@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -748,8 +749,6 @@ func makeSpanSetReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Times
 // NewReader returns a storage.Reader that asserts access of the underlying
 // Reader against the given SpanSet at a given timestamp. If zero timestamp is
 // provided, accesses are considered non-MVCC.
-//
-// NewReader clones and does not retain the provided span set.
 func NewReader(r storage.Reader, spans *SpanSet, ts hlc.Timestamp) storage.Reader {
 	spans = addLockTableSpans(spans)
 	return spanSetReader{r: r, spans: spans, ts: ts}
@@ -758,8 +757,6 @@ func NewReader(r storage.Reader, spans *SpanSet, ts hlc.Timestamp) storage.Reade
 // NewReadWriterAt returns a storage.ReadWriter that asserts access of the
 // underlying ReadWriter against the given SpanSet at a given timestamp.
 // If zero timestamp is provided, accesses are considered non-MVCC.
-//
-// NewReadWriterAt clones and does not retain the provided span set.
 func NewReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Timestamp) storage.ReadWriter {
 	return makeSpanSetReadWriterAt(rw, spans, ts)
 }
@@ -927,4 +924,29 @@ func addLockTableSpans(spans *SpanSet) *SpanSet {
 		withLocks.AddNonMVCC(sa, roachpb.Span{Key: ltKey, EndKey: ltEndKey})
 	})
 	return withLocks
+}
+
+type spanSetEFOS struct {
+	spanSetReader
+	efos storage.EventuallyFileOnlyReader
+}
+
+// NewEventuallyFileOnlySnapshot returns a storage.EventuallyFileOnlyReader that
+// asserts access of the underlying EFOS against the given SpanSet. We only
+// consider span boundaries, associated timestamps are not considered.
+func NewEventuallyFileOnlySnapshot(
+	e storage.EventuallyFileOnlyReader, spans *SpanSet,
+) storage.EventuallyFileOnlyReader {
+	spans = addLockTableSpans(spans)
+	return &spanSetEFOS{
+		spanSetReader: spanSetReader{r: e, spans: spans, spansOnly: true},
+		efos:          e,
+	}
+}
+
+// WaitForFileOnly implements the storage.EventuallyFileOnlyReader interface.
+func (e *spanSetEFOS) WaitForFileOnly(
+	ctx context.Context, gracePeriodBeforeFlush time.Duration,
+) error {
+	return e.efos.WaitForFileOnly(ctx, gracePeriodBeforeFlush)
 }

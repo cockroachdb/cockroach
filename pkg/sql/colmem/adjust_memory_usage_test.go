@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,10 +34,10 @@ func TestAdjustMemoryUsage(t *testing.T) {
 	unlimitedMemAcc := unlimitedMemMonitor.MakeBoundAccount()
 	defer unlimitedMemAcc.Close(ctx)
 
-	limitedMemMonitorName := mon.MakeName("test-limited")
+	limitedMemMonitorName := "test-limited"
 	limit := int64(100000)
 	limitedMemMonitor := mon.NewMonitorInheritWithLimit(
-		limitedMemMonitorName, limit, unlimitedMemMonitor, false, /* longLiving */
+		redact.RedactableString(limitedMemMonitorName), limit, unlimitedMemMonitor, false, /* longLiving */
 	)
 	limitedMemMonitor.StartNoReserved(ctx, unlimitedMemMonitor)
 	defer limitedMemMonitor.Stop(ctx)
@@ -56,7 +57,7 @@ func TestAdjustMemoryUsage(t *testing.T) {
 	// unlimited account has not been grown.
 	err := colexecerror.CatchVectorizedRuntimeError(func() { allocator.AdjustMemoryUsage(limit) })
 	require.NotNil(t, err)
-	require.True(t, strings.Contains(err.Error(), limitedMemMonitorName.String()))
+	require.True(t, strings.Contains(err.Error(), limitedMemMonitorName))
 	require.Equal(t, limit/2, limitedMemAcc.Used())
 	require.Zero(t, unlimitedMemAcc.Used())
 
@@ -64,7 +65,7 @@ func TestAdjustMemoryUsage(t *testing.T) {
 	// unlimited account has been grown.
 	err = colexecerror.CatchVectorizedRuntimeError(func() { allocator.AdjustMemoryUsageAfterAllocation(limit) })
 	require.NotNil(t, err)
-	require.True(t, strings.Contains(err.Error(), limitedMemMonitorName.String()))
+	require.True(t, strings.Contains(err.Error(), limitedMemMonitorName))
 	require.Equal(t, limit/2, limitedMemAcc.Used())
 	require.Equal(t, limit, unlimitedMemAcc.Used())
 
@@ -72,7 +73,7 @@ func TestAdjustMemoryUsage(t *testing.T) {
 	// it cannot be grown.
 	err = colexecerror.CatchVectorizedRuntimeError(func() { allocator.AdjustMemoryUsageAfterAllocation(math.MaxInt64) })
 	require.NotNil(t, err)
-	require.False(t, strings.Contains(err.Error(), limitedMemMonitorName.String()))
+	require.False(t, strings.Contains(err.Error(), limitedMemMonitorName))
 	require.Equal(t, limit/2, limitedMemAcc.Used())
 	require.Equal(t, limit, unlimitedMemAcc.Used())
 

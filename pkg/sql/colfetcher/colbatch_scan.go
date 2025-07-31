@@ -128,7 +128,7 @@ func newColBatchScanBase(
 ) (*colBatchScanBase, *kvpb.BoundedStalenessHeader, *cFetcherTableArgs, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
-		return nil, nil, nil, errors.AssertionFailedf("attempting to create a ColBatchScan with uninitialized NodeID")
+		return nil, nil, nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
 	}
 	var bsHeader *kvpb.BoundedStalenessHeader
 	if aost := flowCtx.EvalCtx.AsOfSystemTime; aost != nil && aost.BoundedStaleness {
@@ -169,14 +169,14 @@ func newColBatchScanBase(
 		s.MakeSpansCopy()
 	}
 
-	if spec.LimitHint > 0 {
+	if spec.LimitHint > 0 || spec.BatchBytesLimit > 0 {
 		// Parallelize shouldn't be set when there's a limit hint, but double-check
 		// just in case.
 		spec.Parallelize = false
 	}
 	var batchBytesLimit rowinfra.BytesLimit
 	if !spec.Parallelize {
-		batchBytesLimit = rowinfra.BytesLimit(flowCtx.Cfg.TestingKnobs.TableReaderBatchBytesLimit)
+		batchBytesLimit = rowinfra.BytesLimit(spec.BatchBytesLimit)
 		if batchBytesLimit == 0 {
 			batchBytesLimit = rowinfra.GetDefaultBatchBytesLimit(flowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
 		}
@@ -221,10 +221,11 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 		s.Ctx, s.flowCtx, "colbatchscan", s.processorID,
 		&s.ContentionEventsListener, &s.ScanStatsListener, &s.TenantConsumptionListener,
 	)
+	limitBatches := !s.parallelize
 	if err := s.cf.StartScan(
 		s.Ctx,
 		s.Spans,
-		s.parallelize,
+		limitBatches,
 		s.batchBytesLimit,
 		s.limitHint,
 	); err != nil {
@@ -338,24 +339,17 @@ func NewColBatchScan(
 		spec.FetchSpec.External,
 	)
 	fetcher := cFetcherPool.Get().(*cFetcher)
-	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
 	fetcher.cFetcherArgs = cFetcherArgs{
 		execinfra.GetWorkMemLimit(flowCtx),
 		estimatedRowCount,
 		flowCtx.TraceKV,
 		true, /* singleUse */
-		shouldCollectStats,
+		execstats.ShouldCollectStats(ctx, flowCtx.CollectStats),
 		false, /* alwaysReallocate */
-		flowCtx.Txn,
 	}
 	if err = fetcher.Init(fetcherAllocator, kvFetcher, tableArgs); err != nil {
 		fetcher.Release()
 		return nil, nil, err
-	}
-	if shouldCollectStats {
-		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
-			base.ContentionEventsListener.Init(flowTxn.ID())
-		}
 	}
 	return &ColBatchScan{
 		colBatchScanBase: base,

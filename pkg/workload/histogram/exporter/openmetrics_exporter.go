@@ -2,7 +2,6 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-
 package exporter
 
 import (
@@ -12,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
 	prom "github.com/prometheus/client_model/go"
@@ -61,16 +59,6 @@ func (o *OpenMetricsExporter) SnapshotAndWrite(
 		return err
 	}
 
-	// emit max metric for this run
-	if err := o.emitGaugeMetric(*name+"_max", float64(hist.Max()), now); err != nil {
-		return err
-	}
-
-	// emit mean metric for this run
-	if err := o.emitGaugeMetric(*name+"_mean", hist.Mean(), now); err != nil {
-		return err
-	}
-
 	if o.histHighestTrackableValues[*name] == nil {
 		o.histHighestTrackableValues[*name] = &histHighestTrackableValue{
 			value: hist.HighestTrackableValue(),
@@ -106,7 +94,6 @@ func (o *OpenMetricsExporter) Close(f func() error) error {
 func (o *OpenMetricsExporter) emitGaugeMetric(
 	name string, value float64, timestamp time.Time,
 ) error {
-	name = util.SanitizeMetricName(name)
 	gaugeMetric := prom.MetricFamily{
 		Name: &name,
 		Help: nil,
@@ -152,10 +139,8 @@ func (o *OpenMetricsExporter) SetLabels(labels *map[string]string) {
 	var labelValues []*prom.LabelPair
 
 	for label, value := range *labels {
-		labelName := util.SanitizeKey(label)
-
-		// In case the label value already has surrounding quotes, we should trim them
-		labelValue := util.SanitizeValue(strings.Trim(value, `"`))
+		labelName := sanitizeOpenMetricsLabels(label)
+		labelValue := value
 		labelPair := &prom.LabelPair{
 			Name:  &labelName,
 			Value: &labelValue,

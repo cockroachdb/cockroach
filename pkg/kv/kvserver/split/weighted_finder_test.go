@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"math"
-	"math/rand/v2"
 	"reflect"
 	"testing"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/exp/rand"
 )
 
 type ZeroRandSource struct{}
@@ -27,7 +27,7 @@ func (r ZeroRandSource) Float64() float64 {
 	return 0
 }
 
-func (r ZeroRandSource) IntN(int) int {
+func (r ZeroRandSource) Intn(int) int {
 	return 0
 }
 
@@ -37,7 +37,7 @@ func (r WFLargestRandSource) Float64() float64 {
 	return 1
 }
 
-func (r WFLargestRandSource) IntN(int) int {
+func (r WFLargestRandSource) Intn(int) int {
 	return 0
 }
 
@@ -167,7 +167,7 @@ func TestSplitWeightedFinderKey(t *testing.T) {
 		{bestBalanceReservoir, keys.SystemSQLCodec.TablePrefix(ReservoirKeyOffset + splitKeySampleSize/2)},
 	}
 
-	randSource := rand.New(rand.NewPCG(2022, 0))
+	randSource := rand.New(rand.NewSource(2022))
 	for i, test := range testCases {
 		weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
 		weightedFinder.samples = test.reservoir
@@ -327,7 +327,7 @@ func TestWeightedFinderNoSplitKeyCause(t *testing.T) {
 		}
 	}
 
-	randSource := rand.New(rand.NewPCG(2022, 0))
+	randSource := rand.New(rand.NewSource(2022))
 	weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
 	weightedFinder.samples = samples
 	insufficientCounters, imbalance := weightedFinder.noSplitKeyCause()
@@ -335,7 +335,7 @@ func TestWeightedFinderNoSplitKeyCause(t *testing.T) {
 	assert.Equal(t, 13, imbalance, "unexpected imbalance counters")
 }
 
-func TestWeightedFinderPopularKey(t *testing.T) {
+func TestWeightedFinderPopularKeyFrequency(t *testing.T) {
 	uniqueKeyUnweightedSample := [splitKeySampleSize]weightedSample{}
 	for i, idx := range rand.Perm(splitKeySampleSize) {
 		uniqueKeyUnweightedSample[idx] = weightedSample{
@@ -387,110 +387,22 @@ func TestWeightedFinderPopularKey(t *testing.T) {
 	const eps = 1e-3
 	testCases := []struct {
 		samples                     [splitKeySampleSize]weightedSample
-		expectedPopularKey          roachpb.Key
 		expectedPopularKeyFrequency float64
 	}{
-		{uniqueKeyUnweightedSample, keys.SystemSQLCodec.TablePrefix(uint32(0)), 1.0 / 20.0},
-		{uniqueKeyWeightedSample, keys.SystemSQLCodec.TablePrefix(uint32(19)), 20.0 / 210.0}, // 20/(1+2+...+20)
-		{duplicateKeyUnweightedSample, keys.SystemSQLCodec.TablePrefix(uint32(2)), 5.0 / 20.0},
-		{duplicateKeyWeightedSample, keys.SystemSQLCodec.TablePrefix(uint32(2)), 84.0 / 210.0}, // (9+10+...+15)/(1+2+...+20)
-		{sameKeySample, keys.SystemSQLCodec.TablePrefix(uint32(0)), 1},
+		{uniqueKeyUnweightedSample, 1.0 / 20.0},
+		{uniqueKeyWeightedSample, 20.0 / 210.0}, // 20/(1+2+...+20)
+		{duplicateKeyUnweightedSample, 5.0 / 20.0},
+		{duplicateKeyWeightedSample, 84.0 / 210.0}, // (9+10+...+15)/(1+2+...+20)
+		{sameKeySample, 1},
 	}
 
-	randSource := rand.New(rand.NewPCG(2022, 0))
+	randSource := rand.New(rand.NewSource(2022))
 	for i, test := range testCases {
 		weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
 		weightedFinder.samples = test.samples
-		popularKey := weightedFinder.PopularKey()
-		assert.Equal(t, test.expectedPopularKey, popularKey.Key)
-		assert.True(t, math.Abs(test.expectedPopularKeyFrequency-popularKey.Frequency) < eps,
+		popularKeyFrequency := weightedFinder.PopularKeyFrequency()
+		assert.True(t, math.Abs(test.expectedPopularKeyFrequency-popularKeyFrequency) < eps,
 			"%d: expected popular key frequency %f, got %f",
-			i, test.expectedPopularKeyFrequency, popularKey.Frequency)
-	}
-}
-
-func TestWeightedFinderAccessDirection(t *testing.T) {
-	testCases := []struct {
-		name              string
-		samples           [splitKeySampleSize]weightedSample
-		expectedDirection float64
-	}{
-		{
-			name: "all samples to the left",
-			samples: [splitKeySampleSize]weightedSample{
-				{left: 10, right: 0, count: 1, weight: 1},
-				{left: 20, right: 0, count: 1, weight: 1},
-				{left: 30, right: 0, count: 1, weight: 1},
-			},
-			expectedDirection: -1,
-		},
-		{
-			name: "all samples to the right",
-			samples: [splitKeySampleSize]weightedSample{
-				{left: 0, right: 10, count: 1, weight: 1},
-				{left: 0, right: 20, count: 1, weight: 1},
-				{left: 0, right: 30, count: 1, weight: 1},
-			},
-			expectedDirection: 1,
-		},
-		{
-			name: "balanced samples",
-			samples: [splitKeySampleSize]weightedSample{
-				{left: 10, right: 10, count: 1, weight: 1},
-				{left: 20, right: 20, count: 1, weight: 1},
-				{left: 30, right: 30, count: 1, weight: 1},
-			},
-			expectedDirection: 0,
-		},
-		{
-			name: "more samples to the left",
-			samples: [splitKeySampleSize]weightedSample{
-				{left: 30, right: 10, count: 1, weight: 1},
-				{left: 40, right: 20, count: 1, weight: 1},
-				{left: 50, right: 30, count: 1, weight: 1},
-			},
-			expectedDirection: -1.0 / 3.0,
-		},
-		{
-			name: "more samples to the right",
-			samples: [splitKeySampleSize]weightedSample{
-				{left: 10, right: 30, count: 1, weight: 1},
-				{left: 20, right: 40, count: 1, weight: 1},
-				{left: 30, right: 50, count: 1, weight: 1},
-			},
-			expectedDirection: 1.0 / 3.0,
-		},
-		{
-			name: "count does not influence direction",
-			samples: [splitKeySampleSize]weightedSample{
-				{left: 10, right: 0, count: 1, weight: 1},
-				{left: 0, right: 10, count: 2, weight: 1},
-			},
-			expectedDirection: 0,
-		},
-		{
-			name: "weight does not influence direction",
-			samples: [splitKeySampleSize]weightedSample{
-				{left: 10, right: 0, count: 1, weight: 1},
-				{left: 0, right: 10, count: 1, weight: 2},
-			},
-			expectedDirection: 0,
-		},
-		{
-			name:              "no samples",
-			samples:           [splitKeySampleSize]weightedSample{},
-			expectedDirection: 0,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			finder := NewWeightedFinder(timeutil.Now(), rand.New(rand.NewPCG(2022, 0)))
-			finder.samples = tc.samples
-			direction := finder.AccessDirection()
-			if math.Abs(direction-tc.expectedDirection) > 1e-9 {
-				t.Errorf("expected direction %v, but got %v", tc.expectedDirection, direction)
-			}
-		})
+			i, test.expectedPopularKeyFrequency, popularKeyFrequency)
 	}
 }

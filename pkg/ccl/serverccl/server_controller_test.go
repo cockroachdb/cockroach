@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -89,8 +89,8 @@ ALTER TENANT application GRANT CAPABILITY can_use_nodelocal_storage`)
 
 	var tenantID uint64
 	db.QueryRow(t, "SELECT id FROM [SHOW TENANT application]").Scan(&tenantID)
-	tc.WaitForTenantCapabilities(t, roachpb.MustMakeTenantID(tenantID), map[tenantcapabilitiespb.ID]string{
-		tenantcapabilitiespb.CanUseNodelocalStorage: "true",
+	tc.WaitForTenantCapabilities(t, roachpb.MustMakeTenantID(tenantID), map[tenantcapabilities.ID]string{
+		tenantcapabilities.CanUseNodelocalStorage: "true",
 	})
 
 	// Wait for tenant to start up on all nodes.
@@ -563,18 +563,16 @@ func TestServerControllerLoginLogout(t *testing.T) {
 
 	ctx := context.Background()
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110002),
+	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
-	isExternal := srv.DeploymentMode().IsExternal()
 
-	sessionType := serverutils.SingleTenantSession
-	client, err := s.GetAuthenticatedHTTPClient(false, sessionType)
+	client, err := s.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	require.NoError(t, err)
 
-	// Using `Get` here instead of `Post` because in external process mode, the
-	// server returns a `StatusMethodNotAllowed` error when using `Post`.
-	resp, err := client.Get(s.AdminURL().WithPath("/logout").String())
+	resp, err := client.Post(s.AdminURL().WithPath("/logout").String(), "", nil)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -584,33 +582,18 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	for i, c := range resp.Cookies() {
 		cookieNames[i] = c.Name
 		cookieValues[i] = c.Value
-		// Secure isn't set in external-mode but it is set in other modes.
-		// See https://github.com/cockroachdb/cockroach/pull/143354#pullrequestreview-2751413632.
-		if !isExternal {
-			require.True(t, c.Secure)
-		}
+		require.True(t, c.Secure)
 		if c.Name == "session" {
 			require.True(t, c.HttpOnly)
 		}
 	}
-	expectedCookies := []string{"session"}
-	expectedValues := []string{""}
-	if !isExternal {
-		expectedCookies = append(expectedCookies, "tenant")
-		expectedValues = append(expectedValues, "")
-	}
-	require.ElementsMatch(t, expectedCookies, cookieNames)
-	require.ElementsMatch(t, expectedValues, cookieValues)
+	require.ElementsMatch(t, []string{"session", "tenant"}, cookieNames)
+	require.ElementsMatch(t, []string{"", ""}, cookieValues)
 
-	// This part of the test doesn't run in external-process mode since we can't
-	// set a session cookie with name `tenant`—that's only supported by HTTP
-	// servers in the system tenant, which also handle routing for secondary
-	// tenants.
-	if isExternal {
-		return
-	}
 	// Need a new server because the HTTP Client is memoized.
-	srv2 := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv2 := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110002),
+	})
 	defer srv2.Stopper().Stop(ctx)
 	s2 := srv2.ApplicationLayer()
 
@@ -640,7 +623,7 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	require.NoError(t, err)
 	cookieJar.SetCookies(s2.AdminURL().URL, []*http.Cookie{
 		{
-			Name:  "tenant",
+			Name:  "multitenant-session",
 			Value: "abc-123",
 		},
 	})

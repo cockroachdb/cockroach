@@ -2,12 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "system",
-    srcs = [
-        "cache_line.go",
-        "endian.go",
-        "num_cpu.go",
-    ],
+    srcs = ["num_cpu.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/system",
     visibility = ["//visibility:public"],
-    deps = ["@org_golang_x_sys//cpu"],
 )

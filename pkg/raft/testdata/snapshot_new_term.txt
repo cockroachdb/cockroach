@@ -33,16 +33,13 @@ transfer-leadership from=1 to=2
 ----
 INFO 1 [term 1] starts to transfer leadership to 2
 INFO 1 sends MsgTimeoutNow to 2 immediately as 2 already has up-to-date log
-DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 1 became follower at term 1
-DEBUG 1 reset election elapsed to 0
 
 stabilize 1 2
 ----
 > 1 handling Ready
-  Ready:
+  Ready MustSync=false:
   State:StateFollower
-  HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   1->2 MsgTimeoutNow Term:1 Log:0/0
 > 2 receiving messages
@@ -53,26 +50,23 @@ stabilize 1 2
   INFO 2 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
   INFO 2 [logterm: 1, index: 11] sent MsgVote request to 3 at term 2
 > 2 handling Ready
-  Ready:
+  Ready MustSync=true:
   State:StateCandidate
   HardState Term:2 Vote:2 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   2->1 MsgVote Term:2 Log:1/11
   2->3 MsgVote Term:2 Log:1/11
-  OnSync:
-  2->2 MsgVoteResp Term:2 Log:0/0
   INFO 2 received MsgVoteResp from 2 at term 2
   INFO 2 has received 1 MsgVoteResp votes and 0 vote rejections
 > 1 receiving messages
   2->1 MsgVote Term:2 Log:1/11
-  INFO 1 [term: 1] received a MsgVote message with higher term from 2 [term: 2], advancing term
+  INFO 1 [term: 1] received a MsgVote message with higher term from 2 [term: 2]
   INFO 1 became follower at term 2
-  DEBUG 1 reset election elapsed to 0
   INFO 1 [logterm: 1, index: 11, vote: 0] cast MsgVote for 2 [logterm: 1, index: 11] at term 2
 > 1 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:11 Lead:0 LeadEpoch:0
-  OnSync:
+  Messages:
   1->2 MsgVoteResp Term:2 Log:0/0
 > 2 receiving messages
   1->2 MsgVoteResp Term:2 Log:0/0
@@ -80,7 +74,7 @@ stabilize 1 2
   INFO 2 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 2 became leader at term 2
 > 2 handling Ready
-  Ready:
+  Ready MustSync=true:
   State:StateLeader
   HardState Term:2 Vote:2 Commit:11 Lead:2 LeadEpoch:1
   Entries:
@@ -90,42 +84,41 @@ stabilize 1 2
   2->3 MsgFortifyLeader Term:2 Log:0/0
   2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
   2->3 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
-  OnSync:
-  2->2 MsgAppResp Term:2 Log:0/12 Commit:11
-  2->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
 > 1 receiving messages
   2->1 MsgFortifyLeader Term:2 Log:0/0
   2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 > 1 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:11 Lead:2 LeadEpoch:1
   Entries:
   2/12 EntryNormal ""
-  OnSync:
+  Messages:
   1->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   1->2 MsgAppResp Term:2 Log:0/12 Commit:11
 > 2 receiving messages
   1->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   1->2 MsgAppResp Term:2 Log:0/12 Commit:11
 > 2 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:12 Lead:2 LeadEpoch:1
-  Committed: (11,12]
-  Messages:
-  2->1 MsgApp Term:2 Log:2/12 Commit:12
-  Applying:
+  CommittedEntries:
   2/12 EntryNormal ""
+  Messages:
+  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+  2->1 MsgApp Term:2 Log:2/12 Commit:12
 > 1 receiving messages
+  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
   2->1 MsgApp Term:2 Log:2/12 Commit:12
 > 1 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:12 Lead:2 LeadEpoch:1
-  Committed: (11,12]
-  OnSync:
-  1->2 MsgAppResp Term:2 Log:0/12 Commit:12
-  Applying:
+  CommittedEntries:
   2/12 EntryNormal ""
+  Messages:
+  1->2 MsgAppResp Term:2 Log:0/12 Commit:11
+  1->2 MsgAppResp Term:2 Log:0/12 Commit:12
 > 2 receiving messages
+  1->2 MsgAppResp Term:2 Log:0/12 Commit:11
   1->2 MsgAppResp Term:2 Log:0/12 Commit:12
 
 # Drop inflight messages to 3.
@@ -146,19 +139,17 @@ stabilize
 > 3 receiving messages
   2->3 MsgSnap Term:2 Log:0/0
     Snapshot: Index:12 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-  INFO 3 [term: 1] received a MsgSnap message with higher term from 2 [term: 2], new leader indicated, advancing term
-  DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
+  INFO 3 [term: 1] received a MsgSnap message with higher term from 2 [term: 2]
   INFO 3 became follower at term 2
-  DEBUG 3 reset election elapsed to 0
   INFO log [committed=11, applied=11, applying=11, unstable.offset=12, unstable.offsetInProgress=12, len(unstable.Entries)=0] starts to restore snapshot [index: 12, term: 2]
   INFO 3 switched to configuration voters=(1 2 3)
   INFO 3 [commit: 12, lastindex: 12, lastterm: 2] restored snapshot [index: 12, term: 2]
   INFO 3 [commit: 12] restored snapshot [index: 12, term: 2]
 > 3 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:2 Commit:12 Lead:0 LeadEpoch:0
   Snapshot Index:12 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-  OnSync:
+  Messages:
   3->2 MsgAppResp Term:2 Log:0/12 Commit:12
 > 2 receiving messages
   3->2 MsgAppResp Term:2 Log:0/12 Commit:12

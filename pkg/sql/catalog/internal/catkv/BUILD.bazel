@@ -54,7 +54,6 @@ go_test(
     deps = [
         ":catkv",
         "//pkg/base",
-        "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

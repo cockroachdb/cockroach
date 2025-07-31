@@ -216,7 +216,7 @@ func TestEncDatumCompare(t *testing.T) {
 	for _, typ := range types.OidToType {
 		switch typ.Family() {
 		case types.AnyFamily, types.UnknownFamily, types.ArrayFamily, types.JsonFamily, types.TupleFamily, types.VoidFamily,
-			types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily, types.TriggerFamily, types.JsonpathFamily:
+			types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily, types.TriggerFamily:
 			continue
 		case types.CollatedStringFamily:
 			typ = types.MakeCollatedString(types.String, *randgen.RandCollationLocale(rng))
@@ -543,7 +543,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 		switch typedTest := test.(type) {
 		case *tree.DTuple:
 
-			buf, err := valueside.Encode(nil, valueside.NoColumnID, typedTest)
+			buf, err := valueside.Encode(nil, valueside.NoColumnID, typedTest, nil)
 			if err != nil {
 				t.Fatalf("seed %d: encoding tuple %v with types %v failed with error: %v",
 					seed, test, colTypes[i], err)

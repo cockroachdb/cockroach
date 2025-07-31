@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"github.com/cockroachdb/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -32,6 +31,39 @@ func ExtractSpanMetaFromGRPCCtx(
 		return tracing.SpanMeta{}, nil
 	}
 	return tracer.ExtractMetaFrom(tracing.MetadataCarrier{MD: md})
+}
+
+// setGRPCErrorTag sets an error tag on the span.
+func setGRPCErrorTag(sp *tracing.Span, err error) {
+	if err == nil {
+		return
+	}
+	s, _ := status.FromError(err)
+	sp.SetTag("response_code", attribute.IntValue(int(codes.Error)))
+	sp.SetOtelStatus(codes.Error, s.Message())
+}
+
+// BatchMethodName is the method name of Internal.Batch RPC.
+const BatchMethodName = "/cockroach.roachpb.Internal/Batch"
+
+// sendKVBatchMethodName is the method name for adminServer.SendKVBatch.
+const sendKVBatchMethodName = "/cockroach.server.serverpb.Admin/SendKVBatch"
+
+// SetupFlowMethodName is the method name of DistSQL.SetupFlow RPC.
+const SetupFlowMethodName = "/cockroach.sql.distsqlrun.DistSQL/SetupFlow"
+const flowStreamMethodName = "/cockroach.sql.distsqlrun.DistSQL/FlowStream"
+
+// methodExcludedFromTracing returns true if a call to the given RPC method does
+// not need to propagate tracing info. Some RPCs (Internal.Batch,
+// DistSQL.SetupFlow) have dedicated fields for passing along the tracing
+// context in the request, which is more efficient than letting the RPC
+// interceptors deal with it. Others (DistSQL.FlowStream) are simply exempt from
+// tracing because it's not worth it.
+func methodExcludedFromTracing(method string) bool {
+	return method == BatchMethodName ||
+		method == sendKVBatchMethodName ||
+		method == SetupFlowMethodName ||
+		method == flowStreamMethodName
 }
 
 // ServerInterceptor returns a grpc.UnaryServerInterceptor suitable
@@ -56,7 +88,7 @@ func ServerInterceptor(tracer *tracing.Tracer) grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
-		if tracingutil.MethodExcludedFromTracing(info.FullMethod) {
+		if methodExcludedFromTracing(info.FullMethod) {
 			return handler(ctx, req)
 		}
 
@@ -103,23 +135,14 @@ func ServerInterceptor(tracer *tracing.Tracer) grpc.UnaryServerInterceptor {
 // application-specific gRPC handler(s) to access.
 func StreamServerInterceptor(tracer *tracing.Tracer) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if tracingutil.MethodExcludedFromTracing(info.FullMethod) {
+		if methodExcludedFromTracing(info.FullMethod) {
 			return handler(srv, ss)
 		}
 		spanMeta, err := ExtractSpanMetaFromGRPCCtx(ss.Context(), tracer)
 		if err != nil {
 			return err
 		}
-		sp := tracing.SpanFromContext(ss.Context())
-		// NB: when this method is called through the local internal client optimization,
-		// we also invoke this interceptor, but don't have spanMeta available. If we then
-		// call straight into the handler below without making a child span, we hit various
-		// use-after-finish conditions. So we also check whether we have a nontrivial `sp`
-		// and if so make sure to go through `StartSpanCtx` below. This can be seen as a
-		// workaround for the following issue:
-		//
-		// https://github.com/cockroachdb/cockroach/issues/135686
-		if sp == nil && !tracing.SpanInclusionFuncForServer(tracer, spanMeta) {
+		if !tracing.SpanInclusionFuncForServer(tracer, spanMeta) {
 			return handler(srv, ss)
 		}
 
@@ -152,6 +175,19 @@ func (ss *tracingServerStream) Context() context.Context {
 	return ss.ctx
 }
 
+func injectSpanMeta(
+	ctx context.Context, tracer *tracing.Tracer, clientSpan *tracing.Span,
+) context.Context {
+	md, ok := metadata.FromOutgoingContext(ctx)
+	if !ok {
+		md = metadata.New(nil)
+	} else {
+		md = md.Copy()
+	}
+	tracer.InjectMetaInto(clientSpan.Meta(), tracing.MetadataCarrier{MD: md})
+	return metadata.NewOutgoingContext(ctx, md)
+}
+
 // ClientInterceptor returns a grpc.UnaryClientInterceptor suitable
 // for use in a grpc.Dial call.
 //
@@ -180,13 +216,17 @@ func ClientInterceptor(
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
-		skipTracing := tracingutil.ShouldSkipClientTracing(ctx)
-		if skipTracing {
+		// Local RPCs don't need any special tracing, since the caller's context
+		// will be used on the "server".
+		_, localRequest := grpcutil.IsLocalRequestContext(ctx)
+		if localRequest {
+			return invoker(ctx, method, req, resp, cc, opts...)
+		}
+		parent := tracing.SpanFromContext(ctx)
+		if !tracing.SpanInclusionFuncForClient(parent) {
 			return invoker(ctx, method, req, resp, cc, opts...)
 		}
 
-		// Create clientSpan here after determining that we shouldn't skip tracing
-		parent := tracing.SpanFromContext(ctx)
 		clientSpan := tracer.StartSpan(
 			method,
 			tracing.WithParent(parent),
@@ -195,11 +235,11 @@ func ClientInterceptor(
 		init(clientSpan)
 		defer clientSpan.Finish()
 
-		// For most RPCs we pass along tracing info as metadata
-		if !tracingutil.MethodExcludedFromTracing(method) {
-			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
+		// For most RPCs we pass along tracing info as gRPC metadata. Some select
+		// RPCs carry the tracing in the request protos, which is more efficient.
+		if !methodExcludedFromTracing(method) {
+			ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		}
-
 		if invoker != nil {
 			err := invoker(ctx, method, req, resp, cc, opts...)
 			if err != nil {
@@ -241,13 +281,18 @@ func StreamClientInterceptor(
 		streamer grpc.Streamer,
 		opts ...grpc.CallOption,
 	) (grpc.ClientStream, error) {
-		skipTracing := tracingutil.ShouldSkipClientTracing(ctx)
-		if skipTracing {
+		// Local RPCs don't need any special tracing, since the caller's context
+		// will be used on the "server".
+		_, localRequest := grpcutil.IsLocalRequestContext(ctx)
+		if localRequest {
+			return streamer(ctx, desc, cc, method, opts...)
+		}
+		parent := tracing.SpanFromContext(ctx)
+		if !tracing.SpanInclusionFuncForClient(parent) {
 			return streamer(ctx, desc, cc, method, opts...)
 		}
 
-		// Create clientSpan here after determining that we shouldn't skip tracing
-		parent := tracing.SpanFromContext(ctx)
+		// Create a span that will live for the life of the stream.
 		clientSpan := tracer.StartSpan(
 			method,
 			tracing.WithParent(parent),
@@ -255,9 +300,8 @@ func StreamClientInterceptor(
 		)
 		init(clientSpan)
 
-		// For most RPCs we pass along tracing info as metadata
-		if !tracingutil.MethodExcludedFromTracing(method) {
-			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
+		if !methodExcludedFromTracing(method) {
+			ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		}
 
 		cs, err := streamer(ctx, desc, cc, method, opts...)
@@ -363,14 +407,4 @@ func (cs *tracingClientStream) CloseSend() error {
 		cs.finishFunc(err)
 	}
 	return errors.Wrap(err, "close send error")
-}
-
-// setGRPCErrorTag sets an error tag on the span.
-func setGRPCErrorTag(sp *tracing.Span, err error) {
-	if err == nil {
-		return
-	}
-	s, _ := status.FromError(err)
-	sp.SetTag("response_code", attribute.IntValue(int(codes.Error)))
-	sp.SetOtelStatus(codes.Error, s.Message())
 }

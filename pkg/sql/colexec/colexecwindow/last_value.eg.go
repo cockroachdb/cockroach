@@ -122,7 +122,7 @@ func NewLastValueOperator(
 			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
 	}
-	return nil, errors.AssertionFailedf("unsupported lastValue window operator type %s", argType.Name())
+	return nil, errors.Errorf("unsupported lastValue window operator type %s", argType.Name())
 }
 
 type lastValueBase struct {

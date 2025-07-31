@@ -22,11 +22,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type Peer struct {
-	ID      pb.PeerID
-	Context []byte
-}
-
 // Bootstrap initializes the RawNode for first use by appending configuration
 // changes for the supplied peers. This method returns an error if the Storage
 // is nonempty.
@@ -51,10 +46,7 @@ func (rn *RawNode) Bootstrap(peers []Peer) error {
 	// TODO(tbg): remove StartNode and give the application the right tools to
 	// bootstrap the initial membership in a cleaner way.
 	rn.raft.becomeFollower(1, None)
-	app := LeadSlice{
-		term:     1,
-		LogSlice: LogSlice{entries: make([]pb.Entry, 0, len(peers))},
-	}
+	app := LogSlice{term: 1, entries: make([]pb.Entry, 0, len(peers))}
 	for i, peer := range peers {
 		cc := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: peer.ID, Context: peer.Context}
 		data, err := cc.Marshal()

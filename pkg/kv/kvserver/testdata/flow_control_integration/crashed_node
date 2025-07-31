@@ -1,0 +1,66 @@
+echo
+----
+----
+-- (Issuing regular 5x1MiB, 2x replicated writes that are not admitted.)
+
+
+-- Flow token metrics from n1 after issuing 5 regular 1MiB 2x replicated writes
+-- that are yet to get admitted. We see 5*1MiB*2=10MiB deductions of
+-- {regular,elastic} tokens with no corresponding returns.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 6.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_deducted    | 10 MiB   
+  kvadmission.flow_controller.elastic_tokens_returned    | 0 B      
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B      
+  kvadmission.flow_controller.regular_tokens_available   | 22 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 10 MiB   
+  kvadmission.flow_controller.regular_tokens_returned    | 0 B      
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+
+
+-- Observe the per-stream tracked tokens on n1, before n2 is crashed.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 5.0 MiB               
+  70       | 2        | 5.0 MiB               
+
+
+-- (Crashing n2 but disabling the raft-transport-break token return mechanism.)
+
+
+-- Observe the per-stream tracked tokens on n1, after n2 crashed. We're no
+-- longer tracking the 5MiB held by n2.
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+
+  range_id | store_id | total_tracked_tokens  
+-----------+----------+-----------------------
+  70       | 1        | 5.0 MiB               
+
+
+-- Flow token metrics from n1 after n2 crashed. Observe that we've returned the
+-- 5MiB previously held by n2.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+
+  kvadmission.flow_controller.elastic_tokens_available   | 11 MiB   
+  kvadmission.flow_controller.elastic_tokens_deducted    | 10 MiB   
+  kvadmission.flow_controller.elastic_tokens_returned    | 5.0 MiB  
+  kvadmission.flow_controller.elastic_tokens_unaccounted | 0 B      
+  kvadmission.flow_controller.regular_tokens_available   | 27 MiB   
+  kvadmission.flow_controller.regular_tokens_deducted    | 10 MiB   
+  kvadmission.flow_controller.regular_tokens_returned    | 5.0 MiB  
+  kvadmission.flow_controller.regular_tokens_unaccounted | 0 B      
+----
+----
+
+# vim:ft=sql

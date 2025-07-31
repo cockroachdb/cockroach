@@ -7,7 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/opt",
-        "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",

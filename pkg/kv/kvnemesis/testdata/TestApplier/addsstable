@@ -1,6 +1,6 @@
 echo
 ----
-db0.AddSSTable(ctx, tk(1), tk(4), ... /* @s1 */) (as writes)
+db0.AddSSTable(ctx, tk(1), tk(4), ... /* @s1 */) // 1004 bytes (as writes)
 // ^-- tk(1) -> sv(s1): /Table/100/"0000000000000001"/<ts> -> /BYTES/v1
 // ^-- tk(2) -> sv(s1): /Table/100/"0000000000000002"/<ts> -> /<empty>
 // ^-- [tk(3), tk(4)) -> sv(s1): /Table/100/"000000000000000{3"-4"} -> /<empty>

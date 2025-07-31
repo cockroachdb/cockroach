@@ -7,7 +7,6 @@ package tests
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -17,9 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
@@ -28,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -50,10 +46,9 @@ func registerC2CMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "c2c/mixed-version",
 		Owner:            registry.OwnerDisasterRecovery,
-		Cluster:          r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, spec.WorkloadNode(), spec.CPU(8)),
+		Cluster:          r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, spec.WorkloadNode()),
 		CompatibleClouds: sp.clouds,
-		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runC2CMixedVersions(ctx, t, c, sp)
 		},
@@ -73,66 +68,19 @@ func runC2CMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster, sp
 	cm.WorkloadHook(ctx)
 	cm.LatencyHook(ctx)
 	cm.UpdateHook(ctx)
-	cm.Run(t)
+	cm.Run(ctx, c)
 }
 
 func InitC2CMixed(
 	ctx context.Context, t test.Test, c cluster.Cluster, sp replicationSpec,
 ) *c2cMixed {
-	// Currently, this test only knows how to orchestrate one major upgrade on the
-	// source and destination cluster. Since the source must always wait to
-	// finalize after the dest, the test can only currently explore certain
-	// upgrade scenarios:
-	//
-	// 1. no version skipping: source and dest both upgrade from n-1 to n, where n
-	// is master.
-	//
-	// 2. both version skipping: source and dest both upgrade from n-2 to n
-	//
-	// 3. source version skips: source upgrades from n-2 to n, dest upgrades from
-	// n-1 to n.
-	//
-	// We can't currently explore the following scenarios:
-	//
-	// 1. dest version skips: source upgrades from n-1 to n, dest upgrades from
-	// n-2 to n. as the dest must always run a major version ahead of the source.
-	//
-	// TODO: it would be nice to test multiple major upgrades, where one cluster
-	// conducts version skipping while the other does not. This will require
-	// building in more coordination in the test driver.
-
-	// It's a bit sad we need to open a new rng here, while the mixed version
-	// drivers below each open their own rng.
-	//
-	// TODO(msbutler): add a mixed version option to pass the seed to the driver.
-	rng, _ := randutil.NewPseudoRand()
-	sourceVersionSkips := false
-	destVersionSkips := false
-	if rng.Intn(2) == 0 {
-		sourceVersionSkips = true
-	}
-	if rng.Intn(2) == 0 && sourceVersionSkips {
-		destVersionSkips = true
-	}
-
-	t.L().Printf("source version skips: %t, dest version skips: %t", sourceVersionSkips, destVersionSkips)
-
-	boolToProb := func(b bool) float64 {
-		if b {
-			return 1.0
-		}
-		return 0.0
-	}
-
-	// This test has the source and destination clusters interacting with each other
-	// through specific nodes, so it is incompatible with failure injections.
+	// TODO(msbutler): allow for version skipping and multiple upgrades.
 	sourceMvt := mixedversion.NewTest(ctx, t, t.L(), c, c.Range(1, sp.srcNodes),
 		mixedversion.AlwaysUseLatestPredecessors,
 		mixedversion.NumUpgrades(expectedMajorUpgrades),
 		mixedversion.EnabledDeploymentModes(mixedversion.SharedProcessDeployment),
 		mixedversion.WithTag("source"),
-		mixedversion.WithSkipVersionProbability(boolToProb(sourceVersionSkips)),
-		mixedversion.DisableAllFailureInjectionMutators(),
+		mixedversion.DisableSkipVersionUpgrades,
 	)
 
 	destMvt := mixedversion.NewTest(ctx, t, t.L(), c, c.Range(sp.srcNodes+1, sp.srcNodes+sp.dstNodes),
@@ -140,8 +88,7 @@ func InitC2CMixed(
 		mixedversion.NumUpgrades(expectedMajorUpgrades),
 		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 		mixedversion.WithTag("dest"),
-		mixedversion.WithSkipVersionProbability(boolToProb(destVersionSkips)),
-		mixedversion.DisableAllFailureInjectionMutators(),
+		mixedversion.DisableSkipVersionUpgrades,
 	)
 
 	return &c2cMixed{
@@ -190,9 +137,8 @@ type c2cMixed struct {
 	// state.
 	midUpgradeCatchupMu syncutil.Mutex
 
-	ingestionJobID          catpb.JobID
-	workloadStopper         mixedversion.StopFunc
-	readOnlyWorkloadStopper mixedversion.StopFunc
+	ingestionJobID  catpb.JobID
+	workloadStopper mixedversion.StopFunc
 }
 
 func (cm *c2cMixed) SetupHook(ctx context.Context) {
@@ -245,7 +191,7 @@ func (cm *c2cMixed) SetupHook(ctx context.Context) {
 			sourceInfo := chanReadCtx(ctx, sourceInfoChan)
 
 			if err := h.Exec(r, fmt.Sprintf(
-				"CREATE TENANT %q FROM REPLICATION OF %q ON $1 WITH READ VIRTUAL CLUSTER",
+				"CREATE TENANT %q FROM REPLICATION OF %q ON $1",
 				destTenantName, sourceInfo.name,
 			), sourceInfo.pgurl.String()); err != nil {
 				return errors.Wrap(err, "creating destination tenant")
@@ -277,17 +223,6 @@ func (cm *c2cMixed) WorkloadHook(ctx context.Context) {
 		Option("tolerate-errors").
 		Flag("warehouses", 500)
 	cm.workloadStopper = cm.sourceMvt.Workload("tpcc", cm.c.WorkloadNode(), tpccInitCmd, tpccRunCmd)
-
-	readerTenantName := fmt.Sprintf("%s-readonly", destTenantName)
-
-	tpccStandbyRunCmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
-		Arg("{pgurl%s:%s}", cm.c.Range(cm.sp.srcNodes+1, cm.sp.srcNodes+cm.sp.dstNodes), readerTenantName).
-		Option("tolerate-errors").
-		Flag("warehouses", 500).
-		Flag("mix", "newOrder=0,payment=0,orderStatus=1,delivery=0,stockLevel=1")
-
-	cm.readOnlyWorkloadStopper = cm.destMvt.Workload("tpcc-read-only", cm.c.WorkloadNode(), nil, tpccStandbyRunCmd)
-
 }
 
 func (cm *c2cMixed) LatencyHook(ctx context.Context) {
@@ -325,14 +260,14 @@ func (cm *c2cMixed) LatencyHook(ctx context.Context) {
 // - The source will also run a fingerprint command using the same timestamps
 // and ensure the fingerprints are the same.
 func (cm *c2cMixed) UpdateHook(ctx context.Context) {
-	destFinalized := make(chan struct{})
+	destFinalized := make(chan struct{}, 1)
 
 	cm.destMvt.InMixedVersion("maybe wait for replicated time",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 			if r.Intn(3) == 0 {
 				cm.midUpgradeCatchupMu.Lock()
 				defer cm.midUpgradeCatchupMu.Unlock()
-				return cm.WaitForReplicatedTime(ctx, nowLess30Seconds(), h, r, 10*time.Minute)
+				return cm.WaitForReplicatedTime(ctx, nowLess30Seconds(), h, r, 5*time.Minute)
 			}
 			return nil
 		})
@@ -340,6 +275,7 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 	cm.sourceMvt.InMixedVersion(
 		"wait for dest to finalize if source is ready to finalize upgrade",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+
 			// If we have to wait for the lock, that implies the destination is
 			// waiting for the replication time to catch up in some mixed version
 			// state.
@@ -358,8 +294,6 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 			cm.midUpgradeCatchupMu.Unlock()
 			if h.Context().Stage == mixedversion.LastUpgradeStage {
 				l.Printf("waiting for destination cluster to finalize upgrade")
-				// TODO(msbutler): once we allow multiple major upgrades, we will need
-				// to reset this channel.
 				chanReadCtx(ctx, destFinalized)
 			} else {
 				l.Printf("no need to wait for dest: not ready to finalize")
@@ -368,25 +302,27 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 		},
 	)
 
+	destMajorUpgradeCount := 0
 	cm.destMvt.AfterUpgradeFinalized(
 		"cutover and allow source to finalize",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-			version := h.Context().ToVersion
-			final := clusterupgrade.CurrentVersion()
-			if version.Equal(final) {
-				close(destFinalized)
+			// Ensure the source always waits to finalize until after the dest finalizes.
+			// NB: the cutover may happen while the source is still in some mixed version state.
+			destFinalized <- struct{}{}
+			destMajorUpgradeCount++
+			if destMajorUpgradeCount == expectedMajorUpgrades {
 				return cm.destCutoverAndFingerprint(ctx, l, r, h)
 			}
 			return nil
 		},
 	)
 
+	sourceMajorUpgradeCount := 0
 	cm.sourceMvt.AfterUpgradeFinalized(
 		"fingerprint source",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-			version := h.Context().ToVersion
-			final := clusterupgrade.CurrentVersion()
-			if version.Equal(final) {
+			sourceMajorUpgradeCount++
+			if sourceMajorUpgradeCount == expectedMajorUpgrades {
 				return cm.sourceFingerprintAndCompare(ctx, l, r, h)
 			}
 			return nil
@@ -452,7 +388,6 @@ func (cm *c2cMixed) sourceFingerprintAndCompare(
 ) error {
 	args := chanReadCtx(ctx, cm.fingerprintArgsChan)
 	cm.workloadStopper()
-	cm.readOnlyWorkloadStopper()
 	var sourceFingerprint int64
 	if err := h.System.QueryRow(r,
 		fmt.Sprintf(fingerprintQuery, args.retainedTime.AsOfSystemTime(), args.cutoverTime.AsOfSystemTime()),
@@ -468,33 +403,31 @@ func (cm *c2cMixed) sourceFingerprintAndCompare(
 	return nil
 }
 
-func (cm *c2cMixed) Run(t task.Tasker) {
+func (cm *c2cMixed) Run(ctx context.Context, c cluster.Cluster) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	t.Go(func(_ context.Context, l *logger.Logger) error {
+	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				l.Printf("source cluster upgrade failed: %v", r)
+				cm.t.L().Printf("source cluster upgrade failed: %v", r)
 			}
 		}()
 		defer wg.Done()
 		cm.sourceMvt.Run()
-		return nil
-	})
+	}()
 
-	t.Go(func(taskCtx context.Context, l *logger.Logger) error {
+	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				l.Printf("destination cluster upgrade failed: %v", r)
+				cm.t.L().Printf("destination cluster upgrade failed: %v", r)
 			}
 		}()
 		defer wg.Done()
 
-		chanReadCtx(taskCtx, cm.sourceStartedChan)
+		chanReadCtx(ctx, cm.sourceStartedChan)
 		cm.destMvt.Run()
-		return nil
-	})
+	}()
 
 	wg.Wait()
 }
@@ -509,12 +442,12 @@ func (cm *c2cMixed) WaitForReplicatedTime(
 	cm.t.L().Printf("waiting for replicated time to advance past %s", targetTime)
 	return testutils.SucceedsWithinError(func() error {
 		query := "SELECT replicated_time FROM [SHOW TENANT $1 WITH REPLICATION STATUS]"
-		var replicatedTime gosql.NullTime
+		var replicatedTime time.Time
 		_, db := h.RandomDB(r)
 		if err := db.QueryRowContext(ctx, query, destTenantName).Scan(&replicatedTime); err != nil {
 			return err
 		}
-		if !(replicatedTime.Valid && replicatedTime.Time.After(targetTime)) {
+		if !replicatedTime.After(targetTime) {
 			return errors.Newf("replicated time %s not yet at %s", replicatedTime, targetTime)
 		}
 		cm.t.L().Printf("replicated time is now %s, past %s", replicatedTime, targetTime)

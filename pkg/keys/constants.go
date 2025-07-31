@@ -80,8 +80,6 @@ var (
 	// LocalRangeAppliedStateSuffix is the suffix for the range applied state
 	// key.
 	LocalRangeAppliedStateSuffix = []byte("rask")
-	// LocalRangeForceFlushSuffix is the suffix for the range force flush key.
-	LocalRangeForceFlushSuffix = []byte("rffk")
 	// This was previously used for the replicated RaftTruncatedState. It is no
 	// longer used and this key has been removed via a migration. See
 	// LocalRaftTruncatedStateSuffix for the corresponding unreplicated

@@ -41,26 +41,15 @@ tc_start_block "Push Diagrams to Git"
 cd generated-diagrams
 
 changed_diagrams=$(git status --porcelain)
-# Check if the branch exists remotely
-branch_exists=$(git ls-remote --heads ssh://git@github.com/cockroachdb/generated-diagrams.git "$TC_BUILD_BRANCH")
-if [ -z "$changed_diagrams" ]; then
-    if [ "$TC_BUILD_BRANCH" = "master" ]; then
-        echo "No diagrams changed on master branch. Exiting."
-        tc_end_block "Push Diagrams to Git"
-        exit 0
-    elif [ -z "$branch_exists" ]; then
-        echo "Branch $TC_BUILD_BRANCH does not exist. Creating empty commit."
-        echo "No diagrams changed, but creating branch $TC_BUILD_BRANCH anyway."
-        git commit --allow-empty -m "Empty commit to create branch $TC_BUILD_BRANCH for reference $cockroach_ref.This empty commit is required to ensure the branch exists in the remote repository even when there are no diagram changes. This helps maintain branch consistency with cockroach repo to ensure clean release note generation process "
-    else
-        echo "Branch $TC_BUILD_BRANCH already exists. Skipping empty commit."
-        tc_end_block "Push Diagrams to Git"
-        exit 0
-    fi
-else
-    git add .
-    git commit -m "Snapshot $cockroach_ref"
+if [ -z "$changed_diagrams" ]
+then
+	echo "No diagrams changed. Exiting."
+  tc_end_block "Push Diagrams to Git"
+	exit 0
 fi
+
+git add .
+git commit -m "Snapshot $cockroach_ref"
 
 github_ssh_key="${PRIVATE_DEPLOY_KEY_FOR_GENERATED_DIAGRAMS}"
 configure_git_ssh_key

@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build !linux && !darwin
+// +build !linux,!darwin
 
 package disk
 

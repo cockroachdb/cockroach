@@ -14,45 +14,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
-// GithubPoster interface allows MaybePost to be mocked in unit tests that test
-// failure modes.
-type GithubPoster interface {
-	MaybePost(
-		t *testImpl, issueInfo *githubIssueInfo, l *logger.Logger, message string,
-		params map[string]string) (
-		*issues.TestFailureIssue, error)
-}
-
-// githubIssues struct implements GithubPoster
 type githubIssues struct {
-	disable     bool
-	issuePoster func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest,
-		*issues.Options) (*issues.TestFailureIssue, error)
-	teamLoader func() (team.Map, error)
-}
-
-// githubIssueInfo struct contains information related to this issue on this
-// worker / test
-// separate from githubIssues because githubIssues is shared amongst all workers
-type githubIssueInfo struct {
+	disable      bool
 	cluster      *clusterImpl
 	vmCreateOpts *vm.CreateOpts
+	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest, *issues.Options) (*issues.TestFailureIssue, error)
+	teamLoader   func() (team.Map, error)
 }
 
-// newGithubIssueInfo constructor for newGithubIssueInfo
-func newGithubIssueInfo(cluster *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssueInfo {
-	return &githubIssueInfo{
-		cluster:      cluster,
+func newGithubIssues(disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssues {
+	return &githubIssues{
+		disable:      disable,
 		vmCreateOpts: vmCreateOpts,
+		cluster:      c,
+		issuePoster:  issues.Post,
+		teamLoader:   team.DefaultLoadTeams,
 	}
 }
 
@@ -192,9 +177,9 @@ func (g *githubIssues) createPostRequest(
 	runtimeAssertionsBuild bool,
 	coverageBuild bool,
 	params map[string]string,
-	issueInfo *githubIssueInfo,
 ) (issues.PostRequest, error) {
 	var mention []string
+	var projColID int
 
 	var (
 		issueOwner    = spec.Owner
@@ -233,7 +218,6 @@ func (g *githubIssues) createPostRequest(
 	const infraFlakeLabel = "X-infra-flake"
 	const runtimeAssertionsLabel = "B-runtime-assertions-enabled"
 	const coverageLabel = "B-coverage-enabled"
-	const s390xTestFailureLabel = "s390x-test-failure"
 	labels := []string{"O-roachtest"}
 	if infraFlake {
 		labels = append(labels, infraFlakeLabel)
@@ -252,11 +236,6 @@ func (g *githubIssues) createPostRequest(
 			labels = append(labels, coverageLabel)
 		}
 	}
-	// N.B. To simplify tracking failures on s390x, we add the designated s390x-test-failure label. This could be removed
-	// in the future, i.e., after several major releases, when we expect s390x to be sufficiently stable.
-	if arch := params["arch"]; vm.CPUArch(arch) == vm.ArchS390x {
-		labels = append(labels, s390xTestFailureLabel)
-	}
 	labels = append(labels, spec.ExtraLabels...)
 
 	teams, err := g.teamLoader()
@@ -270,8 +249,11 @@ func (g *githubIssues) createPostRequest(
 			if mentionTeam {
 				mention = append(mention, "@"+string(alias))
 			}
-			labels = append(labels, teams[alias].Labels()...)
+			if label := teams[alias].Label; label != "" {
+				labels = append(labels, label)
+			}
 		}
+		projColID = teams[sl[0]].TriageColumnID
 	}
 
 	branch := os.Getenv("TC_BUILD_BRANCH")
@@ -281,8 +263,8 @@ func (g *githubIssues) createPostRequest(
 
 	artifacts := fmt.Sprintf("/%s", testName)
 
-	if issueInfo.cluster != nil {
-		issueClusterName = issueInfo.cluster.name
+	if g.cluster != nil {
+		issueClusterName = g.cluster.name
 	}
 
 	issueMessage := messagePrefix + message
@@ -306,6 +288,7 @@ func (g *githubIssues) createPostRequest(
 
 	return issues.PostRequest{
 		MentionOnCreate: mention,
+		ProjectColumnID: projColID,
 		PackageName:     "roachtest",
 		TestName:        issueName,
 		Labels:          labels,
@@ -319,13 +302,8 @@ func (g *githubIssues) createPostRequest(
 	}, nil
 }
 
-// MaybePost entry point for POSTing an issue to GitHub
 func (g *githubIssues) MaybePost(
-	t *testImpl,
-	issueInfo *githubIssueInfo,
-	l *logger.Logger,
-	message string,
-	params map[string]string,
+	t *testImpl, l *logger.Logger, message string, params map[string]string,
 ) (*issues.TestFailureIssue, error) {
 	skipReason := g.shouldPost(t)
 	if skipReason != "" {
@@ -336,7 +314,7 @@ func (g *githubIssues) MaybePost(
 	postRequest, err := g.createPostRequest(
 		t.Name(), t.start, t.end, t.spec, t.failures(),
 		message,
-		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled, params, issueInfo,
+		tests.UsingRuntimeAssertions(t), t.goCoverEnabled, params,
 	)
 
 	if err != nil {

@@ -94,75 +94,39 @@ PREPARE a (INT8) AS DELETE FROM a WHERE ((b) = ($1)) -- fully parenthesized
 PREPARE a (INT8) AS DELETE FROM a WHERE b = $1 -- literals removed
 PREPARE _ (INT8) AS DELETE FROM _ WHERE _ = $1 -- identifiers removed
 
-error
+parse
 PREPARE a AS BACKUP DATABASE a TO 'b'
 ----
-at or near "b": syntax error: The `BACKUP TO` syntax is no longer supported. Please use `BACKUP INTO` to create a backup collection.
-DETAIL: source SQL:
-PREPARE a AS BACKUP DATABASE a TO 'b'
-                                  ^
-HINT: try \h BACKUP
+PREPARE a AS BACKUP DATABASE a TO '*****' -- normalized!
+PREPARE a AS BACKUP DATABASE a TO ('*****') -- fully parenthesized
+PREPARE a AS BACKUP DATABASE a TO '_' -- literals removed
+PREPARE _ AS BACKUP DATABASE _ TO '*****' -- identifiers removed
+PREPARE a AS BACKUP DATABASE a TO 'b' -- passwords exposed
 
-error
+parse
 PREPARE a (STRING) AS BACKUP DATABASE a TO $1
 ----
-at or near "1": syntax error: The `BACKUP TO` syntax is no longer supported. Please use `BACKUP INTO` to create a backup collection.
-DETAIL: source SQL:
 PREPARE a (STRING) AS BACKUP DATABASE a TO $1
-                                           ^
-HINT: try \h BACKUP
+PREPARE a (STRING) AS BACKUP DATABASE a TO ($1) -- fully parenthesized
+PREPARE a (STRING) AS BACKUP DATABASE a TO $1 -- literals removed
+PREPARE _ (STRING) AS BACKUP DATABASE _ TO $1 -- identifiers removed
 
-error
+parse
 PREPARE a AS RESTORE DATABASE a FROM 'b'
 ----
-at or near "EOF": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
-DETAIL: source SQL:
-PREPARE a AS RESTORE DATABASE a FROM 'b'
-                                        ^
-HINT: try \h RESTORE
+PREPARE a AS RESTORE DATABASE a FROM '*****' -- normalized!
+PREPARE a AS RESTORE DATABASE a FROM ('*****') -- fully parenthesized
+PREPARE a AS RESTORE DATABASE a FROM '_' -- literals removed
+PREPARE _ AS RESTORE DATABASE _ FROM '*****' -- identifiers removed
+PREPARE a AS RESTORE DATABASE a FROM 'b' -- passwords exposed
 
-error
+parse
 PREPARE a (STRING) AS RESTORE DATABASE a FROM $1
 ----
-at or near "EOF": syntax error: The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`.
-DETAIL: source SQL:
 PREPARE a (STRING) AS RESTORE DATABASE a FROM $1
-                                                ^
-HINT: try \h RESTORE
-
-parse
-PREPARE a AS BACKUP DATABASE a INTO 'b'
-----
-PREPARE a AS BACKUP DATABASE a INTO '*****' -- normalized!
-PREPARE a AS BACKUP DATABASE a INTO ('*****') -- fully parenthesized
-PREPARE a AS BACKUP DATABASE a INTO '_' -- literals removed
-PREPARE _ AS BACKUP DATABASE _ INTO '*****' -- identifiers removed
-PREPARE a AS BACKUP DATABASE a INTO 'b' -- passwords exposed
-
-parse
-PREPARE a (STRING) AS BACKUP DATABASE a INTO $1
-----
-PREPARE a (STRING) AS BACKUP DATABASE a INTO $1
-PREPARE a (STRING) AS BACKUP DATABASE a INTO ($1) -- fully parenthesized
-PREPARE a (STRING) AS BACKUP DATABASE a INTO $1 -- literals removed
-PREPARE _ (STRING) AS BACKUP DATABASE _ INTO $1 -- identifiers removed
-
-parse
-PREPARE a AS RESTORE DATABASE a FROM 'b' IN 'c'
-----
-PREPARE a AS RESTORE DATABASE a FROM 'b' IN '*****' -- normalized!
-PREPARE a AS RESTORE DATABASE a FROM ('b') IN ('*****') -- fully parenthesized
-PREPARE a AS RESTORE DATABASE a FROM '_' IN '_' -- literals removed
-PREPARE _ AS RESTORE DATABASE _ FROM 'b' IN '*****' -- identifiers removed
-PREPARE a AS RESTORE DATABASE a FROM 'b' IN 'c' -- passwords exposed
-
-parse
-PREPARE a (STRING) AS RESTORE DATABASE a FROM $1 IN $2
-----
-PREPARE a (STRING) AS RESTORE DATABASE a FROM $1 IN $2
-PREPARE a (STRING) AS RESTORE DATABASE a FROM ($1) IN ($2) -- fully parenthesized
-PREPARE a (STRING) AS RESTORE DATABASE a FROM $1 IN $1 -- literals removed
-PREPARE _ (STRING) AS RESTORE DATABASE _ FROM $1 IN $2 -- identifiers removed
+PREPARE a (STRING) AS RESTORE DATABASE a FROM ($1) -- fully parenthesized
+PREPARE a (STRING) AS RESTORE DATABASE a FROM $1 -- literals removed
+PREPARE _ (STRING) AS RESTORE DATABASE _ FROM $1 -- identifiers removed
 
 parse
 PREPARE a AS CANCEL QUERIES SELECT 1

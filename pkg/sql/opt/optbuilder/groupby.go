@@ -721,7 +721,7 @@ func (b *Builder) buildAggregateFunction(
 	if f.OrderBy != nil {
 		for _, o := range f.OrderBy {
 			// ORDER BY (a, b) => ORDER BY a, b.
-			te := fromScope.resolveType(o.Expr, types.AnyElement)
+			te := fromScope.resolveType(o.Expr, types.Any)
 			cols := flattenTuples([]tree.TypedExpr{te})
 
 			nullsDefaultOrder := b.hasDefaultNullsOrder(o)
@@ -730,7 +730,6 @@ func (b *Builder) buildAggregateFunction(
 					expr := tree.NewTypedIsNullExpr(e)
 					b.buildAggArg(expr, &info, tempScope, fromScope)
 				}
-				ensureColumnOrderable(e)
 				b.buildAggArg(e, &info, tempScope, fromScope)
 			}
 		}
@@ -990,7 +989,7 @@ func (b *Builder) allowImplicitGroupingColumn(colID opt.ColumnID, g *groupby) bo
 	// Check UNIQUE INDEX constraints.
 	for i := 1; i < tab.IndexCount(); i++ {
 		index := tab.Index(i)
-		if !index.IsUnique() || !index.Type().CanBeUnique() {
+		if !index.IsUnique() || index.IsInverted() {
 			continue
 		}
 		// If any of the key columns is nullable, uniqueCols is suffixed with the

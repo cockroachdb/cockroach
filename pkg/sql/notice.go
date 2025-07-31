@@ -26,14 +26,11 @@ var NoticesEnabled = settings.RegisterBoolSetting(
 // noticeSender is a subset of RestrictedCommandResult which allows
 // sending notices.
 type noticeSender interface {
-	// BufferNotice buffers the given notice to be sent to the client before
-	// the connection is closed. The notice will be in the command result buffer,
-	// meaning that it will not be sent if the result buffer is discarded.
+	// BufferNotice buffers the given notice to be flushed to the client before
+	// the connection is closed.
 	BufferNotice(pgnotice.Notice)
-	// SendNotice sends the given notice to the client. The notice will be in
-	// the client communication buffer until it is flushed. Flushing can be forced
-	// to occur immediately by setting immediateFlush to true.
-	SendNotice(ctx context.Context, notice pgnotice.Notice, immediateFlush bool) error
+	// SendNotice immediately flushes the given notice to the client.
+	SendNotice(context.Context, pgnotice.Notice) error
 }
 
 // BufferClientNotice implements the eval.ClientNoticeSender interface.
@@ -48,16 +45,14 @@ func (p *planner) BufferClientNotice(ctx context.Context, notice pgnotice.Notice
 }
 
 // SendClientNotice implements the eval.ClientNoticeSender interface.
-func (p *planner) SendClientNotice(
-	ctx context.Context, notice pgnotice.Notice, immediateFlush bool,
-) error {
+func (p *planner) SendClientNotice(ctx context.Context, notice pgnotice.Notice) error {
 	if log.V(2) {
 		log.Infof(ctx, "sending notice: %+v", notice)
 	}
 	if !p.checkNoticeSeverity(notice) {
 		return nil
 	}
-	return p.noticeSender.SendNotice(ctx, notice, immediateFlush)
+	return p.noticeSender.SendNotice(ctx, notice)
 }
 
 func (p *planner) checkNoticeSeverity(notice pgnotice.Notice) bool {

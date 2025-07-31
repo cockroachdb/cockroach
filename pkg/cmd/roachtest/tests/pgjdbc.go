@@ -109,21 +109,6 @@ func registerPgjdbc(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		// Remove an unsupported deferrable qualifier (#31632) from the XA test
-		// suite setup. This prevents XADataSourceTest.mappingOfConstraintViolations
-		// from running properly (it fails either way), but it allows the rest of
-		// the XA tests to run.
-		if err := repeatRunE(
-			ctx,
-			t,
-			c,
-			node,
-			"removing unsupported deferrable qualifier from test",
-			"sed -i 's/ deferrable//' /mnt/data1/pgjdbc/pgjdbc/src/test/java/org/postgresql/test/xa/XADataSourceTest.java",
-		); err != nil {
-			t.Fatal(err)
-		}
-
 		t.Status("building pgjdbc (without tests)")
 		// Build pgjdbc and run a single test, this step involves some
 		// downloading, so it needs a retry loop as well. Just building was not

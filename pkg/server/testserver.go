@@ -34,10 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -45,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -56,10 +53,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -76,6 +72,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
+	"google.golang.org/grpc"
 )
 
 // makeTestConfig returns a config for testing. It overrides the
@@ -88,8 +85,7 @@ func makeTestConfig(st *cluster.Settings, tr *tracing.Tracer) Config {
 	return Config{
 		BaseConfig: makeTestBaseConfig(st, tr),
 		KVConfig:   makeTestKVConfig(),
-		SQLConfig: makeTestSQLConfig(st, roachpb.SystemTenantID,
-			roachpb.TenantName(roachpb.SystemTenantID.String())),
+		SQLConfig:  makeTestSQLConfig(st, roachpb.SystemTenantID),
 	}
 }
 
@@ -100,6 +96,8 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	baseCfg := MakeBaseConfig(st, tr, base.DefaultTestStoreSpec)
 	// Test servers start in secure mode by default.
 	baseCfg.Insecure = false
+	// Configure test storage engine.
+	baseCfg.StorageEngine = storage.DefaultStorageEngine
 	// Load test certs. In addition, the tests requiring certs
 	// need to call securityassets.SetLoader(securitytest.EmbeddedAssets)
 	// in their init to mock out the file system calls for calls to AssetFS,
@@ -126,10 +124,8 @@ func makeTestKVConfig() KVConfig {
 	return kvCfg
 }
 
-func makeTestSQLConfig(
-	st *cluster.Settings, tenID roachpb.TenantID, tenName roachpb.TenantName,
-) SQLConfig {
-	return MakeSQLConfig(tenID, tenName, base.DefaultTestTempStorageConfig(st))
+func makeTestSQLConfig(st *cluster.Settings, tenID roachpb.TenantID) SQLConfig {
+	return MakeSQLConfig(tenID, base.DefaultTestTempStorageConfig(st))
 }
 
 func initTraceDir(dir string) error {
@@ -142,37 +138,14 @@ func initTraceDir(dir string) error {
 	return nil
 }
 
-func configureSlimTestServer(params base.TestServerArgs) base.TestServerArgs {
-	cfg := params.SlimTestSeverConfig
-	if !cfg.Options.EnableTimeseries {
-		ts.TimeseriesStorageEnabled.Override(context.Background(), &params.Settings.SV, false)
-	}
-	if !cfg.Options.EnableAutoStats {
-		stats.AutomaticStatisticsClusterMode.Override(context.Background(), &params.Settings.SV, false)
-	}
-	if !cfg.Options.EnableSpanConfigJob {
-		spanconfigmanager.JobEnabledSetting.Override(context.Background(), &params.Settings.SV, false)
-	}
-	if !cfg.Options.EnableAllUpgrades {
-		if params.Knobs.UpgradeManager == nil {
-			params.Knobs.UpgradeManager = &upgradebase.TestingKnobs{}
-		}
-		params.Knobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps = true
-	}
-
-	return params
-}
-
 // makeTestConfigFromParams creates a Config from a TestServerParams.
 func makeTestConfigFromParams(params base.TestServerArgs) Config {
-	if params.Settings == nil {
-		params.Settings = cluster.MakeClusterSettings()
-	}
 	st := params.Settings
-	if params.SlimTestSeverConfig != nil {
-		params = configureSlimTestServer(params)
+	if params.Settings == nil {
+		st = cluster.MakeClusterSettings()
 	}
 
+	st.ExternalIODir = params.ExternalIODir
 	tr := params.Tracer
 	if params.Tracer == nil {
 		tr = tracing.NewTracerWithOpt(context.TODO(), tracing.WithClusterSettings(&st.SV), tracing.WithTracingMode(params.TracingDefault))
@@ -193,7 +166,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.Locality = params.Locality
 	cfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
 	cfg.DisableSQLServer = params.DisableSQLServer
-	cfg.ExternalIODir = params.ExternalIODir
 	if params.TraceDir != "" {
 		if err := initTraceDir(params.TraceDir); err == nil {
 			cfg.InflightTraceDirName = params.TraceDir
@@ -286,7 +258,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	for _, storeSpec := range params.StoreSpecs {
 		if storeSpec.InMemory {
 			if storeSpec.Size.Percent > 0 {
-				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", base.StoreSpecCmdLineString(storeSpec)))
+				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
 			}
 		} else {
 			// The default store spec is in-memory, so if this one is on-disk then
@@ -308,9 +280,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			}
 			if cfg.CPUProfileDirName == "" {
 				cfg.CPUProfileDirName = filepath.Join(storeSpec.Path, "logs", base.CPUProfileDir)
-			}
-			if cfg.ExecutionTraceDirName == "" {
-				cfg.ExecutionTraceDirName = filepath.Join(storeSpec.Path, "logs", base.ExecutionTraceDir)
 			}
 		}
 	}
@@ -574,14 +543,6 @@ func (ts *testServer) RaftTransport() interface{} {
 	return nil
 }
 
-// StoreLivenessTransport is part of the serverutils.StorageLayerInterface.
-func (ts *testServer) StoreLivenessTransport() interface{} {
-	if ts != nil {
-		return ts.storeLiveness.Transport
-	}
-	return nil
-}
-
 // AmbientCtx implements serverutils.ApplicationLayerInterface. This
 // retrieves the ambient context for this server. This is intended for
 // exclusive use by test code.
@@ -595,11 +556,6 @@ func (ts *testServer) TestingKnobs() *base.TestingKnobs {
 		return &ts.Cfg.TestingKnobs
 	}
 	return nil
-}
-
-// ExternalIODir is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) ExternalIODir() string {
-	return ts.cfg.ExternalIODir
 }
 
 // SQLServerInternal is part of the serverutils.ApplicationLayerInterface.
@@ -639,7 +595,6 @@ func (ts *testServer) startDefaultTestTenant(
 	}
 
 	params := base.TestTenantArgs{
-		TenantName: ts.params.DefaultTenantName,
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
 		TenantID:                  serverutils.TestTenantID(),
@@ -655,40 +610,35 @@ func (ts *testServer) startDefaultTestTenant(
 		StartDiagnosticsReporting: ts.params.StartDiagnosticsReporting,
 		Settings:                  tenantSettings,
 	}
-	ts.setupTenantTestingKnobs(&params.TestingKnobs)
+
+	// Since we're creating a tenant, it doesn't make sense to pass through the
+	// Server testing knobs, since the bulk of them only apply to the system
+	// tenant. Any remaining knobs which are required by the tenant should be
+	// passed through here.
+	params.TestingKnobs.Server = &TestingKnobs{}
+
+	if ts.params.Knobs.Server != nil {
+		params.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+		params.TestingKnobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
+	}
 	return ts.StartTenant(ctx, params)
 }
 
 func (ts *testServer) getSharedProcessDefaultTenantArgs() base.TestSharedProcessTenantArgs {
 	args := base.TestSharedProcessTenantArgs{
-		TenantName:  ts.params.DefaultTenantName,
+		TenantName:  "test-tenant",
 		TenantID:    serverutils.TestTenantID(),
 		Knobs:       ts.params.Knobs,
 		UseDatabase: ts.params.UseDatabase,
 		Settings:    ts.params.Settings,
 	}
-	ts.setupTenantTestingKnobs(&args.Knobs)
-	return args
-}
-
-func (ts *testServer) setupTenantTestingKnobs(tenantKnobs *base.TestingKnobs) {
-	// Since we're creating a tenant, it doesn't make sense to pass through the
-	// Server testing k, since the bulk of them only apply to the system
-	// tenant. Any remaining k which are required by the tenant should be
-	// passed through here.
-	tenantKnobs.Server = &TestingKnobs{}
+	// See comment above on separate process tenant regarding the testing knobs.
+	args.Knobs.Server = &TestingKnobs{}
 	if ts.params.Knobs.Server != nil {
-		tenantKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs =
-			ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
-		tenantKnobs.Server.(*TestingKnobs).ContextTestingKnobs = rpc.ContextTestingKnobs{
-			InjectedLatencyOracle:  ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle,
-			InjectedLatencyEnabled: ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled,
-		}
-		tenantKnobs.Server.(*TestingKnobs).StubTimeNow = ts.params.Knobs.Server.(*TestingKnobs).StubTimeNow
+		args.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+		args.Knobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
 	}
-	if ts.params.Knobs.UpgradeManager != nil {
-		tenantKnobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps = ts.params.Knobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps
-	}
+	return args
 }
 
 func (ts *testServer) startSharedProcessDefaultTestTenant(
@@ -806,8 +756,8 @@ func (ts *testServer) grantDefaultTenantCapabilities(
 				return err
 			}
 		} else {
-			if err := ts.WaitForTenantCapabilities(ctx, tenantID, map[tenantcapabilitiespb.ID]string{
-				tenantcapabilitiespb.CanUseNodelocalStorage: "true",
+			if err := ts.WaitForTenantCapabilities(ctx, tenantID, map[tenantcapabilities.ID]string{
+				tenantcapabilities.CanUseNodelocalStorage: "true",
 			}, ""); err != nil {
 				return err
 			}
@@ -831,12 +781,6 @@ func (ts *testServer) PreStart(ctx context.Context) error {
 	func(args base.TestSharedProcessTenantArgs) {
 		ts.topLevelServer.serverController.mu.Lock()
 		defer ts.topLevelServer.serverController.mu.Unlock()
-		// Note: Since we are fetching default tenant args, only the default tenant
-		// (i.e., demoapp, test-tenant) is present here. If a test starts another
-		// secondary tenant with different arguments (such as testing knobs), those
-		// arguments won't be present in the testArgs map. To prevent the race
-		// condition mentioned earlier, we should disable the server controller
-		// tenant watcher and start those tenants explicitly on every node.
 		ts.topLevelServer.serverController.mu.testArgs[args.TenantName] = args
 	}(ts.getSharedProcessDefaultTenantArgs())
 	return ts.topLevelServer.PreStart(ctx)
@@ -947,9 +891,6 @@ type testTenant struct {
 	// pgPreServer handles SQL connections prior to routing them to a
 	// specific tenant.
 	pgPreServer *pgwire.PreServeConnHandler
-	// deploymentMode specifies the tenant's deployment mode.
-	// Allowed values: ExternalProcess or SharedProcess.
-	deploymentMode serverutils.DeploymentMode
 }
 
 var _ serverutils.ApplicationLayerInterface = &testTenant{}
@@ -987,11 +928,6 @@ func (t *testTenant) HTTPAddr() string {
 // RPCAddr is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) RPCAddr() string {
 	return t.Cfg.Addr
-}
-
-// ExternalIODir is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) ExternalIODir() string {
-	return t.Cfg.ExternalIODir
 }
 
 // SQLConn is part of the serverutils.ApplicationLayerInterface.
@@ -1298,40 +1234,11 @@ func (t *testTenant) SettingsWatcher() interface{} {
 	return t.sql.settingsWatcher
 }
 
-// DeploymentMode is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) DeploymentMode() serverutils.DeploymentMode {
-	return t.deploymentMode
-}
-
-// GrantTenantCapabilities is part of the serverutils.TenantControlInterface.
-func (ts *testServer) GrantTenantCapabilities(
-	ctx context.Context, tenID roachpb.TenantID, targetCaps map[tenantcapabilitiespb.ID]string,
-) error {
-	conn, err := ts.SQLConnE()
-	if err != nil {
-		return err
-	}
-
-	var parts []string
-	for k, v := range targetCaps {
-		parts = append(parts, k.String()+"="+v)
-	}
-	capabilities := strings.Join(parts, ",")
-
-	if _, err = conn.Exec(fmt.Sprintf(`ALTER TENANT [$1] GRANT CAPABILITY %s`, capabilities),
-		tenID.ToUint64(),
-	); err != nil {
-		return err
-	}
-
-	return ts.WaitForTenantCapabilities(ctx, tenID, targetCaps, "")
-}
-
 // WaitForTenantCapabilities is part of the serverutils.TenantControlInterface.
 func (ts *testServer) WaitForTenantCapabilities(
 	ctx context.Context,
 	tenID roachpb.TenantID,
-	targetCaps map[tenantcapabilitiespb.ID]string,
+	targetCaps map[tenantcapabilities.ID]string,
 	errPrefix string,
 ) error {
 	if tenID.IsSystem() {
@@ -1345,7 +1252,7 @@ func (ts *testServer) WaitForTenantCapabilities(
 		errPrefix += ": "
 	}
 
-	missingCapabilityError := func(capID tenantcapabilitiespb.ID) error {
+	missingCapabilityError := func(capID tenantcapabilities.ID) error {
 		return errors.Newf("%stenant %s cap %q not at expected value", errPrefix, tenID, capID)
 	}
 
@@ -1354,7 +1261,7 @@ func (ts *testServer) WaitForTenantCapabilities(
 	// the closed timestamp interval required to see new updates.
 	ts.tenantCapabilitiesWatcher.TestingRestart()
 
-	wrappedFn := func() error {
+	return testutils.SucceedsSoonError(func() error {
 		capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(tenID)
 		if !found {
 			return errors.Newf("%scapabilities not ready for tenant %v", errPrefix, tenID)
@@ -1368,8 +1275,7 @@ func (ts *testServer) WaitForTenantCapabilities(
 		}
 
 		return nil
-	}
-	return retry.ForDuration(200*time.Second, wrappedFn)
+	})
 }
 
 // StartSharedProcessTenant is part of the serverutils.TenantControlInterface.
@@ -1485,7 +1391,6 @@ func (ts *testServer) StartSharedProcessTenant(
 		pgL:            sqlServerWrapper.loopbackPgL,
 		httpTestServer: hts,
 		drain:          sqlServerWrapper.drainServer,
-		deploymentMode: serverutils.SharedProcess,
 	}
 
 	sqlDB, err := ts.SQLConnE(serverutils.DBName("cluster:" + string(args.TenantName) + "/" + args.UseDatabase))
@@ -1633,15 +1538,15 @@ func (ts *testServer) StartTenant(
 
 	ie := ts.InternalExecutor().(*sql.InternalExecutor)
 	if !params.DisableCreateTenant {
-		row, err := ie.QueryRow(
+		rowCount, err := ie.Exec(
 			ctx, "testserver-check-tenant-active", nil,
-			"SELECT name FROM system.tenants WHERE id=$1 AND active=true",
+			"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
 			params.TenantID.ToUint64(),
 		)
 		if err != nil {
 			return nil, err
 		}
-		if row == nil {
+		if rowCount == 0 {
 			// Tenant doesn't exist. Create it.
 			if _, err := ie.Exec(
 				ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1, $2)",
@@ -1649,7 +1554,7 @@ func (ts *testServer) StartTenant(
 			); err != nil {
 				return nil, err
 			}
-		} else if params.TenantName != "" && params.TenantName != roachpb.TenantName(tree.MustBeDString(row[0])) {
+		} else if params.TenantName != "" {
 			_, err := ie.Exec(ctx, "rename-test-tenant", nil,
 				`ALTER TENANT [$1] RENAME TO $2`,
 				params.TenantID.ToUint64(), params.TenantName)
@@ -1721,7 +1626,8 @@ func (ts *testServer) StartTenant(
 		st = cluster.MakeTestingClusterSettings()
 	}
 
-	sqlCfg := makeTestSQLConfig(st, params.TenantID, params.TenantName)
+	st.ExternalIODir = params.ExternalIODir
+	sqlCfg := makeTestSQLConfig(st, params.TenantID)
 	sqlCfg.TenantLoopbackAddr = ts.AdvRPCAddr()
 	if params.MemoryPoolSize != 0 {
 		sqlCfg.MemoryPoolSize = params.MemoryPoolSize
@@ -1776,10 +1682,8 @@ func (ts *testServer) StartTenant(
 	baseCfg.DefaultZoneConfig = ts.Cfg.DefaultZoneConfig
 	baseCfg.HeapProfileDirName = ts.Cfg.BaseConfig.HeapProfileDirName
 	baseCfg.CPUProfileDirName = ts.Cfg.BaseConfig.CPUProfileDirName
-	baseCfg.ExecutionTraceDirName = ts.Cfg.BaseConfig.ExecutionTraceDirName
 	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 	baseCfg.ExternalIODirConfig = params.ExternalIODirConfig
-	baseCfg.ExternalIODir = params.ExternalIODir
 
 	// Grant the tenant the default capabilities.
 	if err := ts.grantDefaultTenantCapabilities(ctx, params.TenantID, params.SkipTenantCheck); err != nil {
@@ -1863,7 +1767,6 @@ func (ts *testServer) StartTenant(
 		http:           sw.http,
 		drain:          sw.drainServer,
 		pgL:            sw.loopbackPgL,
-		deploymentMode: serverutils.ExternalProcess,
 	}, err
 }
 
@@ -1955,7 +1858,7 @@ func (ts *testServer) SetReadyFn(fn func(bool)) {
 
 // WriteSummaries implements the serverutils.StorageLayerInterface.
 func (ts *testServer) WriteSummaries() error {
-	return ts.node.writeNodeStatus(context.TODO(), false)
+	return ts.node.writeNodeStatus(context.TODO(), time.Hour, false)
 }
 
 // UpdateChecker implements the serverutils.StorageLayerInterface.
@@ -1991,11 +1894,6 @@ func (ts *testServer) MustGetSQLNetworkCounter(name string) int64 {
 		reg.AddMetricStruct(m)
 	}
 	return mustGetSQLCounterForRegistry(reg, name)
-}
-
-// DeploymentMode is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) DeploymentMode() serverutils.DeploymentMode {
-	return serverutils.SingleTenant
 }
 
 // Locality is part of the serverutils.ApplicationLayerInterface.
@@ -2383,6 +2281,16 @@ func (ts *testServer) SystemConfigProvider() config.SystemConfigProvider {
 	return ts.node.storeCfg.SystemConfigProvider
 }
 
+// KVFlowController is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) KVFlowController() interface{} {
+	return ts.node.storeCfg.KVFlowController
+}
+
+// KVFlowHandles is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) KVFlowHandles() interface{} {
+	return ts.node.storeCfg.KVFlowHandles
+}
+
 // Codec is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) Codec() keys.SQLCodec {
 	return ts.ExecutorConfig().(sql.ExecutorConfig).Codec
@@ -2525,7 +2433,6 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error
 
 	if !params.PartOfCluster {
 		ts.Cfg.DefaultZoneConfig.NumReplicas = proto.Int32(1)
-		ts.Cfg.DefaultSystemZoneConfig.NumReplicas = proto.Int32(1)
 	}
 
 	// Needs to be called before NewServer to ensure resolvers are initialized.
@@ -2594,14 +2501,14 @@ func TestingMakeLoggingContexts(
 	appTenantID roachpb.TenantID,
 ) (sysContext, appContext context.Context) {
 	ctxSysTenant := context.Background()
-	ctxSysTenant = serverident.ContextWithServerIdentification(ctxSysTenant, &idProvider{
+	ctxSysTenant = context.WithValue(ctxSysTenant, serverident.ServerIdentificationContextKey{}, &idProvider{
 		tenantID:   roachpb.SystemTenantID,
 		clusterID:  &base.ClusterIDContainer{},
 		serverID:   &base.NodeIDContainer{},
 		tenantName: roachpb.NewTenantNameContainer("system"),
 	})
 	ctxAppTenant := context.Background()
-	ctxAppTenant = serverident.ContextWithServerIdentification(ctxAppTenant, &idProvider{
+	ctxAppTenant = context.WithValue(ctxAppTenant, serverident.ServerIdentificationContextKey{}, &idProvider{
 		tenantID:   appTenantID,
 		clusterID:  &base.ClusterIDContainer{},
 		serverID:   &base.NodeIDContainer{},
@@ -2624,7 +2531,7 @@ func (ts *testServer) NewClientRPCContext(
 // RPCClientConn is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) RPCClientConn(
 	test serverutils.TestFataler, user username.SQLUsername,
-) serverutils.RPCConn {
+) *grpc.ClientConn {
 	conn, err := ts.RPCClientConnE(user)
 	if err != nil {
 		test.Fatal(err)
@@ -2633,26 +2540,22 @@ func (ts *testServer) RPCClientConn(
 }
 
 // RPCClientConnE is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
+func (ts *testServer) RPCClientConnE(user username.SQLUsername) (*grpc.ClientConn, error) {
 	ctx := context.Background()
 	rpcCtx := ts.NewClientRPCContext(ctx, user)
-	conn, err := rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), ts.Locality(), rpcbase.DefaultClass).Connect(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return serverutils.FromGRPCConn(conn), nil
+	return rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), ts.Locality(), rpc.DefaultClass).Connect(ctx)
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) GetAdminClient(test serverutils.TestFataler) serverpb.RPCAdminClient {
+func (ts *testServer) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
 	conn := ts.RPCClientConn(test, username.RootUserName())
-	return conn.NewAdminClient()
+	return serverpb.NewAdminClient(conn)
 }
 
 // GetStatusClient is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) GetStatusClient(test serverutils.TestFataler) serverpb.RPCStatusClient {
+func (ts *testServer) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
 	conn := ts.RPCClientConn(test, username.RootUserName())
-	return conn.NewStatusClient()
+	return serverpb.NewStatusClient(conn)
 }
 
 // NewClientRPCContext is part of the serverutils.ApplicationLayerInterface.
@@ -2669,7 +2572,7 @@ func (t *testTenant) NewClientRPCContext(
 // RPCClientConn is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) RPCClientConn(
 	test serverutils.TestFataler, user username.SQLUsername,
-) serverutils.RPCConn {
+) *grpc.ClientConn {
 	conn, err := t.RPCClientConnE(user)
 	if err != nil {
 		test.Fatal(err)
@@ -2678,33 +2581,22 @@ func (t *testTenant) RPCClientConn(
 }
 
 // RPCClientConnE is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
+func (t *testTenant) RPCClientConnE(user username.SQLUsername) (*grpc.ClientConn, error) {
 	ctx := context.Background()
 	rpcCtx := t.NewClientRPCContext(ctx, user)
-	if !rpcbase.TODODRPC {
-		conn, err := rpcCtx.GRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), t.Locality(), rpcbase.DefaultClass).Connect(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return serverutils.FromGRPCConn(conn), nil
-	}
-	conn, err := rpcCtx.DRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), t.Locality(), rpcbase.DefaultClass).Connect(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return serverutils.FromDRPCConn(conn), nil
+	return rpcCtx.GRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), t.Locality(), rpc.DefaultClass).Connect(ctx)
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) GetAdminClient(test serverutils.TestFataler) serverpb.RPCAdminClient {
+func (t *testTenant) GetAdminClient(test serverutils.TestFataler) serverpb.AdminClient {
 	conn := t.RPCClientConn(test, username.RootUserName())
-	return conn.NewAdminClient()
+	return serverpb.NewAdminClient(conn)
 }
 
 // GetStatusClient is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) GetStatusClient(test serverutils.TestFataler) serverpb.RPCStatusClient {
+func (t *testTenant) GetStatusClient(test serverutils.TestFataler) serverpb.StatusClient {
 	conn := t.RPCClientConn(test, username.RootUserName())
-	return conn.NewStatusClient()
+	return serverpb.NewStatusClient(conn)
 }
 
 func newClientRPCContext(

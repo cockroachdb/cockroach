@@ -126,13 +126,6 @@ type TestingKnobs struct {
 	// OverrideFallbackConf, if set, allows tests to override fields in the
 	// fallback config that will be applied to the span.
 	OverrideFallbackConf func(roachpb.SpanConfig) roachpb.SpanConfig
-
-	// OnFullReconcilerStart is invoked when full reconciliation starts.
-	OnFullReconcilerStart func()
-
-	// OnWatchForZoneConfigUpdatesEstablished is invoked when the RangeFeed over
-	// system.zones starts.
-	OnWatchForZoneConfigUpdatesEstablished func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

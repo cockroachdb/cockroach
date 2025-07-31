@@ -81,6 +81,7 @@ func getObjectPrefix(
 	ctx context.Context, g ByNameGetter, dbName, scName string,
 ) (prefix catalog.ResolvedObjectPrefix, err error) {
 	if g.flags.isMutable {
+		g.flags.isMutable = false
 		g.flags.layerFilters.withoutLeased = true
 	}
 	// If we're reading the object descriptor from the store,
@@ -99,7 +100,7 @@ func getObjectPrefix(
 
 // PrefixAndType looks up an immutable type descriptor by its full name.
 func PrefixAndType(
-	ctx context.Context, g ByNameGetter, name *tree.TypeName,
+	ctx context.Context, g ByNameGetter, name tree.ObjectName,
 ) (catalog.ResolvedObjectPrefix, catalog.TypeDescriptor, error) {
 	p, err := getObjectPrefix(ctx, g, name.Catalog(), name.Schema())
 	if err != nil || p.Schema == nil {
@@ -111,7 +112,7 @@ func PrefixAndType(
 
 // PrefixAndMutableType looks up a mutable type descriptor by its full name.
 func PrefixAndMutableType(
-	ctx context.Context, g MutableByNameGetter, name *tree.TypeName,
+	ctx context.Context, g MutableByNameGetter, name tree.ObjectName,
 ) (catalog.ResolvedObjectPrefix, *typedesc.Mutable, error) {
 	p, err := getObjectPrefix(ctx, ByNameGetter(g), name.Catalog(), name.Schema())
 	if err != nil || p.Schema == nil {
@@ -123,7 +124,7 @@ func PrefixAndMutableType(
 
 // PrefixAndTable looks up an immutable table descriptor by its full name.
 func PrefixAndTable(
-	ctx context.Context, g ByNameGetter, name *tree.TableName,
+	ctx context.Context, g ByNameGetter, name tree.ObjectName,
 ) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor, error) {
 	p, err := getObjectPrefix(ctx, g, name.Catalog(), name.Schema())
 	if err != nil || p.Schema == nil {
@@ -135,7 +136,7 @@ func PrefixAndTable(
 
 // PrefixAndMutableTable looks up a mutable table descriptor by its full name.
 func PrefixAndMutableTable(
-	ctx context.Context, g MutableByNameGetter, name *tree.TableName,
+	ctx context.Context, g MutableByNameGetter, name tree.ObjectName,
 ) (catalog.ResolvedObjectPrefix, *tabledesc.Mutable, error) {
 	p, err := getObjectPrefix(ctx, ByNameGetter(g), name.Catalog(), name.Schema())
 	if err != nil || p.Schema == nil {

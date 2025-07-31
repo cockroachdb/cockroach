@@ -331,7 +331,7 @@ func maybeUnsplitRanges(
 	}
 
 	progress.RangesUnsplitDone = true
-	persistProgress(ctx, execCfg, job, progress, statusGC(progress))
+	persistProgress(ctx, execCfg, job, progress, runningStatusGC(progress))
 
 	return nil
 }
@@ -383,7 +383,7 @@ func (r schemaChangeGCResumer) deleteDataAndWaitForGC(
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
 	persistProgress(ctx, &execCfg, r.job, progress,
-		sql.StatusDeletingData)
+		sql.RunningStatusDeletingData)
 	if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
 		if err := fn(r.job.ID()); err != nil {
 			return err
@@ -392,7 +392,7 @@ func (r schemaChangeGCResumer) deleteDataAndWaitForGC(
 	if err := deleteData(ctx, &execCfg, details, progress); err != nil {
 		return err
 	}
-	persistProgress(ctx, &execCfg, r.job, progress, sql.StatusWaitingForMVCCGC)
+	persistProgress(ctx, &execCfg, r.job, progress, sql.RunningStatusWaitingForMVCCGC)
 	r.job.MarkIdle(true)
 	return waitForGC(ctx, &execCfg, details, progress)
 }
@@ -426,6 +426,7 @@ var EmptySpanPollInterval = settings.RegisterDurationSetting(
 	"sql.gc_job.wait_for_gc.interval",
 	"interval at which the GC job should poll to see if the deleted data has been GC'd",
 	5*time.Minute,
+	settings.NonNegativeDuration,
 )
 
 func waitForEmptyPrefix(
@@ -455,6 +456,7 @@ func waitForEmptyPrefix(
 		timer.Reset(EmptySpanPollInterval.Get(sv))
 		select {
 		case <-timer.C:
+			timer.Read = true
 			if empty, err := checkForEmptySpan(
 				ctx, db, prefix, prefix.PrefixEnd(),
 			); empty || err != nil {
@@ -534,7 +536,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 
 		if expired {
 			// Some elements have been marked as DELETING to save the progress.
-			persistProgress(ctx, &execCfg, r.job, progress, statusGC(progress))
+			persistProgress(ctx, &execCfg, r.job, progress, runningStatusGC(progress))
 			if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
 				if err := fn(r.job.ID()); err != nil {
 					return err
@@ -543,7 +545,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 			if err := performGC(ctx, &execCfg, details, progress); err != nil {
 				return err
 			}
-			persistProgress(ctx, &execCfg, r.job, progress, sql.StatusWaitingGC)
+			persistProgress(ctx, &execCfg, r.job, progress, sql.RunningStatusWaitingGC)
 
 			// Trigger immediate re-run in case of more expired elements.
 			timerDuration = 0
@@ -598,6 +600,7 @@ func waitForWork(
 	wait := func() (done bool) {
 		select {
 		case <-markIdleTimer.Ch():
+			markIdleTimer.MarkRead()
 			markIdle(true)
 			markedIdle = true
 			return false
@@ -608,6 +611,7 @@ func waitForWork(
 			}
 
 		case <-workTimer.Ch():
+			workTimer.MarkRead()
 			if log.V(2) {
 				log.Info(ctx, "SchemaChangeGC workTimer triggered")
 			}

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/migrationstable"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 func init() {
@@ -95,13 +94,12 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			SessionData:        execCtx.SessionData(),
 			ClusterID:          execCtx.ExtendedEvalContext().ClusterID,
 			TenantInfoAccessor: mc.SystemDeps().TenantInfoAccessor,
-			OptionalJobID:      r.j.ID(),
 		}
 
 		tenantDeps.SchemaResolverConstructor = func(
 			txn *kv.Txn, descriptors *descs.Collection, currDb string,
 		) (resolver.SchemaResolver, func(), error) {
-			opName := redact.SafeString("internal-planner-for-upgrades")
+			opName := "internal-planner-for-upgrades"
 			sd := execCtx.SessionData().Clone()
 			sd.Database = currDb
 			internalPlanner, cleanup := sql.NewInternalPlanner(

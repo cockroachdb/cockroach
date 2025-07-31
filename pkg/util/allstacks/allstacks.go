@@ -5,22 +5,18 @@
 
 package allstacks
 
-import (
-	"runtime"
-
-	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
-)
+import "runtime"
 
 // Get returns all stacks, except if that takes more than 512mb of memory, in
 // which case it returns only 512mb worth of stacks (clipping the last stack
 // if necessary).
-func Get() debugutil.SafeStack {
+func Get() []byte {
 	return GetWithBuf(nil)
 }
 
 // GetWithBuf is like Get, but tries to use the provided slice first, allocating
 // a new, larger, slice only if necessary.
-func GetWithBuf(buf []byte) debugutil.SafeStack {
+func GetWithBuf(buf []byte) []byte {
 	buf = buf[:cap(buf)]
 	// We don't know how big the traces are, so grow a few times if they don't
 	// fit. Start large, though.

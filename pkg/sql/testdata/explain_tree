@@ -13,7 +13,7 @@ distribution: local
 vectorized: false
 plan type: custom
 maximum memory usage: 0 B
-DistSQL network usage: 0 B (0 messages)
+network usage: 0 B (0 messages)
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -26,6 +26,19 @@ quality of service: regular
 ----
 ----
 
+plan-tree
+SELECT oid FROM t.orders WHERE oid = 123
+----
+name: scan
+attrs:
+- key: missing stats
+  value: ""
+- key: table
+  value: orders@orders_pkey
+- key: spans
+  value: 1 span
+children: []
+
 plan-string
 SELECT cid, date, value FROM t.orders
 ----
@@ -36,7 +49,7 @@ distribution: local
 vectorized: false
 plan type: custom
 maximum memory usage: 0 B
-DistSQL network usage: 0 B (0 messages)
+network usage: 0 B (0 messages)
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -49,6 +62,19 @@ quality of service: regular
 ----
 ----
 
+plan-tree
+SELECT cid, date, value FROM t.orders
+----
+name: scan
+attrs:
+- key: missing stats
+  value: ""
+- key: table
+  value: orders@orders_pkey
+- key: spans
+  value: FULL SCAN
+children: []
+
 plan-string
 SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDER BY 1 - sum(value)
 ----
@@ -59,7 +85,7 @@ distribution: local
 vectorized: false
 plan type: custom
 maximum memory usage: 0 B
-DistSQL network usage: 0 B (0 messages)
+network usage: 0 B (0 messages)
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -100,6 +126,37 @@ quality of service: regular
 ----
 ----
 
+plan-tree
+SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDER BY 1 - sum(value)
+----
+name: sort
+attrs:
+- key: order
+  value: +column10
+children:
+- name: render
+  attrs: []
+  children:
+  - name: group (hash)
+    attrs:
+    - key: group by
+      value: cid
+    children:
+    - name: filter
+      attrs:
+      - key: filter
+        value: date > _
+      children:
+      - name: scan
+        attrs:
+        - key: missing stats
+          value: ""
+        - key: table
+          value: orders@orders_pkey
+        - key: spans
+          value: FULL SCAN
+        children: []
+
 plan-string
 SELECT value FROM (SELECT cid, date, value FROM t.orders)
 ----
@@ -110,7 +167,7 @@ distribution: local
 vectorized: false
 plan type: custom
 maximum memory usage: 0 B
-DistSQL network usage: 0 B (0 messages)
+network usage: 0 B (0 messages)
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -123,6 +180,19 @@ quality of service: regular
 ----
 ----
 
+plan-tree
+SELECT value FROM (SELECT cid, date, value FROM t.orders)
+----
+name: scan
+attrs:
+- key: missing stats
+  value: ""
+- key: table
+  value: orders@orders_pkey
+- key: spans
+  value: FULL SCAN
+children: []
+
 plan-string
 SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
 ----
@@ -133,7 +203,7 @@ distribution: local
 vectorized: false
 plan type: custom
 maximum memory usage: 0 B
-DistSQL network usage: 0 B (0 messages)
+network usage: 0 B (0 messages)
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -166,6 +236,40 @@ quality of service: regular
 ----
 ----
 
+plan-tree
+SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
+----
+name: hash join
+attrs:
+- key: equality
+  value: (date) = (date)
+- key: right cols are key
+  value: ""
+children:
+- name: scan
+  attrs:
+  - key: missing stats
+    value: ""
+  - key: table
+    value: orders@orders_pkey
+  - key: spans
+    value: FULL SCAN
+  children: []
+- name: distinct
+  attrs:
+  - key: distinct on
+    value: date
+  children:
+  - name: scan
+    attrs:
+    - key: missing stats
+      value: ""
+    - key: table
+      value: orders@orders_pkey
+    - key: spans
+      value: FULL SCAN
+    children: []
+
 exec
 CREATE TABLE t.movies (
   id SERIAL PRIMARY KEY,
@@ -192,7 +296,7 @@ distribution: local
 vectorized: false
 plan type: custom
 maximum memory usage: 0 B
-DistSQL network usage: 0 B (0 messages)
+network usage: 0 B (0 messages)
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -233,3 +337,50 @@ quality of service: regular
                   spans: FULL SCAN
 ----
 ----
+
+plan-tree
+SELECT id AS movie_id, title, (SELECT name FROM t.actors WHERE name = 'Foo') FROM t.movies
+----
+name: root
+attrs: []
+children:
+- name: render
+  attrs: []
+  children:
+  - name: scan
+    attrs:
+    - key: missing stats
+      value: ""
+    - key: table
+      value: movies@movies_pkey
+    - key: spans
+      value: FULL SCAN
+    children: []
+- name: subquery
+  attrs:
+  - key: id
+    value: '@S1'
+  - key: original sql
+    value: (SELECT name FROM t.actors WHERE name = '_')
+  - key: exec mode
+    value: one row
+  children:
+  - name: max1row
+    attrs:
+    - key: estimated row count
+      value: "1"
+    children:
+    - name: filter
+      attrs:
+      - key: filter
+        value: name = _
+      children:
+      - name: scan
+        attrs:
+        - key: missing stats
+          value: ""
+        - key: table
+          value: actors@actors_pkey
+        - key: spans
+          value: FULL SCAN
+        children: []

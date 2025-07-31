@@ -14,7 +14,6 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/jobs",
-        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/keyvisualizer",
         "//pkg/kv",

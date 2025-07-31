@@ -107,7 +107,7 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE p
 ORDER BY 1
 ----
 start_key           end_key                    replicas  lease_holder
-<before:/Table/72>  …/1/8                      {1}       1
+<before:/Table/67>  …/1/8                      {1}       1
 …/1/16              …/1/24                     {1}       1
 …/1/24              …/1/32                     {1}       1
 …/1/32              <after:/Table/108/1/4/44>  {1}       1

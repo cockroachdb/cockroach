@@ -125,20 +125,6 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 					return err.Error()
 				}
 				return "success"
-			case "explain-select-query":
-				q := newBatchQueryStatement("AS OF SYSTEM TIME '-1us'")
-				explainQuery := "EXPLAIN (REDACT) " + q
-				res := ""
-				// Query expects 4 arguments - parentID, parentSchemaID, name, limit.
-				rows, err := queryConn.Query(explainQuery, 1, 1, "", 20)
-				if err != nil {
-					return err.Error()
-				}
-				res, err = sqlutils.RowsToDataDrivenOutput(rows)
-				if err != nil {
-					return err.Error()
-				}
-				return explainQuery + "\n---\n" + res
 			default:
 				return "unknown command"
 			}

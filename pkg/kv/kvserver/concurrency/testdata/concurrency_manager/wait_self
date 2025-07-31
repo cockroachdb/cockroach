@@ -82,19 +82,19 @@ on-txn-updated txn=txnOld status=committed
 [-] update txn: committing txnOld
 [2] sequence reqTxn1: resolving intent ‹"k"› for txn 00000002 with COMMITTED status
 [2] sequence reqTxn1: lock wait-queue event: done waiting
-[2] sequence reqTxn1: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k"› for 123.000s
+[2] sequence reqTxn1: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k"› for 123.000s
 [2] sequence reqTxn1: acquiring latches
 [2] sequence reqTxn1: scanning lock table for conflicting locks
 [2] sequence reqTxn1: sequencing complete, returned guard
 [3] sequence reqTxnMiddle: resolving intent ‹"k"› for txn 00000002 with COMMITTED status
 [3] sequence reqTxnMiddle: lock wait-queue event: wait for txn 00000001 running request @ key ‹"k"› (queuedLockingRequests: 3, queuedReaders: 0)
-[3] sequence reqTxnMiddle: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k"› for 123.000s
+[3] sequence reqTxnMiddle: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k"› for 123.000s
 [3] sequence reqTxnMiddle: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence reqTxnMiddle: pushing txn 00000001 to detect request deadlock
 [3] sequence reqTxnMiddle: blocked on select in concurrency_test.(*cluster).PushTransaction
 [4] sequence reqTxn2: resolving intent ‹"k"› for txn 00000002 with COMMITTED status
 [4] sequence reqTxn2: lock wait-queue event: wait self @ key ‹"k"›
-[4] sequence reqTxn2: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k"› for 123.000s
+[4] sequence reqTxn2: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k"› for 123.000s
 [4] sequence reqTxn2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
 debug-lock-table
@@ -116,12 +116,12 @@ finish req=reqTxn1
 ----
 [-] finish reqTxn1: finishing request
 [3] sequence reqTxnMiddle: lock wait-queue event: done waiting
-[3] sequence reqTxnMiddle: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[3] sequence reqTxnMiddle: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [3] sequence reqTxnMiddle: acquiring latches
 [3] sequence reqTxnMiddle: scanning lock table for conflicting locks
 [3] sequence reqTxnMiddle: sequencing complete, returned guard
 [4] sequence reqTxn2: lock wait-queue event: wait for txn 00000003 running request @ key ‹"k"› (queuedLockingRequests: 2, queuedReaders: 0)
-[4] sequence reqTxn2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[4] sequence reqTxn2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [4] sequence reqTxn2: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence reqTxn2: pushing txn 00000003 to detect request deadlock
 [4] sequence reqTxn2: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -130,7 +130,7 @@ finish req=reqTxnMiddle
 ----
 [-] finish reqTxnMiddle: finishing request
 [4] sequence reqTxn2: lock wait-queue event: done waiting
-[4] sequence reqTxn2: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[4] sequence reqTxn2: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [4] sequence reqTxn2: acquiring latches
 [4] sequence reqTxn2: scanning lock table for conflicting locks
 [4] sequence reqTxn2: sequencing complete, returned guard

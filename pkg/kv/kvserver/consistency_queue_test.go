@@ -606,25 +606,18 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 		t.Fatal(err)
 	}
 
-	// When running with leader leases, it might take an extra election interval
-	// for a lease to be established after adding the voters above because the
-	// leader needs to get store liveness support from the followers. The stats
-	// re-computation runs on the leaseholder and will fail if there isn't one.
-	testutils.SucceedsSoon(t, func() error {
-		// Force a run of the consistency queue, otherwise it might take a while.
-		store := tc.GetFirstStoreFromServer(t, 0)
-		require.NoError(t, store.ForceConsistencyQueueProcess())
+	// Force a run of the consistency queue, otherwise it might take a while.
+	store := tc.GetFirstStoreFromServer(t, 0)
+	require.NoError(t, store.ForceConsistencyQueueProcess())
 
-		// The stats should magically repair themselves. We'll first do a quick check
-		// and then a full recomputation.
-		repl, _, err := tc.Servers[0].GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rangeID)
-		require.NoError(t, err)
-		ms := repl.GetMVCCStats()
-		if ms.SysCount >= sysCountGarbage {
-			return errors.Newf("still have a SysCount of %d", ms.SysCount)
-		}
-		return nil
-	})
+	// The stats should magically repair themselves. We'll first do a quick check
+	// and then a full recomputation.
+	repl, _, err := tc.Servers[0].GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rangeID)
+	require.NoError(t, err)
+	ms := repl.GetMVCCStats()
+	if ms.SysCount >= sysCountGarbage {
+		t.Fatalf("still have a SysCount of %d", ms.SysCount)
+	}
 
 	if delta := computeDelta(db0); delta != (enginepb.MVCCStats{}) {
 		t.Fatalf("stats still in need of adjustment: %+v", delta)

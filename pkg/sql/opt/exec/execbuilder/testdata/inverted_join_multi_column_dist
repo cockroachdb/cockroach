@@ -81,7 +81,7 @@ SELECT start_key, end_key, replicas, lease_holder
 FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE j2 WITH DETAILS] ORDER BY lease_holder
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/72>  …/1/44        {1}       1
+<before:/Table/67>  …/1/44        {1}       1
 …/1/44              …/1/88        {2}       2
 …/1/88              <after:/Max>  {3}       3
 
@@ -115,7 +115,7 @@ vectorized: true
             └── • values
                   size: 1 column, 2 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk99v2j4Uxd-_f8XVfYJv3RI7gUp5cluYykShA7Qf2lCVkds2IcSZnaytKv73yaE_IGtYyQOSHftzzuGePKL5laCPva-Xg5P-EBrd_mQ6-TRowqQ36J1N4X_4MB5dQCxkFF9F4T2DmMOX8964B40I7A3BwG024WTYhUYsjmKQPwrHcQlifhQ3YTTu9sZw-s0uFwxicbRAhqkKaRgsyaD_HTnOGGZazckYpe3WY3mgH96j7zCM0qzI7faM4VxpQv8R8yhPCH2cBj8TGlMQkm45yDCkPIiSEhtzGfOrbEEPyPBMJcUyNT5YD8hwkgV2dYizFUNV5K8KJg9uCH2-YanfRd9Zsfe7-hwkBZkW3zbkwSk0BMxvi3RhmrXKoqLMa5VfBYtU6ZA0hVuKM3vzX0fesH8emNuPKkpJt8R2hFGR-yA5k4JJtzaBW0kg9vnv-ulv0jmFTwbcylCfi4js5WTvPtMgOy_Fk6Iy8Gg9803zHpPtWv9exb-7j3_r-6mQ3l_eY_FcyIFSiyKDWEUpqNQHaYOOhiCP35mjzWSHyWNWBqqN0q5E8faJMlE6J91qb8eQ3gGT_KBWslORbO8jOSaTqdRQtcdvKjkVpUNu20zhDa2_DqMKPadLrebl2fVyVILKjZBMvn4r1ot-Wr7iVkFTsHz58DdJfA-S2CTxKknsJLlbJGeTJKokdyfJqye5VZK3k9SuJ3lVUnsnqVNPcuwUrxN1dxWF6KPz9By-8fP8oL0Q3Bhbpcmtuiux04fMFuE6SAwxvAgW1KWc9DJKI5NHc_RzXdBq9d-fAAAA__8tPDij
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk19v2kgUxd_3U1zdJ9hMgmdsEslPkwSvwopAFtC2VYsiF98kNsbjzthNoojvXo3JH3BjGvyANP9-5xzmzBOaHyn6GHy-Gpz2h9Dq9SfTyX-DNkyCQXA-hb_hn_HoEhIh4-Q6jh4YJBw-XQTjAFox2BOCgdtuw-mwB61EHCUgv5WO4xIk_Chpw2jcC8Zw9sUOFwwScbRAhpmKaBguyaD_FTnOGOZazckYpe3UU7WhHz2g7zCMs7ws7PSM4VxpQv8Ji7hICX2cht9TGlMYke44yDCiIozTCptwmfDrfEGPyPBcpeUyMz5YD8hwkod2dIizFUNVFm8KpghvCX2-YanfQ99ZsY-7-j9MSzIdvm3IgzNoCZjfldnCtBuVnZoyb1R-EywzpSPSFG0pzuzJP215x_5FaO7-VXFGuiO2I4zKwgfJmRRMuo0JRC2B2Oe_62c_SRcUPRtwa5f6UkRkrzuDh1yDPH4tnhS1C4_Xd75p3mOy2-jfrfl39_FvfT8X0vvNeyJeCjlQalHmkKg4A5X5IG3Q0RDkyQdzdJk8ZvKEVYEao3i1KN4-USZKF6Q73e0Y0jtgkh80SnZrkt19JMdkcpUZqvf4Qy_lkNs2U3RL69dhVKnndKXVvNq7Ho4qUDURkSnWq2I96GfVErcKmsLl68PfJPE9SGKTxOsksZPkbpGcTZKok9ydJK-Z5NZJ3k5St5nk1UndnaTjZpJjb_EmVffXcYQ-Os_f4Ts_Lx_aA-GtsVWa3Kn7Cjt9zG0RbsLUEMPLcEE9Kkgv4yw2RTxHv9AlrVZ__QoAAP__E-c4nQ==
 
 statement ok
 CREATE TABLE a1 (
@@ -195,4 +195,4 @@ vectorized: true
             └── • values
                   size: 1 column, 2 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk91u4joUhe_PU2ztKzh1S-wEKuXKbeGoHFHoAJofzaDKQ3bbDCHO2Mm0VcW7jxz6A5mGKblAsmN_ay32yiPanwmG2Pt8OTjpD6HR7U-mkw-DJkx6g97ZFP6F_8ajC1BCxuoqju4ZKA6fznvjHjRicDcEA7_ZhJNhFxpKHCmQ3wrP8wkUP1JNGI27vTGcfnHLBQMljhbIMNURDdWSLIZfkeOMYWb0nKzVxm09lgf60T2GHsM4zYrcbc8YzrUhDB8xj_OEMMSp-p7QmFREpuUhw4hyFSclVnGp-FW2oAdkeKaTYpnaEJwHZDjJlFsd4mzFUBf5q4LN1Q1hyDcs9bsYeiv2flcfVVKQbfFtQwGcQkPA_LZIF7ZZqywqyrxW-VWwSLWJyFC0pThzN_925A3758re_q_jlExLbEcYFXkIkjMpmPRrE_iVBGKf_66f_iKTU_RkwK8M9bmIyF5O9u4zA7LzUjwpKgOP1zPfNB8w2a71H1T8-_v4d76fChn84V2J50IOtF4UGfzQcQo6DUG6oKMhyON35mgz2WHymJWBaqO0K1GCfaJMtMnJtNrbMWRwwCQ_qJXsVCTb-0iOyWY6tVTt8ZtKXkXpkLs2U3RD66_D6sLM6dLoeXl2vRyVoHIjIpuv34r1op-Wr7hTMKSWLx_-JonvQRKbJF4liZ0kf4vkbZJEleTvJAX1JL9KCnaS2vWkoEpq7yR16kmem-J1ou-u4ghD9J6ewzd-nh90F9SNdVWa3Oq7Ejt9yFwRrlViieGFWlCXcjLLOI1tHs8xzE1Bq9U_vwMAAP__loI4AQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk9tv2jAYxd_3V3z6nmB1S-yEVsqT28JUJgodoF20ocojX9uMEGd2sraq-N8nh14ga1jJA5Jvv3MOPn5A-zvBELtfL_rHvQE0Or3xZPyp34Rxt989ncB7-DAanoMSMlaXcXTHQHH4ctYddaERgzshGPjNJhwPOtBQ4kCB_FF4nk-g-IFqwnDU6Y7g5JsbzhkocTBHhqmOaKAWZDH8jhynDDOjZ2StNm7qodzQi-4w9BjGaVbkbnrKcKYNYfiAeZwnhCFO1M-ERqQiMi0PGUaUqzgpsYpLxS-zOd0jw1OdFIvUhuA8IMNxptxoH6dLhrrIXxRsrq4JQ75mqdfB0Fuyt7v6rJKCbItvGgrgBBoCZjdFOrfNWmWvosxrlV8Ei1SbiAxFG4pTd_J_W16xf6bszUcdp2RaYjPCsMhDkJxJwaRfm0BUEohd_rte-odMTtGjAb9yqU9FRPa8s3uXGZCHz8WTonLh8erO180HTLZr_fsV__4u_p3vx0IG_3hX4qmQfa3nRQa_dJyCTkOQLuhwAPLojTnaTB4yecTKQLVRgkqUYJcoY21yMq32ZgwZ7DHJ92ol2xXJ9i6SI7KZTi1Ve_yml7LPXZspuqbV67C6MDO6MHpW7l0NhyWonIjI5qtVsRr00nKJOwVDavH88NdJfAeSWCfxKklsJfkbJG-dJKokfyspqCf5VVKwldSuJwVVUnsr6bCe5LlbvEr07WUcYYje47f_ys_Th-6AurauSuMbfVtiJ_eZK8KVSiwxPFdz6lBOZhGnsc3jGYa5KWi5fPc3AAD__30tN_s=

@@ -91,10 +91,11 @@ func TestZigzagJoiner(t *testing.T) {
 		return offsetFunc
 	}
 
-	sqlutils.CreateTable(t, sqlDB, "empty",
+	sqlutils.CreateTableDebug(t, sqlDB, "empty",
 		"a INT, b INT, x INT, c INT, d INT, PRIMARY KEY (a,b), INDEX c (c), INDEX d (d)",
 		0,
 		sqlutils.ToRowFn(aFn, bFn, cFn, dFn),
+		true, /* shouldPrint */
 	)
 
 	// Drop a column to test https://github.com/cockroachdb/cockroach/issues/37196
@@ -108,51 +109,58 @@ func TestZigzagJoiner(t *testing.T) {
 	_, err = sqlDB.Exec("CREATE INDEX d ON test.empty(d)")
 	require.NoError(t, err)
 
-	sqlutils.CreateTable(t, sqlDB, "single",
+	sqlutils.CreateTableDebug(t, sqlDB, "single",
 		"a INT, b INT, c INT, d INT, PRIMARY KEY (a,b), INDEX c (c), INDEX d (d)",
 		1,
 		sqlutils.ToRowFn(aFn, bFn, cFn, dFn),
+		true, /* shouldPrint */
 	)
 
-	sqlutils.CreateTable(t, sqlDB, "small",
+	sqlutils.CreateTableDebug(t, sqlDB, "small",
 		"a INT, b INT, c INT, d INT, PRIMARY KEY (a,b), INDEX c (c), INDEX d (d)",
 		10,
 		sqlutils.ToRowFn(aFn, bFn, cFn, dFn),
+		true, /* shouldPrint */
 	)
 
-	sqlutils.CreateTable(t, sqlDB, "med",
+	sqlutils.CreateTableDebug(t, sqlDB, "med",
 		"a INT, b INT, c INT, d INT, PRIMARY KEY (a,b), INDEX c (c), INDEX d (d)",
 		22,
 		sqlutils.ToRowFn(aFn, bFn, cFn, dFn),
+		true, /* shouldPrint */
 	)
 
-	sqlutils.CreateTable(t, sqlDB, "overlapping",
+	sqlutils.CreateTableDebug(t, sqlDB, "overlapping",
 		"a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX ac (a, c), INDEX d (d)",
 		22,
 		sqlutils.ToRowFn(aFn, bFn, cFn, dFn),
+		true, /* shouldPrint */
 	)
 
-	sqlutils.CreateTable(t, sqlDB, "comp",
+	sqlutils.CreateTableDebug(t, sqlDB, "comp",
 		"a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX cab (c, a, b), INDEX d (d)",
 		22,
 		sqlutils.ToRowFn(aFn, bFn, cFn, dFn),
+		true, /* shouldPrint */
 	)
 
-	sqlutils.CreateTable(t, sqlDB, "rev",
+	sqlutils.CreateTableDebug(t, sqlDB, "rev",
 		"a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX cba (c, b, a), INDEX d (d)",
 		22,
 		sqlutils.ToRowFn(aFn, bFn, cFn, dFn),
+		true, /* shouldPrint */
 	)
 
 	offset := 44
-	sqlutils.CreateTable(t, sqlDB, "offset",
+	sqlutils.CreateTableDebug(t, sqlDB, "offset",
 		"a INT, b INT, c INT, d INT, PRIMARY KEY (a,b), INDEX c (c), INDEX d (d)",
 		20,
 		sqlutils.ToRowFn(offsetFn(aFn, offset), offsetFn(bFn, offset), offsetFn(cFn, offset), offsetFn(dFn, offset)),
+		true, /* shouldPrint */
 	)
 
 	unqOffset := 20
-	sqlutils.CreateTable(t, sqlDB, "unq",
+	sqlutils.CreateTableDebug(t, sqlDB, "unq",
 		"a INT, b INT, c INT UNIQUE, d INT, PRIMARY KEY (a, b), INDEX cb (c, b), INDEX d (d)",
 		20,
 		sqlutils.ToRowFn(
@@ -161,18 +169,21 @@ func TestZigzagJoiner(t *testing.T) {
 			offsetFn(identity, unqOffset),
 			offsetFn(dFn, unqOffset),
 		),
+		true, /* shouldPrint */
 	)
 
-	sqlutils.CreateTable(t, sqlDB, "t2",
+	sqlutils.CreateTableDebug(t, sqlDB, "t2",
 		"b INT, a INT, PRIMARY KEY (b, a)",
 		10,
 		sqlutils.ToRowFn(bFn, aFn),
+		true, /* shouldPrint */
 	)
 
-	sqlutils.CreateTable(t, sqlDB, "nullable",
+	sqlutils.CreateTableDebug(t, sqlDB, "nullable",
 		"a INT, b INT, e INT, d INT, PRIMARY KEY (a, b), INDEX e (e), INDEX d (d)",
 		10,
 		sqlutils.ToRowFn(aFn, bFn, eFn, dFn),
+		true, /* shouldPrint */
 	)
 
 	empty := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "empty")
@@ -758,7 +769,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
 	require.NoError(t, err)
 	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState, nil /* header */)
 	flowCtx := execinfra.FlowCtx{

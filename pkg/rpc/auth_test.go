@@ -60,7 +60,7 @@ func (s *mockServerStream) RecvMsg(m interface{}) error {
 func TestWrappedServerStream(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ss := mockServerStream{1, 2, 3}
-	ctx := context.WithValue(context.Background(), contextKey{}, "v")
+	ctx := context.WithValue(context.Background(), struct{}{}, "v")
 
 	var recv int
 	wrappedI := rpc.TestingNewWrappedServerStream(ctx, &ss, func(m interface{}) error {
@@ -132,7 +132,7 @@ func TestAuthenticateTenant(t *testing.T) {
 		{systemID: stid, ous: nil, commonName: "root"},
 		{systemID: stid, ous: nil, commonName: "node"},
 		{systemID: stid, ous: nil, commonName: "root", tenantScope: 10,
-			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenantID 10\)`},
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenant 10\)`},
 		{systemID: tenTen, ous: correctOU, commonName: "10", expTenID: roachpb.TenantID{}},
 		{systemID: tenTen, ous: correctOU, commonName: "123", expErr: `client tenant identity \(123\) does not match server`},
 		{systemID: tenTen, ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
@@ -256,14 +256,10 @@ func TestAuthenticateTenant(t *testing.T) {
 				ctx = metadata.NewIncomingContext(ctx, md)
 			}
 
-			sv := &settings.Values{}
-			sv.Init(ctx, settings.TestOpaque)
-			u := settings.NewUpdater(sv)
-			err = u.Set(ctx, security.ClientCertSubjectRequiredSettingName,
-				settings.EncodedValue{Value: strconv.FormatBool(tc.subjectRequired), Type: "b"})
-			require.NoError(t, err)
-
-			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, sv)
+			clusterSettings := map[settings.InternalKey]settings.EncodedValue{
+				security.ClientCertSubjectRequiredSettingName: {Value: strconv.FormatBool(tc.subjectRequired), Type: "b"},
+			}
+			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, clusterSettings)
 
 			if tc.expErr == "" {
 				require.Equal(t, tc.expTenID, tenID)
@@ -273,76 +269,6 @@ func TestAuthenticateTenant(t *testing.T) {
 				require.Error(t, err)
 				require.Equal(t, codes.Unauthenticated, status.Code(err))
 				require.Regexp(t, tc.expErr, err)
-			}
-		})
-	}
-}
-
-func BenchmarkAuthenticate(b *testing.B) {
-	correctOU := []string{security.TenantsOU}
-	stid := roachpb.SystemTenantID
-	for _, tc := range []struct {
-		name         string
-		systemID     roachpb.TenantID
-		ous          []string
-		commonName   string
-		rootDNString string
-		nodeDNString string
-	}{
-		// Success case with a tenant certificate.
-		{name: "tenTen", systemID: stid, ous: correctOU, commonName: "10"},
-		// Success cases with root or node DN.
-		{name: "rootDN", systemID: stid, ous: nil, commonName: "foo", rootDNString: "CN=foo"},
-		{name: "nodeDN", systemID: stid, ous: nil, commonName: "foo", nodeDNString: "CN=foo"},
-		// Success cases that fallback to the global scope.
-		{name: "commonRoot", systemID: stid, ous: nil, commonName: "root"},
-		{name: "commonNode", systemID: stid, ous: nil, commonName: "node"},
-	} {
-		b.Run(tc.name, func(b *testing.B) {
-			var err error
-			if tc.rootDNString != "" {
-				err = security.SetRootSubject(tc.rootDNString)
-				if err != nil {
-					b.Fatalf("could not set root subject DN, err: %v", err)
-				}
-			}
-			if tc.nodeDNString != "" {
-				err = security.SetNodeSubject(tc.nodeDNString)
-				if err != nil {
-					b.Fatalf("could not set node subject DN, err: %v", err)
-				}
-			}
-			defer func() {
-				security.UnsetRootSubject()
-				security.UnsetNodeSubject()
-			}()
-
-			cert := &x509.Certificate{
-				Subject: pkix.Name{
-					CommonName:         tc.commonName,
-					OrganizationalUnit: tc.ous,
-				},
-			}
-			cert.RawSubject, err = asn1.Marshal(cert.Subject.ToRDNSequence())
-			if err != nil {
-				b.Fatalf("unable to marshal rdn sequence to raw subject, err: %v", err)
-			}
-			tlsInfo := credentials.TLSInfo{
-				State: tls.ConnectionState{
-					PeerCertificates: []*x509.Certificate{cert},
-				},
-			}
-			p := peer.Peer{AuthInfo: tlsInfo}
-			ctx := peer.NewContext(context.Background(), &p)
-			sv := &settings.Values{}
-			sv.Init(ctx, settings.TestOpaque)
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, sv)
-				if err != nil {
-					b.Fatal(err)
-				}
 			}
 		})
 	}
@@ -572,30 +498,6 @@ func TestTenantAuthRequest(t *testing.T) {
 				expErr: noError,
 			},
 		},
-		"/cockroach.roachpb.Internal/BatchStream": {
-			{
-				req:    &kvpb.BatchRequest{},
-				expErr: `requested key span /Max not fully contained in tenant keyspace /Tenant/1{0-1}`,
-			},
-			{
-				req: &kvpb.BatchRequest{Requests: makeReqs(
-					makeReq("a", "b"),
-				)},
-				expErr: `requested key span {a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
-			},
-			{
-				req: &kvpb.BatchRequest{Requests: makeReqs(
-					makeReq(prefix(5, "a"), prefix(5, "b")),
-				)},
-				expErr: `requested key span /Tenant/5{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
-			},
-			{
-				req: &kvpb.BatchRequest{Requests: makeReqs(
-					makeReq(prefix(10, "a"), prefix(10, "b")),
-				)},
-				expErr: noError,
-			},
-		},
 		"/cockroach.roachpb.Internal/RangeLookup": {
 			{
 				req:    &kvpb.RangeLookupRequest{},
@@ -658,15 +560,19 @@ func TestTenantAuthRequest(t *testing.T) {
 				expErr: noError,
 			},
 			{
+				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"system-db"}},
+				expErr: noError,
+			},
+			{
 				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"table-stat-added"}},
 				expErr: `requested pattern "table-stat-added" not permitted`,
 			},
 			{
-				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"node:.*", "store:.*"}},
+				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"node:.*", "system-db"}},
 				expErr: noError,
 			},
 			{
-				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"node:.*", "store:.*", "table-stat-added"}},
+				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"node:.*", "system-db", "table-stat-added"}},
 				expErr: `requested pattern "table-stat-added" not permitted`,
 			},
 		},
@@ -1029,7 +935,7 @@ func TestTenantAuthRequest(t *testing.T) {
 						// cross-read capability and the request is a read, expect no error.
 						if canCrossRead && strings.Contains(tc.expErr, "fully contained") {
 							switch method {
-							case "/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.Internal/BatchStream":
+							case "/cockroach.roachpb.Internal/Batch":
 								if tc.req.(*kvpb.BatchRequest).IsReadOnly() {
 									tc.expErr = noError
 								}
@@ -1256,5 +1162,3 @@ func (m mockAuthorizer) HasNodelocalStorageCapability(
 func (m mockAuthorizer) IsExemptFromRateLimiting(context.Context, roachpb.TenantID) bool {
 	return m.hasExemptFromRateLimiterCapability
 }
-
-type contextKey struct{}

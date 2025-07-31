@@ -132,15 +132,14 @@ var _ redact.SafeFormatter = CmdIDKey("")
 
 // FilterArgs groups the arguments to a ReplicaCommandFilter.
 type FilterArgs struct {
-	Ctx          context.Context
-	CmdID        CmdIDKey
-	Index        int
-	Sid          roachpb.StoreID
-	Req          kvpb.Request
-	Hdr          kvpb.Header
-	AdmissionHdr kvpb.AdmissionHeader
-	Version      roachpb.Version
-	Err          error // only used for TestingPostEvalFilter
+	Ctx     context.Context
+	CmdID   CmdIDKey
+	Index   int
+	Sid     roachpb.StoreID
+	Req     kvpb.Request
+	Hdr     kvpb.Header
+	Version roachpb.Version
+	Err     error // only used for TestingPostEvalFilter
 }
 
 // ProposalFilterArgs groups the arguments to ReplicaProposalFilter.

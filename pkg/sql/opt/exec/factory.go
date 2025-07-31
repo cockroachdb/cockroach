@@ -191,10 +191,6 @@ const (
 	// SubqueryAllRows - the subquery is an argument to ARRAY. The result is a
 	// tuple of rows.
 	SubqueryAllRows
-	// SubqueryDiscardAllRows - the subquery is executed for its side effects
-	// (e.g. it is adding to a bufferNode). The result is empty, and will never be
-	// used.
-	SubqueryDiscardAllRows
 )
 
 // TableColumnOrdinal is the 0-based ordinal index of a cat.Table column.
@@ -285,7 +281,7 @@ type KVOption struct {
 // RecursiveCTEIterationFn creates a plan for an iteration of WITH RECURSIVE,
 // given the result of the last iteration (as a node created by
 // ConstructBuffer).
-type RecursiveCTEIterationFn func(ctx context.Context, ef Factory, bufferRef Node) (Plan, error)
+type RecursiveCTEIterationFn func(ef Factory, bufferRef Node) (Plan, error)
 
 // ApplyJoinPlanRightSideFn creates a plan for an iteration of ApplyJoin, given
 // a row produced from the left side. The plan is guaranteed to produce the
@@ -299,6 +295,11 @@ type PostQuery struct {
 	// FKConstraint is used for logging and EXPLAIN purposes. It is nil if this
 	// PostQuery describes a set of AFTER triggers.
 	FKConstraint cat.ForeignKeyConstraint
+
+	// CascadeHasBeforeTriggers is set only for cascades. It indicates whether the
+	// mutation planned for the cascade will fire BEFORE triggers. It is used
+	// during EXPLAIN.
+	CascadeHasBeforeTriggers bool
 
 	// Triggers is used for logging and EXPLAIN purposes. It is nil if this
 	// PostQuery describes a foreign-key cascade action.
@@ -400,9 +401,6 @@ const (
 
 	// ExecutionStatsID is an annotation with a *ExecutionStats value.
 	ExecutionStatsID
-
-	// PolicyInfoID is an annotation with a *RLSPoliciesApplied value.
-	PolicyInfoID
 )
 
 // EstimatedStats contains estimated statistics about a given operator.
@@ -446,8 +444,6 @@ type ExecutionStats struct {
 
 	KVTime                optional.Duration
 	KVContentionTime      optional.Duration
-	KVLockWaitTime        optional.Duration
-	KVLatchWaitTime       optional.Duration
 	KVBytesRead           optional.Uint
 	KVPairsRead           optional.Uint
 	KVRowsRead            optional.Uint
@@ -543,27 +539,6 @@ type ExecutionStats struct {
 	// UsedFollowerRead indicates whether at least some reads were served by the
 	// follower replicas.
 	UsedFollowerRead bool
-}
-
-// RLSPoliciesApplied contains information about the row-level security policies
-// that were applied during the query.
-type RLSPoliciesApplied struct {
-	// PoliciesSkippedForRole is true if the user is a member of a role that is
-	// exempt from all policies (e.g., admin).
-	PoliciesSkippedForRole bool
-
-	// PoliciesFilteredAllRows is true if RLS was enforced, and although policies
-	// were applied, the result was that no rows were returned (typically represented
-	// by an empty VALUES node). This is used when it's not possible to attribute
-	// the result to specific table-level policy details (e.g., due to an empty
-	// VALUES node replacing a scan).
-	PoliciesFilteredAllRows bool
-
-	// Policies is the list of policy IDs applied to the scan of a single table.
-	// This applies to the table that this annotation was attached to. If this is
-	// empty, it either means policies were skipped due to the role, or none were
-	// applied.
-	Policies opt.PolicyIDSet
 }
 
 // BuildPlanForExplainFn builds an execution plan against the given

@@ -128,7 +128,7 @@ var fieldBlacklist = map[string]struct{}{
 	"AggregationInterval":     {},
 }
 
-func FillObject(t testing.TB, val reflect.Value, data *randomData) {
+func FillObject(t *testing.T, val reflect.Value, data *randomData) {
 	// Do not set the fields that are not being encoded as json.
 	if val.Kind() != reflect.Ptr {
 		t.Fatal("not a pointer type")

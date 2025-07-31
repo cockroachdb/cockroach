@@ -1,3 +1,5 @@
+# LogicTest: !local-mixed-24.1
+
 statement ok
 CREATE EXTENSION vector
 
@@ -12,7 +14,7 @@ CREATE TABLE v (v vector(0))
 statement error pgcode 42601 dimensions for type vector cannot exceed 16000
 CREATE TABLE v (v vector(16001))
 
-statement error column v has type vector, which is not indexable in a non-vector index
+statement error column v is of type vector and thus is not indexable
 CREATE TABLE v (v vector(2) PRIMARY KEY)
 
 statement ok

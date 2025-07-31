@@ -11,8 +11,8 @@ go_test(
         "dockerNetwork": "standard",
     },
     deps = [
-        "//pkg/backup",
         "//pkg/base",
+        "//pkg/ccl/backupccl",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/cloud/externalconn",

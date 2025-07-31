@@ -350,16 +350,12 @@ func (s *schemaChange) setClusterSettings(ctx context.Context, url string) (err 
 	for _, stmt := range []string{
 		`SET CLUSTER SETTING sql.defaults.super_regions.enabled = 'on'`,
 		`SET CLUSTER SETTING sql.log.all_statements.enabled = 'on'`,
-
-		// This workload is designed to test multiple statements in a transaction.
-		`SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'`,
 	} {
 		_, err := conn.Exec(ctx, stmt)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 	}
-
 	return nil
 }
 
@@ -421,23 +417,15 @@ var (
 	errRunInTxnRbkSentinel   = errors.New("txn needs to rollback")
 )
 
-// LogEntry is used to log information about the operations performed, expected errors,
-// the worker ID, the corresponding timestamp, and any additional messages or error states.
-// Note: LogEntry and its fields must be public so that the json package can encode this struct.
+// LogEntry and its fields must be public so that the json package can encode this struct.
 type LogEntry struct {
-	// WorkerID identifies the worker executing the operations.
-	WorkerID int `json:"workerId"`
-	// ClientTimestamp tracks when the operation was executed.
-	ClientTimestamp string `json:"clientTimestamp"`
-	// Ops a collection of the various types of operations performed.
-	Ops []interface{} `json:"ops"`
-	// ExpectedExecErrors errors which occur as soon as you run the statement.
-	ExpectedExecErrors string `json:"expectedExecErrors"`
-	// ExpectedCommitErrors errors which occur only during commit.
-	ExpectedCommitErrors string `json:"expectedCommitErrors"`
+	WorkerID             int           `json:"workerId"`
+	ClientTimestamp      string        `json:"clientTimestamp"`
+	Ops                  []interface{} `json:"ops"`
+	ExpectedExecErrors   string        `json:"expectedExecErrors"`
+	ExpectedCommitErrors string        `json:"expectedCommitErrors"`
 	// Optional message for errors or if a hook was called.
-	Message string `json:"message"`
-	// ErrorState holds information on the error's state when an error occurs.
+	Message    string      `json:"message"`
 	ErrorState *ErrorState `json:"errorState,omitempty"`
 }
 

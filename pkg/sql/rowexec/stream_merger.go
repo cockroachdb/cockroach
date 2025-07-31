@@ -172,12 +172,12 @@ func makeStreamMerger(
 	memMonitor *mon.BytesMonitor,
 ) (streamMerger, error) {
 	if len(leftOrdering) != len(rightOrdering) {
-		return streamMerger{}, errors.AssertionFailedf(
+		return streamMerger{}, errors.Errorf(
 			"ordering lengths don't match: %d and %d", len(leftOrdering), len(rightOrdering))
 	}
 	for i, ord := range leftOrdering {
 		if ord.Direction != rightOrdering[i].Direction {
-			return streamMerger{}, errors.AssertionFailedf("ordering mismatch")
+			return streamMerger{}, errors.New("ordering mismatch")
 		}
 	}
 

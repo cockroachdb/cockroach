@@ -39,14 +39,6 @@ func (s *Smither) makePLpgSQLBlock(scope plpgsqlBlockScope) *ast.Block {
 	}
 }
 
-func (s *Smither) makePLpgSQLVarName(prefix string, scope plpgsqlBlockScope) tree.Name {
-	varName := s.name(prefix)
-	for scope.hasVariable(string(varName)) {
-		varName = s.name(prefix)
-	}
-	return varName
-}
-
 func (s *Smither) makePLpgSQLDeclarations(
 	scope plpgsqlBlockScope,
 ) ([]ast.Statement, plpgsqlBlockScope) {
@@ -58,12 +50,15 @@ func (s *Smither) makePLpgSQLDeclarations(
 	// TODO(#106368): add support for cursor declarations.
 	decls := make([]ast.Statement, numDecls)
 	for i := 0; i < numDecls; i++ {
-		varName := s.makePLpgSQLVarName("decl", newScope)
-		varTyp, varTypResolvable := s.randType()
+		varName := s.name("decl")
+		for newScope.hasVariable(string(varName)) {
+			varName = s.name("decl")
+		}
+		varTyp := s.randType()
 		for varTyp.Identical(types.AnyTuple) || varTyp.Family() == types.CollatedStringFamily {
 			// TODO(#114874): allow record types here when they are supported.
 			// TODO(#105245): allow collated strings when they are supported.
-			varTyp, varTypResolvable = s.randType()
+			varTyp = s.randType()
 		}
 		constant := s.d6() == 1
 		var expr ast.Expr
@@ -74,7 +69,7 @@ func (s *Smither) makePLpgSQLDeclarations(
 		decls[i] = &ast.Declaration{
 			Var:      varName,
 			Constant: constant,
-			Typ:      varTypResolvable,
+			Typ:      varTyp,
 			Expr:     expr,
 		}
 		newScope.addVariable(string(varName), varTyp, constant)
@@ -139,8 +134,6 @@ var (
 		{1, makePLpgSQLBlock},
 		{2, makePLpgSQLReturn},
 		{2, makePLpgSQLIf},
-		{2, makePLpgSQLWhile},
-		{2, makePLpgSQLForLoop},
 		{5, makePLpgSQLNull},
 		{10, makePLpgSQLAssign},
 		{10, makePLpgSQLExecSQL},
@@ -179,44 +172,13 @@ func makePLpgSQLAssign(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement,
 }
 
 func makePLpgSQLExecSQL(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement, ok bool) {
+	// TODO(#106368): add support for SELECT/RETURNING INTO statements.
 	const maxRetries = 5
 	var sqlStmt tree.Statement
 	for i := 0; i < maxRetries; i++ {
-		var desiredTypes []*types.T
-		var targets []ast.Variable
-		if s.coin() {
-			// Support INTO syntax. Pick a subset of variables to assign into.
-			usedVars := make(map[string]struct{})
-			numNonConstVars := len(scope.vars) - len(scope.constants)
-			for len(usedVars) < numNonConstVars {
-				// Pick non-constant variable that hasn't been used yet.
-				var varName string
-				for {
-					varName = scope.vars[s.rnd.Intn(len(scope.vars))]
-					if scope.variableIsConstant(varName) {
-						continue
-					}
-					if _, used := usedVars[varName]; used {
-						continue
-					}
-					usedVars[varName] = struct{}{}
-					desiredTypes = append(desiredTypes, scope.varTypes[varName])
-					targets = append(targets, tree.Name(varName))
-					break
-				}
-				if s.coin() {
-					break
-				}
-			}
-		}
-		sqlStmt, ok = s.makeSQLStmtForRoutine(scope.vol, scope.refs, desiredTypes)
+		sqlStmt, ok = s.makeSQLStmtForRoutine(scope.vol, scope.refs)
 		if ok {
-			return &ast.Execute{
-				SqlStmt: sqlStmt,
-				// Strict option won't matter if targets is empty.
-				Strict: s.d6() == 1,
-				Target: targets,
-			}, true
+			return &ast.Execute{SqlStmt: sqlStmt}, true
 		}
 	}
 	return nil, false
@@ -224,37 +186,6 @@ func makePLpgSQLExecSQL(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement
 
 func makePLpgSQLNull(_ *Smither, _ plpgsqlBlockScope) (stmt ast.Statement, ok bool) {
 	return &ast.Null{}, true
-}
-
-func makePLpgSQLForLoop(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement, ok bool) {
-	// TODO(#105246): add support for other query and cursor FOR loops.
-	control := ast.IntForLoopControl{
-		Reverse: s.coin(),
-		Lower:   s.makePLpgSQLExpr(scope, types.Int),
-		Upper:   s.makePLpgSQLExpr(scope, types.Int),
-	}
-	if s.coin() {
-		control.Step = s.makePLpgSQLExpr(scope, types.Int)
-	}
-	newScope := scope.makeChild(1 /* numNewVars */)
-	loopVarName := s.makePLpgSQLVarName("loop", newScope)
-	newScope.addVariable(string(loopVarName), types.Int, false /* constant */)
-	const maxLoopStmts = 3
-	return &ast.ForLoop{
-		// TODO(#106368): optionally add a label.
-		Target:  []ast.Variable{loopVarName},
-		Control: &control,
-		Body:    s.makePLpgSQLStatements(newScope, maxLoopStmts),
-	}, true
-}
-
-func makePLpgSQLWhile(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement, ok bool) {
-	const maxLoopStmts = 3
-	return &ast.While{
-		// TODO(#106368): optionally add a label.
-		Condition: s.makePLpgSQLCond(scope),
-		Body:      s.makePLpgSQLStatements(scope, maxLoopStmts),
-	}, true
 }
 
 // plpgsqlBlockScope holds the information needed to ensure that generated

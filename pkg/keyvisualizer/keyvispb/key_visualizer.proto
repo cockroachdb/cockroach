@@ -10,6 +10,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb
 
 import "roachpb/data.proto";
 import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 
 message UpdateBoundariesRequest {

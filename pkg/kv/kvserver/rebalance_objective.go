@@ -263,7 +263,7 @@ func ResolveLBRebalancingObjective(
 	}
 	// When the cpu timekeeping utility is unsupported on this aarch, the cpu
 	// usage cannot be gathered. Fall back to QPS balancing.
-	if !grunning.Supported {
+	if !grunning.Supported() {
 		log.Infof(ctx, "cpu timekeeping unavailable on host, reverting to qps balance objective")
 		return LBRebalancingQueries
 	}

@@ -22,17 +22,11 @@ type rowSourceToPlanNode struct {
 	source    execinfra.RowSource
 	forwarder metadataForwarder
 
-	// We use a zeroInputPlanNode to prevent traversal into the original
-	// planNode since planNodeToRowSource on the other end of the adapter will
-	// take care of propagating signals via its own traversal.
-	zeroInputPlanNode
-
 	// originalPlanNode is the original planNode that the wrapped RowSource got
 	// planned for.
 	originalPlanNode planNode
 
-	// columns contains the metadata for the results of this node.
-	columns colinfo.ResultColumns
+	planCols colinfo.ResultColumns
 
 	// Temporary variables
 	row      rowenc.EncDatumRow
@@ -64,7 +58,7 @@ func newRowSourceToPlanNode(
 		source:           s,
 		datumRow:         row,
 		forwarder:        forwarder,
-		columns:          planCols,
+		planCols:         planCols,
 		originalPlanNode: originalPlanNode,
 	}
 }
@@ -93,7 +87,7 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 		}
 
 		types := r.source.OutputTypes()
-		for i := range r.columns {
+		for i := range r.planCols {
 			encDatum := r.row[i]
 			err := encDatum.EnsureDecoded(types[i], &r.da)
 			if err != nil {

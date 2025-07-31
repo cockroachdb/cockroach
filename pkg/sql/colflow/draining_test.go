@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -36,7 +36,7 @@ func TestDrainingAfterRemoteError(t *testing.T) {
 	// This ensures that the query will run into "out of temporary storage"
 	// error.
 	diskMonitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test-disk"),
+		Name:     "test-disk",
 		Res:      mon.DiskResource,
 		Settings: st,
 	})
@@ -54,10 +54,13 @@ func TestDrainingAfterRemoteError(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
 	defer tc.Stopper().Stop(ctx)
 
-	if tc.DefaultTenantDeploymentMode().IsExternal() {
-		tc.GrantTenantCapabilities(
-			ctx, t, serverutils.TestTenantID(),
-			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	if srv := tc.Server(0); srv.TenantController().StartedDefaultTestTenant() {
+		systemSqlDB := srv.SystemLayer().SQLConn(t, serverutils.DBName("system"))
+		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanAdminRelocateRange: "true",
+		}, "")
 	}
 
 	// Create two tables, one with small values, and another with large rows.

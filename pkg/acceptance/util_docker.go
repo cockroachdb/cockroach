@@ -9,7 +9,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"io/fs"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -171,7 +170,7 @@ func testDocker(
 // so the files can be used inside a docker container. The caller function is responsible for cleaning up.
 // This function doesn't copy the original file permissions and uses 755 for directories and files.
 func copyRunfiles(source, destination string) error {
-	return filepath.WalkDir(source, func(path string, dirEntry fs.DirEntry, walkErr error) error {
+	return filepath.WalkDir(source, func(path string, dirEntry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}

@@ -19,6 +19,9 @@ import (
 //
 // See comments for Memo, RelExpr, Relational, and Physical for more details.
 type exprGroup interface {
+	// memo is the memo which contains the group.
+	memo() *Memo
+
 	// firstExpr points to the first member expression in the group. Other members
 	// of the group can be accessed via calls to RelExpr.NextExpr.
 	firstExpr() RelExpr

@@ -31,14 +31,14 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE NumToSquare WITH DETAILS]
 ----
 start_key           end_key                    replicas  lease_holder
-<before:/Table/72>  <after:/Table/107/1/2000>  {1}       1
+<before:/Table/67>  <after:/Table/107/1/2000>  {1}       1
 
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE NumToStr WITH DETAILS]
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/72>  …/1/2000      {1}       1
+<before:/Table/67>  …/1/2000      {1}       1
 …/1/2000            …/1/4000      {2}       2
 …/1/4000            …/1/6000      {3}       3
 …/1/6000            …/1/8000      {4}       4

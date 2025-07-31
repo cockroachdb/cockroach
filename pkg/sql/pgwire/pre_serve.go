@@ -140,7 +140,7 @@ func NewPreServeConnHandler(
 		getTLSConfig:             getTLSConfig,
 
 		tenantIndependentConnMonitor: mon.NewMonitor(mon.Options{
-			Name:       mon.MakeName("pre-conn"),
+			Name:       "pre-conn",
 			CurCount:   metrics.PreServeCurBytes,
 			MaxHist:    metrics.PreServeMaxBytes,
 			Increment:  int64(connReservationBatchSize) * baseSQLMemoryBudget,

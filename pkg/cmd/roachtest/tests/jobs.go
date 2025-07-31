@@ -78,12 +78,12 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// and adopts 10 jobs at a time.
 	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.registry.interval.adopt='5s'")
 
-	rng, seed := randutil.NewLockedPseudoRand()
+	rng, seed := randutil.NewPseudoRand()
 	t.L().Printf("Rand seed: %d", seed)
 
 	done := make(chan struct{})
 	earlyExit := make(chan struct{}, 1)
-	m := c.NewDeprecatedMonitor(ctx)
+	m := c.NewMonitor(ctx)
 
 	m.Go(func(ctx context.Context) error {
 		defer close(done)
@@ -92,6 +92,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		select {
 		case <-earlyExit:
 		case <-testTimer.C:
+			testTimer.Read = true
 		}
 		return nil
 	})
@@ -110,6 +111,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 				case <-done:
 					return nil
 				case <-pTimer.C:
+					pTimer.Read = true
 					if err := f(ctx, t, c, rng); err != nil {
 						earlyExit <- struct{}{}
 						return err
@@ -141,7 +143,7 @@ func createTablesWithChangefeeds(
 	for i := 0; i < nodeCount; i++ {
 		conn := c.Conn(ctx, t.L(), i+1)
 		sqlDBs[i] = sqlutils.MakeSQLRunner(conn)
-		defer conn.Close() //nolint:deferloop
+		defer conn.Close()
 	}
 
 	sqlDBs[0].Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true;`)

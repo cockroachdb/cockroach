@@ -420,7 +420,7 @@ func (b *Builder) buildWindowOrdering(
 	ord := make(opt.Ordering, 0, len(orderBy))
 	for j, t := range orderBy {
 		// ORDER BY (a, b) => ORDER BY a, b.
-		te := inScope.resolveType(t.Expr, types.AnyElement)
+		te := inScope.resolveType(t.Expr, types.Any)
 		cols := flattenTuples([]tree.TypedExpr{te})
 
 		nullsDefaultOrder := b.hasDefaultNullsOrder(t)

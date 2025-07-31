@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 type deferredState struct {
@@ -42,7 +41,7 @@ type indexesToSplitAndScatter struct {
 
 type schemaChangerJobUpdate struct {
 	isNonCancelable       bool
-	runningStatus         redact.RedactableString
+	runningStatus         string
 	descriptorIDsToRemove catalog.DescriptorIDSet
 }
 
@@ -80,7 +79,7 @@ func (s *deferredState) AddNewSchemaChangerJob(
 	isNonCancelable bool,
 	auth scpb.Authorization,
 	descriptorIDs catalog.DescriptorIDSet,
-	runningStatus redact.RedactableString,
+	runningStatus string,
 ) error {
 	if s.schemaChangerJob != nil {
 		return errors.AssertionFailedf("cannot create more than one new schema change job")
@@ -111,7 +110,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 	isNonCancelable bool,
 	auth scpb.Authorization,
 	descriptorIDs catalog.DescriptorIDSet,
-	runningStatus redact.RedactableString,
+	runningStatus string,
 ) *jobs.Record {
 	stmtStrs := make([]string, len(stmts))
 	for i, stmt := range stmts {
@@ -133,7 +132,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 		DescriptorIDs: descriptorIDs.Ordered(),
 		Details:       jobspb.NewSchemaChangeDetails{},
 		Progress:      jobspb.NewSchemaChangeProgress{},
-		StatusMessage: jobs.StatusMessage(runningStatus),
+		RunningStatus: jobs.RunningStatus(runningStatus),
 		NonCancelable: isNonCancelable,
 	}
 	return rec
@@ -142,7 +141,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 func (s *deferredState) UpdateSchemaChangerJob(
 	jobID jobspb.JobID,
 	isNonCancelable bool,
-	runningStatus redact.RedactableString,
+	runningStatus string,
 	descriptorIDsToRemove catalog.DescriptorIDSet,
 ) error {
 	if s.schemaChangerJobUpdates == nil {
@@ -244,7 +243,7 @@ func manageJobs(
 		) error {
 			s := schemaChangeJobUpdateState{md: md}
 			defer s.doUpdate(updateProgress, updatePayload)
-			s.updatedProgress().StatusMessage = update.runningStatus.StripMarkers() // TODO(150233): should use RedactableString
+			s.updatedProgress().RunningStatus = update.runningStatus
 			if !md.Payload.Noncancelable && update.isNonCancelable {
 				s.updatedPayload().Noncancelable = true
 			}

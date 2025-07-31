@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -44,18 +45,8 @@ var NoFKs = fkHandler{resolver: fkResolver{
 	tableNameToDesc: make(map[string]*tabledesc.Mutable),
 }}
 
-// MakeTestingSimpleTableDescriptor creates a tabledesc.Mutable from a
-// CreateTable parse node without the full machinery. Many parts of the syntax
-// are unsupported (see the implementation and
-// TestMakeSimpleTableDescriptorErrors for details), but this is enough for some
-// unit tests.
-//
-// Any occurrence of SERIAL in the column definitions is handled using
-// the CockroachDB legacy behavior, i.e. INT NOT NULL DEFAULT
-// unique_rowid().
-//
-// TODO(yuzefovich): move this out of importer package into some test utils
-// package.
+// MakeTestingSimpleTableDescriptor is like MakeSimpleTableDescriptor but it
+// uses parentID and parentSchemaID instead of descriptors.
 func MakeTestingSimpleTableDescriptor(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
@@ -78,6 +69,34 @@ func MakeTestingSimpleTableDescriptor(
 			username.RootUserName(),
 		),
 	}).BuildCreatedMutableSchema()
+	return MakeSimpleTableDescriptor(ctx, semaCtx, st, create, db, sc, tableID, fks, walltime)
+}
+
+func makeSemaCtxWithoutTypeResolver(semaCtx *tree.SemaContext) *tree.SemaContext {
+	semaCtxCopy := *semaCtx
+	semaCtxCopy.TypeResolver = nil
+	return &semaCtxCopy
+}
+
+// MakeSimpleTableDescriptor creates a tabledesc.Mutable from a CreateTable
+// parse node without the full machinery. Many parts of the syntax are
+// unsupported (see the implementation and TestMakeSimpleTableDescriptorErrors
+// for details), but this is enough for our csv IMPORT and for some unit tests.
+//
+// Any occurrence of SERIAL in the column definitions is handled using
+// the CockroachDB legacy behavior, i.e. INT NOT NULL DEFAULT
+// unique_rowid().
+func MakeSimpleTableDescriptor(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	st *cluster.Settings,
+	create *tree.CreateTable,
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
+	tableID descpb.ID,
+	fks fkHandler,
+	walltime int64,
+) (*tabledesc.Mutable, error) {
 	create.HoistConstraints()
 	if create.IfNotExists {
 		return nil, unimplemented.NewWithIssueDetailf(42846, "import.if-no-exists", "unsupported IF NOT EXISTS")
@@ -315,6 +334,7 @@ func (so *importSequenceOperators) SetSequenceValueByID(
 
 type fkResolver struct {
 	tableNameToDesc map[string]*tabledesc.Mutable
+	format          roachpb.IOFileFormat
 }
 
 var _ resolver.SchemaResolver = &fkResolver{}
@@ -347,9 +367,18 @@ func (r *fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 func (r *fkResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
+	// PGDUMP supports non-public schemas so respect the schema name.
 	var lookupName string
-	if scName != "" {
-		lookupName = strings.TrimPrefix(obName, scName+".")
+	if r.format.Format == roachpb.IOFileFormat_PgDump {
+		if scName == "" || dbName == "" {
+			return false, prefix, nil, errors.Errorf("expected catalog and schema name to be set when resolving"+
+				" table %q in PGDUMP", obName)
+		}
+		lookupName = fmt.Sprintf("%s.%s", scName, obName)
+	} else {
+		if scName != "" {
+			lookupName = strings.TrimPrefix(obName, scName+".")
+		}
 	}
 	tbl, ok := r.tableNameToDesc[lookupName]
 	if ok {

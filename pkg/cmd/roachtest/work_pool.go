@@ -211,7 +211,7 @@ func scoreTestAgainstCluster(
 	t := tc.spec
 	testPolicy := t.Cluster.ReusePolicy
 	if tag != "" && testPolicy != (spec.ReusePolicyTagged{Tag: tag}) {
-		logFatalfCtx(context.Background(), l,
+		l.Fatalf(
 			"incompatible test and cluster. Cluster tag: %s. Test policy: %+v",
 			tag, t.Cluster.ReusePolicy,
 		)
@@ -263,7 +263,7 @@ func (p *workPool) decTestLocked(ctx context.Context, l *logger.Logger, name str
 		}
 	}
 	if idx == -1 {
-		logFatalfCtx(ctx, l, "failed to find test: %s", name)
+		l.FatalfCtx(ctx, "failed to find test: %s", name)
 	}
 	tc := &p.mu.tests[idx]
 	tc.count--

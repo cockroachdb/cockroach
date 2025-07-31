@@ -16,8 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -74,7 +72,7 @@ type logEntry struct {
 	counter uint64
 
 	// The stack trace(s), when processing e.g. a fatal event.
-	stacks debugutil.SafeStack
+	stacks []byte
 
 	// Whether the entry is structured or not.
 	structured bool
@@ -217,42 +215,6 @@ func makeStructuredEntry(
 	return res
 }
 
-var (
-	// envDefaultSafeRedactionEnabled is the environment variable that controls
-	// if the "default safe" redaction is enabled. If this is set to true, then
-	// all types that do not implement the SafeFormatter or SafeValue interfaces
-	// are assumed to be safe. Enabling this will have some performance degradation
-	// as it will wrap all arguments in a call to redact.Safe. This is still
-	// EXPERIMENTAL and should be used with caution.
-	envDefaultSafeRedactionEnabled = envutil.EnvOrDefaultBool("COCKROACH_DEFAULT_SAFE_REDACTION", false)
-)
-
-// sanitizePrintArgs makes sure that there is no ambiguity in whether an argument is
-// safe or unsafe. This is done by making sure that the types of the arguments
-// either implement the SafeFormatter or SafeValue interfaces. If they do not,
-// the argument is assumed to be safe and is wrapped in a call to redact.Safe.
-func sanitizePrintArgs(args []interface{}) []interface{} {
-	if !envDefaultSafeRedactionEnabled {
-		return args
-	}
-
-	sanitizedArgs := make([]interface{}, len(args))
-	for i, arg := range args {
-		if _, ok := arg.(redact.SafeFormatter); ok {
-			sanitizedArgs[i] = arg
-		}
-
-		if _, ok := arg.(redact.SafeValue); ok {
-			sanitizedArgs[i] = arg
-		}
-
-		// assume that the arg is safe
-		sanitizedArgs[i] = redact.Safe(arg)
-	}
-
-	return sanitizedArgs
-}
-
 // makeUnstructuredEntry creates a logEntry using an unstructured message.
 func makeUnstructuredEntry(
 	ctx context.Context,
@@ -272,15 +234,11 @@ func makeUnstructuredEntry(
 		if len(args) == 0 {
 			// TODO(knz): Remove this legacy case.
 			buf.Print(redact.Safe(format))
+		} else if len(format) == 0 {
+			buf.Print(args...)
 		} else {
-			sArgs := sanitizePrintArgs(args)
-			if len(format) == 0 {
-				buf.Print(sArgs...)
-			} else {
-				buf.Printf(format, sArgs...)
-			}
+			buf.Printf(format, args...)
 		}
-
 		// Collect and append the hints, if any.
 		for _, a := range args {
 			if e, ok := a.(error); ok {
@@ -290,7 +248,6 @@ func makeUnstructuredEntry(
 				}
 			}
 		}
-
 		res.payload = makeRedactablePayload(ctx, buf.RedactableString())
 	} else {
 		var buf strings.Builder
@@ -336,7 +293,7 @@ func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
 	messages = append(messages,
 		makeStartLine(f, "file created at: %s", redact.Safe(now.Format("2006/01/02 15:04:05"))),
 		makeStartLine(f, "running on machine: %s", SafeManaged(fullHostName)),
-		makeStartLine(f, "binary: %s", build.GetInfo().Short()),
+		makeStartLine(f, "binary: %s", redact.Safe(build.GetInfo().Short())),
 		makeStartLine(f, "arguments: %s", SafeManaged(os.Args)),
 	)
 

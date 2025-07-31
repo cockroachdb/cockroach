@@ -45,7 +45,7 @@ num locks: 0, bytes returned: 0, resume reason: RESUME_UNKNOWN, resume span: <ni
 
 query span=a,d uncontended
 ----
-num locks: 1, bytes returned: 39, resume reason: RESUME_UNKNOWN, resume span: <nil>
+num locks: 1, bytes returned: 41, resume reason: RESUME_UNKNOWN, resume span: <nil>
  locks:
   range_id=3 key="c" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=0s
 
@@ -82,14 +82,14 @@ num=3
 
 query span=a,f max-locks=2 uncontended
 ----
-num locks: 2, bytes returned: 78, resume reason: RESUME_KEY_LIMIT, resume span: {e-f}
+num locks: 2, bytes returned: 82, resume reason: RESUME_KEY_LIMIT, resume span: {e-f}
  locks:
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=0s
   range_id=3 key="c" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=0s
 
 query span=a,f max-bytes=50 uncontended
 ----
-num locks: 1, bytes returned: 39, resume reason: RESUME_BYTE_LIMIT, resume span: {c-f}
+num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span: {c-f}
  locks:
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=0s
 
@@ -97,7 +97,7 @@ num locks: 1, bytes returned: 39, resume reason: RESUME_BYTE_LIMIT, resume span:
 
 query span=a,f max-bytes=10 uncontended
 ----
-num locks: 1, bytes returned: 39, resume reason: RESUME_BYTE_LIMIT, resume span: {c-f}
+num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span: {c-f}
  locks:
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=0s
 
@@ -238,13 +238,13 @@ num=4
 
 query span=a,f uncontended max-bytes=50
 ----
-num locks: 1, bytes returned: 39, resume reason: RESUME_BYTE_LIMIT, resume span: {b-f}
+num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span: {b-f}
  locks:
   range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Unreplicated duration=0s
 
 query span=a,f uncontended max-locks=2 uncontended
 ----
-num locks: 1, bytes returned: 39, resume reason: RESUME_KEY_LIMIT, resume span: {b-f}
+num locks: 1, bytes returned: 41, resume reason: RESUME_KEY_LIMIT, resume span: {b-f}
  locks:
   range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Unreplicated duration=0s
 
@@ -252,7 +252,7 @@ num locks: 1, bytes returned: 39, resume reason: RESUME_KEY_LIMIT, resume span: 
 # Bumping max locks up to 3 should return all locks on key b.
 query span=a,f uncontended max-locks=3 uncontended
 ----
-num locks: 3, bytes returned: 117, resume reason: RESUME_KEY_LIMIT, resume span: {c-f}
+num locks: 3, bytes returned: 123, resume reason: RESUME_KEY_LIMIT, resume span: {c-f}
  locks:
   range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Unreplicated duration=0s
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000003 durability=Unreplicated duration=0s
@@ -262,7 +262,7 @@ num locks: 3, bytes returned: 117, resume reason: RESUME_KEY_LIMIT, resume span:
 # locks, which is 2) should return all locks even though it goes over the limit.
 query span=b,f uncontended max-locks=1 uncontended
 ----
-num locks: 2, bytes returned: 78, resume reason: RESUME_KEY_LIMIT, resume span: {c-f}
+num locks: 2, bytes returned: 82, resume reason: RESUME_KEY_LIMIT, resume span: {c-f}
  locks:
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000003 durability=Unreplicated duration=0s
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000002 durability=Unreplicated duration=0s
@@ -271,7 +271,7 @@ num locks: 2, bytes returned: 78, resume reason: RESUME_KEY_LIMIT, resume span: 
 
 query span=b,f uncontended max-bytes=50
 ----
-num locks: 2, bytes returned: 78, resume reason: RESUME_BYTE_LIMIT, resume span: {c-f}
+num locks: 2, bytes returned: 82, resume reason: RESUME_BYTE_LIMIT, resume span: {c-f}
  locks:
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000003 durability=Unreplicated duration=0s
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000002 durability=Unreplicated duration=0s

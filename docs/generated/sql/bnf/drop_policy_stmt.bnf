@@ -1,3 +1,0 @@
-drop_policy_stmt ::=
-	'DROP' 'POLICY' name 'ON' table_name opt_drop_behavior
-	| 'DROP' 'POLICY' 'IF' 'EXISTS' name 'ON' table_name opt_drop_behavior

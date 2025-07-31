@@ -45,7 +45,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 2,001 (16 KiB, 4,002 KVs, 2,001 gRPC calls)
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -57,6 +57,7 @@ quality of service: regular
   regions: <hidden>
   actual row count: 2,001
   KV time: 0µs
+  KV contention time: 0µs
   KV rows decoded: 2,001
   KV pairs read: 4,002
   KV bytes read: 16 KiB
@@ -66,7 +67,7 @@ quality of service: regular
   table: a@a_pkey
   spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMksFqGz0Qx-_fU4g5fQWZaEPpQadSJwWTugm2yaWYMF5NHGHtaquZxTZmH6sv0CcrWtnQlAaqw7Lzn59m_rOzJ-DvASwsb7_cTlcK1efF_VwhaGijo6_YEIP9BhWsNXQp1sQcU5ZOIzBzB7BGg2-7XrK81lDHRGBPIF4CgYUVbgItCB2lKwMaHAn6MJbFj_jU7egIGqYx9E3Lduy97DC_TkDD3aPKjdiqtiphoq2POS3EUiTxDVllfv7gMxL3rBzV0ZGz6lobc767OQqxSoTOquqDuvOfir5dPExVjSHwK7xDny74e23MNWiYP06nioU6Vce-FfU_HeTKt_LOKjPOVwCi3VtAgwfVUBPTUWEIsUbJLo3KXjYo9Quxir10vViV-XGai1DcrQcNRTl_dBbcEtjqty3NbsCaQf_7ohbEXWyZXu3orU7mj06TalhrILel8ndw7FNNDynWI1vC-7HQKDhiKdmqBLP2kmJJhE2xv9bwHOL-yTuwYM5n8pfH5UC-gFvOgy1f4n4suzp22dYzBiYNc9zRDQmlxreexddgJfU0DP_9CgAA__-pfvP2
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUsFqGzEQvfcrxJxaUIg2lB50KnVSMKmbYJtcigmyNHGEtdJWM4ttzH5Wf6BfVrSyoWkb6ByWnTdv573h7RHoewANi5svN5OlMOLz_G4mDEiIyeFX0yKB_gYNrCR0OVkkSrlAx5EwdXvQSoKPXc8FXkmwKSPoI7DngKBhadYB52gc5ksFEhyy8WFcaz6ax26LB5AwSaFvI-lRe9GZ8noBEm4fRBEiLWJT24wbn8qYkbhC7FvUQv38QbW3KTJG9in-NcppR8KhTQ6dFldSqdPa9YGRREbjtGg-iFv_qeKb-f1EWBMCvaB3xucz_b1U6gokzB4mE0GMnbCpjyze4p4vfeR3Wqjx9EpA3L5GaM1etNimfBAmhGQNF5dKFC9rw_YZSaSeu561KPzxmjNQ3a0GCRU55UFsNgi6-S3A6TVoNcj_z3CO1KVI-CK-15TUH0oXzbCSgG6D9ceh1GeL9znZkVvbu3HRCDgkrtOmNtN4HhFnNG21v5LwFNLu0TvQoE518Y_HuaB8YDZUDls8p924dnnoiq0nEwglzMwWr5Extz56Ym9Bc-5xGN78CgAA___XMf2r
 
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b
@@ -78,7 +79,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -90,6 +91,7 @@ quality of service: regular
 │ regions: <hidden>
 │ actual row count: 2
 │ KV time: 0µs
+│ KV contention time: 0µs
 │ KV rows decoded: 1
 │ KV pairs read: 2
 │ KV bytes read: 8 B
@@ -105,6 +107,7 @@ quality of service: regular
       regions: <hidden>
       actual row count: 2
       KV time: 0µs
+      KV contention time: 0µs
       KV rows decoded: 2
       KV pairs read: 4
       KV bytes read: 16 B
@@ -114,7 +117,7 @@ quality of service: regular
       table: c@sec
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lN9qGz0Qxe-_pxjm6isoye5SShEUTJ0UnCZxcEJuigmyNHFU70pbjZbYBD9WX6BPVrSyQ_7T0lYXhjk6PjOan_Et8rcaJZ4dHB0Mz0HvKvg0GR-DhsPx6AQMjE_A7M7gA-jdGQp03tCJaohRfsESpwLb4DUx-5Ck294wMkuUhUDr2i4meSpQ-0AobzHaWBNKPFezmiakDIW9AgUaisrWfaweMGkUOPR11ziWoASk3metStUOCvx8AakRS3BlLgPNrU_XkThmKdqGJBQ_vvPG4m8YDGlvyEiosjhbRWIIpIyE8h18zOp8cjoEreqa74ytsmFrfIsCjy-GQ-BILWjfuQj_0zLuWRffSCj6F2UD0eIlQ6OW0FDjwwpUXXutYpqr6GeYqaivicF3se2ihOTv598KFU7XAnO1WTFHNSeU5T0mo32UxVr8OpZDb92GSvmQihmYy3ZBKxR45P2ia-Grtw68kzCo7tNKqMZpxEFK6Jv1q8-bzDVHVddPAP0p0vIp0vfPES2fEq3-CtGOyQDHQKqhgAJpSbqL1ruHg_8j8NUj8OXvgJ8Qt94xPYD-UqfiUaedcj0VSGZO-U-AfRc0nQave28ux31QLxjimG_LXIzc9ipv7-53ez-pfDWpei1pKvCq9jeX1qDEYnN2nvnYHkxfUHNOKzq79jd97PmqTQ-8UjWTwGO1oH2KFBrrLEerUcbQ0Xr9388AAAD__ySury8=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0VGFLG00Q_v7-imE-vYVV745SykIhNFqIVSNR_FKCbHbHuM3d7nV3DhMkP6t_oL-s7K0RNSot1PsQeJ558szcPMPdYvxRo8Szg6OD4TnoXQVfJuNj0HA4Hp2AgfEJmN0ZfAK9O0OBzhs6UQ1FlN-wxKnANnhNMfqQqNteMDJLlIVA69qOEz0VqH0glLfIlmtCiedqVtOElKGwV6BAQ6xs3dvqQSSNAoe-7hoXJSgBqfdZqxLaQYFfLyA1ihJcmWGgufWpzBQ5U2wbklD8-hkz1t4xObbebZWCv4lgSHtDRkKVydmKKUIgZSSUH-BzZueT0yFoVdfxXtgqGzbC9yjw-GI4hMjUgvadY_iflrxnHb-TUPQvmwVEi5cEjVpCQ40PK1B17bXiNFfRzzBTrK8pgu-47VhC0vfzb4gKp2uBGd1tP7KaE8ryQVyjfZTFWvx5YofeurvAyseBmYG5bBe0QoFH3i-6Fr5768A7CYPqYZApxXEacZAc-mb96vMmM46s6noroDdMu9xO--NzYZfbYVf_JOwukoHIgVRDAQXSknS3Pfgb3UT15CbKv7mJCcXWu0iP7uGlTsWTTjvleiqQzJzypyP6Lmg6DV732gzHvVFPGIqcq2UGI7cp5e3dn_RDp_JVp-o1p6nAq9rfXFqDEou7Z-eZn82D6Q9qHtOKzq79TW97vmrTC16pOpLAY7WgfWIKjXU2stUoOXS0Xv_3OwAA___2YsKZ
 
 # Regression test for using the Streamer API when we have a cast to an Oid type
 # for which DistSQL is prohibited (#122274). (Note that, unlike above, we don't
@@ -129,7 +132,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -151,6 +154,7 @@ quality of service: regular
           regions: <hidden>
           actual row count: 2
           KV time: 0µs
+          KV contention time: 0µs
           KV rows decoded: 2
           KV pairs read: 4
           KV bytes read: 16 B
@@ -160,7 +164,7 @@ quality of service: regular
           table: c@sec
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykU9Fq2zAUfd9XXO7TBmprh7EHwSBdmo10TVKc0pcRiiLdplpkyZOuaULJZ-0H9mXDdlKaspaN6cFwjo7Plc6xHzD9cChxNrwYDq5AHyspi-GXyel4OLs8HQzhczEdg4bz6WgCBqYTMMcL-Aj6eIECfTA0USUllN8wx7nAKgZNKYXYUA-tYGTWKDOB1lc1N_RcoA6RUD4gW3aEEq_UwlFBylA8yVCgIVbWtba6n0ijwEFwdemTBCWgmT2rVIOOUODXa2gGJQk-72CkpQ3NNlPijmJbkoTs18-0k4T7BIZ0MGQk9DpysWFKEEkZCfkH-NSxy-JyAFo5lx6FlbJxL3yPAsfXgwEkpgp0qD3DW1rzifX8TkLW3qgTEK1eEpRqDSWVIW5AORe04uZcWXuGhWJ9RwlCzVXNEhp9e_490cP5VmCHdhEnVktCmT_pZHSGMtuKv6_lPFi_ayU_bMX0zU21og0KvAhhVVfwPVgPwUvo95621VRVkDcUJfTzw48Ld9PbLrpoO5xYOXfYGK1J12yDP6T_I5nes2Tyf0mmoFQFn-gglZcmZc8mHeXbuUAyS-r-khTqqOkyBt1qOzhtjVrCUOJuN-_AyO-3EkdS5WOxT53yV516rznNBd66cH9jDUrMduvoD4_9wuYFtUxNRLO7cN_aXm2q5oK3yiUSOFYrOiOmWFpvE1uNkmNN2-2b3wEAAP__JLtufA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykU8FqGzEQvfcrhjm1oCS7pvQgKDh13OI0toMdcikmyNLEUb0rbaVZYhP8Wf2BflnZlR3spAkt1WHhvXk7M3pv9wHjjwIlTvsX_d4V6GMl5aT_ZXQ67E8vT3t9-DwZD0HD-XgwAgPjEZjjOXwEfTxHgc4bGqmSIspvmONMYBW8phh9aKiHVjAwK5SZQOuqmht6JlD7QCgfkC0XhBKv1LygCSlD4SRDgYZY2aJtq7uRNArs-aIuXZSgBDSzp5Vq0BEK_HoNzaAoweUJBlpY35SZIieKbUkSsl8_Y8LaOybH1rtnpeDvIxjS3pCR0EnkfM0UIZAyEvIP8Cmxi8llD7QqivgorJQNO-F7FDi87vUgMlWgfe0Y3tKKT6zjdxKy9rJJQLR8SVCqFZRU-rAGVRReK272ytod5or1HUXwNVc1S2j07f47ooOzjcCEtu5HVgtCme_FNThDmW3E3yd27q3bBpYfBma65qZa0hoFXni_rCv47q0D7yR0O_tBNilOyBkKErr54XeH2-ltFsnahCOrojhMjFak6-dB_ocznSfO5P_izIRi5V2kA1dempQ9mXSUb2YCySwo_UDR10HTZfC61SY4bhu1hKHIqZonMHC7UuRAqnwMdr9T_mqnzmudZgJvC39_Yw1KzLbn6A-P3cHmBbWIjUXTO3_ftr1aV80Fb1URSeBQLemMmEJpnY1sNUoONW02b34HAAD__xZ9eDE=
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
@@ -169,7 +173,6 @@ project
  ├── columns: a:1
  ├── stats: [rows=10]
  ├── cost: 1129.989
- ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── prune: (1)
  └── inner-join (merge)
@@ -179,14 +182,12 @@ project
       ├── right ordering: +10
       ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(10)=1, null(10)=0]
       ├── cost: 1129.869
-      ├── cost-flags: unbounded-cardinality
       ├── fd: (1)==(10), (10)==(1)
       ├── distribution: test
       ├── scan c
       │    ├── columns: c.a:1
       │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
       │    ├── cost: 30.12
-      │    ├── cost-flags: unbounded-cardinality
       │    ├── ordering: +1
       │    ├── distribution: test
       │    ├── prune: (1)
@@ -196,7 +197,6 @@ project
       │    ├── columns: d.b:10
       │    ├── stats: [rows=1000, distinct(10)=100, null(10)=0]
       │    ├── cost: 1088.62
-      │    ├── cost-flags: unbounded-cardinality
       │    ├── ordering: +10
       │    ├── distribution: test
       │    ├── prune: (10)
@@ -214,7 +214,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -235,6 +235,7 @@ quality of service: regular
 │     regions: <hidden>
 │     actual row count: 2
 │     KV time: 0µs
+│     KV contention time: 0µs
 │     KV rows decoded: 2
 │     KV pairs read: 4
 │     KV bytes read: 16 B
@@ -250,6 +251,7 @@ quality of service: regular
       regions: <hidden>
       actual row count: 2
       KV time: 0µs
+      KV contention time: 0µs
       KV rows decoded: 2
       KV pairs read: 4
       KV bytes read: 16 B
@@ -259,7 +261,7 @@ quality of service: regular
       table: d@d_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsk9FO2zAUhu_3FEfnCjQDSZh2YQmpWummsrVFBXEzVci1D8GqEwfbEa1QH2svsCebnAAjXWFj2uVyUcXn_PnPyf81d-hvDHI8G3wZ9M9B7gv4OJ2MQMJwPB5MYTSYfhrAyWQ4BgWTcSM4ArU_R4alVTQWBXnkXzHFGcPKWUneWxdLd41gqJbIE4a6rOoQyzOG0jpCfodBB0PI8VzMDU1JKHIHCTJUFIQ2ja3syctqQStk2LemLkrPQSDDs0rE2z1k-PkC4iDPoUzbo6Nc29gO5ENbCrogDsn3b_5eYm89KJJWkeKQtcX5KpAHR0JxSN_Dh7aaT0_7IIUx_lFYCe0ehO-Q4eii3wcfqAJp6zLADi3DgS7DLoekeaNWQLR4TlCIJRRUWLcCYYyVIsS9kmaHuQjymjzYOlR14BD1zf4PhQxna4bt6T5iH0ROyNMnTIbHyJM1-zssaReL6qlfsMz_Y_lTLNkGlvRZLD9p1KV1ihypDolZfPJ3ki1sR-RyOrG6JHeQddkaugo7vfTt7pHT-XV7iwwn8ZV6ESUtSdZB27KL76WsYs_fGAhUVKC0X0DtRU7_IMrDjSiz1_zDp-QrW3rajHTrpGRj0l4agyWVUwvK29pJOnVWNtr2OGmMmoIiH9pu1h6GZdNK4wRHonj8QJ86pa9wyp46pZtO2YtOhx2npLvTjOGVsbeXWiHH5P7a2_LzcGF8QOQ-hn12bW8b2_NVFaO6EsYTw5FY0DEFcoUutQ9aIg-upvX6zY8AAAD__2SSFss=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsk99O4zoQxu_PU4zmCnQMJOHoXFhCqk7pWZXdtqggblYVcu0hWHXsYDuiFepj7Qvsk62cAEvLnxUrLjcXVWbmy-fJ92vuMNwY5Hg2-DLon4PcF_D_dDICCcPxeDCF0WD6aQAnk-EYFEzGreAI1P4cGVqnaCwqCsi_Yo4zhrV3kkJwPrXuWsFQLZFnDLWtm5jaM4bSeUJ-h1FHQ8jxXMwNTUko8gcZMlQUhTatrezJy3pBK2TYd6apbOAgkOFZLdLtHjL8fAHpoMDB5l3pqdQujSOF2LWirohD9v1b6GrpbCQbtbPPRt7dBlAknSLFoeia81WkAJ6E4pD_C_913XJ62gcpjAmPwlpo_yD8BxmOLvp9CJFqkK6xEXZoGQ-0jbscsvZlOwHR4jVBJZZQUeX8CoQxToqY9sraHeYiymsK4JpYN5FD0rf7PzQKnK0ZdtV9-iGKkpDnT3ANj5Fna_Z7xPJNYqqnnhGb_yH2AcSKLWL5q8R-gmqs84o8qQ1Is_TkryQvYB-RL-nEaUv-oNjEbugq7vTyv3ePvC6vu1tkOEmv1EuUaUmyeY7vrazSLNwYiFTVoHRYQBNESR8Q5eFWlMV7_vxTCrWzgbYjffGkbOukvTwFS6qkDlRwjZd06p1stV05aY3ahqIQu2nRFUPbjvJ0gidRPX67T53ydzgVT53ybafiTafDDadsc6cZwyvjbi-1Qo7Z_bX3ws_DhekBUYYU9tm1u21tz1d1iupKmEAMR2JBxxTJV9rqELVEHn1D6_VfPwIAAP__d_EqNQ==
 
 statement ok
 RESET vectorize; RESET distsql
@@ -549,20 +551,4 @@ EXPLAIN (VEC) SELECT * FROM t EXCEPT ALL SELECT * FROM u
 └ Node 1
   └ *colexecjoin.crossJoiner
     ├ *colfetcher.ColBatchScan
-    └ *colfetcher.ColBatchScan
-
-# Regression test for attempting to use optimized vectorized operator which
-# doesn't handle collated strings (#147559).
-statement ok
-CREATE TABLE t147559 (
-    a INT,
-    b TEXT COLLATE en_u_ks_level1
-);
-
-query T
-EXPLAIN (VEC) SELECT * FROM t147559 WHERE b LIKE 'abc%';
-----
-│
-└ Node 1
-  └ *colexecsel.defaultCmpConstSelOp
     └ *colfetcher.ColBatchScan

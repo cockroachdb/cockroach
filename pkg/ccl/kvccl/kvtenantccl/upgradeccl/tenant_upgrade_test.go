@@ -346,21 +346,20 @@ func TestTenantUpgradeFailure(t *testing.T) {
 
 	v0 := clusterversion.MinSupported.Version()
 	v2 := clusterversion.Latest.Version()
-	// v1 needs to be between v0 and v2. Set it to the first version with a
-	// different major/minor from v0.
+	// v1 needs to be between v0 and v2. Set it to the minor release
+	// after v0 and before v2.
 	var v1 roachpb.Version
 	for _, version := range clusterversion.ListBetween(v0, v2) {
-		if version.Major != v0.Major && version.Minor != v0.Minor {
+		if version.Minor != v0.Minor {
 			v1 = version
 			break
 		}
 	}
-	if v1 == (roachpb.Version{}) || v1 == v2 {
+	if v1 == (roachpb.Version{}) {
 		// There is no in-between version supported; skip this test.
 		skip.IgnoreLint(t, "test can only run when we support two previous releases")
 	}
 
-	t.Logf("v0=%s  v1=%s  v2=%s", v0, v1, v2)
 	t.Log("starting server")
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
@@ -505,11 +504,11 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		db = sqlutils.MakeSQLRunner(conn)
 
 		t.Log("ensure that the tenant still works and the target version wasn't reached")
-		db.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
-		res := db.QueryStr(t, "SELECT split_part(version, '-', 1) FROM [SHOW CLUSTER SETTING version]")
-		if res[0][0] == v2.String() {
-			t.Fatalf("current version should not equal target version %s", v2.String())
-		}
+		db.CheckQueryResults(t,
+			"SELECT * FROM t", [][]string{{"1"}, {"2"}})
+		db.CheckQueryResults(t,
+			"SELECT split_part(version, '-', 1) FROM [SHOW CLUSTER SETTING version]",
+			[][]string{{v1.String()}})
 
 		t.Log("restart the tenant")
 		tenant.AppStopper().Stop(ctx)

@@ -47,7 +47,7 @@ on-txn-updated txn=txn1 status=aborted
 [-] update txn: aborting txn1
 [3] sequence req1: resolving intent ‹"k"› for txn 00000001 with ABORTED status
 [3] sequence req1: lock wait-queue event: done waiting
-[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[3] sequence req1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard

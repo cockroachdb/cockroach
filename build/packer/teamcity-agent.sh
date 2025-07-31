@@ -25,7 +25,7 @@ ARCH=$(uname -m)
 # Add third-party APT repositories.
 apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0EBFCD88
 cat > /etc/apt/sources.list.d/docker.list <<EOF
-deb https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable
+deb https://download.docker.com/linux/ubuntu focal stable
 EOF
 
 curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
@@ -41,10 +41,6 @@ sleep 3m
 add-apt-repository ppa:git-core/ppa
 apt-get update
 
-python_packages="python3"
-if [[ $(lsb_release -cs) = "focal" ]]; then
-    python_packages="$python_packages python2"
-fi
 # Installing gnome-keyring prevents the error described in
 # https://github.com/moby/moby/issues/34048
 apt-get install --yes \
@@ -64,14 +60,15 @@ apt-get install --yes \
   jq \
   openjdk-11-jre-headless \
   pass \
-  $python_packages \
+  python2 \
+  python3 \
   sudo \
   unzip \
   zip
 
 # Enable support for executing binaries of all architectures via qemu emulation
 # (necessary for building arm64 Docker images)
-apt-get install --yes binfmt-support qemu-user-static
+apt-get install --yes qemu binfmt-support qemu-user-static
 
 # Verify that both of the platforms we support Docker for can be built.
 if [[ $ARCH = x86_64 ]]; then

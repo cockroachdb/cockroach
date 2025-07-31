@@ -37,9 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,9 +48,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -204,7 +204,7 @@ func TestDataDriven(t *testing.T) {
 
 								s := srv.ApplicationLayer()
 
-								url, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+								url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 								defer cleanup()
 								var sqlConnCtx clisqlclient.Context
 								conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -271,7 +271,7 @@ func TestCopyFromTransaction(t *testing.T) {
 		// of the COPY can be lost, which can then cause the COPY to fail.
 		kvcoord.PipelinedWritesEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 
-		url, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
+		url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 		defer cleanup()
 		var sqlConnCtx clisqlclient.Context
 
@@ -279,7 +279,7 @@ func TestCopyFromTransaction(t *testing.T) {
 			valToDecimal := func(v driver.Value) *apd.Decimal {
 				mt, ok := v.(pgtype.Numeric)
 				require.True(t, ok)
-				buf, err := mt.MarshalJSON()
+				buf, err := mt.EncodeText(nil, nil)
 				require.NoError(t, err)
 				decimal, _, err := apd.NewFromString(string(buf))
 				require.NoError(t, err)
@@ -418,7 +418,7 @@ func TestCopyFromTimeout(t *testing.T) {
 
 	s := srv.ApplicationLayer()
 
-	pgURL, cleanup := pgurlutils.PGUrl(
+	pgURL, cleanup := sqlutils.PGUrl(
 		t,
 		s.AdvSQLAddr(),
 		"TestCopyFromTimeout",
@@ -484,7 +484,7 @@ func TestShowQueriesIncludesCopy(t *testing.T) {
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 
-	pgURL, cleanup := pgurlutils.PGUrl(
+	pgURL, cleanup := sqlutils.PGUrl(
 		t,
 		srv.ApplicationLayer().AdvSQLAddr(),
 		"TestShowQueriesIncludesCopy",
@@ -602,10 +602,6 @@ func TestLargeDynamicRows(t *testing.T) {
 	err = conn.Exec(ctx, "CREATE TABLE t (s STRING)")
 	require.NoError(t, err)
 
-	// Enable tracing for this run to ensure that the vectorized fast-path is
-	// used.
-	require.NoError(t, conn.Exec(ctx, `SET tracing = on`))
-
 	rng, _ := randutil.NewTestRand()
 	str := randutil.RandString(rng, (2<<20)+1, "asdf")
 
@@ -618,16 +614,6 @@ func TestLargeDynamicRows(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, 4, batchNumber)
 	batchNumber = 0
-
-	require.NoError(t, conn.Exec(ctx, `SET tracing = off`))
-	// Examine the trace to sanity-check that the vectorized fast-path is used.
-	// This log message is emitted by the vectorInserter on each BatchRequest,
-	// so we expect to see it at least once.
-	row, err := conn.QueryRow(ctx, `SELECT count(*) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%copy running batch%'`)
-	require.NoError(t, err)
-	count, err := strconv.Atoi(row[0].(string))
-	require.NoError(t, err)
-	require.GreaterOrEqualf(t, count, 1, "was vectorized fast-path not used?")
 
 	// Reset and make sure we use 1 batch.
 	kvserverbase.MaxCommandSize.Override(ctx, &s.ClusterSettings().SV, kvserverbase.MaxCommandSizeDefault)
@@ -652,7 +638,7 @@ func TestTinyRows(t *testing.T) {
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 
-	url, cleanup := pgurlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(), "copytest", url.User(username.RootUser))
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -815,7 +801,7 @@ func BenchmarkCopyCSVEndToEnd(b *testing.B) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	pgURL, cleanup, err := pgurlutils.PGUrlE(
+	pgURL, cleanup, err := sqlutils.PGUrlE(
 		s.AdvSQLAddr(),
 		"BenchmarkCopyEndToEnd", /* prefix */
 		url.User(username.RootUser),

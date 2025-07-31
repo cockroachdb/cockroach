@@ -52,7 +52,7 @@ func TestRingBuffer_Add(t *testing.T) {
 	}
 
 	{
-		rb, re := b.clearTo(2)
+		rb, re := b.clearTo(3)
 		eq(t, b, 3, 4, 5, 6)
 		require.EqualValues(t, rb, 2*size)
 		require.EqualValues(t, re, 2)
@@ -173,19 +173,17 @@ func TestRingBuffer_TruncateFrom(t *testing.T) {
 
 func TestRingBuffer_ClearTo(t *testing.T) {
 	b := &ringBuf{}
-	b.clearTo(99)
+	b.clearTo(100)
 	eq(t, b)
 	b.add(newEntries(10, 20, 9))
 	eq(t, b, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-	b.clearTo(8)
-	eq(t, b, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-	b.clearTo(9)
-	eq(t, b, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
 	b.clearTo(10)
+	eq(t, b, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+	b.clearTo(11)
 	eq(t, b, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-	b.clearTo(16)
+	b.clearTo(17)
 	eq(t, b, 17, 18, 19)
-	b.clearTo(99)
+	b.clearTo(100)
 	eq(t, b)
 }
 

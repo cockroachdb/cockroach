@@ -3,18 +3,14 @@ echo
 
 ----
 # TYPE read summary
-read{quantile="0.5"} 1.048575e+06 1.719230907083e+09
-read{quantile="0.95"} 1.835007e+06 1.719230907083e+09
-read{quantile="0.99"} 3.276799e+06 1.719230907083e+09
-read{quantile="1.0"} 1.3631487e+07 1.719230907083e+09
+read{quantile="50.0"} 1.048575e+06 1.719230907083e+09
+read{quantile="95.0"} 1.835007e+06 1.719230907083e+09
+read{quantile="99.0"} 3.276799e+06 1.719230907083e+09
+read{quantile="100.0"} 1.3631487e+07 1.719230907083e+09
 read_sum 0.0 1.719230907083e+09
 read_count 34540 1.719230907083e+09
 # TYPE read_elapsed gauge
 read_elapsed 999.0 1.719230907083e+09
-# TYPE read_max gauge
-read_max 1.3631487e+07 1.719230907083e+09
-# TYPE read_mean gauge
-read_mean 1.0934588627678053e+06 1.719230907083e+09
 # TYPE read_highest_trackable_value gauge
 read_highest_trackable_value 1e+11 1.719230907083e+09
 # EOF

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -61,7 +60,7 @@ func makeTestContext(stopper *stop.Stopper) testContext {
 		clock:  clock,
 		mockDB: kv.NewDB(ambient, factory, clock, stopper),
 		mon: mon.NewMonitor(mon.Options{
-			Name:     mon.MakeName("test root mon"),
+			Name:     "test root mon",
 			Settings: settings,
 		}),
 		tracer:   ambient.Tracer,
@@ -76,7 +75,7 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 	ctx := tracing.ContextWithSpan(tc.ctx, sp)
 
 	txnStateMon := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test mon"),
+		Name:     "test mon",
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	txnStateMon.StartNoReserved(tc.ctx, tc.mon)
@@ -118,7 +117,7 @@ func (tc *testContext) createCommitWaitState() (fsm.State, *txnState, error) {
 
 func (tc *testContext) createNoTxnState() (fsm.State, *txnState) {
 	txnStateMon := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test mon"),
+		Name:     "test mon",
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	ts := txnState{mon: txnStateMon, connCtx: tc.ctx}
@@ -214,7 +213,6 @@ func TestTransitions(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	rng, _ := randutil.NewTestRand()
 	dummyRewCap := rewindCapability{rewindPos: CmdPos(12)}
 	testCon := makeTestContext(stopper)
 	tranCtx := transitionCtx{
@@ -284,7 +282,7 @@ func TestTransitions(t *testing.T) {
 			ev: eventTxnStart{ImplicitTxn: fsm.True},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
 				nil /* historicalTimestamp */, tranCtx, sessiondatapb.Normal, isolation.Serializable,
-				false /* omitInRangefeeds */, false /* bufferedWritesEnabled */, rng,
+				false, /* omitInRangefeeds */
 			),
 			expState: stateOpen{ImplicitTxn: fsm.True, WasUpgraded: fsm.False},
 			expAdv: expAdvance{
@@ -311,7 +309,7 @@ func TestTransitions(t *testing.T) {
 			ev: eventTxnStart{ImplicitTxn: fsm.False},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
 				nil /* historicalTimestamp */, tranCtx, sessiondatapb.Normal, isolation.Serializable,
-				false /* omitInRangefeeds */, false /* bufferedWritesEnabled */, rng,
+				false, /* omitInRangefeeds */
 			),
 			expState: stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.False},
 			expAdv: expAdvance{
@@ -393,18 +391,18 @@ func TestTransitions(t *testing.T) {
 			expTxn: nil,
 		},
 		{
-			// Get a retryable error while we can auto-retry.
+			// Get a retriable error while we can auto-retry.
 			name: "Open + auto-retry",
 			init: func() (fsm.State, *txnState, uuid.UUID, error) {
 				s, ts := testCon.createOpenState(explicitTxn)
 				return s, ts, ts.mu.txn.ID(), nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
-				b := eventRetryableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retryable err"),
+				b := eventRetriableErrPayload{
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: dummyRewCap,
 				}
-				return eventRetryableErr{CanAutoRetry: fsm.True, IsCommit: fsm.False}, b
+				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.False}, b
 			},
 			expState: stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.False},
 			expAdv: expAdvance{
@@ -414,21 +412,21 @@ func TestTransitions(t *testing.T) {
 			// Expect non-nil txn.
 			expTxn:              &expKVTxn{},
 			expAutoRetryCounter: 1,
-			expAutoRetryError:   "test retryable err",
+			expAutoRetryError:   "test retriable err",
 		},
 		{
-			// Get a retryable error while we can auto-retry.
+			// Get a retriable error while we can auto-retry.
 			name: "Open + auto-retry on upgraded txn",
 			init: func() (fsm.State, *txnState, uuid.UUID, error) {
 				s, ts := testCon.createOpenState(upgradedExplicitTxn)
 				return s, ts, ts.mu.txn.ID(), nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
-				b := eventRetryableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retryable err"),
+				b := eventRetriableErrPayload{
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: dummyRewCap,
 				}
-				return eventRetryableErr{CanAutoRetry: fsm.True, IsCommit: fsm.False}, b
+				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.False}, b
 			},
 			expState: stateOpen{ImplicitTxn: fsm.True, WasUpgraded: fsm.False},
 			expAdv: expAdvance{
@@ -438,10 +436,10 @@ func TestTransitions(t *testing.T) {
 			// Expect non-nil txn.
 			expTxn:              &expKVTxn{},
 			expAutoRetryCounter: 1,
-			expAutoRetryError:   "test retryable err",
+			expAutoRetryError:   "test retriable err",
 		},
 		{
-			// Like the above test - get a retryable error while we can auto-retry,
+			// Like the above test - get a retriable error while we can auto-retry,
 			// except this time the error is on a COMMIT. This shouldn't make any
 			// difference; we should still auto-retry like the above.
 			name: "Open + auto-retry (COMMIT)",
@@ -450,11 +448,11 @@ func TestTransitions(t *testing.T) {
 				return s, ts, ts.mu.txn.ID(), nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
-				b := eventRetryableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retryable err"),
+				b := eventRetriableErrPayload{
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: dummyRewCap,
 				}
-				return eventRetryableErr{CanAutoRetry: fsm.True, IsCommit: fsm.True}, b
+				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.True}, b
 			},
 			expState: stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.False},
 			expAdv: expAdvance{
@@ -466,7 +464,7 @@ func TestTransitions(t *testing.T) {
 			expAutoRetryCounter: 1,
 		},
 		{
-			// Like the above test - get a retryable error while we can auto-retry,
+			// Like the above test - get a retriable error while we can auto-retry,
 			// except this time the txn was upgraded to explicit. This shouldn't make
 			// any difference; we should still auto-retry like the above.
 			name: "Open + auto-retry (COMMIT) on upgraded txn",
@@ -475,11 +473,11 @@ func TestTransitions(t *testing.T) {
 				return s, ts, ts.mu.txn.ID(), nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
-				b := eventRetryableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retryable err"),
+				b := eventRetriableErrPayload{
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: dummyRewCap,
 				}
-				return eventRetryableErr{CanAutoRetry: fsm.True, IsCommit: fsm.True}, b
+				return eventRetriableErr{CanAutoRetry: fsm.True, IsCommit: fsm.True}, b
 			},
 			expState: stateOpen{ImplicitTxn: fsm.True, WasUpgraded: fsm.False},
 			expAdv: expAdvance{
@@ -491,7 +489,7 @@ func TestTransitions(t *testing.T) {
 			expAutoRetryCounter: 1,
 		},
 		{
-			// Get a retryable error when we can no longer auto-retry, but the client
+			// Get a retriable error when we can no longer auto-retry, but the client
 			// is doing client-side retries.
 			name: "Open + client retry",
 			init: func() (fsm.State, *txnState, uuid.UUID, error) {
@@ -499,11 +497,11 @@ func TestTransitions(t *testing.T) {
 				return s, ts, ts.mu.txn.ID(), nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
-				b := eventRetryableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retryable err"),
+				b := eventRetriableErrPayload{
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: rewindCapability{},
 				}
-				return eventRetryableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b
+				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b
 			},
 			expState: stateAborted{
 				WasUpgraded: fsm.False,
@@ -516,7 +514,7 @@ func TestTransitions(t *testing.T) {
 			expTxn: &expKVTxn{},
 		},
 		{
-			// Get a retryable error when we can no longer auto-retry, but the client
+			// Get a retriable error when we can no longer auto-retry, but the client
 			// is doing client-side retries.
 			name: "Open (upgraded) + client retry",
 			init: func() (fsm.State, *txnState, uuid.UUID, error) {
@@ -524,11 +522,11 @@ func TestTransitions(t *testing.T) {
 				return s, ts, ts.mu.txn.ID(), nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
-				b := eventRetryableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retryable err"),
+				b := eventRetriableErrPayload{
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: rewindCapability{},
 				}
-				return eventRetryableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b
+				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b
 			},
 			expState: stateAborted{
 				WasUpgraded: fsm.True,
@@ -541,11 +539,11 @@ func TestTransitions(t *testing.T) {
 			expTxn: &expKVTxn{},
 		},
 		{
-			// Like the above (a retryable error when we can no longer auto-retry, but
-			// the client is doing client-side retries) except the retryable error
+			// Like the above (a retriable error when we can no longer auto-retry, but
+			// the client is doing client-side retries) except the retriable error
 			// comes from a COMMIT statement. This means that the client didn't
 			// properly respect the client-directed retries protocol (it should've
-			// done a RELEASE such that COMMIT couldn't get retryable errors), and so
+			// done a RELEASE such that COMMIT couldn't get retriable errors), and so
 			// we can't go to RestartWait.
 			name: "Open + client retry + error on COMMIT",
 			init: func() (fsm.State, *txnState, uuid.UUID, error) {
@@ -553,11 +551,11 @@ func TestTransitions(t *testing.T) {
 				return s, ts, ts.mu.txn.ID(), nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
-				b := eventRetryableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retryable err"),
+				b := eventRetriableErrPayload{
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: rewindCapability{},
 				}
-				return eventRetryableErr{CanAutoRetry: fsm.False, IsCommit: fsm.True}, b
+				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.True}, b
 			},
 			expState: stateNoTxn{},
 			expAdv: expAdvance{
@@ -569,13 +567,13 @@ func TestTransitions(t *testing.T) {
 		},
 		{
 			// An error on COMMIT leaves us in NoTxn, not in Aborted.
-			name: "Open + non-retryable error on COMMIT",
+			name: "Open + non-retriable error on COMMIT",
 			init: func() (fsm.State, *txnState, uuid.UUID, error) {
 				s, ts := testCon.createOpenState(explicitTxn)
 				return s, ts, ts.mu.txn.ID(), nil
 			},
-			ev:        eventNonRetryableErr{IsCommit: fsm.True},
-			evPayload: eventNonRetryableErrPayload{err: fmt.Errorf("test non-retryable err")},
+			ev:        eventNonRetriableErr{IsCommit: fsm.True},
+			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
 				expCode: skipBatch,
@@ -585,19 +583,19 @@ func TestTransitions(t *testing.T) {
 			expTxn: nil,
 		},
 		{
-			// Like the above, but this time with an implicit txn: we get a retryable
+			// Like the above, but this time with an implicit txn: we get a retriable
 			// error, but we can't auto-retry. We expect to go to NoTxn.
-			name: "Open + useless retryable error (implicit)",
+			name: "Open + useless retriable error (implicit)",
 			init: func() (fsm.State, *txnState, uuid.UUID, error) {
 				s, ts := testCon.createOpenState(implicitTxn)
 				return s, ts, ts.mu.txn.ID(), nil
 			},
 			evFun: func(ts *txnState) (fsm.Event, fsm.EventPayload) {
-				b := eventRetryableErrPayload{
-					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retryable err"),
+				b := eventRetriableErrPayload{
+					err:    ts.mu.txn.GenerateForcedRetryableErr(ctx, "test retriable err"),
 					rewCap: rewindCapability{},
 				}
-				return eventRetryableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b
+				return eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}, b
 			},
 			expState: stateNoTxn{},
 			expAdv: expAdvance{
@@ -608,14 +606,14 @@ func TestTransitions(t *testing.T) {
 			expTxn: nil,
 		},
 		{
-			// We get a non-retryable error.
-			name: "Open + non-retryable error",
+			// We get a non-retriable error.
+			name: "Open + non-retriable error",
 			init: func() (fsm.State, *txnState, uuid.UUID, error) {
 				s, ts := testCon.createOpenState(explicitTxn)
 				return s, ts, ts.mu.txn.ID(), nil
 			},
-			ev:        eventNonRetryableErr{IsCommit: fsm.False},
-			evPayload: eventNonRetryableErrPayload{err: fmt.Errorf("test non-retryable err")},
+			ev:        eventNonRetriableErr{IsCommit: fsm.False},
+			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
 			expState: stateAborted{
 				WasUpgraded: fsm.False,
 			},
@@ -626,14 +624,14 @@ func TestTransitions(t *testing.T) {
 			expTxn: &expKVTxn{},
 		},
 		{
-			// We get a non-retryable error.
-			name: "Open (upgraded) + non-retryable error",
+			// We get a non-retriable error.
+			name: "Open (upgraded) + non-retriable error",
 			init: func() (fsm.State, *txnState, uuid.UUID, error) {
 				s, ts := testCon.createOpenState(upgradedExplicitTxn)
 				return s, ts, ts.mu.txn.ID(), nil
 			},
-			ev:        eventNonRetryableErr{IsCommit: fsm.False},
-			evPayload: eventNonRetryableErrPayload{err: fmt.Errorf("test non-retryable err")},
+			ev:        eventNonRetriableErr{IsCommit: fsm.False},
+			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
 			expState: stateAborted{
 				WasUpgraded: fsm.True,
 			},
@@ -693,36 +691,6 @@ func TestTransitions(t *testing.T) {
 			// We would like to test that the transaction's epoch bumped if the txn
 			// performed any operations, but it's not easy to do the test.
 			expTxn: &expKVTxn{},
-		},
-		{
-			// PREPARE TRANSACTION.
-			name: "Open + prepare",
-			init: func() (fsm.State, *txnState, uuid.UUID, error) {
-				s, ts := testCon.createOpenState(explicitTxn)
-				return s, ts, ts.mu.txn.ID(), nil
-			},
-			ev:       eventTxnFinishPrepared{},
-			expState: stateNoTxn{},
-			expAdv: expAdvance{
-				expCode: advanceOne,
-				expEv:   txnPrepare,
-			},
-			expTxn: nil,
-		},
-		{
-			// PREPARE TRANSACTION on an upgraded txn.
-			name: "Open (upgraded) + prepare",
-			init: func() (fsm.State, *txnState, uuid.UUID, error) {
-				s, ts := testCon.createOpenState(upgradedExplicitTxn)
-				return s, ts, ts.mu.txn.ID(), nil
-			},
-			ev:       eventTxnFinishPrepared{},
-			expState: stateNoTxn{},
-			expAdv: expAdvance{
-				expCode: advanceOne,
-				expEv:   txnPrepare,
-			},
-			expTxn: nil,
 		},
 		//
 		// Tests starting from the Aborted state.
@@ -894,8 +862,8 @@ func TestTransitions(t *testing.T) {
 				}
 				return s, ts, ts.mu.txn.ID(), nil
 			},
-			ev:        eventNonRetryableErr{IsCommit: fsm.False},
-			evPayload: eventNonRetryableErrPayload{err: fmt.Errorf("test non-retryable err")},
+			ev:        eventNonRetriableErr{IsCommit: fsm.False},
+			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
 			expState:  stateCommitWait{},
 			expAdv: expAdvance{
 				expCode: skipBatch,

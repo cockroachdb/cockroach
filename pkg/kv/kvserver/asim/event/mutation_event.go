@@ -51,20 +51,11 @@ type SetNodeLocalityEvent struct {
 	LocalityString string
 }
 
-// SetSimulationSettingsEvent represents a mutation event responsible for
-// changing a simulation setting during the simulation.
-type SetSimulationSettingsEvent struct {
-	IsClusterSetting bool
-	Key              string
-	Value            interface{}
-}
-
 var _ Event = &SetSpanConfigEvent{}
 var _ Event = &AddNodeEvent{}
 var _ Event = &SetNodeLivenessEvent{}
 var _ Event = &SetCapacityOverrideEvent{}
 var _ Event = &SetNodeLocalityEvent{}
-var _ Event = &SetSimulationSettingsEvent{}
 
 func (se SetSpanConfigEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {
@@ -137,18 +128,4 @@ func (sne SetNodeLocalityEvent) Func() EventFunc {
 
 func (sne SetNodeLocalityEvent) String() string {
 	return fmt.Sprintf("set node locality event with nodeID=%d, locality=%v", sne.NodeID, sne.LocalityString)
-}
-
-func (se SetSimulationSettingsEvent) Func() EventFunc {
-	return MutationFunc(func(ctx context.Context, s state.State) {
-		if se.IsClusterSetting {
-			s.SetClusterSetting(se.Key, se.Value)
-		} else {
-			s.SetSimulationSettings(se.Key, se.Value)
-		}
-	})
-}
-
-func (se SetSimulationSettingsEvent) String() string {
-	return fmt.Sprintf("set simulation settings event with key=%s, value=%v", se.Key, se.Value)
 }

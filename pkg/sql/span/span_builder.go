@@ -86,21 +86,6 @@ func (s *Builder) InitWithFetchSpec(
 	}
 }
 
-// IsPreEncoded tests that the encoded values for the provided row can be used
-// to build a span without decoding and re-encoding.
-func (s *Builder) IsPreEncoded(values rowenc.EncDatumRow) bool {
-	for i, col := range s.keyAndPrefixCols {
-		encoding := catenumpb.DatumEncoding_ASCENDING_KEY
-		if col.Direction == catenumpb.IndexColumn_DESC {
-			encoding = catenumpb.DatumEncoding_DESCENDING_KEY
-		}
-		if !values[i].IsEncodedAs(encoding) {
-			return false
-		}
-	}
-	return true
-}
-
 // SpanFromEncDatums encodes a span with len(values) constraint columns from the
 // index prefixed with the index key prefix that includes the table and index
 // ID. SpanFromEncDatums assumes that the EncDatums in values are in the order
@@ -314,7 +299,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	var err error
 	var containsNull bool
 	// Encode each logical part of the start key.
-	span.Key, containsNull, err = s.encodeConstraintKey(cs.StartKey(), true /* includePrefix */)
+	span.Key, containsNull, err = s.encodeConstraintKey(cs.StartKey())
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +312,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 		span.Key = span.Key.PrefixEnd()
 	}
 	// Encode each logical part of the end key.
-	span.EndKey, _, err = s.encodeConstraintKey(cs.EndKey(), true /* includePrefix */)
+	span.EndKey, _, err = s.encodeConstraintKey(cs.EndKey())
 	if err != nil {
 		return nil, err
 	}
@@ -352,18 +337,13 @@ func (s *Builder) appendSpansFromConstraintSpan(
 
 // encodeConstraintKey encodes each logical part of a constraint.Key into a
 // roachpb.Key.
-//
-// includePrefix is true if the KeyPrefix bytes should be included in the
-// returned key.
 func (s *Builder) encodeConstraintKey(
-	ck constraint.Key, includePrefix bool,
+	ck constraint.Key,
 ) (key roachpb.Key, containsNull bool, _ error) {
 	if ck.IsEmpty() {
 		return key, containsNull, nil
 	}
-	if includePrefix {
-		key = append(key, s.KeyPrefix...)
-	}
+	key = append(key, s.KeyPrefix...)
 	for i := 0; i < ck.Length(); i++ {
 		val := ck.Value(i)
 		if val == tree.DNull {
@@ -491,36 +471,4 @@ func (s *Builder) generateInvertedSpanKey(
 
 	span, _, err := s.SpanFromEncDatums(scratchRow[:keyLen])
 	return span.Key, err
-}
-
-// KeysFromVectorPrefixConstraint extracts the encoded prefix keys from a
-// vector search operator's prefix constraint. It validates that each span in
-// the constraint has a single key.
-func (s *Builder) KeysFromVectorPrefixConstraint(
-	ctx context.Context, prefixConstraint *constraint.Constraint,
-) ([]roachpb.Key, error) {
-	if prefixConstraint == nil || prefixConstraint.Spans.Count() == 0 {
-		// No prefix.
-		return nil, nil
-	}
-	prefixKeys := make([]roachpb.Key, prefixConstraint.Spans.Count())
-	for i, n := 0, prefixConstraint.Spans.Count(); i < n; i++ {
-		span := prefixConstraint.Spans.Get(i)
-
-		// A vector index with prefix columns is organized as a forest of index
-		// trees, one for each unique prefix. This structure does not support
-		// scanning across multiple trees at once, so the prefix spans must have the
-		// same start and end key.
-		if !span.HasSingleKey(ctx, s.evalCtx) {
-			return nil, errors.AssertionFailedf("constraint span %s does not have a single key", span)
-		}
-		// Do not include the /Table/Index prefix bytes - we only want the portion
-		// of the prefix that corresponds to the prefix columns.
-		var err error
-		prefixKeys[i], _, err = s.encodeConstraintKey(span.StartKey(), false /* includePrefix */)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return prefixKeys, nil
 }

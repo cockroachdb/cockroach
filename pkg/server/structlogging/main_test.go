@@ -24,5 +24,3 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(m.Run())
 }
-
-//go:generate ../../util/leaktest/add-leaktest.sh *_test.go

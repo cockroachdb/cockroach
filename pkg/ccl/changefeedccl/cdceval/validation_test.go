@@ -228,7 +228,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 				return
 			}
 			target := jobspb.ChangefeedTargetSpecification{
-				DescID:            tc.desc.GetID(),
+				TableID:           tc.desc.GetID(),
 				StatementTimeName: tc.desc.GetName(),
 			}
 
@@ -354,7 +354,7 @@ func TestSelectClauseRequiresPrev(t *testing.T) {
 			sc, err := ParseChangefeedExpression(tc.stmt)
 			require.NoError(t, err)
 			target := jobspb.ChangefeedTargetSpecification{
-				DescID:            tc.desc.GetID(),
+				TableID:           tc.desc.GetID(),
 				StatementTimeName: tc.desc.GetName(),
 			}
 

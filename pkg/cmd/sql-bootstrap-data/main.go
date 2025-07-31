@@ -32,7 +32,7 @@ func main() {
 	tenantKeys, tenantHash := bootstrap.GetAndHashInitialValuesToString(12345)
 
 	fmt.Printf("\n// Commit the generated files and " +
-		"add the following declarations to the end of initial_values.go:\n")
+		" add the following declarations to the end of initial_values.go:\n")
 	writeDataFile(version, "system.keys", systemKeys)
 	writeDataFile(version, "system.sha256", systemHash)
 	writeDataFile(version, "tenant.keys", tenantKeys)
@@ -45,15 +45,7 @@ func main() {
 		systemHash:    v%[1]d_%[2]d_system_sha256,
 		nonSystem:     v%[1]d_%[2]d_tenant_keys,
 		nonSystemHash: v%[1]d_%[2]d_tenant_sha256,
-	}.build,
-`, version.Major, version.Minor)
-
-	fmt.Printf("\n\n// Add these to BUILD.bazel, under embedsrcs:\n")
-	fmt.Printf(`
-        "data/%[1]d_%[2]d_system.keys",
-        "data/%[1]d_%[2]d_system.sha256",
-        "data/%[1]d_%[2]d_tenant.keys",
-        "data/%[1]d_%[2]d_tenant.sha256",
+	}.build
 `, version.Major, version.Minor)
 }
 

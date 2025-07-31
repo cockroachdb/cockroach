@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "privileges",
+    srcs = ["privileges.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cloud/privileges",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
+        "//pkg/clusterversion",
+        "//pkg/sql",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/syntheticprivilege",
+    ],
+)
+
+go_library(
+    name = "cloudprivilege",
+    srcs = ["privileges.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
+        "//pkg/sql",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/syntheticprivilege",
+    ],
+)

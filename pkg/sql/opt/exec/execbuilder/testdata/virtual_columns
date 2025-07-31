@@ -27,30 +27,30 @@ query TT
 SHOW CREATE TABLE t
 ----
 t  CREATE TABLE public.t (
-     a INT8 NOT NULL,
-     b INT8 NULL,
-     v INT8 NULL AS (a + b) VIRTUAL,
-     CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-     FAMILY fam_0_a (a),
-     FAMILY fam_1_b (b)
-   ) WITH (schema_locked = true);
+   a INT8 NOT NULL,
+   b INT8 NULL,
+   v INT8 NULL AS (a + b) VIRTUAL,
+   CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+   FAMILY fam_0_a (a),
+   FAMILY fam_1_b (b)
+)
 
 query TT
 SHOW CREATE TABLE t_idx
 ----
 t_idx  CREATE TABLE public.t_idx (
-         a INT8 NOT NULL,
-         b INT8 NULL,
-         c INT8 NULL,
-         v INT8 NULL AS (a + b) VIRTUAL,
-         w INT8 NULL AS (c + 1:::INT8) VIRTUAL,
-         CONSTRAINT t_idx_pkey PRIMARY KEY (a ASC),
-         INDEX t_idx_v_idx (v ASC),
-         UNIQUE INDEX t_idx_w_key (w ASC),
-         FAMILY fam_0_a (a),
-         FAMILY fam_1_b (b),
-         FAMILY fam_2_c (c)
-       ) WITH (schema_locked = true);
+       a INT8 NOT NULL,
+       b INT8 NULL,
+       c INT8 NULL,
+       v INT8 NULL AS (a + b) VIRTUAL,
+       w INT8 NULL AS (c + 1:::INT8) VIRTUAL,
+       CONSTRAINT t_idx_pkey PRIMARY KEY (a ASC),
+       INDEX t_idx_v_idx (v ASC),
+       UNIQUE INDEX t_idx_w_key (w ASC),
+       FAMILY fam_0_a (a),
+       FAMILY fam_1_b (b),
+       FAMILY fam_2_c (c)
+)
 
 subtest Select
 
@@ -137,7 +137,6 @@ vectorized: true
     │ estimated row count: 333 (missing stats)
     │ table: t_idx@t_idx_pkey
     │ key columns: a
-    │ parallel
     │
     └── • scan
           columns: (a)
@@ -178,7 +177,6 @@ vectorized: true
 │ table: t_idx@t_idx_pkey
 │ equality: (a) = (a)
 │ equality cols are key
-│ parallel
 │
 └── • lookup join (inner)
     │ columns: (column1, a, v)
@@ -288,7 +286,6 @@ vectorized: true
               estimated row count: 333 (missing stats)
               table: t@t_pkey
               spans: /2-
-              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE v = 1
@@ -339,7 +336,6 @@ vectorized: true
           estimated row count: 333 (missing stats)
           table: t_idx@t_idx_pkey
           spans: /2-
-          locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a > 1 RETURNING v
@@ -367,7 +363,6 @@ vectorized: true
               estimated row count: 333 (missing stats)
               table: t_idx@t_idx_pkey
               spans: /2-
-              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE v = 1
@@ -392,15 +387,12 @@ vectorized: true
         │ estimated row count: 333 (missing stats)
         │ table: t_idx@t_idx_pkey
         │ key columns: a
-        │ locking strength: for update
-        │ parallel
         │
         └── • scan
               columns: (a)
               estimated row count: 10 (missing stats)
               table: t_idx@t_idx_v_idx
               spans: /1-/2
-              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a + b = 1
@@ -425,15 +417,12 @@ vectorized: true
         │ estimated row count: 333 (missing stats)
         │ table: t_idx@t_idx_pkey
         │ key columns: a
-        │ locking strength: for update
-        │ parallel
         │
         └── • scan
               columns: (a)
               estimated row count: 10 (missing stats)
               table: t_idx@t_idx_v_idx
               spans: /1-/2
-              locking strength: for update
 
 subtest Update
 
@@ -629,7 +618,6 @@ vectorized: true
                 │ table: t_idx@t_idx_pkey
                 │ key columns: a
                 │ locking strength: for update
-                │ parallel
                 │
                 └── • scan
                       columns: (a)
@@ -802,7 +790,6 @@ vectorized: true
         │ table: t@t_pkey
         │ equality: (column1) = (a)
         │ equality cols are key
-        │ parallel
         │
         └── • render
             │ columns: (v_comp, column1, column2)
@@ -861,7 +848,6 @@ vectorized: true
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
-                │ parallel
                 │
                 └── • render
                     │ columns: (v_comp, column1, column2)
@@ -922,7 +908,6 @@ vectorized: true
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
-                │ parallel
                 │
                 └── • render
                     │ columns: (v_comp, column1, column2)
@@ -976,7 +961,6 @@ vectorized: true
             │ equality: (column1) = (a)
             │ equality cols are key
             │ locking strength: for update
-            │ parallel
             │
             └── • render
                 │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1052,7 +1036,6 @@ vectorized: true
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
-                │ parallel
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1100,7 +1083,6 @@ vectorized: true
             │ table: t_idx@t_idx_pkey
             │ equality: (column1) = (a)
             │ equality cols are key
-            │ parallel
             │
             └── • lookup join (anti)
                 │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1108,7 +1090,6 @@ vectorized: true
                 │ table: t_idx@t_idx_w_key
                 │ equality: (w_comp) = (w)
                 │ equality cols are key
-                │ parallel
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1178,7 +1159,6 @@ vectorized: true
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
-                │ parallel
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)
@@ -1255,7 +1235,6 @@ vectorized: true
                 │ equality: (column1) = (a)
                 │ equality cols are key
                 │ locking strength: for update
-                │ parallel
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)

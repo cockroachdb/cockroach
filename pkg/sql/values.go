@@ -17,8 +17,6 @@ import (
 )
 
 type valuesNode struct {
-	zeroInputPlanNode
-
 	// Note: the columns can be renamed in place (see planMutableColumns).
 	columns colinfo.ResultColumns
 	tuples  [][]tree.TypedExpr

@@ -16,8 +16,6 @@ const DOCKER_OVERRIDES: Partial<Cypress.UserConfigOptions["e2e"]> = {
 export default defineConfig({
   e2e: {
     baseUrl: "http://localhost:8080",
-    video: true,
-    numTestsKeptInMemory: 0,
     setupNodeEvents(on, config) {
       config.env.username = "cypress";
       config.env.password = "tests";

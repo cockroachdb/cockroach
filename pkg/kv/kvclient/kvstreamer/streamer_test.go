@@ -43,18 +43,15 @@ func getStreamer(
 	s serverutils.ApplicationLayerInterface,
 	limitBytes int64,
 	acc *mon.BoundAccount,
-	reverse bool,
 ) *kvstreamer.Streamer {
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
 	if err != nil {
 		panic(err)
 	}
 	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState, nil /* header */)
-	metrics := kvstreamer.MakeMetrics()
 	return kvstreamer.NewStreamer(
 		s.DistSenderI().(*kvcoord.DistSender),
-		&metrics,
 		s.AppStopper(),
 		leafTxn,
 		func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
@@ -72,7 +69,6 @@ func getStreamer(
 		nil, /* kvPairsRead */
 		lock.None,
 		lock.Unreplicated,
-		reverse,
 	)
 }
 
@@ -89,7 +85,7 @@ func TestStreamerLimitations(t *testing.T) {
 	s := srv.ApplicationLayer()
 
 	getStreamer := func() *kvstreamer.Streamer {
-		return getStreamer(ctx, s, math.MaxInt64, mon.NewStandaloneUnlimitedAccount(), false /* reverse */)
+		return getStreamer(ctx, s, math.MaxInt64, mon.NewStandaloneUnlimitedAccount())
 	}
 
 	t.Run("non-unique requests unsupported", func(t *testing.T) {
@@ -117,11 +113,9 @@ func TestStreamerLimitations(t *testing.T) {
 	})
 
 	t.Run("unexpected RootTxn", func(t *testing.T) {
-		metrics := kvstreamer.MakeMetrics()
 		require.Panics(t, func() {
 			kvstreamer.NewStreamer(
 				s.DistSenderI().(*kvcoord.DistSender),
-				&metrics,
 				s.AppStopper(),
 				kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID()),
 				nil, /* sendFn */
@@ -133,7 +127,6 @@ func TestStreamerLimitations(t *testing.T) {
 				nil,           /* kvPairsRead */
 				lock.None,
 				lock.Unreplicated,
-				false, /* reverse */
 			)
 		})
 	})
@@ -196,7 +189,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	// Imitate a root SQL memory monitor with 1MiB size.
 	const rootPoolSize = 1 << 20 /* 1MiB */
 	rootMemMonitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("root"),
+		Name:     "root",
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	rootMemMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(rootPoolSize))
@@ -208,7 +201,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	const limitBytes = 30
 	getStreamer := func() *kvstreamer.Streamer {
 		acc.Clear(ctx)
-		s := getStreamer(ctx, s, limitBytes, &acc, false /* reverse */)
+		s := getStreamer(ctx, s, limitBytes, &acc)
 		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s
 	}
@@ -393,27 +386,19 @@ func TestStreamerWideRows(t *testing.T) {
 	}
 }
 
-func makeScanRequest(
-	codec keys.SQLCodec, tableID uint32, start, end int, reverse bool,
-) kvpb.RequestUnion {
+func makeScanRequest(codec keys.SQLCodec, tableID uint32, start, end int) kvpb.RequestUnion {
 	var res kvpb.RequestUnion
+	var scan kvpb.ScanRequest
+	var union kvpb.RequestUnion_Scan
 	makeKey := func(pk int) []byte {
 		// These numbers essentially make a key like '/t/primary/pk'.
 		return append(codec.IndexPrefix(tableID, 1), byte(136+pk))
 	}
-	if reverse {
-		var scan kvpb.ReverseScanRequest
-		scan.Key = makeKey(start)
-		scan.EndKey = makeKey(end)
-		scan.ScanFormat = kvpb.BATCH_RESPONSE
-		res.Value = &kvpb.RequestUnion_ReverseScan{ReverseScan: &scan}
-	} else {
-		var scan kvpb.ScanRequest
-		scan.Key = makeKey(start)
-		scan.EndKey = makeKey(end)
-		scan.ScanFormat = kvpb.BATCH_RESPONSE
-		res.Value = &kvpb.RequestUnion_Scan{Scan: &scan}
-	}
+	scan.Key = makeKey(start)
+	scan.EndKey = makeKey(end)
+	scan.ScanFormat = kvpb.BATCH_RESPONSE
+	union.Scan = &scan
+	res.Value = &union
 	return res
 }
 
@@ -453,54 +438,46 @@ func TestStreamerEmptyScans(t *testing.T) {
 	_, err = db.Exec("SELECT count(*) from t")
 	require.NoError(t, err)
 
-	getStreamer := func(reverse bool) *kvstreamer.Streamer {
-		s := getStreamer(ctx, ts, math.MaxInt64, mon.NewStandaloneUnlimitedAccount(), reverse)
+	getStreamer := func() *kvstreamer.Streamer {
+		s := getStreamer(ctx, ts, math.MaxInt64, mon.NewStandaloneUnlimitedAccount())
 		// There are two column families in the table.
 		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 2 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s
 	}
 
 	t.Run("scan single range", func(t *testing.T) {
-		for _, reverse := range []bool{false, true} {
-			t.Run("reverse="+strconv.FormatBool(reverse), func(t *testing.T) {
-				streamer := getStreamer(reverse)
-				defer streamer.Close(ctx)
+		streamer := getStreamer()
+		defer streamer.Close(ctx)
 
-				// Scan the row with pk=0.
-				reqs := make([]kvpb.RequestUnion, 1)
-				reqs[0] = makeScanRequest(codec, tableID, 0, 1, reverse)
-				require.NoError(t, streamer.Enqueue(ctx, reqs))
-				results, err := streamer.GetResults(ctx)
-				require.NoError(t, err)
-				// We expect a single empty Scan response.
-				require.Equal(t, 1, len(results))
-			})
-		}
+		// Scan the row with pk=0.
+		reqs := make([]kvpb.RequestUnion, 1)
+		reqs[0] = makeScanRequest(codec, tableID, 0, 1)
+		require.NoError(t, streamer.Enqueue(ctx, reqs))
+		results, err := streamer.GetResults(ctx)
+		require.NoError(t, err)
+		// We expect a single empty Scan response.
+		require.Equal(t, 1, len(results))
 	})
 
 	t.Run("scan multiple ranges", func(t *testing.T) {
-		for _, reverse := range []bool{false, true} {
-			t.Run("reverse="+strconv.FormatBool(reverse), func(t *testing.T) {
-				streamer := getStreamer(reverse)
-				defer streamer.Close(ctx)
+		streamer := getStreamer()
+		defer streamer.Close(ctx)
 
-				// Scan the rows with pk in range [1, 4).
-				reqs := make([]kvpb.RequestUnion, 1)
-				reqs[0] = makeScanRequest(codec, tableID, 1, 4, reverse)
-				require.NoError(t, streamer.Enqueue(ctx, reqs))
-				// We expect an empty response for each range.
-				var numResults int
-				for {
-					results, err := streamer.GetResults(ctx)
-					require.NoError(t, err)
-					numResults += len(results)
-					if len(results) == 0 {
-						break
-					}
-				}
-				require.Equal(t, 3, numResults)
-			})
+		// Scan the rows with pk in range [1, 4).
+		reqs := make([]kvpb.RequestUnion, 1)
+		reqs[0] = makeScanRequest(codec, tableID, 1, 4)
+		require.NoError(t, streamer.Enqueue(ctx, reqs))
+		// We expect an empty response for each range.
+		var numResults int
+		for {
+			results, err := streamer.GetResults(ctx)
+			require.NoError(t, err)
+			numResults += len(results)
+			if len(results) == 0 {
+				break
+			}
 		}
+		require.Equal(t, 3, numResults)
 	})
 }
 

@@ -76,23 +76,8 @@ func NewReceiver(
 	return r
 }
 
-func (s *Receiver) AsDRPCServer() ctpb.DRPCSideTransportServer {
-	return (*drpcReceiver)(s)
-}
-
-type drpcReceiver Receiver
-
-// PushUpdates is the streaming RPC handler.
-func (s *drpcReceiver) PushUpdates(stream ctpb.DRPCSideTransport_PushUpdatesStream) error {
-	return (*Receiver)(s).pushUpdates(stream)
-}
-
 // PushUpdates is the streaming RPC handler.
 func (s *Receiver) PushUpdates(stream ctpb.SideTransport_PushUpdatesServer) error {
-	return s.pushUpdates(stream)
-}
-
-func (s *Receiver) pushUpdates(stream ctpb.RPCSideTransport_PushUpdatesStream) error {
 	// Create a steam to service this connection. The stream will call back into
 	// the Receiver through onFirstMsg to register itself once it finds out the
 	// sender's node id.
@@ -261,11 +246,8 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 			if !ok {
 				log.Fatalf(ctx, "attempting to unregister a missing range: r%d", rangeID)
 			}
-			ts, ok := r.mu.lastClosed[info.policy]
-			if !ok {
-				log.Fatalf(ctx, "missing closed timestamp policy %v for range r%d", info.policy, rangeID)
-			}
-			r.stores.ForwardSideTransportClosedTimestampForRange(ctx, rangeID, ts, info.lai)
+			r.stores.ForwardSideTransportClosedTimestampForRange(
+				ctx, rangeID, r.mu.lastClosed[info.policy], info.lai)
 		}
 		r.mu.RUnlock()
 	}
@@ -276,7 +258,9 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 
 	// Reset all the state on snapshots.
 	if msg.Snapshot {
-		r.mu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp, len(r.mu.lastClosed))
+		for i := range r.mu.lastClosed {
+			r.mu.lastClosed[i] = hlc.Timestamp{}
+		}
 		r.mu.tracked = make(map[roachpb.RangeID]trackedRange, len(r.mu.tracked))
 	} else if msg.SeqNum != r.mu.lastSeqNum+1 {
 		log.Fatalf(ctx, "expected closed timestamp side-transport message with sequence number "+
@@ -303,7 +287,7 @@ func (r *incomingStream) Run(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	// The gRPC stream with incoming messages.
-	stream ctpb.RPCSideTransport_PushUpdatesStream,
+	stream ctpb.SideTransport_PushUpdatesServer,
 ) error {
 	// We have to do the stream processing on a separate goroutine because Recv()
 	// is blocking, with no way to interrupt it other than returning from the RPC

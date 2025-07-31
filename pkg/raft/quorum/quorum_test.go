@@ -71,14 +71,7 @@ func TestLeadSupportExpiration(t *testing.T) {
 			m[id] = struct{}{}
 		}
 
-		// Convert the map to a slice of support timestamps.
-		supportSlice := make([]hlc.Timestamp, len(tc.ids))
-		i := 0
-		for _, ts := range tc.support {
-			supportSlice[i] = ts
-			i++
-		}
-		require.Equal(t, tc.exp, m.LeadSupportExpiration(supportSlice))
+		require.Equal(t, tc.exp, m.LeadSupportExpiration(tc.support))
 	}
 }
 
@@ -139,26 +132,7 @@ func TestLeadSupportExpirationJointConfig(t *testing.T) {
 			j[1][id] = struct{}{}
 		}
 
-		// Convert the support map into two slices, one for each majority config.
-		supportSlice1 := make([]hlc.Timestamp, len(tc.cfg1))
-		i := 0
-		for _, id := range tc.cfg1 {
-			if ts, ok := tc.support[id]; ok {
-				supportSlice1[i] = ts
-				i++
-			}
-		}
-
-		supportSlice2 := make([]hlc.Timestamp, len(tc.cfg2))
-		i = 0
-		for _, id := range tc.cfg2 {
-			if ts, ok := tc.support[id]; ok {
-				supportSlice2[i] = ts
-				i++
-			}
-		}
-
-		require.Equal(t, tc.exp, j.LeadSupportExpiration(supportSlice1, supportSlice2))
+		require.Equal(t, tc.exp, j.LeadSupportExpiration(tc.support))
 	}
 }
 

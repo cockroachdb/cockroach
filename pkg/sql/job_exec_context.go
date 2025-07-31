@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
-	"github.com/cockroachdb/redact"
 )
 
 // plannerJobExecContext is a wrapper to implement JobExecContext with a planner
@@ -29,7 +28,7 @@ type plannerJobExecContext struct {
 // MakeJobExecContext makes a JobExecContext.
 func MakeJobExecContext(
 	ctx context.Context,
-	opName redact.SafeString,
+	opName string,
 	user username.SQLUsername,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,

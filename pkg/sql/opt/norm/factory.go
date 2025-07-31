@@ -262,10 +262,10 @@ func (f *Factory) EvalContext() *eval.Context {
 }
 
 // CopyAndReplace builds this factory's memo by constructing a copy of a subtree
-// that is part of another memo. fromMemo's metadata is copied to this factory's
-// memo so that tables and columns referenced by the copied memo can keep the
-// same ids. The copied subtree becomes the root of the destination memo, having
-// the given physical properties.
+// that is part of another memo. That memo's metadata is copied to this
+// factory's memo so that tables and columns referenced by the copied memo can
+// keep the same ids. The copied subtree becomes the root of the destination
+// memo, having the given physical properties.
 //
 // The "replace" callback function allows the caller to override the default
 // traversal and cloning behavior with custom logic. It is called for each node
@@ -288,18 +288,18 @@ func (f *Factory) EvalContext() *eval.Context {
 //	  return f.CopyAndReplaceDefault(e, replaceFn)
 //	}
 //
-//	f.CopyAndReplace(fromMemo, from, fromProps, replaceFn)
+//	f.CopyAndReplace(from, fromProps, replaceFn)
 //
 // NOTE: Callers must take care to always create brand new copies of non-
 // singleton source nodes rather than referencing existing nodes. The source
 // memo should always be treated as immutable, and the destination memo must be
 // completely independent of it once CopyAndReplace has completed.
 func (f *Factory) CopyAndReplace(
-	fromMemo *memo.Memo, from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
+	from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
 ) {
 	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 
-	f.CopyMetadataFrom(fromMemo)
+	f.CopyMetadataFrom(from.Memo())
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.
@@ -317,10 +317,10 @@ func (f *Factory) CopyMetadataFrom(from *memo.Memo) {
 		panic(errors.AssertionFailedf("destination memo must be empty"))
 	}
 
-	// Copy the next scalar rank, With ID, and routine buffer ID to the target
-	// memo so that new expressions built with the new memo will not share scalar
-	// ranks, With IDs, or routine buffer IDs with existing expressions.
-	f.mem.CopyRankAndIDsFrom(from)
+	// Copy the next scalar rank to the target memo so that new scalar
+	// expressions built with the new memo will not share scalar ranks with
+	// existing expressions.
+	f.mem.CopyNextRankFrom(from)
 
 	// Copy all metadata to the target memo so that referenced tables and
 	// columns can keep the same ids they had in the "from" memo. Scalar
@@ -420,7 +420,7 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 		}
 		return f.CopyAndReplaceDefault(e, replaceFn)
 	}
-	f.CopyAndReplace(from, from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
+	f.CopyAndReplace(from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
 
 	return nil
 }

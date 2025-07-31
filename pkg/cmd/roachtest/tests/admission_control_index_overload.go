@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -59,7 +58,7 @@ func registerIndexOverload(r registry.Registry) {
 				defer cleanupFunc()
 			}
 
-			duration, err := time.ParseDuration(roachtestutil.IfLocal(c, "20s", "10m"))
+			duration, err := time.ParseDuration(ifLocal(c, "20s", "10m"))
 			assert.NoError(t, err)
 			testDuration := 3 * duration
 
@@ -68,12 +67,12 @@ func registerIndexOverload(r registry.Registry) {
 
 			if !t.SkipInit() {
 				t.Status("initializing kv dataset ", time.Minute)
-				splits := roachtestutil.IfLocal(c, " --splits=3", " --splits=100")
+				splits := ifLocal(c, " --splits=3", " --splits=100")
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload init kv "+splits+" {pgurl:1}")
 
 				// We need a big enough size so index creation will take enough time.
 				t.Status("initializing tpcc dataset ", duration)
-				warehouses := roachtestutil.IfLocal(c, " --warehouses=1", " --warehouses=2000")
+				warehouses := ifLocal(c, " --warehouses=1", " --warehouses=2000")
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload fixtures import tpcc --checks=false"+warehouses+" {pgurl:1}")
 
 				// Setting this low allows us to hit overload. In a larger cluster with
@@ -88,10 +87,10 @@ func registerIndexOverload(r registry.Registry) {
 			}
 
 			t.Status("starting kv workload thread to run for ", testDuration)
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				testDurationStr := " --duration=" + testDuration.String()
-				concurrency := roachtestutil.IfLocal(c, "  --concurrency=8", " --concurrency=2048")
+				concurrency := ifLocal(c, "  --concurrency=8", " --concurrency=2048")
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()),
 					"./cockroach workload run kv --read-percent=50 --max-rate=1000 --max-block-bytes=4096"+
 						testDurationStr+concurrency+fmt.Sprintf(" {pgurl%s}", c.CRDBNodes()),

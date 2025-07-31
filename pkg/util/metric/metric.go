@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,34 +34,12 @@ const (
 	// WindowedHistogramWrapNum is the number of histograms to keep in rolling
 	// window.
 	WindowedHistogramWrapNum = 2
-	// CardinalityLimit is the max number of distinct label values combinations for any given MetricVec.
-	CardinalityLimit = 2000
-)
-
-// Maintaining a list of static label names here to avoid duplication and
-// encourage reuse of label names across the codebase.
-const (
-	LabelQueryType       = "query_type"
-	LabelQueryInternal   = "query_internal"
-	LabelStatus          = "status"
-	LabelCertificateType = "certificate_type"
-	LabelName            = "name"
-	LabelType            = "type"
-)
-
-type LabelConfig uint64
-
-const (
-	LabelConfigDisabled LabelConfig = iota
-	LabelConfigApp      LabelConfig = 1 << iota
-	LabelConfigDB
-	LabelConfigAppAndDB = LabelConfigApp | LabelConfigDB
 )
 
 // Iterable provides a method for synchronized access to interior objects.
 type Iterable interface {
 	// GetName returns the fully-qualified name of the metric.
-	GetName(useStaticLabels bool) string
+	GetName() string
 	// GetHelp returns the help text for the metric.
 	GetHelp() string
 	// GetMeasurement returns the label for the metric, which describes the entity
@@ -79,13 +56,13 @@ type Iterable interface {
 
 type PrometheusCompatible interface {
 	// GetName is a method on Metadata
-	GetName(useStaticLabels bool) string
+	GetName() string
 	// GetHelp is a method on Metadata
 	GetHelp() string
 	// GetType returns the prometheus type enum for this metric.
 	GetType() *prometheusgo.MetricType
 	// GetLabels is a method on Metadata
-	GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair
+	GetLabels() []*prometheusgo.LabelPair
 }
 
 // PrometheusExportable is the standard interface for an individual metric
@@ -118,19 +95,6 @@ type PrometheusIterable interface {
 	// Each takes a slice of label pairs associated with the parent metric and
 	// calls the passed function with each of the children metrics.
 	Each([]*prometheusgo.LabelPair, func(metric *prometheusgo.Metric))
-}
-
-// PrometheusReinitialisable is an extension of PrometheusIterable to indicate that
-// this metric comprises children metrics which label values are configurable
-// through cluster settings.
-//
-// The motivating use-case for this interface is to update labels
-// for child metrics based on cluster settings so that it would reflect
-// in prometheus export
-type PrometheusReinitialisable interface {
-	PrometheusIterable
-
-	ReinitialiseChildMetrics(labelConfig LabelConfig)
 }
 
 // WindowedHistogram represents a histogram with data over recent window of
@@ -169,13 +133,8 @@ type CumulativeHistogram interface {
 	CumulativeSnapshot() HistogramSnapshot
 }
 
-// GetName returns the metric's name. When `useStaticLabels` is true, it returns
-// the metric's labeled name if it's non-empty. Otherwise, it returns the metric's
-// name.
-func (m *Metadata) GetName(useStaticLabels bool) string {
-	if useStaticLabels && m.LabeledName != "" {
-		return m.LabeledName
-	}
+// GetName returns the metric's name.
+func (m *Metadata) GetName() string {
 	return m.Name
 }
 
@@ -197,23 +156,12 @@ func (m *Metadata) GetUnit() Unit {
 // GetLabels returns the metric's labels. For rationale behind the conversion
 // from metric.LabelPair to prometheusgo.LabelPair, see the LabelPair comment
 // in pkg/util/metric/metric.proto.
-func (m *Metadata) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
+func (m *Metadata) GetLabels() []*prometheusgo.LabelPair {
+	lps := make([]*prometheusgo.LabelPair, len(m.Labels))
 	// x satisfies the field XXX_unrecognized in prometheusgo.LabelPair.
 	var x []byte
-
-	var lps []*prometheusgo.LabelPair
-	numStaticLabels := 0
-	if useStaticLabels {
-		numStaticLabels = len(m.StaticLabels)
-		lps = make([]*prometheusgo.LabelPair, len(m.Labels)+numStaticLabels)
-		for i, v := range m.StaticLabels {
-			lps[i] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
-		}
-	} else {
-		lps = make([]*prometheusgo.LabelPair, len(m.Labels))
-	}
 	for i, v := range m.Labels {
-		lps[i+numStaticLabels] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
+		lps[i] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
 	}
 	return lps
 }
@@ -230,7 +178,6 @@ func (m *Metadata) AddLabel(name, value string) {
 var _ Iterable = &Gauge{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
-var _ Iterable = &UniqueCounter{}
 var _ Iterable = &CounterFloat64{}
 var _ Iterable = &GaugeVec{}
 var _ Iterable = &CounterVec{}
@@ -239,14 +186,12 @@ var _ Iterable = &HistogramVec{}
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
-var _ json.Marshaler = &UniqueCounter{}
 var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
 
 var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
-var _ PrometheusExportable = &UniqueCounter{}
 var _ PrometheusExportable = &CounterFloat64{}
 
 var _ PrometheusVector = &GaugeVec{}
@@ -402,12 +347,8 @@ func newHistogram(
 		// intervals within a histogram's total duration.
 		duration/WindowedHistogramWrapNum,
 		func() {
-			h.windowed.Lock()
-			defer h.windowed.Unlock()
-			if h.windowed.cur.Load() != nil {
-				h.windowed.prev.Store(h.windowed.cur.Load())
-			}
-			h.windowed.cur.Store(prometheus.NewHistogram(opts))
+			h.windowed.prev = h.windowed.cur
+			h.windowed.cur = prometheus.NewHistogram(opts)
 		})
 	h.windowed.Ticker.OnTick()
 	return h
@@ -426,7 +367,7 @@ var _ IHistogram = (*Histogram)(nil)
 // New buckets are created using TestHistogramBuckets.
 type Histogram struct {
 	Metadata
-	cum prometheus.HistogramInternal
+	cum prometheus.Histogram
 
 	// TODO(obs-inf): the way we implement windowed histograms is not great.
 	// We could "just" double the rotation interval (so that the histogram really
@@ -436,9 +377,12 @@ type Histogram struct {
 	// it up right now. It should be doable though, since there is only one
 	// consumer of windowed histograms - our internal timeseries system.
 	windowed struct {
+		// prometheus.Histogram is thread safe, so we only
+		// need an RLock to record into it. But write lock
+		// is held while rotating.
+		syncutil.RWMutex
 		*tick.Ticker
-		syncutil.Mutex
-		prev, cur atomic.Value
+		prev, cur prometheus.Histogram
 	}
 }
 
@@ -465,6 +409,8 @@ type IHistogram interface {
 // fix and should be expected to be removed.
 // TODO(obs-infra): remove this once pkg/util/aggmetric is merged with this package.
 func (h *Histogram) NextTick() time.Time {
+	h.windowed.RLock()
+	defer h.windowed.RUnlock()
 	return h.windowed.NextTick()
 }
 
@@ -474,16 +420,26 @@ func (h *Histogram) NextTick() time.Time {
 // as part of the public API.
 // TODO(obs-infra): remove this once pkg/util/aggmetric is merged with this package.
 func (h *Histogram) Tick() {
+	h.windowed.Lock()
+	defer h.windowed.Unlock()
 	h.windowed.Tick()
+}
+
+// Windowed returns a copy of the current windowed histogram.
+func (h *Histogram) Windowed() prometheus.Histogram {
+	h.windowed.RLock()
+	defer h.windowed.RUnlock()
+	return h.windowed.cur
 }
 
 // RecordValue adds the given value to the histogram.
 func (h *Histogram) RecordValue(n int64) {
 	v := float64(n)
-	b := h.cum.FindBucket(v)
-	h.cum.ObserveInternal(v, b)
+	h.cum.Observe(v)
 
-	h.windowed.cur.Load().(prometheus.HistogramInternal).ObserveInternal(v, b)
+	h.windowed.RLock()
+	defer h.windowed.RUnlock()
+	h.windowed.cur.Observe(v)
 }
 
 // GetType returns the prometheus type enum for this metric.
@@ -507,22 +463,18 @@ func (h *Histogram) CumulativeSnapshot() HistogramSnapshot {
 func (h *Histogram) WindowedSnapshot() HistogramSnapshot {
 	h.windowed.Lock()
 	defer h.windowed.Unlock()
-	cur := h.windowed.cur.Load().(prometheus.Histogram)
-	// Can't cast here since prev might be nil.
-	prev := h.windowed.prev.Load()
-
-	curMetric := &prometheusgo.Metric{}
-	if err := cur.Write(curMetric); err != nil {
+	cur := &prometheusgo.Metric{}
+	prev := &prometheusgo.Metric{}
+	if err := h.windowed.cur.Write(cur); err != nil {
 		panic(err)
 	}
-	if prev != nil {
-		prevMetric := &prometheusgo.Metric{}
-		if err := prev.(prometheus.Histogram).Write(prevMetric); err != nil {
+	if h.windowed.prev != nil {
+		if err := h.windowed.prev.Write(prev); err != nil {
 			panic(err)
 		}
-		MergeWindowedHistogram(curMetric.Histogram, prevMetric.Histogram)
+		MergeWindowedHistogram(cur.Histogram, prev.Histogram)
 	}
-	return MakeHistogramSnapshot(curMetric.Histogram)
+	return MakeHistogramSnapshot(cur.Histogram)
 }
 
 // GetMetadata returns the metric's metadata including the Prometheus
@@ -534,6 +486,8 @@ func (h *Histogram) GetMetadata() Metadata {
 // Inspect calls the closure.
 func (h *Histogram) Inspect(f func(interface{})) {
 	func() {
+		h.windowed.Lock()
+		defer h.windowed.Unlock()
 		tick.MaybeTick(&h.windowed)
 	}()
 	f(h)
@@ -868,76 +822,6 @@ func (c *Counter) GetMetadata() Metadata {
 	return baseMetadata
 }
 
-// UniqueCounter performs set cardinality estimation. You feed keys,
-// and it produces an estimate of how many unique keys its has seen.
-type UniqueCounter struct {
-	Metadata
-
-	mu struct {
-		syncutil.Mutex
-		sketch *hyperloglog.Sketch
-	}
-}
-
-// NewUniqueCounter creates a counter.
-func NewUniqueCounter(metadata Metadata) *UniqueCounter {
-	ret := &UniqueCounter{
-		Metadata: metadata,
-	}
-	ret.Clear()
-	return ret
-}
-
-// Clear resets the counter to zero.
-func (c *UniqueCounter) Clear() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.mu.sketch, _ = hyperloglog.NewSketch(14, true)
-}
-
-// Add a value to the set
-func (c *UniqueCounter) Add(v []byte) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.mu.sketch.Insert(v)
-}
-
-// Count returns the current value of the counter.
-func (c *UniqueCounter) Count() int64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return int64(c.mu.sketch.Estimate())
-}
-
-// GetType returns the prometheus type enum for this metric.
-func (c *UniqueCounter) GetType() *prometheusgo.MetricType {
-	return prometheusgo.MetricType_COUNTER.Enum()
-}
-
-// Inspect calls the given closure with itself.
-func (c *UniqueCounter) Inspect(f func(interface{})) { f(c) }
-
-// MarshalJSON marshals to JSON.
-func (c *UniqueCounter) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Count())
-}
-
-// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
-func (c *UniqueCounter) ToPrometheusMetric() *prometheusgo.Metric {
-	return &prometheusgo.Metric{
-		Counter: &prometheusgo.Counter{Value: proto.Float64(float64(c.Count()))},
-	}
-}
-
-// GetMetadata returns the metric's metadata including the Prometheus
-// MetricType.
-func (c *UniqueCounter) GetMetadata() Metadata {
-	baseMetadata := c.Metadata
-	baseMetadata.MetricType = prometheusgo.MetricType_COUNTER
-	return baseMetadata
-}
-
 type CounterFloat64 struct {
 	Metadata
 	count syncutil.AtomicFloat64
@@ -966,10 +850,25 @@ func (c *CounterFloat64) Inc(i float64) {
 	c.count.Add(i)
 }
 
+// Update atomically sets the current value of the counter. The value must not
+// be smaller than the existing value.
+//
+// Update is intended to be used when the counter itself is not the source of
+// truth; instead it is a (periodically updated) copy of a counter that is
+// maintained elsewhere.
+func (c *CounterFloat64) Update(val float64) {
+	if buildutil.CrdbTestBuild {
+		if prev := c.count.Load(); val < prev {
+			panic(fmt.Sprintf("Counters should not decrease, prev: %f, new: %f.", prev, val))
+		}
+	}
+	c.count.Store(val)
+}
+
 // UpdateIfHigher atomically sets the current value of the counter, unless the
 // current value is already greater.
-func (c *CounterFloat64) UpdateIfHigher(i float64) (old float64, updated bool) {
-	return c.count.StoreIfHigher(i)
+func (c *CounterFloat64) UpdateIfHigher(i float64) {
+	c.count.StoreIfHigher(i)
 }
 
 func (c *CounterFloat64) Snapshot() *CounterFloat64 {
@@ -1148,101 +1047,24 @@ func MergeWindowedHistogram(cur *prometheusgo.Histogram, prev *prometheusgo.Hist
 	*cur.SampleSum = sampleSum
 }
 
-// HistogramMetricComputer is the computation function used to compute and
-// store histogram metrics into the internal TSDB, along with the suffix
-// to be attached to the metric.
-type HistogramMetricComputer struct {
-	Suffix          string
-	IsSummaryMetric bool
-	ComputedMetric  func(h HistogramSnapshot) float64
+// Quantile is a quantile along with a string suffix to be attached to the metric
+// name upon recording into the internal TSDB.
+type Quantile struct {
+	Suffix   string
+	Quantile float64
 }
 
-// HistogramMetricComputers is a slice of all the HistogramMetricComputer
-// that are used to record (windowed) histogram metrics into TSDB.
-var HistogramMetricComputers = []HistogramMetricComputer{
-	{
-		Suffix:          "-max",
-		IsSummaryMetric: true,
-		ComputedMetric: func(h HistogramSnapshot) float64 {
-			return h.ValueAtQuantile(100)
-		},
-	},
-	{
-		Suffix:          "-p99.999",
-		IsSummaryMetric: true,
-		ComputedMetric: func(h HistogramSnapshot) float64 {
-			return h.ValueAtQuantile(99.999)
-		},
-	},
-	{
-		Suffix:          "-p99.99",
-		IsSummaryMetric: true,
-		ComputedMetric: func(h HistogramSnapshot) float64 {
-			return h.ValueAtQuantile(99.99)
-		},
-	},
-	{
-		Suffix:          "-p99.9",
-		IsSummaryMetric: true,
-		ComputedMetric: func(h HistogramSnapshot) float64 {
-			return h.ValueAtQuantile(99.9)
-		},
-	},
-	{
-		Suffix:          "-p99",
-		IsSummaryMetric: true,
-		ComputedMetric: func(h HistogramSnapshot) float64 {
-			return h.ValueAtQuantile(99)
-		},
-	},
-	{
-		Suffix:          "-p90",
-		IsSummaryMetric: true,
-		ComputedMetric: func(h HistogramSnapshot) float64 {
-			return h.ValueAtQuantile(90)
-		},
-	},
-	{
-		Suffix:          "-p75",
-		IsSummaryMetric: true,
-		ComputedMetric: func(h HistogramSnapshot) float64 {
-			return h.ValueAtQuantile(75)
-		},
-	},
-	{
-		Suffix:          "-p50",
-		IsSummaryMetric: true,
-		ComputedMetric: func(h HistogramSnapshot) float64 {
-			return h.ValueAtQuantile(50)
-		},
-	},
-	{
-		Suffix:          "-avg",
-		IsSummaryMetric: true,
-		ComputedMetric: func(h HistogramSnapshot) float64 {
-			avg := h.Mean()
-			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
-				avg = 0
-			}
-			return avg
-		},
-	},
-	{
-		Suffix:          "-count",
-		IsSummaryMetric: false,
-		ComputedMetric: func(h HistogramSnapshot) float64 {
-			count, _ := h.Total()
-			return float64(count)
-		},
-	},
-	{
-		Suffix:          "-sum",
-		IsSummaryMetric: false,
-		ComputedMetric: func(h HistogramSnapshot) float64 {
-			_, sum := h.Total()
-			return sum
-		},
-	},
+// RecordHistogramQuantiles are the quantiles at which (windowed) histograms
+// are recorded into the internal TSDB.
+var RecordHistogramQuantiles = []Quantile{
+	{"-max", 100},
+	{"-p99.999", 99.999},
+	{"-p99.99", 99.99},
+	{"-p99.9", 99.9},
+	{"-p99", 99},
+	{"-p90", 90},
+	{"-p75", 75},
+	{"-p50", 50},
 }
 
 // vector holds the base vector implementation. This is meant to be embedded
@@ -1277,18 +1099,13 @@ func (v *vector) getOrderedValues(labels map[string]string) []string {
 
 // recordLabels records the given combination of label values if they haven't
 // been seen before. This is used to iterate over all the counters created
-// based on unique label combinations. recordLabels will return an error if the
-// labelValues are novel, and the cardinality limit has been reached.
-func (v *vector) recordLabels(labelValues []string) error {
+// based on unique label combinations.
+func (v *vector) recordLabels(labelValues []string) {
 	v.RLock()
 	lookupKey := strings.Join(labelValues, "_")
 	if _, ok := v.encounteredLabelsLookup[lookupKey]; ok {
 		v.RUnlock()
-		return nil
-	}
-	if len(v.encounteredLabelsLookup) >= CardinalityLimit {
-		v.RUnlock()
-		return fmt.Errorf("metric cardinality limit reached")
+		return
 	}
 	v.RUnlock()
 
@@ -1296,15 +1113,6 @@ func (v *vector) recordLabels(labelValues []string) error {
 	defer v.Unlock()
 	v.encounteredLabelsLookup[lookupKey] = struct{}{}
 	v.encounteredLabelValues = append(v.encounteredLabelValues, labelValues)
-	return nil
-}
-
-// clear flushes the labels from the vector.
-func (v *vector) clear() {
-	v.Lock()
-	defer v.Unlock()
-	v.encounteredLabelsLookup = make(map[string]struct{})
-	v.encounteredLabelValues = [][]string{}
 }
 
 // GaugeVec is a collector for gauges that have a variable set of labels.
@@ -1339,27 +1147,21 @@ func NewExportedGaugeVec(metadata Metadata, labelSchema []string) *GaugeVec {
 // Update updates the gauge value for the given combination of labels.
 func (gv *GaugeVec) Update(labels map[string]string, v int64) {
 	labelValues := gv.getOrderedValues(labels)
-	if err := gv.recordLabels(labelValues); err != nil {
-		return
-	}
+	gv.recordLabels(labelValues)
 	gv.promVec.WithLabelValues(labelValues...).Set(float64(v))
 }
 
 // Inc increments the gauge value for the given combination of labels.
 func (gv *GaugeVec) Inc(labels map[string]string, v int64) {
 	labelValues := gv.getOrderedValues(labels)
-	if err := gv.recordLabels(labelValues); err != nil {
-		return
-	}
+	gv.recordLabels(labelValues)
 	gv.promVec.WithLabelValues(labelValues...).Add(float64(v))
 }
 
 // Dec decrements the gauge value for the given combination of labels.
 func (gv *GaugeVec) Dec(labels map[string]string, v int64) {
 	labelValues := gv.getOrderedValues(labels)
-	if err := gv.recordLabels(labelValues); err != nil {
-		return
-	}
+	gv.recordLabels(labelValues)
 	gv.promVec.WithLabelValues(labelValues...).Sub(float64(v))
 }
 
@@ -1430,9 +1232,7 @@ func NewExportedCounterVec(metadata Metadata, labelNames []string) *CounterVec {
 // difference. This panics if the current value is greater than the new value.
 func (cv *CounterVec) Update(labels map[string]string, v int64) {
 	labelValues := cv.getOrderedValues(labels)
-	if err := cv.recordLabels(labelValues); err != nil {
-		return
-	}
+	cv.recordLabels(labelValues)
 
 	currentValue := cv.Count(labels)
 	if currentValue > v {
@@ -1445,9 +1245,7 @@ func (cv *CounterVec) Update(labels map[string]string, v int64) {
 // Inc increments the value for the given combination of labels.
 func (cv *CounterVec) Inc(labels map[string]string, v int64) {
 	labelValues := cv.getOrderedValues(labels)
-	if err := cv.recordLabels(labelValues); err != nil {
-		return
-	}
+	cv.recordLabels(labelValues)
 	cv.promVec.WithLabelValues(labelValues...).Add(float64(v))
 }
 
@@ -1530,16 +1328,8 @@ func NewExportedHistogramVec(
 // combination of labels.
 func (hv *HistogramVec) Observe(labels map[string]string, v float64) {
 	labelValues := hv.getOrderedValues(labels)
-	if err := hv.recordLabels(labelValues); err != nil {
-		return
-	}
+	hv.recordLabels(labelValues)
 	hv.promVec.WithLabelValues(labelValues...).Observe(v)
-}
-
-// Clear removes all the metrics and the label vector, preserving the metadata and configuration.
-func (hv *HistogramVec) Clear() {
-	hv.vector.clear()
-	hv.promVec.Reset()
 }
 
 // GetMetadata implements Iterable.
@@ -1579,18 +1369,4 @@ func (hv *HistogramVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 	}
 
 	return metrics
-}
-
-func MakeLabelPairs(labelNamesAndValues ...string) []*LabelPair {
-	if len(labelNamesAndValues)%2 != 0 {
-		panic("labelNamesAndValues must be a list with even length of label names and values")
-	}
-	labelPairs := make([]*LabelPair, 0, len(labelNamesAndValues)/2)
-	for i := 0; i < len(labelNamesAndValues); i += 2 {
-		labelPairs = append(labelPairs, &LabelPair{
-			Name:  &labelNamesAndValues[i],
-			Value: &labelNamesAndValues[i+1],
-		})
-	}
-	return labelPairs
 }

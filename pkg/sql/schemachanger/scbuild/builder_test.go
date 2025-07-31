@@ -51,8 +51,6 @@ func TestBuildDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 
-	skip.UnderRace(t, "expensive and can easily extend past test timeout")
-
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		for _, depsType := range []struct {
 			name                string
@@ -91,13 +89,12 @@ func TestBuildDataDriven(t *testing.T) {
 								sctestdeps.ReadSessionDataFromDB(
 									t,
 									tdb,
-									func(sd *sessiondata.SessionData, localData sessiondatapb.LocalOnlySessionData) {
+									func(sd *sessiondata.SessionData) {
 										// For setting up a builder inside tests we will ensure that the new schema
 										// changer will allow non-fully implemented operations.
-										sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafeAlways
+										sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 										sd.ApplicationName = ""
 										sd.EnableUniqueWithoutIndexConstraints = true
-										sd.SerialNormalizationMode = localData.SerialNormalizationMode
 									},
 								),
 							),
@@ -312,7 +309,7 @@ func TestBuildIsMemoryMonitored(t *testing.T) {
 	tdb.Exec(t, `use system;`)
 
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test-sc-build-mon"),
+		Name:     "test-sc-build-mon",
 		Settings: s.ClusterSettings(),
 	})
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(5*1024*1024 /* 5MiB */))

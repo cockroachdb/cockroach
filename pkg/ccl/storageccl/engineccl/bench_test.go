@@ -142,7 +142,7 @@ func runIterate(
 
 	// Store the database in this directory so we don't have to regenerate it on
 	// each benchmark run.
-	eng := loadTestData(b, "mvcc_data_v3", numKeys, numBatches, batchTimeSpan, valueBytes)
+	eng := loadTestData(b, "mvcc_data_v2", numKeys, numBatches, batchTimeSpan, valueBytes)
 	defer eng.Close()
 
 	b.SetBytes(int64(numKeys * valueBytes))

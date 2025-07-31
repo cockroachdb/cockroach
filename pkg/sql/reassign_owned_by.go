@@ -27,7 +27,6 @@ import (
 
 // ReassignOwnedByNode represents a REASSIGN OWNED BY <role(s)> TO <role> statement.
 type reassignOwnedByNode struct {
-	zeroInputPlanNode
 	n                  *tree.ReassignOwnedBy
 	normalizedOldRoles []username.SQLUsername
 }

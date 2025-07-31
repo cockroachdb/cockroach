@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -38,19 +37,14 @@ func registerLedger(r registry.Registry) {
 			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())
 
 			t.Status("running workload")
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
-				concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(nodes*32))
-				duration := " --duration=" + roachtestutil.IfLocal(c, "10s", "10m")
-
-				labels := map[string]string{
-					"concurrency": fmt.Sprint(nodes * 32),
-					"duration":    roachtestutil.IfLocal(c, "10000", "600000"),
-				}
+				concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*32))
+				duration := " --duration=" + ifLocal(c, "10s", "10m")
 
 				// See https://github.com/cockroachdb/cockroach/issues/94062 for the --data-loader.
-				cmd := fmt.Sprintf("./workload run ledger --init --data-loader=INSERT %s %s %s {pgurl%s}",
-					roachtestutil.GetWorkloadHistogramArgs(t, c, labels), concurrency, duration, gatewayNodes)
+				cmd := fmt.Sprintf("./workload run ledger --init --data-loader=INSERT --histograms="+t.PerfArtifactsDir()+"/stats.json"+
+					concurrency+duration+" {pgurl%s}", gatewayNodes)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				return nil
 			})

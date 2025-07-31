@@ -30,7 +30,7 @@ func registerDeclSchemaChangeCompatMixedVersions(r registry.Registry) {
 		// Uses gs://cockroach-fixtures-us-east1. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
-		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDeclSchemaChangeCompatMixedVersions(ctx, t, c)
 		},
@@ -133,7 +133,7 @@ func runDeclSchemaChangeCompatMixedVersions(ctx context.Context, t test.Test, c 
 	predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
 
 	releaseSeries := func(v *clusterupgrade.Version) string {
-		return v.Format("%X.%Y")
+		return fmt.Sprintf("%d.%d", v.Major(), v.Minor())
 	}
 
 	// Test definitions which indicates which version of the corpus to fetch,

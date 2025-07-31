@@ -63,7 +63,6 @@ func interestingGoroutines() map[int64]string {
 			// TODO(pritesh-lahoti): Revisit this once Go is updated to 1.23, as this seems to have been
 			// fixed: https://github.com/golang/go/pull/62227.
 			strings.Contains(stack, "net/http.(*persistConn).addTLS") ||
-			strings.Contains(stack, "crypto/tls.(*Conn).handshakeContext") ||
 			// Seems to be gccgo specific.
 			(runtime.Compiler == "gccgo" && strings.Contains(stack, "testing.T.Parallel")) ||
 			// Ignore intentionally long-running logging goroutines that live for the

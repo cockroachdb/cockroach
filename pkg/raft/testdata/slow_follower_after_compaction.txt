@@ -107,7 +107,7 @@ DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=14 next=19
 stabilize
 ----
 > 1 handling Ready
-  Ready:
+  Ready MustSync=false:
   Messages:
   1->3 MsgSnap Term:1 Log:0/0
     Snapshot: Index:18 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
@@ -119,10 +119,10 @@ stabilize
   INFO 3 [commit: 18, lastindex: 18, lastterm: 1] restored snapshot [index: 18, term: 1]
   INFO 3 [commit: 18] restored snapshot [index: 18, term: 1]
 > 3 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:18 Lead:1 LeadEpoch:1
   Snapshot Index:18 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-  OnSync:
+  Messages:
   3->1 MsgAppResp Term:1 Log:0/18 Commit:18
 > 1 receiving messages
   3->1 MsgAppResp Term:1 Log:0/18 Commit:18

@@ -197,7 +197,7 @@ func (s *State) Reconfigure(
 	s.clampToLimit()
 	log.Infof(
 		ctx, "token bucket for tenant %s reconfigured: available=%g refill-rate=%g burst-limit=%g",
-		tenantID, s.TokenCurrent, s.TokenRefillRate, s.TokenBurstLimit,
+		tenantID.String(), s.TokenCurrent, s.TokenRefillRate, s.TokenBurstLimit,
 	)
 }
 

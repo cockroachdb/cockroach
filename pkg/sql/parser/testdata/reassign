@@ -1,3 +1,4 @@
+
 parse
 REASSIGN OWNED BY foo TO bar
 ----
@@ -53,19 +54,3 @@ DROP OWNED BY foo RESTRICT
 DROP OWNED BY foo RESTRICT -- fully parenthesized
 DROP OWNED BY foo RESTRICT -- literals removed
 DROP OWNED BY _ RESTRICT -- identifiers removed
-
-parse
-ALTER JOB 123 OWNER TO foo
-----
-ALTER JOB 123 OWNER TO foo
-ALTER JOB (123) OWNER TO foo -- fully parenthesized
-ALTER JOB _ OWNER TO foo -- literals removed
-ALTER JOB 123 OWNER TO _ -- identifiers removed
-
-parse
-ALTER JOB $1 OWNER TO foo
-----
-ALTER JOB $1 OWNER TO foo
-ALTER JOB ($1) OWNER TO foo -- fully parenthesized
-ALTER JOB $1 OWNER TO foo -- literals removed
-ALTER JOB $1 OWNER TO _ -- identifiers removed

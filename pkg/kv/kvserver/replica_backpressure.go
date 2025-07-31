@@ -118,14 +118,11 @@ func canBackpressureBatch(ba *kvpb.BatchRequest) bool {
 	return false
 }
 
-// signallerForBatch returns the signaller to use for this batch in the
-// following priorities:
-// 1. If the batch contains a request uses poison.Policy_Wait, we will return
-// neverTripSignaller.
-// 2. If the replica is leaderless for a time longer than the threshold in
-// `kv.replica_raft.leaderless_unavailable_threshold`, use the
-// leaderlessWatcher signal.
-// 3. Otherwise, use the replica's breaker's signaller
+// signallerForBatch returns the signaller to use for this batch. This is the
+// Replica's breaker's signaller except if any request in the batch uses
+// poison.Policy_Wait, in which case it's a neverTripSignaller. In particular,
+// `(signaller).C() == nil` signals that the request bypasses the circuit
+// breakers.
 func (r *Replica) signallerForBatch(ba *kvpb.BatchRequest) signaller {
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
@@ -133,14 +130,6 @@ func (r *Replica) signallerForBatch(ba *kvpb.BatchRequest) signaller {
 			return neverTripSignaller{}
 		}
 	}
-
-	// If the leaderless watcher indicates that this replica is leaderless for a
-	// long time, use it as the signal.
-	if r.LeaderlessWatcher.IsUnavailable() {
-		return r.LeaderlessWatcher
-	}
-
-	// Otherwise, use the replica's breaker.
 	return r.breaker.Signal()
 }
 
@@ -153,16 +142,13 @@ func (r *Replica) signallerForBatch(ba *kvpb.BatchRequest) signaller {
 // range's size is already larger than the absolute maximum we'll allow.
 func (r *Replica) shouldBackpressureWrites() bool {
 	r.mu.RLock()
-	size := r.shMu.state.Stats.Total()
-	rangeMaxBytes := r.mu.conf.RangeMaxBytes
-	largestPreviousMaxRangeSize := r.mu.largestPreviousMaxRangeSizeBytes
-	r.mu.RUnlock()
+	defer r.mu.RUnlock()
 
 	// Check if the current range's size is already over the absolute maximum
 	// we'll allow. Don't bother with any multipliers/byte tolerance calculations
 	// if it is.
 	rangeSizeHardCap := backpressureRangeHardCap.Get(&r.store.cfg.Settings.SV)
-
+	size := r.shMu.state.Stats.Total()
 	if size >= rangeSizeHardCap {
 		return true
 	}
@@ -173,8 +159,7 @@ func (r *Replica) shouldBackpressureWrites() bool {
 		return false
 	}
 
-	exceeded, bytesOver := exceedsMultipleOfSplitSize(mult, rangeMaxBytes,
-		largestPreviousMaxRangeSize, size)
+	exceeded, bytesOver := r.exceedsMultipleOfSplitSizeRLocked(mult)
 	if !exceeded {
 		return false
 	}
@@ -198,7 +183,7 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 	for first := true; r.shouldBackpressureWrites(); first = false {
 		if first {
 			r.store.metrics.BackpressuredOnSplitRequests.Inc(1)
-			defer r.store.metrics.BackpressuredOnSplitRequests.Dec(1) //nolint:deferloop
+			defer r.store.metrics.BackpressuredOnSplitRequests.Dec(1)
 
 			if backpressureLogLimiter.ShouldLog() {
 				log.Warningf(ctx, "applying backpressure to limit range growth on batch %s", ba)

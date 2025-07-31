@@ -59,7 +59,7 @@ func decodeJSONKey(buf []byte, dir encoding.Direction) (json.JSON, []byte, error
 			return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "could not decode JSON Number")
 		}
 		if len(buf) == 0 || !encoding.IsJSONKeyDone(buf, dir) {
-			return nil, nil, errors.AssertionFailedf("cannot find JSON terminator")
+			return nil, nil, errors.New("cannot find JSON terminator")
 		}
 		buf = buf[1:] // removing the terminator
 		jsonVal = json.FromDecimal(dec)
@@ -70,7 +70,7 @@ func decodeJSONKey(buf []byte, dir encoding.Direction) (json.JSON, []byte, error
 			return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "could not decode JSON Number")
 		}
 		if len(buf) == 0 || !encoding.IsJSONKeyDone(buf, dir) {
-			return nil, nil, errors.AssertionFailedf("cannot find JSON terminator")
+			return nil, nil, errors.New("cannot find JSON terminator")
 		}
 		buf = buf[1:] // removing the terminator
 		jsonVal = json.FromDecimal(dec)
@@ -104,7 +104,7 @@ func decodeJSONString(buf []byte, dir encoding.Direction) (json.JSON, []byte, er
 			"the JSON String")
 	}
 	if len(buf) == 0 || !encoding.IsJSONKeyDone(buf, dir) {
-		return nil, nil, errors.AssertionFailedf("cannot find JSON terminator")
+		return nil, nil, errors.New("cannot find JSON terminator")
 	}
 	buf = buf[1:] // removing the terminator
 	jsonVal, err := json.MakeJSON(str)

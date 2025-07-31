@@ -103,7 +103,7 @@ func (it *Iterator) load() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if it.entry, err = RaftEntryFromRawValue(v); err != nil {
+	if it.entry, err = raftEntryFromRawValue(v); err != nil {
 		return false, err
 	}
 	return true, nil

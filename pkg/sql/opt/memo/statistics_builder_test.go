@@ -101,7 +101,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		}
 
 		sb := &statisticsBuilder{}
-		sb.init(context.Background(), &evalCtx, &mem)
+		sb.init(context.Background(), &evalCtx, mem.Metadata())
 
 		// Make the scan.
 		scan := mem.MemoizeScan(&ScanPrivate{Table: tabID, Cols: cols})
@@ -160,7 +160,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs2 := constraint.SingleConstraint(&c2)
 	statsFunc(
 		cs2,
-		"[rows=3.33333e+09, distinct(2)=166.667, null(2)=0]",
+		"[rows=3.333333e+09, distinct(2)=166.667, null(2)=0]",
 	)
 
 	cs3 := constraint.SingleConstraint(&c3)
@@ -202,7 +202,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs312 := constraint.SingleConstraint(&c312)
 	statsFunc(
 		cs312,
-		"[rows=2.44907e+07, distinct(1)=2, null(1)=0, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0, distinct(1-3)=26.9395, null(1-3)=0]",
+		"[rows=2.449065e+07, distinct(1)=2, null(1)=0, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0, distinct(1-3)=26.9395, null(1-3)=0]",
 	)
 
 	cs312n := constraint.SingleConstraint(&c312n)
@@ -214,13 +214,13 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs := cs3.Intersect(ctx, &evalCtx, cs123)
 	statsFunc(
 		cs,
-		"[rows=909099, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1-3)=1, null(1-3)=0]",
+		"[rows=909098.9, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1-3)=1, null(1-3)=0]",
 	)
 
 	cs = cs32.Intersect(ctx, &evalCtx, cs123)
 	statsFunc(
 		cs,
-		"[rows=909099, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1-3)=1, null(1-3)=0]",
+		"[rows=909098.9, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1-3)=1, null(1-3)=0]",
 	)
 
 	cs45 := constraint.SingleSpanConstraint(&keyCtx45, &sp45)

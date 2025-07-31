@@ -72,14 +72,7 @@ func (dbc *dbAdapter) RangeFeed(
 	eventC chan<- kvcoord.RangeFeedMessage,
 	opts ...kvcoord.RangeFeedOption,
 ) error {
-	timedSpans := make([]kvcoord.SpanTimePair, 0, len(spans))
-	for _, sp := range spans {
-		timedSpans = append(timedSpans, kvcoord.SpanTimePair{
-			Span:       sp,
-			StartAfter: startFrom,
-		})
-	}
-	return dbc.distSender.RangeFeed(ctx, timedSpans, eventC, opts...)
+	return dbc.distSender.RangeFeed(ctx, spans, startFrom, eventC, opts...)
 }
 
 // RangeFeedFromFrontier is part of the DB interface.
@@ -89,16 +82,7 @@ func (dbc *dbAdapter) RangeFeedFromFrontier(
 	eventC chan<- kvcoord.RangeFeedMessage,
 	opts ...kvcoord.RangeFeedOption,
 ) error {
-	timedSpans := make([]kvcoord.SpanTimePair, 0, frontier.Len())
-	for sp, ts := range frontier.Entries() {
-		timedSpans = append(timedSpans, kvcoord.SpanTimePair{
-			// Clone the span as the rangefeed progress tracker will manipulate the
-			// original frontier.
-			Span:       sp.Clone(),
-			StartAfter: ts,
-		})
-	}
-	return dbc.distSender.RangeFeed(ctx, timedSpans, eventC, opts...)
+	return dbc.distSender.RangeFeedFromFrontier(ctx, frontier, eventC, opts...)
 }
 
 // Scan is part of the DB interface.
@@ -118,8 +102,6 @@ func (dbc *dbAdapter) Scan(
 	if cfg.mon != nil {
 		acc = cfg.mon.MakeConcurrentBoundAccount()
 		defer acc.Close(ctx)
-	} else {
-		acc = mon.NewStandaloneUnlimitedConcurrentAccount()
 	}
 
 	// If we don't have parallelism configured, just scan each span in turn.

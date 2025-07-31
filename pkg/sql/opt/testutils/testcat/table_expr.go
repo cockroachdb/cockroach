@@ -52,7 +52,7 @@ func typeCheckTableExpr(e tree.Expr, cols []cat.Column) *types.T {
 	}
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
-	typedExpr, err := resolved.TypeCheck(ctx, &semaCtx, types.AnyElement)
+	typedExpr, err := resolved.TypeCheck(ctx, &semaCtx, types.Any)
 	if err != nil {
 		panic(err)
 	}

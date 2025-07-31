@@ -114,10 +114,13 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	setup := func(t *testing.T, canResize bool) (*kafkaSinkV2Fx, SinkPayload, []any) {
+	setup := func(t *testing.T, canResize bool, errorDetails bool) (*kafkaSinkV2Fx, SinkPayload, []any) {
 		fx := newKafkaSinkV2Fx(t, withSettings(func(settings *cluster.Settings) {
 			if canResize {
 				changefeedbase.BatchReductionRetryEnabled.Override(context.Background(), &settings.SV, true)
+			}
+			if errorDetails {
+				changefeedbase.KafkaV2ErrorDetailsEnabled.Override(context.Background(), &settings.SV, true)
 			}
 		}))
 		defer fx.close()
@@ -144,14 +147,14 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 	}
 
 	t.Run("resize disabled", func(t *testing.T) {
-		fx, payload, payloadAnys := setup(t, false)
+		fx, payload, payloadAnys := setup(t, false, false)
 		pr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.MessageTooLarge)}}
 		fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys...).Times(1).Return(pr)
 		require.Error(t, fx.sink.Flush(fx.ctx, payload))
 	})
 
 	t.Run("resize enabled and it keeps failing", func(t *testing.T) {
-		fx, payload, payloadAnys := setup(t, true)
+		fx, payload, payloadAnys := setup(t, true, true)
 
 		pr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.MessageTooLarge)}}
 		// it should keep splitting it in two until it hits size=1
@@ -176,7 +179,7 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 	})
 
 	t.Run("resize enabled and it gets everything", func(t *testing.T) {
-		fx, payload, payloadAnys := setup(t, true)
+		fx, payload, payloadAnys := setup(t, true, false)
 
 		prErr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.MessageTooLarge)}}
 		prOk := kgo.ProduceResults{}
@@ -214,7 +217,7 @@ func TestKafkaSinkClientV2_Naming(t *testing.T) {
 			return rec.Topic == `_u2603_` && string(rec.Key) == `k☃` && string(rec.Value) == `v☃`
 		})).Times(1).Return(nil)
 
-		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc, nil))
+		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc))
 
 		testutils.SucceedsSoon(t, func() error {
 			select {
@@ -237,7 +240,7 @@ func TestKafkaSinkClientV2_Naming(t *testing.T) {
 			return rec.Topic == `general` && string(rec.Key) == `k☃` && string(rec.Value) == `v☃`
 		})).Times(1).Return(nil)
 
-		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`t1`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc, nil))
+		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`t1`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc))
 
 		testutils.SucceedsSoon(t, func() error {
 			select {
@@ -260,7 +263,7 @@ func TestKafkaSinkClientV2_Naming(t *testing.T) {
 			return rec.Topic == `prefix-_u2603_` && string(rec.Key) == `k☃` && string(rec.Value) == `v☃`
 		})).Times(1).Return(nil)
 
-		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`t1`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc, nil))
+		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`t1`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc))
 
 		testutils.SucceedsSoon(t, func() error {
 			select {
@@ -726,7 +729,7 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	}
 
 	var err error
-	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts, fx.batchConfig, uri, settings, knobs, nilMetricsRecorderBuilder, nil, nil)
+	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts, fx.batchConfig, uri, settings, knobs, nilMetricsRecorderBuilder, nil)
 	if err != nil && fx.createClientErrorCb != nil {
 		fx.createClientErrorCb(err)
 		return fx
@@ -747,7 +750,7 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	}
 	u.RawQuery = q.Encode()
 
-	bs, err := makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, changefeedbase.KafkaSinkOptions{JSONConfig: fx.sinkJSONConfig}, 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, knobs)
+	bs, err := makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, fx.sinkJSONConfig, 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, knobs)
 	if err != nil && fx.createClientErrorCb != nil {
 		fx.createClientErrorCb(err)
 		return fx

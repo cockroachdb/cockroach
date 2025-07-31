@@ -183,7 +183,7 @@ func TestHistogram(t *testing.T) {
 	if distinct != expected {
 		t.Fatalf("expected %f but found %f", expected, distinct)
 	}
-	maxFrequency, expected := h.MaxFrequency(false /* ignoreNulls */), float64(35)
+	maxFrequency, expected := h.MaxFrequency(), float64(35)
 	if maxFrequency != expected {
 		t.Fatalf("expected %f but found %f", expected, maxFrequency)
 	}
@@ -198,7 +198,7 @@ func TestHistogram(t *testing.T) {
 	}{
 		{
 			constraint:   "/1: [/0 - /0]",
-			buckets:      nil,
+			buckets:      []cat.HistogramBucket{},
 			count:        0,
 			maxDistinct:  0,
 			distinct:     0,
@@ -206,7 +206,7 @@ func TestHistogram(t *testing.T) {
 		},
 		{
 			constraint:   "/1: [/50 - /100]",
-			buckets:      nil,
+			buckets:      []cat.HistogramBucket{},
 			count:        0,
 			maxDistinct:  0,
 			distinct:     0,
@@ -391,7 +391,7 @@ func TestHistogram(t *testing.T) {
 			if testData[i].distinct != distinct {
 				t.Fatalf("expected %f but found %f", testData[i].distinct, distinct)
 			}
-			maxFrequency := roundVal(filtered.MaxFrequency(false /* ignoreNulls */))
+			maxFrequency := roundVal(filtered.MaxFrequency())
 			if testData[i].maxFrequency != maxFrequency {
 				t.Fatalf("expected %f but found %f", testData[i].maxFrequency, maxFrequency)
 			}
@@ -438,8 +438,8 @@ func TestFilterBucket(t *testing.T) {
 		// the second bucket.
 		iter.setIdx(1)
 		b := getFilteredBucket(&iter, &keyCtx, span, colOffset)
-		roundBucket(&b)
-		return &b, nil
+		roundBucket(b)
+		return b, nil
 	}
 
 	runTest := func(h *Histogram, testData []testCase, colOffset int, typs ...types.Family) {

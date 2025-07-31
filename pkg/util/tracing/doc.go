@@ -66,7 +66,10 @@
 // Since this package is used pervasively, the implementation is very
 // performance-sensitive. It tries to avoid allocations (even
 // trying to avoid allocating Span objects[12] whenever possible), and avoids
-// doing work unless strictly necessary.
+// doing work unless strictly necessary. One example of this is us checking to
+// see if a given Span is a "noop span"[13] (i.e. does not have any sinks
+// configured). This then lets us short-circuit work that would be discarded
+// anyway.
 //
 // The tracing package internally makes use of OpenTelemetry[2]. This gives us
 // the ability to configure external collectors for tracing information,
@@ -93,4 +96,5 @@
 // [10]: `{Client,Server}Interceptor`
 // [11]: `SpanFromContext`
 // [12]: WithForceRealSpan
+// [13]: `Span.isNoop`
 package tracing

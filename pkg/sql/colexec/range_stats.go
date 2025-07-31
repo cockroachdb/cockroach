@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -25,9 +24,6 @@ type rangeStatsOperator struct {
 	allocator   *colmem.Allocator
 	argumentCol int
 	outputIdx   int
-	// withErrors defines if the operator includes any encountered errors in the
-	// returned JSON struct. If true, these errors will not fail the query.
-	withErrors bool
 }
 
 var _ colexecop.Operator = (*rangeStatsOperator)(nil)
@@ -42,7 +38,6 @@ func newRangeStatsOperator(
 	argumentCol int,
 	outputIdx int,
 	input colexecop.Operator,
-	withErrors bool,
 ) (colexecop.Operator, error) {
 	return &rangeStatsOperator{
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
@@ -50,7 +45,6 @@ func newRangeStatsOperator(
 		argumentCol:    argumentCol,
 		outputIdx:      outputIdx,
 		fetcher:        fetcher,
-		withErrors:     withErrors,
 	}, nil
 }
 
@@ -130,36 +124,17 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 			// keys plus some constant multiple.
 			// TODO(yuzefovich): add unit tests that use the RunTests test
 			// harness.
-			res, rangeStatsErr := r.fetcher.RangeStats(r.Ctx, keys...)
-			if rangeStatsErr != nil && !r.withErrors {
-				colexecerror.ExpectedError(rangeStatsErr)
+			res, err := r.fetcher.RangeStats(r.Ctx, keys...)
+			if err != nil {
+				colexecerror.ExpectedError(err)
 			}
-			if len(res) != len(keys) && !r.withErrors {
-				colexecerror.InternalError(
-					errors.AssertionFailedf(
-						"unexpected number of RangeStats responses %d: %d expected", len(res), len(keys),
-					),
-				)
+			if len(res) != len(keys) {
+				colexecerror.InternalError(errors.AssertionFailedf(
+					"unexpected number of RangeStats responses %d: %d expected", len(res), len(keys),
+				))
 			}
 			for i, outputIdx := range keysOutputIdx {
-				rswe := &rangeStatsWithErrors{}
-				if rangeStatsErr != nil {
-					rswe.Error = rangeStatsErr.Error()
-				}
-				// Not all keys from the keysOutputIdx are guaranteed to be
-				// present in res (e.g. some may be missing if there were errors
-				// in fetcher.RangeStats and r.withErrors = true).
-				if i < len(res) {
-					rswe.RangeStats = &res[i].MVCCStats
-				}
-				var jsonStr []byte
-				var err error
-				if r.withErrors {
-					jsonStr, err = gojson.Marshal(rswe)
-				} else {
-					jsonStr, err = gojson.Marshal(&res[i].MVCCStats)
-				}
-
+				jsonStr, err := gojson.Marshal(&res[i].MVCCStats)
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
@@ -169,12 +144,6 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 				}
 				jsonOutput.Set(outputIdx, jsonDatum)
 			}
-		},
-	)
+		})
 	return batch
-}
-
-type rangeStatsWithErrors struct {
-	RangeStats *enginepb.MVCCStats
-	Error      string
 }

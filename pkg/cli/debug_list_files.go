@@ -41,14 +41,13 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 	defer cancel()
 
 	// Connect to the node pointed to in the command line.
-	conn, finish, err := newClientConn(ctx, serverCfg)
+	status, finish, err := getStatusClient(ctx, serverCfg)
 	if err != nil {
 		return err
 	}
 	defer finish()
 
 	// Retrieve the details for the head node.
-	status := conn.NewStatusClient()
 	firstNodeDetails, err := status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
 	if err != nil {
 		return err

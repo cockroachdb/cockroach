@@ -128,7 +128,7 @@ WHERE a.y>1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
-memo (optimized, ~27KB, required=[presentation: y:2,x:6,c:11] [ordering: +2])
+memo (optimized, ~26KB, required=[presentation: y:2,x:6,c:11] [ordering: +2])
  ├── G1: (project G2 G3 y x)
  │    ├── [presentation: y:2,x:6,c:11] [ordering: +2]
  │    │    ├── best: (project G2="[ordering: +2]" G3 y x)
@@ -268,7 +268,7 @@ memo (optimized, ~9KB, required=[presentation: x:1])
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
 ----
-memo (optimized, ~10KB, required=[presentation: x:13,y:14])
+memo (optimized, ~9KB, required=[presentation: x:13,y:14])
  ├── G1: (union G2 G3) (union G2 G3 ordering=+13,+14)
  │    └── [presentation: x:13,y:14]
  │         ├── best: (union G2 G3)

@@ -151,7 +151,7 @@ enum Family {
     // for various character-based operations such as sorting, pattern matching,
     // and builtin functions like lower and upper.
     //
-    //   Oid      : T_text, T_varchar, T_bpchar, T_char, T_citext
+    //   Oid      : T_text, T_varchar, T_bpchar, T_char
     //   Width    : max # characters (0 = no specified limit)
     //   Locale   : name of locale (e.g. EN or DE)
     //
@@ -406,12 +406,6 @@ enum Family {
     //   Canonical: types.Trigger
     //   Oid      : T_trigger
     TriggerFamily = 33;
-
-    // JsonpathFamily is a type family for the jsonpath type, which is the type
-    // representing JSON path expressions.
-    //  Canonical: types.Jsonpath
-    //  Oid: T_jsonpath
-    JsonpathFamily = 34;
 
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and

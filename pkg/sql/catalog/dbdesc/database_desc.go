@@ -307,7 +307,7 @@ func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
 
 	// TODO(radu): this should really be SystemDatabaseSchemaBootstrapVersion.
 	latestVersion := clusterversion.RemoveDevOffset(clusterversion.Latest.Version())
-	if latestVersion.Less(sv) && !clusterversion.TestingExtraVersions {
+	if latestVersion.Less(sv) {
 		vea.Report(errors.AssertionFailedf(
 			`attempting to set system database schema version to version higher than the latest version (%#v): %#v`,
 			latestVersion,

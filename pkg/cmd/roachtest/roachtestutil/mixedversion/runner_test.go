@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
@@ -119,6 +118,10 @@ func Test_run(t *testing.T) {
 				startSystemID: 9999,
 			}
 
+			runnerCh := make(chan error)
+			defer close(runnerCh)
+			runner.monitor = &crdbMonitor{errCh: runnerCh}
+
 			runErr := runner.run()
 			require.Error(t, runErr)
 
@@ -157,7 +160,7 @@ func testTestRunner() *testRunner {
 		cancel:         cancel,
 		logger:         nilLogger,
 		systemService:  newServiceRuntime(systemDescriptor),
-		background:     task.NewManager(runnerCtx, nilLogger),
+		background:     newBackgroundRunner(runnerCtx, nilLogger),
 		ranUserHooks:   &ranUserHooks,
 		plan:           &TestPlan{seed: seed},
 		_addAnnotation: testAddAnnotation,
@@ -173,9 +176,6 @@ func (*testSingleStep) Background() shouldStop { return nil }
 
 func (tss *testSingleStep) Run(_ context.Context, _ *logger.Logger, _ *rand.Rand, _ *Helper) error {
 	return tss.runFunc()
-}
-func (s testSingleStep) ConcurrencyDisabled() bool {
-	return false
 }
 
 func newTestStep(f func() error) *singleStep {

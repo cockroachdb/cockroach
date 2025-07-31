@@ -167,9 +167,12 @@ type changePrivilegesNode struct {
 }
 
 type changeDescriptorBackedPrivilegesNode struct {
-	zeroInputPlanNode
 	changePrivilegesNode
 	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, username.SQLUsername) (changed bool, retErr error)
+}
+
+type changeNonDescriptorBackedPrivilegesNode struct {
+	changePrivilegesNode
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -498,10 +501,6 @@ func (p *planner) getGrantOnObject(
 	case targets.AllTablesInSchema:
 		incIAMFunc(sqltelemetry.OnAllTablesInSchema)
 		return privilege.Table, nil
-	case targets.AllFunctionsInSchema && targets.AllProceduresInSchema:
-		incIAMFunc(sqltelemetry.OnAllFunctionsInSchema)
-		incIAMFunc(sqltelemetry.OnAllProceduresInSchema)
-		return privilege.Routine, nil
 	case targets.AllFunctionsInSchema:
 		incIAMFunc(sqltelemetry.OnAllFunctionsInSchema)
 		return privilege.Routine, nil

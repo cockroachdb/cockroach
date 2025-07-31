@@ -61,7 +61,7 @@ func TestTypeCheckNormalize(t *testing.T) {
 				t.Fatal(err)
 			}
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
-			typeChecked, err := tree.TypeCheck(ctx, expr, &semaCtx, types.AnyElement)
+			typeChecked, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -182,7 +182,7 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
 		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		semaCtx.Placeholders.Init(len(test.ptypes), clonePlaceholderTypes(test.ptypes))
-		desired := types.AnyElement
+		desired := types.Any
 		if test.desired != nil {
 			desired = test.desired
 		}
@@ -337,7 +337,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 		t.Run(fmt.Sprintf("test_%d", i), func(t *testing.T) {
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
 			semaCtx.Placeholders.Init(len(d.ptypes), d.ptypes)
-			desired := types.AnyElement
+			desired := types.Any
 			if d.desired != nil {
 				desired = d.desired
 			}
@@ -377,7 +377,7 @@ func TestTypeCheckSameTypedExprsImplicitCastOneWay(t *testing.T) {
 		t.Run(fmt.Sprintf("test_%d", i), func(t *testing.T) {
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
 			semaCtx.Placeholders.Init(len(d.ptypes), d.ptypes)
-			desired := types.AnyElement
+			desired := types.Any
 			if d.desired != nil {
 				desired = d.desired
 			}

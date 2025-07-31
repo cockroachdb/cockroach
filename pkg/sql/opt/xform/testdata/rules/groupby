@@ -1152,7 +1152,7 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,2,9), (1)==(9), (9)==(1)
+ │    ├── fd: ()-->(1,2,9), (9)==(1), (1)==(9)
  │    ├── scalar-group-by
  │    │    ├── columns: min:9
  │    │    ├── cardinality: [1 - 1]
@@ -1187,7 +1187,7 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,2,9), (1)==(9), (9)==(1)
+ │    ├── fd: ()-->(1,2,9), (9)==(1), (1)==(9)
  │    ├── scalar-group-by
  │    │    ├── columns: max:9
  │    │    ├── cardinality: [1 - 1]
@@ -2019,7 +2019,7 @@ memo (optimized, ~7KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (u, v) u, v, w FROM kuvw
 ----
-memo (optimized, ~7KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(2,3)) (distinct-on G2 G3 cols=(2,3),ordering=+2,+3) (distinct-on G2 G3 cols=(2,3),ordering=+3)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2,+3]" G3 cols=(2,3),ordering=+2,+3)
@@ -2365,25 +2365,25 @@ memo (optimized, ~27KB, required=[presentation: w:12] [ordering: +13,+1])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO NOTHING
 ----
-memo (optimized, ~29KB, required=[])
+memo (optimized, ~28KB, required=[])
  ├── G1: (insert G2 G3 G4 G5 xyz)
  │    └── []
  │         ├── best: (insert G2 G3 G4 G5 xyz)
- │         └── cost: 7132.30
+ │         └── cost: 2196.92
  ├── G2: (upsert-distinct-on G6 G7 cols=(8)) (upsert-distinct-on G6 G7 cols=(8),ordering=+8 opt(12))
  │    └── []
  │         ├── best: (upsert-distinct-on G6 G7 cols=(8))
- │         └── cost: 7132.29
+ │         └── cost: 2196.91
  ├── G3: (unique-checks)
  ├── G4: (fast-path-unique-checks)
  ├── G5: (f-k-checks)
  ├── G6: (anti-join G8 G9 G10) (merge-join G8 G9 G11 anti-join,+8,+13) (lookup-join G8 G11 xyz,keyCols=[8],outCols=(8,9,12,13)) (lookup-join G8 G11 xyz@xy,keyCols=[8],outCols=(8,9,12,13))
  │    ├── [ordering: +8 opt(12)]
- │    │    ├── best: (lookup-join G8="[ordering: +8 opt(12)]" G11 xyz@xy,keyCols=[8],outCols=(8,9,12,13))
- │    │    └── cost: 7132.26
+ │    │    ├── best: (merge-join G8="[ordering: +8 opt(12)]" G9="[ordering: +13]" G11 anti-join,+8,+13)
+ │    │    └── cost: 2196.88
  │    └── []
- │         ├── best: (lookup-join G8 G11 xyz@xy,keyCols=[8],outCols=(8,9,12,13))
- │         └── cost: 7132.26
+ │         ├── best: (merge-join G8="[ordering: +8 opt(12)]" G9="[ordering: +13]" G11 anti-join,+8,+13)
+ │         └── cost: 2196.88
  ├── G7: (aggregations G12 G13)
  ├── G8: (project G14 G15 v w)
  │    ├── [ordering: +8 opt(12)]
@@ -2422,21 +2422,21 @@ memo (optimized, ~29KB, required=[])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
-memo (optimized, ~29KB, required=[])
+memo (optimized, ~28KB, required=[])
  ├── G1: (upsert G2 G3 G4 xyz)
  │    └── []
  │         ├── best: (upsert G2 G3 G4 xyz)
- │         └── cost: 7242.72
+ │         └── cost: 2287.34
  ├── G2: (project G5 G6 v w ?column? x y z)
  │    └── []
  │         ├── best: (project G5 G6 v w ?column? x y z)
- │         └── cost: 7242.71
+ │         └── cost: 2287.33
  ├── G3: (unique-checks)
  ├── G4: (f-k-checks)
  ├── G5: (left-join G7 G8 G9) (right-join G8 G7 G9) (lookup-join G7 G10 xyz,keyCols=[8],outCols=(8,9,12-15)) (lookup-join G11 G10 xyz,keyCols=[13],outCols=(8,9,12-15)) (merge-join G8 G7 G10 right-join,+13,+8)
  │    └── []
- │         ├── best: (lookup-join G7 G10 xyz,keyCols=[8],outCols=(8,9,12-15))
- │         └── cost: 7222.69
+ │         ├── best: (merge-join G8="[ordering: +13]" G7="[ordering: +8 opt(12)]" G10 right-join,+13,+8)
+ │         └── cost: 2267.31
  ├── G6: (projections G12)
  ├── G7: (ensure-upsert-distinct-on G13 G14 cols=(8)) (ensure-upsert-distinct-on G13 G14 cols=(8),ordering=+8 opt(12))
  │    ├── [ordering: +8 opt(12)]
@@ -2867,19 +2867,24 @@ upsert xyz
       ├── columns: upsert_z:23 a:7!null b:8!null c:9 x:15 y:16 z:17
       ├── key: (7)
       ├── fd: (7)-->(8,9,15-17,23), (15)-->(16,17)
-      ├── left-join (lookup xyz)
+      ├── right-join (merge)
       │    ├── columns: a:7!null b:8!null c:9 x:15 y:16 z:17
-      │    ├── key columns: [7] = [15]
-      │    ├── lookup columns are key
+      │    ├── left ordering: +15
+      │    ├── right ordering: +7
       │    ├── key: (7)
       │    ├── fd: (7)-->(8,9,15-17), (15)-->(16,17)
+      │    ├── scan xyz
+      │    │    ├── columns: x:15!null y:16 z:17
+      │    │    ├── key: (15)
+      │    │    ├── fd: (15)-->(16,17)
+      │    │    └── ordering: +15
       │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: a:7!null b:8!null c:9
       │    │    ├── grouping columns: a:7!null
-      │    │    ├── internal-ordering: +7
       │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    ├── key: (7)
       │    │    ├── fd: (7)-->(8,9)
+      │    │    ├── ordering: +7
       │    │    ├── union-all
       │    │    │    ├── columns: a:7!null b:8!null c:9
       │    │    │    ├── left columns: a:25 b:26 c:27
@@ -2928,19 +2933,24 @@ upsert xyz
       ├── columns: upsert_z:23 a:7!null b:8!null c:9 x:15 y:16 z:17
       ├── key: (7)
       ├── fd: (7)-->(8,9,15-17,23), (15)-->(16,17)
-      ├── left-join (lookup xyz)
+      ├── right-join (merge)
       │    ├── columns: a:7!null b:8!null c:9 x:15 y:16 z:17
-      │    ├── key columns: [7] = [15]
-      │    ├── lookup columns are key
+      │    ├── left ordering: +15
+      │    ├── right ordering: +7
       │    ├── key: (7)
       │    ├── fd: (7)-->(8,9,15-17), (15)-->(16,17)
+      │    ├── scan xyz
+      │    │    ├── columns: x:15!null y:16 z:17
+      │    │    ├── key: (15)
+      │    │    ├── fd: (15)-->(16,17)
+      │    │    └── ordering: +15
       │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: a:7!null b:8!null c:9
       │    │    ├── grouping columns: a:7!null
-      │    │    ├── internal-ordering: +7
       │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    ├── key: (7)
       │    │    ├── fd: (7)-->(8,9)
+      │    │    ├── ordering: +7
       │    │    ├── union-all
       │    │    │    ├── columns: a:7!null b:8!null c:9
       │    │    │    ├── left columns: a:25 b:26 c:27
@@ -3206,19 +3216,24 @@ upsert xyz
       ├── columns: upsert_z:21 a:6 b:7 x:13 y:14 z:15
       ├── lax-key: (6,13)
       ├── fd: (6)~~>(7), (13)-->(14,15), (6,13)~~>(7,21)
-      ├── left-join (lookup xyz)
+      ├── right-join (merge)
       │    ├── columns: a:6 b:7 x:13 y:14 z:15
-      │    ├── key columns: [6] = [13]
-      │    ├── lookup columns are key
+      │    ├── left ordering: +13
+      │    ├── right ordering: +6
       │    ├── lax-key: (6,13)
       │    ├── fd: (6)~~>(7), (13)-->(14,15)
+      │    ├── scan xyz
+      │    │    ├── columns: x:13!null y:14 z:15
+      │    │    ├── key: (13)
+      │    │    ├── fd: (13)-->(14,15)
+      │    │    └── ordering: +13
       │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: a:6 b:7
       │    │    ├── grouping columns: a:6
-      │    │    ├── internal-ordering: +6
       │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    ├── lax-key: (6)
       │    │    ├── fd: (6)~~>(7)
+      │    │    ├── ordering: +6
       │    │    ├── scan abcd@partial_ab,partial
       │    │    │    ├── columns: a:6 b:7 rowid:10!null
       │    │    │    ├── key: (10)

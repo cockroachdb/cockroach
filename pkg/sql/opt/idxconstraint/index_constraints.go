@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -627,10 +626,9 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 
 	// Attempt to build a single tight constraint from a scalar expression and use
 	// it to derive predicates/constraints on computed columns.
-	if !c.skipComputedColPredDerivation &&
+	if c.computedColSet.Intersects(c.keyCols) &&
 		c.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation &&
-		c.computedColSet.Intersects(c.keyCols) &&
-		c.computedColInSuffix(offset) {
+		!c.skipComputedColPredDerivation {
 		switch t := e.(type) {
 		case *memo.FiltersExpr, *memo.FiltersItem, *memo.AndExpr, *memo.OrExpr:
 		// Skip over scalar expressions that are not conditions, require special
@@ -657,10 +655,9 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 					// All disjunctions fully represent the original condition
 					// plus derived predicates, so we only have to make spans on
 					// the list of disjunctions.
-					origSkip := c.skipComputedColPredDerivation
 					c.skipComputedColPredDerivation = true
-					defer func() { c.skipComputedColPredDerivation = origSkip }()
 					localTight := c.binaryMergeSpansForOr(offset, disjunctions, out)
+					c.skipComputedColPredDerivation = false
 					return localTight
 				}
 			}
@@ -1322,100 +1319,4 @@ func (c *indexConstraintCtx) isNullable(offset int) bool {
 // colType returns the type of the index column <offset>.
 func (c *indexConstraintCtx) colType(offset int) *types.T {
 	return c.md.ColumnMeta(c.columns[offset].ID()).Type
-}
-
-// computedColInSuffix returns true if one of the key columns at or after offset
-// is a computed column.
-func (c *indexConstraintCtx) computedColInSuffix(offset int) bool {
-	for _, col := range c.columns[offset:] {
-		if c.computedColSet.Contains(col.ID()) {
-			return true
-		}
-	}
-	return false
-}
-
-// IndexPrefixCols returns a slice of ordering columns for each of the prefix
-// columns of the inverted or vector index. It also returns a set of those
-// columns that are NOT NULL. If the index is a single-column inverted index,
-// the function returns nil ordering columns.
-func IndexPrefixCols(
-	tabID opt.TableID, index cat.Index,
-) (_ []opt.OrderingColumn, notNullCols opt.ColSet) {
-	prefixColumnCount := index.PrefixColumnCount()
-
-	// If this is a single-column inverted/vector index, there are no prefix
-	// columns.
-	if prefixColumnCount == 0 {
-		return nil, opt.ColSet{}
-	}
-
-	prefixColumns := make([]opt.OrderingColumn, prefixColumnCount)
-	for i := range prefixColumns {
-		col := index.Column(i)
-		colID := tabID.ColumnID(col.Ordinal())
-		prefixColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
-		if !col.IsNullable() {
-			notNullCols.Add(colID)
-		}
-	}
-	return prefixColumns, notNullCols
-}
-
-// ConstrainIndexPrefixCols attempts to build a constraint for the prefix
-// columns of the given inverted or vector index. If a constraint is
-// successfully built, it is returned along with remaining filters and ok=true.
-// The function is only successful if it can generate a constraint where all
-// spans have the same start and end keys for all prefix columns. This is
-// required for building spans for scanning multi-column inverted/vector indexes
-// (see span.Builder.SpansFromInvertedSpans).
-func ConstrainIndexPrefixCols(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	factory *norm.Factory,
-	columns []opt.OrderingColumn,
-	notNullCols opt.ColSet,
-	filters memo.FiltersExpr,
-	optionalFilters memo.FiltersExpr,
-	tabID opt.TableID,
-	index cat.Index,
-	checkCancellation func(),
-) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
-	tabMeta := factory.Metadata().TableMeta(tabID)
-	prefixColumnCount := index.PrefixColumnCount()
-	ps := tabMeta.IndexPartitionLocality(index.Ordinal())
-
-	// Consolidation of a constraint converts contiguous spans into a single
-	// span. By definition, the consolidated span would have different start and
-	// end keys and could not be used for multi-column inverted index scans.
-	// Therefore, we only generate and check the unconsolidated constraint,
-	// allowing the optimizer to plan multi-column inverted/vector index scans in
-	// more cases.
-	//
-	// For example, the consolidated constraint for (x IN (1, 2, 3)) is:
-	//
-	//   /x: [/1 - /3]
-	//   Prefix: 0
-	//
-	// The unconsolidated constraint for the same expression is:
-	//
-	//   /x: [/1 - /1] [/2 - /2] [/3 - /3]
-	//   Prefix: 1
-	//
-	var ic Instance
-	ic.Init(
-		ctx, filters, optionalFilters,
-		columns, notNullCols, tabMeta.ComputedCols,
-		tabMeta.ColsInComputedColsExpressions,
-		false, /* consolidate */
-		evalCtx, factory, ps, checkCancellation,
-	)
-	var c constraint.Constraint
-	ic.UnconsolidatedConstraint(&c)
-	if c.Prefix(ctx, evalCtx) != prefixColumnCount {
-		// The prefix columns must be constrained to single values.
-		return nil, nil, false
-	}
-
-	return &c, ic.RemainingFilters(), true
 }

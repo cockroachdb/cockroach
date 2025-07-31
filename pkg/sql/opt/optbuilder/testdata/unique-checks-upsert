@@ -56,7 +56,7 @@ upsert uniq
  │    │    │              └── column5:12
  │    │    ├── scan uniq
  │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
- │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── column1:8 = uniq.k:13
  │    └── projections
@@ -77,7 +77,7 @@ upsert uniq
       │              │         └──  column5:12 => y:32
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:21!null uniq.v:22 uniq.w:23 uniq.x:24 uniq.y:25
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:30 = uniq.w:23
       │                   └── k:28 != uniq.k:21
@@ -96,7 +96,7 @@ upsert uniq
                      │         └──  column5:12 => y:44
                      ├── scan uniq
                      │    ├── columns: uniq.k:33!null uniq.v:34 uniq.w:35 uniq.x:36 uniq.y:37
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:43 = uniq.x:36
                           ├── y:44 = uniq.y:37
@@ -149,7 +149,7 @@ upsert uniq
  │    │    │              └── y_default:12
  │    │    ├── scan uniq
  │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
- │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── column1:8 = uniq.k:13
  │    └── projections
@@ -172,7 +172,7 @@ upsert uniq
       │              │         └──  upsert_y:22 => y:34
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:23!null uniq.v:24 uniq.w:25 uniq.x:26 uniq.y:27
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:32 = uniq.w:25
       │                   └── k:30 != uniq.k:23
@@ -191,7 +191,7 @@ upsert uniq
                      │         └──  upsert_y:22 => y:46
                      ├── scan uniq
                      │    ├── columns: uniq.k:35!null uniq.v:36 uniq.w:37 uniq.x:38 uniq.y:39
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:45 = uniq.x:38
                           ├── y:46 = uniq.y:39
@@ -245,7 +245,7 @@ upsert uniq
  │    │    │              └── y_default:12
  │    │    ├── scan uniq
  │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
- │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── column1:8 = uniq.k:13
  │    └── projections
@@ -268,7 +268,7 @@ upsert uniq
       │              │         └──  upsert_y:22 => y:34
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:23!null uniq.v:24 uniq.w:25 uniq.x:26 uniq.y:27
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:32 = uniq.w:25
       │                   └── k:30 != uniq.k:23
@@ -287,7 +287,7 @@ upsert uniq
                      │         └──  upsert_y:22 => y:46
                      ├── scan uniq
                      │    ├── columns: uniq.k:35!null uniq.v:36 uniq.w:37 uniq.x:38 uniq.y:39
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:45 = uniq.x:38
                           ├── y:46 = uniq.y:39
@@ -343,7 +343,7 @@ upsert uniq
  │    │    │              └── y_default:17
  │    │    ├── scan uniq
  │    │    │    ├── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22 uniq.crdb_internal_mvcc_timestamp:23 uniq.tableoid:24
- │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── other.k:8 = uniq.k:18
  │    └── projections
@@ -364,7 +364,7 @@ upsert uniq
       │              │         └──  y_default:17 => y:37
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:26!null uniq.v:27 uniq.w:28 uniq.x:29 uniq.y:30
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:35 = uniq.w:28
       │                   └── k:33 != uniq.k:26
@@ -383,7 +383,7 @@ upsert uniq
                      │         └──  y_default:17 => y:49
                      ├── scan uniq
                      │    ├── columns: uniq.k:38!null uniq.v:39 uniq.w:40 uniq.x:41 uniq.y:42
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:48 = uniq.x:41
                           ├── y:49 = uniq.y:42
@@ -432,7 +432,7 @@ upsert uniq
  │    │    │              └── column5:12
  │    │    ├── scan uniq
  │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
- │    │    │    └── flags: force-index=uniq_v_key avoid-full-scan disabled not visible index feature
+ │    │    │    └── flags: force-index=uniq_v_key disabled not visible index feature
  │    │    └── filters
  │    │         └── column1:8 = uniq.k:13
  │    └── projections
@@ -453,7 +453,7 @@ upsert uniq
       │              │         └──  column5:12 => y:32
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:21!null uniq.v:22 uniq.w:23 uniq.x:24 uniq.y:25
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:30 = uniq.w:23
       │                   └── k:28 != uniq.k:21
@@ -472,7 +472,7 @@ upsert uniq
                      │         └──  column5:12 => y:44
                      ├── scan uniq
                      │    ├── columns: uniq.k:33!null uniq.v:34 uniq.w:35 uniq.x:36 uniq.y:37
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:43 = uniq.x:36
                           ├── y:44 = uniq.y:37
@@ -526,7 +526,7 @@ upsert uniq
  │    │    │    │              └── y_default:11
  │    │    │    ├── scan uniq
  │    │    │    │    ├── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17 tableoid:18
- │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column1:8 = uniq.k:12
  │    │    └── projections
@@ -553,7 +553,7 @@ upsert uniq
       │              │         └──  upsert_y:24 => y:36
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:34 = uniq.w:27
       │                   └── k:32 != uniq.k:25
@@ -572,7 +572,7 @@ upsert uniq
                      │         └──  upsert_y:24 => y:48
                      ├── scan uniq
                      │    ├── columns: uniq.k:37!null uniq.v:38 uniq.w:39 uniq.x:40 uniq.y:41
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:47 = uniq.x:40
                           ├── y:48 = uniq.y:41
@@ -625,7 +625,7 @@ upsert uniq
  │    │    │    │              └── y_default:17
  │    │    │    ├── scan uniq
  │    │    │    │    ├── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22 uniq.crdb_internal_mvcc_timestamp:23 uniq.tableoid:24
- │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── other.k:8 = uniq.k:18
  │    │    └── projections
@@ -652,7 +652,7 @@ upsert uniq
       │              │         └──  upsert_y:30 => y:42
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:31!null uniq.v:32 uniq.w:33 uniq.x:34 uniq.y:35
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:40 = uniq.w:33
       │                   └── k:38 != uniq.k:31
@@ -671,7 +671,7 @@ upsert uniq
                      │         └──  upsert_y:30 => y:54
                      ├── scan uniq
                      │    ├── columns: uniq.k:43!null uniq.v:44 uniq.w:45 uniq.x:46 uniq.y:47
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:53 = uniq.x:46
                           ├── y:54 = uniq.y:47
@@ -725,7 +725,7 @@ upsert uniq
  │    │    │    │              └── y_default:12
  │    │    │    ├── scan uniq
  │    │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
- │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column3:10 = uniq.w:15
  │    │    └── projections
@@ -752,7 +752,7 @@ upsert uniq
       │              │         └──  upsert_y:25 => y:37
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:26!null uniq.v:27 uniq.w:28 uniq.x:29 uniq.y:30
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:35 = uniq.w:28
       │                   └── k:33 != uniq.k:26
@@ -771,7 +771,7 @@ upsert uniq
                      │         └──  upsert_y:25 => y:49
                      ├── scan uniq
                      │    ├── columns: uniq.k:38!null uniq.v:39 uniq.w:40 uniq.x:41 uniq.y:42
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:48 = uniq.x:41
                           ├── y:49 = uniq.y:42
@@ -817,7 +817,7 @@ upsert uniq
  │    │    │    │              └── column3:10
  │    │    │    ├── scan uniq
  │    │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
- │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         ├── column4:11 = uniq.x:16
  │    │    │         └── column5:12 = uniq.y:17
@@ -845,7 +845,7 @@ upsert uniq
                      │         └──  upsert_y:25 => y:37
                      ├── scan uniq
                      │    ├── columns: uniq.k:26!null uniq.v:27 uniq.w:28 uniq.x:29 uniq.y:30
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── w:35 = uniq.w:28
                           └── k:33 != uniq.k:26
@@ -909,7 +909,7 @@ upsert uniq_overlaps_pk
       │              │         └──  column4:10 => d:20
       │              ├── scan uniq_overlaps_pk
       │              │    ├── columns: uniq_overlaps_pk.a:11!null uniq_overlaps_pk.b:12!null uniq_overlaps_pk.c:13 uniq_overlaps_pk.d:14
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:18 = uniq_overlaps_pk.b:12
       │                   ├── c:19 = uniq_overlaps_pk.c:13
@@ -928,7 +928,7 @@ upsert uniq_overlaps_pk
       │              │         └──  column4:10 => d:30
       │              ├── scan uniq_overlaps_pk
       │              │    ├── columns: uniq_overlaps_pk.a:21!null uniq_overlaps_pk.b:22!null uniq_overlaps_pk.c:23 uniq_overlaps_pk.d:24
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:27 = uniq_overlaps_pk.a:21
       │                   └── b:28 != uniq_overlaps_pk.b:22
@@ -946,7 +946,7 @@ upsert uniq_overlaps_pk
                      │         └──  column4:10 => d:40
                      ├── scan uniq_overlaps_pk
                      │    ├── columns: uniq_overlaps_pk.a:31!null uniq_overlaps_pk.b:32!null uniq_overlaps_pk.c:33 uniq_overlaps_pk.d:34
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── c:39 = uniq_overlaps_pk.c:33
                           ├── d:40 = uniq_overlaps_pk.d:34
@@ -990,7 +990,7 @@ upsert uniq_overlaps_pk
       │              │         └──  d_default:15 => d:25
       │              ├── scan uniq_overlaps_pk
       │              │    ├── columns: uniq_overlaps_pk.a:16!null uniq_overlaps_pk.b:17!null uniq_overlaps_pk.c:18 uniq_overlaps_pk.d:19
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:23 = uniq_overlaps_pk.b:17
       │                   ├── c:24 = uniq_overlaps_pk.c:18
@@ -1009,7 +1009,7 @@ upsert uniq_overlaps_pk
                      │         └──  d_default:15 => d:35
                      ├── scan uniq_overlaps_pk
                      │    ├── columns: uniq_overlaps_pk.a:26!null uniq_overlaps_pk.b:27!null uniq_overlaps_pk.c:28 uniq_overlaps_pk.d:29
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:32 = uniq_overlaps_pk.a:26
                           └── b:33 != uniq_overlaps_pk.b:27
@@ -1054,7 +1054,7 @@ upsert uniq_overlaps_pk
  │    │    │    │              └── column4:10
  │    │    │    ├── scan uniq_overlaps_pk
  │    │    │    │    ├── columns: uniq_overlaps_pk.a:11!null uniq_overlaps_pk.b:12!null uniq_overlaps_pk.c:13 uniq_overlaps_pk.d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
- │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column1:7 = uniq_overlaps_pk.a:11
  │    │    └── projections
@@ -1079,7 +1079,7 @@ upsert uniq_overlaps_pk
       │              │         └──  upsert_d:21 => d:31
       │              ├── scan uniq_overlaps_pk
       │              │    ├── columns: uniq_overlaps_pk.a:22!null uniq_overlaps_pk.b:23!null uniq_overlaps_pk.c:24 uniq_overlaps_pk.d:25
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:29 = uniq_overlaps_pk.b:23
       │                   ├── c:30 = uniq_overlaps_pk.c:24
@@ -1098,7 +1098,7 @@ upsert uniq_overlaps_pk
       │              │         └──  upsert_d:21 => d:41
       │              ├── scan uniq_overlaps_pk
       │              │    ├── columns: uniq_overlaps_pk.a:32!null uniq_overlaps_pk.b:33!null uniq_overlaps_pk.c:34 uniq_overlaps_pk.d:35
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:38 = uniq_overlaps_pk.a:32
       │                   └── b:39 != uniq_overlaps_pk.b:33
@@ -1116,7 +1116,7 @@ upsert uniq_overlaps_pk
                      │         └──  upsert_d:21 => d:51
                      ├── scan uniq_overlaps_pk
                      │    ├── columns: uniq_overlaps_pk.a:42!null uniq_overlaps_pk.b:43!null uniq_overlaps_pk.c:44 uniq_overlaps_pk.d:45
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── c:50 = uniq_overlaps_pk.c:44
                           ├── d:51 = uniq_overlaps_pk.d:45
@@ -1159,7 +1159,7 @@ upsert uniq_overlaps_pk
  │    │    │    │              └── column2:8
  │    │    │    ├── scan uniq_overlaps_pk
  │    │    │    │    ├── columns: uniq_overlaps_pk.a:11!null uniq_overlaps_pk.b:12!null uniq_overlaps_pk.c:13 uniq_overlaps_pk.d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
- │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         ├── column3:9 = uniq_overlaps_pk.c:13
  │    │    │         └── column4:10 = uniq_overlaps_pk.d:14
@@ -1185,7 +1185,7 @@ upsert uniq_overlaps_pk
       │              │         └──  upsert_d:21 => d:31
       │              ├── scan uniq_overlaps_pk
       │              │    ├── columns: uniq_overlaps_pk.a:22!null uniq_overlaps_pk.b:23!null uniq_overlaps_pk.c:24 uniq_overlaps_pk.d:25
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:29 = uniq_overlaps_pk.b:23
       │                   ├── c:30 = uniq_overlaps_pk.c:24
@@ -1204,7 +1204,7 @@ upsert uniq_overlaps_pk
                      │         └──  upsert_d:21 => d:41
                      ├── scan uniq_overlaps_pk
                      │    ├── columns: uniq_overlaps_pk.a:32!null uniq_overlaps_pk.b:33!null uniq_overlaps_pk.c:34 uniq_overlaps_pk.d:35
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:38 = uniq_overlaps_pk.a:32
                           └── b:39 != uniq_overlaps_pk.b:33
@@ -1269,7 +1269,7 @@ upsert uniq_hidden_pk
  │    │    │              └── c_default:11
  │    │    ├── scan uniq_hidden_pk
  │    │    │    ├── columns: uniq_hidden_pk.a:13 uniq_hidden_pk.b:14 uniq_hidden_pk.c:15 uniq_hidden_pk.d:16 uniq_hidden_pk.rowid:17!null crdb_internal_mvcc_timestamp:18 tableoid:19
- │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── rowid_default:12 = uniq_hidden_pk.rowid:17
  │    └── projections
@@ -1291,7 +1291,7 @@ upsert uniq_hidden_pk
       │              │         └──  upsert_rowid:21 => rowid:33
       │              ├── scan uniq_hidden_pk
       │              │    ├── columns: uniq_hidden_pk.a:22 uniq_hidden_pk.b:23 uniq_hidden_pk.c:24 uniq_hidden_pk.d:25 uniq_hidden_pk.rowid:26!null
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:30 = uniq_hidden_pk.b:23
       │                   ├── c:31 = uniq_hidden_pk.c:24
@@ -1311,7 +1311,7 @@ upsert uniq_hidden_pk
       │              │         └──  upsert_rowid:21 => rowid:45
       │              ├── scan uniq_hidden_pk
       │              │    ├── columns: uniq_hidden_pk.a:34 uniq_hidden_pk.b:35 uniq_hidden_pk.c:36 uniq_hidden_pk.d:37 uniq_hidden_pk.rowid:38!null
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:41 = uniq_hidden_pk.a:34
       │                   ├── b:42 = uniq_hidden_pk.b:35
@@ -1332,7 +1332,7 @@ upsert uniq_hidden_pk
                      │         └──  upsert_rowid:21 => rowid:57
                      ├── scan uniq_hidden_pk
                      │    ├── columns: uniq_hidden_pk.a:46 uniq_hidden_pk.b:47 uniq_hidden_pk.c:48 uniq_hidden_pk.d:49 uniq_hidden_pk.rowid:50!null
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:53 = uniq_hidden_pk.a:46
                           └── rowid:57 != uniq_hidden_pk.rowid:50
@@ -1375,7 +1375,7 @@ upsert uniq_hidden_pk
       │              │         └──  rowid_default:16 => rowid:28
       │              ├── scan uniq_hidden_pk
       │              │    ├── columns: uniq_hidden_pk.a:17 uniq_hidden_pk.b:18 uniq_hidden_pk.c:19 uniq_hidden_pk.d:20 uniq_hidden_pk.rowid:21!null
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:25 = uniq_hidden_pk.b:18
       │                   ├── c:26 = uniq_hidden_pk.c:19
@@ -1395,7 +1395,7 @@ upsert uniq_hidden_pk
       │              │         └──  rowid_default:16 => rowid:40
       │              ├── scan uniq_hidden_pk
       │              │    ├── columns: uniq_hidden_pk.a:29 uniq_hidden_pk.b:30 uniq_hidden_pk.c:31 uniq_hidden_pk.d:32 uniq_hidden_pk.rowid:33!null
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:36 = uniq_hidden_pk.a:29
       │                   ├── b:37 = uniq_hidden_pk.b:30
@@ -1416,7 +1416,7 @@ upsert uniq_hidden_pk
                      │         └──  rowid_default:16 => rowid:52
                      ├── scan uniq_hidden_pk
                      │    ├── columns: uniq_hidden_pk.a:41 uniq_hidden_pk.b:42 uniq_hidden_pk.c:43 uniq_hidden_pk.d:44 uniq_hidden_pk.rowid:45!null
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:48 = uniq_hidden_pk.a:41
                           └── rowid:52 != uniq_hidden_pk.rowid:45
@@ -1463,7 +1463,7 @@ upsert uniq_hidden_pk
  │    │    │    │              └── rowid_default:12
  │    │    │    ├── scan uniq_hidden_pk
  │    │    │    │    ├── columns: uniq_hidden_pk.a:13 uniq_hidden_pk.b:14 uniq_hidden_pk.c:15 uniq_hidden_pk.d:16 uniq_hidden_pk.rowid:17!null crdb_internal_mvcc_timestamp:18 tableoid:19
- │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         ├── column1:8 = uniq_hidden_pk.a:13
  │    │    │         ├── column2:9 = uniq_hidden_pk.b:14
@@ -1492,7 +1492,7 @@ upsert uniq_hidden_pk
       │              │         └──  upsert_rowid:25 => rowid:37
       │              ├── scan uniq_hidden_pk
       │              │    ├── columns: uniq_hidden_pk.a:26 uniq_hidden_pk.b:27 uniq_hidden_pk.c:28 uniq_hidden_pk.d:29 uniq_hidden_pk.rowid:30!null
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:34 = uniq_hidden_pk.b:27
       │                   ├── c:35 = uniq_hidden_pk.c:28
@@ -1512,7 +1512,7 @@ upsert uniq_hidden_pk
       │              │         └──  upsert_rowid:25 => rowid:49
       │              ├── scan uniq_hidden_pk
       │              │    ├── columns: uniq_hidden_pk.a:38 uniq_hidden_pk.b:39 uniq_hidden_pk.c:40 uniq_hidden_pk.d:41 uniq_hidden_pk.rowid:42!null
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:45 = uniq_hidden_pk.a:38
       │                   ├── b:46 = uniq_hidden_pk.b:39
@@ -1533,7 +1533,7 @@ upsert uniq_hidden_pk
                      │         └──  upsert_rowid:25 => rowid:61
                      ├── scan uniq_hidden_pk
                      │    ├── columns: uniq_hidden_pk.a:50 uniq_hidden_pk.b:51 uniq_hidden_pk.c:52 uniq_hidden_pk.d:53 uniq_hidden_pk.rowid:54!null
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:57 = uniq_hidden_pk.a:50
                           └── rowid:61 != uniq_hidden_pk.rowid:54
@@ -1591,7 +1591,7 @@ upsert uniq_fk_parent
  │    │    │              └── column1:5
  │    │    ├── scan uniq_fk_parent
  │    │    │    ├── columns: uniq_fk_parent.a:7 uniq_fk_parent.rowid:8!null uniq_fk_parent.crdb_internal_mvcc_timestamp:9 uniq_fk_parent.tableoid:10
- │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── rowid_default:6 = uniq_fk_parent.rowid:8
  │    └── projections
@@ -1609,7 +1609,7 @@ upsert uniq_fk_parent
  │                   │         └──  upsert_rowid:11 => rowid:17
  │                   ├── scan uniq_fk_parent
  │                   │    ├── columns: uniq_fk_parent.a:12 uniq_fk_parent.rowid:13!null
- │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   │    └── flags: disabled not visible index feature
  │                   └── filters
  │                        ├── a:16 = uniq_fk_parent.a:12
  │                        └── rowid:17 != uniq_fk_parent.rowid:13
@@ -1631,7 +1631,7 @@ upsert uniq_fk_parent
                 │              └──  column1:5 => a:19
                 ├── scan uniq_fk_child
                 │    ├── columns: uniq_fk_child.a:21
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── a:18 = uniq_fk_child.a:21
 
@@ -1659,7 +1659,7 @@ upsert uniq_fk_child
                 │         └──  column2:6 => a:7
                 ├── scan uniq_fk_parent
                 │    ├── columns: uniq_fk_parent.a:8
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── a:7 = uniq_fk_parent.a:8
 
@@ -1714,7 +1714,7 @@ upsert t
  │    │    │    │    │    ├── partial index predicates
  │    │    │    │    │    │    └── i1: filters
  │    │    │    │    │    │         └── t.i:7 > 0
- │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    │    └── filters
  │    │    │    │         └── column1:5 = t.i:7
  │    │    │    └── projections
@@ -1741,7 +1741,7 @@ upsert t
                      │    ├── partial index predicates
                      │    │    └── i1: filters
                      │    │         └── t.i:16 > 0
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── i:20 = t.i:16
                           └── rowid:21 != t.rowid:17
@@ -1787,7 +1787,7 @@ upsert uniq
  │    │    │    │              └── column5:12
  │    │    │    ├── scan uniq
  │    │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
- │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column3:10 = uniq.w:15
  │    │    └── projections
@@ -1814,7 +1814,7 @@ upsert uniq
                      │         └──  upsert_y:25 => y:37
                      ├── scan uniq
                      │    ├── columns: uniq.k:26!null uniq.v:27 uniq.w:28 uniq.x:29 uniq.y:30
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:36 = uniq.x:29
                           ├── y:37 = uniq.y:30
@@ -1858,7 +1858,7 @@ upsert uniq_partial
                      │         └──  column3:8 => b:16
                      ├── scan uniq_partial
                      │    ├── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:15 = uniq_partial.a:10
                           ├── b:16 > 0
@@ -1909,7 +1909,7 @@ upsert uniq_partial
                      │         └──  w:8 => b:21
                      ├── scan uniq_partial
                      │    ├── columns: uniq_partial.k:14!null uniq_partial.a:15 uniq_partial.b:16
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:20 = uniq_partial.a:15
                           ├── b:21 > 0
@@ -1961,7 +1961,7 @@ upsert uniq_partial
  │    │    │    │    ├── columns: uniq_partial.k:10!null uniq_partial.a:11 uniq_partial.b:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
  │    │    │    │    ├── scan uniq_partial
  │    │    │    │    │    ├── columns: uniq_partial.k:10!null uniq_partial.a:11 uniq_partial.b:12 crdb_internal_mvcc_timestamp:13 tableoid:14
- │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    │    └── filters
  │    │    │    │         └── uniq_partial.b:12 > 0
  │    │    │    └── filters
@@ -1987,7 +1987,7 @@ upsert uniq_partial
                      │         └──  upsert_b:18 => b:26
                      ├── scan uniq_partial
                      │    ├── columns: uniq_partial.k:19!null uniq_partial.a:20 uniq_partial.b:21
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:25 = uniq_partial.a:20
                           ├── b:26 > 0
@@ -2052,7 +2052,7 @@ upsert uniq_partial_constraint_and_index
  │    │    │    │    ├── columns: uniq_partial_constraint_and_index.k:10!null uniq_partial_constraint_and_index.a:11 uniq_partial_constraint_and_index.b:12
  │    │    │    │    ├── partial index predicates
  │    │    │    │    │    └── uniq_partial_constraint_and_index_a_key: filters (true)
- │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── uniq_partial_constraint_and_index.a:11 = 1
  │    │    └── filters (true)
@@ -2083,7 +2083,7 @@ upsert uniq_partial_constraint_and_index
                      │    │    ├── columns: uniq_partial_constraint_and_index.k:20!null uniq_partial_constraint_and_index.a:21 uniq_partial_constraint_and_index.b:22
                      │    │    ├── partial index predicates
                      │    │    │    └── uniq_partial_constraint_and_index_a_key: filters (true)
-                     │    │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    │    └── flags: disabled not visible index feature
                      │    └── filters
                      │         └── uniq_partial_constraint_and_index.b:22 > 10
                      └── filters
@@ -2135,7 +2135,7 @@ upsert uniq_constraint_and_partial_index
  │    │    │    │    ├── partial index predicates
  │    │    │    │    │    └── uniq_constraint_and_partial_index_a_key: filters
  │    │    │    │    │         └── uniq_constraint_and_partial_index.b:12 > 0
- │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── uniq_constraint_and_partial_index.a:11 = 1
  │    │    └── filters (true)
@@ -2160,7 +2160,7 @@ upsert uniq_constraint_and_partial_index
                      │    ├── partial index predicates
                      │    │    └── uniq_constraint_and_partial_index_a_key: filters
                      │    │         └── uniq_constraint_and_partial_index.b:23 > 0
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:27 = uniq_constraint_and_partial_index.a:22
                           └── k:26 != uniq_constraint_and_partial_index.k:21
@@ -2265,7 +2265,7 @@ upsert uniq_computed_pk
  │    │    │    │    │    │    │    └── uniq_computed_pk.d:17
  │    │    │    │    │    │    └── uniq_computed_pk.c_d_expr:21
  │    │    │    │    │    │         └── uniq_computed_pk.d:17::STRING
- │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    │    └── projections
  │    │    │    │         └── uniq_computed_pk.s:16 [as=uniq_computed_pk.c_s:19]
  │    │    │    └── filters
@@ -2305,7 +2305,7 @@ upsert uniq_computed_pk
                      │    │    │    │    └── uniq_computed_pk.d:47
                      │    │    │    └── uniq_computed_pk.c_d_expr:51
                      │    │    │         └── uniq_computed_pk.d:47::STRING
-                     │    │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    │    └── flags: disabled not visible index feature
                      │    └── projections
                      │         └── uniq_computed_pk.s:46 [as=uniq_computed_pk.c_s:49]
                      └── filters

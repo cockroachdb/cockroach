@@ -42,7 +42,7 @@ SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
 ----
 <unnamed portal 6>
 
-statement ok
+statement ok;
 ABORT;
 
 # Continue incrementing over transaction boundaries.

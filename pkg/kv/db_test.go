@@ -268,6 +268,38 @@ func TestDB_CPutInline(t *testing.T) {
 	}
 }
 
+func TestDB_InitPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InitPut(ctx, "aa", "2", false); err == nil {
+		t.Fatal("expected error from init put")
+	}
+	if _, err := db.Del(ctx, "aa"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InitPut(ctx, "aa", "2", true); err == nil {
+		t.Fatal("expected error from init put")
+	}
+	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
+		t.Fatal(err)
+	}
+	result, err := db.Get(ctx, "aa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte("1"), result.ValueBytes())
+}
+
 func TestDB_Inc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -949,43 +981,34 @@ func testDBTxnRetryLimit(t *testing.T, isoLevel isolation.Level) {
 	defer s.Stopper().Stop(ctx)
 
 	// Configure a low retry limit.
-	const maxRetriesSetting = 7
-	const maxRetriesExplicit = 4
-	kv.MaxInternalTxnAutoRetries.Override(ctx, &s.ClusterSettings().SV, maxRetriesSetting)
-	testutils.RunTrueAndFalse(t, "explicitRetryLimit", func(t *testing.T, explicitRetryLimit bool) {
-		maxAttempts := maxRetriesSetting + 1
-		if explicitRetryLimit {
-			maxAttempts = maxRetriesExplicit + 1
+	const maxRetries = 7
+	const maxAttempts = maxRetries + 1
+	kv.MaxInternalTxnAutoRetries.Override(ctx, &s.ClusterSettings().SV, maxRetries)
+
+	// Run the txn, aborting it on each attempt.
+	attempts := 0
+	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		attempts++
+		require.NoError(t, txn.SetIsoLevel(isoLevel))
+		require.NoError(t, txn.Put(ctx, "a", "1"))
+
+		{
+			// High priority txn - will abort the other txn each attempt.
+			hpTxn := kv.NewTxn(ctx, db, 0)
+			require.NoError(t, hpTxn.SetUserPriority(roachpb.MaxUserPriority))
+			require.NoError(t, hpTxn.Put(ctx, "a", "hp txn"))
+			require.NoError(t, hpTxn.Commit(ctx))
 		}
 
-		// Run the txn, aborting it on each attempt.
-		attempts := 0
-		err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if explicitRetryLimit {
-				txn.SetMaxAutoRetries(maxRetriesExplicit)
-			}
-			attempts++
-			require.NoError(t, txn.SetIsoLevel(isoLevel))
-			require.NoError(t, txn.Put(ctx, "a", "1"))
-
-			{
-				// High priority txn - will abort the other txn each attempt.
-				hpTxn := kv.NewTxn(ctx, db, 0)
-				require.NoError(t, hpTxn.SetUserPriority(roachpb.MaxUserPriority))
-				require.NoError(t, hpTxn.Put(ctx, "a", "hp txn"))
-				require.NoError(t, hpTxn.Commit(ctx))
-			}
-
-			// Read, so that we'll get a retryable error.
-			_, err := txn.Get(ctx, "a")
-			require.Error(t, err)
-			require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
-			return err
-		})
+		// Read, so that we'll get a retryable error.
+		_, err := txn.Get(ctx, "a")
 		require.Error(t, err)
-		require.Regexp(t, "Terminating retry loop and returning error", err)
-		require.Equal(t, maxAttempts, attempts)
+		require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
+		return err
 	})
+	require.Error(t, err)
+	require.Regexp(t, "Terminating retry loop and returning error", err)
+	require.Equal(t, maxAttempts, attempts)
 }
 
 func TestPreservingSteppingOnSenderReplacement(t *testing.T) {
@@ -1115,7 +1138,8 @@ func TestBulkBatchAPI(t *testing.T) {
 
 	testF(func(b *kv.Batch) { b.PutBytes(&byteSliceBulkSource[[]byte]{kys, vals}) })
 	testF(func(b *kv.Batch) { b.PutTuples(&byteSliceBulkSource[[]byte]{kys, vals}) })
-	testF(func(b *kv.Batch) { b.CPutBytesEmpty(&byteSliceBulkSource[[]byte]{kys, vals}) })
+	testF(func(b *kv.Batch) { b.InitPutBytes(&byteSliceBulkSource[[]byte]{kys, vals}) })
+	testF(func(b *kv.Batch) { b.InitPutTuples(&byteSliceBulkSource[[]byte]{kys, vals}) })
 	testF(func(b *kv.Batch) { b.CPutTuplesEmpty(&byteSliceBulkSource[[]byte]{kys, vals}) })
 
 	values := make([]roachpb.Value, len(kys))
@@ -1144,39 +1168,25 @@ func TestGetResult(t *testing.T) {
 	b.PutBytes(&byteSliceBulkSource[[]byte]{kys2, vals})
 	keyToDel := roachpb.Key("b")
 	b.Del(keyToDel)
-	keyToCPut := roachpb.Key("c")
-	var expVal roachpb.Value
-	expVal.SetBytes(vals[2])
-	b.CPut(keyToCPut, []byte("who"), expVal.TagAndDataBytes())
 	err := txn.CommitInBatch(ctx, b)
 	require.NoError(t, err)
 	for i := 0; i < len(kys1)+len(kys2); i++ {
-		res, exp, row, err := b.GetResult(i)
-		require.Equal(t, &b.Results[i/3], res)
-		require.Nil(t, exp)
-		require.Equal(t, b.Results[i/3].Rows[i%3], row)
+		res, row, err := b.GetResult(i)
+		require.Equal(t, res, &b.Results[i/3])
+		require.Equal(t, row, b.Results[i/3].Rows[i%3])
 		require.NoError(t, err)
 	}
 	// test Del request (it uses Result.Keys rather than Result.Rows)
-	_, exp, kv, err := b.GetResult(len(kys1) + len(kys2))
+	_, kv, err := b.GetResult(len(kys1) + len(kys2))
 	require.NoError(t, err)
-	require.Nil(t, exp)
-	require.Equal(t, kv.Key, keyToDel)
+	require.Equal(t, keyToDel, kv.Key)
 	require.Nil(t, kv.Value)
-
-	// test CPut request (it fills in expBytes)
-	res, exp, row, err := b.GetResult(len(kys1) + len(kys2) + 1)
-	require.Equal(t, &b.Results[3], res)
-	require.Equal(t, expVal.TagAndDataBytes(), exp)
-	require.Equal(t, b.Results[3].Rows[0], row)
-	require.NoError(t, err)
-
 	// test EndTxn result
-	_, _, _, err = b.GetResult(len(kys1) + len(kys2) + 2)
+	_, _, err = b.GetResult(len(kys1) + len(kys2) + 1)
 	require.NoError(t, err)
 
 	// test out of bounds
-	_, _, _, err = b.GetResult(len(kys1) + len(kys2) + 3)
+	_, _, err = b.GetResult(len(kys1) + len(kys2) + 2)
 	require.Error(t, err)
 }
 

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -231,27 +230,26 @@ const (
 type statisticsBuilder struct {
 	ctx                   context.Context
 	evalCtx               *eval.Context
-	mem                   *Memo
 	md                    *opt.Metadata
 	checkInputMinRowCount float64
 	minRowCount           float64
 }
 
-func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, mem *Memo) {
+func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, md *opt.Metadata) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*sb = statisticsBuilder{
 		ctx:                   ctx,
 		evalCtx:               evalCtx,
-		mem:                   mem,
-		md:                    mem.Metadata(),
+		md:                    md,
 		checkInputMinRowCount: evalCtx.SessionData().OptimizerCheckInputMinRowCount,
 		minRowCount:           evalCtx.SessionData().OptimizerMinRowCount,
 	}
 }
 
 func (sb *statisticsBuilder) clear() {
-	*sb = statisticsBuilder{}
+	sb.evalCtx = nil
+	sb.md = nil
 }
 
 // colStatCols returns the set of columns which may be looked up in
@@ -501,12 +499,6 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.LockOp:
 		return sb.colStatLock(colSet, e.(*LockExpr))
 
-	case opt.VectorSearchOp:
-		return sb.colStatVectorSearch(colSet, e.(*VectorSearchExpr))
-
-	case opt.VectorMutationSearchOp:
-		return sb.colStatVectorMutationSearch(colSet, e.(*VectorMutationSearchExpr))
-
 	case opt.BarrierOp:
 		return sb.colStatBarrier(colSet, e.(*BarrierExpr))
 
@@ -621,19 +613,12 @@ func (sb *statisticsBuilder) colStatLeaf(
 // | Table |
 // +-------+
 
-// GetTableStats returns the statistics for the given table if already available
-// in the metadata.
-func GetTableStats(md *opt.Metadata, tabID opt.TableID) (*props.Statistics, bool) {
-	stats, ok := md.TableAnnotation(tabID, statsAnnID).(*props.Statistics)
-	return stats, ok
-}
-
 // makeTableStatistics returns the available statistics for the given table.
 // Statistics are derived lazily and are cached in the metadata, since they may
 // be accessed multiple times during query optimization. For more details, see
 // props.Statistics.
 func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Statistics {
-	stats, ok := GetTableStats(sb.md, tabID)
+	stats, ok := sb.md.TableAnnotation(tabID, statsAnnID).(*props.Statistics)
 	if ok {
 		// Already made.
 		return stats
@@ -648,7 +633,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	invertedIndexCols := make(map[int]invertedIndexColInfo)
 	for indexI, indexN := 0, tab.IndexCount(); indexI < indexN; indexI++ {
 		index := tab.Index(indexI)
-		if index.Type() != idxtype.INVERTED {
+		if !index.IsInverted() {
 			continue
 		}
 		col := index.InvertedColumn()
@@ -1181,10 +1166,10 @@ func (sb *statisticsBuilder) colStatProject(
 				if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
 					!s.VirtualCols.Empty() {
 					element := sb.factorOutVirtualCols(
-						item.Element, &item.scalar.Shared, s.VirtualCols, sb.mem,
+						item.Element, &item.scalar.Shared, s.VirtualCols, prj.Memo(),
 					).(opt.ScalarExpr)
 					if element != item.Element {
-						newItem := constructProjectionsItem(element, item.Col, sb.mem)
+						newItem := constructProjectionsItem(element, item.Col, prj.Memo())
 						item = &newItem
 					}
 				}
@@ -1259,13 +1244,9 @@ func (sb *statisticsBuilder) buildInvertedFilter(
 
 	// Calculate selectivity and row count
 	// -----------------------------------
-	// Inverted filters de-duplicate inverted index tuples by the primary key,
-	// so they produce no more rows than the distinct count of the PK columns.
-	keyStats := sb.colStatFromChild(invFilter.PKCols, invFilter, 0 /* childIdx */)
-	s.RowCount = keyStats.DistinctCount
 	inputStats := invFilter.Input.Relational().Statistics()
+	s.RowCount = inputStats.RowCount
 	s.VirtualCols.UnionWith(inputStats.VirtualCols)
-
 	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, invFilter, s)
 	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, invFilter, s, corr))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(invFilter, relProps.NotNullCols, constrainedCols))
@@ -1964,8 +1945,8 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// join ends up having a higher row count and therefore higher cost than
 	// a competing index join + constrained scan.
 	tab := sb.md.Table(zigzag.LeftTable)
-	leftIndexInverted := tab.Index(zigzag.LeftIndex).Type() == idxtype.INVERTED
-	rightIndexInverted := tab.Index(zigzag.RightIndex).Type() == idxtype.INVERTED
+	leftIndexInverted := tab.Index(zigzag.LeftIndex).IsInverted()
+	rightIndexInverted := tab.Index(zigzag.RightIndex).IsInverted()
 	if leftIndexInverted {
 		unapplied.unknown += len(zigzag.LeftFixedCols) * 2
 	}
@@ -2864,100 +2845,6 @@ func (sb *statisticsBuilder) colStatLock(colSet opt.ColSet, lock *LockExpr) *pro
 	return colStat
 }
 
-// +--------------+
-// | VectorSearch |
-// +--------------+
-
-func (sb *statisticsBuilder) buildVectorSearch(
-	search *VectorSearchExpr, relProps *props.Relational,
-) {
-	s := relProps.Statistics()
-	if zeroCardinality := s.Init(relProps, sb.minRowCount); zeroCardinality {
-		// Short cut if cardinality is 0.
-		return
-	}
-	inputStats := sb.makeTableStatistics(search.Table)
-	s.RowCount = inputStats.RowCount
-	s.VirtualCols.UnionWith(inputStats.VirtualCols)
-
-	// Expect the number of candidates to be at most 2 times the number of
-	// neighbors requested.
-	// TODO(drewk, mw5h): determine if we need to adjust this multiplier or do
-	// something more sophisticated. Maybe we should also expect that at most some
-	// fraction of the table is returned as candidates?
-	const candidateMultiplier = 2
-	expectedCandidates := float64(candidateMultiplier * search.TargetNeighborCount)
-	if s.RowCount > expectedCandidates {
-		s.RowCount = expectedCandidates
-	}
-
-	// TODO(drewk, mw5h): consider adding stats for the PrefixConstraint.
-	sb.finalizeFromCardinality(relProps)
-}
-
-func (sb *statisticsBuilder) colStatVectorSearch(
-	colSet opt.ColSet, search *VectorSearchExpr,
-) *props.ColumnStatistic {
-	relProps := search.Relational()
-	s := relProps.Statistics()
-
-	inputColStat := sb.colStatTable(search.Table, colSet)
-	colStat := sb.copyColStat(colSet, s, inputColStat)
-
-	if sb.shouldUseHistogram(relProps) {
-		colStat.Histogram = inputColStat.Histogram
-	}
-
-	if s.Selectivity != props.OneSelectivity {
-		tableStats := sb.makeTableStatistics(search.Table)
-		colStat.ApplySelectivity(s.Selectivity, tableStats.RowCount)
-	}
-
-	if colSet.Intersects(relProps.NotNullCols) {
-		colStat.NullCount = 0
-	}
-
-	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
-	return colStat
-}
-
-// +-----------------------+
-// | VectorMutationSearch |
-// +-----------------------+
-
-func (sb *statisticsBuilder) buildVectorMutationSearch(
-	search *VectorMutationSearchExpr, relProps *props.Relational,
-) {
-	s := relProps.Statistics()
-	if zeroCardinality := s.Init(relProps, sb.minRowCount); zeroCardinality {
-		// Short cut if cardinality is 0.
-		return
-	}
-	s.Available = sb.availabilityFromInput(search)
-
-	inputStats := search.Input.Relational().Statistics()
-
-	// VectorMutationSearch operators do not change the cardinality of the input.
-	s.RowCount = inputStats.RowCount
-	s.VirtualCols.UnionWith(inputStats.VirtualCols)
-	sb.finalizeFromCardinality(relProps)
-}
-
-func (sb *statisticsBuilder) colStatVectorMutationSearch(
-	colSet opt.ColSet, search *VectorMutationSearchExpr,
-) *props.ColumnStatistic {
-	s := search.Relational().Statistics()
-
-	inColStat := sb.colStatFromChild(colSet, search, 0 /* childIdx */)
-
-	// Construct colstat using the corresponding input stats.
-	colStat, _ := s.ColStats.Add(colSet)
-	colStat.DistinctCount = inColStat.DistinctCount
-	colStat.NullCount = inColStat.NullCount
-	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
-	return colStat
-}
-
 // +---------+
 // | Barrier |
 // +---------+
@@ -3231,7 +3118,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 
 		// We need to determine the row count of the join before the
 		// ON conditions are applied.
-		withoutOn := sb.mem.MemoizeLookupJoin(t.Input, nil /* on */, lookupJoinPrivate)
+		withoutOn := e.Memo().MemoizeLookupJoin(t.Input, nil /* on */, lookupJoinPrivate)
 		return withoutOn.Relational().Statistics().RowCount
 
 	case *InvertedJoinExpr:
@@ -3255,7 +3142,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 
 		// We need to determine the row count of the join before the
 		// ON conditions are applied.
-		withoutOn := sb.mem.MemoizeInvertedJoin(t.Input, nil /* on */, invertedJoinPrivate)
+		withoutOn := e.Memo().MemoizeInvertedJoin(t.Input, nil /* on */, invertedJoinPrivate)
 		return withoutOn.Relational().Statistics().RowCount
 
 	case *MergeJoinExpr:
@@ -3279,7 +3166,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 
 		// We need to determine the row count of the join before the
 		// ON conditions are applied.
-		withoutOn := sb.mem.MemoizeMergeJoin(t.Left, t.Right, nil /* on */, mergeJoinPrivate)
+		withoutOn := e.Memo().MemoizeMergeJoin(t.Left, t.Right, nil /* on */, mergeJoinPrivate)
 		return withoutOn.Relational().Statistics().RowCount
 
 	default:
@@ -3298,13 +3185,13 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 		// The number of rows processed for semi and anti joins is closer to the
 		// number of output rows for an equivalent inner join.
 		case *SemiJoinExpr:
-			e = sb.mem.MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
+			e = e.Memo().MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
 		case *SemiJoinApplyExpr:
-			e = sb.mem.MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
+			e = e.Memo().MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
 		case *AntiJoinExpr:
-			e = sb.mem.MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
+			e = e.Memo().MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
 		case *AntiJoinApplyExpr:
-			e = sb.mem.MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
+			e = e.Memo().MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
 
 		default:
 			if len(on) == len(*filters) {
@@ -3314,17 +3201,17 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 
 			switch t := e.(type) {
 			case *InnerJoinExpr:
-				e = sb.mem.MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
+				e = e.Memo().MemoizeInnerJoin(t.Left, t.Right, on, &t.JoinPrivate)
 			case *InnerJoinApplyExpr:
-				e = sb.mem.MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
+				e = e.Memo().MemoizeInnerJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
 			case *LeftJoinExpr:
-				e = sb.mem.MemoizeLeftJoin(t.Left, t.Right, on, &t.JoinPrivate)
+				e = e.Memo().MemoizeLeftJoin(t.Left, t.Right, on, &t.JoinPrivate)
 			case *LeftJoinApplyExpr:
-				e = sb.mem.MemoizeLeftJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
+				e = e.Memo().MemoizeLeftJoinApply(t.Left, t.Right, on, &t.JoinPrivate)
 			case *RightJoinExpr:
-				e = sb.mem.MemoizeRightJoin(t.Left, t.Right, on, &t.JoinPrivate)
+				e = e.Memo().MemoizeRightJoin(t.Left, t.Right, on, &t.JoinPrivate)
 			case *FullJoinExpr:
-				e = sb.mem.MemoizeFullJoin(t.Left, t.Right, on, &t.JoinPrivate)
+				e = e.Memo().MemoizeFullJoin(t.Left, t.Right, on, &t.JoinPrivate)
 			default:
 				panic(errors.AssertionFailedf("join type %v not handled", redact.Safe(e.Op())))
 			}
@@ -3500,10 +3387,10 @@ func (sb *statisticsBuilder) applyFiltersItem(
 	if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
 		!relProps.Statistics().VirtualCols.Empty() {
 		cond := sb.factorOutVirtualCols(
-			filter.Condition, &filter.scalar.Shared, relProps.Statistics().VirtualCols, sb.mem,
+			filter.Condition, &filter.scalar.Shared, relProps.Statistics().VirtualCols, e.Memo(),
 		).(opt.ScalarExpr)
 		if cond != filter.Condition {
-			newFilter := constructFiltersItem(cond, sb.mem)
+			newFilter := constructFiltersItem(cond, e.Memo())
 			filter = &newFilter
 		}
 	}
@@ -4685,11 +4572,11 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 			// is able to build column equivalencies.
 			switch disjuncts[i].(type) {
 			case *EqExpr, *AndExpr:
-				if andFilters, ok = addEqExprConjuncts(disjuncts[i], andFilters, sb.mem); !ok {
+				if andFilters, ok = addEqExprConjuncts(disjuncts[i], andFilters, e.Memo()); !ok {
 					unapplied.unknown++
 					continue
 				}
-				sb.mem.logPropsBuilder.addFiltersToFuncDep(andFilters, &filtersFD)
+				e.Memo().logPropsBuilder.addFiltersToFuncDep(andFilters, &filtersFD)
 			default:
 				unapplied.unknown++
 				ok = false
@@ -5079,11 +4966,9 @@ func (sb *statisticsBuilder) numConjunctsInConstraint(
 
 // RequestColStat causes a column statistic to be calculated on the relational
 // expression. This is used for testing.
-func RequestColStat(
-	ctx context.Context, evalCtx *eval.Context, mem *Memo, e RelExpr, cols opt.ColSet,
-) {
+func RequestColStat(ctx context.Context, evalCtx *eval.Context, e RelExpr, cols opt.ColSet) {
 	var sb statisticsBuilder
-	sb.init(ctx, evalCtx, mem)
+	sb.init(ctx, evalCtx, e.Memo().Metadata())
 	sb.colStat(cols, e)
 }
 

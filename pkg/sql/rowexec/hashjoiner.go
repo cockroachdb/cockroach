@@ -60,8 +60,7 @@ type hashJoiner struct {
 
 	runningState hashJoinerState
 
-	unlimitedMemMonitor *mon.BytesMonitor
-	diskMonitor         *mon.BytesMonitor
+	diskMonitor *mon.BytesMonitor
 
 	leftSource, rightSource execinfra.RowSource
 
@@ -147,12 +146,10 @@ func newHashJoiner(
 
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The hashJoiner will overflow to disk if this limit is not enough.
-	mn := mon.MakeName("hashjoiner")
-	h.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, mn.Limited())
-	h.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, mn.Unlimited())
-	h.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, mn.Disk())
+	h.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, "hashjoiner-limited")
+	h.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "hashjoiner-disk")
 	h.hashTable = rowcontainer.NewHashDiskBackedRowContainer(
-		h.FlowCtx.EvalCtx, h.MemMonitor, h.unlimitedMemMonitor, h.diskMonitor, h.FlowCtx.Cfg.TempStorage,
+		h.FlowCtx.EvalCtx, h.MemMonitor, h.diskMonitor, h.FlowCtx.Cfg.TempStorage,
 	)
 
 	// If the trace is recording, instrument the hashJoiner to collect stats.
@@ -462,9 +459,6 @@ func (h *hashJoiner) close() {
 			h.emittingRightUnmatchedState.iter.Close()
 		}
 		h.MemMonitor.Stop(h.Ctx())
-		if h.unlimitedMemMonitor != nil {
-			h.unlimitedMemMonitor.Stop(h.Ctx())
-		}
 		if h.diskMonitor != nil {
 			h.diskMonitor.Stop(h.Ctx())
 		}

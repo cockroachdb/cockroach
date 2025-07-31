@@ -11,25 +11,20 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
 
 // testPredecessorMapping is a test-only artificial mapping from
 // release series to an arbitrary release in the previous series.
-//
-// TODO(radu): we use this mapping starting with the current version, so we need
-// to keep updating it. Ideally, all unit tests would use a fixed "current"
-// version so this doesn't need to change.
 var testPredecessorMapping = map[string]*clusterupgrade.Version{
 	"19.2": clusterupgrade.MustParseVersion("v19.1.8"),
 	"21.1": clusterupgrade.MustParseVersion("v19.2.16"),
@@ -41,7 +36,6 @@ var testPredecessorMapping = map[string]*clusterupgrade.Version{
 	"24.1": clusterupgrade.MustParseVersion("v23.2.4"),
 	"24.2": clusterupgrade.MustParseVersion("v24.1.1"),
 	"24.3": clusterupgrade.MustParseVersion("v24.2.2"),
-	"25.2": clusterupgrade.MustParseVersion("v24.3.0"),
 }
 
 //go:embed testdata/test_releases.yaml
@@ -399,28 +393,6 @@ func Test_randomPredecessor(t *testing.T) {
 // "current version". Returns a function that resets that variable.
 func withTestBuildVersion(v string) func() {
 	testBuildVersion := version.MustParse(v)
-	clusterupgrade.TestBuildVersion = &testBuildVersion
-	return func() { clusterupgrade.TestBuildVersion = &buildVersion }
-}
-
-func TestSupportsSkipUpgradeTo(t *testing.T) {
-	expect := func(verStr string, expected bool) {
-		t.Helper()
-		v := clusterupgrade.MustParseVersion(verStr)
-		r := clusterversion.Latest.ReleaseSeries()
-		currentMajor := version.MajorVersion{Year: int(r.Major), Ordinal: int(r.Minor)}
-		if currentMajor.Equals(v.Version.Major()) {
-			// We have to special case the current series, to allow for bumping the
-			// min supported version separately from the current version.
-			expected = len(clusterversion.SupportedPreviousReleases()) > 1
-		}
-		require.Equal(t, expected, supportsSkipUpgradeTo(v))
-	}
-	for _, v := range []string{"v24.3.0", "v24.3.0-beta.1", "v25.2.1", "v25.2.0-rc.1"} {
-		expect(v, true)
-	}
-
-	for _, v := range []string{"v25.1.0", "v25.1.0-beta.1", "v25.3.1", "v25.3.0-rc.1"} {
-		expect(v, false)
-	}
+	clusterupgrade.TestBuildVersion = testBuildVersion
+	return func() { clusterupgrade.TestBuildVersion = buildVersion }
 }

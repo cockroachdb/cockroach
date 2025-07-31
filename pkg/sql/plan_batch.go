@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/errors"
 )
 
 // batchedPlanNode is an interface that complements planNode to
@@ -68,9 +67,7 @@ type batchedPlanNode interface {
 }
 
 var _ batchedPlanNode = &deleteNode{}
-var _ batchedPlanNode = &deleteSwapNode{}
 var _ batchedPlanNode = &updateNode{}
-var _ batchedPlanNode = &updateSwapNode{}
 
 // serializeNode serializes the results of a batchedPlanNode into a
 // plain planNode interface. In other words, it wraps around
@@ -124,22 +121,6 @@ func (s *serializeNode) Next(params runParams) (bool, error) {
 
 func (s *serializeNode) Values() tree.Datums       { return s.source.BatchedValues(s.rowIdx) }
 func (s *serializeNode) Close(ctx context.Context) { s.source.Close(ctx) }
-
-func (s *serializeNode) InputCount() int {
-	return 1
-}
-
-func (s *serializeNode) Input(i int) (planNode, error) {
-	if i == 0 {
-		return s.source, nil
-	}
-	return nil, errors.AssertionFailedf("input index %d is out of range", i)
-}
-
-func (r *serializeNode) SetInput(i int, p planNode) error {
-	// The source cannot be set.
-	return nil
-}
 
 // FastPathResults implements the planNodeFastPath interface.
 func (s *serializeNode) FastPathResults() (int, bool) {
@@ -196,22 +177,6 @@ func (r *rowCountNode) startExec(params runParams) error {
 func (r *rowCountNode) Next(params runParams) (bool, error) { return false, nil }
 func (r *rowCountNode) Values() tree.Datums                 { return nil }
 func (r *rowCountNode) Close(ctx context.Context)           { r.source.Close(ctx) }
-
-func (r *rowCountNode) InputCount() int {
-	return 1
-}
-
-func (r *rowCountNode) Input(i int) (planNode, error) {
-	if i == 0 {
-		return r.source, nil
-	}
-	return nil, errors.AssertionFailedf("input index %d is out of range", i)
-}
-
-func (r *rowCountNode) SetInput(i int, p planNode) error {
-	// The source cannot be set.
-	return nil
-}
 
 // FastPathResults implements the planNodeFastPath interface.
 func (r *rowCountNode) FastPathResults() (int, bool) { return r.rowCount, true }

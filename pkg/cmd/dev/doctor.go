@@ -30,7 +30,7 @@ const (
 	// doctorStatusVersion is the current "version" of the status checks
 	// performed by `dev doctor``. Increasing it will force doctor to be re-run
 	// before other dev commands can be run.
-	doctorStatusVersion = 11
+	doctorStatusVersion = 10
 
 	noCacheFlag     = "no-cache"
 	interactiveFlag = "interactive"
@@ -143,13 +143,17 @@ var allDoctorChecks = []doctorCheck{
 			if runtime.GOOS != "darwin" {
 				return ""
 			}
-			stdout, err := d.exec.CommandContextSilent(ctx, "/usr/bin/xcode-select", "-p")
+			stdout, err := d.exec.CommandContextSilent(ctx, "/usr/bin/xcodebuild", "-version")
 			if err != nil {
-				log.Println("Failed to run `/usr/bin/xcode-select -p`.")
+				log.Println("Failed to run `/usr/bin/xcodebuild -version`.")
 				stdoutStr := strings.TrimSpace(string(stdout))
 				printStdoutAndErr(stdoutStr, err)
-				return `You must have the XCode command-line tools installed (if not a full installation of XCode) to build with Bazel.
-Please run ` + "`xcode-select --install`."
+				return `You must have a full installation of XCode to build with Bazel.
+A command-line tools instance does not suffice.
+Please perform the following steps:
+  1. Install XCode from the App Store.
+  2. Launch Xcode.app at least once to perform one-time initialization of developer tools.
+  3. Run ` + "`xcode-select -switch /Applications/Xcode.app/`."
 			}
 			return ""
 		},

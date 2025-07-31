@@ -10,14 +10,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/trace"
 )
 
-// spanInner contains all the span types we are recording to.
-// Note that one of crdb, otelSpan or netTr should be non-nil.
 type spanInner struct {
 	tracer *Tracer // never nil
 
@@ -39,11 +38,21 @@ type spanInner struct {
 }
 
 func (s *spanInner) TraceID() tracingpb.TraceID {
+	if s.isNoop() {
+		return 0
+	}
 	return s.crdb.TraceID()
 }
 
 func (s *spanInner) SpanID() tracingpb.SpanID {
+	if s.isNoop() {
+		return 0
+	}
 	return s.crdb.SpanID()
+}
+
+func (s *spanInner) isNoop() bool {
+	return s.crdb == nil && s.netTr == nil && s.otelSpan == nil
 }
 
 func (s *spanInner) isSterile() bool {
@@ -55,6 +64,9 @@ func (s *spanInner) RecordingType() tracingpb.RecordingType {
 }
 
 func (s *spanInner) SetRecordingType(to tracingpb.RecordingType) {
+	if s.isNoop() {
+		panic(errors.AssertionFailedf("SetRecordingType called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
+	}
 	s.crdb.SetRecordingType(to)
 }
 
@@ -62,13 +74,10 @@ func (s *spanInner) SetRecordingType(to tracingpb.RecordingType) {
 //
 // See also GetRecording(), which returns it as a tracingpb.Recording.
 func (s *spanInner) GetTraceRecording(recType tracingpb.RecordingType, finishing bool) Trace {
+	if s.isNoop() {
+		return Trace{}
+	}
 	return s.crdb.GetRecording(recType, finishing)
-}
-
-// GetFullTraceRecording returns the span's full recording, including detached
-// children, as a Trace. See GetTraceRecording and WithDetachedRecording.
-func (s *spanInner) GetFullTraceRecording(recType tracingpb.RecordingType) Trace {
-	return s.crdb.GetFullRecording(recType)
 }
 
 // GetRecording returns the span's recording.
@@ -121,7 +130,7 @@ func treeifyRecordingInner(
 }
 
 func (s *spanInner) Finish() {
-	if s == nil {
+	if s == nil || s.isNoop() {
 		return
 	}
 
@@ -191,10 +200,16 @@ func (s *spanInner) Meta() SpanMeta {
 // OperationName returns the span's name. The name was specified at span
 // creation time.
 func (s *spanInner) OperationName() string {
+	if s.isNoop() {
+		return "noop"
+	}
 	return s.crdb.operation
 }
 
 func (s *spanInner) SetTag(key string, value attribute.Value) *spanInner {
+	if s.isNoop() {
+		return s
+	}
 	if s.otelSpan != nil {
 		s.otelSpan.SetAttributes(attribute.KeyValue{
 			Key:   attribute.Key(key),
@@ -211,6 +226,9 @@ func (s *spanInner) SetTag(key string, value attribute.Value) *spanInner {
 }
 
 func (s *spanInner) SetLazyTag(key string, value interface{}) *spanInner {
+	if s.isNoop() {
+		return s
+	}
 	s.crdb.mu.Lock()
 	defer s.crdb.mu.Unlock()
 	s.crdb.setLazyTagLocked(key, value)
@@ -218,6 +236,9 @@ func (s *spanInner) SetLazyTag(key string, value interface{}) *spanInner {
 }
 
 func (s *spanInner) setLazyTagLocked(key string, value interface{}) *spanInner {
+	if s.isNoop() {
+		return s
+	}
 	s.crdb.setLazyTagLocked(key, value)
 	return s
 }
@@ -225,12 +246,18 @@ func (s *spanInner) setLazyTagLocked(key string, value interface{}) *spanInner {
 // GetLazyTag returns the value of the tag with the given key. If that tag doesn't
 // exist, the bool retval is false.
 func (s *spanInner) GetLazyTag(key string) (interface{}, bool) {
+	if s.isNoop() {
+		return attribute.Value{}, false
+	}
 	s.crdb.mu.Lock()
 	defer s.crdb.mu.Unlock()
 	return s.crdb.getLazyTagLocked(key)
 }
 
 func (s *spanInner) RecordStructured(item Structured) {
+	if s.isNoop() {
+		return
+	}
 	s.crdb.recordStructured(item)
 	if s.hasVerboseSink() {
 		// Do not call .String() on the item, so that non-redactable bits

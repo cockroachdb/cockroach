@@ -43,6 +43,7 @@ func (t testFs) Open(name string) (fs.File, error) {
 func TestUIHandlerDevelopment(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	defer func() func() {
 		hold := Assets
 		Assets = &testFs{}
@@ -116,12 +117,6 @@ func TestUIHandlerDevelopment(t *testing.T) {
 			resp2, err := server.Client().Do(req2)
 			require.NoError(t, err)
 			require.Equal(t, 200, resp2.StatusCode)
-
-			if tc.devHeader || tc.haveUI {
-				require.Equal(t, resp.Header.Get("Content-Security-Policy"), cspHeader)
-			} else {
-				require.Empty(t, resp.Header.Get("Content-Security-Policy"))
-			}
 		})
 	}
 

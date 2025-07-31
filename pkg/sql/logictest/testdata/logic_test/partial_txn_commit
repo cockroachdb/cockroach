@@ -1,20 +1,8 @@
 # This test exercises the presence of an explanatory hint when a transaction
 # ends up partially committed and partially aborted.
 
-# Tables can't be created with schema_locked if we need
-# to manipulate them with the legacy schema changer, since
-# only non-backfilling changes in that mode will work correctly.
 statement ok
-SET create_table_with_schema_locked=false
-
-statement ok
-SET autocommit_before_ddl = false
-
-statement disable-cf-mutator ok
-CREATE TABLE t (x INT);
-
-statement ok
-INSERT INTO t (x) VALUES (0);
+CREATE TABLE t (x INT); INSERT INTO t (x) VALUES (0);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -46,7 +34,4 @@ t  CREATE TABLE public.t (
      x INT8 NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-   );
-
-statement ok
-RESET autocommit_before_ddl
+   )

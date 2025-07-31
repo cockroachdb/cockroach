@@ -30,7 +30,7 @@ func (d *delegator) delegateShowSchedules(n *tree.ShowSchedules) (tree.Statement
 		fmt.Sprintf(`(
 SELECT count(*) FROM system.jobs
 WHERE status='%s' AND created_by_type='%s' AND created_by_id=schedule_id
-) AS jobsRunning`, jobs.StateRunning, jobs.CreatedByScheduledJobs),
+) AS jobsRunning`, jobs.StatusRunning, jobs.CreatedByScheduledJobs),
 		"owner",
 		"created",
 		"crdb_internal.pb_to_json('cockroach.jobs.jobspb.ScheduleDetails', schedule_details, true)->>'wait' as on_previous_running",

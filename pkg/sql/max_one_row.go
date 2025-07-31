@@ -22,7 +22,7 @@ import (
 // the subquery can return at most 1 row - that expectation must be enforced at
 // runtime.
 type max1RowNode struct {
-	singleInputPlanNode
+	plan planNode
 
 	nexted    bool
 	values    tree.Datums
@@ -39,7 +39,7 @@ func (m *max1RowNode) Next(params runParams) (bool, error) {
 	}
 	m.nexted = true
 
-	ok, err := m.input.Next(params)
+	ok, err := m.plan.Next(params)
 	if !ok || err != nil {
 		return ok, err
 	}
@@ -47,10 +47,10 @@ func (m *max1RowNode) Next(params runParams) (bool, error) {
 		// We need to eagerly check our parent plan for a new row, to ensure that
 		// we return an error as per the contract of this node if the parent plan
 		// isn't exhausted after a single row.
-		m.values = make(tree.Datums, len(m.input.Values()))
-		copy(m.values, m.input.Values())
+		m.values = make(tree.Datums, len(m.plan.Values()))
+		copy(m.values, m.plan.Values())
 		var secondOk bool
-		secondOk, err = m.input.Next(params)
+		secondOk, err = m.plan.Next(params)
 		if secondOk {
 			// TODO(knz): m.errorText could be passed via redact.Safe if there
 			// was a guarantee that it does not contain PII. Or better yet,
@@ -67,5 +67,5 @@ func (m *max1RowNode) Values() tree.Datums {
 }
 
 func (m *max1RowNode) Close(ctx context.Context) {
-	m.input.Close(ctx)
+	m.plan.Close(ctx)
 }

@@ -85,7 +85,7 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 
 	c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload init kv --splits=1000 {pgurl:1}")
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+	m := c.NewMonitor(ctx, c.CRDBNodes())
 	cancels = append(cancels, m.GoWithCancel(func(ctx context.Context) error {
 		t.L().Printf("starting load generator\n")
 		// NB: kv50 with 4kb block size at 5k rate will incur approx. 500mb/s write
@@ -100,8 +100,8 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 	}))
 
 	t.Status(fmt.Sprintf("waiting %s for baseline workload throughput", initialDuration))
-	wait(c.NewDeprecatedMonitor(ctx, c.CRDBNodes()), initialDuration)
-	qpsInitial := roachtestutil.MeasureQPS(ctx, t, c, 10*time.Second, c.Node(1))
+	wait(c.NewMonitor(ctx, c.CRDBNodes()), initialDuration)
+	qpsInitial := measureQPS(ctx, t, c, 10*time.Second, c.Node(1))
 	t.Status(fmt.Sprintf("initial (single node) qps: %.0f", qpsInitial))
 
 	if cfg.writeCapBytes >= 0 {
@@ -126,8 +126,8 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 		}))
 	}
 
-	wait(c.NewDeprecatedMonitor(ctx, c.CRDBNodes()), limitDuration)
-	qpsFinal := roachtestutil.MeasureQPS(ctx, t, c, 10*time.Second, c.Node(1))
+	wait(c.NewMonitor(ctx, c.CRDBNodes()), limitDuration)
+	qpsFinal := measureQPS(ctx, t, c, 10*time.Second, c.Node(1))
 	qpsRelative := qpsFinal / qpsInitial
 	t.Status(fmt.Sprintf("initial qps=%f final qps=%f (%f%%)", qpsInitial, qpsFinal, 100*qpsRelative))
 	for _, cancel := range cancels {

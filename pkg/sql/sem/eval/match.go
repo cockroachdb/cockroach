@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/text/unicode/norm"
 )
 
 // MatchLikeEscape matches 'unescaped' with 'pattern' using custom escape character 'escape' which
@@ -82,17 +81,7 @@ func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
 	}
-	var s, pattern string
-	var err error
-	s, err = matchStringFromDatum(left)
-	if err != nil {
-		return tree.DBoolFalse, err
-	}
-	pattern, err = matchStringFromDatum(right)
-	if err != nil {
-		return tree.DBoolFalse, err
-	}
-
+	s, pattern := string(tree.MustBeDString(left)), string(tree.MustBeDString(right))
 	if len(s) == 0 {
 		// An empty string only matches with an empty pattern or a pattern
 		// consisting only of '%'. To match PostgreSQL's behavior, we have a
@@ -122,21 +111,6 @@ func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree
 	}
 	matches, err := like(s)
 	return tree.MakeDBool(tree.DBool(matches)), err
-}
-
-func matchStringFromDatum(datum tree.Datum) (string, error) {
-	datum = tree.UnwrapDOidWrapper(datum)
-	switch d := datum.(type) {
-	case *tree.DCollatedString:
-		if !d.Deterministic {
-			return "", pgerror.New(pgcode.FeatureNotSupported, "nondeterministic collations are not supported for LIKE")
-		}
-		// Collated string comparisons must be normalized via NFD (Normalization Form D).
-		// See https://www.unicode.org/reports/tr10/#Main_Algorithm for more details.
-		return norm.NFD.String(d.Contents), nil
-	default:
-		return string(tree.MustBeDString(d)), nil
-	}
 }
 
 func matchRegexpWithKey(ctx *Context, str tree.Datum, key tree.RegexpCacheKey) (tree.Datum, error) {
@@ -340,8 +314,6 @@ type likeKey struct {
 	caseInsensitive bool
 	escape          rune
 }
-
-var _ tree.RegexpCacheKey = likeKey{}
 
 // LikeEscape converts a like pattern to a regexp pattern.
 func LikeEscape(pattern string) (string, error) {
@@ -798,8 +770,7 @@ func (k likeKey) patternNoAnchor() (string, error) {
 	return pattern, nil
 }
 
-// Pattern implements the tree.RegexpCacheKey interface.
-//
+// Pattern implements the RegexpCacheKey interface.
 // The strategy for handling custom escape character
 // is to convert all unescaped escape character into '\'.
 // k.escape can either be empty or a single character.
@@ -816,9 +787,7 @@ type similarToKey struct {
 	escape rune
 }
 
-var _ tree.RegexpCacheKey = similarToKey{}
-
-// Pattern implements the tree.RegexpCacheKey interface.
+// Pattern implements the RegexpCacheKey interface.
 func (k similarToKey) Pattern() (string, error) {
 	pattern := similarEscapeCustomChar(k.s, k.escape, k.escape != 0)
 	return anchorPattern(pattern, false), nil
@@ -865,9 +834,7 @@ type regexpKey struct {
 	caseInsensitive bool
 }
 
-var _ tree.RegexpCacheKey = regexpKey{}
-
-// Pattern implements the tree.RegexpCacheKey interface.
+// Pattern implements the RegexpCacheKey interface.
 func (k regexpKey) Pattern() (string, error) {
 	if k.caseInsensitive {
 		return caseInsensitive(k.s), nil

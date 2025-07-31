@@ -5,7 +5,11 @@
 
 package rel
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/google/btree"
+)
 
 // valuesItem is used to construct query bounds from the tree.
 type valuesItem struct {
@@ -15,8 +19,8 @@ type valuesItem struct {
 	idx *indexSpec
 }
 
-func (v *valuesItem) less(than *valuesItem) bool {
-	return v.idx.compareItems(v, than) < 0
+func (v *valuesItem) Less(than btree.Item) bool {
+	return v.idx.compareItems(v, than.(*valuesItem)) < 0
 }
 
 func (index *indexSpec) compareItems(a, b *valuesItem) (ret int) {

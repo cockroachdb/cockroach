@@ -2,15 +2,10 @@ echo
 ----
 ----
 -- Flow token metrics, before issuing the 1MiB replicated write.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB  
   kvflowcontrol.tokens.eval.elastic.deducted                        | 0 B     
@@ -59,34 +54,24 @@ ORDER BY name ASC;
 
 
 -- Another view of the stream count, using /inspectz-backed vtables.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  count(*) AS streams
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-GROUP BY
-  range_id
-ORDER BY
-  range_id;
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  a        | 3             
+  70       | 3             
 
 
 -- Flow token metrics from n1 after issuing the 1MiB replicated write,
 -- and it being admitted on n1, n2 and n3. We should see 3*1MiB = 3MiB of
 -- {regular,elastic} tokens deducted and returned, and {8*3=24MiB,16*3=48MiB} of
 -- {regular,elastic} tokens available. Everything should be accounted for.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  

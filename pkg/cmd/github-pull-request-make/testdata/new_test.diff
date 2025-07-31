@@ -1,12 +1,12 @@
 index 6c20afaef23..879494bdadd 100644
---- a/pkg/crosscluster/streamclient/client_test.go
-+++ b/pkg/crosscluster/streamclient/client_test.go
+--- a/pkg/ccl/crosscluster/streamclient/client_test.go
++++ b/pkg/ccl/crosscluster/streamclient/client_test.go
 @@ -15,13 +15,19 @@ import (
         "testing"
         "time"
 
 +       "github.com/cockroachdb/cockroach/pkg/base"
-        "github.com/cockroachdb/cockroach/pkg/crosscluster"
+        "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
         "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
         "github.com/cockroachdb/cockroach/pkg/repstream/streampb"
         "github.com/cockroachdb/cockroach/pkg/roachpb"

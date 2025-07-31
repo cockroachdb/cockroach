@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -34,7 +33,6 @@ import (
 // DropRoleNode deletes entries from the system.users table.
 // This is called from DROP USER and DROP ROLE.
 type DropRoleNode struct {
-	zeroInputPlanNode
 	ifExists  bool
 	isRole    bool
 	roleNames []username.SQLUsername
@@ -201,20 +199,6 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				tn := tree.MakeTableNameWithSchema(tree.Name(parentName), tree.Name(schemaName), tree.Name(tableDescriptor.GetName()))
 				privilegeObjectFormatter.FormatNode(&tn)
 				break
-			}
-		}
-		// Check that any of the roles we are dropping aren't referenced in any of
-		// the row-level security policies defined on this table.
-		for _, p := range tableDescriptor.GetPolicies() {
-			for _, rn := range p.RoleNames {
-				roleName := username.MakeSQLUsernameFromPreNormalizedString(rn)
-				if _, found := userNames[roleName]; found {
-					return errors.WithDetailf(
-						pgerror.Newf(pgcode.DependentObjectsStillExist,
-							"role %q cannot be dropped because some objects depend on it",
-							roleName),
-						"target of policy %q on table %q", p.Name, tableDescriptor.GetName())
-				}
 			}
 		}
 	}
@@ -463,8 +447,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			params.p.txn,
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(
-				`DELETE FROM system.public.%s WHERE username=$1`,
-				catconstants.RoleOptionsTableName,
+				`DELETE FROM %s WHERE username=$1`,
+				sessioninit.RoleOptionsTableName,
 			),
 			normalizedUsername,
 		)
@@ -478,8 +462,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			params.p.txn,
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(
-				`DELETE FROM system.public.%s WHERE role_name = $1`,
-				catconstants.DatabaseRoleSettingsTableName,
+				`DELETE FROM %s WHERE role_name = $1`,
+				sessioninit.DatabaseRoleSettingsTableName,
 			),
 			normalizedUsername,
 		); err != nil {

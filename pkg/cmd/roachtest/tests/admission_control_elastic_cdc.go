@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -32,6 +31,7 @@ func registerElasticControlForCDC(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Weekly),
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(8), spec.WorkloadNode()),
+		RequiresLicense:  true,
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {
@@ -63,11 +63,11 @@ func registerElasticControlForCDC(r registry.Registry) {
 				t.Status(fmt.Sprintf("initializing + running tpcc for %s (<%s)", workloadDuration, 10*time.Minute))
 			}
 
-			padDuration, err := time.ParseDuration(roachtestutil.IfLocal(c, "5s", "5m"))
+			padDuration, err := time.ParseDuration(ifLocal(c, "5s", "5m"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			stopFeedsDuration, err := time.ParseDuration(roachtestutil.IfLocal(c, "5s", "1m"))
+			stopFeedsDuration, err := time.ParseDuration(ifLocal(c, "5s", "1m"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -87,7 +87,7 @@ func registerElasticControlForCDC(r registry.Registry) {
 
 					t.Status(fmt.Sprintf("configuring cluster (<%s)", 30*time.Second))
 					{
-						roachtestutil.SetAdmissionControl(ctx, t, c, true)
+						setAdmissionControl(ctx, t, c, true)
 
 						// Changefeeds depend on rangefeeds being enabled.
 						if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
@@ -105,7 +105,7 @@ func registerElasticControlForCDC(r registry.Registry) {
 					stopFeeds(db) // stop stray feeds (from repeated runs against the same cluster for ex.)
 					defer stopFeeds(db)
 
-					m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+					m := c.NewMonitor(ctx, c.CRDBNodes())
 					m.Go(func(ctx context.Context) error {
 						const iters, changefeeds = 5, 10
 						for i := 0; i < iters; i++ {

@@ -33,12 +33,12 @@ func LogJobCompletion(
 	if jobErr != nil {
 		redactedErr = redact.Sprint(jobErr)
 	}
-	status := jobs.StateSucceeded
+	status := jobs.StatusSucceeded
 	if !success {
 		if jobs.HasErrJobCanceled(jobErr) {
-			status = jobs.StateCanceled
+			status = jobs.StatusCanceled
 		} else {
-			status = jobs.StateFailed
+			status = jobs.StatusFailed
 		}
 	}
 

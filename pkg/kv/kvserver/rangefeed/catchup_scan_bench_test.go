@@ -31,8 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const noBulkDelivery = 0
-
 func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) (numEvents int) {
 	eng, _ := setupData(context.Background(), b, emk, opts.dataOpts)
 	defer eng.Close()
@@ -56,7 +54,7 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) (numE
 			err = iter.CatchUpScan(ctx, func(*kvpb.RangeFeedEvent) error {
 				counter++
 				return nil
-			}, opts.withDiff, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery)
+			}, opts.withDiff, false /* withFiltering */, false /* withOmitRemote */)
 			if err != nil {
 				b.Fatalf("failed catchUp scan: %+v", err)
 			}

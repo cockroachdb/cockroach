@@ -100,7 +100,7 @@ func newTrackerConfig(codec keys.SQLCodec, rc RangeCounter, job *jobs.Job) track
 			if err := job.NoTxn().FractionProgressed(
 				ctx, jobs.FractionUpdater(fractionProgressed),
 			); err != nil {
-				return jobs.SimplifyInvalidStateError(err)
+				return jobs.SimplifyInvalidStatusError(err)
 			}
 			return nil
 		},

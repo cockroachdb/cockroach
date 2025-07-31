@@ -150,18 +150,11 @@ func verboseRaftLoggingEnabled() bool {
 	return log.V(5)
 }
 
-func (r *Replica) maybeLogRaftReadyRaftMuLocked(ctx context.Context, ready raft.Ready) {
-	fn := r.store.TestingKnobs().RaftLogReadyRaftMuLocked
-	switch {
-	case verboseRaftLoggingEnabled():
-	case fn != nil && fn(ctx, r.RangeID, r.ReplicaID(), ready):
-	default:
+func logRaftReady(ctx context.Context, ready raft.Ready) {
+	if !verboseRaftLoggingEnabled() {
 		return
 	}
-	logRaftReady(ctx, ready)
-}
 
-func logRaftReady(ctx context.Context, ready raft.Ready) {
 	var buf bytes.Buffer
 	if ready.SoftState != nil {
 		fmt.Fprintf(&buf, "  SoftState updated: %+v\n", *ready.SoftState)
@@ -173,9 +166,12 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 		fmt.Fprintf(&buf, "  New Entry[%d]: %.200s\n",
 			i, raft.DescribeEntry(e, raftEntryFormatter))
 	}
-	fmt.Fprintf(&buf, "  Committed: %v\n", ready.Committed)
-	if ready.Snapshot != nil {
-		snap := *ready.Snapshot
+	for i, e := range ready.CommittedEntries {
+		fmt.Fprintf(&buf, "  Committed Entry[%d]: %.200s\n",
+			i, raft.DescribeEntry(e, raftEntryFormatter))
+	}
+	if !raft.IsEmptySnap(ready.Snapshot) {
+		snap := ready.Snapshot
 		snap.Data = nil
 		fmt.Fprintf(&buf, "  Snapshot updated: %v\n", snap)
 	}
@@ -183,7 +179,7 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 		fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
 			i, raft.DescribeMessage(m, raftEntryFormatter))
 	}
-	log.Infof(ctx, "raft ready\n%s", buf.String())
+	log.Infof(ctx, "raft ready (must-sync=%t)\n%s", ready.MustSync, buf.String())
 }
 
 func raftEntryFormatter(data []byte) string {

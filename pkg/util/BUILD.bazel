@@ -25,6 +25,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/intsets",
         "//pkg/util/netutil/addr",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",

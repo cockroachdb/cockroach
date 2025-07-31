@@ -27,7 +27,7 @@ import (
 // should quiesce. Unquiescing incurs a raft proposal which has a non-neglible
 // cost, and low-latency clusters may otherwise (un)quiesce very frequently,
 // e.g. on every tick.
-var quiesceAfterTicks = envutil.EnvOrDefaultInt64("COCKROACH_QUIESCE_AFTER_TICKS", 6)
+var quiesceAfterTicks = envutil.EnvOrDefaultInt("COCKROACH_QUIESCE_AFTER_TICKS", 6)
 
 // raftDisableQuiescence disables raft quiescence.
 var raftDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
@@ -39,9 +39,9 @@ func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) 
 		}
 		r.mu.quiescent = true
 		r.mu.laggingFollowersOnQuiesce = lagging
-		r.store.unquiescedOrAwakeReplicas.Lock()
-		delete(r.store.unquiescedOrAwakeReplicas.m, r.RangeID)
-		r.store.unquiescedOrAwakeReplicas.Unlock()
+		r.store.unquiescedReplicas.Lock()
+		delete(r.store.unquiescedReplicas.m, r.RangeID)
+		r.store.unquiescedReplicas.Unlock()
 	} else if log.V(4) {
 		log.Infof(ctx, "r%d already quiesced", r.RangeID)
 	}
@@ -82,9 +82,9 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 	}
 	r.mu.quiescent = false
 	r.mu.laggingFollowersOnQuiesce = nil
-	r.store.unquiescedOrAwakeReplicas.Lock()
-	r.store.unquiescedOrAwakeReplicas.m[r.RangeID] = struct{}{}
-	r.store.unquiescedOrAwakeReplicas.Unlock()
+	r.store.unquiescedReplicas.Lock()
+	r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
+	r.store.unquiescedReplicas.Unlock()
 
 	st := r.raftSparseStatusRLocked()
 	if st.RaftState == raftpb.StateLeader {
@@ -213,7 +213,7 @@ type quiescer interface {
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
 	hasSendTokensRaftMuLockedReplicaMuLocked() bool
-	ticksSinceLastProposalRLocked() int64
+	ticksSinceLastProposalRLocked() int
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
 }
@@ -300,10 +300,19 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 		}
 		return nil, nil, false
 	}
-	// Fast path: if the lease doesn't support quiescence (leader leases and
-	// expiration based leases do not), return early.
-	if !leaseStatus.Lease.SupportsQuiescence() {
-		log.VInfof(ctx, 4, "not quiescing: %s", leaseStatus.Lease.Type())
+	// Fast path: don't quiesce leader leases. A fortified raft leader does not
+	// send raft heartbeats, so quiescence is not needed. All liveness decisions
+	// are based on store liveness communication, which is cheap enough to not
+	// need a notion of quiescence.
+	if leaseStatus.Lease.Type() == roachpb.LeaseLeader {
+		log.VInfof(ctx, 4, "not quiescing: leader lease")
+		return nil, nil, false
+	}
+	// Fast path: don't quiesce expiration-based leases, since they'll likely be
+	// renewed soon. The lease may not be ours, but in that case we wouldn't be
+	// able to quiesce anyway (see leaseholder condition below).
+	if l := leaseStatus.Lease; l.Type() == roachpb.LeaseExpiration {
+		log.VInfof(ctx, 4, "not quiescing: expiration-based lease")
 		return nil, nil, false
 	}
 	if q.hasPendingProposalsRLocked() {

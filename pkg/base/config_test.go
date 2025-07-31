@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,15 +33,14 @@ func TestDefaultRaftConfig(t *testing.T) {
 	nodeActive, nodeRenewal := cfg.NodeLivenessDurations()
 	storeActive, storeRenewal := cfg.StoreLivenessDurations()
 	raftElectionTimeout := cfg.RaftElectionTimeout()
-	raftElectionJitter := cfg.RaftTickInterval * time.Duration(cfg.RaftElectionTimeoutJitterTicks)
 	raftReproposalTimeout := cfg.RaftTickInterval * time.Duration(cfg.RaftReproposalTimeoutTicks)
 	raftHeartbeatInterval := cfg.RaftTickInterval * time.Duration(cfg.RaftHeartbeatIntervalTicks)
+
 	{
 		var s string
 		s += spew.Sdump(cfg)
 		s += fmt.Sprintf("RaftHeartbeatInterval: %s\n", raftHeartbeatInterval)
 		s += fmt.Sprintf("RaftElectionTimeout: %s\n", raftElectionTimeout)
-		s += fmt.Sprintf("RaftElectionJitter: %s\n", raftElectionJitter)
 		s += fmt.Sprintf("RaftReproposalTimeout: %s\n", raftReproposalTimeout)
 		s += fmt.Sprintf("RangeLeaseDurations: active=%s renewal=%s\n", leaseActive, leaseRenewal)
 		s += fmt.Sprintf("RangeLeaseAcquireTimeout: %s\n", cfg.RangeLeaseAcquireTimeout())
@@ -54,8 +52,9 @@ func TestDefaultRaftConfig(t *testing.T) {
 
 	// Generate and assert the derived recovery intervals.
 	const (
-		minRTT = 10 * time.Millisecond
-		maxRTT = 400 * time.Millisecond // max GCP inter-region RTT is ~350ms
+		minRTT                = 10 * time.Millisecond
+		maxRTT                = 400 * time.Millisecond // max GCP inter-region RTT is ~350ms
+		maxElectionMultiplier = 2
 		// TODO(nvanbenschoten): don't hardcode this values, separate from the
 		// hardcoded value in storeliveness/config.go.
 		storeLivenessWithdrawalInterval = 100 * time.Millisecond
@@ -94,9 +93,9 @@ func TestDefaultRaftConfig(t *testing.T) {
 			0,
 		},
 		{
-			"Election timeout (timeout + random election jitter)",
+			fmt.Sprintf("Election timeout (random 1x-%dx timeout)", maxElectionMultiplier),
 			raftElectionTimeout,
-			raftElectionTimeout + raftElectionJitter,
+			maxElectionMultiplier * raftElectionTimeout,
 		},
 		{
 			"Election (3x RTT: prevote, vote, append)",
@@ -165,9 +164,9 @@ func TestDefaultRaftConfig(t *testing.T) {
 			storeLivenessWithdrawalInterval,
 		},
 		{
-			"Raft election timeout jitter (random election jitter)",
+			fmt.Sprintf("Raft election timeout jitter (random 0x-%dx timeout)", maxElectionMultiplier-1),
 			0,
-			raftElectionJitter,
+			(maxElectionMultiplier - 1) * raftElectionTimeout,
 		},
 		{
 			"Election (3x RTT: prevote, vote, append)",
@@ -218,7 +217,7 @@ func TestWALFailoverConfigRoundtrip(t *testing.T) {
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "wal-failover-config"), func(t *testing.T, d *datadriven.TestData) string {
 		var buf bytes.Buffer
 		for _, l := range strings.Split(d.Input, "\n") {
-			var cfg storageconfig.WALFailover
+			var cfg base.WALFailoverConfig
 			if err := cfg.Set(l); err != nil {
 				fmt.Fprintf(&buf, "err: %s\n", err)
 				continue

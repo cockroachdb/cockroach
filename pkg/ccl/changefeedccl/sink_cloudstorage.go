@@ -7,7 +7,6 @@ package changefeedccl
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -19,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/RaduBerinde/btreemap"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
@@ -35,8 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/google/btree"
 	// Placeholder for pgzip and zdstd.
 	_ "github.com/klauspost/compress/zstd"
 	_ "github.com/klauspost/pgzip"
@@ -342,7 +340,7 @@ type cloudStorageSink struct {
 	// These are fields to track information needed to output files based on the naming
 	// convention described above. See comment on cloudStorageSink above for more details.
 	fileID int64
-	files  *btreemap.BTreeMap[cloudStorageSinkKey, *cloudStorageSinkFile]
+	files  *btree.BTree // of *cloudStorageSinkFile
 
 	timestampOracle timestampLowerBoundOracle
 	jobSessionID    string
@@ -438,7 +436,7 @@ func makeCloudStorageSink(
 		sinkID:            sinkID,
 		settings:          settings,
 		targetMaxFileSize: targetMaxFileSize,
-		files:             btreemap.New[cloudStorageSinkKey, *cloudStorageSinkFile](8, keyCmp),
+		files:             btree.New(8),
 		partitionFormat:   defaultPartitionFormat,
 		timestampOracle:   timestampOracle,
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
@@ -486,7 +484,7 @@ func makeCloudStorageSink(
 	}
 
 	switch encodingOpts.Envelope {
-	case changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare, changefeedbase.OptEnvelopeEnriched:
+	case changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
@@ -538,7 +536,8 @@ func (s *cloudStorageSink) getOrCreateFile(
 ) (*cloudStorageSinkFile, error) {
 	name, _ := s.topicNamer.Name(topic)
 	key := cloudStorageSinkKey{name, int64(topic.GetVersion())}
-	if _, f, _ := s.files.Get(key); f != nil {
+	if item := s.files.Get(key); item != nil {
+		f := item.(*cloudStorageSinkFile)
 		if eventMVCC.Less(f.oldestMVCC) {
 			f.oldestMVCC = eventMVCC
 		}
@@ -558,7 +557,7 @@ func (s *cloudStorageSink) getOrCreateFile(
 		}
 		f.codec = codec
 	}
-	s.files.ReplaceOrInsert(f.cloudStorageSinkKey, f)
+	s.files.ReplaceOrInsert(f)
 	return f, nil
 }
 
@@ -569,7 +568,6 @@ func (s *cloudStorageSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
-	headers rowHeaders,
 ) (retErr error) {
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
@@ -592,7 +590,7 @@ func (s *cloudStorageSink) EmitRow(
 		}
 	}()
 
-	s.metrics.recordMessageSize(int64(len(key) + len(value) + headersLen(headers)))
+	s.metrics.recordMessageSize(int64(len(key) + len(value)))
 	file, err := s.getOrCreateFile(topic, mvcc)
 	if err != nil {
 		return err
@@ -667,17 +665,20 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 // on cloudStorageSink)
 func (s *cloudStorageSink) flushTopicVersions(
 	ctx context.Context, topic string, maxVersionToFlush int64,
-) error {
+) (err error) {
 	var toRemoveAlloc [2]int64    // generally avoid allocating
 	toRemove := toRemoveAlloc[:0] // schemaIDs of flushed files
 	gte := cloudStorageSinkKey{topic: topic}
 	lt := cloudStorageSinkKey{topic: topic, schemaID: maxVersionToFlush + 1}
-
-	for _, f := range s.files.Ascend(btreemap.GE(gte), btreemap.LT(lt)) {
-		if err := s.flushFile(ctx, f); err != nil {
-			return err
+	s.files.AscendRange(gte, lt, func(i btree.Item) (wantMore bool) {
+		f := i.(*cloudStorageSinkFile)
+		if err = s.flushFile(ctx, f); err == nil {
+			toRemove = append(toRemove, f.schemaID)
 		}
-		toRemove = append(toRemove, f.schemaID)
+		return err == nil
+	})
+	if err != nil {
+		return err
 	}
 
 	// Allow synchronization with the async flusher to happen.
@@ -690,7 +691,8 @@ func (s *cloudStorageSink) flushTopicVersions(
 	// flushed files may not be removed from s.files. This is ok, since
 	// the error will trigger the sink to be closed, and we will only use
 	// s.files to ensure that the codecs are closed before deallocating it.
-	if err := s.waitAsyncFlush(ctx); err != nil {
+	err = s.waitAsyncFlush(ctx)
+	if err != nil {
 		return err
 	}
 
@@ -699,7 +701,7 @@ func (s *cloudStorageSink) flushTopicVersions(
 	for _, v := range toRemove {
 		s.files.Delete(cloudStorageSinkKey{topic: topic, schemaID: v})
 	}
-	return nil
+	return err
 }
 
 // Flush implements the Sink interface.
@@ -710,10 +712,13 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 
 	s.metrics.recordFlushRequestCallback()()
 
-	for _, f := range s.files.Ascend(btreemap.Min[cloudStorageSinkKey](), btreemap.Max[cloudStorageSinkKey]()) {
-		if err := s.flushFile(ctx, f); err != nil {
-			return err
-		}
+	var err error
+	s.files.Ascend(func(i btree.Item) (wantMore bool) {
+		err = s.flushFile(ctx, i.(*cloudStorageSinkFile))
+		return err == nil
+	})
+	if err != nil {
+		return err
 	}
 	// Allow synchronization with the async flusher to happen.
 	if s.testingKnobs != nil && s.testingKnobs.AsyncFlushSync != nil {
@@ -725,7 +730,8 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 	// flushed files may not be removed from s.files. This is ok, since
 	// the error will trigger the sink to be closed, and we will only use
 	// s.files to ensure that the codecs are closed before deallocating it.
-	if err := s.waitAsyncFlush(ctx); err != nil {
+	err = s.waitAsyncFlush(ctx)
+	if err != nil {
 		return err
 	}
 	// Files need to be cleared after the flush completes, otherwise file resources
@@ -777,9 +783,6 @@ var logQueueDepth = log.Every(30 * time.Second)
 // flushFile flushes file to the cloud storage.
 // file should not be used after flushing.
 func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSinkFile) error {
-	ctx, sp := tracing.ChildSpan(ctx, "changefeed.cloudstorage_sink.flush_file")
-	defer sp.Finish()
-
 	asyncFlushEnabled := enableAsyncFlush.Get(&s.settings.SV)
 	if s.asyncFlushActive && !asyncFlushEnabled {
 		// Async flush behavior was turned off --  drain any active flush requests
@@ -904,8 +907,6 @@ func (f *cloudStorageSinkFile) flushToStorage(
 		if err := f.codec.Close(); err != nil {
 			return err
 		}
-		// Reset reference to underlying codec to prevent accidental reuse.
-		f.codec = nil
 	}
 
 	compressedBytes := f.buf.Len()
@@ -925,7 +926,8 @@ func (s *cloudStorageSink) closeAllCodecs() (err error) {
 	// Codecs need to be closed because of the klauspost compression library implementation
 	// details where it spins up go routines to perform compression in parallel.
 	// Those go routines are cleaned up when the compression codec is closed.
-	for _, f := range s.files.Ascend(btreemap.Min[cloudStorageSinkKey](), btreemap.Max[cloudStorageSinkKey]()) {
+	s.files.Ascend(func(i btree.Item) (wantMore bool) {
+		f := i.(*cloudStorageSinkFile)
 		if f.codec != nil {
 			cErr := f.codec.Close()
 			f.codec = nil
@@ -933,7 +935,8 @@ func (s *cloudStorageSink) closeAllCodecs() (err error) {
 				err = cErr
 			}
 		}
-	}
+		return true
+	})
 	return err
 }
 
@@ -957,11 +960,22 @@ type cloudStorageSinkKey struct {
 	schemaID int64
 }
 
-func keyCmp(a, b cloudStorageSinkKey) int {
-	if a.topic != b.topic {
-		return cmp.Compare(a.topic, b.topic)
+func (k cloudStorageSinkKey) Less(other btree.Item) bool {
+	switch other := other.(type) {
+	case *cloudStorageSinkFile:
+		return keyLess(k, other.cloudStorageSinkKey)
+	case cloudStorageSinkKey:
+		return keyLess(k, other)
+	default:
+		panic(errors.Errorf("unexpected item type %T", other))
 	}
-	return cmp.Compare(a.schemaID, b.schemaID)
+}
+
+func keyLess(a, b cloudStorageSinkKey) bool {
+	if a.topic == b.topic {
+		return a.schemaID < b.schemaID
+	}
+	return a.topic < b.topic
 }
 
 // generateChangefeedSessionID generates a unique string that is used to

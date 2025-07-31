@@ -12,25 +12,25 @@ import (
 )
 
 // encodeTuple produces the value encoding for a tuple.
-func encodeTuple(
-	t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte,
-) (_, newScratch []byte, err error) {
+func encodeTuple(t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte) ([]byte, error) {
 	appendTo = encoding.EncodeValueTag(appendTo, colID, encoding.Tuple)
-	return encodeUntaggedTuple(t, appendTo, scratch)
+	return encodeUntaggedTuple(t, appendTo, colID, scratch)
 }
 
 // encodeUntaggedTuple produces the value encoding for a tuple without a value tag.
 func encodeUntaggedTuple(
-	t *tree.DTuple, appendTo []byte, scratch []byte,
-) (_, newScratch []byte, err error) {
+	t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte,
+) ([]byte, error) {
 	appendTo = encoding.EncodeNonsortingUvarint(appendTo, uint64(len(t.D)))
+
+	var err error
 	for _, dd := range t.D {
-		appendTo, scratch, err = EncodeWithScratch(appendTo, NoColumnID, dd, scratch[:0])
+		appendTo, err = Encode(appendTo, NoColumnID, dd, scratch)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
-	return appendTo, scratch, nil
+	return appendTo, nil
 }
 
 // decodeTuple decodes a tuple from its value encoding. It is the
@@ -52,29 +52,4 @@ func decodeTuple(a *tree.DatumAlloc, tupTyp *types.T, b []byte) (tree.Datum, []b
 		result.D[i] = datum
 	}
 	return a.NewDTuple(result), b, nil
-}
-
-func init() {
-	encoding.PrettyPrintTupleValueEncoded = func(b []byte) ([]byte, string, error) {
-		b, _, l, err := encoding.DecodeNonsortingUvarint(b)
-		if err != nil {
-			return b, "", err
-		}
-		result := &tree.DTuple{D: make([]tree.Datum, l)}
-		for i := range result.D {
-			_, _, _, encType, err := encoding.DecodeValueTag(b)
-			if err != nil {
-				return b, "", err
-			}
-			t, err := encodingTypeToDatumType(encType)
-			if err != nil {
-				return b, "", err
-			}
-			result.D[i], b, err = Decode(nil /* a */, t, b)
-			if err != nil {
-				return b, "", err
-			}
-		}
-		return b, result.String(), nil
-	}
 }

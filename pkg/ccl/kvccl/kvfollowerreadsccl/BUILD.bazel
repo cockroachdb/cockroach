@@ -44,7 +44,8 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":kvfollowerreadsccl"],
     exec_properties = select({
-        "//conditions:default": {"test.Pool": "large"},
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         "//pkg/base",
@@ -59,7 +60,6 @@ go_test(
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverbase",
-        "//pkg/kv/kvtestutils",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security/securityassets",

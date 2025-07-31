@@ -134,6 +134,7 @@ func newSplitQueue(store *Store, db *kv.DB) *splitQueue {
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.SplitQueueSuccesses,
 			failures:             store.metrics.SplitQueueFailures,
+			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.SplitQueuePending,
 			processingNanos:      store.metrics.SplitQueueProcessingNanos,
 			purgatory:            store.metrics.SplitQueuePurgatory,
@@ -302,9 +303,6 @@ func (sq *splitQueue) processAttempt(
 			return false, errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
 		}
 		sq.metrics.SpanConfigBasedSplitCount.Inc(1)
-
-		// Reset the splitter now that the bounds of the range changed.
-		r.loadBasedSplitter.Reset(sq.store.Clock().PhysicalTime())
 		return true, nil
 	}
 
@@ -330,9 +328,6 @@ func (sq *splitQueue) processAttempt(
 			return false, err
 		}
 		sq.metrics.SizeBasedSplitCount.Inc(1)
-
-		// Reset the splitter now that the bounds of the range changed.
-		r.loadBasedSplitter.Reset(sq.store.Clock().PhysicalTime())
 		return true, nil
 	}
 

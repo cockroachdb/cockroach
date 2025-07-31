@@ -241,9 +241,6 @@ vectorized: true
       table: s@s_pkey
       spans: FULL SCAN
 
-statement ok
-SET autocommit_before_ddl = false
-
 # Ensuring that the presence of composite values results in
 # encoding in the valueside as well for a given K/V pair.
 statement ok
@@ -255,16 +252,16 @@ INSERT INTO composite VALUES (1, '1.00'::JSONB), (2, '1'::JSONB), (3, '2'::JSONB
  (4, '3.0'::JSONB), (5, '"a"'::JSONB)
 ----
 Scan /Table/20/1/10{8-9}
-CPut /Table/108/1/1/0 -> /TUPLE/2:2:SentinelType/1.00
-Put /Table/108/2/"H*\x02\x00\x00\x89\x88" -> /BYTES/0x2f0f0c200000002000000403348964
-CPut /Table/108/1/2/0 -> /TUPLE/2:2:SentinelType/1
-Put /Table/108/2/"H*\x02\x00\x00\x8a\x88" -> /BYTES/
-CPut /Table/108/1/3/0 -> /TUPLE/2:2:SentinelType/2
-Put /Table/108/2/"H*\x04\x00\x00\x8b\x88" -> /BYTES/
-CPut /Table/108/1/4/0 -> /TUPLE/2:2:SentinelType/3.0
-Put /Table/108/2/"H*\x06\x00\x00\x8c\x88" -> /BYTES/0x2f0f0c20000000200000040334891e
-CPut /Table/108/1/5/0 -> /TUPLE/2:2:SentinelType/"a"
-Put /Table/108/2/"G\x12a\x00\x01\x00\x8d\x88" -> /BYTES/
+CPut /Table/108/1/1/0 -> /TUPLE/
+InitPut /Table/108/2/"H*\x02\x00\x00\x89\x88" -> /BYTES/0x2f0f0c200000002000000403348964
+CPut /Table/108/1/2/0 -> /TUPLE/
+InitPut /Table/108/2/"H*\x02\x00\x00\x8a\x88" -> /BYTES/
+CPut /Table/108/1/3/0 -> /TUPLE/
+InitPut /Table/108/2/"H*\x04\x00\x00\x8b\x88" -> /BYTES/
+CPut /Table/108/1/4/0 -> /TUPLE/
+InitPut /Table/108/2/"H*\x06\x00\x00\x8c\x88" -> /BYTES/0x2f0f0c20000000200000040334891e
+CPut /Table/108/1/5/0 -> /TUPLE/
+InitPut /Table/108/2/"G\x12a\x00\x01\x00\x8d\x88" -> /BYTES/
 
 query T kvtrace
 SELECT j FROM composite where j = '1.00'::JSONB

@@ -68,7 +68,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	defer memoryMonitor.Stop(ctx)
 
 	// Use random types and random rows.
-	typs := randgen.RandSortingTypes(rng, numCols)
+	types := randgen.RandSortingTypes(rng, numCols)
 	ordering := colinfo.ColumnOrdering{
 		colinfo.ColumnOrderInfo{
 			ColIdx:    0,
@@ -79,9 +79,9 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 			Direction: encoding.Descending,
 		},
 	}
-	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, typs, ordering)
+	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
 	rc := NewDiskBackedNumberedRowContainer(
-		true /* deDup */, typs, &evalCtx, tempEngine, memoryMonitor, evalCtx.TestingMon, diskMonitor,
+		true /*deDup*/, types, &evalCtx, tempEngine, memoryMonitor, diskMonitor,
 	)
 	defer rc.Close(ctx)
 
@@ -108,10 +108,10 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 			if skip {
 				continue
 			}
-			require.Equal(t, rows[accesses[i]].String(typs), row.String(typs))
+			require.Equal(t, rows[accesses[i]].String(types), row.String(types))
 		}
 		// Reset and reorder the rows for the next pass.
-		rng.Shuffle(numRows, func(i, j int) {
+		rand.Shuffle(numRows, func(i, j int) {
 			rows[i], rows[j] = rows[j], rows[i]
 		})
 		require.NoError(t, rc.UnsafeReset(ctx))
@@ -162,7 +162,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	}
 	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
 	rc := NewDiskBackedNumberedRowContainer(
-		false /* deDup */, types, &evalCtx, tempEngine, memoryMonitor, evalCtx.TestingMon, diskMonitor,
+		false /*deDup*/, types, &evalCtx, tempEngine, memoryMonitor, diskMonitor,
 	)
 	defer rc.Close(ctx)
 
@@ -205,7 +205,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 		fmt.Printf("hits: %d, misses: %d, maxCacheSize: %d\n",
 			rc.rowIter.hitCount, rc.rowIter.missCount, rc.rowIter.maxCacheSize)
 		// Reset and reorder the rows for the next pass.
-		rng.Shuffle(numRows, func(i, j int) {
+		rand.Shuffle(numRows, func(i, j int) {
 			rows[i], rows[j] = rows[j], rows[i]
 		})
 		require.NoError(t, rc.UnsafeReset(ctx))
@@ -310,7 +310,7 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 			}
 		}
 		// Reset and reorder the rows for the next pass.
-		rng.Shuffle(numRows, func(i, j int) {
+		rand.Shuffle(numRows, func(i, j int) {
 			rows[i], rows[j] = rows[j], rows[i]
 		})
 		for _, rc := range containers {
@@ -369,9 +369,7 @@ func makeNumberedContainerUsingNRC(
 	diskMonitor *mon.BytesMonitor,
 ) numberedContainerUsingNRC {
 	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
-	rc := NewDiskBackedNumberedRowContainer(
-		false /* deDup */, types, evalCtx, engine, memoryMonitor, evalCtx.TestingMon, diskMonitor,
-	)
+	rc := NewDiskBackedNumberedRowContainer(false /* deDup */, types, evalCtx, engine, memoryMonitor, diskMonitor)
 	_, err := rc.SpillToDisk(ctx)
 	require.NoError(t, err)
 	return numberedContainerUsingNRC{rc: rc, memoryMonitor: memoryMonitor}
@@ -423,8 +421,7 @@ func makeNumberedContainerUsingIRC(
 ) numberedContainerUsingIRC {
 	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
 	rc := NewDiskBackedIndexedRowContainer(
-		nil /* ordering */, types, evalCtx, engine, memoryMonitor, evalCtx.TestingMon, diskMonitor,
-	)
+		nil /* ordering */, types, evalCtx, engine, memoryMonitor, diskMonitor)
 	require.NoError(t, rc.SpillToDisk(ctx))
 	return numberedContainerUsingIRC{rc: rc, memoryMonitor: memoryMonitor}
 }

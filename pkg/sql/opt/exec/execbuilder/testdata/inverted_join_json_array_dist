@@ -65,7 +65,7 @@ SELECT start_key, end_key, replicas, lease_holder
 FROM [SHOW RANGES FROM INDEX json_tab@primary WITH DETAILS] ORDER BY lease_holder, start_key
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/72>  …/10          {1}       1
+<before:/Table/67>  …/10          {1}       1
 …/10                …/20          {2}       2
 …/20                …/<IndexMax>  {3}       3
 

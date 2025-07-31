@@ -34,9 +34,6 @@ type Setter interface {
 	// This allows checking whether multiple storage parameters together
 	// form a valid configuration.
 	RunPostChecks() error
-	// IsNewTableObject returns true if the storage parameter is being set on a new
-	// table.
-	IsNewTableObject() bool
 }
 
 // Set sets the given storage parameters using the
@@ -48,7 +45,7 @@ func Set(
 	params tree.StorageParams,
 	setter Setter,
 ) error {
-	if err := storageParamPreChecks(ctx, evalCtx, setter, params, nil /* resetParams */); err != nil {
+	if err := storageParamPreChecks(ctx, evalCtx, params, nil /* resetParams */); err != nil {
 		return err
 	}
 	for _, sp := range params {
@@ -62,28 +59,25 @@ func Set(
 		// Cast these as strings.
 		expr := paramparse.UnresolvedNameToStrVal(sp.Value)
 
-		err := func() error {
-			// Storage params handle their own scalar arguments, with no help from the
-			// optimizer. As such, they cannot contain subqueries.
-			defer semaCtx.Properties.Restore(semaCtx.Properties)
-			semaCtx.Properties.Require("table storage parameters", tree.RejectSubqueries)
+		// Storage params handle their own scalar arguments, with no help from the
+		// optimizer. As such, they cannot contain subqueries.
+		defer semaCtx.Properties.Restore(semaCtx.Properties)
+		semaCtx.Properties.Require("table storage parameters", tree.RejectSubqueries)
 
-			// Convert the expressions to a datum.
-			typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.AnyElement)
-			if err != nil {
-				return err
-			}
-			if typedExpr, err = normalize.Expr(ctx, evalCtx, typedExpr); err != nil {
-				return err
-			}
-			datum, err := eval.Expr(ctx, evalCtx, typedExpr)
-			if err != nil {
-				return err
-			}
-			return setter.Set(ctx, semaCtx, evalCtx, key, datum)
-		}()
-
+		// Convert the expressions to a datum.
+		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
 		if err != nil {
+			return err
+		}
+		if typedExpr, err = normalize.Expr(ctx, evalCtx, typedExpr); err != nil {
+			return err
+		}
+		datum, err := eval.Expr(ctx, evalCtx, typedExpr)
+		if err != nil {
+			return err
+		}
+
+		if err := setter.Set(ctx, semaCtx, evalCtx, key, datum); err != nil {
 			return err
 		}
 	}
@@ -95,7 +89,7 @@ func Set(
 func Reset(
 	ctx context.Context, evalCtx *eval.Context, params []string, paramObserver Setter,
 ) error {
-	if err := storageParamPreChecks(ctx, evalCtx, paramObserver, nil /* setParam */, params); err != nil {
+	if err := storageParamPreChecks(ctx, evalCtx, nil /* setParam */, params); err != nil {
 		return err
 	}
 	for _, p := range params {
@@ -129,23 +123,14 @@ func SetFillFactor(ctx context.Context, evalCtx *eval.Context, key string, datum
 // storageParamPreChecks is where we specify pre-conditions for setting/resetting
 // storage parameters `param`.
 func storageParamPreChecks(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	setter Setter,
-	setParams tree.StorageParams,
-	resetParams []string,
+	ctx context.Context, evalCtx *eval.Context, setParams tree.StorageParams, resetParams []string,
 ) error {
 	if setParams != nil && resetParams != nil {
 		return errors.AssertionFailedf("only one of setParams and resetParams should be non-nil.")
 	}
 
-	keys := make([]string, 0, len(setParams)+len(resetParams))
-	params := make(map[string]struct{}, len(setParams))
+	var keys []string
 	for _, param := range setParams {
-		if _, exists := params[param.Key]; exists {
-			return pgerror.Newf(pgcode.InvalidParameterValue, "parameter %q specified more than once", param.Key)
-		}
-		params[param.Key] = struct{}{}
 		keys = append(keys, param.Key)
 	}
 	keys = append(keys, resetParams...)
@@ -159,11 +144,7 @@ func storageParamPreChecks(
 			// change we make to the descriptor in the transaction, so we can uphold
 			// the "one-version invariant" as discussed further in RFC
 			// https://github.com/ajwerner/cockroach/blob/ajwerner/low-latency-rfc-take-3/docs/RFCS/20230328_low_latency_changefeeds.md
-			// For newly created tables we will allow schema_locked to be set upon creation,
-			// since later operations cannot unset schema_locked (i.e. only implicit single
-			// statement transactions are allowed to manipulate schema_locked, see
-			// checkSchemaChangeIsAllowed).
-			if !setter.IsNewTableObject() && (len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt) {
+			if len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt {
 				return pgerror.Newf(pgcode.InvalidParameterValue, "%q can only be set/reset on "+
 					"its own without other parameters in a single-statement implicit transaction.", key)
 			}

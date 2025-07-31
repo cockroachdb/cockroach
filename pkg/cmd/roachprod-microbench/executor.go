@@ -13,12 +13,10 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/parser"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	roachprodConfig "github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -44,7 +42,6 @@ type executorConfig struct {
 	affinity          bool
 	quiet             bool
 	recoverable       bool
-	postIssues        bool
 }
 
 type executor struct {
@@ -53,13 +50,6 @@ type executor struct {
 	ignorePackages         map[string]struct{}
 	runOptions             install.RunOptions
 	log                    *logger.Logger
-	postConfig             postConfig
-}
-
-type postConfig struct {
-	branch    string
-	binary    string
-	commitSHA string
 }
 
 type benchmark struct {
@@ -70,6 +60,12 @@ type benchmark struct {
 type benchmarkKey struct {
 	benchmark
 	key string
+}
+
+type benchmarkExtractionResult struct {
+	results [][]string
+	errors  bool
+	skipped bool
 }
 
 func newExecutor(config executorConfig) (*executor, error) {
@@ -111,21 +107,9 @@ func newExecutor(config executorConfig) (*executor, error) {
 		return nil, errors.New("iterations must be greater than 0")
 	}
 
-	var pc postConfig
-	if config.postIssues {
-		pc = postConfig{
-			branch:    os.Getenv("GITHUB_BRANCH"),
-			binary:    os.Getenv("GITHUB_BINARY"),
-			commitSHA: os.Getenv("GITHUB_SHA"),
-		}
-		if pc.branch == "" || pc.binary == "" || pc.commitSHA == "" {
-			return nil, errors.New("GITHUB_BRANCH, GITHUB_BINARY, and GITHUB_SHA environment variables must be set when post-issues is enabled")
-		}
-	}
-
 	roachprodConfig.Quiet = config.quiet
 	timestamp := timeutil.Now()
-	l := InitLogger(filepath.Join(config.outputDir, fmt.Sprintf("roachprod-microbench-%s.log", timestamp.Format(util.TimeFormat))))
+	l := util.InitLogger(filepath.Join(config.outputDir, fmt.Sprintf("roachprod-microbench-%s.log", timestamp.Format(util.TimeFormat))))
 
 	excludeBenchmarks := util.GetRegexExclusionPairs(config.excludeList)
 	return &executor{
@@ -134,7 +118,6 @@ func newExecutor(config executorConfig) (*executor, error) {
 		ignorePackages:         ignorePackages,
 		runOptions:             runOptions,
 		log:                    l,
-		postConfig:             pc,
 	}, nil
 }
 
@@ -147,7 +130,6 @@ func defaultExecutorConfig() executorConfig {
 		iterations:   1,
 		lenient:      true,
 		recoverable:  true,
-		affinity:     true,
 	}
 }
 
@@ -276,74 +258,6 @@ func (e *executor) listRemotePackages(log *logger.Logger, dir string) ([]string,
 	return packages, nil
 }
 
-func (e *executor) generateBenchmarkCommands(
-	benchmarks []benchmark,
-) ([][]cluster.RemoteCommand, error) {
-	// Generate commands for running benchmarks.
-	commands := make([][]cluster.RemoteCommand, 0)
-
-	// Sort the binary keys to ensure a deterministic order.
-	binaryKeys := maps.Keys(e.binaries)
-	sort.Strings(binaryKeys)
-
-	// If post issues is enabled, move the post config binary key to the front
-	// of the binary keys list to ensure it runs first. Since we might only run
-	// one iteration before cancelling the other iterations, we want to report
-	// the failure as soon as possible.
-	if e.postIssues {
-		for i, key := range binaryKeys {
-			if key == e.postConfig.binary {
-				// Move the key to front by removing it and inserting at index 0
-				copy(binaryKeys[1:i+1], binaryKeys[0:i])
-				binaryKeys[0] = e.postConfig.binary
-				break
-			}
-		}
-	}
-
-	// Generate the commands for each benchmark binary.
-	for _, bench := range benchmarks {
-		runCommand := fmt.Sprintf("./run.sh %s -test.benchmem -test.bench=^%s$ -test.run=^$ -test.v",
-			strings.Join(e.testArgs, " "), bench.name)
-		if e.timeout != "" {
-			runCommand = fmt.Sprintf("timeout -k 30s %s %s", e.timeout, runCommand)
-		}
-		if e.shellCommand != "" {
-			runCommand = fmt.Sprintf("%s && %s", e.shellCommand, runCommand)
-		}
-
-		benchmarkCommands := make([]cluster.RemoteCommand, 0, len(e.binaries))
-		for _, key := range binaryKeys {
-			bin := e.binaries[key]
-			shellCommand := fmt.Sprintf(`"cd %s/%s/bin && %s"`, bin, bench.pkg, runCommand)
-			command := cluster.RemoteCommand{
-				Args:     []string{"sh", "-c", shellCommand},
-				Metadata: benchmarkKey{bench, key},
-				GroupID:  fmt.Sprintf("%s/%s", bench.pkg, bench.name),
-			}
-			benchmarkCommands = append(benchmarkCommands, command)
-		}
-
-		// If affinity is enabled, add all commands for a benchmark together.
-		// Otherwise, split commands for each binary.
-		if e.affinity {
-			commands = append(commands, benchmarkCommands)
-		} else {
-			for _, cmd := range benchmarkCommands {
-				commands = append(commands, []cluster.RemoteCommand{cmd})
-			}
-		}
-	}
-
-	// Expand the commands for the number of iterations requested.
-	expandedCommands := make([][]cluster.RemoteCommand, 0)
-	for range e.iterations {
-		expandedCommands = append(expandedCommands, commands...)
-	}
-
-	return expandedCommands, nil
-}
-
 // executeBenchmarks executes the microbenchmarks on the remote cluster. Reports
 // containing the microbenchmark results for each package are stored in the log
 // output directory. Microbenchmark failures are recorded in separate log files,
@@ -351,7 +265,6 @@ func (e *executor) generateBenchmarkCommands(
 // corresponding microbenchmark. When running in lenient mode errors will not
 // fail the execution, and will still be logged to the aforementioned logs.
 func (e *executor) executeBenchmarks() error {
-	var executorError error
 
 	// Remote execution Logging is captured and saved to appropriate log files and
 	// the main logger is used for orchestration logging only. Therefore, we use a
@@ -362,7 +275,7 @@ func (e *executor) executeBenchmarks() error {
 	}
 
 	// Init `roachprod` and get the number of nodes in the cluster.
-	InitRoachprod()
+	util.InitRoachprod()
 	statuses, err := roachprod.Status(context.Background(), e.log, e.cluster, "")
 	if err != nil {
 		return err
@@ -396,12 +309,6 @@ func (e *executor) executeBenchmarks() error {
 		return errors.New("no packages containing benchmarks found")
 	}
 
-	// Generate commands for running benchmarks.
-	commands, err := e.generateBenchmarkCommands(benchmarks)
-	if err != nil {
-		return err
-	}
-
 	// Create reports for each key, binary combination.
 	reporters := make(map[string]*report)
 	defer func() {
@@ -424,7 +331,43 @@ func (e *executor) executeBenchmarks() error {
 		}
 	}
 
+	// Generate commands for running benchmarks.
+	commands := make([][]cluster.RemoteCommand, 0)
+	for _, bench := range benchmarks {
+		runCommand := fmt.Sprintf("./run.sh %s -test.benchmem -test.bench=^%s$ -test.run=^$ -test.v",
+			strings.Join(e.testArgs, " "), bench.name)
+		if e.timeout != "" {
+			runCommand = fmt.Sprintf("timeout -k 30s %s %s", e.timeout, runCommand)
+		}
+		if e.shellCommand != "" {
+			runCommand = fmt.Sprintf("%s && %s", e.shellCommand, runCommand)
+		}
+		commandGroup := make([]cluster.RemoteCommand, 0)
+		// Weave the commands between binaries and iterations.
+		for i := 0; i < e.iterations; i++ {
+			for key, bin := range e.binaries {
+				shellCommand := fmt.Sprintf(`"cd %s/%s/bin && %s"`, bin, bench.pkg, runCommand)
+				command := cluster.RemoteCommand{
+					Args:     []string{"sh", "-c", shellCommand},
+					Metadata: benchmarkKey{bench, key},
+				}
+				commandGroup = append(commandGroup, command)
+			}
+		}
+		if e.affinity {
+			commands = append(commands, commandGroup)
+		} else {
+			// When affinity is disabled, commands & single iterations can run on any
+			// node. This has the benefit of not having stragglers, but the downside
+			// of possibly introducing noise.
+			for _, command := range commandGroup {
+				commands = append(commands, []cluster.RemoteCommand{command})
+			}
+		}
+	}
+
 	// Execute commands.
+	errorCount := 0
 	logIndex := 0
 	missingBenchmarks := make(map[benchmark]int, 0)
 	failedBenchmarks := make(map[benchmark]int, 0)
@@ -433,39 +376,28 @@ func (e *executor) executeBenchmarks() error {
 		if !e.quiet {
 			fmt.Print(".")
 		}
-		extractResults := parser.ExtractBenchmarkResults(response.Stdout)
+		extractResults := extractBenchmarkResults(response.Stdout)
 		benchmarkResponse := response.Metadata.(benchmarkKey)
 		report := reporters[benchmarkResponse.key]
-		for _, benchmarkResult := range extractResults.Results {
+		for _, benchmarkResult := range extractResults.results {
 			if _, writeErr := report.benchmarkOutput[benchmarkResponse.pkg].WriteString(
 				fmt.Sprintf("%s\n", strings.Join(benchmarkResult, " "))); writeErr != nil {
 				e.log.Errorf("Failed to write benchmark result to file - %v", writeErr)
 			}
 		}
-		if extractResults.Errors || response.Err != nil {
+		if extractResults.errors || response.Err != nil {
 			if !e.quiet {
 				fmt.Println()
 			}
 			tag := fmt.Sprintf("%d", logIndex)
-			timeout := false
 			if response.ExitStatus == 124 || response.ExitStatus == 137 {
 				tag = fmt.Sprintf("%d-timeout", logIndex)
-				timeout = true
 			}
 			err = report.writeBenchmarkErrorLogs(response, tag)
 			if err != nil {
 				e.log.Errorf("Failed to write error logs - %v", err)
 			}
-
-			if e.postIssues && benchmarkResponse.key == e.postConfig.binary {
-				artifactsDir := fmt.Sprintf("%s/%s", e.outputDir, benchmarkResponse.key)
-				formatter, req := createBenchmarkPostRequest(artifactsDir, response, timeout)
-				err = postBenchmarkIssue(context.Background(), e.log, formatter, req)
-				if err != nil {
-					e.log.Errorf("Failed to post benchmark issue - %v", err)
-					executorError = errors.CombineErrors(executorError, errors.Wrap(err, "failed to post benchmark issue"))
-				}
-			}
+			errorCount++
 			logIndex++
 		}
 		if _, writeErr := report.analyticsOutput[benchmarkResponse.pkg].WriteString(
@@ -475,11 +407,11 @@ func (e *executor) executeBenchmarks() error {
 		}
 
 		// If we didn't find any results, increment the appropriate counter.
-		if len(extractResults.Results) == 0 {
+		if len(extractResults.results) == 0 {
 			switch {
-			case extractResults.Errors || response.Err != nil || response.ExitStatus != 0:
+			case extractResults.errors || response.Err != nil || response.ExitStatus != 0:
 				failedBenchmarks[benchmarkResponse.benchmark]++
-			case extractResults.Skipped:
+			case extractResults.skipped:
 				skippedBenchmarks[benchmarkResponse.benchmark]++
 			default:
 				missingBenchmarks[benchmarkResponse.benchmark]++
@@ -504,7 +436,58 @@ func (e *executor) executeBenchmarks() error {
 	for res, count := range missingBenchmarks {
 		e.log.Errorf("Missing benchmark: %s/%s in %d iterations", res.pkg, res.name, count)
 	}
-	e.log.Printf("Completed benchmarks, results located at %s", e.outputDir)
 
-	return executorError
+	e.log.Printf("Completed benchmarks, results located at %s", e.outputDir)
+	if errorCount != 0 {
+		return errors.Newf("Found %d errors during remote execution", errorCount)
+	}
+	return nil
+}
+
+// extractBenchmarkResults extracts the microbenchmark results generated by a
+// test binary and reports if any failures or skips were found in the output.
+// This method makes specific assumptions regarding the format of the output,
+// and attempts to ignore any spurious output that the test binary may have
+// logged. The returned list of string arrays each represent a row of metrics as
+// outputted by the test binary.
+func extractBenchmarkResults(benchmarkOutput string) benchmarkExtractionResult {
+	keywords := map[string]struct{}{
+		"ns/op":     {},
+		"B/op":      {},
+		"allocs/op": {},
+	}
+	results := make([][]string, 0)
+	buf := make([]string, 0)
+	containsErrors := false
+	skipped := false
+	var benchName string
+	for _, line := range strings.Split(benchmarkOutput, "\n") {
+		elems := strings.Fields(line)
+		for _, s := range elems {
+			if !containsErrors {
+				containsErrors = strings.Contains(s, "FAIL") || strings.Contains(s, "panic:")
+			}
+			if !skipped {
+				skipped = strings.Contains(s, "SKIP")
+			}
+			if strings.HasPrefix(s, "Benchmark") && len(s) > 9 {
+				benchName = s
+			}
+			if _, ok := keywords[s]; ok {
+				row := elems
+				if elems[0] == benchName {
+					row = elems[1:]
+				}
+
+				buf = append(buf, row...)
+				if benchName != "" {
+					buf = append([]string{benchName}, buf...)
+					results = append(results, buf)
+				}
+				buf = make([]string, 0)
+				benchName = ""
+			}
+		}
+	}
+	return benchmarkExtractionResult{results, containsErrors, skipped}
 }

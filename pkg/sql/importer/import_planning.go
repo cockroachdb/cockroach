@@ -6,6 +6,7 @@
 package importer
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -16,10 +17,14 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -29,14 +34,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -62,7 +69,10 @@ const (
 	mysqlOutfileEnclose  = "fields_enclosed_by"
 	mysqlOutfileEscape   = "fields_escaped_by"
 
+	importOptionSSTSize          = "sstsize"
 	importOptionDecompress       = "decompress"
+	importOptionOversample       = "oversample"
+	importOptionSkipFKs          = "skip_foreign_keys"
 	importOptionDisableGlobMatch = "disable_glob_matching"
 	importOptionSaveRejected     = "experimental_save_rejected"
 	importOptionDetached         = "detached"
@@ -84,6 +94,15 @@ const (
 	// as either an inline JSON schema, or an external schema URI.
 	avroSchema    = "schema"
 	avroSchemaURI = "schema_uri"
+
+	pgDumpIgnoreAllUnsupported     = "ignore_unsupported_statements"
+	pgDumpIgnoreShuntFileDest      = "log_ignored_statements"
+	pgDumpUnsupportedSchemaStmtLog = "unsupported_schema_stmts"
+	pgDumpUnsupportedDataStmtLog   = "unsupported_data_stmts"
+
+	// RunningStatusImportBundleParseSchema indicates to the user that a bundle format
+	// schema is being parsed
+	runningStatusImportBundleParseSchema jobs.RunningStatus = "parsing schema on Import Bundle"
 )
 
 var importOptionExpectValues = map[string]exprutil.KVStringOptValidate{
@@ -100,9 +119,12 @@ var importOptionExpectValues = map[string]exprutil.KVStringOptValidate{
 	mysqlOutfileEnclose:  exprutil.KVStringOptRequireValue,
 	mysqlOutfileEscape:   exprutil.KVStringOptRequireValue,
 
+	importOptionSSTSize:      exprutil.KVStringOptRequireValue,
 	importOptionDecompress:   exprutil.KVStringOptRequireValue,
+	importOptionOversample:   exprutil.KVStringOptRequireValue,
 	importOptionSaveRejected: exprutil.KVStringOptRequireNoValue,
 
+	importOptionSkipFKs:          exprutil.KVStringOptRequireNoValue,
 	importOptionDisableGlobMatch: exprutil.KVStringOptRequireNoValue,
 	importOptionDetached:         exprutil.KVStringOptRequireNoValue,
 
@@ -114,6 +136,19 @@ var importOptionExpectValues = map[string]exprutil.KVStringOptValidate{
 	avroRecordsSeparatedBy: exprutil.KVStringOptRequireValue,
 	avroBinRecords:         exprutil.KVStringOptRequireNoValue,
 	avroJSONRecords:        exprutil.KVStringOptRequireNoValue,
+
+	pgDumpIgnoreAllUnsupported: exprutil.KVStringOptRequireNoValue,
+	pgDumpIgnoreShuntFileDest:  exprutil.KVStringOptRequireValue,
+}
+
+var pgDumpMaxLoggedStmts = 1024
+
+func testingSetMaxLogIgnoredImportStatements(maxLogSize int) (cleanup func()) {
+	prevLogSize := pgDumpMaxLoggedStmts
+	pgDumpMaxLoggedStmts = maxLogSize
+	return func() {
+		pgDumpMaxLoggedStmts = prevLogSize
+	}
 }
 
 func makeStringSet(opts ...string) map[string]struct{} {
@@ -126,8 +161,8 @@ func makeStringSet(opts ...string) map[string]struct{} {
 
 // Options common to all formats.
 var allowedCommonOptions = makeStringSet(
-	importOptionDecompress, importOptionSaveRejected, importOptionDisableGlobMatch, importOptionDetached,
-)
+	importOptionSSTSize, importOptionDecompress, importOptionOversample,
+	importOptionSaveRejected, importOptionDisableGlobMatch, importOptionDetached)
 
 // Format specific allowed options.
 var avroAllowedOptions = makeStringSet(
@@ -144,7 +179,12 @@ var mysqlOutAllowedOptions = makeStringSet(
 	mysqlOutfileEscape, csvNullIf, csvSkip, csvRowLimit,
 )
 
-var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
+var (
+	mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs, csvRowLimit)
+	pgCopyAllowedOptions    = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
+	pgDumpAllowedOptions    = makeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit,
+		pgDumpIgnoreAllUnsupported, pgDumpIgnoreShuntFileDest)
+)
 
 // DROP is required because the target table needs to be take offline during
 // IMPORT INTO.
@@ -312,10 +352,23 @@ func importTypeCheck(
 // importPlanHook implements sql.PlanHookFn.
 func importPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
-		return nil, nil, false, nil
+		return nil, nil, nil, false, nil
+	}
+
+	if !importStmt.Bundle && !importStmt.Into {
+		p.BufferClientNotice(ctx, pgnotice.Newf("IMPORT TABLE has been deprecated in 21.2, and will be removed in a future version."+
+			" Instead, use CREATE TABLE with the desired schema, and IMPORT INTO the newly created table."))
+	}
+	switch f := strings.ToUpper(importStmt.FileFormat); f {
+	case "PGDUMP", "MYSQLDUMP":
+		p.BufferClientNotice(ctx, pgnotice.Newf(
+			"IMPORT %s has been deprecated in 23.1, and will be removed in a future version. See %s for alternatives.",
+			redact.SafeString(f),
+			redact.SafeString(docs.URL("migration-overview")),
+		))
 	}
 
 	addToFileFormatTelemetry(importStmt.FileFormat, "attempted")
@@ -326,7 +379,7 @@ func importPlanHook(
 		featureImportEnabled,
 		"IMPORT",
 	); err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 
 	exprEval := p.ExprEvaluator("IMPORT")
@@ -334,7 +387,7 @@ func importPlanHook(
 		ctx, importStmt.Options, importOptionExpectValues,
 	)
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 
 	var isDetached bool
@@ -344,7 +397,7 @@ func importPlanHook(
 
 	filenamePatterns, err := exprEval.StringArray(ctx, importStmt.Files)
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, nil, false, err
 	}
 
 	// Certain ExternalStorage URIs require super-user access. Check all the
@@ -357,14 +410,14 @@ func importPlanHook(
 			if _, workloadErr := parseWorkloadConfig(file); workloadErr == nil {
 				continue
 			}
-			return nil, nil, false, err
+			return nil, nil, nil, false, err
 		}
-		if err := sql.CheckDestinationPrivileges(ctx, p, []string{file}); err != nil {
-			return nil, nil, false, err
+		if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, []string{file}); err != nil {
+			return nil, nil, nil, false, err
 		}
 	}
 
-	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
 		defer span.Finish()
@@ -415,30 +468,64 @@ func importPlanHook(
 			}
 		}
 
-		table := importStmt.Table
-		// TODO: As part of work for #34240, we should be operating on
-		//  UnresolvedObjectNames here, rather than TableNames.
-		// We have a target table, so it might specify a DB in its name.
-		un := table.ToUnresolvedObjectName()
-		foundDB, prefix, resPrefix, err := resolver.ResolveTarget(ctx,
-			un, p, p.SessionData().Database, p.SessionData().SearchPath)
-		if err != nil {
-			return pgerror.Wrap(err, pgcode.UndefinedTable,
-				"resolving target import name")
+		// Typically the SQL grammar means it is only possible to specifying exactly
+		// one pgdump/mysqldump URI, but glob-expansion could have changed that.
+		if importStmt.Bundle && len(files) != 1 {
+			return pgerror.New(pgcode.FeatureNotSupported, "SQL dump files must be imported individually")
 		}
-		if !foundDB {
-			// Check if database exists right now. It might not after the import is done,
-			// but it's better to fail fast than wait until restore.
-			return pgerror.Newf(pgcode.UndefinedObject,
-				"database does not exist: %q", table)
-		}
-		table.ObjectNamePrefix = prefix
-		db := resPrefix.Database
 
-		switch resPrefix.Schema.SchemaKind() {
-		case catalog.SchemaVirtual:
-			return pgerror.Newf(pgcode.InvalidSchemaName,
-				"cannot import into schema %q", table.SchemaName)
+		table := importStmt.Table
+		var db catalog.DatabaseDescriptor
+		var sc catalog.SchemaDescriptor
+		if table != nil {
+			// TODO: As part of work for #34240, we should be operating on
+			//  UnresolvedObjectNames here, rather than TableNames.
+			// We have a target table, so it might specify a DB in its name.
+			un := table.ToUnresolvedObjectName()
+			found, prefix, resPrefix, err := resolver.ResolveTarget(ctx,
+				un, p, p.SessionData().Database, p.SessionData().SearchPath)
+			if err != nil {
+				return pgerror.Wrap(err, pgcode.UndefinedTable,
+					"resolving target import name")
+			}
+			if !found {
+				// Check if database exists right now. It might not after the import is done,
+				// but it's better to fail fast than wait until restore.
+				return pgerror.Newf(pgcode.UndefinedObject,
+					"database does not exist: %q", table)
+			}
+			table.ObjectNamePrefix = prefix
+			db = resPrefix.Database
+			sc = resPrefix.Schema
+			// If this is a non-INTO import that will thus be making a new table, we
+			// need the CREATE priv in the target DB.
+			if !importStmt.Into {
+				if err := p.CheckPrivilege(ctx, db, privilege.CREATE); err != nil {
+					return err
+				}
+			}
+
+			switch sc.SchemaKind() {
+			case catalog.SchemaVirtual:
+				return pgerror.Newf(pgcode.InvalidSchemaName,
+					"cannot import into schema %q", table.SchemaName)
+			}
+		} else {
+			// No target table means we're importing whatever we find into the session
+			// database, so it must exist.
+			db, err = p.MustGetCurrentSessionDatabase(ctx)
+			if err != nil {
+				return pgerror.Wrap(err, pgcode.UndefinedObject,
+					"could not resolve current database")
+			}
+			// If this is a non-INTO import that will thus be making a new table, we
+			// need the CREATE priv in the target DB.
+			if !importStmt.Into {
+				if err := p.CheckPrivilege(ctx, db, privilege.CREATE); err != nil {
+					return err
+				}
+			}
+			sc = schemadesc.GetPublicSchema()
 		}
 
 		format := roachpb.IOFileFormat{}
@@ -569,6 +656,21 @@ func importPlanHook(
 				}
 				format.MysqlOut.RowLimit = int64(rowLimit)
 			}
+		case "MYSQLDUMP":
+			if err = validateFormatOptions(importStmt.FileFormat, opts, mysqlDumpAllowedOptions); err != nil {
+				return err
+			}
+			format.Format = roachpb.IOFileFormat_Mysqldump
+			if override, ok := opts[csvRowLimit]; ok {
+				rowLimit, err := strconv.Atoi(override)
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid numeric %s value", csvRowLimit)
+				}
+				if rowLimit <= 0 {
+					return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
+				}
+				format.MysqlDump.RowLimit = int64(rowLimit)
+			}
 		case "PGCOPY":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, pgCopyAllowedOptions); err != nil {
 				return err
@@ -600,6 +702,44 @@ func importPlanHook(
 				maxRowSize = int32(sz)
 			}
 			format.PgCopy.MaxRowSize = maxRowSize
+		case "PGDUMP":
+			if err = validateFormatOptions(importStmt.FileFormat, opts, pgDumpAllowedOptions); err != nil {
+				return err
+			}
+			format.Format = roachpb.IOFileFormat_PgDump
+			maxRowSize := int32(defaultScanBuffer)
+			if override, ok := opts[optMaxRowSize]; ok {
+				sz, err := humanizeutil.ParseBytes(override)
+				if err != nil {
+					return err
+				}
+				if sz < 1 || sz > math.MaxInt32 {
+					return errors.Errorf("%d out of range: %d", maxRowSize, sz)
+				}
+				maxRowSize = int32(sz)
+			}
+			format.PgDump.MaxRowSize = maxRowSize
+			if _, ok := opts[pgDumpIgnoreAllUnsupported]; ok {
+				format.PgDump.IgnoreUnsupported = true
+			}
+
+			if dest, ok := opts[pgDumpIgnoreShuntFileDest]; ok {
+				if !format.PgDump.IgnoreUnsupported {
+					return errors.New("cannot log unsupported PGDUMP stmts without `ignore_unsupported_statements` option")
+				}
+				format.PgDump.IgnoreUnsupportedLog = dest
+			}
+
+			if override, ok := opts[csvRowLimit]; ok {
+				rowLimit, err := strconv.Atoi(override)
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid numeric %s value", csvRowLimit)
+				}
+				if rowLimit <= 0 {
+					return pgerror.Newf(pgcode.Syntax, "%s must be > 0", csvRowLimit)
+				}
+				format.PgDump.RowLimit = int64(rowLimit)
+			}
 		case "AVRO":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, avroAllowedOptions); err != nil {
 				return err
@@ -610,6 +750,31 @@ func importPlanHook(
 			}
 		default:
 			return unimplemented.Newf("import.format", "unsupported import format: %q", importStmt.FileFormat)
+		}
+
+		// sstSize, if 0, will be set to an appropriate default by the specific
+		// implementation (local or distributed) since each has different optimal
+		// settings.
+		var sstSize int64
+		if override, ok := opts[importOptionSSTSize]; ok {
+			sz, err := humanizeutil.ParseBytes(override)
+			if err != nil {
+				return err
+			}
+			sstSize = sz
+		}
+		var oversample int64
+		if override, ok := opts[importOptionOversample]; ok {
+			os, err := strconv.ParseInt(override, 10, 64)
+			if err != nil {
+				return err
+			}
+			oversample = os
+		}
+
+		var skipFKs bool
+		if _, ok := opts[importOptionSkipFKs]; ok {
+			skipFKs = true
 		}
 
 		if override, ok := opts[importOptionDecompress]; ok {
@@ -633,91 +798,102 @@ func importPlanHook(
 			return err
 		}
 
-		if _, ok := allowedIntoFormats[importStmt.FileFormat]; !ok {
-			return errors.Newf(
-				"%s file format is currently unsupported by IMPORT INTO",
-				importStmt.FileFormat)
-		}
-		_, found, err := p.ResolveMutableTableDescriptor(ctx, table, true, tree.ResolveRequireTableDesc)
-		if err != nil {
-			return err
-		}
-
-		err = ensureRequiredPrivileges(ctx, importIntoRequiredPrivileges, p, found)
-		if err != nil {
-			return err
-		}
-		// Check if the table has any vector indexes
-		for _, idx := range found.NonDropIndexes() {
-			if idx.GetType() == idxtype.VECTOR {
-				return unimplemented.NewWithIssueDetail(145227, "import.vector-index",
-					"IMPORT INTO is not supported for tables with vector indexes")
+		if importStmt.Into {
+			if _, ok := allowedIntoFormats[importStmt.FileFormat]; !ok {
+				return errors.Newf(
+					"%s file format is currently unsupported by IMPORT INTO",
+					importStmt.FileFormat)
 			}
-		}
-
-		if len(found.LDRJobIDs) > 0 {
-			return errors.Newf("cannot run an import on table %s which is apart of a Logical Data Replication stream", table)
-		}
-
-		// Import into an RLS table is blocked, unless this is the admin. It is
-		// allowed for admins since they are exempt from RLS policies and have
-		// unrestricted read/write access.
-		if found.IsRowLevelSecurityEnabled() {
-			admin, err := p.HasAdminRole(ctx)
+			_, found, err := p.ResolveMutableTableDescriptor(ctx, table, true, tree.ResolveRequireTableDesc)
 			if err != nil {
 				return err
-			} else if !admin {
-				return pgerror.New(pgcode.FeatureNotSupported,
-					"IMPORT INTO not supported with row-level security for non-admin users")
 			}
-		}
 
-		// Validate target columns.
-		var intoCols []string
-		isTargetCol := make(map[string]bool)
-		for _, name := range importStmt.IntoCols {
-			active, err := catalog.MustFindPublicColumnsByNameList(found, tree.NameList{name})
+			err = ensureRequiredPrivileges(ctx, importIntoRequiredPrivileges, p, found)
 			if err != nil {
-				return errors.Wrap(err, "verifying target columns")
+				return err
 			}
 
-			isTargetCol[active[0].GetName()] = true
-			intoCols = append(intoCols, active[0].GetName())
-		}
+			if len(found.LDRJobIDs) > 0 {
+				return errors.Newf("cannot run an import on table %s which is apart of a Logical Data Replication stream", table)
+			}
 
-		// Ensure that non-target columns that don't have default
-		// expressions are nullable.
-		if len(isTargetCol) != 0 {
-			for _, col := range found.VisibleColumns() {
-				if !(isTargetCol[col.GetName()] || col.IsNullable() || col.HasDefault() || col.IsComputed()) {
-					return errors.Newf(
-						"all non-target columns in IMPORT INTO must be nullable "+
-							"or have default expressions, or have computed expressions"+
-							" but violated by column %q",
-						col.GetName(),
-					)
+			// Validate target columns.
+			var intoCols []string
+			isTargetCol := make(map[string]bool)
+			for _, name := range importStmt.IntoCols {
+				active, err := catalog.MustFindPublicColumnsByNameList(found, tree.NameList{name})
+				if err != nil {
+					return errors.Wrap(err, "verifying target columns")
 				}
-				if isTargetCol[col.GetName()] && col.IsComputed() {
-					return schemaexpr.CannotWriteToComputedColError(col.GetName())
+
+				isTargetCol[active[0].GetName()] = true
+				intoCols = append(intoCols, active[0].GetName())
+			}
+
+			// Ensure that non-target columns that don't have default
+			// expressions are nullable.
+			if len(isTargetCol) != 0 {
+				for _, col := range found.VisibleColumns() {
+					if !(isTargetCol[col.GetName()] || col.IsNullable() || col.HasDefault() || col.IsComputed()) {
+						return errors.Newf(
+							"all non-target columns in IMPORT INTO must be nullable "+
+								"or have default expressions, or have computed expressions"+
+								" but violated by column %q",
+							col.GetName(),
+						)
+					}
+					if isTargetCol[col.GetName()] && col.IsComputed() {
+						return schemaexpr.CannotWriteToComputedColError(col.GetName())
+					}
 				}
 			}
-		}
 
-		{
-			// Resolve the UDTs used by the table being imported into.
-			typeDescs, err := resolveUDTsUsedByImportInto(ctx, p, found)
-			if err != nil {
-				return errors.Wrap(err, "resolving UDTs used by table being imported into")
+			{
+				// Resolve the UDTs used by the table being imported into.
+				typeDescs, err := resolveUDTsUsedByImportInto(ctx, p, found)
+				if err != nil {
+					return errors.Wrap(err, "resolving UDTs used by table being imported into")
+				}
+				if len(typeDescs) > 0 {
+					typeDetails = make([]jobspb.ImportDetails_Type, 0, len(typeDescs))
+				}
+				for _, typeDesc := range typeDescs {
+					typeDetails = append(typeDetails, jobspb.ImportDetails_Type{Desc: typeDesc.TypeDesc()})
+				}
 			}
-			if len(typeDescs) > 0 {
-				typeDetails = make([]jobspb.ImportDetails_Type, 0, len(typeDescs))
+
+			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false, TargetCols: intoCols}}
+		} else if importStmt.Bundle {
+			// If we target a single table, populate details with one entry of tableName.
+			if table != nil {
+				tableDetails = make([]jobspb.ImportDetails_Table, 1)
+				tableName := table.ObjectName.String()
+				// PGDUMP supports importing tables from non-public schemas, thus we
+				// must prepend the target table name with the target schema name.
+				if format.Format == roachpb.IOFileFormat_PgDump {
+					if table.Schema() == "" {
+						return errors.Newf("expected schema for target table %s to be resolved",
+							tableName)
+					}
+					tableName = fmt.Sprintf("%s.%s", table.SchemaName.String(),
+						table.ObjectName.String())
+				}
+				tableDetails[0] = jobspb.ImportDetails_Table{
+					Name:  tableName,
+					IsNew: true,
+				}
 			}
-			for _, typeDesc := range typeDescs {
-				typeDetails = append(typeDetails, jobspb.ImportDetails_Type{Desc: typeDesc.TypeDesc()})
+
+			// Due to how we generate and rewrite descriptor ID's for import, we run
+			// into problems when using user defined schemas.
+			publicSchemaID := db.GetSchemaID(catconstants.PublicSchemaName)
+			if sc.GetID() != publicSchemaID && sc.GetID() != keys.PublicSchemaID {
+				err := errors.New("cannot use IMPORT with a user defined schema")
+				hint := errors.WithHint(err, "create the table with CREATE TABLE and use IMPORT INTO instead")
+				return hint
 			}
 		}
-
-		tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, TargetCols: intoCols}}
 
 		// Store the primary region of the database being imported into. This is
 		// used during job execution to evaluate certain default expressions and
@@ -755,7 +931,9 @@ func importPlanHook(
 				break
 			}
 		}
-		telemetry.Count("import.into")
+		if importStmt.Into {
+			telemetry.Count("import.into")
+		}
 
 		// Here we create the job in a side transaction and then kick off the job.
 		// This is awful. Rather we should be disallowing this statement in an
@@ -769,6 +947,11 @@ func importPlanHook(
 			ParentID:              db.GetID(),
 			Tables:                tableDetails,
 			Types:                 typeDetails,
+			SSTSize:               sstSize,
+			Oversample:            oversample,
+			SkipFKs:               skipFKs,
+			ParseBundleSchema:     importStmt.Bundle,
+			DefaultIntSize:        p.SessionData().DefaultIntSize,
 			DatabasePrimaryRegion: databasePrimaryRegion,
 		}
 
@@ -847,9 +1030,9 @@ func importPlanHook(
 	}
 
 	if isDetached {
-		return fn, jobs.DetachedJobExecutionResultHeader, false, nil
+		return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
 	}
-	return fn, jobs.BulkJobExecutionResultHeader, false, nil
+	return fn, jobs.BulkJobExecutionResultHeader, nil, false, nil
 }
 
 func parseAvroOptions(
@@ -937,6 +1120,115 @@ func parseAvroOptions(
 			format.Avro.MaxRecordSize = int32(sz)
 		}
 	}
+	return nil
+}
+
+type loggerKind int
+
+const (
+	schemaParsing loggerKind = iota
+	dataIngestion
+)
+
+// unsupportedStmtLogger is responsible for handling unsupported PGDUMP SQL
+// statements seen during the import.
+type unsupportedStmtLogger struct {
+	ctx   context.Context
+	user  username.SQLUsername
+	jobID int64
+
+	// Values are initialized based on the options specified in the IMPORT PGDUMP
+	// stmt.
+	ignoreUnsupported        bool
+	ignoreUnsupportedLogDest string
+	externalStorage          cloud.ExternalStorageFactory
+
+	// logBuffer holds the string to be flushed to the ignoreUnsupportedLogDest.
+	logBuffer       *bytes.Buffer
+	numIgnoredStmts int
+
+	// Incremented every time the logger flushes. It is used as the suffix of the
+	// log file written to external storage.
+	flushCount int
+
+	loggerType loggerKind
+}
+
+func makeUnsupportedStmtLogger(
+	ctx context.Context,
+	user username.SQLUsername,
+	jobID int64,
+	ignoreUnsupported bool,
+	unsupportedLogDest string,
+	loggerType loggerKind,
+	externalStorage cloud.ExternalStorageFactory,
+) *unsupportedStmtLogger {
+	return &unsupportedStmtLogger{
+		ctx:                      ctx,
+		user:                     user,
+		jobID:                    jobID,
+		ignoreUnsupported:        ignoreUnsupported,
+		ignoreUnsupportedLogDest: unsupportedLogDest,
+		loggerType:               loggerType,
+		logBuffer:                new(bytes.Buffer),
+		externalStorage:          externalStorage,
+	}
+}
+
+func (u *unsupportedStmtLogger) log(logLine string, isParseError bool) error {
+	// We have already logged parse errors during the schema ingestion phase, so
+	// skip them to avoid duplicate entries.
+	skipLoggingParseErr := isParseError && u.loggerType == dataIngestion
+	if u.ignoreUnsupportedLogDest == "" || skipLoggingParseErr {
+		return nil
+	}
+
+	// Flush to a file if we have hit the max size of our buffer.
+	if u.numIgnoredStmts >= pgDumpMaxLoggedStmts {
+		err := u.flush()
+		if err != nil {
+			return err
+		}
+	}
+
+	if isParseError {
+		logLine = fmt.Sprintf("%s: could not be parsed\n", logLine)
+	} else {
+		logLine = fmt.Sprintf("%s: unsupported by IMPORT\n", logLine)
+	}
+	u.logBuffer.Write([]byte(logLine))
+	u.numIgnoredStmts++
+	return nil
+}
+
+func (u *unsupportedStmtLogger) flush() error {
+	if u.ignoreUnsupportedLogDest == "" {
+		return nil
+	}
+
+	conf, err := cloud.ExternalStorageConfFromURI(u.ignoreUnsupportedLogDest, u.user)
+	if err != nil {
+		return errors.Wrap(err, "failed to log unsupported stmts during IMPORT PGDUMP")
+	}
+	var s cloud.ExternalStorage
+	if s, err = u.externalStorage(u.ctx, conf); err != nil {
+		return errors.New("failed to log unsupported stmts during IMPORT PGDUMP")
+	}
+	defer s.Close()
+
+	logFileName := fmt.Sprintf("import%d", u.jobID)
+	if u.loggerType == dataIngestion {
+		logFileName = path.Join(logFileName, pgDumpUnsupportedDataStmtLog, fmt.Sprintf("%d.log", u.flushCount))
+	} else {
+		logFileName = path.Join(logFileName, pgDumpUnsupportedSchemaStmtLog, fmt.Sprintf("%d.log", u.flushCount))
+	}
+	err = cloud.WriteFile(u.ctx, s, logFileName, bytes.NewReader(u.logBuffer.Bytes()))
+	if err != nil {
+		return errors.Wrap(err, "failed to log unsupported stmts to log during IMPORT PGDUMP")
+	}
+	u.flushCount++
+	u.numIgnoredStmts = 0
+	u.logBuffer.Truncate(0)
 	return nil
 }
 

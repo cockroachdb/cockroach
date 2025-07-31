@@ -47,7 +47,7 @@ func TestMemoryAllocations(t *testing.T) {
 	var paramHeader func()
 
 	m := NewMonitor(Options{
-		Name:     MakeName("test"),
+		Name:     "test",
 		Settings: st,
 	})
 	m.StartNoReserved(ctx, nil /* pool */)
@@ -144,7 +144,7 @@ func TestMemoryAllocations(t *testing.T) {
 	}
 
 	for _, max := range maxs {
-		pool = getMonitorEx(ctx, st, "test" /* prefix */, nil /* parent */, max /* reservedBytes */)
+		pool = getMonitorEx(ctx, st, "test" /* name */, nil /* parent */, max /* reservedBytes */)
 
 		for _, hf := range hysteresisFactors {
 			maxAllocatedButUnusedBlocks = hf
@@ -158,7 +158,7 @@ func TestMemoryAllocations(t *testing.T) {
 					// We start with a fresh monitor for every set of
 					// parameters.
 					m = NewMonitor(Options{
-						Name:      MakeName("test"),
+						Name:      "test",
 						Increment: pa,
 						Settings:  st,
 					})
@@ -226,7 +226,7 @@ func TestBoundAccount(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	m := getMonitorEx(ctx, st, "test" /* prefix */, nil /* parent */, 100 /* reservedBytes */)
+	m := getMonitorEx(ctx, st, "test" /* name */, nil /* parent */, 100 /* reservedBytes */)
 	m.poolAllocationSize = 1
 	maxAllocatedButUnusedBlocks = 1
 
@@ -285,7 +285,7 @@ func TestBytesMonitor(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	m := getMonitorEx(ctx, st, "test" /* prefix */, nil /* parent */, 100 /* reservedBytes */)
+	m := getMonitorEx(ctx, st, "test" /* name */, nil /* parent */, 100 /* reservedBytes */)
 	maxAllocatedButUnusedBlocks = 1
 
 	if err := m.reserveBytes(ctx, 10); err != nil {
@@ -318,7 +318,7 @@ func TestBytesMonitor(t *testing.T) {
 	}
 
 	limitedMonitor := NewMonitor(Options{
-		Name:      MakeName("testlimit"),
+		Name:      "testlimit",
 		Limit:     10,
 		Increment: 1,
 		Settings:  cluster.MakeTestingClusterSettings(),
@@ -343,7 +343,7 @@ func TestMemoryAllocationEdgeCases(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	m := NewMonitor(Options{
-		Name:      MakeName("test"),
+		Name:      "test",
 		Increment: 1e9,
 		Settings:  st,
 	})
@@ -367,14 +367,14 @@ func TestMultiSharedGauge(t *testing.T) {
 	minAllocation := int64(1000)
 
 	parent := NewMonitor(Options{
-		Name:      MakeName("root"),
+		Name:      "root",
 		CurCount:  resourceGauge,
 		Increment: minAllocation,
 		Settings:  cluster.MakeTestingClusterSettings(),
 	})
 	parent.Start(ctx, nil, NewStandaloneBudget(100000))
 
-	child := NewMonitorInheritWithLimit(MakeName("child"), 20000, parent, false /* longLiving */)
+	child := NewMonitorInheritWithLimit("child", 20000, parent, false /* longLiving */)
 	child.StartNoReserved(ctx, parent)
 
 	acc := child.MakeBoundAccount()
@@ -387,7 +387,7 @@ func TestReservedAccountCleared(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
-	root := getMonitor(ctx, st, "root" /* prefix */, nil /* parent */)
+	root := getMonitor(ctx, st, "root" /* name */, nil /* parent */)
 	root.RelinquishAllOnReleaseBytes()
 
 	// Pre-reserve a budget of 100 bytes.
@@ -395,7 +395,7 @@ func TestReservedAccountCleared(t *testing.T) {
 	require.NoError(t, reserved.Grow(ctx, 100))
 
 	m := NewMonitor(Options{
-		Name:      MakeName("test"),
+		Name:      "test",
 		Increment: 1,
 		Settings:  st,
 	})
@@ -415,7 +415,7 @@ func TestReservedAccountCleared(t *testing.T) {
 }
 
 func getMonitor(
-	ctx context.Context, st *cluster.Settings, name redact.SafeString, parent *BytesMonitor,
+	ctx context.Context, st *cluster.Settings, name string, parent *BytesMonitor,
 ) *BytesMonitor {
 	var reservedBytes int64
 	if parent == nil {
@@ -425,14 +425,10 @@ func getMonitor(
 }
 
 func getMonitorEx(
-	ctx context.Context,
-	st *cluster.Settings,
-	name redact.SafeString,
-	parent *BytesMonitor,
-	reservedBytes int64,
+	ctx context.Context, st *cluster.Settings, name string, parent *BytesMonitor, reservedBytes int64,
 ) *BytesMonitor {
 	m := NewMonitor(Options{
-		Name:      MakeName(name),
+		Name:      redact.RedactableString(name),
 		Increment: 1,
 		Settings:  st,
 	})
@@ -444,7 +440,7 @@ func getMonitorUsed(
 	t *testing.T,
 	ctx context.Context,
 	st *cluster.Settings,
-	name redact.SafeString,
+	name string,
 	parent *BytesMonitor,
 	usedBytes, reservedBytes int64,
 ) *BytesMonitor {
@@ -476,8 +472,7 @@ func TestBytesMonitorTree(t *testing.T) {
 			for i := 0; i < e.Level; i++ {
 				sb.WriteString("-")
 			}
-			sb.WriteString(e.Name.String())
-			sb.WriteString("\n")
+			sb.WriteString(e.Name + "\n")
 		}
 		return sb.String()
 	}
@@ -559,7 +554,7 @@ func TestBytesMonitorNoDeadlocks(t *testing.T) {
 					return
 				default:
 					func() {
-						m := getMonitor(ctx, st, redact.SafeString(fmt.Sprintf("m%d", i)), root)
+						m := getMonitor(ctx, st, fmt.Sprintf("m%d", i), root)
 						defer m.Stop(ctx)
 						numOps := rng.Intn(10 + 1)
 						var reserved int64
@@ -614,7 +609,7 @@ func TestBytesMonitorNoDeadlocks(t *testing.T) {
 func BenchmarkBoundAccountGrow(b *testing.B) {
 	ctx := context.Background()
 	m := NewMonitor(Options{
-		Name:      MakeName("test"),
+		Name:      "test",
 		Increment: 1e9,
 		Settings:  cluster.MakeTestingClusterSettings(),
 	})
@@ -636,7 +631,7 @@ func BenchmarkTraverseTree(b *testing.B) {
 			allMonitors[level] = make([]*BytesMonitor, 0, len(allMonitors[level-1])*numChildrenPerMonitor)
 			for parent, parentMon := range allMonitors[level-1] {
 				for child := 0; child < numChildrenPerMonitor; child++ {
-					name := redact.SafeString(fmt.Sprintf("child%d_parent%d", child, parent))
+					name := fmt.Sprintf("child%d_parent%d", child, parent)
 					allMonitors[level] = append(allMonitors[level], getMonitor(ctx, st, name, parentMon))
 				}
 			}
@@ -676,7 +671,7 @@ func TestLimit(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	m := NewMonitor(Options{
-		Name:     MakeName("test"),
+		Name:     "test",
 		Settings: st,
 	})
 
@@ -689,7 +684,7 @@ func TestLimit(t *testing.T) {
 	m.Stop(ctx)
 
 	m2 := NewMonitor(Options{
-		Name:     MakeName("test"),
+		Name:     "test",
 		Settings: st,
 	})
 

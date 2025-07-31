@@ -275,7 +275,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	var intentsToCleanup []roachpb.LockUpdate
 	for i, txn := range pushedTxns {
 		switch txn.Status {
-		case roachpb.PENDING, roachpb.PREPARED, roachpb.STAGING:
+		case roachpb.PENDING, roachpb.STAGING:
 			// The transaction is still in progress but its timestamp was moved
 			// forward to the current time. Inform the Processor that it can
 			// forward the txn's timestamp in its unresolvedIntentQueue.

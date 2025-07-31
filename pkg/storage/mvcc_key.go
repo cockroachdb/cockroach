@@ -7,6 +7,7 @@ package storage
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"slices"
 	"sort"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -24,6 +24,14 @@ var (
 	MVCCKeyMax = MakeMVCCMetadataKey(roachpb.KeyMax)
 	// NilKey is the nil MVCCKey.
 	NilKey = MVCCKey{}
+)
+
+const (
+	mvccEncodedTimeSentinelLen  = 1
+	mvccEncodedTimeWallLen      = 8
+	mvccEncodedTimeLogicalLen   = 4
+	mvccEncodedTimeSyntheticLen = 1
+	mvccEncodedTimeLengthLen    = 1
 )
 
 // MVCCKey is a versioned key, distinguished from roachpb.Key with the addition
@@ -145,7 +153,7 @@ func (k MVCCKey) Format(f fmt.State, c rune) {
 // Len returns the size of the MVCCKey when encoded. Implements the
 // pebble.Encodeable interface.
 func (k MVCCKey) Len() int {
-	return mvccencoding.EncodedMVCCKeyLength(k.Key, k.Timestamp)
+	return encodedMVCCKeyLength(k)
 }
 
 // EncodeMVCCKey encodes an MVCCKey into its Pebble representation. The encoding
@@ -172,22 +180,22 @@ func (k MVCCKey) Len() int {
 // then, decoding routines must be prepared to handle it, but can ignore the
 // synthetic bit.
 func EncodeMVCCKey(key MVCCKey) []byte {
-	keyLen := mvccencoding.EncodedMVCCKeyLength(key.Key, key.Timestamp)
+	keyLen := encodedMVCCKeyLength(key)
 	buf := make([]byte, keyLen)
-	mvccencoding.EncodeMVCCKeyToBufSized(buf, key.Key, key.Timestamp, keyLen)
+	encodeMVCCKeyToBuf(buf, key, keyLen)
 	return buf
 }
 
 // EncodeMVCCKeyToBuf encodes an MVCCKey into its Pebble representation, reusing
 // the given byte buffer if it has sufficient capacity.
 func EncodeMVCCKeyToBuf(buf []byte, key MVCCKey) []byte {
-	keyLen := mvccencoding.EncodedMVCCKeyLength(key.Key, key.Timestamp)
+	keyLen := encodedMVCCKeyLength(key)
 	if cap(buf) < keyLen {
 		buf = make([]byte, keyLen)
 	} else {
 		buf = buf[:keyLen]
 	}
-	mvccencoding.EncodeMVCCKeyToBufSized(buf, key.Key, key.Timestamp, keyLen)
+	encodeMVCCKeyToBuf(buf, key, keyLen)
 	return buf
 }
 
@@ -197,15 +205,59 @@ func EncodeMVCCKeyPrefix(key roachpb.Key) []byte {
 	return EncodeMVCCKey(MVCCKey{Key: key})
 }
 
+// encodeMVCCKeyToBuf encodes an MVCCKey into its Pebble representation to the
+// target buffer, which must have the correct size.
+func encodeMVCCKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
+	copy(buf, key.Key)
+	pos := len(key.Key)
+
+	buf[pos] = 0 // sentinel byte
+	pos += mvccEncodedTimeSentinelLen
+
+	tsLen := keyLen - pos - mvccEncodedTimeLengthLen
+	if tsLen > 0 {
+		encodeMVCCTimestampToBuf(buf[pos:], key.Timestamp)
+		pos += tsLen
+		buf[pos] = byte(tsLen + mvccEncodedTimeLengthLen)
+	}
+}
+
 // encodeMVCCTimestamp encodes an MVCC timestamp into its Pebble
 // representation, excluding length suffix and sentinel byte.
 func encodeMVCCTimestamp(ts hlc.Timestamp) []byte {
-	tsLen := mvccencoding.EncodedMVCCTimestampLength(ts)
+	tsLen := encodedMVCCTimestampLength(ts)
 	if tsLen == 0 {
 		return nil
 	}
 	buf := make([]byte, tsLen)
-	mvccencoding.EncodeMVCCTimestampToBufSized(buf, ts)
+	encodeMVCCTimestampToBuf(buf, ts)
+	return buf
+}
+
+// EncodeMVCCTimestampSuffix encodes an MVCC timestamp into its Pebble
+// representation, including the length suffix but excluding the sentinel byte.
+// This is equivalent to the Pebble suffix.
+func EncodeMVCCTimestampSuffix(ts hlc.Timestamp) []byte {
+	return encodeMVCCTimestampSuffixToBuf(nil, ts)
+}
+
+// encodeMVCCTimestampSuffixToBuf encodes an MVCC timestamp into its Pebble
+// representation, including the length suffix but excluding the sentinel byte.
+// This is equivalent to the Pebble suffix. It reuses the given byte buffer if
+// it has sufficient capacity.
+func encodeMVCCTimestampSuffixToBuf(buf []byte, ts hlc.Timestamp) []byte {
+	tsLen := encodedMVCCTimestampLength(ts)
+	if tsLen == 0 {
+		return buf[:0]
+	}
+	suffixLen := tsLen + mvccEncodedTimeLengthLen
+	if cap(buf) < suffixLen {
+		buf = make([]byte, suffixLen)
+	} else {
+		buf = buf[:suffixLen]
+	}
+	encodeMVCCTimestampToBuf(buf, ts)
+	buf[tsLen] = byte(suffixLen)
 	return buf
 }
 
@@ -213,7 +265,7 @@ func encodeMVCCTimestamp(ts hlc.Timestamp) []byte {
 // representation, excluding the length suffix and sentinel byte, reusing the
 // given byte slice if it has sufficient capacity.
 func EncodeMVCCTimestampToBuf(buf []byte, ts hlc.Timestamp) []byte {
-	tsLen := mvccencoding.EncodedMVCCTimestampLength(ts)
+	tsLen := encodedMVCCTimestampLength(ts)
 	if tsLen == 0 {
 		return buf[:0]
 	}
@@ -222,8 +274,61 @@ func EncodeMVCCTimestampToBuf(buf []byte, ts hlc.Timestamp) []byte {
 	} else {
 		buf = buf[:tsLen]
 	}
-	mvccencoding.EncodeMVCCTimestampToBufSized(buf, ts)
+	encodeMVCCTimestampToBuf(buf, ts)
 	return buf
+}
+
+// encodeMVCCTimestampToBuf encodes an MVCC timestamp into its Pebble
+// representation, excluding the length suffix and sentinel byte. The target
+// buffer must have the correct size, and the timestamp must not be empty.
+func encodeMVCCTimestampToBuf(buf []byte, ts hlc.Timestamp) {
+	binary.BigEndian.PutUint64(buf, uint64(ts.WallTime))
+	if ts.Logical != 0 {
+		binary.BigEndian.PutUint32(buf[mvccEncodedTimeWallLen:], uint32(ts.Logical))
+	}
+}
+
+// encodedMVCCKeyLength returns the encoded length of the given MVCCKey.
+func encodedMVCCKeyLength(key MVCCKey) int {
+	// NB: We don't call into EncodedMVCCKeyPrefixLength() or
+	// EncodedMVCCTimestampSuffixLength() here because the additional function
+	// call overhead is significant.
+	keyLen := len(key.Key) + mvccEncodedTimeSentinelLen
+	if !key.Timestamp.IsEmpty() {
+		keyLen += mvccEncodedTimeWallLen + mvccEncodedTimeLengthLen
+		if key.Timestamp.Logical != 0 {
+			keyLen += mvccEncodedTimeLogicalLen
+		}
+	}
+	return keyLen
+}
+
+// EncodedMVCCKeyPrefixLength returns the encoded length of a roachpb.Key prefix
+// including the sentinel byte.
+func EncodedMVCCKeyPrefixLength(key roachpb.Key) int {
+	return len(key) + mvccEncodedTimeSentinelLen
+}
+
+// encodedMVCCTimestampLength returns the encoded length of the given MVCC
+// timestamp, excluding the length suffix and sentinel bytes.
+func encodedMVCCTimestampLength(ts hlc.Timestamp) int {
+	// This is backwards, but encodedMVCCKeyLength() is called in the
+	// EncodeMVCCKey() hot path and an additional function call to this function
+	// shows ~6% overhead in benchmarks. We therefore do the timestamp length
+	// calculation inline in encodedMVCCKeyLength(), and remove the excess here.
+	tsLen := encodedMVCCKeyLength(MVCCKey{Timestamp: ts}) - mvccEncodedTimeSentinelLen
+	if tsLen > 0 {
+		tsLen -= mvccEncodedTimeLengthLen
+	}
+	return tsLen
+}
+
+// EncodedMVCCTimestampSuffixLength returns the encoded length of the
+// given MVCC timestamp, including the length suffix. It returns 0
+// if the timestamp is empty.
+func EncodedMVCCTimestampSuffixLength(ts hlc.Timestamp) int {
+	// This is backwards, see comment in encodedMVCCTimestampLength() for why.
+	return encodedMVCCKeyLength(MVCCKey{Timestamp: ts}) - mvccEncodedTimeSentinelLen
 }
 
 // TODO(erikgrinaker): merge in the enginepb decoding functions once it can
@@ -233,6 +338,42 @@ func EncodeMVCCTimestampToBuf(buf []byte, ts hlc.Timestamp) []byte {
 func DecodeMVCCKey(encodedKey []byte) (MVCCKey, error) {
 	k, ts, err := enginepb.DecodeKey(encodedKey)
 	return MVCCKey{k, ts}, err
+}
+
+// decodeMVCCTimestamp decodes an MVCC timestamp from its Pebble representation,
+// excluding the length suffix.
+func decodeMVCCTimestamp(encodedTS []byte) (hlc.Timestamp, error) {
+	// NB: This logic is duplicated in enginepb.DecodeKey() to avoid the
+	// overhead of an additional function call there (~13%).
+	var ts hlc.Timestamp
+	switch len(encodedTS) {
+	case 0:
+		// No-op.
+	case 8:
+		ts.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
+	case 12, 13:
+		ts.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
+		ts.Logical = int32(binary.BigEndian.Uint32(encodedTS[8:12]))
+		// NOTE: byte 13 used to store the timestamp's synthetic bit, but this is no
+		// longer consulted and can be ignored during decoding.
+	default:
+		return hlc.Timestamp{}, errors.Errorf("bad timestamp %x", encodedTS)
+	}
+	return ts, nil
+}
+
+// DecodeMVCCTimestampSuffix decodes an MVCC timestamp from its Pebble representation,
+// including the length suffix.
+func DecodeMVCCTimestampSuffix(encodedTS []byte) (hlc.Timestamp, error) {
+	if len(encodedTS) == 0 {
+		return hlc.Timestamp{}, nil
+	}
+	encodedLen := len(encodedTS)
+	if suffixLen := int(encodedTS[encodedLen-1]); suffixLen != encodedLen {
+		return hlc.Timestamp{}, errors.Errorf(
+			"bad timestamp: found length suffix %d, actual length %d", suffixLen, encodedLen)
+	}
+	return decodeMVCCTimestamp(encodedTS[:encodedLen-1])
 }
 
 // MVCCRangeKey is a versioned key span.
@@ -308,9 +449,9 @@ func (k MVCCRangeKey) Compare(o MVCCRangeKey) int {
 // incorrectly always uses 13 bytes for the timestamp while this method
 // calculates the actual encoded size.
 func (k MVCCRangeKey) EncodedSize() int {
-	return mvccencoding.EncodedMVCCKeyPrefixLength(k.StartKey) +
-		mvccencoding.EncodedMVCCKeyPrefixLength(k.EndKey) +
-		mvccencoding.EncodedMVCCTimestampSuffixLength(k.Timestamp)
+	return EncodedMVCCKeyPrefixLength(k.StartKey) +
+		EncodedMVCCKeyPrefixLength(k.EndKey) +
+		EncodedMVCCTimestampSuffixLength(k.Timestamp)
 }
 
 // String formats the range key.
@@ -800,4 +941,31 @@ func (v MVCCRangeKeyVersion) Equal(o MVCCRangeKeyVersion) bool {
 // String formats the MVCCRangeKeyVersion as a string.
 func (v MVCCRangeKeyVersion) String() string {
 	return fmt.Sprintf("%s=%x", v.Timestamp, v.Value)
+}
+
+// EncodeMVCCTimestampSuffixWithSyntheticBitForTesting is a utility to encode
+// the provided timestamp as a MVCC timestamp key suffix with the synthetic bit
+// set. The synthetic bit is no longer encoded/decoded into the hlc.Timestamp
+// but may exist in existing databases. This utility allows a test to construct
+// a timestamp with the synthetic bit for testing appropriate handling of
+// existing keys with the bit set. It should only be used in tests. See #129592.
+//
+// TODO(jackson): Remove this function when we've migrated all keys to unset the
+// synthetic bit.
+func EncodeMVCCTimestampSuffixWithSyntheticBitForTesting(ts hlc.Timestamp) []byte {
+	const mvccEncodedTimestampWithSyntheticBitLen = mvccEncodedTimeWallLen +
+		mvccEncodedTimeLogicalLen +
+		mvccEncodedTimeSyntheticLen +
+		mvccEncodedTimeLengthLen
+	suffix := make([]byte, mvccEncodedTimestampWithSyntheticBitLen)
+	encodeMVCCTimestampToBuf(suffix, ts)
+	suffix[len(suffix)-2] = 0x01 // Synthetic bit.
+	suffix[len(suffix)-1] = mvccEncodedTimestampWithSyntheticBitLen
+	if decodedTS, err := DecodeMVCCTimestampSuffix(suffix); err != nil {
+		panic(err)
+	} else if !ts.Equal(decodedTS) {
+		panic(errors.AssertionFailedf("manufactured MVCC timestamp with synthetic bit decoded to %s not %s",
+			ts, decodedTS))
+	}
+	return suffix
 }

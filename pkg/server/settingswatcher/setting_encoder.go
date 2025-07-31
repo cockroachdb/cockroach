@@ -33,19 +33,22 @@ func EncodeSettingValue(rawValue []byte, valueType string) ([]byte, error) {
 	if tuple, err = valueside.Encode(tuple,
 		valueside.MakeColumnIDDelta(descpb.ColumnID(encoding.NoColumnID),
 			systemschema.SettingsTable.PublicColumns()[1].GetID()),
-		tree.NewDString(string(rawValue))); err != nil {
+		tree.NewDString(string(rawValue)),
+		nil); err != nil {
 		return nil, err
 	}
 	if tuple, err = valueside.Encode(tuple,
 		valueside.MakeColumnIDDelta(systemschema.SettingsTable.PublicColumns()[1].GetID(),
 			systemschema.SettingsTable.PublicColumns()[2].GetID()),
-		tree.MustMakeDTimestamp(timeutil.Now(), time.Microsecond)); err != nil {
+		tree.MustMakeDTimestamp(timeutil.Now(), time.Microsecond),
+		nil); err != nil {
 		return nil, err
 	}
 	if tuple, err = valueside.Encode(tuple,
 		valueside.MakeColumnIDDelta(systemschema.SettingsTable.PublicColumns()[2].GetID(),
 			systemschema.SettingsTable.PublicColumns()[3].GetID()),
-		tree.NewDString(valueType)); err != nil {
+		tree.NewDString(valueType),
+		nil); err != nil {
 		return nil, err
 	}
 	return tuple, nil

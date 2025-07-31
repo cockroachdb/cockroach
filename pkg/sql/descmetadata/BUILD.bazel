@@ -14,7 +14,6 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/isql",
         "//pkg/sql/schemachanger/scexec",
-        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessioninit",
         "//pkg/sql/ttl/ttlbase",

@@ -41,7 +41,7 @@ func prepareExpr(t *testing.T, datumExpr string) tree.Datum {
 	// annotations have come into effect.
 	ctx := context.Background()
 	sema := tree.MakeSemaContext(nil /* resolver */)
-	typedExpr, err := tree.TypeCheck(ctx, expr, &sema, types.AnyElement)
+	typedExpr, err := tree.TypeCheck(ctx, expr, &sema, types.Any)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}

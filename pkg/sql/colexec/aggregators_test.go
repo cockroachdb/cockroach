@@ -1156,21 +1156,10 @@ func benchmarkAggregateFunction(
 	if numSameAggs != 1 {
 		numSameAggsSuffix = fmt.Sprintf("/numSameAggs=%d", numSameAggs)
 	}
-	afterEachRunDefault := func(b *testing.B, op colexecop.Operator) {
-		if err = op.(colexecop.Closer).Close(ctx); err != nil {
-			b.Fatal(err)
-		}
-	}
 	b.Run(fmt.Sprintf(
 		"%s/%s/%s%s/groupSize=%d%s/numInputRows=%d",
 		fName, agg.name, inputTypesString, numSameAggsSuffix, groupSize, distinctProbString, numInputRows),
 		func(b *testing.B) {
-			afterEachRun := afterEachRunDefault
-			if agg.afterEachRun != nil {
-				afterEachRun = func(*testing.B, colexecop.Operator) {
-					agg.afterEachRun()
-				}
-			}
 			// Simulate the scenario when the optimizer has the perfect
 			// estimate.
 			estimatedRowCount := uint64(math.Ceil(float64(numInputRows) / float64(groupSize)))
@@ -1198,7 +1187,12 @@ func benchmarkAggregateFunction(
 						break
 					}
 				}
-				afterEachRun(b, a)
+				if err = a.(colexecop.Closer).Close(ctx); err != nil {
+					b.Fatal(err)
+				}
+				if agg.afterEachRun != nil {
+					agg.afterEachRun()
+				}
 				source.Reset(ctx)
 			}
 		},

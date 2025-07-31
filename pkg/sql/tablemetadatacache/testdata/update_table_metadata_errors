@@ -3,18 +3,71 @@ set-time unixSecs=1610000000
 
 update-cache injectSpanStatsErrors=error1
 ----
-updatedTables: 62, errors: 4, run #: 1, duration > 0: true
+updatedTables: 57, errors: 3, run #: 1, duration > 0: true
 
 # Since this is the first update and we encountered an error we should see the zero value for
 # the non nullable columns, except for the last updated time which is set to the current time.
 query
 SELECT * FROM system.table_metadata
-WHERE db_name <> 'system' OR table_name IN ('comments', 'locations', 'descriptor_id_seq')
 ORDER BY (db_name, table_name)
 ----
 1 24 system public comments 4 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 44 system public database_role_settings 4 2 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 3 system public descriptor 2 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
 1 7 system public descriptor_id_seq 1 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC SEQUENCE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 12 system public eventlog 6 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 53 system public external_connections 7 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 54 system public job_info 4 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 15 system public jobs 12 5 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 41 system public join_tokens 3 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 11 system public lease 5 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
 1 21 system public locations 4 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 40 system public migrations 5 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 64 system public mvcc_statistics 6 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 30 system public namespace 4 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 52 system public privileges 5 3 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 31 system public protected_ts_meta 5 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 32 system public protected_ts_records 8 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 13 system public rangelog 7 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 9 system public region_liveness 2 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 25 system public replication_constraint_stats 7 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 26 system public replication_critical_localities 5 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 27 system public replication_stats 7 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 28 system public reports_meta 2 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 48 system public role_id_seq 1 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC SEQUENCE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 23 system public role_members 5 6 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 33 system public role_options 4 2 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 37 system public scheduled_jobs 10 2 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 6 system public settings 4 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 47 system public span_configurations 3 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 51 system public span_count 2 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 56 system public span_stats_buckets 5 2 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 57 system public span_stats_samples 2 2 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 58 system public span_stats_tenant_boundaries 2 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 55 system public span_stats_unique_keys 2 2 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 46 system public sql_instances 8 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 39 system public sqlliveness 3 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 61 system public statement_activity 17 8 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 34 system public statement_bundle_chunks 3 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 36 system public statement_diagnostics 7 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 35 system public statement_diagnostics_requests 11 2 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 66 system public statement_execution_insights 29 5 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 42 system public statement_statistics 19 9 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 67 system public table_metadata 18 11 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 20 system public table_statistics 12 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 59 system public task_payloads 8 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 63 system public tenant_id_seq 1 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC SEQUENCE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 50 system public tenant_settings 6 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 60 system public tenant_tasks 7 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 45 system public tenant_usage 14 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 8 system public tenants 6 3 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 62 system public transaction_activity 14 8 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 65 system public transaction_execution_insights 23 3 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 43 system public transaction_statistics 14 8 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 14 system public ui 3 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 4 system public users 4 2 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 19 system public web_sessions 9 5 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
+1 5 system public zones 2 1 {} 0 0 0 0 0 An error has occurred while fetching span stats. 2021-01-07 06:13:20 +0000 UTC TABLE {"auto_stats_enabled": null, "replica_count": 0, "stats_last_updated": null}
 
 
 set-time unixSecs=1710000000
@@ -22,7 +75,7 @@ set-time unixSecs=1710000000
 
 update-cache
 ----
-updatedTables: 62, errors: 0, run #: 2, duration > 0: true
+updatedTables: 57, errors: 0, run #: 2, duration > 0: true
 
 # Now the last_update_error column should be nil and data
 # should be updated.
@@ -42,12 +95,65 @@ SELECT
   last_updated,
   last_update_error
 FROM system.table_metadata
-WHERE db_name <> 'system' OR table_name IN ('comments', 'locations', 'descriptor_id_seq')
 ORDER BY (db_name, table_name)
 ----
 comments system public 1 24 4 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+database_role_settings system public 1 44 4 2 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+descriptor system public 1 3 2 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
 descriptor_id_seq system public 1 7 1 1 SEQUENCE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+eventlog system public 1 12 6 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+external_connections system public 1 53 7 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+job_info system public 1 54 4 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+jobs system public 1 15 12 5 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+join_tokens system public 1 41 3 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+lease system public 1 11 5 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
 locations system public 1 21 4 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+migrations system public 1 40 5 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+mvcc_statistics system public 1 64 6 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+namespace system public 1 30 4 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+privileges system public 1 52 5 3 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+protected_ts_meta system public 1 31 5 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+protected_ts_records system public 1 32 8 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+rangelog system public 1 13 7 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+region_liveness system public 1 9 2 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+replication_constraint_stats system public 1 25 7 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+replication_critical_localities system public 1 26 5 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+replication_stats system public 1 27 7 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+reports_meta system public 1 28 2 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+role_id_seq system public 1 48 1 1 SEQUENCE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+role_members system public 1 23 5 6 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+role_options system public 1 33 4 2 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+scheduled_jobs system public 1 37 10 2 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+settings system public 1 6 4 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+span_configurations system public 1 47 3 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+span_count system public 1 51 2 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+span_stats_buckets system public 1 56 5 2 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+span_stats_samples system public 1 57 2 2 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+span_stats_tenant_boundaries system public 1 58 2 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+span_stats_unique_keys system public 1 55 2 2 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+sql_instances system public 1 46 8 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+sqlliveness system public 1 39 3 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+statement_activity system public 1 61 17 8 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+statement_bundle_chunks system public 1 34 3 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+statement_diagnostics system public 1 36 7 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+statement_diagnostics_requests system public 1 35 11 2 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+statement_execution_insights system public 1 66 29 5 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+statement_statistics system public 1 42 19 9 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+table_metadata system public 1 67 18 11 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+table_statistics system public 1 20 12 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+task_payloads system public 1 59 8 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+tenant_id_seq system public 1 63 1 1 SEQUENCE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+tenant_settings system public 1 50 6 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+tenant_tasks system public 1 60 7 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+tenant_usage system public 1 45 14 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+tenants system public 1 8 6 3 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+transaction_activity system public 1 62 14 8 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+transaction_execution_insights system public 1 65 23 3 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+transaction_statistics system public 1 43 14 8 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+ui system public 1 14 3 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+users system public 1 4 4 2 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+web_sessions system public 1 19 9 5 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
+zones system public 1 5 2 1 TABLE null {1} 1 2024-03-09 16:00:00 +0000 UTC <nil>
 
 
 set-time unixSecs=1711000000
@@ -57,7 +163,7 @@ set-time unixSecs=1711000000
 # including the last_updated time.
 update-cache injectSpanStatsErrors=error2,error3
 ----
-updatedTables: 62, errors: 4, run #: 3, duration > 0: true
+updatedTables: 57, errors: 3, run #: 3, duration > 0: true
 
 query
 SELECT
@@ -71,11 +177,64 @@ SELECT
   last_updated,
   last_update_error
 FROM system.table_metadata
-WHERE db_name <> 'system' OR table_name IN ('comments', 'locations', 'descriptor_id_seq')
 ----
+1 3 descriptor 2 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 4 users 4 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 5 zones 2 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 6 settings 4 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
 1 7 descriptor_id_seq 1 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 8 tenants 6 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 9 region_liveness 2 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 11 lease 5 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 12 eventlog 6 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 13 rangelog 7 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 14 ui 3 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 15 jobs 12 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 19 web_sessions 9 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 20 table_statistics 12 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
 1 21 locations 4 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 23 role_members 5 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
 1 24 comments 4 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 25 replication_constraint_stats 7 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 26 replication_critical_localities 5 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 27 replication_stats 7 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 28 reports_meta 2 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 30 namespace 4 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 31 protected_ts_meta 5 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 32 protected_ts_records 8 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 33 role_options 4 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 34 statement_bundle_chunks 3 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 35 statement_diagnostics_requests 11 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 36 statement_diagnostics 7 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 37 scheduled_jobs 10 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 39 sqlliveness 3 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 40 migrations 5 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 41 join_tokens 3 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 42 statement_statistics 19 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 43 transaction_statistics 14 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 44 database_role_settings 4 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 45 tenant_usage 14 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 46 sql_instances 8 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 47 span_configurations 3 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 48 role_id_seq 1 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 50 tenant_settings 6 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 51 span_count 2 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 52 privileges 5 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 53 external_connections 7 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 54 job_info 4 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 55 span_stats_unique_keys 2 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 56 span_stats_buckets 5 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 57 span_stats_samples 2 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 58 span_stats_tenant_boundaries 2 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 59 task_payloads 8 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 60 tenant_tasks 7 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 61 statement_activity 17 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 62 transaction_activity 14 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 63 tenant_id_seq 1 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 64 mvcc_statistics 6 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 65 transaction_execution_insights 23 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 66 statement_execution_insights 29 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
+1 67 table_metadata 18 {1} 1 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats.
 
 
 set-time unixSecs=1810010000
@@ -86,7 +245,7 @@ set-time unixSecs=1810010000
 
 update-cache injectSpanStatsErrors=error4 spanStatsErrBatch=1
 ----
-updatedTables: 62, errors: 1, run #: 4, duration > 0: true
+updatedTables: 57, errors: 1, run #: 4, duration > 0: true
 
 query
 SELECT
@@ -97,9 +256,62 @@ SELECT
   db_name,
   table_name
 FROM system.table_metadata
-WHERE db_name <> 'system' OR table_name IN ('comments', 'locations', 'descriptor_id_seq')
 ORDER BY last_updated
 ----
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 30 namespace
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 64 mvcc_statistics
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 54 job_info
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 53 external_connections
 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 7 descriptor_id_seq
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 52 privileges
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 9 region_liveness
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 11 lease
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 12 eventlog
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 13 rangelog
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 44 database_role_settings
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 15 jobs
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 41 join_tokens
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 3 descriptor
 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 21 locations
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 40 migrations
 2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 24 comments
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 25 replication_constraint_stats
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 32 protected_ts_records
+2024-03-09 16:00:00 +0000 UTC An error has occurred while fetching span stats. 1 31 protected_ts_meta
+2027-05-11 04:33:20 +0000 UTC <nil> 1 20 table_statistics
+2027-05-11 04:33:20 +0000 UTC <nil> 1 50 tenant_settings
+2027-05-11 04:33:20 +0000 UTC <nil> 1 27 replication_stats
+2027-05-11 04:33:20 +0000 UTC <nil> 1 26 replication_critical_localities
+2027-05-11 04:33:20 +0000 UTC <nil> 1 33 role_options
+2027-05-11 04:33:20 +0000 UTC <nil> 1 34 statement_bundle_chunks
+2027-05-11 04:33:20 +0000 UTC <nil> 1 35 statement_diagnostics_requests
+2027-05-11 04:33:20 +0000 UTC <nil> 1 36 statement_diagnostics
+2027-05-11 04:33:20 +0000 UTC <nil> 1 37 scheduled_jobs
+2027-05-11 04:33:20 +0000 UTC <nil> 1 39 sqlliveness
+2027-05-11 04:33:20 +0000 UTC <nil> 1 23 role_members
+2027-05-11 04:33:20 +0000 UTC <nil> 1 19 web_sessions
+2027-05-11 04:33:20 +0000 UTC <nil> 1 42 statement_statistics
+2027-05-11 04:33:20 +0000 UTC <nil> 1 43 transaction_statistics
+2027-05-11 04:33:20 +0000 UTC <nil> 1 14 ui
+2027-05-11 04:33:20 +0000 UTC <nil> 1 45 tenant_usage
+2027-05-11 04:33:20 +0000 UTC <nil> 1 46 sql_instances
+2027-05-11 04:33:20 +0000 UTC <nil> 1 47 span_configurations
+2027-05-11 04:33:20 +0000 UTC <nil> 1 48 role_id_seq
+2027-05-11 04:33:20 +0000 UTC <nil> 1 28 reports_meta
+2027-05-11 04:33:20 +0000 UTC <nil> 1 51 span_count
+2027-05-11 04:33:20 +0000 UTC <nil> 1 8 tenants
+2027-05-11 04:33:20 +0000 UTC <nil> 1 6 settings
+2027-05-11 04:33:20 +0000 UTC <nil> 1 5 zones
+2027-05-11 04:33:20 +0000 UTC <nil> 1 55 span_stats_unique_keys
+2027-05-11 04:33:20 +0000 UTC <nil> 1 56 span_stats_buckets
+2027-05-11 04:33:20 +0000 UTC <nil> 1 57 span_stats_samples
+2027-05-11 04:33:20 +0000 UTC <nil> 1 58 span_stats_tenant_boundaries
+2027-05-11 04:33:20 +0000 UTC <nil> 1 59 task_payloads
+2027-05-11 04:33:20 +0000 UTC <nil> 1 60 tenant_tasks
+2027-05-11 04:33:20 +0000 UTC <nil> 1 61 statement_activity
+2027-05-11 04:33:20 +0000 UTC <nil> 1 62 transaction_activity
+2027-05-11 04:33:20 +0000 UTC <nil> 1 63 tenant_id_seq
+2027-05-11 04:33:20 +0000 UTC <nil> 1 4 users
+2027-05-11 04:33:20 +0000 UTC <nil> 1 65 transaction_execution_insights
+2027-05-11 04:33:20 +0000 UTC <nil> 1 66 statement_execution_insights
+2027-05-11 04:33:20 +0000 UTC <nil> 1 67 table_metadata

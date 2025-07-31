@@ -13,10 +13,10 @@ INSERT INTO t VALUES (1,1,1)
 statement ok
 CREATE INDEX foo ON t (b)
 
-statement error column b has type int, which is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INVERTED INDEX foo_inv ON t(b)
 
-statement error column b has type int, which is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INDEX foo_inv2 ON t USING GIN (b)
 
 statement error pq: inverted indexes can't be unique
@@ -33,7 +33,6 @@ CREATE TABLE c (
   FAMILY "primary" (id, foo, "bAr", "qUuX")
 )
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE c
 ----
@@ -45,21 +44,7 @@ c  CREATE TABLE public.c (
      CONSTRAINT c_pkey PRIMARY KEY (id ASC),
      INVERTED INDEX c_foo_idx (foo),
      INVERTED INDEX "c_bAr_idx" ("bAr")
-   );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE c
-----
-c  CREATE TABLE public.c (
-     id INT8 NOT NULL,
-     foo JSONB NULL,
-     "bAr" JSONB NULL,
-     "qUuX" JSONB NULL,
-     CONSTRAINT c_pkey PRIMARY KEY (id ASC),
-     INVERTED INDEX c_foo_idx (foo),
-     INVERTED INDEX "c_bAr_idx" ("bAr")
-   ) WITH (schema_locked = true);
+   )
 
 # Test that only the permitted opclasses are usable to make an inverted index.
 statement error operator class \"blah_ops\" does not exist
@@ -88,7 +73,7 @@ CREATE INVERTED INDEX ON c (foo DESC)
 statement ok
 CREATE INVERTED INDEX ON c("qUuX")
 
-statement error column foo has type int, which is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
+statement error column foo of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE TABLE d (
   id INT PRIMARY KEY,
   foo INT,
@@ -1568,7 +1553,6 @@ INSERT INTO c VALUES(1, ARRAY[], ARRAY['foo', 'bar', 'baz'])
 statement ok
 CREATE INDEX ON c USING GIN (bar)
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE c
 ----
@@ -1579,20 +1563,7 @@ c  CREATE TABLE public.c (
      CONSTRAINT c_pkey PRIMARY KEY (id ASC),
      INVERTED INDEX c_foo_idx (foo),
      INVERTED INDEX c_bar_idx (bar)
-   );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE c
-----
-c  CREATE TABLE public.c (
-     id INT8 NOT NULL,
-     foo INT8[] NULL,
-     bar STRING[] NULL,
-     CONSTRAINT c_pkey PRIMARY KEY (id ASC),
-     INVERTED INDEX c_foo_idx (foo),
-     INVERTED INDEX c_bar_idx (bar)
-   ) WITH (schema_locked = true);
+   )
 
 query ITT
 SELECT * FROM c WHERE bar @> ARRAY['foo']
@@ -1952,7 +1923,6 @@ CREATE TABLE table_desc_inverted_index (
    FAMILY f2 (testdata)
 );
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE table_desc_inverted_index];
 ----
@@ -1964,21 +1934,7 @@ CREATE TABLE public.table_desc_inverted_index (
   INVERTED INDEX inv_idx_testdata (last_accessed DESC, testdata),
   FAMILY f1 (id, last_accessed),
   FAMILY f2 (testdata)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE table_desc_inverted_index];
-----
-CREATE TABLE public.table_desc_inverted_index (
-  id INT8 NOT NULL,
-  last_accessed TIMESTAMP NULL,
-  testdata JSONB NULL,
-  CONSTRAINT table_desc_inverted_index_pkey PRIMARY KEY (id ASC),
-  INVERTED INDEX inv_idx_testdata (last_accessed DESC, testdata),
-  FAMILY f1 (id, last_accessed),
-  FAMILY f2 (testdata)
-) WITH (schema_locked = true);
+)
 
 subtest overlaps_with_array
 

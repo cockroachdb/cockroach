@@ -6,20 +6,59 @@
 package insights
 
 import (
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 )
 
-// lockingRegistry is the central object in the insights subsystem. It observes
+// This registry is the central object in the insights subsystem. It observes
 // statement execution to determine which statements are outliers and
 // writes insights into the provided sink.
 type lockingRegistry struct {
-	detector detector
-	causes   *causes
-	store    *LockingStore
+	statements   map[clusterunique.ID]*statementBuf
+	detector     detector
+	causes       *causes
+	store        *LockingStore
+	testingKnobs *TestingKnobs
+}
+
+func (r *lockingRegistry) Clear() {
+	r.statements = make(map[clusterunique.ID]*statementBuf)
+}
+
+func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
+	if !r.enabled() {
+		return
+	}
+	b, ok := r.statements[sessionID]
+	if !ok {
+		b = statementsBufPool.Get().(*statementBuf)
+		r.statements[sessionID] = b
+	}
+	b.append(statement)
+}
+
+type statementBuf []*Statement
+
+func (b *statementBuf) append(statement *Statement) {
+	*b = append(*b, statement)
+}
+
+func (b *statementBuf) release() {
+	for i, n := 0, len(*b); i < n; i++ {
+		(*b)[i] = nil
+	}
+	*b = (*b)[:0]
+	statementsBufPool.Put(b)
+}
+
+var statementsBufPool = sync.Pool{
+	New: func() interface{} {
+		return new(statementBuf)
+	},
 }
 
 // Instead of creating and allocating a map to track duplicate
@@ -46,28 +85,30 @@ func addProblem(arr []Problem, n Problem) []Problem {
 	return append(arr, n)
 }
 
-// observeTransaction determines if a transaction is slow or failed and records
-// an insight if so. It does so by examining the statements in the transaction
-// and marking them as slow or failed if they are.
-// the given sessionID. The buffer is returned to the pool along with the
-// statements it contains.
-func (r *lockingRegistry) observeTransaction(
-	transactionStats *sqlstats.RecordedTxnStats, statements []*sqlstats.RecordedStmtStats,
-) {
+func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
 	if !r.enabled() {
 		return
 	}
-
-	if transactionStats.TransactionID.Equal(uuid.Nil) {
+	if transaction.ID.String() == "00000000-0000-0000-0000-000000000000" {
 		return
 	}
-
-	sessionID := transactionStats.SessionID
+	statements, ok := func() (*statementBuf, bool) {
+		statements, ok := r.statements[sessionID]
+		if !ok {
+			return nil, false
+		}
+		delete(r.statements, sessionID)
+		return statements, true
+	}()
+	if !ok {
+		return
+	}
+	defer statements.release()
 
 	// Mark statements which are detected as slow or have a failed status.
 	var slowOrFailedStatements intsets.Fast
-	for i, s := range statements {
-		if !shouldIgnoreStatement(s) && (r.detector.isSlow(s) || s.Failed) {
+	for i, s := range *statements {
+		if !shouldIgnoreStatement(s) && (r.detector.isSlow(s) || isFailed(s)) {
 			slowOrFailedStatements.Add(i)
 		}
 	}
@@ -75,9 +116,12 @@ func (r *lockingRegistry) observeTransaction(
 	// So far this is the only case when a transaction is considered slow.
 	// In the future, we may want to make a detector for transactions if there
 	// are more cases.
-	highContention := transactionStats.ExecStats.ContentionTime.Seconds() >= LatencyThreshold.Get(&r.causes.st.SV).Seconds()
+	highContention := false
+	if transaction.Contention != nil {
+		highContention = transaction.Contention.Seconds() >= LatencyThreshold.Get(&r.causes.st.SV).Seconds()
+	}
 
-	txnFailed := !transactionStats.Committed
+	txnFailed := transaction.Status == Transaction_Failed
 	if slowOrFailedStatements.Empty() && !highContention && !txnFailed {
 		// We only record an insight if we have slow statements, high txn contention, or failed executions.
 		return
@@ -85,7 +129,6 @@ func (r *lockingRegistry) observeTransaction(
 
 	// Note that we'll record insights for every statement, not just for
 	// the slow ones.
-	transaction := makeTxnInsight(transactionStats)
 	insight := makeInsight(sessionID, transaction)
 
 	if highContention {
@@ -102,8 +145,7 @@ func (r *lockingRegistry) observeTransaction(
 	// this does not take into account the "Cancelled" transaction status.
 	var lastStmtErr redact.RedactableString
 	var lastStmtErrCode string
-	for i, recordedStmt := range statements {
-		s := makeStmtInsight(recordedStmt)
+	for i, s := range *statements {
 		if slowOrFailedStatements.Contains(i) {
 			switch s.Status {
 			case Statement_Completed:
@@ -139,6 +181,18 @@ func (r *lockingRegistry) observeTransaction(
 	r.store.addInsight(insight)
 }
 
+// clearSession removes the session from the registry and releases the
+// associated statement buffer.
+func (r *lockingRegistry) clearSession(sessionID clusterunique.ID) {
+	if b, ok := r.statements[sessionID]; ok {
+		delete(r.statements, sessionID)
+		b.release()
+		if r.testingKnobs != nil && r.testingKnobs.OnSessionClear != nil {
+			r.testingKnobs.OnSessionClear(sessionID)
+		}
+	}
+}
+
 // TODO(todd):
 //
 //	Once we can handle sufficient throughput to live on the hot
@@ -149,10 +203,14 @@ func (r *lockingRegistry) enabled() bool {
 	return r.detector.enabled()
 }
 
-func newRegistry(st *cluster.Settings, detector detector, store *LockingStore) *lockingRegistry {
+func newRegistry(
+	st *cluster.Settings, detector detector, store *LockingStore, knobs *TestingKnobs,
+) *lockingRegistry {
 	return &lockingRegistry{
-		detector: detector,
-		causes:   &causes{st: st},
-		store:    store,
+		statements:   make(map[clusterunique.ID]*statementBuf),
+		detector:     detector,
+		causes:       &causes{st: st},
+		store:        store,
+		testingKnobs: knobs,
 	}
 }

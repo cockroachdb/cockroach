@@ -2,12 +2,12 @@
 
 Aborted{WasUpgraded:false}
 	handled events:
-		NonRetryableErr{IsCommit:false}
-		NonRetryableErr{IsCommit:true}
-		RetryableErr{CanAutoRetry:false, IsCommit:false}
-		RetryableErr{CanAutoRetry:false, IsCommit:true}
-		RetryableErr{CanAutoRetry:true, IsCommit:false}
-		RetryableErr{CanAutoRetry:true, IsCommit:true}
+		NonRetriableErr{IsCommit:false}
+		NonRetriableErr{IsCommit:true}
+		RetriableErr{CanAutoRetry:false, IsCommit:false}
+		RetriableErr{CanAutoRetry:false, IsCommit:true}
+		RetriableErr{CanAutoRetry:true, IsCommit:false}
+		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
 		TxnFinishAborted{}
 		TxnRestart{}
@@ -17,19 +17,18 @@ Aborted{WasUpgraded:false}
 		TxnFinishAbortedPLpgSQL{}
 		TxnFinishCommittedPLpgSQL{}
 		TxnFinishCommitted{}
-		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
 		TxnUpgradeToExplicit{}
 Aborted{WasUpgraded:true}
 	handled events:
-		NonRetryableErr{IsCommit:false}
-		NonRetryableErr{IsCommit:true}
-		RetryableErr{CanAutoRetry:false, IsCommit:false}
-		RetryableErr{CanAutoRetry:false, IsCommit:true}
-		RetryableErr{CanAutoRetry:true, IsCommit:false}
-		RetryableErr{CanAutoRetry:true, IsCommit:true}
+		NonRetriableErr{IsCommit:false}
+		NonRetriableErr{IsCommit:true}
+		RetriableErr{CanAutoRetry:false, IsCommit:false}
+		RetriableErr{CanAutoRetry:false, IsCommit:true}
+		RetriableErr{CanAutoRetry:true, IsCommit:false}
+		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
 		TxnFinishAborted{}
 		TxnRestart{}
@@ -39,28 +38,26 @@ Aborted{WasUpgraded:true}
 		TxnFinishAbortedPLpgSQL{}
 		TxnFinishCommittedPLpgSQL{}
 		TxnFinishCommitted{}
-		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
 		TxnUpgradeToExplicit{}
 CommitWait{}
 	handled events:
-		NonRetryableErr{IsCommit:false}
-		NonRetryableErr{IsCommit:true}
+		NonRetriableErr{IsCommit:false}
+		NonRetriableErr{IsCommit:true}
 		TxnFinishCommitted{}
 	missing events:
-		RetryableErr{CanAutoRetry:false, IsCommit:false}
-		RetryableErr{CanAutoRetry:false, IsCommit:true}
-		RetryableErr{CanAutoRetry:true, IsCommit:false}
-		RetryableErr{CanAutoRetry:true, IsCommit:true}
+		RetriableErr{CanAutoRetry:false, IsCommit:false}
+		RetriableErr{CanAutoRetry:false, IsCommit:true}
+		RetriableErr{CanAutoRetry:true, IsCommit:false}
+		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
 		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAbortedPLpgSQL{}
 		TxnFinishAborted{}
 		TxnFinishCommittedPLpgSQL{}
-		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnStart{ImplicitTxn:false}
@@ -68,15 +65,15 @@ CommitWait{}
 		TxnUpgradeToExplicit{}
 NoTxn{}
 	handled events:
-		NonRetryableErr{IsCommit:false}
-		NonRetryableErr{IsCommit:true}
+		NonRetriableErr{IsCommit:false}
+		NonRetriableErr{IsCommit:true}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
 	missing events:
-		RetryableErr{CanAutoRetry:false, IsCommit:false}
-		RetryableErr{CanAutoRetry:false, IsCommit:true}
-		RetryableErr{CanAutoRetry:true, IsCommit:false}
-		RetryableErr{CanAutoRetry:true, IsCommit:true}
+		RetriableErr{CanAutoRetry:false, IsCommit:false}
+		RetriableErr{CanAutoRetry:false, IsCommit:true}
+		RetriableErr{CanAutoRetry:true, IsCommit:false}
+		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
 		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
@@ -84,23 +81,21 @@ NoTxn{}
 		TxnFinishAborted{}
 		TxnFinishCommittedPLpgSQL{}
 		TxnFinishCommitted{}
-		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnUpgradeToExplicit{}
 Open{ImplicitTxn:false, WasUpgraded:false}
 	handled events:
-		NonRetryableErr{IsCommit:false}
-		NonRetryableErr{IsCommit:true}
-		RetryableErr{CanAutoRetry:false, IsCommit:false}
-		RetryableErr{CanAutoRetry:false, IsCommit:true}
-		RetryableErr{CanAutoRetry:true, IsCommit:false}
-		RetryableErr{CanAutoRetry:true, IsCommit:true}
+		NonRetriableErr{IsCommit:false}
+		NonRetriableErr{IsCommit:true}
+		RetriableErr{CanAutoRetry:false, IsCommit:false}
+		RetriableErr{CanAutoRetry:false, IsCommit:true}
+		RetriableErr{CanAutoRetry:true, IsCommit:false}
+		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
-		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnRestart{}
 	missing events:
@@ -112,17 +107,16 @@ Open{ImplicitTxn:false, WasUpgraded:false}
 		TxnUpgradeToExplicit{}
 Open{ImplicitTxn:false, WasUpgraded:true}
 	handled events:
-		NonRetryableErr{IsCommit:false}
-		NonRetryableErr{IsCommit:true}
-		RetryableErr{CanAutoRetry:false, IsCommit:false}
-		RetryableErr{CanAutoRetry:false, IsCommit:true}
-		RetryableErr{CanAutoRetry:true, IsCommit:false}
-		RetryableErr{CanAutoRetry:true, IsCommit:true}
+		NonRetriableErr{IsCommit:false}
+		NonRetriableErr{IsCommit:true}
+		RetriableErr{CanAutoRetry:false, IsCommit:false}
+		RetriableErr{CanAutoRetry:false, IsCommit:true}
+		RetriableErr{CanAutoRetry:true, IsCommit:false}
+		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
-		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnRestart{}
 	missing events:
@@ -134,12 +128,12 @@ Open{ImplicitTxn:false, WasUpgraded:true}
 		TxnUpgradeToExplicit{}
 Open{ImplicitTxn:true, WasUpgraded:false}
 	handled events:
-		NonRetryableErr{IsCommit:false}
-		NonRetryableErr{IsCommit:true}
-		RetryableErr{CanAutoRetry:false, IsCommit:false}
-		RetryableErr{CanAutoRetry:false, IsCommit:true}
-		RetryableErr{CanAutoRetry:true, IsCommit:false}
-		RetryableErr{CanAutoRetry:true, IsCommit:true}
+		NonRetriableErr{IsCommit:false}
+		NonRetriableErr{IsCommit:true}
+		RetriableErr{CanAutoRetry:false, IsCommit:false}
+		RetriableErr{CanAutoRetry:false, IsCommit:true}
+		RetriableErr{CanAutoRetry:true, IsCommit:false}
+		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		TxnCommittedDueToDDL{}
 		TxnFinishAbortedPLpgSQL{}
 		TxnFinishAborted{}
@@ -149,7 +143,6 @@ Open{ImplicitTxn:true, WasUpgraded:false}
 	missing events:
 		SavepointRollback{}
 		TxnCommittedWithShowCommitTimestamp{}
-		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnStart{ImplicitTxn:false}
@@ -157,21 +150,20 @@ Open{ImplicitTxn:true, WasUpgraded:false}
 Open{ImplicitTxn:true, WasUpgraded:true}
 	unreachable!
 	handled events:
-		NonRetryableErr{IsCommit:true}
-		RetryableErr{CanAutoRetry:false, IsCommit:true}
+		NonRetriableErr{IsCommit:true}
+		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		TxnCommittedDueToDDL{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
 	missing events:
-		NonRetryableErr{IsCommit:false}
-		RetryableErr{CanAutoRetry:false, IsCommit:false}
-		RetryableErr{CanAutoRetry:true, IsCommit:false}
-		RetryableErr{CanAutoRetry:true, IsCommit:true}
+		NonRetriableErr{IsCommit:false}
+		RetriableErr{CanAutoRetry:false, IsCommit:false}
+		RetriableErr{CanAutoRetry:true, IsCommit:false}
+		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAbortedPLpgSQL{}
 		TxnFinishCommittedPLpgSQL{}
-		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnStart{ImplicitTxn:false}

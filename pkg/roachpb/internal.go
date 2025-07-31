@@ -37,30 +37,3 @@ func (data *InternalTimeSeriesData) OffsetForTimestamp(timestampNanos int64) int
 func (data *InternalTimeSeriesData) TimestampForOffset(offset int32) int64 {
 	return data.StartTimestampNanos + int64(offset)*data.SampleDurationNanos
 }
-
-// ResetRetainingSlices clears all fields in the InternalTimeSeriesData, but
-// retains any backing slices.
-func (data *InternalTimeSeriesData) ResetRetainingSlices() {
-	samples := data.Samples[:0]
-	offset := data.Offset[:0]
-	last := data.Last[:0]
-	count := data.Count[:0]
-	sum := data.Sum[:0]
-	maxSlice := data.Max[:0]
-	minSlice := data.Min[:0]
-	first := data.First[:0]
-	variance := data.Variance[:0]
-
-	// We make sure we don't cause correctness issues if new fields are added.
-	*data = InternalTimeSeriesData{
-		Samples:  samples,
-		Offset:   offset,
-		Last:     last,
-		Count:    count,
-		Sum:      sum,
-		Max:      maxSlice,
-		Min:      minSlice,
-		First:    first,
-		Variance: variance,
-	}
-}

@@ -7,16 +7,18 @@ package spanconfigptsreader
 
 import (
 	"context"
-	"time"
+	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // adapter implements the spanconfig.ProtectedTSReader interface and is intended
@@ -60,30 +62,46 @@ func NewAdapter(
 func (a *adapter) GetProtectionTimestamps(
 	ctx context.Context, sp roachpb.Span,
 ) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, err error) {
+	// After the migration of old-style PTS records (#118772), we do not need to read
+	// any entries from the cache as they will be available via the kv subscriber.
+	// TODO(#119243): remove the cache entirely in 24.2.
 	subscriberTimestamps, subscriberFreshness, err := a.kvSubscriber.GetProtectionTimestamps(ctx, sp)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
 
-	return subscriberTimestamps, subscriberFreshness, nil
+	if a.s.Version.IsActive(ctx, clusterversion.V24_1) {
+		return subscriberTimestamps, subscriberFreshness, nil
+	}
+
+	cacheTimestamps, cacheFreshness, err := a.cache.GetProtectionTimestamps(ctx, sp)
+	if err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+
+	// The freshness of the adapter is the minimum freshness of the Cache and
+	// KVSubscriber.
+	subscriberFreshness.Backward(cacheFreshness)
+	return append(subscriberTimestamps, cacheTimestamps...), subscriberFreshness, nil
 }
 
 // TestingRefreshPTSState refreshes the in-memory protected timestamp state to
 // at least asOf.
 func TestingRefreshPTSState(
-	ctx context.Context, protectedTSReader spanconfig.ProtectedTSReader, asOf hlc.Timestamp,
+	ctx context.Context,
+	t *testing.T,
+	protectedTSReader spanconfig.ProtectedTSReader,
+	asOf hlc.Timestamp,
 ) error {
 	a, ok := protectedTSReader.(*adapter)
 	if !ok {
 		return errors.AssertionFailedf("could not convert protectedTSReader to adapter")
 	}
 	// First refresh the cache past asOf.
-	if err := a.cache.Refresh(ctx, asOf); err != nil {
-		return err
-	}
+	require.NoError(t, a.cache.Refresh(ctx, asOf))
 
 	// Now ensure the KVSubscriber is fresh enough.
-	return retry.ForDuration(200*time.Second, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		_, fresh, err := a.GetProtectionTimestamps(ctx, keys.EverythingSpan)
 		if err != nil {
 			return err
@@ -93,4 +111,5 @@ func TestingRefreshPTSState(
 		}
 		return nil
 	})
+	return nil
 }

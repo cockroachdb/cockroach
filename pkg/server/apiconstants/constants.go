@@ -23,9 +23,6 @@ const (
 	// StatusVars exposes Prometheus metrics for monitoring consumption.
 	StatusVars = StatusPrefix + "vars"
 
-	// Metrics exposes Prometheus metrics for monitoring consumption.
-	MetricsPath = "/metrics"
-
 	// LoadStatusVars exposes prometheus metrics for instant monitoring of CPU load.
 	LoadStatusVars = StatusPrefix + "load"
 

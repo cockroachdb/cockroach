@@ -84,9 +84,6 @@ type InternalExecutorOverride struct {
 	GrowStackSize bool
 	// DisablePlanGists, if true, overrides the disable_plan_gists session var.
 	DisablePlanGists bool
-	// BufferedWritesEnabled, if set, controls whether the buffered writes KV transaction
-	// protocol is used for user queries on the current session.
-	BufferedWritesEnabled *bool
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not

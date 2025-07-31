@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -22,7 +23,7 @@ func TestTableRefs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	params, _ := createTestServerParams()
 	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -39,7 +40,7 @@ CREATE INDEX bc ON test.t(b, c);
 	}
 
 	// Retrieve the numeric descriptors.
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	tID := tableDesc.GetID()
 	var aID, bID, cID descpb.ColumnID
 	for _, c := range tableDesc.PublicColumns() {
@@ -52,9 +53,11 @@ CREATE INDEX bc ON test.t(b, c);
 			cID = c.GetID()
 		}
 	}
+	pkID := tableDesc.GetPrimaryIndexID()
+	secID := tableDesc.PublicNonPrimaryIndexes()[0].GetID()
 
 	// Retrieve the numeric descriptors.
-	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "hidden")
+	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "hidden")
 	tIDHidden := tableDesc.GetID()
 	var rowIDHidden descpb.ColumnID
 	for _, c := range tableDesc.PublicColumns() {
@@ -65,8 +68,6 @@ CREATE INDEX bc ON test.t(b, c);
 	}
 
 	// Make some schema changes meant to shuffle the ID/name mapping.
-	// Note: index IDs will change since the declarative schema changer implements
-	// DROP COLUMN with an index swap.
 	stmt = `
 ALTER TABLE test.t RENAME COLUMN b TO d;
 ALTER TABLE test.t RENAME COLUMN a TO p;
@@ -76,10 +77,6 @@ ALTER TABLE test.t DROP COLUMN xx;
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
-	pkID := tableDesc.GetPrimaryIndexID()
-	secID := tableDesc.PublicNonPrimaryIndexes()[0].GetID()
 
 	// Check the table references.
 	testData := []struct {

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -735,14 +734,6 @@ func (v *validator) processOp(op Operation) {
 		}
 		// We don't yet actually check the barrier guarantees here, i.e. that all
 		// concurrent writes are applied by the time it completes. Maybe later.
-	case *FlushLockTableOperation:
-		execTimestampStrictlyOptional = true
-		if resultHasErrorType(t.Result, &kvpb.RangeKeyMismatchError{}) {
-			// FlushLockTableOperation may race with a split.
-		} else {
-			// Fail or retry on other errors, depending on type.
-			v.checkNonAmbError(op, t.Result, exceptUnhandledRetry)
-		}
 	case *ScanOperation:
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
@@ -1046,8 +1037,8 @@ func (v *validator) checkAtomicCommitted(
 	// it, un-hiding each of them as we encounter each write, and using the
 	// current state of the view as we encounter each read. Luckily this is easy
 	// to do by with a pebble.Batch "view".
-	firstBatch := v.kvs.kvs.NewIndexedBatch()
-	defer func() { _ = firstBatch.Close() }()
+	batch := v.kvs.kvs.NewIndexedBatch()
+	defer func() { _ = batch.Close() }()
 
 	var failure string
 	// writeTS is populated with the timestamp of the materialized observed writes
@@ -1076,7 +1067,6 @@ func (v *validator) checkAtomicCommitted(
 	// rollbackSp = observedSavepoint{...} when the observedSavepoint object
 	// contains a rollback for which we haven't encountered a matching create yet.
 	var rollbackSp *observedSavepoint = nil
-	batch := firstBatch
 	for idx := len(txnObservations) - 1; idx >= 0; idx-- {
 		observation := txnObservations[idx]
 		switch o := observation.(type) {
@@ -1138,7 +1128,7 @@ func (v *validator) checkAtomicCommitted(
 			} else { // ranged write
 				key := storage.EngineKey{Key: o.Key}.Encode()
 				endKey := storage.EngineKey{Key: o.EndKey}.Encode()
-				suffix := mvccencoding.EncodeMVCCTimestampSuffix(o.Timestamp)
+				suffix := storage.EncodeMVCCTimestampSuffix(o.Timestamp)
 				if err := batch.RangeKeyUnset(key, endKey, suffix, nil); err != nil {
 					panic(err)
 				}
@@ -1215,7 +1205,7 @@ func (v *validator) checkAtomicCommitted(
 			} else {
 				key := storage.EngineKey{Key: o.Key}.Encode()
 				endKey := storage.EngineKey{Key: o.EndKey}.Encode()
-				suffix := mvccencoding.EncodeMVCCTimestampSuffix(writeTS)
+				suffix := storage.EncodeMVCCTimestampSuffix(writeTS)
 				if err := batch.RangeKeySet(key, endKey, suffix, o.Value.RawBytes, nil); err != nil {
 					panic(err)
 				}
@@ -1560,7 +1550,7 @@ func validReadTimes(
 			// Range key contains the key. Emit a point deletion on the key
 			// at the tombstone's timestamp for each active range key.
 			for _, rk := range iter.RangeKeys() {
-				ts, err := mvccencoding.DecodeMVCCTimestampSuffix(rk.Suffix)
+				ts, err := storage.DecodeMVCCTimestampSuffix(rk.Suffix)
 				if err != nil {
 					panic(err)
 				}

@@ -61,7 +61,7 @@ sort
  ├── save-table-name: q7_sort_1
  ├── columns: supp_nation:50(char!null) cust_nation:56(char!null) l_year:61(float) revenue:63(float!null)
  ├── immutable
- ├── stats: [rows=974.268, distinct(50)=1.33333, null(50)=0, distinct(56)=1.33333, null(56)=0, distinct(61)=730.978, null(61)=0, distinct(63)=974.268, null(63)=0, distinct(50,56,61)=974.268, null(50,56,61)=0]
+ ├── stats: [rows=974.2682, distinct(50)=1.33333, null(50)=0, distinct(56)=1.33333, null(56)=0, distinct(61)=730.978, null(61)=0, distinct(63)=974.268, null(63)=0, distinct(50,56,61)=974.268, null(50,56,61)=0]
  ├── key: (50,56,61)
  ├── fd: (50,56,61)-->(63)
  ├── ordering: +50,+56,+61
@@ -70,19 +70,19 @@ sort
       ├── columns: n1.n_name:50(char!null) n2.n_name:56(char!null) l_year:61(float) sum:63(float!null)
       ├── grouping columns: n1.n_name:50(char!null) n2.n_name:56(char!null) l_year:61(float)
       ├── immutable
-      ├── stats: [rows=974.268, distinct(50)=1.33333, null(50)=0, distinct(56)=1.33333, null(56)=0, distinct(61)=730.978, null(61)=0, distinct(63)=974.268, null(63)=0, distinct(50,56,61)=974.268, null(50,56,61)=0]
+      ├── stats: [rows=974.2682, distinct(50)=1.33333, null(50)=0, distinct(56)=1.33333, null(56)=0, distinct(61)=730.978, null(61)=0, distinct(63)=974.268, null(63)=0, distinct(50,56,61)=974.268, null(50,56,61)=0]
       ├── key: (50,56,61)
       ├── fd: (50,56,61)-->(63)
       ├── project
       │    ├── save-table-name: q7_project_3
       │    ├── columns: l_year:61(float) volume:62(float!null) n1.n_name:50(char!null) n2.n_name:56(char!null)
       │    ├── immutable
-      │    ├── stats: [rows=7604.44, distinct(50)=1.33333, null(50)=0, distinct(56)=1.33333, null(56)=0, distinct(61)=730.978, null(61)=0, distinct(62)=7445.29, null(62)=0, distinct(50,56,61)=974.268, null(50,56,61)=0]
+      │    ├── stats: [rows=7604.442, distinct(50)=1.33333, null(50)=0, distinct(56)=1.33333, null(56)=0, distinct(61)=730.978, null(61)=0, distinct(62)=7445.29, null(62)=0, distinct(50,56,61)=974.268, null(50,56,61)=0]
       │    ├── inner-join (hash)
       │    │    ├── save-table-name: q7_inner_join_4
       │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:10(int!null) l_suppkey:12(int!null) l_extendedprice:15(float!null) l_discount:16(float!null) l_shipdate:20(date!null) o_orderkey:28(int!null) o_custkey:29(int!null) c_custkey:39(int!null) c_nationkey:42(int!null) n1.n_nationkey:49(int!null) n1.n_name:50(char!null) n2.n_nationkey:55(int!null) n2.n_name:56(char!null)
       │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │    │    ├── stats: [rows=7604.44, distinct(1)=7604.44, null(1)=0, distinct(4)=1.29975, null(4)=0, distinct(10)=7359.52, null(10)=0, distinct(12)=7604.44, null(12)=0, distinct(15)=7435.74, null(15)=0, distinct(16)=11, null(16)=0, distinct(20)=730.978, null(20)=0, distinct(28)=7359.52, null(28)=0, distinct(29)=4894.07, null(29)=0, distinct(39)=4894.07, null(39)=0, distinct(42)=1.29975, null(42)=0, distinct(49)=1.29975, null(49)=0, distinct(50)=1.33333, null(50)=0, distinct(55)=1.29975, null(55)=0, distinct(56)=1.33333, null(56)=0, distinct(15,16)=7445.29, null(15,16)=0, distinct(20,50,56)=974.268, null(20,50,56)=0]
+      │    │    ├── stats: [rows=7604.442, distinct(1)=7604.44, null(1)=0, distinct(4)=1.29975, null(4)=0, distinct(10)=7359.52, null(10)=0, distinct(12)=7604.44, null(12)=0, distinct(15)=7435.74, null(15)=0, distinct(16)=11, null(16)=0, distinct(20)=730.978, null(20)=0, distinct(28)=7359.52, null(28)=0, distinct(29)=4894.07, null(29)=0, distinct(39)=4894.07, null(39)=0, distinct(42)=1.29975, null(42)=0, distinct(49)=1.29975, null(49)=0, distinct(50)=1.33333, null(50)=0, distinct(55)=1.29975, null(55)=0, distinct(56)=1.33333, null(56)=0, distinct(15,16)=7445.29, null(15,16)=0, distinct(20,50,56)=974.268, null(20,50,56)=0]
       │    │    ├── fd: (1)-->(4), (28)-->(29), (39)-->(42), (49)-->(50), (55)-->(56), (42)==(55), (55)==(42), (29)==(39), (39)==(29), (10)==(28), (28)==(10), (1)==(12), (12)==(1), (4)==(49), (49)==(4)
       │    │    ├── scan customer@c_nk
       │    │    │    ├── save-table-name: q7_scan_5
@@ -99,14 +99,14 @@ sort
       │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:10(int!null) l_suppkey:12(int!null) l_extendedprice:15(float!null) l_discount:16(float!null) l_shipdate:20(date!null) o_orderkey:28(int!null) o_custkey:29(int!null) n1.n_nationkey:49(int!null) n1.n_name:50(char!null) n2.n_nationkey:55(int!null) n2.n_name:56(char!null)
       │    │    │    ├── key columns: [10] = [28]
       │    │    │    ├── lookup columns are key
-      │    │    │    ├── stats: [rows=97519.8, distinct(1)=529.63, null(1)=0, distinct(4)=1.29975, null(4)=0, distinct(10)=93524.1, null(10)=0, distinct(12)=529.63, null(12)=0, distinct(15)=60140.8, null(15)=0, distinct(16)=11, null(16)=0, distinct(20)=731, null(20)=0, distinct(28)=93524.1, null(28)=0, distinct(29)=62248.9, null(29)=0, distinct(49)=1.29975, null(49)=0, distinct(50)=1.33333, null(50)=0, distinct(55)=1.29975, null(55)=0, distinct(56)=1.33333, null(56)=0]
+      │    │    │    ├── stats: [rows=97519.83, distinct(1)=529.63, null(1)=0, distinct(4)=1.29975, null(4)=0, distinct(10)=93524.1, null(10)=0, distinct(12)=529.63, null(12)=0, distinct(15)=60140.8, null(15)=0, distinct(16)=11, null(16)=0, distinct(20)=731, null(20)=0, distinct(28)=93524.1, null(28)=0, distinct(29)=62248.9, null(29)=0, distinct(49)=1.29975, null(49)=0, distinct(50)=1.33333, null(50)=0, distinct(55)=1.29975, null(55)=0, distinct(56)=1.33333, null(56)=0]
       │    │    │    ├── fd: (28)-->(29), (1)-->(4), (49)-->(50), (55)-->(56), (4)==(49), (49)==(4), (1)==(12), (12)==(1), (10)==(28), (28)==(10)
       │    │    │    ├── inner-join (lookup lineitem)
       │    │    │    │    ├── save-table-name: q7_lookup_join_7
       │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:10(int!null) l_suppkey:12(int!null) l_extendedprice:15(float!null) l_discount:16(float!null) l_shipdate:20(date!null) n1.n_nationkey:49(int!null) n1.n_name:50(char!null) n2.n_nationkey:55(int!null) n2.n_name:56(char!null)
       │    │    │    │    ├── key columns: [10 13] = [10 13]
       │    │    │    │    ├── lookup columns are key
-      │    │    │    │    ├── stats: [rows=97519.8, distinct(1)=529.63, null(1)=0, distinct(4)=1.29975, null(4)=0, distinct(10)=93524.1, null(10)=0, distinct(12)=529.63, null(12)=0, distinct(15)=92051.8, null(15)=0, distinct(16)=11, null(16)=0, distinct(20)=731, null(20)=0, distinct(49)=1.29975, null(49)=0, distinct(50)=1.33333, null(50)=0, distinct(55)=1.29975, null(55)=0, distinct(56)=1.33333, null(56)=0]
+      │    │    │    │    ├── stats: [rows=97519.83, distinct(1)=529.63, null(1)=0, distinct(4)=1.29975, null(4)=0, distinct(10)=93524.1, null(10)=0, distinct(12)=529.63, null(12)=0, distinct(15)=92051.8, null(15)=0, distinct(16)=11, null(16)=0, distinct(20)=731, null(20)=0, distinct(49)=1.29975, null(49)=0, distinct(50)=1.33333, null(50)=0, distinct(55)=1.29975, null(55)=0, distinct(56)=1.33333, null(56)=0]
       │    │    │    │    ├── fd: (1)-->(4), (49)-->(50), (55)-->(56), (4)==(49), (49)==(4), (1)==(12), (12)==(1)
       │    │    │    │    ├── inner-join (lookup lineitem@l_sk)
       │    │    │    │    │    ├── save-table-name: q7_lookup_join_8
@@ -114,18 +114,18 @@ sort
       │    │    │    │    │    ├── key columns: [1] = [12]
       │    │    │    │    │    ├── stats: [rows=322646, distinct(1)=529.63, null(1)=0, distinct(4)=1.29975, null(4)=0, distinct(10)=290857, null(10)=0, distinct(12)=529.63, null(12)=0, distinct(13)=7, null(13)=0, distinct(49)=1.29975, null(49)=0, distinct(50)=1.33333, null(50)=0, distinct(55)=1.29975, null(55)=0, distinct(56)=1.33333, null(56)=0]
       │    │    │    │    │    ├── key: (10,13,55)
-      │    │    │    │    │    ├── fd: (1)-->(4), (49)-->(50), (55)-->(56), (10,13)-->(12), (4)==(49), (49)==(4), (1)==(12), (12)==(1)
+      │    │    │    │    │    ├── fd: (1)-->(4), (49)-->(50), (55)-->(56), (4)==(49), (49)==(4), (10,13)-->(12), (1)==(12), (12)==(1)
       │    │    │    │    │    ├── inner-join (lookup supplier@s_nk)
       │    │    │    │    │    │    ├── save-table-name: q7_lookup_join_9
       │    │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) n1.n_nationkey:49(int!null) n1.n_name:50(char!null) n2.n_nationkey:55(int!null) n2.n_name:56(char!null)
       │    │    │    │    │    │    ├── key columns: [49] = [4]
-      │    │    │    │    │    │    ├── stats: [rows=533.333, distinct(1)=529.63, null(1)=0, distinct(4)=1.29975, null(4)=0, distinct(49)=1.29975, null(49)=0, distinct(50)=1.33333, null(50)=0, distinct(55)=1.29975, null(55)=0, distinct(56)=1.33333, null(56)=0]
+      │    │    │    │    │    │    ├── stats: [rows=533.3333, distinct(1)=529.63, null(1)=0, distinct(4)=1.29975, null(4)=0, distinct(49)=1.29975, null(49)=0, distinct(50)=1.33333, null(50)=0, distinct(55)=1.29975, null(55)=0, distinct(56)=1.33333, null(56)=0]
       │    │    │    │    │    │    ├── key: (1,55)
       │    │    │    │    │    │    ├── fd: (1)-->(4), (49)-->(50), (55)-->(56), (4)==(49), (49)==(4)
       │    │    │    │    │    │    ├── inner-join (cross)
       │    │    │    │    │    │    │    ├── save-table-name: q7_inner_join_10
       │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:49(int!null) n1.n_name:50(char!null) n2.n_nationkey:55(int!null) n2.n_name:56(char!null)
-      │    │    │    │    │    │    │    ├── stats: [rows=1.33333, distinct(49)=1.29975, null(49)=0, distinct(50)=1.33333, null(50)=0, distinct(55)=1.29975, null(55)=0, distinct(56)=1.33333, null(56)=0, distinct(50,56)=1.33333, null(50,56)=0]
+      │    │    │    │    │    │    │    ├── stats: [rows=1.333333, distinct(49)=1.29975, null(49)=0, distinct(50)=1.33333, null(50)=0, distinct(55)=1.29975, null(55)=0, distinct(56)=1.33333, null(56)=0, distinct(50,56)=1.33333, null(50,56)=0]
       │    │    │    │    │    │    │    ├── key: (49,55)
       │    │    │    │    │    │    │    ├── fd: (49)-->(50), (55)-->(56)
       │    │    │    │    │    │    │    ├── scan nation [as=n1]

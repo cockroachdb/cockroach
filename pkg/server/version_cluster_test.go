@@ -134,20 +134,8 @@ func prev(version roachpb.Version) roachpb.Version {
 		if version.Minor > 1 {
 			return roachpb.Version{Major: version.Major, Minor: version.Minor - 1}
 		}
-
-		// version is the first release of that year, e.g. MM.1
-
-		v25_1 := roachpb.Version{Major: 25, Minor: 1}
-		if v25_1.Equal(version) {
-			// For 2024, we had 3 releases that year.
-			return roachpb.Version{Major: 24, Minor: 3}
-		}
-		if v25_1.Less(version) {
-			// 2025 onwards, we had 4 releases per year.
-			return roachpb.Version{Major: version.Major - 1, Minor: 4}
-		}
-
-		// Prior to 2024, we had 2 releases per year.
+		// Here we assume that there's going to only be 2 releases per year.
+		// Otherwise we'd need to keep some history of what releases we've had.
 		return roachpb.Version{Major: version.Major - 1, Minor: 2}
 	}
 
@@ -166,50 +154,6 @@ func prev(version roachpb.Version) roachpb.Version {
 	} else {
 		// version will be at least 2.0-X, so it's safe to set new Major to be version.Major-1.
 		return roachpb.Version{Major: version.Major - 1}
-	}
-}
-
-func TestPrev(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	tests := []struct {
-		this, prev roachpb.Version
-	}{
-		// releases 2025+: 4 releases per year.
-		{
-			this: roachpb.Version{Major: 28, Minor: 4},
-			prev: roachpb.Version{Major: 28, Minor: 3},
-		},
-		{
-			this: roachpb.Version{Major: 28, Minor: 1},
-			prev: roachpb.Version{Major: 27, Minor: 4},
-		},
-		{
-			this: roachpb.Version{Major: 26, Minor: 1},
-			prev: roachpb.Version{Major: 25, Minor: 4},
-		},
-		// releases 2024: 3 releases per year.
-		{
-			this: roachpb.Version{Major: 25, Minor: 1},
-			prev: roachpb.Version{Major: 24, Minor: 3},
-		},
-		// releases 2019-2023: Calendar versioning, with 2 releases per year
-		{
-			this: roachpb.Version{Major: 24, Minor: 1},
-			prev: roachpb.Version{Major: 23, Minor: 2},
-		},
-		{
-			this: roachpb.Version{Major: 21, Minor: 1},
-			prev: roachpb.Version{Major: 20, Minor: 2},
-		},
-	}
-	for _, test := range tests {
-		t.Run("", func(t *testing.T) {
-			if p := prev(test.this); p != test.prev {
-				t.Errorf("expected %s, got %s", test.prev, p)
-			}
-		})
 	}
 }
 

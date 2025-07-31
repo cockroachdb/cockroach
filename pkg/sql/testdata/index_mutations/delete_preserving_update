@@ -152,7 +152,7 @@ kvtrace
 UPDATE tii SET b = ARRAY[1, 2, 2, NULL, 4, 4]
 ----
 Scan /Table/109/{1-2} lock Exclusive (Block, Unreplicated)
-Put /Table/109/1/1/0 -> /TUPLE/2:2:Array/ARRAY[1,2,2,NULL,4,4]
+Put /Table/109/1/1/0 -> /TUPLE/
 Put (delete) /Table/109/2/NULL/1/0
 Put (delete) /Table/109/2/1/1/0
 Put (delete) /Table/109/2/2/1/0
@@ -187,7 +187,7 @@ kvtrace
 UPDATE tmi SET b = 3, c = '{"a": "foobar", "c": "baz"}'::json
 ----
 Scan /Table/110/{1-2} lock Exclusive (Block, Unreplicated)
-Put /Table/110/1/1/0 -> /TUPLE/2:2:Int/3/1:3:SentinelType/{"a": "foobar", "c": "baz"}
+Put /Table/110/1/1/0 -> /TUPLE/2:2:Int/3/
 Put (delete) /Table/110/2/2/"a"/"foo"/1/0
 Put (delete) /Table/110/2/2/"b"/"bar"/1/0
 Put /Table/110/2/3/"a"/"foobar"/1/0 -> /BYTES/0x0a0103

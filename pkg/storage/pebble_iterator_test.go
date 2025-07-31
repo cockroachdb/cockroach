@@ -15,20 +15,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
@@ -51,11 +49,11 @@ func TestPebbleIterator_Corruption(t *testing.T) {
 	require.NoError(t, p.Flush())
 
 	// Corrupt the SSTs in the DB.
-	err = filepath.WalkDir(dataDir, func(path string, d stdfs.DirEntry, err error) error {
+	err = filepath.Walk(dataDir, func(path string, info stdfs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if !strings.HasSuffix(d.Name(), ".sst") {
+		if !strings.HasSuffix(info.Name(), ".sst") {
 			return nil
 		}
 		file, err := os.OpenFile(path, os.O_WRONLY, 0600)
@@ -78,21 +76,14 @@ func TestPebbleIterator_Corruption(t *testing.T) {
 	}
 	iter, err := newPebbleIterator(context.Background(), p.db, iterOpts, StandardDurability, p)
 	require.NoError(t, err)
-	defer iter.Close()
 
-	var fatalCalled atomic.Uint32
-	log.SetExitFunc(true /* hideStack */, func(code exit.Code) {
-		fatalCalled.Add(1)
-	})
-	defer log.ResetExitFunc()
-	// Seeking into the table runs into the corruption and reports it
-	// synchronously through the event listener; it should cause a Fatalf during
-	// this call.
-	_, _ = iter.SeekEngineKeyGE(ek)
+	// Seeking into the table catches the corruption.
+	ok, err := iter.SeekEngineKeyGE(ek)
+	require.False(t, ok)
+	require.True(t, errors.Is(err, pebble.ErrCorruption))
 
-	if fatalCalled.Load() == 0 {
-		t.Fatalf("Fatalf not called")
-	}
+	// Closing the iter results in a panic due to the corruption.
+	require.Panics(t, func() { iter.Close() })
 
 	// Should have laid down marker file to prevent startup.
 	_, err = p.Env().Stat(base.PreventedStartupFile(p.GetAuxiliaryDir()))
@@ -114,7 +105,7 @@ func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 	ctx := context.Background()
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	var f bytes.Buffer
-	w := MakeTransportSSTWriter(ctx, st, &f)
+	w := MakeBackupSSTWriter(ctx, st, &f)
 
 	// Create an example sstable.
 	var rawValue [64]byte
@@ -131,21 +122,14 @@ func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 
 	// Trash a random byte.
 	b := f.Bytes()
-
-	// If we mess with the format byte, we will get an unexpected error.
-	// See https://github.com/cockroachdb/cockroach/issues/141477 and
-	// TODO(radu): This can be removed if Pebble checksums the footer:
-	// https://github.com/cockroachdb/pebble/issues/4344
-	const nAvoidLastBytes = 12
-	//b[rng.Intn(len(b)-nAvoidLastBytes)]++
-	b[len(b)-60+rng.Intn(60-nAvoidLastBytes)]++
+	b[rng.Intn(len(b))]++
 
 	it, err := NewSSTIterator([][]sstable.ReadableFile{{vfs.NewMemFile(b)}},
 		IterOptions{UpperBound: roachpb.KeyMax})
 
 	// We may error early, while opening the iterator.
 	if err != nil {
-		require.True(t, pebble.IsCorruptionError(err))
+		require.True(t, errors.Is(err, pebble.ErrCorruption))
 		return
 	}
 
@@ -157,7 +141,7 @@ func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 	}
 	// Or we may error during iteration.
 	if err != nil {
-		require.True(t, pebble.IsCorruptionError(err))
+		require.True(t, errors.Is(err, pebble.ErrCorruption))
 	}
 	it.Close()
 }

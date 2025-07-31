@@ -105,7 +105,7 @@ on-txn-updated txn=txn1 status=aborted
 [-] update txn: aborting txn1
 [5] sequence req3: resolving intent ‹"a"› for txn 00000001 with ABORTED status
 [5] sequence req3: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
-[5] sequence req3: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[5] sequence req3: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req3: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req3: pushing txn 00000002 to abort
 [5] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -115,7 +115,7 @@ on-txn-updated txn=txn2 status=committed
 [-] update txn: committing txn2
 [5] sequence req3: resolving intent ‹"a"› for txn 00000002 with COMMITTED status
 [5] sequence req3: lock wait-queue event: done waiting
-[5] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[5] sequence req3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req3: acquiring latches
 [5] sequence req3: scanning lock table for conflicting locks
 [5] sequence req3: sequencing complete, returned guard
@@ -224,13 +224,13 @@ on-txn-updated txn=txn3 status=aborted
 [-] update txn: aborting txn3
 [4] sequence req5: resolving intent ‹"a"› for txn 00000003 with ABORTED status
 [4] sequence req5: lock wait-queue event: done waiting
-[4] sequence req5: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[4] sequence req5: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [4] sequence req5: acquiring latches
 [4] sequence req5: scanning lock table for conflicting locks
 [4] sequence req5: sequencing complete, returned guard
 [5] sequence req6: resolving intent ‹"a"› for txn 00000003 with ABORTED status
 [5] sequence req6: lock wait-queue event: done waiting
-[5] sequence req6: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[5] sequence req6: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req6: acquiring latches
 [5] sequence req6: scanning lock table for conflicting locks
 [5] sequence req6: sequencing complete, returned guard

@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build crdb_test && !crdb_test_off
+// +build crdb_test,!crdb_test_off
 
 // Package buildutil provides a constant CrdbTestBuild.
 package buildutil

@@ -126,26 +126,24 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
   {indexId: 1, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2, ReferencedColumnIDs: [1]}, TRANSIENT_ABSENT], ABSENT]
-  {columnIds: [1], constraintId: 2, expr: 'CASE WHEN (crdb_internal.assignment_cast(i + 1:::INT8, NULL::INT8)) IS NULL THEN true ELSE true END', indexIdForValidation: 2, referencedColumnIds: [1], tableId: 104}
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   {columnId: 2, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT]
   {columnId: 2, name: a, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT]
   {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
-- [[ColumnComputeExpression:{DescID: 104, ColumnID: 2, Usage: REGULAR}, PUBLIC], ABSENT]
+- [[ColumnComputeExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   {columnId: 2, expr: 'i + 1:::INT8', referencedColumnIds: [1], tableId: 104}
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
-  {constraintId: 3, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
+  {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: foo_pkey, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  {constraintId: 4, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+  {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
@@ -309,117 +307,3 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j)
   {columnId: 2, indexId: 3, kind: KEY_SUFFIX, tableId: 106}
 - [[IndexName:{DescID: 106, Name: t_i_key, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: t_i_key, tableId: 106}
-
-build
-ALTER TABLE defaultdb.foo ADD COLUMN j INT GENERATED ALWAYS AS IDENTITY
-----
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
-  {columnId: 1, indexId: 1, tableId: 104}
-- [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  {constraintId: 1, indexId: 1, isUnique: true, tableId: 104}
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
-  {indexId: 1, name: foo_pkey, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
-  {indexId: 1, tableId: 104}
-- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 104}
-- [[Sequence:{DescID: 107}, PUBLIC], ABSENT]
-  {sequenceId: 107}
-- [[Namespace:{DescID: 107, Name: foo_j_seq, ReferencedDescID: 100}, PUBLIC], ABSENT]
-  {databaseId: 100, descriptorId: 107, name: foo_j_seq, schemaId: 101}
-- [[SchemaChild:{DescID: 107, ReferencedDescID: 101}, PUBLIC], ABSENT]
-  {childObjectId: 107, schemaId: 101}
-- [[TableData:{DescID: 107, ReferencedDescID: 100}, PUBLIC], ABSENT]
-  {databaseId: 100, tableId: 107}
-- [[Column:{DescID: 107, ColumnID: 1}, PUBLIC], ABSENT]
-  {columnId: 1, tableId: 107}
-- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, PUBLIC], ABSENT]
-  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, tableId: 107, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
-- [[ColumnNotNull:{DescID: 107, ColumnID: 1, IndexID: 0}, PUBLIC], ABSENT]
-  {columnId: 1, tableId: 107}
-- [[ColumnName:{DescID: 107, Name: value, ColumnID: 1}, PUBLIC], ABSENT]
-  {columnId: 1, name: value, tableId: 107}
-- [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 0}, PUBLIC], ABSENT]
-  {indexId: 1, isUnique: true, tableId: 107}
-- [[IndexName:{DescID: 107, Name: primary, IndexID: 1}, PUBLIC], ABSENT]
-  {indexId: 1, name: primary, tableId: 107}
-- [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, PUBLIC], ABSENT]
-  {columnId: 1, indexId: 1, tableId: 107}
-- [[Owner:{DescID: 107}, PUBLIC], ABSENT]
-  {descriptorId: 107, owner: root}
-- [[UserPrivileges:{DescID: 107, Name: admin}, PUBLIC], ABSENT]
-  {descriptorId: 107, privileges: "2", userName: admin, withGrantOption: "2"}
-- [[UserPrivileges:{DescID: 107, Name: root}, PUBLIC], ABSENT]
-  {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
-- [[SequenceOwner:{DescID: 104, ColumnID: 2, ReferencedDescID: 107}, PUBLIC], ABSENT]
-  {columnId: 2, sequenceId: 107, tableId: 104}
-- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, generatedAsIdentityType: 1, tableId: 104}
-- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, name: j, tableId: 104}
-- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
-- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, ReferencedSequenceIDs: [107], Expr: nextval(107:::REGCLASS)}, PUBLIC], ABSENT]
-  {columnId: 2, expr: 'nextval(107:::REGCLASS)', tableId: 104, usesSequenceIds: [107]}
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
-  {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
-  {indexId: 2, name: foo_pkey, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
-  {columnId: 1, indexId: 2, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
-  {indexId: 2, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
-  {columnId: 1, indexId: 3, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
-  {indexId: 3, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, indexId: 2, kind: STORED, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
-  {columnId: 2, indexId: 3, kind: STORED, tableId: 104}
-- [[ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, indexIdForValidation: 2, tableId: 104}
-
-build
-ALTER TABLE defaultdb.foo ADD COLUMN j SERIAL GENERATED ALWAYS AS IDENTITY
-----
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
-  {columnId: 1, indexId: 1, tableId: 104}
-- [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  {constraintId: 1, indexId: 1, isUnique: true, tableId: 104}
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
-  {indexId: 1, name: foo_pkey, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
-  {indexId: 1, tableId: 104}
-- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 104}
-- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, generatedAsIdentityType: 1, tableId: 104}
-- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, name: j, tableId: 104}
-- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
-- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, Expr: unique_rowid()}, PUBLIC], ABSENT]
-  {columnId: 2, expr: unique_rowid(), tableId: 104}
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
-  {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
-  {indexId: 2, name: foo_pkey, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
-  {columnId: 1, indexId: 2, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
-  {indexId: 2, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
-  {columnId: 1, indexId: 3, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
-  {indexId: 3, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, indexId: 2, kind: STORED, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
-  {columnId: 2, indexId: 3, kind: STORED, tableId: 104}
-- [[ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, indexIdForValidation: 2, tableId: 104}

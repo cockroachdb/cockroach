@@ -1,4 +1,5 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "gomock")
+load("@bazel_gomock//:gomock.bzl", "gomock")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 gomock(
     name = "tenant_status_server_generated",
@@ -48,7 +49,6 @@ go_library(
     visibility = ["//visibility:public"],
     # keep
     deps = [
-        "//pkg/gossip",
         "//pkg/roachpb",
         "//pkg/server/serverpb",
         "@com_github_golang_mock//gomock",

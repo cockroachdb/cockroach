@@ -7,15 +7,10 @@ echo
 -- Flow token metrics from n1 after issuing 1x1MiB elastic 3x replicated write
 -- that's not admitted. We see 1*1MiB*3=3MiB deductions of elastic tokens with
 -- no corresponding returns.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 21 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
@@ -48,15 +43,10 @@ ORDER BY
 -- Flow token metrics from n1 after issuing 1x1MiB 3x replicated write
 -- that's not admitted. We see 1*1MiB*3=3MiB deductions of {regular,elastic}
 -- tokens with no corresponding returns.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 18 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 6.0 MiB  
@@ -88,15 +78,10 @@ ORDER BY
 
 -- Flow token metrics from n1 after work gets admitted. All {regular,elastic}
 -- tokens deducted are returned.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 6.0 MiB  

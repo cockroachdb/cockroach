@@ -6,7 +6,6 @@
 package operation
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -29,5 +28,4 @@ type Operation interface {
 
 	L() *logger.Logger
 	Status(args ...interface{})
-	WorkloadCluster() cluster.Cluster
 }

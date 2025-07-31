@@ -3,33 +3,27 @@
 1:
 -
 IMPORT
-INTO
-	foo
-AVRO
-	DATA (
-		$1
-	)
+PGDUMP
+	'http://test'
 WITH
-	skip = '2'
+	skip = '2',
+	sstsize = '30MB'
 
 6:
 ------
 IMPORT
-  INTO foo
-  AVRO DATA (
-		$1
-       )
-  WITH skip = '2'
+PGDUMP 'http://test'
+  WITH skip = '2',
+       sstsize = '30MB'
 
-16:
-----------------
+35:
+-----------------------------------
 IMPORT
-  INTO foo
-  AVRO DATA ($1)
-  WITH skip = '2'
+PGDUMP 'http://test'
+  WITH skip = '2', sstsize = '30MB'
 
-46:
-----------------------------------------------
-IMPORT INTO foo AVRO DATA ($1) WITH skip = '2'
+61:
+-------------------------------------------------------------
+IMPORT PGDUMP 'http://test' WITH skip = '2', sstsize = '30MB'
 
 

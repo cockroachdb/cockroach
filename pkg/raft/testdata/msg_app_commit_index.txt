@@ -46,11 +46,11 @@ deliver-msgs 2 3
 
 process-ready 3
 ----
-Ready:
+Ready MustSync=true:
 Entries:
 1/12 EntryNormal "data1"
 1/13 EntryNormal "data2"
-OnSync:
+Messages:
 3->1 MsgAppResp Term:1 Log:0/12 Commit:11
 3->1 MsgAppResp Term:1 Log:0/13 Commit:11
 
@@ -59,11 +59,11 @@ OnSync:
 stabilize 1 2
 ----
 > 2 handling Ready
-  Ready:
+  Ready MustSync=true:
   Entries:
   1/12 EntryNormal "data1"
   1/13 EntryNormal "data2"
-  OnSync:
+  Messages:
   2->1 MsgAppResp Term:1 Log:0/12 Commit:11
   2->1 MsgAppResp Term:1 Log:0/13 Commit:11
 > 1 receiving messages
@@ -72,30 +72,28 @@ stabilize 1 2
   2->1 MsgAppResp Term:1 Log:0/12 Commit:11
   2->1 MsgAppResp Term:1 Log:0/13 Commit:11
 > 1 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:1
-  Committed: (11,13]
+  CommittedEntries:
+  1/12 EntryNormal "data1"
+  1/13 EntryNormal "data2"
   Messages:
   1->2 MsgApp Term:1 Log:1/13 Commit:12
   1->3 MsgApp Term:1 Log:1/13 Commit:12
   1->2 MsgApp Term:1 Log:1/13 Commit:13
   1->3 MsgApp Term:1 Log:1/13 Commit:13
-  Applying:
-  1/12 EntryNormal "data1"
-  1/13 EntryNormal "data2"
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/13 Commit:12
   1->2 MsgApp Term:1 Log:1/13 Commit:13
 > 2 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:1
-  Committed: (11,13]
-  OnSync:
-  2->1 MsgAppResp Term:1 Log:0/13 Commit:12
-  2->1 MsgAppResp Term:1 Log:0/13 Commit:13
-  Applying:
+  CommittedEntries:
   1/12 EntryNormal "data1"
   1/13 EntryNormal "data2"
+  Messages:
+  2->1 MsgAppResp Term:1 Log:0/13 Commit:12
+  2->1 MsgAppResp Term:1 Log:0/13 Commit:13
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/13 Commit:12
   2->1 MsgAppResp Term:1 Log:0/13 Commit:13
@@ -122,7 +120,7 @@ ok
 
 process-ready 1
 ----
-Ready:
+Ready MustSync=false:
 Messages:
 1->3 MsgApp Term:1 Log:1/13 Commit:13
 
@@ -134,14 +132,13 @@ stabilize 1 2 3
 > 3 receiving messages
   1->3 MsgApp Term:1 Log:1/13 Commit:13
 > 3 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:1
-  Committed: (11,13]
-  OnSync:
-  3->1 MsgAppResp Term:1 Log:0/13 Commit:13
-  Applying:
+  CommittedEntries:
   1/12 EntryNormal "data1"
   1/13 EntryNormal "data2"
+  Messages:
+  3->1 MsgAppResp Term:1 Log:0/13 Commit:13
 > 1 receiving messages
   3->1 MsgAppResp Term:1 Log:0/13 Commit:13
 

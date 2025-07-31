@@ -96,6 +96,7 @@ func (j *jobMonitor) start(
 		for {
 			select {
 			case <-timer.C:
+				timer.Read = true
 			case <-drain:
 				// Graceful shutdown.
 				return
@@ -177,10 +178,10 @@ func (j *jobMonitor) updateSchedule(ctx context.Context, cronExpr string) {
 			if sj.ScheduleExpr() == cronExpr {
 				return nil
 			}
-			if err := sj.SetScheduleAndNextRun(cronExpr); err != nil {
+			if err := sj.SetSchedule(cronExpr); err != nil {
 				return err
 			}
-			sj.SetScheduleStatus(string(jobs.StatePending))
+			sj.SetScheduleStatus(string(jobs.StatusPending))
 			return jobs.ScheduledJobTxn(txn).Update(ctx, sj)
 		}); err != nil && ctx.Err() == nil {
 			log.Errorf(ctx, "failed to update stats scheduled compaction job: %s", err)

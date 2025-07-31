@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build bazel
+// +build bazel
 
 package main
 
@@ -61,7 +62,6 @@ var (
 	port                    int
 	artifactsDir            string
 	githubPostFormatterName string
-	extraLabels             []string
 
 	rootCmd = &cobra.Command{
 		Use:   "bazci",
@@ -287,12 +287,6 @@ func init() {
 		8998,
 		"port to run the bazci server on",
 	)
-	rootCmd.Flags().StringSliceVar(
-		&extraLabels,
-		"extralabels",
-		[]string{},
-		"comma-separated list of extra labels to add to any filed GitHub issues",
-	)
 }
 
 func getRunEnvForBeaverHub() string {
@@ -495,7 +489,7 @@ func processTestXmls(testXmls []string) error {
 				postErrors = append(postErrors, fmt.Sprintf("Failed to parse test.xml file with the following error: %+v", err))
 				continue
 			}
-			if err := githubpost.PostFromTestXMLWithFormatterName(githubPostFormatterName, testSuites, extraLabels); err != nil {
+			if err := githubpost.PostFromTestXMLWithFormatterName(githubPostFormatterName, testSuites); err != nil {
 				postErrors = append(postErrors, fmt.Sprintf("Failed to process %s with the following error: %+v", testXml, err))
 				continue
 			}

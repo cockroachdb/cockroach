@@ -9,6 +9,7 @@ package ptstorage
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -287,7 +288,7 @@ func writeDeprecatedPTSRecord(knobs *protectedts.TestingKnobs, r *ptpb.Record) b
 func usePTSMetaTable(
 	ctx context.Context, st *cluster.Settings, knobs *protectedts.TestingKnobs,
 ) bool {
-	return knobs.UseMetaTable
+	return knobs.UseMetaTable || !st.Version.IsActive(ctx, clusterversion.V24_1)
 }
 
 // New creates a new Storage.

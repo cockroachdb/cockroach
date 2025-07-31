@@ -261,7 +261,7 @@ func (d *rowCodec) encodeValue(
 			prev = d.valueColumnIDs[i-1]
 		}
 		delta := valueside.MakeColumnIDDelta(prev, d.valueColumnIDs[i])
-		if valueBuf, err = valueside.Encode(valueBuf, delta, f()); err != nil {
+		if valueBuf, err = valueside.Encode(valueBuf, delta, f(), nil); err != nil {
 			return nil, err
 		}
 	}

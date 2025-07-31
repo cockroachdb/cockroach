@@ -222,31 +222,11 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_settings": {
-		customQueryUnredacted: `SELECT
-			variable,
-			CASE 
-			  WHEN sensitive THEN '<redacted>'
-			  ELSE value 
-			END value,
-			type,
-			public,
-			sensitive,
-			reportable,
-			description,
-			default_value,
-			origin
-		FROM crdb_internal.cluster_settings`,
 		customQueryRedacted: `SELECT
 			variable,
-			CASE 
-			  WHEN NOT reportable AND value != default_value THEN '<redacted>'
-			  WHEN sensitive THEN '<redacted>'
-			  ELSE value 
-			END value,
+			CASE WHEN type = 's' AND value != default_value THEN '<redacted>' ELSE value END value,
 			type,
 			public,
-			sensitive,
-			reportable,
 			description,
 			default_value,
 			origin
@@ -292,19 +272,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
 		},
 	},
-	`"".crdb_internal.create_trigger_statements`: {
-		nonSensitiveCols: NonSensitiveColumns{
-			"database_id",
-			"database_name",
-			"schema_id",
-			"schema_name",
-			"table_id",
-			"table_name",
-			"trigger_id",
-			"trigger_name",
-			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
-		},
-	},
 	`"".crdb_internal.create_procedure_statements`: {
 		nonSensitiveCols: NonSensitiveColumns{
 			"database_id",
@@ -340,7 +307,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"is_virtual",
 			"is_temporary",
 			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
-			"crdb_internal.hide_sql_constants(fk_statements) as fk_statements",
+			"crdb_internal.hide_sql_constants(alter_statements) as alter_statements",
 			"crdb_internal.hide_sql_constants(create_nofks) as create_nofks",
 			"crdb_internal.redact(create_redactable) as create_redactable",
 		},
@@ -358,13 +325,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	`"".crdb_internal.cluster_replication_spans`: {
-		nonSensitiveCols: NonSensitiveColumns{
-			"job_id",
-			"resolved",
-			"resolved_age",
-		},
-	},
-	`"".crdb_internal.logical_replication_spans`: {
 		nonSensitiveCols: NonSensitiveColumns{
 			"job_id",
 			"resolved",
@@ -402,21 +362,28 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	},
 	// `statement` column can contain customer URI params such as
 	// AWS_ACCESS_KEY_ID.
-	// `error` column contains error text that may contain sensitive data.
+	// `error`, `execution_errors`, and `execution_events` columns contain
+	// error text that may contain sensitive data.
 	"crdb_internal.jobs": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"job_id",
 			"job_type",
 			"description",
 			"user_name",
+			"descriptor_ids",
 			"status",
 			"running_status",
 			"created",
+			"started",
 			"finished",
 			"modified",
 			"fraction_completed",
 			"high_water_timestamp",
 			"coordinator_id",
+			"trace_id",
+			"last_run",
+			"next_run",
+			"num_runs",
 		},
 	},
 	"crdb_internal.system_jobs": {
@@ -579,43 +546,26 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	},
 	"crdb_internal.transaction_contention_events": {
 		customQueryUnredacted: `
-WITH contention_fingerprints AS (
-    -- First, extract all relevant fingerprints from contention events
-    SELECT DISTINCT waiting_stmt_fingerprint_id, blocking_txn_fingerprint_id
-    FROM crdb_internal.transaction_contention_events
-    WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+with fingerprint_queries as (
+	SELECT distinct fingerprint_id, metadata->> 'query' as query  
+	FROM system.statement_statistics
 ),
-fingerprint_queries AS (
-    -- Only fetch statement data for fingerprints that appear in contention events
-    SELECT DISTINCT fingerprint_id, metadata->>'query' as query
-    FROM system.statement_statistics ss
-    WHERE EXISTS (
-        SELECT 1 FROM contention_fingerprints cf
-        WHERE cf.waiting_stmt_fingerprint_id = ss.fingerprint_id
-    )
-),
-transaction_fingerprints AS (
-    -- Only fetch transaction data for fingerprints that appear in contention events
-    SELECT DISTINCT fingerprint_id, transaction_fingerprint_id
-    FROM system.statement_statistics ss
-    WHERE EXISTS (
-        SELECT 1 FROM contention_fingerprints cf
-        WHERE cf.waiting_stmt_fingerprint_id = ss.fingerprint_id
-    )
-),
-transaction_queries AS (
-    -- Build transaction queries only for relevant transactions
-    SELECT tf.transaction_fingerprint_id, array_agg(fq.query) as queries
-    FROM fingerprint_queries fq
-    JOIN transaction_fingerprints tf ON tf.fingerprint_id = fq.fingerprint_id
-    GROUP BY tf.transaction_fingerprint_id
+transaction_fingerprints as (
+		SELECT distinct fingerprint_id, transaction_fingerprint_id
+		FROM system.statement_statistics
+), 
+transaction_queries as (
+		SELECT tf.transaction_fingerprint_id, array_agg(fq.query) as queries
+		FROM fingerprint_queries fq
+		JOIN transaction_fingerprints tf on tf.fingerprint_id = fq.fingerprint_id
+		GROUP BY tf.transaction_fingerprint_id
 )
 SELECT collection_ts,
        contention_duration,
        waiting_txn_id,
        waiting_txn_fingerprint_id,
        waiting_stmt_fingerprint_id,
-       fq.query AS waiting_stmt_query,
+       fq.query                      AS waiting_stmt_query,
        blocking_txn_id,
        blocking_txn_fingerprint_id,
        tq.queries AS blocking_txn_queries_unordered,
@@ -985,6 +935,9 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"index_recommendations",
 			"latency_seconds_min",
 			"latency_seconds_max",
+			"latency_seconds_p50",
+			"latency_seconds_p90",
+			"latency_seconds_p99",
 		},
 	},
 	"crdb_internal.node_transaction_statistics": {
@@ -1244,18 +1197,6 @@ var zipSystemTables = DebugZipTableRegistry{
 			'redacted' AS value
 			FROM system.job_info`,
 	},
-	"system.job_progress": {
-		nonSensitiveCols: NonSensitiveColumns{"job_id", "written", "fraction", "resolved"},
-	},
-	"system.job_progress_history": {
-		nonSensitiveCols: NonSensitiveColumns{"job_id", "written", "fraction", "resolved"},
-	},
-	"system.job_status": {
-		nonSensitiveCols: NonSensitiveColumns{"job_id", "written", "status"},
-	},
-	"system.job_message": {
-		nonSensitiveCols: NonSensitiveColumns{"job_id", "written", "kind", "message"},
-	},
 	"system.lease": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"desc_id",
@@ -1404,29 +1345,18 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.settings": {
-		customQueryUnredacted: `
-SELECT 
-     name,
-     CASE
-          WHEN cs.sensitive THEN '<redacted>'
-          ELSE s.value
-     END value,
-	s."lastUpdated",
-	s."valueType"
-FROM system.settings s
-JOIN crdb_internal.cluster_settings cs ON cs.variable = s.name`,
-		customQueryRedacted: `
-SELECT 
-     name,
-     CASE
-          WHEN cs.sensitive THEN '<redacted>'
-          WHEN NOT cs.reportable THEN '<redacted>'
-          ELSE s.value
-     END value,
-	s."lastUpdated",
-	s."valueType"
-FROM system.settings s
-JOIN crdb_internal.cluster_settings cs ON cs.variable = s.name`,
+		customQueryUnredacted: `SELECT * FROM system.settings`,
+		customQueryRedacted: `SELECT * FROM (
+				SELECT *
+				FROM system.settings
+				WHERE "valueType" <> 's'
+    	) UNION (
+				SELECT name, '<redacted>' as value,
+				"lastUpdated",
+				"valueType"
+				FROM system.settings
+				WHERE "valueType"  = 's'
+    	)`,
 	},
 	"system.span_configurations": {
 		nonSensitiveCols: NonSensitiveColumns{
@@ -1513,7 +1443,6 @@ JOIN crdb_internal.cluster_settings cs ON cs.variable = s.name`,
 			"plan_gist",
 			"anti_plan_gist",
 			"redacted",
-			"username",
 		},
 	},
 	// statement_statistics can have over 100k rows in just the last hour.

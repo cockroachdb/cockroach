@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build !cgo
+// +build !cgo
 
 package build
 

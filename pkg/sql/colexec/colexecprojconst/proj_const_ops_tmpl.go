@@ -5,6 +5,7 @@
 
 // {{/*
 //go:build execgen_template
+// +build execgen_template
 
 //
 // This file is the execgen template for proj_const_{left,right}_ops.eg.go.
@@ -48,7 +49,6 @@ var (
 	_ telemetry.Counter
 	_ json.JSON
 	_ = coldataext.CompareDatum
-	_ = encoding.UnsafeConvertStringToBytes
 )
 
 // {{/*

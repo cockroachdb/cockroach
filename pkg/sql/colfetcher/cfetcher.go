@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -178,19 +177,6 @@ func (m colIdxMap) Swap(i, j int) {
 	m.ords[i], m.ords[j] = m.ords[j], m.ords[i]
 }
 
-// Get returns the ordinal for the given column ID, returning -1 if the column
-// ID is not in the map.
-func (m colIdxMap) Get(id descpb.ColumnID) int {
-	// Binary search for the column id.
-	idx := sort.Search(len(m.vals), func(i int) bool {
-		return m.vals[i] >= id
-	})
-	if idx < len(m.vals) && m.vals[idx] == id {
-		return m.ords[idx]
-	}
-	return -1
-}
-
 type cFetcherArgs struct {
 	// memoryLimit determines the maximum memory footprint of the output batch.
 	memoryLimit int64
@@ -216,8 +202,6 @@ type cFetcherArgs struct {
 	// the last one returned on the NextBatch calls if the caller wishes to keep
 	// multiple batches at the same time.
 	alwaysReallocate bool
-	// Txn is the txn for the fetch. It might be nil.
-	txn *kv.Txn
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -397,10 +381,10 @@ func (cf *cFetcher) Init(
 	allocator *colmem.Allocator, nextKVer storage.NextKVer, tableArgs *cFetcherTableArgs,
 ) error {
 	if tableArgs.spec.Version != fetchpb.IndexFetchSpecVersionInitial {
-		return errors.AssertionFailedf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
+		return errors.Newf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
 	}
 	table := newCTableInfo()
-	nCols := len(tableArgs.spec.FetchedColumns)
+	nCols := tableArgs.ColIdxMap.Len()
 	if cap(table.orderedColIdxMap.vals) < nCols {
 		table.orderedColIdxMap.vals = make(descpb.ColumnIDs, 0, nCols)
 		table.orderedColIdxMap.ords = make([]int, 0, nCols)
@@ -408,7 +392,7 @@ func (cf *cFetcher) Init(
 	for i := range tableArgs.spec.FetchedColumns {
 		id := tableArgs.spec.FetchedColumns[i].ColumnID
 		table.orderedColIdxMap.vals = append(table.orderedColIdxMap.vals, id)
-		table.orderedColIdxMap.ords = append(table.orderedColIdxMap.ords, i)
+		table.orderedColIdxMap.ords = append(table.orderedColIdxMap.ords, tableArgs.ColIdxMap.GetDefault(id))
 	}
 	sort.Sort(table.orderedColIdxMap)
 	*table = cTableInfo{
@@ -456,14 +440,6 @@ func (cf *cFetcher) Init(
 		}
 	}
 
-	// Disable buffered writes if any system columns are needed that require
-	// MVCC decoding.
-	if cf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
-		if cf.txn != nil && cf.txn.BufferedWritesEnabled() {
-			cf.txn.SetBufferedWritesEnabled(false /* enabled */)
-		}
-	}
-
 	fullColumns := table.spec.KeyFullColumns()
 
 	nIndexCols := len(fullColumns)
@@ -477,9 +453,10 @@ func (cf *cFetcher) Init(
 	needToDecodeDecimalKey := false
 	for i := range fullColumns {
 		col := &fullColumns[i]
-		//gcassert:bce
-		indexColOrdinals[i] = table.orderedColIdxMap.Get(col.ColumnID)
-		if colIdx := indexColOrdinals[i]; colIdx >= 0 {
+		colIdx, ok := tableArgs.ColIdxMap.Get(col.ColumnID)
+		if ok {
+			//gcassert:bce
+			indexColOrdinals[i] = colIdx
 			cf.mustDecodeIndexKey = true
 			needToDecodeDecimalKey = needToDecodeDecimalKey || tableArgs.spec.FetchedColumns[colIdx].Type.Family() == types.DecimalFamily
 			// A composite column might also have a value encoding which must be
@@ -489,6 +466,9 @@ func (cf *cFetcher) Init(
 			} else {
 				table.neededValueColsByIdx.Remove(colIdx)
 			}
+		} else {
+			//gcassert:bce
+			indexColOrdinals[i] = -1
 		}
 	}
 	if needToDecodeDecimalKey && cap(cf.scratch.decoding) < 64 {
@@ -505,7 +485,8 @@ func (cf *cFetcher) Init(
 		suffixCols := table.spec.KeySuffixColumns()
 		for i := range suffixCols {
 			id := suffixCols[i].ColumnID
-			if colIdx := table.orderedColIdxMap.Get(id); colIdx >= 0 {
+			colIdx, ok := tableArgs.ColIdxMap.Get(id)
+			if ok {
 				if suffixCols[i].IsComposite {
 					table.compositeIndexColOrdinals.Add(colIdx)
 					// Note: we account for these composite columns separately: we add
@@ -529,8 +510,14 @@ func (cf *cFetcher) Init(
 		extraValColOrdinals := table.extraValColOrdinals
 		_ = extraValColOrdinals[len(suffixCols)-1]
 		for i := range suffixCols {
-			//gcassert:bce
-			extraValColOrdinals[i] = table.orderedColIdxMap.Get(suffixCols[i].ColumnID)
+			idx, ok := tableArgs.ColIdxMap.Get(suffixCols[i].ColumnID)
+			if ok {
+				//gcassert:bce
+				extraValColOrdinals[i] = idx
+			} else {
+				//gcassert:bce
+				extraValColOrdinals[i] = -1
+			}
 		}
 	}
 
@@ -588,15 +575,15 @@ func cFetcherFirstBatchLimit(limitHint rowinfra.RowLimit, maxKeysPerRow uint32) 
 func (cf *cFetcher) StartScan(
 	ctx context.Context,
 	spans roachpb.Spans,
-	parallelize bool,
+	limitBatches bool,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
 	}
-	if parallelize && batchBytesLimit != rowinfra.NoBytesLimit {
-		return errors.AssertionFailedf("TargetBytes limit requested with parallelize=true")
+	if !limitBatches && batchBytesLimit != rowinfra.NoBytesLimit {
+		return errors.AssertionFailedf("batchBytesLimit set without limitBatches")
 	}
 
 	firstBatchLimit := cFetcherFirstBatchLimit(limitHint, cf.table.spec.MaxKeysPerRow)
@@ -729,7 +716,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		}
 		switch cf.machine.state[0] {
 		case stateInvalid:
-			return nil, errors.AssertionFailedf("invalid fetcher state")
+			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
 			cf.machine.firstKeyOfRow = nil
 			cf.cpuStopWatch.Start()
@@ -1144,7 +1131,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			if err != nil {
 				break
 			}
-			prettyKey, prettyValue, err = cf.processValueBytes(table, tupleBytes, prettyKey)
+			prettyKey, prettyValue, err = cf.processValueBytes(ctx, table, tupleBytes, prettyKey)
 
 		default:
 			// If familyID is 0, this is the row sentinel (in the legacy pre-family format),
@@ -1152,23 +1139,21 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			if familyID == 0 {
 				break
 			}
-			// Find the default column for the family.
-			var defaultColumnIdx int
-			found := false
+			// Find the default column ID for the family.
+			var defaultColumnID descpb.ColumnID
 			for _, f := range table.spec.FamilyDefaultColumns {
 				if f.FamilyID == familyID {
-					defaultColumnIdx = table.orderedColIdxMap.Get(f.DefaultColumnID)
-					found = true
+					defaultColumnID = f.DefaultColumnID
 					break
 				}
 			}
-			if !found {
+			if defaultColumnID == 0 {
 				return scrub.WrapError(
 					scrub.IndexKeyDecodingError,
-					errors.AssertionFailedf("single entry value with no default column"),
+					errors.Errorf("single entry value with no default column id"),
 				)
 			}
-			prettyKey, prettyValue, err = cf.processValueSingle(table, defaultColumnIdx, prettyKey)
+			prettyKey, prettyValue, err = cf.processValueSingle(ctx, table, defaultColumnID, prettyKey)
 		}
 		if err != nil {
 			return scrub.WrapError(scrub.IndexValueDecodingError, err)
@@ -1218,7 +1203,9 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 		}
 
 		if len(valueBytes) > 0 {
-			prettyKey, prettyValue, err = cf.processValueBytes(table, valueBytes, prettyKey)
+			prettyKey, prettyValue, err = cf.processValueBytes(
+				ctx, table, valueBytes, prettyKey,
+			)
 			if err != nil {
 				return scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
@@ -1236,40 +1223,46 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 // value in cf.machine.colvecs accordingly.
 // The key is only used for logging.
 func (cf *cFetcher) processValueSingle(
-	table *cTableInfo, idx int, prettyKeyPrefix string,
+	ctx context.Context, table *cTableInfo, colID descpb.ColumnID, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 
-	if idx < 0 {
-		// No need to unmarshal the column value. Either the column was part of
-		// the index key or it isn't needed.
+	if idx, ok := table.ColIdxMap.Get(colID); ok {
+		if cf.traceKV {
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.spec.FetchedColumns[idx].Name)
+		}
+		val := cf.machine.nextKV.Value
+		if !val.IsPresent() {
+			return prettyKey, "", nil
+		}
+		typ := cf.table.spec.FetchedColumns[idx].Type
+		err := colencoding.UnmarshalColumnValueToCol(
+			&table.da, &cf.machine.colvecs, idx, cf.machine.rowIdx, typ, val,
+		)
+		if err != nil {
+			return "", "", err
+		}
+		cf.machine.remainingValueColsByIdx.Remove(idx)
+
+		if cf.traceKV {
+			prettyValue = cf.getDatumAt(idx, cf.machine.rowIdx).String()
+		}
+		if row.DebugRowFetch {
+			log.Infof(ctx, "Scan %s -> %v", cf.machine.nextKV.Key, "?")
+		}
 		return prettyKey, prettyValue, nil
 	}
 
-	if cf.traceKV {
-		prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.spec.FetchedColumns[idx].Name)
-	}
-	val := cf.machine.nextKV.Value
-	if !val.IsPresent() {
-		return prettyKey, "", nil
-	}
-	typ := cf.table.spec.FetchedColumns[idx].Type
-	err = colencoding.UnmarshalColumnValueToCol(
-		&table.da, &cf.machine.colvecs, idx, cf.machine.rowIdx, typ, val,
-	)
-	if err != nil {
-		return "", "", err
-	}
-	cf.machine.remainingValueColsByIdx.Remove(idx)
-
-	if cf.traceKV {
-		prettyValue = cf.getDatumAt(idx, cf.machine.rowIdx).String()
+	// No need to unmarshal the column value. Either the column was part of
+	// the index key or it isn't needed.
+	if row.DebugRowFetch {
+		log.Infof(ctx, "Scan %s -> [%d] (skipped)", cf.machine.nextKV.Key, colID)
 	}
 	return prettyKey, prettyValue, nil
 }
 
 func (cf *cFetcher) processValueBytes(
-	table *cTableInfo, valueBytes []byte, prettyKeyPrefix string,
+	ctx context.Context, table *cTableInfo, valueBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 	if cf.traceKV {
@@ -1286,7 +1279,7 @@ func (cf *cFetcher) processValueBytes(
 	cf.machine.remainingValueColsByIdx.UnionWith(cf.table.compositeIndexColOrdinals)
 
 	var (
-		colIDDelta     uint32
+		colIDDiff      uint32
 		lastColID      descpb.ColumnID
 		dataOffset     int
 		typ            encoding.Type
@@ -1298,11 +1291,11 @@ func (cf *cFetcher) processValueBytes(
 	// it's expensive to keep calling .Len() in the loop.
 	remainingValueCols := cf.machine.remainingValueColsByIdx.Len()
 	for len(valueBytes) > 0 && remainingValueCols > 0 {
-		_, dataOffset, colIDDelta, typ, err = encoding.DecodeValueTag(valueBytes)
+		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
 		}
-		colID := lastColID + descpb.ColumnID(colIDDelta)
+		colID := lastColID + descpb.ColumnID(colIDDiff)
 		lastColID = colID
 		vecIdx := -1
 		// Find the ordinal into table.cols for the column ID we just decoded,
@@ -1327,6 +1320,9 @@ func (cf *cFetcher) processValueBytes(
 				return "", "", err
 			}
 			valueBytes = valueBytes[len:]
+			if row.DebugRowFetch {
+				log.Infof(ctx, "Scan %s -> [%d] (skipped)", cf.machine.nextKV.Key, colID)
+			}
 			continue
 		}
 
@@ -1374,7 +1370,7 @@ func (cf *cFetcher) fillNulls() error {
 			for i := range table.spec.KeyFullColumns() {
 				indexColNames = append(indexColNames, table.spec.KeyAndSuffixColumns[i].Name)
 			}
-			return scrub.WrapError(scrub.UnexpectedNullValueError, errors.AssertionFailedf(
+			return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
 				"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 				table.spec.TableName, table.spec.FetchedColumns[i].Name, table.spec.IndexName,
 				strings.Join(indexColNames, ","), indexColValues.String()))

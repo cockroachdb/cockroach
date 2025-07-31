@@ -46,7 +46,7 @@ sequence req=reqNormalPriNoWait
 [2] sequence reqNormalPriNoWait: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = true
 [2] sequence reqNormalPriNoWait: pushing timestamp of txn 00000001 above 12.000000000,1
 [2] sequence reqNormalPriNoWait: pushee not abandoned
-[2] sequence reqNormalPriNoWait: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[2] sequence reqNormalPriNoWait: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [2] sequence reqNormalPriNoWait: sequencing complete, returned error: conflicting locks on ‹"k"› [reason=wait_policy]
 
 debug-lock-table
@@ -77,7 +77,7 @@ sequence req=reqHighPriNoWait
 [3] sequence reqHighPriNoWait: pusher pushed pushee to 11.000000000,2
 [3] sequence reqHighPriNoWait: resolving intent ‹"k"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,3}
 [3] sequence reqHighPriNoWait: lock wait-queue event: done waiting
-[3] sequence reqHighPriNoWait: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[3] sequence reqHighPriNoWait: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [3] sequence reqHighPriNoWait: acquiring latches
 [3] sequence reqHighPriNoWait: scanning lock table for conflicting locks
 [3] sequence reqHighPriNoWait: sequencing complete, returned guard

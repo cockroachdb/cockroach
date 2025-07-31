@@ -1,0 +1,619 @@
+# Test backing up and restoring a database with user defined functions.
+new-cluster name=s
+----
+
+exec-sql
+CREATE DATABASE db1;
+----
+
+exec-sql
+USE db1;
+----
+
+exec-sql
+CREATE SCHEMA sc1;
+----
+
+exec-sql
+CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql
+CREATE TYPE sc1.enum1 AS ENUM('Good');
+----
+
+exec-sql
+CREATE SEQUENCE sc1.sq1;
+----
+
+exec-sql
+CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sc1.tbl1;
+  SELECT 'Good'::sc1.enum1;
+  SELECT nextval('sc1.sq1');
+$$;
+----
+
+exec-sql
+CREATE SCHEMA sc2;
+----
+
+exec-sql
+CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
+----
+
+exec-sql
+CREATE FUNCTION sc2.f2() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM sc2.tbl2 LIMIT 1 $$;
+----
+
+exec-sql
+INSERT INTO sc2.tbl2 VALUES (123)
+----
+
+query-sql
+SELECT sc1.f1('Good'::sc1.enum1)
+----
+1
+
+query-sql
+SELECT sc2.f2()
+----
+123
+
+exec-sql
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
+----
+
+query-sql
+WITH descs AS (
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
+)
+SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
+----
+<nil> <nil> db1 database false
+db1 <nil> public schema false
+db1 <nil> sc1 schema false
+db1 sc1 tbl1 table false
+db1 sc1 enum1 type false
+db1 sc1 _enum1 type false
+db1 sc1 sq1 table false
+db1 sc1 f1 function false
+db1 <nil> sc2 schema false
+db1 sc2 tbl2 table false
+db1 sc2 f2 function false
+
+query-sql
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
+----
+CREATE FUNCTION sc1.f1(a sc1.enum1)
+	RETURNS INT8
+	VOLATILE
+	NOT LEAKPROOF
+	CALLED ON NULL INPUT
+	LANGUAGE SQL
+	SECURITY INVOKER
+	AS $$
+	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::sc1.enum1;
+	SELECT nextval('sc1.sq1'::REGCLASS);
+$$
+
+query-sql
+SELECT sc1.f1('Good'::sc1.enum1)
+----
+2
+
+exec-sql
+DROP DATABASE db1
+----
+
+exec-sql
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name = db1_new
+----
+
+exec-sql
+USE db1_new
+----
+
+# Make sure ids in signature and body are rewritten.
+# 1. argument type id is rewritten so that type name is deserialized correctly.
+# 2. db name in qualified name is rewritten.
+# 3. sequence id is rewritten so that sequence name is deserialized correctly.
+query-sql
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
+----
+CREATE FUNCTION sc1.f1(a sc1.enum1)
+	RETURNS INT8
+	VOLATILE
+	NOT LEAKPROOF
+	CALLED ON NULL INPUT
+	LANGUAGE SQL
+	SECURITY INVOKER
+	AS $$
+	SELECT a FROM db1_new.sc1.tbl1;
+	SELECT 'Good':::sc1.enum1;
+	SELECT nextval('sc1.sq1'::REGCLASS);
+$$
+
+# Make sure function signature is rewritten in schema descriptor so that
+# function can be resolved and executed.
+query-sql
+SELECT sc1.f1('Good'::db1_new.sc1.enum1)
+----
+2
+
+# Make sure function still queries from correct table.
+query-sql
+SELECT db1_new.sc2.f2()
+----
+123
+
+# Make sure dependency IDs are rewritten.
+# Note that technically this only tests forward-reference IDs in depended-on
+# objects are rewritten. But since we have cross-references validation, so this
+# also means back-references in UDF descriptor are good.
+exec-sql
+DROP SEQUENCE sc1.sq1
+----
+pq: cannot drop sequence sq1 because other objects depend on it
+
+exec-sql
+DROP TABLE sc1.tbl1
+----
+pq: cannot drop table tbl1 because other objects depend on it
+
+exec-sql
+ALTER TABLE sc1.tbl1 RENAME TO tbl1_new
+----
+pq: cannot rename relation "sc1.tbl1" because function "f1" depends on it
+HINT: consider dropping "f1" first.
+
+exec-sql
+ALTER TABLE sc1.tbl1 SET SCHEMA sc2;
+----
+pq: cannot set schema on relation "tbl1" because function "f1" depends on it
+HINT: consider dropping "f1" first.
+
+exec-sql
+DROP TYPE sc1.enum1
+----
+pq: cannot drop type "enum1" because other objects ([db1_new.sc1.f1]) still depend on it
+
+# Test backing up and restoring a full cluster with user defined function.
+new-cluster name=s1
+----
+
+exec-sql cluster=s1
+CREATE DATABASE db1;
+----
+
+exec-sql cluster=s1
+USE db1;
+----
+
+exec-sql cluster=s1
+CREATE SCHEMA sc1;
+----
+
+exec-sql cluster=s1
+CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql cluster=s1
+CREATE TYPE sc1.enum1 AS ENUM('Good');
+----
+
+exec-sql cluster=s1
+CREATE SEQUENCE sc1.sq1;
+----
+
+exec-sql cluster=s1
+CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sc1.tbl1;
+  SELECT 'Good'::sc1.enum1;
+  SELECT nextval('sc1.sq1');
+$$;
+----
+
+exec-sql cluster=s1
+CREATE SCHEMA sc2;
+----
+
+exec-sql cluster=s1
+CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
+----
+
+exec-sql cluster=s1
+CREATE FUNCTION sc2.f2() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM sc2.tbl2 LIMIT 1 $$;
+----
+
+exec-sql
+INSERT INTO sc2.tbl2 VALUES (123)
+----
+
+query-sql
+SELECT sc1.f1('Good'::sc1.enum1)
+----
+1
+
+query-sql
+SELECT sc2.f2()
+----
+123
+
+exec-sql
+BACKUP INTO 'nodelocal://1/test/'
+----
+
+query-sql
+WITH descs AS (
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
+)
+SELECT
+  database_name, parent_schema_name, object_name, object_type, is_full_cluster
+FROM
+  descs
+WHERE
+  database_name = 'db1'
+
+----
+db1 <nil> public schema true
+db1 <nil> sc1 schema true
+db1 sc1 tbl1 table true
+db1 sc1 enum1 type true
+db1 sc1 _enum1 type true
+db1 sc1 sq1 table true
+db1 sc1 f1 function true
+db1 <nil> sc2 schema true
+db1 sc2 tbl2 table true
+db1 sc2 f2 function true
+
+query-sql
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
+----
+CREATE FUNCTION sc1.f1(a sc1.enum1)
+	RETURNS INT8
+	VOLATILE
+	NOT LEAKPROOF
+	CALLED ON NULL INPUT
+	LANGUAGE SQL
+	SECURITY INVOKER
+	AS $$
+	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::sc1.enum1;
+	SELECT nextval('sc1.sq1'::REGCLASS);
+$$
+
+query-sql
+SELECT sc1.f1('Good'::sc1.enum1)
+----
+2
+
+# Start a new cluster with the same IO dir.
+new-cluster name=s2 share-io-dir=s1
+----
+
+# Restore into the new cluster.
+exec-sql cluster=s2
+RESTORE FROM LATEST IN 'nodelocal://1/test/'
+----
+
+exec-sql
+USE db1
+----
+
+# Make sure ids in signature and body are rewritten.
+# 1. argument type id is rewritten so that type name is deserialized correctly.
+# 2. db name in qualified name is rewritten.
+# 3. sequence id is rewritten so that sequence name is deserialized correctly.
+query-sql
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
+----
+CREATE FUNCTION sc1.f1(a sc1.enum1)
+	RETURNS INT8
+	VOLATILE
+	NOT LEAKPROOF
+	CALLED ON NULL INPUT
+	LANGUAGE SQL
+	SECURITY INVOKER
+	AS $$
+	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::sc1.enum1;
+	SELECT nextval('sc1.sq1'::REGCLASS);
+$$
+
+# Make sure function signature is rewritten in schema descriptor so that
+# function can be resolved and executed.
+query-sql
+SELECT sc1.f1('Good'::sc1.enum1)
+----
+2
+
+# Make sure function still queries from correct table.
+query-sql
+SELECT sc2.f2()
+----
+123
+
+# Make sure dependency IDs are rewritten.
+# Note that technically this only tests forward-reference IDs in depended-on
+# objects are rewritten. But since we have cross-references validation, so this
+# also means back-references in UDF descriptor are good.
+exec-sql
+DROP SEQUENCE sc1.sq1
+----
+pq: cannot drop sequence sq1 because other objects depend on it
+
+exec-sql
+DROP TABLE sc1.tbl1
+----
+pq: cannot drop table tbl1 because other objects depend on it
+
+exec-sql
+ALTER TABLE sc1.tbl1 RENAME TO tbl1_new
+----
+pq: cannot rename relation "sc1.tbl1" because function "f1" depends on it
+HINT: consider dropping "f1" first.
+
+exec-sql
+ALTER TABLE sc1.tbl1 SET SCHEMA sc2;
+----
+pq: cannot set schema on relation "tbl1" because function "f1" depends on it
+HINT: consider dropping "f1" first.
+
+exec-sql
+DROP TYPE sc1.enum1
+----
+pq: cannot drop type "enum1" because other objects ([db1.sc1.f1]) still depend on it
+
+# Make sure that backup and restore individual tables from schema with UDF does
+# not crash.
+new-cluster name=s3
+----
+
+exec-sql cluster=s3
+CREATE DATABASE db1;
+----
+
+exec-sql cluster=s3
+CREATE SCHEMA sc1;
+----
+
+exec-sql cluster=s3
+CREATE TABLE sc1.t(a INT PRIMARY KEY);
+----
+
+exec-sql cluster=s3
+CREATE FUNCTION sc1.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+----
+
+# Make sure the original schema has function signatures
+let $defaultdb_sc1_db
+WITH db_id AS (
+  SELECT id FROM system.namespace WHERE name = 'defaultdb'
+),
+schema_id AS (
+  SELECT ns.id
+  FROM system.namespace AS ns
+  JOIN db_id ON ns."parentID" = db_id.id
+  WHERE ns.name = 'sc1'
+)
+SELECT id FROM schema_id;
+----
+
+query-sql
+WITH to_json AS (
+    SELECT
+      id,
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sqlbase.Descriptor',
+        descriptor,
+        false
+      ) AS d
+    FROM
+      system.descriptor
+    WHERE id = $defaultdb_sc1_db
+)
+-- Remove ID from the result, since it isn't stable.
+SELECT json_set(d, '{schema,functions,f,signatures,0,id}', '0')->'schema'->>'functions'::string FROM to_json;
+----
+{"f": {"signatures": [{"id": 0, "returnType": {"family": "IntFamily", "oid": 20, "width": 64}}]}}
+
+exec-sql
+BACKUP TABLE sc1.t INTO 'nodelocal://1/test/'
+----
+
+exec-sql
+RESTORE TABLE sc1.t FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db1';
+----
+
+exec-sql
+USE db1;
+----
+
+let $db1_sc1_id
+WITH db_id AS (
+  SELECT id FROM system.namespace WHERE name = 'db1'
+),
+schema_id AS (
+  SELECT ns.id
+  FROM system.namespace AS ns
+  JOIN db_id ON ns."parentID" = db_id.id
+  WHERE ns.name = 'sc1'
+)
+SELECT id FROM schema_id;
+----
+
+query-sql
+WITH to_json AS (
+    SELECT
+      id,
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sqlbase.Descriptor',
+        descriptor,
+        false
+      ) AS d
+    FROM
+      system.descriptor
+    WHERE id = $db1_sc1_id
+)
+SELECT d->'schema'->>'functions'::string FROM to_json;
+----
+<nil>
+
+# Make sure proper error message is returned when trying to resolve the
+# function from the restore target db.
+query-sql
+SELECT f()
+----
+pq: unknown function: f()
+
+# Test that backing up and restoring a cluster with a function does not grant
+# EXECUTE privileges on the public role for functions where that privilege has
+# been revoked.
+new-cluster name=s4
+----
+
+exec-sql cluster=s4
+CREATE DATABASE db1;
+----
+
+exec-sql cluster=s4
+USE db1;
+----
+
+exec-sql cluster=s4
+CREATE USER u1;
+----
+
+exec-sql cluster=s4
+CREATE FUNCTION add(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x + y';
+----
+
+exec-sql cluster=s4
+REVOKE EXECUTE ON FUNCTION ADD FROM public;
+----
+
+exec-sql cluster=s4
+SET ROLE = u1;
+----
+
+query-sql
+SELECT add(1, 2)
+----
+pq: user u1 does not have EXECUTE privilege on function add
+
+query-sql
+SELECT database_name, schema_name, routine_signature, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON FUNCTION add]
+----
+db1 public add(int8, int8) admin ALL true
+db1 public add(int8, int8) root ALL true
+
+exec-sql
+SET ROLE = root
+----
+
+exec-sql cluster=s4
+BACKUP INTO 'nodelocal://1/test/'
+----
+
+# Start a new cluster with the same IO dir.
+new-cluster name=s5 share-io-dir=s4
+----
+
+# Restore into the new cluster.
+exec-sql cluster=s5
+RESTORE FROM LATEST IN 'nodelocal://1/test/'
+----
+
+exec-sql cluster=s5
+USE db1;
+SET ROLE = u1;
+----
+
+query-sql cluster=s5
+SELECT add(1, 2)
+----
+pq: user u1 does not have EXECUTE privilege on function add
+
+query-sql cluster=s5
+SELECT database_name, schema_name, routine_signature, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON FUNCTION add]
+----
+db1 public add(int8, int8) admin ALL true
+db1 public add(int8, int8) root ALL true
+
+# Backing up and restoring a database with a function resets privileges on
+# functions to the default privileges because we cannot be sure if the same
+# users are present in the new cluster.
+new-cluster name=s6
+----
+
+exec-sql cluster=s6
+CREATE DATABASE db1;
+----
+
+exec-sql cluster=s6
+USE db1;
+----
+
+exec-sql cluster=s6
+CREATE USER u1;
+----
+
+exec-sql cluster=s6
+CREATE FUNCTION add(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x + y';
+----
+
+exec-sql cluster=s6
+REVOKE EXECUTE ON FUNCTION ADD FROM public;
+----
+
+exec-sql cluster=s6
+SET ROLE = u1;
+----
+
+query-sql
+SELECT add(1, 2)
+----
+pq: user u1 does not have EXECUTE privilege on function add
+
+query-sql
+SELECT database_name, schema_name, routine_signature, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON FUNCTION add]
+----
+db1 public add(int8, int8) admin ALL true
+db1 public add(int8, int8) root ALL true
+
+exec-sql
+SET ROLE = root
+----
+
+exec-sql cluster=s6
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
+----
+
+# Restore into the new cluster.
+exec-sql cluster=s6
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name = db1_new
+----
+
+exec-sql cluster=s6
+USE db1_new;
+SET ROLE = u1;
+----
+
+# The user now has EXECUTE privilege via the public role.
+query-sql cluster=s6
+SELECT add(1, 2)
+----
+3
+
+query-sql cluster=s6
+SELECT database_name, schema_name, routine_signature, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON FUNCTION add]
+----
+db1_new public add(int8, int8) admin ALL true
+db1_new public add(int8, int8) public EXECUTE false
+db1_new public add(int8, int8) root ALL true

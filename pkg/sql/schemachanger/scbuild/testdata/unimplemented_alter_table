@@ -13,6 +13,10 @@ CREATE TABLE defaultdb.foo (
 ----
 
 unimplemented
+ALTER TABLE defaultdb.foo ALTER COLUMN i DROP NOT NULL
+----
+
+unimplemented
 ALTER TABLE defaultdb.foo ALTER COLUMN i DROP STORED
 ----
 
@@ -26,6 +30,10 @@ ALTER TABLE defaultdb.foo RENAME CONSTRAINT foobar TO baz
 
 unimplemented
 ALTER TABLE defaultdb.foo EXPERIMENTAL_AUDIT SET READ WRITE
+----
+
+unimplemented
+ALTER TABLE defaultdb.foo ADD PRIMARY KEY (l);
 ----
 
 unimplemented

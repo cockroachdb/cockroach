@@ -9,13 +9,13 @@ import (
 	"database/sql/driver"
 	"io"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
 )
 
 type sqlRows struct {
 	rows     pgx.Rows
-	typeMap  *pgtype.Map
+	connInfo *pgtype.ConnInfo
 	conn     *sqlConn
 	colNames []string
 }
@@ -27,7 +27,7 @@ func (r *sqlRows) Columns() []string {
 		fields := r.rows.FieldDescriptions()
 		r.colNames = make([]string, len(fields))
 		for i, fd := range fields {
-			r.colNames[i] = fd.Name
+			r.colNames[i] = string(fd.Name)
 		}
 	}
 	return r.colNames
@@ -83,5 +83,5 @@ func (r *sqlRows) NextResultSet() (bool, error) {
 
 func (r *sqlRows) ColumnTypeDatabaseTypeName(index int) string {
 	fieldOID := r.rows.FieldDescriptions()[index].DataTypeOID
-	return databaseTypeName(r.typeMap, fieldOID)
+	return databaseTypeName(r.connInfo, fieldOID)
 }

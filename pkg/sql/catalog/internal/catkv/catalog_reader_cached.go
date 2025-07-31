@@ -104,7 +104,7 @@ func (c *cachedCatalogReader) IsIDInCache(id descpb.ID) bool {
 }
 
 // IsNameInCache is part of the CatalogReader interface.
-func (c *cachedCatalogReader) IsNameInCache(key descpb.NameInfo) bool {
+func (c *cachedCatalogReader) IsNameInCache(key catalog.NameKey) bool {
 	return c.cache.LookupNamespaceEntry(key) != nil
 }
 
@@ -388,8 +388,8 @@ func (c *cachedCatalogReader) GetByNames(
 		if c.byNameState[ni].hasGetNamespaceEntries || c.hasScanAll {
 			continue
 		}
-		if id, ts := c.systemDatabaseCache.lookupDescriptorID(c.version, ni); id != descpb.InvalidID {
-			c.cache.UpsertNamespaceEntry(ni, id, ts)
+		if id, ts := c.systemDatabaseCache.lookupDescriptorID(c.version, &ni); id != descpb.InvalidID {
+			c.cache.UpsertNamespaceEntry(&ni, id, ts)
 			s := c.byNameState[ni]
 			s.hasGetNamespaceEntries = true
 			c.setByNameState(ni, s)

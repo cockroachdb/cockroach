@@ -34,5 +34,3 @@ util/admission
 util/hlc
 util/intsets
 util/mon
-util/num32
-util/vector

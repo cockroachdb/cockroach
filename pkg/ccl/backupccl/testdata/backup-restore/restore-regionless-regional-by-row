@@ -1,0 +1,76 @@
+# perform backups with regional by row table
+subtest mrbackup-rbr
+
+# disabled to run within tenant because multiregion primitives are not supported within tenant
+new-cluster name=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1";
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+query-sql
+SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
+----
+eu-central-1
+us-east-1
+us-west-1
+
+query-sql
+SHOW DATABASES;
+----
+d root us-east-1  {eu-central-1,us-east-1,us-west-1} zone
+data root <nil> <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
+
+# make our table regional by row
+exec-sql
+ALTER TABLE d.t SET LOCALITY REGIONAL BY ROW;
+----
+NOTICE: LOCALITY changes will be finalized asynchronously; further schema changes on this table may be restricted until the job completes
+
+query-sql
+SELECT crdb_region FROM d.t;
+----
+us-east-1
+us-east-1
+us-east-1
+
+# backup db, table, and cluster with regional by row table
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/rbr_database_backup/';
+----
+
+exec-sql
+BACKUP TABLE d.t INTO 'nodelocal://1/rbr_table_backup/';
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/rbr_cluster_backup/';
+----
+
+subtest end
+
+# ensure restoring a cluster/db/table with a table that has regional by row on a single region cluster
+# fails fast
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access localities=us-east-1
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/rbr_cluster_backup/' WITH remove_regions;
+----
+pq: cannot perform a remove_regions RESTORE with region by row enabled table t in BACKUP target
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/rbr_database_backup/' WITH remove_regions;
+----
+pq: cannot perform a remove_regions RESTORE with region by row enabled table t in BACKUP target
+
+exec-sql
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/rbr_table_backup/' WITH remove_regions;
+----
+pq: cannot perform a remove_regions RESTORE with region by row enabled table t in BACKUP target

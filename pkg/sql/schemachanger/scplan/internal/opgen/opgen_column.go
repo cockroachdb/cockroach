@@ -8,7 +8,6 @@ package opgen
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -32,9 +31,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
-				revertibleFunc(func(e scpb.Element, state *opGenContext) bool {
-					return checkIfDescriptorIsWithoutData(screl.GetDescID(e), state)
-				}),
+				revertible(false),
 				emit(func(this *scpb.Column, md *opGenContext) *scop.MakeWriteOnlyColumnPublic {
 					return &scop.MakeWriteOnlyColumnPublic{
 						TableID:  this.TableID,

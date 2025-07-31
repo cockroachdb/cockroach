@@ -6,9 +6,6 @@
 package scpb
 
 import (
-	"fmt"
-	"reflect"
-
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/errors"
 )
@@ -214,17 +211,17 @@ func (c *ElementCollection[E]) NotToAbsent() *ElementCollection[E] {
 	})
 }
 
-// TransientAbsent filters by elements targeting the TRANSIENT_ABSENT state.
+// Transient filters by elements targeting the TRANSIENT_ABSENT state.
 func (c *ElementCollection[E]) Transient() *ElementCollection[E] {
 	return c.FilterTarget(func(target TargetStatus, _ E) bool {
-		return target == TransientAbsent
+		return target == Transient
 	})
 }
 
 // NotTransient filters by elements not targeting the TRANSIENT_ABSENT state.
 func (c *ElementCollection[E]) NotTransient() *ElementCollection[E] {
 	return c.FilterTarget(func(target TargetStatus, _ E) bool {
-		return target != TransientAbsent
+		return target != Transient
 	})
 }
 
@@ -275,13 +272,4 @@ func (c *ElementCollection[E]) MustHaveZeroOrOne() *ElementCollection[E] {
 		panic(errors.AssertionFailedf("expected element collection size 0 or 1, not %d", c.Size()))
 	}
 	return c
-}
-
-func (c *ElementCollection[E]) String() string {
-	var result string
-	for _, element := range c.Elements() {
-		elemType := reflect.TypeOf(element).Elem()
-		result += fmt.Sprintf("%s:{%+v}\n", elemType.Name(), element)
-	}
-	return result
 }

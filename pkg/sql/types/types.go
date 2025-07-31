@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"runtime/debug"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -17,8 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
-	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -87,7 +86,6 @@ import (
 // | TIMETZ            | TIMETZ         | T_timetz      | 0         | 0     |
 // | JSON              | JSONB          | T_json        | 0         | 0     |
 // | JSONB             | JSONB          | T_jsonb       | 0         | 0     |
-// | JSONPATH          | JSONPATH       | T_jsonpath    | 0         | 0     |
 // |                   |                |               |           |       |
 // | BYTES             | BYTES          | T_bytea       | 0         | 0     |
 // |                   |                |               |           |       |
@@ -339,11 +337,6 @@ var (
 	VarChar = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_varchar, Locale: &emptyLocale}}
 
-	// CIText is the type of a case-insensitive string and is similar to AnyCollatedString,
-	// but has a differing Locale (case-insensitive) and a differing OID (T_citext).
-	CIText = &T{InternalType: InternalType{
-		Family: CollatedStringFamily, Oid: oidext.T_citext, Locale: &collatedstring.CaseInsensitiveLocale}}
-
 	// QChar is the special "char" type that is a single-character column type.
 	// It's used by system tables. It is reported as "char" (with double quotes
 	// included) in SHOW CREATE and "char" in introspection for compatibility
@@ -548,15 +541,6 @@ var (
 		},
 	}
 
-	// Jsonpath is the jsonpath type which represents a jsonpath query.
-	Jsonpath = &T{
-		InternalType: InternalType{
-			Family: JsonpathFamily,
-			Oid:    oidext.T_jsonpath,
-			Locale: &emptyLocale,
-		},
-	}
-
 	// RefCursor is the type for a variable representing the name of a cursor in a
 	// PLpgSQL routine. The underlying value is a string.
 	RefCursor = &T{
@@ -596,25 +580,21 @@ var (
 		TimeTZ,
 		Jsonb,
 		VarBit,
-		// TODO(#22513): consider including jsonpath here.
 	}
 
-	Any = &T{InternalType: InternalType{
-		Family: AnyFamily, Oid: oid.T_any, Locale: &emptyLocale}}
-
-	// AnyElement is a special type used only during static analysis as a wildcard type
+	// Any is a special type used only during static analysis as a wildcard type
 	// that matches any other type, including scalar, array, and tuple types.
 	// Execution-time values should never have this type. As an example of its
 	// use, many SQL builtin functions allow an input value to be of any type,
 	// and so use this type in their static definitions.
-	AnyElement = &T{InternalType: InternalType{
+	Any = &T{InternalType: InternalType{
 		Family: AnyFamily, Oid: oid.T_anyelement, Locale: &emptyLocale}}
 
 	// AnyArray is a special type used only during static analysis as a wildcard
 	// type that matches an array having elements of any (uniform) type (including
 	// nested array types). Execution-time values should never have this type.
 	AnyArray = &T{InternalType: InternalType{
-		Family: ArrayFamily, ArrayContents: AnyElement, Oid: oid.T_anyarray, Locale: &emptyLocale}}
+		Family: ArrayFamily, ArrayContents: Any, Oid: oid.T_anyarray, Locale: &emptyLocale}}
 
 	// AnyEnum is a special type only used during static analysis as a wildcard
 	// type that matches an possible enum value. Execution-time values should
@@ -626,7 +606,7 @@ var (
 	// type that matches a tuple with any number of fields of any type (including
 	// tuple types). Execution-time values should never have this type.
 	AnyTuple = &T{InternalType: InternalType{
-		Family: TupleFamily, TupleContents: []*T{AnyElement}, Oid: oid.T_record, Locale: &emptyLocale}}
+		Family: TupleFamily, TupleContents: []*T{Any}, Oid: oid.T_record, Locale: &emptyLocale}}
 
 	// AnyTupleArray is a special type used only during static analysis as a wildcard
 	// type that matches an array of tuples with any number of fields of any type (including
@@ -741,13 +721,6 @@ var (
 	// by Postgres in system tables. Int2vectors are 0-indexed, unlike normal arrays.
 	Int2Vector = &T{InternalType: InternalType{
 		Family: ArrayFamily, Oid: oid.T_int2vector, ArrayContents: Int2, Locale: &emptyLocale}}
-
-	// JsonpathArray is the type of an array value having Jsonpath-typed elements.
-	JsonpathArray = &T{
-		InternalType: InternalType{
-			Family: ArrayFamily, ArrayContents: Jsonpath, Oid: oidext.T__jsonpath, Locale: &emptyLocale,
-		},
-	}
 )
 
 // Unexported wrapper types.
@@ -975,10 +948,10 @@ func MakeChar(width int32) *T {
 		Family: StringFamily, Oid: oid.T_bpchar, Width: width, Locale: &emptyLocale}}
 }
 
-// oidCanBeCollatedString returns true if the given oid can be a CollatedString.
+// oidCanBeCollatedString returns true if the given oid is can be a CollatedString.
 func oidCanBeCollatedString(o oid.Oid) bool {
 	switch o {
-	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name, oidext.T_citext:
+	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name:
 		return true
 	}
 	return false
@@ -996,21 +969,6 @@ func MakeCollatedString(strType *T, locale string) *T {
 			Family: CollatedStringFamily, Oid: strType.Oid(), Width: strType.Width(), Locale: &locale}}
 	}
 	panic(errors.AssertionFailedf("cannot apply collation to non-string type: %s", strType))
-}
-
-// MakeCollatedType is like MakeCollatedString but also handles NULL and arrays
-// of string types that need to become arrays of collated string types.
-//
-// UNKNOWN  => STRING COLLATE EN
-// []STRING => []STRING COLLATE EN
-func MakeCollatedType(typ *T, locale string) *T {
-	if typ.Family() == ArrayFamily {
-		return MakeArray(MakeCollatedType(typ.ArrayContents(), locale))
-	}
-	if typ.Family() == UnknownFamily {
-		return MakeCollatedType(String, locale)
-	}
-	return MakeCollatedString(typ, locale)
 }
 
 // MakeDecimal constructs a new instance of a DECIMAL type (oid = T_numeric)
@@ -1234,11 +1192,9 @@ func MakeEnum(typeOID, arrayTypeOID oid.Oid) *T {
 // MakeArray constructs a new instance of an ArrayFamily type with the given
 // element type (which may itself be an ArrayFamily type).
 func MakeArray(typ *T) *T {
-	// Do not make an array of type unknown[]. Follow Postgres' behavior and convert
-	// this to type string[]. Likewise, Any does not have an array type, so treat it
-	// as an array of strings.
-	if typ.Family() == UnknownFamily ||
-		(typ.Family() == AnyFamily && typ.Oid() == oid.T_any) {
+	// Do not make an array of type unknown[]. Follow Postgres' behavior and
+	// convert this to type string[].
+	if typ.Family() == UnknownFamily {
 		typ = String
 	}
 	arr := &T{InternalType: InternalType{
@@ -1596,7 +1552,6 @@ var familyNames = map[Family]redact.SafeString{
 	UuidFamily:           "uuid",
 	VoidFamily:           "void",
 	EncodedKeyFamily:     "encodedkey",
-	JsonpathFamily:       "jsonpath",
 }
 
 // Name returns a user-friendly word indicating the family type.
@@ -1620,12 +1575,7 @@ func (f Family) Name() redact.SafeString {
 func (t *T) Name() string {
 	switch fam := t.Family(); fam {
 	case AnyFamily:
-		switch t.Oid() {
-		case oid.T_any:
-			return "any"
-		default:
-			return "anyelement"
-		}
+		return "anyelement"
 
 	case ArrayFamily:
 		switch t.Oid() {
@@ -1685,8 +1635,6 @@ func (t *T) Name() string {
 			return "varchar"
 		case oid.T_name:
 			return "name"
-		case oidext.T_citext:
-			return "citext"
 		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 
@@ -1854,8 +1802,6 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 	case JsonFamily:
 		// Only binary JSON is currently supported.
 		return "jsonb"
-	case JsonpathFamily:
-		return "jsonpath"
 	case OidFamily:
 		switch t.Oid() {
 		case oid.T_oid:
@@ -1899,8 +1845,6 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		case oid.T_name:
 			// Type modifiers not allowed for name.
 			return "name"
-		case oidext.T_citext:
-			return "citext"
 		default:
 			panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 		}
@@ -2041,8 +1985,6 @@ func (t *T) SQLString() string {
 	case JsonFamily:
 		// Only binary JSON is currently supported.
 		return "JSONB"
-	case JsonpathFamily:
-		return "JSONPATH"
 	case TimestampFamily, TimestampTZFamily, TimeFamily, TimeTZFamily:
 		if t.InternalType.Precision > 0 || t.InternalType.TimePrecisionIsSet {
 			return fmt.Sprintf("%s(%d)", strings.ToUpper(t.Name()), t.Precision())
@@ -2203,7 +2145,7 @@ func fallbackFormatTypeName(UserDefinedTypeName, bool) string {
 // other attributes of equivalent types, such as width, precision, and oid, can
 // be different.
 //
-// Wildcard types (e.g. AnyElement, AnyArray, AnyTuple, etc) have special equivalence
+// Wildcard types (e.g. Any, AnyArray, AnyTuple, etc) have special equivalence
 // behavior. AnyFamily types match any other type, including other AnyFamily
 // types. And a wildcard collation (empty string) matches any other collation.
 func (t *T) Equivalent(other *T) bool {
@@ -2317,7 +2259,7 @@ func (t *T) Equal(other *T) bool {
 // static analysis, and cannot be used during execution.
 func (t *T) IsWildcardType() bool {
 	for _, wildcard := range []*T{
-		Any, AnyElement, AnyArray, AnyCollatedString, AnyEnum, AnyEnumArray, AnyTuple, AnyTupleArray,
+		Any, AnyArray, AnyCollatedString, AnyEnum, AnyEnumArray, AnyTuple, AnyTupleArray,
 	} {
 		// Note that pointer comparison is insufficient since we might have
 		// deserialized t from disk.
@@ -2332,7 +2274,7 @@ func (t *T) IsWildcardType() bool {
 // return-type of a polymorphic function. Note that this does not include RECORD
 // (AnyTuple) or RECORD[].
 func (t *T) IsPolymorphicType() bool {
-	for _, poly := range []*T{AnyElement, AnyArray, AnyEnum, AnyEnumArray} {
+	for _, poly := range []*T{Any, AnyArray, AnyEnum, AnyEnumArray} {
 		if t.Identical(poly) {
 			return true
 		}
@@ -2351,7 +2293,14 @@ func (t *T) IsPseudoType() bool {
 //
 // Marshal is part of the protoutil.Message interface.
 func (t *T) Size() (n int) {
-	return t.InternalType.Size()
+	// Need to first downgrade the type before delegating to InternalType,
+	// because Marshal will downgrade.
+	temp := *t
+	err := temp.downgradeType()
+	if err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "error during Size call"))
+	}
+	return temp.InternalType.Size()
 }
 
 // Identical is the internal implementation for T.Identical. See that comment
@@ -2459,78 +2408,67 @@ func (t *T) Unmarshal(data []byte) error {
 // according to the requirements of the latest version by remapping fields and
 // setting required values. This is necessary to preserve backwards-
 // compatibility with older formats (e.g. restoring database from old backup).
-//
-// This can be removed once we can ensure that all descriptors have been
-// rewritten with the newer format. Note that the migration in first_upgrade.go
-// is not sufficient to ensure that all descriptors have been rewritten, since
-// that migration is only based on post-deserialization changes, but the type
-// upgrade logic happens _during_ deserialization.
 func (t *T) upgradeType() error {
 	switch t.Family() {
 	case IntFamily:
-		// If the OID is not set already, check VisibleType field that was populated
-		// in previous versions.
-		if t.InternalType.Oid == 0 {
-			switch t.InternalType.VisibleType {
-			case visibleSMALLINT:
-				t.InternalType.Width = 16
+		// Check VisibleType field that was populated in previous versions.
+		switch t.InternalType.VisibleType {
+		case visibleSMALLINT:
+			t.InternalType.Width = 16
+			t.InternalType.Oid = oid.T_int2
+		case visibleINTEGER:
+			t.InternalType.Width = 32
+			t.InternalType.Oid = oid.T_int4
+		case visibleBIGINT:
+			t.InternalType.Width = 64
+			t.InternalType.Oid = oid.T_int8
+		case visibleBIT, visibleNONE:
+			// Pre-2.1 BIT was using IntFamily with arbitrary widths. Clamp them
+			// to fixed/known widths. See #34161.
+			switch t.Width() {
+			case 16:
 				t.InternalType.Oid = oid.T_int2
-			case visibleINTEGER:
-				t.InternalType.Width = 32
+			case 32:
 				t.InternalType.Oid = oid.T_int4
-			case visibleBIGINT:
-				t.InternalType.Width = 64
-				t.InternalType.Oid = oid.T_int8
-			case visibleBIT, visibleNONE:
-				// Pre-2.1 BIT was using IntFamily with arbitrary widths. Clamp them
-				// to fixed/known widths. See #34161.
-				switch t.Width() {
-				case 16:
-					t.InternalType.Oid = oid.T_int2
-				case 32:
-					t.InternalType.Oid = oid.T_int4
-				default:
-					// Assume INT8 if width is 0 or not valid.
-					t.InternalType.Oid = oid.T_int8
-					t.InternalType.Width = 64
-				}
 			default:
-				return errors.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
+				// Assume INT8 if width is 0 or not valid.
+				t.InternalType.Oid = oid.T_int8
+				t.InternalType.Width = 64
 			}
+		default:
+			return errors.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
 		}
 
 	case FloatFamily:
-		// If the OID is not set already, map visible REAL type to 32-bit width.
-		if t.InternalType.Oid == 0 {
-			switch t.InternalType.VisibleType {
-			case visibleREAL:
+		// Map visible REAL type to 32-bit width.
+		switch t.InternalType.VisibleType {
+		case visibleREAL:
+			t.InternalType.Oid = oid.T_float4
+			t.InternalType.Width = 32
+		case visibleDOUBLE:
+			t.InternalType.Oid = oid.T_float8
+			t.InternalType.Width = 64
+		case visibleNONE:
+			switch t.Width() {
+			case 32:
 				t.InternalType.Oid = oid.T_float4
-				t.InternalType.Width = 32
-			case visibleDOUBLE:
+			case 64:
 				t.InternalType.Oid = oid.T_float8
-				t.InternalType.Width = 64
-			case visibleNONE:
-				switch t.Width() {
-				case 32:
-					t.InternalType.Oid = oid.T_float4
-				case 64:
-					t.InternalType.Oid = oid.T_float8
-				default:
-					// Pre-2.1 (before Width) there were 3 cases:
-					// - VisibleType = DOUBLE PRECISION, Width = 0 -> now clearly FLOAT8
-					// - VisibleType = NONE, Width = 0 -> now clearly FLOAT8
-					// - VisibleType = NONE, Precision > 0 -> we need to derive the width.
-					if t.Precision() >= 1 && t.Precision() <= 24 {
-						t.InternalType.Oid = oid.T_float4
-						t.InternalType.Width = 32
-					} else {
-						t.InternalType.Oid = oid.T_float8
-						t.InternalType.Width = 64
-					}
-				}
 			default:
-				return errors.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
+				// Pre-2.1 (before Width) there were 3 cases:
+				// - VisibleType = DOUBLE PRECISION, Width = 0 -> now clearly FLOAT8
+				// - VisibleType = NONE, Width = 0 -> now clearly FLOAT8
+				// - VisibleType = NONE, Precision > 0 -> we need to derive the width.
+				if t.Precision() >= 1 && t.Precision() <= 24 {
+					t.InternalType.Oid = oid.T_float4
+					t.InternalType.Width = 32
+				} else {
+					t.InternalType.Oid = oid.T_float8
+					t.InternalType.Width = 64
+				}
 			}
+		default:
+			return errors.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
 		}
 
 		// Precision should always be set to 0 going forward.
@@ -2559,21 +2497,18 @@ func (t *T) upgradeType() error {
 			t.InternalType.TimePrecisionIsSet = true
 		}
 	case StringFamily, CollatedStringFamily:
-		// If the OID is not set, map string-related visible types to corresponding
-		// Oid values.
-		if t.InternalType.Oid == 0 {
-			switch t.InternalType.VisibleType {
-			case visibleVARCHAR:
-				t.InternalType.Oid = oid.T_varchar
-			case visibleCHAR:
-				t.InternalType.Oid = oid.T_bpchar
-			case visibleQCHAR:
-				t.InternalType.Oid = oid.T_char
-			case visibleNONE:
-				t.InternalType.Oid = oid.T_text
-			default:
-				return errors.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
-			}
+		// Map string-related visible types to corresponding Oid values.
+		switch t.InternalType.VisibleType {
+		case visibleVARCHAR:
+			t.InternalType.Oid = oid.T_varchar
+		case visibleCHAR:
+			t.InternalType.Oid = oid.T_bpchar
+		case visibleQCHAR:
+			t.InternalType.Oid = oid.T_char
+		case visibleNONE:
+			t.InternalType.Oid = oid.T_text
+		default:
+			return errors.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
 		}
 		if t.InternalType.Family == StringFamily {
 			if t.InternalType.Locale != nil && len(*t.InternalType.Locale) != 0 {
@@ -2583,17 +2518,14 @@ func (t *T) upgradeType() error {
 		}
 
 	case BitFamily:
-		// If the OID is not set already, map visible VARBIT type to T_varbit OID
-		// value.
-		if t.InternalType.Oid == 0 {
-			switch t.InternalType.VisibleType {
-			case visibleVARBIT:
-				t.InternalType.Oid = oid.T_varbit
-			case visibleNONE:
-				t.InternalType.Oid = oid.T_bit
-			default:
-				return errors.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
-			}
+		// Map visible VARBIT type to T_varbit OID value.
+		switch t.InternalType.VisibleType {
+		case visibleVARBIT:
+			t.InternalType.Oid = oid.T_varbit
+		case visibleNONE:
+			t.InternalType.Oid = oid.T_bit
+		default:
+			return errors.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
 		}
 
 	case ArrayFamily:
@@ -2666,11 +2598,20 @@ func (t *T) upgradeType() error {
 }
 
 // Marshal serializes a type into a byte representation using gogo protobuf
-// serialization rules. It returns the resulting bytes as a slice.
+// serialization rules. It returns the resulting bytes as a slice. The bytes
+// are serialized in a format that is backwards-compatible with the previous
+// version of CRDB so that clusters can run in mixed version mode during
+// upgrade.
 //
 //	bytes, err := protoutil.Marshal(&typ)
 func (t *T) Marshal() (data []byte, err error) {
-	return protoutil.Marshal(&t.InternalType)
+	// First downgrade to a struct that will be serialized in a backwards-
+	// compatible bytes format.
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
+		return nil, err
+	}
+	return protoutil.Marshal(&temp.InternalType)
 }
 
 // MarshalToSizedBuffer is like Mashal, except that it deserializes to
@@ -2679,7 +2620,11 @@ func (t *T) Marshal() (data []byte, err error) {
 //
 // Marshal is part of the protoutil.Message interface.
 func (t *T) MarshalToSizedBuffer(data []byte) (int, error) {
-	return t.InternalType.MarshalToSizedBuffer(data)
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
+		return 0, err
+	}
+	return temp.InternalType.MarshalToSizedBuffer(data)
 }
 
 // MarshalTo behaves like Marshal, except that it deserializes to an existing
@@ -2689,7 +2634,79 @@ func (t *T) MarshalToSizedBuffer(data []byte) (int, error) {
 //
 // Marshal is part of the protoutil.Message interface.
 func (t *T) MarshalTo(data []byte) (int, error) {
-	return t.InternalType.MarshalTo(data)
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
+		return 0, err
+	}
+	return temp.InternalType.MarshalTo(data)
+}
+
+// of the latest CRDB version. It updates the fields so that they will be
+// marshaled into a format that is compatible with the previous version of
+// CRDB. This is necessary to preserve backwards-compatibility in mixed-version
+// scenarios, such as during upgrade.
+func (t *T) downgradeType() error {
+	// Set Family and VisibleType for 19.1 backwards-compatibility.
+	switch t.Family() {
+	case BitFamily:
+		if t.Oid() == oid.T_varbit {
+			t.InternalType.VisibleType = visibleVARBIT
+		}
+
+	case FloatFamily:
+		switch t.Width() {
+		case 32:
+			t.InternalType.VisibleType = visibleREAL
+		}
+
+	case StringFamily, CollatedStringFamily:
+		switch t.Oid() {
+		case oid.T_text:
+			// Nothing to do.
+		case oid.T_varchar:
+			t.InternalType.VisibleType = visibleVARCHAR
+		case oid.T_bpchar:
+			t.InternalType.VisibleType = visibleCHAR
+		case oid.T_char:
+			t.InternalType.VisibleType = visibleQCHAR
+		case oid.T_name:
+			t.InternalType.Family = name
+		default:
+			return errors.AssertionFailedf("unexpected Oid: %d", t.Oid())
+		}
+
+	case ArrayFamily:
+		// Marshaling/unmarshaling nested arrays is not yet supported.
+		if t.ArrayContents().Family() == ArrayFamily {
+			return errors.AssertionFailedf("nested array should never be marshaled")
+		}
+
+		// Downgrade to array representation used before 19.2, in which the array
+		// type fields specified the width, locale, etc. of the element type.
+		temp := *t.InternalType.ArrayContents
+		if err := temp.downgradeType(); err != nil {
+			return err
+		}
+		t.InternalType.Width = temp.InternalType.Width
+		t.InternalType.Precision = temp.InternalType.Precision
+		t.InternalType.Locale = temp.InternalType.Locale
+		t.InternalType.VisibleType = temp.InternalType.VisibleType
+		t.InternalType.ArrayElemType = &t.InternalType.ArrayContents.InternalType.Family
+
+		switch t.Oid() {
+		case oid.T_int2vector:
+			t.InternalType.Family = int2vector
+		case oid.T_oidvector:
+			t.InternalType.Family = oidvector
+		}
+	}
+
+	// Map empty locale to nil.
+	if t.InternalType.Locale != nil && len(*t.InternalType.Locale) == 0 {
+		t.InternalType.Locale = nil
+	}
+
+	return nil
 }
 
 // String returns the name of the type, similar to the Name method. However, it
@@ -2701,9 +2718,6 @@ func (t *T) MarshalTo(data []byte) (int, error) {
 func (t *T) String() string {
 	switch t.Family() {
 	case CollatedStringFamily:
-		if t.Oid() == oidext.T_citext {
-			return t.Name()
-		}
 		if t.Locale() == "" {
 			// Used in telemetry.
 			return fmt.Sprintf("collated%s{*}", t.Name())
@@ -2829,7 +2843,7 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 		phys,
 		t.TypeMeta.Name.FQName(true /* explicitCatalog */),
 		t.TypeMeta.EnumData.debugString(),
-		debugutil.Stack(),
+		debug.Stack(),
 	)
 	return 0, err
 }
@@ -2949,13 +2963,6 @@ func IsWildcardTupleType(t *T) bool {
 //	STRING COLLATE EN
 //	VARCHAR(20)[] COLLATE DE
 func (t *T) collatedStringTypeSQL(isArray bool) string {
-	if t.Oid() == oidext.T_citext {
-		if isArray {
-			return "CITEXT[]"
-		}
-		return "CITEXT"
-	}
-
 	var buf bytes.Buffer
 	buf.WriteString(t.stringTypeSQL())
 	if isArray {

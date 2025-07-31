@@ -1727,7 +1727,7 @@ ORDER BY
 sort
  ├── columns: way:69!null int_tc_type:100!null
  ├── immutable
- ├── stats: [rows=2632.06, distinct(69)=2632.06, null(69)=0]
+ ├── stats: [rows=2632.056, distinct(69)=2632.06, null(69)=0]
  ├── key: (69)
  ├── fd: (69)-->(100)
  ├── ordering: +69
@@ -1736,36 +1736,36 @@ sort
       ├── grouping columns: p.way:69!null
       ├── internal-ordering: +148 opt(29,69)
       ├── immutable
-      ├── stats: [rows=2632.06, distinct(69)=2632.06, null(69)=0]
+      ├── stats: [rows=2632.056, distinct(69)=2632.06, null(69)=0]
       ├── key: (69)
       ├── fd: (69)-->(100)
       ├── sort
       │    ├── columns: p.highway:29!null p.way:69!null l.highway:100!null l.way:142!null column1:147!null column2:148!null
       │    ├── immutable
-      │    ├── stats: [rows=386640, distinct(69)=2632.06, null(69)=0, distinct(100)=5, null(100)=0, distinct(147)=5, null(147)=0]
+      │    ├── stats: [rows=386640.5, distinct(69)=2632.06, null(69)=0, distinct(100)=5, null(100)=0, distinct(147)=5, null(147)=0]
       │    ├── fd: ()-->(29), (100)==(147), (147)==(100)
       │    ├── ordering: +148 opt(29,69) [actual: +148]
       │    └── inner-join (hash)
       │         ├── columns: p.highway:29!null p.way:69!null l.highway:100!null l.way:142!null column1:147!null column2:148!null
       │         ├── immutable
-      │         ├── stats: [rows=386640, distinct(69)=2632.06, null(69)=0, distinct(100)=5, null(100)=0, distinct(147)=5, null(147)=0]
+      │         ├── stats: [rows=386640.5, distinct(69)=2632.06, null(69)=0, distinct(100)=5, null(100)=0, distinct(147)=5, null(147)=0]
       │         ├── fd: ()-->(29), (100)==(147), (147)==(100)
       │         ├── inner-join (lookup planet_osm_line [as=l])
       │         │    ├── columns: p.highway:29!null p.way:69!null l.highway:100 l.way:142!null
       │         │    ├── key columns: [218] = [143]
       │         │    ├── lookup columns are key
       │         │    ├── immutable
-      │         │    ├── stats: [rows=3.92674e+06, distinct(69)=2632.06, null(69)=0, distinct(100)=31, null(100)=1.52957e+06]
+      │         │    ├── stats: [rows=3926737, distinct(69)=2632.06, null(69)=0, distinct(100)=31, null(100)=1.52957e+06]
       │         │    ├── fd: ()-->(29)
       │         │    ├── inner-join (inverted planet_osm_line@planet_osm_line_way_idx,inverted [as=l])
       │         │    │    ├── columns: p.highway:29!null p.way:69 l.rowid:218!null
       │         │    │    ├── inverted-expr
       │         │    │    │    └── st_dwithin(p.way:69, l.way:217, 100.0)
-      │         │    │    ├── stats: [rows=3.92674e+06, distinct(218)=148586, null(218)=0]
+      │         │    │    ├── stats: [rows=3926737, distinct(218)=148586, null(218)=0]
       │         │    │    ├── fd: ()-->(29)
       │         │    │    ├── select
       │         │    │    │    ├── columns: p.highway:29!null p.way:69
-      │         │    │    │    ├── stats: [rows=2632.06, distinct(29)=1, null(29)=0, distinct(69)=2632.06, null(69)=0]
+      │         │    │    │    ├── stats: [rows=2632.056, distinct(29)=1, null(29)=0, distinct(69)=2632.06, null(69)=0]
       │         │    │    │    ├── fd: ()-->(29)
       │         │    │    │    ├── scan planet_osm_point [as=p]
       │         │    │    │    │    ├── columns: p.highway:29 p.way:69

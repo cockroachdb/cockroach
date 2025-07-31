@@ -19,10 +19,10 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     steps:
       - name: 'Download artifact'
-        uses: actions/github-script@v7.0.1
+        uses: actions/github-script@v3.1.0
         with:
           script: |
-            var artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+            var artifacts = await github.actions.listWorkflowRunArtifacts({
                owner: context.repo.owner,
                repo: context.repo.repo,
                run_id: ${{github.event.workflow_run.id }},
@@ -30,7 +30,7 @@ jobs:
             var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
               return artifact.name == "cover"
             })[0];
-            var download = await github.rest.actions.downloadArtifact({
+            var download = await github.actions.downloadArtifact({
                owner: context.repo.owner,
                repo: context.repo.repo,
                artifact_id: matchArtifact.id,
@@ -56,7 +56,3 @@ jobs:
           parent: false
           destination: 'crl-codecover-public/pr-cockroach/'
           process_gcloudignore: false
-
-      - name: 'Call DeadManSnitch'
-        run: |
-          curl -X GET 'https://nosnch.in/c2d75963ee' -d 'message=Code coverage uploaded to GCS'

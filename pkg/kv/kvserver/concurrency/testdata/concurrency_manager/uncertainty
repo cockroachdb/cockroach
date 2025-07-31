@@ -49,7 +49,7 @@ on-txn-updated txn=txn1 status=pending ts=15,2
 [-] update txn: increasing timestamp of txn1
 [3] sequence req1: resolving intent ‹"k"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,1}
 [3] sequence req1: lock wait-queue event: done waiting
-[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[3] sequence req1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
@@ -115,7 +115,7 @@ on-txn-updated txn=txn1 status=pending ts=135,1
 [-] update txn: increasing timestamp of txn1
 [3] sequence req1: resolving intent ‹"k"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,1}
 [3] sequence req1: lock wait-queue event: done waiting
-[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[3] sequence req1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
@@ -230,13 +230,13 @@ on-txn-updated txn=txn1 status=committed
 [-] update txn: committing txn1
 [3] sequence req1: resolving intent ‹"k"› for txn 00000001 with COMMITTED status
 [3] sequence req1: lock wait-queue event: done waiting
-[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[3] sequence req1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
 [5] sequence req2-retry: resolving intent ‹"k"› for txn 00000001 with COMMITTED status
 [5] sequence req2-retry: lock wait-queue event: done waiting
-[5] sequence req2-retry: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[5] sequence req2-retry: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [5] sequence req2-retry: acquiring latches
 [5] sequence req2-retry: scanning lock table for conflicting locks
 [5] sequence req2-retry: sequencing complete, returned guard

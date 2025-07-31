@@ -64,40 +64,25 @@ const (
 func TimeZoneStringToLocation(
 	locStr string, std TimeZoneStringToLocationStandard,
 ) (*time.Location, error) {
-	// ParseTimeZoneOffset uses strconv.ParseFloat, which returns an error when
-	// parsing fails that is expensive to construct. We first check if the string
-	// contains any non-numeric characters to see if we can skip attempting to
-	// parse it as a timezone offset. `/` is also checked since that character
-	// appears in most timezone names. Since UTC is the most commonly used
-	// timezone, we also check for that explicitly to avoid calling ContainsAny if
-	// possible.
-	containsNonNumeric := strings.EqualFold(locStr, "utc") || strings.ContainsAny(locStr, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/")
-	if !containsNonNumeric {
-		offset, _, parsed := ParseTimeZoneOffset(locStr, std)
-		if parsed {
-			if offset < -maxUTCHourOffsetInSeconds || offset > maxUTCHourOffsetInSeconds {
-				return nil, errors.New("UTC timezone offset is out of range.")
-			}
-			return TimeZoneOffsetToLocation(offset), nil
+	offset, _, parsed := ParseTimeZoneOffset(locStr, std)
+	if parsed {
+		if offset < -maxUTCHourOffsetInSeconds || offset > maxUTCHourOffsetInSeconds {
+			return nil, errors.New("UTC timezone offset is out of range.")
 		}
+		return TimeZoneOffsetToLocation(offset), nil
 	}
 
-	// The time may just be a raw int value. Similar to the above, in order to
-	// avoid constructing an expensive error, we first check if the string
-	// contains any non-numeric characters to see if we can skip attempting to
-	// parse it as an int.
-	if !containsNonNumeric {
-		intVal, err := strconv.ParseInt(locStr, 10, 64)
-		if err == nil {
-			// Parsing an int has different behavior for POSIX and ISO8601.
-			if std == TimeZoneStringToLocationPOSIXStandard {
-				intVal *= -1
-			}
-			if intVal < -maxUTCHourOffset || intVal > maxUTCHourOffset {
-				return nil, errors.New("UTC timezone offset is out of range.")
-			}
-			return TimeZoneOffsetToLocation(int(intVal) * 60 * 60), nil
+	// The time may just be a raw int value.
+	intVal, err := strconv.ParseInt(locStr, 10, 64)
+	if err == nil {
+		// Parsing an int has different behavior for POSIX and ISO8601.
+		if std == TimeZoneStringToLocationPOSIXStandard {
+			intVal *= -1
 		}
+		if intVal < -maxUTCHourOffset || intVal > maxUTCHourOffset {
+			return nil, errors.New("UTC timezone offset is out of range.")
+		}
+		return TimeZoneOffsetToLocation(int(intVal) * 60 * 60), nil
 	}
 
 	locTransforms := []func(string) string{

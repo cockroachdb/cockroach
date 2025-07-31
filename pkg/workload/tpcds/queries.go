@@ -11,12 +11,11 @@ const NumQueries = 99
 // QueriesByNumber is a mapping from the number of a TPC-DS query to the actual
 // query. Only queries that can be parsed by CockroachDB are present.
 var QueriesByNumber = map[int]string{
-	1: query1,
-	2: query2,
-	3: query3,
-	4: query4,
-	// TODO(#46280): adjust this query.
-	//5:  query5,
+	1:  query1,
+	2:  query2,
+	3:  query3,
+	4:  query4,
+	5:  query5,
 	6:  query6,
 	7:  query7,
 	8:  query8,
@@ -25,23 +24,20 @@ var QueriesByNumber = map[int]string{
 	11: query11,
 	12: query12,
 	13: query13,
-	// TODO(#46280): adjust this query.
-	// 14: query14,
+	14: query14,
 	15: query15,
 	16: query16,
 	17: query17,
-	// TODO(#46280): adjust this query.
-	// 18: query18,
+	18: query18,
 	19: query19,
 	20: query20,
 	21: query21,
-	// TODO(#46280): adjust the query.
-	// 22: query22,
+	22: query22,
 	23: query23,
 	24: query24,
 	25: query25,
 	26: query26,
-	// TODO(#46280): adjust the query.
+	// TODO(yuzefovich): adjust the query.
 	//27: query27,
 	28: query28,
 	29: query29,
@@ -51,7 +47,7 @@ var QueriesByNumber = map[int]string{
 	33: query33,
 	34: query34,
 	35: query35,
-	// TODO(#46280): adjust the query.
+	// TODO(yuzefovich): adjust the query.
 	//36: query36,
 	37: query37,
 	38: query38,
@@ -83,11 +79,10 @@ var QueriesByNumber = map[int]string{
 	64: query64,
 	65: query65,
 	66: query66,
-	// TODO(#46280): adjust the query.
-	// 67: query67,
+	67: query67,
 	68: query68,
 	69: query69,
-	// TODO(#46280): adjust the query.
+	// TODO(yuzefovich): adjust the query.
 	//70: query70,
 	71: query71,
 	72: query72,
@@ -95,18 +90,16 @@ var QueriesByNumber = map[int]string{
 	74: query74,
 	75: query75,
 	76: query76,
-	// TODO(#46280: adjust the query.
-	// 77: query77,
+	77: query77,
 	78: query78,
 	79: query79,
-	// TODO(#46280): adjust the query.
-	// 80: query80,
+	80: query80,
 	81: query81,
 	82: query82,
 	83: query83,
 	84: query84,
 	85: query85,
-	// TODO(#46280): adjust the query.
+	// TODO(yuzefovich): adjust the query.
 	//86: query86,
 	87: query87,
 	88: query88,
@@ -123,18 +116,11 @@ var QueriesByNumber = map[int]string{
 	99: query99,
 }
 
-// TODO(#46280): remove once these queries are "enabled."
+// TODO(yuzefovich): remove once these queries are "enabled."
 var (
-	_ = query5
-	_ = query14
-	_ = query18
-	_ = query22
 	_ = query27
 	_ = query36
-	_ = query67
 	_ = query70
-	_ = query77
-	_ = query80
 	_ = query86
 )
 
@@ -2999,7 +2985,7 @@ SELECT
 	c_birth_country,
 	c_login,
 	c_email_address,
-	c_last_review_date,
+	c_last_review_date_sk,
 	ctr_total_return
 FROM
 	customer_total_return AS ctr1,
@@ -3030,7 +3016,7 @@ ORDER BY
 	c_birth_country,
 	c_login,
 	c_email_address,
-	c_last_review_date,
+	c_last_review_date_sk,
 	ctr_total_return
 LIMIT
 	100;

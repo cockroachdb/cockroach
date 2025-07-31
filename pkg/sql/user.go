@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
-	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -83,7 +83,6 @@ func GetUserSessionInitInfo(
 	isSuperuser bool,
 	defaultSettings []sessioninit.SettingsCacheEntry,
 	subject *ldap.DN,
-	provisioningSource *provisioning.Source,
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 	err error,
 ) {
@@ -112,7 +111,7 @@ func GetUserSessionInitInfo(
 		// Root user cannot have password expiry and must have login.
 		// It also never has default settings applied to it, and it cannot
 		// have its SUBJECT configured.
-		return true, true, true, true, true, nil, nil, nil, rootFn, nil
+		return true, true, true, true, true, nil, nil, rootFn, nil
 	}
 
 	var authInfo sessioninit.AuthInfo
@@ -208,7 +207,6 @@ func GetUserSessionInitInfo(
 		isSuperuser,
 		settingsEntries,
 		authInfo.Subject,
-		authInfo.ProvisioningSource,
 		func(ctx context.Context) (expired bool, ret password.PasswordHash, err error) {
 			ret = authInfo.HashedPassword
 			if authInfo.ValidUntil != nil {
@@ -387,15 +385,6 @@ func retrieveAuthInfo(
 					}
 					aInfo.Subject = dn
 				}
-			case "PROVISIONSRC":
-				if row[1] != tree.DNull {
-					sourceStr := string(tree.MustBeDString(row[1]))
-					source, err := provisioning.ParseProvisioningSource(sourceStr)
-					if err != nil {
-						return err
-					}
-					aInfo.ProvisioningSource = source
-				}
 			}
 		}
 		if loopErr != nil {
@@ -488,6 +477,7 @@ var userLoginTimeout = settings.RegisterDurationSetting(
 	"server.user_login.timeout",
 	"timeout after which client authentication times out if some system range is unavailable (0 = no timeout)",
 	10*time.Second,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // GetAllRoles returns a "set" (map) of Roles -> true.
@@ -542,10 +532,12 @@ func RoleExists(ctx context.Context, txn isql.Txn, role username.SQLUsername) (b
 	return row != nil, nil
 }
 
+var roleMembersTableName = tree.MakeTableNameWithSchema("system", catconstants.PublicSchemaName, "role_members")
+
 // BumpRoleMembershipTableVersion increases the table version for the
 // role membership table.
 func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
-	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, keys.RoleMembersTableID)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &roleMembersTableName, true, tree.ResolveAnyTableKind)
 	if err != nil {
 		return err
 	}
@@ -558,7 +550,7 @@ func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 // bumpUsersTableVersion increases the table version for the
 // users table.
 func (p *planner) bumpUsersTableVersion(ctx context.Context) error {
-	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, keys.UsersTableID)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, sessioninit.UsersTableName, true, tree.ResolveAnyTableKind)
 	if err != nil {
 		return err
 	}
@@ -571,7 +563,7 @@ func (p *planner) bumpUsersTableVersion(ctx context.Context) error {
 // bumpRoleOptionsTableVersion increases the table version for the
 // role_options table.
 func (p *planner) bumpRoleOptionsTableVersion(ctx context.Context) error {
-	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, keys.RoleOptionsTableID)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, sessioninit.RoleOptionsTableName, true, tree.ResolveAnyTableKind)
 	if err != nil {
 		return err
 	}
@@ -584,7 +576,7 @@ func (p *planner) bumpRoleOptionsTableVersion(ctx context.Context) error {
 // bumpDatabaseRoleSettingsTableVersion increases the table version for the
 // database_role_settings table.
 func (p *planner) bumpDatabaseRoleSettingsTableVersion(ctx context.Context) error {
-	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, keys.DatabaseRoleSettingsTableID)
+	_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, sessioninit.DatabaseRoleSettingsTableName, true, tree.ResolveAnyTableKind)
 	if err != nil {
 		return err
 	}
@@ -835,24 +827,4 @@ func updateUserPasswordHash(
 			return d.WriteDesc(ctx, false /* kvTrace */, usersTable, txn.KV())
 		})
 	})
-}
-
-// UpdateLastLoginTime updates the estimated_last_login_time column for the user
-// logging in to the current time in the system.users table.
-func UpdateLastLoginTime(ctx context.Context, execCfg *ExecutorConfig, dbUser string) error {
-	now := timeutil.Now()
-	if err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		if _, err := txn.Exec(
-			ctx, "UpdateLastLoginTime-authsuccess", txn.KV(),
-			"UPDATE system.users SET estimated_last_login_time = $1 WHERE username = $2",
-			now,
-			dbUser,
-		); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	return nil
 }

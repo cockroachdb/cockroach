@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -832,7 +833,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromUDF(
 		if err != nil {
 			return errors.Wrapf(err, "failed to parse routine %s", udfDesc.GetName())
 		}
-		v := plpgsqltree.SQLStmtVisitor{Fn: visitFunc}
+		v := utils.SQLStmtVisitor{Fn: visitFunc}
 		plpgsqltree.Walk(&v, stmt.AST)
 		if v.Err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(v.Err, "failed to parse routine %s", udfDesc.GetName())
@@ -1421,7 +1422,7 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 			return nil
 		case !IsPermanentSchemaChangeError(tcErr):
 			// If this isn't a permanent error, then retry.
-			log.Infof(ctx, "retrying type schema change due to retryable error %v", tcErr)
+			log.Infof(ctx, "retrying type schema change due to retriable error %v", tcErr)
 		default:
 			return tcErr
 		}
@@ -1431,8 +1432,8 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 
 func (t *typeSchemaChanger) logTags() *logtags.Buffer {
 	buf := &logtags.Buffer{}
-	buf = buf.Add("typeChangeExec", nil)
-	buf = buf.Add("type", t.typeID)
+	buf.Add("typeChangeExec", nil)
+	buf.Add("type", t.typeID)
 	return buf
 }
 

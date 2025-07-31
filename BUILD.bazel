@@ -33,7 +33,7 @@ exports_files([
 # gazelle:proto default
 # gazelle:proto_group go_package
 # gazelle:go_proto_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler
-# gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler,//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler
+# gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler
 
 # Gazelle needs the following resolve hints.
 #
@@ -45,7 +45,7 @@ exports_files([
 # gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto
 # gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto
 # gazelle:resolve proto proto google/api/annotations.proto @go_googleapis//google/api:annotations_proto
-# gazelle:resolve proto go google/api/annotations.proto @org_golang_google_genproto_googleapis_api//annotations:go_default_library
+# gazelle:resolve proto go google/api/annotations.proto @org_golang_google_genproto//googleapis/api/annotations:go_default_library
 # gazelle:resolve proto io/prometheus/client/metrics.proto @com_github_prometheus_client_model//io/prometheus/client:io_prometheus_client_proto
 # gazelle:resolve proto go io/prometheus/client/metrics.proto @com_github_prometheus_client_model//go
 # gazelle:resolve go github.com/prometheus/client_model/go @com_github_prometheus_client_model//go
@@ -57,8 +57,6 @@ exports_files([
 # gazelle:resolve go google.golang.org/genproto/googleapis/pubsub/v1 @org_golang_google_genproto//googleapis/pubsub/v1:pubsub
 # gazelle:resolve go google.golang.org/genproto/googleapis/cloud/kms/v1 @org_golang_google_genproto//googleapis/cloud/kms/v1:kms
 # gazelle:resolve go google.golang.org/genproto/googleapis/devtools/build/v1 @org_golang_google_genproto//googleapis/devtools/build/v1:build
-# gazelle:resolve go google.golang.org/genproto/googleapis/api/httpbody @org_golang_google_genproto_googleapis_api//httpbody:go_default_library
-# gazelle:resolve go google.golang.org/genproto/googleapis/api/annotations @org_golang_google_genproto_googleapis_api//annotations:go_default_library
 
 # See pkg/kv/kvpb/gen/BUILD.bazel for more details.
 #
@@ -124,8 +122,6 @@ exports_files([
 # gazelle:exclude pkg/sql/plpgsql/parser/lexbase/keywords.go
 # gazelle:exclude pkg/sql/plpgsql/parser/lexbase/tokens.go
 # gazelle:exclude pkg/sql/plpgsql/parser/lexbase/reserved_keywords.go
-# gazelle:exclude pkg/util/jsonpath/parser/lexbase/keywords.go
-# gazelle:exclude pkg/util/jsonpath/parser/lexbase/tokens.go
 # gazelle:exclude pkg/sql/scanner/token_names_test.go
 # gazelle:exclude pkg/sql/schemachanger/scexec/mocks_generated_test.go
 # gazelle:exclude pkg/cmd/prereqs/testdata
@@ -190,7 +186,6 @@ nogo(
         "@org_golang_x_tools//go/analysis/passes/unreachable:go_default_library",
         "@org_golang_x_tools//go/analysis/passes/unsafeptr:go_default_library",
         "@org_golang_x_tools//go/analysis/passes/unusedresult:go_default_library",
-        "//pkg/testutils/lint/passes/deferloop",
         "//pkg/testutils/lint/passes/deferunlockcheck",
         "//pkg/testutils/lint/passes/descriptormarshal",
         "//pkg/testutils/lint/passes/errcheck",
@@ -207,7 +202,7 @@ nogo(
         "//pkg/testutils/lint/passes/returncheck",
         "//pkg/testutils/lint/passes/returnerrcheck",
         "//pkg/testutils/lint/passes/shadow",
+        "//pkg/testutils/lint/passes/timer",
         "//pkg/testutils/lint/passes/unconvert",
-        "//pkg/testutils/lint/passes/roachtest",
     ],
 )

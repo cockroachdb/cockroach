@@ -759,12 +759,11 @@ CREATE TABLE pg_catalog.pg_tablespace (
 )`
 
 // PGCatalogTrigger describes the schema of the pg_catalog.pg_trigger table.
-// https://www.postgresql.org/docs/16/catalog-pg-trigger.html
+// https://www.postgresql.org/docs/9.5/catalog-pg-trigger.html,
 const PGCatalogTrigger = `
 CREATE TABLE pg_catalog.pg_trigger (
 	oid OID,
 	tgrelid OID,
-	tgparentid OID,
 	tgname NAME,
 	tgfoid OID,
 	tgtype INT2,
@@ -780,7 +779,8 @@ CREATE TABLE pg_catalog.pg_trigger (
 	tgargs BYTEA,
 	tgqual TEXT,
 	tgoldtable NAME,
-	tgnewtable NAME
+	tgnewtable NAME,
+	tgparentid OID
 )`
 
 // PGCatalogType describes the schema of the pg_catalog.pg_type table.
@@ -1249,8 +1249,7 @@ CREATE TABLE pg_catalog.pg_stat_gssapi (
 	encrypted BOOL
 )`
 
-// PgCatalogPolicies provides a user-friendly view of row-level security policies.
-// https://www.postgresql.org/docs/17/view-pg-policies.html
+// PgCatalogPolicies is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogPolicies = `
 CREATE TABLE pg_catalog.pg_policies (
 	schemaname NAME,
@@ -1497,8 +1496,7 @@ CREATE TABLE pg_catalog.pg_stat_progress_basebackup (
 	tablespaces_streamed INT
 )`
 
-// PgCatalogPolicy describes the schema of the pg_catalog.pg_policy table.
-// https://www.postgresql.org/docs/17/catalog-pg-policy.html,
+// PgCatalogPolicy is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogPolicy = `
 CREATE TABLE pg_catalog.pg_policy (
 	oid OID,
@@ -1508,8 +1506,7 @@ CREATE TABLE pg_catalog.pg_policy (
 	polpermissive BOOL,
 	polroles OID[],
 	polqual STRING,
-	polwithcheck STRING,
-	INDEX (polrelid)
+	polwithcheck STRING
 )`
 
 // PgCatalogStatArchiver is an empty table in the pg_catalog that is not implemented yet

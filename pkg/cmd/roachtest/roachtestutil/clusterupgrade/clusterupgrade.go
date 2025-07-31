@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/version"
 )
 
 var (
@@ -74,19 +74,19 @@ func (v *Version) IsCurrent() bool {
 // Equal compares the two versions, returning whether they represent
 // the same version.
 func (v *Version) Equal(other *Version) bool {
-	return v.Version.Compare(other.Version) == 0
+	return v.Version.Compare(&other.Version) == 0
 }
 
 // AtLeast is a thin wrapper around `(*version.Version).AtLeast`,
 // allowing two `Version` objects to be compared directly.
 func (v *Version) AtLeast(other *Version) bool {
-	return v.Version.AtLeast(other.Version)
+	return v.Version.AtLeast(&other.Version)
 }
 
 // LessThan returns true if the version is strictly
 // older than the other version. `v < other`
 func (v *Version) LessThan(other *Version) bool {
-	return !v.Version.AtLeast(other.Version)
+	return !v.Version.AtLeast(&other.Version)
 }
 
 // Series returns the release series this version is a part of.
@@ -101,7 +101,7 @@ func CurrentVersion() *Version {
 		return &Version{*TestBuildVersion} // test-only
 	}
 
-	return &Version{version.MustParse(build.BinaryVersion())}
+	return &Version{*version.MustParse(build.BinaryVersion())}
 }
 
 // MustParseVersion parses the version string given (with or without
@@ -135,7 +135,7 @@ func ParseVersion(v string) (*Version, error) {
 		return nil, err
 	}
 
-	return &Version{parsedVersion}, nil
+	return &Version{*parsedVersion}, nil
 }
 
 // LatestPatchRelease returns the latest patch release version for a given
@@ -298,7 +298,7 @@ func uploadBinaryVersion(
 			// a build for a specific release. Instead, we stage the binary
 			// for the corresponding release branch, which is good enough in
 			// most cases.
-			stageVersion = v.Format("release-%X.%Y")
+			stageVersion = fmt.Sprintf("release-%d.%d", v.Major(), v.Minor())
 		}
 
 		if err := c.Stage(ctx, l, application, stageVersion, dir, nodes); err != nil {
@@ -323,7 +323,7 @@ func InstallFixtures(
 	// The fixtures use cluster version (major.minor) but the input might be
 	// a patch release.
 	name := CheckpointName(
-		roachpb.Version{Major: int32(v.Major().Year), Minor: int32(v.Major().Ordinal)}.String(),
+		roachpb.Version{Major: int32(v.Major()), Minor: int32(v.Minor())}.String(),
 	)
 	for n := 1; n <= len(nodes); n++ {
 		if err := c.PutE(ctx, l,

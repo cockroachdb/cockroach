@@ -10,8 +10,6 @@
 package cast
 
 import (
-	"sort"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
@@ -130,31 +128,14 @@ type Cast struct {
 }
 
 // ForEachCast calls fn for every valid cast from a source type to a target
-// type. Iteration order is deterministic.
+// type.
 func ForEachCast(
 	fn func(
 		src oid.Oid, tgt oid.Oid, castCtx Context, ctxOrigin ContextOrigin, v volatility.V,
 	),
 ) {
-	srcOids := make([]oid.Oid, 0, len(castMap))
-	for src := range castMap {
-		srcOids = append(srcOids, src)
-	}
-	sort.Slice(srcOids, func(i, j int) bool {
-		return srcOids[i] < srcOids[j]
-	})
-	var tgtOids []oid.Oid
-	for _, src := range srcOids {
-		tgts := castMap[src]
-		tgtOids = tgtOids[:0]
-		for tgt := range tgts {
-			tgtOids = append(tgtOids, tgt)
-		}
-		sort.Slice(tgtOids, func(i, j int) bool {
-			return tgtOids[i] < tgtOids[j]
-		})
-		for _, tgt := range tgtOids {
-			cast := tgts[tgt]
+	for src, tgts := range castMap {
+		for tgt, cast := range tgts {
 			fn(src, tgt, cast.MaxContext, cast.origin, cast.Volatility)
 		}
 	}

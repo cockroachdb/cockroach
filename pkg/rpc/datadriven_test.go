@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -222,16 +221,16 @@ func (env *ddEnv) lookupServerWithSkip(nodeID roachpb.NodeID, skip int) *ddServe
 	return nil
 }
 
-func (env *ddEnv) dial(srv *ddServer, class rpcbase.ConnectionClass) *GRPCConnection {
+func (env *ddEnv) dial(srv *ddServer, class ConnectionClass) *Connection {
 	// TODO(baptist): Fix the locality for tests.
 	return env.client.GRPCDialNode(srv.addr, srv.nodeID, roachpb.Locality{}, class)
 }
 
-func (env *ddEnv) handleDial(to *ddServer, class rpcbase.ConnectionClass) {
+func (env *ddEnv) handleDial(to *ddServer, class ConnectionClass) {
 	env.dial(to, class)
 }
 
-func (env *ddEnv) handleConnect(ctx context.Context, srv *ddServer, class rpcbase.ConnectionClass) {
+func (env *ddEnv) handleConnect(ctx context.Context, srv *ddServer, class ConnectionClass) {
 	if _, err := env.dial(srv, class).Connect(ctx); err != nil {
 		// Don't log errors because it introduces too much flakiness. For example,
 		// network errors look different on different systems, and in many tests
@@ -243,7 +242,7 @@ func (env *ddEnv) handleConnect(ctx context.Context, srv *ddServer, class rpcbas
 	}
 }
 
-func (env *ddEnv) handleShow(ctx context.Context, srv *ddServer, class rpcbase.ConnectionClass) {
+func (env *ddEnv) handleShow(ctx context.Context, srv *ddServer, class ConnectionClass) {
 	sn, _, b, ok := env.client.peers.getWithBreaker(peerKey{NodeID: srv.nodeID, TargetAddr: srv.addr, Class: class})
 	if !ok {
 		log.Eventf(ctx, "%s", redact.SafeString("<nil>"))
@@ -314,18 +313,18 @@ func (env *ddEnv) lookupTarget(t *testing.T, in ...datadriven.CmdArg) *ddServer 
 	return srvs[0]
 }
 
-func scanClass(t *testing.T, d *datadriven.TestData) rpcbase.ConnectionClass {
+func scanClass(t *testing.T, d *datadriven.TestData) ConnectionClass {
 	var s string
 	d.ScanArgs(t, "class", &s)
 	switch s {
 	case "def":
-		return rpcbase.DefaultClass
+		return DefaultClass
 	case "sys":
-		return rpcbase.SystemClass
+		return SystemClass
 	case "rf":
-		return rpcbase.RangefeedClass
+		return RangefeedClass
 	case "raft":
-		return rpcbase.RaftClass
+		return RaftClass
 	default:
 		t.Fatalf("no such class: %s", s)
 	}

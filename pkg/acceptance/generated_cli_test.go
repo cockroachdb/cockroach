@@ -118,6 +118,13 @@ func TestDockerCLI_test_demo_memory_warning(t *testing.T) {
 	runTestDockerCLI(t, "test_demo_memory_warning", "../cli/interactive_tests/test_demo_memory_warning.tcl")
 }
 
+func TestDockerCLI_test_demo_multitenant(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_demo_multitenant", "../cli/interactive_tests/test_demo_multitenant.tcl")
+}
+
 func TestDockerCLI_test_demo_networking(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
@@ -382,13 +389,6 @@ func TestDockerCLI_test_sb_recreate_mr(t *testing.T) {
 	defer s.Close(t)
 
 	runTestDockerCLI(t, "test_sb_recreate_mr", "../cli/interactive_tests/test_sb_recreate_mr.tcl")
-}
-
-func TestDockerCLI_test_sb_recreate_rls(t *testing.T) {
-	s := log.Scope(t)
-	defer s.Close(t)
-
-	runTestDockerCLI(t, "test_sb_recreate_rls", "../cli/interactive_tests/test_sb_recreate_rls.tcl")
 }
 
 func TestDockerCLI_test_secure(t *testing.T) {

@@ -215,7 +215,6 @@ upsert descriptor #108
   +    sharded: {}
   +    storeColumnNames: []
   +    unique: true
-  +    vecConfig: {}
   +    version: 4
   +  privileges:
   +    ownerProto: root
@@ -230,11 +229,11 @@ upsert descriptor #108
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
+  +    cacheSize: "1"
   +    increment: "1"
   +    maxValue: "9223372036854775807"
   +    minValue: "1"
   +    sequenceOwner: {}
-  +    sessionCacheSize: "1"
   +    start: "32"
   +  unexposedParentSchemaId: 106
   +  version: "1"
@@ -382,7 +381,6 @@ upsert descriptor #108
   +    sharded: {}
   +    storeColumnNames: []
   +    unique: true
-  +    vecConfig: {}
   +    version: 4
   +  privileges:
   +    ownerProto: root
@@ -397,11 +395,11 @@ upsert descriptor #108
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
+  +    cacheSize: "1"
   +    increment: "1"
   +    maxValue: "9223372036854775807"
   +    minValue: "1"
   +    sequenceOwner: {}
-  +    sessionCacheSize: "1"
   +    start: "32"
   +  unexposedParentSchemaId: 106
   +  version: "1"

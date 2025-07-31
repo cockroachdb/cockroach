@@ -6,8 +6,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/plpgsql/parser",
+        "//pkg/sql/plpgsql/parser:plpgparser",
         "//pkg/sql/sem/plpgsqltree",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",
+        "//pkg/util/errorutil/unimplemented",
     ],
 )

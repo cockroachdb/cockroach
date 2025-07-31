@@ -679,11 +679,11 @@ show_test  CREATE TABLE public.show_test (
 ) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN ((1)),
   PARTITION p2 VALUES IN ((2))
-) WITH (schema_locked = true);
+);
 ALTER PARTITION p1 OF INDEX "my database".public.show_test@show_test_pkey CONFIGURE ZONE USING
   constraints = '[+dc=dc1]';
 ALTER PARTITION p2 OF INDEX "my database".public.show_test@show_test_pkey CONFIGURE ZONE USING
-  constraints = '[+dc=dc2]';
+  constraints = '[+dc=dc2]'
 
 # test warnings on table creation
 statement ok
@@ -700,9 +700,8 @@ warning  CREATE TABLE public.warning (
          CONSTRAINT warning_pkey PRIMARY KEY (x ASC)
 ) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN ((1))
-) WITH (schema_locked = true)
+)
 -- Warning: Partitioned table with no zone configurations.
-;
 
 subtest alter_partition_across_all_indexes
 
@@ -779,9 +778,9 @@ t40417  CREATE TABLE public.t40417 (
         CONSTRAINT t40417_pkey PRIMARY KEY (x ASC)
 ) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN ((1))
-) WITH (schema_locked = true);
+);
 ALTER PARTITION p1 OF INDEX "my database".public.t40417@t40417_pkey CONFIGURE ZONE USING
-  num_replicas = 1;
+  num_replicas = 1
 
 subtest authorization
 
@@ -1172,7 +1171,7 @@ t  CREATE TABLE public.t (
    ),
    UNIQUE INDEX t_x_key (x ASC),
    FAMILY fam_0_x_y_z_w (x, y, z, w)
-) WITH (schema_locked = true);
+);
 ALTER PARTITION p1 OF INDEX test.public.t@i1 CONFIGURE ZONE USING
   gc.ttlseconds = 15210;
 ALTER PARTITION p2 OF INDEX test.public.t@i1 CONFIGURE ZONE USING
@@ -1180,7 +1179,7 @@ ALTER PARTITION p2 OF INDEX test.public.t@i1 CONFIGURE ZONE USING
 ALTER PARTITION p3 OF INDEX test.public.t@i2 CONFIGURE ZONE USING
   gc.ttlseconds = 15411;
 ALTER PARTITION p4 OF INDEX test.public.t@i2 CONFIGURE ZONE USING
-  gc.ttlseconds = 15418;
+  gc.ttlseconds = 15418
 
 # Test that the global_reads attribute can be set with an enterprise license.
 # This same test fails in pkg/sql/logictest/testdata/logic_test/zone_config.
@@ -1329,94 +1328,5 @@ ALTER PARTITION cadr OF INDEX fooba@fooba_pkey CONFIGURE ZONE USING num_replicas
 # Configure the zone of a partition on an index that does not exist.
 statement error index "nonexistent" (?:not found in relation "fooba"|does not exist)
 ALTER PARTITION rest OF INDEX fooba@nonexistent CONFIGURE ZONE USING num_replicas = 1;
-
-subtest end
-
-# Regression test for #134986 where subzone configs in an explicit txn were
-# incorrect due to faulty seqNum logic.
-subtest subzone_side_effects
-
-statement ok
-CREATE TABLE person (
-    name STRING,
-    country STRING,
-    birth_date DATE,
-    PRIMARY KEY (country, birth_date, name),
-    FAMILY fam_0_birth_date (birth_date),
-    FAMILY fam_1_country_name (country, name)
-)
-    PARTITION BY LIST (country) (
-            PARTITION australia
-                VALUES IN ('AU', 'NZ')
-                PARTITION BY RANGE (birth_date)
-                    (
-                        PARTITION old_au VALUES FROM (minvalue) TO ('1995-01-01'),
-                        PARTITION yung_au VALUES FROM ('1995-01-01') TO (maxvalue)
-                    )
-        );
-
-skipif config local-legacy-schema-changer
-statement ok
-SET use_declarative_schema_changer = unsafe_always;
-
-statement ok
-BEGIN;
-ALTER PARTITION australia OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 2;
-ALTER PARTITION old_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 4;
-ALTER PARTITION yung_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 5;
-COMMIT;
-
-query TI colnames
-WITH subzones AS (
-    SELECT
-        json_array_elements(
-            crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzones'
-        ) AS config
-    FROM system.zones
-    WHERE id = 'person'::REGCLASS::OID
-),
-subzone_configs AS (
-    SELECT
-        config ->> 'partitionName' AS name,
-        (config -> 'config' -> 'gc' ->> 'ttlSeconds')::INT AS ttl
-    FROM subzones
-)
-SELECT *
-FROM subzone_configs
-ORDER BY name;
-----
-name       ttl
-australia  2
-old_au     4
-yung_au    5
-
-# Ensure that configuring the zone on all subpartitions of a partition erases
-# the overarching partition's subzoneSpans to ensure that our keys are
-# non-overlapping.
-#
-# N.B. We expect 2 spans allocated for each subpartition (old_au, yung_au),
-# covering partition australia (instead of appending -- which would give us a
-# total of 6).
-query I
-SELECT json_array_length(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans')
-FROM system.zones
-WHERE id = 'person'::REGCLASS::OID
-----
-4
-
-statement ok
-RESET use_declarative_schema_changer;
-
-subtest end
-
-# Regression test for #137541: in some cases (like for sequences), we cannot
-# default to getting the primary index on our physical table.
-subtest bad_partition_on_sequence
-
-statement ok
-CREATE SEQUENCE IF NOT EXISTS "foo_seq";
-
-statement error partition "nonexistent" does not exist on table "foo_seq"
-ALTER PARTITION nonexistent OF TABLE foo_seq CONFIGURE ZONE USING DEFAULT;
 
 subtest end

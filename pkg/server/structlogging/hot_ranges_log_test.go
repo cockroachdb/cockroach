@@ -8,149 +8,33 @@ package structlogging_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"regexp"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 )
-
-// setup an impossibly low cpu threshold, test clusters
-// do not seem to record cpu utilization per replica.
-const lowCPUThreshold = time.Duration(-1)
-const highCPUThreshold = time.Second
-const lowDelay = 50 * time.Millisecond
-const highDelay = time.Minute
-
-// TestHotRangeLogger tests that hot ranges stats are logged per node.
-// It uses system ranges to verify behavior.
-func TestHotRangeLoggerSettings(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	skip.UnderRace(t)
-	ctx := context.Background()
-
-	settings, spy, teardown := setupTestServer(t, ctx)
-	defer teardown()
-
-	for _, test := range []struct {
-		enabled            bool
-		tickerInterval     time.Duration
-		logSettingInterval time.Duration
-		logCPUThreshold    time.Duration
-		hasLogs            bool
-	}{
-		// Tests the straightforward use case, where we expect no threshold,
-		// a minimal interval, minimal loop, and zero threshold should
-		// result in multiple logs.
-		{true, lowDelay, lowDelay, lowCPUThreshold, true},
-
-		// This test is the same as the default case, except the
-		// cluster setting which controls logging is off.
-		{false, lowDelay, lowDelay, lowCPUThreshold, false},
-
-		// This test validates that even when we check on a low cadance,
-		// if the threshold is not passed and the interval is long,
-		// no logs will appear.
-		{true, lowDelay, highDelay, highCPUThreshold, false},
-
-		// This test validates that even if the interval is long,
-		// if the cpu threshold is low, and its checked, the system
-		// will produce logs.
-		{true, lowDelay, highDelay, lowCPUThreshold, true},
-
-		// This test validates with a high check cadance, no logs
-		// will appear, even if the interval and thresholds are low.
-		{true, highDelay, lowDelay, lowCPUThreshold, false},
-
-		// This test checks that if there's a low logging interval
-		// if the cpuThreshold is high, logs will still appear.
-		{true, lowDelay, lowDelay, highCPUThreshold, true},
-	} {
-		t.Run(fmt.Sprintf("settings tests %v", test), func(t *testing.T) {
-			setupTest(ctx, settings, test.enabled, test.logSettingInterval, test.tickerInterval, test.logCPUThreshold, spy)
-			testutils.SucceedsSoon(t, func() error {
-				actual := hasNonZeroQPSRange(spy.Logs())
-				if test.hasLogs != actual {
-					return errors.Errorf("expected hasLogs %v, got %v", test.hasLogs, actual)
-				}
-				return nil
-			})
-		})
-	}
-
-	t.Run("the per node restriction limits the number of unique logs", func(t *testing.T) {
-		countSeenRanges := func(logs []testLog) int {
-			counts := make(map[int64]int)
-			for _, l := range logs {
-				counts[l.Stats.RangeID]++
-			}
-			return len(counts)
-		}
-
-		// without a limit set, we should see many ranges.
-		setupTest(ctx, settings, true, lowDelay, lowDelay, lowCPUThreshold, spy)
-		testutils.SucceedsSoon(t, func() error {
-			if actual := countSeenRanges(spy.Logs()); actual <= 1 {
-				return fmt.Errorf("expected >1 range, got %d", actual)
-			}
-			return nil
-		})
-
-		// with a limit, only one range should show up.
-		structlogging.ReportTopHottestRanges = 1
-		setupTest(ctx, settings, true, lowDelay, lowDelay, lowCPUThreshold, spy)
-		testutils.SucceedsSoon(t, func() error {
-			if actual := countSeenRanges(spy.Logs()); actual != 1 {
-				return fmt.Errorf("expected 1 range, got %d", actual)
-			}
-			return nil
-		})
-	})
-}
-
-// For multi-tenancy, we want to test the differing behavior.
-// Specifically, we want to test the following:
-//   - Logs are written separately for system and app tenants.
-//   - For app tenants, the interval at which logs are collected
-//     is longer.
-//   - For app tenants, a job is initialized for the hot ranges
-//     logger, whereas for the system tenant it runs as a task.
-func TestHotRangeLoggerMultitenant(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	skip.UnderRace(t)
-	ctx := context.Background()
-	_, spy, teardown := setupTestServer(t, ctx)
-	spy.Logs()
-	// TODO (brian): the jobs system isn't registering this correctly,
-	// this will be fixed in a short follow pr.
-	defer teardown()
-}
-
-type testLog struct {
-	TenantID string
-	Stats    eventpb.HotRangesStats
-}
 
 type hotRangesLogSpy struct {
 	t  *testing.T
 	mu struct {
 		syncutil.RWMutex
-		logs []testLog
+		logs []eventpb.HotRangesStats
 	}
 }
 
@@ -161,7 +45,7 @@ func (spy *hotRangesLogSpy) Intercept(e []byte) {
 	}
 
 	re := regexp.MustCompile(`"EventType":"hot_ranges_stats"`)
-	if entry.Channel != logpb.Channel_HEALTH || !re.MatchString(entry.Message) {
+	if entry.Channel != logpb.Channel_TELEMETRY || !re.MatchString(entry.Message) {
 		return
 	}
 
@@ -172,13 +56,13 @@ func (spy *hotRangesLogSpy) Intercept(e []byte) {
 		spy.t.Fatal(err)
 	}
 
-	spy.mu.logs = append(spy.mu.logs, testLog{entry.TenantID, rangesLog})
+	spy.mu.logs = append(spy.mu.logs, rangesLog)
 }
 
-func (spy *hotRangesLogSpy) Logs() []testLog {
+func (spy *hotRangesLogSpy) Logs() []eventpb.HotRangesStats {
 	spy.mu.RLock()
 	defer spy.mu.RUnlock()
-	logs := make([]testLog, len(spy.mu.logs))
+	logs := make([]eventpb.HotRangesStats, len(spy.mu.logs))
 	copy(logs, spy.mu.logs)
 	return logs
 }
@@ -189,105 +73,96 @@ func (spy *hotRangesLogSpy) Reset() {
 	spy.mu.logs = nil
 }
 
-type testHotRangeGetter struct{}
+// TestHotRangesStatsTenants tests that hot ranges stats are logged per node.
+// The test will ensure each node contains 5 distinct range replicas for hot
+// ranges logging. Each node should thus log 5 distinct range ids.
+func TestHotRangesStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
 
-func (t testHotRangeGetter) HotRangesV2(
-	ctx context.Context, req *serverpb.HotRangesRequest,
-) (*serverpb.HotRangesResponseV2, error) {
-	if req.PerNodeLimit == 1 {
-		return &serverpb.HotRangesResponseV2{
-			Ranges: []*serverpb.HotRangesResponseV2_HotRange{
-				{
-					RangeID:          1,
-					CPUTimePerSecond: float64(100 * time.Millisecond),
-					QPS:              float64(100),
+	skip.UnderRace(t)
+
+	ctx := context.Background()
+	spy := hotRangesLogSpy{t: t}
+	defer log.InterceptWith(ctx, &spy)()
+
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
+						DisableReplicaRebalancing: true,
+					},
 				},
 			},
-		}, nil
-	}
-	return &serverpb.HotRangesResponseV2{
-		Ranges: []*serverpb.HotRangesResponseV2_HotRange{
-			{
-				RangeID:          1,
-				CPUTimePerSecond: float64(100 * time.Millisecond),
-				QPS:              float64(100),
-			},
-			{
-				RangeID:          2,
-				CPUTimePerSecond: float64(1300 * time.Millisecond),
-				QPS:              float64(100),
-			},
-			{
-				RangeID:          3,
-				CPUTimePerSecond: float64(900 * time.Millisecond),
-				QPS:              float64(100),
-			},
 		},
-	}, nil
-}
+	})
+	defer tc.Stopper().Stop(ctx)
 
-var _ structlogging.HotRangeGetter = testHotRangeGetter{}
+	db := tc.ServerConn(0)
+	sqlutils.CreateTable(
+		t, db, "foo",
+		"k INT PRIMARY KEY, v INT",
+		300,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(2)),
+	)
 
-// setupTestServer is a somewhat lengthy warmup process
-// to ensure that the hot ranges tests are ready to run.
-// It sets up a cluster, runs it until the hot range stats are
-// warm by dialing the knobs to noisy, and checking for output,
-// then redials the knobs back to quiet so the test can take over.
-func setupTestServer(
-	t *testing.T, ctx context.Context,
-) (*cluster.Settings, *hotRangesLogSpy, func()) {
-	sc := log.ScopeWithoutShowLogs(t)
-	spy := &hotRangesLogSpy{t: t}
+	// Ensure both of node 1 and 2 have 5 distinct replicas from the table.
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		tc.Server(0).DB(), keys.SystemSQLCodec, "test", "foo")
+	tc.SplitTable(t, tableDesc, []serverutils.SplitPoint{
+		{TargetNodeIdx: 1, Vals: []interface{}{100}},
+		{TargetNodeIdx: 1, Vals: []interface{}{120}},
+		{TargetNodeIdx: 1, Vals: []interface{}{140}},
+		{TargetNodeIdx: 1, Vals: []interface{}{160}},
+		{TargetNodeIdx: 1, Vals: []interface{}{180}},
+		{TargetNodeIdx: 2, Vals: []interface{}{200}},
+		{TargetNodeIdx: 2, Vals: []interface{}{220}},
+		{TargetNodeIdx: 2, Vals: []interface{}{240}},
+		{TargetNodeIdx: 2, Vals: []interface{}{260}},
+		{TargetNodeIdx: 2, Vals: []interface{}{280}},
+	})
 
-	// override internal settings.
-	structlogging.ReportTopHottestRanges = 1000
-	structlogging.CheckInterval = 100 * time.Millisecond
-
-	logInterceptor := log.InterceptWith(ctx, spy)
-	stopper := stop.NewStopper()
-	settings := cluster.MakeTestingClusterSettings()
-	teardown := func() {
-		stopper.Stop(ctx)
-		sc.Close(t)
-		logInterceptor()
+	// query table
+	for i := 0; i < 300; i++ {
+		db := tc.ServerConn(0)
+		sqlutils.MakeSQLRunner(db).Query(t, `SELECT * FROM test.foo`)
 	}
 
-	// lower settings so that we can wait for the stats to warm.
-	structlogging.TelemetryHotRangesStatsEnabled.Override(ctx, &settings.SV, true)
-	structlogging.TelemetryHotRangesStatsInterval.Override(ctx, &settings.SV, time.Millisecond)
-	structlogging.TelemetryHotRangesStatsLoggingDelay.Override(ctx, &settings.SV, 0*time.Millisecond)
+	// Skip node 1 since it will contain many more replicas.
+	// We only need to check nodes 2 and 3 to see that the nodes are logging their local hot ranges.
+	rangeIDs := make(map[int64]struct{})
+	for _, i := range []int{1, 2} {
+		spy.Reset()
+		ts := tc.ApplicationLayer(i)
+		structlogging.TelemetryHotRangesStatsEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
+		structlogging.TelemetryHotRangesStatsInterval.Override(ctx, &ts.ClusterSettings().SV, time.Second)
+		structlogging.TelemetryHotRangesStatsLoggingDelay.Override(ctx, &ts.ClusterSettings().SV, 0*time.Millisecond)
 
-	err := structlogging.StartSystemHotRangesLogger(ctx, stopper, testHotRangeGetter{}, settings)
-	require.NoError(t, err)
+		testutils.SucceedsSoon(t, func() error {
+			logs := spy.Logs()
+			if len(logs) < 5 {
+				return errors.New("waiting for hot ranges to be logged")
+			}
 
-	return settings, spy, teardown
-}
+			return nil
+		})
+		structlogging.TelemetryHotRangesStatsInterval.Override(ctx, &ts.ClusterSettings().SV, 1*time.Hour)
 
-// Utility function which generally indicates that the hot ranges
-// are being logged.
-func hasNonZeroQPSRange(logs []testLog) bool {
-	for _, l := range logs {
-		if l.Stats.Qps == 0 {
-			continue
+		// Get first 5 logs since the logging loop may have fired multiple times.
+		// We should have gotten 5 distinct range ids, one for each split point above.
+		logs := spy.Logs()[:5]
+		for _, l := range logs {
+			_, ok := rangeIDs[l.RangeID]
+			if ok {
+				t.Fatalf(`Logged ranges should be unique per node for this test.
+found range on node %d and node %d: %s %s %s %s %d`, i, l.LeaseholderNodeID, l.DatabaseName, l.SchemaName, l.TableName, l.IndexName, l.RangeID)
+			}
+			rangeIDs[l.RangeID] = struct{}{}
 		}
-		return true
-	}
-	return false
-}
 
-func setupTest(
-	ctx context.Context,
-	st *cluster.Settings,
-	enabled bool,
-	logInterval, tickerInterval time.Duration,
-	logCPUThreshold time.Duration,
-	spy *hotRangesLogSpy,
-) {
-	structlogging.TelemetryHotRangesStatsEnabled.Override(ctx, &st.SV, enabled)
-	structlogging.TelemetryHotRangesStatsInterval.Override(ctx, &st.SV, logInterval)
-	structlogging.TelemetryHotRangesStatsCPUThreshold.Override(ctx, &st.SV, logCPUThreshold)
-	structlogging.CheckInterval = tickerInterval
-	structlogging.TestLoopChannel <- struct{}{}
-	log.FlushAllSync()
-	spy.Reset()
+	}
 }

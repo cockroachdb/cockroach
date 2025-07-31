@@ -184,63 +184,6 @@ func checkIfDescriptorIsWithoutData(id descpb.ID, md *opGenContext) bool {
 				doesDescriptorHaveData = true
 			}
 		}
-		if doesDescriptorHaveData {
-			break
-		}
 	}
 	return !doesDescriptorHaveData
-}
-
-// checkIfZoneConfigHasGCDependents will determine if a table/database
-// descriptor has data dependencies it still needs to GC. This allows us to
-// determine when we need to skip certain operations like deleting a zone
-// config.
-func checkIfZoneConfigHasGCDependents(elem scpb.ZoneConfigElement, md *opGenContext) bool {
-	isValidTableData := func(td *scpb.TableData) bool {
-		switch e := elem.(type) {
-		case *scpb.DatabaseZoneConfig:
-			return e.DatabaseID == td.DatabaseID
-		case *scpb.TableZoneConfig:
-			return e.TableID == td.TableID
-		default:
-			panic(errors.AssertionFailedf(
-				"element type %T not allowed for checkIfZoneConfigHasGCDependents", e))
-		}
-	}
-	for idx, t := range md.Targets {
-		switch e := t.Element().(type) {
-		case *scpb.TableData:
-			// Filter out any elements we do not want to consider.
-			if !isValidTableData(e) {
-				continue
-			}
-			// Check if this descriptor has any data marked for an absent state.
-			if t.TargetStatus == scpb.Status_ABSENT &&
-				md.Initial[idx] == scpb.Status_PUBLIC {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// checkIfIndexHasGCDependents is like checkIfZoneConfigHasGCDependents, but
-// for indexes. We also ensure that we filter out irrelevant indexes here.
-func checkIfIndexHasGCDependents(tableID descpb.ID, md *opGenContext) bool {
-	for idx, t := range md.Targets {
-		switch e := t.Element().(type) {
-		case *scpb.IndexData:
-			// Validate this is the table ID we are
-			// looking for.
-			if e.TableID != tableID {
-				continue
-			}
-			// Check if this descriptor has any data marked for an absent state.
-			if t.TargetStatus == scpb.Status_ABSENT &&
-				md.Initial[idx] == scpb.Status_PUBLIC {
-				return true
-			}
-		}
-	}
-	return false
 }

@@ -86,10 +86,6 @@ func upgradeDescriptors(
 		descBatch := idsToRewrite[currentIdx:min(currentIdx+batchSize, len(idsToRewrite))]
 		err := timeutil.RunWithTimeout(ctx, "repair-post-deserialization", repairBatchTimeLimit, func(ctx context.Context) error {
 			return d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-				// We explicitly specify a low retry limit because this operation is
-				// wrapped with its own retry function that will also take care of
-				// adjusting the batch size on each retry.
-				txn.KV().SetMaxAutoRetries(10)
 				if batchSize <= HighPriBatchSize {
 					if err := txn.KV().SetUserPriority(roachpb.MaxUserPriority); err != nil {
 						return err
@@ -220,10 +216,6 @@ WHERE
 			var rowsUpdated tree.DInt
 			err := timeutil.RunWithTimeout(ctx, "descriptor-repair", repairBatchTimeLimit, func(ctx context.Context) error {
 				return d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-					// We explicitly specify a low retry limit because this operation is
-					// wrapped with its own retry function that will also take care of
-					// adjusting the batch size on each retry.
-					txn.KV().SetMaxAutoRetries(10)
 					if batchSize <= HighPriBatchSize {
 						if err = txn.KV().SetUserPriority(roachpb.MaxUserPriority); err != nil {
 							return err

@@ -7,7 +7,6 @@ package cluster
 
 import (
 	"context"
-	"strconv"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -32,6 +31,8 @@ type Settings struct {
 	// Also see the Override() method that different types of settings provide for
 	// overwriting the default of a single setting.
 	Manual atomic.Value // bool
+
+	ExternalIODir string
 
 	// Tracks whether a CPU profile is going on and if so, which kind. See
 	// CPUProfileType().
@@ -65,23 +66,8 @@ type OverridesInformer interface {
 
 var SettingOverrideErr = errors.New("cluster setting is overridden by system virtual cluster")
 
-// telemetryOptOutCompTimeString controls whether to opt out of telemetry
-// (including Sentry) or not compile time. The variable is set by bazel via stamping
-// (`stamp.sh -d true/false`). Becuase Go only supports strings for in
-// `-ldflags "-X ..."`, we have to use a string representation here.
-
-var telemetryOptOutCompTimeString = "false"
-
-func telemetryOptOutCompTime(defaultValue bool) bool {
-	ret, err := strconv.ParseBool(telemetryOptOutCompTimeString)
-	if err != nil {
-		return defaultValue
-	}
-	return ret
-}
-
 // TelemetryOptOut controls whether to opt out of telemetry (including Sentry) or not.
-var TelemetryOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false) || telemetryOptOutCompTime(false)
+var TelemetryOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
 
 // NoSettings is used when a func requires a Settings but none is available
 // (for example, a CLI subcommand that does not connect to a cluster).
@@ -190,7 +176,9 @@ func MakeTestingClusterSettingsWithVersions(
 // be used for settings objects that are passed as initial parameters for test
 // clusters; the given Settings object should not be in use by any server.
 func TestingCloneClusterSettings(st *Settings) *Settings {
-	result := &Settings{}
+	result := &Settings{
+		ExternalIODir: st.ExternalIODir,
+	}
 	result.Version = clusterversion.MakeVersionHandle(
 		&result.SV, st.Version.LatestVersion(), st.Version.MinSupportedVersion(),
 	)

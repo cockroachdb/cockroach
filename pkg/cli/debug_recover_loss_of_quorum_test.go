@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -168,7 +167,6 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDeadlock(t, "slow under deadlock")
-	skip.UnderStress(t, "slow under stress")
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
@@ -444,7 +442,6 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDeadlock(t, "slow under deadlock")
-	skip.UnderStress(t, "fails under stress and leader leases")
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
@@ -458,7 +455,6 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	listenerReg := listenerutil.NewListenerRegistry()
 	defer listenerReg.Close()
 
-	st := cluster.MakeTestingClusterSettings()
 	// Test cluster contains 3 nodes that we would turn into a single node
 	// cluster using loss of quorum recovery. To do that, we will terminate
 	// two nodes and run recovery on remaining one. Restarting node should
@@ -473,7 +469,6 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	sa := make(map[int]base.TestServerArgs)
 	for i := 0; i < 3; i++ {
 		sa[i] = base.TestServerArgs{
-			Settings: st,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyVFSRegistry: fs.NewStickyRegistry(),

@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -167,7 +166,7 @@ func CreateDocker(
 	cli.NegotiateAPIVersion(ctx)
 
 	clusterID := uuid.MakeV4()
-	clusterIDS := clusterID.Short().String()
+	clusterIDS := clusterID.Short()
 
 	if volumesDir == "" {
 		volumesDir, err = os.MkdirTemp(datapathutils.DebuggableTempDir(), fmt.Sprintf("cockroach-acceptance-%s", clusterIDS))
@@ -485,9 +484,9 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode, singleNod
 	for _, store := range node.stores {
 		storeSpec := base.StoreSpec{
 			Path: store.dir,
-			Size: storageconfig.Size{Bytes: int64(store.config.MaxRanges) * maxRangeBytes},
+			Size: base.SizeSpec{InBytes: int64(store.config.MaxRanges) * maxRangeBytes},
 		}
-		cmd = append(cmd, fmt.Sprintf("--store=%s", base.StoreSpecCmdLineString(storeSpec)))
+		cmd = append(cmd, fmt.Sprintf("--store=%s", storeSpec))
 	}
 	// Append --join flag for all nodes.
 	if !singleNode {
@@ -772,12 +771,10 @@ func (l *DockerCluster) stop(ctx context.Context) {
 			fmt.Sprintf("stderr.%s.log", strings.Replace(
 				timeutil.Now().Format(time.RFC3339), ":", "_", -1)))
 		maybePanic(os.MkdirAll(filepath.Dir(file), 0755))
-		func() {
-			w, err := os.Create(file)
-			maybePanic(err)
-			defer w.Close()
-			maybePanic(n.Logs(ctx, w))
-		}()
+		w, err := os.Create(file)
+		maybePanic(err)
+		defer w.Close()
+		maybePanic(n.Logs(ctx, w))
 		log.Infof(ctx, "node %d: stderr at %s", i, file)
 		if crashed {
 			log.Infof(ctx, "~~~ node %d CRASHED ~~~~", i)

@@ -77,7 +77,7 @@ func TestRandomizedCast(t *testing.T) {
 		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(t, testAllocator,
 			[]colexectestutils.Tuples{input}, [][]*types.T{{from}}, output, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
-				return colexecbase.GetCastOperator(ctx, testAllocator, input[0], 0, 1, from, to, &evalCtx)
+				return colexecbase.GetCastOperator(testAllocator, input[0], 0, 1, from, to, &evalCtx)
 			}, func(err error) {
 				if !errorExpected {
 					t.Fatal(err)
@@ -118,7 +118,7 @@ func BenchmarkCastOp(b *testing.B) {
 							coldata.BatchSize(), nullProbability, selectivity,
 						)
 						source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
-						op, err := colexecbase.GetCastOperator(ctx, testAllocator, source, 0, 1, typePair[0], typePair[1], &evalCtx)
+						op, err := colexecbase.GetCastOperator(testAllocator, source, 0, 1, typePair[0], typePair[1], &evalCtx)
 						require.NoError(b, err)
 						b.SetBytes(int64(8 * coldata.BatchSize()))
 						b.ResetTimer()

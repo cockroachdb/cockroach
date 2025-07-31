@@ -39,6 +39,13 @@ export const indexUnusedDuration = "168h";
 export const REMOTE_DEBUGGING_ERROR_TEXT =
   "This information is not available due to the current value of the 'server.remote_debugging.mode' setting.";
 
+export const serverToClientErrorMessageMap = new Map([
+  [
+    "not allowed (due to the 'server.remote_debugging.mode' setting)",
+    REMOTE_DEBUGGING_ERROR_TEXT,
+  ],
+]);
+
 export const NO_SAMPLES_FOUND = "no samples";
 
 export const INTERNAL_APP_NAME_PREFIX = "$ internal";

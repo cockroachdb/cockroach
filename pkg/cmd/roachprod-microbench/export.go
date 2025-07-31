@@ -31,15 +31,13 @@ func exportMetrics(
 	builder := model.NewBuilder()
 	for _, pkg := range packages {
 		path := filepath.Join(dir, getReportLogName(reportLogName, pkg))
-		err := func() error {
-			file, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer file.Close()
-			reader := benchfmt.NewReader(file, path)
-			return builder.AddMetrics(runID, pkg+"/", reader)
-		}()
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		reader := benchfmt.NewReader(file, path)
+		err = builder.AddMetrics(runID, pkg+"/", reader)
 		if err != nil {
 			return err
 		}

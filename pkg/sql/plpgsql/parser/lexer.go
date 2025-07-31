@@ -181,12 +181,10 @@ func (l *lexer) MakeExecSqlStmt() (*plpgsqltree.Execute, error) {
 	if target != nil && sqlStmt.AST.StatementReturnType() != tree.Rows {
 		return nil, pgerror.New(pgcode.Syntax, "INTO used with a command that cannot return data")
 	}
-	ann := tree.MakeAnnotations(sqlStmt.NumAnnotations)
 	return &plpgsqltree.Execute{
-		SqlStmt:     sqlStmt.AST,
-		Strict:      haveStrict,
-		Target:      target,
-		Annotations: &ann,
+		SqlStmt: sqlStmt.AST,
+		Strict:  haveStrict,
+		Target:  target,
 	}, nil
 }
 
@@ -297,12 +295,10 @@ func (l *lexer) MakeFetchOrMoveStmt(isMove bool) (plpgsqltree.Statement, error) 
 	}
 	// Move past the semicolon.
 	l.lastPos++
-	ann := tree.MakeAnnotations(sqlStmt.NumAnnotations)
 	return &plpgsqltree.Fetch{
-		Cursor:      cursor,
-		Target:      target,
-		IsMove:      isMove,
-		Annotations: &ann,
+		Cursor: cursor,
+		Target: target,
+		IsMove: isMove,
 	}, nil
 }
 
@@ -364,59 +360,6 @@ func (l *lexer) ReadIntegerForLoopControl() (plpgsqltree.ForLoopControl, error) 
 	}, err
 }
 
-// makeDoStmt analyzes and parses the options supplied to a DO statement.
-func makeDoStmt(options tree.DoBlockOptions) (*plpgsqltree.DoBlock, error) {
-	doBlockBodyStr, err := tree.AnalyzeDoBlockOptions(options)
-	if err != nil {
-		return nil, err
-	}
-	parsedStmt, err := Parse(string(doBlockBodyStr))
-	if err != nil {
-		return nil, err
-	}
-	return &plpgsqltree.DoBlock{Block: parsedStmt.AST}, nil
-}
-
-// ParseReturnExpr handles reading and parsing the expression for a RETURN or
-// RETURN NEXT statement, which can be nonexistent.
-func (l *lexer) ParseReturnExpr() (plpgsqltree.Expr, error) {
-	startPos, endPos, _, err := l.readSQLConstruct(true /* isExpr */, true /* allowEmpty */, ';')
-	if err != nil || startPos == endPos {
-		return nil, err
-	}
-	exprStr := l.getStr(startPos, endPos)
-	return l.ParseExpr(exprStr)
-}
-
-// ParseReturnQuery handles reading and parsing the query for a RETURN QUERY
-// statement, which can be nonexistent.
-func (l *lexer) ParseReturnQuery() (plpgsqltree.Statement, error) {
-	startPos, endPos, _, err := l.readSQLConstruct(false /* isExpr */, false /* allowEmpty */, ';')
-	if err != nil || startPos == endPos {
-		return nil, err
-	}
-	queryStr := l.getStr(startPos, endPos)
-	stmt, err := parser.ParseOne(queryStr)
-	if err != nil {
-		return nil, err
-	}
-	ann := tree.MakeAnnotations(stmt.NumAnnotations)
-	return &plpgsqltree.ReturnQuery{
-		SqlStmt:     stmt.AST,
-		Annotations: &ann,
-	}, nil
-}
-
-// peekForExecute checks whether the next token is EXECUTE, used to identify
-// dynamic SQL statements.
-func (l *lexer) peekForExecute() bool {
-	if l.parser.Lookahead() != -1 {
-		// Push back the lookahead token so that it can be included.
-		l.PushBack(1)
-	}
-	return l.Peek().id == EXECUTE
-}
-
 func (l *lexer) ReadSqlExpr(
 	terminator1 int, terminators ...int,
 ) (sqlStr string, terminatorMet int, err error) {
@@ -425,6 +368,17 @@ func (l *lexer) ReadSqlExpr(
 		true /* isExpr */, false /* allowEmpty */, terminator1, terminators...,
 	)
 	return l.getStr(startPos, endPos), terminatorMet, err
+}
+
+// ReadReturnExpr handles reading the expression for a RETURN statement, which
+// can be nonexistent.
+func (l *lexer) ReadReturnExpr() (sqlStr string, err error) {
+	var startPos, endPos int
+	startPos, endPos, _, err = l.readSQLConstruct(true /* isExpr */, true /* allowEmpty */, ';')
+	if err != nil || startPos == endPos {
+		return "", err
+	}
+	return l.getStr(startPos, endPos), err
 }
 
 func (l *lexer) ReadSqlStatement(
@@ -550,21 +504,6 @@ func (l *lexer) PushBack(n int) {
 	}
 }
 
-// Advance advances the lexer by n tokens.
-func (l *lexer) Advance(n int) {
-	if n < 0 {
-		panic(errors.AssertionFailedf("negative n provided to Advance"))
-	}
-	l.lastPos += n
-	if l.lastPos > len(l.tokens) {
-		l.lastPos = len(l.tokens)
-	}
-	if n >= 1 {
-		// Invalidate the parser lookahead token.
-		l.parser.(*plpgsqlParserImpl).char = -1
-	}
-}
-
 func (l *lexer) lastToken() plpgsqlSymType {
 	if l.lastPos < 0 {
 		return plpgsqlSymType{}
@@ -593,16 +532,6 @@ func (l *lexer) setErr(err error) {
 	l.lastError = err
 	lastTok := l.lastToken()
 	l.lastError = parser.PopulateErrorDetails(lastTok.id, lastTok.str, lastTok.pos, l.lastError, l.in)
-}
-
-// setErrNoDetails is similar to setErr, but is used for an error that should
-// not be further annotated with details. If there is no candidate code for the
-// error, it is annotated with pgcode.Syntax.
-func (l *lexer) setErrNoDetails(err error) {
-	if !pgerror.HasCandidateCode(err) {
-		err = pgerror.WithCandidateCode(err, pgcode.Syntax)
-	}
-	l.lastError = err
 }
 
 func (l *lexer) Error(e string) {

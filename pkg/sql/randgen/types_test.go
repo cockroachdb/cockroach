@@ -33,9 +33,6 @@ loop:
 		case types.UnknownFamily, types.AnyFamily, types.TriggerFamily:
 			// These are not included on purpose.
 			continue loop
-		case types.JsonpathFamily:
-			// TODO(#22513): Don't include jsonpath in randomized tests yet.
-			continue loop
 		}
 		noFamilyRepresentative[familyID] = struct{}{}
 	}

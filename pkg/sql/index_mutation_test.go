@@ -13,7 +13,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -36,8 +35,7 @@ func TestIndexMutationKVOps(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	params, _ := createTestServerParamsAllowTenants()
-	params.DefaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(143114)
+	params, _ := createTestServerParams()
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.Knobs.SQLEvalContext = &eval.TestingKnobs{
@@ -107,6 +105,7 @@ func getKVTrace(t *testing.T, db *gosql.DB) string {
 	allowedKVOpTypes := []string{
 		"CPut",
 		"Put",
+		"InitPut",
 		"Del",
 		"DelRange",
 		"ClearRange",

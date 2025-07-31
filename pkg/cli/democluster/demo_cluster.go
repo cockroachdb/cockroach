@@ -65,7 +65,7 @@ import (
 
 type serverEntry struct {
 	serverutils.TestServerInterface
-	adminClient    serverpb.RPCAdminClient
+	adminClient    serverpb.AdminClient
 	nodeID         roachpb.NodeID
 	decommissioned bool
 }
@@ -87,7 +87,7 @@ type transientCluster struct {
 
 	stickyVFSRegistry fs.StickyRegistry
 
-	drainAndShutdown func(ctx context.Context, adminClient serverpb.RPCAdminClient) error
+	drainAndShutdown func(ctx context.Context, adminClient serverpb.AdminClient) error
 
 	infoLog  LoggerFn
 	warnLog  LoggerFn
@@ -146,7 +146,7 @@ func NewDemoCluster(
 	warnLog LoggerFn,
 	shoutLog ShoutLoggerFn,
 	startStopper func(ctx context.Context) (*stop.Stopper, error),
-	drainAndShutdown func(ctx context.Context, s serverpb.RPCAdminClient) error,
+	drainAndShutdown func(ctx context.Context, s serverpb.AdminClient) error,
 ) (DemoCluster, error) {
 	c := &transientCluster{
 		demoCtx:          demoCtx,
@@ -795,7 +795,7 @@ func (c *transientCluster) waitForNodeIDReadiness(
 			if err != nil {
 				return err
 			}
-			c.servers[idx].adminClient = conn.NewAdminClient()
+			c.servers[idx].adminClient = serverpb.NewAdminClient(conn)
 
 		}
 		break
@@ -924,8 +924,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		EnableDemoLoginEndpoint: true,
 		// Demo clusters by default will create their own tenants, so we
 		// don't need to create them here.
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		DefaultTenantName: roachpb.TenantName(demoTenantName),
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
@@ -1083,9 +1082,9 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 // server than the one referred to by the node ID.
 func (c *transientCluster) findOtherServer(
 	ctx context.Context, nodeID int32, op string,
-) (serverpb.RPCAdminClient, error) {
+) (serverpb.AdminClient, error) {
 	// Find a node to use as the sender.
-	var adminClient serverpb.RPCAdminClient
+	var adminClient serverpb.AdminClient
 	for _, s := range c.servers {
 		if s.adminClient != nil && s.nodeID != roachpb.NodeID(nodeID) {
 			adminClient = s.adminClient
@@ -1219,7 +1218,7 @@ func (c *transientCluster) startServerInternal(
 
 	c.servers[serverIdx] = serverEntry{
 		TestServerInterface: s,
-		adminClient:         conn.NewAdminClient(),
+		adminClient:         serverpb.NewAdminClient(conn),
 		nodeID:              nodeID,
 	}
 

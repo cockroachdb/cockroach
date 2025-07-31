@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -209,36 +208,17 @@ func (e *evaluator) EvalCollateExpr(
 		return nil, err
 	}
 	unwrapped := UnwrapDatum(ctx, e.ctx(), d)
-
-	// buildCollated is a recursive helper function to handle evaluating COLLATE
-	// on arrays.
-	var buildCollated func(tree.Datum) (tree.Datum, error)
-	buildCollated = func(datum tree.Datum) (tree.Datum, error) {
-		if datum == tree.DNull {
-			return tree.DNull, nil
-		}
-		switch d := datum.(type) {
-		case *tree.DString:
-			return tree.NewDCollatedString(string(*d), expr.Locale, &e.CollationEnv)
-		case *tree.DCollatedString:
-			return tree.NewDCollatedString(d.Contents, expr.Locale, &e.CollationEnv)
-		case *tree.DArray:
-			a := tree.NewDArray(types.MakeCollatedType(d.ParamTyp, expr.Locale))
-			a.Array = make(tree.Datums, 0, len(d.Array))
-			for _, elem := range d.Array {
-				collatedElem, err := buildCollated(elem)
-				if err != nil {
-					return nil, err
-				}
-				if err := a.Append(collatedElem); err != nil {
-					return nil, err
-				}
-			}
-			return a, nil
-		}
-		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "incompatible type for COLLATE: %s", datum)
+	if unwrapped == tree.DNull {
+		return tree.DNull, nil
 	}
-	return buildCollated(unwrapped)
+	switch d := unwrapped.(type) {
+	case *tree.DString:
+		return tree.NewDCollatedString(string(*d), expr.Locale, &e.CollationEnv)
+	case *tree.DCollatedString:
+		return tree.NewDCollatedString(d.Contents, expr.Locale, &e.CollationEnv)
+	default:
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "incompatible type for COLLATE: %s", d)
+	}
 }
 
 func (e *evaluator) EvalColumnAccessExpr(
@@ -493,7 +473,7 @@ func (e *evaluator) EvalFuncExpr(ctx context.Context, expr *tree.FuncExpr) (tree
 
 	if fn.Body != "" {
 		// This expression evaluator cannot run functions defined with a SQL body.
-		return nil, unimplemented.NewWithIssuef(147472, "cannot evaluate function in this context")
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot evaluate function in this context")
 	}
 	if fn.Fn == nil {
 		// This expression evaluator cannot run functions that are not "normal"
@@ -503,7 +483,7 @@ func (e *evaluator) EvalFuncExpr(ctx context.Context, expr *tree.FuncExpr) (tree
 
 	res, err := fn.Fn.(FnOverload)(ctx, e.ctx(), args)
 	if err != nil {
-		return nil, err
+		return nil, expr.MaybeWrapError(err)
 	}
 	if e.TestingKnobs.AssertFuncExprReturnTypes {
 		if err := ensureExpectedType(fn.FixedReturnType(), res); err != nil {

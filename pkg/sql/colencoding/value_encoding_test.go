@@ -33,7 +33,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 		typs[i] = ct
 		datums[i] = datum
 		var err error
-		buf, scratch, err = valueside.EncodeWithScratch(buf, valueside.NoColumnID, datum, scratch[:0])
+		buf, err = valueside.Encode(buf, valueside.NoColumnID, datum, scratch)
 		if err != nil {
 			t.Fatal(err)
 		}

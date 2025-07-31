@@ -68,7 +68,7 @@ func registerTPCDSVec(r registry.Registry) {
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
 		if _, err := clusterConn.Exec(
 			`
-RESTORE DATABASE tpcds FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpcds/scalefactor=1/backup?AUTH=implicit'
+RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures-us-east1/workload/tpcds/scalefactor=1/backup?AUTH=implicit'
 WITH unsafe_restore_incompatible_version;
 `,
 		); err != nil {

@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -113,9 +112,14 @@ var (
 			"(these can't retry internally, so should be long enough to allow quorum/lease recovery)",
 		10*time.Second,
 		settings.WithPublic,
-		// This prevents probes from exiting when idle, which can lead to
-		// buildup of probe goroutines, so cap it at 1 minute.
-		settings.DurationInRange(0 /* minVal */, time.Minute),
+		settings.WithValidateDuration(func(t time.Duration) error {
+			// This prevents probes from exiting when idle, which can lead to buildup
+			// of probe goroutines, so cap it at 1 minute.
+			if t > time.Minute {
+				return errors.New("grace period can't be more than 1 minute")
+			}
+			return nil
+		}),
 	)
 )
 
@@ -282,6 +286,7 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 	for {
 		select {
 		case <-timer.C:
+			timer.Read = true
 			// Eagerly reset the timer, to avoid skewing the interval.
 			timer.Reset(CircuitBreakerProbeInterval.Get(&d.settings.SV))
 		case <-d.stopper.ShouldQuiesce():
@@ -297,13 +302,13 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 
 		// Probe replicas for a stall if we haven't seen a response from them in the
 		// past probe threshold.
-		now := crtime.NowMono()
+		nowNanos := timeutil.Now().UnixNano()
 		probeThreshold := CircuitBreakerProbeThreshold.Get(&d.settings.SV)
 
 		d.replicas.Range(func(_ cbKey, cb *ReplicaCircuitBreaker) bool {
 			// Don't probe if the breaker is already tripped. It will be probed in
 			// response to user traffic, to reduce the number of concurrent probes.
-			if cb.stallDuration(now) >= probeThreshold && !cb.isTripped() {
+			if cb.stallDuration(nowNanos) >= probeThreshold && !cb.isTripped() {
 				cb.breaker.Probe()
 			}
 
@@ -334,13 +339,13 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 			return
 		}
 
-		now := crtime.NowMono()
+		nowNanos := timeutil.Now().UnixNano()
 
 		var cbs, gced int
 		d.replicas.Range(func(key cbKey, cb *ReplicaCircuitBreaker) bool {
 			cbs++
 
-			if idleDuration := cb.lastRequestDuration(now); idleDuration >= cbGCThreshold {
+			if idleDuration := cb.lastRequestDuration(nowNanos); idleDuration >= cbGCThreshold {
 				// Check if we raced with a concurrent delete or replace. We don't
 				// expect to, since only this loop removes circuit breakers.
 				if cb2, ok := d.replicas.LoadAndDelete(key); ok {
@@ -433,21 +438,22 @@ type ReplicaCircuitBreaker struct {
 	// inflightReqs tracks the number of in-flight requests.
 	inflightReqs atomic.Int32
 
-	// lastRequest contains the last request timestamp, for garbage collection.
-	lastRequest crtime.AtomicMono
+	// lastRequest contains the last request timestamp (in nanoseconds), for
+	// garbage collection.
+	lastRequest atomic.Int64
 
-	// errorSince is the timestamp when the current streak of errors began. Set on
-	// an initial error, and cleared on successful responses.
-	errorSince crtime.AtomicMono
+	// errorSince is the timestamp (in nanoseconds) when the current streak of
+	// errors began. Set on an initial error, and cleared on successful responses.
+	errorSince atomic.Int64
 
-	// stallSince is the timestamp when the current potential stall began. It is
-	// set on every first in-flight request (inflightReqs==1) and moved forward on
-	// every response from the replica (even errors).
+	// stallSince is the timestamp (in nanoseconds) when the current potential
+	// stall began. It is set on every first in-flight request (inflightReqs==1)
+	// and moved forward on every response from the replica (even errors).
 	//
 	// It is not reset to zero when inflightReqs==0, to avoid synchronization with
 	// inflightReqs. To determine whether a replica is stalled, it is therefore
 	// also necessary to check inflightReqs>0.
-	stallSince crtime.AtomicMono
+	stallSince atomic.Int64
 
 	// closedC is closed when the circuit breaker has been GCed. This will shut
 	// down a running probe, and prevent new probes from launching.
@@ -518,9 +524,9 @@ type replicaCircuitBreakerToken struct {
 // cancelled by the circuit breaker, an appropriate context cancellation error
 // is returned.
 func (t replicaCircuitBreakerToken) Done(
-	br *kvpb.BatchResponse, sendErr error, now crtime.Mono,
+	br *kvpb.BatchResponse, sendErr error, nowNanos int64,
 ) error {
-	return t.r.done(t.ctx, t.cancelCtx, t.ba, t.withCommit, br, sendErr, now)
+	return t.r.done(t.ctx, t.cancelCtx, t.ba, t.withCommit, br, sendErr, nowNanos)
 }
 
 // id returns a string identifier for the replica.
@@ -529,32 +535,32 @@ func (r *ReplicaCircuitBreaker) id() redact.RedactableString {
 		r.rangeID, r.desc.ReplicaID, r.desc.NodeID, r.desc.StoreID)
 }
 
-// errorDuration returns the error duration relative to now.
-func (r *ReplicaCircuitBreaker) errorDuration(now crtime.Mono) time.Duration {
+// errorDuration returns the error duration relative to nowNanos.
+func (r *ReplicaCircuitBreaker) errorDuration(nowNanos int64) time.Duration {
 	errorSince := r.errorSince.Load()
-	if errorSince == 0 || errorSince > now {
+	if errorSince == 0 || errorSince > nowNanos {
 		return 0
 	}
-	return now.Sub(errorSince)
+	return time.Duration(nowNanos - errorSince)
 }
 
-// stallDuration returns the stall duration relative to now.
-func (r *ReplicaCircuitBreaker) stallDuration(now crtime.Mono) time.Duration {
+// stallDuration returns the stall duration relative to nowNanos.
+func (r *ReplicaCircuitBreaker) stallDuration(nowNanos int64) time.Duration {
 	stallSince := r.stallSince.Load()
 	// The replica is only stalled if there are in-flight requests.
-	if r.inflightReqs.Load() == 0 || stallSince > now {
+	if r.inflightReqs.Load() == 0 || stallSince > nowNanos {
 		return 0
 	}
-	return now.Sub(stallSince)
+	return time.Duration(nowNanos - stallSince)
 }
 
-// lastRequestDuration returns the last request duration relative to now.
-func (r *ReplicaCircuitBreaker) lastRequestDuration(now crtime.Mono) time.Duration {
+// lastRequestDuration returns the last request duration relative to nowNanos.
+func (r *ReplicaCircuitBreaker) lastRequestDuration(nowNanos int64) time.Duration {
 	lastRequest := r.lastRequest.Load()
-	if lastRequest == 0 || lastRequest > now {
+	if lastRequest == 0 || lastRequest > nowNanos {
 		return 0
 	}
-	return now.Sub(lastRequest)
+	return time.Duration(nowNanos - lastRequest)
 }
 
 // Err returns the circuit breaker error if it is tripped.
@@ -597,14 +603,14 @@ func (r *ReplicaCircuitBreaker) isClosed() bool {
 // for the send and a token which the caller must call Done() on with the result
 // of the request.
 func (r *ReplicaCircuitBreaker) Track(
-	ctx context.Context, ba *kvpb.BatchRequest, withCommit bool, now crtime.Mono,
+	ctx context.Context, ba *kvpb.BatchRequest, withCommit bool, nowNanos int64,
 ) (context.Context, replicaCircuitBreakerToken, error) {
 	if r == nil {
 		return ctx, replicaCircuitBreakerToken{}, nil // circuit breakers disabled
 	}
 
 	// Record the request timestamp.
-	r.lastRequest.Store(now)
+	r.lastRequest.Store(nowNanos)
 
 	// Check if the breaker is tripped. If it is, this will also launch a probe if
 	// one isn't already running.
@@ -626,7 +632,7 @@ func (r *ReplicaCircuitBreaker) Track(
 	// Record in-flight requests. If this is the only request, tentatively start
 	// tracking a stall.
 	if inflightReqs := r.inflightReqs.Add(1); inflightReqs == 1 {
-		r.stallSince.Store(now)
+		r.stallSince.Store(nowNanos)
 	} else if inflightReqs < 0 {
 		log.Fatalf(ctx, "inflightReqs %d < 0", inflightReqs) // overflow
 	}
@@ -638,26 +644,30 @@ func (r *ReplicaCircuitBreaker) Track(
 	// also allocates. Ideally, it should be possible to propagate cancellation of
 	// a single replica-scoped context onto all request contexts, but this
 	// requires messing with Go internals.
+	sendCtx := ctx
 	if CircuitBreakerCancellation.Get(&r.d.settings.SV) {
 		// If the request already has a timeout that is below the probe threshold
 		// and probe timeout, there is no point in us cancelling it (only relevant
 		// with replica stalls). This is the common case when using statement
 		// timeouts, and avoids the overhead.
-		if deadline, hasTimeout := ctx.Deadline(); !hasTimeout ||
-			crtime.MonoFromTime(deadline).Sub(now) >
-				CircuitBreakerProbeThreshold.Get(&r.d.settings.SV)+CircuitBreakerProbeTimeout.Get(&r.d.settings.SV) {
-			sendCtx, cancel := context.WithCancelCause(ctx)
+		deadline, hasTimeout := ctx.Deadline()
+		hasTimeout = hasTimeout && deadline.UnixNano() < nowNanos+
+			CircuitBreakerProbeThreshold.Get(&r.d.settings.SV).Nanoseconds()+
+			CircuitBreakerProbeTimeout.Get(&r.d.settings.SV).Nanoseconds()
+
+		if !hasTimeout {
+			var cancel context.CancelCauseFunc
+			sendCtx, cancel = context.WithCancelCause(ctx)
 			token.cancelCtx = sendCtx
 
 			reqKind := cbRequestCancellationPolicyFromBatch(ba, withCommit)
 			r.mu.Lock()
 			r.mu.cancelFns[reqKind][ba] = cancel
 			r.mu.Unlock()
-			return sendCtx, token, nil
 		}
 	}
 
-	return ctx, token, nil
+	return sendCtx, token, nil
 }
 
 // done records the result of a tracked request and untracks it. It is called
@@ -672,7 +682,7 @@ func (r *ReplicaCircuitBreaker) done(
 	withCommit bool,
 	br *kvpb.BatchResponse,
 	sendErr error,
-	now crtime.Mono,
+	nowNanos int64,
 ) error {
 	if r == nil {
 		return nil // circuit breakers disabled when we began tracking the request
@@ -728,7 +738,7 @@ func (r *ReplicaCircuitBreaker) done(
 	// NB: we don't reset this to 0 when inflightReqs==0 to avoid unnecessary
 	// synchronization.
 	if sendErr == nil {
-		r.stallSince.Store(now)
+		r.stallSince.Store(nowNanos)
 	}
 
 	// Record error responses, by setting err non-nil. Otherwise, the response is
@@ -768,10 +778,10 @@ func (r *ReplicaCircuitBreaker) done(
 	if err == nil {
 		// On success, reset the error tracking.
 		r.errorSince.Store(0)
-	} else if errorDuration := r.errorDuration(now); errorDuration == 0 {
+	} else if errorDuration := r.errorDuration(nowNanos); errorDuration == 0 {
 		// If this is the first error we've seen, record it. We'll launch a probe on
 		// a later error if necessary.
-		r.errorSince.Store(now)
+		r.errorSince.Store(nowNanos)
 	} else if errorDuration >= CircuitBreakerProbeThreshold.Get(&r.d.settings.SV) {
 		// The replica has been failing for the past probe threshold, probe it.
 		r.breaker.Probe()
@@ -819,7 +829,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 		// we're only going to contact this replica.
 		replicas := ReplicaSlice{{ReplicaDescriptor: r.desc}}
 		opts := SendOptions{
-			class:                  rpcbase.SystemClass,
+			class:                  rpc.SystemClass,
 			metrics:                &r.d.metrics,
 			dontConsiderConnHealth: true,
 		}
@@ -878,7 +888,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 			report(err)
 			if err == nil {
 				// On a successful probe, record the success and stop probing.
-				r.stallSince.Store(crtime.NowMono())
+				r.stallSince.Store(timeutil.Now().UnixNano())
 				r.errorSince.Store(0)
 				return
 			}
@@ -907,12 +917,13 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 				cancelRequests(cbCancelAfterGracePeriod)
 			}
 
-			for done := false; !done; { // select until probe interval timer fires
+			for !timer.Read { // select until probe interval timer fires
 				select {
 				case <-timer.C:
-					done = true
+					timer.Read = true
 				case <-writeGraceTimer.C:
 					cancelRequests(cbCancelAfterGracePeriod)
+					writeGraceTimer.Read = true
 					writeGraceTimer.Stop() // sets C = nil
 				case <-r.closedC:
 					// The circuit breaker has been GCed, exit. We could cancel the context
@@ -933,7 +944,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 			// NB: we check this after waiting out the probe interval above, to avoid
 			// frequently spawning new probe goroutines, instead waiting to see if any
 			// requests come in.
-			if r.lastRequestDuration(crtime.NowMono()) >= cbProbeIdleTimeout {
+			if r.lastRequestDuration(timeutil.Now().UnixNano()) >= cbProbeIdleTimeout {
 				// Keep probing if the write grace timer hasn't expired yet, since we
 				// need to cancel pending writes first.
 				if writeGraceTimer.C == nil {
@@ -1041,9 +1052,9 @@ func (r *ReplicaCircuitBreaker) OnTrip(b *circuit.Breaker, prev, cur error) {
 		// TODO(erikgrinaker): consider rate limiting these with log.Every, but for
 		// now we want to know which ones trip for debugging.
 		ctx := r.d.ambientCtx.AnnotateCtx(context.Background())
-		now := crtime.NowMono()
-		stallSince := r.stallDuration(now).Truncate(time.Millisecond)
-		errorSince := r.errorDuration(now).Truncate(time.Millisecond)
+		nowNanos := timeutil.Now().UnixNano()
+		stallSince := r.stallDuration(nowNanos).Truncate(time.Millisecond)
+		errorSince := r.errorDuration(nowNanos).Truncate(time.Millisecond)
 		log.Errorf(ctx, "%s circuit breaker tripped: %s (stalled for %s, erroring for %s)",
 			r.id(), cur, stallSince, errorSince)
 
@@ -1091,9 +1102,9 @@ func (r *ReplicaCircuitBreaker) OnProbeLaunched(b *circuit.Breaker) {
 	}
 
 	ctx := r.d.ambientCtx.AnnotateCtx(context.Background())
-	now := crtime.NowMono()
-	stallSince := r.stallDuration(now).Truncate(time.Millisecond)
-	errorSince := r.errorDuration(now).Truncate(time.Millisecond)
+	nowNanos := timeutil.Now().UnixNano()
+	stallSince := r.stallDuration(nowNanos).Truncate(time.Millisecond)
+	errorSince := r.errorDuration(nowNanos).Truncate(time.Millisecond)
 	tripped := r.breaker.Signal().IsTripped()
 	log.VEventf(ctx, 2, "launching circuit breaker probe for %s (tripped=%t stall=%s error=%s)",
 		r.id(), tripped, stallSince, errorSince)
@@ -1120,9 +1131,9 @@ func (r *ReplicaCircuitBreaker) OnProbeDone(b *circuit.Breaker) {
 	}
 
 	ctx := r.d.ambientCtx.AnnotateCtx(context.Background())
-	now := crtime.NowMono()
+	nowNanos := timeutil.Now().UnixNano()
 	tripped := r.breaker.Signal().IsTripped()
-	lastRequest := r.lastRequestDuration(now).Truncate(time.Millisecond)
+	lastRequest := r.lastRequestDuration(nowNanos).Truncate(time.Millisecond)
 	log.VEventf(ctx, 2, "stopping circuit breaker probe for %s (tripped=%t lastRequest=%s)",
 		r.id(), tripped, lastRequest)
 }

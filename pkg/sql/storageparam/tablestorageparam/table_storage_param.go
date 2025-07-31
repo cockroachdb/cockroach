@@ -12,9 +12,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -38,22 +36,18 @@ type Setter struct {
 	// UpdatedRowLevelTTL is kept separate from the RowLevelTTL in TableDesc
 	// in case changes need to be made in schema changer.
 	UpdatedRowLevelTTL *catpb.RowLevelTTL
-
-	// NewObject bool tracks if this is a newly created object.
-	NewObject bool
 }
 
 var _ storageparam.Setter = (*Setter)(nil)
 
 // NewSetter returns a new Setter.
-func NewSetter(tableDesc *tabledesc.Mutable, isNewObject bool) *Setter {
+func NewSetter(tableDesc *tabledesc.Mutable) *Setter {
 	var updatedRowLevelTTL *catpb.RowLevelTTL
 	if tableDesc.HasRowLevelTTL() {
 		updatedRowLevelTTL = protoutil.Clone(tableDesc.GetRowLevelTTL()).(*catpb.RowLevelTTL)
 	}
 	return &Setter{
 		TableDesc:          tableDesc,
-		NewObject:          isNewObject,
 		UpdatedRowLevelTTL: updatedRowLevelTTL,
 	}
 }
@@ -64,11 +58,6 @@ func (po *Setter) RunPostChecks() error {
 		return err
 	}
 	return nil
-}
-
-// IsNewTableObject implements the Setter interface.
-func (po *Setter) IsNewTableObject() bool {
-	return po.NewObject
 }
 
 func boolFromDatum(
@@ -522,10 +511,6 @@ var tableParams = map[string]tableParam{
 		onSet:   autoStatsEnabledSettingFunc,
 		onReset: autoStatsTableSettingResetFunc,
 	},
-	catpb.AutoFullStatsEnabledTableSettingName: {
-		onSet:   autoStatsEnabledSettingFunc,
-		onReset: autoStatsTableSettingResetFunc,
-	},
 	catpb.AutoPartialStatsMinStaleTableSettingName: {
 		onSet: autoStatsMinStaleRowsSettingFunc(func(intVal int64) error {
 			if intVal < 0 {
@@ -610,22 +595,7 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
-			schemaLockedDefault := evalCtx.SessionData().CreateTableWithSchemaLocked
-			// Before 25.3 tables were never created with schema_locked by default.
-			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_3) {
-				schemaLockedDefault = false
-			}
-			po.TableDesc.SchemaLocked = schemaLockedDefault
-			return nil
-		},
-	},
-	catpb.RBRUsingConstraintTableSettingName: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
-			// Handled by the schema changer.
-			return nil
-		},
-		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
-			po.TableDesc.RBRUsingConstraint = descpb.ConstraintID(0)
+			po.TableDesc.SchemaLocked = false
 			return nil
 		},
 	},
@@ -707,9 +677,6 @@ func autoStatsEnabledSettingFunc(
 	case catpb.AutoPartialStatsEnabledTableSettingName:
 		po.TableDesc.AutoStatsSettings.PartialEnabled = &boolVal
 		return nil
-	case catpb.AutoFullStatsEnabledTableSettingName:
-		po.TableDesc.AutoStatsSettings.FullEnabled = &boolVal
-		return nil
 	}
 	return errors.AssertionFailedf("unable to set table setting %s", key)
 }
@@ -788,9 +755,6 @@ func autoStatsTableSettingResetFunc(
 		return nil
 	case catpb.AutoPartialStatsEnabledTableSettingName:
 		autoStatsSettings.PartialEnabled = nil
-		return nil
-	case catpb.AutoFullStatsEnabledTableSettingName:
-		autoStatsSettings.FullEnabled = nil
 		return nil
 	case catpb.AutoPartialStatsMinStaleTableSettingName:
 		autoStatsSettings.PartialMinStaleRows = nil

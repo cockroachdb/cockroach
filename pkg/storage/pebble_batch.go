@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -85,7 +84,7 @@ func (wb *writeBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 // ClearMVCC implements the Writer interface.
 func (wb *writeBatch) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 	if key.Timestamp.IsEmpty() {
-		return errors.AssertionFailedf("ClearMVCC timestamp is empty")
+		panic("ClearMVCC timestamp is empty")
 	}
 	return wb.clear(key, opts)
 }
@@ -113,7 +112,7 @@ func (wb *writeBatch) ClearMVCCIteratorRange(
 ) error {
 	// TODO(jackson): Remove this method. See the TODO in its definition within
 	// the Writer interface.
-	return errors.AssertionFailedf("batch is write-only")
+	panic("batch is write-only")
 }
 
 func (wb *writeBatch) clear(key MVCCKey, opts ClearOptions) error {
@@ -188,7 +187,7 @@ func (wb *writeBatch) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 			rangeKey.StartKey, rangeKey.EndKey, rangeKey.EncodedTimestampSuffix)
 	}
 	return wb.ClearEngineRangeKey(
-		rangeKey.StartKey, rangeKey.EndKey, mvccencoding.EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
 
 // BufferedSize implements the Writer interface.
@@ -218,7 +217,7 @@ func (wb *writeBatch) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) er
 	// it's present, because we explicitly do NOT want to write range keys with
 	// the synthetic bit set.
 	return wb.PutEngineRangeKey(
-		rangeKey.StartKey, rangeKey.EndKey, mvccencoding.EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
+		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
 }
 
 // PutEngineRangeKey implements the Writer interface.
@@ -242,7 +241,7 @@ func (wb *writeBatch) PutInternalRangeKey(start, end []byte, key rangekey.Key) e
 	case pebble.InternalKeyKindRangeKeyDelete:
 		return wb.batch.RangeKeyDelete(start, end, nil /* writeOptions */)
 	default:
-		return errors.AssertionFailedf("unexpected range key kind")
+		panic("unexpected range key kind")
 	}
 }
 
@@ -272,15 +271,19 @@ func (wb *writeBatch) Merge(key MVCCKey, value []byte) error {
 // PutMVCC implements the Writer interface.
 func (wb *writeBatch) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
-		return errors.AssertionFailedf("PutMVCC timestamp is empty")
+		panic("PutMVCC timestamp is empty")
 	}
-	return wb.putMVCC(key, value)
+	encValue, err := EncodeMVCCValue(value)
+	if err != nil {
+		return err
+	}
+	return wb.put(key, encValue)
 }
 
 // PutRawMVCC implements the Writer interface.
 func (wb *writeBatch) PutRawMVCC(key MVCCKey, value []byte) error {
 	if key.Timestamp.IsEmpty() {
-		return errors.AssertionFailedf("PutRawMVCC timestamp is empty")
+		panic("PutRawMVCC timestamp is empty")
 	}
 	return wb.put(key, value)
 }
@@ -299,41 +302,13 @@ func (wb *writeBatch) PutEngineKey(key EngineKey, value []byte) error {
 	return wb.batch.Set(wb.buf, value, nil)
 }
 
-func (wb *writeBatch) putMVCC(key MVCCKey, value MVCCValue) error {
-	// For performance, this method uses the pebble Batch's deferred operation
-	// API to avoid an extra memcpy. We:
-	// - determine the length of the encoded MVCC key and MVCC value
-	// - reserve space in the pebble Batch using SetDeferred
-	// - encode the MVCC key and MVCC value directly into the Batch
-	// - call Finish on the deferred operation (which will index the key if
-	//   wb.batch is indexed)
-	valueLen, isExtended := mvccValueSize(value)
-	keyLen := mvccencoding.EncodedMVCCKeyLength(key.Key, key.Timestamp)
-	o := wb.batch.SetDeferred(keyLen, valueLen)
-	mvccencoding.EncodeMVCCKeyToBufSized(o.Key, key.Key, key.Timestamp, keyLen)
-	if !isExtended {
-		// Fast path; we don't need to use the extended encoding and can copy
-		// RawBytes in verbatim.
-		copy(o.Value, value.Value.RawBytes)
-	} else {
-		// Slow path; we need the MVCC value header.
-		err := encodeExtendedMVCCValueToSizedBuf(value, o.Value)
-		if err != nil {
-			return err
-		}
-	}
-	return o.Finish()
-}
-
 func (wb *writeBatch) put(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	keyLen := mvccencoding.EncodedMVCCKeyLength(key.Key, key.Timestamp)
-	o := wb.batch.SetDeferred(keyLen, len(value))
-	mvccencoding.EncodeMVCCKeyToBufSized(o.Key, key.Key, key.Timestamp, keyLen)
-	copy(o.Value, value)
-	return o.Finish()
+
+	wb.buf = EncodeMVCCKeyToBuf(wb.buf[:0], key)
+	return wb.batch.Set(wb.buf, value, nil)
 }
 
 // LogData implements the Writer interface.
@@ -352,7 +327,7 @@ func (wb *writeBatch) Commit(sync bool) error {
 		opts = pebble.Sync
 	}
 	if wb.batch == nil {
-		return errors.AssertionFailedf("called with nil batch")
+		panic("called with nil batch")
 	}
 	err := wb.batch.Commit(opts)
 	if err != nil {
@@ -373,7 +348,7 @@ func (wb *writeBatch) Commit(sync bool) error {
 // CommitNoSyncWait implements the WriteBatch interface.
 func (wb *writeBatch) CommitNoSyncWait() error {
 	if wb.batch == nil {
-		return errors.AssertionFailedf("called with nil batch")
+		panic("called with nil batch")
 	}
 	err := wb.db.ApplyNoSyncWait(wb.batch, pebble.Sync)
 	if err != nil {
@@ -392,7 +367,7 @@ func (wb *writeBatch) CommitNoSyncWait() error {
 // SyncWait implements the WriteBatch interface.
 func (wb *writeBatch) SyncWait() error {
 	if wb.batch == nil {
-		return errors.AssertionFailedf("called with nil batch")
+		panic("called with nil batch")
 	}
 	err := wb.batch.SyncWait()
 	if err != nil {
@@ -459,7 +434,7 @@ func (wb *writeBatch) Close() {
 
 func (wb *writeBatch) close() {
 	if wb.closed {
-		panic(errors.AssertionFailedf("closing an already-closed writeBatch"))
+		panic("closing an already-closed writeBatch")
 	}
 	wb.closed = true
 	_ = wb.batch.Close()
@@ -633,7 +608,7 @@ func (p *pebbleBatch) NewBatchOnlyMVCCIterator(
 	ctx context.Context, opts IterOptions,
 ) (MVCCIterator, error) {
 	if !p.batch.Indexed() {
-		return nil, errors.AssertionFailedf("unindexed batch")
+		panic("unindexed batch")
 	}
 	var err error
 	iter := pebbleIterPool.Get().(*pebbleIterator)
@@ -695,7 +670,7 @@ func (p *pebbleBatch) ScanInternal(
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
 	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
-	return errors.AssertionFailedf("ScanInternal only supported on Engine and Snapshot.")
+	panic("ScanInternal only supported on Engine and Snapshot.")
 }
 
 // ConsistentIterators implements the Batch interface.
@@ -708,7 +683,7 @@ func (p *pebbleBatch) PinEngineStateForIterators(readCategory fs.ReadCategory) e
 	var err error
 	if p.iter == nil {
 		var iter *pebble.Iterator
-		o := &pebble.IterOptions{Category: readCategory.PebbleCategory()}
+		o := &pebble.IterOptions{CategoryAndQoS: fs.GetCategoryAndQoS(readCategory)}
 		if p.batch.Indexed() {
 			iter, err = p.batch.NewIter(o)
 		} else {

@@ -19,72 +19,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-type Parser int
-
-const (
-	SQL Parser = iota
-	PLpgSQL
-)
-
-func parse(t *testing.T, input string, p Parser) (statements.ParsedStmts, error) {
+func parse(t *testing.T, input string, plpgsql bool) (statements.ParsedStmts, error) {
 	t.Helper()
-	switch p {
-	case SQL:
-		return parser.Parse(input)
-	case PLpgSQL:
+	if plpgsql {
 		return plpgsqlparser.Parse(input)
-	default:
-		t.Fatalf("unexpected parser type: %v", p)
 	}
-	return nil, fmt.Errorf("unreachable code")
+	return parser.Parse(input)
 }
 
-func parseOne(t *testing.T, input string, p Parser) (tree.NodeFormatter, error) {
+func parseOne(t *testing.T, input string, plpgsql bool) (tree.NodeFormatter, error) {
 	t.Helper()
-	switch p {
-	case SQL:
-		stmt, err := parser.ParseOne(input)
-		if err != nil {
-			return nil, err
-		}
-		return stmt.AST, err
-	case PLpgSQL:
+	if plpgsql {
 		stmt, err := plpgsqlparser.Parse(input)
 		if err != nil {
 			return nil, err
 		}
 		return stmt.AST, err
-	default:
-		t.Fatalf("unexpected parser type: %v", p)
 	}
-	return nil, fmt.Errorf("unreachable code")
+	stmt, err := parser.ParseOne(input)
+	if err != nil {
+		return nil, err
+	}
+	return stmt.AST, err
 }
 
 // VerifyParseFormat is used in the SQL and PL/pgSQL datadriven parser tests to
 // check that a successfully parsed expression round trips and correctly handles
 // formatting flags.
-//
-// -reParseWithoutLiterals indicates whether the statement should be re-parsed
-// after constants are removed. This can be needed to handle cases where quotes
-// are formatted differently depending on the string content.
-func VerifyParseFormat(
-	t *testing.T, input, pos string, p Parser, reParseWithoutLiterals bool,
-) string {
+func VerifyParseFormat(t *testing.T, input, pos string, plpgsql bool) string {
 	// Check parse.
-	stmts, err := parse(t, input, p)
+	stmts, err := parse(t, input, plpgsql)
 	if err != nil {
 		t.Fatalf("%s\nunexpected parse error: %v", pos, err)
 	}
 
 	// Check pretty-print roundtrip.
-	switch p {
-	case SQL:
-		VerifyStatementPrettyRoundtrip(t, input)
-	case PLpgSQL:
+	if plpgsql {
 		plStmt := stmts.(statements.PLpgStatement).AST
-		verifyStatementPrettyRoundTrip(t, input, plStmt, PLpgSQL)
-	default:
-		t.Fatalf("unexpected parser type: %v", p)
+		verifyStatementPrettyRoundTrip(t, input, plStmt, true /* plpgsql */)
+	} else {
+		VerifyStatementPrettyRoundtrip(t, input)
 	}
 
 	ref := stmts.StringWithFlags(tree.FmtSimple)
@@ -100,22 +74,20 @@ func VerifyParseFormat(
 	constantsHidden := stmts.StringWithFlags(tree.FmtHideConstants)
 	fmt.Fprintln(&buf, constantsHidden, "-- literals removed")
 
-	if reParseWithoutLiterals {
-		// As of this writing, the SQL statement stats proceed as follows:
-		// first the literals are removed from statement to form a stat key,
-		// then the stat key is re-parsed, to undergo the anonymization stage.
-		// We also want to check the re-parsing is fine.
-		reparsedStmts, err := parse(t, constantsHidden, p)
-		if err != nil {
-			t.Fatalf("%s\nunexpected error when reparsing without literals: %+v", pos, err)
-		} else {
-			reparsedStmtsS := reparsedStmts.String()
-			if reparsedStmtsS != constantsHidden {
-				t.Fatalf(
-					"%s\nmismatched AST when reparsing without literals:\noriginal: %s\nexpected: %s\nactual:   %s",
-					pos, input, constantsHidden, reparsedStmtsS,
-				)
-			}
+	// As of this writing, the SQL statement stats proceed as follows:
+	// first the literals are removed from statement to form a stat key,
+	// then the stat key is re-parsed, to undergo the anonymization stage.
+	// We also want to check the re-parsing is fine.
+	reparsedStmts, err := parse(t, constantsHidden, plpgsql)
+	if err != nil {
+		t.Fatalf("%s\nunexpected error when reparsing without literals: %+v", pos, err)
+	} else {
+		reparsedStmtsS := reparsedStmts.String()
+		if reparsedStmtsS != constantsHidden {
+			t.Fatalf(
+				"%s\nmismatched AST when reparsing without literals:\noriginal: %s\nexpected: %s\nactual:   %s",
+				pos, input, constantsHidden, reparsedStmtsS,
+			)
 		}
 	}
 

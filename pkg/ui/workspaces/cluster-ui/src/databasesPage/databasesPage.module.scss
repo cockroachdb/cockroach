@@ -1,0 +1,96 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module";
+
+.databases-table {
+  &__col {
+    &-name {
+      font-family: $font-family--semi-bold;
+    }
+
+    &-size,
+    &-table-count,
+    &-range-count {
+      width: 10em;
+      text-align: right;
+      padding-right: $spacing-x-large;
+    }
+    &-idx-rec {
+      width: 20em;
+    }
+  }
+
+  &__no-result {
+    @include text--body-strong;
+  }
+
+  &__cell-error {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    svg {
+      fill: $colors--warning;
+    }
+  }
+}
+
+.sorted-table {
+  width: 100%;
+}
+
+.icon {
+  &__container {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  &--md {
+    height: 24px;
+    width: 24px;
+    margin-right: 12px;
+  }
+
+  &--s {
+    height: 16px;
+    width: 16px;
+    margin-right: 10px;
+  }
+
+  &--xxs {
+    height: 8px;
+    width: 8px;
+  }
+
+  &--title {
+    fill: $colors--title;
+  }
+
+  &--primary {
+    fill: $colors--primary-text;
+  }
+
+    &--warning {
+      fill: $colors--functional-orange-3;
+    }
+}
+
+.index-recommendations-icon {
+  &__exist {
+    height: 10px;
+    width: 20px;
+    fill: $colors--functional-orange-3;
+  }
+
+  &__none {
+    height: 10px;
+    width: 20px;
+    fill: $colors--neutral-11;
+  }
+}
+
+.page-config {
+  margin-bottom: $spacing-smaller;
+}

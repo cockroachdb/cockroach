@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import { util } from "@cockroachlabs/cluster-ui";
-import { format } from "d3-format";
+import * as d3 from "d3";
 import React from "react";
 import { useSelector } from "react-redux";
 import { Link } from "react-router-dom";
@@ -77,8 +77,8 @@ export const selectNodesSummaryEmpty = createSelector(
   nodes => !nodes,
 );
 
-const formatOnePlace = format(".1f");
-const formatPercentage = format(".2%");
+const formatOnePlace = d3.format(".1f");
+const formatPercentage = d3.format(".2%");
 function formatNanosAsMillis(n: number) {
   return formatOnePlace(util.NanoToMilli(n)) + " ms";
 }

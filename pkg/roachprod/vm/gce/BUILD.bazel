@@ -6,7 +6,6 @@ go_library(
         "dns.go",
         "fast_dns.go",
         "gcloud.go",
-        "infra_provider.go",
         "utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce",
@@ -23,7 +22,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_marusama_semaphore//:semaphore",
         "@com_github_masterminds_semver_v3//:semver",
         "@com_github_spf13_pflag//:pflag",
         "@org_golang_google_api//cloudbilling/v1beta",
@@ -36,21 +34,13 @@ go_library(
 go_test(
     name = "gce_test",
     size = "small",
-    srcs = [
-        "gcloud_test.go",
-        "utils_test.go",
-    ],
-    data = glob(["testdata/**"]),
+    srcs = ["gcloud_test.go"],
     embed = [":gce"],
     deps = [
-        "//pkg/roachprod/config",
         "//pkg/roachprod/vm",
-        "//pkg/testutils/datapathutils",
-        "//pkg/testutils/echotest",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
-        "@com_github_stretchr_testify//require",
     ],
 )

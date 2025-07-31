@@ -1,3 +1,0 @@
-check_external_connection_stmt ::=
-	'CHECK' 'EXTERNAL' 'CONNECTION' connection_uri 'WITH' check_external_connection_options_list
-	| 'CHECK' 'EXTERNAL' 'CONNECTION' connection_uri 

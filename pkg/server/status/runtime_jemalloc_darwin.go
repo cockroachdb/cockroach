@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build !stdmalloc && darwin
+// +build !stdmalloc,darwin
 
 package status
 

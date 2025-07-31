@@ -270,31 +270,34 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, tc.WaitForFullReplication())
-
 	// Wait for the new tables' ranges to be created and replicated.
-	var resp serverpb.DataDistributionResponse
-	if err := srvtestutils.GetAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
-		t.Fatal(err)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		var resp serverpb.DataDistributionResponse
+		if err := srvtestutils.GetAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
+			t.Fatal(err)
+		}
 
-	delete(resp.DatabaseInfo, "system") // delete results for system database.
-	if !reflect.DeepEqual(resp.DatabaseInfo, expectedDatabaseInfo) {
-		t.Fatalf("expected %v; got %v", expectedDatabaseInfo, resp.DatabaseInfo)
-	}
+		delete(resp.DatabaseInfo, "system") // delete results for system database.
+		if !reflect.DeepEqual(resp.DatabaseInfo, expectedDatabaseInfo) {
+			return fmt.Errorf("expected %v; got %v", expectedDatabaseInfo, resp.DatabaseInfo)
+		}
 
-	// Don't test anything about the zone configs for now; just verify that something is there.
-	require.NotEmpty(t, resp.ZoneConfigs)
+		// Don't test anything about the zone configs for now; just verify that something is there.
+		if len(resp.ZoneConfigs) == 0 {
+			return fmt.Errorf("no zone configs returned")
+		}
+
+		return nil
+	})
 
 	// Verify that the request still works after a table has been dropped,
 	// and that dropped_at is set on the dropped table.
 	sqlDB.Exec(t, `DROP TABLE roachblog.comments`)
 
-	//var resp serverpb.DataDistributionResponse
+	var resp serverpb.DataDistributionResponse
 	if err := srvtestutils.GetAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
 		t.Fatal(err)
 	}
-
 	if resp.DatabaseInfo["roachblog"].TableInfo["public.comments"].DroppedAt == nil {
 		t.Fatal("expected roachblog.comments to have dropped_at set but it's nil")
 	}
@@ -336,6 +339,69 @@ func BenchmarkAdminAPIDataDistribution(b *testing.B) {
 	b.StopTimer()
 }
 
+func TestHotRangesResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer serverutils.TestingSetDefaultTenantSelectionOverride(
+		// bug: HotRanges not available with secondary tenants yet.
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109499),
+	)()
+
+	srv := rangetestutils.StartServer(t)
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.ApplicationLayer()
+
+	var hotRangesResp serverpb.HotRangesResponse
+	if err := srvtestutils.GetStatusJSONProto(ts, "hotranges", &hotRangesResp); err != nil {
+		t.Fatal(err)
+	}
+	if len(hotRangesResp.HotRangesByNodeID) == 0 {
+		t.Fatalf("didn't get hot range responses from any nodes")
+	}
+
+	for nodeID, nodeResp := range hotRangesResp.HotRangesByNodeID {
+		if len(nodeResp.Stores) == 0 {
+			t.Errorf("didn't get any stores in hot range response from n%d: %v",
+				nodeID, nodeResp.ErrorMessage)
+		}
+		for _, storeResp := range nodeResp.Stores {
+			// Only the first store will actually have any ranges on it.
+			if storeResp.StoreID != roachpb.StoreID(1) {
+				continue
+			}
+			lastQPS := math.MaxFloat64
+			if len(storeResp.HotRanges) == 0 {
+				t.Errorf("didn't get any hot ranges in response from n%d,s%d: %v",
+					nodeID, storeResp.StoreID, nodeResp.ErrorMessage)
+			}
+			for _, r := range storeResp.HotRanges {
+				if r.Desc.RangeID == 0 || (len(r.Desc.StartKey) == 0 && len(r.Desc.EndKey) == 0) {
+					t.Errorf("unexpected empty/unpopulated range descriptor: %+v", r.Desc)
+				}
+				if r.QueriesPerSecond > 0 {
+					if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 && r.ReadBytesPerSecond == 0 && r.WriteBytesPerSecond == 0 {
+						t.Errorf("qps %.2f > 0, expected either reads=%.2f, writes=%.2f, readBytes=%.2f or writeBytes=%.2f to be non-zero",
+							r.QueriesPerSecond, r.ReadsPerSecond, r.WritesPerSecond, r.ReadBytesPerSecond, r.WriteBytesPerSecond)
+					}
+					// If the architecture doesn't support sampling CPU, it
+					// will also be zero.
+					if grunning.Supported() && r.CPUTimePerSecond == 0 {
+						t.Errorf("qps %.2f > 0, expected cpu=%.2f to be non-zero",
+							r.QueriesPerSecond, r.CPUTimePerSecond)
+					}
+				}
+				if r.QueriesPerSecond > lastQPS {
+					t.Errorf("unexpected increase in qps between ranges; prev=%.2f, current=%.2f, desc=%v",
+						lastQPS, r.QueriesPerSecond, r.Desc)
+				}
+				lastQPS = r.QueriesPerSecond
+			}
+		}
+
+	}
+}
+
 func TestHotRanges2Response(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -351,31 +417,26 @@ func TestHotRanges2Response(t *testing.T) {
 	if len(hotRangesResp.Ranges) == 0 {
 		t.Fatalf("didn't get hot range responses from any nodes")
 	}
-	cpuSupport := grunning.Supported
-	lastCPU := math.MaxFloat64
+	lastQPS := math.MaxFloat64
 	for _, r := range hotRangesResp.Ranges {
 		if r.RangeID == 0 {
 			t.Errorf("unexpected empty range id: %d", r.RangeID)
 		}
-
 		if r.QPS > 0 {
 			if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 && r.ReadBytesPerSecond == 0 && r.WriteBytesPerSecond == 0 {
 				t.Errorf("qps %.2f > 0, expected either reads=%.2f, writes=%.2f, readBytes=%.2f or writeBytes=%.2f to be non-zero",
 					r.QPS, r.ReadsPerSecond, r.WritesPerSecond, r.ReadBytesPerSecond, r.WriteBytesPerSecond)
 			}
-
-			if cpuSupport && r.CPUTimePerSecond == 0 {
+			// If the architecture doesn't support sampling CPU, it
+			// will also be zero.
+			if grunning.Supported() && r.CPUTimePerSecond == 0 {
 				t.Errorf("qps %.2f > 0, expected cpu=%.2f to be non-zero", r.QPS, r.CPUTimePerSecond)
 			}
 		}
-
-		// Ranges in response should be sorted by cpu.
-		if cpuSupport {
-			if r.CPUTimePerSecond > lastCPU {
-				t.Errorf("unexpected increase in cpu between ranges; prev=%.2f, current=%.2f", lastCPU, r.CPUTimePerSecond)
-			}
-			lastCPU = r.CPUTimePerSecond
+		if r.QPS > lastQPS {
+			t.Errorf("unexpected increase in qps between ranges; prev=%.2f, current=%.2f", lastQPS, r.QPS)
 		}
+		lastQPS = r.QPS
 	}
 }
 

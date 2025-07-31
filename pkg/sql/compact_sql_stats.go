@@ -54,7 +54,7 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 			if err != nil {
 				return err
 			}
-			r.sj.SetScheduleStatus(string(jobs.StateRunning))
+			r.sj.SetScheduleStatus(string(jobs.StatusRunning))
 
 			return schedules.Update(ctx, r.sj)
 		}
@@ -76,7 +76,7 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 		ctx,
 		p.ExecCfg().InternalDB,
 		p.ExecCfg().JobsKnobs(),
-		jobs.StateSucceeded)
+		jobs.StatusSucceeded)
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
@@ -85,7 +85,7 @@ func (r *sqlStatsCompactionResumer) OnFailOrCancel(
 ) error {
 	p := execCtx.(JobExecContext)
 	execCfg := p.ExecCfg()
-	return r.maybeNotifyJobTerminated(ctx, execCfg.InternalDB, execCfg.JobsKnobs(), jobs.StateFailed)
+	return r.maybeNotifyJobTerminated(ctx, execCfg.InternalDB, execCfg.JobsKnobs(), jobs.StatusFailed)
 }
 
 // CollectProfile implements the jobs.Resumer interface.
@@ -96,7 +96,7 @@ func (r *sqlStatsCompactionResumer) CollectProfile(_ context.Context, _ interfac
 // maybeNotifyJobTerminated will notify the job termination
 // (with termination status).
 func (r *sqlStatsCompactionResumer) maybeNotifyJobTerminated(
-	ctx context.Context, db isql.DB, jobKnobs *jobs.TestingKnobs, status jobs.State,
+	ctx context.Context, db isql.DB, jobKnobs *jobs.TestingKnobs, status jobs.Status,
 ) error {
 	log.Infof(ctx, "sql stats compaction job terminated with status = %s", status)
 	if r.sj == nil {
@@ -204,18 +204,18 @@ func (e *scheduledSQLStatsCompactionExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus jobs.State,
+	jobStatus jobs.Status,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
 ) error {
-	if jobStatus == jobs.StateFailed {
+	if jobStatus == jobs.StatusFailed {
 		jobs.DefaultHandleFailedRun(sj, "sql stats compaction %d failed", jobID)
 		e.metrics.NumFailed.Inc(1)
 		return nil
 	}
 
-	if jobStatus == jobs.StateSucceeded {
+	if jobStatus == jobs.StatusSucceeded {
 		e.metrics.NumSucceeded.Inc(1)
 	}
 

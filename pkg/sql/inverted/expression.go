@@ -167,7 +167,7 @@ func formatSpan(span Span, redactable bool) string {
 	}
 	output := fmt.Sprintf("[%s, %s%c", start, end, spanEndOpenOrClosed)
 	if redactable {
-		output = string(redact.Sprintf("%s", encoding.Unsafe(output)))
+		output = string(redact.Sprintf("%s", redact.Unsafe(output)))
 	}
 	return output
 }

@@ -62,21 +62,21 @@ func TestFormatCrdbV2(t *testing.T) {
 
 	sysCtx := context.Background()
 	sysIDPayload := testIDPayload{tenantID: "1"}
-	sysCtx = serverident.ContextWithServerIdentification(sysCtx, sysIDPayload)
+	sysCtx = context.WithValue(sysCtx, serverident.ServerIdentificationContextKey{}, sysIDPayload)
 	sysCtx = logtags.AddTag(sysCtx, "noval", nil)
 	sysCtx = logtags.AddTag(sysCtx, "s", "1")
 	sysCtx = logtags.AddTag(sysCtx, "long", "2")
 
 	tenantIDPayload := testIDPayload{tenantID: "2"}
 	tenantCtx := context.Background()
-	tenantCtx = serverident.ContextWithServerIdentification(tenantCtx, tenantIDPayload)
+	tenantCtx = context.WithValue(tenantCtx, serverident.ServerIdentificationContextKey{}, tenantIDPayload)
 	tenantCtx = logtags.AddTag(tenantCtx, "noval", nil)
 	tenantCtx = logtags.AddTag(tenantCtx, "p", "3")
 	tenantCtx = logtags.AddTag(tenantCtx, "longKey", "456")
 
 	namedTenantIDPayload := tenantIDPayload
 	namedTenantIDPayload.tenantName = "abc"
-	namedTenantCtx := serverident.ContextWithServerIdentification(tenantCtx, namedTenantIDPayload)
+	namedTenantCtx := context.WithValue(tenantCtx, serverident.ServerIdentificationContextKey{}, namedTenantIDPayload)
 
 	defer func(prev int) { crdbV2LongLineLen.set(prev) }(int(crdbV2LongLineLen))
 	crdbV2LongLineLen.set(1024)

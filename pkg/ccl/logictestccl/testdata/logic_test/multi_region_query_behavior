@@ -290,7 +290,7 @@ vectorized: true
 │           │ lookup condition: (((crdb_region IN ('ca-central-1', 'us-east-1')) AND (column3 = c_w_id)) AND (column2 = c_d_id)) AND (column1 = c_id)
 │           │
 │           └── • lookup join (anti)
-│               │ estimated row count: 0
+│               │ estimated row count: 1
 │               │ table: customer@primary
 │               │ equality cols are key
 │               │ lookup condition: (((crdb_region = 'ap-southeast-2') AND (column3 = c_w_id)) AND (column2 = c_d_id)) AND (column1 = c_id)
@@ -310,7 +310,7 @@ vectorized: true
             │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (column5 = d_w_id)) AND (column4 = d_id)
             │
             └── • lookup join (anti)
-                │ estimated row count: 0
+                │ estimated row count: 1
                 │ table: district@primary
                 │ equality cols are key
                 │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (column5 = d_w_id)) AND (column4 = d_id)
@@ -374,7 +374,7 @@ vectorized: true
               table: orders@orders_pkey
               spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk21L40AQx9_fp1jmjQ-kNJtEWwNCRHtepVav7XEHl1JidqJ7pru53Q1WpK_us933Ojax9gErKBfoPs30N_OfYZ5A_84hhM6P695Jt092z7rD0fBrb48MO73O6YhIxVBNOHNIoeRUPp94iuRkWB8mD9zcydJMKoeFdZ8wrlNZCrPuWHuRz4Ory5qtycVVt1_TNfk27PbPye4i1h75_qUz6LxkQY7JzlGAwU07aDXamZc1giQ9aLT9jDYOA8oO0WdZy2vtgANCMuwnU9QQ_oQAxg4USqaotVT26aly6LIZhK4DXBSlsc9jB1KpEMInMNzkCCGMkpscB5gwVE0XHGBoEp5X2FpBVG-T4h4fwYFTmZdTocO12vEUlyUEB4ZFYl2aMcTxrO3GUJ-OgjieoV1u2ufWkjUv_v6J41lGWRzPKBPH9tLaiaHpwnjugCzNMnVtkluEkK5o7Z5B6M6dj8ml_19u9CGpJBGMUCLNHaqtsr0N2XSr7KVajYonOSlFlT2yNcHj-Sv16cuGLJreemV6fMoNoVtT8zdS897TkQvJxXND_PWw9dRE9bZoSE_K-7IgvyQXRIqQRP5ql5ZjvBhQcGCAgqEKSUQdEvkOiTz7248OtgoKNgT57xE0QF1IoXGj2K9HcjciNajtCrJbrDupZalSvFYyrXzr61UFqh4YalNbvfrSFZWJ2ggKk-nLhKyS6EdJdJPkvUny10juKsnbJPlvkoLtJNdWLMvlgx3GENznr_HKsvjA_iG51bZtwzv5UGFHj4UtepbkGh24TO7xDA2qKRdcG55CaFSJ8_mnfwEAAP__728TVQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk2tP2zwUx98_n8I6b7goVXODlkhIQdCHFZXC2k6bNFdViE_AI7Uz2xFFqK_22fa9JieUXkTRQIvU-Hb69_n9T84T6J85RND5dt076fbJ7ll3OBp-7u2RYafXOR0RqRiqCWcOKZScyucZT5GcDOvJ5IGbO1maSRWwON0njOtUlsKsB9ZR5P_B1WWtrcnFVbdfq2vyZdjtn5PdxV175OunzqDzkgU5JjtHIYY37bDVaGd-1giT9KDRDjKvcRh67BADlrX81g44ICTDfjJFDdF3CGHsQKFkilpLZbeeqoAum0HkOsBFURq7PXYglQohegLDTY4QwSi5yXGACUPVdMEBhibheSVbE8T1MCnu8REcOJV5ORU6WvOOp7i0EBwYFokNaVKIKTQpUDo7CimdoX3dtM8pnbWz5sXvX5TOMo9ROvOYOLaL1g6FpksSwYhHpLlDBeO5A7I0SwRtkluEyFth7p5B5M6dj2F7_x7bArofQt-K62_geltxl5QaFU9yUooqa2RroOP5K770ZUMWTX_dkR6fckO8ram5G6n576nEheTiuRDB-rV118T1sChET8r7siA_JBdEiojEwWp1lm28aFBwYICCoYpI7DkkDhwS-_a3Hx9sBQo2gIL3AA1QF1Jo3DD776xreLYqyG6xrqSWpUrxWsm0iq2XV5VQtcFQm_rUrxddUR159gaFyfTlU1lV8j6q5G4q-W8qBWtK7qqSv6kUvKkUbldyrWNZLh9sE0bgPj-NV16LB-wfklttyza8kw-V7OixsKZnSa7RgcvkHs_QoJpywbXhKURGlTif__cnAAD__8jUE1E=
 
 skipif config multiregion-9node-3region-3azs-no-los
 query T nodeidx=3
@@ -412,12 +412,13 @@ vectorized: true
                   table: orders@orders_pkey
                   spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslNtu4zYQhu_7FMTcpF3Qax1tr4AFuNi4rQOvvbUDtEAVGIo4StjYpEpSjReBr_psfa-CknOwELlwUAEST8N_5iNn9ADmzzUkMP7t6_TTZEa-P58sL5e_TH8gy_F0_PmSKM1RrwSnpNRqo8z7utlPiBzJp2XTWd0Le6squ6oNHlffES5MrippDw0bK_LjYv6lcWHIxXwy2zsh88feeyELRVhaeV6Ie8tm7tefx4vxU3jkIzn7EGF0PYqGvVERFL0oy-PeKCz83iDy-QBDXgyD4RlQkIrjLNuggeR3iOCKQqlVjsYo7aYeaoMJ30LiURCyrKybvqKQK42QPIAVdo2QwGV2vcYFZhx13wMKHG0m1rVsEylrmlV5h9-Awme1rjbSJAeHKnKkxBEBhWWZueV-Cmm6HXkpNL0PUZpu0X2uRz-5laJ_8c_fabotfJ6mW5_Lj24wPEuh78HVjoKq7HPYxmY3CIn_gnNyDom3o29D9f9fVPYmTJJJTnyi7C3qTuSghex3Ij-TGtQiW5NK1pEjP4C92r1yNjPVU2U_ODyVqdgIS_zO0MJWaMEptzGRf6G2yC-UkKj74aHrpnJY06zcea8E3wJ92jbelpqw-KmsWPjyxp4LfH9V88omhPmUBZSFlEWdTFGLKTyFybHsEyw6xrNPsKlSd1VJ_lBCEiUTwtym-Yyw4X9iPf6RugBjygaUDTsx4xZmdApmkyzxIeECJUddx0BYRAkL3PuOxZ0xDFoxxKfEsEBTKmmwldqve_Jannq-qwHkN9jUjVGVzvGrVnlt2wzntVA9wdHYZjVoBhNZL_nOg8Zs8_Qveqnkv1XJbysFR5XCAyXvpVLQVgqPKkXdSmFbKTqqFHcrRW2l-KjSoFvJc7dYrNX9SnBIwNs_vVc-jw-4DdmNcam0vFX3tezlt9IlQpGtDVL4kt3hOVrUGyGFsSKHxOoKd7vv_g0AAP__zsG90Q==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslN1u2zYUx-_3FMS5yVbQtT5jV0ABFo23OXDtzg6wAVNgKOJRwsUmNZJaVAS-2rPtvQZKzoeFyluCCrAokod__n_kOb4H8-cGEpj89nn2YTon359NVxerX2Y_kNVkNvl4QZTmqNeCU1JqtVXmbdPsB0SO5MOq_VjfCXujKrtuAh5m3xAuTK4qaQ8D2yjy43Lxqd3CkPPFdL7fhCwevt4KWSjC0srzQtxHtmO__jxZTh7tkffk5F2E0dU4Gg3GRVAMoiyPB-Ow8Aenkc9PMeTFKBidAAWpOM6zLRpIfocILimUWuVojNJu6L4JmPIaEo-CkGVl3fAlhVxphOQerLAbhAQusqsNLjHjqIceUOBoM7FpZFunrG3W5S1-AQof1abaSpMcHKrIkRJHBBRWZeamhymwFIYppGn9LkrTGt3ravxTmtbjYnj-z99pWhc-T9Pa5_K964xOUhh6JJOc-ETZG9RwuaOgKvtk39jsGiHxn_FOzyDxdvR1yP63RXZw3quwe1GDDqrfi_pEaFCLbEMq2ThGfgB5ufvKmczVQJXD4PA0ZmIrLPF7rXkda8FLbmEq_0JtkZ8rIVEPw8Ot28phbbN257wWvAb6uGxSl5qw-LGsWPj8pp4KfH9Fi8omhPmUBZSFlEW9TGGHKXwJk2PZJ1Z0jGefWDOlbquS_KGEJEomhLlFizlho__EevhH6gOMKTulbNSLGXUwo5dgtskSHxIuUXLUjQfCIkpY4H5vWNzrIe54iF_iYYmmVNJgJ7X_X6IOfFcDyK-xrRujKp3jZ63yJrbtLhqhZoCjse1s0Hamspny3Q4as-1jYT5X8l-r5HWVgqNK4YGS91wp6CqFR5WifqWwqxQdVYr7laKuUnxU6bRfyXO3WGzU3VpwSMDbP4OvvB4ecAuya-NSaXWj7hrZiy-lS4Qi2xik8Cm7xTO0qLdCCmNFDonVFe523_0bAAD__51rvcs=
 
 # Regression test for #74890. Code should not panic due to distribution already
 # provided by input.
-query empty nodeidx=3
-CREATE TABLE multi_region_test_db.public.t74890 AS SELECT generate_series(1, 5) AS g
+statement ok nodeidx=3
+USE multi_region_test_db; CREATE TABLE t74890 AS
+SELECT generate_series(1, 5) AS g
 
 query I nodeidx=3
 USE multi_region_test_db; SELECT g FROM t74890 ORDER BY g

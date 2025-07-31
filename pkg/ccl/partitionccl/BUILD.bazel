@@ -7,7 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/utilccl",
-        "//pkg/config/zonepb",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",

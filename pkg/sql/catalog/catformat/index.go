@@ -17,10 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -100,24 +98,14 @@ func indexForDisplay(
 	if displayMode == IndexDisplayShowCreate {
 		f.WriteString("CREATE ")
 	}
-	displayPrimaryKeyClauses := isPrimary && displayMode == IndexDisplayDefOnly
-	if index.Unique && !displayPrimaryKeyClauses {
+	if index.Unique {
 		f.WriteString("UNIQUE ")
 	}
-	if !f.HasFlags(tree.FmtPGCatalog) {
-		switch index.Type {
-		case idxtype.INVERTED:
-			f.WriteString("INVERTED ")
-		case idxtype.VECTOR:
-			f.WriteString("VECTOR ")
-		}
+	if !f.HasFlags(tree.FmtPGCatalog) && index.Type == descpb.IndexDescriptor_INVERTED {
+		f.WriteString("INVERTED ")
 	}
-	if displayPrimaryKeyClauses {
-		f.WriteString("PRIMARY KEY")
-	} else {
-		f.WriteString("INDEX ")
-		f.FormatNameP(&index.Name)
-	}
+	f.WriteString("INDEX ")
+	f.FormatNameP(&index.Name)
 	if *tableName != descpb.AnonymousTable {
 		f.WriteString(" ON ")
 		f.FormatNode(tableName)
@@ -125,12 +113,9 @@ func indexForDisplay(
 
 	if f.HasFlags(tree.FmtPGCatalog) {
 		f.WriteString(" USING")
-		switch index.Type {
-		case idxtype.INVERTED:
+		if index.Type == descpb.IndexDescriptor_INVERTED {
 			f.WriteString(" gin")
-		case idxtype.VECTOR:
-			f.WriteString(" cspann")
-		default:
+		} else {
 			f.WriteString(" btree")
 		}
 	}
@@ -254,35 +239,17 @@ func FormatIndexElements(
 		} else {
 			f.FormatNameP(&index.KeyColumnNames[i])
 		}
-		switch index.Type {
-		case idxtype.INVERTED:
-			if col.GetID() == index.InvertedColumnID() && len(index.InvertedColumnKinds) > 0 {
-				switch index.InvertedColumnKinds[0] {
-				case catpb.InvertedIndexColumnKind_TRIGRAM:
-					f.WriteString(" gin_trgm_ops")
-				}
-			}
-		case idxtype.VECTOR:
-			if col.GetID() == index.VectorColumnID() {
-				switch index.VecConfig.DistanceMetric {
-				case vecpb.L2SquaredDistance:
-					f.WriteString(" vector_l2_ops")
-				case vecpb.CosineDistance:
-					f.WriteString(" vector_cosine_ops")
-				case vecpb.InnerProductDistance:
-					f.WriteString(" vector_ip_ops")
-				}
+		if index.Type == descpb.IndexDescriptor_INVERTED &&
+			col.GetID() == index.InvertedColumnID() && len(index.InvertedColumnKinds) > 0 {
+			switch index.InvertedColumnKinds[0] {
+			case catpb.InvertedIndexColumnKind_TRIGRAM:
+				f.WriteString(" gin_trgm_ops")
 			}
 		}
-		// Vector indexes do not support ASC/DESC modifiers.
-		if !index.Type.HasScannablePrefix() {
-			continue
-		}
-		// The last column of an inverted index cannot have a DESC direction
-		// because it does not have a linear ordering. Since the default
-		// direction is ASC, we omit the direction entirely for inverted index
-		// columns.
-		if i < n-1 || index.Type.HasLinearOrdering() {
+		// The last column of an inverted index cannot have a DESC direction.
+		// Since the default direction is ASC, we omit the direction entirely
+		// for inverted index columns.
+		if i < n-1 || index.Type != descpb.IndexDescriptor_INVERTED {
 			f.WriteByte(' ')
 			f.WriteString(index.KeyColumnDirections[i].String())
 		}
@@ -296,18 +263,6 @@ func formatStorageConfigs(
 	table catalog.TableDescriptor, index *descpb.IndexDescriptor, f *tree.FmtCtx,
 ) error {
 	numCustomSettings := 0
-	writeCustomSetting := func(key, val string) {
-		if numCustomSettings > 0 {
-			f.WriteString(", ")
-		} else {
-			f.WriteString(" WITH (")
-		}
-		numCustomSettings++
-		f.WriteString(key)
-		f.WriteString("=")
-		f.WriteString(val)
-	}
-
 	if index.GeoConfig.S2Geometry != nil || index.GeoConfig.S2Geography != nil {
 		var s2Config *geopb.S2Config
 
@@ -330,7 +285,15 @@ func formatStorageConfigs(
 				{`s2_max_cells`, s2Config.MaxCells, defaultS2Config.MaxCells},
 			} {
 				if check.val != check.defaultVal {
-					writeCustomSetting(check.key, strconv.Itoa(int(check.val)))
+					if numCustomSettings > 0 {
+						f.WriteString(", ")
+					} else {
+						f.WriteString(" WITH (")
+					}
+					numCustomSettings++
+					f.WriteString(check.key)
+					f.WriteString("=")
+					f.WriteString(strconv.Itoa(int(check.val)))
 				}
 			}
 		}
@@ -357,26 +320,29 @@ func formatStorageConfigs(
 				{`geometry_max_y`, cfg.MaxY, defaultConfig.S2Geometry.MaxY},
 			} {
 				if check.val != check.defaultVal {
-					writeCustomSetting(check.key, strconv.FormatFloat(check.val, 'f', -1, 64))
+					if numCustomSettings > 0 {
+						f.WriteString(", ")
+					} else {
+						f.WriteString(" WITH (")
+					}
+					numCustomSettings++
+					f.WriteString(check.key)
+					f.WriteString("=")
+					f.WriteString(strconv.FormatFloat(check.val, 'f', -1, 64))
 				}
 			}
 		}
 	}
 
-	if index.Type == idxtype.VECTOR {
-		if index.VecConfig.BuildBeamSize != 0 {
-			writeCustomSetting(`build_beam_size`, strconv.Itoa(int(index.VecConfig.BuildBeamSize)))
-		}
-		if index.VecConfig.MinPartitionSize != 0 {
-			writeCustomSetting(`min_partition_size`, strconv.Itoa(int(index.VecConfig.MinPartitionSize)))
-		}
-		if index.VecConfig.MaxPartitionSize != 0 {
-			writeCustomSetting(`max_partition_size`, strconv.Itoa(int(index.VecConfig.MaxPartitionSize)))
-		}
-	}
-
 	if index.IsSharded() {
-		writeCustomSetting(`bucket_count`, strconv.FormatInt(int64(index.Sharded.ShardBuckets), 10))
+		if numCustomSettings > 0 {
+			f.WriteString(", ")
+		} else {
+			f.WriteString(" WITH (")
+		}
+		f.WriteString(`bucket_count=`)
+		f.WriteString(strconv.FormatInt(int64(index.Sharded.ShardBuckets), 10))
+		numCustomSettings++
 	}
 
 	if numCustomSettings > 0 {

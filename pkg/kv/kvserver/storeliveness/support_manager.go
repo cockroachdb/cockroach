@@ -9,8 +9,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 )
@@ -45,16 +44,13 @@ type SupportManager struct {
 	settings              *clustersettings.Settings
 	stopper               *stop.Stopper
 	clock                 *hlc.Clock
-	heartbeatTicker       *timeutil.BroadcastTicker // optional
 	sender                MessageSender
 	receiveQueue          receiveQueue
 	storesToAdd           storesToAdd
 	minWithdrawalTS       hlc.Timestamp
-	withdrawalCallback    func(map[roachpb.StoreID]struct{})
 	supporterStateHandler *supporterStateHandler
 	requesterStateHandler *requesterStateHandler
 	metrics               *SupportManagerMetrics
-	knobs                 *SupportManagerKnobs
 }
 
 var _ Fabric = (*SupportManager)(nil)
@@ -69,13 +65,8 @@ func NewSupportManager(
 	settings *clustersettings.Settings,
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
-	heartbeatTicker *timeutil.BroadcastTicker,
 	sender MessageSender,
-	knobs *SupportManagerKnobs,
 ) *SupportManager {
-	if knobs != nil && knobs.TestEngine != nil && knobs.TestEngine.storeID == storeID {
-		engine = knobs.TestEngine
-	}
 	return &SupportManager{
 		storeID:               storeID,
 		engine:                engine,
@@ -83,9 +74,7 @@ func NewSupportManager(
 		settings:              settings,
 		stopper:               stopper,
 		clock:                 clock,
-		heartbeatTicker:       heartbeatTicker,
 		sender:                sender,
-		knobs:                 knobs,
 		receiveQueue:          newReceiveQueue(),
 		storesToAdd:           newStoresToAdd(),
 		requesterStateHandler: newRequesterStateHandler(),
@@ -156,16 +145,15 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 	return ss.Epoch, ss.Expiration
 }
 
-// RegisterSupportWithdrawalCallback implements the Fabric interface and
-// registers a callback to be invoked on each support withdrawal.
-func (sm *SupportManager) RegisterSupportWithdrawalCallback(cb func(map[roachpb.StoreID]struct{})) {
-	sm.withdrawalCallback = cb
-}
-
 // SupportFromEnabled implements the Fabric interface and determines if Store
-// Liveness sends heartbeats. It returns true if the cluster setting is on.
+// Liveness sends heartbeats. It returns true if both the cluster setting and
+// version gate are on.
 func (sm *SupportManager) SupportFromEnabled(ctx context.Context) bool {
-	return Enabled.Get(&sm.settings.SV)
+	clusterSettingEnabled := Enabled.Get(&sm.settings.SV)
+	versionGateEnabled := sm.settings.Version.IsActive(
+		ctx, clusterversion.V24_3_StoreLivenessEnabled,
+	)
+	return clusterSettingEnabled && versionGateEnabled
 }
 
 // Start starts the main processing goroutine in startLoop as an async task.
@@ -178,17 +166,9 @@ func (sm *SupportManager) Start(ctx context.Context) error {
 		return err
 	}
 
-	ctx, hdl, err := sm.stopper.GetHandle(ctx, stop.TaskOpts{
-		TaskName: "storeliveness.SupportManager: loop",
-	})
-	if err != nil {
-		return err
-	}
-	go func(ctx context.Context) {
-		defer hdl.Activate(ctx).Release(ctx)
-		sm.startLoop(ctx)
-	}(ctx)
-	return nil
+	return sm.stopper.RunAsyncTask(
+		ctx, "storeliveness.SupportManager: loop", sm.startLoop,
+	)
 }
 
 // onRestart initializes the SupportManager with state persisted on disk.
@@ -233,12 +213,7 @@ func (sm *SupportManager) onRestart(ctx context.Context) error {
 // stores. Doing so in a single goroutine serializes these actions and
 // simplifies the concurrency model.
 func (sm *SupportManager) startLoop(ctx context.Context) {
-	if sm.heartbeatTicker == nil {
-		// Tests may not supply a node-wide broadcast ticker. Create one on the fly.
-		sm.heartbeatTicker = timeutil.NewBroadcastTicker(sm.options.HeartbeatInterval)
-		defer sm.heartbeatTicker.Stop()
-	}
-	heartbeatTicker := sm.heartbeatTicker.NewTicker()
+	heartbeatTicker := time.NewTicker(sm.options.HeartbeatInterval)
 	defer heartbeatTicker.Stop()
 
 	supportExpiryTicker := time.NewTicker(sm.options.SupportExpiryInterval)
@@ -303,15 +278,9 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	if !sm.SupportFromEnabled(ctx) {
 		return
 	}
-	if sm.knobs != nil && sm.knobs.DisableHeartbeats != nil && sm.knobs.DisableHeartbeats.Load() == sm.storeID {
-		return
-	}
-	if sm.knobs != nil && sm.knobs.DisableAllHeartbeats != nil && sm.knobs.DisableAllHeartbeats.Load() {
-		return
-	}
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
 	defer sm.requesterStateHandler.finishUpdate(rsfu)
-	livenessInterval := sm.options.SupportDuration
+	livenessInterval := sm.options.LivenessInterval
 	heartbeats := rsfu.getHeartbeatsToSend(sm.storeID, sm.clock.Now(), livenessInterval)
 	if err := rsfu.write(ctx, sm.engine); err != nil {
 		log.Warningf(ctx, "failed to write requester meta: %v", err)
@@ -343,8 +312,7 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 	}
 	ssfu := sm.supporterStateHandler.checkOutUpdate()
 	defer sm.supporterStateHandler.finishUpdate(ssfu)
-	supportWithdrawnForStoreIDs := ssfu.withdrawSupport(ctx, now)
-	numWithdrawn := len(supportWithdrawnForStoreIDs)
+	numWithdrawn := ssfu.withdrawSupport(ctx, now)
 	if numWithdrawn == 0 {
 		// No support to withdraw.
 		return
@@ -365,16 +333,6 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 	sm.supporterStateHandler.checkInUpdate(ssfu)
 	log.Infof(ctx, "withdrew support from %d stores", numWithdrawn)
 	sm.metrics.SupportWithdrawSuccesses.Inc(int64(numWithdrawn))
-	if sm.withdrawalCallback != nil {
-		beforeProcess := timeutil.Now()
-		sm.withdrawalCallback(supportWithdrawnForStoreIDs)
-		afterProcess := timeutil.Now()
-		processDur := afterProcess.Sub(beforeProcess)
-		if processDur > minCallbackDurationToRecord {
-			sm.metrics.CallbacksProcessingDuration.RecordValue(processDur.Nanoseconds())
-		}
-		log.Infof(ctx, "invoked callback for %d stores", numWithdrawn)
-	}
 }
 
 // handleMessages iterates over the given messages and delegates their handling

@@ -7,7 +7,7 @@ package state
 
 import (
 	"context"
-	"math/rand/v2"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -58,12 +58,6 @@ func (lsc loadSplitConfig) StatThreshold(_ split.SplitObjective) float64 {
 	return lsc.settings.SplitQPSThreshold
 }
 
-// SampleResetDuration returns the duration that any sampling structure should
-// retain data for before resetting.
-func (lsc loadSplitConfig) SampleResetDuration() time.Duration {
-	return 0 /* disabled */
-}
-
 // SplitDecider implements the LoadSplitter interface.
 type SplitDecider struct {
 	deciders    map[RangeID]*split.Decider
@@ -77,7 +71,7 @@ func NewSplitDecider(settings *config.SimulationSettings) *SplitDecider {
 		deciders:    make(map[RangeID]*split.Decider),
 		suggestions: []RangeID{},
 		splitConfig: loadSplitConfig{
-			randSource: rand.New(rand.NewPCG(uint64(settings.Seed), 0)),
+			randSource: rand.New(rand.NewSource(settings.Seed)),
 			settings:   settings,
 		},
 	}
@@ -86,9 +80,8 @@ func NewSplitDecider(settings *config.SimulationSettings) *SplitDecider {
 func (s *SplitDecider) newDecider() *split.Decider {
 	decider := &split.Decider{}
 	split.Init(decider, s.splitConfig, &split.LoadSplitterMetrics{
-		PopularKeyCount:     metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount:     metric.NewCounter(metric.Metadata{}),
-		ClearDirectionCount: metric.NewCounter(metric.Metadata{}),
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
 	}, split.SplitQPS)
 	return decider
 }

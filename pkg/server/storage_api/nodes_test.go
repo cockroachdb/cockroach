@@ -12,7 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
@@ -83,79 +83,63 @@ func TestStatusJson(t *testing.T) {
 func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110023),
+	})
+	defer srv.Stopper().Stop(context.Background())
 
-	type testCase struct {
-		name                     string
-		defaultTestTenantOptions base.DefaultTestTenantOptions
-		expectedErr              string
+	if srv.TenantController().StartedDefaultTestTenant() {
+		// Enable access to the nodes endpoint for the test tenant.
+		_, err := srv.SystemLayer().SQLConn(t).Exec(
+			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+
+		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanViewNodeInfo: "true",
+		}, "")
 	}
 
-	testCases := []testCase{
-		{
-			name:                     "test_node_status_reponse_shared_tenant",
-			defaultTestTenantOptions: base.SharedTestTenantAlwaysEnabled,
-		},
-		{
-			name:                     "test_node_status_reponse_external_tenant",
-			defaultTestTenantOptions: base.ExternalTestTenantAlwaysEnabled,
-			expectedErr:              "status: 500", // `can_view_node_info` capability is missing
-		},
+	s := srv.ApplicationLayer()
+
+	node := srv.StorageLayer().Node().(*server.Node)
+
+	wrapper := serverpb.NodesResponse{}
+
+	// Check that the node statuses cannot be accessed via a non-admin account.
+	if err := srvtestutils.GetStatusJSONProtoWithAdminOption(s, "nodes", &wrapper, false /* isAdmin */); !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-				// Test only shared tenants. More fixes are needed to make
-				// it work for external tenants.
-				DefaultTestTenant: tc.defaultTestTenantOptions,
-			})
-			defer srv.Stopper().Stop(context.Background())
+	// Now fetch all the node statuses as admin.
+	if err := srvtestutils.GetStatusJSONProto(s, "nodes", &wrapper); err != nil {
+		t.Fatal(err)
+	}
+	nodeStatuses := wrapper.Nodes
 
-			s := srv.ApplicationLayer()
-			node := srv.StorageLayer().Node().(*server.Node)
+	if len(nodeStatuses) != 1 {
+		t.Errorf("too many node statuses returned - expected:1 actual:%d", len(nodeStatuses))
+	}
+	if !node.Descriptor.Equal(&nodeStatuses[0].Desc) {
+		t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", node.Descriptor, nodeStatuses[0].Desc)
+	}
 
-			wrapper := serverpb.NodesResponse{}
+	// Now fetch each one individually. Loop through the nodeStatuses to use the
+	// ids only.
+	for _, oldNodeStatus := range nodeStatuses {
+		nodeStatus := statuspb.NodeStatus{}
+		nodeURL := "nodes/" + oldNodeStatus.Desc.NodeID.String()
+		// Check that the node statuses cannot be accessed via a non-admin account.
+		if err := srvtestutils.GetStatusJSONProtoWithAdminOption(s, nodeURL, &nodeStatus, false /* isAdmin */); !testutils.IsError(err, "status: 403") {
+			t.Fatalf("expected privilege error, got %v", err)
+		}
 
-			// Check that the node statuses cannot be accessed via a non-admin account.
-			if err := srvtestutils.GetStatusJSONProtoWithAdminOption(s, "nodes", &wrapper, false /* isAdmin */); !testutils.IsError(err, "status: 403") {
-				t.Fatalf("expected privilege error, got %v", err)
-			}
-
-			// Now fetch all the node statuses as admin.
-			if err := srvtestutils.GetStatusJSONProto(s, "nodes", &wrapper); !testutils.IsError(err, tc.expectedErr) {
-				t.Fatal(err)
-			}
-
-			if tc.expectedErr == "" {
-				nodeStatuses := wrapper.Nodes
-
-				if len(nodeStatuses) != 1 {
-					t.Errorf("too many node statuses returned - expected:1 actual:%d", len(nodeStatuses))
-				}
-				if !node.Descriptor.Equal(&nodeStatuses[0].Desc) {
-					t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", node.Descriptor, nodeStatuses[0].Desc)
-				}
-
-				// Now fetch each one individually. Loop through the nodeStatuses to use the
-				// ids only.
-				for _, oldNodeStatus := range nodeStatuses {
-					nodeStatus := statuspb.NodeStatus{}
-					nodeURL := "nodes/" + oldNodeStatus.Desc.NodeID.String()
-					// Check that the node statuses cannot be accessed via a non-admin account.
-					if err := srvtestutils.GetStatusJSONProtoWithAdminOption(s, nodeURL, &nodeStatus, false /* isAdmin */); !testutils.IsError(err, "status: 403") {
-						t.Fatalf("expected privilege error, got %v", err)
-					}
-
-					// Now access that node's status.
-					if err := srvtestutils.GetStatusJSONProto(s, nodeURL, &nodeStatus); err != nil {
-						t.Fatal(err)
-					}
-					if !node.Descriptor.Equal(&nodeStatus.Desc) {
-						t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", node.Descriptor, nodeStatus.Desc)
-					}
-				}
-			}
-		})
+		// Now access that node's status.
+		if err := srvtestutils.GetStatusJSONProto(s, nodeURL, &nodeStatus); err != nil {
+			t.Fatal(err)
+		}
+		if !node.Descriptor.Equal(&nodeStatus.Desc) {
+			t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", node.Descriptor, nodeStatus.Desc)
+		}
 	}
 }
 
@@ -221,11 +205,15 @@ func TestNodesGRPCResponse(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 
-	if srv.DeploymentMode().IsExternal() {
+	if srv.TenantController().StartedDefaultTestTenant() {
 		// Enable access to the nodes endpoint for the test tenant.
-		require.NoError(t, srv.GrantTenantCapabilities(
-			ctx, serverutils.TestTenantID(),
-			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewNodeInfo: "true"}))
+		_, err := srv.SystemLayer().SQLConn(t).Exec(
+			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+
+		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanViewNodeInfo: "true",
+		}, "")
 	}
 
 	var request serverpb.NodesRequest

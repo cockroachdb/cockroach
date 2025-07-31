@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
 )
@@ -94,47 +93,6 @@ func (v *ValuesCoreSpec) summary() (string, []string) {
 	}
 	detail := fmt.Sprintf("%s (%d chunks)", humanize.IBytes(bytes), len(v.RawBytes))
 	return "Values", []string{detail}
-}
-
-// summary implements the diagramCellType interface.
-func (v *VectorSearchSpec) summary() (string, []string) {
-	details := []string{
-		fmt.Sprintf("%s@%s", v.FetchSpec.TableName, v.FetchSpec.IndexName),
-		fmt.Sprintf("Nearest Neighbor Target Count: %d", v.TargetNeighborCount),
-		fmt.Sprintf("Query Vector: %s", vector.T(v.QueryVector).String()),
-	}
-	if len(v.PrefixKeys) > 0 {
-		// Only show the first prefix key.
-		var spanStr strings.Builder
-		vals, _ := encoding.PrettyPrintValuesWithTypes(nil /* valDirs */, v.PrefixKeys[0])
-		spanStr.WriteString(fmt.Sprintf("Prefix Vals: %s", strings.Join(vals, "/")))
-		if len(v.PrefixKeys) > 1 {
-			spanStr.WriteString(fmt.Sprintf(" and %d more", len(v.PrefixKeys)-1))
-		}
-		details = append(details, spanStr.String())
-	}
-	return "VectorSearch", details
-}
-
-// summary implements the diagramCellType interface.
-func (v *VectorMutationSearchSpec) summary() (string, []string) {
-	var mutationType string
-	if v.IsIndexPut {
-		mutationType = "Index Put"
-	} else {
-		mutationType = "Index Delete"
-	}
-	details := []string{
-		fmt.Sprintf("%s@%s", v.FetchSpec.TableName, v.FetchSpec.IndexName),
-		mutationType,
-		fmt.Sprintf("Query Vector Col: @%d", v.QueryVectorColumnOrdinal+1),
-	}
-	if len(v.PrefixKeyColumnOrdinals) > 0 {
-		details = append(details,
-			fmt.Sprintf("Prefix Columns: %s", colListStr(v.PrefixKeyColumnOrdinals)),
-		)
-	}
-	return "VectorMutationSearch", details
 }
 
 // summary implements the diagramCellType interface.
@@ -626,31 +584,6 @@ func (s *LogicalReplicationWriterSpec) summary() (string, []string) {
 	return "LogicalReplicationWriter", annotations
 }
 
-func (s *LogicalReplicationOfflineScanSpec) summary() (string, []string) {
-	const spanLimit = 9
-
-	srcTableIDs := []string{}
-	for _, pair := range s.Rekey {
-		srcTableIDs = append(srcTableIDs, fmt.Sprintf("%d", pair.OldID))
-	}
-
-	annotations := []string{
-		fmt.Sprintf("Src Table IDs: %s", strings.Join(srcTableIDs, ",")),
-		fmt.Sprintf("Source node %s", s.PartitionSpec.SrcInstanceID),
-		"Spans:",
-	}
-
-	for i, span := range s.PartitionSpec.Spans {
-		if i == spanLimit {
-			annotations = append(annotations, fmt.Sprintf("and %d more spans", len(s.PartitionSpec.Spans)-spanLimit))
-			break
-		}
-		annotations = append(annotations, fmt.Sprintf("%v", span))
-	}
-
-	return "LogicalReplicationOfflineScanWriter", annotations
-}
-
 // summary implements the diagramCellType interface.
 func (s *StreamIngestionFrontierSpec) summary() (string, []string) {
 	annotations := []string{
@@ -740,13 +673,6 @@ func (s *TTLSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
-func (s *InspectSpec) summary() (string, []string) {
-	return "INSPECT", []string{
-		fmt.Sprintf("JobID: %d", s.JobID),
-	}
-}
-
-// summary implements the diagramCellType interface.
 func (s *HashGroupJoinerSpec) summary() (string, []string) {
 	_, details := s.HashJoinerSpec.summary()
 	if len(s.JoinOutputColumns) > 0 {
@@ -782,29 +708,6 @@ func (i *InsertSpec) summary() (string, []string) {
 func (i *IngestStoppedSpec) summary() (string, []string) {
 	detail := fmt.Sprintf("job %d ingest stopped spans", i.JobID)
 	return "IngestStoppedSpec", []string{detail}
-}
-
-// summary implements the diagramCellType interface.
-func (m *CompactBackupsSpec) summary() (string, []string) {
-	var spanStr strings.Builder
-	if len(m.Spans) > 0 {
-		spanStr.WriteString(fmt.Sprintf("Spans [%d]: ", len(m.AssignedSpans)))
-		const limit = 3
-		for i := 0; i < len(m.AssignedSpans) && i < limit; i++ {
-			if i > 0 {
-				spanStr.WriteString(", ")
-			}
-			spanStr.WriteString(m.AssignedSpans[i].String())
-		}
-		if len(m.Spans) > limit {
-			spanStr.WriteString("...")
-		}
-	}
-
-	details := []string{
-		spanStr.String(),
-	}
-	return "CompactBackupsSpec", details
 }
 
 type diagramCell struct {

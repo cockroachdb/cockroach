@@ -13,7 +13,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"text/tabwriter"
 	"time"
@@ -23,19 +25,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/maps"
 )
 
 type (
+	// backgroundEvent is the struct sent by background steps when they
+	// finish (successfully or not).
+	backgroundEvent struct {
+		Name            string
+		Err             error
+		TriggeredByTest bool
+	}
+
+	backgroundRunner struct {
+		group     ctxgroup.Group
+		ctx       context.Context
+		events    chan backgroundEvent
+		logger    *logger.Logger
+		stopFuncs []StopFunc
+	}
+
+	// crdbMonitor is a thin wrapper around the roachtest monitor API
+	// (cluster.NewMonitor) that produces error events through a channel
+	// whenever an unexpected node death happens. It also allows us to
+	// provide an API for test authors to inform the framework that a
+	// node death is expected if the test performs its own restarts or
+	// chaos events.
+	crdbMonitor struct {
+		once      sync.Once
+		crdbNodes option.NodeListOption
+		monitor   cluster.Monitor
+		errCh     chan error
+	}
+
 	serviceRuntime struct {
 		descriptor      *ServiceDescriptor
 		binaryVersions  *atomic.Value
@@ -57,8 +86,8 @@ type (
 		tenantService *serviceRuntime
 		logger        *logger.Logger
 
-		background task.Manager
-		monitor    test.Monitor
+		background *backgroundRunner
+		monitor    *crdbMonitor
 
 		// ranUserHooks keeps track of whether the runner has run any
 		// user-provided hooks so far.
@@ -97,7 +126,6 @@ func newTestRunner(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	plan *TestPlan,
-	rt test.Test,
 	tag string,
 	l *logger.Logger,
 	c cluster.Cluster,
@@ -128,8 +156,8 @@ func newTestRunner(
 		systemService: systemService,
 		tenantService: tenantService,
 		cluster:       c,
-		background:    task.NewManager(ctx, l),
-		monitor:       rt.Monitor(),
+		background:    newBackgroundRunner(ctx, l),
+		monitor:       newCRDBMonitor(ctx, c, maps.Keys(allCRDBNodes)),
 		ranUserHooks:  &ranUserHooks,
 	}
 }
@@ -180,6 +208,9 @@ func (tr *testRunner) run() (retErr error) {
 			}
 
 			return fmt.Errorf("background step `%s` returned error: %w", event.Name, event.Err)
+
+		case err := <-tr.monitor.Err():
+			return tr.testFailure(tr.ctx, err, tr.logger, nil)
 		}
 	}
 }
@@ -267,7 +298,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 	if err := panicAsError(l, func() error {
 		return ss.impl.Run(ctx, l, ss.rng, tr.newHelper(ctx, l, ss.context))
 	}); err != nil {
-		if task.IsContextCanceled(ctx) {
+		if isContextCanceled(ctx) {
 			l.Printf("step terminated (context canceled)")
 			// Avoid creating a `stepError` (which involves querying binary
 			// and cluster versions) when the context was canceled as the
@@ -285,9 +316,9 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 }
 
 func (tr *testRunner) startBackgroundStep(ss *singleStep, l *logger.Logger, stopChan shouldStop) {
-	stop := tr.background.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
+	stop := tr.background.Start(ss.impl.Description(), func(ctx context.Context) error {
 		return tr.runSingleStep(ctx, ss, l)
-	}, task.Logger(l), task.Name(ss.impl.Description()))
+	})
 
 	// We start a goroutine to listen for user-requests to stop the
 	// background function.
@@ -370,7 +401,12 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 	// termination is marked `TriggeredByTest` (not necessary for
 	// correctness, just for clarity).
 	tr.logger.Printf("stopping background functions")
-	tr.background.Terminate(tr.logger)
+	tr.background.Terminate()
+
+	tr.logger.Printf("stopping node monitor")
+	if err := tr.monitor.Stop(); err != nil {
+		tr.logger.Printf("monitor returned error: %v", err)
+	}
 
 	// If the test failed, we wait for any currently running steps to
 	// return before passing control back to the roachtest
@@ -379,7 +415,7 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 	// artifacts, which would be confusing.
 	if testFailed {
 		tr.logger.Printf("waiting for all steps to finish after context cancelation")
-		task.WaitForChannel(stepsChan, "test steps", tr.logger)
+		waitForChannel(stepsChan, "test steps", tr.logger)
 	}
 
 	tr.logger.Printf("closing database connections")
@@ -508,13 +544,6 @@ func (tr *testRunner) loggerFor(step *singleStep) (*logger.Logger, error) {
 	return prefixedLoggerWithFilename(tr.logger, prefix, filepath.Join(logPrefix, name))
 }
 
-// getAvailableNodes returns the nodes that are available for the given service descriptor.
-func (tr *testRunner) getAvailableNodes(
-	serviceDescriptor *ServiceDescriptor,
-) option.NodeListOption {
-	return serviceDescriptor.Nodes.Intersect(tr.monitor.AvailableNodes(serviceDescriptor.Name))
-}
-
 // refreshBinaryVersions updates the `binaryVersions` field for every
 // service with the binary version running on each node of the
 // cluster. We use the `atomic` package here as this function may be
@@ -525,7 +554,7 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 	defer cancel()
 
 	group := ctxgroup.WithContext(connectionCtx)
-	for j, node := range tr.getAvailableNodes(service.descriptor) {
+	for j, node := range service.descriptor.Nodes {
 		group.GoCtx(func(ctx context.Context) error {
 			bv, err := clusterupgrade.BinaryVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
@@ -534,6 +563,7 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 					node, service.descriptor.Name, err,
 				)
 			}
+
 			newBinaryVersions[j] = bv
 			return nil
 		})
@@ -556,7 +586,7 @@ func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *servi
 	defer cancel()
 
 	group := ctxgroup.WithContext(connectionCtx)
-	for j, node := range tr.getAvailableNodes(service.descriptor) {
+	for j, node := range service.descriptor.Nodes {
 		group.GoCtx(func(ctx context.Context) error {
 			cv, err := clusterupgrade.ClusterVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
@@ -599,6 +629,22 @@ func (tr *testRunner) refreshServiceData(ctx context.Context, service *serviceRu
 		return err
 	}
 
+	// We only want to start the monitor once we know every relevant
+	// cockroach binary is running. This is due to a limitation on the
+	// roachprod monitor: it is only able to monitor cockroach processes
+	// that are running at the time the monitor is created.
+	//
+	// For system-only and separate-process deployments, we can
+	// initialize the monitor right away, since this function is only
+	// called once the storage cluster is running. For separate-process
+	// deployments, we start the monitor if this function is called with
+	// the tenant service. The system is always started first, so when
+	// this function is called with the tenant service, we know that
+	// every relevant cockroach binary is running at this point.
+	if tr.plan.deploymentMode != SeparateProcessDeployment || !isSystem {
+		tr.monitor.Init()
+	}
+
 	return nil
 }
 
@@ -615,7 +661,7 @@ func (tr *testRunner) maybeInitConnections(service *serviceRuntime) error {
 	}
 
 	cc := map[int]*gosql.DB{}
-	for _, node := range tr.getAvailableNodes(service.descriptor) {
+	for _, node := range service.descriptor.Nodes {
 		conn, err := tr.cluster.ConnE(
 			tr.ctx, tr.logger, node, option.VirtualClusterName(service.descriptor.Name),
 		)
@@ -641,7 +687,6 @@ func (tr *testRunner) newHelper(
 		connFunc := func(node int) *gosql.DB {
 			return tr.conn(node, sc.Descriptor.Name)
 		}
-		nodes := sc.Descriptor.Nodes
 
 		return &Service{
 			ServiceContext: sc,
@@ -650,8 +695,6 @@ func (tr *testRunner) newHelper(
 			connFunc:        connFunc,
 			stepLogger:      l,
 			clusterVersions: cv,
-			monitor:         tr.monitor,
-			nodes:           nodes,
 		}
 	}
 
@@ -690,15 +733,14 @@ func (tr *testRunner) conn(node int, virtualClusterName string) *gosql.DB {
 
 func (tr *testRunner) closeConnections() {
 	for _, service := range tr.allServices() {
-		func() {
-			service.connCache.mu.Lock()
-			defer service.connCache.mu.Unlock()
-			for _, db := range service.connCache.cache {
-				if db != nil {
-					_ = db.Close()
-				}
+		service.connCache.mu.Lock()
+		defer service.connCache.mu.Unlock()
+
+		for _, db := range service.connCache.cache {
+			if db != nil {
+				_ = db.Close()
 			}
-		}()
+		}
 	}
 }
 
@@ -719,6 +761,117 @@ func (tr *testRunner) addGrafanaAnnotation(
 	}
 
 	return tr.cluster.AddGrafanaAnnotation(ctx, l, req)
+}
+
+func newCRDBMonitor(
+	ctx context.Context, c cluster.Cluster, crdbNodes option.NodeListOption,
+) *crdbMonitor {
+	return &crdbMonitor{
+		crdbNodes: crdbNodes,
+		monitor:   c.NewMonitor(ctx, crdbNodes),
+		errCh:     make(chan error),
+	}
+}
+
+// Init must be called once the cluster is initialized and the
+// cockroach process is running on the nodes. Init is idempotent.
+func (cm *crdbMonitor) Init() {
+	cm.once.Do(func() {
+		go func() {
+			if err := cm.monitor.WaitForNodeDeath(); err != nil {
+				cm.errCh <- err
+			}
+		}()
+	})
+}
+
+// Err returns a channel that will receive errors whenever an
+// unexpected node death is observed.
+func (cm *crdbMonitor) Err() chan error {
+	return cm.errCh
+}
+
+func (cm *crdbMonitor) ExpectDeaths(n int) {
+	cm.monitor.ExpectDeaths(int32(n))
+}
+
+func (cm *crdbMonitor) Stop() error {
+	if cm.monitor == nil { // test-only
+		return nil
+	}
+
+	return cm.monitor.WaitE()
+}
+
+func newBackgroundRunner(ctx context.Context, l *logger.Logger) *backgroundRunner {
+	g := ctxgroup.WithContext(ctx)
+	return &backgroundRunner{
+		group:  g,
+		ctx:    ctx,
+		logger: l,
+		events: make(chan backgroundEvent),
+	}
+}
+
+// Start will run the function `fn` in a goroutine. Any errors
+// returned by that function are observable by reading from the
+// channel returned by the `Events()` function. Returns a function
+// that can be called to stop the background function (canceling the
+// context passed to it).
+func (br *backgroundRunner) Start(name string, fn func(context.Context) error) context.CancelFunc {
+	bgCtx, cancel := context.WithCancel(br.ctx)
+	var expectedContextCancelation bool
+	br.group.Go(func() error {
+		err := fn(bgCtx)
+		event := backgroundEvent{
+			Name:            name,
+			Err:             err,
+			TriggeredByTest: err != nil && isContextCanceled(bgCtx) && expectedContextCancelation,
+		}
+
+		select {
+		case br.events <- event:
+			// exit goroutine
+		case <-br.ctx.Done():
+			// Test already finished, exit goroutine.
+			return nil
+		}
+
+		return err
+	})
+
+	stopBgFunc := func() {
+		expectedContextCancelation = true
+		cancel()
+	}
+	// Collect all stopFuncs so that we can explicitly stop all
+	// background functions when the test finishes.
+	br.stopFuncs = append(br.stopFuncs, stopBgFunc)
+	return stopBgFunc
+}
+
+// Terminate will call the stop functions for every background function
+// started during the test. This includes background functions created
+// during test runtime (using `helper.Background()`), as well as
+// background steps declared in the test setup (using
+// `BackgroundFunc`, `Workload`, et al). Returns when all background
+// functions have returned.
+func (br *backgroundRunner) Terminate() {
+	for _, stop := range br.stopFuncs {
+		stop()
+	}
+
+	doneCh := make(chan error)
+	go func() {
+		defer close(doneCh)
+		_ = br.group.Wait()
+	}()
+
+	waitForChannel(doneCh, "background functions", br.logger)
+}
+
+func (br *backgroundRunner) CompletedEvents() <-chan backgroundEvent {
+	return br.events
 }
 
 // tableWriter is a thin wrapper around the `tabwriter` package used
@@ -792,17 +945,30 @@ func loadAtomicVersions(v *atomic.Value) []roachpb.Version {
 func panicAsError(l *logger.Logger, f func() error) (retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
-			retErr = logPanicToErr(l, r)
+			l.Printf("panic stack trace:\n%s", string(debug.Stack()))
+			retErr = fmt.Errorf("panic (stack trace above): %v", r)
 		}
 	}()
 	return f()
 }
 
-// logPanicToErr logs the panic stack trace and returns an error with the
-// panic message.
-func logPanicToErr(l *logger.Logger, r interface{}) error {
-	l.Printf("panic stack trace:\n%s", debugutil.Stack())
-	return fmt.Errorf("panic (stack trace above): %v", r)
+// waitForChannel waits for the given channel `ch` to close; returns
+// when that happens. If the channel does not close within 5 minutes,
+// the function logs a message and returns.
+//
+// The main use-case for this function is waiting for user-provided
+// hooks to return after the context passed to them is canceled. We
+// want to allow some time for them to finish, but we also don't want
+// to block indefinitely if a function inadvertently ignores context
+// cancelation.
+func waitForChannel(ch chan error, desc string, l *logger.Logger) {
+	maxWait := 5 * time.Minute
+	select {
+	case <-ch:
+		// return
+	case <-time.After(maxWait):
+		l.Printf("waited for %s for %s to finish, giving up", maxWait, desc)
+	}
 }
 
 func toString[T fmt.Stringer](xs []T) []string {
@@ -812,4 +978,15 @@ func toString[T fmt.Stringer](xs []T) []string {
 	}
 
 	return result
+}
+
+// isContextCanceled returns a boolean indicating whether the context
+// passed is canceled.
+func isContextCanceled(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
 }

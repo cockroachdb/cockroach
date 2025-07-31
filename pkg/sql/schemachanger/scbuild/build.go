@@ -103,11 +103,7 @@ func Build(
 
 	// Generate redacted statement.
 	{
-		if _, ok := n.(*tree.CreateRoutine); !ok {
-			// This validation fails for references to CTEs, which need not be
-			// qualified.
-			an.ValidateAnnotations()
-		}
+		an.ValidateAnnotations()
 		currentStatementID := uint32(len(els.statements) - 1)
 		els.statements[currentStatementID].RedactedStatement = dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation)
 	}
@@ -285,11 +281,10 @@ type cachedDesc struct {
 func newBuilderState(
 	ctx context.Context, d Dependencies, incumbent scpb.CurrentState, localMemAcc *mon.BoundAccount,
 ) *builderState {
-
 	bs := builderState{
 		ctx:                      ctx,
 		clusterSettings:          d.ClusterSettings(),
-		evalCtx:                  d.EvalCtx(),
+		evalCtx:                  newEvalCtx(d),
 		semaCtx:                  d.SemaCtx(),
 		cr:                       d.CatalogReader(),
 		tr:                       d.TableReader(),
@@ -341,7 +336,7 @@ func makeNameMappings(elementStates []elementState) (ret scpb.NameMappings) {
 		return &ret[idx], true /* isNew */
 	}
 	isNotDropping := func(ts scpb.TargetStatus) bool {
-		return ts != scpb.ToAbsent && ts != scpb.TransientAbsent
+		return ts != scpb.ToAbsent && ts != scpb.Transient
 	}
 	for _, es := range elementStates {
 		switch e := es.element.(type) {
@@ -447,11 +442,7 @@ func (b buildCtx) Add(element scpb.Element) {
 }
 
 func (b buildCtx) AddTransient(element scpb.Element) {
-	b.Ensure(element, scpb.TransientAbsent, b.TargetMetadata())
-}
-
-func (b buildCtx) DropTransient(element scpb.Element) {
-	b.Ensure(element, scpb.TransientPublic, b.TargetMetadata())
+	b.Ensure(element, scpb.Transient, b.TargetMetadata())
 }
 
 // Drop implements the scbuildstmt.BuildCtx interface.

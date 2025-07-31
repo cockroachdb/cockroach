@@ -196,7 +196,6 @@ func TestColumnTypeSQLString(t *testing.T) {
 		{types.String, "STRING"},
 		{types.MakeString(10), "STRING(10)"},
 		{types.Bytes, "BYTES"},
-		{types.MakePGVector(3), "VECTOR(3)"},
 	}
 	for i, d := range testData {
 		t.Run(d.colType.DebugString(), func(t *testing.T) {

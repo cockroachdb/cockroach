@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -45,27 +44,22 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
 	runQueueWorkload := func(duration time.Duration, initTables bool) {
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
-			concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(dbNodeCount*64))
+			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(dbNodeCount*64))
 			duration := fmt.Sprintf(" --duration=%s", duration.String())
 			batch := " --batch 100"
 			init := ""
 			if initTables {
 				init = " --init"
 			}
-			labels := map[string]string{
-				"batch":       "100",
-				"concurrency": roachtestutil.IfLocal(c, "", fmt.Sprint(dbNodeCount*64)),
-				"duration":    duration,
-			}
 			cmd := fmt.Sprintf(
-				"./workload run queue %s %s %s %s %s  {pgurl%s}",
-				roachtestutil.GetWorkloadHistogramArgs(t, c, labels),
-				init,
-				concurrency,
-				duration,
-				batch,
+				"./workload run queue --histograms="+t.PerfArtifactsDir()+"/stats.json"+
+					init+
+					concurrency+
+					duration+
+					batch+
+					" {pgurl%s}",
 				c.CRDBNodes(),
 			)
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)

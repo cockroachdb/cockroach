@@ -43,25 +43,16 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	)
 	require.NoError(t, err)
 	defer tempEngine.Close()
-	memMonitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test-mem"),
-		Res:      mon.MemoryResource,
-		Settings: st,
-	})
-	memMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-	defer memMonitor.Stop(ctx)
-	memAcc := memMonitor.MakeBoundAccount()
 	diskMonitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test-disk"),
+		Name:     "test-disk",
 		Res:      mon.DiskResource,
 		Settings: st,
 	})
 	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
-	reverse := rng.Float64() > 0.5
 	budget := newBudget(mon.NewStandaloneUnlimitedAccount(), math.MaxInt /* limitBytes */)
-	diskBuffer := TestResultDiskBufferConstructor(tempEngine, memAcc, diskMonitor, reverse)
+	diskBuffer := TestResultDiskBufferConstructor(tempEngine, diskMonitor)
 	b := newInOrderResultsBuffer(budget, diskBuffer)
 	defer b.close(ctx)
 
@@ -86,7 +77,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 					numRanges = rng.Intn(10) + 1
 				}
 				for j := 0; j < numRanges; j++ {
-					scan := makeResultWithScanResp(rng, reverse)
+					scan := makeResultWithScanResp(rng)
 					scan.scanComplete = j+1 == numRanges
 					scan.memoryTok.toRelease = rng.Int63n(100)
 					scan.Position = i
@@ -184,7 +175,7 @@ func makeResultWithGetResp(rng *rand.Rand, empty bool) Result {
 	return r
 }
 
-func makeResultWithScanResp(rng *rand.Rand, reverse bool) Result {
+func makeResultWithScanResp(rng *rand.Rand) Result {
 	var r Result
 	// Sometimes generate zero-length batchResponses.
 	batchResponses := make([][]byte, rng.Intn(20))
@@ -193,14 +184,8 @@ func makeResultWithScanResp(rng *rand.Rand, reverse bool) Result {
 		rng.Read(batchResponse)
 		batchResponses[i] = batchResponse
 	}
-	if reverse {
-		r.ScanResp = &kvpb.ReverseScanResponse{
-			BatchResponses: batchResponses,
-		}
-	} else {
-		r.ScanResp = &kvpb.ScanResponse{
-			BatchResponses: batchResponses,
-		}
+	r.ScanResp = &kvpb.ScanResponse{
+		BatchResponses: batchResponses,
 	}
 	return r
 }

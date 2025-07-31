@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security/clientcert"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -72,12 +73,6 @@ func assertMetricsMissingUser(
 	}
 }
 
-func assertMetricValue(t *testing.T, metrics *aggmetric.AggGauge, user string, value int64) {
-	c := metrics.GetChild(user)
-	require.NotNil(t, c)
-	require.Equal(t, value, c.Value())
-}
-
 func TestEntryCache(t *testing.T) {
 	ctx, clock, stopper, teardown := setup(t)
 	defer teardown()
@@ -89,39 +84,87 @@ func TestEntryCache(t *testing.T) {
 	laterExpiration := timeutil.Now().Add(100 * time.Second).Unix()
 	closerExpiration := timeutil.Now().Unix()
 
-	cache, expirationMetrics, ttlMetrics := newCacheAndMetrics(ctx, clock, stopper)
+	cache := newCache(ctx, clock, stopper)
 	require.Equal(t, 0, cache.Len())
 
 	// Verify insert.
-	cache.Upsert(ctx, fooUser, defaultSerial, laterExpiration)
+	cache.MaybeUpsert(ctx, fooUser, defaultSerial, laterExpiration)
 	require.Equal(t, 1, cache.Len())
 
 	// Verify update.
-	cache.Upsert(ctx, fooUser, defaultSerial, closerExpiration)
+	cache.MaybeUpsert(ctx, fooUser, defaultSerial, closerExpiration)
 	require.Equal(t, 1, cache.Len())
 
 	// Verify retrieval.
-	assertMetricValue(t, expirationMetrics, fooUser, closerExpiration)
+	expiration := cache.GetExpiration(fooUser)
+	require.Equal(t, closerExpiration, expiration)
 
 	// Verify the cache retains the minimum expiration for a user, assuming no
 	// eviction.
-	cache.Upsert(ctx, barUser, defaultSerial, closerExpiration)
+	cache.MaybeUpsert(ctx, barUser, defaultSerial, closerExpiration)
 	require.Equal(t, 2, cache.Len())
-	cache.Upsert(ctx, barUser, secondarySerial, laterExpiration)
+	cache.MaybeUpsert(ctx, barUser, secondarySerial, laterExpiration)
 	require.Equal(t, 2, cache.Len())
-	assertMetricValue(t, expirationMetrics, barUser, closerExpiration)
+	expiration = cache.GetExpiration(barUser)
+	require.Equal(t, closerExpiration, expiration)
 
 	// Verify indication of absence for non-existent values.
-	assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, fakeUser)
+	expiration = cache.GetExpiration(fakeUser)
+	require.Equal(t, int64(0), expiration)
 
 	// Verify value of TTL metrics
 	cache.Clear()
 	when := timeutil.Unix(closerExpiration+20, 0)
 	clock.AdvanceTo(when)
-	cache.Upsert(ctx, fooUser, defaultSerial, closerExpiration)
-	cache.Upsert(ctx, barUser, defaultSerial, laterExpiration)
-	assertMetricValue(t, ttlMetrics, fooUser, int64(0))
-	assertMetricValue(t, ttlMetrics, barUser, laterExpiration-(closerExpiration+20))
+	cache.MaybeUpsert(ctx, fooUser, defaultSerial, closerExpiration)
+	cache.MaybeUpsert(ctx, barUser, defaultSerial, laterExpiration)
+	ttl := cache.GetTTL(fooUser)
+	require.Equal(t, int64(0), ttl)
+	ttl = cache.GetTTL(barUser)
+	require.Equal(t, laterExpiration-(closerExpiration+20), ttl)
+}
+
+// TestCacheMetricsSync verifies that the cache metrics are correctly synchronized
+// when entries are inserted and updated. It checks that the cache length and
+// expiration times are properly updated and reflected in the metrics.
+func TestCacheMetricsSync(t *testing.T) {
+	ctx, clock, stopper, teardown := setup(t)
+	defer teardown()
+
+	findChildMetric := func(metrics *aggmetric.AggGauge, childName string) *io_prometheus_client.Metric {
+		var result *io_prometheus_client.Metric
+		metrics.Each([]*io_prometheus_client.LabelPair{}, func(metric *io_prometheus_client.Metric) {
+			if metric.GetLabel()[0].GetValue() == childName {
+				result = metric
+			}
+		})
+		return result
+	}
+
+	fooUser := "foo"
+
+	laterExpiration := timeutil.Now().Add(100 * time.Second).Unix()
+	closerExpiration := timeutil.Now().Unix()
+	clock.Backwards(time.Second * time.Duration(clock.Now().Unix()))
+
+	cache, expMetric, ttlMetric := newCacheAndMetrics(ctx, clock, stopper)
+	require.Equal(t, 0, cache.Len())
+
+	// insert.
+	cache.MaybeUpsert(ctx, fooUser, defaultSerial, laterExpiration)
+	// update.
+	cache.MaybeUpsert(ctx, fooUser, secondarySerial, closerExpiration)
+
+	expFloat := *(findChildMetric(expMetric, fooUser).Gauge.Value)
+	expiration := cache.GetExpiration(fooUser)
+	ttlFloat := *(findChildMetric(ttlMetric, fooUser).Gauge.Value)
+	ttl := cache.GetTTL(fooUser)
+
+	// verify that both the cache and metric are in sync.
+	require.Equal(t, closerExpiration, expiration)
+	require.Equal(t, closerExpiration, int64(expFloat))
+	require.Equal(t, closerExpiration, ttl)
+	require.Equal(t, closerExpiration, int64(ttlFloat))
 }
 
 func TestPurge(t *testing.T) {
@@ -136,26 +179,28 @@ func TestPurge(t *testing.T) {
 
 	t.Run("Purge when no certificates are evictable", func(t *testing.T) {
 		cache, expirationMetrics, ttlMetrics := newCacheAndMetrics(ctx, clock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 100)
+		cache.MaybeUpsert(ctx, "user1", "serial1", 100)
 		cache.Purge(ctx)
-		assertMetricValue(t, expirationMetrics, "user1", 100)
+		require.Equal(t, int64(100), cache.GetExpiration("user1"))
 		assertMetricsHasUser(t, expirationMetrics, ttlMetrics, "user1")
 	})
 
 	t.Run("Purge last certificate for a user", func(t *testing.T) {
 		cache, expirationMetrics, ttlMetrics := newCacheAndMetrics(ctx, clock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 100)
+		cache.MaybeUpsert(ctx, "user1", "serial1", 100)
 		clock.Advance(time.Minute)
 		cache.Purge(ctx)
+		require.Equal(t, int64(0), cache.GetExpiration("user1"))
 		assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, "user1")
 	})
 
 	t.Run("Purge not the last certificate for a user", func(t *testing.T) {
 		cache, expirationMetrics, ttlMetrics := newCacheAndMetrics(ctx, clock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 100)
+		cache.MaybeUpsert(ctx, "user1", "serial1", 100)
 		clock.Advance(time.Minute)
-		cache.Upsert(ctx, "user1", "serial2", 120)
+		cache.MaybeUpsert(ctx, "user1", "serial2", 120)
 		cache.Purge(ctx)
+		require.Equal(t, int64(120), cache.GetExpiration("user1"))
 		assertMetricsHasUser(t, expirationMetrics, ttlMetrics, "user1")
 	})
 
@@ -164,15 +209,16 @@ func TestPurge(t *testing.T) {
 		// One certificate for each user will be purged, and therefore user1 will
 		// be the only user "left" in the cache.
 		cache, expirationMetrics, ttlMetrics := newCacheAndMetrics(ctx, clock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 100)
-		cache.Upsert(ctx, "user2", "serial2", 65)
+		cache.MaybeUpsert(ctx, "user1", "serial1", 100)
+		cache.MaybeUpsert(ctx, "user2", "serial2", 65)
 		clock.Advance(time.Minute)
-		cache.Upsert(ctx, "user1", "serial3", 150)
+		cache.MaybeUpsert(ctx, "user1", "serial3", 150)
 		cache.Purge(ctx)
 
 		// verify that user 1 still exists, but user2 is gone.
-		assertMetricValue(t, expirationMetrics, "user1", 150)
+		require.Equal(t, int64(150), cache.GetExpiration("user1"))
 		assertMetricsHasUser(t, expirationMetrics, ttlMetrics, "user1")
+		require.Equal(t, int64(0), cache.GetExpiration("user2"))
 		assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, "user2")
 	})
 }
@@ -193,10 +239,10 @@ func TestConcurrentUpdates(t *testing.T) {
 	const N = 8000
 	var wg sync.WaitGroup
 	wg.Add(N)
-	for i := range N {
+	for i := 0; i < N; i++ {
 		go func(i int) {
 			if i%2 == 1 {
-				cache.Upsert(ctx, user, defaultSerial, expiration)
+				cache.MaybeUpsert(ctx, user, defaultSerial, expiration)
 			} else {
 				cache.Clear()
 			}
@@ -213,23 +259,26 @@ func TestUpsert(t *testing.T) {
 	cache, expirationMetrics, ttlMetrics := newCacheAndMetrics(ctx, clock, stopper)
 
 	// check no users in cache.
+	require.Equal(t, int64(0), cache.GetExpiration("user1"))
 	assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, "user1")
+	require.Equal(t, int64(0), cache.GetExpiration("user2"))
 	assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, "user2")
 
-	cache.Upsert(ctx, "user1", "serial1", 100)
+	cache.MaybeUpsert(ctx, "user1", "serial1", 100)
 
 	// check user1 in cache.
-	assertMetricValue(t, expirationMetrics, "user1", 100)
+	require.Equal(t, int64(100), cache.GetExpiration("user1"))
 	assertMetricsHasUser(t, expirationMetrics, ttlMetrics, "user1")
 	// check user 2 not in the cache.
+	require.Equal(t, int64(0), cache.GetExpiration("user2"))
 	assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, "user2")
 
-	cache.Upsert(ctx, "user2", "serial2", 90)
+	cache.MaybeUpsert(ctx, "user2", "serial2", 90)
 
 	// check both in cache now.
-	assertMetricValue(t, expirationMetrics, "user1", 100)
+	require.Equal(t, int64(100), cache.GetExpiration("user1"))
 	assertMetricsHasUser(t, expirationMetrics, ttlMetrics, "user1")
-	assertMetricValue(t, expirationMetrics, "user2", 90)
+	require.Equal(t, int64(90), cache.GetExpiration("user2"))
 	assertMetricsHasUser(t, expirationMetrics, ttlMetrics, "user2")
 }
 
@@ -239,51 +288,58 @@ func TestClear(t *testing.T) {
 	cache, expirationMetrics, ttlMetrics := newCacheAndMetrics(ctx, clock, stopper)
 
 	// Set up a user with multiple expired certificates.
-	cache.Upsert(ctx, "user1", "serial1", 5)
-	cache.Upsert(ctx, "user1", "serial2", 10)
+	cache.MaybeUpsert(ctx, "user1", "serial1", 5)
+	cache.MaybeUpsert(ctx, "user1", "serial2", 10)
 	// Set up a user with a single expired, and one unexpired ceritificate.
-	cache.Upsert(ctx, "user2", "serial3", 15)
+	cache.MaybeUpsert(ctx, "user2", "serial3", 15)
 	// Set up a user with a single expired certificate.
-	cache.Upsert(ctx, "user3", "serial4", 20)
+	cache.MaybeUpsert(ctx, "user3", "serial4", 20)
 
 	clock.Advance(time.Minute)
 
 	// user2's unexpired certificate.
-	cache.Upsert(ctx, "user2", "serial5", 25)
+	cache.MaybeUpsert(ctx, "user2", "serial5", 25)
 
 	// Set up a user with no expired certificates.
-	cache.Upsert(ctx, "user4", "serial6", 30)
+	cache.MaybeUpsert(ctx, "user4", "serial6", 30)
 
 	// Verify initial state
 	assertMetricsHasUser(t, expirationMetrics, ttlMetrics, "user1")
-	assertMetricValue(t, expirationMetrics, "user1", 5)
+	require.Equal(t, int64(5), cache.GetExpiration("user1"))
 	assertMetricsHasUser(t, expirationMetrics, ttlMetrics, "user2")
-	assertMetricValue(t, expirationMetrics, "user2", 15)
+	require.Equal(t, int64(15), cache.GetExpiration("user2"))
 	assertMetricsHasUser(t, expirationMetrics, ttlMetrics, "user3")
-	assertMetricValue(t, expirationMetrics, "user3", 20)
+	require.Equal(t, int64(20), cache.GetExpiration("user3"))
 	assertMetricsHasUser(t, expirationMetrics, ttlMetrics, "user4")
-	assertMetricValue(t, expirationMetrics, "user4", 30)
+	require.Equal(t, int64(30), cache.GetExpiration("user4"))
 	// check for a user who will be added after the clear call.
 	assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, "user5")
+	require.Equal(t, int64(0), cache.GetExpiration("user5"))
 	// check for a user who is not in the cache.
 	assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, "user6")
+	require.Equal(t, int64(0), cache.GetExpiration("user6"))
 
 	// Clear all certificates
 	cache.Clear()
 
-	cache.Upsert(ctx, "user5", "serial7", 35)
+	cache.MaybeUpsert(ctx, "user5", "serial7", 35)
 
 	// Verify final state - all users should be removed
 	assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, "user1")
+	require.Equal(t, int64(0), cache.GetExpiration("user1"))
 	assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, "user2")
+	require.Equal(t, int64(0), cache.GetExpiration("user2"))
 	assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, "user3")
+	require.Equal(t, int64(0), cache.GetExpiration("user3"))
 	assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, "user4")
+	require.Equal(t, int64(0), cache.GetExpiration("user4"))
 	// nothing changes for a user who has never been seen.
 	assertMetricsMissingUser(t, expirationMetrics, ttlMetrics, "user6")
+	require.Equal(t, int64(0), cache.GetExpiration("user6"))
 
 	// user5 should be the only one in the cache.
 	assertMetricsHasUser(t, expirationMetrics, ttlMetrics, "user5")
-	assertMetricValue(t, expirationMetrics, "user5", 35)
+	require.Equal(t, int64(35), cache.GetExpiration("user5"))
 }
 
 func TestAllocationTracking(t *testing.T) {
@@ -293,110 +349,114 @@ func TestAllocationTracking(t *testing.T) {
 	var certInfoSize, gaugeSize = clientcert.CertInfoSize, clientcert.GaugeSize
 
 	t.Run("starts at zero", func(t *testing.T) {
-		_, account := newCacheAndAccount(ctx, clock, stopper)
+		account := newCache(ctx, clock, stopper).Account()
 		// verify no usage to start
 		require.Equal(t, int64(0), account.Used())
 	})
 
 	t.Run("increases two gauge and num certs per user", func(t *testing.T) {
-		cache, account := newCacheAndAccount(ctx, clock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 100)
-		cache.Upsert(ctx, "user1", "serial2", 120)
-		cache.Upsert(ctx, "user2", "serial3", 65)
-		cache.Upsert(ctx, "user2", "serial4", 75)
+		cache := newCache(ctx, clock, stopper)
+		account := cache.Account()
+		cache.MaybeUpsert(ctx, "user1", "serial1", 100)
+		cache.MaybeUpsert(ctx, "user1", "serial2", 120)
+		cache.MaybeUpsert(ctx, "user2", "serial3", 65)
+		cache.MaybeUpsert(ctx, "user2", "serial4", 75)
 		require.Equal(t, (4*certInfoSize)+(4*gaugeSize), account.Used())
 	})
 
 	t.Run("Purge removes the gauges and cert allocations correctly", func(t *testing.T) {
-		cache, account := newCacheAndAccount(ctx, clock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 100)
-		cache.Upsert(ctx, "user1", "serial2", 120)
-		cache.Upsert(ctx, "user2", "serial3", 65)
+		cache := newCache(ctx, clock, stopper)
+		account := cache.Account()
+		cache.MaybeUpsert(ctx, "user1", "serial1", 100)
+		cache.MaybeUpsert(ctx, "user1", "serial2", 120)
+		cache.MaybeUpsert(ctx, "user2", "serial3", 65)
 		clock.Advance(time.Minute)
 		cache.Purge(ctx)
-		cache.Upsert(ctx, "user2", "serial4", 75)
+		cache.MaybeUpsert(ctx, "user2", "serial4", 75)
 		require.Equal(t, certInfoSize+(2*gaugeSize), account.Used())
 	})
 
 	t.Run("Clear also removes the gauges and cert allocations correctly", func(t *testing.T) {
-		cache, account := newCacheAndAccount(ctx, clock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 100)
-		cache.Upsert(ctx, "user1", "serial2", 120)
-		cache.Upsert(ctx, "user2", "serial3", 65)
-		cache.Upsert(ctx, "user2", "serial4", 75)
+		cache := newCache(ctx, clock, stopper)
+		account := cache.Account()
+		cache.MaybeUpsert(ctx, "user1", "serial1", 100)
+		cache.MaybeUpsert(ctx, "user1", "serial2", 120)
+		cache.MaybeUpsert(ctx, "user2", "serial3", 65)
+		cache.MaybeUpsert(ctx, "user2", "serial4", 75)
 		cache.Clear()
 		require.Equal(t, int64(0), account.Used())
 	})
 }
 
-func TestExpiration(t *testing.T) {
+func TestGetExpiration(t *testing.T) {
 	ctx, clock, stopper, teardown := setup(t)
 	defer teardown()
 
 	t.Run("basic test", func(t *testing.T) {
-		cache, expMetrics, _ := newCacheAndMetrics(ctx, clock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 100)
-		assertMetricValue(t, expMetrics, "user1", 100)
+		cache := newCache(ctx, clock, stopper)
+		cache.MaybeUpsert(ctx, "user1", "serial1", 100)
+		require.Equal(t, int64(100), cache.GetExpiration("user1"))
 	})
 
 	// This should work, but it's unlikely this is a possible use case.
 	t.Run("update existing certificate", func(t *testing.T) {
-		cache, expMetrics, _ := newCacheAndMetrics(ctx, clock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 100)
-		cache.Upsert(ctx, "user1", "serial1", 90)
-		assertMetricValue(t, expMetrics, "user1", 90)
+		cache := newCache(ctx, clock, stopper)
+		cache.MaybeUpsert(ctx, "user1", "serial1", 100)
+		cache.MaybeUpsert(ctx, "user1", "serial1", 90)
+		require.Equal(t, int64(90), cache.GetExpiration("user1"))
 	})
 
 	t.Run("multiple certs for a single user", func(t *testing.T) {
-		cache, expMetrics, _ := newCacheAndMetrics(ctx, clock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 120)
-		cache.Upsert(ctx, "user1", "serial2", 80)
+		cache := newCache(ctx, clock, stopper)
+		cache.MaybeUpsert(ctx, "user1", "serial1", 120)
+		cache.MaybeUpsert(ctx, "user1", "serial2", 80)
 		// verify that the lowest expiration is chosen.
-		assertMetricValue(t, expMetrics, "user1", 80)
+		require.Equal(t, int64(80), cache.GetExpiration("user1"))
 
 		// verify that when last inserted doesn't matter.
-		cache.Upsert(ctx, "user1", "serial3", 100)
-		assertMetricValue(t, expMetrics, "user1", 80)
+		cache.MaybeUpsert(ctx, "user1", "serial3", 100)
+		require.Equal(t, int64(80), cache.GetExpiration("user1"))
 	})
 
 	t.Run("multiple users", func(t *testing.T) {
-		cache, expMetrics, _ := newCacheAndMetrics(ctx, clock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 80)
-		cache.Upsert(ctx, "user2", "serial2", 120)
-		cache.Upsert(ctx, "user3", "serial3", 60)
+		cache := newCache(ctx, clock, stopper)
+		cache.MaybeUpsert(ctx, "user1", "serial1", 80)
+		cache.MaybeUpsert(ctx, "user2", "serial2", 120)
+		cache.MaybeUpsert(ctx, "user3", "serial3", 60)
 
-		assertMetricValue(t, expMetrics, "user1", 80)
-		assertMetricValue(t, expMetrics, "user2", 120)
-		assertMetricValue(t, expMetrics, "user3", 60)
+		require.Equal(t, int64(80), cache.GetExpiration("user1"))
+		require.Equal(t, int64(120), cache.GetExpiration("user2"))
+		require.Equal(t, int64(60), cache.GetExpiration("user3"))
 	})
 
 	t.Run("returns nothing when the certificates are purged", func(t *testing.T) {
-		cache, expMetrics, ttlMetrics := newCacheAndMetrics(ctx, clock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 100)
+		cache := newCache(ctx, clock, stopper)
+		cache.MaybeUpsert(ctx, "user1", "serial1", 100)
 		clock.Advance(time.Minute)
 		cache.Purge(ctx)
-		assertMetricsMissingUser(t, expMetrics, ttlMetrics, "user1")
+		require.Equal(t, int64(0), cache.GetExpiration("user1"))
 	})
 }
 
-func TestTTL(t *testing.T) {
+func TestGetTTL(t *testing.T) {
 	ctx, _, stopper, teardown := setup(t)
 	defer teardown()
 
 	t.Run("reports ttl based on expiration", func(t *testing.T) {
 		manClock := timeutil.NewManualTime(time.Unix(50, 0))
-		cache, _, ttlMetrics := newCacheAndMetrics(ctx, manClock, stopper)
+		cache := newCache(ctx, manClock, stopper)
 
-		cache.Upsert(ctx, "user1", "serial1", 100)
-		assertMetricValue(t, ttlMetrics, "user1", 50)
+		cache.MaybeUpsert(ctx, "user1", "serial1", 100)
+
+		require.Equal(t, int64(50), cache.GetTTL("user1"))
 	})
 
 	t.Run("negative ttls get clamped to 0", func(t *testing.T) {
 		manClock := timeutil.NewManualTime(time.Unix(50, 0))
-		cache, _, ttlMetrics := newCacheAndMetrics(ctx, manClock, stopper)
-		cache.Upsert(ctx, "user1", "serial1", 49)
+		cache := newCache(ctx, manClock, stopper)
+		cache.MaybeUpsert(ctx, "user1", "serial1", 49)
 
-		assertMetricValue(t, ttlMetrics, "user1", 0)
+		require.Equal(t, int64(0), cache.GetTTL("user1"))
 	})
 }
 
@@ -409,40 +469,32 @@ func BenchmarkCertExpirationCacheInsert(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cache.Upsert(ctx, "foo", defaultSerial, clock.Now().Unix())
-		cache.Upsert(ctx, "bar", defaultSerial, clock.Now().Unix())
-		cache.Upsert(ctx, "blah", defaultSerial, clock.Now().Unix())
+		cache.MaybeUpsert(ctx, "foo", defaultSerial, clock.Now().Unix())
+		cache.MaybeUpsert(ctx, "bar", defaultSerial, clock.Now().Unix())
+		cache.MaybeUpsert(ctx, "blah", defaultSerial, clock.Now().Unix())
 	}
 }
 
 func newCache(
 	ctx context.Context, clock *timeutil.ManualTime, stopper *stop.Stopper,
-) *clientcert.Cache {
+) *clientcert.ClientCertExpirationCache {
 	cache, _, _ := newCacheAndMetrics(ctx, clock, stopper)
 	return cache
 }
 
 func newCacheAndMetrics(
 	ctx context.Context, clock *timeutil.ManualTime, stopper *stop.Stopper,
-) (*clientcert.Cache, *aggmetric.AggGauge, *aggmetric.AggGauge) {
-	cache, expirationMetrics, ttlMetrics, _ := newCacheAndMetricsAndAccount(ctx, clock, stopper)
-	return cache, expirationMetrics, ttlMetrics
-}
+) (*clientcert.ClientCertExpirationCache, *aggmetric.AggGauge, *aggmetric.AggGauge) {
+	st := &cluster.Settings{}
+	parentMon := mon.NewUnlimitedMonitor(ctx, mon.Options{
+		Name:     "test",
+		Settings: st,
+	})
 
-func newCacheAndAccount(
-	ctx context.Context, clock *timeutil.ManualTime, stopper *stop.Stopper,
-) (*clientcert.Cache, *mon.BoundAccount) {
-	cache, _, _, account := newCacheAndMetricsAndAccount(ctx, clock, stopper)
-	return cache, account
-}
-
-func newCacheAndMetricsAndAccount(
-	ctx context.Context, clock *timeutil.ManualTime, stopper *stop.Stopper,
-) (*clientcert.Cache, *aggmetric.AggGauge, *aggmetric.AggGauge, *mon.BoundAccount) {
 	clientcert.CacheTTL = time.Minute
+
 	expirationMetrics := aggmetric.MakeBuilder("user").Gauge(metric.Metadata{})
 	ttlMetrics := aggmetric.MakeBuilder("user").Gauge(metric.Metadata{})
-	account := mon.NewStandaloneUnlimitedAccount()
-	cache := clientcert.NewCache(clock, account, expirationMetrics, ttlMetrics)
-	return cache, expirationMetrics, ttlMetrics, account
+	cache := clientcert.NewClientCertExpirationCache(ctx, st, stopper, clock, parentMon, expirationMetrics, ttlMetrics)
+	return cache, expirationMetrics, ttlMetrics
 }

@@ -228,38 +228,47 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(ctx context.Context)
 // system.table_metadata.
 func newBatchQueryStatement(aostClause string) string {
 	return fmt.Sprintf(`
-SELECT 
-    n.id,
-    n.name,
-    n."parentID",
-    db_name.name as db_name,
-    n."parentSchemaID",
-    schema_name.name as schema_name,
-    json_array_length(d->'table' -> 'columns') as columns,
-    COALESCE(json_array_length(d->'table' -> 'indexes'), 0) as indexes,
-    CASE
-        WHEN d->'table'->>'isMaterializedView' = 'true' THEN 'MATERIALIZED_VIEW'
-        WHEN d->'table'->>'viewQuery' IS NOT NULL THEN 'VIEW'
-        WHEN d->'table'->'sequenceOpts' IS NOT NULL THEN 'SEQUENCE'
-        ELSE 'TABLE'
-    END as table_type,
-    (d->'table'->'autoStatsSettings'->>'enabled')::BOOL as auto_stats_enabled,
-    ts.last_updated as stats_last_updated,
-    crdb_internal.table_span(n.id) as span
-FROM system.namespace n
-JOIN system.descriptor enc_desc ON n.id = enc_desc.id
-CROSS JOIN LATERAL crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', enc_desc.descriptor) AS d
-JOIN system.namespace db_name ON n."parentID" = db_name.id AND db_name."parentID" = 0
-JOIN system.namespace schema_name ON n."parentSchemaID" = schema_name.id AND schema_name."parentID" = n."parentID"
+WITH tables AS (
+    SELECT n.id,
+           n.name,
+           n."parentID",
+           n."parentSchemaID",
+           d.descriptor,
+           crdb_internal.table_span(n.id) as span
+    FROM system.namespace n
+    JOIN system.descriptor d ON n.id = d.id
+		%[1]s
+    WHERE (n."parentID", n."parentSchemaID", n.name) > ($1, $2, $3) AND n."parentSchemaID" != 0
+    ORDER BY (n."parentID", n."parentSchemaID", n.name)
+    LIMIT $4
+)
+SELECT t.id,
+       t.name,
+       t."parentID",
+       db_name.name as db_name,
+       t."parentSchemaID",
+       schema_name.name as schema_name,
+       json_array_length(d -> 'table' -> 'columns') as columns,
+       COALESCE(json_array_length(d -> 'table' -> 'indexes'), 0) as indexes,
+       CASE
+           WHEN d->'table'->>'isMaterializedView' = 'true' THEN 'MATERIALIZED_VIEW'
+           WHEN d->'table'->>'viewQuery' IS NOT NULL THEN 'VIEW'
+           WHEN d->'table'->'sequenceOpts' IS NOT NULL THEN 'SEQUENCE'
+           ELSE 'TABLE'
+           END as table_type,
+       (d->'table'->'autoStatsSettings'->>'enabled')::BOOL as auto_stats_enabled,
+       ts.last_updated as stats_last_updated,
+       t.span as span
+FROM tables t
 LEFT JOIN (
     SELECT "tableID", max("createdAt") as last_updated 
     FROM system.table_statistics 
     GROUP BY "tableID"
-) ts ON ts."tableID" = n.id
+) ts ON ts."tableID" = t.id
+JOIN system.namespace db_name ON t."parentID" = db_name.id AND db_name."parentID" = 0
+JOIN system.namespace schema_name ON t."parentSchemaID" = schema_name.id AND schema_name."parentID" = t."parentID",
+crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', t.descriptor) AS d
 %[1]s
-WHERE (n."parentID", n."parentSchemaID", n.name) > ($1, $2, $3) 
-  AND n."parentSchemaID" != 0
-ORDER BY n."parentID", n."parentSchemaID", n.name
-LIMIT $4
+ORDER BY (t."parentID", t."parentSchemaID", t.name);
 `, aostClause)
 }

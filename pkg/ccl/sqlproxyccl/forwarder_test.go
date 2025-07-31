@@ -110,33 +110,24 @@ func TestForward(t *testing.T) {
 		errChan := make(chan error, 1)
 		go func() {
 			<-sendEventCh
-			if buf, err := (&pgproto3.Query{
+			if _, err := client.Write((&pgproto3.Query{
 				String: "SELECT 1",
-			}).Encode(nil); err != nil {
-				errChan <- err
-				return
-			} else if _, err := client.Write(buf); err != nil {
+			}).Encode(nil)); err != nil {
 				errChan <- err
 				return
 			}
 			<-sendEventCh
-			if buf, err := (&pgproto3.Execute{
+			if _, err := client.Write((&pgproto3.Execute{
 				Portal:  "foobar",
 				MaxRows: 42,
-			}).Encode(nil); err != nil {
-				errChan <- err
-				return
-			} else if _, err := client.Write(buf); err != nil {
+			}).Encode(nil)); err != nil {
 				errChan <- err
 				return
 			}
 			<-sendEventCh
-			if buf, err := (&pgproto3.Close{
+			if _, err := client.Write((&pgproto3.Close{
 				ObjectType: 'P',
-			}).Encode(nil); err != nil {
-				errChan <- err
-				return
-			} else if _, err := client.Write(buf); err != nil {
+			}).Encode(nil)); err != nil {
 				errChan <- err
 				return
 			}
@@ -264,23 +255,17 @@ func TestForward(t *testing.T) {
 		errChan := make(chan error, 1)
 		go func() {
 			<-recvEventCh
-			if buf, err := (&pgproto3.ErrorResponse{
+			if _, err := server.Write((&pgproto3.ErrorResponse{
 				Code:    "100",
 				Message: "foobarbaz",
-			}).Encode(nil); err != nil {
-				errChan <- err
-				return
-			} else if _, err := server.Write(buf); err != nil {
+			}).Encode(nil)); err != nil {
 				errChan <- err
 				return
 			}
 			<-recvEventCh
-			if buf, err := (&pgproto3.ReadyForQuery{
+			if _, err := server.Write((&pgproto3.ReadyForQuery{
 				TxStatus: 'I',
-			}).Encode(nil); err != nil {
-				errChan <- err
-				return
-			} else if _, err := server.Write(buf); err != nil {
+			}).Encode(nil)); err != nil {
 				errChan <- err
 				return
 			}
@@ -440,8 +425,7 @@ func TestForwarder_replaceServerConn(t *testing.T) {
 	require.NoError(t, f.resumeProcessors())
 
 	// Check that we can receive messages from newServer.
-	q, err := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
-	require.NoError(t, err)
+	q := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
 	go func() {
 		_, _ = newServer.Write(q)
 	}()
@@ -701,8 +685,7 @@ func TestSuspendResumeProcessor(t *testing.T) {
 
 		// Client writes messages to be forwarded.
 		buf := new(bytes.Buffer)
-		q, err := (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
-		require.NoError(t, err)
+		q := (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
 		for i := 0; i < queryCount; i++ {
 			// Alternate between SELECT 1 and 2 to ensure correctness.
 			if i%2 == 0 {
@@ -780,7 +763,7 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		// have been forwarded.
 		go func(p *processor) { _ = p.resume(ctx) }(p)
 
-		err = p.waitResumed(ctx)
+		err := p.waitResumed(ctx)
 		require.NoError(t, err)
 
 		// Now read all the messages on the server for correctness.

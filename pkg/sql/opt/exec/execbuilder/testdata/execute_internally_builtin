@@ -148,9 +148,6 @@ statement ok
 BEGIN;
 
 statement ok
-SET LOCAL autocommit_before_ddl=off;
-
-statement ok
 CREATE TABLE t2 (k INT PRIMARY KEY);
 
 # When running in a separate txn, we cannot see the newly created table.

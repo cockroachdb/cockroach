@@ -1,7 +1,4 @@
 statement ok
-SET autocommit_before_ddl = false
-
-statement ok
 CLOSE ALL
 
 statement ok
@@ -553,10 +550,6 @@ bar  SELECT 1, 2, 3  false  false  false
 statement ok
 COMMIT
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE a SET (schema_locked=false);
-
 query TTBBB
 SELECT name, statement, is_scrollable, is_holdable, is_binary FROM pg_catalog.pg_cursors
 ----
@@ -645,30 +638,8 @@ FETCH 1 a b;
 statement ok
 COMMIT;
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE a SET (schema_locked=true);
-
-# Test holdable cursors.
-subtest holdable
-
-statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT);
-INSERT INTO t (SELECT t, t%123 FROM generate_series(1, 10000) g(t));
-
-# A holdable cursor can be declared in an implicit transaction.
-statement ok
+statement error DECLARE CURSOR WITH HOLD can only be used in transaction blocks
 DECLARE foo CURSOR WITH HOLD FOR SELECT 1
-
-query I
-FETCH 1 foo;
-----
-1
-
-# A holdable cursor can be declared in an explicit transaction and remain open
-# after commit.
-statement ok
-CLOSE foo;
 
 statement ok
 BEGIN
@@ -688,144 +659,29 @@ statement ok
 CLOSE foo
 
 statement ok
-COMMIT
-
-query I
-FETCH 1 bar
-----
-2
-
-statement ok
 CLOSE bar
 
 statement ok
-BEGIN
-
-statement ok
-DECLARE foo CURSOR WITH HOLD FOR SELECT * FROM generate_series(1, 10)
-
-statement ok
 COMMIT
 
-query I rowsort
-FETCH 2 foo
-----
-1
-2
+statement ok
+BEGIN
+
+statement ok
+DECLARE foo CURSOR WITH HOLD FOR SELECT 1
+
+statement error cursor foo WITH HOLD must be closed before committing
+COMMIT
 
 statement ok
 BEGIN
 
 statement ok
-DECLARE bar CURSOR WITH HOLD FOR SELECT 1
+DECLARE foo CURSOR WITH HOLD FOR SELECT 1
 
+# ROLLBACK is fine, since it renders the cursor unusable anyway.
 statement ok
 ROLLBACK
-
-# The rollback should have closed the holdable cursor for that transaction, but
-# not the one from the previous committed transaction.
-query T rowsort
-SELECT name FROM pg_cursors
-----
-foo
-
-query I rowsort
-FETCH 2 foo
-----
-3
-4
-
-statement ok
-CLOSE foo;
-
-# Open a holdable cursor fetching from a table.
-statement ok
-DECLARE foo CURSOR WITH HOLD FOR SELECT * FROM t ORDER BY x
-
-query II rowsort
-FETCH 3 foo
-----
-1  1
-2  2
-3  3
-
-# Same as before, but in an explicit transaction.
-statement ok
-BEGIN;
-DECLARE bar CURSOR WITH HOLD FOR SELECT * FROM t ORDER BY x;
-
-query II rowsort
-FETCH 3 bar
-----
-1  1
-2  2
-3  3
-
-statement ok
-COMMIT
-
-query II rowsort
-FETCH 3 bar
-----
-4  4
-5  5
-6  6
-
-# Fetch again from the cursor declared in the implicit txn.
-query II rowsort
-FETCH 3 foo
-----
-4  4
-5  5
-6  6
-
-# CLOSE ALL should close holdable cursors.
-statement ok
-CLOSE ALL;
-
-query T rowsort
-SELECT name FROM pg_cursors
-----
-
-# A transaction with an active holdable cursor cannot be prepared.
-statement ok
-BEGIN;
-
-statement ok
-DECLARE foo CURSOR WITH HOLD FOR SELECT 1
-
-statement error pgcode 0A000 pq: cannot PREPARE a transaction that has created a cursor WITH HOLD
-PREPARE TRANSACTION 'read-only'
-
-query T rowsort
-SELECT name FROM pg_cursors
-----
-
-statement ok
-BEGIN;
-
-statement ok
-DECLARE foo CURSOR WITH HOLD FOR SELECT 1
-
-statement ok
-CLOSE foo;
-
-statement ok
-PREPARE TRANSACTION 'read-only'
-
-statement ok
-COMMIT PREPARED 'read-only'
-
-# Holdable cursors cannot contain locking.
-statement error pgcode 0A000 pq: DECLARE CURSOR WITH HOLD must not contain locking
-DECLARE foo CURSOR WITH HOLD FOR SELECT * FROM t FOR UPDATE
-
-statement ok
-DROP TABLE t
-
-subtest end
-
-subtest regression
 
 # Regression test for using a SQL cursor that buffers a notice.
 # See https://github.com/cockroachdb/cockroach/issues/94344
@@ -866,76 +722,3 @@ FETCH 1 FROM a
 statement ok
 SET statement_timeout = 0;
 COMMIT
-
-statement ok
-RESET autocommit_before_ddl
-
-subtest end
-
-# Regression test for #142114 - close the holdable cursor container if there is
-# an error while executing the query.
-subtest regression_142114
-
-statement error pgcode 22012 pq: sql-cursor: division by zero
-DECLARE foo CURSOR WITH HOLD FOR SELECT 1 // 0;
-
-statement ok
-DECLARE curs CURSOR WITH HOLD FOR SELECT 100;
-
-statement ok
-BEGIN;
-
-statement ok
-DECLARE foo CURSOR FOR SELECT 1;
-
-statement ok
-DECLARE bar CURSOR WITH HOLD FOR SELECT 2;
-
-statement ok
-DECLARE baz CURSOR WITH HOLD FOR SELECT 1 // 0;
-
-statement ok
-DECLARE bar2 CURSOR WITH HOLD FOR SELECT 3;
-
-statement ok
-INSERT INTO a VALUES (-1, -2);
-
-statement error pgcode 22012 pq: sql-cursor: division by zero
-COMMIT;
-
-# All cursors created in the aborted transaction should be closed.
-query T rowsort
-SELECT name FROM pg_cursors;
-----
-curs
-
-# The insert should not have been committed.
-query III
-SELECT * FROM a ORDER BY a LIMIT 1;
-----
-1  2  NULL
-
-statement ok
-CLOSE curs;
-
-subtest end
-
-# Regression test for incorrectly advancing internal position when persisting
-# the WITH HOLD cursor (#145362).
-subtest regression_145362
-
-statement ok
-CREATE TABLE empty (k INT PRIMARY KEY)
-
-statement ok
-BEGIN;
-DECLARE foo CURSOR WITH HOLD FOR SELECT * FROM empty;
-COMMIT;
-
-query empty
-FETCH ABSOLUTE 1 FROM foo;
-
-statement ok
-CLOSE foo;
-
-subtest end

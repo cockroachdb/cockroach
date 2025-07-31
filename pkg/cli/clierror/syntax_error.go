@@ -8,7 +8,7 @@ package clierror
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgconn"
 )
 
 // IsSQLSyntaxError returns true iff the provided error is a SQL

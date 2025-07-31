@@ -1,5 +1,5 @@
-# Yaml for creating and configuring the drt-scale cluster. This also configures Datadog.
-# Build the roachprod and roachtest binaries (using --cross) before running this script
+# Yaml for creating and configuring the drt-scale cluster. This also configures the datadog.
+# Build the roachprod and roachtest binaries (using --cross) before running this script and delete any certs folder
 environment:
   ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
   ROACHPROD_DNS: drt.crdb.io
@@ -8,9 +8,6 @@ environment:
   ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
   CLUSTER: drt-scale
   WORKLOAD_CLUSTER: workload-scale
-  CLUSTER_NODES: 150
-  WORKLOAD_NODES: 9
-  COCKROACH_VERSION: v24.3.0-beta.2
 
 targets:
   # crdb cluster specs
@@ -24,12 +21,10 @@ targets:
           gce-managed: true
           gce-enable-multiple-stores: true
           gce-zones: "us-central1-a"
-          nodes: $CLUSTER_NODES
+          nodes: 150
           gce-machine-type: n2-standard-16
-          local-ssd: false
-          gce-pd-volume-size: 375
-          gce-pd-volume-type: pd-ssd
-          gce-pd-volume-count: 4
+          local-ssd: true
+          gce-local-ssd-count: 4
           os-volume-size: 100
           username: drt
           lifetime: 8760h
@@ -37,26 +32,10 @@ targets:
       - command: sync
         flags:
           clouds: gce
-      - command: run
+      - command: stage
         args:
           - $CLUSTER
-          - --
-          - wget https://binaries.cockroachdb.com/cockroach-${COCKROACH_VERSION}.linux-amd64.tgz
-      - command: run
-        args:
-          - $CLUSTER
-          - --
-          - tar -xvzf cockroach-${COCKROACH_VERSION}.linux-amd64.tgz
-      - command: run
-        args:
-          - $CLUSTER
-          - --
-          - mv cockroach-${COCKROACH_VERSION}.linux-amd64/* .
-      - command: run
-        args:
-          - $CLUSTER
-          - --
-          - rm -rf cockroach-${COCKROACH_VERSION}.linux-amd64*
+          - cockroach
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
       - command: start
         args:
@@ -70,21 +49,23 @@ targets:
           args: --wal-failover=among-stores
           restart: false
           sql-port: 26257
+        on_rollback:
+          - command: stop
+            args:
+              - $CLUSTER
       - command: run
         args:
           - $CLUSTER
           - --
           - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
   # workload cluster specs
-  - target_name: $WORKLOAD_CLUSTER
-    steps:
       - command: create
         args:
           - $WORKLOAD_CLUSTER
         flags:
           clouds: gce
           gce-zones: "us-central1-a"
-          nodes: $WORKLOAD_NODES
+          nodes: 9
           gce-machine-type: n2-standard-8
           os-volume-size: 100
           username: workload
@@ -105,11 +86,6 @@ targets:
           - $WORKLOAD_CLUSTER
           - workload
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
-  - target_name: post_tasks
-    dependent_targets:
-      - $CLUSTER
-      - $WORKLOAD_CLUSTER
-    steps:
       - script: rm
         args:
           - -rf
@@ -130,46 +106,23 @@ targets:
           - --
           - chmod
           - 600
-          - './certs/*'
+          - certs/*
       - command: put
         args:
           - $WORKLOAD_CLUSTER
-          - artifacts/roachprod
+          - bin/roachprod
           - roachprod
       - command: put
         args:
           - $WORKLOAD_CLUSTER
-          - artifacts/roachtest
+          - bin/roachtest
           - roachtest-operations
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - pkg/cmd/drt/scripts/roachtest_operations_run.sh
+          - roachtest_operations_run.sh
       - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
-        args:
-          - cct_tpcc_400k # suffix added to script name tpcc_init_cct_tpcc_400k.sh
-          - false # determines whether to execute the script immediately on workload node
         flags:
-          warehouses: 400000
+          warehouses: 100000
           db: cct_tpcc
-      - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
-        args:
-          - cct_tpcc_2000k # suffix added to script name tpcc_init_cct_tpcc_2000k.sh
-          - false # determines whether to execute the script immediately on workload node
-        flags:
-          warehouses: 2000000
-          db: cct_tpcc_big
-      - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
-        args:
-          - cct_tpcc_400k # suffix added to script name tpcc_run_400k.sh
-          - false # determines whether to execute the script immediately on workload node
-        flags:
-          db: cct_tpcc
-          warehouses: 400000
-          max-rate: 1000
-          workers: 400000
-          conns: 5000
-          duration: 12h
-          ramp: 10m
-          wait: 0
-      - script: "pkg/cmd/drtprod/scripts/generate_tpch_run.sh"
-        args:
-          - scale_factor_1000
-        flags:
-          scale-factor: 1000

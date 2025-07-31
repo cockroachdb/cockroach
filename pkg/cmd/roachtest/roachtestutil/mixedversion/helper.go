@@ -16,8 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
@@ -48,8 +46,6 @@ type (
 		connFunc        func(int) *gosql.DB
 		stepLogger      *logger.Logger
 		clusterVersions *atomic.Value
-		monitor         test.Monitor
-		nodes           option.NodeListOption
 	}
 
 	// Helper is the struct passed to `stepFunc`s (user-provided or
@@ -62,24 +58,14 @@ type (
 		testContext Context
 
 		ctx context.Context
-		// taskCount keeps track of the number of tasks started with `helper.Go()`.
-		// The counter is used to generate unique log file names.
-		taskCount  int64
+		// bgCount keeps track of the number of background tasks started
+		// with `helper.Background()`. The counter is used to generate
+		// unique log file names.
+		bgCount    int64
 		runner     *testRunner
 		stepLogger *logger.Logger
 	}
 )
-
-func (s *Service) randomAvailableNode(rng *rand.Rand) int {
-	nodes := s.AvailableNodes()
-	return nodes.SeededRandNode(rng)[0]
-}
-
-// AvailableNodes uses the monitor implementation to return the
-// set of available nodes as determined by their expected health.
-func (s *Service) AvailableNodes() option.NodeListOption {
-	return s.monitor.AvailableNodes(s.Descriptor.Name).Intersect(s.nodes)
-}
 
 // Connect returns a connection pool to the given node. Note that
 // these connection pools are managed by the framework and therefore
@@ -93,7 +79,7 @@ func (s *Service) Connect(node int) *gosql.DB {
 // cluster. Do *not* call `Close` on the pool returned (see comment on
 // `Connect` function).
 func (s *Service) RandomDB(rng *rand.Rand) (int, *gosql.DB) {
-	node := s.randomAvailableNode(rng)
+	node := s.Descriptor.Nodes.SeededRandNode(rng)[0]
 	return node, s.Connect(node)
 }
 
@@ -103,8 +89,7 @@ func (s *Service) RandomDB(rng *rand.Rand) (int, *gosql.DB) {
 func (s *Service) prepareQuery(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...any,
 ) (*gosql.DB, error) {
-	availableNodes := s.AvailableNodes().Intersect(nodes)
-	node := availableNodes.SeededRandNode(rng)[0]
+	node := nodes.SeededRandNode(rng)[0]
 	db := s.Connect(node)
 
 	v, err := s.NodeVersion(node)
@@ -137,8 +122,7 @@ func (s *Service) Exec(rng *rand.Rand, query string, args ...interface{}) error 
 func (s *Service) ExecWithGateway(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...interface{},
 ) error {
-	availableNodes := s.AvailableNodes().Intersect(nodes)
-	db, err := s.prepareQuery(rng, availableNodes, query, args...)
+	db, err := s.prepareQuery(rng, nodes, query, args...)
 	if err != nil {
 		return err
 	}
@@ -192,10 +176,6 @@ func (h *Helper) DefaultService() *Service {
 	return h.System
 }
 
-func (h *Helper) AvailableNodes() option.NodeListOption {
-	return h.DefaultService().AvailableNodes()
-}
-
 func (h *Helper) Context() *ServiceContext {
 	return h.DefaultService().ServiceContext
 }
@@ -244,63 +224,54 @@ func (h *Helper) ExecWithGateway(
 	return h.DefaultService().ExecWithGateway(rng, nodes, query, args...)
 }
 
-// defaultTaskOptions returns the default options that are passed to all tasks
-// started by the helper.
-func (h *Helper) defaultTaskOptions() []task.Option {
-	loggerFuncOpt := task.LoggerFunc(func(name string) (*logger.Logger, error) {
+// Background allows test authors to create functions that run in the
+// background in mixed-version hooks.
+func (h *Helper) Background(
+	name string, fn func(context.Context, *logger.Logger) error,
+) context.CancelFunc {
+	return h.runner.background.Start(name, func(ctx context.Context) error {
 		bgLogger, err := h.loggerFor(name)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create logger for task function %q: %w", name, err)
+			return fmt.Errorf("failed to create logger for background function %q: %w", name, err)
 		}
-		return bgLogger, nil
-	})
-	panicOpt := task.PanicHandler(func(_ context.Context, name string, l *logger.Logger, r interface{}) error {
-		return logPanicToErr(l, r)
-	})
-	errHandlerOpt := task.ErrorHandler(func(ctx context.Context, name string, l *logger.Logger, err error) error {
+
+		err = panicAsError(bgLogger, func() error { return fn(ctx, bgLogger) })
 		if err != nil {
-			if task.IsContextCanceled(ctx) {
+			if isContextCanceled(ctx) {
 				return err
 			}
-			errWrapped := errors.Wrapf(err, "error in task function %s", name)
-			return h.runner.testFailure(ctx, errWrapped, l, nil)
+
+			err := errors.Wrapf(err, "error in background function %s", name)
+			return h.runner.testFailure(ctx, err, bgLogger, nil)
 		}
+
 		return nil
 	})
-	return []task.Option{loggerFuncOpt, panicOpt, errHandlerOpt}
 }
 
-// GoWithCancel implements the Tasker interface.
-func (h *Helper) GoWithCancel(fn task.Func, opts ...task.Option) context.CancelFunc {
-	return h.runner.background.GoWithCancel(
-		fn, task.OptionList(h.defaultTaskOptions()...), task.OptionList(opts...),
-	)
-}
-
-// Go implements the Tasker interface.
-func (h *Helper) Go(fn task.Func, opts ...task.Option) {
-	h.GoWithCancel(fn, opts...)
-}
-
-// NewGroup implements the Group interface.
-func (h *Helper) NewGroup(opts ...task.Option) task.Group {
-	return h.runner.background.NewGroup(task.OptionList(h.defaultTaskOptions()...), task.OptionList(opts...))
-}
-
-// NewErrorGroup implements the Group interface.
-func (h *Helper) NewErrorGroup(opts ...task.Option) task.ErrorGroup {
-	return h.runner.background.NewErrorGroup(task.OptionList(h.defaultTaskOptions()...), task.OptionList(opts...))
-}
-
-// GoCommand has the same semantics of `GoWithCancel()`; the command passed will
-// run and the test will fail if the command is not successful. The task name is
-// derived from the command passed.
-func (h *Helper) GoCommand(cmd string, nodes option.NodeListOption) context.CancelFunc {
+// BackgroundCommand has the same semantics of `Background()`; the
+// command passed will run and the test will fail if the command is
+// not successful.
+func (h *Helper) BackgroundCommand(cmd string, nodes option.NodeListOption) context.CancelFunc {
 	desc := fmt.Sprintf("run command: %q", cmd)
-	return h.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
-		l.Printf("running command `%s` on nodes %v in a task", cmd, nodes)
+	return h.Background(desc, func(ctx context.Context, l *logger.Logger) error {
+		l.Printf("running command `%s` on nodes %v in the background", cmd, nodes)
 		return h.runner.cluster.RunE(ctx, option.WithNodes(nodes), cmd)
-	}, task.Name(desc))
+	})
+}
+
+// ExpectDeath alerts the testing infrastructure that a node is
+// expected to die. Regular restarts as part of the mixedversion
+// testing are already taken into account. This function should only
+// be used by tests that perform their own node restarts or chaos
+// events.
+func (h *Helper) ExpectDeath() {
+	h.ExpectDeaths(1)
+}
+
+// ExpectDeaths is the general version of `ExpectDeath()`.
+func (h *Helper) ExpectDeaths(n int) {
+	h.runner.monitor.ExpectDeaths(n)
 }
 
 // ClusterVersion returns the currently active cluster version. Avoids
@@ -323,14 +294,15 @@ func (h *Helper) ClusterVersionAtLeast(rng *rand.Rand, v string) (bool, error) {
 	return h.DefaultService().ClusterVersionAtLeast(rng, v)
 }
 
-// loggerFor creates a logger instance to be used by task functions (created by
-// calling `Go` on the helper instance). It is similar to the logger instances
-// created for mixed-version steps, but with the `task_` prefix.
+// loggerFor creates a logger instance to be used by background
+// functions (created by calling `Background` on the helper
+// instance). It is similar to the logger instances created for
+// mixed-version steps, but with the `background_` prefix.
 func (h *Helper) loggerFor(name string) (*logger.Logger, error) {
-	atomic.AddInt64(&h.taskCount, 1)
+	atomic.AddInt64(&h.bgCount, 1)
 
 	fileName := invalidChars.ReplaceAllString(strings.ToLower(name), "")
-	fileName = fmt.Sprintf("task_%s_%d", fileName, h.taskCount)
+	fileName = fmt.Sprintf("background_%s_%d", fileName, h.bgCount)
 	fileName = path.Join(logPrefix, fileName)
 
 	return prefixedLogger(h.runner.logger, fileName)

@@ -120,13 +120,6 @@ type Provider struct {
 	vm.DNSProvider
 }
 
-func (p *Provider) DefaultZones(_ string, _ bool) []string {
-	return []string{}
-}
-
-func (p *Provider) ConfigureProviderFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
-}
-
 func (p *Provider) SupportsSpotVMs() bool {
 	return false
 }
@@ -138,12 +131,6 @@ func (p *Provider) GetPreemptedSpotVMs(
 }
 
 func (p *Provider) GetHostErrorVMs(
-	l *logger.Logger, vms vm.List, since time.Time,
-) ([]string, error) {
-	return nil, nil
-}
-
-func (p *Provider) GetLiveMigrationVMs(
 	l *logger.Logger, vms vm.List, since time.Time,
 ) ([]string, error) {
 	return nil, nil
@@ -194,8 +181,12 @@ type providerOpts struct{}
 func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 }
 
-// ConfigureClusterCleanupFlags is part of the vm.Provider interface. This implementation is a no-op.
-func (p *Provider) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
+// ConfigureClusterFlags is part of ProviderOpts.  This implementation is a no-op.
+func (o *providerOpts) ConfigureClusterFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
+}
+
+// ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
+func (o *providerOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
 }
 
 // CleanSSH is part of the vm.Provider interface.  This implementation is a no-op.

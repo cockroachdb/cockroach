@@ -200,7 +200,7 @@ query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%batch%' AND message LIKE '%Scan%'
 ----
-r74: sending batch 4 Scan to (n1,s1):1
+r69: sending batch 4 Scan to (n1,s1):1
 
 # Regression test for #115377.
 statement ok

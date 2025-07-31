@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
@@ -132,7 +132,6 @@ func (s *sqlSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
-	_headers rowHeaders,
 ) error {
 	defer alloc.Release(ctx)
 	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
@@ -168,7 +167,7 @@ func (s *sqlSink) EmitResolvedTimestamp(
 		if err != nil {
 			return err
 		}
-		s.scratch, payload = s.scratch.Copy(payload)
+		s.scratch, payload = s.scratch.Copy(payload, 0 /* extraCap */)
 		for partition := int32(0); partition < sqlSinkNumPartitions; partition++ {
 			if err := s.emit(ctx, topic, partition, noKey, noValue, payload); err != nil {
 				return err
@@ -190,7 +189,7 @@ func (s *sqlSink) emit(
 	// Generate the message id on the client to match the guaranttees of kafka
 	// (two messages are only guaranteed to keep their order if emitted from the
 	// same producer to the same partition).
-	messageID := unique.GenerateUniqueInt(unique.ProcessUniqueID(partition))
+	messageID := builtins.GenerateUniqueInt(builtins.ProcessUniqueID(partition))
 	s.rowBuf = append(s.rowBuf, topic, partition, messageID, key, value, resolved)
 	if len(s.rowBuf)/sqlSinkEmitCols >= sqlSinkRowBatchSize {
 		return s.Flush(ctx)

@@ -47,8 +47,9 @@ module.exports = (env, argv) => {
       profile: true,
     }),
 
-    // Use MomentTimezoneDataPlugin to include all timezone data
+    // Use MomentTimezoneDataPlugin to remove timezone data that we don't need.
     new MomentTimezoneDataPlugin({
+      matchZones: ["Etc/UTC", "America/New_York"],
       startYear: 2021,
       endYear: currentYear + 10,
       // We have to tell the plugin where to store the pruned file
@@ -65,13 +66,13 @@ module.exports = (env, argv) => {
   ];
 
   const config = {
-    devtool: "cheap-source-map",
     context: __dirname,
     entry: [ "./src/index.tsx"],
     output: {
       filename: "bundle.js",
       path: path.resolve(env.output || `../../dist${env.dist}`, "assets"),
     },
+
     mode: argv.mode || "production",
 
     resolve: {

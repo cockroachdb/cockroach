@@ -162,61 +162,70 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     );
 
     const seconds = windowSize.asSeconds();
+    let selected = {};
     let key = currentScale.key;
     let endTime = moment.utc(currentWindow.end);
     // Dynamic moving window should be off unless the window extends to the current time.
     let isMoving = false;
 
+    const now = moment.utc();
     switch (direction) {
       case ArrowDirection.RIGHT:
         endTime = endTime.add(seconds, "seconds");
-        key = "Custom";
         break;
       case ArrowDirection.LEFT:
         endTime = endTime.subtract(seconds, "seconds");
-        key = "Custom";
         break;
       case ArrowDirection.CENTER:
-        // Clicking `NOW` always makes the metric view become live.
-        isMoving = true;
-
-        key = Object.keys(defaultTimeScaleOptions).reduce(
-          (closest, current) => {
-            const currentDiff = Math.abs(
-              defaultTimeScaleOptions[current].windowSize.asSeconds() -
-                windowSize.asSeconds(),
-            );
-            const closestDiff = Math.abs(
-              defaultTimeScaleOptions[closest].windowSize.asSeconds() -
-                windowSize.asSeconds(),
-            );
-            return currentDiff < closestDiff ? current : closest;
-          },
-        );
+        // CENTER is used to set the time window to the current time.
+        endTime = now;
+        // Only predefined time ranges are considered to be moving window (ie Past Hour, Past 3 days, etc).
+        // Custom time window has specific start/end time and constant duration, and in this case we
+        // move time window with the same duration with end time = now() and keep it fixed as before.
+        if (key !== "Custom") {
+          isMoving = true;
+        }
         break;
       default:
         getLogger().error("Unknown direction: ", direction);
     }
 
-    let timeScale: TimeScale;
-    if (isMoving) {
-      timeScale = {
-        ...defaultTimeScaleOptions[key],
-        key: key,
-        fixedWindowEnd: false,
-      };
-    } else {
-      timeScale = {
-        ...currentScale,
-        fixedWindowEnd: endTime,
-        windowSize,
-        key,
-      };
-      if (adjustTimeScaleOnChange) {
-        timeScale = adjustTimeScaleOnChange(timeScale, currentWindow);
+    // If the timescale extends into the future then fallback to a default
+    // timescale. Otherwise set the key to "Custom" so it appears correctly.
+    // If endTime + windowValid > now. Unclear why this uses windowValid instead of windowSize.
+    if (endTime.isSameOrAfter(now.subtract(currentScale.windowValid))) {
+      const foundTimeScale = Object.entries(options).find(
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        ([_, value]) => value.windowSize.asSeconds() === windowSize.asSeconds(),
+      );
+      if (foundTimeScale) {
+        /**
+         * This code can be hit by:
+         *  - Select a default option, then click the left arrow, then click the right arrow.
+         * This (or the parent if block) is *not* hit by:
+         *  - Select a default time, click left, select a custom time of the same range, then click right. The arrow is
+         *    not disabled, but the clause doesn't seem to be true.
+         */
+        selected = { key: foundTimeScale[0], ...foundTimeScale[1] };
+        isMoving = true;
+      } else {
+        // This code might not be possible to hit, due to the right arrow being disabled
+        key = "Custom";
       }
+    } else {
+      key = "Custom";
     }
 
+    let timeScale: TimeScale = {
+      ...currentScale,
+      fixedWindowEnd: isMoving ? false : endTime,
+      windowSize,
+      key,
+      ...selected,
+    };
+    if (adjustTimeScaleOnChange) {
+      timeScale = adjustTimeScaleOnChange(timeScale, currentWindow);
+    }
     setTimeScale(timeScale);
   };
 

@@ -189,6 +189,15 @@ func transformPrincipal(commonName string) string {
 	return mappedName
 }
 
+func getCertificatePrincipals(cert *x509.Certificate) []string {
+	results := make([]string, 0, 1+len(cert.DNSNames))
+	results = append(results, transformPrincipal(cert.Subject.CommonName))
+	for _, name := range cert.DNSNames {
+		results = append(results, transformPrincipal(name))
+	}
+	return results
+}
+
 // GetCertificateUserScope extracts the certificate scopes from a client
 // certificate. It tries to get CRDB prefixed SAN URIs and extracts tenantID and
 // user information. If there is no such URI, then it gets principal transformed
@@ -196,82 +205,42 @@ func transformPrincipal(commonName string) string {
 func GetCertificateUserScope(
 	peerCert *x509.Certificate,
 ) (userScopes []CertificateUserScope, _ error) {
-	collectFn := func(userScope CertificateUserScope) (halt bool, err error) {
-		userScopes = append(userScopes, userScope)
-		return false, nil
-	}
-	err := forEachCertificateUserScope(peerCert, collectFn)
-	return userScopes, err
-}
-
-// CertificateUserScopeContainsFunc returns true if the given function returns
-// true for any of the scopes in the client certificate.
-func CertificateUserScopeContainsFunc(
-	peerCert *x509.Certificate, fn func(CertificateUserScope) bool,
-) (ok bool, _ error) {
-	res := false
-	containsFn := func(userScope CertificateUserScope) (halt bool, err error) {
-		if fn(userScope) {
-			res = true
-			return true, nil
-		}
-		return false, nil
-	}
-	err := forEachCertificateUserScope(peerCert, containsFn)
-	return res, err
-}
-
-func forEachCertificateUserScope(
-	peerCert *x509.Certificate, fn func(userScope CertificateUserScope) (halt bool, err error),
-) error {
-	hasCRDBSANURI := false
 	for _, uri := range peerCert.URIs {
-		if !isCRDBSANURI(uri) {
-			continue
-		}
-		hasCRDBSANURI = true
-		var scope CertificateUserScope
-		if isTenantNameSANURI(uri) {
-			tenantName, user, err := parseTenantNameURISAN(uri)
-			if err != nil {
-				return err
+		if isCRDBSANURI(uri) {
+			var scope CertificateUserScope
+			if isTenantNameSANURI(uri) {
+				tenantName, user, err := parseTenantNameURISAN(uri)
+				if err != nil {
+					return nil, err
+				}
+				scope = CertificateUserScope{
+					Username:   user,
+					TenantName: tenantName,
+				}
+			} else {
+				tenantID, user, err := parseTenantURISAN(uri)
+				if err != nil {
+					return nil, err
+				}
+				scope = CertificateUserScope{
+					Username: user,
+					TenantID: tenantID,
+				}
 			}
-			scope = CertificateUserScope{
-				Username:   user,
-				TenantName: tenantName,
-			}
-		} else {
-			tenantID, user, err := parseTenantURISAN(uri)
-			if err != nil {
-				return err
-			}
-			scope = CertificateUserScope{
-				Username: user,
-				TenantID: tenantID,
-			}
-		}
-		if halt, err := fn(scope); halt || err != nil {
-			return err
+			userScopes = append(userScopes, scope)
 		}
 	}
-	if !hasCRDBSANURI {
-		globalScope := func(user string) CertificateUserScope {
-			return CertificateUserScope{
+	if len(userScopes) == 0 {
+		users := getCertificatePrincipals(peerCert)
+		for _, user := range users {
+			scope := CertificateUserScope{
 				Username: user,
 				Global:   true,
 			}
-		}
-		halt, err := fn(globalScope(transformPrincipal(peerCert.Subject.CommonName)))
-		if halt || err != nil {
-			return err
-		}
-		for _, name := range peerCert.DNSNames {
-			if halt, err := fn(globalScope(transformPrincipal(name))); halt || err != nil {
-				return err
-			}
+			userScopes = append(userScopes, scope)
 		}
 	}
-	return nil
+	return userScopes, nil
 }
 
 // Contains returns true if the specified string is present in the given slice.
@@ -290,7 +259,6 @@ func UserAuthCertHook(
 	insecureMode bool,
 	tlsState *tls.ConnectionState,
 	tenantID roachpb.TenantID,
-	tenantName roachpb.TenantName,
 	certManager *CertificateManager,
 	roleSubject *ldap.DN,
 	subjectRequired bool,
@@ -351,7 +319,7 @@ func UserAuthCertHook(
 			}
 		}
 
-		if ValidateUserScope(certUserScope, systemIdentity, tenantID, tenantName, roleSubject, certSubject) {
+		if ValidateUserScope(certUserScope, systemIdentity, tenantID, roleSubject, certSubject) {
 			if certManager != nil {
 				certManager.MaybeUpsertClientExpiration(
 					ctx,
@@ -382,12 +350,7 @@ func FormatUserScopes(certUserScope []CertificateUserScope) string {
 		if scope.Global {
 			buf.WriteString("all tenants")
 		} else {
-			if scope.TenantID.IsSet() {
-				fmt.Fprintf(&buf, "tenantID %v", scope.TenantID)
-			}
-			if scope.TenantName != "" {
-				fmt.Fprintf(&buf, "tenantName %v", scope.TenantName)
-			}
+			fmt.Fprintf(&buf, "tenant %v", scope.TenantID)
 		}
 		comma = ", "
 	}
@@ -481,7 +444,6 @@ func ValidateUserScope(
 	certUserScope []CertificateUserScope,
 	user string,
 	tenantID roachpb.TenantID,
-	tenantName roachpb.TenantName,
 	roleSubject *ldap.DN,
 	certSubject *ldap.DN,
 ) bool {
@@ -493,13 +455,7 @@ func ValidateUserScope(
 		if scope.Username == user {
 			// If username matches, allow authentication to succeed if
 			// the tenantID is a match or if the certificate scope is global.
-			if scope.Global {
-				return true
-			}
-			if scope.TenantID.IsSet() && scope.TenantID == tenantID {
-				return true
-			}
-			if scope.TenantName != "" && scope.TenantName == tenantName {
+			if scope.TenantID == tenantID || scope.Global {
 				return true
 			}
 		}

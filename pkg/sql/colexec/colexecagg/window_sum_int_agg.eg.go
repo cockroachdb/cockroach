@@ -45,7 +45,7 @@ func newSumIntWindowAggAlloc(
 			return &sumIntInt64WindowAggAlloc{aggAllocBase: allocBase}, nil
 		}
 	}
-	return nil, errors.AssertionFailedf("unsupported sum agg type %s", t.Name())
+	return nil, errors.Errorf("unsupported sum agg type %s", t.Name())
 }
 
 type sumIntInt16WindowAgg struct {

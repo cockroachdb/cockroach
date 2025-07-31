@@ -197,10 +197,6 @@ func initTestData(
 			return nil, err
 		}
 
-		if stat.HistogramData != nil {
-			// Match the behavior from TableStatisticsCache.parseStats.
-			stat.HistogramData.Buckets = nil
-		}
 		expectedStats[stat.TableID] = append(expectedStats[stat.TableID], stat)
 	}
 

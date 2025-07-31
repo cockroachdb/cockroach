@@ -6,10 +6,8 @@
 package ycsb
 
 import (
-	"math/rand/v2"
-
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
+	"golang.org/x/exp/rand"
 )
 
 // SkewedLatestGenerator is a random number generator that generates numbers in
@@ -19,7 +17,7 @@ type SkewedLatestGenerator struct {
 	mu struct {
 		syncutil.Mutex
 		iMax    uint64
-		zipfGen *workloadimpl.ZipfGenerator
+		zipfGen *ZipfGenerator
 	}
 }
 
@@ -32,7 +30,7 @@ func NewSkewedLatestGenerator(
 
 	z := SkewedLatestGenerator{}
 	z.mu.iMax = iMax
-	zipfGen, err := workloadimpl.NewZipfGenerator(rng, 0, iMax-iMin, theta, verbose)
+	zipfGen, err := NewZipfGenerator(rng, 0, iMax-iMin, theta, verbose)
 	if err != nil {
 		return nil, err
 	}

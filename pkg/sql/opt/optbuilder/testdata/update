@@ -119,12 +119,11 @@ update abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    │    ├── scan abcde
       │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    │    ├── computed column expressions
-      │    │    │    │    ├── d:12
-      │    │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    │    └── e:13
-      │    │    │    │         └── a:9
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:12
+      │    │    │         │    └── (b:10 + c:11) + 1
+      │    │    │         └── e:13
+      │    │    │              └── a:9
       │    │    └── filters
       │    │         └── a:9 = 1
       │    └── projections
@@ -152,12 +151,11 @@ update abcde
       │    ├── columns: a_new:17!null b_new:18!null c_new:19!null rowid_new:20!null a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    ├── scan abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    ├── computed column expressions
-      │    │    │    ├── d:12
-      │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    └── e:13
-      │    │    │         └── a:9
-      │    │    └── flags: avoid-full-scan
+      │    │    └── computed column expressions
+      │    │         ├── d:12
+      │    │         │    └── (b:10 + c:11) + 1
+      │    │         └── e:13
+      │    │              └── a:9
       │    └── projections
       │         ├── 1 [as=a_new:17]
       │         ├── 2 [as=b_new:18]
@@ -186,12 +184,11 @@ update abcde
       │    ├── columns: rowid_new:17!null c_new:18!null b_new:19!null a_new:20!null a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    ├── scan abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    ├── computed column expressions
-      │    │    │    ├── d:12
-      │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    └── e:13
-      │    │    │         └── a:9
-      │    │    └── flags: avoid-full-scan
+      │    │    └── computed column expressions
+      │    │         ├── d:12
+      │    │         │    └── (b:10 + c:11) + 1
+      │    │         └── e:13
+      │    │              └── a:9
       │    └── projections
       │         ├── 1 [as=rowid_new:17]
       │         ├── 2 [as=c_new:18]
@@ -220,12 +217,11 @@ update abcde
       │    ├── columns: a_new:17 a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    ├── scan abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    ├── computed column expressions
-      │    │    │    ├── d:12
-      │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    └── e:13
-      │    │    │         └── a:9
-      │    │    └── flags: avoid-full-scan
+      │    │    └── computed column expressions
+      │    │         ├── d:12
+      │    │         │    └── (b:10 + c:11) + 1
+      │    │         └── e:13
+      │    │              └── a:9
       │    └── projections
       │         └── NULL::INT8 [as=a_new:17]
       └── projections
@@ -251,12 +247,11 @@ update abcde
       │    │    ├── columns: a:9!null b:10!null c:11 d:12 e:13!null rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    │    ├── scan abcde
       │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    │    ├── computed column expressions
-      │    │    │    │    ├── d:12
-      │    │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    │    └── e:13
-      │    │    │    │         └── a:9
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:12
+      │    │    │         │    └── (b:10 + c:11) + 1
+      │    │    │         └── e:13
+      │    │    │              └── a:9
       │    │    └── filters
       │    │         └── b:10 > e:13
       │    └── projections
@@ -281,12 +276,11 @@ update abcde [as=foo]
       ├── columns: d_comp:17 a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       ├── scan abcde [as=foo]
       │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    ├── computed column expressions
-      │    │    ├── d:12
-      │    │    │    └── (b:10 + c:11) + 1
-      │    │    └── e:13
-      │    │         └── a:9
-      │    └── flags: avoid-full-scan
+      │    └── computed column expressions
+      │         ├── d:12
+      │         │    └── (b:10 + c:11) + 1
+      │         └── e:13
+      │              └── a:9
       └── projections
            └── (c:11 + c:11) + 1 [as=d_comp:17]
 
@@ -315,12 +309,11 @@ update abcde
       │    │    │         ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    │    │         ├── scan abcde
       │    │    │         │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    │         │    ├── computed column expressions
-      │    │    │         │    │    ├── d:12
-      │    │    │         │    │    │    └── (b:10 + c:11) + 1
-      │    │    │         │    │    └── e:13
-      │    │    │         │    │         └── a:9
-      │    │    │         │    └── flags: avoid-full-scan
+      │    │    │         │    └── computed column expressions
+      │    │    │         │         ├── d:12
+      │    │    │         │         │    └── (b:10 + c:11) + 1
+      │    │    │         │         └── e:13
+      │    │    │         │              └── a:9
       │    │    │         └── filters
       │    │    │              └── a:9 > 0
       │    │    └── 10
@@ -354,7 +347,7 @@ update xyzw
       │    ├── columns: x:7!null y:8 z:9!null w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── scan xyzw
       │    │    ├── columns: x:7!null y:8 z:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    └── flags: force-index=xyzw_pkey avoid-full-scan
+      │    │    └── flags: force-index=xyzw_pkey
       │    └── filters
       │         └── z:9 = 1
       └── projections
@@ -374,7 +367,7 @@ update xyzw
       │    ├── columns: x:7!null y:8 z:9!null w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── scan xyzw
       │    │    ├── columns: x:7!null y:8 z:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    └── flags: force-index=foo avoid-full-scan
+      │    │    └── flags: force-index=foo
       │    └── filters
       │         └── z:9 = 1
       └── projections
@@ -394,7 +387,7 @@ update xyzw
       │    ├── columns: x:7!null y:8 z:9!null w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── scan xyzw
       │    │    ├── columns: x:7!null y:8 z:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    └── flags: force-index=foo,fwd avoid-full-scan
+      │    │    └── flags: force-index=foo,fwd
       │    └── filters
       │         └── z:9 = 1
       └── projections
@@ -414,7 +407,7 @@ update xyzw
       │    ├── columns: x:7!null y:8 z:9!null w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── scan xyzw,rev
       │    │    ├── columns: x:7!null y:8 z:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    └── flags: force-index=foo,rev avoid-full-scan
+      │    │    └── flags: force-index=foo,rev
       │    └── filters
       │         └── z:9 = 1
       └── projections
@@ -434,7 +427,7 @@ update xyzw
       │    ├── columns: x:7!null y:8 z:9!null w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── scan xyzw
       │    │    ├── columns: x:7!null y:8 z:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    └── flags: no-index-join avoid-full-scan
+      │    │    └── flags: no-index-join
       │    └── filters
       │         └── z:9 = 1
       └── projections
@@ -459,8 +452,7 @@ update xyz
  └── project
       ├── columns: y_new:11!null z_new:12!null x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       ├── scan xyz
-      │    ├── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    └── flags: avoid-full-scan
+      │    └── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       └── projections
            ├── 1 [as=y_new:11]
            └── 1.0 [as=z_new:12]
@@ -479,8 +471,7 @@ update xyz
  └── project
       ├── columns: x_new:11 y_new:12 z_new:13 x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       ├── scan xyz
-      │    ├── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    └── flags: avoid-full-scan
+      │    └── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       └── projections
            ├── $1 [as=x_new:11]
            ├── $2 [as=y_new:12]
@@ -506,12 +497,11 @@ update abcde
       │    │    ├── columns: a:9!null b:10 c:11!null d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    │    ├── scan abcde
       │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    │    ├── computed column expressions
-      │    │    │    │    ├── d:12
-      │    │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    │    └── e:13
-      │    │    │    │         └── a:9
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:12
+      │    │    │         │    └── (b:10 + c:11) + 1
+      │    │    │         └── e:13
+      │    │    │              └── a:9
       │    │    └── filters
       │    │         └── c:11 = 10
       │    └── projections
@@ -548,8 +538,7 @@ update xyz
       ├── project
       │    ├── columns: x_new:11!null z_new:12!null x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan xyz
-      │    │    ├── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── flags: avoid-full-scan
+      │    │    └── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    └── projections
       │         ├── 1 [as=x_new:11]
       │         └── 1.0 [as=z_new:12]
@@ -585,8 +574,7 @@ with &1
  │    └── project
  │         ├── columns: y_new:11 xyz.x:6!null xyz.y:7 xyz.z:8 xyz.crdb_internal_mvcc_timestamp:9 xyz.tableoid:10
  │         ├── scan xyz
- │         │    ├── columns: xyz.x:6!null xyz.y:7 xyz.z:8 xyz.crdb_internal_mvcc_timestamp:9 xyz.tableoid:10
- │         │    └── flags: avoid-full-scan
+ │         │    └── columns: xyz.x:6!null xyz.y:7 xyz.z:8 xyz.crdb_internal_mvcc_timestamp:9 xyz.tableoid:10
  │         └── projections
  │              └── xyz.y:7 + 1 [as=y_new:11]
  └── with &2 (cte)
@@ -609,12 +597,11 @@ with &1
                 ├── columns: d_comp:31 a:23!null b:24 c:25 d:26 e:27 rowid:28!null abcde.crdb_internal_mvcc_timestamp:29 abcde.tableoid:30
                 ├── scan abcde
                 │    ├── columns: a:23!null b:24 c:25 d:26 e:27 rowid:28!null abcde.crdb_internal_mvcc_timestamp:29 abcde.tableoid:30
-                │    ├── computed column expressions
-                │    │    ├── d:26
-                │    │    │    └── (b:24 + c:25) + 1
-                │    │    └── e:27
-                │    │         └── a:23
-                │    └── flags: avoid-full-scan
+                │    └── computed column expressions
+                │         ├── d:26
+                │         │    └── (b:24 + c:25) + 1
+                │         └── e:27
+                │              └── a:23
                 └── projections
                      └── (b:24 + c:25) + 1 [as=d_comp:31]
 
@@ -667,12 +654,11 @@ project
            │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
            │    │    ├── scan abcde
            │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-           │    │    │    ├── computed column expressions
-           │    │    │    │    ├── d:12
-           │    │    │    │    │    └── (b:10 + c:11) + 1
-           │    │    │    │    └── e:13
-           │    │    │    │         └── a:9
-           │    │    │    └── flags: avoid-full-scan
+           │    │    │    └── computed column expressions
+           │    │    │         ├── d:12
+           │    │    │         │    └── (b:10 + c:11) + 1
+           │    │    │         └── e:13
+           │    │    │              └── a:9
            │    │    └── filters
            │    │         └── a:9 = 1
            │    └── projections
@@ -707,12 +693,11 @@ project
  │         │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
  │         │    │    ├── scan abcde [as=foo]
  │         │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
- │         │    │    │    ├── computed column expressions
- │         │    │    │    │    ├── d:12
- │         │    │    │    │    │    └── (b:10 + c:11) + 1
- │         │    │    │    │    └── e:13
- │         │    │    │    │         └── a:9
- │         │    │    │    └── flags: avoid-full-scan
+ │         │    │    │    └── computed column expressions
+ │         │    │    │         ├── d:12
+ │         │    │    │         │    └── (b:10 + c:11) + 1
+ │         │    │    │         └── e:13
+ │         │    │    │              └── a:9
  │         │    │    └── filters
  │         │    │         └── a:9 = 1
  │         │    └── projections
@@ -759,12 +744,11 @@ with &1
  │              │    │    │         ├── columns: abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
  │              │    │    │         ├── scan abcde
  │              │    │    │         │    ├── columns: abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
- │              │    │    │         │    ├── computed column expressions
- │              │    │    │         │    │    ├── abcde.d:12
- │              │    │    │         │    │    │    └── (abcde.b:10 + abcde.c:11) + 1
- │              │    │    │         │    │    └── abcde.e:13
- │              │    │    │         │    │         └── abcde.a:9
- │              │    │    │         │    └── flags: avoid-full-scan
+ │              │    │    │         │    └── computed column expressions
+ │              │    │    │         │         ├── abcde.d:12
+ │              │    │    │         │         │    └── (abcde.b:10 + abcde.c:11) + 1
+ │              │    │    │         │         └── abcde.e:13
+ │              │    │    │         │              └── abcde.a:9
  │              │    │    │         └── filters
  │              │    │    │              └── abcde.a:9 > 0
  │              │    │    └── 10
@@ -807,12 +791,11 @@ project
            │    ├── columns: rowid_new:17!null a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
            │    ├── scan abcde
            │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-           │    │    ├── computed column expressions
-           │    │    │    ├── d:12
-           │    │    │    │    └── (b:10 + c:11) + 1
-           │    │    │    └── e:13
-           │    │    │         └── a:9
-           │    │    └── flags: avoid-full-scan
+           │    │    └── computed column expressions
+           │    │         ├── d:12
+           │    │         │    └── (b:10 + c:11) + 1
+           │    │         └── e:13
+           │    │              └── a:9
            │    └── projections
            │         └── rowid:14 + 1 [as=rowid_new:17]
            └── projections
@@ -851,12 +834,11 @@ update abcde
       │    ├── columns: b_new:17 c_new:18!null a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    ├── scan abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    ├── computed column expressions
-      │    │    │    ├── d:12
-      │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    └── e:13
-      │    │    │         └── a:9
-      │    │    └── flags: avoid-full-scan
+      │    │    └── computed column expressions
+      │    │         ├── d:12
+      │    │         │    └── (b:10 + c:11) + 1
+      │    │         └── e:13
+      │    │              └── a:9
       │    └── projections
       │         ├── NULL::INT8 [as=b_new:17]
       │         └── 10 [as=c_new:18]
@@ -880,12 +862,11 @@ update abcde
       │    ├── columns: a_new:17 a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    ├── scan abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    ├── computed column expressions
-      │    │    │    ├── d:12
-      │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    └── e:13
-      │    │    │         └── a:9
-      │    │    └── flags: avoid-full-scan
+      │    │    └── computed column expressions
+      │    │         ├── d:12
+      │    │         │    └── (b:10 + c:11) + 1
+      │    │         └── e:13
+      │    │              └── a:9
       │    └── projections
       │         └── NULL::INT8 [as=a_new:17]
       └── projections
@@ -918,12 +899,11 @@ update abcde
       │    ├── columns: a_new:17!null b_new:18!null c_new:19!null a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    ├── scan abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    ├── computed column expressions
-      │    │    │    ├── d:12
-      │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    └── e:13
-      │    │    │         └── a:9
-      │    │    └── flags: avoid-full-scan
+      │    │    └── computed column expressions
+      │    │         ├── d:12
+      │    │         │    └── (b:10 + c:11) + 1
+      │    │         └── e:13
+      │    │              └── a:9
       │    └── projections
       │         ├── 1 [as=a_new:17]
       │         ├── 2 [as=b_new:18]
@@ -949,12 +929,11 @@ update abcde
       │    ├── columns: c_new:17 b_new:18!null a_new:19!null a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    ├── scan abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    ├── computed column expressions
-      │    │    │    ├── d:12
-      │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    └── e:13
-      │    │    │         └── a:9
-      │    │    └── flags: avoid-full-scan
+      │    │    └── computed column expressions
+      │    │         ├── d:12
+      │    │         │    └── (b:10 + c:11) + 1
+      │    │         └── e:13
+      │    │              └── a:9
       │    └── projections
       │         ├── NULL::INT8 [as=c_new:17]
       │         ├── 1 [as=b_new:18]
@@ -979,12 +958,11 @@ update abcde
       │    ├── columns: b_new:17 c_new:18!null a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    ├── scan abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    ├── computed column expressions
-      │    │    │    ├── d:12
-      │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    └── e:13
-      │    │    │         └── a:9
-      │    │    └── flags: avoid-full-scan
+      │    │    └── computed column expressions
+      │    │         ├── d:12
+      │    │         │    └── (b:10 + c:11) + 1
+      │    │         └── e:13
+      │    │              └── a:9
       │    └── projections
       │         ├── NULL::INT8 [as=b_new:17]
       │         └── 10 [as=c_new:18]
@@ -1009,12 +987,11 @@ update abcde
       │    ├── columns: a_new:17 a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
       │    ├── scan abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    ├── computed column expressions
-      │    │    │    ├── d:12
-      │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    └── e:13
-      │    │    │         └── a:9
-      │    │    └── flags: avoid-full-scan
+      │    │    └── computed column expressions
+      │    │         ├── d:12
+      │    │         │    └── (b:10 + c:11) + 1
+      │    │         └── e:13
+      │    │              └── a:9
       │    └── projections
       │         └── NULL::INT8 [as=a_new:17]
       └── projections
@@ -1060,12 +1037,11 @@ update abcde
       │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16 one:17
       │    ├── scan abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    ├── computed column expressions
-      │    │    │    ├── d:12
-      │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    └── e:13
-      │    │    │         └── a:9
-      │    │    └── flags: avoid-full-scan
+      │    │    └── computed column expressions
+      │    │         ├── d:12
+      │    │         │    └── (b:10 + c:11) + 1
+      │    │         └── e:13
+      │    │              └── a:9
       │    ├── max1-row
       │    │    ├── columns: one:17!null
       │    │    └── project
@@ -1098,12 +1074,11 @@ update abcde
       │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 y:18 x:22 z:23 y1:24
       │    ├── scan abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16
-      │    │    ├── computed column expressions
-      │    │    │    ├── d:12
-      │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    └── e:13
-      │    │    │         └── a:9
-      │    │    └── flags: avoid-full-scan
+      │    │    └── computed column expressions
+      │    │         ├── d:12
+      │    │         │    └── (b:10 + c:11) + 1
+      │    │         └── e:13
+      │    │              └── a:9
       │    ├── max1-row
       │    │    ├── columns: y:18 x:22!null z:23 y1:24
       │    │    └── project
@@ -1140,12 +1115,11 @@ update abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 y:18 y1:22
       │    │    ├── scan abcde
       │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16
-      │    │    │    ├── computed column expressions
-      │    │    │    │    ├── d:12
-      │    │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    │    └── e:13
-      │    │    │    │         └── a:9
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:12
+      │    │    │         │    └── (b:10 + c:11) + 1
+      │    │    │         └── e:13
+      │    │    │              └── a:9
       │    │    ├── max1-row
       │    │    │    ├── columns: y:18 y1:22
       │    │    │    └── project
@@ -1183,12 +1157,11 @@ update abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 y:18 y1:22
       │    │    ├── scan abcde
       │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16
-      │    │    │    ├── computed column expressions
-      │    │    │    │    ├── d:12
-      │    │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    │    └── e:13
-      │    │    │    │         └── a:9
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:12
+      │    │    │         │    └── (b:10 + c:11) + 1
+      │    │    │         └── e:13
+      │    │    │              └── a:9
       │    │    ├── max1-row
       │    │    │    ├── columns: y:18 y1:22
       │    │    │    └── project
@@ -1226,12 +1199,11 @@ update abcde
       │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 y:18 y1:22
       │    │    ├── scan abcde
       │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16
-      │    │    │    ├── computed column expressions
-      │    │    │    │    ├── d:12
-      │    │    │    │    │    └── (b:10 + c:11) + 1
-      │    │    │    │    └── e:13
-      │    │    │    │         └── a:9
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:12
+      │    │    │         │    └── (b:10 + c:11) + 1
+      │    │    │         └── e:13
+      │    │    │              └── a:9
       │    │    ├── max1-row
       │    │    │    ├── columns: y:18 y1:22
       │    │    │    └── project
@@ -1270,8 +1242,7 @@ update xyz
       ├── left-join-apply
       │    ├── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10 two:11 three:12
       │    ├── scan xyz
-      │    │    ├── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── flags: avoid-full-scan
+      │    │    └── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── max1-row
       │    │    ├── columns: two:11!null three:12!null
       │    │    └── project
@@ -1310,12 +1281,11 @@ project
            │    ├── columns: b_new:25 abcde1.a:9!null abcde1.b:10 abcde1.c:11 abcde1.d:12 abcde1.e:13 abcde1.rowid:14!null abcde1.crdb_internal_mvcc_timestamp:15 abcde1.tableoid:16
            │    ├── scan abcde [as=abcde1]
            │    │    ├── columns: abcde1.a:9!null abcde1.b:10 abcde1.c:11 abcde1.d:12 abcde1.e:13 abcde1.rowid:14!null abcde1.crdb_internal_mvcc_timestamp:15 abcde1.tableoid:16
-           │    │    ├── computed column expressions
-           │    │    │    ├── abcde1.d:12
-           │    │    │    │    └── (abcde1.b:10 + abcde1.c:11) + 1
-           │    │    │    └── abcde1.e:13
-           │    │    │         └── abcde1.a:9
-           │    │    └── flags: avoid-full-scan
+           │    │    └── computed column expressions
+           │    │         ├── abcde1.d:12
+           │    │         │    └── (abcde1.b:10 + abcde1.c:11) + 1
+           │    │         └── abcde1.e:13
+           │    │              └── abcde1.a:9
            │    └── projections
            │         └── subquery [as=b_new:25]
            │              └── max1-row
@@ -1386,12 +1356,11 @@ with &1 (cte)
            │    ├── columns: a:14!null b:15 c:16 d:17 e:18 rowid:19!null abcde.crdb_internal_mvcc_timestamp:20 abcde.tableoid:21
            │    ├── scan abcde
            │    │    ├── columns: a:14!null b:15 c:16 d:17 e:18 rowid:19!null abcde.crdb_internal_mvcc_timestamp:20 abcde.tableoid:21
-           │    │    ├── computed column expressions
-           │    │    │    ├── d:17
-           │    │    │    │    └── (b:15 + c:16) + 1
-           │    │    │    └── e:18
-           │    │    │         └── a:14
-           │    │    └── flags: avoid-full-scan
+           │    │    └── computed column expressions
+           │    │         ├── d:17
+           │    │         │    └── (b:15 + c:16) + 1
+           │    │         └── e:18
+           │    │              └── a:14
            │    └── filters
            │         └── exists
            │              └── with-scan &1 (cte)
@@ -1426,12 +1395,11 @@ with &1 (a)
            │    ├── columns: a:15!null b:16 c:17 d:18 e:19 rowid:20!null abcde.crdb_internal_mvcc_timestamp:21 abcde.tableoid:22 y:23 y1:24
            │    ├── scan abcde
            │    │    ├── columns: a:15!null b:16 c:17 d:18 e:19 rowid:20!null abcde.crdb_internal_mvcc_timestamp:21 abcde.tableoid:22
-           │    │    ├── computed column expressions
-           │    │    │    ├── d:18
-           │    │    │    │    └── (b:16 + c:17) + 1
-           │    │    │    └── e:19
-           │    │    │         └── a:15
-           │    │    └── flags: avoid-full-scan
+           │    │    └── computed column expressions
+           │    │         ├── d:18
+           │    │         │    └── (b:16 + c:17) + 1
+           │    │         └── e:19
+           │    │              └── a:15
            │    ├── max1-row
            │    │    ├── columns: y:23 y1:24
            │    │    └── with-scan &1 (a)
@@ -1469,9 +1437,8 @@ update mutation
       │    │    │    ├── columns: m_new:15!null m:8!null n:9 o:10 p:11 q:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    │    │    ├── scan mutation
       │    │    │    │    ├── columns: m:8!null n:9 o:10 p:11 q:12 crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    │    │    ├── check constraint expressions
-      │    │    │    │    │    └── m:8 > 0
-      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── check constraint expressions
+      │    │    │    │         └── m:8 > 0
       │    │    │    └── projections
       │    │    │         └── 1 [as=m_new:15]
       │    │    └── projections
@@ -1504,9 +1471,8 @@ update mutation
       │    │    │    ├── columns: m_new:15!null n_new:16!null m:8!null n:9 o:10 p:11 q:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    │    │    ├── scan mutation
       │    │    │    │    ├── columns: m:8!null n:9 o:10 p:11 q:12 crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    │    │    ├── check constraint expressions
-      │    │    │    │    │    └── m:8 > 0
-      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── check constraint expressions
+      │    │    │    │         └── m:8 > 0
       │    │    │    └── projections
       │    │    │         ├── 1 [as=m_new:15]
       │    │    │         └── 2 [as=n_new:16]
@@ -1548,7 +1514,6 @@ update mutation
       │    │    │    │    │         ├── columns: m:8!null n:9 o:10 p:11 q:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    │    │    │    │         ├── check constraint expressions
       │    │    │    │    │         │    └── m:8 > 0
-      │    │    │    │    │         ├── flags: avoid-full-scan
       │    │    │    │    │         └── ordering: +8
       │    │    │    │    └── 10
       │    │    │    └── projections
@@ -1617,10 +1582,9 @@ update checks
       │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    ├── check constraint expressions
       │    │    │    │    └── a:7 > 0
-      │    │    │    ├── computed column expressions
-      │    │    │    │    └── d:10
-      │    │    │    │         └── c:9 + 1
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         └── d:10
+      │    │    │              └── c:9 + 1
       │    │    └── projections
       │    │         ├── 1 [as=a_new:13]
       │    │         ├── 2 [as=b_new:14]
@@ -1651,10 +1615,9 @@ update checks
       │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    ├── check constraint expressions
       │    │    │    │    └── a:7 > 0
-      │    │    │    ├── computed column expressions
-      │    │    │    │    └── d:10
-      │    │    │    │         └── c:9 + 1
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         └── d:10
+      │    │    │              └── c:9 + 1
       │    │    └── projections
       │    │         └── 1 [as=a_new:13]
       │    └── projections
@@ -1683,10 +1646,9 @@ update checks
       │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    ├── check constraint expressions
       │    │    │    │    └── a:7 > 0
-      │    │    │    ├── computed column expressions
-      │    │    │    │    └── d:10
-      │    │    │    │         └── c:9 + 1
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         └── d:10
+      │    │    │              └── c:9 + 1
       │    │    └── projections
       │    │         └── 2 [as=b_new:13]
       │    └── projections
@@ -1716,10 +1678,9 @@ update checks
       │    │    │    ├── columns: checks.a:7!null checks.b:8 checks.c:9 checks.d:10 checks.crdb_internal_mvcc_timestamp:11 checks.tableoid:12
       │    │    │    ├── check constraint expressions
       │    │    │    │    └── checks.a:7 > 0
-      │    │    │    ├── computed column expressions
-      │    │    │    │    └── checks.d:10
-      │    │    │    │         └── checks.c:9 + 1
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         └── checks.d:10
+      │    │    │              └── checks.c:9 + 1
       │    │    ├── max1-row
       │    │    │    ├── columns: abcde.a:13!null abcde.b:14
       │    │    │    └── project
@@ -1783,8 +1744,7 @@ update multi_col_fam_checks
       ├── project
       │    ├── columns: a_new:15!null a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    ├── scan multi_col_fam_checks
-      │    │    ├── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    └── flags: avoid-full-scan
+      │    │    └── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    └── projections
       │         └── 5 [as=a_new:15]
       └── projections
@@ -1814,8 +1774,7 @@ update multi_col_fam_checks
       │    ├── select
       │    │    ├── columns: a:8!null b:9!null c:10!null d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    │    ├── scan multi_col_fam_checks
-      │    │    │    ├── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    │    └── filters
       │    │         └── (b:9 = 6) AND (c:10 = 3)
       │    └── projections
@@ -1840,8 +1799,7 @@ update multi_col_fam_checks
       ├── project
       │    ├── columns: a_new:15!null b_new:16!null a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    ├── scan multi_col_fam_checks
-      │    │    ├── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    └── flags: avoid-full-scan
+      │    │    └── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    └── projections
       │         ├── 5 [as=a_new:15]
       │         └── 6 [as=b_new:16]
@@ -1866,8 +1824,7 @@ update multi_col_fam_checks
       ├── project
       │    ├── columns: a_new:15!null b_new:16!null e_new:17!null a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    ├── scan multi_col_fam_checks
-      │    │    ├── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    └── flags: avoid-full-scan
+      │    │    └── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    └── projections
       │         ├── 5 [as=a_new:15]
       │         ├── 6 [as=b_new:16]
@@ -1892,8 +1849,7 @@ update multi_col_fam_checks
       │    ├── select
       │    │    ├── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    │    ├── scan multi_col_fam_checks
-      │    │    │    ├── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    │    └── filters
       │    │         └── a:8 = 5
       │    └── projections
@@ -1916,8 +1872,7 @@ update multi_col_fam_checks
       ├── project
       │    ├── columns: e_new:15!null a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    ├── scan multi_col_fam_checks
-      │    │    ├── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    └── flags: avoid-full-scan
+      │    │    └── columns: a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    └── projections
       │         └── 3 [as=e_new:15]
       └── projections
@@ -1958,11 +1913,9 @@ update decimals
       │    │    │    │    ├── columns: a_new:13!null b_new:14 a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    ├── scan decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    │    └── d:10
-      │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1)
-      │    │    │    │    │    │              └── a:7 + c:9
-      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── d:10
+      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95, NULL, 15::DECIMAL(10,2)] [as=b_new:14]
@@ -2005,11 +1958,9 @@ update decimals
       │    │    │    │    ├── columns: a_new:13!null b_new:14!null a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    ├── scan decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    │    └── d:10
-      │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1)
-      │    │    │    │    │    │              └── a:7 + c:9
-      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── d:10
+      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95,NULL,15.00] [as=b_new:14]
@@ -2047,11 +1998,9 @@ update assn_cast
       │    │    ├── columns: c_new:19!null qc_new:20!null i_new:21!null s_new:22!null c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    ├── scan assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
-      │    │    │    ├── computed column expressions
-      │    │    │    │    └── d_comp:15
-      │    │    │    │         └── assignment-cast: DECIMAL(10)
-      │    │    │    │              └── d:14 + 10.0
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         └── d_comp:15
+      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
       │    │         ├── '' [as=c_new:19]
       │    │         ├── 'foo' [as=qc_new:20]
@@ -2086,11 +2035,9 @@ update assn_cast
       │    │    ├── columns: c_new:19!null qc_new:20!null i_new:21!null c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    ├── scan assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
-      │    │    │    ├── computed column expressions
-      │    │    │    │    └── d_comp:15
-      │    │    │    │         └── assignment-cast: DECIMAL(10)
-      │    │    │    │              └── d:14 + 10.0
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         └── d_comp:15
+      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
       │    │         ├── '' [as=c_new:19]
       │    │         ├── 'foo' [as=qc_new:20]
@@ -2120,11 +2067,9 @@ update assn_cast
       │    │    ├── columns: i_new:19!null c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    ├── scan assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
-      │    │    │    ├── computed column expressions
-      │    │    │    │    └── d_comp:15
-      │    │    │    │         └── assignment-cast: DECIMAL(10)
-      │    │    │    │              └── d:14 + 10.0
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         └── d_comp:15
+      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
       │    │         └── 10::INT2 [as=i_new:19]
       │    └── projections
@@ -2154,11 +2099,9 @@ update assn_cast
       │    │    │    ├── columns: d_new:19!null c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    ├── scan assn_cast
       │    │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
-      │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    └── d_comp:15
-      │    │    │    │    │         └── assignment-cast: DECIMAL(10)
-      │    │    │    │    │              └── d:14 + 10.0
-      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── d_comp:15
+      │    │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    │    └── projections
       │    │    │         └── 1.45::DECIMAL(10,2) [as=d_new:19]
       │    │    └── projections
@@ -2191,11 +2134,9 @@ update assn_cast
       │    │    │    ├── columns: d_new:19!null c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    ├── scan assn_cast
       │    │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
-      │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    └── d_comp:15
-      │    │    │    │    │         └── assignment-cast: DECIMAL(10)
-      │    │    │    │    │              └── d:14 + 10.0
-      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── d_comp:15
+      │    │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    │    └── projections
       │    │    │         └── 1.45 [as=d_new:19]
       │    │    └── projections
@@ -2231,11 +2172,9 @@ update decimals
       │    │    │    │    ├── columns: a_new:13!null b_new:14 a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    ├── scan decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    │    └── d:10
-      │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1)
-      │    │    │    │    │    │              └── a:7 + c:9
-      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── d:10
+      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95, NULL, 15::DECIMAL(10,2)] [as=b_new:14]
@@ -2277,11 +2216,9 @@ update decimals
       │    │    │    │    ├── columns: a_new:13!null b_new:14!null a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    ├── scan decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    │    └── d:10
-      │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1)
-      │    │    │    │    │    │              └── a:7 + c:9
-      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── d:10
+      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:13]
       │    │    │    │         └── ARRAY[0.95,NULL,15.00] [as=b_new:14]
@@ -2317,11 +2254,9 @@ update assn_cast
       │    │    ├── columns: c_new:19!null i_new:20!null c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    ├── scan assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
-      │    │    │    ├── computed column expressions
-      │    │    │    │    └── d_comp:15
-      │    │    │    │         └── assignment-cast: DECIMAL(10)
-      │    │    │    │              └── d:14 + 10.0
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         └── d_comp:15
+      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
       │    │         ├── '' [as=c_new:19]
       │    │         └── 10::INT2 [as=i_new:20]
@@ -2351,11 +2286,9 @@ update assn_cast
       │    │    ├── columns: c_new:19!null i_new:20!null c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    ├── scan assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
-      │    │    │    ├── computed column expressions
-      │    │    │    │    └── d_comp:15
-      │    │    │    │         └── assignment-cast: DECIMAL(10)
-      │    │    │    │              └── d:14 + 10.0
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── computed column expressions
+      │    │    │         └── d_comp:15
+      │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    └── projections
       │    │         ├── '' [as=c_new:19]
       │    │         └── 10::INT2 [as=i_new:20]
@@ -2390,11 +2323,9 @@ update decimals
       │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12 n:13
       │    │    │    │    ├── scan decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    │    └── d:10
-      │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1)
-      │    │    │    │    │    │              └── a:7 + c:9
-      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── d:10
+      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
       │    │    │    │    ├── max1-row
       │    │    │    │    │    ├── columns: n:13!null
       │    │    │    │    │    └── project
@@ -2440,11 +2371,9 @@ update decimals
       │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 decimals.crdb_internal_mvcc_timestamp:11 decimals.tableoid:12 u:13 "?column?":18
       │    │    │    │    ├── scan decimals
       │    │    │    │    │    ├── columns: a:7!null b:8 c:9 d:10 decimals.crdb_internal_mvcc_timestamp:11 decimals.tableoid:12
-      │    │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    │    └── d:10
-      │    │    │    │    │    │         └── assignment-cast: DECIMAL(10,1)
-      │    │    │    │    │    │              └── a:7 + c:9
-      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── d:10
+      │    │    │    │    │              └── (a:7 + c:9)::DECIMAL(10,1)
       │    │    │    │    ├── max1-row
       │    │    │    │    │    ├── columns: u:13!null "?column?":18!null
       │    │    │    │    │    └── project
@@ -2493,11 +2422,9 @@ update assn_cast
       │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 assn_cast.rowid:16!null assn_cast.crdb_internal_mvcc_timestamp:17 assn_cast.tableoid:18 "?column?":24 "?column?":25
       │    │    │    ├── scan assn_cast
       │    │    │    │    ├── columns: c:10 qc:11 i:12 s:13 d:14 d_comp:15 assn_cast.rowid:16!null assn_cast.crdb_internal_mvcc_timestamp:17 assn_cast.tableoid:18
-      │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    └── d_comp:15
-      │    │    │    │    │         └── assignment-cast: DECIMAL(10)
-      │    │    │    │    │              └── d:14 + 10.0
-      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── d_comp:15
+      │    │    │    │              └── (d:14 + 10.0)::DECIMAL(10)
       │    │    │    ├── max1-row
       │    │    │    │    ├── columns: "?column?":24!null "?column?":25!null
       │    │    │    │    └── project
@@ -2542,11 +2469,9 @@ update assn_cast_on_update
       │    │    │    ├── columns: i_new:19!null b_new:20!null i:10 i2:11 d:12 d2:13 d_comp:14 b:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
       │    │    │    ├── scan assn_cast_on_update
       │    │    │    │    ├── columns: i:10 i2:11 d:12 d2:13 d_comp:14 b:15 rowid:16!null crdb_internal_mvcc_timestamp:17 tableoid:18
-      │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    └── d_comp:14
-      │    │    │    │    │         └── assignment-cast: DECIMAL(10)
-      │    │    │    │    │              └── d:12
-      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── d_comp:14
+      │    │    │    │              └── d:12::DECIMAL(10)
       │    │    │    └── projections
       │    │    │         ├── 1 [as=i_new:19]
       │    │    │         └── true [as=b_new:20]
@@ -2591,8 +2516,7 @@ update on_update_bare
       │    ├── select
       │    │    ├── columns: a:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    ├── scan on_update_bare
-      │    │    │    ├── columns: a:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── columns: a:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    └── filters
       │    │         └── a:6 = 2
       │    └── projections
@@ -2614,8 +2538,7 @@ update on_update_bare
       ├── select
       │    ├── columns: a:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan on_update_bare
-      │    │    ├── columns: a:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── flags: avoid-full-scan
+      │    │    └── columns: a:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       │    └── filters
       │         └── a:6 = 2
       └── projections
@@ -2638,8 +2561,7 @@ update on_update_with_default
       │    ├── select
       │    │    ├── columns: a:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    ├── scan on_update_with_default
-      │    │    │    ├── columns: a:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── columns: a:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    └── filters
       │    │         └── a:6 = 2
       │    └── projections
@@ -2661,8 +2583,7 @@ update on_update_with_default
       ├── select
       │    ├── columns: a:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan on_update_with_default
-      │    │    ├── columns: a:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── flags: avoid-full-scan
+      │    │    └── columns: a:6!null v:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       │    └── filters
       │         └── a:6 = 2
       └── projections
@@ -2691,8 +2612,7 @@ update generated_as_identity
  └── project
       ├── columns: b_new:13 a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       ├── scan generated_as_identity
-      │    ├── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    └── flags: avoid-full-scan
+      │    └── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       └── projections
            └── nextval('t.public.generated_as_identity_b_seq') [as=b_new:13]
 
@@ -2708,8 +2628,7 @@ update generated_as_identity
  └── project
       ├── columns: a_new:13!null b_new:14 a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       ├── scan generated_as_identity
-      │    ├── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    └── flags: avoid-full-scan
+      │    └── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       └── projections
            ├── 10 [as=a_new:13]
            └── nextval('t.public.generated_as_identity_b_seq') [as=b_new:14]
@@ -2725,8 +2644,7 @@ update generated_as_identity
  └── project
       ├── columns: c_new:13!null a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       ├── scan generated_as_identity
-      │    ├── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    └── flags: avoid-full-scan
+      │    └── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       └── projections
            └── 1 + 1 [as=c_new:13]
 
@@ -2742,8 +2660,7 @@ update generated_as_identity
  └── project
       ├── columns: a_new:13!null c_new:14!null a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       ├── scan generated_as_identity
-      │    ├── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    └── flags: avoid-full-scan
+      │    └── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       └── projections
            ├── 10 [as=a_new:13]
            └── 1 + 1 [as=c_new:14]
@@ -2759,8 +2676,7 @@ update generated_as_identity
  └── project
       ├── columns: c_new:13 a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       ├── scan generated_as_identity
-      │    ├── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    └── flags: avoid-full-scan
+      │    └── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       └── projections
            └── nextval('t.public.generated_as_identity_c_seq') [as=c_new:13]
 
@@ -2776,8 +2692,7 @@ update generated_as_identity
  └── project
       ├── columns: a_new:13!null c_new:14 a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       ├── scan generated_as_identity
-      │    ├── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    └── flags: avoid-full-scan
+      │    └── columns: a:7 b:8!null c:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       └── projections
            ├── 10 [as=a_new:13]
            └── nextval('t.public.generated_as_identity_c_seq') [as=c_new:14]
@@ -2801,8 +2716,7 @@ update serial_t
  └── project
       ├── columns: a_new:11!null a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       ├── scan serial_t
-      │    ├── columns: a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    └── flags: avoid-full-scan
+      │    └── columns: a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       └── projections
            └── 1 + 2 [as=a_new:11]
 
@@ -2817,7 +2731,6 @@ update serial_t
  └── project
       ├── columns: a_new:11 a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       ├── scan serial_t
-      │    ├── columns: a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    └── flags: avoid-full-scan
+      │    └── columns: a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       └── projections
            └── unique_rowid() [as=a_new:11]

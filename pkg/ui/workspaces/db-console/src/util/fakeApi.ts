@@ -12,8 +12,12 @@ import { cockroach } from "src/js/protos";
 import { API_PREFIX, STATUS_PREFIX } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
 
-const { SettingsResponse, TableIndexStatsResponse, NodesResponse } =
-  cockroach.server.serverpb;
+const {
+  SettingsResponse,
+  TableStatsResponse,
+  TableIndexStatsResponse,
+  NodesResponse,
+} = cockroach.server.serverpb;
 
 // These test-time functions provide typesafe wrappers around fetchMock,
 // stubbing HTTP responses from the admin API.
@@ -26,7 +30,7 @@ const { SettingsResponse, TableIndexStatsResponse, NodesResponse } =
 //   describe("The thing I'm testing", function() {
 //     it("works like this", function() {
 //       // 1. Set up a fake response from the /databases endpoint.
-//       fakeApi.stuatabases({
+//       fakeApi.stubDatabases({
 //         databases: ["one", "two", "three"],
 //       });
 //
@@ -61,6 +65,20 @@ export function stubNodesUI(
   response: cockroach.server.serverpb.INodesResponseExternal,
 ) {
   stubGet(`/nodes_ui`, NodesResponse.encode(response), STATUS_PREFIX);
+}
+
+export function stubTableStats(
+  database: string,
+  table: string,
+  response: cockroach.server.serverpb.ITableStatsResponse,
+) {
+  stubGet(
+    `/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(
+      table,
+    )}/stats`,
+    TableStatsResponse.encode(response),
+    API_PREFIX,
+  );
 }
 
 export function stubIndexStats(

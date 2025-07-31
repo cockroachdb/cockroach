@@ -124,12 +124,6 @@ func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Trans
 		log.VEventf(ctx, 2, "txn tombstone present; transaction has been aborted")
 		return kvpb.NewTransactionAbortedError(reason)
 	}
-	// Verify that if the transaction record is being created, the client thinks
-	// it's in the PENDING state.
-	if txn.Status != roachpb.PENDING {
-		return errors.AssertionFailedf(
-			"cannot create transaction record with non-PENDING transaction: %v", txn)
-	}
 	return nil
 }
 

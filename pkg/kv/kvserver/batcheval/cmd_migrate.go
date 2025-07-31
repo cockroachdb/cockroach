@@ -81,10 +81,6 @@ func Migrate(
 	// as all below-raft migrations (the only users of Migrate) were introduced
 	// after it.
 	pd.Replicated.State.Version = &migrationVersion
-	// Set DoTimelyApplicationToAllReplicas so that migrates are applied on all
-	// replicas. This is done since MigrateRequests trigger a call to
-	// waitForApplication (see Replica.executeWriteBatch).
-	pd.Replicated.DoTimelyApplicationToAllReplicas = true
 	return pd, nil
 }
 

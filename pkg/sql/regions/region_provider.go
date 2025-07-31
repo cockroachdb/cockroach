@@ -13,9 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/errors"
 )
 
@@ -97,60 +95,6 @@ func (p *Provider) GetRegions(ctx context.Context) (*serverpb.RegionsResponse, e
 	return regions, nil
 }
 
-// SynthesizeRegionConfig implements the descs.RegionProvider interface.
-func (p *Provider) SynthesizeRegionConfig(
-	ctx context.Context, dbID descpb.ID, opts ...multiregion.SynthesizeRegionConfigOption,
-) (multiregion.RegionConfig, error) {
-	return SynthesizeRegionConfigInTxn(ctx, p.txn, dbID, p.descs, opts...)
-}
-
-func SynthesizeRegionConfigInTxn(
-	ctx context.Context,
-	txn *kv.Txn,
-	dbID descpb.ID,
-	descsCol *descs.Collection,
-	opts ...multiregion.SynthesizeRegionConfigOption,
-) (multiregion.RegionConfig, error) {
-	var o multiregion.SynthesizeRegionConfigOptions
-	for _, opt := range opts {
-		opt(&o)
-	}
-
-	var b descs.ByIDGetterBuilder
-	if o.UseCache {
-		b = descsCol.ByIDWithLeased(txn)
-	} else {
-		b = descsCol.ByIDWithoutLeased(txn)
-	}
-	if !o.IncludeOffline {
-		b = b.WithoutOffline()
-	}
-	g := b.Get()
-	dbDesc, err := g.Database(ctx, dbID)
-	if err != nil {
-		return multiregion.RegionConfig{}, err
-	}
-	if !dbDesc.IsMultiRegion() {
-		return multiregion.RegionConfig{}, ErrNotMultiRegionDatabase
-	}
-	regionEnumID, err := dbDesc.MultiRegionEnumID()
-	if err != nil {
-		return multiregion.RegionConfig{}, err
-	}
-	typeDesc, err := g.Type(ctx, regionEnumID)
-	if err != nil {
-		return multiregion.RegionConfig{}, err
-	}
-	regionEnumDesc := typeDesc.AsRegionEnumTypeDescriptor()
-	if regionEnumDesc == nil {
-		return multiregion.RegionConfig{}, errors.AssertionFailedf(
-			"expected region enum type, not %s for type %q (%d)",
-			typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
-	}
-
-	return multiregion.SynthesizeRegionConfig(regionEnumDesc, dbDesc, o)
-}
-
 // getTenantRegions fetches the multi-region enum corresponding to the system
 // database of the current tenant, if that tenant is a multi-region tenant.
 // It returns nil, nil if the tenant is not a multi-region tenant.
@@ -165,9 +109,3 @@ func getTenantRegions(
 	}
 	return GetDatabaseRegions(ctx, txn, systemDatabase, descs)
 }
-
-// ErrNotMultiRegionDatabase is returned from SynthesizeRegionConfig when the
-// requested database is not a multi-region database.
-var ErrNotMultiRegionDatabase = errors.New(
-	"database is not a multi-region database",
-)

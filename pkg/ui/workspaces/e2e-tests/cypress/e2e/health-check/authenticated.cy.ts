@@ -12,6 +12,14 @@ describe("health check: authenticated user", () => {
       cy.login(users[0].username, users[0].password);
     });
 
+    // Ensure that something reasonable renders at / when authenticated, making
+    // just enough assertions to ensure the right page loaded. If this test
+    // fails, the server probably isn't running or authentication is broken.
+    cy.visit({
+      url: "/",
+      failOnStatusCode: true,
+    });
+
     // Ensure the Cluster ID appears
     cy.findByText(
       /^Cluster id: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
@@ -22,27 +30,17 @@ describe("health check: authenticated user", () => {
     cy.findByText("Capacity Usage", { selector: "h3>span" });
     cy.findByText("Node Status");
     cy.findByText("Replication Status");
-    // Asserts that storage usable from nodes_ui metrics is populated
-    cy.get(".cluster-summary__metric.storage-usable").should(
-      isTextGreaterThanZero,
-    );
-    // Asserts that there is at least 1 live node
-    cy.get(".cluster-summary__metric.live-nodes").should(isTextGreaterThanZero);
+    cy.findByText("Nodes (1)");
+
     // Check for sidebar contents
     cy.findByRole("navigation").within(() => {
       cy.findByRole("link", { name: "Overview" });
       cy.findByRole("link", { name: "Metrics" });
       cy.findByRole("link", { name: "Databases" });
       cy.findByRole("link", { name: "SQL Activity" });
-      cy.findByRole("link", { name: /^(Hot|Top) Ranges$/ });
+      cy.findByRole("link", { name: "Hot Ranges" });
       cy.findByRole("link", { name: "Jobs" });
       cy.findByRole("link", { name: "Advanced Debug" });
     });
   });
 });
-
-const isTextGreaterThanZero = (ele: JQuery<HTMLElement>) => {
-  const text = ele.get()[0].innerText;
-  const textAsFloat = parseFloat(text);
-  expect(textAsFloat).to.be.greaterThan(0);
-};

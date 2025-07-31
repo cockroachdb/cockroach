@@ -34,7 +34,9 @@ func TestingWaitForProtectedTimestampToExistOnSpans(
 	spans roachpb.Spans,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		if err := spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, srv.Clock().Now()); err != nil {
+		if err := spanconfigptsreader.TestingRefreshPTSState(
+			ctx, t, ptsReader, srv.Clock().Now(),
+		); err != nil {
 			return err
 		}
 		for _, sp := range spans {

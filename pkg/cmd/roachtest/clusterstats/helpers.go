@@ -27,7 +27,7 @@ import (
 func SetupCollectorPromClient(
 	ctx context.Context, c cluster.Cluster, l *logger.Logger, cfg *prometheus.Config,
 ) (prometheus.Client, error) {
-	prometheusNodeIP, err := c.ExternalIP(ctx, l, c.Node(int(cfg.PrometheusNode)))
+	prometheusNodeIP, err := c.ExternalIP(ctx, l, c.Node(int(cfg.PrometheusNode[0])))
 	if err != nil {
 		return nil, err
 	}

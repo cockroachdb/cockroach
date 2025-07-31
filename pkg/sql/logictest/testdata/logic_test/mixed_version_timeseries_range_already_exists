@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-configs
+# LogicTest: cockroach-go-testserver-24.2
 
 # This test verifies that if the timeseries range already has a zone config
 # before upgrading to the current version, then that zone config is preserved

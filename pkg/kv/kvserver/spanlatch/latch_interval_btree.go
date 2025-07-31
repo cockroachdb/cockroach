@@ -1021,23 +1021,14 @@ func (i *iterator) Cur() *latch {
 	return i.n.items[i.pos]
 }
 
-// An overlap scan is a scan over all items that overlap with the provided item
-// (start key inclusive, end key exclusive) in order of the overlapping items'
-// start keys. The goal of the scan is to minimize the number of key comparisons
-// performed in total. The algorithm operates based on the following two
-// invariants maintained by augmented interval btree:
+// An overlap scan is a scan over all items that overlap with the provided
+// item in order of the overlapping items' start keys. The goal of the scan
+// is to minimize the number of key comparisons performed in total. The
+// algorithm operates based on the following two invariants maintained by
+// augmented interval btree:
 //  1. all items are sorted in the btree based on their start key.
 //  2. all btree nodes maintain the upper bound end key of all items
 //     in their subtree.
-//
-// An overlapping scan can be performed either in the forward or reverse
-// direction. The algorithm for each is slightly different. First, we present
-// each algorithm, and then we talk about the differences (and the reasons for
-// for them).
-//
-// -----------------------------------------------------------------------------
-// Forward Overlap Scan Algorithm
-// -----------------------------------------------------------------------------
 //
 // The scan algorithm starts in "unconstrained minimum" and "unconstrained
 // maximum" states. To enter a "constrained minimum" state, the scan must reach
@@ -1052,113 +1043,33 @@ func (i *iterator) Cur() *latch {
 //
 // The scan algorithm works like a standard btree forward scan with the
 // following augmentations:
-//  1. before traversing the tree, the scan performs a binary search on the
+//  1. before tranversing the tree, the scan performs a binary search on the
 //     root node's items to determine a "soft" lower-bound constraint position
 //     and a "hard" upper-bound constraint position in the root's children.
-//  2. when traversing into a child node in the lower or upper bound constraint
+//  2. when tranversing into a child node in the lower or upper bound constraint
 //     position, the constraint is refined by searching the child's items.
 //  3. the initial traversal down the tree follows the left-most children
 //     whose upper bound end keys are equal to or greater than the start key
 //     of the search range. The children followed will be equal to or less
 //     than the soft lower bound constraint.
-//  4. once the initial traversal completes and the scan is in the left-most
+//  4. once the initial tranversal completes and the scan is in the left-most
 //     btree node whose upper bound overlaps the search range, key comparisons
 //     must be performed with each item in the tree. This is necessary because
 //     any of these items may have end keys that cause them to overlap with the
 //     search range.
 //  5. once the scan reaches the lower bound constraint position (the first item
 //     with a start key equal to or greater than the search range's start key),
-//     it can begin scanning without performing key comparisons. This is allowed
+//     it can begin scaning without performing key comparisons. This is allowed
 //     because all items from this point forward will have end keys that are
 //     greater than the search range's start key.
 //  6. once the scan reaches the upper bound constraint position, it terminates.
 //     It does so because the item at this position is the first item with a
 //     start key larger than the search range's end key.
-//
-// -----------------------------------------------------------------------------
-// Reverse Overlap Scan Algorithm
-// -----------------------------------------------------------------------------
-//
-// The scan algorithm starts in a "unconstrained minimum" and "unconstrained
-// maximum" state. To enter the "constrained maximum" state, the scan must reach
-// items in the tree with start keys below the search range's end key. Once the
-// scan enters the "constrained maximum" state, it will remain there. To enter
-// the "constrained minimum" state, the scan must reach items in the tree with
-// start keys above the search range's start key. To enter a "constrained
-// minimum" state, the scan must determine the first child btree node in a given
-// subtree that can have items with start keys less than the search range's
-// start key. The scan then remains in the "constrained minimum" state, until it
-// traverses into this child node, at which point it moves to the "unconstrained
-// minimum" state again.
-//
-// The scan algorithm works like a standard btree reverse scan with the
-// following augmentations:
-//  1. before traversing the tree, the scan performs a binary search on the root
-//     node's items to determine a "soft" lower-bound constraint position and a
-//     "hard" upper-bound constraint position in the root's children.
-//  2. when traversing into a child node in the lower or upper bound constraint
-//     position the constraint is refined by searching the child's items.
-//  3. the initial traversal down the tree follows the right-most children whose
-//     upper bound end keys are equal to or greater than the start key of the search
-//     range. The children followed will be equal to or less than the hard
-//     upper-bound constraint.
-//  4. once the initial traversal completes and the scan is in the right-most
-//     btree node whose upper bound overlaps the search range, then jumps directly
-//     to the first item before the upper bound constraint position. This is because
-//     the upper bound constraint position is exclusive.
-//  5. as long as the scan hasn't reached the lower bound constraint position
-//     (the first item with a start key equal or greater than the search range's
-//     start key), it can continue scanning without performing key comparisions.
-//     This is allowed because all items until the lower bound constraint position
-//     is reached will have end keys greater than the search range's start key, and
-//     we know that all items in the tree have start keys less than the search
-//     range's end key.
-//  6. once the scan reaches the lower bound constraint position, key comparisons
-//     must be performed with each item in the tree. This is necessary because even
-//     though the scan is dealing with items that have start keys less than the
-//     serach range's start key, it is possible that these items have end keys that
-//     cause them to overlap with the search range.
-//
-// -----------------------------------------------------------------------------
-// Differences between forward and reverse overlap scans
-// -----------------------------------------------------------------------------
-//
-//  1. The forward overlapping scan can terminate early. It can do so once it
-//     reaches the hard upper bound constaint. This is the first item whose start
-//     key is greater than or equal to the search range's end key.
-//  2. The reverse overlaping scan can directly "jump" directly to the item right
-//     before the hard upper bound constraint. This allows it to skip any subtree/
-//     items that are past the search range's end key.
-//  3. Once the forward overlapping scan enters the inConstrMin condition, it
-//     stays there. The scan reaches inConstrMin at the first item whose start key
-//     is greater than the search range's start key. While inConstrMin is true, no
-//     key comparisons need to be performed[1].
-//  4. In contrast, the reverse overlapping starts off[2] in the inConstrMin
-//     state (where no key comparisons are needed). Once it exitst this state, key
-//     comparisons are needed.
-//
-// [1] This is because the search interval's end key must be greater than the
-// item's start key. Otherwise, we'd have terminated the scan. So, the item must
-// overlap with the search range, and we can skip key comparisons.
-// [2] After it's jumped to the item right before the "hard" upper bound
-// constraint.
-//
-// There's a few reasons for the differences here:
-//  1. All items in the b-tree are sorted by start key. This means that we have a
-//     "hard" upper bound, but a "soft" lower bound. For forward scans, this means
-//     that we can terminate early when this "hard" upper bound is reached. For
-//     reverse scans, this means that we can directly jump to the last item the scan
-//     will ever see.
-//  2. The number of children at an interior node is one more than the number of
-//     items. For a forward scan, the scan starts off at the 0th index regardless of
-//     the type of node. For a reverse scan, however, the scan must start off at the
-//     last child for interior nodes, and the last item for leaf-nodes. These are "off
-//     by one", which requires some care to get right.
 type overlapScan struct {
 	// The "soft" lower-bound constraint.
-	constrMinN   *node
-	constrMinPos int16
-	inConstrMin  bool
+	constrMinN       *node
+	constrMinPos     int16
+	constrMinReached bool
 
 	// The "hard" upper-bound constraint.
 	constrMaxN   *node
@@ -1173,23 +1084,10 @@ func (i *iterator) FirstOverlap(item *latch) {
 		return
 	}
 	i.pos = 0
+	i.o = overlapScan{}
 	i.constrainMinSearchBounds(item)
 	i.constrainMaxSearchBounds(item)
 	i.findNextOverlap(item)
-}
-
-// LastOverlap seeks to the last item in the btree that overlaps with the
-// provided search item.
-func (i *iterator) LastOverlap(item *latch) {
-	i.reset()
-	if i.n == nil {
-		return
-	}
-	i.pos = i.n.count
-	i.o.inConstrMin = true // reverse scans start inConstrMin
-	i.constrainMinSearchBounds(item)
-	i.constrainMaxSearchBounds(item)
-	i.findPrevOverlap(item)
 }
 
 // NextOverlap positions the iterator to the item immediately following
@@ -1202,24 +1100,6 @@ func (i *iterator) NextOverlap(item *latch) {
 	i.findNextOverlap(item)
 }
 
-// PrevOverlap positions the iterator to the item immediately preceding
-// its current position that overlaps with the search item.
-func (i *iterator) PrevOverlap(item *latch) {
-	if i.n == nil {
-		return
-	}
-	i.findPrevOverlap(item)
-}
-
-// constrainMinSearchBounds sets the "soft" lower-bound constraint. This is the
-// first item whose start key is greater than or equal to the supplied search
-// range's start key.
-//
-//	| search range:           [-------------)
-//	| items:         [----) [----) [----) [----) [----)
-//	|                                ^
-//	|                                |
-//	|                                +---constrMinPos
 func (i *iterator) constrainMinSearchBounds(item *latch) {
 	k := item.Key()
 	j := sort.Search(int(i.n.count), func(j int) bool {
@@ -1229,15 +1109,6 @@ func (i *iterator) constrainMinSearchBounds(item *latch) {
 	i.o.constrMinPos = int16(j)
 }
 
-// constrainMaxSearchBounds sets the "hard" upper-bound constraint. This is the
-// first item whose start key is greater than the supplied search range's end
-// key.
-//
-//	| search range:           [--------------)
-//	| items:         [----) [----) [----) [----) [----)
-//	|                                               ^
-//	|                                               |
-//	|                                               +---constrMaxPos
 func (i *iterator) constrainMaxSearchBounds(item *latch) {
 	up := upperBound(item)
 	j := sort.Search(int(i.n.count), func(j int) bool {
@@ -1254,7 +1125,7 @@ func (i *iterator) findNextOverlap(item *latch) {
 			i.ascend()
 		} else if !i.n.leaf() {
 			// Iterate down tree.
-			if i.o.inConstrMin || i.n.children[i.pos].max().contains(item) {
+			if i.o.constrMinReached || i.n.children[i.pos].max().contains(item) {
 				par := i.n
 				pos := i.pos
 				i.descend(par, pos)
@@ -1278,14 +1149,14 @@ func (i *iterator) findNextOverlap(item *latch) {
 		}
 		if i.n == i.o.constrMinN && i.pos == i.o.constrMinPos {
 			// The scan reached the soft lower-bound constraint.
-			i.o.inConstrMin = true
+			i.o.constrMinReached = true
 		}
 
 		// Iterate across node.
 		if i.pos < i.n.count {
 			// Check for overlapping item.
-			if i.o.inConstrMin {
-				// Fast-path to avoid span comparison. i.o.inConstrMin
+			if i.o.constrMinReached {
+				// Fast-path to avoid span comparison. i.o.constrMinReached
 				// tells us that all items have end keys above our search
 				// span's start key.
 				return
@@ -1295,95 +1166,5 @@ func (i *iterator) findNextOverlap(item *latch) {
 			}
 		}
 		i.pos++
-	}
-}
-
-func (i *iterator) findPrevOverlap(item *latch) {
-	for {
-		// First off, we want to avoid exploring any items that are past the
-		// search range's end key.
-		if i.n == i.o.constrMaxN && i.pos > i.o.constrMaxPos {
-			// The item at i.o.constrMaxPos is the first item with a start key
-			// that's greater than the search range's end key. As such, it is
-			// the left-most item that does not overlap with the search range --
-			// we want to "jump" straight to the preceding position. However, we
-			// can't just position the iterator to i.o.constrMaxPos - 1; if this
-			// is an interior node, we might need to descend into the child on
-			// the right of i.o.constrMaxPos - 1 first. So, we set the position
-			// to that of the child node, and let the loop decide whether to
-			// descend further or not.
-			i.pos = i.o.constrMaxPos
-		}
-
-		if i.pos < 0 {
-			if i.s.len() > 0 {
-				// Iterate up tree, if possible.
-				i.ascend()
-			} else {
-				// We've reached the root, so there's no more ascending to do;
-				// the iterator is already invalid, so simply return.
-				return
-			}
-		} else if !i.n.leaf() {
-			// Iterate down tree, but only if there's any hope of finding an
-			// overlap. In particular, if the max key found in the child subtree
-			// is less than the search item's start key, there's no way we'll
-			// find an overlap.
-			if i.o.inConstrMin || i.n.children[i.pos].max().contains(item) {
-				par := i.n
-				pos := i.pos
-				i.descend(par, pos)
-				// Position the iterator to the last child. It's fine if we
-				// descended to a leaf node; we'll be positioned to the last
-				// item in the leaf node in the next iteration.
-				i.pos = i.n.count
-
-				// Refine the constraint bounds, if necessary.
-				if par == i.o.constrMinN && pos == i.o.constrMinPos {
-					i.constrainMinSearchBounds(item)
-				}
-				if par == i.o.constrMaxN && pos == i.o.constrMaxPos {
-					i.constrainMaxSearchBounds(item)
-				}
-				continue
-			}
-		}
-
-		if i.n == i.o.constrMinN && i.pos == i.o.constrMinPos {
-			// The item at i.o.constrMinPos is the left-most item whose start
-			// key is greater than or equal to the search range's start key. As
-			// such, it's the last item we can eschew key comparisons for. The
-			// i.pos-- is going to transition us from a constrained minimum to
-			// an unconstrained minimum scan; update state to reflect this.
-			i.o.inConstrMin = false
-		}
-
-		// NB: We decrement the position between descending into a child node
-		// and checking an item. This is in contrast to the forward scan, where
-		// the increment happens after doing both.
-		//
-		// This is because the number of children at an interior node is one
-		// more than the number of items. As such, positioning the iterator at
-		// the last child is different than positioning it at the last item
-		// (it's off by one). On the other hand, positioning the iterator at the
-		// first item or the first child is the same index (0).
-		i.pos--
-
-		// Iterate across node.
-		if i.pos >= 0 {
-			if i.o.inConstrMin {
-				// Fast-path to avoid span comparison. i.o.inConstrMin
-				// tells us that the item has a start key that's greater than
-				// the search range's start key.
-				return
-			}
-			if upperBound(i.n.items[i.pos]).contains(item) {
-				// We're not in the constrained minimum state, which means the
-				// item's start key is less than the search range's start key.
-				// We must check if the item's end key results in an overlap
-				// (i.e. if the end key is contained in the search range).
-				return
-			}
-		}
 	}
 }

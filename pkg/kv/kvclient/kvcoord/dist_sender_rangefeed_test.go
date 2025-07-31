@@ -22,11 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -49,10 +47,10 @@ type testRangefeedClient struct {
 }
 
 func (c *testRangefeedClient) MuxRangeFeed(
-	ctx context.Context,
-) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
+	ctx context.Context, opts ...grpc.CallOption,
+) (kvpb.Internal_MuxRangeFeedClient, error) {
 	defer c.count()
-	return c.RestrictedInternalClient.MuxRangeFeed(ctx)
+	return c.RestrictedInternalClient.MuxRangeFeed(ctx, opts...)
 }
 
 type internalClientCounts struct {
@@ -136,7 +134,7 @@ func rangeFeed(
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) (err error) {
-		return ds.RangeFeed(ctx, []kvcoord.SpanTimePair{{Span: sp, StartAfter: startFrom}}, events, opts...)
+		return ds.RangeFeed(ctx, []roachpb.Span{sp}, startFrom, events, opts...)
 	})
 	g.GoCtx(func(ctx context.Context) error {
 		for {
@@ -312,8 +310,6 @@ func TestMuxRangeFeedDoesNotStallOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderDuress(t, "slow test")
-
 	ctx := context.Background()
 
 	var (
@@ -324,7 +320,7 @@ func TestMuxRangeFeedDoesNotStallOnError(t *testing.T) {
 		errCount    int
 	)
 
-	streamInterceptor := func(target string, class rpcbase.ConnectionClass) grpc.StreamClientInterceptor {
+	streamInterceptor := func(target string, class rpc.ConnectionClass) grpc.StreamClientInterceptor {
 		return func(
 			ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
 			method string, streamer grpc.Streamer, opts ...grpc.CallOption,

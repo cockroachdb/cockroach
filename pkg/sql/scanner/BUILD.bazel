@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "scanner",
     srcs = [
-        "jsonpath_scan.go",
         "plpgsql_scan.go",
         "scan.go",
     ],
@@ -12,7 +11,6 @@ go_library(
     deps = [
         "//pkg/sql/lexbase",
         "//pkg/sql/plpgsql/parser/lexbase",
-        "//pkg/util/jsonpath/parser/lexbase",
     ],
 )
 

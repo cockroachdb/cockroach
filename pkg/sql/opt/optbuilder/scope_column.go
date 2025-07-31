@@ -70,11 +70,6 @@ type scopeColumn struct {
 	// exprStr contains a stringified representation of expr, or the original
 	// column name if expr is nil. It is populated lazily inside getExprStr().
 	exprStr string
-
-	// resolveErr, if non-nil, is the error to be returned when the column is
-	// successfully resolved. This is used to provide a helpful error message for
-	// a column that is not allowed to be referenced.
-	resolveErr error
 }
 
 // columnVisibility is an extension of cat.ColumnVisibility.
@@ -145,9 +140,9 @@ func (c *scopeColumn) getParamOrd() int {
 }
 
 // funcParamReferencedBy returns true if the scopeColumn is a function parameter
-// column that can be referenced by the given 0-based ordinal.
-func (c *scopeColumn) funcParamReferencedBy(ord int) bool {
-	return c.paramOrd > 0 && int(c.paramOrd-1) == ord
+// column that can be referenced by the given placeholder.
+func (c *scopeColumn) funcParamReferencedBy(idx tree.PlaceholderIdx) bool {
+	return c.paramOrd > 0 && tree.PlaceholderIdx(c.paramOrd-1) == idx
 }
 
 // clearName sets the empty table and column name. This is used to make the

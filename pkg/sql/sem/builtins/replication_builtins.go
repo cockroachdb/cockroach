@@ -120,9 +120,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				if err := mgr.AuthorizeViaReplicationPriv(ctx); err != nil {
-					return nil, err
-				}
 				tenantName := string(tree.MustBeDString(args[0]))
 				replicationProducerSpec, err := mgr.StartReplicationStream(ctx, roachpb.TenantName(tenantName), streampb.ReplicationProducerRequest{})
 				if err != nil {
@@ -149,9 +146,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
-					return nil, err
-				}
-				if err := mgr.AuthorizeViaReplicationPriv(ctx); err != nil {
 					return nil, err
 				}
 				tenantName := string(tree.MustBeDString(args[0]))
@@ -206,9 +200,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				streamID := streampb.StreamID(int(tree.MustBeDInt(args[0])))
-				if err := mgr.AuthorizeViaJob(ctx, streamID); err != nil {
-					return nil, err
-				}
 				sps, err := mgr.HeartbeatReplicationStream(ctx, streamID, frontier)
 				if err != nil {
 					return nil, err
@@ -246,10 +237,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				streamID := streampb.StreamID(tree.MustBeDInt(args[0]))
-				if err := mgr.AuthorizeViaJob(ctx, streamID); err != nil {
-					return nil, err
-				}
 				return mgr.StreamPartition(
 					ctx,
 					streampb.StreamID(tree.MustBeDInt(args[0])),
@@ -279,9 +266,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 				}
 
 				streamID := int64(tree.MustBeDInt(args[0]))
-				if err := mgr.AuthorizeViaJob(ctx, streampb.StreamID(streamID)); err != nil {
-					return nil, err
-				}
 				spec, err := mgr.GetPhysicalReplicationStreamSpec(ctx, streampb.StreamID(streamID))
 				if err != nil {
 					return nil, err
@@ -319,9 +303,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 
 				streamID := int64(tree.MustBeDInt(args[0]))
 				successfulIngestion := bool(tree.MustBeDBool(args[1]))
-				if err := mgr.AuthorizeViaJob(ctx, streampb.StreamID(streamID)); err != nil {
-					return nil, err
-				}
 				if err := mgr.CompleteReplicationStream(
 					ctx, streampb.StreamID(streamID), successfulIngestion,
 				); err != nil {
@@ -352,9 +333,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
-					return nil, err
-				}
-				if err := mgr.AuthorizeViaReplicationPriv(ctx); err != nil {
 					return nil, err
 				}
 				return mgr.SetupSpanConfigsStream(ctx, roachpb.TenantName(tree.MustBeDString(args[0])))
@@ -511,16 +489,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err := protoutil.Unmarshal(reqBytes, &req); err != nil {
 					return nil, err
 				}
-				if req.StreamID != 0 {
-					if err := mgr.AuthorizeViaJob(ctx, req.StreamID); err != nil {
-						return nil, err
-					}
-					// Auth via replication priv exists to ensure a user that planned their
-					// job pre 25.2, which will not send a stream id, can still plan their
-					// distsql flow.
-				} else if err := mgr.AuthorizeViaReplicationPriv(ctx); err != nil {
-					return nil, err
-				}
 
 				spec, err := mgr.PlanLogicalReplication(ctx, req)
 				if err != nil {
@@ -557,9 +525,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 				req := streampb.ReplicationProducerRequest{}
 				if err := protoutil.Unmarshal(reqBytes, &req); err != nil {
 					return nil, err
-				}
-				if err := mgr.AuthorizeViaReplicationPriv(ctx, req.TableNames...); err != nil {
-					return nil, errors.Wrapf(err, "failed to auth")
 				}
 
 				spec, err := mgr.StartReplicationStreamForTables(ctx, req)
@@ -599,20 +564,12 @@ var replicationBuiltins = map[string]builtinDefinition{
 				proc := int32(int(tree.MustBeDInt(args[1])))
 				percent := streampb.StreamID(int(tree.MustBeDInt(args[2])))
 
-				if err := mgr.AuthorizeViaJob(ctx, stream); err != nil {
-					return nil, err
-				}
-
 				if percent > 100 {
 					return nil, errors.New("invalid percent")
 				}
 
 				found := false
-				statuses, err := mgr.DebugGetLogicalConsumerStatuses(ctx)
-				if err != nil {
-					return nil, err
-				}
-				for _, i := range statuses {
+				for _, i := range mgr.DebugGetLogicalConsumerStatuses(ctx) {
 					if stream == 0 || stream == i.StreamID {
 						if proc == 0 || proc == i.ProcessorID {
 							found = true

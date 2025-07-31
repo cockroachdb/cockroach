@@ -7,9 +7,10 @@ package sqlstatsccl_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"encoding/json"
 	"fmt"
-	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,8 +41,9 @@ func TestSQLStatsRegions(t *testing.T) {
 	// and a secondary tenant, ensuring that a distsql query across multiple
 	// regions sees those regions reported in sqlstats.
 	ctx := context.Background()
+	rng, _ := randutil.NewPseudoRand()
 
-	numServers := 9
+	numServers := 3
 	regionNames := []string{
 		"gcp-us-west1",
 		"gcp-us-central1",
@@ -84,62 +86,117 @@ func TestSQLStatsRegions(t *testing.T) {
 	}()
 
 	tdb := sqlutils.MakeSQLRunner(host.ServerConn(0))
+
+	// Shorten the closed timestamp target duration so that span configs
+	// propagate more rapidly.
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`)
+	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
+
+	// Lengthen the lead time for the global tables to prevent overload from
+	// resulting in delays in propagating closed timestamps and, ultimately
+	// forcing requests from being redirected to the leaseholder. Without this
+	// change, the test sometimes is flakey because the latency budget allocated
+	// to closed timestamp propagation proves to be insufficient. This value is
+	// very cautious, and makes this already slow test even slower.
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'")
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_override = '500ms'`)
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'")
+	tdb.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '500ms'`)
+
 	tdb.Exec(t, `ALTER RANGE meta configure zone using constraints = '{"+region=gcp-us-west1": 1, "+region=gcp-us-central1": 1, "+region=gcp-us-east1": 1}';`)
-	tdbObs := sqlutils.MakeSQLRunner(host.ServerConn(0))
 
 	// Create secondary tenants
-	var tenants []serverutils.ApplicationLayerInterface
+	var tenantDbs []*gosql.DB
 	for _, server := range host.Servers {
-		tenant, _ := serverutils.StartTenant(t, server, base.TestTenantArgs{
+		_, tenantDb := serverutils.StartTenant(t, server, base.TestTenantArgs{
 			TenantID: roachpb.MustMakeTenantID(11),
 			Locality: server.Locality(),
 		})
-		tenants = append(tenants, tenant)
+		tenantDbs = append(tenantDbs, tenantDb)
 	}
 
 	systemDbName := "testDbSystem"
 	createMultiRegionDbAndTable(t, tdb, regionNames, systemDbName)
-	tenantRunner := sqlutils.MakeSQLRunner(tenants[1].SQLConn(t))
+	tenantRunner := sqlutils.MakeSQLRunner(tenantDbs[1])
 	tenantDbName := "testDbTenant"
 	createMultiRegionDbAndTable(t, tenantRunner, regionNames, tenantDbName)
-	tenantRunnerObs := sqlutils.MakeSQLRunner(tenants[1].SQLConn(t))
 
 	testCases := []struct {
-		name    string
-		dbName  string
-		db      *sqlutils.SQLRunner
-		obsConn *sqlutils.SQLRunner
+		name   string
+		dbName string
+		db     *sqlutils.SQLRunner
 	}{{
 		// This test runs against the system tenant, opening a database
 		// connection to the first node in the cluster.
-		name:    "system tenant",
-		dbName:  systemDbName,
-		db:      tdb,
-		obsConn: tdbObs,
+		name:   "system tenant",
+		dbName: systemDbName,
+		db:     tdb,
 	}, {
 		// This test runs against a secondary tenant, launching a SQL instance
 		// for each node in the underlying cluster and returning a database
 		// connection to the first one.
-		name:    "secondary tenant",
-		dbName:  tenantDbName,
-		db:      tenantRunner,
-		obsConn: tenantRunnerObs,
+		name:   "secondary tenant",
+		dbName: tenantDbName,
+		db:     tenantRunner,
 	}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			db := tc.db
 			db.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 1;`)
 
-			testutils.SucceedsWithin(t, func() (err error) {
+			// In order to ensure that ranges are replicated across all regions, following
+			// SucceedsWithin block performs following:
+			// - wait for full replication, which doesn't guarantee that there's no
+			// more splits should happen
+			// - query `show ranges` to check that at least one leaseholder is present
+			// in every locality.
+			// - if localitiesMap has localities for all regions defined in regionNames then
+			// it means we have leaseholders in every region.
+			// - otherwise enqueue replica split for all ranges to speed up splits and
+			// try again with new cycle.
+			testutils.SucceedsWithin(t, func() error {
+				require.NoError(t, host.WaitForFullReplication())
+				rows := db.QueryStr(t, `select range_id, lease_holder, lease_holder_locality from [show ranges from table test with details]`)
+
+				localitiesMap := map[string] /*locality*/ []string /*leaseholderNodeID*/ {}
+				for _, row := range rows {
+					leaseholderNodeID := row[1]
+					leaseholderLocality := row[2]
+					localitiesMap[leaseholderLocality] = append(localitiesMap[leaseholderLocality], leaseholderNodeID)
+				}
+
+				if len(localitiesMap) < len(regionNames) {
+					for _, row := range rows {
+						rangeID, err := strconv.Atoi(row[0])
+						require.NoError(t, err)
+						lhID, err := strconv.Atoi(row[1])
+						require.NoError(t, err)
+						systemSqlDb := host.SystemLayer(lhID-1).SQLConn(t, serverutils.DBName(tc.dbName))
+						// ignore errors of enqueued splits to make sure it doesn't affect test execution.
+						_, _ = systemSqlDb.Exec(`SELECT crdb_internal.kv_enqueue_replica($1, 'split', true)`, rangeID)
+					}
+					return fmt.Errorf("expected leaseholders in following %s localities, but got %s", regionNames, localitiesMap)
+				}
+				return nil
+			}, 5*time.Minute)
+
+			// It takes a while for the region replication to complete.
+			testutils.SucceedsWithin(t, func() error {
 				var expectedRegions []string
-				_, err = db.DB.ExecContext(ctx, fmt.Sprintf(`USE %s`, tc.dbName))
+				_, err := db.DB.ExecContext(ctx, fmt.Sprintf(`USE %s`, tc.dbName))
 				if err != nil {
 					return err
 				}
-				_, err = db.DB.ExecContext(ctx, `SET distsql = on;`)
-				if err != nil {
-					return err
+
+				if rng.Float64() < 0.5 {
+					// In half of the cases disable DistSQL in order to check
+					// that KV regions information is propagated correctly.
+					_, err = db.DB.ExecContext(ctx, "SET distsql = off;")
+					if err != nil {
+						return err
+					}
 				}
+
 				// Use EXPLAIN ANALYSE (DISTSQL) to get the accurate list of nodes.
 				explainInfo, err := db.DB.QueryContext(ctx, `EXPLAIN ANALYSE (DISTSQL) SELECT * FROM test`)
 				if err != nil {
@@ -167,11 +224,7 @@ func TestSQLStatsRegions(t *testing.T) {
 				// Select from the table and see what statement statistics were written.
 				db.Exec(t, "SET application_name = $1", t.Name())
 				db.Exec(t, "SELECT * FROM test")
-				sqlstatstestutil.WaitForStatementEntriesAtLeast(t, tc.obsConn, 1, sqlstatstestutil.StatementFilter{
-					App: t.Name(),
-				})
-
-				row := tc.obsConn.QueryRow(t, `
+				row := db.QueryRow(t, `
 				SELECT statistics->>'statistics'
 				  FROM crdb_internal.statement_statistics
 				 WHERE app_name = $1`, t.Name())
@@ -181,18 +234,7 @@ func TestSQLStatsRegions(t *testing.T) {
 				var actual appstatspb.StatementStatistics
 				err = json.Unmarshal([]byte(actualJSON), &actual)
 				require.NoError(t, err)
-
-				foundRegions := 0
-				for _, r := range expectedRegions {
-					if slices.Contains(actual.Regions, r) {
-						foundRegions += 1
-					}
-				}
-				// As long as we find more than 1 region, we pass the test.
-				// Asserting that all 3 regions are present times out
-				// frequently and makes this test less useful.
-				require.Greater(t, foundRegions, 1, "expect at least 2 regions present in the statement stats, found: %v", actual.Regions)
-
+				require.Equal(t, expectedRegions, actual.Regions)
 				return nil
 			}, 3*time.Minute)
 		})

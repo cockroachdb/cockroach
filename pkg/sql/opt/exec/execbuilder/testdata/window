@@ -14,7 +14,7 @@ CREATE TABLE kv (
   FAMILY (s)
 )
 
-statement ok
+statement OK
 INSERT INTO kv VALUES
 (1, 2, 3, 1.0, 1, 'a', true),
 (3, 4, 5, 2, 8, 'a', true),

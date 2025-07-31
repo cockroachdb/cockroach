@@ -20,10 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -115,8 +114,6 @@ func TestTestPlanner(t *testing.T) {
 				}
 			case "mixed-version-test":
 				mvt = createDataDrivenMixedVersionTest(t, d.CmdArgs)
-			case "before-cluster-start":
-				mvt.BeforeClusterStart(d.CmdArgs[0].Vals[0], dummyHook)
 			case "on-startup":
 				mvt.OnStartup(d.CmdArgs[0].Vals[0], dummyHook)
 			case "in-mixed-version":
@@ -327,10 +324,10 @@ func Test_maxNumPlanSteps(t *testing.T) {
 
 	// There is in fact no "basic upgrade" test plan with fewer than 13 steps.
 	// The smallest plan is,
-	// planner_test.go:314: Seed:               12345
-	// Upgrades:           v24.1.1 → <current>
+	//planner_test.go:314: Seed:               12345
+	//Upgrades:           v24.1.1 → <current>
 	//		Deployment mode:    system-only
-	// Plan:
+	//Plan:
 	//	├── start cluster at version "v24.1.1" (1)
 	//	├── wait for all nodes (:1-4) to acknowledge cluster version '24.1' on system tenant (2)
 	//	└── upgrade cluster from "v24.1.1" to "<current>"
@@ -359,7 +356,7 @@ func Test_maxNumPlanSteps(t *testing.T) {
 // the oldest supported version. Called by TestMain.
 func setDefaultVersions() func() {
 	previousBuildV := clusterupgrade.TestBuildVersion
-	clusterupgrade.TestBuildVersion = &buildVersion
+	clusterupgrade.TestBuildVersion = buildVersion
 
 	previousOldestV := OldestSupportedVersion
 	OldestSupportedVersion = minimumSupported
@@ -443,7 +440,7 @@ func testPredecessorFunc(
 ) (*clusterupgrade.Version, error) {
 	pred, ok := testPredecessorMapping[v.Series()]
 	if !ok {
-		return nil, fmt.Errorf("no known predecessor for %q (%q series)", v, v.Series())
+		return nil, fmt.Errorf("no known predecessor for %q", v)
 	}
 
 	return pred, nil
@@ -861,9 +858,7 @@ type concurrentUserHooksMutator struct{}
 func (concurrentUserHooksMutator) Name() string         { return "concurrent_user_hooks_mutator" }
 func (concurrentUserHooksMutator) Probability() float64 { return 0.5 }
 
-func (concurrentUserHooksMutator) Generate(
-	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+func (concurrentUserHooksMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
 	// Insert our `testSingleStep` implementation concurrently with every
 	// user-provided function.
 	return plan.
@@ -882,9 +877,7 @@ type removeUserHooksMutator struct{}
 func (removeUserHooksMutator) Name() string         { return "remove_user_hooks_mutator" }
 func (removeUserHooksMutator) Probability() float64 { return 0.5 }
 
-func (removeUserHooksMutator) Generate(
-	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+func (removeUserHooksMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
 	return plan.
 		newStepSelector().
 		Filter(func(s *singleStep) bool {
@@ -896,36 +889,6 @@ func (removeUserHooksMutator) Generate(
 
 func dummyHook(context.Context, *logger.Logger, *rand.Rand, *Helper) error {
 	return nil
-}
-
-func Test_DisableAllMutators(t *testing.T) {
-	mvt := newTest(DisableAllMutators())
-
-	rng, seed := randutil.NewTestRand()
-	mvt.seed = seed
-	mvt.prng = rng
-
-	plan, err := mvt.plan()
-	require.NoError(t, err)
-	require.Nil(t, plan.enabledMutators)
-
-}
-
-func Test_DisableAllClusterSettingMutators(t *testing.T) {
-	mvt := newTest(DisableAllClusterSettingMutators())
-
-	rng, seed := randutil.NewTestRand()
-	mvt.seed = seed
-	mvt.prng = rng
-
-	plan, err := mvt.plan()
-	require.NoError(t, err)
-
-	for _, enabled := range plan.enabledMutators {
-		if _, ok := enabled.(clusterSettingMutator); ok {
-			t.Errorf("cluster setting mutator %q was not disabled", enabled.Name())
-		}
-	}
 }
 
 // This is a regression test to ensure that separate process deployments

@@ -129,13 +129,6 @@ func TestLogic_distsql_enum(
 	runLogicTest(t, "distsql_enum")
 }
 
-func TestLogic_distsql_inspect(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "distsql_inspect")
-}
-
 func TestLogic_distsql_numtables(
 	t *testing.T,
 ) {

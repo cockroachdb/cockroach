@@ -347,7 +347,7 @@ var aggregates = map[string]builtinDefinition{
 	),
 
 	"count": makeBuiltin(tree.FunctionProperties{},
-		makeAggOverload([]*types.T{types.AnyElement}, types.Int, newCountAggregate,
+		makeAggOverload([]*types.T{types.Any}, types.Int, newCountAggregate,
 			"Calculates the number of selected elements.", volatility.Immutable, true /* calledOnNullInput */),
 	),
 
@@ -526,21 +526,21 @@ var aggregates = map[string]builtinDefinition{
 	),
 
 	"json_agg": makeBuiltin(tree.FunctionProperties{},
-		makeAggOverload([]*types.T{types.AnyElement}, types.Jsonb, newJSONAggregate,
+		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
 			"Aggregates values as a JSON or JSONB array.", volatility.Stable, true /* calledOnNullInput */),
 	),
 
 	"jsonb_agg": makeBuiltin(tree.FunctionProperties{},
-		makeAggOverload([]*types.T{types.AnyElement}, types.Jsonb, newJSONAggregate,
+		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
 			"Aggregates values as a JSON or JSONB array.", volatility.Stable, true /* calledOnNullInput */),
 	),
 
 	"json_object_agg": makeBuiltin(tree.FunctionProperties{},
-		makeAggOverload([]*types.T{types.String, types.AnyElement}, types.Jsonb, newJSONObjectAggregate,
+		makeAggOverload([]*types.T{types.String, types.Any}, types.Jsonb, newJSONObjectAggregate,
 			"Aggregates values as a JSON or JSONB object.", volatility.Stable, true /* calledOnNullInput */),
 	),
 	"jsonb_object_agg": makeBuiltin(tree.FunctionProperties{},
-		makeAggOverload([]*types.T{types.String, types.AnyElement}, types.Jsonb, newJSONObjectAggregate,
+		makeAggOverload([]*types.T{types.String, types.Any}, types.Jsonb, newJSONObjectAggregate,
 			"Aggregates values as a JSON or JSONB object.", volatility.Stable, true /* calledOnNullInput */),
 	),
 
@@ -591,7 +591,7 @@ var aggregates = map[string]builtinDefinition{
 
 	AnyNotNull: makePrivate(makeBuiltin(tree.FunctionProperties{},
 		makeImmutableAggOverloadWithReturnType(
-			[]*types.T{types.AnyElement},
+			[]*types.T{types.Any},
 			tree.IdentityReturnType(0),
 			newAnyNotNullAggregate,
 			"Returns an arbitrary not-NULL value, or NULL if none exists.",

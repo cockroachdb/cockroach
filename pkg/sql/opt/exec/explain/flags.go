@@ -30,9 +30,6 @@ type Flags struct {
 
 	// Flags to hide various fields for testing purposes.
 	Deflake DeflakeFlags
-	// ShowPolicyInfo indicates that row-level security policy information is
-	// shown.
-	ShowPolicyInfo bool
 }
 
 // DeflakeFlags control hiding of various field values. They are used to
@@ -70,11 +67,9 @@ func MakeFlags(options *tree.ExplainOptions) Flags {
 	var f Flags
 	if options.Flags[tree.ExplainFlagVerbose] {
 		f.Verbose = true
-		f.ShowPolicyInfo = true
 	}
 	if options.Flags[tree.ExplainFlagTypes] {
 		f.Verbose = true
-		f.ShowPolicyInfo = true
 		f.ShowTypes = true
 	}
 	if options.Flags[tree.ExplainFlagShape] {

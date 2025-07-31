@@ -92,7 +92,6 @@ type kv struct {
 	keySize                              int
 	insertCount                          int
 	txnQoS                               string
-	prepareReadOnly                      bool
 	writesUseSelect1                     bool
 }
 
@@ -119,18 +118,17 @@ var kvMeta = workload.Meta{
 		g := &kv{}
 		g.flags.FlagSet = pflag.NewFlagSet(`kv`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`batch`:             {RuntimeOnly: true},
-			`sfu-wait-delay`:    {RuntimeOnly: true},
-			`sfu-writes`:        {RuntimeOnly: true},
-			`read-percent`:      {RuntimeOnly: true},
-			`span-percent`:      {RuntimeOnly: true},
-			`span-limit`:        {RuntimeOnly: true},
-			`del-percent`:       {RuntimeOnly: true},
-			`splits`:            {RuntimeOnly: true},
-			`scatter`:           {RuntimeOnly: true},
-			`timeout`:           {RuntimeOnly: true},
-			`prepare-read-only`: {RuntimeOnly: true},
-			`sel1-writes`:       {RuntimeOnly: true},
+			`batch`:          {RuntimeOnly: true},
+			`sfu-wait-delay`: {RuntimeOnly: true},
+			`sfu-writes`:     {RuntimeOnly: true},
+			`read-percent`:   {RuntimeOnly: true},
+			`span-percent`:   {RuntimeOnly: true},
+			`span-limit`:     {RuntimeOnly: true},
+			`del-percent`:    {RuntimeOnly: true},
+			`splits`:         {RuntimeOnly: true},
+			`scatter`:        {RuntimeOnly: true},
+			`timeout`:        {RuntimeOnly: true},
+			`sel1-writes`:    {RuntimeOnly: true},
 		}
 		g.flags.IntVar(&g.batchSize, `batch`, 1,
 			`Number of blocks to read/insert in a single SQL statement.`)
@@ -184,7 +182,6 @@ var kvMeta = workload.Meta{
 		g.flags.StringVar(&g.txnQoS, `txn-qos`, `regular`,
 			`Set default_transaction_quality_of_service session variable, accepted`+
 				`values are 'background', 'regular' and 'critical'.`)
-		g.flags.BoolVar(&g.prepareReadOnly, `prepare-read-only`, false, `Prepare and perform only read statements.`)
 		g.flags.BoolVar(&g.writesUseSelect1, `sel1-writes`, false,
 			`Use SELECT 1 as the first statement of transactional writes with a sleep after SELECT 1.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -249,9 +246,6 @@ func (w *kv) validateConfig() (err error) {
 	}
 	if w.readPercent+w.spanPercent+w.delPercent > 100 {
 		return errors.New("'read-percent', 'span-percent' and 'del-precent' combined exceed 100%")
-	}
-	if w.prepareReadOnly && w.readPercent < 100 {
-		return errors.New("'prepare-read-only' can only be used with 'read-percent' set to 100")
 	}
 	if w.targetCompressionRatio < 1.0 || math.IsNaN(w.targetCompressionRatio) {
 		return errors.New("'target-compression-ratio' must be a number >= 1.0")
@@ -439,7 +433,7 @@ func (w *kv) Tables() []workload.Table {
 					rowOffset := rowIdx - rowBegin
 					var payload []byte
 					blockSize, uniqueSize := w.randBlockSize(rndBlock)
-					*a, payload = a.Alloc(blockSize)
+					*a, payload = a.Alloc(blockSize, 0 /* extraCap */)
 					w.randFillBlock(rndBlock, payload, uniqueSize)
 					valCol.Set(rowOffset, payload)
 				}
@@ -548,10 +542,8 @@ func (w *kv) Ops(
 		}
 		op.readStmt = op.sr.Define(readStmtStr)
 		op.followerReadStmt = op.sr.Define(followerReadStmtStr)
-		if !op.config.prepareReadOnly {
-			op.writeStmt = op.sr.Define(writeStmtStr)
-		}
-		if len(sfuStmtStr) > 0 && !op.config.prepareReadOnly {
+		op.writeStmt = op.sr.Define(writeStmtStr)
+		if len(sfuStmtStr) > 0 {
 			op.sfuStmt = op.sr.Define(sfuStmtStr)
 		}
 		op.sel1Stmt = op.sr.Define("SELECT 1")
@@ -561,9 +553,7 @@ func (w *kv) Ops(
 				" SET default_transaction_quality_of_service = %s", w.txnQoS))
 			op.qosStmt = &stmt
 		}
-		if !op.config.prepareReadOnly {
-			op.delStmt = op.sr.Define(delStmtStr)
-		}
+		op.delStmt = op.sr.Define(delStmtStr)
 		if err := op.sr.Init(ctx, "kv", mcp); err != nil {
 			return workload.QueryLoad{}, err
 		}

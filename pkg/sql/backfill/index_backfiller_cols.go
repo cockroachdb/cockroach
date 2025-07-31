@@ -8,8 +8,6 @@ package backfill
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -54,10 +52,7 @@ type indexBackfillerCols struct {
 // requirements due to references in expressions. That needs to be added after
 // constructing this information.
 func makeIndexBackfillColumns(
-	tableDesc catalog.TableDescriptor,
-	deletableColumns []catalog.Column,
-	sourcePrimaryIndex catalog.Index,
-	addedIndexes []catalog.Index,
+	deletableColumns []catalog.Column, sourcePrimaryIndex catalog.Index, addedIndexes []catalog.Index,
 ) (indexBackfillerCols, error) {
 
 	// We will need to evaluate default or computed expressions for
@@ -76,14 +71,6 @@ func makeIndexBackfillColumns(
 	for _, idx := range addedIndexes {
 		allIndexColumns.UnionWith(indexColumns(idx))
 	}
-	if tableDesc != nil {
-		var err error
-		// Add any dependent columns needed to evaluate expressions.
-		allIndexColumns, err = addIndexColumnsFromExpressions(allIndexColumns, tableDesc, addedIndexes)
-		if err != nil {
-			return indexBackfillerCols{}, err
-		}
-	}
 	for _, column := range deletableColumns {
 		if !column.Public() &&
 			// Include columns we are adding, in case we are adding them to a
@@ -98,23 +85,6 @@ func makeIndexBackfillColumns(
 			!(column.Dropped() && primaryColumns.Contains(column.GetID()) &&
 				allIndexColumns.Contains(column.GetID())) {
 			continue
-		}
-		// Public columns that are not in the source primary index and not
-		// needed by the secondary index can be skipped. If there are virtual
-		// columns that are needed by the secondary index then pick those up.
-		if column.Public() && !primaryColumns.Contains(column.GetID()) {
-			// If a non-virtual column requested by the secondary index is missing
-			// we are going to error out.
-			if allIndexColumns.Contains(column.GetID()) && !column.IsVirtual() {
-				return indexBackfillerCols{}, errors.AssertionFailedf(
-					"column %s is public but not in the source primary index",
-					column.GetName(),
-				)
-			}
-			// If the column is not needed by the secondary index then we can skip it.
-			if !allIndexColumns.Contains(column.GetID()) {
-				continue
-			}
 		}
 		if column.IsComputed() && column.IsVirtual() {
 			computedVirtual.Add(column.GetID())
@@ -212,46 +182,4 @@ func indexColumns(idx catalog.Index) (s catalog.TableColSet) {
 	s.UnionWith(idx.CollectPrimaryStoredColumnIDs())
 	s.UnionWith(idx.CollectSecondaryStoredColumnIDs())
 	return s
-}
-
-// addIndexColumnsFromExpressions takes a set of columns stored in an index,
-// and computes any dependent columns needed for computed expressions or partial
-// indexes.
-func addIndexColumnsFromExpressions(
-	s catalog.TableColSet, table catalog.TableDescriptor, addIndexes []catalog.Index,
-) (catalog.TableColSet, error) {
-	addReferencesFromExpression := func(expression string) error {
-		expr, err := parser.ParseExpr(expression)
-		if err != nil {
-			return err
-		}
-		referencedColumns, err := schemaexpr.ExtractColumnIDs(table, expr)
-		if err != nil {
-			return err
-		}
-		for _, colID := range referencedColumns.Ordered() {
-			s.Add(colID)
-		}
-		return nil
-	}
-	// First get any columns needed to compute virtual expressions.
-	for _, colID := range s.Ordered() {
-		column := catalog.FindColumnByID(table, colID)
-		if !column.IsVirtual() || !column.IsComputed() {
-			continue
-		}
-		if err := addReferencesFromExpression(column.GetComputeExpr()); err != nil {
-			return s, err
-		}
-	}
-	// Next get any expressions needed to evaluate index predicates.
-	for _, idx := range addIndexes {
-		if len(idx.GetPredicate()) == 0 {
-			continue
-		}
-		if err := addReferencesFromExpression(idx.GetPredicate()); err != nil {
-			return s, err
-		}
-	}
-	return s, nil
 }

@@ -22,7 +22,7 @@ import (
 
 var testingAvoidFullScans = metamorphic.ConstantWithTestBool(
 	"jobs.avoid_full_scans_in_find_running_jobs",
-	true, /* defaultValue */
+	false, /* defaultValue */
 )
 
 var avoidFullScans = settings.RegisterBoolSetting(
@@ -32,7 +32,7 @@ var avoidFullScans = settings.RegisterBoolSetting(
 	testingAvoidFullScans)
 
 // RunningJobExists checks that whether there are any job of the given types
-// in the pending, running, or paused state, optionally ignoring the job with
+// in the pending, running, or paused status, optionally ignoring the job with
 // the ID specified by ignoreJobID as well as any jobs created after it, if
 // the passed ID is not InvalidJobID.
 func RunningJobExists(
@@ -60,7 +60,7 @@ func RunningJobExists(
 	}
 
 	q := `SELECT id FROM system.jobs@%s WHERE job_type IN %s AND status IN %s %s LIMIT 1`
-	stmt := fmt.Sprintf(q, hint, typeStrs, NonTerminalStateTupleString, orderBy)
+	stmt := fmt.Sprintf(q, hint, typeStrs, NonTerminalStatusTupleString, orderBy)
 
 	it, err := txn.QueryIterator(
 		ctx,
@@ -87,7 +87,7 @@ func RunningJobExists(
 }
 
 // RunningJobs returns the IDs of all jobs of the given types in the pending,
-// running, or paused state, optionally ignoring the job with the ID specified
+// running, or paused status, optionally ignoring the job with the ID specified
 // by ignoreJobID as well as any jobs created after it, if the passed ID is not
 // InvalidJobID.
 func RunningJobs(
@@ -115,7 +115,7 @@ func RunningJobs(
 	}
 
 	q := `SELECT id FROM system.jobs@%s WHERE job_type IN %s AND status IN %s %s`
-	stmt := fmt.Sprintf(q, hint, typeStrs, NonTerminalStateTupleString, orderBy)
+	stmt := fmt.Sprintf(q, hint, typeStrs, NonTerminalStatusTupleString, orderBy)
 	it, err := txn.QueryIterator(
 		ctx,
 		"find-all-running-jobs-of-type",

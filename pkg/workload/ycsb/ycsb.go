@@ -13,7 +13,6 @@ import (
 	"hash"
 	"hash/fnv"
 	"math"
-	"math/rand/v2"
 	"strings"
 	"sync/atomic"
 
@@ -25,12 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
-	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/rand"
 )
 
 const (
@@ -381,7 +380,7 @@ func (g *ycsb) Tables() []workload.Table {
 					config:   g,
 					hashFunc: fnv.New64(),
 				}
-				rng := rand.NewPCG(RandomSeed.Seed(), uint64(batchIdx))
+				rng := rand.NewSource(RandomSeed.Seed() + uint64(batchIdx))
 
 				var tmpbuf [fieldLength]byte
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
@@ -459,18 +458,16 @@ func (g *ycsb) Ops(
 
 	var requestGen randGenerator
 	var err error
-	requestGenRng := rand.New(rand.NewPCG(RandomSeed.Seed(), 0))
+	requestGenRng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	switch strings.ToLower(g.requestDistribution) {
 	case "zipfian":
-		requestGen, err = workloadimpl.NewZipfGenerator(
-			requestGenRng, zipfIMin,
-			workloadimpl.DefaultIMax-1, workloadimpl.DefaultTheta, false /* verbose */)
+		requestGen, err = NewZipfGenerator(
+			requestGenRng, zipfIMin, defaultIMax-1, defaultTheta, false /* verbose */)
 	case "uniform":
 		requestGen, err = NewUniformGenerator(requestGenRng, 0, uint64(g.recordCount)-1)
 	case "latest":
 		requestGen, err = NewSkewedLatestGenerator(
-			requestGenRng, zipfIMin, uint64(g.recordCount)-1,
-			workloadimpl.DefaultTheta, false /* verbose */)
+			requestGenRng, zipfIMin, uint64(g.recordCount)-1, defaultTheta, false /* verbose */)
 	default:
 		return workload.QueryLoad{}, errors.Errorf("Unknown request distribution: %s", g.requestDistribution)
 	}
@@ -479,12 +476,10 @@ func (g *ycsb) Ops(
 	}
 
 	var scanLengthGen randGenerator
-	scanLengthGenRng := rand.New(rand.NewPCG(RandomSeed.Seed(), 1))
+	scanLengthGenRng := rand.New(rand.NewSource(RandomSeed.Seed() + 1))
 	switch strings.ToLower(g.scanLengthDistribution) {
 	case "zipfian":
-		scanLengthGen, err = workloadimpl.NewZipfGenerator(
-			scanLengthGenRng, g.minScanLength, g.maxScanLength,
-			workloadimpl.DefaultTheta, false /* verbose */)
+		scanLengthGen, err = NewZipfGenerator(scanLengthGenRng, g.minScanLength, g.maxScanLength, defaultTheta, false /* verbose */)
 	case "uniform":
 		scanLengthGen, err = NewUniformGenerator(scanLengthGenRng, g.minScanLength, g.maxScanLength)
 	default:
@@ -553,7 +548,7 @@ func (g *ycsb) Ops(
 			return workload.QueryLoad{}, err
 		}
 
-		rng := rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(i)))
+		rng := rand.New(rand.NewSource(RandomSeed.Seed() + uint64(i)))
 		w := &ycsbWorker{
 			config:                  g,
 			hists:                   reg.GetHandle(),
@@ -767,7 +762,7 @@ func (yw *ycsbWorker) randString(length int) string {
 	}
 	// the rest of data is random str
 	for i := strStart; i < length; i++ {
-		str[i] = letters[yw.rng.IntN(len(letters))]
+		str[i] = letters[yw.rng.Intn(len(letters))]
 	}
 	return string(str)
 }
@@ -830,7 +825,7 @@ func (yw *ycsbWorker) updateRow(ctx context.Context) error {
 	var stmt stmtKey
 	var args [2]interface{}
 	args[0] = yw.nextReadKey()
-	fieldIdx := yw.rng.IntN(numTableFields)
+	fieldIdx := yw.rng.Intn(numTableFields)
 	value := yw.randString(fieldLength)
 	if yw.config.json {
 		stmt = yw.updateStmts[0]
@@ -912,7 +907,7 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 	}
 	run := func(db conn) error {
 		key := yw.nextReadKey()
-		fieldIdx := yw.rng.IntN(numTableFields)
+		fieldIdx := yw.rng.Intn(numTableFields)
 		// Read.
 		var oldValue []byte
 		readStmt := yw.readFieldForUpdateStmts[fieldIdx]

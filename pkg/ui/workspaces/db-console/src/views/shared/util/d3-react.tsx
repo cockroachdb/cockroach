@@ -3,10 +3,10 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { select, Selection } from "d3-selection";
+import d3 from "d3";
 import React from "react";
 
-export type Chart<T> = (sel: Selection<SVGElement, T, null, undefined>) => void;
+type Chart<T> = (sel: d3.Selection<T>) => void;
 
 /**
  * createChartComponent wraps a D3 reusable chart in a React component.
@@ -17,7 +17,7 @@ export default function createChartComponent<T>(
   chart: Chart<T>,
 ) {
   return class WrappedChart extends React.Component<T> {
-    containerEl: React.RefObject<SVGElement> = React.createRef();
+    containerEl: React.RefObject<Element> = React.createRef();
 
     componentDidMount() {
       this.redraw();
@@ -35,7 +35,7 @@ export default function createChartComponent<T>(
     }
 
     redraw(props: T = this.props) {
-      select(this.containerEl.current).datum(props).call(chart);
+      d3.select(this.containerEl.current).datum(props).call(chart);
     }
 
     handleResize = () => {

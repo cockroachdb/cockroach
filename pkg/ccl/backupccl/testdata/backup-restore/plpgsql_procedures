@@ -1,0 +1,501 @@
+# Test backing up and restoring a database with PL/pgSQL procedures.
+new-cluster name=s
+----
+
+exec-sql
+CREATE DATABASE db1;
+----
+
+exec-sql
+USE db1;
+----
+
+exec-sql
+CREATE SCHEMA sc1;
+----
+
+exec-sql
+CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql
+CREATE TYPE sc1.enum1 AS ENUM('Good');
+----
+
+exec-sql
+CREATE SEQUENCE sc1.sq1;
+----
+
+exec-sql
+CREATE PROCEDURE sc1.p1(a sc1.enum1) LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foobar sc1.enum1;
+  BEGIN
+    SELECT a FROM sc1.tbl1;
+    SELECT 'Good'::sc1.enum1;
+    SELECT nextval('sc1.sq1');
+  END
+$$;
+----
+
+exec-sql
+CREATE SCHEMA sc2;
+----
+
+exec-sql
+CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
+----
+
+exec-sql
+CREATE PROCEDURE sc2.p2(i INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO sc2.tbl2 VALUES (i);
+  END
+$$;
+----
+
+exec-sql
+CALL sc1.p1('Good'::sc1.enum1)
+----
+
+exec-sql
+CALL sc2.p2(123)
+----
+
+query-sql
+SELECT * FROM sc2.tbl2
+----
+123
+
+exec-sql
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
+----
+
+query-sql
+WITH descs AS (
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
+)
+SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
+----
+<nil> <nil> db1 database false
+db1 <nil> public schema false
+db1 <nil> sc1 schema false
+db1 sc1 tbl1 table false
+db1 sc1 enum1 type false
+db1 sc1 _enum1 type false
+db1 sc1 sq1 table false
+db1 sc1 p1 function false
+db1 <nil> sc2 schema false
+db1 sc2 tbl2 table false
+db1 sc2 p2 function false
+
+query-sql
+SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
+----
+CREATE PROCEDURE sc1.p1(a sc1.enum1)
+	LANGUAGE plpgsql
+	SECURITY INVOKER
+	AS $$
+	DECLARE
+	foobar sc1.enum1;
+	BEGIN
+	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::sc1.enum1;
+	SELECT nextval('sc1.sq1'::REGCLASS);
+	END;
+$$
+
+exec-sql
+CALL sc1.p1('Good'::sc1.enum1)
+----
+
+query-sql
+SELECT currval('sc1.sq1')
+----
+2
+
+exec-sql
+DROP DATABASE db1
+----
+
+exec-sql
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name = db1_new
+----
+
+exec-sql
+USE db1_new
+----
+
+# Make sure ids in signature and body are rewritten.
+# 1. argument type id is rewritten so that type name is deserialized correctly.
+# 2. db name in qualified name is rewritten.
+# 3. sequence id is rewritten so that sequence name is deserialized correctly.
+query-sql
+SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
+----
+CREATE PROCEDURE sc1.p1(a sc1.enum1)
+	LANGUAGE plpgsql
+	SECURITY INVOKER
+	AS $$
+	DECLARE
+	foobar sc1.enum1;
+	BEGIN
+	SELECT a FROM db1_new.sc1.tbl1;
+	SELECT 'Good':::sc1.enum1;
+	SELECT nextval('sc1.sq1'::REGCLASS);
+	END;
+$$
+
+# Make sure procedure signature is rewritten in schema descriptor so that
+# procedure can be resolved and executed.
+exec-sql
+CALL sc1.p1('Good'::sc1.enum1)
+----
+
+query-sql
+SELECT currval('sc1.sq1')
+----
+2
+
+# Make sure procedure still inserts into the correct table.
+exec-sql
+CALL sc2.p2(456)
+----
+
+query-sql
+SELECT * FROM sc2.tbl2
+----
+123
+456
+
+# Make sure dependency IDs are rewritten.
+# Note that technically this only tests forward-reference IDs in depended-on
+# objects are rewritten. But since we have cross-references validation, so this
+# also means back-references in the function descriptor are good.
+exec-sql
+DROP SEQUENCE sc1.sq1
+----
+pq: cannot drop sequence sq1 because other objects depend on it
+
+exec-sql
+DROP TABLE sc1.tbl1
+----
+pq: cannot drop table tbl1 because other objects depend on it
+
+# TODO(mgartner): The error message should say "procedure".
+exec-sql
+ALTER TABLE sc1.tbl1 RENAME TO tbl1_new
+----
+pq: cannot rename relation "sc1.tbl1" because function "p1" depends on it
+HINT: consider dropping "p1" first.
+
+# TODO(mgartner): The error message should say "procedure".
+exec-sql
+ALTER TABLE sc1.tbl1 SET SCHEMA sc2;
+----
+pq: cannot set schema on relation "tbl1" because function "p1" depends on it
+HINT: consider dropping "p1" first.
+
+exec-sql
+DROP TYPE sc1.enum1
+----
+pq: cannot drop type "enum1" because other objects ([db1_new.sc1.p1]) still depend on it
+
+# Test backing up and restoring a full cluster with procedures.
+new-cluster name=s1
+----
+
+exec-sql cluster=s1
+CREATE DATABASE db1;
+----
+
+exec-sql cluster=s1
+USE db1;
+----
+
+exec-sql cluster=s1
+CREATE SCHEMA sc1;
+----
+
+exec-sql cluster=s1
+CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql cluster=s1
+CREATE TYPE sc1.enum1 AS ENUM('Good');
+----
+
+exec-sql cluster=s1
+CREATE SEQUENCE sc1.sq1;
+----
+
+exec-sql cluster=s1
+CREATE PROCEDURE sc1.p1(a sc1.enum1) LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foobar sc1.enum1;
+  BEGIN
+    SELECT a FROM sc1.tbl1;
+    SELECT 'Good'::sc1.enum1;
+    SELECT nextval('sc1.sq1');
+  END
+$$;
+----
+
+exec-sql cluster=s1
+CREATE SCHEMA sc2;
+----
+
+exec-sql cluster=s1
+CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
+----
+
+exec-sql cluster=s1
+CREATE PROCEDURE sc2.p2(i INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO sc2.tbl2 VALUES (i);
+  END
+$$;
+----
+
+exec-sql
+CALL sc1.p1('Good'::sc1.enum1)
+----
+
+exec-sql
+CALL sc2.p2(123)
+----
+
+query-sql
+SELECT * FROM sc2.tbl2
+----
+123
+
+exec-sql
+BACKUP INTO 'nodelocal://1/test/'
+----
+
+query-sql
+WITH descs AS (
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
+)
+SELECT
+  database_name, parent_schema_name, object_name, object_type, is_full_cluster
+FROM
+  descs
+WHERE
+  database_name = 'db1'
+
+----
+db1 <nil> public schema true
+db1 <nil> sc1 schema true
+db1 sc1 tbl1 table true
+db1 sc1 enum1 type true
+db1 sc1 _enum1 type true
+db1 sc1 sq1 table true
+db1 sc1 p1 function true
+db1 <nil> sc2 schema true
+db1 sc2 tbl2 table true
+db1 sc2 p2 function true
+
+query-sql
+SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
+----
+CREATE PROCEDURE sc1.p1(a sc1.enum1)
+	LANGUAGE plpgsql
+	SECURITY INVOKER
+	AS $$
+	DECLARE
+	foobar sc1.enum1;
+	BEGIN
+	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::sc1.enum1;
+	SELECT nextval('sc1.sq1'::REGCLASS);
+	END;
+$$
+
+query-sql
+CALL sc1.p1('Good'::sc1.enum1)
+----
+
+query-sql
+SELECT currval('sc1.sq1')
+----
+2
+
+# Start a new cluster with the same IO dir.
+new-cluster name=s2 share-io-dir=s1
+----
+
+# Restore into the new cluster.
+exec-sql cluster=s2
+RESTORE FROM LATEST IN 'nodelocal://1/test/'
+----
+
+exec-sql
+USE db1
+----
+
+# Make sure ids in signature and body are rewritten.
+# 1. argument type id is rewritten so that type name is deserialized correctly.
+# 2. db name in qualified name is rewritten.
+# 3. sequence id is rewritten so that sequence name is deserialized correctly.
+query-sql
+SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
+----
+CREATE PROCEDURE sc1.p1(a sc1.enum1)
+	LANGUAGE plpgsql
+	SECURITY INVOKER
+	AS $$
+	DECLARE
+	foobar sc1.enum1;
+	BEGIN
+	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::sc1.enum1;
+	SELECT nextval('sc1.sq1'::REGCLASS);
+	END;
+$$
+
+# Make sure procedure signature is rewritten in schema descriptor so that
+# procedure can be resolved and executed.
+exec-sql
+CALL sc2.p2(456)
+----
+
+query-sql
+SELECT * FROM sc2.tbl2
+----
+123
+456
+
+# Make sure dependency IDs are rewritten.
+# Note that technically this only tests forward-reference IDs in depended-on
+# objects are rewritten. But since we have cross-references validation, so this
+# also means back-references in the function descriptor are good.
+exec-sql
+DROP SEQUENCE sc1.sq1
+----
+pq: cannot drop sequence sq1 because other objects depend on it
+
+exec-sql
+DROP TABLE sc1.tbl1
+----
+pq: cannot drop table tbl1 because other objects depend on it
+
+exec-sql
+ALTER TABLE sc1.tbl1 RENAME TO tbl1_new
+----
+pq: cannot rename relation "sc1.tbl1" because function "p1" depends on it
+HINT: consider dropping "p1" first.
+
+exec-sql
+ALTER TABLE sc1.tbl1 SET SCHEMA sc2;
+----
+pq: cannot set schema on relation "tbl1" because function "p1" depends on it
+HINT: consider dropping "p1" first.
+
+exec-sql
+DROP TYPE sc1.enum1
+----
+pq: cannot drop type "enum1" because other objects ([db1.sc1.p1]) still depend on it
+
+# Make sure that backup and restore individual tables from schema with procedure
+# does not crash.
+new-cluster name=s3
+----
+
+exec-sql cluster=s3
+CREATE DATABASE db1;
+----
+
+exec-sql cluster=s3
+CREATE SCHEMA sc1;
+----
+
+exec-sql cluster=s3
+CREATE TABLE sc1.t(a INT PRIMARY KEY);
+----
+
+exec-sql cluster=s3
+CREATE PROCEDURE sc1.p() LANGUAGE PLpgSQL AS $$ BEGIN SELECT 1; END $$;
+----
+
+# Make sure the original schema has procedure signatures
+let $defaultdb_sc1_id
+WITH db_id AS (
+  SELECT id FROM system.namespace WHERE name = 'defaultdb'
+),
+schema_id AS (
+  SELECT ns.id
+  FROM system.namespace AS ns
+  JOIN db_id ON ns."parentID" = db_id.id
+  WHERE ns.name = 'sc1'
+)
+SELECT id FROM schema_id;
+----
+
+query-sql
+WITH to_json AS (
+    SELECT
+      id,
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sqlbase.Descriptor',
+        descriptor,
+        false
+      ) AS d
+    FROM
+      system.descriptor
+    WHERE id = $defaultdb_sc1_id
+)
+-- Remove ID from the result, since it isn't stable.
+SELECT json_set(d, '{schema,functions,p,signatures,0,id}', '0')->'schema'->>'functions'::string FROM to_json;
+----
+{"p": {"signatures": [{"id": 0, "isProcedure": true, "returnType": {"family": "VoidFamily", "oid": 2278}}]}}
+
+exec-sql
+BACKUP TABLE sc1.t INTO 'nodelocal://1/test/'
+----
+
+exec-sql
+RESTORE TABLE sc1.t FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db1';
+----
+
+exec-sql
+USE db1;
+----
+
+let $db1_sc1_id
+WITH db_id AS (
+  SELECT id FROM system.namespace WHERE name = 'db1'
+),
+schema_id AS (
+  SELECT ns.id
+  FROM system.namespace AS ns
+  JOIN db_id ON ns."parentID" = db_id.id
+  WHERE ns.name = 'sc1'
+)
+SELECT id FROM schema_id;
+----
+
+query-sql
+WITH to_json AS (
+    SELECT
+      id,
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sqlbase.Descriptor',
+        descriptor,
+        false
+      ) AS d
+    FROM
+      system.descriptor
+    WHERE id = $db1_sc1_id
+)
+SELECT d->'schema'->>'functions'::string FROM to_json;
+----
+<nil>
+
+# Make sure proper error message is returned when trying to resolve the
+# procedure from the restore target db.
+query-sql
+CALL p()
+----
+pq: procedure p does not exist

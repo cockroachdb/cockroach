@@ -67,11 +67,11 @@ func main() {
 						// so split them out to their
 						// own statement.
 						newstmts = append(newstmts, &tree.CreateIndex{
-							Name:    def.Name,
-							Table:   stmt.Table,
-							Type:    def.Type,
-							Columns: def.Columns,
-							Storing: def.Storing,
+							Name:     def.Name,
+							Table:    stmt.Table,
+							Inverted: def.Inverted,
+							Columns:  def.Columns,
+							Storing:  def.Storing,
 							// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
 						})
 					case *tree.UniqueConstraintTableDef:
@@ -93,12 +93,12 @@ func main() {
 							break
 						}
 						newstmts = append(newstmts, &tree.CreateIndex{
-							Name:    def.Name,
-							Table:   stmt.Table,
-							Unique:  true,
-							Type:    def.Type,
-							Columns: def.Columns,
-							Storing: def.Storing,
+							Name:     def.Name,
+							Table:    stmt.Table,
+							Unique:   true,
+							Inverted: def.Inverted,
+							Columns:  def.Columns,
+							Storing:  def.Storing,
 							// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.
 						})
 					default:

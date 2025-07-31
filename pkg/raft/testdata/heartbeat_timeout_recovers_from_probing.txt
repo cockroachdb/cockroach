@@ -51,14 +51,14 @@ ok
 stabilize
 ----
 > 1 handling Ready
-  Ready:
+  Ready MustSync=false:
   Messages:
   1->2 MsgApp Term:1 Log:1/11 Commit:11
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/11 Commit:11
 > 2 handling Ready
-  Ready:
-  OnSync:
+  Ready MustSync=false:
+  Messages:
   2->1 MsgAppResp Term:1 Log:0/11 Commit:11
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/11 Commit:11

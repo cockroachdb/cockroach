@@ -131,7 +131,7 @@ func TestManualReplication(t *testing.T) {
 		}
 	}
 
-	// Transfer the lease to node 2.
+	// Transfer the lease to node 1.
 	target := tc.Target(0)
 	leaseHolder, err := tc.FindRangeLeaseHolder(tableRangeDesc, &target)
 	if err != nil {
@@ -150,16 +150,11 @@ func TestManualReplication(t *testing.T) {
 	// Check that the lease holder has changed. We'll use the old lease holder as
 	// the hint, since it's guaranteed that the old lease holder has applied the
 	// new lease.
-	// We wrap this in a SucceedsSoon because N2 might have not applied the lease
-	// yet, it might think that the N1 is the current leaseholder, and the lease
-	// might be INVALID if the time is close to the lease expiration time, or in
-	// the case of leader leases, N2 might not be able to determine the validity
-	// of the lease all together.
-	testutils.SucceedsSoon(t, func() error {
-		leaseHolder, err = tc.FindRangeLeaseHolder(tableRangeDesc, &target)
-		return err
-	})
-
+	target = tc.Target(0)
+	leaseHolder, err = tc.FindRangeLeaseHolder(tableRangeDesc, &target)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if leaseHolder.StoreID != tc.Servers[1].StorageLayer().GetFirstStoreID() {
 		t.Fatalf("expected lease on server idx 1 (node: %d store: %d), but is on node: %+v",
 			tc.Server(1).NodeID(),

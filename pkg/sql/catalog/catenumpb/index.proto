@@ -8,6 +8,8 @@ syntax = "proto3";
 package cockroach.sql.catalog.catpb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb";
 
+import "gogoproto/gogo.proto";
+
 // IndexColumn contains an enum used to represent the direction of a column
 // in an index key.
 message IndexColumn {

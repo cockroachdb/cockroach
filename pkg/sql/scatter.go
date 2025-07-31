@@ -22,7 +22,6 @@ import (
 )
 
 type scatterNode struct {
-	zeroInputPlanNode
 	optColumnsSlot
 
 	run scatterRun

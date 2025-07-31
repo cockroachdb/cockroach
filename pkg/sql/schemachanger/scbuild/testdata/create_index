@@ -1,6 +1,5 @@
 setup
-CREATE TABLE defaultdb.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), money INT8);
-CREATE TABLE defaultdb.t1_locked(id INT8 PRIMARY KEY,  name VARCHAR(256), money INT8, INDEX money_index (money)) WITH (schema_locked=true);
+CREATE TABLE defaultdb.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), money INT8)
 ----
 
 build
@@ -42,7 +41,7 @@ CREATE INVERTED INDEX CONCURRENTLY id2
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
 - [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1, RecreateSourceIndexID: 0}, PUBLIC], ABSENT]
-  {indexId: 2, isConcurrently: true, isInverted: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3, type: INVERTED}
+  {indexId: 2, isConcurrently: true, isInverted: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 2, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
@@ -52,7 +51,7 @@ CREATE INVERTED INDEX CONCURRENTLY id2
 - [[IndexName:{DescID: 104, Name: id2, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: id2, tableId: 104}
 - [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  {constraintId: 1, indexId: 3, isConcurrently: true, isInverted: true, isUsingSecondaryEncoding: true, sourceIndexId: 1, tableId: 104, type: INVERTED}
+  {constraintId: 1, indexId: 3, isConcurrently: true, isInverted: true, isUsingSecondaryEncoding: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
@@ -111,7 +110,7 @@ CREATE INDEX id4
   {columnId: 4, name: crdb_internal_id_name_shard_8, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4, TypeName: INT8}, PUBLIC], ABSENT]
   {columnId: 4, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isVirtual: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
-- [[ColumnComputeExpression:{DescID: 104, ColumnID: 4, Usage: REGULAR}, PUBLIC], ABSENT]
+- [[ColumnComputeExpression:{DescID: 104, ColumnID: 4}, PUBLIC], ABSENT]
   {columnId: 4, expr: 'mod(fnv32(md5(crdb_internal.datums_to_bytes(id, name))), 8:::INT8)', referencedColumnIds: [1, 2], tableId: 104}
 - [[ColumnNotNull:{DescID: 104, ColumnID: 4, IndexID: 1}, PUBLIC], ABSENT]
   {columnId: 4, indexIdForValidation: 1, tableId: 104}
@@ -145,10 +144,3 @@ CREATE INDEX id4
   {columnId: 3, indexId: 3, kind: STORED, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 104}
-
-
-# Validates that IF NOT EXISTS operation correctly behaves as a no-op
-# on schema_locked tables.
-build
-CREATE INDEX IF NOT EXISTS money_index ON defaultdb.t1_locked(money)
-----

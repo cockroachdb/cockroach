@@ -9,9 +9,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
@@ -32,16 +32,10 @@ func executeValidateIndex(ctx context.Context, deps Dependencies, op *scop.Valid
 	}
 	// Execute the validation operation as a node user.
 	execOverride := sessiondata.NodeUserSessionDataOverride
-	switch index.GetType() {
-	case idxtype.FORWARD:
+	if index.GetType() == descpb.IndexDescriptor_FORWARD {
 		err = deps.Validator().ValidateForwardIndexes(ctx, deps.TransactionalJobRegistry().CurrentJob(), table, []catalog.Index{index}, execOverride)
-	case idxtype.INVERTED:
+	} else {
 		err = deps.Validator().ValidateInvertedIndexes(ctx, deps.TransactionalJobRegistry().CurrentJob(), table, []catalog.Index{index}, execOverride)
-	case idxtype.VECTOR:
-		// TODO(drewk): consider whether we can perform useful validation for
-		// vector indexes.
-	default:
-		return errors.AssertionFailedf("unexpected index type %v", index.GetType())
 	}
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)

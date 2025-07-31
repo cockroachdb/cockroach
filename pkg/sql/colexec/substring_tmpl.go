@@ -5,6 +5,7 @@
 
 // {{/*
 //go:build execgen_template
+// +build execgen_template
 
 //
 // This file is the execgen template for substring.eg.go. It's formatted in a
@@ -22,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -69,7 +69,7 @@ func newSubstringOperator(
 		}
 		// {{end}}
 	}
-	colexecerror.InternalError(errors.AssertionFailedf("unsupported substring argument types: %s %s", startType, lengthType))
+	colexecerror.InternalError(errors.Errorf("unsupported substring argument types: %s %s", startType, lengthType))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -134,7 +134,7 @@ func (s *substring_StartType_LengthTypeOperator) Next() coldata.Batch {
 				startCharIdx := int(startCol[rowIdx]) - 1
 				length := int(lengthCol[rowIdx])
 				if length < 0 {
-					colexecerror.ExpectedError(builtins.NegativeSubstringLengthErr)
+					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				endCharIdx := startCharIdx + length

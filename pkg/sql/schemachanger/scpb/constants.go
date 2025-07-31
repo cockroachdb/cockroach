@@ -5,10 +5,7 @@
 
 package scpb
 
-import (
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
-)
+import "github.com/cockroachdb/errors"
 
 const (
 	// PlaceHolderRoleName placeholder string for non-fetched role names.
@@ -18,15 +15,6 @@ const (
 // TargetStatus is the subset of Status values which serve as valid target
 // statuses.
 type TargetStatus Status
-
-var _ redact.SafeValue = Status(0)
-var _ redact.SafeValue = TargetStatus(0)
-
-// SafeValue implements the redact.SafeValue interface.
-func (t TargetStatus) SafeValue() {}
-
-// SafeValue implements the redact.SafeValue interface.
-func (s Status) SafeValue() {}
 
 const (
 	// InvalidTarget indicates that the element doesn't have a target status
@@ -42,24 +30,13 @@ const (
 	// in any kind of transitory state.
 	ToPublic TargetStatus = TargetStatus(Status_PUBLIC)
 
-	// TransientAbsent is like ToAbsent in that the element should no longer exist once
+	// Transient is like ToAbsent in that the element should no longer exist once
 	// the schema change is done. The element is also not assumed to exist prior
 	// to the schema change, so this target status is used to ensure it comes into
 	// existence before disappearing again. Otherwise, an element whose current
 	// and target statuses are both ABSENT won't experience any state transitions.
-	TransientAbsent TargetStatus = TargetStatus(Status_TRANSIENT_ABSENT)
-
-	// TransientPublic is similar to ToPublic in that the element should persist after
-	// the schema change is completed. The element is assumed to exist before the schema
-	// change; therefore, this target status is used to ensure it becomes absent and
-	// becomes public at a later stage.
-	TransientPublic TargetStatus = TargetStatus(Status_TRANSIENT_PUBLIC)
+	Transient TargetStatus = TargetStatus(Status_TRANSIENT_ABSENT)
 )
-
-// Status returns the TargetStatus as a Status.
-func (t TargetStatus) String() string {
-	return Status(t).String()
-}
 
 // Status returns the TargetStatus as a Status.
 func (t TargetStatus) Status() Status {
@@ -69,9 +46,9 @@ func (t TargetStatus) Status() Status {
 // InitialStatus returns the initial status for this TargetStatus.
 func (t TargetStatus) InitialStatus() Status {
 	switch t {
-	case ToAbsent, TransientPublic:
+	case ToAbsent:
 		return Status_PUBLIC
-	case ToPublic, TransientAbsent:
+	case ToPublic, Transient:
 		return Status_ABSENT
 	default:
 		panic(errors.AssertionFailedf("unknown target status %v", t.Status()))
@@ -86,9 +63,7 @@ func AsTargetStatus(s Status) TargetStatus {
 	case Status_PUBLIC:
 		return ToPublic
 	case Status_TRANSIENT_ABSENT:
-		return TransientAbsent
-	case Status_TRANSIENT_PUBLIC:
-		return TransientPublic
+		return Transient
 	default:
 		return InvalidTarget
 	}

@@ -23,7 +23,7 @@ func TestExport(t *testing.T) {
 	testLabels := make(map[string]string)
 	testLabels["some"] = "42test"
 	testLabels["abc/def"] = "good/label?"
-	ddFilePath := path.Join(datapathutils.TestDataPath(t), "export.txt")
+	ddFilePath := path.Join(datapathutils.TestDataPath(t), "export")
 	datadriven.RunTest(t, ddFilePath, func(t *testing.T, d *datadriven.TestData) string {
 		if d.Cmd != "export" {
 			d.Fatalf(t, "unknown command %s", d.Cmd)

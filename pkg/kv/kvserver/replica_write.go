@@ -185,7 +185,7 @@ func (r *Replica) executeWriteBatch(
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose. If we return with an error from executeWriteBatch, we
 	// also return the guard which the caller reassumes ownership of.
-	ch, abandonTok, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
+	ch, abandon, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
 	if pErr != nil {
 		if cErr, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
 			// Need to unlock here because setCorruptRaftMuLock needs readOnlyCmdMu not held.
@@ -340,7 +340,7 @@ func (r *Replica) executeWriteBatch(
 						}
 					})
 			}
-			r.abandon(abandonTok)
+			abandon()
 			dur := timeutil.Since(startTime)
 			log.VEventf(ctx, 2, "context cancellation after %.2fs of attempting command %s",
 				dur.Seconds(), ba)
@@ -351,7 +351,7 @@ func (r *Replica) executeWriteBatch(
 		case <-shouldQuiesce:
 			// If shutting down, return an AmbiguousResultError, which indicates
 			// to the caller that the command may have executed.
-			r.abandon(abandonTok)
+			abandon()
 			log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
 				timeutil.Since(startTime).Seconds(), ba)
 			return nil, nil, nil, kvpb.NewError(kvpb.NewAmbiguousResultErrorf(

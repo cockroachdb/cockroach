@@ -27,9 +27,9 @@ const (
 // are useful for testing.
 type TestingKnobs struct {
 
-	// ListBetweenOverride injects an override for clusterversion.ListBetween() in
-	// order to run upgrades corresponding to versions which do not actually
-	// exist. This function has to return versions in the range (from, to].
+	// ListBetweenOverride injects an override for `clusterversion.ListBetween()
+	// in order to run upgrades corresponding to versions which do not
+	// actually exist.
 	ListBetweenOverride func(from, to roachpb.Version) []roachpb.Version
 
 	// RegistryOverride is used to inject upgrades for specific cluster versions.
@@ -71,17 +71,9 @@ type TestingKnobs struct {
 
 	SkipUpdateTableMetadataCacheBootstrap bool
 
-	SkipSqlActivityFlushJobBootstrap bool
-
 	// ForceCheckLicenseViolation is true if we want the v24_3_check_license_violation.go
 	// task to continue even though we are in a test environment.
 	ForceCheckLicenseViolation bool
-
-	SkipSomeUpgradeSteps bool
-
-	SkipZoneConfigBootstrap bool
-
-	SkipHotRangesLoggerJobBootstrap bool
 }
 
 // ModuleTestingKnobs makes TestingKnobs a base.ModuleTestingKnobs.

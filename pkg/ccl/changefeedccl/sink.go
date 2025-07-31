@@ -59,29 +59,6 @@ const (
 	sinkTypePulsar
 )
 
-func (st sinkType) String() string {
-	switch st {
-	case sinkTypeSinklessBuffer:
-		return `sinkless buffer`
-	case sinkTypeNull:
-		return `null`
-	case sinkTypeKafka:
-		return `kafka`
-	case sinkTypeWebhook:
-		return `webhook`
-	case sinkTypePubsub:
-		return `pubsub`
-	case sinkTypeCloudstorage:
-		return `cloudstorage`
-	case sinkTypeSQL:
-		return `sql`
-	case sinkTypePulsar:
-		return `pulsar`
-	default:
-		return `unknown`
-	}
-}
-
 // externalResource is the interface common to both EventSink and
 // ResolvedTimestampSink.
 type externalResource interface {
@@ -111,7 +88,6 @@ type EventSink interface {
 		key, value []byte,
 		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
-		headers rowHeaders,
 	) error
 
 	// Flush blocks until every message enqueued by EmitRow
@@ -184,6 +160,30 @@ func getAndDialSink(
 	return sink, nil
 }
 
+// WebhookV2Enabled determines whether or not the refactored Webhook sink
+// or the deprecated sink should be used.
+var WebhookV2Enabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.new_webhook_sink_enabled",
+	"if enabled, this setting enables a new implementation of the webhook sink"+
+		" that allows for a much higher throughput",
+	// TODO: delete the original webhook sink code
+	metamorphic.ConstantWithTestBool("changefeed.new_webhook_sink.enabled", true),
+	settings.WithName("changefeed.new_webhook_sink.enabled"),
+)
+
+// PubsubV2Enabled determines whether or not the refactored Webhook sink
+// or the deprecated sink should be used.
+var PubsubV2Enabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.new_pubsub_sink_enabled",
+	"if enabled, this setting enables a new implementation of the pubsub sink"+
+		" that allows for a higher throughput",
+	// TODO: delete the original pubsub sink code
+	metamorphic.ConstantWithTestBool("changefeed.new_pubsub_sink.enabled", true),
+	settings.WithName("changefeed.new_pubsub_sink.enabled"),
+)
+
 // KafkaV2Enabled determines whether or not the refactored Kafka sink
 // or the deprecated sink should be used.
 var KafkaV2Enabled = settings.RegisterBoolSetting(
@@ -249,16 +249,12 @@ func getSink(
 			return makeNullSink(&changefeedbase.SinkURL{URL: u}, metricsBuilder(nullIsAccounted))
 		case isKafkaSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
-				sinkOpts, err := opts.GetKafkaSinkOptions()
-				if err != nil {
-					return nil, err
-				}
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
-					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, AllTargets(feedCfg), sinkOpts,
+					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
 						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{})
 				} else {
-					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, AllTargets(feedCfg), sinkOpts, serverCfg.Settings, metricsBuilder)
+					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
 				}
 			})
 		case isPulsarSink(u):
@@ -266,31 +262,38 @@ func getSink(
 			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
 				testingKnobs = knobs
 			}
-			sinkOpts, err := opts.GetKafkaSinkOptions()
-			if err != nil {
-				return nil, err
-			}
-			return makePulsarSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, AllTargets(feedCfg), sinkOpts.JSONConfig,
+			return makePulsarSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
 				serverCfg.Settings, metricsBuilder, testingKnobs)
 		case isWebhookSink(u):
 			webhookOpts, err := opts.GetWebhookSinkOptions()
 			if err != nil {
 				return nil, err
 			}
-			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-				return makeWebhookSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, webhookOpts,
-					numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-					metricsBuilder, serverCfg.Settings)
-			})
+			if WebhookV2Enabled.Get(&serverCfg.Settings.SV) {
+				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
+					return makeWebhookSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, webhookOpts,
+						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
+						metricsBuilder, serverCfg.Settings)
+				})
+			} else {
+				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
+					return makeDeprecatedWebhookSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, webhookOpts,
+						defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
+				})
+			}
 		case isPubsubSink(u):
 			var testingKnobs *TestingKnobs
 			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
 				testingKnobs = knobs
 			}
-			return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg),
-				opts.IsSet(changefeedbase.OptUnordered), numSinkIOWorkers(serverCfg),
-				newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-				metricsBuilder, serverCfg.Settings, testingKnobs)
+			if PubsubV2Enabled.Get(&serverCfg.Settings.SV) {
+				return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg),
+					opts.IsSet(changefeedbase.OptUnordered), numSinkIOWorkers(serverCfg),
+					newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
+					metricsBuilder, serverCfg.Settings, testingKnobs)
+			} else {
+				return makeDeprecatedPubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered), metricsBuilder, testingKnobs)
+			}
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
 				var testingKnobs *TestingKnobs
@@ -378,9 +381,8 @@ func (s errorWrapperSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
-	headers rowHeaders,
 ) error {
-	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc, headers); err != nil {
+	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -470,7 +472,6 @@ func (s *bufferSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
-	_headers rowHeaders,
 ) error {
 	defer r.Release(ctx)
 	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
@@ -502,7 +503,7 @@ func (s *bufferSink) EmitResolvedTimestamp(
 	if err != nil {
 		return err
 	}
-	s.scratch, payload = s.scratch.Copy(payload)
+	s.scratch, payload = s.scratch.Copy(payload, 0 /* extraCap */)
 	s.buf.Push(rowenc.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
 		{Datum: tree.DNull}, // topic
@@ -582,7 +583,6 @@ func (n *nullSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
-	_headers rowHeaders,
 ) error {
 	defer r.Release(ctx)
 	defer n.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
@@ -661,11 +661,10 @@ func (s *safeSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
-	headers rowHeaders,
 ) error {
 	s.Lock()
 	defer s.Unlock()
-	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc, headers)
+	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc)
 }
 
 func (s *safeSink) Flush(ctx context.Context) error {

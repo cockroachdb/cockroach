@@ -1,0 +1,133 @@
+create-replication-clusters no-external-conn
+----
+
+start-replication-stream
+----
+
+# TODO(adityamaru): This is a hack until we have the time we started replicating
+# from persisted in the replication job details.
+let $start as=source-system
+SELECT clock_timestamp()::timestamp::string
+----
+
+wait-until-replicated-time ts=$start
+----
+
+# The job description should be redacted.
+#
+# The substring business in this test is to extract the hostname which has a random port it in.
+exec-sql as=destination-system
+CREATE FUNCTION strip_host(s string) returns string language sql AS $$ select concat(substring(s FOR position('@' IN s)), substring(s FROM position('?' IN s))) $$
+----
+
+query-sql as=destination-system
+SELECT strip_host(description) FROM [SHOW JOBS SELECT id FROM system.jobs WHERE job_type='REPLICATION STREAM INGESTION']
+----
+CREATE VIRTUAL CLUSTER destination FROM REPLICATION OF source ON ('postgres://root@?redacted')
+
+query-sql as=destination-system
+SELECT strip_host(source_cluster_uri) FROM [SHOW TENANT destination WITH REPLICATION STATUS]
+----
+postgres://root@?redacted
+
+# The session on the source should have an app name set.
+query-sql as=source-system
+SELECT application_name FROM [SHOW ALL SESSIONS] WHERE application_name LIKE '%repstream%' LIMIT 1
+----
+$ internal repstream job id=$_producerJobID
+
+
+query-sql as=source-system
+SHOW TENANT source WITH REPLICATION STATUS
+----
+10 source <nil> <nil> <nil> <nil> <nil> <nil> ready
+
+exec-sql as=source-tenant
+CREATE TABLE d.x (id INT PRIMARY KEY, n INT);
+----
+
+exec-sql as=source-tenant
+EXPORT INTO CSV 'userfile:///dx' FROM SELECT 42, 42 UNION ALL SELECT 43, 43;
+----
+
+exec-sql as=source-tenant
+IMPORT INTO d.x CSV DATA ('userfile:///dx/export*-n*.0.csv');
+----
+
+query-sql as=source-system
+SHOW TENANTS
+----
+1 system ready shared
+10 source ready shared
+
+query-sql as=destination-system
+SHOW TENANTS
+----
+1 system ready shared
+2 destination replicating none
+
+query-sql as=destination-system
+SELECT id, name, source_tenant_name, failover_time, status FROM [SHOW TENANTS WITH REPLICATION STATUS]
+----
+1 system <nil> <nil> ready
+2 destination source <nil> replicating
+
+let $ts as=source-system
+SELECT clock_timestamp()::timestamptz::string
+----
+
+let $src as=source-system
+SELECT crdb_internal.cluster_id()::string || ':10'
+----
+
+cutover ts=$ts
+----
+
+query-sql as=destination-system
+SELECT id, source_id = '$src', hlc_to_timestamp(activation_time)::string = '$ts' FROM [SHOW VIRTUAL CLUSTER destination WITH PRIOR REPLICATION DETAILS]
+----
+2 true true
+
+start-replicated-tenant
+----
+
+query-sql as=destination-system
+SHOW TENANTS
+----
+1 system ready shared
+2 destination ready shared
+
+compare-tenant-fingerprints from=$start to=$ts with_revisions table_fingerprints
+----
+
+compare-replication-results
+SELECT * FROM d.t1;
+----
+
+compare-replication-results
+SELECT * FROM d.t2;
+----
+
+compare-replication-results
+SELECT * FROM d.x;
+----
+
+# After cutover, changes to source won't be streamed into destination cluster.
+exec-sql as=source-tenant
+INSERT INTO d.t2 VALUES (3);
+----
+
+# Check the dst cluster didn't receive the change after a while.
+sleep ms=3000
+----
+
+query-sql as=source-tenant
+SELECT * FROM d.t2 ORDER BY i;
+----
+2
+3
+
+query-sql as=destination-tenant
+SELECT * FROM d.t2;
+----
+2

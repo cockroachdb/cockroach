@@ -36,6 +36,7 @@ func NewV2Server(
 		sqlServer:  s,
 		authServer: innerServer,
 		mux:        simpleMux,
+		ctx:        ctx,
 		basePath:   basePath,
 	}
 

@@ -13,11 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -153,7 +150,7 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLoginSQL, _, canUseReplicationMode, isSuperuser, defaultSettings, roleSubject, provisioningSource, pwRetrievalFn, err :=
+	exists, canLoginSQL, _, canUseReplicationMode, isSuperuser, defaultSettings, roleSubject, pwRetrievalFn, err :=
 		sql.GetUserSessionInitInfo(
 			ctx,
 			execCfg,
@@ -165,31 +162,6 @@ func (c *conn) handleAuthentication(
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
 		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
-
-	if !exists {
-		if execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_3) &&
-			behaviors.IsProvisioningEnabled(execCfg.Settings, hbaEntry.Method.String()) {
-			err := behaviors.MaybeProvisionUser(ctx, execCfg.Settings, hbaEntry.Method.String())
-			if err != nil {
-				log.Warningf(ctx, "user provisioning failed for user=%q: %+v", dbUser, err)
-				ac.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
-				return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
-			}
-			exists, canLoginSQL, _, canUseReplicationMode, isSuperuser, defaultSettings, roleSubject, provisioningSource, pwRetrievalFn, err =
-				sql.GetUserSessionInitInfo(
-					ctx,
-					execCfg,
-					dbUser,
-					c.sessionArgs.SessionDefaults["database"],
-				)
-			if err != nil {
-				log.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
-				ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
-				return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
-			}
-		}
-	}
-
 	c.sessionArgs.IsSuperuser = isSuperuser
 
 	if !exists {
@@ -268,36 +240,12 @@ func (c *conn) handleAuthentication(
 		}
 	}
 
-	// If user has PROVISIONSRC set, increment the login success counter
-	if provisioningSource != nil {
-		telemetry.Inc(provisioning.ProvisionedUserLoginSuccessCounter)
-	}
-
 	// Compute the authentication latency needed to serve a SQL query.
 	// The metric published is based on the authentication type.
 	duration := timeutil.Since(authStartTime).Nanoseconds()
 	c.publishConnLatencyMetric(duration, hbaEntry.Method.String())
 
-	c.populateLastLoginTime(ctx, execCfg, dbUser)
-
 	return connClose, nil
-}
-
-// populateLastLoginTime updates the last login time for the sql user
-// asynchronously. This not guaranteed to succeed and we log any errors obtained
-// from the update transaction to the DEV channel.
-func (c *conn) populateLastLoginTime(
-	ctx context.Context, execCfg *sql.ExecutorConfig, dbUser username.SQLUsername,
-) {
-	// Update last login time in async. This is done asynchronously to avoid
-	// blocking the connection.
-	if err := execCfg.Stopper.RunAsyncTask(ctx, "write_last_login_time", func(ctx context.Context) {
-		if err := sql.UpdateLastLoginTime(ctx, execCfg, dbUser.SQLIdentifier()); err != nil {
-			log.Warningf(ctx, "failed to update last login time for user %s: %v", dbUser, err)
-		}
-	}); err != nil {
-		log.Warningf(ctx, "failed to create async task to update last login time for user %s: %v", dbUser, err)
-	}
 }
 
 // publishConnLatencyMetric publishes the latency  of the connection

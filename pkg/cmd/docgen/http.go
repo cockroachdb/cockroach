@@ -48,6 +48,7 @@ into "buf protoc".`)
 }
 
 var singleMethods = []string{
+	"HotRanges",
 	"Nodes",
 	"Health",
 }

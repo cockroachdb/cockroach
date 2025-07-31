@@ -7,14 +7,6 @@ CREATE VIRTUAL CLUSTER bar -- literals removed
 CREATE VIRTUAL CLUSTER _ -- identifiers removed
 
 parse
-CREATE VIRTUAL CLUSTER [123::INT]
-----
-CREATE VIRTUAL CLUSTER [123::INT8] -- normalized!
-CREATE VIRTUAL CLUSTER [((123)::INT8)] -- fully parenthesized
-CREATE VIRTUAL CLUSTER [_::INT8] -- literals removed
-CREATE VIRTUAL CLUSTER [123::INT8] -- identifiers removed
-
-parse
 CREATE TENANT bar
 ----
 CREATE VIRTUAL CLUSTER bar -- normalized!
@@ -39,28 +31,12 @@ CREATE VIRTUAL CLUSTER IF NOT EXISTS bar -- literals removed
 CREATE VIRTUAL CLUSTER IF NOT EXISTS _ -- identifiers removed
 
 parse
-CREATE VIRTUAL CLUSTER IF NOT EXISTS [123::INT]
-----
-CREATE VIRTUAL CLUSTER IF NOT EXISTS [123::INT8] -- normalized!
-CREATE VIRTUAL CLUSTER IF NOT EXISTS [((123)::INT8)] -- fully parenthesized
-CREATE VIRTUAL CLUSTER IF NOT EXISTS [_::INT8] -- literals removed
-CREATE VIRTUAL CLUSTER IF NOT EXISTS [123::INT8] -- identifiers removed
-
-parse
 CREATE VIRTUAL CLUSTER destination FROM REPLICATION OF source ON 'pgurl'
 ----
 CREATE VIRTUAL CLUSTER destination FROM REPLICATION OF source ON 'pgurl'
 CREATE VIRTUAL CLUSTER (destination) FROM REPLICATION OF (source) ON ('pgurl') -- fully parenthesized
 CREATE VIRTUAL CLUSTER destination FROM REPLICATION OF source ON '_' -- literals removed
 CREATE VIRTUAL CLUSTER _ FROM REPLICATION OF _ ON 'pgurl' -- identifiers removed
-
-parse
-CREATE VIRTUAL CLUSTER [123::INT] FROM REPLICATION OF source ON 'pgurl'
-----
-CREATE VIRTUAL CLUSTER [123::INT8] FROM REPLICATION OF source ON 'pgurl' -- normalized!
-CREATE VIRTUAL CLUSTER [((123)::INT8)] FROM REPLICATION OF (source) ON ('pgurl') -- fully parenthesized
-CREATE VIRTUAL CLUSTER [_::INT8] FROM REPLICATION OF source ON '_' -- literals removed
-CREATE VIRTUAL CLUSTER [123::INT8] FROM REPLICATION OF _ ON 'pgurl' -- identifiers removed
 
 parse
 CREATE VIRTUAL CLUSTER IF NOT EXISTS destination FROM REPLICATION OF source ON 'pgurl'

@@ -44,32 +44,6 @@ func (n *explainDDLNode) Close(ctx context.Context) {
 	n.next = len(n.values)
 }
 
-func (n *explainDDLNode) InputCount() int {
-	// We check whether planNode is nil because the input might be represented
-	// physically, which we can't traverse into currently.
-	// TODO(yuzefovich/mgartner): Figure out a way to traverse into physical
-	// plans, if necessary.
-	if n.plan.main.planNode != nil {
-		return 1
-	}
-	return 0
-}
-
-func (n *explainDDLNode) Input(i int) (planNode, error) {
-	if i == 0 && n.plan.main.planNode != nil {
-		return n.plan.main.planNode, nil
-	}
-	return nil, errors.AssertionFailedf("input index %d is out of range", i)
-}
-
-func (n *explainDDLNode) SetInput(i int, p planNode) error {
-	if i == 0 && n.plan.main.planNode != nil {
-		n.plan.main.planNode = p
-		return nil
-	}
-	return errors.AssertionFailedf("input index %d is out of range", i)
-}
-
 var _ planNode = (*explainDDLNode)(nil)
 
 var explainNotPossibleError = pgerror.New(pgcode.FeatureNotSupported,

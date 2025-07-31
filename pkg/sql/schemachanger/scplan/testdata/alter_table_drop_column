@@ -383,7 +383,7 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
       - 107
       - 108
       JobID: 1
-      RunningStatus: 'Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 1 of 7).'
+      RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE
         redactedstatement: ALTER TABLE defaultdb.public.foo DROP COLUMN v1 CASCADE
@@ -1115,10 +1115,6 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 3}, PUBLIC]
-  kind: Precedence
-  rule: ensure index columns are added in increasing order
-- from: [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 3}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
@@ -1126,10 +1122,6 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, PUBLIC]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 4}, PUBLIC]
-  kind: Precedence
-  rule: ensure index columns are added in increasing order
 - from: [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -1869,7 +1861,7 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
       - 107
       - 108
       JobID: 1
-      RunningStatus: 'Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 1 of 7).'
+      RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE
         redactedstatement: ALTER TABLE defaultdb.public.foo DROP COLUMN v2 CASCADE
@@ -2473,7 +2465,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
 - from: [ColumnDefaultExpression:{DescID: 107, ColumnID: 3, ReferencedSequenceIDs: [106], Expr: nextval(106:::REGCLASS)}, ABSENT]
   to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type, except if part of a column type alteration 
+  rule: column type dependents removed right before column type
 - from: [ColumnName:{DescID: 107, Name: v2, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -2643,10 +2635,6 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 3}, PUBLIC]
-  kind: Precedence
-  rule: ensure index columns are added in increasing order
-- from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
@@ -2654,10 +2642,6 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, PUBLIC]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 4}, PUBLIC]
-  kind: Precedence
-  rule: ensure index columns are added in increasing order
 - from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -3226,7 +3210,7 @@ PreCommitPhase stage 2 of 2 with 15 MutationType ops
       - 107
       - 109
       JobID: 1
-      RunningStatus: 'Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 1 of 7).'
+      RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo DROP COLUMN udfcol
         redactedstatement: ALTER TABLE defaultdb.public.foo DROP COLUMN udfcol
@@ -3492,7 +3476,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN udfcol;
 - from: [ColumnDefaultExpression:{DescID: 107, ColumnID: 4, Expr: [FUNCTION 100109](), ReferencedFunctionIDs: [109]}, ABSENT]
   to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type, except if part of a column type alteration 
+  rule: column type dependents removed right before column type
 - from: [ColumnName:{DescID: 107, Name: udfcol, ColumnID: 4}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 4}, ABSENT]
   kind: Precedence
@@ -3526,10 +3510,6 @@ ALTER TABLE defaultdb.foo DROP COLUMN udfcol;
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 3}, PUBLIC]
-  kind: Precedence
-  rule: ensure index columns are added in increasing order
-- from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
@@ -3537,10 +3517,6 @@ ALTER TABLE defaultdb.foo DROP COLUMN udfcol;
   to:   [PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, PUBLIC]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, PUBLIC]
-  kind: Precedence
-  rule: ensure index columns are added in increasing order
 - from: [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence

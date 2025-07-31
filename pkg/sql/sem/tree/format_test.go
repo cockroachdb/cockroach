@@ -238,7 +238,7 @@ func TestFormatExpr(t *testing.T) {
 				t.Fatal(err)
 			}
 			semaContext := tree.MakeSemaContext(nil /* resolver */)
-			typeChecked, err := tree.TypeCheck(ctx, expr, &semaContext, types.AnyElement)
+			typeChecked, err := tree.TypeCheck(ctx, expr, &semaContext, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -424,7 +424,7 @@ func TestFormatExpr2(t *testing.T) {
 	for i, test := range testData {
 		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
-			typeChecked, err := tree.TypeCheck(ctx, test.expr, &semaCtx, types.AnyElement)
+			typeChecked, err := tree.TypeCheck(ctx, test.expr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -485,7 +485,7 @@ func TestFormatPgwireText(t *testing.T) {
 				t.Fatal(err)
 			}
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
-			typeChecked, err := tree.TypeCheck(ctx, expr, &semaCtx, types.AnyElement)
+			typeChecked, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -733,65 +733,6 @@ func TestFmtCollapseListsFormatFlag(t *testing.T) {
 			exprStr := tree.AsStringWithFlags(stmt.AST, tree.FmtCollapseLists)
 			if exprStr != test.expected {
 				t.Fatalf("expected %q, got %q", test.expected, exprStr)
-			}
-		})
-	}
-}
-
-func TestFormatStringDollarQuotes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	tests := []struct {
-		input string
-		delim string
-	}{
-		{
-			input: ``,
-			delim: `$$`,
-		},
-		{
-			input: `foo`,
-			delim: `$$`,
-		},
-		{
-			input: `foo $ bar`,
-			delim: `$$`,
-		},
-		{
-			input: `foo $bar$ baz`,
-			delim: `$$`,
-		},
-		{
-			input: `foo $$ bar`,
-			delim: `$funcbody$`,
-		},
-		{
-			input: `foo $$ $funcbody$ bar`,
-			delim: `$funcbodyx$`,
-		},
-		{
-			input: `foo $$ $funcbody$ $funcbodyx$ bar`,
-			delim: `$funcbodyxx$`,
-		},
-		{
-			input: `foo $funcbody$ bar`,
-			delim: `$$`,
-		},
-		{
-			input: `foo $$ $funcbodyx$ bar`,
-			delim: `$funcbody$`,
-		},
-	}
-
-	for i, test := range tests {
-		t.Run(fmt.Sprintf("%d %s", i, test.input), func(t *testing.T) {
-			f := tree.NewFmtCtx(tree.FmtSimple)
-			f.FormatStringDollarQuotes(test.input)
-			res := f.CloseAndGetString()
-			expected := test.delim + test.input + test.delim
-			if res != expected {
-				t.Fatalf("expected %q, got %q", expected, res)
 			}
 		})
 	}

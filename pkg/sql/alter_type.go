@@ -25,7 +25,6 @@ import (
 )
 
 type alterTypeNode struct {
-	zeroInputPlanNode
 	n      *tree.AlterType
 	prefix catalog.ResolvedObjectPrefix
 	desc   *typedesc.Mutable

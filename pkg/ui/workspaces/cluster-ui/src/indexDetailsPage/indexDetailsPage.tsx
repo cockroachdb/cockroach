@@ -208,9 +208,9 @@ export class IndexDetailsPage extends React.Component<
     });
   };
 
-  onChangePage = (current: number, pageSize: number): void => {
+  onChangePage = (current: number): void => {
     const { stmtPagination } = this.state;
-    this.setState({ stmtPagination: { ...stmtPagination, current, pageSize } });
+    this.setState({ stmtPagination: { ...stmtPagination, current } });
   };
 
   resetPagination = (): void => {
@@ -654,7 +654,6 @@ export class IndexDetailsPage extends React.Component<
                       current={stmtPagination.current}
                       total={filteredStmts.length}
                       onChange={this.onChangePage}
-                      onShowSizeChange={this.onChangePage}
                     />
                   </Loading>
                 </SummaryCard>

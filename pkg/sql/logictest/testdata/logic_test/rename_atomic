@@ -1,9 +1,6 @@
 subtest databases
 
 statement ok
-SET autocommit_before_ddl = false
-
-statement ok
 CREATE DATABASE db;
 CREATE DATABASE db_new
 
@@ -156,6 +153,3 @@ SHOW TABLES FROM sc93002;
 CREATE TABLE sc93002.t(a INT);
 DROP SCHEMA sc93002 CASCADE;
 COMMIT;
-
-statement ok
-RESET autocommit_before_ddl

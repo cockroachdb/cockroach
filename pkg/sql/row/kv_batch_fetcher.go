@@ -61,7 +61,7 @@ var logAdmissionPacerErr = log.Every(100 * time.Millisecond)
 // each time we seek admission for response handling during internally submitted
 // low priority reads (like row-level TTL selects).
 var elasticCPUDurationPerLowPriReadResponse = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"sqladmission.elastic_cpu.duration_per_low_pri_read_response",
 	"controls how many CPU tokens are allotted for handling responses for internally submitted low priority reads",
 	// NB: Experimentally, during TTL reads, we observed cumulative on-CPU time
@@ -75,7 +75,7 @@ var elasticCPUDurationPerLowPriReadResponse = settings.RegisterDurationSetting(
 // internally submitted low-priority reads (like row-level TTL selects)
 // integrate with elastic CPU control.
 var internalLowPriReadElasticControlEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"sqladmission.low_pri_read_response_elastic_control.enabled",
 	"determines whether the sql portion of internally submitted reads integrate with elastic CPU controller",
 	true,
@@ -132,7 +132,7 @@ func (s *identifiableSpans) reset() {
 
 // txnKVFetcher handles retrieval of key/values.
 type txnKVFetcher struct {
-	kvBatchMetrics
+	kvBatchFetcherHelper
 	// "Constant" fields, provided by the caller.
 	sendFn sendFunc
 	// spans is the list of Spans that will be read by this KV Fetcher. If an
@@ -390,7 +390,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		args.admission.pacerFactory,
 		args.admission.settingsValues,
 	)
-	f.kvBatchMetrics.init(args.kvPairsRead, args.batchRequestsIssued)
+	f.kvBatchFetcherHelper.init(f.nextBatch, args.kvPairsRead, args.batchRequestsIssued)
 	return f
 }
 
@@ -802,16 +802,6 @@ func popBatch(
 	return nil, nil, colBatch, remainingColBatches
 }
 
-// NextBatch implements the KVBatchFetcher interface.
-func (f *txnKVFetcher) NextBatch(ctx context.Context) (KVBatchFetcherResponse, error) {
-	resp, err := f.nextBatch(ctx)
-	if !resp.MoreKVs || err != nil {
-		return resp, err
-	}
-	f.kvBatchMetrics.Record(resp)
-	return resp, nil
-}
-
 func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherResponse, err error) {
 	// The purpose of this loop is to unpack the two-level batch structure that is
 	// returned from the KV layer.
@@ -893,12 +883,12 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 			}
 			if len(t.Rows) > 0 {
 				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
-					"unexpectedly got a ReverseScanResponse using KEY_VALUES response format",
+					"unexpectedly got a ScanResponse using KEY_VALUES response format",
 				)
 			}
 			if len(t.IntentRows) > 0 {
 				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
-					"unexpectedly got a ReverseScanResponse with non-nil IntentRows",
+					"unexpectedly got a ScanResponse with non-nil IntentRows",
 				)
 			}
 			// Note that ret.BatchResponse and ret.ColBatch might be nil when
@@ -1068,24 +1058,33 @@ func spansToRequests(
 	return reqs
 }
 
-// kvBatchMetrics tracks metrics and implements some of the methods for
-// the KVBatchFetcher interface related to observability.
-type kvBatchMetrics struct {
-	atomics struct {
+// kvBatchFetcherHelper is a small helper that extracts common logic for
+// implementing some methods of the KVBatchFetcher interface related to
+// observability.
+type kvBatchFetcherHelper struct {
+	nextBatch func(context.Context) (KVBatchFetcherResponse, error)
+	atomics   struct {
 		bytesRead           int64
 		kvPairsRead         *int64
 		batchRequestsIssued *int64
 	}
 }
 
-func (h *kvBatchMetrics) init(kvPairsRead, batchRequestsIssued *int64) {
+func (h *kvBatchFetcherHelper) init(
+	nextBatch func(context.Context) (KVBatchFetcherResponse, error),
+	kvPairsRead, batchRequestsIssued *int64,
+) {
+	h.nextBatch = nextBatch
 	h.atomics.kvPairsRead = kvPairsRead
 	h.atomics.batchRequestsIssued = batchRequestsIssued
 }
 
-// Record records metrics for the given batch response. It should be called
-// after each batch is fetched.
-func (h *kvBatchMetrics) Record(resp KVBatchFetcherResponse) {
+// NextBatch implements the KVBatchFetcher interface.
+func (h *kvBatchFetcherHelper) NextBatch(ctx context.Context) (KVBatchFetcherResponse, error) {
+	resp, err := h.nextBatch(ctx)
+	if !resp.MoreKVs || err != nil {
+		return resp, err
+	}
 	atomic.AddInt64(h.atomics.kvPairsRead, resp.kvPairsRead)
 	// Note that if resp.ColBatch is nil, then GetBatchMemSize will return 0.
 	// TODO(yuzefovich, 23.1): for resp.ColBatch this includes the decoded
@@ -1098,10 +1097,11 @@ func (h *kvBatchMetrics) Record(resp KVBatchFetcherResponse) {
 		nBytes += len(resp.KVs[i].Value.RawBytes)
 	}
 	atomic.AddInt64(&h.atomics.bytesRead, int64(nBytes))
+	return resp, nil
 }
 
 // GetBytesRead implements the KVBatchFetcher interface.
-func (h *kvBatchMetrics) GetBytesRead() int64 {
+func (h *kvBatchFetcherHelper) GetBytesRead() int64 {
 	if h == nil {
 		return 0
 	}
@@ -1109,7 +1109,7 @@ func (h *kvBatchMetrics) GetBytesRead() int64 {
 }
 
 // GetKVPairsRead implements the KVBatchFetcher interface.
-func (h *kvBatchMetrics) GetKVPairsRead() int64 {
+func (h *kvBatchFetcherHelper) GetKVPairsRead() int64 {
 	if h == nil || h.atomics.kvPairsRead == nil {
 		return 0
 	}
@@ -1117,7 +1117,7 @@ func (h *kvBatchMetrics) GetKVPairsRead() int64 {
 }
 
 // GetBatchRequestsIssued implements the KVBatchFetcher interface.
-func (h *kvBatchMetrics) GetBatchRequestsIssued() int64 {
+func (h *kvBatchFetcherHelper) GetBatchRequestsIssued() int64 {
 	if h == nil || h.atomics.batchRequestsIssued == nil {
 		return 0
 	}

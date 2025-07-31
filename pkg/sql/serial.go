@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -29,6 +30,28 @@ var uniqueRowIDExpr = &tree.FuncExpr{Func: tree.WrapFunction("unique_rowid")}
 // unorderedUniqueRowIDExpr is used when SessionNormalizationMode is
 // SerialUsesUnorderedRowID.
 var unorderedUniqueRowIDExpr = &tree.FuncExpr{Func: tree.WrapFunction("unordered_unique_rowid")}
+
+// realSequenceOpts (nil) is used when SessionNormalizationMode is
+// SerialUsesSQLSequences.
+var realSequenceOpts tree.SequenceOptions
+
+// virtualSequenceOpts is used when SessionNormalizationMode is
+// SerialUsesVirtualSequences.
+var virtualSequenceOpts = tree.SequenceOptions{
+	tree.SequenceOption{Name: tree.SeqOptVirtual},
+}
+
+// cachedSequencesCacheSize is the default cache size used when
+// SessionNormalizationMode is SerialUsesCachedSQLSequences or
+// SerialUsesCachedNodeSQLSequences.
+var cachedSequencesCacheSizeSetting = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.defaults.serial_sequences_cache_size",
+	"the default cache size when the session's serial normalization mode is set to cached sequences"+
+		"A cache size of 1 means no caching. Any cache size less than 1 is invalid.",
+	256,
+	settings.PositiveInt,
+)
 
 // generateSequenceForSerial generates a new sequence
 // which will be used when creating a SERIAL column.
@@ -178,9 +201,40 @@ func (p *planner) generateSerialInColumnDef(
 	}
 
 	seqType := ""
-	seqOpts, err := catalog.SequenceOptionsFromNormalizationMode(serialNormalizationMode, p.ExecCfg().Settings, d, asIntType)
-	if err != nil {
-		return nil, nil, nil, nil, err
+	seqOpts := realSequenceOpts
+	if serialNormalizationMode == sessiondatapb.SerialUsesVirtualSequences {
+		seqType = "virtual "
+		seqOpts = virtualSequenceOpts
+	} else if serialNormalizationMode == sessiondatapb.SerialUsesCachedSQLSequences {
+		seqType = "cached "
+
+		value := cachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
+		seqOpts = tree.SequenceOptions{
+			tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &value},
+		}
+	} else if serialNormalizationMode == sessiondatapb.SerialUsesCachedNodeSQLSequences {
+		seqType = "cached node "
+
+		value := cachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
+		seqOpts = tree.SequenceOptions{
+			tree.SequenceOption{Name: tree.SeqOptCacheNode, IntVal: &value},
+		}
+	}
+
+	// Setup the type of the sequence based on the type observed within
+	// the column.
+	switch asIntType {
+	case types.Int2, types.Int4:
+		// Valid types, nothing to do.
+	case types.Int:
+		// Int is the default, so no cast necessary.
+		fallthrough
+	default:
+		// Types is not an integer so nothing to set.
+		asIntType = nil
+	}
+	if asIntType != nil {
+		seqOpts = append(seqOpts, tree.SequenceOption{Name: tree.SeqOptAs, AsIntegerType: asIntType})
 	}
 
 	log.VEventf(ctx, 2, "new column %q of %q will have %s sequence name %q and default %q",

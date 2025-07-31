@@ -21,6 +21,7 @@ import (
 )
 
 func constructPlan(
+	planner *planner,
 	root exec.Node,
 	subqueries []exec.Subquery,
 	cascades, triggers []exec.PostQuery,
@@ -56,8 +57,6 @@ func constructPlan(
 				out.execMode = rowexec.SubqueryExecModeAllRowsNormalized
 			case exec.SubqueryAllRows:
 				out.execMode = rowexec.SubqueryExecModeAllRows
-			case exec.SubqueryDiscardAllRows:
-				out.execMode = rowexec.SubqueryExecModeDiscardAllRows
 			default:
 				return nil, errors.Errorf("invalid SubqueryMode %d", in.Mode)
 			}
@@ -272,8 +271,9 @@ func constructVirtualScan(
 	)
 
 	n, err := delayedNodeCallback(&delayedNode{
-		name:    fmt.Sprintf("%s@%s", table.Name(), index.Name()),
-		columns: columns,
+		name:            fmt.Sprintf("%s@%s", table.Name(), index.Name()),
+		columns:         columns,
+		indexConstraint: params.IndexConstraint,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			return constructor(ctx, p, tn.Catalog())
 		},
@@ -312,12 +312,21 @@ func constructVirtualScan(
 	// Virtual indexes never provide a legitimate ordering, so we have to make
 	// sure to sort if we have a required ordering.
 	if len(reqOrdering) != 0 {
-		n, err = ef.ConstructSort(n, reqOrdering, 0 /* alreadyOrderedPrefix */, 0 /* estimatedInputRowCount */)
+		n, err = ef.ConstructSort(n, reqOrdering, 0)
 		if err != nil {
 			return nil, err
 		}
 	}
 	return n, nil
+}
+
+func scanContainsSystemColumns(colCfg *scanColumnsConfig) bool {
+	for _, id := range colCfg.wantedColumns {
+		if colinfo.IsColIDSystemColumn(id) {
+			return true
+		}
+	}
+	return false
 }
 
 func constructOpaque(metadata opt.OpaqueMetadata) (planNode, error) {

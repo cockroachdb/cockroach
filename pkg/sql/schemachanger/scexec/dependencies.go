@@ -67,37 +67,20 @@ type Catalog interface {
 	// DeleteDescriptor deletes a descriptor entry.
 	DeleteDescriptor(ctx context.Context, id descpb.ID) error
 
-	// WriteZoneConfigToBatch adds the new zoneconfig to uncommitted layer and
-	// writes to the kv batch.
-	WriteZoneConfigToBatch(ctx context.Context, id descpb.ID, zc catalog.ZoneConfig) error
-
-	// GetZoneConfig gets the zone config for a descriptor ID.
-	GetZoneConfig(ctx context.Context, id descpb.ID) (catalog.ZoneConfig, error)
-
-	// UpdateZoneConfig upserts a zone config for a descriptor ID.
+	// UpdateZoneConfig upserts a zone config for a descriptor.
 	UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb.ZoneConfig) error
 
-	// UpdateSubzoneConfig upserts a subzone config into the given zone config
-	// for a descriptor ID.
+	// UpdateSubzoneConfig upserts a subzone config into the zone config for a
+	// descriptor.
 	UpdateSubzoneConfig(
 		ctx context.Context,
-		parentZone catalog.ZoneConfig,
-		subzone zonepb.Subzone,
+		tableID descpb.ID,
+		subzones []zonepb.Subzone,
 		subzoneSpans []zonepb.SubzoneSpan,
-		idxRefToDelete int32,
-	) (catalog.ZoneConfig, error)
+	) error
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
-
-	// DeleteSubzoneConfig deletes a subzone config from the zone config for a
-	// table.
-	DeleteSubzoneConfig(
-		ctx context.Context,
-		tableID descpb.ID,
-		subzone zonepb.Subzone,
-		subzoneSpans []zonepb.SubzoneSpan,
-	) error
 
 	// UpdateComment upserts a comment for the (objID, subID, cmtType) key.
 	UpdateComment(ctx context.Context, key catalogkeys.CommentKey, cmt string) error

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -39,20 +38,14 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 
 	ctx := context.Background()
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
-	defer testCluster.Stopper().Stop(ctx)
 
-	hostRunner := sqlutils.MakeSQLRunner(testCluster.SystemLayer(0).SQLConn(t))
-	// If we happen to enable buffered writes metamorphically, we must have the
-	// split lock reliability enabled (which can be tweaked metamorphically too,
-	// #146412).
-	hostRunner.Exec(t, "SET CLUSTER SETTING kv.lock_table.unreplicated_lock_reliability.split.enabled = true")
+	defer testCluster.Stopper().Stop(ctx)
 
 	s0 := testCluster.Server(0).ApplicationLayer()
 	s1 := testCluster.Server(1).ApplicationLayer()
 	s2 := testCluster.Server(2).ApplicationLayer()
 	server1Conn := sqlutils.MakeSQLRunner(s0.SQLConn(t))
 	server2Conn := sqlutils.MakeSQLRunner(s1.SQLConn(t))
-	obsConn := sqlutils.MakeSQLRunner(s1.SQLConn(t))
 
 	contentionCountBefore := s1.SQLServer().(*sql.Server).Metrics.EngineMetrics.SQLContendedTxns.Count()
 
@@ -93,9 +86,6 @@ COMMIT;
 SET TRACING=off;
 `,
 	)
-
-	sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, obsConn, 1,
-		sqlstatstestutil.TransactionFilter{App: "contentionTest"})
 
 	var resp serverpb.ListContentionEventsResponse
 	require.NoError(t,

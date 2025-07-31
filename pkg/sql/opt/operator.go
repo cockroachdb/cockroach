@@ -73,6 +73,10 @@ type Expr interface {
 	// For example, an operator may choose to return one of its fields, or perhaps
 	// a pointer to itself, or nil if there is nothing useful to return.
 	Private() interface{}
+
+	// String returns a human-readable string representation for the expression
+	// that can be used for debugging and testing.
+	String() string
 }
 
 // ScalarRank is the type of the sort order given to every scalar
@@ -91,11 +95,6 @@ type ScalarExpr interface {
 
 	// DataType is the SQL type of the expression.
 	DataType() *types.T
-
-	// String returns a human-readable string representation for the expression
-	// that can be used for debugging and testing. It is only implemented for
-	// scalar expressions because relational expressions need access to the memo.
-	String() string
 }
 
 // MutableExpr is implemented by expressions that allow their children to be

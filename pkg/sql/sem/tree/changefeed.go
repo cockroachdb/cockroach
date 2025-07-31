@@ -10,29 +10,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
-type ChangefeedLevel int
-
-const (
-	// ChangefeedLevelTable is used for table-level changefeeds e.g.
-	// CREATE CHANGEFEED FOR TABLE t;
-	ChangefeedLevelTable ChangefeedLevel = iota
-	// ChangefeedLevelDatabase is used for database-level changefeeds e.g.
-	// CREATE CHANGEFEED FOR DATABASE d;
-	ChangefeedLevelDatabase
-)
-
-func (l ChangefeedLevel) String() string {
-	return []string{"TABLE", "DATABASE"}[l]
-}
-
 // CreateChangefeed represents a CREATE CHANGEFEED statement.
 type CreateChangefeed struct {
-	TableTargets   ChangefeedTableTargets
-	DatabaseTarget ChangefeedDatabaseTarget
-	Level          ChangefeedLevel
-	SinkURI        Expr
-	Options        KVOptions
-	Select         *SelectClause
+	Targets ChangefeedTargets
+	SinkURI Expr
+	Options KVOptions
+	Select  *SelectClause
 }
 
 var _ Statement = &CreateChangefeed{}
@@ -43,7 +26,8 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 		node.formatWithPredicates(ctx)
 		return
 	}
-	if node.SinkURI != nil || node.Level == ChangefeedLevelDatabase {
+
+	if node.SinkURI != nil {
 		ctx.WriteString("CREATE ")
 	} else {
 		// Sinkless feeds don't really CREATE anything, so the syntax omits the
@@ -52,11 +36,7 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 	}
 
 	ctx.WriteString("CHANGEFEED FOR ")
-	if node.Level == ChangefeedLevelTable {
-		ctx.FormatNode(&node.TableTargets)
-	} else {
-		ctx.FormatNode(&node.DatabaseTarget)
-	}
+	ctx.FormatNode(&node.Targets)
 	if node.SinkURI != nil {
 		ctx.WriteString(" INTO ")
 		ctx.FormatURI(node.SinkURI)
@@ -85,25 +65,14 @@ func (node *CreateChangefeed) formatWithPredicates(ctx *FmtCtx) {
 	ctx.FormatNode(node.Select)
 }
 
-type ChangefeedDatabaseTarget Name
-
-func (ct *ChangefeedDatabaseTarget) Format(ctx *FmtCtx) {
-	ctx.WriteString("DATABASE ")
-	ctx.FormatName(string(*ct))
-}
-
 // ChangefeedTarget represents a database object to be watched by a changefeed.
-type ChangefeedTableTarget struct {
+type ChangefeedTarget struct {
 	TableName  TablePattern
 	FamilyName Name
 }
 
-func (ct *ChangefeedTableTarget) GetName() string {
-	return ct.TableName.String()
-}
-
 // Format implements the NodeFormatter interface.
-func (ct *ChangefeedTableTarget) Format(ctx *FmtCtx) {
+func (ct *ChangefeedTarget) Format(ctx *FmtCtx) {
 	ctx.WriteString("TABLE ")
 	ctx.FormatNode(ct.TableName)
 	if ct.FamilyName != "" {
@@ -113,10 +82,10 @@ func (ct *ChangefeedTableTarget) Format(ctx *FmtCtx) {
 }
 
 // ChangefeedTargets represents a list of database objects to be watched by a changefeed.
-type ChangefeedTableTargets []ChangefeedTableTarget
+type ChangefeedTargets []ChangefeedTarget
 
 // Format implements the NodeFormatter interface.
-func (cts *ChangefeedTableTargets) Format(ctx *FmtCtx) {
+func (cts *ChangefeedTargets) Format(ctx *FmtCtx) {
 	for i := range *cts {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -127,15 +96,15 @@ func (cts *ChangefeedTableTargets) Format(ctx *FmtCtx) {
 
 // ChangefeedTargetFromTableExpr returns ChangefeedTarget for the
 // specified table expression.
-func ChangefeedTargetFromTableExpr(e TableExpr) (ChangefeedTableTarget, error) {
+func ChangefeedTargetFromTableExpr(e TableExpr) (ChangefeedTarget, error) {
 	switch t := e.(type) {
 	case TablePattern:
-		return ChangefeedTableTarget{TableName: t}, nil
+		return ChangefeedTarget{TableName: t}, nil
 	case *AliasedTableExpr:
 		if tn, ok := t.Expr.(*TableName); ok {
-			return ChangefeedTableTarget{TableName: tn}, nil
+			return ChangefeedTarget{TableName: tn}, nil
 		}
 	}
-	return ChangefeedTableTarget{}, pgerror.Newf(
+	return ChangefeedTarget{}, pgerror.Newf(
 		pgcode.InvalidName, "unsupported changefeed target type")
 }

@@ -23,7 +23,6 @@ import (
 // For a more detailed description of zigzag joins, as well as when they can
 // be planned, see the comment in rowexec/zigzagjoiner.go.
 type zigzagJoinNode struct {
-	zeroInputPlanNode
 	// sides contains information about each individual "side" of a
 	// zigzag join. Must contain 2 or more zigzagJoinSides.
 	sides []zigzagJoinSide
@@ -43,7 +42,9 @@ type zigzagJoinNode struct {
 // join. Note that the length of all eqCols in one zigzagJoinNode should
 // be the same.
 type zigzagJoinSide struct {
-	fetch fetchPlanningInfo
+	// scan references a scan node containing index/table descriptor references
+	// for this side of the join.
+	scan *scanNode
 
 	// eqCols is an int slice containing the equated columns for this side
 	// of the zigzag join (as ordinals into scan.cols).

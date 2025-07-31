@@ -835,10 +835,10 @@ func expectExecStmt(
 		t.Fatalf("expected %s, got %s", expSQL, es.AST.String())
 	}
 
-	if es.ParseStart == 0 {
+	if es.ParseStart == (time.Time{}) {
 		t.Fatalf("ParseStart not filled in")
 	}
-	if es.ParseEnd == 0 {
+	if es.ParseEnd == (time.Time{}) {
 		t.Fatalf("ParseEnd not filled in")
 	}
 	if typ == queryStringComplete {

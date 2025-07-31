@@ -8,8 +8,7 @@ package split
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"math/rand/v2"
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -27,8 +26,8 @@ func (r DFLargestRandSource) Float64() float64 {
 	return 0
 }
 
-// IntN returns the largest number possible in [0, n)
-func (r DFLargestRandSource) IntN(n int) int {
+// Intn returns the largest number possible in [0, n)
+func (r DFLargestRandSource) Intn(n int) int {
 	var result int
 	if n > 0 {
 		result = n - 1
@@ -162,7 +161,7 @@ func TestSplitFinderKey(t *testing.T) {
 		{multipleSpanReservoir, keys.SystemSQLCodec.TablePrefix(ReservoirKeyOffset + splitKeySampleSize/2)},
 	}
 
-	randSource := rand.New(rand.NewPCG(2022, 0))
+	randSource := rand.New(rand.NewSource(2022))
 	for i, test := range testCases {
 		finder := NewUnweightedFinder(timeutil.Now(), randSource)
 		finder.samples = test.reservoir
@@ -287,8 +286,8 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 			}
 		} else if i < 7 {
 			// Imbalance and too many contained counters.
-			deviationLeft := rand.IntN(5)
-			deviationRight := rand.IntN(5)
+			deviationLeft := rand.Intn(5)
+			deviationRight := rand.Intn(5)
 			samples[idx] = sample{
 				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
 				left:      25 + deviationLeft,
@@ -297,8 +296,8 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 			}
 		} else if i < 13 {
 			// Imbalance counters.
-			deviationLeft := rand.IntN(5)
-			deviationRight := rand.IntN(5)
+			deviationLeft := rand.Intn(5)
+			deviationRight := rand.Intn(5)
 			samples[idx] = sample{
 				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
 				left:      50 + deviationLeft,
@@ -318,7 +317,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 		}
 	}
 
-	randSource := rand.New(rand.NewPCG(2022, 0))
+	randSource := rand.New(rand.NewSource(2022))
 	finder := NewUnweightedFinder(timeutil.Now(), randSource)
 	finder.samples = samples
 	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := finder.noSplitKeyCause()
@@ -382,103 +381,23 @@ func TestFinderPopularKeyFrequency(t *testing.T) {
 		}
 	}
 
-	randSource := rand.New(rand.NewPCG(2022, 0))
-	for i, test := range []struct {
+	testCases := []struct {
 		samples                     [splitKeySampleSize]sample
-		expectedPopularKey          roachpb.Key
 		expectedPopularKeyFrequency float64
 	}{
-		{uniqueKeySample, keys.SystemSQLCodec.TablePrefix(1), 0.05},
-		{twentyPercentPopularKeySample, keys.SystemSQLCodec.TablePrefix(6), 0.2},
-		{twentyFivePercentPopularKeySample, keys.SystemSQLCodec.TablePrefix(2), 0.25},
-		{fiftyPercentPopularKeySample, keys.SystemSQLCodec.TablePrefix(0), 0.5},
-		{fiftyFivePercentPopularKeySample, keys.SystemSQLCodec.TablePrefix(0), 0.55},
-		{sameKeySample, keys.SystemSQLCodec.TablePrefix(0), 1},
-	} {
-		t.Run(fmt.Sprintf("popular key test %d", i), func(t *testing.T) {
-			finder := NewUnweightedFinder(timeutil.Now(), randSource)
-			finder.samples = test.samples
-			popularKey := finder.PopularKey()
-			assert.Equal(t, test.expectedPopularKey, popularKey.Key, "unexpected popular key in test %d", i)
-			assert.Equal(t, test.expectedPopularKeyFrequency, popularKey.Frequency, "unexpected popular key frequency in test %d", i)
-		})
-	}
-}
-
-func TestUnweightedFinderAccessDirection(t *testing.T) {
-	testCases := []struct {
-		name              string
-		samples           [splitKeySampleSize]sample
-		expectedDirection float64
-	}{
-		{
-			name: "all samples to the left",
-			samples: [splitKeySampleSize]sample{
-				{left: 10, right: 0, contained: 1},
-				{left: 20, right: 0, contained: 1},
-				{left: 30, right: 0, contained: 1},
-			},
-			expectedDirection: -1,
-		},
-		{
-			name: "all samples to the right",
-			samples: [splitKeySampleSize]sample{
-				{left: 0, right: 10, contained: 1},
-				{left: 0, right: 20, contained: 1},
-				{left: 0, right: 30, contained: 1},
-			},
-			expectedDirection: 1,
-		},
-		{
-			name: "balanced samples",
-			samples: [splitKeySampleSize]sample{
-				{left: 10, right: 10, contained: 1},
-				{left: 20, right: 20, contained: 1},
-				{left: 30, right: 30, contained: 1},
-			},
-			expectedDirection: 0,
-		},
-		{
-			name: "more samples to the left",
-			samples: [splitKeySampleSize]sample{
-				{left: 30, right: 10, contained: 1},
-				{left: 40, right: 20, contained: 1},
-				{left: 50, right: 30, contained: 1},
-			},
-			expectedDirection: -(1.0 / 3),
-		},
-		{
-			name: "more samples to the right",
-			samples: [splitKeySampleSize]sample{
-				{left: 10, right: 30, contained: 1},
-				{left: 20, right: 40, contained: 1},
-				{left: 30, right: 50, contained: 1},
-			},
-			expectedDirection: (1.0 / 3),
-		},
-		{
-			name: "contained samples does not influence direction",
-			samples: [splitKeySampleSize]sample{
-				{left: 10, right: 0, contained: 1},
-				{left: 0, right: 10, contained: 2},
-			},
-			expectedDirection: 0,
-		},
-		{
-			name:              "no samples",
-			samples:           [splitKeySampleSize]sample{},
-			expectedDirection: 0,
-		},
+		{uniqueKeySample, 0.05},
+		{twentyPercentPopularKeySample, 0.2},
+		{twentyFivePercentPopularKeySample, 0.25},
+		{fiftyPercentPopularKeySample, 0.5},
+		{fiftyFivePercentPopularKeySample, 0.55},
+		{sameKeySample, 1},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			finder := NewUnweightedFinder(timeutil.Now(), rand.New(rand.NewPCG(2022, 0)))
-			finder.samples = tc.samples
-			direction := finder.AccessDirection()
-			if direction != tc.expectedDirection {
-				t.Errorf("expected direction %v, but got %v", tc.expectedDirection, direction)
-			}
-		})
+	randSource := rand.New(rand.NewSource(2022))
+	for i, test := range testCases {
+		finder := NewUnweightedFinder(timeutil.Now(), randSource)
+		finder.samples = test.samples
+		popularKeyFrequency := finder.PopularKeyFrequency()
+		assert.Equal(t, test.expectedPopularKeyFrequency, popularKeyFrequency, "unexpected popular key frequency in test %d", i)
 	}
 }

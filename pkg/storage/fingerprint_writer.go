@@ -50,7 +50,7 @@ func makeFingerprintWriter(
 	// TODO(adityamaru,dt): Once
 	// https://github.com/cockroachdb/cockroach/issues/90450 has been addressed we
 	// should write to a kvBuf instead of a Backup SST writer.
-	sstWriter := MakeTransportSSTWriter(ctx, cs, f)
+	sstWriter := MakeBackupSSTWriter(ctx, cs, f)
 	return fingerprintWriter{
 		sstWriter: &sstWriter,
 		hasher:    hasher,

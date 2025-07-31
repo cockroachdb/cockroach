@@ -103,21 +103,20 @@ func AlterPrimaryKeyCorrectZoneConfigTest(
 			s, sqlDB, _ := serverutils.StartServer(t, params)
 			db = sqlDB
 			defer s.Stopper().Stop(ctx)
-			_, err := sqlDB.Exec("SET create_table_with_schema_locked=false")
-			require.NoError(t, err)
-			_, err = sqlDB.Exec(fmt.Sprintf(`
-				%s;
-				USE t;
-				%s
-`, createDBStatement, tc.SetupQuery))
-			require.NoError(t, err)
-			_, err = sqlDB.Exec("SET CLUSTER SETTING sql.schema.force_declarative_statements = '!ALTER TABLE';")
-			require.NoError(t, err)
+
+			if _, err := sqlDB.Exec(fmt.Sprintf(`
+%s;
+USE t;
+%s
+`, createDBStatement, tc.SetupQuery)); err != nil {
+				t.Fatal(err)
+			}
 
 			// Insert some rows so we can interrupt inspect state during backfill.
 			require.NoError(t, sqltestutils.BulkInsertIntoTable(sqlDB, maxValue))
+
 			runCheck = true
-			_, err = sqlDB.Exec(tc.AlterQuery)
+			_, err := sqlDB.Exec(tc.AlterQuery)
 			require.NoError(t, err)
 		})
 	}

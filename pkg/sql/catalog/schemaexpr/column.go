@@ -14,13 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // DequalifyColumnRefs returns a serialized expression with database and table
@@ -383,33 +381,4 @@ func formatGeneratedAsIdentitySequenceOption(seqOpt string) string {
 		return ""
 	}
 	return fmt.Sprintf(" (%s)", seqOpt)
-}
-
-// wrapWithAssignmentCast wraps the given typed expression with an assignment
-// cast to the given column's type if the expression's type is not identical to
-// the column's type.
-func wrapWithAssignmentCast(
-	ctx context.Context, typedExpr tree.TypedExpr, col catalog.Column, semaCtx *tree.SemaContext,
-) (tree.TypedExpr, error) {
-	origExpr := typedExpr
-	if !typedExpr.ResolvedType().Identical(col.GetType()) {
-		const fnName = "crdb_internal.assignment_cast"
-		funcRef := tree.WrapFunction(fnName)
-		props, overloads := builtinsregistry.GetBuiltinProperties(fnName)
-		var err error
-		if typedExpr, err = tree.TypeCheck(ctx, tree.NewTypedFuncExpr(
-			funcRef,
-			0, /* aggQualifier */
-			tree.TypedExprs{typedExpr, tree.NewTypedCastExpr(tree.DNull, col.GetType())},
-			nil, /* filter */
-			nil, /* windowDef */
-			col.GetType(),
-			props,
-			&overloads[0],
-		), semaCtx, col.GetType()); err != nil {
-			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-				"failed to type check the cast of %v to %v", origExpr, col.GetType())
-		}
-	}
-	return typedExpr, nil
 }

@@ -35,23 +35,14 @@ import (
 // ProviderName is aws.
 const ProviderName = "aws"
 
+// providerInstance is the instance to be registered into vm.Providers by Init.
+var providerInstance = &Provider{}
+
 //go:embed config.json
 var configJson []byte
 
 //go:embed old.json
 var oldJson []byte
-
-var (
-	// TODO(golgeek, 2025-03-25): remove this in one year or so when all
-	// resources are created with the unified tags.
-	legacyTagsRemapping = map[string]string{
-		"Cluster":   vm.TagCluster,
-		"Created":   vm.TagCreated,
-		"Lifetime":  vm.TagLifetime,
-		"Roachprod": vm.TagRoachprod,
-		"Spot":      vm.TagSpotInstance,
-	}
-)
 
 // Init initializes the AWS provider and registers it into vm.Providers.
 //
@@ -66,14 +57,11 @@ func Init() error {
 		"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)"
 	const noCredentials = "missing AWS credentials, expected ~/.aws/credentials file or AWS_ACCESS_KEY_ID env var"
 
-	providerInstance := &Provider{}
-	providerInstance.Config.awsConfig = *DefaultConfig
+	configVal := awsConfigValue{awsConfig: *DefaultConfig}
+	providerInstance.Config = &configVal.awsConfig
+	providerInstance.IAMProfile = "roachprod-testing"
 
 	haveRequiredVersion := func() bool {
-		// `aws --version` takes around 400ms on my machine.
-		if os.Getenv("ROACHPROD_SKIP_AWSCLI_CHECK") == "true" {
-			return true
-		}
 		cmd := exec.Command("aws", "--version")
 		output, err := cmd.Output()
 		if err != nil {
@@ -92,32 +80,14 @@ func Init() error {
 	// NB: This is a bit hacky, but using something like `aws iam get-user` is
 	// slow and not something we want to do at startup.
 	haveCredentials := func() bool {
-		// We assume SSO is enabled if either AWS_PROFILE is set or ~/.aws/config exists.
-		// N.B. We can't check if the user explicitly passed `--aws-profile` because CLI parsing hasn't happened yet.
-		if os.Getenv("AWS_PROFILE") != "" {
-			return true
-		}
-		const configFile = "${HOME}/.aws/config"
-		if _, err := os.Stat(os.ExpandEnv(configFile)); err == nil {
-			return true
-		}
-		// Non-SSO authentication is deprecated and will be removed in the future. However, CI continues to use it.
-		hasAuth := false
 		const credFile = "${HOME}/.aws/credentials"
 		if _, err := os.Stat(os.ExpandEnv(credFile)); err == nil {
-			hasAuth = true
+			return true
 		}
 		if os.Getenv("AWS_ACCESS_KEY_ID") != "" {
-			hasAuth = true
+			return true
 		}
-		if !hasAuth {
-			// No known method of auth. was detected.
-			return false
-		}
-		// Non-SSO auth. is deprecated, so let's display a warning.
-		fmt.Fprintf(os.Stderr, "WARN: Non-SSO form of authentication is deprecated and will be removed in the future.\n")
-		fmt.Fprintf(os.Stderr, "WARN:\tPlease set `AWS_PROFILE` or pass `--aws-profile`.\n")
-		return true
+		return false
 	}
 	if !haveCredentials() {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, noCredentials)
@@ -240,7 +210,6 @@ func DefaultProviderOpts() *ProviderOpts {
 		RemoteUserName:   "ubuntu",
 		DefaultEBSVolume: defaultEBSVolumeValue,
 		CreateRateLimit:  2,
-		IAMProfile:       "roachprod-testing",
 	}
 }
 
@@ -258,10 +227,6 @@ type ProviderOpts struct {
 	DefaultEBSVolume ebsVolume
 	EBSVolumes       ebsVolumeList
 	UseMultipleDisks bool
-
-	// IAMProfile designates the name of the instance profile to use for created
-	// EC2 instances if non-empty.
-	IAMProfile string
 
 	// Use specified ImageAMI when provisioning.
 	// Overrides config.json AMI.
@@ -287,7 +252,11 @@ type Provider struct {
 	Profile string
 
 	// Path to json for aws configuration, defaults to predefined configuration
-	Config awsConfigValue
+	Config *awsConfig
+
+	// IAMProfile designates the name of the instance profile to use for created
+	// EC2 instances if non-empty.
+	IAMProfile string
 
 	// aws accounts to perform action in, used by gcCmd only as it clean ups multiple aws accounts
 	AccountIDs []string
@@ -344,8 +313,7 @@ func (p *Provider) GetPreemptedSpotVMs(
 //
 // Sample error message:
 //
-// ‹An error occurred (InvalidInstanceID.NotFound) when calling the DescribeInstances operation: The instance IDs 'i-02e9adfac0e5fa18f, i-0bc7869fda0299caa'
-// do not exist›
+// ‹An error occurred (InvalidInstanceID.NotFound) when calling the DescribeInstances operation: The instance IDs 'i-02e9adfac0e5fa18f, i-0bc7869fda0299caa' do not exist›
 func getInstanceIDsNotFound(errorMsg string) []string {
 	// Regular expression pattern to find instance IDs between single quotes
 	re := regexp.MustCompile(`'([^']*)'`)
@@ -358,12 +326,6 @@ func getInstanceIDsNotFound(errorMsg string) []string {
 }
 
 func (p *Provider) GetHostErrorVMs(
-	l *logger.Logger, vms vm.List, since time.Time,
-) ([]string, error) {
-	return nil, nil
-}
-
-func (p *Provider) GetLiveMigrationVMs(
 	l *logger.Logger, vms vm.List, since time.Time,
 ) ([]string, error) {
 	return nil, nil
@@ -448,7 +410,7 @@ var DefaultConfig = func() (cfg *awsConfig) {
 // doesn't support multi-regional buckets, thus resulting in material
 // egress cost if the test loads from a different region. See
 // https://github.com/cockroachdb/cockroach/issues/105968.
-var defaultZones = []string{
+var DefaultZones = []string{
 	"us-east-2a",
 	"us-west-2b",
 	"eu-west-2b",
@@ -464,17 +426,7 @@ type Tags []Tag
 func (t Tags) MakeMap() map[string]string {
 	tagMap := make(map[string]string, len(t))
 	for _, entry := range t {
-
-		// If the resource was created with the legacy tags, we remap
-		// to the unified ones.
-		// TODO(golgeek, 2025-03-25): remove this in one year or so when all
-		// resources are created with the unified tags.
-		if tag, ok := legacyTagsRemapping[entry.Key]; ok {
-			tagMap[tag] = entry.Value
-		} else {
-			tagMap[entry.Key] = entry.Value
-		}
-
+		tagMap[entry.Key] = entry.Value
 	}
 	return tagMap
 }
@@ -525,7 +477,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		fmt.Sprintf("aws availability zones to use for cluster creation. If zones are formatted\n"+
 			"as AZ:N where N is an integer, the zone will be repeated N times. If > 1\n"+
 			"zone specified, the cluster will be spread out evenly by zone regardless\n"+
-			"of geo (default [%s])", strings.Join(defaultZones, ",")))
+			"of geo (default [%s])", strings.Join(DefaultZones, ",")))
 	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
 		o.ImageAMI, "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
 	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
@@ -538,22 +490,25 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		" created. Try lowering this limit when hitting 'Request limit exceeded' errors.")
 	flags.BoolVar(&o.UseSpot, ProviderName+"-use-spot",
 		false, "use AWS Spot VMs, which are significantly cheaper, but can be preempted by AWS.")
-	flags.StringVar(&o.IAMProfile, ProviderName+"-iam-profile", o.IAMProfile,
+	flags.StringVar(&providerInstance.IAMProfile, ProviderName+"-iam-profile", providerInstance.IAMProfile,
 		"the IAM instance profile to associate with created VMs if non-empty")
+
+}
+
+// ConfigureClusterFlags implements vm.ProviderOpts.
+func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
+	flags.StringVar(&providerInstance.Profile, ProviderName+"-profile", providerInstance.Profile,
+		"Profile to manage cluster in")
+	configFlagVal := awsConfigValue{awsConfig: *DefaultConfig}
+	providerInstance.Config = &configFlagVal.awsConfig
+	flags.Var(&configFlagVal, ProviderName+"-config",
+		"Path to json for aws configuration, defaults to predefined configuration")
 }
 
 // ConfigureClusterCleanupFlags implements ProviderOpts.
-func (p *Provider) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
-	flags.StringSliceVar(&p.AccountIDs, ProviderName+"-account-ids", []string{},
+func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
+	flags.StringSliceVar(&providerInstance.AccountIDs, ProviderName+"-account-ids", []string{},
 		"AWS account ids as a comma-separated string")
-}
-
-// ConfigureProviderFlags is part of the vm.Provider interface.
-func (p *Provider) ConfigureProviderFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
-	flags.StringVar(&p.Profile, ProviderName+"-profile", os.Getenv("AWS_PROFILE"),
-		"Profile to manage cluster in")
-	flags.Var(&p.Config, ProviderName+"-config",
-		"Path to json for aws configuration, defaults to predefined configuration")
 }
 
 // CleanSSH is part of vm.Provider.  This implementation is a no-op,
@@ -698,7 +653,11 @@ func (p *Provider) Create(
 	}
 
 	if len(expandedZones) == 0 {
-		expandedZones = DefaultZones(opts.GeoDistributed)
+		if opts.GeoDistributed {
+			expandedZones = DefaultZones
+		} else {
+			expandedZones = DefaultZones[:1]
+		}
 	}
 
 	// We need to make sure that the SSH keys have been distributed to all regions.
@@ -751,13 +710,6 @@ func (p *Provider) Create(
 	}
 
 	return vmList, nil
-}
-
-func DefaultZones(geoDistributed bool) []string {
-	if geoDistributed {
-		return defaultZones
-	}
-	return []string{defaultZones[0]}
 }
 
 func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) (vm.List, error) {
@@ -862,7 +814,7 @@ func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 // This will update the Lifetime tag on the instances.
 func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration) error {
 	return p.AddLabels(l, vms, map[string]string{
-		vm.TagLifetime: lifetime.String(),
+		"Lifetime": lifetime.String(),
 	})
 }
 
@@ -1111,13 +1063,6 @@ type DescribeInstancesOutputInstance struct {
 	InstanceType          string
 	InstanceLifecycle     string `json:"InstanceLifecycle"`
 	SpotInstanceRequestId string `json:"SpotInstanceRequestId"`
-
-	// Encodes IAM identifier for this instance.
-	IamInstanceProfile struct {
-		// Of the form "Arn": "arn:aws:iam::[0-9]+:instance-profile/roachprod-testing"
-		Arn string `json:"Arn"`
-		Id  string `json:"Id"`
-	}
 }
 
 // toVM converts an ec2 instance to a vm.VM struct.
@@ -1135,7 +1080,7 @@ func (in *DescribeInstancesOutputInstance) toVM(
 	}
 
 	var lifetime time.Duration
-	if lifeText, ok := tagMap[vm.TagLifetime]; ok {
+	if lifeText, ok := tagMap["Lifetime"]; ok {
 		lifetime, err = time.ParseDuration(lifeText)
 		if err != nil {
 			errs = append(errs, err)
@@ -1161,12 +1106,6 @@ func (in *DescribeInstancesOutputInstance) toVM(
 			}
 		}
 	}
-	// Parse IamInstanceProfile.Arn to extract IAM identifier.
-	// The ARN is of the form "arn:aws:iam::[0-9]+:instance-profile/roachprod-testing"
-	iamIdentifier := ""
-	if in.IamInstanceProfile.Arn != "" {
-		iamIdentifier = strings.Split(strings.TrimPrefix(in.IamInstanceProfile.Arn, "arn:aws:iam::"), ":")[0]
-	}
 
 	return &vm.VM{
 		CreatedAt:              createdAt,
@@ -1178,7 +1117,6 @@ func (in *DescribeInstancesOutputInstance) toVM(
 		PrivateIP:              in.PrivateIPAddress,
 		Provider:               ProviderName,
 		ProviderID:             in.InstanceID,
-		ProviderAccountID:      iamIdentifier,
 		PublicIP:               in.PublicIPAddress,
 		RemoteUser:             remoteUserName,
 		VPC:                    in.VpcID,
@@ -1188,6 +1126,7 @@ func (in *DescribeInstancesOutputInstance) toVM(
 		NonBootAttachedVolumes: nonBootableVolumes,
 		Preemptible:            in.InstanceLifecycle == "spot",
 	}
+
 }
 
 // CancelSpotInstanceRequestsOutput represents the output structure of the cancel-spot-instance-requests command.
@@ -1251,7 +1190,7 @@ func (p *Provider) describeInstances(
 			tagMap := in.Tags.MakeMap()
 
 			// Ignore any instances that we didn't create
-			if tagMap[vm.TagRoachprod] != "true" {
+			if tagMap["Roachprod"] != "true" {
 				continue in
 			}
 
@@ -1308,14 +1247,16 @@ func (p *Provider) runInstance(
 	m[vm.TagCreated] = timeutil.Now().Format(time.RFC3339)
 	m["Name"] = name
 
-	// TODO(golgeek, 2025-03-25): In an effort to unify tags in lowercase across
-	// all providers, AWS cost analysis dashboard will break as they look for a
-	// capitalized `Cluster` tag. We duplicate the tag for now and will remove it
-	// once all resources are created with the unified tags in a year or so.
-	m["Cluster"] = m[vm.TagCluster]
-
 	if providerOpts.UseSpot {
 		m[vm.TagSpotInstance] = "true"
+	}
+
+	var awsLabelsNameMap = map[string]string{
+		vm.TagCluster:      "Cluster",
+		vm.TagCreated:      "Created",
+		vm.TagLifetime:     "Lifetime",
+		vm.TagRoachprod:    "Roachprod",
+		vm.TagSpotInstance: "Spot",
 	}
 
 	var labelPairs []string
@@ -1334,6 +1275,9 @@ func (p *Provider) runInstance(
 		addLabel(key, value)
 	}
 	for key, value := range m {
+		if n, ok := awsLabelsNameMap[key]; ok {
+			key = n
+		}
 		addLabel(key, value)
 	}
 	labels := strings.Join(labelPairs, ",")
@@ -1348,14 +1292,7 @@ func (p *Provider) runInstance(
 			extraMountOpts = "nobarrier"
 		}
 	}
-	filename, err := writeStartupScript(
-		name,
-		extraMountOpts,
-		opts.SSDOpts.FileSystem,
-		providerOpts.UseMultipleDisks,
-		opts.Arch == string(vm.ArchFIPS),
-		providerOpts.RemoteUserName,
-	)
+	filename, err := writeStartupScript(name, extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS))
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}
@@ -1407,8 +1344,8 @@ func (p *Provider) runInstance(
 		args = append(args, "--cpu-options", cpuOptions)
 	}
 
-	if providerOpts.IAMProfile != "" {
-		args = append(args, "--iam-instance-profile", "Name="+providerOpts.IAMProfile)
+	if p.IAMProfile != "" {
+		args = append(args, "--iam-instance-profile", "Name="+p.IAMProfile)
 	}
 	ebsVolumes := assignEBSVolumes(&opts, providerOpts)
 	args, err = genDeviceMapping(ebsVolumes, args)

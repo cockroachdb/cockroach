@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -19,6 +18,8 @@ import (
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 )
+
+//go:generate mockgen -package tests -destination drt_generated_test.go github.com/cockroachdb/cockroach/pkg/roachprod/prometheus Client
 
 type tpccChaosEventProcessor struct {
 	workloadInstances []workloadInstance
@@ -234,8 +235,8 @@ func (ep *tpccChaosEventProcessor) err() error {
 	return err
 }
 
-func (ep *tpccChaosEventProcessor) listen(ctx context.Context, t task.Tasker, l *logger.Logger) {
-	t.Go(func(context.Context, *logger.Logger) error {
+func (ep *tpccChaosEventProcessor) listen(ctx context.Context, l *logger.Logger) {
+	go func() {
 		var prevTime time.Time
 		started := false
 		for ev := range ep.ch {
@@ -295,6 +296,5 @@ func (ep *tpccChaosEventProcessor) listen(ctx context.Context, t task.Tasker, l 
 			}
 			prevTime = ev.Time
 		}
-		return nil
-	})
+	}()
 }

@@ -9,13 +9,9 @@ package catpb
 // enabled table setting is enabled, disabled, or not set.
 type AutoStatsCollectionStatus int
 
-// AutoPartialStatsCollectionStatus represents whether the auto partial stats
+// AutoPartialStatsCollectionStatus represents whether the auto stats
 // collections enabled table setting is enabled, disabled or not set.
 type AutoPartialStatsCollectionStatus int
-
-// AutoFullStatsCollectionStatus represents whether the auto full stats
-// collections enabled table setting is enabled, disabled or not set.
-type AutoFullStatsCollectionStatus int
 
 // The values for AutoStatsCollectionStatus.
 const (
@@ -28,12 +24,6 @@ const (
 	AutoPartialStatsCollectionNotSet AutoPartialStatsCollectionStatus = iota
 	AutoPartialStatsCollectionEnabled
 	AutoPartialStatsCollectionDisabled
-)
-
-const (
-	AutoFullStatsCollectionNotSet AutoFullStatsCollectionStatus = iota
-	AutoFullStatsCollectionEnabled
-	AutoFullStatsCollectionDisabled
 )
 
 const (
@@ -70,7 +60,7 @@ const (
 	AutoStatsFractionStaleTableSettingName = "sql_stats_automatic_collection_fraction_stale_rows"
 
 	// AutoPartialStatsEnabledSettingName is the name of the automatic partial
-	// stats collection enabled cluster setting.
+	// stats collection enabled cluster setting
 	AutoPartialStatsEnabledSettingName = "sql.stats.automatic_partial_collection.enabled"
 
 	// AutoPartialStatsEnabledTableSettingName is the name of the automatic
@@ -78,7 +68,7 @@ const (
 	AutoPartialStatsEnabledTableSettingName = "sql_stats_automatic_partial_collection_enabled"
 
 	// AutoPartialStatsMinStaleSettingName is the name of the automatic partial
-	// stats collection min stale rows cluster setting.
+	// stats collection min stale rows cluster setting
 	AutoPartialStatsMinStaleSettingName = "sql.stats.automatic_partial_collection.min_stale_rows"
 
 	// AutoPartialStatsMinStaleTableSettingName is the name of the automatic
@@ -92,18 +82,6 @@ const (
 	// AutoPartialStatsFractionStaleTableSettingName is the name of the automatic
 	// partial stats collection fraction stale rows table setting.
 	AutoPartialStatsFractionStaleTableSettingName = "sql_stats_automatic_partial_collection_fraction_stale_rows"
-
-	// AutoFullStatsEnabledSettingName is the name of the automatic full
-	// stats collection enabled cluster setting.
-	AutoFullStatsEnabledSettingName = "sql.stats.automatic_full_collection.enabled"
-
-	// AutoFullStatsEnabledTableSettingName is the name of the automatic
-	// full stats collection enabled table setting.
-	AutoFullStatsEnabledTableSettingName = "sql_stats_automatic_full_collection_enabled"
-
-	// RBRUsingConstraintTableSettingName is the name of the REGIONAL BY ROW region
-	// column inference setting.
-	RBRUsingConstraintTableSettingName = "infer_rbr_region_col_using_constraint"
 )
 
 // AutoStatsCollectionEnabled indicates if automatic statistics collection is
@@ -146,7 +124,6 @@ func (as *AutoStatsSettings) NoAutoStatsSettingsOverrides() bool {
 		as.MinStaleRows != nil ||
 		as.FractionStaleRows != nil ||
 		as.PartialEnabled != nil ||
-		as.FullEnabled != nil ||
 		as.PartialMinStaleRows != nil ||
 		as.PartialFractionStaleRows != nil {
 		return false
@@ -172,18 +149,6 @@ func (as *AutoStatsSettings) AutoPartialStatsCollectionEnabled() AutoPartialStat
 		return AutoPartialStatsCollectionEnabled
 	}
 	return AutoPartialStatsCollectionDisabled
-}
-
-// AutoFullStatsCollectionEnabled indicates if automatic full statistics
-// collection is explicitly enabled or disabled.
-func (as *AutoStatsSettings) AutoFullStatsCollectionEnabled() AutoFullStatsCollectionStatus {
-	if as.FullEnabled == nil {
-		return AutoFullStatsCollectionNotSet
-	}
-	if *as.FullEnabled {
-		return AutoFullStatsCollectionEnabled
-	}
-	return AutoFullStatsCollectionDisabled
 }
 
 // AutoPartialStatsMinStaleRows indicates the setting of

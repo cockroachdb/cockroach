@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
@@ -219,7 +218,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				EventLog: &eventlog.EventLogTestingKnobs{
+				EventLog: &sql.EventLogTestingKnobs{
 					// The sampling checks below need to have a deterministic
 					// number of statements run by internal executor.
 					SyncWrites: true,
@@ -359,15 +358,13 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 
 		if strings.Contains(tc.query, "WITH detached") {
 			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID)
-		} else if strings.HasPrefix(tc.query, "IMPORT") {
-			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID, &unused, &unused, &unused, &unused, &unused)
 		} else {
-			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID, &unused, &unused, &unused)
+			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID, &unused, &unused, &unused, &unused, &unused)
 		}
 		if err != nil {
 			t.Errorf("unexpected error executing query `%s`: %v", tc.query, err)
 		}
-		waitForJobResult(t, testCluster, jobspb.JobID(jobID), jobs.StateSucceeded)
+		waitForJobResult(t, testCluster, jobspb.JobID(jobID), jobs.StatusSucceeded)
 		t.Logf("finished:%q\n", tc.query)
 
 		execTimestamp++
@@ -416,7 +413,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 }
 
 func waitForJobResult(
-	t *testing.T, tc serverutils.TestClusterInterface, id jobspb.JobID, expected jobs.State,
+	t *testing.T, tc serverutils.TestClusterInterface, id jobspb.JobID, expected jobs.Status,
 ) {
 	// Force newly created job to be adopted and verify its result.
 	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()

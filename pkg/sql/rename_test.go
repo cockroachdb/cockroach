@@ -210,7 +210,6 @@ func TestTxnCanUseNewNameAfterRename(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	sql := `
-SET autocommit_before_ddl=off;
 CREATE DATABASE test;
 CREATE TABLE test.t (a INT PRIMARY KEY);
 `
@@ -280,9 +279,6 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 
 	txn, err := db.Begin()
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := txn.Exec("SET LOCAL autocommit_before_ddl = false"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := txn.Exec("ALTER TABLE test.t RENAME TO test.t2"); err != nil {

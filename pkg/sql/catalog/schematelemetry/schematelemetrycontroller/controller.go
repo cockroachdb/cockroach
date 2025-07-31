@@ -159,10 +159,10 @@ func updateSchedule(ctx context.Context, db isql.DB, st *cluster.Settings, clust
 			if sj.ScheduleExpr() == cronExpr {
 				return nil
 			}
-			if err := sj.SetScheduleAndNextRun(cronExpr); err != nil {
+			if err := sj.SetSchedule(cronExpr); err != nil {
 				return err
 			}
-			sj.SetScheduleStatus(string(jobs.StatePending))
+			sj.SetScheduleStatus(string(jobs.StatusPending))
 			return jobs.ScheduledJobTxn(txn).Update(ctx, sj)
 		}); err != nil && ctx.Err() == nil {
 			log.Warningf(ctx, "failed to update SQL schema telemetry schedule: %s", err)
@@ -219,7 +219,7 @@ func CreateSchemaTelemetrySchedule(
 	scheduledJob := jobs.NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
 
 	schedule := SchemaTelemetryRecurrence.Get(&st.SV)
-	if err := scheduledJob.SetScheduleAndNextRun(schedule); err != nil {
+	if err := scheduledJob.SetSchedule(schedule); err != nil {
 		return nil, err
 	}
 
@@ -242,7 +242,7 @@ func CreateSchemaTelemetrySchedule(
 		jobspb.ExecutionArguments{Args: args},
 	)
 
-	scheduledJob.SetScheduleStatus(string(jobs.StatePending))
+	scheduledJob.SetScheduleStatus(string(jobs.StatusPending))
 	if err = jobs.ScheduledJobTxn(txn).Create(ctx, scheduledJob); err != nil {
 		return nil, err
 	}

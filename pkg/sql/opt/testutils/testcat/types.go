@@ -51,12 +51,46 @@ func (tc *Catalog) CreateType(c *tree.CreateType) {
 	tc.enumTypes[c.TypeName.Object()] = typ
 }
 
-// Look for a matching implicit record type, skipping tables that don't match
-// the filter functor's criteria.
-func (tc *Catalog) resolveTypeImplicit(skipme func(tab *Table) bool) *types.T {
+// ResolveType part of the cat.Catalog interface and the
+// tree.TypeReferenceResolver interface.
+func (tc *Catalog) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	// First look for a matching user-defined enum type.
+	if typ := tc.enumTypes[name.Object()]; typ != nil {
+		return typ, nil
+	}
+	// Otherwise look for a matching implicit record type.
+	for _, ds := range tc.testSchema.dataSources {
+		if tab, ok := ds.(*Table); ok && tab.TabName.Object() == name.Object() {
+			contents := make([]*types.T, 0, tab.ColumnCount())
+			labels := make([]string, 0, tab.ColumnCount())
+			for i, n := 0, tab.ColumnCount(); i < n; i++ {
+				col := tab.Column(i)
+				if col.Kind() == cat.Ordinary && col.Visibility() == cat.Visible {
+					contents = append(contents, col.DatumType())
+					labels = append(labels, string(col.ColName()))
+				}
+			}
+			return types.MakeLabeledTuple(contents, labels), nil
+		}
+	}
+	return nil, errors.Newf("type %q does not exist", name)
+}
+
+// ResolveTypeByOID is part of the cat.Catalog interface.
+func (tc *Catalog) ResolveTypeByOID(ctx context.Context, typID oid.Oid) (*types.T, error) {
+	// First look for a matching user-defined enum type.
+	for _, typ := range tc.enumTypes {
+		if typ.Oid() == typID {
+			return typ, nil
+		}
+	}
+	// Otherwise look for a matching implicit record type.
 	for _, ds := range tc.testSchema.dataSources {
 		if tab, ok := ds.(*Table); ok {
-			if skipme(tab) {
+			implicitTypID := typedesc.TableIDToImplicitTypeOID(descpb.ID(tab.ID()))
+			if implicitTypID != typID {
 				continue
 			}
 			contents := make([]*types.T, 0, tab.ColumnCount())
@@ -68,53 +102,8 @@ func (tc *Catalog) resolveTypeImplicit(skipme func(tab *Table) bool) *types.T {
 					labels = append(labels, string(col.ColName()))
 				}
 			}
-			return types.MakeLabeledTuple(contents, labels)
+			return types.MakeLabeledTuple(contents, labels), nil
 		}
 	}
-
-	return nil
-}
-
-// ResolveType is part of the cat.Catalog interface and the
-// tree.TypeReferenceResolver interface.
-func (tc *Catalog) ResolveType(
-	ctx context.Context, name *tree.UnresolvedObjectName,
-) (*types.T, error) {
-	// First look for a matching user-defined enum type.
-	if typ := tc.enumTypes[name.Object()]; typ != nil {
-		return typ, nil
-	}
-
-	// Otherwise look for a matching implicit record type.
-	typ := tc.resolveTypeImplicit(func(tab *Table) bool {
-		return tab.TabName.Object() != name.Object()
-	})
-	if typ == nil {
-		return nil, errors.Newf("type %q does not exist", name)
-	}
-	return typ, nil
-}
-
-// ResolveTypeByOID is part of the cat.Catalog interface.
-func (tc *Catalog) ResolveTypeByOID(ctx context.Context, typID oid.Oid) (*types.T, error) {
-	// Look for a builtin type first.
-	if typ, ok := types.OidToType[typID]; ok {
-		return typ, nil
-	}
-
-	// Look for a matching user-defined enum type.
-	for _, typ := range tc.enumTypes {
-		if typ.Oid() == typID {
-			return typ, nil
-		}
-	}
-
-	// Otherwise look for a matching implicit record type.
-	typ := tc.resolveTypeImplicit(func(tab *Table) bool {
-		return typedesc.TableIDToImplicitTypeOID(descpb.ID(tab.ID())) != typID
-	})
-	if typ == nil {
-		return nil, errors.Newf("type %q does not exist", typID)
-	}
-	return typ, nil
+	return nil, errors.Newf("type %d does not exist", typID)
 }

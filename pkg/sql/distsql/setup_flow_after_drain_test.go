@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -47,7 +47,7 @@ func TestSetupFlowAfterDrain(t *testing.T) {
 	)
 
 	// We create some flow; it doesn't matter what.
-	req := execinfrapb.SetupFlowRequest{Version: execversion.Latest}
+	req := execinfrapb.SetupFlowRequest{Version: execinfra.Version}
 	req.Flow = execinfrapb.FlowSpec{
 		Processors: []execinfrapb.ProcessorSpec{
 			{

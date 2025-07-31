@@ -52,10 +52,10 @@ func TestNodePropose(t *testing.T) {
 		// change the step function to appendStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = appendStep
-			rn.AckAppend(rd.Ack())
+			rn.Advance(rd)
 			break
 		}
-		rn.AckAppend(rd.Ack())
+		rn.Advance(rd)
 	}
 	require.NoError(t, rn.Propose([]byte("somedata")))
 
@@ -115,10 +115,10 @@ func TestNodeProposeConfig(t *testing.T) {
 		// change the step function to appendStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = appendStep
-			rn.AckAppend(rd.Ack())
+			rn.Advance(rd)
 			break
 		}
-		rn.AckAppend(rd.Ack())
+		rn.Advance(rd)
 	}
 	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 1}
 	ccdata, err := cc.Marshal()
@@ -144,16 +144,14 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 
 	rd := rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
-	require.True(t, rd.Committed.Empty())
+	rn.Advance(rd)
 
 	ready := func() (appliedConfChange bool) {
 		rd := rn.Ready()
 		t.Log(DescribeReady(rd, nil))
 		require.NoError(t, s.Append(rd.Entries))
 		applied := false
-		apply := committedEntries(t, rn, rd)
-		for _, e := range apply {
+		for _, e := range rd.CommittedEntries {
 			allCommittedEntries = append(allCommittedEntries, e)
 			switch e.Type {
 			case raftpb.EntryNormal:
@@ -164,8 +162,7 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 				applied = true
 			}
 		}
-		rn.AckAppend(rd.Ack())
-		rn.AckApplied(apply)
+		rn.Advance(rd)
 		return applied
 	}
 	waitAppliedConfChange := func() bool {
@@ -209,7 +206,7 @@ func TestBlockProposal(t *testing.T) {
 	require.NoError(t, rn.Campaign())
 	rd := rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
+	rn.Advance(rd)
 
 	require.NoError(t, rn.Propose([]byte("somedata")))
 }
@@ -240,10 +237,10 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 		// change the step function to dropStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = dropStep
-			rn.AckAppend(rd.Ack())
+			rn.Advance(rd)
 			break
 		}
-		rn.AckAppend(rd.Ack())
+		rn.Advance(rd)
 	}
 	assert.Equal(t, ErrProposalDropped, rn.Propose(droppingMsg))
 
@@ -269,41 +266,41 @@ func TestNodeStart(t *testing.T) {
 	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 1}
 	ccdata, err := cc.Marshal()
 	require.NoError(t, err)
-	wants := []Ready{{
-		StorageAppend: StorageAppend{
+	wants := []Ready{
+		{
 			HardState: raftpb.HardState{Term: 1, Commit: 1, Vote: 0, Lead: 0},
 			Entries: []raftpb.Entry{
 				{Type: raftpb.EntryConfChange, Term: 1, Index: 1, Data: ccdata},
 			},
-			LeadTerm: 1,
+			CommittedEntries: []raftpb.Entry{
+				{Type: raftpb.EntryConfChange, Term: 1, Index: 1, Data: ccdata},
+			},
+			MustSync: true,
 		},
-		Committed: raftpb.LogSpan{After: 0, Last: 1},
-	}, {
-		StorageAppend: StorageAppend{
-			HardState: raftpb.HardState{Term: 2, Commit: 2, Vote: 1, Lead: 1, LeadEpoch: 1},
-			Entries:   []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
-			LeadTerm:  2,
+		{
+			HardState:        raftpb.HardState{Term: 2, Commit: 2, Vote: 1, Lead: 1, LeadEpoch: 1},
+			Entries:          []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
+			CommittedEntries: []raftpb.Entry{{Term: 2, Index: 2, Data: nil}},
+			MustSync:         true,
 		},
-		Committed: raftpb.LogSpan{After: 1, Last: 2},
-	}, {
-		StorageAppend: StorageAppend{
-			HardState: raftpb.HardState{Term: 2, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
+		{
+			HardState:        raftpb.HardState{Term: 2, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
+			Entries:          nil,
+			CommittedEntries: []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
+			MustSync:         true,
 		},
-		Committed: raftpb.LogSpan{After: 2, Last: 3},
-	}}
+	}
 	storage := NewMemoryStorage()
 	c := &Config{
-		ID:                 1,
-		ElectionTick:       10,
-		ElectionJitterTick: 10,
-		HeartbeatTick:      1,
-		Storage:            storage,
-		MaxSizePerMsg:      noLimit,
-		MaxInflightMsgs:    256,
-		StoreLiveness:      raftstoreliveness.AlwaysLive{},
-		CRDBVersion:        cluster.MakeTestingClusterSettings().Version,
-		Metrics:            NewMetrics(),
-		TestingKnobs:       &TestingKnobs{EnableApplyUnstableEntries: true},
+		ID:              1,
+		ElectionTick:    10,
+		HeartbeatTick:   1,
+		Storage:         storage,
+		MaxSizePerMsg:   noLimit,
+		MaxInflightMsgs: 256,
+		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
+		Metrics:         NewMetrics(),
 	}
 
 	rn, err := NewRawNode(c)
@@ -311,39 +308,31 @@ func TestNodeStart(t *testing.T) {
 	require.NoError(t, rn.Bootstrap([]Peer{{ID: 1}}))
 
 	rd := rn.Ready()
-	require.NoError(t, storage.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
-	rn.AckApplied(committedEntries(t, rn, rd))
-	rd.Responses = nil // TODO(pav-kv): assert on the responses too
 	require.Equal(t, wants[0], rd)
+	require.NoError(t, storage.Append(rd.Entries))
+	rn.Advance(rd)
 
 	require.NoError(t, rn.Campaign())
 
 	// Persist vote.
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
-	rn.AckApplied(committedEntries(t, rn, rd))
+	rn.Advance(rd)
 	// Append empty entry.
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
-	rn.AckApplied(committedEntries(t, rn, rd))
+	rn.Advance(rd)
 
 	require.NoError(t, rn.Propose([]byte("foo")))
 	rd = rn.Ready()
+	assert.Equal(t, wants[1], rd)
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
-	rn.AckApplied(committedEntries(t, rn, rd))
-	rd.Responses = nil // TODO(pav-kv): assert on the responses too
-	require.Equal(t, wants[1], rd)
+	rn.Advance(rd)
 
 	rd = rn.Ready()
+	assert.Equal(t, wants[2], rd)
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
-	rn.AckApplied(committedEntries(t, rn, rd))
-	rd.Responses = nil // TODO(pav-kv): assert on the responses too
-	require.Equal(t, wants[2], rd)
+	rn.Advance(rd)
 
 	require.False(t, rn.HasReady())
 }
@@ -356,35 +345,35 @@ func TestNodeRestart(t *testing.T) {
 	st := raftpb.HardState{Term: 1, Commit: 1}
 
 	want := Ready{
-		// No storage append is emitted because there was no change.
-		StorageAppend: StorageAppend{},
+		// No HardState is emitted because there was no change.
+		HardState: raftpb.HardState{},
 		// commit up to index commit index in st
-		Committed: raftpb.LogSpan{After: 0, Last: raftpb.Index(st.Commit)},
+		CommittedEntries: entries[:st.Commit],
+		// MustSync is false because no HardState or new entries are provided.
+		MustSync: false,
 	}
 
 	storage := NewMemoryStorage()
 	require.NoError(t, storage.SetHardState(st))
 	require.NoError(t, storage.Append(entries))
 	c := &Config{
-		ID:                 1,
-		ElectionTick:       10,
-		ElectionJitterTick: 10,
-		HeartbeatTick:      1,
-		Storage:            storage,
-		MaxSizePerMsg:      noLimit,
-		MaxInflightMsgs:    256,
-		StoreLiveness:      raftstoreliveness.AlwaysLive{},
-		CRDBVersion:        cluster.MakeTestingClusterSettings().Version,
-		Metrics:            NewMetrics(),
+		ID:              1,
+		ElectionTick:    10,
+		HeartbeatTick:   1,
+		Storage:         storage,
+		MaxSizePerMsg:   noLimit,
+		MaxInflightMsgs: 256,
+		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
+		Metrics:         NewMetrics(),
 	}
 	rn, err := NewRawNode(c)
 	require.NoError(t, err)
 
 	rd := rn.Ready()
-	require.Equal(t, want, rd)
-	rn.AckAppend(rd.Ack())
-	rn.AckApplied(committedEntries(t, rn, rd))
-
+	if assert.Equal(t, want, rd) {
+		rn.Advance(rd)
+	}
 	require.False(t, rn.HasReady())
 }
 
@@ -402,11 +391,14 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 	st := raftpb.HardState{Term: 1, Commit: 3}
 
 	want := Ready{
-		// No storage append is emitted because nothing changed relative to what is
+		// No HardState is emitted because nothing changed relative to what is
 		// already persisted.
-		StorageAppend: StorageAppend{},
+		HardState: raftpb.HardState{},
 		// commit up to index commit index in st
-		Committed: raftpb.LogSpan{After: 2, Last: 3},
+		CommittedEntries: entries,
+		// MustSync is only true when there is a new HardState or new entries;
+		// neither is the case here.
+		MustSync: false,
 	}
 
 	s := NewMemoryStorage()
@@ -414,41 +406,38 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 	require.NoError(t, s.ApplySnapshot(snap))
 	require.NoError(t, s.Append(entries))
 	c := &Config{
-		ID:                 1,
-		ElectionTick:       10,
-		ElectionJitterTick: 10,
-		HeartbeatTick:      1,
-		Storage:            s,
-		MaxSizePerMsg:      noLimit,
-		MaxInflightMsgs:    256,
-		StoreLiveness:      raftstoreliveness.AlwaysLive{},
-		CRDBVersion:        cluster.MakeTestingClusterSettings().Version,
-		Metrics:            NewMetrics(),
+		ID:              1,
+		ElectionTick:    10,
+		HeartbeatTick:   1,
+		Storage:         s,
+		MaxSizePerMsg:   noLimit,
+		MaxInflightMsgs: 256,
+		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
+		Metrics:         NewMetrics(),
 	}
 	rn, err := NewRawNode(c)
 	require.NoError(t, err)
 
 	rd := rn.Ready()
-	require.Equal(t, want, rd)
-	rn.AckAppend(rd.Ack())
-	rn.AckApplied(committedEntries(t, rn, rd))
-
+	if assert.Equal(t, want, rd) {
+		rn.Advance(rd)
+	}
 	require.False(t, rn.HasReady())
 }
 
 func TestNodeAdvance(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1))
 	c := &Config{
-		ID:                 1,
-		ElectionTick:       10,
-		ElectionJitterTick: 10,
-		HeartbeatTick:      1,
-		Storage:            storage,
-		MaxSizePerMsg:      noLimit,
-		MaxInflightMsgs:    256,
-		StoreLiveness:      raftstoreliveness.AlwaysLive{},
-		CRDBVersion:        cluster.MakeTestingClusterSettings().Version,
-		Metrics:            NewMetrics(),
+		ID:              1,
+		ElectionTick:    10,
+		HeartbeatTick:   1,
+		Storage:         storage,
+		MaxSizePerMsg:   noLimit,
+		MaxInflightMsgs: 256,
+		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
+		Metrics:         NewMetrics(),
 	}
 	rn, err := NewRawNode(c)
 	require.NoError(t, err)
@@ -457,16 +446,16 @@ func TestNodeAdvance(t *testing.T) {
 	// Persist vote.
 	rd := rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
+	rn.Advance(rd)
 	// Append empty entry.
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
+	rn.Advance(rd)
 
 	require.NoError(t, rn.Propose([]byte("foo")))
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
+	rn.Advance(rd)
 
 	require.True(t, rn.HasReady())
 }
@@ -507,13 +496,13 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 	require.NoError(t, rn.Campaign())
 	rd := rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
+	rn.Advance(rd)
 
 	ready := func() (appliedConfChange bool) {
 		rd := rn.Ready()
 		require.NoError(t, s.Append(rd.Entries))
 		t.Logf("raft: %v", rd.Entries)
-		for _, ent := range committedEntries(t, rn, rd) {
+		for _, ent := range rd.CommittedEntries {
 			if ent.Type != raftpb.EntryConfChange {
 				continue
 			}
@@ -528,7 +517,7 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 			t.Logf("apply raft conf %v changed to: %v", cc, state.String())
 			appliedConfChange = true
 		}
-		rn.AckAppend(rd.Ack())
+		rn.Advance(rd)
 		return appliedConfChange
 	}
 	waitAppliedConfChange := func() bool {
@@ -589,26 +578,28 @@ func TestAppendPagination(t *testing.T) {
 }
 
 func TestCommitPagination(t *testing.T) {
-	const maxCommittedSize = 2048
 	s := newTestMemoryStorage(withPeers(1))
-	rn := newTestRawNode(1, 10, 1, s)
+	cfg := newTestConfig(1, 10, 1, s)
+	cfg.MaxCommittedSizePerReady = 2048
+	rn, err := NewRawNode(cfg)
+	require.NoError(t, err)
+
 	require.NoError(t, rn.Campaign())
 
 	// Persist vote.
 	rd := rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
+	rn.Advance(rd)
 
 	// Append empty entry.
 	rd = rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
+	rn.Advance(rd)
 	// Apply empty entry.
 	rd = rn.Ready()
-	require.Equal(t, uint64(1), rd.Committed.Len())
+	require.Len(t, rd.CommittedEntries, 1)
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
-	rn.AckApplied(committedEntries(t, rn, rd))
+	rn.Advance(rd)
 
 	blob := []byte(strings.Repeat("a", 1000))
 	for i := 0; i < 3; i++ {
@@ -619,55 +610,66 @@ func TestCommitPagination(t *testing.T) {
 	rd = rn.Ready()
 	require.Len(t, rd.Entries, 3)
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
+	rn.Advance(rd)
 
 	// The 3 proposals will commit in two batches.
 	rd = rn.Ready()
-	// TODO(pav-kv): we no longer need this test after the flow control policy is
-	// moved up the stack.
-	committed, err := rn.LogSnapshot().Slice(rd.Committed, maxCommittedSize)
-	require.NoError(t, err)
-	require.Len(t, committed, 2)
+	require.Len(t, rd.CommittedEntries, 2)
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
-	rn.AckApplied(committed)
+	rn.Advance(rd)
 
 	rd = rn.Ready()
-	committed, err = rn.LogSnapshot().Slice(rd.Committed, maxCommittedSize)
-	require.NoError(t, err)
-	require.Len(t, committed, 1)
+	require.Len(t, rd.CommittedEntries, 1)
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AckAppend(rd.Ack())
-	rn.AckApplied(committed)
+	rn.Advance(rd)
 }
 
 func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
-	rn := newTestRawNode(1, 10, 1, s)
+	cfg := newTestConfig(1, 10, 1, s)
+	cfg.MaxCommittedSizePerReady = 2048
+	cfg.AsyncStorageWrites = true
 
+	rn, err := NewRawNode(cfg)
+	require.NoError(t, err)
 	require.NoError(t, rn.Campaign())
 
 	// Persist vote.
 	rd := rn.Ready()
-	require.Empty(t, rd.Messages)
-	storageAppend := func(m StorageAppend) {
-		require.NoError(t, s.Append(m.Entries))
-		rn.AckAppend(m.Ack())
+	require.Len(t, rd.Messages, 1)
+	m := rd.Messages[0]
+	require.Equal(t, raftpb.MsgStorageAppend, m.Type)
+	require.NoError(t, s.Append(m.Entries))
+	for _, resp := range m.Responses {
+		require.NoError(t, rn.Step(resp))
 	}
-	storageAppend(rd.StorageAppend)
-
 	// Append empty entry.
 	rd = rn.Ready()
-	require.Empty(t, rd.Messages)
-	require.Equal(t, raftpb.LogSpan{}, rd.Committed)
-	storageAppend(rd.StorageAppend)
-
+	require.Len(t, rd.Messages, 1)
+	m = rd.Messages[0]
+	require.Equal(t, raftpb.MsgStorageAppend, m.Type)
+	require.NoError(t, s.Append(m.Entries))
+	for _, resp := range m.Responses {
+		require.NoError(t, rn.Step(resp))
+	}
 	// Apply empty entry.
 	rd = rn.Ready()
-	require.Empty(t, rd.Messages)
-	require.Equal(t, raftpb.LogSpan{Last: 1}, rd.Committed)
-	storageAppend(rd.StorageAppend)
-	rn.AckApplied(committedEntries(t, rn, rd))
+	require.Len(t, rd.Messages, 2)
+	for _, m := range rd.Messages {
+		switch m.Type {
+		case raftpb.MsgStorageAppend:
+			require.NoError(t, s.Append(m.Entries))
+			for _, resp := range m.Responses {
+				require.NoError(t, rn.Step(resp))
+			}
+		case raftpb.MsgStorageApply:
+			require.Len(t, m.Entries, 1)
+			require.Len(t, m.Responses, 1)
+			require.NoError(t, rn.Step(m.Responses[0]))
+		default:
+			t.Fatalf("unexpected: %v", m)
+		}
+	}
 
 	// Propose first entry.
 	blob := []byte(strings.Repeat("a", 1024))
@@ -675,39 +677,86 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 
 	// Append first entry.
 	rd = rn.Ready()
-	require.Empty(t, rd.Messages)
-	require.Equal(t, raftpb.LogSpan{After: 1, Last: 1}, rd.Committed)
-	storageAppend(rd.StorageAppend)
+	require.Len(t, rd.Messages, 1)
+	m = rd.Messages[0]
+	require.Equal(t, raftpb.MsgStorageAppend, m.Type)
+	require.Len(t, m.Entries, 1)
+	require.NoError(t, s.Append(m.Entries))
+	for _, resp := range m.Responses {
+		require.NoError(t, rn.Step(resp))
+	}
 
 	// Propose second entry.
 	require.NoError(t, rn.Propose(blob))
 
 	// Append second entry. Don't apply first entry yet.
 	rd = rn.Ready()
-	require.Empty(t, rd.Messages)
-	storageAppend(rd.StorageAppend)
-	require.Equal(t, raftpb.LogSpan{After: 1, Last: 2}, rd.Committed)
+	require.Len(t, rd.Messages, 2)
+	var applyResps []raftpb.Message
+	for _, m := range rd.Messages {
+		switch m.Type {
+		case raftpb.MsgStorageAppend:
+			require.NoError(t, s.Append(m.Entries))
+			for _, resp := range m.Responses {
+				require.NoError(t, rn.Step(resp))
+			}
+		case raftpb.MsgStorageApply:
+			require.Len(t, m.Entries, 1)
+			require.Len(t, m.Responses, 1)
+			applyResps = append(applyResps, m.Responses[0])
+		default:
+			t.Fatalf("unexpected: %v", m)
+		}
+	}
 
 	// Propose third entry.
 	require.NoError(t, rn.Propose(blob))
 
 	// Append third entry. Don't apply second entry yet.
 	rd = rn.Ready()
-	require.Empty(t, rd.Messages)
-	storageAppend(rd.StorageAppend)
-	require.Equal(t, raftpb.LogSpan{After: 1, Last: 3}, rd.Committed)
+	require.Len(t, rd.Messages, 2)
+	for _, m := range rd.Messages {
+		switch m.Type {
+		case raftpb.MsgStorageAppend:
+			require.NoError(t, s.Append(m.Entries))
+			for _, resp := range m.Responses {
+				require.NoError(t, rn.Step(resp))
+			}
+		case raftpb.MsgStorageApply:
+			require.Len(t, m.Entries, 1)
+			require.Len(t, m.Responses, 1)
+			applyResps = append(applyResps, m.Responses[0])
+		default:
+			t.Fatalf("unexpected: %v", m)
+		}
+	}
+
+	// Third entry should not be returned to be applied until first entry's
+	// application is acknowledged.
+	for rn.HasReady() { // drain the Ready-s
+		rd := rn.Ready()
+		for _, m := range rd.Messages {
+			require.NotEqual(t, raftpb.MsgStorageApply, m.Type, "unexpected message: %v", m)
+		}
+	}
 
 	// Acknowledged first entry application.
-	rn.AckApplied(committedEntries(t, rn, rd)[:1])
+	require.NoError(t, rn.Step(applyResps[0]))
+	applyResps = applyResps[1:]
 
 	// Third entry now returned for application.
 	rd = rn.Ready()
-	require.Equal(t, raftpb.LogSpan{After: 2, Last: 4}, rd.Committed)
+	require.Len(t, rd.Messages, 1)
+	m = rd.Messages[0]
+	require.Equal(t, raftpb.MsgStorageApply, m.Type)
+	require.Len(t, m.Entries, 1)
+	applyResps = append(applyResps, m.Responses[0])
+
 	// Acknowledged second and third entry application.
-	rn.AckApplied(committedEntries(t, rn, rd))
-	// No new committed entries.
-	rd = rn.Ready()
-	require.Equal(t, raftpb.LogSpan{After: 4, Last: 4}, rd.Committed)
+	for _, resp := range applyResps {
+		require.NoError(t, rn.Step(resp))
+	}
+	applyResps = nil
 }
 
 type ignoreSizeHintMemStorage struct {
@@ -757,7 +806,7 @@ func TestNodeCommitPaginationAfterRestart(t *testing.T) {
 		entries[i] = ent
 		size += uint64(ent.Size())
 	}
-	s.ls = LogSlice{entries: entries}
+	s.ls = LogSlice{term: 1, entries: entries}
 
 	cfg := newTestConfig(1, 10, 1, s)
 	// Set a MaxSizePerMsg that would suggest to Raft that the last committed entry should
@@ -769,9 +818,8 @@ func TestNodeCommitPaginationAfterRestart(t *testing.T) {
 	require.NoError(t, err)
 
 	rd := rn.Ready()
-	committed := committedEntries(t, rn, rd)
 	assert.False(t, !IsEmptyHardState(rd.HardState) && rd.HardState.Commit < persistedHardState.Commit,
 		"HardState regressed: Commit %d -> %d\nCommitting:\n%+v",
 		persistedHardState.Commit, rd.HardState.Commit,
-		DescribeEntries(committed, func(data []byte) string { return fmt.Sprintf("%q", data) }))
+		DescribeEntries(rd.CommittedEntries, func(data []byte) string { return fmt.Sprintf("%q", data) }))
 }

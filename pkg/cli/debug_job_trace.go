@@ -46,44 +46,33 @@ func runDebugJobTrace(_ *cobra.Command, args []string) (resErr error) {
 
 func getJobTraceID(sqlConn clisqlclient.Conn, jobID int64) (int64, error) {
 	var traceID int64
-	// We normally avoid programatic access to the job's message log, but this is
-	// a debug command so we can allow it here.
-	for attempt, query := range []string{
-		`SELECT message::int FROM system.job_message WHERE job_id=$1 AND kind = 'trace-id' ORDER BY written DESC LIMIT 1`,
-		`SELECT trace_id FROM crdb_internal.jobs WHERE job_id=$1`,
-	} {
-		rows, err := sqlConn.Query(context.Background(), query, jobID)
-		if err != nil {
-			// Cluster might not be on 25.1 yet; just fallback to old query.
-			if attempt == 0 {
-				continue
-			}
-			return traceID, err
-		}
-		vals := make([]driver.Value, 1)
-		for {
-			var err error
-			if err = rows.Next(vals); err == io.EOF {
-				break
-			}
-			if err != nil {
-				return traceID, err
-			}
-		}
-		if err := rows.Close(); err != nil {
-			return traceID, err
-		}
-		if vals[0] == nil {
-			continue
-		}
-		var ok bool
-		traceID, ok = vals[0].(int64)
-		if !ok {
-			return traceID, errors.New("failed to parse traceID")
-		}
-		return traceID, nil
+	rows, err := sqlConn.Query(context.Background(),
+		`SELECT trace_id FROM crdb_internal.jobs WHERE job_id=$1`, jobID)
+	if err != nil {
+		return traceID, err
 	}
-	return traceID, errors.Newf("no job entry found for %d", jobID)
+	vals := make([]driver.Value, 1)
+	for {
+		var err error
+		if err = rows.Next(vals); err == io.EOF {
+			break
+		}
+		if err != nil {
+			return traceID, err
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return traceID, err
+	}
+	if vals[0] == nil {
+		return traceID, errors.Newf("no job entry found for %d", jobID)
+	}
+	var ok bool
+	traceID, ok = vals[0].(int64)
+	if !ok {
+		return traceID, errors.New("failed to parse traceID")
+	}
+	return traceID, nil
 }
 
 func constructJobTraceZipBundle(ctx context.Context, sqlConn clisqlclient.Conn, jobID int64) error {

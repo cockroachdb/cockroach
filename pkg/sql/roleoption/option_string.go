@@ -42,9 +42,6 @@ func _() {
 	_ = x[VIEWCLUSTERSETTING-27]
 	_ = x[NOVIEWCLUSTERSETTING-28]
 	_ = x[SUBJECT-29]
-	_ = x[BYPASSRLS-30]
-	_ = x[NOBYPASSRLS-31]
-	_ = x[PROVISIONSRC-32]
 }
 
 func (i Option) String() string {
@@ -107,12 +104,6 @@ func (i Option) String() string {
 		return "NOVIEWCLUSTERSETTING"
 	case SUBJECT:
 		return "SUBJECT"
-	case BYPASSRLS:
-		return "BYPASSRLS"
-	case NOBYPASSRLS:
-		return "NOBYPASSRLS"
-	case PROVISIONSRC:
-		return "PROVISIONSRC"
 	default:
 		return "Option(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

@@ -1,6 +1,3 @@
-// This code has been modified from its original form by The Cockroach Authors.
-// All modifications are Copyright 2025 The Cockroach Authors.
-//
 // Copyright 2019 The etcd Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,16 +23,17 @@ import (
 
 func (env *InteractionEnv) handleCompact(t *testing.T, d datadriven.TestData) error {
 	idx := firstAsNodeIdx(t, d)
-	index, err := strconv.ParseUint(d.CmdArgs[1].Key, 10, 64)
+	newFirstIndex, err := strconv.ParseUint(d.CmdArgs[1].Key, 10, 64)
 	if err != nil {
 		return err
 	}
-	return env.Compact(idx, index)
+	return env.Compact(idx, newFirstIndex)
 }
 
-// Compact compacts the given node's log to the supplied log index (inclusive).
-func (env *InteractionEnv) Compact(idx int, index uint64) error {
-	if err := env.Nodes[idx].Compact(index); err != nil {
+// Compact truncates the log on the node at index idx so that the supplied new
+// first index results.
+func (env *InteractionEnv) Compact(idx int, newFirstIndex uint64) error {
+	if err := env.Nodes[idx].Compact(newFirstIndex); err != nil {
 		return err
 	}
 	return env.RaftLog(idx)

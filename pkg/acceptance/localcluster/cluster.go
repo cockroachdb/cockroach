@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -413,7 +412,7 @@ type Node struct {
 	cmd            *exec.Cmd
 	rpcPort, pgURL string // legacy: remove once 1.0.x is no longer tested
 	db             *gosql.DB
-	statusClient   serverpb.RPCStatusClient
+	statusClient   serverpb.StatusClient
 }
 
 // RPCPort returns the RPC + Postgres port.
@@ -469,7 +468,7 @@ func (n *Node) Alive() bool {
 }
 
 // StatusClient returns a StatusClient set up to talk to this node.
-func (n *Node) StatusClient(ctx context.Context) serverpb.RPCStatusClient {
+func (n *Node) StatusClient(ctx context.Context) serverpb.StatusClient {
 	n.Lock()
 	existingClient := n.statusClient
 	n.Unlock()
@@ -478,18 +477,11 @@ func (n *Node) StatusClient(ctx context.Context) serverpb.RPCStatusClient {
 		return existingClient
 	}
 
-	if !rpcbase.TODODRPC {
-		conn, err := n.rpcCtx.GRPCUnvalidatedDial(n.RPCAddr(), roachpb.Locality{}).Connect(ctx)
-		if err != nil {
-			log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
-		}
-		return serverpb.NewGRPCStatusClientAdapter(conn)
-	}
-	conn, err := n.rpcCtx.DRPCUnvalidatedDial(n.RPCAddr(), roachpb.Locality{}).Connect(ctx)
+	conn, err := n.rpcCtx.GRPCUnvalidatedDial(n.RPCAddr(), roachpb.Locality{}).Connect(ctx)
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 	}
-	return serverpb.NewDRPCStatusClientAdapter(conn)
+	return serverpb.NewStatusClient(conn)
 }
 
 func (n *Node) logDir() string {
@@ -733,6 +725,12 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 			n.pgURL = pgURL.String()
 		}()
 
+		var uiURL *url.URL
+
+		defer func() {
+			log.Infof(ctx, "process %d started (db: %s ui: %s)", pid, pgURL, uiURL)
+		}()
+
 		// We're basically running, but (at least) the decommissioning test sometimes starts
 		// up servers that can already be draining when they get here. For that reason, leave
 		// the admin port undefined if we don't manage to get it.
@@ -745,17 +743,21 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 			n.db = makeDB(n.pgURL, n.Cfg.NumWorkers, n.Cfg.DB)
 		}()
 
-		var uiStr string
-		var uiURL *url.URL
-		if err := n.db.QueryRow(
-			`SELECT value FROM crdb_internal.node_runtime_info WHERE component='UI' AND field = 'URL'`,
-		).Scan(&uiStr); err != nil {
-			log.Infof(ctx, "%v", err)
-		} else if _, uiURL, err = portFromURL(uiStr); err != nil {
-			log.Infof(ctx, "%v", err)
-			// TODO(tschottdorf): see above.
+		{
+			var uiStr string
+			if err := n.db.QueryRow(
+				`SELECT value FROM crdb_internal.node_runtime_info WHERE component='UI' AND field = 'URL'`,
+			).Scan(&uiStr); err != nil {
+				log.Infof(ctx, "%v", err)
+				return nil
+			}
+
+			_, uiURL, err = portFromURL(uiStr)
+			if err != nil {
+				log.Infof(ctx, "%v", err)
+				// TODO(tschottdorf): see above.
+			}
 		}
-		log.Infof(ctx, "process %d started (db: %s ui: %s)", pid, pgURL, uiURL)
 		return nil
 	}
 	return errors.Errorf("node %+v was unable to join cluster within %s", n.Cfg, dur)

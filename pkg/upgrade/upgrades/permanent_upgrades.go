@@ -34,22 +34,14 @@ import (
 func bootstrapSystem(
 	ctx context.Context, cv clusterversion.ClusterVersion, deps upgrade.SystemDeps,
 ) error {
-	var skipSomeSteps bool
-	if deps.TestingKnobs != nil && deps.TestingKnobs.SkipSomeUpgradeSteps {
-		skipSomeSteps = true
-	}
 	for _, u := range []struct {
-		name            string
-		fn              upgrade.SystemUpgradeFunc
-		skippableInTest bool
+		name string
+		fn   upgrade.SystemUpgradeFunc
 	}{
-		{"initialize cluster version", populateVersionSetting, false},
-		{"configure key visualizer", keyVisualizerTablesMigration, true},
+		{"initialize cluster version", populateVersionSetting},
+		{"configure key visualizer", keyVisualizerTablesMigration},
+		{"configure sql activity table TTLs", sqlStatsTTLChange},
 	} {
-		if skipSomeSteps && u.skippableInTest {
-			log.Infof(ctx, "skipping system bootstrap step %q", u.name)
-			continue
-		}
 		log.Infof(ctx, "executing system bootstrap step %q", u.name)
 		if err := u.fn(ctx, cv, deps); err != nil {
 			return errors.Wrapf(err, "system bootstrap step %q failed", u.name)
@@ -67,34 +59,21 @@ func bootstrapSystem(
 func bootstrapCluster(
 	ctx context.Context, cv clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
-	var skipSomeSteps bool
-	if deps.TestingKnobs != nil && deps.TestingKnobs.SkipSomeUpgradeSteps {
-		skipSomeSteps = true
-	}
 	for _, u := range []struct {
-		name            string
-		fn              upgrade.TenantUpgradeFunc
-		skippableInTest bool
+		name string
+		fn   upgrade.TenantUpgradeFunc
 	}{
-		{"add users and roles", addRootUser, false},
-		{"enable diagnostics reporting", optInToDiagnosticsStatReporting, true},
-		{"initialize the cluster.secret setting", initializeClusterSecret, true},
-		{"update system.locations with default location data", updateSystemLocationData, true},
-		{"create default databases", createDefaultDbs, false},
-		{"create jobs metrics polling job", createJobsMetricsPollingJob, true},
-		{"create sql activity updater job", createActivityUpdateJobMigration, true},
-		{"create mvcc stats job", createMVCCStatisticsJob, true},
-		{"create update cached table metadata job", createUpdateTableMetadataCacheJob, true},
-		{"maybe initialize replication standby read-only catalog", maybeSetupPCRStandbyReader, true},
-		{"create sql activity flush job", createSqlActivityFlushJob, true},
-		{"configure sql activity table TTLs", sqlStatsTTLChange, true},
-		{"create hot range logger job", createHotRangesLoggerJob, true},
+		{"add users and roles", addRootUser},
+		{"enable diagnostics reporting", optInToDiagnosticsStatReporting},
+		{"initialize the cluster.secret setting", initializeClusterSecret},
+		{"update system.locations with default location data", updateSystemLocationData},
+		{"create default databases", createDefaultDbs},
+		{"create jobs metrics polling job", createJobsMetricsPollingJob},
+		{"create sql activity updater job", createActivityUpdateJobMigration},
+		{"create mvcc stats job", createMVCCStatisticsJob},
+		{"create update cached table metadata job", createUpdateTableMetadataCacheJob},
+		{"maybe initialize replication standby read-only catalog", maybeSetupPCRStandbyReader},
 	} {
-
-		if skipSomeSteps && u.skippableInTest {
-			log.Infof(ctx, "skipping bootstrap step %q", u.name)
-			continue
-		}
 		log.Infof(ctx, "executing bootstrap step %q", u.name)
 		if err := u.fn(ctx, cv, deps); err != nil {
 			return errors.Wrapf(err, "bootstrap step %q failed", u.name)

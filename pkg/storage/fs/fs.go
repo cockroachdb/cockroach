@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
@@ -122,7 +121,7 @@ func InitEnvFromStoreSpec(
 // EnvConfig provides additional configuration settings for Envs.
 type EnvConfig struct {
 	RW                RWMode
-	EncryptionOptions *storageconfig.EncryptionOptions
+	EncryptionOptions []byte
 }
 
 // InitEnv initializes a new virtual filesystem environment.
@@ -228,7 +227,7 @@ type Env struct {
 	UnencryptedFS vfs.FS
 	// DirectoryLock is a file lock preventing other processes from opening the
 	// database or encryption-at-rest registry within this data directory.
-	DirectoryLock *pebble.DirLock
+	DirectoryLock *pebble.Lock
 	// Registry is non-nil if encryption-at-rest has ever been enabled on the
 	// store. The registry maintains a mapping of all encrypted keys and the
 	// corresponding data key with which they're encrypted.

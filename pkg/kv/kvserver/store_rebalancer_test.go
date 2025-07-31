@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
@@ -496,9 +495,7 @@ func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
 	acc := NewReplicaAccumulator(load.Queries, load.CPU)
 	for i, r := range ranges {
 		rangeID := roachpb.RangeID(i + 1)
-		repl := &Replica{store: s, RangeID: rangeID, logStorage: &replicaLogStorage{}}
-		repl.logStorage.mu.RWMutex = (*syncutil.RWMutex)(&repl.mu.ReplicaMutex)
-		repl.logStorage.raftMu.Mutex = &repl.raftMu.Mutex
+		repl := &Replica{store: s, RangeID: rangeID}
 		repl.shMu.state.Desc = &roachpb.RangeDescriptor{RangeID: rangeID}
 		repl.mu.conf = s.cfg.DefaultSpanConfig
 		for _, storeID := range r.voters {
@@ -515,7 +512,7 @@ func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
 		}
 		// NB: We set the index to 2 corresponding to the match in
 		// TestingRaftStatusFn. Matches that are 0 are considered behind.
-		repl.asLogStorage().shMu.trunc = kvserverpb.RaftTruncatedState{Index: 2}
+		repl.shMu.state.TruncatedState = &kvserverpb.RaftTruncatedState{Index: 2}
 		for _, storeID := range r.nonVoters {
 			repl.shMu.state.Desc.InternalReplicas = append(repl.shMu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
 				NodeID:    roachpb.NodeID(storeID),
@@ -1834,9 +1831,9 @@ func TestStoreRebalancerHotRangesLogging(t *testing.T) {
 
 	hottestRanges := rr.TopLoad(objectiveProvider.Objective().ToDimension())
 	require.Equal(t, redact.RedactableString(
-		"\t1: r3:/Meta1 replicas=[(n1,s1):1,(n2,s2):2,(n3,s3):3] load=[batches/s=300.0 request_cpu/s=300ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]"+
-			"\n\t2: r2:/Meta1 replicas=[(n2,s2):2,(n4,s4):4,(n6,s6):6] load=[batches/s=200.0 request_cpu/s=200ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]"+
-			"\n\t3: r1:/Meta1 replicas=[(n1,s1):1,(n3,s3):3,(n5,s5):5] load=[batches/s=100.0 request_cpu/s=100ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]",
+		"\t1: r3:‹/Meta1› replicas=[(n1,s1):1,(n2,s2):2,(n3,s3):3] load=[batches/s=300.0 request_cpu/s=300ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]"+
+			"\n\t2: r2:‹/Meta1› replicas=[(n2,s2):2,(n4,s4):4,(n6,s6):6] load=[batches/s=200.0 request_cpu/s=200ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]"+
+			"\n\t3: r1:‹/Meta1› replicas=[(n1,s1):1,(n3,s3):3,(n5,s5):5] load=[batches/s=100.0 request_cpu/s=100ms raft_cpu/s=0µs write(keys)/s=0.0 write(bytes)/s=0 B read(keys)/s=0.0 read(bytes)/s=0 B]",
 	), formatHotRanges(hottestRanges))
 }
 

@@ -427,7 +427,7 @@ export default function Debug() {
           />
           <DebugTableLink
             name="Heap (recent allocs)"
-            url="debug/pprof/ui/allocs/"
+            url="debug/pprof/ui/heap/"
             params={{ node: nodeID, seconds: "5", si: "alloc_objects" }}
           />
           <DebugTableLink
@@ -594,6 +594,12 @@ export default function Debug() {
             name="Single node's ranges"
             url="_status/hotranges?node_id=local"
             note="_status/hotranges?node_id=[node_id]"
+          />
+        </DebugTableRow>
+        <DebugTableRow title="Databases">
+          <DebugTableLink
+            name="Databases Page (Legacy)"
+            url="#/legacy/databases"
           />
         </DebugTableRow>
         <DebugTableRow

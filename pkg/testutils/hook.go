@@ -17,12 +17,3 @@ func TestingHook(ptr, val interface{}) func() {
 	global.Set(reflect.ValueOf(val))
 	return func() { global.Set(orig) }
 }
-
-// HookGlobal provides a way to temporarily set a package-global variable to a
-// new value for the duration of a test. It returns a closure that restores the
-// original value.
-func HookGlobal[T any](ptr *T, val T) func() {
-	orig := *ptr
-	*ptr = val
-	return func() { *ptr = orig }
-}

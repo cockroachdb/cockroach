@@ -12,11 +12,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesccache"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -84,7 +82,7 @@ func NewCollectionFactory(
 		spanConfigSplitter: spanConfigSplitter,
 		spanConfigLimiter:  spanConfigLimiter,
 		defaultMonitor: mon.NewUnlimitedMonitor(ctx, mon.Options{
-			Name:     mon.MakeName("CollectionFactoryDefaultUnlimitedMonitor"),
+			Name:     "CollectionFactoryDefaultUnlimitedMonitor",
 			Settings: settings,
 		}),
 		defaultDescriptorSessionDataProvider: defaultDescriptorSessionDataProvider,
@@ -144,19 +142,12 @@ func (cf *CollectionFactory) NewCollection(ctx context.Context, options ...Optio
 		opt(&cfg)
 	}
 	v := cf.settings.Version.ActiveVersion(ctx)
-	// If the leaseMgr  is nil then ensure we have a nil LeaseManager interface,
-	// otherwise comparisons against a nil implementation will fail.
-	var lm LeaseManager
-	lm = cf.leaseMgr
-	if cf.leaseMgr == nil {
-		lm = nil
-	}
 	return &Collection{
 		settings:                cf.settings,
 		version:                 v,
 		hydrated:                cf.hydrated,
 		virtual:                 makeVirtualDescriptors(cf.virtualSchemas),
-		leased:                  makeLeasedDescriptors(lm),
+		leased:                  makeLeasedDescriptors(cf.leaseMgr),
 		uncommitted:             makeUncommittedDescriptors(cfg.monitor),
 		uncommittedComments:     makeUncommittedComments(),
 		uncommittedZoneConfigs:  makeUncommittedZoneConfigs(),
@@ -173,12 +164,4 @@ type RegionProvider interface {
 	// GetRegions provides access to the set of regions available to the
 	// current tenant.
 	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
-
-	// SynthesizeRegionConfig returns a RegionConfig that describes the
-	// multiregion setup for the given database ID.
-	SynthesizeRegionConfig(
-		ctx context.Context,
-		dbID descpb.ID,
-		opts ...multiregion.SynthesizeRegionConfigOption,
-	) (multiregion.RegionConfig, error)
 }

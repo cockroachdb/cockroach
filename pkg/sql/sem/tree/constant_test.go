@@ -726,12 +726,6 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 					continue
 				}
 
-				// TODO(#22513): Skip JsonpathFamily for now, since it will resolve to a
-				// string but in the future we don't want to.
-				if availType.Family() == types.JsonpathFamily {
-					continue
-				}
-
 				semaCtx := tree.MakeSemaContext(nil /* resolver */)
 				typedExpr, err := test.c.ResolveAsType(ctx, &semaCtx, availType)
 				var res tree.Datum

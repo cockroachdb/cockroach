@@ -9,7 +9,6 @@ package parser
 import (
 	"go/constant"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -20,13 +19,6 @@ import (
 func init() {
 	scanner.NewNumValFn = func(a constant.Value, s string, b bool) interface{} { return tree.NewNumVal(a, s, b) }
 	scanner.NewPlaceholderFn = func(s string) (interface{}, error) { return tree.NewPlaceholder(s) }
-	parser.ParseDoBlockFn = func(options tree.DoBlockOptions) (tree.DoBlockBody, error) {
-		doBlockBody, err := makeDoStmt(options)
-		if err != nil {
-			return nil, err
-		}
-		return doBlockBody, nil
-	}
 }
 
 // Parser wraps a scanner, parser and other utilities present in the parser

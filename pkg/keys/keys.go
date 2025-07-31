@@ -327,11 +327,6 @@ func RangeAppliedStateKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeAppliedStateKey()
 }
 
-// RangeForceFlushKey returns a system-local key for the range force flush key.
-func RangeForceFlushKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).RangeForceFlushKey()
-}
-
 // RangeLeaseKey returns a system-local key for a range lease.
 func RangeLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeLeaseKey()
@@ -531,7 +526,6 @@ func LockTableSingleKey(key roachpb.Key, buf []byte) (roachpb.Key, []byte) {
 	} else {
 		buf = buf[:0]
 	}
-
 	// Don't unwrap any local prefix on key using Addr(key). This allow for
 	// doubly-local lock table keys. For example, local range descriptor keys can
 	// be locked during split and merge transactions.
@@ -1133,12 +1127,6 @@ func (b RangeIDPrefixBuf) ReplicatedSharedLocksTransactionLatchingKey(txnID uuid
 // See comment on RangeAppliedStateKey function.
 func (b RangeIDPrefixBuf) RangeAppliedStateKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeAppliedStateSuffix...)
-}
-
-// RangeForceFlushKey returns a system-local key for the range force flush
-// key.
-func (b RangeIDPrefixBuf) RangeForceFlushKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRangeForceFlushSuffix...)
 }
 
 // RangeLeaseKey returns a system-local key for a range lease.

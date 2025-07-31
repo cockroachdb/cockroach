@@ -12,6 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/server/debug",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/base/serverident",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/sidetransport",

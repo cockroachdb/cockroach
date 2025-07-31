@@ -20,8 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,87 +56,6 @@ func TestMetricsMetadata(t *testing.T) {
 	}
 }
 
-func TestGetRecordedMetricNames(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-	metricsMetadata, _, _ := s.MetricsRecorder().GetMetricsMetadata(true /* combine */)
-	recordedNames := s.MetricsRecorder().GetRecordedMetricNames(metricsMetadata)
-
-	for _, v := range recordedNames {
-		require.True(t, strings.HasPrefix(v, "cr.node") || strings.HasPrefix(v, "cr.store"))
-	}
-}
-
-func TestGetRecordedMetricNames_histogram(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-	metricName := "my.metric"
-	metricsMetadata := map[string]metric.Metadata{
-		metricName: {
-			Name:        metricName,
-			Help:        "help text",
-			Measurement: "measurement",
-			Unit:        metric.Unit_COUNT,
-			MetricType:  prometheusgo.MetricType_HISTOGRAM,
-		},
-	}
-
-	recordedNames := s.MetricsRecorder().GetRecordedMetricNames(metricsMetadata)
-	require.Equal(t, len(metric.HistogramMetricComputers), len(recordedNames))
-	for _, histogramMetric := range metric.HistogramMetricComputers {
-		_, ok := recordedNames[metricName+histogramMetric.Suffix]
-		require.True(t, ok)
-	}
-}
-
-func TestHistogramMetricComputers(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	metricName := "my.metric"
-	h := metric.NewHistogram(metric.HistogramOptions{
-		Metadata: metric.Metadata{Name: metricName},
-		Buckets:  []float64{10, 20, 30, 40, 50, 60, 70, 80, 90, 100},
-		Mode:     metric.HistogramModePrometheus,
-	})
-
-	sum := int64(0)
-	count := 0
-
-	for i := 1; i <= 10; i++ {
-		recordedVal := int64(i) * 10
-		sum += recordedVal
-		count++
-		h.RecordValue(recordedVal)
-	}
-
-	avg := float64(sum) / float64(count)
-	snapshot := h.WindowedSnapshot()
-	results := make(map[string]float64, len(metric.HistogramMetricComputers))
-	for _, c := range metric.HistogramMetricComputers {
-		results[metricName+c.Suffix] = c.ComputedMetric(snapshot)
-	}
-
-	expected := map[string]float64{
-		metricName + "-sum":     float64(sum),
-		metricName + "-avg":     avg,
-		metricName + "-count":   float64(count),
-		metricName + "-max":     100,
-		metricName + "-p99.999": 100,
-		metricName + "-p99.99":  100,
-		metricName + "-p99.9":   100,
-		metricName + "-p99":     100,
-		metricName + "-p90":     90,
-		metricName + "-p75":     80,
-		metricName + "-p50":     50,
-	}
-	require.Equal(t, expected, results)
-}
-
 // TestStatusVars verifies that prometheus metrics are available via the
 // /_status/vars and /_status/load endpoints.
 func TestStatusVars(t *testing.T) {
@@ -151,38 +68,13 @@ func TestStatusVars(t *testing.T) {
 
 	if body, err := srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String()); err != nil {
 		t.Fatal(err)
-	} else {
-		if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
-			t.Errorf("expected sql_bytesout, got: %s", body)
-		}
-		if !bytes.Contains(body, []byte(`# TYPE sql_insert_count counter`)) {
-			t.Errorf("expected sql_insert_count, got: %s", body)
-		}
+	} else if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
+		t.Errorf("expected sql_bytesout, got: %s", body)
 	}
 	if body, err := srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"load").String()); err != nil {
 		t.Fatal(err)
 	} else if !bytes.Contains(body, []byte("# TYPE sys_cpu_user_ns gauge\nsys_cpu_user_ns")) {
 		t.Errorf("expected sys_cpu_user_ns, got: %s", body)
-	}
-}
-
-func TestMetricsEndpoint(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(context.Background())
-
-	s := srv.ApplicationLayer()
-
-	if body, err := srvtestutils.GetText(s, s.AdminURL().WithPath("/metrics").String()); err != nil {
-		t.Fatal(err)
-	} else {
-		if !bytes.Contains(body, []byte(`# TYPE sql_bytesout counter`)) {
-			t.Errorf("expected sql_bytesout, got: %s", body)
-		}
-		if !bytes.Contains(body, []byte(`# TYPE sql_count counter`)) {
-			t.Errorf("expected sql_count, got: %s", body)
-		}
 	}
 }
 
@@ -237,7 +129,10 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 	})
 	t.Run("tenant", func(t *testing.T) {
 		s := srv.ApplicationLayer()
-		testFn(s, `tenant="test-tenant"`)
+		// TODO(knz): why is the tenant label missing here?
+		// TODO(herko): it is present when running in shared process mode. Hence why
+		// the test is now forced to run only in external process mode.
+		testFn(s, `tenant=""`)
 	})
 }
 

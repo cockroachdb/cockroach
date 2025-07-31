@@ -344,7 +344,6 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"latencyInfo", (*latencyInfo)(&s.LatencyInfo)},
 		{"lastErrorCode", (*jsonString)(&s.LastErrorCode)},
 		{"failureCount", (*jsonInt)(&s.FailureCount)},
-		{"genericCount", (*jsonInt)(&s.GenericCount)},
 		{"sqlType", (*jsonString)(&s.SQLType)},
 	}
 }
@@ -431,6 +430,9 @@ func (l *latencyInfo) jsonFields() jsonFields {
 	return jsonFields{
 		{"min", (*jsonFloat)(&l.Min)},
 		{"max", (*jsonFloat)(&l.Max)},
+		{"p50", (*jsonFloat)(&l.P50)},
+		{"p90", (*jsonFloat)(&l.P90)},
+		{"p99", (*jsonFloat)(&l.P99)},
 	}
 }
 

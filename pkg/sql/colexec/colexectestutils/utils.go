@@ -432,6 +432,21 @@ func RunTestsWithOrderedCols(
 				"non-nulls in the input tuples, we expect for all nulls injection to "+
 				"change the output")
 		}
+		closeIfCloser(t, originalOp)
+		closeIfCloser(t, opWithNulls)
+	}
+}
+
+// closeIfCloser is a testing utility function that checks whether op is a
+// colexecop.Closer and closes it if so.
+//
+// RunTests harness needs to do that once it is done with op. In non-test
+// setting, the closing happens at the end of the query execution.
+func closeIfCloser(t *testing.T, op colexecop.Operator) {
+	if c, ok := op.(colexecop.Closer); ok {
+		if err := c.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -528,6 +543,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 				errorHandler(err)
 			}
 		}
+		closeIfCloser(t, op)
 	})
 
 	if !skipVerifySelAndNullsResets {
@@ -555,6 +571,8 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			if err != nil {
 				t.Fatal(err)
 			}
+			// We might short-circuit, so defer the closing of the operator.
+			defer closeIfCloser(t, op)
 			op.Init(ctx)
 			// NOTE: this test makes sense only if the operator returns two
 			// non-zero length batches (if not, we short-circuit the test since
@@ -636,6 +654,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 		}); err != nil {
 			errorHandler(err)
 		}
+		closeIfCloser(t, op)
 	}
 }
 
@@ -1772,8 +1791,9 @@ func MakeRandWindowFrameRangeOffset(t *testing.T, rng *rand.Rand, typ *types.T) 
 // EncodeWindowFrameOffset returns the given datum offset encoded as bytes, for
 // use in testing window functions in RANGE mode with offsets.
 func EncodeWindowFrameOffset(t *testing.T, offset tree.Datum) []byte {
-	var encoded []byte
-	encoded, err := valueside.Encode(encoded, valueside.NoColumnID, offset)
+	var encoded, scratch []byte
+	encoded, err := valueside.Encode(
+		encoded, valueside.NoColumnID, offset, scratch)
 	require.NoError(t, err)
 	return encoded
 }

@@ -22,7 +22,6 @@ go_library(
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "//pkg/roachpb",
-        "//pkg/server/serverpb",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/container/ring",
@@ -45,6 +44,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":replica_rac2"],
     deps = [
+        "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/kv/kvserver/kvflowcontrol/rac2",
@@ -54,7 +54,6 @@ go_test(
         "//pkg/raft",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
-        "//pkg/server/serverpb",
         "//pkg/testutils/datapathutils",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/leaktest",

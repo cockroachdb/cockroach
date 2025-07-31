@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -44,7 +43,7 @@ import (
 var createStatsPostEvents = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.stats.post_events.enabled",
-	"if set, an event is logged for every successful CREATE STATISTICS job",
+	"if set, an event is logged for every CREATE STATISTICS job",
 	false,
 	settings.WithPublic)
 
@@ -73,7 +72,7 @@ var nonIndexJSONHistograms = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.stats.non_indexed_json_histograms.enabled",
 	"set to true to collect table statistics histograms on non-indexed JSON columns",
-	false,
+	true,
 	settings.WithPublic)
 
 var automaticJobCheckBeforeCreatingJob = settings.RegisterBoolSetting(
@@ -87,7 +86,7 @@ var errorOnConcurrentCreateStats = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.stats.error_on_concurrent_create_stats.enabled",
 	"set to true to error on concurrent CREATE STATISTICS jobs, instead of skipping them",
-	false,
+	true,
 	settings.WithPublic)
 
 const nonIndexColHistogramBuckets = 2
@@ -123,7 +122,6 @@ func StubTableStats(
 // CREATE STATISTICS planning and execution is performed within the jobs
 // framework.
 type createStatsNode struct {
-	zeroInputPlanNode
 	tree.CreateStats
 
 	// p is the "outer planner" from planning the CREATE STATISTICS
@@ -229,12 +227,6 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 // makeJobRecord creates a CreateStats job record which can be used to plan and
 // execute statistics creation.
 func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, error) {
-	// Check tenant-level read-only status first (applies to all tables in tenant).
-	if n.p.ExecCfg().TenantReadOnly {
-		return nil, pgerror.Newf(
-			pgcode.WrongObjectType, "cannot create statistics in read-only tenant")
-	}
-
 	var tableDesc catalog.TableDescriptor
 	var fqTableName string
 	var err error
@@ -386,9 +378,6 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	if n.Name == jobspb.AutoStatsName {
 		// Use a user-friendly description for automatic statistics.
 		description = fmt.Sprintf("Table statistics refresh for %s", fqTableName)
-	} else if n.Name == jobspb.AutoPartialStatsName {
-		// Use a similar user-friendly description for partial statistics.
-		description = fmt.Sprintf("Partial statistics update for %s", fqTableName)
 	} else {
 		// This must be a user query, so use the statement (for consistency with
 		// other jobs triggered by statements).
@@ -551,7 +540,7 @@ func createStatsDefaultColumns(
 	// implicitly partitioned indexes.
 	if partialStats {
 		for _, idx := range desc.ActiveIndexes() {
-			if idx.GetType() != idxtype.FORWARD ||
+			if idx.GetType() != descpb.IndexDescriptor_FORWARD ||
 				idx.IsPartial() ||
 				idx.IsSharded() ||
 				idx.ImplicitPartitioningColumnCount() > 0 {
@@ -619,13 +608,9 @@ func createStatsDefaultColumns(
 
 	// Add column stats for each secondary index.
 	for _, idx := range desc.PublicNonPrimaryIndexes() {
-		if idx.GetType() == idxtype.VECTOR {
-			// Skip vector indexes for now.
-			continue
-		}
 		for j, n := 0, idx.NumKeyColumns(); j < n; j++ {
 			colID := idx.GetKeyColumnID(j)
-			isInverted := idx.GetType() == idxtype.INVERTED && colID == idx.InvertedColumnID()
+			isInverted := idx.GetType() == descpb.IndexDescriptor_INVERTED && colID == idx.InvertedColumnID()
 
 			// Generate stats for each indexed column.
 			if err := addIndexColumnStatsIfNotExists(colID, isInverted); err != nil {
@@ -869,8 +854,6 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		return nil
 	}
 
-	// Note that we'll log an event even if the stats collection didn't occur
-	// due to a benign error.
 	// TODO(rytaft): This creates a new transaction for the CREATE STATISTICS
 	// event. It must be different from the CREATE STATISTICS transaction,
 	// because that transaction must be read-only. In the future we may want

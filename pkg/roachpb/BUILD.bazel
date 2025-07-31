@@ -49,7 +49,6 @@ go_library(
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@com_github_cockroachdb_redact//interfaces",
         "@com_github_golang_mock//gomock",  # keep
         "@org_golang_google_grpc//metadata",  # keep
     ],
@@ -77,7 +76,6 @@ go_test(
     embed = [":roachpb"],
     deps = [
         "//pkg/cli/exit",
-        "//pkg/geo",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
@@ -97,8 +95,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
-        "//pkg/util/timeofday",
-        "//pkg/util/timetz",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
@@ -134,6 +130,7 @@ proto_library(
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
+        "@go_googleapis//google/api:annotations_proto",
     ],
 )
 
@@ -152,6 +149,7 @@ go_proto_library(
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
+        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
     ],
 )
 
@@ -164,5 +162,4 @@ stringer(
 disallowed_imports_test(
     "roachpb",
     disallow_cdeps = True,
-    disallowed_list = [],
 )

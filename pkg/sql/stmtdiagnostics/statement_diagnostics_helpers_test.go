@@ -28,11 +28,10 @@ func (r *Registry) InsertRequestInternal(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) (int64, error) {
-	// Note that redacted bundles as well as collected under different user than
-	// the one requesting it are checked in TestExplainAnalyzeDebug.
+	// Note that redacted bundles are checked in TestExplainAnalyzeDebug.
 	id, err := r.insertRequestInternal(
 		ctx, fprint, planGist, antiPlanGist, samplingProbability,
-		minExecutionLatency, expiresAfter, false /* redacted */, "", /* username */
+		minExecutionLatency, expiresAfter, false, /* redacted */
 	)
 	return int64(id), err
 }

@@ -16,7 +16,7 @@ go_library(
         "//pkg/roachprod/vm",
         "//pkg/testutils/release",
         "//pkg/util/retry",
+        "//pkg/util/version",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_version//:version",
     ],
 )

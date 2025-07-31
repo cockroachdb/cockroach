@@ -1,10 +1,11 @@
 # Any changes in this result should be copied to the comment on
-# defaultRangeLeaseDuration, and the corresponding reasoning should be adjusted.
+# defaultRangeLeaseRaftElectionTimeoutMultiplier, and the corresponding
+# reasoning should be adjusted.
 echo
 ----
 // Raft election (fortification disabled):
 // - Heartbeat offset (0-1 heartbeat interval)                [-1.00s - 0.00s]
-// - Election timeout (timeout + random election jitter)      [ 2.00s - 4.00s]
+// - Election timeout (random 1x-2x timeout)                  [ 2.00s - 4.00s]
 // - Election (3x RTT: prevote, vote, append)                 [ 0.03s - 1.20s]
 // Total latency                                              [ 1.03s - 5.20s]
 //
@@ -22,10 +23,10 @@ echo
 // Total latency                                              [ 3.03s - 7.20s]
 //
 // Leader lease acquisition (including raft election):
-// - Store Liveness heartbeat offset (0-1 heartbeat interval) [-1.00s - 0.00s]
-// - Store Liveness expiration (constant)                     [ 3.00s - 3.00s]
+// - Store Liveness heartbeat offset (0-1 heartbeat interval) [-3.00s - 0.00s]
+// - Store Liveness expiration (constant)                     [ 6.00s - 6.00s]
 // - Store Liveness withdrawal (0-1 withdrawal interval)      [ 0.00s - 0.10s]
-// - Raft election timeout jitter (random election jitter)    [ 0.00s - 2.00s]
+// - Raft election timeout jitter (random 0x-1x timeout)      [ 0.00s - 2.00s]
 // - Election (3x RTT: prevote, vote, append)                 [ 0.03s - 1.20s]
 // - Lease acquisition (1x RTT: append)                       [ 0.01s - 0.40s]
-// Total latency                                              [ 2.04s - 6.70s]
+// Total latency                                              [ 3.04s - 9.70s]

@@ -31,7 +31,7 @@ SELECT * FROM t LIMIT 1;
 {
 	"ApplicationName": "telemetry-logging-datadriven",
 	"Database": "defaultdb",
-	"Distribution": "local",
+	"Distribution": "full",
 	"EventType": "sampled_query",
 	"PlanGist": "AgHQAQIAAAAAAg==",
 	"ScanCount": 1,
@@ -164,7 +164,7 @@ SELECT * FROM t LIMIT 1;
 {
 	"ApplicationName": "$ internal-console-app",
 	"Database": "defaultdb",
-	"Distribution": "local",
+	"Distribution": "full",
 	"EventType": "sampled_query",
 	"PlanGist": "AgHQAQIAAAAAAg==",
 	"ScanCount": 1,
@@ -352,8 +352,8 @@ COMMIT;
 	"PlanGist": "Ais=",
 	"SkippedQueries": 7,
 	"Statement": "CREATE USER craig",
-	"StatementFingerprintID": "4157831042514459856",
-	"StmtPosInTxn": 1,
+	"StatementFingerprintID": "4157831042514459868",
+	"StmtPosInTxn": 3,
 	"Tag": "CREATE ROLE",
 	"User": "root"
 }
@@ -364,8 +364,8 @@ COMMIT;
 	"EventType": "sampled_query",
 	"PlanGist": "Ais=",
 	"Statement": "GRANT admin TO craig",
-	"StatementFingerprintID": "9654126880073528925",
-	"StmtPosInTxn": 1,
+	"StatementFingerprintID": "9654126880073528913",
+	"StmtPosInTxn": 4,
 	"Tag": "GRANT",
 	"User": "root"
 }

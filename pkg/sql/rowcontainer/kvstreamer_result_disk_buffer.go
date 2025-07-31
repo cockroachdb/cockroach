@@ -21,9 +21,6 @@ import (
 )
 
 type kvStreamerResultDiskBuffer struct {
-	// reverse indicates that scan responses are ReverseScanResponse rather than
-	// ScanResponse.
-	reverse bool
 	// initialized is set to true when the first Result is Serialize()'d.
 	initialized bool
 	// container stores all Results that have been Serialize()'d since the last
@@ -40,28 +37,22 @@ type kvStreamerResultDiskBuffer struct {
 	iter         RowIterator
 	iterResultID int
 
-	engine      diskmap.Factory
-	memAcc      mon.BoundAccount
-	diskMonitor *mon.BytesMonitor
-	rowScratch  rowenc.EncDatumRow
-	alloc       tree.DatumAlloc
+	engine     diskmap.Factory
+	monitor    *mon.BytesMonitor
+	rowScratch rowenc.EncDatumRow
+	alloc      tree.DatumAlloc
 }
 
 var _ kvstreamer.ResultDiskBuffer = &kvStreamerResultDiskBuffer{}
 
 // NewKVStreamerResultDiskBuffer return a new kvstreamer.ResultDiskBuffer that
 // is backed by a disk row container.
-//
-// -reverse informs the ResultDiskBuffer to expect ReverseScanResponse instead
-// of ScanResponse.
 func NewKVStreamerResultDiskBuffer(
-	engine diskmap.Factory, memAcc mon.BoundAccount, diskMonitor *mon.BytesMonitor, reverse bool,
+	engine diskmap.Factory, monitor *mon.BytesMonitor,
 ) kvstreamer.ResultDiskBuffer {
 	return &kvStreamerResultDiskBuffer{
-		reverse:     reverse,
-		engine:      engine,
-		memAcc:      memAcc,
-		diskMonitor: diskMonitor,
+		engine:  engine,
+		monitor: monitor,
 	}
 }
 
@@ -73,8 +64,7 @@ func (b *kvStreamerResultDiskBuffer) Serialize(
 		var err error
 		b.container, err = MakeDiskRowContainer(
 			ctx,
-			b.memAcc,
-			b.diskMonitor,
+			b.monitor,
 			inOrderResultsBufferSpillTypeSchema,
 			colinfo.ColumnOrdering{},
 			b.engine,
@@ -127,7 +117,7 @@ func (b *kvStreamerResultDiskBuffer) Deserialize(
 	if err != nil {
 		return err
 	}
-	return deserialize(r, serialized, &b.alloc, b.reverse)
+	return deserialize(r, serialized, &b.alloc)
 }
 
 // Reset implements the kvstreamer.ResultDiskBuffer interface.
@@ -205,9 +195,8 @@ func serialize(r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.DatumAl
 		} else {
 			// We have a Scan response.
 			batchResponses := tree.NewDArray(types.Bytes)
-			scanBatchResponses := kvstreamer.GetScanBatchResponses(r.ScanResp)
-			batchResponses.Array = make(tree.Datums, 0, len(scanBatchResponses))
-			for _, b := range scanBatchResponses {
+			batchResponses.Array = make(tree.Datums, 0, len(r.ScanResp.BatchResponses))
+			for _, b := range r.ScanResp.BatchResponses {
 				if err := batchResponses.Append(alloc.NewDBytes(tree.DBytes(b))); err != nil {
 					return err
 				}
@@ -224,12 +213,7 @@ func serialize(r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.DatumAl
 //
 // 'Position', 'memoryTok', 'subRequestIdx', 'subRequestDone', and
 // 'scanComplete' fields are left unchanged since those aren't serialized.
-//
-// - reverse, if true, indicates that ReverseScanResponse is to be used instead
-// of ScanResponse.
-func deserialize(
-	r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.DatumAlloc, reverse bool,
-) error {
+func deserialize(r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.DatumAlloc) error {
 	for i := range row {
 		if err := row[i].EnsureDecoded(inOrderResultsBufferSpillTypeSchema[i], alloc); err != nil {
 			return err
@@ -246,22 +230,13 @@ func deserialize(
 				},
 			}
 		}
-	} else if reverse {
-		response := &kvpb.ReverseScanResponse{}
-		batchResponses := tree.MustBeDArray(row[scanBatchResponsesIdx].Datum)
-		response.BatchResponses = make([][]byte, batchResponses.Len())
-		for i := range batchResponses.Array {
-			response.BatchResponses[i] = []byte(tree.MustBeDBytes(batchResponses.Array[i]))
-		}
-		r.ScanResp = response
 	} else {
-		response := &kvpb.ScanResponse{}
+		r.ScanResp = &kvpb.ScanResponse{}
 		batchResponses := tree.MustBeDArray(row[scanBatchResponsesIdx].Datum)
-		response.BatchResponses = make([][]byte, batchResponses.Len())
+		r.ScanResp.BatchResponses = make([][]byte, batchResponses.Len())
 		for i := range batchResponses.Array {
-			response.BatchResponses[i] = []byte(tree.MustBeDBytes(batchResponses.Array[i]))
+			r.ScanResp.BatchResponses[i] = []byte(tree.MustBeDBytes(batchResponses.Array[i]))
 		}
-		r.ScanResp = response
 	}
 	return nil
 }

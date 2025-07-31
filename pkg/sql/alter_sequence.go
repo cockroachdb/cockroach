@@ -8,9 +8,12 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -20,7 +23,6 @@ import (
 )
 
 type alterSequenceNode struct {
-	zeroInputPlanNode
 	n       *tree.AlterSequence
 	seqDesc *tabledesc.Mutable
 }
@@ -168,6 +170,13 @@ func alterSequenceImpl(
 				restartVal = option.IntVal
 			} else {
 				restartVal = &opts.Start
+			}
+		} else if option.Name == tree.SeqOptCacheNode {
+			if !params.p.execCfg.Settings.Version.IsActive(params.ctx, clusterversion.V24_1) {
+				return pgerror.New(
+					pgcode.FeatureNotSupported,
+					`node-level cache not supported before V24.1`,
+				)
 			}
 		}
 	}

@@ -7,15 +7,10 @@ echo
 -- Flow token metrics from n1 after issuing 1x1MiB 3x replicated write
 -- that's not admitted. We see 1*1MiB*3=3MiB deductions of tokens with
 -- no corresponding returns.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 21 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
@@ -47,15 +42,10 @@ ORDER BY
 
 -- Flow token metrics from n1 having lost the lease but retained raft
 -- leadership. No deducted tokens are released.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 21 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
@@ -83,15 +73,10 @@ ORDER BY
 
 
 -- (Allow below-raft admission to proceed. All tokens should be returned.)
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
@@ -124,15 +109,10 @@ ORDER BY
 
 -- Looking at n1's flow token metrics, there's no change. No additional tokens
 -- are deducted since the write is not being proposed here.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
@@ -161,15 +141,10 @@ ORDER BY
 
 -- Looking at n2's flow token metrics, there's no activity. n2 never acquired
 -- the raft leadership.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 0 B  
   kvflowcontrol.tokens.eval.elastic.deducted                        | 0 B  

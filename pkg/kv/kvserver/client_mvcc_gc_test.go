@@ -260,7 +260,7 @@ SELECT count(*)
 	// applied to foo's empty range.
 	ptsReader := store.GetStoreConfig().ProtectedTimestampReader
 	require.NoError(t,
-		spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, s.Clock().Now()))
+		spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, s.Clock().Now()))
 	ts, _, err := kvSubscriber.GetProtectionTimestamps(ctx, sp)
 	require.NoError(t, err)
 	require.Len(t, ts, 1)
@@ -269,7 +269,7 @@ SELECT count(*)
 	testutils.SucceedsSoon(t, func() error {
 		require.NoError(t, store.ManualMVCCGC(repl))
 		require.NoError(t,
-			spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, s.Clock().Now()))
+			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, s.Clock().Now()))
 		threshold := repl.GetGCThreshold()
 		if !threshold.Equal(ptsTime.Prev()) {
 			require.False(t, ptsTime.Prev().Less(threshold), "range GC threshold should never pass protected timestamp")

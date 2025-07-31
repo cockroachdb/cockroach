@@ -18,7 +18,6 @@ SELECT ARRAY['hi']::_newname
 # Test that we can use the new name within a transaction.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 ALTER TYPE newname RENAME TO renameagain
 
 query T
@@ -195,9 +194,6 @@ statement ok
 CREATE TABLE new_enum_values (x build)
 
 statement ok
-SET autocommit_before_ddl = false
-
-statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE build ADD VALUE 'g';
 ALTER TYPE build ADD VALUE '_a' BEFORE 'a'
@@ -223,9 +219,6 @@ INSERT INTO new_enum_values VALUES ('g')
 
 statement ok
 ROLLBACK
-
-statement ok
-RESET autocommit_before_ddl
 
 # Ensure that optimizer plan caching takes into account changes in types.
 statement ok
@@ -398,9 +391,6 @@ subtest add_drop_same_value_in_txn
 statement ok
 CREATE TYPE a AS ENUM('a')
 
-statement ok
-SET autocommit_before_ddl = false
-
 statement error enum value "b" is being added, try again later
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE a ADD VALUE 'b';
@@ -461,9 +451,6 @@ ALTER TYPE a RENAME VALUE 'a' TO 'new_name';
 
 statement ok
 ROLLBACK
-
-statement ok
-RESET autocommit_before_ddl
 
 # Ensure changes to the type are picked up by the array type descriptor as well.
 subtest regression_58710
@@ -706,6 +693,7 @@ ALTER TYPE typ_110827 DROP VALUE 'a';
 statement error pgcode 2BP01 could not remove enum value "b" as it is being used by table ".*t_110827"
 ALTER TYPE typ_110827 DROP VALUE 'b';
 
+
 subtest end
 
 # We accidentally introduced a regression formatting dependent rows out,
@@ -718,8 +706,6 @@ CREATE TYPE typ_127136 AS ENUM('a', 'b', 'c');
 CREATE TABLE t_127136 (x INT PRIMARY KEY);
 CREATE INDEX foo ON t_127136((x*10));
 ALTER TABLE t_127136 ADD COLUMN y typ_127136;
-
-statement ok
 INSERT INTO t_127136 VALUES (1, 'a');
 
 statement error pgcode 2BP01 could not remove enum value "a" as it is being used by "t_127136" in row: x=1, y='a'

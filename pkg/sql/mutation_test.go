@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"reflect"
 	"sync"
 	"testing"
 
@@ -30,7 +29,7 @@ func TestConstraintValidationBeforeBuffering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -133,7 +132,7 @@ func TestReadCommittedImplicitPartitionUpsert(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	params, _ := createTestServerParamsAllowTenants()
+	params, _ := createTestServerParams()
 	// If test is in Ready state, transition to ReadDone and wait for conflict.
 	params.Knobs = base.TestingKnobs{
 		SQLExecutor: &sql.ExecutorTestingKnobs{
@@ -264,9 +263,8 @@ PARTITION ALL BY LIST (r) (
 			if err := rows.Scan(&id, &k, &r, &a); err != nil {
 				t.Fatal(err)
 			}
-			res := []string{id, k, r, a}
-			if !reflect.DeepEqual(tc.expectedOutput, res) {
-				t.Fatalf("%d: expected %v, got %v", idx, tc.expectedOutput, res)
+			if id != tc.expectedOutput[0] || k != tc.expectedOutput[1] || r != tc.expectedOutput[2] || a != tc.expectedOutput[3] {
+				t.Fatalf("%d: expected %v, got %v", idx, tc.expectedOutput, []string{id, k, r, a})
 			}
 		}
 		rows.Close()

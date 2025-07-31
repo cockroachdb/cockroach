@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -27,6 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
+
+// AlterColTypeInTxnNotSupportedErr is returned when an ALTER COLUMN TYPE
+// is tried in an explicit transaction.
+var AlterColTypeInTxnNotSupportedErr = unimplemented.NewWithIssuef(
+	49351, "ALTER COLUMN TYPE is not supported inside a transaction")
+
+var alterColTypeInCombinationNotSupportedErr = unimplemented.NewWithIssuef(
+	49351, "ALTER COLUMN TYPE cannot be used in combination "+
+		"with other ALTER TABLE commands")
 
 // AlterColumnType takes an AlterTableAlterColumnType, determines
 // which conversion to use and applies the type conversion.
@@ -50,7 +58,7 @@ func AlterColumnType(
 		}
 		if found {
 			return params.p.dependentError(
-				ctx, objType, col.GetName(), tableDesc.ParentID, tableRef.ID, tableDesc.ID, op,
+				ctx, objType, col.GetName(), tableDesc.ParentID, tableRef.ID, op,
 			)
 		}
 	}
@@ -73,12 +81,12 @@ func AlterColumnType(
 	}
 
 	typ, err = schemachange.ValidateAlterColumnTypeChecks(ctx, t,
-		params.EvalContext().Settings, typ, col.IsGeneratedAsIdentity(), col.IsVirtual())
+		params.EvalContext().Settings, typ, col.IsGeneratedAsIdentity())
 	if err != nil {
 		return err
 	}
 
-	kind, err := schemachange.ClassifyConversionFromTree(ctx, t, col.GetType(), typ, col.IsVirtual())
+	kind, err := schemachange.ClassifyConversionFromTree(ctx, t, col.GetType(), typ)
 	if err != nil {
 		return err
 	}
@@ -144,6 +152,19 @@ func alterColumnTypeGeneral(
 	cmds tree.AlterTableCmds,
 	tn *tree.TableName,
 ) error {
+	if !params.SessionData().AlterColumnTypeGeneralEnabled {
+		return pgerror.WithCandidateCode(
+			errors.WithHint(
+				errors.WithIssueLink(
+					errors.Newf("ALTER COLUMN TYPE from %v to %v is only "+
+						"supported experimentally",
+						col.GetType(), toType),
+					errors.IssueLink{IssueURL: build.MakeIssueURL(49329)}),
+				"you can enable alter column type general support by running "+
+					"`SET enable_experimental_alter_column_type_general = true`"),
+			pgcode.ExperimentalFeature)
+	}
+
 	// Disallow ALTER COLUMN TYPE general for columns that own sequences.
 	if col.NumOwnsSequences() != 0 {
 		return sqlerrors.NewAlterColumnTypeColOwnsSequenceNotSupportedErr()
@@ -191,11 +212,11 @@ func alterColumnTypeGeneral(
 
 	// Disallow ALTER COLUMN TYPE general inside a multi-statement transaction.
 	if !params.extendedEvalCtx.TxnIsSingleStmt {
-		return sqlerrors.NewAlterColTypeInTxnNotSupportedErr()
+		return AlterColTypeInTxnNotSupportedErr
 	}
 
 	if len(cmds) > 1 {
-		return sqlerrors.NewAlterColTypeInCombinationNotSupportedError()
+		return alterColTypeInCombinationNotSupportedErr
 	}
 
 	// Disallow ALTER COLUMN TYPE general if the table is already undergoing
@@ -207,46 +228,6 @@ func alterColumnTypeGeneral(
 			return unimplemented.NewWithIssuef(
 				47137, "table %s is currently undergoing a schema change", tableDesc.Name)
 		}
-	}
-
-	// The algorithm relies heavily on the computed column expression, so we don’t
-	// support altering a column if it’s also computed. There’s currently no way to
-	// track the original expression in this case. However, this is supported in the
-	// declarative schema changer.
-	if col.IsComputed() {
-		return unimplemented.Newf("ALTER COLUMN ... TYPE",
-			"ALTER COLUMN TYPE requiring an on-disk data rewrite with the legacy schema changer "+
-				"is not supported for computed columns")
-	}
-
-	// Starting in 25.1, ALTER COLUMN TYPE is fully supported in the declarative
-	// schema changer (DSC) and no longer requires the experimental setting. This
-	// version gate ensures backward compatibility for mixed-version clusters. If
-	// 25.1 is active, the DSC becomes the only way to alter the column type.
-	//
-	// Once 25.1 becomes the minimum supported version, this gate and all
-	// associated legacy schema changer support can be removed.
-	//
-	// This check is intentionally placed near the end of the compatibility checks
-	// to ensure consistent error messages for scenarios that overlap with the DSC.
-	if params.p.execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_1) {
-		return pgerror.New(pgcode.FeatureNotSupported,
-			"ALTER COLUMN TYPE is only implemented in the declarative schema changer")
-	}
-
-	// If we are going to proceed with the legacy code, check the experimental setting
-	// because it was never fully supported.
-	if !params.SessionData().AlterColumnTypeGeneralEnabled {
-		return pgerror.WithCandidateCode(
-			errors.WithHint(
-				errors.WithIssueLink(
-					errors.Newf("ALTER COLUMN TYPE from %v to %v is only "+
-						"supported experimentally",
-						col.GetType(), toType),
-					errors.IssueLink{IssueURL: build.MakeIssueURL(49329)}),
-				"you can enable alter column type general support by running "+
-					"`SET enable_experimental_alter_column_type_general = true`"),
-			pgcode.ExperimentalFeature)
 	}
 
 	nameExists := func(name string) bool {

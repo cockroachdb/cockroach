@@ -14,12 +14,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -69,7 +67,7 @@ func (tc *Collection) hydrateDescriptors(
 
 	// hydrate mutable hydratable descriptors of the slice in-place.
 	if !hydratableMutableIndexes.Empty() {
-		typeFn := makeMutableTypeLookupFunc(tc, txn, flags, descs)
+		typeFn := makeMutableTypeLookupFunc(tc, txn, descs)
 		for _, i := range hydratableMutableIndexes.Ordered() {
 			if err := hydrate(ctx, descs[i], typeFn); err != nil {
 				return err
@@ -110,7 +108,7 @@ func (tc *Collection) hydrateDescriptors(
 }
 
 func makeMutableTypeLookupFunc(
-	tc *Collection, txn *kv.Txn, flags getterFlags, descs []catalog.Descriptor,
+	tc *Collection, txn *kv.Txn, descs []catalog.Descriptor,
 ) typedesc.TypeLookupFunc {
 	var mc nstree.MutableCatalog
 	for _, desc := range descs {
@@ -133,7 +131,7 @@ func makeMutableTypeLookupFunc(
 		if id == catconstants.PublicSchemaID {
 			return schemadesc.GetPublicSchema(), nil
 		}
-		f := getterFlags{
+		flags := getterFlags{
 			contextFlags: contextFlags{
 				isMutable: true,
 			},
@@ -142,35 +140,9 @@ func makeMutableTypeLookupFunc(
 				withoutLeased:    true,
 				withoutHydration: skipHydration,
 			},
-			descFilters: descFilters{
-				// For hydration, we will allow offline descriptors for lookups
-				// of type descriptors. A descriptor can be offline either due to:
-				// 1) IMPORT in which case we are looking at an implicit record type
-				// 2) RESTORE which will always pick a new object to restore into, so
-				//    only the restore code paths can enter here, which will include
-				//    offline descriptors explicitly.
-				withoutOffline: false,
-			},
 		}
-		g := ByIDGetter(makeGetterBase(txn, tc, f))
-		desc, err := g.Desc(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		// Sanity: If offline descriptors were asked to be ignored, then we should
-		// only observe ones caused by IMPORT.
-		if flags.descFilters.withoutOffline &&
-			(desc.GetOfflineReason() != "" && desc.GetOfflineReason() != tabledesc.OfflineReasonImporting) {
-			if buildutil.CrdbTestBuild {
-				return nil, errors.AssertionFailedf("unexpected offline descriptor %s(%d): %s",
-					desc.GetName(),
-					desc.GetID(),
-					desc.GetOfflineReason())
-			}
-			// For release builds surface an offline descriptor error.
-			return nil, catalog.FilterOfflineDescriptor(desc)
-		}
-		return desc, nil
+		g := ByIDGetter(makeGetterBase(txn, tc, flags))
+		return g.Desc(ctx, id)
 	}
 	return makeTypeLookupFuncForHydration(mc, mutableLookupFunc)
 }
@@ -197,34 +169,11 @@ func makeImmutableTypeLookupFunc(
 			},
 			descFilters: descFilters{
 				withoutDropped: true,
-				// For hydration, we will allow offline descriptors for lookups
-				// of type descriptors. A descriptor can be offline either due to:
-				// 1) IMPORT in which case we are looking at an implicit record type
-				// 2) RESTORE which will always pick a new object to restore into, so
-				//    only the restore code paths can enter here, which will include
-				//    offline descriptors explicitly.
-				withoutOffline: false,
+				withoutOffline: flags.descFilters.withoutOffline,
 			},
 		}
 		g := ByIDGetter(makeGetterBase(txn, tc, f))
-		desc, err := g.Desc(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		// Sanity: If offline descriptors were asked to be ignored, then we should
-		// only observe ones caused by IMPORT.
-		if flags.descFilters.withoutOffline &&
-			(desc.GetOfflineReason() != "" && desc.GetOfflineReason() != tabledesc.OfflineReasonImporting) {
-			if buildutil.CrdbTestBuild {
-				return nil, errors.AssertionFailedf("unexpected offline descriptor %s(%d): %s",
-					desc.GetName(),
-					desc.GetID(),
-					desc.GetOfflineReason())
-			}
-			// For release builds surface an offline descriptor error.
-			return nil, catalog.FilterOfflineDescriptor(desc)
-		}
-		return desc, nil
+		return g.Desc(ctx, id)
 	}
 	return makeTypeLookupFuncForHydration(mc, immutableLookupFunc)
 }

@@ -620,13 +620,13 @@ func (d *diskQueue) Enqueue(ctx context.Context, b coldata.Batch) error {
 	}
 	if d.state == diskQueueStateDequeueing {
 		if d.cfg.CacheMode != DiskQueueCacheModeIntertwinedCalls {
-			return errors.AssertionFailedf(
+			return errors.Errorf(
 				"attempted to Enqueue to DiskQueue after Dequeueing "+
 					"in mode that disallows it: %d", d.cfg.CacheMode,
 			)
 		}
 		if d.rewindable {
-			return errors.AssertionFailedf("attempted to Enqueue to RewindableDiskQueue after Dequeue has been called")
+			return errors.Errorf("attempted to Enqueue to RewindableDiskQueue after Dequeue has been called")
 		}
 	}
 	d.state = diskQueueStateEnqueueing
@@ -752,7 +752,7 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 		d.cfg.SpilledBytesRead.Inc(int64(n))
 	}
 	if n != len(d.writer.scratch.compressedBuf) {
-		return false, errors.AssertionFailedf("expected to read %d bytes but read %d", len(d.writer.scratch.compressedBuf), n)
+		return false, errors.Errorf("expected to read %d bytes but read %d", len(d.writer.scratch.compressedBuf), n)
 	}
 
 	blockType := d.writer.scratch.compressedBuf[0]

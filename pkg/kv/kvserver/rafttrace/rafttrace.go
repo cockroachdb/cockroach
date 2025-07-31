@@ -68,9 +68,9 @@ type traceValue struct {
 		// messages or reproposals.
 		seenMsgAppResp map[raftpb.PeerID]bool
 
-		// seenMsgStorageAppendAck tracks whether a MsgStorageAppendAck has already
-		// been logged.
-		seenMsgStorageAppendAck bool
+		// seenMsgStorageAppendResp tracks whether a MsgStorageAppendResp
+		// message has already been logged.
+		seenMsgStorageAppendResp bool
 
 		// propCtx is the underlying proposal context used for tracing to the
 		// SQL trace.
@@ -109,15 +109,15 @@ func (t *traceValue) seenMsgAppResp(p raftpb.PeerID) bool {
 	return false
 }
 
-// seenMsgStorageAppendAck returns true if it hasn't seen a MsgStorageAppendAck
-// for this trace.
-func (t *traceValue) seenMsgStorageAppendAck() bool {
+// seenMsgStorageAppendResp returns true if it hasn't seen a
+// MsgStorageAppendResp for this trace.
+func (t *traceValue) seenMsgStorageAppendResp() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.mu.seenMsgStorageAppendAck {
+	if t.mu.seenMsgStorageAppendResp {
 		return true
 	}
-	t.mu.seenMsgStorageAppendAck = true
+	t.mu.seenMsgStorageAppendResp = true
 	return false
 }
 
@@ -338,75 +338,15 @@ func (r *RaftTracer) MaybeTrace(m raftpb.Message) []kvserverpb.TracedEntry {
 	if r.numRegisteredReplica.Load() == 0 {
 		return nil
 	}
+
 	switch m.Type {
-	case raftpb.MsgProp, raftpb.MsgApp:
+	case raftpb.MsgProp, raftpb.MsgApp, raftpb.MsgStorageAppend, raftpb.MsgStorageApply:
 		return r.traceIfCovered(m)
-	case raftpb.MsgAppResp:
+	case raftpb.MsgAppResp, raftpb.MsgStorageAppendResp, raftpb.MsgStorageApplyResp:
 		r.traceIfPast(m)
+		return nil
 	}
 	return nil
-}
-
-// MaybeTraceAppend traces the completion of a raft log append, to all the
-// relevant traced indices.
-// TODO(pav-kv): handle snapshots.
-func (r *RaftTracer) MaybeTraceAppend(app raft.StorageAppend) {
-	// Optimize the common case when there are no traces or entries.
-	if len(app.Entries) == 0 || r.numRegisteredReplica.Load() == 0 {
-		return
-	}
-	from := kvpb.RaftIndex(app.Entries[0].Index)
-	to := kvpb.RaftIndex(app.Entries[len(app.Entries)-1].Index)
-	r.iterCovered(from, to, func(t *traceValue) {
-		t.logf(5, "appended entries [%d-%d] at leader term %d", from, to, app.Mark().Term)
-	})
-}
-
-// MaybeTraceAppendAck traces a log storage sync, to all the relevant traced
-// indices.
-func (r *RaftTracer) MaybeTraceAppendAck(ack raft.StorageAppendAck) {
-	// Optimize the common case when there are no traces or nothing to ack.
-	if ack.Mark.Index == 0 || r.numRegisteredReplica.Load() == 0 {
-		return
-	}
-	r.iterCovered(0, kvpb.RaftIndex(ack.Mark.Index), func(t *traceValue) {
-		if !t.seenMsgStorageAppendAck() {
-			t.logf(5, "synced log storage write at mark %+v", ack.Mark)
-		}
-	})
-}
-
-// MaybeTraceApplying traces the beginning of applying a batch of entries, to
-// all the relevant traced indices.
-func (r *RaftTracer) MaybeTraceApplying(entries []raftpb.Entry) {
-	// Optimize the common case when there are no traces or entries.
-	if r.numRegisteredReplica.Load() == 0 || len(entries) == 0 {
-		return
-	}
-	from := kvpb.RaftIndex(entries[0].Index)
-	to := kvpb.RaftIndex(entries[len(entries)-1].Index)
-	r.iterCovered(from, to, func(t *traceValue) {
-		t.logf(5, "applying entries [%d-%d]", from, to)
-	})
-}
-
-// MaybeTraceApplied traces the completion of applying a batch of entries, to
-// all the relevant traced indices. It also unregisters all these indices from
-// tracing because this is the last "interesting" event in the trace.
-func (r *RaftTracer) MaybeTraceApplied(entries []raftpb.Entry) {
-	// Optimize the common case when there are no traces or entries.
-	if r.numRegisteredReplica.Load() == 0 || len(entries) == 0 {
-		return
-	}
-	from := kvpb.RaftIndex(entries[0].Index)
-	to := kvpb.RaftIndex(entries[len(entries)-1].Index)
-	r.iterCovered(from, to, func(t *traceValue) {
-		t.logf(5, "applied entries [%d-%d]", from, to)
-		// Unregister the index here because we are "done" with this entry, and
-		// don't expect more useful events.
-		t.logf(5, "unregistered log index %d from tracing", t.traced.Index)
-		r.removeEntry(t.traced.Index)
-	})
 }
 
 // removeEntry removes the trace at the given index and decrements the
@@ -467,11 +407,17 @@ func (r *RaftTracer) traceIfCovered(m raftpb.Message) []kvserverpb.TracedEntry {
 	minEntryIndex := kvpb.RaftIndex(m.Entries[0].Index)
 	maxEntryIndex := kvpb.RaftIndex(m.Entries[len(m.Entries)-1].Index)
 	var tracedEntries []kvserverpb.TracedEntry
-	r.iterCovered(minEntryIndex, maxEntryIndex, func(t *traceValue) {
+	r.m.Range(func(index kvpb.RaftIndex, t *traceValue) bool {
+		// If the traced index is not in the range of the entries, we can skip
+		// it. We don't need to check each individual entry since they are
+		// contiguous.
+		if t.traced.Index < minEntryIndex || t.traced.Index > maxEntryIndex {
+			return true
+		}
 		tracedEntries = append(tracedEntries, t.traced)
 		// TODO(baptist): Not all the fields are relevant to log for all
 		// message types. Consider cleaning up what is logged.
-		t.logf(6, // NB: depth=6 for the caller of MaybeTrace()
+		t.logf(4,
 			"%s->%s %v Term:%d Log:%d/%d Entries:[%d-%d]",
 			peer(m.From),
 			peer(m.To),
@@ -482,19 +428,9 @@ func (r *RaftTracer) traceIfCovered(m raftpb.Message) []kvserverpb.TracedEntry {
 			minEntryIndex,
 			maxEntryIndex,
 		)
-	})
-	return tracedEntries
-}
-
-// iterCovered iterates through all traced entries overlapping with the given
-// [from, to] index interval.
-func (r *RaftTracer) iterCovered(from, to kvpb.RaftIndex, visit func(*traceValue)) {
-	r.m.Range(func(index kvpb.RaftIndex, t *traceValue) bool {
-		if index >= from && index <= to {
-			visit(t)
-		}
 		return true
 	})
+	return tracedEntries
 }
 
 // traceIfPast will log the message to all registered traceValues the message is
@@ -504,20 +440,57 @@ func (r *RaftTracer) iterCovered(from, to kvpb.RaftIndex, visit func(*traceValue
 // unable to match these events to entries exactly once, we instead check that
 // the watermark passed the entry. To protect against overly verbose logging, we
 // only allow MsgAppResp to be logged once per peer, and only one
-// MsgStorageAppendResp.
+// MsgStorageAppendResp. When we receive a MsgStorageApplyResp we will log and
+// unregister the tracing.
 func (r *RaftTracer) traceIfPast(m raftpb.Message) {
-	if m.Type != raftpb.MsgAppResp || m.Reject {
+	if m.Reject {
 		return
 	}
-	r.iterCovered(0, kvpb.RaftIndex(m.Index), func(t *traceValue) {
-		if t.seenMsgAppResp(m.From) {
-			return
+	r.m.Range(func(index kvpb.RaftIndex, t *traceValue) bool {
+		switch m.Type {
+		case raftpb.MsgAppResp:
+			if kvpb.RaftIndex(m.Index) >= index && !t.seenMsgAppResp(m.From) {
+				t.logf(4,
+					"%s->%s %v Term:%d Index:%d",
+					peer(m.From),
+					peer(m.To),
+					m.Type,
+					m.Term,
+					m.Index,
+				)
+			}
+		case raftpb.MsgStorageAppendResp:
+			if kvpb.RaftIndex(m.Index) >= index && !t.seenMsgStorageAppendResp() {
+				t.logf(4,
+					"%s->%s %v Log:%d/%d",
+					peer(m.From),
+					peer(m.To),
+					m.Type,
+					m.LogTerm,
+					m.Index,
+				)
+			}
+		case raftpb.MsgStorageApplyResp:
+			if len(m.Entries) == 0 {
+				return true
+			}
+			// Use the last entry to determine if we should log this message.
+			msgIndex := m.Entries[len(m.Entries)-1].Index
+			if kvpb.RaftIndex(msgIndex) >= index {
+				t.logf(4,
+					"%s->%s %v LastEntry:%d/%d",
+					peer(m.From),
+					peer(m.To),
+					m.Type,
+					m.Entries[len(m.Entries)-1].Term,
+					m.Entries[len(m.Entries)-1].Index,
+				)
+				// We unregister the index here because we are now "done" with
+				// this entry and don't expect more useful events.
+				t.logf(4, "unregistered log index %d from tracing", index)
+				r.removeEntry(index)
+			}
 		}
-		// TODO(pav-kv): since this is used only for MsgAppResp now, make it simple.
-		t.logf(6, // NB: depth=6 for the caller of MaybeTrace()
-			"%s->%s %v Term:%d Index:%d",
-			peer(m.From), peer(m.To), m.Type,
-			m.Term, m.Index,
-		)
+		return true
 	})
 }

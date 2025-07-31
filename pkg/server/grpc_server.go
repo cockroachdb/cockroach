@@ -7,13 +7,10 @@ package server
 
 import (
 	"context"
-	"strings"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -24,32 +21,49 @@ import (
 // and a mode of operation that can instruct the interceptor to refuse certain
 // RPCs.
 type grpcServer struct {
-	serveModeHandler
 	*grpc.Server
 	serverInterceptorsInfo rpc.ServerInterceptorInfo
+	mode                   serveMode
 }
 
-func newGRPCServer(
-	ctx context.Context, rpcCtx *rpc.Context, metricsRegistry *metric.Registry,
-) (*grpcServer, error) {
+func newGRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*grpcServer, error) {
 	s := &grpcServer{}
 	s.mode.set(modeInitializing)
-	requestMetrics := rpc.NewRequestMetrics()
-	metricsRegistry.AddMetricStruct(requestMetrics)
 	srv, interceptorInfo, err := rpc.NewServerEx(
 		ctx, rpcCtx, rpc.WithInterceptor(func(path string) error {
 			return s.intercept(path)
-		}), rpc.WithMetricsServerInterceptor(
-			rpc.NewRequestMetricsInterceptor(requestMetrics, func(method string) bool {
-				return shouldRecordRequestDuration(rpcCtx.Settings, method)
-			},
-			)))
+		}))
 	if err != nil {
 		return nil, err
 	}
 	s.Server = srv
 	s.serverInterceptorsInfo = interceptorInfo
 	return s, nil
+}
+
+type serveMode int32
+
+// A list of the server states for bootstrap process.
+const (
+	// modeInitializing is intended for server initialization process.
+	// It allows only bootstrap, heartbeat and gossip methods
+	// to prevent calls to potentially uninitialized services.
+	modeInitializing serveMode = iota
+	// modeOperational is intended for completely initialized server
+	// and thus allows all RPC methods.
+	modeOperational
+	// modeDraining is intended for an operational server in the process of
+	// shutting down. The difference is that readiness checks will fail.
+	modeDraining
+)
+
+func (s *grpcServer) setMode(mode serveMode) {
+	s.mode.set(mode)
+}
+
+func (s *grpcServer) operational() bool {
+	sMode := s.mode.get()
+	return sMode == modeOperational || sMode == modeDraining
 }
 
 func (s *grpcServer) health(ctx context.Context) error {
@@ -86,31 +100,17 @@ func (s *grpcServer) intercept(fullName string) error {
 	return nil
 }
 
+func (s *serveMode) set(mode serveMode) {
+	atomic.StoreInt32((*int32)(s), int32(mode))
+}
+
+func (s *serveMode) get() serveMode {
+	return serveMode(atomic.LoadInt32((*int32)(s)))
+}
+
 // NewWaitingForInitError creates an error indicating that the server cannot run
 // the specified method until the node has been initialized.
 func NewWaitingForInitError(methodName string) error {
 	// NB: this error string is sadly matched in grpcutil.IsWaitingForInit().
 	return grpcstatus.Errorf(codes.Unavailable, "node waiting for init; %s not available", methodName)
-}
-
-const (
-	serverPrefix = "/cockroach.server"
-	tsdbPrefix   = "/cockroach.ts"
-)
-
-// serverGRPCRequestMetricsEnabled is a cluster setting that enables the
-// collection of gRPC request duration metrics. This uses export only
-// metrics so the metrics are only exported to external sources such as
-// /_status/vars and DataDog.
-var serverGRPCRequestMetricsEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"server.grpc.request_metrics.enabled",
-	"enables the collection of grpc metrics",
-	false,
-)
-
-func shouldRecordRequestDuration(settings *cluster.Settings, method string) bool {
-	return serverGRPCRequestMetricsEnabled.Get(&settings.SV) &&
-		(strings.HasPrefix(method, serverPrefix) ||
-			strings.HasPrefix(method, tsdbPrefix))
 }

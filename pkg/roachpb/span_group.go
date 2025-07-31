@@ -64,7 +64,7 @@ func (g *SpanGroup) Contains(k Key) bool {
 	})
 }
 
-// Encloses returns whether the provided Span is fully contained within the group
+// Encloses returns whether the provided Span is fully conained within the group
 // of Spans in the SpanGroup
 func (g *SpanGroup) Encloses(spans ...Span) bool {
 	if g.rg == nil {
@@ -117,14 +117,6 @@ func (g *SpanGroup) ForEach(op func(span Span) error) error {
 	return g.rg.ForEach(func(r interval.Range) error {
 		return op(r2s(r))
 	})
-}
-
-// Clear clears all of the spans from the SpanGroup, resetting it to be used
-// again.
-func (g *SpanGroup) Clear() {
-	if g.rg != nil {
-		g.rg.Clear()
-	}
 }
 
 // s2r converts a Span to an interval.Range.  Since the Key and

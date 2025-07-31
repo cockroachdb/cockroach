@@ -52,7 +52,7 @@ type FlowCtx struct {
 	Txn *kv.Txn
 
 	// MakeLeafTxn returns a new LeafTxn, different from Txn.
-	MakeLeafTxn func(context.Context) (*kv.Txn, error)
+	MakeLeafTxn func() (*kv.Txn, error)
 
 	// Descriptors is used to look up leased table descriptors and to construct
 	// transaction bound TypeResolvers to resolve type references during flow

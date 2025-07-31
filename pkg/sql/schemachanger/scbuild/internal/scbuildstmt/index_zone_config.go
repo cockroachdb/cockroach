@@ -16,25 +16,23 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// indexZoneConfigObj is used to represent an index-specific zone configuration
+// indexZoneConfigObj is used to represent a table-specific zone configuration
 // object.
 type indexZoneConfigObj struct {
 	tableZoneConfigObj
 	indexID      catid.IndexID
 	indexSubzone *zonepb.Subzone
+	seqNum       uint32
 }
 
 var _ zoneConfigObject = &indexZoneConfigObj{}
-
-func (izo *indexZoneConfigObj) isNoOp() bool {
-	return izo.indexSubzone == nil
-}
 
 func (izo *indexZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
 	return izo.tableZoneConfigObj.zoneConfig
 }
 
-func (izo *indexZoneConfigObj) getZoneConfigElemForAdd(b BuildCtx) (scpb.Element, []scpb.Element) {
+func (izo *indexZoneConfigObj) addZoneConfigToBuildCtx(b BuildCtx) scpb.Element {
+	izo.seqNum += 1
 	subzones := []zonepb.Subzone{*izo.indexSubzone}
 
 	// Merge the new subzones with the old subzones so that we can generate
@@ -44,124 +42,21 @@ func (izo *indexZoneConfigObj) getZoneConfigElemForAdd(b BuildCtx) (scpb.Element
 		parentZoneConfig.SetSubzone(*izo.indexSubzone)
 		subzones = parentZoneConfig.Subzones
 	}
+
 	ss, err := generateSubzoneSpans(b, izo.tableID, subzones)
 	if err != nil {
 		panic(err)
 	}
 
-	// TODO(annie): This does a little more work than necessary -- we should be
-	// able to just update the affected subzone spans. This can be done by
-	// comparing the parent's subzone spans with `ss`.
-	//
-	// Update the index that is represented by izo, along with all other subzones.
-	idxToSpansMap := getSubzoneSpansWithIdx(len(subzones), ss)
-	var szCfg scpb.Element
-	var szCfgsToUpdate []scpb.Element
-	for i, sub := range subzones {
-		if spans, ok := idxToSpansMap[int32(i)]; ok {
-			if len(sub.PartitionName) > 0 {
-				szCfgsToUpdate = append(szCfgsToUpdate,
-					constructSideEffectPartitionElem(b, izo, -1, sub, spans))
-			} else {
-				if sub.IndexID == uint32(izo.indexID) {
-					szCfg = &scpb.IndexZoneConfig{
-						TableID:      izo.tableID,
-						IndexID:      catid.IndexID(sub.IndexID),
-						Subzone:      sub,
-						SubzoneSpans: spans,
-						SeqNum:       izo.seqNum + 1,
-						OldIdxRef:    -1,
-					}
-				} else {
-					szCfgsToUpdate = append(szCfgsToUpdate,
-						constructSideEffectIndexElem(b, izo, -1, spans, sub))
-				}
-			}
-		}
+	elem := &scpb.IndexZoneConfig{
+		TableID:      izo.tableID,
+		IndexID:      izo.indexID,
+		Subzone:      *izo.indexSubzone,
+		SubzoneSpans: ss,
+		SeqNum:       izo.seqNum,
 	}
-
-	return szCfg, szCfgsToUpdate
-}
-
-func (izo *indexZoneConfigObj) getZoneConfigElemForDrop(
-	b BuildCtx,
-) ([]scpb.Element, []scpb.Element) {
-	var subzonesToWrite []zonepb.Subzone
-	var err error
-
-	parentZoneConfig := izo.getTableZoneConfig()
-	if parentZoneConfig != nil {
-		// Get the list of subzones after we have dropped the target; this is so we
-		// can correctly generate the list of subzone spans to upsert.
-		modifiedZc := protoutil.Clone(parentZoneConfig).(*zonepb.ZoneConfig)
-		modifiedZc.DeleteSubzone(uint32(izo.indexID), "")
-		subzonesToWrite = modifiedZc.Subzones
-	} else {
-		// Likely in an explicit txn that has not created an overarching
-		// TableZoneConfig yet.
-		var toDropElems []scpb.Element
-		// Ensure that we drop all elements associated with this index. This
-		// becomes more relevant in explicit txns -- where there could be multiple
-		// zone config elements associated with this index with increasing seqNums.
-		b.QueryByID(izo.getTargetID()).FilterIndexZoneConfig().
-			ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexZoneConfig) {
-				if e.IndexID == izo.indexID {
-					toDropElems = append(toDropElems, e)
-				}
-			})
-
-		if len(toDropElems) == 0 {
-			panic(errors.AssertionFailedf(
-				"attempted to drop subzone config for table [%d], index %d that does not exist",
-				izo.tableID, izo.indexID))
-		}
-		return toDropElems, nil
-	}
-	ss, err := generateSubzoneSpans(b, izo.tableID, subzonesToWrite)
-	if err != nil {
-		panic(err)
-	}
-
-	// TODO(annie): This does a little more work than necessary -- we should be
-	// able to just update the affected subzone spans. This can be done by
-	// comparing the parent's subzone spans with `ss`.
-	//
-	// Update the index that is represented by izo, along with all other subzones.
-	// These other subzones are "side effects" that will need their subzoneSpans
-	// updated in some way.
-	idxToSpansMap := getSubzoneSpansWithIdx(len(subzonesToWrite), ss)
-	var szCfgsToUpdate []scpb.Element
-	for i, sub := range subzonesToWrite {
-		if spans, ok := idxToSpansMap[int32(i)]; ok {
-			oldIdxRefToDelete := parentZoneConfig.GetSubzoneIndex(sub.IndexID, sub.PartitionName)
-			if len(sub.PartitionName) > 0 {
-				szCfgsToUpdate = append(szCfgsToUpdate,
-					constructSideEffectPartitionElem(b, izo, oldIdxRefToDelete, sub, spans))
-			} else {
-				szCfgsToUpdate = append(szCfgsToUpdate,
-					constructSideEffectIndexElem(b, izo, oldIdxRefToDelete, spans, sub))
-			}
-		}
-	}
-
-	var toDropElems []scpb.Element
-	if izo.seqNum > 0 {
-		for i := range izo.seqNum {
-			toDropElems = append(toDropElems, &scpb.IndexZoneConfig{
-				TableID: izo.tableID,
-				IndexID: izo.indexID,
-				SeqNum:  i + 1,
-			})
-		}
-	} else {
-		toDropElems = append(toDropElems, &scpb.IndexZoneConfig{
-			TableID: izo.tableID,
-			IndexID: izo.indexID,
-			SeqNum:  0,
-		})
-	}
-
-	return toDropElems, szCfgsToUpdate
+	b.Add(elem)
+	return elem
 }
 
 func (izo *indexZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {
@@ -284,6 +179,10 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	copyFromParentList []tree.Name,
 	setters []func(c *zonepb.ZoneConfig),
 ) (*zonepb.ZoneConfig, error) {
+	// TODO(annie): once we allow configuring zones for named zones/system ranges,
+	// we will need to guard against secondary tenants from configuring such
+	// ranges.
+
 	// We are configuring an index. Determine the index ID and fill this
 	// information out in our zoneConfigObject.
 	izo.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)
@@ -296,11 +195,6 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	subzonePlaceholder := false
 	// No zone was found. Possibly a SubzonePlaceholder depending on the index.
 	if partialZone == nil {
-		// If we are trying to discard a zone config that doesn't exist in
-		// system.zones, make this a no-op.
-		if n.Discard {
-			return nil, nil
-		}
 		partialZone = zonepb.NewZoneConfig()
 		subzonePlaceholder = true
 	}
@@ -410,7 +304,7 @@ func (izo *indexZoneConfigObj) fillIndexFromZoneSpecifier(b BuildCtx, zs tree.Zo
 		indexID = primaryIndexElem.IndexID
 	} else {
 		indexElems := b.ResolveIndex(tableID, tree.Name(indexName), ResolveParams{})
-		indexID = indexElems.Filter(publicStatusFilter).FilterIndexName().MustGetOneElement().IndexID
+		indexID = indexElems.FilterIndexName().MustGetOneElement().IndexID
 	}
 	izo.indexID = indexID
 }

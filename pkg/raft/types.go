@@ -63,15 +63,27 @@ func (l LogMark) After(other LogMark) bool {
 
 // LogSlice describes a correct slice of a raft log.
 //
+// Every log slice is considered in a context of a specific leader term. This
+// term does not necessarily match entryID.term of the entries, since a leader
+// log contains both entries from its own term, and some earlier terms.
+//
+// Two slices with a matching LogSlice.term are guaranteed to be consistent,
+// i.e. they never contain two different entries at the same index. The reverse
+// is not true: two slices with different LogSlice.term may contain both
+// matching and mismatching entries. Specifically, logs at two different leader
+// terms share a common prefix, after which they *permanently* diverge.
+//
 // A well-formed LogSlice conforms to raft safety properties. It provides the
 // following guarantees:
 //
 //  1. entries[i].Index == prev.index + 1 + i,
 //  2. prev.term <= entries[0].Term,
-//  3. entries[i-1].Term <= entries[i].Term
+//  3. entries[i-1].Term <= entries[i].Term,
+//  4. entries[len-1].Term <= term.
 //
 // Property (1) means the slice is contiguous. Properties (2) and (3) mean that
-// the terms of the entries in a log never regress.
+// the terms of the entries in a log never regress. Property (4) means that a
+// leader log at a specific term never has entries from higher terms.
 //
 // Users of this struct can assume the invariants hold true. Exception is the
 // "gateway" code that initially constructs LogSlice, such as when its content
@@ -83,6 +95,8 @@ func (l LogMark) After(other LogMark) bool {
 // be appended to in some cases, when the callee protects its underlying slice
 // by capping the returned entries slice with a full slice expression.
 type LogSlice struct {
+	// term is the leader term containing the given entries in its log.
+	term uint64
 	// prev is the ID of the entry immediately preceding the entries.
 	prev entryID
 	// entries contains the consecutive entries representing this slice.
@@ -110,6 +124,11 @@ func (s LogSlice) lastEntryID() entryID {
 	return s.prev
 }
 
+// mark returns the LogMark identifying the end of this LogSlice.
+func (s LogSlice) mark() LogMark {
+	return LogMark{Term: s.term, Index: s.lastIndex()}
+}
+
 // termAt returns the term of the entry at the given index.
 // Requires: prev.index <= index <= lastIndex().
 func (s LogSlice) termAt(index uint64) uint64 {
@@ -123,13 +142,13 @@ func (s LogSlice) termAt(index uint64) uint64 {
 // Requires: prev.index <= index <= lastIndex().
 func (s LogSlice) forward(index uint64) LogSlice {
 	return LogSlice{
+		term:    s.term,
 		prev:    entryID{term: s.termAt(index), index: index},
 		entries: s.entries[index-s.prev.index:],
 	}
 }
 
-// sub returns the entries of this slice at indices in (after, to].
-// Requires: prev.index <= after <= to <= lastIndex().
+// sub returns the entries of this LogSlice with indices in (after, to].
 func (s LogSlice) sub(after, to uint64) []pb.Entry {
 	return s.entries[after-s.prev.index : to-s.prev.index]
 }
@@ -141,56 +160,11 @@ func (s LogSlice) valid() error {
 	for i := range s.entries {
 		id := pbEntryID(&s.entries[i])
 		if id.term < prev.term || id.index != prev.index+1 {
-			return fmt.Errorf("entries %+v and %+v not consistent", prev, id)
+			return fmt.Errorf("leader term %d: entries %+v and %+v not consistent", s.term, prev, id)
 		}
 		prev = id
 	}
-	return nil
-}
-
-// LeadSlice describes a correct slice of a raft log, tied to a leader term.
-//
-// The leader term does not necessarily match entryID.term of the entries, since
-// a leader log contains both entries from its own term, and some earlier terms.
-//
-// Two slices with a matching LeadSlice.term are guaranteed to be consistent,
-// i.e. they never contain two different entries at the same index. The reverse
-// is not true: two slices with different LeadSlice.term may contain both
-// matching and mismatching entries. Specifically, logs at two different leader
-// terms share a common prefix, after which they *permanently* diverge.
-//
-// A well-formed LeadSlice conforms to LogSlice invariants (1)-(3), and gives an
-// additional guarantee that the leader log never has entries from higher terms:
-//
-//  4. lastEntryID().Term <= term.
-//
-// Users of this struct can assume the invariants hold true. Exception is the
-// "gateway" code that initially constructs LeadSlice, such as when its content
-// is sourced from a message that was received via transport, or from Storage,
-// or in a test code that manually hard-codes this struct. In these cases, the
-// invariants should be validated using the valid() method.
-//
-// The LeadSlice is immutable. The entries slice must not be mutated, but it can
-// be appended to in some cases, when the callee protects its underlying slice
-// by capping the returned entries slice with a full slice expression.
-type LeadSlice struct {
-	// term is the leader term containing the given slice in its log.
-	term uint64
-	// LogSlice is the slice of the log.
-	LogSlice
-}
-
-// mark returns the LogMark identifying the end of this LeadSlice.
-func (s LeadSlice) mark() LogMark {
-	return LogMark{Term: s.term, Index: s.lastIndex()}
-}
-
-// valid returns nil iff the LeadSlice is a well-formed leader log slice. See
-// LeadSlice comment for details on what constitutes a valid slice.
-func (s LeadSlice) valid() error {
-	if err := s.LogSlice.valid(); err != nil {
-		return err
-	} else if prev := s.lastEntryID(); s.term < prev.term {
+	if s.term < prev.term {
 		return fmt.Errorf("leader term %d: entry %+v has a newer term", s.term, prev)
 	}
 	return nil
@@ -199,7 +173,7 @@ func (s LeadSlice) valid() error {
 // snapshot is a state machine snapshot tied to the term of the leader who
 // observed this committed state.
 //
-// Semantically, from the log perspective, this type is equivalent to a LeadSlice
+// Semantically, from the log perspective, this type is equivalent to a LogSlice
 // from 0 to lastEntryID(), plus a commit LogMark. All leader logs at terms >=
 // snapshot.term contain all entries up to the lastEntryID(). At earlier terms,
 // logs may or may not be consistent with this snapshot, depending on whether

@@ -107,7 +107,7 @@ func (t Transitions) apply(a Args) (State, error) {
 
 // Machine encapsulates a State with a set of State transitions. It reacts to
 // Events, adjusting its internal State according to its Transition graph and
-// performing actions on its ExtendedState accordingly.
+// perforing actions on its ExtendedState accordingly.
 type Machine struct {
 	t   Transitions
 	cur State

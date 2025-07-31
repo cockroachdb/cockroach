@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/google/go-github/github"
 	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/pkg/browser"
 )

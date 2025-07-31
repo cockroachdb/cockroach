@@ -52,17 +52,6 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.SecondaryIndex) *scop.AddTableIndexBackReferencesInFunctions {
-					if this.EmbeddedExpr == nil ||
-						len(this.EmbeddedExpr.UsesFunctionIDs) == 0 {
-						return nil
-					}
-					return &scop.AddTableIndexBackReferencesInFunctions{
-						FunctionIDs:           this.EmbeddedExpr.UsesFunctionIDs,
-						BackReferencedTableID: this.TableID,
-						BackReferencedIndexID: this.IndexID,
-					}
-				}),
 			),
 			to(scpb.Status_BACKFILLED,
 				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.BackfillIndex {
@@ -136,19 +125,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.SecondaryIndex) *scop.MarkRecreatedIndexAsInvisible {
-					// Recreated indexes are not visible until their final primary index
-					// is usable. While they maybe made public we need to make sure they
-					// are not accidentally used.
-					if this.RecreateTargetIndexID == 0 {
-						return nil
-					}
-					return &scop.MarkRecreatedIndexAsInvisible{
-						TableID:              this.TableID,
-						IndexID:              this.IndexID,
-						TargetPrimaryIndexID: this.RecreateTargetIndexID,
-					}
-				}),
 				emit(func(this *scpb.SecondaryIndex) *scop.MakeValidatedSecondaryIndexPublic {
 					return &scop.MakeValidatedSecondaryIndexPublic{
 						TableID: this.TableID,
@@ -185,10 +161,6 @@ func init() {
 						IndexID: this.IndexID,
 					}
 				}),
-			),
-			equiv(scpb.Status_BACKFILLED),
-			equiv(scpb.Status_BACKFILL_ONLY),
-			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.SecondaryIndex) *scop.RemoveDroppedIndexPartialPredicate {
 					if this.EmbeddedExpr == nil {
 						return nil
@@ -207,17 +179,10 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.SecondaryIndex) *scop.RemoveTableIndexBackReferencesInFunctions {
-					if this.EmbeddedExpr == nil ||
-						len(this.EmbeddedExpr.UsesFunctionIDs) == 0 {
-						return nil
-					}
-					return &scop.RemoveTableIndexBackReferencesInFunctions{
-						FunctionIDs:           this.EmbeddedExpr.UsesFunctionIDs,
-						BackReferencedTableID: this.TableID,
-						BackReferencedIndexID: this.IndexID,
-					}
-				}),
+			),
+			equiv(scpb.Status_BACKFILLED),
+			equiv(scpb.Status_BACKFILL_ONLY),
+			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.CreateGCJobForIndex {
 					return nil
 				}),

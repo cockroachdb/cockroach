@@ -31,8 +31,9 @@ import (
 // The Progress is only populated on the leader.
 type Status struct {
 	BasicStatus
-	Config   quorum.Config
-	Progress map[pb.PeerID]tracker.Progress
+	Config           quorum.Config
+	Progress         map[pb.PeerID]tracker.Progress
+	LeadSupportUntil hlc.Timestamp
 }
 
 // SparseStatus is a variant of Status without Config or Progress.Inflights,
@@ -40,6 +41,13 @@ type Status struct {
 type SparseStatus struct {
 	BasicStatus
 	Progress map[pb.PeerID]tracker.Progress
+}
+
+// LeadSupportStatus is a variant of Status without Config or Progress, which
+// are expensive to copy.
+type LeadSupportStatus struct {
+	BasicStatus
+	LeadSupportUntil hlc.Timestamp
 }
 
 // BasicStatus contains basic information about the Raft peer. It does not allocate.
@@ -51,8 +59,7 @@ type BasicStatus struct {
 
 	Applied uint64
 
-	LeadTransferee   pb.PeerID
-	LeadSupportUntil hlc.Timestamp
+	LeadTransferee pb.PeerID
 }
 
 // Empty returns true if the receiver is empty.
@@ -62,18 +69,16 @@ func (b BasicStatus) Empty() bool {
 
 // withProgress calls the supplied visitor to introspect the progress for the
 // supplied raft group. Cannot be used to introspect p.Inflights.
-func withProgress(r *raft, visitor func(id pb.PeerID, pr tracker.Progress)) {
+func withProgress(r *raft, visitor func(id pb.PeerID, typ ProgressType, pr tracker.Progress)) {
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+		typ := ProgressTypePeer
+		if pr.IsLearner {
+			typ = ProgressTypeLearner
+		}
 		p := *pr
 		p.Inflights = nil
-		visitor(id, p)
+		visitor(id, typ, p)
 	})
-}
-
-// getReplicaProgress returns the progress for the replica with the given ID.
-// It returns nil if the replica is not being tracked.
-func getReplicaProgress(r *raft, id pb.PeerID) *tracker.Progress {
-	return r.trk.Progress(id)
 }
 
 func getProgressCopy(r *raft) map[pb.PeerID]tracker.Progress {
@@ -96,13 +101,23 @@ func getBasicStatus(r *raft) BasicStatus {
 	s.HardState = r.hardState()
 	s.SoftState = r.softState()
 	s.Applied = r.raftLog.applied
-
-	// NOTE: we assign to LeadSupportUntil even if RaftState is not currently
-	// StateLeader. The replica may have been the leader and stepped down to a
-	// follower before its lead support ran out.
-	s.LeadSupportUntil = r.fortificationTracker.LeadSupportUntil()
-
-	assertTrue((s.RaftState == pb.StateLeader) == (s.Lead == r.id), "inconsistent lead / raft state")
+	if s.RaftState == pb.StateFollower && s.Lead == r.id {
+		// A raft leader's term ends when it is shut down. It'll rejoin its peers as
+		// a follower when it comes back up, but its Lead and Term field may still
+		// correspond to its pre-restart leadership term. We expect this to quickly
+		// be updated when it hears from the new leader, if one was elected in its
+		// absence, or when it campaigns.
+		//
+		// The layers above raft (in particular kvserver) do not handle the case
+		// where a raft node's state is StateFollower but its lead field points to
+		// itself. They expect the Lead field to correspond to the current leader,
+		// which we know we are not. For their benefit, we overwrite the Lead field
+		// to None.
+		//
+		// TODO(arul): the layers above should not conflate Lead with current
+		// leader. Fix that and get rid of this overwrite.
+		s.HardState.Lead = None
+	}
 	return s
 }
 
@@ -114,6 +129,10 @@ func getStatus(r *raft) Status {
 		s.Progress = getProgressCopy(r)
 	}
 	s.Config = r.config.Clone()
+	// NOTE: we assign to LeadSupportUntil even if RaftState is not currently
+	// StateLeader. The replica may have been the leader and stepped down to a
+	// follower before its lead support ran out.
+	s.LeadSupportUntil = r.fortificationTracker.LeadSupportUntil(r.state)
 	return s
 }
 
@@ -125,10 +144,19 @@ func getSparseStatus(r *raft) SparseStatus {
 	s.BasicStatus = getBasicStatus(r)
 	if s.RaftState == pb.StateLeader {
 		s.Progress = make(map[pb.PeerID]tracker.Progress, r.trk.Len())
-		withProgress(r, func(id pb.PeerID, pr tracker.Progress) {
+		withProgress(r, func(id pb.PeerID, _ ProgressType, pr tracker.Progress) {
 			s.Progress[id] = pr
 		})
 	}
+	return s
+}
+
+// getLeadSupportStatus gets a copy of the current raft status with only the
+// leader support information included.
+func getLeadSupportStatus(r *raft) LeadSupportStatus {
+	var s LeadSupportStatus
+	s.BasicStatus = getBasicStatus(r)
+	s.LeadSupportUntil = r.fortificationTracker.LeadSupportUntil(r.state)
 	return s
 }
 

@@ -30,9 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -42,8 +42,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/stdstrings"
 	"github.com/cockroachdb/redact"
-	pgx "github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgconn"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -507,7 +507,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 
 					// We want the certs to be present in the filesystem for this test.
 					// However, certs are only generated for users "root" and "testuser" specifically.
-					sqlURL, cleanupFn := pgurlutils.PGUrlWithOptionalClientCerts(
+					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
 						t, s.AdvSQLAddr(), t.Name(), url.User(systemIdentity),
 						forceCerts || systemIdentity == username.RootUser ||
 							systemIdentity == username.TestUser, certName)
@@ -586,14 +586,6 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						defer func() { _ = dbSQL.Close(ctx) }()
 					}
 					if err != nil {
-						// If the error is a PgError, return that directly instead of the
-						// wrapped error. The wrapped error includes additional contextual
-						// information that complicates checking for the expected error
-						// string in tests.
-						pgErr := new(pgconn.PgError)
-						if errors.As(err, &pgErr) {
-							return "", pgErr
-						}
 						return "", err
 					}
 					row := dbSQL.QueryRow(ctx, "SELECT current_catalog")
@@ -672,7 +664,7 @@ func fmtErr(err error) string {
 			// pgx uses an internal type (pgconn.connectError) for "TLS not enabled"
 			// errors here. We need to munge the error here to avoid including
 			// non-stable information like IP addresses in the output.
-			const tlsErr = "tls error: server refused TLS connection"
+			const tlsErr = "tls error (server refused TLS connection)"
 			if strings.HasSuffix(errStr, tlsErr) {
 				errStr = tlsErr
 			}

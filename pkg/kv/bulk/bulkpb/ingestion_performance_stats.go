@@ -14,17 +14,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/redact"
 	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
 	"go.opentelemetry.io/otel/attribute"
 )
 
-var _ tracing.AggregatorEvent = (*IngestionPerformanceStats)(nil)
+var _ bulk.TracingAggregatorEvent = (*IngestionPerformanceStats)(nil)
 
 const (
 	sigFigs    = 1
@@ -35,8 +35,8 @@ const (
 	maxBytes = 256 * 1024 * 1024 // 256 MB
 )
 
-// Identity implements the AggregatorEvent interface.
-func (s *IngestionPerformanceStats) Identity() tracing.AggregatorEvent {
+// Identity implements the TracingAggregatorEvent interface.
+func (s *IngestionPerformanceStats) Identity() bulk.TracingAggregatorEvent {
 	stats := IngestionPerformanceStats{
 		LastFlushTime:    hlc.Timestamp{WallTime: math.MaxInt64},
 		CurrentFlushTime: hlc.Timestamp{WallTime: math.MinInt64},
@@ -77,8 +77,8 @@ func getCombinedHist(
 	}
 }
 
-// Combine implements the AggregatorEvent interface.
-func (s *IngestionPerformanceStats) Combine(other tracing.AggregatorEvent) {
+// Combine implements the TracingAggregatorEvent interface.
+func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 	otherStats, ok := other.(*IngestionPerformanceStats)
 	if !ok {
 		panic(fmt.Sprintf("`other` is not of type IngestionPerformanceStats: %T", other))
@@ -130,7 +130,7 @@ func (s *IngestionPerformanceStats) Combine(other tracing.AggregatorEvent) {
 	}
 }
 
-// ProtoName implements the AggregatorEvent interface.
+// ProtoName implements the TracingAggregatorEvent interface.
 func (s *IngestionPerformanceStats) ProtoName() string {
 	return proto.MessageName(s)
 }
@@ -206,7 +206,7 @@ func (s *IngestionPerformanceStats) String() string {
 	return b.String()
 }
 
-// Render implements the AggregatorEvent interface.
+// Render implements the TracingAggregatorEvent interface.
 func (s *IngestionPerformanceStats) Render() []attribute.KeyValue {
 	const mb = 1 << 20
 	tags := make([]attribute.KeyValue, 0)

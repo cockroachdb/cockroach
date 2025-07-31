@@ -7,729 +7,402 @@ package tests
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"net/url"
-	"os"
-	"path"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/blobfixture"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
 
-// At the moment, Azure VMs do not have managed identities set up yet.
-// Therefore, in order to use implicit authentication, we need to put a
-// credentials file on each VM and point the
-// `COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE` environment variable at the
-// file.
-// Currently, the only set of credentials that have write access to the storage
-// buckets are the Teamcity credentials, so the Azure fixture roachtests cannot
-// be run locally until those managed identities are set up.
-// TODO (kev-cao): Once managed identities are set up, we can remove this file
-// and rely on the managed identity to authenticate with Azure Blob Storage.
-const azureCredentialsFilePath = "/home/ubuntu/azure-credentials.yaml"
-
-// Maps a fixture database name to the expected number of tables in the
-// database, useful for verifying that the fingerprint of the fixture is as
-// expected.
-var expectedNumTables = map[string]int{
-	"tpcc": 9,
+func makeBackupFixtureSpecs(override scheduledBackupSpecs) scheduledBackupSpecs {
+	backupSpecs := makeBackupSpecs(override.backupSpecs, defaultBackupFixtureSpecs.backupSpecs)
+	specs := scheduledBackupSpecs{
+		backupSpecs:              backupSpecs,
+		incrementalBackupCrontab: defaultBackupFixtureSpecs.incrementalBackupCrontab,
+	}
+	if override.incrementalBackupCrontab != "" {
+		specs.incrementalBackupCrontab = override.incrementalBackupCrontab
+	}
+	specs.ignoreExistingBackups = override.ignoreExistingBackups
+	return specs
 }
 
-type BackupFixture interface {
-	Kind() string
-	// The database that is backed up.
-	DatabaseName() string
+// defaultBackupFixtureSpecs defines the default scheduled backup used to create a fixture.
+var defaultBackupFixtureSpecs = scheduledBackupSpecs{
+	// Runs an incremental backup every 5 minutes.
+	incrementalBackupCrontab: "*/5 * * * *",
+
+	// The default option of false prevents roachtest users from overriding the
+	// latest backup in a collection, which may be used in restore roachtests.
+	ignoreExistingBackups: false,
+
+	backupSpecs: backupSpecs{
+		version:           "v23.1.11",
+		cloud:             spec.AWS,
+		fullBackupDir:     "LATEST",
+		numBackupsInChain: 48,
+		workload: tpceRestore{
+			customers: 25000,
+		},
+	},
 }
 
-type TpccFixture struct {
-	Name                   string
-	ImportWarehouses       int
-	WorkloadWarehouses     int
-	IncrementalChainLength int
-	CompactionThreshold    int
-	CompactionWindow       int
-	RestoredSizeEstimate   string
+const scheduleLabel = "schedule_cluster"
+
+// fixtureFromMasterVersion should be used in the backupSpecs version field to
+// create a fixture using the bleeding edge of master. In the backup fixture
+// path on external storage, the {version} subdirectory will be equal to this
+// value.
+const fixtureFromMasterVersion = "latest"
+
+type scheduledBackupSpecs struct {
+	backupSpecs
+	// ignoreExistingBackups if set to true, will allow a new backup chain
+	// to get written to an already existing backup collection.
+	ignoreExistingBackups    bool
+	incrementalBackupCrontab string
 }
 
-var _ BackupFixture = TpccFixture{}
-
-func (f TpccFixture) Kind() string {
-	return f.Name
-}
-
-func (f TpccFixture) DatabaseName() string {
-	return "tpcc"
-}
-
-// TinyFixture is a TPCC fixture that is intended for smoke tests, local
-// testing, and continous testing of the fixture generation logic.
-var TinyFixture = TpccFixture{
-	Name:                   "tpcc-10",
-	ImportWarehouses:       10,
-	WorkloadWarehouses:     10,
-	IncrementalChainLength: 4,
-	CompactionThreshold:    4,
-	CompactionWindow:       3,
-	RestoredSizeEstimate:   "700MiB",
-}
-
-// SmallFixture is a TPCC fixture that is intended to be quick to restore and
-// cheap to generate for continous testing of the fixture generation logic.
-var SmallFixture = TpccFixture{
-	Name:                   "tpcc-5k",
-	ImportWarehouses:       5000,
-	WorkloadWarehouses:     1000,
-	IncrementalChainLength: 48,
-	CompactionThreshold:    4,
-	CompactionWindow:       3,
-	RestoredSizeEstimate:   "350GiB",
-}
-
-// MediumFixture is a TPCC fixture sized so that it is a tight fit in 3 nodes
-// with the smallest supported node size of 4 VCPU per node.
-var MediumFixture = TpccFixture{
-	Name:                   "tpcc-30k",
-	ImportWarehouses:       30000,
-	WorkloadWarehouses:     5000,
-	IncrementalChainLength: 400,
-	CompactionThreshold:    4,
-	CompactionWindow:       3,
-	RestoredSizeEstimate:   "2TiB",
-}
-
-// LargeFixture is a TPCC fixture sized so that it is a tight fit in 3 nodes
-// with the maximum supported node density of 8 TiB storage per node. If the
-// node storage density increases, then the size of this fixture should be
-// increased.
-var LargeFixture = TpccFixture{
-	Name:                   "tpcc-300k",
-	ImportWarehouses:       300000,
-	WorkloadWarehouses:     7500,
-	IncrementalChainLength: 400,
-	CompactionThreshold:    4,
-	CompactionWindow:       3,
-	RestoredSizeEstimate:   "20TiB",
+func (sbs scheduledBackupSpecs) scheduledBackupCmd() string {
+	// This backup schedule will first run a full backup immediately and then the
+	// incremental backups at the given incrementalBackupCrontab cadence until the user cancels the
+	// backup schedules. To ensure that only one full backup chain gets created,
+	// begin the backup schedule at the beginning of the week, as a new full
+	// backup will get created on Sunday at Midnight ;)
+	options := ""
+	if !sbs.nonRevisionHistory {
+		options = "WITH revision_history"
+	}
+	backupCmd := fmt.Sprintf(`BACKUP INTO %s %s`, sbs.backupCollection(), options)
+	cmd := fmt.Sprintf(`CREATE SCHEDULE %s FOR %s RECURRING '%s' FULL BACKUP '@weekly' WITH SCHEDULE OPTIONS first_run = 'now'`,
+		scheduleLabel, backupCmd, sbs.incrementalBackupCrontab)
+	if sbs.ignoreExistingBackups {
+		cmd = cmd + ",ignore_existing_backups"
+	}
+	return cmd
 }
 
 type backupFixtureSpecs struct {
-	// hardware specifies the roachprod specs to create the fixture on.
+	// hardware specifies the roachprod specs to create the scheduledBackupSpecs fixture on.
 	hardware hardwareSpecs
 
-	fixture TpccFixture
+	// scheduledBackupSpecs specifies the scheduled scheduledBackupSpecs fixture which will be created.
+	scheduledBackupSpecs scheduledBackupSpecs
+
+	// initWorkloadViaRestore, if specified, initializes the cluster via restore
+	// of an older fixture. The fields specified here will override any fields
+	// specified in the scheduledBackupSpecs field above.
+	initWorkloadViaRestore *restoreSpecs
 
 	timeout time.Duration
-
+	// A no-op, used only to set larger timeouts due roachtests limiting timeouts based on the suite
 	suites registry.SuiteSet
 
-	clouds []spec.Cloud
+	testName string
 
 	// If non-empty, the test will be skipped with the supplied reason.
 	skip string
-
-	// If set, the fixture will not be fingerprinted after the backup. Used for
-	// larger fixtures where fingerprinting is too expensive.
-	skipFingerprint bool
 }
 
-const scheduleLabel = "tpcc_backup"
+func (bf *backupFixtureSpecs) initTestName() {
+	bf.testName = fmt.Sprintf("backupFixture/%s/revision-history=%t/%s", bf.scheduledBackupSpecs.workload.String(), !bf.scheduledBackupSpecs.nonRevisionHistory, bf.scheduledBackupSpecs.cloud)
+}
 
-func CreateScheduleStatement(fixture BackupFixture, uri url.URL) string {
-	// This backup schedule will first run a full backup immediately and then the
-	// incremental backups every minute until the user cancels the backup
-	// schedules. To ensure that only one full backup chain gets created,
-	// schedule the full back up on backup will get created on Sunday at Midnight
-	// ;)
-	statement := fmt.Sprintf(
-		`CREATE SCHEDULE IF NOT EXISTS "%s"
-FOR BACKUP DATABASE %s
-INTO '%s'
-RECURRING '* * * * *'
-FULL BACKUP '@weekly'
-WITH SCHEDULE OPTIONS first_run = 'now';
-`, scheduleLabel, fixture.DatabaseName(), uri.String())
-	return statement
+func makeBackupDriver(t test.Test, c cluster.Cluster, sp backupFixtureSpecs) backupDriver {
+	return backupDriver{
+		t:  t,
+		c:  c,
+		sp: sp,
+	}
 }
 
 type backupDriver struct {
-	sp       backupFixtureSpecs
-	t        test.Test
-	c        cluster.Cluster
-	fixture  blobfixture.FixtureMetadata
-	registry *blobfixture.Registry
+	sp backupFixtureSpecs
+
+	t test.Test
+	c cluster.Cluster
 }
 
 func (bd *backupDriver) prepareCluster(ctx context.Context) {
-	bd.c.Start(
-		ctx, bd.t.L(), option.NewStartOpts(option.NoBackupSchedule),
-		install.MakeClusterSettings(
-			install.ClusterSettingsOption{
-				// Large imports can run into a death spiral where splits fail because
-				// there is a snapshot backlog, which makes the snapshot backlog worse
-				// because add sst causes ranges to fall behind and need recovery snapshots
-				// to catch up.
-				"kv.snapshot_rebalance.max_rate": "256 MiB",
-			},
-			install.EnvOption{
-				fmt.Sprintf("COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE=%s", azureCredentialsFilePath),
-			},
-		))
+	if err := bd.sp.scheduledBackupSpecs.CloudIsCompatible(bd.c.Cloud()); err != nil {
+		bd.t.Skip(err.Error())
+	}
+	version := clusterupgrade.CurrentVersion()
+	if bd.sp.scheduledBackupSpecs.version != fixtureFromMasterVersion {
+		version = clusterupgrade.MustParseVersion(bd.sp.scheduledBackupSpecs.version)
+	}
+	bd.t.L().Printf("Creating cluster with version %s", version)
+
+	binaryPath, err := clusterupgrade.UploadCockroach(ctx, bd.t, bd.t.L(), bd.c,
+		bd.sp.hardware.getCRDBNodes(), version)
+	require.NoError(bd.t, err)
+
+	require.NoError(bd.t, clusterupgrade.StartWithSettings(ctx, bd.t.L(), bd.c,
+		bd.sp.hardware.getCRDBNodes(),
+		option.NewStartOpts(option.NoBackupSchedule),
+		install.BinaryOption(binaryPath)))
+
+	bd.assertCorrectCockroachBinary(ctx)
+	if !bd.sp.scheduledBackupSpecs.ignoreExistingBackups {
+		// This check allows the roachtest to fail fast, instead of when the
+		// scheduled backup cmd is issued.
+		require.False(bd.t, bd.checkForExistingBackupCollection(ctx), fmt.Sprintf("existing backup in collection %s", bd.sp.scheduledBackupSpecs.backupCollection()))
+	}
+}
+
+// checkForExistingBackupCollection returns true if there exists a backup in the collection path.
+func (bd *backupDriver) checkForExistingBackupCollection(ctx context.Context) bool {
+	collectionQuery := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUPS IN %s]`,
+		bd.sp.scheduledBackupSpecs.backupCollection())
+	conn := bd.c.Conn(ctx, bd.t.L(), 1)
+	sql := sqlutils.MakeSQLRunner(conn)
+	var collectionCount int
+	sql.QueryRow(bd.t, collectionQuery).Scan(&collectionCount)
+	return collectionCount > 0
+}
+
+func (bd *backupDriver) assertCorrectCockroachBinary(ctx context.Context) {
+	binaryQuery := "SELECT value FROM crdb_internal.node_build_info WHERE field = 'Version'"
+	conn := bd.c.Conn(ctx, bd.t.L(), 1)
+	sql := sqlutils.MakeSQLRunner(conn)
+	var binaryVersion string
+	sql.QueryRow(bd.t, binaryQuery).Scan(&binaryVersion)
+	if bd.sp.scheduledBackupSpecs.version != fixtureFromMasterVersion {
+		require.Equal(bd.t, bd.sp.scheduledBackupSpecs.version, binaryVersion, "cluster not running on expected binary")
+	} else {
+		require.Contains(bd.t, binaryVersion, "dev")
+	}
 }
 
 func (bd *backupDriver) initWorkload(ctx context.Context) {
-	bd.t.L().Printf("importing tpcc with %d warehouses", bd.sp.fixture.ImportWarehouses)
-
-	urls, err := bd.c.InternalPGUrl(ctx, bd.t.L(), bd.c.Node(1), roachprod.PGURLOptions{})
-	require.NoError(bd.t, err)
-
-	cmd := roachtestutil.NewCommand("./cockroach workload fixtures import tpcc").
-		Arg("%q", urls[0]).
-		Option("checks=false").
-		Flag("warehouses", bd.sp.fixture.ImportWarehouses).
-		String()
-
-	bd.c.Run(ctx, option.WithNodes(bd.c.WorkloadNode()), cmd)
+	if bd.sp.initWorkloadViaRestore == nil {
+		bd.t.L().Printf(`Initializing workload`)
+		bd.sp.scheduledBackupSpecs.workload.init(ctx, bd.t, bd.c, bd.sp.hardware)
+		return
+	}
+	computedRestoreSpecs := restoreSpecs{
+		hardware:               bd.sp.hardware,
+		backup:                 makeBackupSpecs(bd.sp.initWorkloadViaRestore.backup, bd.sp.scheduledBackupSpecs.backupSpecs),
+		restoreUptoIncremental: bd.sp.initWorkloadViaRestore.restoreUptoIncremental,
+	}
+	restoreDriver := makeRestoreDriver(bd.t, bd.c, computedRestoreSpecs)
+	bd.t.L().Printf(`Initializing workload via restore`)
+	restoreDriver.getAOST(ctx)
+	// Only restore the database because a cluster restore will also restore the
+	// scheduled_jobs system table, which will automatically begin any backed up
+	// backup schedules, which complicates fixture generation.
+	target := fmt.Sprintf("DATABASE %s", restoreDriver.sp.backup.workload.DatabaseName())
+	require.NoError(bd.t, restoreDriver.run(ctx, target))
 }
 
-func (bd *backupDriver) runWorkload(ctx context.Context) (func(), error) {
-	bd.t.L().Printf("starting tpcc workload against %d", bd.sp.fixture.WorkloadWarehouses)
-
-	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	m := bd.c.NewDeprecatedMonitor(workloadCtx)
-	m.Go(func(ctx context.Context) error {
-		cmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
-			Arg("{pgurl%s}", bd.c.CRDBNodes()).
-			Option("tolerate-errors=true").
-			// Increase the ramp time to prevent the initial connection spike from
-			// the workload starting from overloading the cluster. Connection set up
-			// is not yet integreated with admission control. Starting the full
-			// backup and workload at the same time caused the cluster to hiccup and
-			// a few nodes shed leaseholders
-			Flag("ramp", "10m").
-			// Limit the number of connections to limit total concurrency. 2
-			// connections per warehouse was fine in the steady state, but lead to
-			// periodic spikes in the number of connections.
-			Flag("conns", int(float64(bd.sp.fixture.WorkloadWarehouses)*0.5)).
-			// Increase the lifetime of connections to prevent connection churn from
-			// causing unecessary load.
-			Flag("max-conn-lifetime", 2*time.Hour).
-			Flag("max-conn-lifetime-jitter", time.Hour).
-			Flag("max-conn-idle-time", 2*time.Hour).
-			Flag("warehouses", bd.sp.fixture.WorkloadWarehouses).
-			String()
-		err := bd.c.RunE(ctx, option.WithNodes(bd.c.WorkloadNode()), cmd)
-		if err != nil && ctx.Err() == nil {
-			return err
-		}
-		// We expect the workload to return a context cancelled error because
-		// the roachtest driver cancels the monitor's context after the backup
-		// schedule completes.
-		if err != nil && ctx.Err() == nil {
-			// Implies the workload context was not cancelled and the workload cmd returned a
-			// different error.
-			return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
-		}
-		bd.t.L().Printf("workload successfully finished")
-		return nil
-	})
-
-	return func() {
-		workloadCancel()
-		m.Wait()
-	}, nil
+func (bd *backupDriver) runWorkload(ctx context.Context) error {
+	return bd.sp.scheduledBackupSpecs.workload.run(ctx, bd.t, bd.c, bd.sp.hardware)
 }
 
 // scheduleBackups begins the backup schedule.
 func (bd *backupDriver) scheduleBackups(ctx context.Context) {
-	bd.t.L().Printf("creating backup schedule", bd.sp.fixture.WorkloadWarehouses)
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
-	defer conn.Close()
-	if bd.sp.fixture.CompactionThreshold > 0 {
-		bd.t.L().Printf(
-			"enabling compaction with threshold %d and window size %d",
-			bd.sp.fixture.CompactionThreshold, bd.sp.fixture.CompactionWindow,
-		)
-		_, err := conn.Exec(fmt.Sprintf(
-			"SET CLUSTER SETTING backup.compaction.threshold = %d", bd.sp.fixture.CompactionThreshold,
-		))
-		require.NoError(bd.t, err)
-		_, err = conn.Exec(fmt.Sprintf(
-			"SET CLUSTER SETTING backup.compaction.window_size = %d", bd.sp.fixture.CompactionWindow,
-		))
-		require.NoError(bd.t, err)
-	}
-	createScheduleStatement := CreateScheduleStatement(bd.sp.fixture, bd.registry.URI(bd.fixture.DataPath))
-	_, err := conn.Exec(createScheduleStatement)
-	require.NoError(bd.t, err)
+	sql := sqlutils.MakeSQLRunner(conn)
+	sql.Exec(bd.t, bd.sp.scheduledBackupSpecs.scheduledBackupCmd())
 }
 
 // monitorBackups pauses the schedule once the target number of backups in the
 // chain have been taken.
-func (bd *backupDriver) monitorBackups(ctx context.Context) error {
+func (bd *backupDriver) monitorBackups(ctx context.Context) {
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
-	defer conn.Close()
 	sql := sqlutils.MakeSQLRunner(conn)
-	fixtureURI := bd.registry.URI(bd.fixture.DataPath)
-	const (
-		WaitingFirstFull = iota
-		RunningIncrementals
-		WaitingCompletion
-		Done
-	)
-	state := WaitingFirstFull
-	for state != Done {
+	for {
 		time.Sleep(1 * time.Minute)
-		compSuccess, compRunning, compFailed, err := bd.compactionJobStates(sql)
-		if err != nil {
-			return err
+		var activeScheduleCount int
+		scheduleCountQuery := fmt.Sprintf(`SELECT count(*) FROM [SHOW SCHEDULES] WHERE label='%s' AND schedule_status='ACTIVE'`, scheduleLabel)
+		sql.QueryRow(bd.t, scheduleCountQuery).Scan(&activeScheduleCount)
+		if activeScheduleCount < 2 {
+			bd.t.L().Printf(`First full backup still running`)
+			continue
 		}
-		_, backupRunning, backupFailed, err := bd.backupJobStates(sql)
-		if err != nil {
-			return err
-		}
-		switch state {
-		case WaitingFirstFull:
-			var activeScheduleCount int
-			scheduleCountQuery := fmt.Sprintf(
-				`SELECT count(*) FROM [SHOW SCHEDULES] WHERE label='%s' AND schedule_status='ACTIVE'`, scheduleLabel,
-			)
-			sql.QueryRow(bd.t, scheduleCountQuery).Scan(&activeScheduleCount)
-			if len(backupFailed) > 0 {
-				return errors.Newf("backup jobs failed while waiting first full: %v", backupFailed)
-			} else if activeScheduleCount < 2 {
-				bd.t.L().Printf(`First full backup still running`)
-			} else {
-				state = RunningIncrementals
-			}
-		case RunningIncrementals:
-			var backupCount int
-			// We track completed backups via SHOW BACKUP as opposed to SHOW JOBs in
-			// the case that a fixture runs for a long enough time that old backup
-			// jobs stop showing up in SHOW JOBS.
-			backupCountQuery := fmt.Sprintf(
-				`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM LATEST IN '%s']`, fixtureURI.String(),
-			)
-			sql.QueryRow(bd.t, backupCountQuery).Scan(&backupCount)
-			bd.t.L().Printf(`%d scheduled backups taken`, backupCount)
-
-			if len(backupFailed) > 0 {
-				return errors.Newf("backup jobs failed while running incrementals: %v", backupFailed)
-			} else if bd.sp.fixture.CompactionThreshold > 0 {
-				bd.t.L().Printf("%d compaction jobs succeeded, %d running", len(compSuccess), len(compRunning))
-				if len(compFailed) > 0 {
-					return errors.Newf("compaction jobs failed while running incrementals: %v", compFailed)
-				}
-			}
-
-			if backupCount >= bd.sp.fixture.IncrementalChainLength {
-				pauseSchedulesQuery := fmt.Sprintf(
-					`PAUSE SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label = '%s'`, scheduleLabel,
-				)
-				sql.Exec(bd.t, pauseSchedulesQuery)
-				if len(compRunning) > 0 || len(backupRunning) > 0 {
-					state = WaitingCompletion
-				} else {
-					state = Done
-				}
-			}
-		case WaitingCompletion:
-			if len(backupFailed) > 0 {
-				return errors.Newf("backup jobs failed while waiting completion: %v", backupFailed)
-			} else if len(compFailed) > 0 {
-				return errors.Newf("compaction jobs failed while waiting completion: %v", compFailed)
-			} else if len(backupRunning) > 0 {
-				bd.t.L().Printf("waiting for %d backup jobs to finish", len(backupRunning))
-			} else if len(compRunning) > 0 {
-				bd.t.L().Printf("waiting for %d compaction jobs to finish", len(compRunning))
-			} else {
-				state = Done
-			}
+		var backupCount int
+		backupCountQuery := fmt.Sprintf(`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM LATEST IN %s]`, bd.sp.scheduledBackupSpecs.backupCollection())
+		sql.QueryRow(bd.t, backupCountQuery).Scan(&backupCount)
+		bd.t.L().Printf(`%d scheduled backups taken`, backupCount)
+		if backupCount >= bd.sp.scheduledBackupSpecs.numBackupsInChain {
+			pauseSchedulesQuery := fmt.Sprintf(`PAUSE SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label = '%s'`, scheduleLabel)
+			sql.QueryRow(bd.t, pauseSchedulesQuery)
+			break
 		}
 	}
-	return nil
-}
-
-type jobMeta struct {
-	jobID jobspb.JobID
-	state jobs.State
-	error string
-}
-
-// compactionJobStates returns the state of the compaction jobs, returning
-// a partition of jobs that succeeded, are running, and failed.
-func (bd *backupDriver) compactionJobStates(
-	sql *sqlutils.SQLRunner,
-) ([]jobMeta, []jobMeta, []jobMeta, error) {
-	if bd.sp.fixture.CompactionThreshold == 0 {
-		return nil, nil, nil, nil
-	}
-	s, r, f, err := bd.queryJobStates(
-		sql, "job_type = 'BACKUP' AND description ILIKE 'COMPACT BACKUPS%'",
-	)
-	return s, r, f, errors.Wrapf(err, "error querying compaction job states")
-}
-
-// backupJobStates returns the state of the backup jobs, returning
-// a partition of jobs that succeeded, are running, and failed.
-func (bd *backupDriver) backupJobStates(
-	sql *sqlutils.SQLRunner,
-) ([]jobMeta, []jobMeta, []jobMeta, error) {
-	s, r, f, err := bd.queryJobStates(
-		sql, "job_type = 'BACKUP' AND description ILIKE 'BACKUP %'",
-	)
-	return s, r, f, errors.Wrapf(err, "error querying backup job states")
-}
-
-// queryJobStates queries the job table and returns a partition of jobs that
-// succeeded, are running, and failed. The filter is applied to the query to
-// limit the jobs searched. If the filter is empty, all jobs are searched.
-func (bd *backupDriver) queryJobStates(
-	sql *sqlutils.SQLRunner, filter string,
-) ([]jobMeta, []jobMeta, []jobMeta, error) {
-	query := "SELECT job_id, status, error FROM [SHOW JOBS]"
-	if filter != "" {
-		query += fmt.Sprintf(" WHERE %s", filter)
-	}
-	rows := sql.Query(bd.t, query)
-	defer rows.Close()
-	var jobMetas []jobMeta
-	for rows.Next() {
-		var job jobMeta
-		if err := rows.Scan(&job.jobID, &job.state, &job.error); err != nil {
-			return nil, nil, nil, errors.Wrapf(err, "error scanning job")
-		}
-		jobMetas = append(jobMetas, job)
-	}
-	var successes, running, failures []jobMeta
-	for _, job := range jobMetas {
-		switch job.state {
-		case jobs.StateSucceeded:
-			successes = append(successes, job)
-		case jobs.StateRunning:
-			running = append(running, job)
-		case jobs.StateFailed:
-			failures = append(failures, job)
-		default:
-			bd.t.L().Printf(`unexpected job %d in state %s`, job.jobID, job.state)
-		}
-	}
-	return successes, running, failures, nil
-}
-
-// fingerprintFixture computes fingerprints for the fixture as of the time of
-// its last incremental backup. It maps the fully qualified name of each table
-// to its fingerprint.
-func (bd *backupDriver) fingerprintFixture(ctx context.Context) map[string]string {
-	conn := bd.c.Conn(ctx, bd.t.L(), 1)
-	defer conn.Close()
-	return fingerprintDatabase(
-		bd.t, conn, bd.sp.fixture.DatabaseName(), bd.getLatestAOST(sqlutils.MakeSQLRunner(conn)),
-	)
-}
-
-// getLatestAOST returns the end time as seen in SHOW BACKUP of the latest
-// backup in the fixture.
-func (bd *backupDriver) getLatestAOST(sql *sqlutils.SQLRunner) string {
-	uri := bd.registry.URI(bd.fixture.DataPath)
-	query := fmt.Sprintf(
-		`SELECT end_time FROM
-		[SHOW BACKUP FROM LATEST IN '%s']
-		ORDER BY end_time DESC
-		LIMIT 1`,
-		uri.String(),
-	)
-	var endTime string
-	sql.QueryRow(bd.t, query).Scan(&endTime)
-	return endTime
-}
-
-// fingerprintDatabase fingerprints all of the tables in the provided database
-// and returns a map of fully qualified table names to their fingerprints.
-// If AOST is not provided, the current time is used as the AOST.
-func fingerprintDatabase(
-	t test.Test, conn *gosql.DB, dbName string, aost string,
-) map[string]string {
-	sql := sqlutils.MakeSQLRunner(conn)
-	tables := getDatabaseTables(t, sql, dbName)
-	if len(tables) == 0 {
-		t.L().Printf("no tables found in database %s", dbName)
-		return nil
-	}
-	require.Len(t, tables, expectedNumTables[dbName], "unexpected number of tables in database %s", dbName)
-	t.L().Printf("fingerprinting %d tables in database %s", len(tables), dbName)
-
-	fingerprints := make(map[string]string)
-	var mu syncutil.Mutex
-	start := timeutil.Now()
-	group := t.NewErrorGroup()
-	for _, table := range tables {
-		group.Go(func(ctx context.Context, log *logger.Logger) error {
-			fpContents := newFingerprintContents(conn, table)
-			if err := fpContents.Load(
-				ctx, log, aost, nil, /* tableContents */
-			); err != nil {
-				return err
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			fingerprints[table] = fpContents.fingerprints
-			return nil
-		})
-	}
-	require.NoError(t, group.WaitE(), "error fingerprinting tables in database %s", dbName)
-	t.L().Printf(
-		"fingerprinted %d tables in %s in %s",
-		len(tables), dbName, timeutil.Since(start),
-	)
-	require.Len(
-		t, fingerprints, expectedNumTables[dbName],
-		"unexpected number of fingerprints for database %s", dbName,
-	)
-	return fingerprints
-}
-
-// getDatabaseTables returns the fully qualified name of every table in the
-// fixture.
-// Note: This assumes there aren't any funky characters in the identifiers, so
-// nothing is SQL-escaped.
-func getDatabaseTables(t test.Test, sql *sqlutils.SQLRunner, db string) []string {
-	tablesQuery := fmt.Sprintf(`SELECT schema_name, table_name FROM [SHOW TABLES FROM %s]`, db)
-	rows := sql.Query(t, tablesQuery)
-	defer rows.Close()
-
-	var tables []string
-	for rows.Next() {
-		var schemaName, tableName string
-		if err := rows.Scan(&schemaName, &tableName); err != nil {
-			require.NoError(t, err, "error scanning table name")
-		}
-		tables = append(tables, fmt.Sprintf(`%s.%s.%s`, db, schemaName, tableName))
-	}
-	require.NoError(t, rows.Err(), "error iterating over tables in database %s", db)
-	return tables
-}
-
-func fixtureDirectory() string {
-	if clusterversion.DevelopmentBranch {
-		return "roachtest/master"
-	}
-	version := clusterupgrade.CurrentVersion()
-	return version.Format("roachtest/v%X.%Y")
-}
-
-// GetFixtureRegistry returns the backup fixture registry for the given cloud provider.
-func GetFixtureRegistry(ctx context.Context, t test.Test, cloud spec.Cloud) *blobfixture.Registry {
-	var uri url.URL
-	switch cloud {
-	case spec.AWS:
-		uri = url.URL{
-			Scheme:   "s3",
-			Host:     "cockroach-fixtures-us-east-2",
-			RawQuery: "AUTH=implicit",
-		}
-	case spec.Azure:
-		uri = url.URL{
-			Scheme:   "azure-blob",
-			Host:     "cockroachdb-fixtures-eastus",
-			RawQuery: "AUTH=implicit&AZURE_ACCOUNT_NAME=roachtest",
-		}
-	case spec.GCE, spec.Local:
-		account, err := vm.Providers["gce"].FindActiveAccount(t.L())
-		require.NoError(t, err)
-		t.L().Printf("using GCE account", account)
-
-		uri = url.URL{
-			Scheme:   "gs",
-			Host:     "cockroach-fixtures-us-east1",
-			RawQuery: "AUTH=implicit",
-		}
-	default:
-		t.Fatalf("fixtures not supported on %s", cloud)
-	}
-
-	uri.Path = path.Join(uri.Path, fixtureDirectory())
-
-	registry, err := blobfixture.NewRegistry(ctx, uri)
-	require.NoError(t, err)
-
-	return registry
 }
 
 func registerBackupFixtures(r registry.Registry) {
-	specs := []backupFixtureSpecs{
+	for _, bf := range []backupFixtureSpecs{
 		{
-			fixture: TinyFixture,
-			hardware: makeHardwareSpecs(hardwareSpecs{
-				workloadNode: true,
+			// 400GB backup fixture with 48 incremental layers. This is used by
+			// - restore/tpce/400GB/aws/inc-count=48/nodes=4/cpus=8
+			// - restore/tpce/400GB/aws/nodes=4/cpus=16
+			// - restore/tpce/400GB/aws/nodes=4/cpus=8
+			// - restore/tpce/400GB/aws/nodes=8/cpus=8
+			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
+			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
+				backupSpecs: backupSpecs{
+					version: fixtureFromMasterVersion},
 			}),
-			timeout: 30 * time.Minute,
+			timeout: 5 * time.Hour,
+			initWorkloadViaRestore: &restoreSpecs{
+				backup:                 backupSpecs{version: "v22.2.0", numBackupsInChain: 48},
+				restoreUptoIncremental: 48,
+			},
+			skip:   "only for fixture generation",
+			suites: registry.Suites(registry.Nightly),
+		},
+		{
+			// 400GB backup fixture, no revision history, with 48 incremental layers.
+			// This will used by the online restore roachtests. During 24.2
+			// development, we can use it to enable OR of incremental backups.
+			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
+			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
+				backupSpecs: backupSpecs{
+					version:            fixtureFromMasterVersion,
+					nonRevisionHistory: true,
+				},
+			}),
+			timeout: 5 * time.Hour,
+			initWorkloadViaRestore: &restoreSpecs{
+				backup: backupSpecs{
+					version:           fixtureFromMasterVersion,
+					numBackupsInChain: 48,
+				},
+				restoreUptoIncremental: 12,
+			},
+			skip:   "only for fixture generation",
+			suites: registry.Suites(registry.Nightly),
+		},
+		{
+			// 8TB backup fixture, no revision history, with 48 incremental layers.
+			// This will used by the online restore roachtests. During 24.2
+			// development, we can use it to enable OR of incremental backups.
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 1500, workloadNode: true}),
+			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
+				backupSpecs: backupSpecs{
+					version:            fixtureFromMasterVersion,
+					nonRevisionHistory: true,
+					workload:           tpceRestore{customers: 500000},
+				},
+			}),
+			timeout: 23 * time.Hour,
+			initWorkloadViaRestore: &restoreSpecs{
+				backup: backupSpecs{
+					version:            "v23.1.11",
+					numBackupsInChain:  48,
+					nonRevisionHistory: true,
+				},
+				restoreUptoIncremental: 12,
+			},
+			skip:   "only for fixture generation",
+			suites: registry.Suites(registry.Weekly),
+		},
+		{
+			// 8TB Backup Fixture.
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000, workloadNode: true}),
+			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
+				backupSpecs: backupSpecs{
+					version:  fixtureFromMasterVersion,
+					workload: tpceRestore{customers: 500000}}}),
+			timeout: 25 * time.Hour,
+			initWorkloadViaRestore: &restoreSpecs{
+				backup:                 backupSpecs{version: "v22.2.1", numBackupsInChain: 48},
+				restoreUptoIncremental: 48,
+			},
+			// Use weekly to allow an over 24 hour timeout.
+			suites: registry.Suites(registry.Weekly),
+			skip:   "only for fixture generation",
+		},
+		{
+			// Default Fixture, Run on GCE. Initiated by the tpce --init.
+			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
+			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
+				backupSpecs: backupSpecs{cloud: spec.GCE}}),
+			// TODO(radu): this should be OnlyGCE.
 			suites:  registry.Suites(registry.Nightly),
-			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE, spec.Local},
+			timeout: 5 * time.Hour,
+			skip:    "only for fixture generation",
 		},
 		{
-			fixture: SmallFixture,
-			hardware: makeHardwareSpecs(hardwareSpecs{
-				workloadNode: true,
+			// 32TB Backup Fixture.
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000, workloadNode: true}),
+			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
+				backupSpecs: backupSpecs{workload: tpceRestore{customers: 2000000}}}),
+			initWorkloadViaRestore: &restoreSpecs{
+				backup:                 backupSpecs{version: "v22.2.1", numBackupsInChain: 48},
+				restoreUptoIncremental: 48,
+			},
+			// Use weekly to allow an over 24 hour timeout.
+			suites:  registry.Suites(registry.Weekly),
+			timeout: 48 * time.Hour,
+			skip:    "only for fixture generation",
+		},
+		{
+			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
+			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
+				backupSpecs: backupSpecs{
+					workload:           tpccRestore{opts: tpccRestoreOptions{warehouses: 5000}},
+					nonRevisionHistory: true,
+				},
 			}),
-			// Fingerprinting is measured to take about 40 minutes on a 350 GB
-			// fixture on top of the allocated 2 hours for the test.
-			timeout: 3 * time.Hour,
+			initWorkloadViaRestore: &restoreSpecs{
+				backup:                 backupSpecs{version: "v23.1.1", numBackupsInChain: 48},
+				restoreUptoIncremental: 48,
+			},
+			timeout: 1 * time.Hour,
 			suites:  registry.Suites(registry.Nightly),
-			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE},
+			skip:    "only for fixture generation",
 		},
-		{
-			fixture: MediumFixture,
-			hardware: makeHardwareSpecs(hardwareSpecs{
-				workloadNode: true,
-				nodes:        9,
-				cpus:         16,
-			}),
-			timeout: 12 * time.Hour,
-			suites:  registry.Suites(registry.Weekly),
-			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE},
-			// The fixture takes an estimated 3.5 hours to fingerprint, so we skip it.
-			skipFingerprint: true,
-		},
-		{
-			fixture: LargeFixture,
-			hardware: makeHardwareSpecs(hardwareSpecs{
-				workloadNode: true,
-				nodes:        9,
-				cpus:         32,
-				volumeSize:   4000,
-			}),
-			timeout: 40 * time.Hour,
-			suites:  registry.Suites(registry.Weekly),
-			// The large fixture is only generated on GCE to reduce the cost of
-			// storing the fixtures.
-			clouds: []spec.Cloud{spec.GCE},
-			// Well medium fixture takes 3.5 hours to fingerprint, so we dare not
-			// consider fingerprinting the large fixture.
-			skipFingerprint: true,
-		},
-	}
-	for _, bf := range specs {
+	} {
 		bf := bf
-		clusterSpec := bf.hardware.makeClusterSpecs(r)
+		bf.initTestName()
 		r.Add(registry.TestSpec{
-			Name: fmt.Sprintf(
-				"backupFixture/tpcc/warehouses=%d/incrementals=%d",
-				bf.fixture.ImportWarehouses, bf.fixture.IncrementalChainLength,
-			),
+			Name:              bf.testName,
 			Owner:             registry.OwnerDisasterRecovery,
-			Cluster:           clusterSpec,
+			Cluster:           bf.hardware.makeClusterSpecs(r, bf.scheduledBackupSpecs.cloud),
 			Timeout:           bf.timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,
-			CompatibleClouds:  registry.Clouds(bf.clouds...),
+			CompatibleClouds:  bf.scheduledBackupSpecs.CompatibleClouds(),
 			Suites:            bf.suites,
 			Skip:              bf.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				require.NoError(t, maybePutAzureCredentialsFile(ctx, c, azureCredentialsFilePath))
-				registry := GetFixtureRegistry(ctx, t, c.Cloud())
 
-				handle, err := registry.Create(ctx, bf.fixture.Name, t.L())
-				require.NoError(t, err)
-
-				bd := backupDriver{
-					t:        t,
-					c:        c,
-					sp:       bf,
-					fixture:  handle.Metadata(),
-					registry: registry,
-				}
+				bd := makeBackupDriver(t, c, bf)
 				bd.prepareCluster(ctx)
 				bd.initWorkload(ctx)
 
-				stopWorkload, err := bd.runWorkload(ctx)
-				require.NoError(t, err)
-
+				workloadCtx, workloadCancel := context.WithCancel(ctx)
+				m := c.NewMonitor(workloadCtx)
+				defer func() {
+					workloadCancel()
+					m.Wait()
+				}()
+				m.Go(func(ctx context.Context) error {
+					err := bd.runWorkload(ctx)
+					// We expect the workload to return a context cancelled error because
+					// the roachtest driver cancels the monitor's context after the backup
+					// schedule completes.
+					if err != nil && ctx.Err() == nil {
+						// Implies the workload context was not cancelled and the workload cmd returned a
+						// different error.
+						return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
+					}
+					bd.t.L().Printf("workload successfully finished")
+					return nil
+				})
 				bd.scheduleBackups(ctx)
-				require.NoError(t, bd.monitorBackups(ctx))
-
-				stopWorkload()
-
-				if !bf.skipFingerprint {
-					fingerprint := bd.fingerprintFixture(ctx)
-					require.NoError(t, handle.SetFingerprint(ctx, fingerprint))
-				}
-
-				require.NoError(t, handle.SetReadyAt(ctx))
+				bd.monitorBackups(ctx)
 			},
 		})
 	}
-}
-
-func maybePutAzureCredentialsFile(ctx context.Context, c cluster.Cluster, path string) error {
-	if c.Cloud() != spec.Azure {
-		return nil
-	}
-
-	type azureCreds struct {
-		TenantID     string `yaml:"azure_tenant_id"`
-		ClientID     string `yaml:"azure_client_id"`
-		ClientSecret string `yaml:"azure_client_secret"`
-	}
-
-	azureEnvVars := []string{AzureTenantIDEnvVar, AzureClientIDEnvVar, AzureClientSecretEnvVar}
-	azureEnvValues := make(map[string]string)
-	for _, envVar := range azureEnvVars {
-		val := os.Getenv(envVar)
-		if val == "" {
-			return errors.Newf("environment variable %s is not set", envVar)
-		}
-		azureEnvValues[envVar] = val
-	}
-
-	creds := azureCreds{
-		TenantID:     azureEnvValues[AzureTenantIDEnvVar],
-		ClientID:     azureEnvValues[AzureClientIDEnvVar],
-		ClientSecret: azureEnvValues[AzureClientSecretEnvVar],
-	}
-
-	credsYaml, err := yaml.Marshal(creds)
-	if err != nil {
-		return errors.Wrapf(err, "failed to marshal Azure credentials to YAML")
-	}
-
-	return errors.Wrap(
-		c.PutString(ctx, string(credsYaml), path, 0700),
-		"failed to put Azure credentials file in cluster",
-	)
-}
-
-func registerBlobFixtureGC(r registry.Registry) {
-	r.Add(registry.TestSpec{
-		Name:             "blobfixture/gc",
-		Owner:            registry.OwnerDisasterRecovery,
-		Cluster:          r.MakeClusterSpec(1, spec.CPU(2)),
-		CompatibleClouds: registry.Clouds(spec.GCE, spec.AWS),
-		Timeout:          1 * time.Hour,
-		Suites:           registry.Suites(registry.Nightly),
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			// TODO(jeffswenson): ideally we would run the GC on the scheduled node
-			// so that it is close to the fixture repository.
-			registry := GetFixtureRegistry(ctx, t, c.Cloud())
-			require.NoError(t, registry.GC(ctx, t.L()))
-		},
-	})
 }

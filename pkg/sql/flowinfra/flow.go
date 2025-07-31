@@ -157,7 +157,7 @@ type Flow interface {
 	// GetOnCleanupFns returns a couple of functions that should be called at
 	// the very beginning and the very end of Cleanup, respectively. Both will
 	// be non-nil.
-	GetOnCleanupFns() (startCleanup func(), endCleanup func(context.Context))
+	GetOnCleanupFns() (startCleanup, endCleanup func())
 
 	// Cleanup must be called whenever the flow is done (meaning it either
 	// completes gracefully after all processors and mailboxes exited or an
@@ -227,7 +227,7 @@ type FlowBase struct {
 	// onCleanupStart and onCleanupEnd will be called in the very beginning and
 	// the very end of Cleanup(), respectively.
 	onCleanupStart func()
-	onCleanupEnd   func(context.Context)
+	onCleanupEnd   func()
 
 	statementSQL string
 
@@ -323,7 +323,7 @@ func NewFlowBase(
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
 	localVectorSources map[int32]any,
-	onFlowCleanupEnd func(context.Context),
+	onFlowCleanupEnd func(),
 	statementSQL string,
 ) *FlowBase {
 	// We are either in a single tenant cluster, or a SQL node in a multi-tenant
@@ -642,16 +642,15 @@ func (f *FlowBase) AddOnCleanupStart(fn func()) {
 }
 
 var noopFn = func() {}
-var noopCtxFn = func(context.Context) {}
 
 // GetOnCleanupFns is part of the Flow interface.
-func (f *FlowBase) GetOnCleanupFns() (startCleanup func(), endCleanup func(context.Context)) {
+func (f *FlowBase) GetOnCleanupFns() (startCleanup, endCleanup func()) {
 	onCleanupStart, onCleanupEnd := f.onCleanupStart, f.onCleanupEnd
 	if onCleanupStart == nil {
 		onCleanupStart = noopFn
 	}
 	if onCleanupEnd == nil {
-		onCleanupEnd = noopCtxFn
+		onCleanupEnd = noopFn
 	}
 	return onCleanupStart, onCleanupEnd
 }

@@ -141,18 +141,10 @@ id
 species
 username
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE users SET (schema_locked=false);
-
 # Check that a column can be added and renamed in the same statement
 statement ok
 ALTER TABLE users RENAME COLUMN species TO species_old,
                   ADD COLUMN species STRING AS (species_old || ' woo') STORED
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE users SET (schema_locked=true);
 
 query T rowsort
 SELECT species FROM users

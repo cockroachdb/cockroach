@@ -18,7 +18,6 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/catconstants",
-        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/log",

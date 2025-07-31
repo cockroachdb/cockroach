@@ -38,10 +38,6 @@ type LocalResult struct {
 	// UpdatedTxns stores transaction records that have been updated by
 	// calls to EndTxn, PushTxn, and RecoverTxn.
 	UpdatedTxns []*roachpb.Transaction
-	// ReportedMissingLocks stores lock acquisition structs that represent locks
-	// that have been reported as missing via QueryIntent. Such locks must be
-	// reported to the concurrency manager.
-	ReportedMissingLocks []roachpb.LockAcquisition
 	// EndTxns stores completed transactions. If the transaction
 	// contains unresolved intents, they should be handed off for
 	// asynchronous intent resolution. A bool in each EndTxnIntents
@@ -54,11 +50,6 @@ type LocalResult struct {
 	// PopulateBarrierResponse will populate a BarrierResponse with the lease
 	// applied index and range descriptor when applied.
 	PopulateBarrierResponse bool
-
-	// RepopulateRequestResponse will overwrite the SubsumeResponse's
-	// LeaseAppliedIndex field with the lease applied index of the
-	// SubsumeRequest itself.
-	RepopulateSubsumeResponseLAI bool
 
 	// When set (in which case we better be the first range), call
 	// GossipFirstRange if the Replica holds the lease.
@@ -87,7 +78,6 @@ func (lResult *LocalResult) IsZero() bool {
 		lResult.UpdatedTxns == nil &&
 		lResult.EndTxns == nil &&
 		!lResult.PopulateBarrierResponse &&
-		!lResult.RepopulateSubsumeResponseLAI &&
 		!lResult.GossipFirstRange &&
 		!lResult.MaybeGossipSystemConfig &&
 		!lResult.MaybeGossipSystemConfigIfHaveFailure &&
@@ -102,15 +92,13 @@ func (lResult *LocalResult) String() string {
 	return fmt.Sprintf("LocalResult (reply: %v, "+
 		"#encountered intents: %d, #acquired locks: %d, #resolved locks: %d"+
 		"#updated txns: %d #end txns: %d, "+
-		"PopulateBarrierResponse:%t RepopulateSubsumeResponse:%t "+
-		"GossipFirstRange:%t MaybeGossipSystemConfig:%t "+
+		"PopulateBarrierResponse:%t GossipFirstRange:%t MaybeGossipSystemConfig:%t "+
 		"MaybeGossipSystemConfigIfHaveFailure:%t MaybeAddToSplitQueue:%t "+
 		"MaybeGossipNodeLiveness:%s ",
 		lResult.Reply,
 		len(lResult.EncounteredIntents), len(lResult.AcquiredLocks), len(lResult.ResolvedLocks),
 		len(lResult.UpdatedTxns), len(lResult.EndTxns),
-		lResult.PopulateBarrierResponse, lResult.RepopulateSubsumeResponseLAI,
-		lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig,
+		lResult.PopulateBarrierResponse, lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig,
 		lResult.MaybeGossipSystemConfigIfHaveFailure, lResult.MaybeAddToSplitQueue,
 		lResult.MaybeGossipNodeLiveness)
 }
@@ -132,17 +120,6 @@ func (lResult *LocalResult) DetachEncounteredIntents() []roachpb.Intent {
 	}
 	r := lResult.EncounteredIntents
 	lResult.EncounteredIntents = nil
-	return r
-}
-
-// DetachMissingLocks returns (and removes) those locks that have been reported
-// missing during an QueryIntentRequest and must be handled.
-func (lResult *LocalResult) DetachMissingLocks() []roachpb.LockAcquisition {
-	if lResult == nil {
-		return nil
-	}
-	r := lResult.ReportedMissingLocks
-	lResult.ReportedMissingLocks = nil
 	return r
 }
 
@@ -177,17 +154,6 @@ func (lResult *LocalResult) DetachPopulateBarrierResponse() bool {
 	}
 	r := lResult.PopulateBarrierResponse
 	lResult.PopulateBarrierResponse = false
-	return r
-}
-
-// DetachRepopulateSubsumeResponse returns (and removes) the
-// RepopulateSubsumeResponse value from the local result.
-func (lResult *LocalResult) DetachRepopulateSubsumeResponse() bool {
-	if lResult == nil {
-		return false
-	}
-	r := lResult.RepopulateSubsumeResponseLAI
-	lResult.RepopulateSubsumeResponseLAI = false
 	return r
 }
 
@@ -273,6 +239,7 @@ func (p *Result) MergeAndDestroy(q Result) error {
 			return errors.AssertionFailedf("conflicting TruncatedState")
 		}
 		q.Replicated.State.TruncatedState = nil
+		q.Replicated.RaftExpectedFirstIndex = 0
 
 		if q.Replicated.State.GCThreshold != nil {
 			if p.Replicated.State.GCThreshold == nil {
@@ -300,28 +267,11 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		if q.Replicated.State.Stats != nil {
 			return errors.AssertionFailedf("must not specify Stats")
 		}
-		if q.Replicated.State.ForceFlushIndex != (roachpb.ForceFlushIndex{}) {
-			return errors.AssertionFailedf("must not specify ForceFlushIndex")
-		}
 		if (*q.Replicated.State != kvserverpb.ReplicaState{}) {
 			log.Fatalf(context.TODO(), "unhandled EvalResult: %s",
 				pretty.Diff(*q.Replicated.State, kvserverpb.ReplicaState{}))
 		}
 		q.Replicated.State = nil
-	}
-
-	if p.Replicated.RaftTruncatedState == nil {
-		p.Replicated.RaftTruncatedState = q.Replicated.RaftTruncatedState
-		p.Replicated.RaftExpectedFirstIndex = q.Replicated.RaftExpectedFirstIndex
-	} else if q.Replicated.RaftTruncatedState != nil {
-		return errors.AssertionFailedf("conflicting RaftTruncatedState")
-	}
-	q.Replicated.RaftTruncatedState = nil
-	q.Replicated.RaftExpectedFirstIndex = 0
-
-	if p.Replicated.State != nil && p.Replicated.State.TruncatedState != nil &&
-		p.Replicated.RaftTruncatedState != nil {
-		return errors.AssertionFailedf("conflicting RaftTruncatedState")
 	}
 
 	if p.Replicated.Split == nil {
@@ -373,13 +323,6 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.LinkExternalSSTable = nil
 
-	if p.Replicated.Excise == nil {
-		p.Replicated.Excise = q.Replicated.Excise
-	} else if q.Replicated.Excise != nil {
-		return errors.AssertionFailedf("conflicting Excise")
-	}
-	q.Replicated.Excise = nil
-
 	if p.Replicated.MVCCHistoryMutation == nil {
 		p.Replicated.MVCCHistoryMutation = q.Replicated.MVCCHistoryMutation
 	} else if q.Replicated.MVCCHistoryMutation != nil {
@@ -407,11 +350,6 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.IsProbe = false
 
-	if q.Replicated.DoTimelyApplicationToAllReplicas {
-		p.Replicated.DoTimelyApplicationToAllReplicas = true
-	}
-	q.Replicated.DoTimelyApplicationToAllReplicas = false
-
 	if p.Local.EncounteredIntents == nil {
 		p.Local.EncounteredIntents = q.Local.EncounteredIntents
 	} else {
@@ -432,13 +370,6 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		p.Local.ResolvedLocks = append(p.Local.ResolvedLocks, q.Local.ResolvedLocks...)
 	}
 	q.Local.ResolvedLocks = nil
-
-	if p.Local.ReportedMissingLocks == nil {
-		p.Local.ReportedMissingLocks = q.Local.ReportedMissingLocks
-	} else {
-		p.Local.ReportedMissingLocks = append(p.Local.ReportedMissingLocks, q.Local.ReportedMissingLocks...)
-	}
-	q.Local.ReportedMissingLocks = nil
 
 	if p.Local.UpdatedTxns == nil {
 		p.Local.UpdatedTxns = q.Local.UpdatedTxns
@@ -461,14 +392,6 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		return errors.AssertionFailedf("multiple PopulateBarrierResponse results")
 	}
 	q.Local.PopulateBarrierResponse = false
-
-	if !p.Local.RepopulateSubsumeResponseLAI {
-		p.Local.RepopulateSubsumeResponseLAI = q.Local.RepopulateSubsumeResponseLAI
-	} else {
-		// RepopulateSubsumeResponseLAI is only valid for a single Subsume response.
-		return errors.AssertionFailedf("multiple RepopulateSubsumeResponseLAI results")
-	}
-	q.Local.RepopulateSubsumeResponseLAI = false
 
 	if p.Local.MaybeGossipNodeLiveness == nil {
 		p.Local.MaybeGossipNodeLiveness = q.Local.MaybeGossipNodeLiveness

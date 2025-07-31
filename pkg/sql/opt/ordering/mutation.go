@@ -38,7 +38,7 @@ func mutationBuildChildReqOrdering(
 	return props.OrderingChoice{Optional: optional, Columns: columns}
 }
 
-func mutationBuildProvided(mem *memo.Memo, expr memo.RelExpr) opt.Ordering {
+func mutationBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	private := expr.Private().(*memo.MutationPrivate)
 	input := expr.Child(0).(memo.RelExpr)
 	provided := input.ProvidedPhysical().Ordering
@@ -47,7 +47,7 @@ func mutationBuildProvided(mem *memo.Memo, expr memo.RelExpr) opt.Ordering {
 	// be used by remapProvided.
 	var fdset props.FuncDepSet
 	fdset.CopyFrom(&input.Relational().FuncDeps)
-	private.AddEquivTableCols(mem.Metadata(), &fdset)
+	private.AddEquivTableCols(expr.Memo().Metadata(), &fdset)
 
 	// Ensure that provided ordering only uses projected columns.
 	return remapProvided(provided, &fdset, expr.Relational().OutputCols)

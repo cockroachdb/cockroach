@@ -40,7 +40,6 @@ var insertFastPathNodePool = sync.Pool{
 // performed via a direct lookup in an index, and when the input is VALUES of
 // limited size (at most mutations.MaxBatchSize).
 type insertFastPathNode struct {
-	zeroInputPlanNode
 	// input values, similar to a valuesNode.
 	input [][]tree.TypedExpr
 
@@ -112,14 +111,7 @@ func (c *insertFastPathCheck) init(params runParams) error {
 	codec := params.ExecCfg().Codec
 	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc.GetID(), c.idx.GetID())
 	c.spanBuilder.InitAllowingExternalRowData(params.EvalContext(), codec, c.tabDesc, c.idx)
-
-	if c.Locking.MustLockAllRequestedColumnFamilies() {
-		c.spanSplitter = span.MakeSplitterForSideEffect(
-			c.tabDesc, c.idx, intsets.Fast{}, /* neededColOrdinals */
-		)
-	} else {
-		c.spanSplitter = span.MakeSplitter(c.tabDesc, c.idx, intsets.Fast{} /* neededColOrdinals */)
-	}
+	c.spanSplitter = span.MakeSplitter(c.tabDesc, c.idx, intsets.Fast{} /* neededColOrdinals */)
 
 	if len(c.InsertCols) > idx.numLaxKeyCols {
 		return errors.AssertionFailedf(
@@ -398,7 +390,7 @@ func (n *insertFastPathNode) startExec(params runParams) error {
 	// Cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	n.run.init(params, n.columns)
+	n.run.initRowContainer(params, n.columns)
 
 	n.run.numInputCols = len(n.input[0])
 	n.run.inputBuf = make(tree.Datums, len(n.input)*n.run.numInputCols)

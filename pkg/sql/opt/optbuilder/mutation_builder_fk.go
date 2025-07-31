@@ -657,19 +657,13 @@ func (h *fkCheckHelper) buildOtherTableScan(parent bool) (outScope *scope, tabMe
 		}
 	}
 	otherTabMeta := h.mb.b.addTable(h.otherTab, tree.NewUnqualifiedTableName(h.otherTab.Name()))
-	indexFlags := &tree.IndexFlags{IgnoreForeignKeys: true}
-	if h.mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
-		indexFlags.AvoidFullScan = true
-	}
-
 	return h.mb.b.buildScan(
 		otherTabMeta,
 		h.otherTabOrdinals,
-		indexFlags,
+		&tree.IndexFlags{IgnoreForeignKeys: true},
 		locking,
 		h.mb.b.allocScope(),
 		true, /* disableNotVisibleIndex */
-		cat.PolicyScopeExempt,
 	), otherTabMeta
 }
 

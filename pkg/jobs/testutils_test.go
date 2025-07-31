@@ -164,7 +164,7 @@ func registerScopedScheduledJobExecutor(name string, ex ScheduledJobExecutor) fu
 // addFakeJob adds a fake job associated with the specified scheduleID.
 // Returns the id of the newly created job.
 func addFakeJob(
-	t *testing.T, h *testHelper, scheduleID jobspb.ScheduleID, state State, txn isql.Txn,
+	t *testing.T, h *testHelper, scheduleID jobspb.ScheduleID, status Status, txn isql.Txn,
 ) jobspb.JobID {
 	datums, err := txn.QueryRowEx(context.Background(), "fake-job", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
@@ -174,7 +174,7 @@ VALUES ($1, $2, $3)
 RETURNING id`,
 			h.env.SystemJobsTableName(),
 		),
-		CreatedByScheduledJobs, scheduleID, state,
+		CreatedByScheduledJobs, scheduleID, status,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, datums)

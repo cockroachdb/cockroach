@@ -45,10 +45,10 @@ success
 
 update-cache
 ----
-updatedTables: 69, errors: 0, run #: 1, duration > 0: true
+updatedTables: 64, errors: 0, run #: 1, duration > 0: true
 
 
-# We are omitting the following columns since they are not deterministic.
+# We're omitting the following columns since they are not deterministic.
 # - total_live_data_bytes,
 # - perc_live_data
 # - total_data_bytes
@@ -70,7 +70,6 @@ SELECT
   last_updated,
   last_update_error
 FROM system.table_metadata
-WHERE db_name <> 'system' OR table_name IN ('comments', 'locations', 'descriptor_id_seq')
 ORDER BY (db_name, table_name)
 ----
 autostats_disabled defaultdb public 100 107 2 1 TABLE false {1} 1 2021-01-07 06:13:20 +0000 UTC 
@@ -81,8 +80,62 @@ mytable defaultdb public 100 104 3 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 
 mytable2 defaultdb public 100 105 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
 myview defaultdb public 100 108 3 1 VIEW null {1} 1 2021-01-07 06:13:20 +0000 UTC 
 comments system public 1 24 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+database_role_settings system public 1 44 4 2 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+descriptor system public 1 3 2 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
 descriptor_id_seq system public 1 7 1 1 SEQUENCE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+eventlog system public 1 12 6 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+external_connections system public 1 53 7 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+job_info system public 1 54 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+jobs system public 1 15 12 5 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+join_tokens system public 1 41 3 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+lease system public 1 11 5 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
 locations system public 1 21 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+migrations system public 1 40 5 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+mvcc_statistics system public 1 64 6 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+namespace system public 1 30 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+privileges system public 1 52 5 3 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+protected_ts_meta system public 1 31 5 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+protected_ts_records system public 1 32 8 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+rangelog system public 1 13 7 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+region_liveness system public 1 9 2 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+replication_constraint_stats system public 1 25 7 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+replication_critical_localities system public 1 26 5 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+replication_stats system public 1 27 7 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+reports_meta system public 1 28 2 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+role_id_seq system public 1 48 1 1 SEQUENCE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+role_members system public 1 23 5 6 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+role_options system public 1 33 4 2 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+scheduled_jobs system public 1 37 10 2 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+settings system public 1 6 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+span_configurations system public 1 47 3 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+span_count system public 1 51 2 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+span_stats_buckets system public 1 56 5 2 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+span_stats_samples system public 1 57 2 2 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+span_stats_tenant_boundaries system public 1 58 2 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+span_stats_unique_keys system public 1 55 2 2 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+sql_instances system public 1 46 8 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+sqlliveness system public 1 39 3 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+statement_activity system public 1 61 17 8 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+statement_bundle_chunks system public 1 34 3 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+statement_diagnostics system public 1 36 7 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+statement_diagnostics_requests system public 1 35 11 2 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+statement_execution_insights system public 1 66 29 5 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+statement_statistics system public 1 42 19 9 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+table_metadata system public 1 67 18 11 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+table_statistics system public 1 20 12 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+task_payloads system public 1 59 8 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+tenant_id_seq system public 1 63 1 1 SEQUENCE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+tenant_settings system public 1 50 6 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+tenant_tasks system public 1 60 7 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+tenant_usage system public 1 45 14 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+tenants system public 1 8 6 3 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+transaction_activity system public 1 62 14 8 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+transaction_execution_insights system public 1 65 23 3 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+transaction_statistics system public 1 43 14 8 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+ui system public 1 14 3 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+users system public 1 4 4 2 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+web_sessions system public 1 19 9 5 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+zones system public 1 5 2 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
 
 query
 SELECT count(*) FROM system.table_metadata WHERE perc_live_data > 1
@@ -92,7 +145,7 @@ SELECT count(*) FROM system.table_metadata WHERE perc_live_data > 1
 query
 SELECT count(*) FROM system.table_metadata WHERE replication_size_bytes > 0
 ----
-69
+64
 
 query
 SELECT count(*) FROM system.table_metadata WHERE total_live_data_bytes > total_data_bytes

@@ -19,8 +19,7 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
- │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
- │         │    └── flags: avoid-full-scan
+ │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         └── filters
  │              └── p:4 > 1
  └── cascade
@@ -35,7 +34,7 @@ root
                 │    ├── columns: c:11!null child.p:12
                 │    ├── scan child
                 │    │    ├── columns: c:11!null child.p:12
-                │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    └── flags: disabled not visible index feature
                 │    ├── with-scan &1
                 │    │    ├── columns: p:15!null
                 │    │    └── mapping:
@@ -76,8 +75,7 @@ root
  │    └── select
  │         ├── columns: p:6!null q:7!null r:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
  │         ├── scan parent_multicol
- │         │    ├── columns: p:6!null q:7!null r:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
- │         │    └── flags: avoid-full-scan
+ │         │    └── columns: p:6!null q:7!null r:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
  │         └── filters
  │              └── p:6 > 1
  └── cascade
@@ -105,7 +103,7 @@ root
                 │    │    │    │    ├── computed column expressions
                 │    │    │    │    │    └── x:22
                 │    │    │    │    │         └── (child_multicol.p:19 + child_multicol.q:20) + child_multicol.r:21
-                │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    │    │    └── flags: disabled not visible index feature
                 │    │    │    ├── with-scan &1
                 │    │    │    │    ├── columns: p:25!null q:26!null r:27!null
                 │    │    │    │    └── mapping:
@@ -151,8 +149,7 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent_partial
- │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
- │         │    └── flags: avoid-full-scan
+ │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         └── filters
  │              └── p:4 > 1
  └── cascade
@@ -176,7 +173,7 @@ root
                 │    │    │    │    │    └── i:14 > 0
                 │    │    │    │    └── child_partial_i_idx: filters
                 │    │    │    │         └── child_partial.p:13 > 0
-                │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    │    └── flags: disabled not visible index feature
                 │    │    ├── with-scan &1
                 │    │    │    ├── columns: p:17!null
                 │    │    │    └── mapping:
@@ -216,8 +213,7 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent_virt
- │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
- │         │    └── flags: avoid-full-scan
+ │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         └── filters
  │              └── p:4 > 1
  └── cascade
@@ -238,7 +234,7 @@ root
                 │    │    │    ├── computed column expressions
                 │    │    │    │    └── v:14
                 │    │    │    │         └── child_virt.p:13
-                │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    │    └── flags: disabled not visible index feature
                 │    │    └── projections
                 │    │         └── child_virt.p:13 [as=v:14]
                 │    ├── with-scan &1

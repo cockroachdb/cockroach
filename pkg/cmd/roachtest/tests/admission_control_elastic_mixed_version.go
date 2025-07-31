@@ -37,11 +37,10 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "admission-control/elastic-workload/mixed-version",
 		Owner:            registry.OwnerKV,
-		Timeout:          3 * time.Hour,
+		Timeout:          1 * time.Hour,
 		Benchmark:        true,
-		Monitor:          true,
 		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Suites:           registry.Suites(registry.Nightly),
 		Cluster: r.MakeClusterSpec(4, spec.CPU(8),
 			spec.WorkloadNode(), spec.ReuseNone()),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -81,36 +80,30 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 						"--min-block-bytes=512 --max-block-bytes=1024 {pgurl%s}",
 					binary, c.Node(1)))
 			}
-			labels := map[string]string{
-				"concurrency":  "500",
-				"read-percent": "5",
-			}
 			// The workloads are tuned to keep the cluster busy at 30-40% CPU, and IO
 			// overload metric approaching 20-30% which causes elastic traffic being
 			// de-prioritized and wait.
 			runForeground := func(ctx context.Context, duration time.Duration) error {
 				cmd := roachtestutil.NewCommand("./cockroach workload run kv "+
-					"%s --concurrency=500 "+
+					"--histograms=perf/stats.json --concurrency=500 "+
 					"--max-rate=5000 --read-percent=5 "+
 					"--min-block-bytes=512 --max-block-bytes=1024 "+
 					"--txn-qos='regular' "+
-					"--duration=%v {pgurl%s}", roachtestutil.GetWorkloadHistogramArgs(t, c, labels), duration, c.CRDBNodes())
+					"--duration=%v {pgurl%s}", duration, c.CRDBNodes())
 				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
 			}
-
-			labels["read-percent"] = "0"
 			runBackground := func(ctx context.Context, duration time.Duration) error {
 				cmd := roachtestutil.NewCommand("./cockroach workload run kv "+
-					"%s --concurrency=500 "+
+					"--histograms=perf/stats.json --concurrency=500 "+
 					"--max-rate=10000 --read-percent=0 "+
 					"--min-block-bytes=2048 --max-block-bytes=4096 "+
 					"--txn-qos='background' "+
-					"--duration=%v {pgurl%s}", roachtestutil.GetWorkloadHistogramArgs(t, c, labels), duration, c.CRDBNodes())
+					"--duration=%v {pgurl%s}", duration, c.CRDBNodes())
 				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
 			}
 			runWorkloads := func(ctx2 context.Context) error {
 				const duration = 5 * time.Minute
-				m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+				m := c.NewMonitor(ctx, c.CRDBNodes())
 				m.Go(func(ctx context.Context) error { return runForeground(ctx, duration) })
 				m.Go(func(ctx context.Context) error { return runBackground(ctx, duration) })
 				return m.WaitE()
@@ -133,7 +126,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 			mvt.Run()
 			// TODO(pav-kv): also validate that the write throughput was kept under
 			// control, and the foreground traffic was not starved.
-			roachtestutil.ValidateTokensReturned(ctx, t, c, c.CRDBNodes(), time.Minute)
+			validateTokensReturned(ctx, t, c, c.CRDBNodes())
 		},
 	})
 }

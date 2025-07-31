@@ -25,21 +25,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/stretchr/testify/require"
 )
-
-func columnType(typStr string) *types.T {
-	t, err := parser.GetTypeFromValidSQLSyntax(typStr)
-	if err != nil {
-		panic(err)
-	}
-	return tree.MustBeStaticallyKnownType(t)
-}
 
 // TestColumnConversions rolls-up a lot of test plumbing to prevent
 // top-level namespace pollution.
 func TestColumnConversions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	columnType := func(typStr string) *types.T {
+		t, err := parser.GetTypeFromValidSQLSyntax(typStr)
+		if err != nil {
+			panic(err)
+		}
+		return tree.MustBeStaticallyKnownType(t)
+	}
 
 	// columnConversionInfo is where we document conversions that
 	// don't require a fully-generalized conversion path or where there are
@@ -54,11 +53,6 @@ func TestColumnConversions(t *testing.T) {
 
 		"DECIMAL(6)": {
 			"DECIMAL(8)": ColumnConversionTrivial,
-		},
-
-		"DECIMAL(10,2)": {
-			"DECIMAL(10,1)": ColumnConversionGeneral,
-			"DECIMAL(10,5)": ColumnConversionTrivial,
 		},
 
 		"FLOAT4": {
@@ -247,19 +241,11 @@ func TestColumnConversions(t *testing.T) {
 						}
 
 					case types.DecimalFamily:
-						// Decimal values will be truncated on insert to either 0 or 2 digits.
-						insert = []interface{}{"-112358.878", "112358.134"}
+						insert = []interface{}{"-112358", "112358"}
 						switch toTyp.Family() {
 						case types.DecimalFamily:
 							// We're going to see decimals returned as strings
-							switch toTyp.Width() {
-							case 0:
-								expect = []interface{}{[]uint8("-112359"), []uint8("112358")}
-							case 1:
-								expect = []interface{}{[]uint8("-112358.9"), []uint8("112358.1")}
-							case 5:
-								expect = []interface{}{[]uint8("-112358.88"), []uint8("112358.13")}
-							}
+							expect = []interface{}{[]uint8("-112358"), []uint8("112358")}
 						}
 
 					case types.FloatFamily:
@@ -424,55 +410,4 @@ func TestColumnConversions(t *testing.T) {
 			}
 		}
 	})
-}
-
-// TestVirtualColumnConversions will validate column conversions for virtual
-// compute columns.
-func TestVirtualColumnConversions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	for _, tc := range []struct {
-		from               string
-		to                 string
-		expectedConversion ColumnConversionKind
-	}{
-		{"BYTES", "BYTES", ColumnConversionTrivial},
-		{"BYTES", "STRING(255)", ColumnConversionValidate},
-		{"BYTES", "UUID", ColumnConversionValidate},
-		{"BYTES", "INT8", ColumnConversionImpossible},
-		{"DECIMAL(9,3)", "DECIMAL(9,2)", ColumnConversionTrivial},
-		{"DECIMAL(9,3)", "DECIMAL(9,4)", ColumnConversionTrivial},
-		{"DECIMAL(9,3)", "DECIMAL(10,3)", ColumnConversionTrivial},
-		{"DECIMAL(9,3)", "DECIMAL(8,3)", ColumnConversionValidate},
-		{"FLOAT(8)", "FLOAT(4)", ColumnConversionTrivial},
-		{"INT8", "INT4", ColumnConversionValidate},
-		{"INT4", "INT8", ColumnConversionTrivial},
-		{"INT2", "TEXT", ColumnConversionImpossible},
-		{"BIT(1)", "BIT(4)", ColumnConversionTrivial},
-		{"BIT(4)", "BIT(1)", ColumnConversionValidate},
-		{"BIT(4)", "BIT(0)", ColumnConversionTrivial},
-		{"VARCHAR(10)", "CHAR(5)", ColumnConversionValidate},
-		{"CHAR(15)", "TEXT", ColumnConversionTrivial},
-		{"TIMESTAMP(6)", "TIMESTAMP(4)", ColumnConversionTrivial},
-		{"TIMESTAMP(4)", "TIMESTAMP(6)", ColumnConversionTrivial},
-		{"TIMESTAMP(4)", "TIMESTAMPTZ(2)", ColumnConversionTrivial},
-		{"TIMESTAMPTZ(5)", "TIMESTAMPTZ(2)", ColumnConversionTrivial},
-		{"TIMESTAMPTZ(5)", "TIMESTAMP(3)", ColumnConversionTrivial},
-		{"TIMESTAMPTZ(5)", "TIME", ColumnConversionImpossible},
-		{"TIME", "TIME(4)", ColumnConversionTrivial},
-		{"TIME(6)", "TIME(4)", ColumnConversionTrivial},
-		{"TIME(6)", "TIMESTAMP(6)", ColumnConversionImpossible},
-	} {
-		t.Run(fmt.Sprintf("%s->%s", tc.from, tc.to), func(t *testing.T) {
-			actual, err := ClassifyConversionFromTree(ctx, &tree.AlterTableAlterColumnType{},
-				columnType(tc.from), columnType(tc.to), true)
-			if tc.expectedConversion != ColumnConversionImpossible {
-				require.NoError(t, err)
-			} else {
-				require.Error(t, err)
-			}
-			require.Equal(t, tc.expectedConversion, actual)
-		})
-	}
 }

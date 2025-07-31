@@ -47,9 +47,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	pgproto3 "github.com/jackc/pgproto3/v2"
-	pgx "github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	pgx "github.com/jackc/pgx/v4"
 	proxyproto "github.com/pires/go-proxyproto"
 	"github.com/pires/go-proxyproto/tlvparse"
 	"github.com/stretchr/testify/assert"
@@ -1810,8 +1810,7 @@ func TestCancelQuery(t *testing.T) {
 			ProcessID: 1,
 			SecretKey: conn.PgConn().SecretKey() + 1,
 		}
-		buf, err := crdbRequest.Encode(nil /* buf */)
-		require.NoError(t, err)
+		buf := crdbRequest.Encode(nil /* buf */)
 		proxyAddr := conn.PgConn().Conn().RemoteAddr()
 		cancelConn, err := net.Dial(proxyAddr.Network(), proxyAddr.String())
 		require.NoError(t, err)

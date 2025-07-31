@@ -99,7 +99,6 @@ CREATE TABLE t(
 statement ok
 COMMENT ON TABLE t IS 'table t';
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -111,26 +110,11 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON TABLE public.t IS 'table t';
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-) WITH (schema_locked = true);
-COMMENT ON TABLE public.t IS 'table t';
+COMMENT ON TABLE public.t IS 'table t'
 
 statement ok
 COMMENT ON TABLE t IS 'table t AGAIN';
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -142,26 +126,11 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON TABLE public.t IS 'table t AGAIN';
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-) WITH (schema_locked = true);
-COMMENT ON TABLE public.t IS 'table t AGAIN';
+COMMENT ON TABLE public.t IS 'table t AGAIN'
 
 statement ok
 COMMENT ON TABLE t IS NULL;
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -172,25 +141,11 @@ CREATE TABLE public.t (
   INDEX idxb (b ASC),
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-) WITH (schema_locked = true);
+)
 
 statement ok
 COMMENT ON COLUMN t.b IS 'column b';
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -202,21 +157,7 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON COLUMN public.t.b IS 'column b';
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-) WITH (schema_locked = true);
-COMMENT ON COLUMN public.t.b IS 'column b';
+COMMENT ON COLUMN public.t.b IS 'column b'
 
 statement ok
 COMMENT ON COLUMN t.b IS 'column b AGAIN';
@@ -224,7 +165,6 @@ COMMENT ON COLUMN t.b IS 'column b AGAIN';
 statement error column name must be qualified
 COMMENT ON COLUMN b IS 'unqualified column b';
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -236,26 +176,11 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON COLUMN public.t.b IS 'column b AGAIN';
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-) WITH (schema_locked = true);
-COMMENT ON COLUMN public.t.b IS 'column b AGAIN';
+COMMENT ON COLUMN public.t.b IS 'column b AGAIN'
 
 statement ok
 COMMENT ON COLUMN t.b IS NULL;
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -266,25 +191,11 @@ CREATE TABLE public.t (
   INDEX idxb (b ASC),
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-) WITH (schema_locked = true);
+)
 
 statement ok
 COMMENT ON INDEX t@idxb IS 'index b';
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -296,26 +207,11 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON INDEX public.t@idxb IS 'index b';
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-) WITH (schema_locked = true);
-COMMENT ON INDEX public.t@idxb IS 'index b';
+COMMENT ON INDEX public.t@idxb IS 'index b'
 
 statement ok
 COMMENT ON INDEX t@idxb IS 'index b AGAIN';
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -327,26 +223,11 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON INDEX public.t@idxb IS 'index b AGAIN';
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-) WITH (schema_locked = true);
-COMMENT ON INDEX public.t@idxb IS 'index b AGAIN';
+COMMENT ON INDEX public.t@idxb IS 'index b AGAIN'
 
 statement ok
 COMMENT ON INDEX t@idxb IS NULL;
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -357,25 +238,11 @@ CREATE TABLE public.t (
   INDEX idxb (b ASC),
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-) WITH (schema_locked = true);
+)
 
 statement ok
 COMMENT ON CONSTRAINT ckb ON t IS 'cst b';
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -387,26 +254,11 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b';
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-) WITH (schema_locked = true);
-COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b';
+COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b'
 
 statement ok
 COMMENT ON CONSTRAINT ckb ON t IS 'cst b AGAIN';
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -418,26 +270,11 @@ CREATE TABLE public.t (
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
 );
-COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b AGAIN';
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-) WITH (schema_locked = true);
-COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b AGAIN';
+COMMENT ON CONSTRAINT ckb ON public.t IS 'cst b AGAIN'
 
 statement ok
 COMMENT ON CONSTRAINT ckb ON t IS NULL;
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -448,20 +285,7 @@ CREATE TABLE public.t (
   INDEX idxb (b ASC),
   FAMILY fam_0_b_a (a, b),
   CONSTRAINT ckb CHECK (b > 1:::INT8)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  INDEX idxb (b ASC),
-  FAMILY fam_0_b_a (a, b),
-  CONSTRAINT ckb CHECK (b > 1:::INT8)
-) WITH (schema_locked = true);
+)
 
 # Make sure invalid comment type does not crash a server.
 subtest regression_99316
@@ -497,22 +321,27 @@ statement error COMMENT ON TYPE is only implemented in the declarative schema ch
 COMMENT ON TYPE roach_dwellings IS 'First-CRDB-comment-on-types';
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_dwellings IS 'First-CRDB-comment-on-types';
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_legs IS 'Second-CRDB-comment-on-types';
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_dwellings IS 'First-CRDB-comment-on-types-again';
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_legs IS 'Second-CRDB-comment-on-types-again';
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 query IIIT colnames,rowsort
 SELECT * FROM SYSTEM.COMMENTS;
 ----
@@ -522,6 +351,7 @@ type  object_id  sub_id  comment
 7     114        0       Second-CRDB-comment-on-types-again
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 query TTTT colnames,rowsort
 SHOW TYPES WITH COMMENT
 ----
@@ -530,14 +360,17 @@ public  roach_dwellings  root   First-CRDB-comment-on-types-again
 public  roach_legs       root   Second-CRDB-comment-on-types-again
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_dwellings IS NULL;
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_legs IS NULL;
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 query TTTT colnames,rowsort
 SHOW TYPES WITH COMMENT
 ----
@@ -546,6 +379,7 @@ public  roach_dwellings  root   NULL
 public  roach_legs       root   NULL
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 query IIIT colnames
 SELECT * FROM SYSTEM.COMMENTS;
 ----
@@ -595,10 +429,12 @@ CREATE TYPE roach_type AS ENUM ('option1', 'option2')
 
 # Skip for legacy schema changer as COMMENT ON TYPE is not supported
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_type IS 'This is a test comment on a type'
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 query TTTT colnames
 SHOW TYPES WITH COMMENT
 ----

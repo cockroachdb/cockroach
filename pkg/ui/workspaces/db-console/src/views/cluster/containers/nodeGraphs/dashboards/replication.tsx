@@ -11,6 +11,7 @@ import LineGraph from "src/views/cluster/components/linegraph";
 import {
   CircuitBreakerTrippedReplicasTooltip,
   LogicalBytesGraphTooltip,
+  PausedFollowersTooltip,
   ReceiverSnapshotsQueuedTooltip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 import { Axis, Metric } from "src/views/shared/components/metricQuery";
@@ -207,14 +208,7 @@ export default function (props: GraphDashboardProps) {
     >
       <Axis label="replicas">
         <Metric name="cr.store.replicas" title="Replicas" />
-        <Metric
-          name="cr.store.replicas.quiescent"
-          title="Epoch Lease Quiescent"
-        />
-        <Metric
-          name="cr.store.replicas.asleep"
-          title="Leader Lease Quiescent"
-        />
+        <Metric name="cr.store.replicas.quiescent" title="Quiescent" />
       </Axis>
     </LineGraph>,
 
@@ -351,6 +345,25 @@ export default function (props: GraphDashboardProps) {
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={storeIDsForNode(storeIDsByNodeID, nid)}
             downsampler={TimeSeriesQueryAggregator.SUM}
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+    <LineGraph
+      title="Paused Followers"
+      sources={storeSources}
+      tenantSource={tenantSource}
+      tooltip={PausedFollowersTooltip}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="replicas">
+        {nodeIDs.map(nid => (
+          <Metric
+            key={nid}
+            name="cr.store.admission.raft.paused_replicas"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            nonNegativeRate
           />
         ))}
       </Axis>

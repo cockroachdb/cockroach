@@ -333,11 +333,10 @@ func (rsfu *requesterStateForUpdate) getHeartbeatsToSend(
 }
 
 // updateMaxRequested forwards the current MaxRequested timestamp to now +
-// support duration, where now is the node's clock timestamp.
-func (rsfu *requesterStateForUpdate) updateMaxRequested(
-	now hlc.Timestamp, supportDuration time.Duration,
-) {
-	newMaxRequested := now.Add(supportDuration.Nanoseconds(), 0)
+// interval, where now is the node's clock timestamp and interval is the
+// liveness interval.
+func (rsfu *requesterStateForUpdate) updateMaxRequested(now hlc.Timestamp, interval time.Duration) {
+	newMaxRequested := now.Add(interval.Nanoseconds(), 0)
 	meta := rsfu.getMeta()
 	if meta.MaxRequested.Forward(newMaxRequested) {
 		// Update the entire meta struct to ensure MaxEpoch is not overwritten.
@@ -448,6 +447,10 @@ func assert(condition bool, msg string) {
 	}
 }
 
-func supportChangeStr(ssOld slpb.SupportState, ssNew slpb.SupportState) redact.RedactableString {
-	return redact.Sprintf("store %+v; old = %+v, new = %+v", ssNew.Target, ssOld, ssNew)
+func supportChangeStr(
+	current slpb.SupportState, previous slpb.SupportState,
+) redact.RedactableString {
+	return redact.Sprintf(
+		"store %+v; current = %+v, previous = %+v", current.Target, current, previous,
+	)
 }

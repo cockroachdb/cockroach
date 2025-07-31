@@ -111,13 +111,3 @@ func InsertUnique[T cmp.Ordered](s []T, v T) []T {
 	}
 	return slices.Insert(s, idx, v)
 }
-
-// Reduce applies a function against an accumulator and each element of a
-// collection, reducing it to a single value.
-func Reduce[T any, U any](collection []T, fn func(acc U, el T, idx int) U, init U) U {
-	acc := init
-	for idx, el := range collection {
-		acc = fn(acc, el, idx)
-	}
-	return acc
-}

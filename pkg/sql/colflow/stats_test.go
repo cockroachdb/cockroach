@@ -112,7 +112,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			nil, /* inputStatsCollectors */
 		)
 		mergeJoiner := colexecjoin.NewMergeJoinOp(
-			ctx, tu.testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
+			tu.testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
 			colexecop.NewTestingSemaphore(4), descpb.InnerJoin, leftInput, rightInput,
 			[]*types.T{types.Int}, []*types.T{types.Int},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},

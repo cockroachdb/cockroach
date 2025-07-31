@@ -14,7 +14,6 @@ project
  └── window partition=(1)
       ├── columns: k:1!null rank:8
       ├── key: (1)
-      ├── fd: (1)-->(8)
       ├── scan a
       │    ├── columns: k:1!null
       │    └── key: (1)
@@ -45,7 +44,6 @@ project
  └── window partition=() ordering=+1
       ├── columns: k:1!null rank:8
       ├── key: (1)
-      ├── fd: (1)-->(8)
       ├── scan a
       │    ├── columns: k:1!null
       │    └── key: (1)
@@ -64,7 +62,6 @@ project
  └── window partition=(1)
       ├── columns: k:1!null rank:8
       ├── key: (1)
-      ├── fd: (1)-->(8)
       ├── scan a
       │    ├── columns: k:1!null
       │    └── key: (1)
@@ -240,7 +237,7 @@ project
  └── window partition=(1)
       ├── columns: k:1!null i:2!null rank:8
       ├── key: (1)
-      ├── fd: ()-->(2), (1)-->(8)
+      ├── fd: ()-->(2)
       ├── select
       │    ├── columns: k:1!null i:2!null
       │    ├── key: (1)
@@ -264,7 +261,7 @@ project
       ├── columns: k:1!null i:2 f:3 rank:8
       ├── immutable
       ├── key: (1)
-      ├── fd: (1)-->(2,3,8)
+      ├── fd: (1)-->(2,3)
       ├── select
       │    ├── columns: k:1!null i:2 f:3
       │    ├── immutable
@@ -292,7 +289,7 @@ project
       ├── window partition=(1)
       │    ├── columns: k:1!null i:2 f:3 rank:8
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2,3,8)
+      │    ├── fd: (1)-->(2,3)
       │    ├── scan a
       │    │    ├── columns: k:1!null i:2 f:3
       │    │    ├── key: (1)
@@ -405,11 +402,9 @@ project
       ├── columns: k:1!null avg:8
       ├── cardinality: [0 - 10]
       ├── key: (1)
-      ├── fd: (1)-->(8)
       ├── window partition=()
       │    ├── columns: k:1!null avg:8
       │    ├── key: (1)
-      │    ├── fd: (1)-->(8)
       │    ├── limit hint: 10.00
       │    ├── scan a
       │    │    ├── columns: k:1!null
@@ -495,11 +490,11 @@ project
       ├── columns: k:1!null i:2 f:3 rank:8 avg:9
       ├── cardinality: [0 - 10]
       ├── key: (1)
-      ├── fd: (1)-->(2,3,8,9)
+      ├── fd: (1)-->(2,3)
       ├── window partition=(2) ordering=+3 opt(2)
       │    ├── columns: k:1!null i:2 f:3 rank:8 avg:9
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2,3,8,9)
+      │    ├── fd: (1)-->(2,3)
       │    ├── limit hint: 10.00
       │    ├── scan a
       │    │    ├── columns: k:1!null i:2 f:3
@@ -523,18 +518,18 @@ limit
  ├── internal-ordering: +3
  ├── cardinality: [0 - 2]
  ├── key: (1)
- ├── fd: (1)-->(2-4,7)
+ ├── fd: (1)-->(2-4)
  ├── ordering: +3
  ├── sort
  │    ├── columns: w:1!null x:2 y:3 z:4 rank:7
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4,7)
+ │    ├── fd: (1)-->(2-4)
  │    ├── ordering: +3
  │    ├── limit hint: 2.00
  │    └── window partition=(4) ordering=+3 opt(4)
  │         ├── columns: w:1!null x:2 y:3 z:4 rank:7
  │         ├── key: (1)
- │         ├── fd: (1)-->(2-4,7)
+ │         ├── fd: (1)-->(2-4)
  │         ├── scan wxyz
  │         │    ├── columns: w:1!null x:2 y:3 z:4
  │         │    ├── key: (1)
@@ -550,13 +545,13 @@ sort
  ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
- ├── fd: (1)-->(2-4,7)
+ ├── fd: (1)-->(2-4)
  ├── ordering: +3
  └── window partition=(1)
       ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
-      ├── fd: (1)-->(2-4,7)
+      ├── fd: (1)-->(2-4)
       ├── limit
       │    ├── columns: w:1!null x:2 y:3 z:4
       │    ├── internal-ordering: +3,+1
@@ -584,13 +579,13 @@ sort
  ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
- ├── fd: (1)-->(2-4,7)
+ ├── fd: (1)-->(2-4)
  ├── ordering: +1
  └── window partition=(1)
       ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
-      ├── fd: (1)-->(2-4,7)
+      ├── fd: (1)-->(2-4)
       ├── limit
       │    ├── columns: w:1!null x:2 y:3 z:4
       │    ├── internal-ordering: +1
@@ -614,13 +609,13 @@ sort
  ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
- ├── fd: (1)-->(2-4,7)
+ ├── fd: (1)-->(2-4)
  ├── ordering: +1
  └── window partition=(1)
       ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
-      ├── fd: (1)-->(2-4,7)
+      ├── fd: (1)-->(2-4)
       ├── limit
       │    ├── columns: w:1!null x:2 y:3 z:4
       │    ├── internal-ordering: +1
@@ -644,13 +639,13 @@ sort
  ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
- ├── fd: (1)-->(2-4,7)
+ ├── fd: (1)-->(2-4)
  ├── ordering: +3,+1
  └── window partition=(1)
       ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
-      ├── fd: (1)-->(2-4,7)
+      ├── fd: (1)-->(2-4)
       ├── limit
       │    ├── columns: w:1!null x:2 y:3 z:4
       │    ├── internal-ordering: +3,+1
@@ -678,13 +673,13 @@ sort
  ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
- ├── fd: (1)-->(2-4,7)
+ ├── fd: (1)-->(2-4)
  ├── ordering: +1
  └── window partition=(1)
       ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
-      ├── fd: (1)-->(2-4,7)
+      ├── fd: (1)-->(2-4)
       ├── limit
       │    ├── columns: w:1!null x:2 y:3 z:4
       │    ├── internal-ordering: +1
@@ -708,13 +703,13 @@ sort
  ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
- ├── fd: (1)-->(2-4,7)
+ ├── fd: (1)-->(2-4)
  ├── ordering: +4,+2
  └── window partition=(2,4) ordering=+3 opt(2,4)
       ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
-      ├── fd: (1)-->(2-4,7)
+      ├── fd: (1)-->(2-4)
       ├── limit
       │    ├── columns: w:1!null x:2 y:3 z:4
       │    ├── internal-ordering: +4,+2,+3
@@ -742,13 +737,13 @@ sort
  ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
- ├── fd: (1)-->(2-4,7)
+ ├── fd: (1)-->(2-4)
  ├── ordering: +4,+3
  └── window partition=(4) ordering=+3 opt(4)
       ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
-      ├── fd: (1)-->(2-4,7)
+      ├── fd: (1)-->(2-4)
       ├── limit
       │    ├── columns: w:1!null x:2 y:3 z:4
       │    ├── internal-ordering: +4,+3
@@ -777,18 +772,18 @@ limit
  ├── internal-ordering: +3
  ├── cardinality: [0 - 2]
  ├── key: (1)
- ├── fd: (1)-->(2-4,7)
+ ├── fd: (1)-->(2-4)
  ├── ordering: +3
  ├── sort
  │    ├── columns: w:1!null x:2 y:3 z:4 rank:7
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4,7)
+ │    ├── fd: (1)-->(2-4)
  │    ├── ordering: +3
  │    ├── limit hint: 2.00
  │    └── window partition=(4) ordering=+3 opt(4)
  │         ├── columns: w:1!null x:2 y:3 z:4 rank:7
  │         ├── key: (1)
- │         ├── fd: (1)-->(2-4,7)
+ │         ├── fd: (1)-->(2-4)
  │         ├── scan wxyz
  │         │    ├── columns: w:1!null x:2 y:3 z:4
  │         │    ├── key: (1)
@@ -804,13 +799,13 @@ sort
  ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
- ├── fd: (1)-->(2-4,7)
+ ├── fd: (1)-->(2-4)
  ├── ordering: +1
  └── window partition=(1)
       ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
-      ├── fd: (1)-->(2-4,7)
+      ├── fd: (1)-->(2-4)
       ├── limit
       │    ├── columns: w:1!null x:2 y:3 z:4
       │    ├── internal-ordering: +1
@@ -834,13 +829,13 @@ sort
  ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
- ├── fd: (1)-->(2-4,7)
+ ├── fd: (1)-->(2-4)
  ├── ordering: +4,+1
  └── window partition=(1)
       ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
-      ├── fd: (1)-->(2-4,7)
+      ├── fd: (1)-->(2-4)
       ├── limit
       │    ├── columns: w:1!null x:2 y:3 z:4
       │    ├── internal-ordering: +4,+1
@@ -868,13 +863,13 @@ sort
  ├── columns: w:1!null x:2 y:3 z:4 rank:7
  ├── cardinality: [0 - 2]
  ├── key: (1)
- ├── fd: (1)-->(2-4,7)
+ ├── fd: (1)-->(2-4)
  ├── ordering: +4
  └── window partition=(1)
       ├── columns: w:1!null x:2 y:3 z:4 rank:7
       ├── cardinality: [0 - 2]
       ├── key: (1)
-      ├── fd: (1)-->(2-4,7)
+      ├── fd: (1)-->(2-4)
       ├── limit
       │    ├── columns: w:1!null x:2 y:3 z:4
       │    ├── internal-ordering: +4,+1

@@ -28,7 +28,7 @@ import (
 func TypeCheckSystemTimeExpr(
 	ctx context.Context, semaCtx *tree.SemaContext, systemTimeExpr tree.Expr, op string,
 ) (tree.TypedExpr, error) {
-	typedExpr, err := tree.TypeCheckAndRequire(ctx, systemTimeExpr, semaCtx, types.AnyElement, op)
+	typedExpr, err := tree.TypeCheckAndRequire(ctx, systemTimeExpr, semaCtx, types.Any, op)
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build gccgo
+// +build gccgo
 
 package storage
 

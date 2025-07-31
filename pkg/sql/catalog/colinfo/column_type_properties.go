@@ -6,6 +6,7 @@
 package colinfo
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -21,14 +22,14 @@ import (
 // scalar type String).
 //
 // This is used by the UPDATE, INSERT and UPSERT code.
-func CheckDatumTypeFitsColumnType(colName string, colTyp *types.T, typ *types.T) error {
+func CheckDatumTypeFitsColumnType(col catalog.Column, typ *types.T) error {
 	if typ.Family() == types.UnknownFamily {
 		return nil
 	}
-	if !typ.Equivalent(colTyp) {
+	if !typ.Equivalent(col.GetType()) {
 		return pgerror.Newf(pgcode.DatatypeMismatch,
 			"value type %s doesn't match type %s of column %q",
-			typ.String(), colTyp.String(), tree.ErrNameString(colName))
+			typ.String(), col.GetType().String(), tree.ErrNameString(col.GetName()))
 	}
 	return nil
 }
@@ -82,8 +83,7 @@ func CanHaveCompositeKeyEncoding(typ *types.T) bool {
 		types.VoidFamily,
 		types.EncodedKeyFamily,
 		types.TSQueryFamily,
-		types.TSVectorFamily,
-		types.JsonpathFamily:
+		types.TSVectorFamily:
 		return false
 	case types.UnknownFamily,
 		types.AnyFamily:

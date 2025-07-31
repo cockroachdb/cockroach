@@ -8,7 +8,6 @@ package scbuildstmt
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -16,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -25,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
@@ -46,7 +43,6 @@ type BuildCtx interface {
 	Telemetry
 	NodeStatusInfo
 	RegionProvider
-	ZoneConfigProvider
 
 	// Add adds an absent element to the BuilderState, targeting PUBLIC.
 	Add(element scpb.Element)
@@ -54,10 +50,6 @@ type BuildCtx interface {
 	// AddTransient adds an absent element to the BuilderState, targeting
 	// TRANSIENT_ABSENT.
 	AddTransient(element scpb.Element)
-
-	// DropTransient adds a public element to the BuilderState state targeting
-	// TRANSIENT_PUBLIC.
-	DropTransient(element scpb.Element)
 
 	// Drop sets the ABSENT target on an existing element in the BuilderState.
 	Drop(element scpb.Element)
@@ -68,6 +60,9 @@ type BuildCtx interface {
 
 	// Codec returns the codec for the current tenant.
 	Codec() keys.SQLCodec
+
+	// ZoneConfigGetter returns the zone config getter.
+	ZoneConfigGetter() scdecomp.ZoneConfigGetter
 }
 
 // ClusterAndSessionInfo provides general cluster and session info.
@@ -284,10 +279,6 @@ type TableHelpers interface {
 	// added to this table.
 	NextTableTriggerID(tableID catid.DescID) catid.TriggerID
 
-	// NextTablePolicyID returns the ID that should be used for any new row-level
-	// security policies added to this table.
-	NextTablePolicyID(tableID catid.DescID) catid.PolicyID
-
 	// NextTableTentativeIndexID returns the tentative ID, starting from
 	// scbuild.TABLE_TENTATIVE_IDS_START, that should be used for any new index added to
 	// this table.
@@ -313,7 +304,7 @@ type TableHelpers interface {
 	// ComputedColumnExpression returns a validated computed column expression
 	// and its type.
 	// TODO(postamar): make this more low-level instead of consuming an AST
-	ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef, exprContext tree.SchemaExprContext) (tree.Expr, *types.T)
+	ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef) tree.Expr
 
 	// PartialIndexPredicateExpression returns a validated partial predicate
 	// wrapped expression
@@ -441,9 +432,6 @@ type NameResolver interface {
 
 	// ResolveTrigger retrieves a trigger by name and returns its elements.
 	ResolveTrigger(relationID catid.DescID, triggerName tree.Name, p ResolveParams) ElementResultSet
-
-	// ResolvePolicy retrieves a policy by name and returns its elements.
-	ResolvePolicy(relationID catid.DescID, policyName tree.Name, p ResolveParams) ElementResultSet
 }
 
 // ReferenceProvider provides all referenced objects with in current DDL
@@ -493,21 +481,4 @@ type RegionProvider interface {
 	// GetRegions provides access to the set of regions available to the
 	// current tenant.
 	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
-
-	// SynthesizeRegionConfig returns a RegionConfig that describes the
-	// multiregion setup for the given database ID.
-	SynthesizeRegionConfig(
-		ctx context.Context,
-		dbID descpb.ID,
-		opts ...multiregion.SynthesizeRegionConfigOption,
-	) (multiregion.RegionConfig, error)
-}
-
-type ZoneConfigProvider interface {
-	// ZoneConfigGetter returns the zone config getter.
-	ZoneConfigGetter() scdecomp.ZoneConfigGetter
-
-	// GetDefaultZoneConfig is used to get the default zone config inside the
-	// server.
-	GetDefaultZoneConfig() *zonepb.ZoneConfig
 }

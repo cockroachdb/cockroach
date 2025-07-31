@@ -5,11 +5,9 @@ add-nodes 2 index=10
 ----
 INFO 1 switched to configuration voters=()
 INFO 1 became follower at term 0
-DEBUG 1 reset election elapsed to 0
 INFO newRaft 1 [peers: [], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
 INFO 2 switched to configuration voters=()
 INFO 2 became follower at term 0
-DEBUG 2 reset election elapsed to 0
 INFO newRaft 2 [peers: [], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
 
 store-liveness
@@ -22,7 +20,6 @@ add-nodes 1
 ----
 INFO 3 switched to configuration voters=()
 INFO 3 became follower at term 0
-DEBUG 3 reset election elapsed to 0
 INFO newRaft 3 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
 
 store-liveness
@@ -91,7 +88,6 @@ add-nodes 1
 ----
 INFO 4 switched to configuration voters=()
 INFO 4 became follower at term 0
-DEBUG 4 reset election elapsed to 0
 INFO newRaft 4 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
 
 store-liveness

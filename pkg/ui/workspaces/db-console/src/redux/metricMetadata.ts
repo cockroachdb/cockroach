@@ -8,7 +8,7 @@ import { createSelector } from "reselect";
 import { AdminUIState } from "src/redux/state";
 import { MetricMetadataResponseMessage } from "src/util/api";
 
-export type MetricsMetadata = MetricMetadataResponseMessage;
+export type MetricsMetadata = MetricMetadataResponseMessage["metadata"];
 
 // State selectors
 const metricsMetadataStateSelector = (state: AdminUIState) =>
@@ -16,5 +16,6 @@ const metricsMetadataStateSelector = (state: AdminUIState) =>
 
 export const metricsMetadataSelector = createSelector(
   metricsMetadataStateSelector,
-  (metricsMetadata): MetricsMetadata => metricsMetadata,
+  (metricsMetadata): MetricsMetadata =>
+    metricsMetadata ? metricsMetadata.metadata : undefined,
 );

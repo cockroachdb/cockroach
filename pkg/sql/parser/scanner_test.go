@@ -135,8 +135,6 @@ func TestScanComment(t *testing.T) {
 		remainder string
 	}{
 		{`/* hello */world`, "", "world"},
-		{`/* hello */
-world`, "", "\nworld"},
 		{`/* hello */*`, "", "*"},
 		{`/* /* deeply /* nested */ comment */ */`, "", ""},
 		{`/* /* */* */`, "", ""},
@@ -144,7 +142,7 @@ world`, "", "\nworld"},
 		{`/* multi line
 comment */`, "", ""},
 		{`-- hello world
-foo`, "", "\nfoo"},
+foo`, "", "foo"},
 		{`/*`, "unterminated comment", ""},
 		{`/*/`, "unterminated comment", ""},
 		{`/* /* */`, "unterminated comment", ""},

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -33,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
@@ -108,6 +108,7 @@ func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfi
 	}
 	cfg.successes = metric.NewCounter(metric.Metadata{Name: "processed"})
 	cfg.failures = metric.NewCounter(metric.Metadata{Name: "failures"})
+	cfg.storeFailures = metric.NewCounter(metric.Metadata{Name: "store_failures"})
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
 	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
 	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
@@ -123,8 +124,11 @@ func createReplicas(t *testing.T, tc *testContext, num int) []*Replica {
 	if err != nil {
 		t.Fatal(err)
 	}
-	require.NoError(t, tc.store.RemoveReplica(context.Background(),
-		repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
+	if err := tc.store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+		DestroyData: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	repls := make([]*Replica, num)
 	for i := 0; i < num; i++ {
@@ -705,7 +709,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	// Remove replica for range 1 since it encompasses the entire keyspace.
 	repl1, err := s.GetReplica(1)
 	require.NoError(t, err)
-	require.NoError(t, s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
+	require.NoError(t, s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{DestroyData: true}))
 
 	// This range can never be split due to zone configs boundaries.
 	neverSplits := createReplica(s, 2, roachpb.RKeyMin, maxWontSplitAddr)
@@ -907,8 +911,11 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	// the replica set. The number of processed replicas will be 2 less.
 	const rmReplCount = 2
 	repls[0].replicaID = 2
-	require.NoError(t, tc.store.RemoveReplica(ctx,
-		repls[1], repls[1].Desc().NextReplicaID, redact.SafeString(t.Name())))
+	if err := tc.store.RemoveReplica(ctx, repls[1], repls[1].Desc().NextReplicaID, RemoveOptions{
+		DestroyData: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	// Remove error and reprocess.
 	testQueue.err = nil
@@ -1552,4 +1559,18 @@ func TestBaseQueueRequeue(t *testing.T) {
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	assertShouldQueueCount(6)
 	assertProcessedAndProcessing(2, 0)
+
+	// Reset shouldQueueCount so we actually process the replica. Then return
+	// a StoreBenign error. It should requeue the replica.
+	atomic.StoreInt64(&shouldQueueCount, 0)
+	pQueue.err = benignerror.NewStoreBenign(errors.New("test"))
+	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
+	assertShouldQueueCount(1)
+	assertProcessedAndProcessing(2, 1)
+	// Let the first processing attempt finish. It should requeue.
+	pQueue.processBlocker <- struct{}{}
+	assertProcessedAndProcessing(3, 1)
+	pQueue.err = nil
+	pQueue.processBlocker <- struct{}{}
+	assertProcessedAndProcessing(4, 0)
 }

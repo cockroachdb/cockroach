@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,17 +34,17 @@ func TestAnyDetector(t *testing.T) {
 
 	t.Run("isSlow is false without any detectors", func(t *testing.T) {
 		detector := &compositeDetector{}
-		require.False(t, detector.isSlow(&sqlstats.RecordedStmtStats{}))
+		require.False(t, detector.isSlow(&Statement{}))
 	})
 
 	t.Run("isSlow is false without any concerned detectors", func(t *testing.T) {
 		detector := &compositeDetector{[]detector{&fakeDetector{}, &fakeDetector{}}}
-		require.False(t, detector.isSlow(&sqlstats.RecordedStmtStats{}))
+		require.False(t, detector.isSlow(&Statement{}))
 	})
 
 	t.Run("isSlow is true with at least one concerned detector", func(t *testing.T) {
 		detector := &compositeDetector{[]detector{&fakeDetector{stubIsSlow: true}, &fakeDetector{}}}
-		require.True(t, detector.isSlow(&sqlstats.RecordedStmtStats{}))
+		require.True(t, detector.isSlow(&Statement{}))
 	})
 
 	t.Run("isSlow consults all detectors without short-circuiting", func(t *testing.T) {
@@ -56,7 +55,7 @@ func TestAnyDetector(t *testing.T) {
 		d2 := &fakeDetector{stubIsSlow: true}
 
 		detector := &compositeDetector{[]detector{d1, d2}}
-		detector.isSlow(&sqlstats.RecordedStmtStats{})
+		detector.isSlow(&Statement{})
 		require.True(t, d1.isSlowCalled, "the first detector should be consulted")
 		require.True(t, d2.isSlowCalled, "the second detector should be consulted")
 	})
@@ -107,18 +106,16 @@ func TestLatencyQuantileDetector(t *testing.T) {
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
 				d := newAnomalyDetector(st, NewMetrics())
-				stmtWithSeedLatency := &sqlstats.RecordedStmtStats{ServiceLatencySec: test.seedLatency.Seconds()}
 				for i := 0; i < 1000; i++ {
-					d.isSlow(stmtWithSeedLatency)
+					d.isSlow(&Statement{LatencyInSeconds: test.seedLatency.Seconds()})
 				}
-				// Now determine if the candidate latency is slow.
-				require.Equal(t, test.isSlow, d.isSlow(&sqlstats.RecordedStmtStats{ServiceLatencySec: test.candidateLatency.Seconds()}))
+				require.Equal(t, test.isSlow, d.isSlow(&Statement{LatencyInSeconds: test.candidateLatency.Seconds()}))
 			})
 		}
 	})
 
 	// Testing the slow and failure detectors at the same time.
-	t.Run("isSlow with slow and failed statement", func(t *testing.T) {
+	t.Run("isSlow and isFailed", func(t *testing.T) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
 		AnomalyDetectionEnabled.Override(ctx, &st.SV, true)
@@ -130,42 +127,46 @@ func TestLatencyQuantileDetector(t *testing.T) {
 			candidateLatency time.Duration
 			status           Statement_Status
 			isSlow           bool
+			isFailed         bool
 		}{{
 			name:             "slow and failed statement",
 			seedLatency:      100 * time.Millisecond,
 			candidateLatency: 200 * time.Millisecond,
 			status:           Statement_Failed,
 			isSlow:           true,
+			isFailed:         true,
 		}, {
 			name:             "slow and non-failed statement",
 			seedLatency:      100 * time.Millisecond,
 			candidateLatency: 200 * time.Millisecond,
 			status:           Statement_Completed,
 			isSlow:           true,
+			isFailed:         false,
 		}, {
 			name:             "fast and non-failed statement",
 			seedLatency:      100 * time.Millisecond,
 			candidateLatency: 50 * time.Millisecond,
 			status:           Statement_Completed,
 			isSlow:           false,
+			isFailed:         false,
 		}, {
 			name:             "fast and failed statement",
 			seedLatency:      100 * time.Millisecond,
 			candidateLatency: 50 * time.Millisecond,
 			status:           Statement_Failed,
 			isSlow:           false,
+			isFailed:         true,
 		}}
 
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
 				d := newAnomalyDetector(st, NewMetrics())
-				stmtWithSeedLatency := &sqlstats.RecordedStmtStats{ServiceLatencySec: test.seedLatency.Seconds()}
 				for i := 0; i < 1000; i++ {
-					d.isSlow(stmtWithSeedLatency)
+					d.isSlow(&Statement{LatencyInSeconds: test.seedLatency.Seconds()})
 				}
-				// Now determine if the candidate latency is slow.
-				stmt := &sqlstats.RecordedStmtStats{Failed: true, ServiceLatencySec: test.candidateLatency.Seconds()}
+				stmt := &Statement{LatencyInSeconds: test.candidateLatency.Seconds(), Status: test.status}
 				require.Equal(t, test.isSlow, d.isSlow(stmt))
+				require.Equal(t, test.isFailed, isFailed(stmt))
 			})
 		}
 	})
@@ -222,11 +223,10 @@ func TestLatencyQuantileDetector(t *testing.T) {
 				d := newAnomalyDetector(st, metrics)
 				// Show the detector `test.fingerprints` distinct fingerprints.
 				for i := 0; i < test.fingerprints; i++ {
-					stmt := &sqlstats.RecordedStmtStats{
-						ServiceLatencySec: AnomalyDetectionLatencyThreshold.Get(&st.SV).Seconds(),
-						FingerprintID:     appstatspb.StmtFingerprintID(i),
-					}
-					d.isSlow(stmt)
+					d.isSlow(&Statement{
+						LatencyInSeconds: AnomalyDetectionLatencyThreshold.Get(&st.SV).Seconds(),
+						FingerprintID:    appstatspb.StmtFingerprintID(i),
+					})
 				}
 				test.assertion(t, metrics)
 			})
@@ -241,11 +241,10 @@ func BenchmarkLatencyQuantileDetector(b *testing.B) {
 	settings := cluster.MakeTestingClusterSettings()
 	AnomalyDetectionEnabled.Override(context.Background(), &settings.SV, true)
 	d := newAnomalyDetector(settings, NewMetrics())
-	stmt := &sqlstats.RecordedStmtStats{
-		ServiceLatencySec: random.Float64(),
-	}
 	for i := 0; i < b.N; i++ {
-		d.isSlow(stmt)
+		d.isSlow(&Statement{
+			LatencyInSeconds: random.Float64(),
+		})
 	}
 }
 
@@ -268,21 +267,21 @@ func TestLatencyThresholdDetector(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(context.Background(), &st.SV, 0)
 		detector := latencyThresholdDetector{st: st}
-		require.False(t, detector.isSlow(&sqlstats.RecordedStmtStats{ServiceLatencySec: 1}))
+		require.False(t, detector.isSlow(&Statement{LatencyInSeconds: 1}))
 	})
 
 	t.Run("isSlow false when fast enough", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(context.Background(), &st.SV, 1*time.Second)
 		detector := latencyThresholdDetector{st: st}
-		require.False(t, detector.isSlow(&sqlstats.RecordedStmtStats{ServiceLatencySec: 0.5}))
+		require.False(t, detector.isSlow(&Statement{LatencyInSeconds: 0.5}))
 	})
 
 	t.Run("isSlow true beyond threshold", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(context.Background(), &st.SV, 1*time.Second)
 		detector := latencyThresholdDetector{st: st}
-		require.True(t, detector.isSlow(&sqlstats.RecordedStmtStats{ServiceLatencySec: 1}))
+		require.True(t, detector.isSlow(&Statement{LatencyInSeconds: 1}))
 	})
 }
 
@@ -296,7 +295,7 @@ func (f *fakeDetector) enabled() bool {
 	return f.stubEnabled
 }
 
-func (f *fakeDetector) isSlow(stats *sqlstats.RecordedStmtStats) bool {
+func (f *fakeDetector) isSlow(*Statement) bool {
 	f.isSlowCalled = true
 	return f.stubIsSlow
 }

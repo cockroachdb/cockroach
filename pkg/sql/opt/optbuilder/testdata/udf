@@ -1720,8 +1720,7 @@ update abc
       ├── select
       │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan abc
-      │    │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── flags: avoid-full-scan
+      │    │    └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    └── filters
       │         └── ups(1, 2, 3)
       └── projections
@@ -1853,7 +1852,7 @@ values
       │              │                   │         └──  column2:8 => p:9
       │              │                   ├── scan parent
       │              │                   │    ├── columns: parent.p:10!null
-      │              │                   │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │                   │    └── flags: disabled not visible index feature
       │              │                   └── filters
       │              │                        └── eq
       │              │                             ├── variable: p:9
@@ -1895,7 +1894,7 @@ values
                      │                   │         └──  column2:23 => p:24
                      │                   ├── scan parent
                      │                   │    ├── columns: parent.p:25!null
-                     │                   │    └── flags: avoid-full-scan disabled not visible index feature
+                     │                   │    └── flags: disabled not visible index feature
                      │                   └── filters
                      │                        └── eq
                      │                             ├── variable: p:24

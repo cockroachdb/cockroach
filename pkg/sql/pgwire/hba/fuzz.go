@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build gofuzz
+// +build gofuzz
 
 package hba
 

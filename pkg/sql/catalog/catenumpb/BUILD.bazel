@@ -11,6 +11,7 @@ proto_library(
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )
 
 go_proto_library(
@@ -19,6 +20,9 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb",
     proto = ":catenumpb_proto",
     visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
 )
 
 go_library(

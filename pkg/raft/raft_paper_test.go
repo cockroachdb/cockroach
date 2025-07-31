@@ -110,7 +110,7 @@ func TestStartAsFollower(t *testing.T) {
 // every heartbeat interval, but it won't send a MsgHeartbeat.
 func TestLeaderBcastBeat(t *testing.T) {
 	// heartbeat interval
-	hi := int64(3)
+	hi := 3
 
 	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
 		func(t *testing.T, storeLivenessEnabled bool) {
@@ -129,7 +129,7 @@ func TestLeaderBcastBeat(t *testing.T) {
 				mustAppendEntry(r, pb.Entry{Index: uint64(i) + 1})
 			}
 
-			for i := int64(0); i < hi; i++ {
+			for i := 0; i < hi; i++ {
 				require.Empty(t, r.readMessages())
 				r.tick()
 			}
@@ -171,7 +171,7 @@ func TestCandidateStartNewElection(t *testing.T) {
 // Reference: section 5.2
 func testNonleaderStartElection(t *testing.T, state pb.StateType) {
 	// election timeout
-	et := int64(10)
+	et := 10
 	r := newTestRaft(1, et, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 	switch state {
 	case pb.StateFollower:
@@ -180,7 +180,7 @@ func testNonleaderStartElection(t *testing.T, state pb.StateType) {
 		r.becomeCandidate()
 	}
 
-	for i := int64(1); i <= r.randomizedElectionTimeout; i++ {
+	for i := 1; i < 2*et; i++ {
 		r.tick()
 	}
 	r.advanceMessagesAfterAppend()
@@ -307,11 +307,10 @@ func TestCandidateElectionTimeoutRandomized(t *testing.T) {
 // follower or candidate is randomized.
 // Reference: section 5.2
 func testNonleaderElectionTimeoutRandomized(t *testing.T, state pb.StateType) {
-	et := int64(10)
+	et := 10
 	r := newTestRaft(1, et, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	r.electionTimeoutJitter = et
-	timeouts := make(map[int64]bool)
-	for round := int64(0); round < 50*et; round++ {
+	timeouts := make(map[int]bool)
+	for round := 0; round < 50*et; round++ {
 		switch state {
 		case pb.StateFollower:
 			r.becomeFollower(r.Term+1, 2)
@@ -319,7 +318,7 @@ func testNonleaderElectionTimeoutRandomized(t *testing.T, state pb.StateType) {
 			r.becomeCandidate()
 		}
 
-		time := int64(0)
+		time := 0
 		for len(r.readMessages()) == 0 {
 			r.tick()
 			time++
@@ -348,7 +347,7 @@ func TestCandidatesElectionTimeoutNonconflict(t *testing.T) {
 // likelihood of split vote in the new election.
 // Reference: section 5.2
 func testNonleadersElectionTimeoutNonconflict(t *testing.T, state pb.StateType) {
-	et := int64(10)
+	et := 10
 	size := 5
 	rs := make([]*raft, size)
 	ids := idsBySize(size)
@@ -662,22 +661,22 @@ func TestFollowerAppendEntries(t *testing.T) {
 // into consistency with its own.
 // Reference: section 5.3, figure 7
 func TestLeaderSyncFollowerLog(t *testing.T) {
-	ents := index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6, 6)
-	term := uint64(9)
+	ents := index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6)
+	term := uint64(8)
 	for i, tt := range [][]pb.Entry{
-		index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6),
-		index(1).terms(1, 1, 1, 4, 4),
-		index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 6),
-		index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 7, 7),
-		index(1).terms(1, 1, 1, 4, 4, 4, 4),
-		index(1).terms(1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3),
+		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6),
+		index(0).terms(0, 1, 1, 1, 4, 4),
+		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 6),
+		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 7, 7),
+		index(0).terms(0, 1, 1, 1, 4, 4, 4, 4),
+		index(0).terms(0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3),
 	} {
 		leadStorage := newTestMemoryStorage(withPeers(1, 2, 3))
-		require.NoError(t, leadStorage.Append(ents))
+		leadStorage.Append(ents)
 		lead := newTestRaft(1, 10, 1, leadStorage)
 		lead.loadState(pb.HardState{Commit: lead.raftLog.lastIndex(), Term: term})
 		followerStorage := newTestMemoryStorage(withPeers(1, 2, 3))
-		require.NoError(t, followerStorage.Append(tt))
+		followerStorage.Append(tt)
 		follower := newTestRaft(2, 10, 1, followerStorage)
 		follower.loadState(pb.HardState{Term: term - 1})
 		// It is necessary to have a three-node cluster.
@@ -713,7 +712,7 @@ func TestVoteRequest(t *testing.T) {
 		})
 		r.readMessages()
 
-		for i := int64(1); i <= r.randomizedElectionTimeout; i++ {
+		for i := 1; i < r.electionTimeout*2; i++ {
 			r.tickElection()
 		}
 
@@ -824,7 +823,7 @@ func commitNoopEntry(r *raft, s *MemoryStorage) {
 	// ignore further messages to refresh followers' commit index
 	r.readMessages()
 	s.Append(r.raftLog.nextUnstableEnts())
-	r.raftLog.appliedTo(r.raftLog.committed)
+	r.raftLog.appliedTo(r.raftLog.committed, 0 /* size */)
 	r.raftLog.stableTo(r.raftLog.unstable.mark())
 }
 

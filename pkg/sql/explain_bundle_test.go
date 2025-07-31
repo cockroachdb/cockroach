@@ -82,10 +82,7 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(godb)
 	r.Exec(t, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE);
 CREATE SCHEMA s;
-CREATE TABLE s.a (a INT PRIMARY KEY);
-CREATE USER testuser;
-GRANT ALL ON abc TO testuser;`)
-	testuserR := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t, serverutils.User("testuser")))
+CREATE TABLE s.a (a INT PRIMARY KEY);`)
 
 	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql"
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
@@ -178,9 +175,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 
 	t.Run("basic when tracing already enabled", func(t *testing.T) {
 		r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='100ms';")
-		r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.sample_rate='1.0';")
 		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='0ms';")
-		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.sample_rate='0.0';")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
 			t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
@@ -632,7 +627,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	// getBundleThroughBuiltin is a helper function that returns an url to
 	// download a stmt bundle that was collected in response to a diagnostics
 	// request inserted by the builtin.
-	getBundleThroughBuiltin := func(fprint, query, planGist string, redacted, underTestUser bool) string {
+	getBundleThroughBuiltin := func(fprint, query, planGist string, redacted bool) string {
 		// Delete all old diagnostics to make this test easier.
 		r.Exec(t, "DELETE FROM system.statement_diagnostics WHERE true")
 
@@ -643,11 +638,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		require.True(t, inserted)
 
 		// Now actually execute the query so that the bundle is collected.
-		if underTestUser {
-			testuserR.Exec(t, query)
-		} else {
-			r.Exec(t, query)
-		}
+		r.Exec(t, query)
 
 		// Get ID of our bundle.
 		var id int
@@ -674,7 +665,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 					query := "SELECT max(cardno), test_redact() FROM pterosaur WHERE cardholder = 'pterodactyl';"
 					// Collect a bundle in response to a diagnostics request
 					// inserted by the builtin.
-					url = getBundleThroughBuiltin(fprint, query, "" /* planGist */, true /* redacted */, false /* underTestUser */)
+					url = getBundleThroughBuiltin(fprint, query, "" /* planGist */, true /* redacted */)
 				} else {
 					rows := r.QueryStr(t,
 						"EXPLAIN ANALYZE (DEBUG, REDACT) SELECT max(cardno), test_redact() FROM pterosaur WHERE cardholder = 'pterodactyl'",
@@ -927,7 +918,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		var gist string
 		row.Scan(&gist)
 
-		url := getBundleThroughBuiltin(fprint, fprint, gist, false /* redacted */, false /* underTestUser */)
+		url := getBundleThroughBuiltin(fprint, fprint, gist, false /* redacted */)
 		checkBundleContents(
 			t, url, "gist", func(name, contents string) error {
 				if name != "plan.txt" {
@@ -953,59 +944,6 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.gist.sql",
 		)
 	})
-
-	t.Run("row-level security", func(t *testing.T) {
-		r.Exec(t, "CREATE TABLE rls1 (pk INT PRIMARY KEY, u TEXT, val SMALLINT)")
-		alterTableDDL := "ALTER TABLE public.rls1 ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY"
-		r.Exec(t, alterTableDDL)
-		r.Exec(t, "CREATE POLICY policy1 ON rls1 USING (u = 'hal')")
-		r.Exec(t, "CREATE USER rls_user")
-		r.Exec(t, "GRANT SYSTEM VIEWCLUSTERSETTING TO rls_user")
-		r.Exec(t, "ALTER TABLE rls1 OWNER TO rls_user")
-		r.Exec(t, "SET ROLE rls_user")
-		defer r.Exec(t, "SET ROLE root")
-
-		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG,VERBOSE) SELECT * FROM rls1")
-		checkBundle(
-			t, fmt.Sprint(rows), "public.rls1", func(name, contents string) error {
-				if name == "env.sql" {
-					if !strings.Contains(contents, `-- User: rls_user`) {
-						return errors.Errorf("could not find user 'rls_user' in env.sql:\n%s", contents)
-					}
-				}
-				if name == "plan.txt" {
-					if !strings.Contains(contents, `policies: policy1`) {
-						return errors.Errorf("could not find policy information in the plan.txt:\n%s", contents)
-					}
-					if !strings.Contains(contents, "filter: ((u)[string] = ('hal')[string])[bool]") {
-						return errors.Errorf("could not find injected filter from policy in the plan.txt:\n%s", contents)
-					}
-				}
-				if name == "schema.sql" {
-					for _, ddl := range []string{alterTableDDL, "CREATE POLICY policy1 ON public.rls1"} {
-						if !strings.Contains(contents, ddl) {
-							return errors.Errorf("could not find ddl %q in schema.sql:\n%s", ddl, contents)
-						}
-					}
-				}
-				return nil
-			}, false, /* expectErrors */
-			base, plans, "stats-defaultdb.public.rls1.sql", "distsql.html vec.txt vec-v.txt",
-		)
-	})
-
-	// TODO(yuzefovich): figure out why this test occasionally fails under
-	// stress (i.e. it seems that no bundle is collected altogether).
-	//t.Run("under different users", func(t *testing.T) {
-	//	const fprint = `SELECT * FROM abc`
-	//	for _, underTestUser := range []bool{false, true} {
-	//		url := getBundleThroughBuiltin(fprint, fprint, "" /* planGist */, false /* redacted */, underTestUser)
-	//		checkBundleContents(
-	//			t, url, "public.abc", nil, false, /* expectErrors */
-	//			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
-	//		)
-	//	}
-	//})
 }
 
 func getBundleDownloadURL(t *testing.T, text string) string {
@@ -1101,6 +1039,7 @@ func checkBundleContents(
 	var files []string
 	foundSchema := false
 	for _, f := range unzip.File {
+		t.Logf("found file: %s", f.Name)
 		if f.UncompressedSize64 == 0 {
 			t.Fatalf("file %s is empty", f.Name)
 		}
@@ -1318,7 +1257,7 @@ func TestExplainBundleEnv(t *testing.T) {
 	)
 	defer cleanup()
 	p := internalPlanner.(*planner)
-	c := makeStmtEnvCollector(ctx, p, s.InternalExecutor().(*InternalExecutor), "" /* requesterUsername */)
+	c := makeStmtEnvCollector(ctx, p, s.InternalExecutor().(*InternalExecutor))
 
 	var sb strings.Builder
 	require.NoError(t, c.PrintSessionSettings(&sb, &s.ClusterSettings().SV, true /* all */))
@@ -1335,9 +1274,6 @@ func TestExplainBundleEnv(t *testing.T) {
 	require.NoError(t, c.PrintClusterSettings(&sb, true /* all */))
 	vars = strings.Split(sb.String(), "\n")
 	for _, line := range vars {
-		if strings.Contains(line, "unsafe") {
-			continue
-		}
 		_, err := sqlDB.ExecContext(ctx, line)
 		if err != nil {
 			t.Fatalf("unexpectedly couldn't execute %s: %v", line, err)

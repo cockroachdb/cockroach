@@ -8,7 +8,6 @@ package logcrash
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -210,21 +209,6 @@ func PanicAsError(depth int, r interface{}) error {
 	return errors.NewWithDepthf(depth+1, "panic: %v", r)
 }
 
-// crashReportingDisabledString controls whether to opt out of crash reporting
-// or not compile time. The variable is set by bazel via stamping
-// (`stamp.sh -d true/false`, which controls telemetry opt out). Becuase Go only
-// supports strings for in `-ldflags "-X ..."`, we have to use a string
-// representation here.
-var crashReportingDisabledString = "false"
-
-func crashReportingDisabled() bool {
-	ret, err := strconv.ParseBool(crashReportingDisabledString)
-	if err != nil {
-		return false
-	}
-	return ret
-}
-
 // Crash reporting URL.
 //
 // This uses a Sentry proxy run by Cockroach Labs. The proxy
@@ -243,9 +227,6 @@ func crashReportingDisabled() bool {
 // TODO(knz): We could envision auto-selecting this alternate URL
 // when detecting a non-release build.
 var crashReportURL = func() string {
-	if crashReportingDisabled() {
-		return ""
-	}
 	var defaultURL string
 	if build.SeemsOfficial() {
 		defaultURL = "https://ignored@errors.cockroachdb.com/api/sentry/v2/1111"

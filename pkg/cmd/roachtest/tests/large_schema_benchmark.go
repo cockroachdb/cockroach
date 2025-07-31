@@ -73,6 +73,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
 		Timeout:          testTimeout,
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			numWorkers := (len(c.All()) - 1) * 10
 			// Number of tables per-database from the TPCC template.
@@ -151,16 +152,11 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 						conn := c.Conn(ctx, t.L(), 1)
 						defer conn.Close()
-						// Disable autocommit before DDL since we need to batch statements
-						// in a single transaction for them to complete in a reasonable amount
-						// of time. In multi-region this latency can be substantial.
-						_, err := conn.Exec("SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'")
-						require.NoError(t, err)
 						// Since we will be making a large number of databases / tables
 						// quickly,on MR the job retention can slow things down. Let's
 						// minimize how long jobs are kept, so that the creation / ingest
 						// completes in a reasonable amount of time.
-						_, err = conn.Exec("SET CLUSTER SETTING jobs.retention_time='1h'")
+						_, err := conn.Exec("SET CLUSTER SETTING jobs.retention_time='1h'")
 						require.NoError(t, err)
 						// Use a higher number of retries, since we hit retry errors on importing
 						// a large number of tables
@@ -180,7 +176,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 			}
 			// Upload a file containing the ORM queries.
 			require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, c.WorkloadNode()))
-			mon := c.NewDeprecatedMonitor(ctx, c.All())
+			mon := c.NewMonitor(ctx, c.All())
 			// Upload a file containing the web API calls we want to benchmark.
 			require.NoError(t, c.PutString(ctx,
 				LargeSchemaAPICalls,
@@ -200,16 +196,14 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 				populateFileName := fmt.Sprintf("populate_%d", dbListType)
 				mon.Go(func(ctx context.Context) error {
 					waitEnabled := "--wait 0.0"
+					// Export histograms out for the roach perf dashboard
+					histograms := " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
 					var wlInstance []workloadInstance
-					disableHistogram := false
 					// Inactive databases will intentionally have wait time on
 					// them and not include them in our histograms.
 					if dbListType == inactiveDbListType {
 						waitEnabled = "--wait 1.0"
-
-						// disable histogram since they shouldn't be included
-						disableHistogram = true
-
+						histograms = ""
 						// Use a different prometheus port for the inactive databases,
 						// this will not be measured.
 						wlInstance = append(
@@ -226,11 +220,11 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						Warehouses:        len(c.All()) - 1,
 						SkipSetup:         true,
 						DisablePrometheus: true,
-						DisableHistogram:  disableHistogram, // We setup the flag above.
+						DisableHistogram:  true, // We setup the flag above.
 						WorkloadInstances: wlInstance,
 						Duration:          time.Minute * 60,
 						ExtraRunArgs: fmt.Sprintf("--db-list-file=%s --txn-preamble-file=%s --admin-urls=%q "+
-							"--console-api-file=apiCalls --console-api-username=%q --console-api-password=%q --conns=%d --workers=%d %s",
+							"--console-api-file=apiCalls --console-api-username=%q --console-api-password=%q --conns=%d --workers=%d %s %s",
 							populateFileName,
 							"ormQueries.sql",
 							strings.Join(webConsoleURLs, ","),
@@ -238,7 +232,8 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 							"roacher",
 							numWorkers,
 							numWorkers,
-							waitEnabled),
+							waitEnabled,
+							histograms),
 					}
 					runTPCC(ctx, t, t.L(), c, options)
 					return nil

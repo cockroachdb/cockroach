@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -114,18 +113,12 @@ var (
 		Help:        "Number of open SQL connections",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    `This metric shows the number of connections as well as the distribution, or balancing, of connections across cluster nodes. An imbalance can lead to nodes becoming overloaded. Review Connection Pooling.`,
 	}
 	MetaNewConns = metric.Metadata{
 		Name:        "sql.new_conns",
 		Help:        "Number of SQL connections created",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    `The rate of this metric shows how frequently new connections are being established. This can be useful in determining if a high rate of incoming new connections is causing additional load on the server due to a misconfigured application.`,
 	}
 	MetaConnsWaitingToHash = metric.Metadata{
 		Name:        "sql.conns_waiting_to_hash",
@@ -150,18 +143,12 @@ var (
 		Help:        "Latency to establish and authenticate a SQL connection",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    "These metrics characterize the database connection latency which can affect the application performance, for example, by having slow startup times. Connection failures are not recorded in these metrics.",
 	}
 	MetaConnFailures = metric.Metadata{
 		Name:        "sql.conn.failures",
 		Help:        "Number of SQL connection failures",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    "This metric is incremented whenever a connection attempt fails for any reason, including timeouts.",
 	}
 	MetaPGWireCancelTotal = metric.Metadata{
 		Name:        "sql.pgwire_cancel.total",
@@ -446,7 +433,7 @@ func MakeServer(
 		},
 	}
 	server.sqlMemoryPool = mon.NewMonitor(mon.Options{
-		Name: mon.MakeName("sql"),
+		Name: "sql",
 		// Note that we don't report metrics on this monitor. The reason for this is
 		// that we report metrics on the sum of all the child monitors of this pool.
 		// This monitor is the "main sql" monitor. It's a child of the root memory
@@ -462,7 +449,7 @@ func MakeServer(
 	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
 
 	server.tenantSpecificConnMonitor = mon.NewMonitor(mon.Options{
-		Name:       mon.MakeName("conn"),
+		Name:       "conn",
 		CurCount:   server.tenantMetrics.ConnMemMetrics.CurBytesCount,
 		MaxHist:    server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
 		Increment:  int64(connReservationBatchSize) * baseSQLMemoryBudget,
@@ -1295,7 +1282,7 @@ func (s *Server) serveImpl(
 				// packet) and instead return a broken pipe or io.EOF error message.
 				return false, isSimpleQuery, errors.Wrap(err, "pgwire: error reading input")
 			}
-			timeReceived := crtime.NowMono()
+			timeReceived := timeutil.Now()
 			log.VEventf(ctx, 2, "pgwire: processing %s", typ)
 
 			if ignoreUntilSync {

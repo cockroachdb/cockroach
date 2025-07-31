@@ -14,6 +14,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/utilccl",
+        "//pkg/clusterversion",
         "//pkg/security",
         "//pkg/security/distinguishedname",
         "//pkg/security/username",
@@ -24,6 +25,8 @@ go_library(
         "//pkg/sql/pgwire",
         "//pkg/sql/pgwire/hba",
         "//pkg/sql/pgwire/identmap",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",

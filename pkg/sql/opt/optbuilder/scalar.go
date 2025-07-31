@@ -491,7 +491,7 @@ func (b *Builder) buildScalar(
 		panic(unimplemented.Newf(fmt.Sprintf("optbuilder.%T", scalar), "not yet implemented: scalar expression: %T", scalar))
 	}
 
-	return b.finishBuildScalar(scalar, out, outScope, outCol)
+	return b.finishBuildScalar(scalar, out, inScope, outScope, outCol)
 }
 
 func (b *Builder) hasSubOperator(t *tree.ComparisonExpr) bool {
@@ -610,7 +610,7 @@ func (b *Builder) buildFunction(
 		}
 	}
 
-	return b.finishBuildScalar(f, out, outScope, outCol)
+	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
 }
 
 // getColumnDefinitionListTypes returns a composite type representing the column
@@ -943,7 +943,7 @@ func (sb *ScalarBuilder) Build(expr tree.Expr) (_ opt.ScalarExpr, err error) {
 		}
 	}()
 
-	typedExpr := sb.scope.resolveType(expr, types.AnyElement)
+	typedExpr := sb.scope.resolveType(expr, types.Any)
 	scalar := sb.buildScalar(typedExpr, &sb.scope, nil, nil, nil)
 	return scalar, nil
 }

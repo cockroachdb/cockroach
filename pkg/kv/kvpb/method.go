@@ -123,6 +123,10 @@ const (
 	// CheckConsistency verifies the consistency of all ranges falling within a
 	// key span.
 	CheckConsistency
+	// InitPut sets the value for a key if the key doesn't exist. It returns
+	// an error if the key exists and the existing value is different from the
+	// supplied one.
+	InitPut
 	// WriteBatch applies the operations encoded in a BatchRepr.
 	WriteBatch
 	// Export dumps a keyrange into files.
@@ -151,6 +155,9 @@ const (
 	Subsume
 	// RangeStats returns the MVCC statistics for a range.
 	RangeStats
+	// AdminVerifyProtectedTimestamp determines whether the specified protection
+	// record will be respected by this Range.
+	AdminVerifyProtectedTimestamp
 	// QueryResolvedTimestamp requests the resolved timestamp of the key span it
 	// is issued over.
 	QueryResolvedTimestamp
@@ -164,14 +171,6 @@ const (
 	// IsSpanEmpty is a non-transaction read request used to determine whether
 	// a span contains any keys whatsoever (garbage or otherwise).
 	IsSpanEmpty
-	// Excise is a non-MVCC command that destroys all data in a user MVCC key
-	// span. See ExciseRequest for details.
-	Excise
-
-	// FlushLockTable is an operation writes unreplicated locks in the
-	// in-memory lock table to the replicated lock table.
-	FlushLockTable
-
 	// MaxMethod is the maximum method.
 	MaxMethod Method = iota - 1
 	// NumMethods represents the total number of API methods.

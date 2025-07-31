@@ -102,7 +102,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		if err != nil {
 			panic(err)
 		}
-		texpr := inScope.resolveType(expr, types.AnyElement)
+		texpr := inScope.resolveType(expr, types.Any)
 
 		var def *tree.ResolvedFunctionDefinition
 		funcExpr, ok := texpr.(*tree.FuncExpr)
@@ -271,7 +271,9 @@ func (b *Builder) validateGeneratorFunctionReturnType(
 			}
 		}
 	} else if overload.ReturnsRecordType {
-		panic(needColumnDefListForRecordErr)
+		panic(pgerror.New(pgcode.Syntax,
+			"a column definition list is required for functions returning \"record\"",
+		))
 	}
 
 	// Verify that the function return type can be assignment-casted to the
@@ -320,7 +322,3 @@ func (b *Builder) buildProjectSet(inScope *scope) {
 
 	inScope.expr = b.factory.ConstructProjectSet(inScope.expr, zip)
 }
-
-var needColumnDefListForRecordErr = pgerror.New(pgcode.Syntax,
-	"a column definition list is required for functions returning \"record\"",
-)

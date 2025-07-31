@@ -124,7 +124,6 @@
                         AggregationsItem |
                         Filters |
                         FiltersItem |
-                        Barrier |
                         Zip |
                         ZipItem |
                         ZipItemPrivate |
@@ -258,11 +257,6 @@
                         ProjectSet |
                         Sort |
                         TopK |
-                        VectorSearch |
-                        VectorMutationSearch |
-                        VectorDistance |
-                        VectorCosVectorDistance |
-                        VectorNegInnerProduct |
                         Insert |
                         Update |
                         Upsert |

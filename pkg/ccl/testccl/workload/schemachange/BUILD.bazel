@@ -10,7 +10,7 @@ go_test(
     data = [
         "//c-deps:libgeos",
     ],
-    exec_properties = {"test.Pool": "heavy"},
+    exec_properties = {"test.Pool": "large"},
     deps = [
         "//pkg/base",
         "//pkg/ccl",
@@ -18,7 +18,6 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",

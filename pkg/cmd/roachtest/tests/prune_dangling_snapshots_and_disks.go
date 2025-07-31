@@ -30,6 +30,7 @@ func registerPruneDanglingSnapshotsAndDisks(r registry.Registry) {
 		Cluster:          clusterSpec,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
 				CreatedBefore: timeutil.Now().Add(-1 * roachprod.SnapshotTTL),

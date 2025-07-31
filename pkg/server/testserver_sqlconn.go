@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -65,7 +65,7 @@ func pgURL(
 	}
 
 	// No LoopbackListener
-	pgURL, cleanupFn, err = pgurlutils.PGUrlWithOptionalClientCertsE(sqlAddr, prefix, user, clientCerts, "")
+	pgURL, cleanupFn, err = sqlutils.PGUrlWithOptionalClientCertsE(sqlAddr, prefix, user, clientCerts, "")
 	if err != nil {
 		return pgURL, cleanupFn, err
 	}

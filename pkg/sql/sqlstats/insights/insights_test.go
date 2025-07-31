@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -41,7 +40,8 @@ func BenchmarkInsights(b *testing.B) {
 	// down, guiding us as we tune buffer sizes, etc.
 	for _, numSessions := range []int{1, 10, 100, 1000, 10000} {
 		b.Run(fmt.Sprintf("numSessions=%d", numSessions), func(b *testing.B) {
-			provider := insights.New(settings, insights.NewMetrics())
+			provider := insights.New(settings, insights.NewMetrics(), nil)
+			provider.Start(ctx, stopper)
 
 			// Spread the b.N work across the simulated SQL sessions, so that we
 			// can make apples-to-apples comparisons in the benchmark reports:
@@ -50,34 +50,31 @@ func BenchmarkInsights(b *testing.B) {
 			numTransactionsPerSession := b.N / numSessions
 			var sessions sync.WaitGroup
 			sessions.Add(numSessions)
-			statements := make([]sqlstats.RecordedStmtStats, b.N)
-			transactions := make([]sqlstats.RecordedTxnStats, b.N)
+			writer := provider.Writer()
+			statements := make([]insights.Statement, b.N)
+			transactions := make([]insights.Transaction, b.N)
 			for i := 0; i < numSessions; i++ {
-				sessionID := clusterunique.ID{Uint128: uint128.FromInts(rand.Uint64(), uint64(i))}
 				for j := 0; j < numTransactionsPerSession; j++ {
-					statements[numTransactionsPerSession*i+j] = sqlstats.RecordedStmtStats{
-						SessionID: sessionID,
+					statements[numTransactionsPerSession*i+j] = insights.Statement{
 						// Spread across 6 different statement fingerprints.
 						FingerprintID: appstatspb.StmtFingerprintID(j % 6),
 						// Choose latencies in 20ms, 40ms, 60ms, 80ms, 100ms, 120ms, 140ms.
 						// As configured above, only latencies >=100ms are noteworthy.
 						// Since 7 is relatively prime to 6, we'll spread these across all fingerprints.
-						ServiceLatencySec: float64(j%7+1) * 0.02,
+						LatencyInSeconds: float64(j%7+1) * 0.02,
 					}
-				}
-				transactions[i] = sqlstats.RecordedTxnStats{
-					SessionID: sessionID,
 				}
 			}
 
 			b.ResetTimer()
 			for i := 0; i < numSessions; i++ {
+				sessionID := clusterunique.ID{Uint128: uint128.FromInts(rand.Uint64(), uint64(i))}
 				go func(i int) {
 					defer sessions.Done()
 					for j := 0; j < numTransactionsPerSession; j++ {
 						idx := numTransactionsPerSession*i + j
-						provider.ObserveTransaction(ctx, &transactions[idx],
-							[]*sqlstats.RecordedStmtStats{&statements[idx]})
+						writer.ObserveStatement(sessionID, &statements[idx])
+						writer.ObserveTransaction(sessionID, &transactions[idx])
 					}
 				}(i)
 			}

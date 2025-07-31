@@ -8,14 +8,14 @@ package changefeedccl
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,20 +28,17 @@ const (
 // JSON format. Keys are the primary key columns in a record. Values are all
 // columns in a record.
 type confluentAvroEncoder struct {
-	schemaRegistry                         schemaRegistry
-	schemaPrefix                           string
-	updatedField, beforeField, sourceField bool
-	mvccTimestampField                     bool
-	virtualColumnVisibility                changefeedbase.VirtualColumnVisibility
-	targets                                changefeedbase.Targets
-	envelopeType                           changefeedbase.EnvelopeType
-	customKeyColumn                        string
-	headersJSONColumnName                  string
+	schemaRegistry            schemaRegistry
+	schemaPrefix              string
+	updatedField, beforeField bool
+	mvccTimestampField        bool
+	virtualColumnVisibility   changefeedbase.VirtualColumnVisibility
+	targets                   changefeedbase.Targets
+	envelopeType              changefeedbase.EnvelopeType
+	customKeyColumn           string
 
 	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
-
-	enrichedSourceProvider *enrichedSourceProvider
 
 	// resolvedCache doesn't need to be bounded like the other caches because the number of topics
 	// is fixed per changefeed.
@@ -56,12 +53,12 @@ type tableIDAndVersion struct {
 type tableIDAndVersionPair [2]tableIDAndVersion // [before, after]
 
 type confluentRegisteredKeySchema struct {
-	schema     *avro.DataRecord
+	schema     *avroDataRecord
 	registryID int32
 }
 
 type confluentRegisteredEnvelopeSchema struct {
-	schema     *avro.EnvelopeRecord
+	schema     *avroEnvelopeRecord
 	registryID int32
 }
 
@@ -80,7 +77,6 @@ func newConfluentAvroEncoder(
 	targets changefeedbase.Targets,
 	p externalConnectionProvider,
 	sliMetrics *sliMetrics,
-	enrichedSourceProvider *enrichedSourceProvider,
 ) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{
 		schemaPrefix:            opts.AvroSchemaPrefix,
@@ -91,11 +87,8 @@ func newConfluentAvroEncoder(
 
 	e.updatedField = opts.UpdatedTimestamps
 	e.beforeField = opts.Diff
-	e.sourceField = inSet(changefeedbase.EnrichedPropertySource, opts.EnrichedProperties)
 	e.customKeyColumn = opts.CustomKeyColumn
-	e.headersJSONColumnName = opts.HeadersJSONColName
 	e.mvccTimestampField = opts.MVCCTimestamps
-	e.enrichedSourceProvider = enrichedSourceProvider
 
 	// TODO: Implement this.
 	if opts.KeyInValue {
@@ -125,6 +118,25 @@ func newConfluentAvroEncoder(
 	return e, nil
 }
 
+// Get the raw SQL-formatted string for a table name
+// and apply full_table_name and avro_schema_prefix options
+func (e *confluentAvroEncoder) rawTableName(eventMeta cdcevent.Metadata) (string, error) {
+	target, found := e.targets.FindByTableIDAndFamilyName(eventMeta.TableID, eventMeta.FamilyName)
+	if !found {
+		return eventMeta.TableName, errors.Newf("Could not find Target for %s", eventMeta)
+	}
+	switch target.Type {
+	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
+		return e.schemaPrefix + string(target.StatementTimeName), nil
+	case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
+		return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, eventMeta.FamilyName), nil
+	case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+		return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, target.FamilyName), nil
+	default:
+		return "", errors.AssertionFailedf("Found a matching target with unimplemented type %s", target.Type)
+	}
+}
+
 // EncodeKey implements the Encoder interface.
 func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) ([]byte, error) {
 	// No familyID in the cache key for keys because it's the same schema for all families
@@ -134,17 +146,17 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 	v, ok := e.keyCache.Get(cacheKey)
 	if ok {
 		registered = v.(confluentRegisteredKeySchema)
-		if err := registered.schema.RefreshTypeMetadata(row); err != nil {
+		if err := registered.schema.refreshTypeMetadata(row); err != nil {
 			return nil, err
 		}
 	} else {
 		var err error
-		tableName, err := getTableName(e.targets, e.schemaPrefix, row.Metadata)
+		tableName, err := e.rawTableName(row.Metadata)
 		if err != nil {
 			return nil, err
 		}
 		if e.customKeyColumn == "" {
-			registered.schema, err = avro.PrimaryIndexToAvroSchema(row, tableName, e.schemaPrefix)
+			registered.schema, err = primaryIndexToAvroSchema(row, tableName, e.schemaPrefix)
 			if err != nil {
 				return nil, err
 			}
@@ -153,7 +165,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 			if err != nil {
 				return nil, err
 			}
-			registered.schema, err = avro.NewSchemaForRow(it, changefeedbase.SQLNameToAvroName(tableName), e.schemaPrefix)
+			registered.schema, err = newSchemaForRow(it, SQLNameToAvroName(tableName), e.schemaPrefix)
 			if err != nil {
 				return nil, err
 			}
@@ -161,8 +173,8 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := changefeedbase.SQLNameToKafkaName(tableName) + confluentSubjectSuffixKey
-		registered.registryID, err = e.register(ctx, &registered.schema.Record, subject)
+		subject := SQLNameToKafkaName(tableName) + confluentSubjectSuffixKey
+		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
 		if err != nil {
 			return nil, err
 		}
@@ -207,69 +219,55 @@ func (e *confluentAvroEncoder) EncodeValue(
 	v, ok := e.valueCache.Get(cacheKey)
 	if ok {
 		registered = v.(confluentRegisteredEnvelopeSchema)
-		if prevRow.IsInitialized() && registered.schema.Before != nil {
-			if err := registered.schema.Before.RefreshTypeMetadata(prevRow); err != nil {
+		if prevRow.IsInitialized() && registered.schema.before != nil {
+			if err := registered.schema.before.refreshTypeMetadata(prevRow); err != nil {
 				return nil, err
 			}
 		}
-		if registered.schema.After != nil {
-			if err := registered.schema.After.RefreshTypeMetadata(updatedRow); err != nil {
+		if registered.schema.after != nil {
+			if err := registered.schema.after.refreshTypeMetadata(updatedRow); err != nil {
 				return nil, err
 			}
 		}
-		if registered.schema.Rec != nil {
-			if err := registered.schema.Rec.RefreshTypeMetadata(updatedRow); err != nil {
+		if registered.schema.record != nil {
+			if err := registered.schema.record.refreshTypeMetadata(updatedRow); err != nil {
 				return nil, err
 			}
 		}
 	} else {
-		var beforeDataSchema, afterDataSchema, recordDataSchema *avro.DataRecord
-		var sourceDataSchema *avro.FunctionalRecord
+		var beforeDataSchema, afterDataSchema, recordDataSchema *avroDataRecord
 		if e.beforeField && prevRow.IsInitialized() {
 			var err error
-			beforeDataSchema, err = avro.TableToAvroSchema(prevRow, `before`, e.schemaPrefix, e.headersJSONColumnName)
+			beforeDataSchema, err = tableToAvroSchema(prevRow, `before`, e.schemaPrefix)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		currentSchema, err := avro.TableToAvroSchema(updatedRow, avro.SchemaNoSuffix, e.schemaPrefix, e.headersJSONColumnName)
+		currentSchema, err := tableToAvroSchema(updatedRow, avroSchemaNoSuffix, e.schemaPrefix)
 		if err != nil {
 			return nil, err
 		}
 
-		var opts avro.EnvelopeOpts
+		var opts avroEnvelopeOpts
 
 		// In the wrapped envelope, row data goes in the "after" field. In the raw envelope,
 		// it goes in the "record" field. In the "key_only" envelope it's omitted.
 		// This means metadata can safely go at the top level as there are never arbitrary column names
 		// for it to conflict with.
-		switch e.envelopeType {
-
-		case changefeedbase.OptEnvelopeWrapped:
-			opts = avro.EnvelopeOpts{AfterField: true, BeforeField: e.beforeField, UpdatedField: e.updatedField, MVCCTimestampField: e.mvccTimestampField}
+		if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
+			opts = avroEnvelopeOpts{afterField: true, beforeField: e.beforeField, updatedField: e.updatedField, mvccTimestampField: e.mvccTimestampField}
 			afterDataSchema = currentSchema
-		case changefeedbase.OptEnvelopeBare:
-			opts = avro.EnvelopeOpts{RecordField: true, UpdatedField: e.updatedField, MVCCTimestampField: e.mvccTimestampField}
+		} else {
+			opts = avroEnvelopeOpts{recordField: true, updatedField: e.updatedField, mvccTimestampField: e.mvccTimestampField}
 			recordDataSchema = currentSchema
-		case changefeedbase.OptEnvelopeEnriched:
-			afterDataSchema = currentSchema
-			opts = avro.EnvelopeOpts{AfterField: true, BeforeField: e.beforeField, OpField: true, TsField: true, SourceField: e.sourceField}
-			if e.sourceField {
-				if sourceDataSchema, err = e.enrichedSourceProvider.GetAvro(updatedRow, e.schemaPrefix, evCtx); err != nil {
-					return nil, err
-				}
-			}
-		// key_only handled above, and row is not supported in avro
-		default:
-			return nil, errors.AssertionFailedf(`unknown envelope type: %s`, e.envelopeType)
 		}
 
-		name, err := getTableName(e.targets, e.schemaPrefix, updatedRow.Metadata)
+		name, err := e.rawTableName(updatedRow.Metadata)
 		if err != nil {
 			return nil, err
 		}
-		registered.schema, err = avro.NewEnvelopeRecord(name, opts, beforeDataSchema, afterDataSchema, recordDataSchema, sourceDataSchema, e.schemaPrefix)
+		registered.schema, err = envelopeToAvroSchema(name, opts, beforeDataSchema, afterDataSchema, recordDataSchema, e.schemaPrefix)
 
 		if err != nil {
 			return nil, err
@@ -277,26 +275,20 @@ func (e *confluentAvroEncoder) EncodeValue(
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := changefeedbase.SQLNameToKafkaName(name) + confluentSubjectSuffixValue
-		registered.registryID, err = e.register(ctx, &registered.schema.Record, subject)
+		subject := SQLNameToKafkaName(name) + confluentSubjectSuffixValue
+		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
 		if err != nil {
 			return nil, err
 		}
 		e.valueCache.Add(cacheKey, registered)
 	}
 
-	meta := avro.Metadata{}
-	if registered.schema.Opts.UpdatedField {
+	meta := avroMetadata{}
+	if registered.schema.opts.updatedField {
 		meta[`updated`] = evCtx.updated
 	}
-	if registered.schema.Opts.MVCCTimestampField {
+	if registered.schema.opts.mvccTimestampField {
 		meta[`mvcc_timestamp`] = evCtx.mvcc
-	}
-	if registered.schema.Opts.OpField {
-		meta[`op`] = string(deduceOp(updatedRow, prevRow))
-	}
-	if registered.schema.Opts.TsField {
-		meta[`ts_ns`] = timeutil.Now().UnixNano()
 	}
 
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
@@ -305,7 +297,7 @@ func (e *confluentAvroEncoder) EncodeValue(
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
-	return registered.schema.BinaryFromRow(header, meta, prevRow, updatedRow, updatedRow, "" /* omitColumn */)
+	return registered.schema.BinaryFromRow(header, meta, prevRow, updatedRow, updatedRow)
 }
 
 // EncodeResolvedTimestamp implements the Encoder interface.
@@ -314,25 +306,25 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 ) ([]byte, error) {
 	registered, ok := e.resolvedCache[topic]
 	if !ok {
-		opts := avro.EnvelopeOpts{ResolvedField: true}
+		opts := avroEnvelopeOpts{resolvedField: true}
 		var err error
-		registered.schema, err = avro.NewEnvelopeRecord(topic, opts, nil /* before */, nil /* after */, nil /* record */, nil /* source */, e.schemaPrefix /* namespace */)
+		registered.schema, err = envelopeToAvroSchema(topic, opts, nil /* before */, nil /* after */, nil /* record */, e.schemaPrefix /* namespace */)
 		if err != nil {
 			return nil, err
 		}
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := changefeedbase.SQLNameToKafkaName(topic) + confluentSubjectSuffixValue
-		registered.registryID, err = e.register(ctx, &registered.schema.Record, subject)
+		subject := SQLNameToKafkaName(topic) + confluentSubjectSuffixValue
+		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
 		if err != nil {
 			return nil, err
 		}
 
 		e.resolvedCache[topic] = registered
 	}
-	var meta avro.Metadata
-	if registered.schema.Opts.ResolvedField {
+	var meta avroMetadata
+	if registered.schema.opts.resolvedField {
 		meta = map[string]interface{}{
 			`resolved`: resolved,
 		}
@@ -344,11 +336,11 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
 	var nilRow cdcevent.Row
-	return registered.schema.BinaryFromRow(header, meta, nilRow, nilRow, nilRow, "")
+	return registered.schema.BinaryFromRow(header, meta, nilRow, nilRow, nilRow)
 }
 
 func (e *confluentAvroEncoder) register(
-	ctx context.Context, schema *avro.Record, subject string,
+	ctx context.Context, schema *avroRecord, subject string,
 ) (int32, error) {
-	return e.schemaRegistry.RegisterSchemaForSubject(ctx, subject, schema.Schema())
+	return e.schemaRegistry.RegisterSchemaForSubject(ctx, subject, schema.codec.Schema())
 }

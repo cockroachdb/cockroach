@@ -295,7 +295,6 @@ function makeStats(): Required<StatementStatistics> {
     },
     last_error_code: "",
     failure_count: Long.fromNumber(0),
-    generic_count: Long.fromNumber(0),
   };
 }
 

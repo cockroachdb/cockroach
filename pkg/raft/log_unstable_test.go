@@ -25,10 +25,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newUnstableForTesting(ls LeadSlice, snap *pb.Snapshot) unstable {
+func newUnstableForTesting(ls LogSlice, snap *pb.Snapshot) unstable {
 	return unstable{
 		snapshot:        snap,
-		LeadSlice:       ls,
+		LogSlice:        ls,
 		entryInProgress: ls.prev.index,
 		logger:          raftlogger.DiscardLogger,
 	}
@@ -36,7 +36,7 @@ func newUnstableForTesting(ls LeadSlice, snap *pb.Snapshot) unstable {
 
 func (u *unstable) checkInvariants(t testing.TB) {
 	t.Helper()
-	require.NoError(t, u.LeadSlice.valid())
+	require.NoError(t, u.LogSlice.valid())
 	require.GreaterOrEqual(t, u.entryInProgress, u.prev.index)
 	require.LessOrEqual(t, u.entryInProgress, u.lastIndex())
 	if u.snapshot != nil {
@@ -50,11 +50,11 @@ func (u *unstable) checkInvariants(t testing.TB) {
 	}
 }
 
-func TestUnstableMaybeCompacted(t *testing.T) {
+func TestUnstableMaybeFirstIndex(t *testing.T) {
 	prev4 := entryID{term: 1, index: 4}
 	snap4 := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}
 	for _, tt := range []struct {
-		ls   LeadSlice
+		ls   LogSlice
 		snap *pb.Snapshot
 
 		wok    bool
@@ -66,24 +66,24 @@ func TestUnstableMaybeCompacted(t *testing.T) {
 			false, 0,
 		},
 		{
-			LeadSlice{}, nil,
+			LogSlice{}, nil,
 			false, 0,
 		},
 		// has snapshot
 		{
 			prev4.append(1), snap4,
-			true, 4,
+			true, 5,
 		},
 		{
 			prev4.append(), snap4,
-			true, 4,
+			true, 5,
 		},
 	} {
 		t.Run("", func(t *testing.T) {
 			u := newUnstableForTesting(tt.ls, tt.snap)
 			u.checkInvariants(t)
 
-			index, ok := u.maybeCompacted()
+			index, ok := u.maybeFirstIndex()
 			require.Equal(t, tt.wok, ok)
 			require.Equal(t, tt.windex, index)
 		})
@@ -94,14 +94,14 @@ func TestLastIndex(t *testing.T) {
 	prev4 := entryID{term: 1, index: 4}
 	snap4 := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}
 	for _, tt := range []struct {
-		ls     LeadSlice
+		ls     LogSlice
 		snap   *pb.Snapshot
 		windex uint64
 	}{
 		{prev4.append(1), nil, 5}, // last in entries
 		{prev4.append(1), snap4, 5},
 		{prev4.append(), snap4, 4}, // last in snapshot
-		{LeadSlice{}, nil, 0},      // empty unstable
+		{LogSlice{}, nil, 0},       // empty unstable
 	} {
 		t.Run("", func(t *testing.T) {
 			u := newUnstableForTesting(tt.ls, tt.snap)
@@ -136,7 +136,7 @@ func TestUnstableRestore(t *testing.T) {
 func TestUnstableNextEntries(t *testing.T) {
 	prev4 := entryID{term: 1, index: 4}
 	for _, tt := range []struct {
-		ls              LeadSlice
+		ls              LogSlice
 		entryInProgress uint64
 
 		wentries []pb.Entry
@@ -205,7 +205,7 @@ func TestUnstableAcceptInProgress(t *testing.T) {
 	prev4 := entryID{term: 1, index: 4}
 	snap4 := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}
 	for _, tt := range []struct {
-		ls                 LeadSlice
+		ls                 LogSlice
 		snap               *pb.Snapshot
 		entryInProgress    uint64
 		snapshotInProgress bool
@@ -311,7 +311,7 @@ func TestUnstableStableTo(t *testing.T) {
 	prev4 := entryID{term: 1, index: 4}
 	snap4 := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}
 	for _, tt := range []struct {
-		ls              LeadSlice
+		ls              LogSlice
 		entryInProgress uint64
 		snap            *pb.Snapshot
 		index, term     uint64
@@ -321,7 +321,7 @@ func TestUnstableStableTo(t *testing.T) {
 		wlen             int
 	}{
 		{
-			LeadSlice{}, 0, nil,
+			LogSlice{}, 0, nil,
 			5, 1,
 			0, 0, 0,
 		},
@@ -410,12 +410,12 @@ func TestUnstableStableTo(t *testing.T) {
 func TestUnstableTruncateAndAppend(t *testing.T) {
 	prev4 := entryID{term: 1, index: 4}
 	for _, tt := range []struct {
-		ls              LeadSlice
+		ls              LogSlice
 		entryInProgress uint64
 		snap            *pb.Snapshot
-		app             LeadSlice
+		app             LogSlice
 
-		want             LeadSlice
+		want             LogSlice
 		wentryInProgress uint64
 	}{
 		// append to the end
@@ -484,7 +484,7 @@ func TestUnstableTruncateAndAppend(t *testing.T) {
 
 			u.truncateAndAppend(tt.app)
 			u.checkInvariants(t)
-			require.Equal(t, tt.want, u.LeadSlice)
+			require.Equal(t, tt.want, u.LogSlice)
 			require.Equal(t, tt.wentryInProgress, u.entryInProgress)
 		})
 	}

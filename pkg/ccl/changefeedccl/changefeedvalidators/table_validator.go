@@ -89,16 +89,6 @@ func validateTable(
 		}
 	}
 
-	for name, typ := range canHandle.RequiredColumnTypes {
-		col := catalog.FindColumnByName(tableDesc, name)
-		if col == nil {
-			return errors.Errorf("required column %s not present on table %s", name, tableDesc.GetName())
-		}
-		if !col.GetType().Equivalent(typ) {
-			return errors.Errorf("column %s of type %s does not match required type %s", name, col.GetType(), typ)
-		}
-	}
-
 	return err
 }
 

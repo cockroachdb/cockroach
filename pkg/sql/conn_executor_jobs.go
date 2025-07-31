@@ -6,18 +6,14 @@
 package sql
 
 import (
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
-// waitOneVersionForNewVersionDescriptorsWithoutJobs is used to wait until all
+// waitOneVersionForNewVersionDescriptorsWithoutJobs is to used wait until all
 // descriptors with new versions to converge to one version in the cluster.
 // `descIDsInJobs` are collected with `descIDsInSchemaChangeJobs`. We need to do
 // this to make sure all descriptors mutated are at one version when the schema
@@ -25,7 +21,7 @@ import (
 // thing for affected descriptors. But, in some scenario, jobs are not created
 // for mutated descriptors.
 func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
-	descIDsInJobs catalog.DescriptorIDSet, cachedRegions *regions.CachedDatabaseRegions,
+	descIDsInJobs catalog.DescriptorIDSet,
 ) error {
 	withNewVersion, err := ex.extraTxnState.descCollection.GetOriginalPreviousIDVersionsForUncommitted()
 	if err != nil {
@@ -34,6 +30,10 @@ func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
 	// If no schema change occurred, then nothing needs to be done here.
 	if len(withNewVersion) == 0 {
 		return nil
+	}
+	cachedRegions, err := regions.NewCachedDatabaseRegions(ex.Ctx(), ex.server.cfg.DB, ex.server.cfg.LeaseManager)
+	if err != nil {
+		return err
 	}
 	for _, idVersion := range withNewVersion {
 		if descIDsInJobs.Contains(idVersion.ID) {
@@ -53,26 +53,6 @@ func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
 		}
 	}
 	return nil
-}
-
-func (ex *connExecutor) waitForInitialVersionForNewDescriptors(
-	cachedRegions *regions.CachedDatabaseRegions,
-) error {
-	// Detect any tables that have just been created, we will confirm that all
-	// nodes that have leased the schema for them out are aware of the new object.
-	// This guarantees that any cached optimizer memos are discarded once the
-	// user transaction completes.
-	descriptorIDs := make(descpb.IDs, 0, len(ex.extraTxnState.descCollection.GetUncommittedTables()))
-	for _, tbl := range ex.extraTxnState.descCollection.GetUncommittedTables() {
-		if tbl.GetVersion() == 1 {
-			descriptorIDs = append(descriptorIDs, tbl.GetID())
-		}
-	}
-	return ex.planner.LeaseMgr().WaitForInitialVersion(ex.Ctx(), descriptorIDs, retry.Options{
-		InitialBackoff: time.Millisecond,
-		MaxBackoff:     time.Second,
-		Multiplier:     1.5,
-	}, cachedRegions)
 }
 
 // descIDsInSchemaChangeJobs returns all descriptor IDs with which schema change

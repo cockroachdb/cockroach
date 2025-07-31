@@ -53,13 +53,7 @@ func TestParseDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "parse":
-				reparseWithoutLiterals := true
-				for _, arg := range d.CmdArgs {
-					if arg.Key == "no-parse-without-literals" {
-						reparseWithoutLiterals = false
-					}
-				}
-				return sqlutils.VerifyParseFormat(t, d.Input, d.Pos, sqlutils.SQL, reparseWithoutLiterals)
+				return sqlutils.VerifyParseFormat(t, d.Input, d.Pos, false /* plpgsql */)
 			case "parse-no-verify":
 				_, err := parser.Parse(d.Input)
 				if err != nil {
@@ -509,6 +503,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b BOX)`, 21286, `box`, ``},
 		{`CREATE TABLE a(b CIDR)`, 18846, `cidr`, ``},
 		{`CREATE TABLE a(b CIRCLE)`, 21286, `circle`, ``},
+		{`CREATE TABLE a(b JSONPATH)`, 22513, `jsonpath`, ``},
 		{`CREATE TABLE a(b LINE)`, 21286, `line`, ``},
 		{`CREATE TABLE a(b LSEG)`, 21286, `lseg`, ``},
 		{`CREATE TABLE a(b MACADDR)`, 45813, `macaddr`, ``},
@@ -634,27 +629,6 @@ func TestParseSQL(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestParse_RetainComments(t *testing.T) {
-	sql := `SELECT 1 -- my comment`
-	var p parser.Parser
-
-	testutils.RunTrueAndFalse(t, "RetainComments", func(t *testing.T, retainComments bool) {
-		options := parser.DefaultParseOptions
-		if retainComments {
-			options = options.RetainComments()
-		}
-		stmts, err := p.ParseWithOptions(sql, options)
-		require.NoError(t, err)
-		require.Len(t, stmts, 1)
-		if retainComments {
-			require.Len(t, stmts[0].Comments, 1)
-			require.Equal(t, `-- my comment`, stmts[0].Comments[0])
-		} else {
-			require.Len(t, stmts[0].Comments, 0)
-		}
-	})
 }
 
 // TestParseNumPlaceholders verifies that Statement.NumPlaceholders is set

@@ -91,17 +91,11 @@ func (c JointConfig) VoteResult(votes map[pb.PeerID]bool) VoteResult {
 	return VotePending
 }
 
-// LeadSupportExpiration takes slices of timestamps peers in both configurations
-// have promised a leader support until and returns the timestamp until which
-// the leader is guaranteed support until.
-//
-// Note that we accept two slices of timestamps instead of one map of a joint
-// configuration for performance reasons. Having two contiguous slices is more
-// performant than one map based on the ComputeLeadSupportUntil microbenchmark.
-func (c JointConfig) LeadSupportExpiration(
-	supportedC0 []hlc.Timestamp, supportedC1 []hlc.Timestamp,
-) hlc.Timestamp {
-	qse := c[0].LeadSupportExpiration(supportedC0)
-	qse.Backward(c[1].LeadSupportExpiration(supportedC1))
+// LeadSupportExpiration takes a mapping of timestamps peers have promised a
+// leader support until and returns the timestamp until which the leader is
+// guaranteed support until.
+func (c JointConfig) LeadSupportExpiration(supported map[pb.PeerID]hlc.Timestamp) hlc.Timestamp {
+	qse := c[0].LeadSupportExpiration(supported)
+	qse.Backward(c[1].LeadSupportExpiration(supported))
 	return qse
 }

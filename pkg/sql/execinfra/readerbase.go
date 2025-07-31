@@ -202,13 +202,13 @@ func (h *LimitHintHelper) ReadSomeRows(rowsRead int64) error {
 
 // UseStreamer returns whether the kvstreamer.Streamer API should be used as
 // well as the txn that should be used (regardless of the boolean return value).
-func (flowCtx *FlowCtx) UseStreamer(ctx context.Context) (bool, *kv.Txn, error) {
+func (flowCtx *FlowCtx) UseStreamer() (bool, *kv.Txn, error) {
 	useStreamer := flowCtx.EvalCtx.SessionData().StreamerEnabled && flowCtx.Txn != nil &&
 		flowCtx.Txn.Type() == kv.LeafTxn && flowCtx.MakeLeafTxn != nil
 	if !useStreamer {
 		return false, flowCtx.Txn, nil
 	}
-	leafTxn, err := flowCtx.MakeLeafTxn(ctx)
+	leafTxn, err := flowCtx.MakeLeafTxn()
 	if leafTxn == nil || err != nil {
 		// leafTxn might be nil in some flows which run outside of the txn, the
 		// streamer should not be used in such cases.

@@ -36,7 +36,7 @@ func (s *topLevelServer) RunInitialSQL(
 		return nil
 	}
 
-	if startSingleNode && (*s.cfg.DefaultSystemZoneConfig.NumReplicas != 1 || *s.cfg.DefaultZoneConfig.NumReplicas != 1) {
+	if startSingleNode {
 		// For start-single-node, set the default replication factor to
 		// 1 so as to avoid warning messages and unnecessary rebalance
 		// churn.

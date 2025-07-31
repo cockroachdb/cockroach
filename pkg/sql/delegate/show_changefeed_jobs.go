@@ -37,11 +37,10 @@ SELECT
   status,
   running_status,
   created,
-  created as started,
+  started,
   finished,
   modified,
   high_water_timestamp,
-  hlc_to_timestamp(high_water_timestamp) as readable_high_water_timestamptz,
   error,
   replace(
     changefeed_details->>'sink_uri',
@@ -56,7 +55,7 @@ SELECT
     FROM
       crdb_internal.tables
     WHERE
-      table_id = ANY (SELECT key::INT FROM json_each(changefeed_details->'tables'))
+      table_id = ANY (descriptor_ids)
   ) AS full_table_names,
   changefeed_details->'opts'->>'topics' AS topics,
   COALESCE(changefeed_details->'opts'->>'format','json') AS format

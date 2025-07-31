@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -197,44 +196,57 @@ func TestDupeMsgAppResp(t *testing.T) {
 	require.Equal(t, int64(1), rt.numRegisteredStore.Load())
 }
 
-func TestTraceStorageAppendAck(t *testing.T) {
+func TestTraceMsgStorageAppendResp(t *testing.T) {
 	rt := createTracer(10)
 	ctx, finish := tracing.ContextWithRecordingSpan(context.Background(), rt.tracer, "test")
 
 	ent := raftpb.Entry{Index: 1}
 	require.True(t, rt.MaybeRegister(ctx, ent))
-	rt.MaybeTraceAppendAck(raft.StorageAppendAck{
-		Mark: raft.LogMark{Term: 4, Index: 5},
-	})
+	require.Empty(t, rt.MaybeTrace(raftpb.Message{
+		From:    1,
+		To:      2,
+		Term:    3,
+		Type:    raftpb.MsgStorageAppendResp,
+		Index:   uint64(5),
+		LogTerm: uint64(4),
+	}))
 
 	output := finish().String()
-	require.NoError(t, testutils.MatchInOrder(output,
-		"synced log storage write at mark {Term:4 Index:5}",
-	))
+	require.NoError(t, testutils.MatchInOrder(output, []string{"1->2 MsgStorageAppendResp Log:4/5"}...))
 	require.Equal(t, int64(1), rt.numRegisteredStore.Load())
 }
 
-func TestDupeStorageAppendAck(t *testing.T) {
+func TestDupeMsgStorageAppendResp(t *testing.T) {
 	rt := createTracer(10)
 	ctx, finish := tracing.ContextWithRecordingSpan(context.Background(), rt.tracer, "test")
 
 	ent := raftpb.Entry{Index: 1}
 	require.True(t, rt.MaybeRegister(ctx, ent))
-	rt.MaybeTraceAppendAck(raft.StorageAppendAck{
-		Mark: raft.LogMark{Term: 4, Index: 5},
-	})
-	// The second message should not trace.
-	rt.MaybeTraceAppendAck(raft.StorageAppendAck{
-		Mark: raft.LogMark{Term: 9, Index: 8},
-	})
+	require.Empty(t, rt.MaybeTrace(raftpb.Message{
+		From:    1,
+		To:      2,
+		Term:    3,
+		Type:    raftpb.MsgStorageAppendResp,
+		Index:   uint64(5),
+		LogTerm: uint64(4),
+	}))
+	// The second messsage should not trace.
+	require.Empty(t, rt.MaybeTrace(raftpb.Message{
+		From:    5,
+		To:      6,
+		Term:    7,
+		Type:    raftpb.MsgStorageAppendResp,
+		Index:   uint64(8),
+		LogTerm: uint64(9),
+	}))
 
 	output := finish().String()
-	require.NoError(t, testutils.MatchInOrder(output, "at mark {Term:4 Index:5}"))
-	require.Error(t, testutils.MatchInOrder(output, "at mark {Term:9 Index:4}"))
+	require.NoError(t, testutils.MatchInOrder(output, []string{"1->2 MsgStorageAppendResp Log:4/5"}...))
+	require.Error(t, testutils.MatchInOrder(output, []string{"5->6 MsgStorageAppendResp"}...))
 	require.Equal(t, int64(1), rt.numRegisteredStore.Load())
 }
 
-func TestNoTraceStorageAppendAck(t *testing.T) {
+func TestNoTraceMsgStorageAppendResp(t *testing.T) {
 	rt := createTracer(10)
 	ctx, finish := tracing.ContextWithRecordingSpan(context.Background(), rt.tracer, "test")
 
@@ -242,30 +254,42 @@ func TestNoTraceStorageAppendAck(t *testing.T) {
 	require.True(t, rt.MaybeRegister(ctx, ent))
 
 	// This doesn't trace since the index is behind the entry index.
-	rt.MaybeTraceAppendAck(raft.StorageAppendAck{
-		Mark: raft.LogMark{Term: 4, Index: 5},
-	})
+	require.Empty(t, rt.MaybeTrace(raftpb.Message{
+		From:    1,
+		To:      2,
+		Term:    3,
+		Type:    raftpb.MsgStorageAppendResp,
+		Index:   uint64(5),
+		LogTerm: uint64(4),
+	}))
 
 	output := finish().String()
-	require.Error(t, testutils.MatchInOrder(output, "synced log storage write"))
+	require.Error(t, testutils.MatchInOrder(output, []string{"MsgStorageAppendResp"}...))
 	require.Equal(t, int64(1), rt.numRegisteredStore.Load())
 }
 
-func TestTraceApplied(t *testing.T) {
+func TestTraceMsgStorageApplyResp(t *testing.T) {
 	rt := createTracer(10)
 	ctx, finish := tracing.ContextWithRecordingSpan(context.Background(), rt.tracer, "test")
 
 	require.True(t, rt.MaybeRegister(ctx, raftpb.Entry{Index: 1}))
-	rt.MaybeTraceApplied([]raftpb.Entry{
-		{Term: 1, Index: 1},
-		{Term: 2, Index: 4},
-	})
+	require.Empty(t, rt.MaybeTrace(
+		raftpb.Message{
+			From: 1,
+			To:   2,
+			Type: raftpb.MsgStorageApplyResp,
+			Entries: []raftpb.Entry{
+				{Term: 1, Index: 1},
+				{Term: 2, Index: 4},
+			},
+		}))
 
 	output := finish().String()
 	require.NoError(t, testutils.MatchInOrder(output,
-		"applied entries \\[1-4\\]",
-		"unregistered log index 1",
-	))
+		[]string{
+			`1->2 MsgStorageApplyResp LastEntry:2/4`,
+			`unregistered log index`,
+		}...))
 	require.Equal(t, int64(0), rt.numRegisteredStore.Load())
 }
 
@@ -282,28 +306,38 @@ func TestDuplicateIndex(t *testing.T) {
 	require.Equal(t, int64(1), rt.numRegisteredStore.Load())
 	require.Equal(t, int64(1), rt.numRegisteredReplica.Load())
 
-	// Unregister the entry with MaybeTraceApplied.
-	rt.MaybeTraceApplied([]raftpb.Entry{
-		{Term: 1, Index: 1},
-		{Term: 2, Index: 4},
-	})
+	// Unregister the entry with a MsgStorageApplyResp.
+	require.Empty(t, rt.MaybeTrace(
+		raftpb.Message{
+			From: 1,
+			To:   2,
+			Type: raftpb.MsgStorageApplyResp,
+			Entries: []raftpb.Entry{
+				{Term: 1, Index: 1},
+				{Term: 2, Index: 4},
+			},
+		}))
 	// We expect the logs to go to the first trace.
 	output1 := trace1().String()
 	output2 := trace2().String()
 	require.NoError(t, testutils.MatchInOrder(output1,
-		"applied entries \\[1-4\\]",
-		"unregistered log index 1",
-	))
+		[]string{
+			`1->2 MsgStorageApplyResp LastEntry:2/4`,
+			`unregistered log index`,
+		}...))
 	require.NoError(t, testutils.MatchInOrder(output1,
-		"additional registration for same index",
-	))
+		[]string{
+			`additional registration for same index`,
+		}...))
 	require.Error(t, testutils.MatchInOrder(output2,
-		"applied entries \\[1-4\\]",
-		"unregistered log index 1",
-	))
+		[]string{
+			`1->2 MsgStorageApplyResp LastEntry:2/4`,
+			`unregistered log index`,
+		}...))
 	require.NoError(t, testutils.MatchInOrder(output2,
-		"duplicate registration ignored",
-	))
+		[]string{
+			`duplicate registration ignored`,
+		}...))
 
 	require.Equal(t, int64(0), rt.numRegisteredStore.Load())
 	require.Equal(t, int64(0), rt.numRegisteredReplica.Load())

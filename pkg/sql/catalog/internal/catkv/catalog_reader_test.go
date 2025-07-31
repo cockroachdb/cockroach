@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -115,7 +114,7 @@ func TestDataDriven(t *testing.T) {
 						ParentSchemaID: descpb.ID(scID),
 						Name:           name,
 					}
-					return fmt.Sprintf("%v", ccr.IsNameInCache(ni))
+					return fmt.Sprintf("%v", ccr.IsNameInCache(&ni))
 
 				case "is_desc_id_known_to_not_exist":
 					var id, maybeParentID int
@@ -318,8 +317,8 @@ type queryFunc func(ctx context.Context, txn *kv.Txn, cr catkv.CatalogReader) (n
 
 func (h testHelper) wrappedQuery(
 	ctx context.Context, label string, cr catkv.CatalogReader, unwrapped queryFunc,
-) (c nstree.Catalog, rs tracingpb.RecordedSpan, err error) {
-	err = h.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+) (c nstree.Catalog, rs tracingpb.RecordedSpan) {
+	err := h.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		tracer := h.execCfg.AmbientCtx.Tracer
 		vCtx, vSpan := tracer.StartSpanCtx(
 			ctx, catkv.TestingSpanOperationName, tracing.WithRecording(tracingpb.RecordingVerbose),
@@ -331,7 +330,8 @@ func (h testHelper) wrappedQuery(
 		require.True(h.t, found)
 		return err
 	})
-	return c, rs, err
+	require.NoErrorf(h.t, err, "%s: error running query with %s CatalogReader", h.d.Pos, label)
+	return c, rs
 }
 
 func (h testHelper) doCatalogQuery(ctx context.Context, fn queryFunc) string {
@@ -366,15 +366,10 @@ func (h testHelper) doCatalogQuery(ctx context.Context, fn queryFunc) string {
 	return fmt.Sprintf("%scached:\n%s", u, d)
 }
 
-func (h testHelper) marshalResult(
-	c nstree.Catalog, rs tracingpb.RecordedSpan, queryErr error,
-) string {
+func (h testHelper) marshalResult(c nstree.Catalog, rs tracingpb.RecordedSpan) string {
 	m := map[string]interface{}{
 		"catalog": h.catalogToYaml(c),
 		"trace":   h.traceToYaml(rs),
-	}
-	if queryErr != nil {
-		m["error"] = queryErr.Error()
 	}
 	bytes, err := yaml.Marshal(m)
 	require.NoError(h.t, err)
@@ -431,26 +426,13 @@ func (h testHelper) catalogToYaml(c nstree.Catalog) interface{} {
 		ids.Add(id)
 	}
 	y := make(map[string]interface{})
-
-	var systemDatabaseEntry map[string]interface{}
-	var numSystemObjects int
 	for _, id := range ids.Ordered() {
 		j := m[id]
 		jm := make(map[string]interface{})
-		if id == keys.SystemDatabaseID {
-			systemDatabaseEntry = jm
-		}
 		if j.d != nil {
 			jm["descriptor"] = j.d.DescriptorType()
 		}
 		if j.ns != nil {
-			if j.ns.ParentID == keys.SystemDatabaseID {
-				if systemDatabaseEntry != nil {
-					// Skip this entry, it will be aggregated into the systemEntry.
-					numSystemObjects++
-					continue
-				}
-			}
 			jm["namespace"] = fmt.Sprintf("(%d, %d, %q)",
 				j.ns.ParentID, j.ns.ParentSchemaID, j.ns.Name)
 		}
@@ -473,9 +455,6 @@ func (h testHelper) catalogToYaml(c nstree.Catalog) interface{} {
 			jm["comments"] = cm
 		}
 		y[fmt.Sprintf("%03d", id)] = jm
-	}
-	if systemDatabaseEntry != nil {
-		systemDatabaseEntry["num_objects"] = numSystemObjects
 	}
 	return y
 }

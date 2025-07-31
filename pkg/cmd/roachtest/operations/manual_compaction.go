@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/helpers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -30,9 +29,9 @@ func runManualCompaction(
 	conn := c.Conn(ctx, o.L(), nid, option.VirtualClusterName(roachtestflags.VirtualCluster))
 	defer conn.Close()
 
-	dbName := helpers.PickRandomDB(ctx, o, conn, helpers.SystemDBs)
-	tableName := helpers.PickRandomTable(ctx, o, conn, dbName)
-	sid := helpers.PickRandomStore(ctx, o, conn, nid)
+	dbName := pickRandomDB(ctx, o, conn, systemDBs)
+	tableName := pickRandomTable(ctx, o, conn, dbName)
+	sid := pickRandomStore(ctx, o, conn, nid)
 
 	compactionStmt := fmt.Sprintf(`SELECT crdb_internal.compact_engine_span(
 				%d, %d,

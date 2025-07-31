@@ -300,7 +300,6 @@ type mergeJoinInput struct {
 //
 // evalCtx will not be mutated.
 func NewMergeJoinOp(
-	ctx context.Context,
 	unlimitedAllocator *colmem.Allocator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
@@ -364,7 +363,7 @@ func NewMergeJoinOp(
 			}
 			if castLeftToRight {
 				castColumnIdx := len(actualLeftTypes)
-				left, err = colexecbase.GetCastOperator(ctx, unlimitedAllocator, left, int(leftColIdx), castColumnIdx, leftType, rightType, evalCtx)
+				left, err = colexecbase.GetCastOperator(unlimitedAllocator, left, int(leftColIdx), castColumnIdx, leftType, rightType, evalCtx)
 				if err != nil {
 					colexecerror.InternalError(err)
 				}
@@ -372,7 +371,7 @@ func NewMergeJoinOp(
 				actualLeftOrdering[i].ColIdx = uint32(castColumnIdx)
 			} else {
 				castColumnIdx := len(actualRightTypes)
-				right, err = colexecbase.GetCastOperator(ctx, unlimitedAllocator, right, int(rightColIdx), castColumnIdx, rightType, leftType, evalCtx)
+				right, err = colexecbase.GetCastOperator(unlimitedAllocator, right, int(rightColIdx), castColumnIdx, rightType, leftType, evalCtx)
 				if err != nil {
 					colexecerror.InternalError(err)
 				}

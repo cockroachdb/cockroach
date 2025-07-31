@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/redact"
 )
 
@@ -47,7 +46,7 @@ func (m *MockTransactionalSender) Send(
 
 // GetLeafTxnInputState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnInputState(
-	context.Context, interval.Tree,
+	context.Context,
 ) (*roachpb.LeafTxnInputState, error) {
 	panic("unimplemented")
 }
@@ -107,14 +106,6 @@ func (m *MockTransactionalSender) GetOmitInRangefeeds() bool {
 // SetOmitInRangefeeds is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetOmitInRangefeeds() {
 	m.txn.OmitInRangefeeds = true
-}
-
-// SetBufferedWritesEnabled is part of the TxnSender interface.
-func (m *MockTransactionalSender) SetBufferedWritesEnabled(enabled bool) {}
-
-// BufferedWritesEnabled is part of the TxnSender interface.
-func (m *MockTransactionalSender) BufferedWritesEnabled() bool {
-	return false
 }
 
 // String is part of the TxnSender interface.
@@ -219,9 +210,6 @@ func (m *MockTransactionalSender) ReleaseSavepoint(context.Context, SavepointTok
 func (m *MockTransactionalSender) CanUseSavepoint(context.Context, SavepointToken) bool {
 	panic("unimplemented")
 }
-
-// Key is part of the TxnSender interface.
-func (m *MockTransactionalSender) Key() roachpb.Key { panic("unimplemented") }
 
 // Epoch is part of the TxnSender interface.
 func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { panic("unimplemented") }

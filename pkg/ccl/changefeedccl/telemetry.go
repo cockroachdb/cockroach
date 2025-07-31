@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -28,6 +29,7 @@ type sinkTelemetryData struct {
 type periodicTelemetryLogger struct {
 	ctx               context.Context
 	sinkTelemetryData sinkTelemetryData
+	job               *jobs.Job
 	changefeedDetails eventpb.CommonChangefeedEventDetails
 	settings          *cluster.Settings
 
@@ -50,15 +52,12 @@ type telemetryLogger interface {
 var _ telemetryLogger = (*periodicTelemetryLogger)(nil)
 
 func makePeriodicTelemetryLogger(
-	ctx context.Context,
-	details jobspb.ChangefeedDetails,
-	description string,
-	jobID jobspb.JobID,
-	s *cluster.Settings,
+	ctx context.Context, job *jobs.Job, s *cluster.Settings,
 ) (*periodicTelemetryLogger, error) {
 	return &periodicTelemetryLogger{
 		ctx:               ctx,
-		changefeedDetails: makeCommonChangefeedEventDetails(ctx, details, description, jobID),
+		job:               job,
+		changefeedDetails: makeCommonChangefeedEventDetails(ctx, job.Details().(jobspb.ChangefeedDetails), job.Payload().Description, job.ID()),
 		sinkTelemetryData: sinkTelemetryData{},
 		settings:          s,
 	}, nil
@@ -124,16 +123,10 @@ func (ptl *periodicTelemetryLogger) close() {
 }
 
 func wrapMetricsRecorderWithTelemetry(
-	ctx context.Context,
-	details jobspb.ChangefeedDetails,
-	description string,
-	jobID jobspb.JobID,
-	s *cluster.Settings,
-	mb metricsRecorder,
-	knobs TestingKnobs,
+	ctx context.Context, job *jobs.Job, s *cluster.Settings, mb metricsRecorder, knobs TestingKnobs,
 ) (*telemetryMetricsRecorder, error) {
 	var logger telemetryLogger
-	logger, err := makePeriodicTelemetryLogger(ctx, details, description, jobID, s)
+	logger, err := makePeriodicTelemetryLogger(ctx, job, s)
 	if err != nil {
 		return &telemetryMetricsRecorder{}, err
 	}
@@ -174,11 +167,12 @@ func (r *telemetryMetricsRecorder) recordEmittedBatch(
 }
 
 // continuousTelemetryInterval determines the interval at which each node emits
-// periodic telemetry events during the lifespan of each changefeed.
+// periodic telemetry events during the lifespan of each enterprise changefeed.
 var continuousTelemetryInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.telemetry.continuous_logging.interval",
 	"determines the interval at which each node emits continuous telemetry events"+
-		" during the lifespan of every changefeed; setting a zero value disables logging",
+		" during the lifespan of every enterprise changefeed; setting a zero value disables logging",
 	24*time.Hour,
+	settings.NonNegativeDuration,
 )

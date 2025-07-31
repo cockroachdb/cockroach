@@ -85,12 +85,7 @@ func alterTableAddPrimaryKey(
 	if getPrimaryIndexDefaultRowIDColumn(
 		b, tbl.TableID, oldPrimaryIndex.IndexID,
 	) == nil {
-		// If the constraint already exists then nothing to do here.
-		if oldPrimaryIndex != nil && d.IfNotExists {
-			return
-		}
-		panic(pgerror.Newf(pgcode.InvalidColumnDefinition,
-			"multiple primary keys for table %q are not allowed", tn.Object()))
+		panic(scerrors.NotImplementedError(t))
 	}
 	alterPrimaryKey(b, tn, tbl, stmt, alterPrimaryKeySpec{
 		n:             t,
@@ -286,7 +281,7 @@ func alterTableAddForeignKey(
 			"and is no longer supported."))
 	}
 	// Disallow schema change if the FK references a table whose schema is locked.
-	defer checkTableSchemaChangePrerequisites(b, b.QueryByID(referencedTableID), stmt)()
+	panicIfSchemaChangeIsDisallowed(b.QueryByID(referencedTableID), stmt)
 
 	// 6. Check that temporary tables can only reference temporary tables, or,
 	// permanent tables can only reference permanent tables.
@@ -796,21 +791,21 @@ func iterateColNamesInExpr(
 func retrieveColumnDefaultExpressionElem(
 	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
 ) *scpb.ColumnDefaultExpression {
-	return b.QueryByID(tableID).Filter(publicTargetFilter).FilterColumnDefaultExpression().
-		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnDefaultExpression) bool {
-			return e.ColumnID == columnID
-		}).
-		MustGetZeroOrOneElement()
+	_, _, ret := scpb.FindColumnDefaultExpression(b.QueryByID(tableID).Filter(hasColumnIDAttrFilter(columnID)))
+	return ret
 }
 
 func retrieveColumnOnUpdateExpressionElem(
 	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
 ) (columnOnUpdateExpression *scpb.ColumnOnUpdateExpression) {
-	return b.QueryByID(tableID).Filter(publicTargetFilter).FilterColumnOnUpdateExpression().
-		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnOnUpdateExpression) bool {
-			return e.ColumnID == columnID
-		}).
-		MustGetZeroOrOneElement()
+	scpb.ForEachColumnOnUpdateExpression(b.QueryByID(tableID), func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.ColumnOnUpdateExpression,
+	) {
+		if e.ColumnID == columnID {
+			columnOnUpdateExpression = e
+		}
+	})
+	return columnOnUpdateExpression
 }
 
 // ensureColCanBeUsedInOutboundFK ensures the column can be used in an outbound

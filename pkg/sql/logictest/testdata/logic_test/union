@@ -122,7 +122,7 @@ CREATE TABLE uniontest (
   v INT
 )
 
-statement ok
+statement OK
 INSERT INTO uniontest VALUES
 (1, 1),
 (1, 1),

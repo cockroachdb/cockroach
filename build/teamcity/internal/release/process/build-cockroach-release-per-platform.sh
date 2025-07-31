@@ -14,12 +14,6 @@ source "$dir/teamcity-bazel-support.sh"  # for run_bazel
 
 tc_start_block "Variable Setup"
 platform="${PLATFORM:?PLATFORM must be specified}"
-telemetry_disabled="${TELEMETRY_DISABLED:-false}"
-cockroach_archive_prefix="${COCKROACH_ARCHIVE_PREFIX:-cockroach}"
-if [[ $telemetry_disabled == true && $cockroach_archive_prefix == "cockroach" ]]; then
-  echo "COCKROACH_ARCHIVE_PREFIX must be set to a non-default value when telemetry is disabled"
-  exit 1
-fi
 version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
 version_label=$(echo "${version}" | sed -e 's/^v//' | cut -d- -f 1)
 
@@ -38,13 +32,13 @@ if [[ -z "${DRY_RUN}" ]] ; then
   gcr_credentials="$GCS_CREDENTIALS_PROD"
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_PROD"
-  gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/${cockroach_archive_prefix}"
+  gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/cockroach"
 else
   gcs_bucket="cockroach-release-artifacts-staged-dryrun"
   gcr_credentials="$GCS_CREDENTIALS_DEV"
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_DEV"
-  gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/${cockroach_archive_prefix}"
+  gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach"
 fi
 
 tc_end_block "Variable Setup"
@@ -53,7 +47,7 @@ tc_end_block "Variable Setup"
 tc_start_block "Make and publish release artifacts"
 # Using publish-provisional-artifacts here is funky. We're directly publishing
 # the official binaries, not provisional ones. Legacy naming. To clean up...
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$version -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform -e telemetry_disabled=$telemetry_disabled -e cockroach_archive_prefix=$cockroach_archive_prefix" run_bazel << 'EOF'
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$version -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform" run_bazel << 'EOF'
 bazel build //pkg/cmd/publish-provisional-artifacts
 BAZEL_BIN=$(bazel info bazel-bin)
 export google_credentials="$gcs_credentials"
@@ -80,7 +74,7 @@ done
 
 tr -d '\r' < /tmp/THIRD-PARTY-NOTICES.txt.tmp > /tmp/THIRD-PARTY-NOTICES.txt
 
-$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket" --output-directory=artifacts --platform=$platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt --telemetry-disabled=$telemetry_disabled --cockroach-archive-prefix=$cockroach_archive_prefix
+$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket" --output-directory=artifacts --platform=$platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt
 EOF
 tc_end_block "Make and publish release artifacts"
 
@@ -96,7 +90,7 @@ if [[ $platform == "linux-amd64" || $platform == "linux-arm64" || $platform == "
   tar \
     --directory="build/deploy-${platform}" \
     --extract \
-    --file="artifacts/${cockroach_archive_prefix}-${version}.${platform}.tgz" \
+    --file="artifacts/cockroach-${version}.${platform}.tgz" \
     --ungzip \
     --ignore-zeros \
     --strip-components=1
@@ -120,6 +114,6 @@ fi
 # Here we verify the FIPS image only. The multi-arch image will be verified in the job it's created.
 if [[ $platform == "linux-amd64-fips" ]]; then
   tc_start_block "Verify FIPS docker image"
-  verify_docker_image "$build_docker_tag" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" true false
+  verify_docker_image "$build_docker_tag" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" true
   tc_end_block "Verify FIPS docker image"
 fi

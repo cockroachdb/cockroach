@@ -223,7 +223,7 @@ num=3
 
 query span=a,d
 ----
-num locks: 1, bytes returned: 73, resume reason: RESUME_UNKNOWN, resume span: <nil>
+num locks: 1, bytes returned: 77, resume reason: RESUME_UNKNOWN, resume span: <nil>
  locks:
   range_id=3 key="c" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=0s
    waiters:

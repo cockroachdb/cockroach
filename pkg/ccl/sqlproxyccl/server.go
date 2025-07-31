@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -108,10 +107,9 @@ func NewServer(ctx context.Context, stopper *stop.Stopper, options ProxyOptions)
 	}
 	s.mu.errorLogLimiter = cache.NewUnorderedCache(cacheConfig)
 
-	// /metrics and /_status/{healthz,vars} matches CRDB's healthcheck and metrics
+	// /_status/{healthz,vars} matches CRDB's healthcheck and metrics
 	// endpoints.
-	mux.HandleFunc("/metrics", s.handleMetricsWithLabels)
-	mux.HandleFunc("/_status/vars/", s.handleMetricsWithoutLabels)
+	mux.HandleFunc("/_status/vars/", s.handleVars)
 	mux.HandleFunc("/_status/healthz/", s.handleHealth)
 	mux.HandleFunc("/_status/cancel/", s.handleCancel)
 
@@ -146,25 +144,16 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("OK"))
 }
 
-func (s *Server) handleMetricsWithLabels(w http.ResponseWriter, r *http.Request) {
-	s.handleMetricsHelper(w, r, true)
-}
-
-func (s *Server) handleMetricsWithoutLabels(w http.ResponseWriter, r *http.Request) {
-	s.handleMetricsHelper(w, r, false)
-}
-
-func (s *Server) handleMetricsHelper(w http.ResponseWriter, r *http.Request, useStaticLabels bool) {
+func (s *Server) handleVars(w http.ResponseWriter, r *http.Request) {
 	contentType := expfmt.Negotiate(r.Header)
 	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
 	scrape := func(pm *metric.PrometheusExporter) {
-		pm.ScrapeRegistry(s.metricsRegistry, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true), metric.WithUseStaticLabels(useStaticLabels))
+		pm.ScrapeRegistry(s.metricsRegistry, true /* includeChildMetrics*/, true /* includeAggregateMetrics */)
 	}
 	if err := s.prometheusExporter.ScrapeAndPrintAsText(w, contentType, scrape); err != nil {
 		log.Errorf(r.Context(), "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-
 }
 
 // handleCancel processes a cancel request that has been forwarded from another
@@ -210,7 +199,7 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 }
 
 // ServeHTTP starts the proxy's HTTP server on the given listener.
-// The server provides Prometheus metrics at /metrics and/_status/vars,
+// The server provides Prometheus metrics at /_status/vars,
 // a health check endpoint at /_status/healthz, and pprof debug
 // endpoints at /debug/pprof.
 func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
@@ -464,20 +453,20 @@ func (s *Server) shouldLogError(
 	return limiter.ShouldLog()
 }
 
-// requestTagsContextKey is the fast value key used to carry the request tags
-// map in a context.Context object.
-var requestTagsContextKey = ctxutil.RegisterFastValueKey()
+// requestTagsContextKey is the type of a context.Value key used to carry the
+// request tags map in a context.Context object.
+type requestTagsContextKey struct{}
 
 // contextWithRequestTags returns a context annotated with the provided request
 // tags map. Use requestTagsFromContext(ctx) to retrieve it back.
 func contextWithRequestTags(ctx context.Context, reqTags map[string]interface{}) context.Context {
-	return ctxutil.WithFastValue(ctx, requestTagsContextKey, reqTags)
+	return context.WithValue(ctx, requestTagsContextKey{}, reqTags)
 }
 
 // requestTagsFromContext retrieves the request tags map stored in the context
 // via contextWithRequestTags.
 func requestTagsFromContext(ctx context.Context) map[string]interface{} {
-	r := ctxutil.FastValue(ctx, requestTagsContextKey)
+	r := ctx.Value(requestTagsContextKey{})
 	if r == nil {
 		return nil
 	}

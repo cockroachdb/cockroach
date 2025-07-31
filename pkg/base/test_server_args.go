@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -90,13 +89,12 @@ type TestServerArgs struct {
 	// If not initialized, will default to DefaultTestTempStorageConfig.
 	TempStorageConfig TempStorageConfig
 
+	// ExternalIODir is used to initialize field in cluster.Settings.
+	ExternalIODir string
+
 	// ExternalIODirConfig is used to initialize the same-named
 	// field on the server.Config struct.
 	ExternalIODirConfig ExternalIODirConfig
-
-	// ExternalIODir is used to initialize the same-named field on
-	// the server.Config struct.
-	ExternalIODir string
 
 	// Fields copied to the server.Config.
 	Insecure                    bool
@@ -159,94 +157,12 @@ type TestServerArgs struct {
 	// below for alternative options that suits your test case.
 	DefaultTestTenant DefaultTestTenantOptions
 
-	// DefaultDRPCOption specifies the DRPC enablement mode for a test
-	// server. This controls whether inter-node connectivity uses DRPC, just
-	// gRPC, or is chosen randomly.
-	DefaultDRPCOption DefaultTestDRPCOption
-
-	// DefaultTenantName is the name of the tenant created implicitly according
-	// to DefaultTestTenant. It is typically `test-tenant` for unit tests and
-	// always `demoapp` for the cockroach demo.
-	DefaultTenantName roachpb.TenantName
-
 	// StartDiagnosticsReporting checks cluster.TelemetryOptOut(), and
 	// if not disabled starts the asynchronous goroutine that checks for
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
-
-	SlimTestSeverConfig *SlimTestServerConfig
 }
-
-type slimOptions struct {
-	EnableSpanConfigJob bool
-	EnableAutoStats     bool
-	EnableTimeseries    bool
-	EnableAllUpgrades   bool
-}
-
-type SlimServerOption func(*slimOptions)
-
-func WithSpanConfigJob() SlimServerOption {
-	return func(o *slimOptions) {
-		o.EnableSpanConfigJob = true
-	}
-}
-
-func WithAutoStats() SlimServerOption {
-	return func(o *slimOptions) {
-		o.EnableAutoStats = true
-	}
-}
-
-func WithTimeseries() SlimServerOption {
-	return func(o *slimOptions) {
-		o.EnableTimeseries = true
-	}
-}
-
-func WithAllUpgrades() SlimServerOption {
-	return func(o *slimOptions) {
-		o.EnableAllUpgrades = true
-	}
-}
-
-func processOptions(opts []SlimServerOption) *slimOptions {
-	ret := &slimOptions{}
-	for _, o := range opts {
-		o(ret)
-	}
-	return ret
-}
-
-func (a *TestServerArgs) SlimServerConfig(opts ...SlimServerOption) {
-	a.SlimTestSeverConfig = &SlimTestServerConfig{
-		Options: *processOptions(opts),
-	}
-}
-
-type SlimTestServerConfig struct {
-	Options slimOptions
-}
-
-// DefaultTestDRPCOption specifies the DRPC enablement mode for a test
-// server. This controls whether inter-node connectivity uses DRPC, just gRPC,
-// or is chosen randomly.
-type DefaultTestDRPCOption uint8
-
-const (
-	// TestDRPCDisabled disables DRPC; all inter-node connectivity will use gRPC
-	// only.
-	TestDRPCDisabled DefaultTestDRPCOption = iota
-
-	// TestDRPCEnabled enables DRPC. Some services may still use gRPC if they
-	// have not yet migrated to DRPC.
-	TestDRPCEnabled
-
-	// TestDRPCEnabledRandomly randomly chooses between the behavior of
-	// TestDRPCDisabled or TestDRPCEnabled.
-	TestDRPCEnabledRandomly
-)
 
 // TestClusterArgs contains the parameters one can set when creating a test
 // cluster. It contains a TestServerArgs instance which will be copied over to
@@ -543,34 +459,6 @@ func TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
 	}
 }
 
-// TestSkippedForExternalModeDueToPerformance can be used to disable selecting
-// the external process virtual cluster due to significant performance
-// degradation compared to other modes. However, the goal is to eventually make
-// it work efficiently in external mode.
-//
-// It should link to a github issue with label C-investigation.
-func TestSkippedForExternalModeDueToPerformance(issueNumber int) DefaultTestTenantOptions {
-	return testSkippedForExternalProcessMode(issueNumber)
-}
-
-// TestDoesNotWorkWithExternalProcessMode disables selecting the external
-// process virtual cluster for tests that are not functional in that mode and
-// require further investigation. Any test using this function should reference
-// a GitHub issue tagged with "C-investigation" describing the underlying
-// problem.
-func TestDoesNotWorkWithExternalProcessMode(issueNumber int) DefaultTestTenantOptions {
-	return testSkippedForExternalProcessMode(issueNumber)
-}
-
-func testSkippedForExternalProcessMode(issueNumber int) DefaultTestTenantOptions {
-	return DefaultTestTenantOptions{
-		testBehavior:           ttSharedProcess,
-		allowAdditionalTenants: true,
-		issueNum:               issueNumber,
-		label:                  "C-investigation",
-	}
-}
-
 // InternalNonDefaultDecision builds a sentinel value used inside a
 // mechanism in serverutils. Should not be used by tests directly.
 func InternalNonDefaultDecision(
@@ -591,14 +479,16 @@ func InternalNonDefaultDecision(
 	return baseArg
 }
 
-// DefaultTestStoreSpec is just a single in memory store of 512 MiB
-// with no special attributes.
-var DefaultTestStoreSpec = storageconfig.Store{
-	InMemory: true,
-	Size: storageconfig.Size{
-		Bytes: 512 << 20,
-	},
-}
+var (
+	// DefaultTestStoreSpec is just a single in memory store of 512 MiB
+	// with no special attributes.
+	DefaultTestStoreSpec = StoreSpec{
+		InMemory: true,
+		Size: SizeSpec{
+			InBytes: 512 << 20,
+		},
+	}
+)
 
 // DefaultTestTempStorageConfig is the associated temp storage for
 // DefaultTestStoreSpec that is in-memory.
@@ -613,7 +503,7 @@ func DefaultTestTempStorageConfigWithSize(
 	st *cluster.Settings, maxSizeBytes int64,
 ) TempStorageConfig {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:      mon.MakeName("in-mem temp storage"),
+		Name:      "in-mem temp storage",
 		Res:       mon.DiskResource,
 		Increment: 1024 * 1024,
 		Settings:  st,
@@ -635,10 +525,6 @@ type TestSharedProcessTenantArgs struct {
 	// TenantID is the ID of the tenant to be created. If not set, an ID is
 	// assigned automatically.
 	TenantID roachpb.TenantID
-	// TenantReadOnly indicates if this tenant should be created as read-only
-	// (for testing PCR reader tenants). This field is used for testing purposes
-	// and overrides the tenant record check.
-	TenantReadOnly bool
 
 	Knobs TestingKnobs
 
@@ -692,7 +578,7 @@ type TestTenantArgs struct {
 	ExternalIODirConfig ExternalIODirConfig
 
 	// ExternalIODir is used to initialize the same-named field on
-	// the server.Config struct.
+	// the params.Settings struct.
 	ExternalIODir string
 
 	// If set, this will be appended to the Postgres URL by functions that

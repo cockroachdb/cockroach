@@ -10,14 +10,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/errors"
 )
 
 // joinNode is a planNode whose rows are the result of a join operation.
 type joinNode struct {
 	// The data sources.
-	left  planNode
-	right planNode
+	left  planDataSource
+	right planDataSource
 
 	// pred represents the join predicate.
 	pred *joinPredicate
@@ -32,28 +31,16 @@ type joinNode struct {
 
 	// columns contains the metadata for the results of this node.
 	columns colinfo.ResultColumns
-
-	// estimatedLeftRowCount, when set, is the estimated number of rows that
-	// the left input will produce.
-	estimatedLeftRowCount uint64
-	// estimatedRightRowCount, when set, is the estimated number of rows that
-	// the right input will produce.
-	estimatedRightRowCount uint64
 }
 
 func (p *planner) makeJoinNode(
-	left planNode,
-	right planNode,
-	pred *joinPredicate,
-	estimatedLeftRowCount, estimatedRightRowCount uint64,
+	left planDataSource, right planDataSource, pred *joinPredicate,
 ) *joinNode {
 	n := &joinNode{
-		left:                   left,
-		right:                  right,
-		pred:                   pred,
-		columns:                pred.cols,
-		estimatedLeftRowCount:  estimatedLeftRowCount,
-		estimatedRightRowCount: estimatedRightRowCount,
+		left:    left,
+		right:   right,
+		pred:    pred,
+		columns: pred.cols,
 	}
 	return n
 }
@@ -74,34 +61,6 @@ func (n *joinNode) Values() tree.Datums {
 
 // Close implements the planNode interface.
 func (n *joinNode) Close(ctx context.Context) {
-	n.right.Close(ctx)
-	n.left.Close(ctx)
-}
-
-func (n *joinNode) InputCount() int {
-	return 2
-}
-
-func (n *joinNode) Input(i int) (planNode, error) {
-	switch i {
-	case 0:
-		return n.left, nil
-	case 1:
-		return n.right, nil
-	default:
-		return nil, errors.AssertionFailedf("input index %d is out of range", i)
-	}
-}
-
-func (n *joinNode) SetInput(i int, p planNode) error {
-	switch i {
-	case 0:
-		n.left = p
-		return nil
-	case 1:
-		n.right = p
-		return nil
-	default:
-		return errors.AssertionFailedf("input index %d is out of range", i)
-	}
+	n.right.plan.Close(ctx)
+	n.left.plan.Close(ctx)
 }

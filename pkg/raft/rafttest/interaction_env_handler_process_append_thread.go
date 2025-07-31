@@ -55,41 +55,47 @@ func (env *InteractionEnv) ProcessAppendThread(idx int) error {
 	m := n.AppendWork[0]
 	n.AppendWork = n.AppendWork[1:]
 
-	env.Output.WriteString(m.Describe(defaultEntryFormatter))
-	if err := processAppend(n, m); err != nil {
+	resps := m.Responses
+	m.Responses = nil
+	env.Output.WriteString("Processing:\n")
+	env.Output.WriteString(raft.DescribeMessage(m, defaultEntryFormatter) + "\n")
+	st := raftpb.HardState{
+		Term:      m.Term,
+		Vote:      m.Vote,
+		Commit:    m.Commit,
+		Lead:      m.Lead,
+		LeadEpoch: m.LeadEpoch,
+	}
+	var snap raftpb.Snapshot
+	if m.Snapshot != nil {
+		snap = *m.Snapshot
+	}
+	if err := processAppend(n, st, m.Entries, snap); err != nil {
 		return err
 	}
 
-	ack := m.Ack()
-	for msg := range ack.Send(raftpb.PeerID(idx + 1)) {
-		env.Messages = append(env.Messages, msg)
+	env.Output.WriteString("Responses:\n")
+	for _, m := range resps {
+		env.Output.WriteString(raft.DescribeMessage(m, defaultEntryFormatter) + "\n")
 	}
-	hasLocal := false
-	for range ack.Step(raftpb.PeerID(idx + 1)) {
-		hasLocal = true
-		break
-	}
-	if hasLocal || m.NeedAck() {
-		n.AppendAcks = append(n.AppendAcks, ack)
-	}
-
+	env.Messages = append(env.Messages, resps...)
 	return nil
 }
 
-func processAppend(n *Node, app raft.StorageAppend) error {
+func processAppend(n *Node, st raftpb.HardState, ents []raftpb.Entry, snap raftpb.Snapshot) error {
 	// TODO(tbg): the order of operations here is not necessarily safe. See:
 	// https://github.com/etcd-io/etcd/pull/10861
 	s := n.Storage
-	if hs := app.HardState; !raft.IsEmptyHardState(hs) {
-		if err := s.SetHardState(hs); err != nil {
+	if !raft.IsEmptyHardState(st) {
+		if err := s.SetHardState(st); err != nil {
 			return err
 		}
 	}
-	if snap := app.Snapshot; snap != nil {
-		if len(app.Entries) > 0 {
+	if !raft.IsEmptySnap(snap) {
+		if len(ents) > 0 {
 			return errors.New("can't apply snapshot and entries at the same time")
 		}
-		return s.ApplySnapshot(*snap)
+		return s.ApplySnapshot(snap)
 	}
-	return s.Append(app.Entries)
+	return s.Append(ents)
 }

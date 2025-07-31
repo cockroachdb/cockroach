@@ -139,7 +139,7 @@ func EncDatumFromEncoded(enc catenumpb.DatumEncoding, encoded []byte) EncDatum {
 // slice for the rest of the buffer.
 func EncDatumFromBuffer(enc catenumpb.DatumEncoding, buf []byte) (EncDatum, []byte, error) {
 	if len(buf) == 0 {
-		return EncDatum{}, nil, errors.AssertionFailedf("empty encoded value")
+		return EncDatum{}, nil, errors.New("empty encoded value")
 	}
 	switch enc {
 	case catenumpb.DatumEncoding_ASCENDING_KEY, catenumpb.DatumEncoding_DESCENDING_KEY:
@@ -287,12 +287,6 @@ func (ed *EncDatum) Encoding() (catenumpb.DatumEncoding, bool) {
 	return ed.encoding, true
 }
 
-// IsEncodedAs tests that the encoded value for the provided datum is encoded
-// with the given encoding.
-func (ed *EncDatum) IsEncodedAs(enc catenumpb.DatumEncoding) bool {
-	return ed.encoded != nil && ed.encoding == enc
-}
-
 // Encode appends the encoded datum to the given slice using the requested
 // encoding.
 // Note: catenumpb.DatumEncoding_VALUE encodings are not unique because they can contain
@@ -313,7 +307,7 @@ func (ed *EncDatum) Encode(
 	case catenumpb.DatumEncoding_DESCENDING_KEY:
 		return keyside.Encode(appendTo, ed.Datum, encoding.Descending)
 	case catenumpb.DatumEncoding_VALUE:
-		return valueside.Encode(appendTo, valueside.NoColumnID, ed.Datum)
+		return valueside.Encode(appendTo, valueside.NoColumnID, ed.Datum, nil /* scratch */)
 	default:
 		panic(errors.AssertionFailedf("unknown encoding requested %s", enc))
 	}
@@ -372,7 +366,7 @@ func (ed *EncDatum) Fingerprint(
 		}
 		// We must use value encodings without a column ID even if the EncDatum already
 		// is encoded with the value encoding so that the hashes are indeed unique.
-		fingerprint, err = valueside.Encode(appendTo, valueside.NoColumnID, ed.Datum)
+		fingerprint, err = valueside.Encode(appendTo, valueside.NoColumnID, ed.Datum, nil /* scratch */)
 	} else {
 		// For values that are key encodable, using the ascending key.
 		// Note that using a value encoding will not easily work in case when
@@ -431,15 +425,13 @@ func (ed *EncDatum) CompareEx(
 	return ed.Datum.Compare(ctx, evalCtx, rhs.Datum)
 }
 
-var errNullInt = errors.New("NULL INT value")
-
 // GetInt decodes an EncDatum that is known to be of integer type and returns
 // the integer value. It is a more convenient and more efficient alternative to
 // calling EnsureDecoded and casting the Datum.
 func (ed *EncDatum) GetInt() (int64, error) {
 	if ed.Datum != nil {
 		if ed.Datum == tree.DNull {
-			return 0, errNullInt
+			return 0, errors.Errorf("NULL INT value")
 		}
 		return int64(*ed.Datum.(*tree.DInt)), nil
 	}
@@ -447,14 +439,14 @@ func (ed *EncDatum) GetInt() (int64, error) {
 	switch ed.encoding {
 	case catenumpb.DatumEncoding_ASCENDING_KEY:
 		if _, isNull := encoding.DecodeIfNull(ed.encoded); isNull {
-			return 0, errNullInt
+			return 0, errors.Errorf("NULL INT value")
 		}
 		_, val, err := encoding.DecodeVarintAscending(ed.encoded)
 		return val, err
 
 	case catenumpb.DatumEncoding_DESCENDING_KEY:
 		if _, isNull := encoding.DecodeIfNull(ed.encoded); isNull {
-			return 0, errNullInt
+			return 0, errors.Errorf("NULL INT value")
 		}
 		_, val, err := encoding.DecodeVarintDescending(ed.encoded)
 		return val, err
@@ -466,7 +458,7 @@ func (ed *EncDatum) GetInt() (int64, error) {
 		}
 		// NULL, true, and false are special, because their values are fully encoded by their value tag.
 		if typ == encoding.Null {
-			return 0, errNullInt
+			return 0, errors.Errorf("NULL INT value")
 		}
 
 		_, val, err := encoding.DecodeUntaggedIntValue(ed.encoded[dataOffset:])

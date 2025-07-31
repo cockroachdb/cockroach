@@ -20,7 +20,7 @@ const InternalAppNamePrefix = ReportableAppNamePrefix + "internal"
 
 // AttributedToUserInternalAppNamePrefix indicates that the application name
 // identifies an internally-executed query that should be attributed to the
-// user. Specifically, this means having the queries show up in SQL activity pages.
+// user.
 const AttributedToUserInternalAppNamePrefix = ReportableAppNamePrefix + "public-internal"
 
 // DelegatedAppNamePrefix is added to a regular client application
@@ -58,10 +58,6 @@ const (
 	RangeEventTableName                    SystemTableName = "rangelog"
 	UITableName                            SystemTableName = "ui"
 	JobsTableName                          SystemTableName = "jobs"
-	JobsProgressTableName                  SystemTableName = "job_progress"
-	JobsProgressHistoryTableName           SystemTableName = "job_progress_history"
-	JobsStatusTableName                    SystemTableName = "job_status"
-	JobsMessageTableName                   SystemTableName = "job_message"
 	WebSessionsTableName                   SystemTableName = "web_sessions"
 	TableStatisticsTableName               SystemTableName = "table_statistics"
 	LocationsTableName                     SystemTableName = "locations"
@@ -106,7 +102,6 @@ const (
 	StmtExecInsightsTableName              SystemTableName = "statement_execution_insights"
 	TxnExecInsightsTableName               SystemTableName = "transaction_execution_insights"
 	TableMetadata                          SystemTableName = "table_metadata"
-	PreparedTransactionsTableName          SystemTableName = "prepared_transactions"
 )
 
 // Oid for virtual database and table.
@@ -139,7 +134,6 @@ const (
 	CrdbInternalCreateProcedureStmtsTableID
 	CrdbInternalCreateSchemaStmtsTableID
 	CrdbInternalCreateStmtsTableID
-	CrdbInternalCreateTriggerStmtsTableID
 	CrdbInternalCreateTypeStmtsTableID
 	CrdbInternalDatabasesTableID
 	CrdbInternalFeatureUsageID
@@ -206,9 +200,9 @@ const (
 	CrdbInternalShowTenantCapabilitiesCacheTableID
 	CrdbInternalInheritedRoleMembersTableID
 	CrdbInternalKVSystemPrivilegesViewID
-	CrdbInternalKVFlowControllerID // obsolete
+	CrdbInternalKVFlowControllerID
 	CrdbInternalKVFlowControllerIDV2
-	CrdbInternalKVFlowHandlesID // obsolete
+	CrdbInternalKVFlowHandlesID
 	CrdbInternalKVFlowHandlesIDV2
 	CrdbInternalKVFlowTokenDeductions
 	CrdbInternalKVFlowTokenDeductionsV2
@@ -216,7 +210,6 @@ const (
 	CrdbInternalKVProtectedTS
 	CrdbInternalKVSessionBasedLeases
 	CrdbInternalClusterReplicationResolvedViewID
-	CrdbInternalLogicalReplicationResolvedViewID
 	CrdbInternalPCRStreamsTableID
 	CrdbInternalPCRStreamSpansTableID
 	CrdbInternalPCRStreamCheckpointsTableID
@@ -224,9 +217,6 @@ const (
 	CrdbInternalFullyQualifiedNamesViewID
 	CrdbInternalStoreLivenessSupportFrom
 	CrdbInternalStoreLivenessSupportFor
-	// CrdbInternalTestID is reserved for tests that need to inject virtual tables
-	// into crdb_internal.
-	CrdbInternalTestID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

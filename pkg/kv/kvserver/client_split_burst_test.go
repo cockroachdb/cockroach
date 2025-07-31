@@ -160,9 +160,9 @@ func TestSplitBurstWithSlowFollower(t *testing.T) {
 		// even though there is a slow follower, `splitDelayHelper` isn't interested in
 		// delaying this here (which would imply that it's trying to check that every-
 		// one is "caught up").
-		// We set a 200s timeout so that below we can assert that `splitDelayHelper`
+		// We set a 100s timeout so that below we can assert that `splitDelayHelper`
 		// isn't somehow forcing us to wait here.
-		infiniteDelay := 200 * time.Second
+		infiniteDelay := 100 * time.Second
 		sbt := setupSplitBurstTest(t, infiniteDelay)
 		defer sbt.Stopper().Stop(ctx)
 

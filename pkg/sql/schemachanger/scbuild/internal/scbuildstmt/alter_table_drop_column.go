@@ -6,9 +6,6 @@
 package scbuildstmt
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -17,11 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,7 +29,8 @@ func alterTableDropColumn(
 	stmt tree.Statement,
 	n *tree.AlterTableDropColumn,
 ) {
-	panicIfRegionChangeUnderwayOnRBRTable(b, "DROP COLUMN", tbl.TableID)
+	fallBackIfSubZoneConfigExists(b, n, tbl.TableID)
+	fallBackIfRegionalByRowTable(b, n, tbl.TableID)
 	checkSafeUpdatesForDropColumn(b)
 	checkRegionalByRowColumnConflict(b, tbl, n)
 
@@ -84,9 +82,12 @@ func checkRegionalByRowColumnConflict(b BuildCtx, tbl *scpb.Table, n *tree.Alter
 				"cannot drop column %s as it is used to store the region in a REGIONAL BY ROW table",
 				n.Column,
 			),
-			"You must change the table locality before dropping this column or alter the table to use a different column for the region.",
+			"You must change the table locality before dropping this table or alter the table to use a different column to use for the region.",
 		))
 	}
+	// TODO(ajwerner): Support dropping a column of a REGIONAL BY ROW table.
+	panic(scerrors.NotImplementedErrorf(n,
+		"regional by row partitioning is not supported"))
 }
 
 func resolveColumnForDropColumn(
@@ -223,19 +224,6 @@ func dropColumn(
 				)
 			}
 			dropCascadeDescriptor(b, e.FunctionID)
-		case *scpb.TriggerDeps:
-			if behavior == tree.DropCascade {
-				panic(unimplemented.NewWithIssuef(
-					146667, "ALTER TABLE DROP COLUMN cascade not supported with triggers"))
-			}
-			triggerName := b.QueryByID(e.TableID).FilterTriggerName().Filter(func(_ scpb.Status, _ scpb.TargetStatus, tn *scpb.TriggerName) bool {
-				return tn.TriggerID == e.TriggerID
-			}).MustGetOneElement()
-			tableName := b.QueryByID(e.TableID).FilterNamespace().MustGetOneElement()
-			panic(sqlerrors.NewDependentObjectErrorf(
-				"cannot drop column %q because trigger %q on table %q depends on it",
-				cn.Name, triggerName.Name, tableName.Name,
-			))
 		case *scpb.UniqueWithoutIndexConstraint:
 			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
 			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
@@ -261,8 +249,6 @@ func dropColumn(
 			// Otherwise, it is a dependency on the column used in the expiration
 			// expression.
 			panic(sqlerrors.NewAlterDependsOnExpirationExprError(op, objType, cn.Name, tn.Object(), string(e.ExpirationExpr)))
-		case *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr:
-			panic(sqlerrors.NewAlterDependsOnPolicyExprError(op, objType, cn.Name))
 		default:
 			b.Drop(e)
 		}
@@ -284,7 +270,7 @@ func dropColumn(
 		}
 	})
 	if _, _, ct := scpb.FindColumnType(colElts); !ct.IsVirtual {
-		handleDropColumnPrimaryIndexes(b, tbl, col)
+		handleDropColumnPrimaryIndexes(b, tbl, n, col)
 	}
 	assertAllColumnElementsAreDropped(colElts)
 }
@@ -310,8 +296,7 @@ func walkColumnDependencies(
 				*scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression,
 				*scpb.UniqueWithoutIndexConstraint, *scpb.CheckConstraint,
 				*scpb.UniqueWithoutIndexConstraintUnvalidated, *scpb.CheckConstraintUnvalidated,
-				*scpb.RowLevelTTL, *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr,
-				*scpb.TriggerDeps:
+				*scpb.RowLevelTTL:
 				fn(e, op, objType)
 			case *scpb.ColumnType:
 				if elt.ColumnID == col.ColumnID {
@@ -329,6 +314,8 @@ func walkColumnDependencies(
 				fn(e, op, objType)
 				sequenceDeps.Add(elt.SequenceID)
 			case *scpb.SecondaryIndex:
+				indexDeps.Add(elt.IndexID)
+			case *scpb.SecondaryIndexPartial:
 				indexDeps.Add(elt.IndexID)
 			case *scpb.IndexColumn:
 				indexDeps.Add(elt.IndexID)
@@ -396,12 +383,6 @@ func walkColumnDependencies(
 					fn(e, op, objType)
 				}
 			}
-		case *scpb.TriggerDeps:
-			for _, ref := range elt.UsesRelations {
-				if ref.ID == col.TableID && catalog.MakeTableColSet(ref.ColumnIDs...).Contains(col.ColumnID) {
-					fn(e, op, objType)
-				}
-			}
 		}
 	})
 }
@@ -432,6 +413,10 @@ func panicIfColReferencedInPredicate(
 			if elt.EmbeddedExpr != nil && contains(elt.EmbeddedExpr.ReferencedColumnIDs, col.ColumnID) {
 				violatingIndex = elt.IndexID
 			}
+		case *scpb.SecondaryIndexPartial:
+			if contains(elt.ReferencedColumnIDs, col.ColumnID) {
+				violatingIndex = elt.IndexID
+			}
 		case *scpb.UniqueWithoutIndexConstraint:
 			if elt.Predicate != nil && contains(elt.Predicate.ReferencedColumnIDs, col.ColumnID) {
 				violatingUWI = elt.ConstraintID
@@ -455,7 +440,9 @@ func panicIfColReferencedInPredicate(
 	}
 }
 
-func handleDropColumnPrimaryIndexes(b BuildCtx, tbl *scpb.Table, col *scpb.Column) {
+func handleDropColumnPrimaryIndexes(
+	b BuildCtx, tbl *scpb.Table, n tree.NodeFormatter, col *scpb.Column,
+) {
 	inflatedChain := getInflatedPrimaryIndexChain(b, tbl.TableID)
 
 	// If `col` is already public in `old`, then we just need to drop it from `final`.
@@ -520,10 +507,10 @@ func dropIndexColumnFromInternal(
 
 func assertAllColumnElementsAreDropped(colElts ElementResultSet) {
 	if stillPublic := colElts.Filter(publicTargetFilter); !stillPublic.IsEmpty() {
-		var sb strings.Builder
+		var elements []scpb.Element
 		stillPublic.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-			sb.WriteString(fmt.Sprintf("%T[%v]", e, e))
+			elements = append(elements, e)
 		})
-		panic(errors.AssertionFailedf("failed to drop all of the relevant elements: %s", sb.String()))
+		panic(errors.AssertionFailedf("failed to drop all of the relevant elements: %v", elements))
 	}
 }

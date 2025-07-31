@@ -43,6 +43,7 @@ var GCInterval = settings.RegisterDurationSetting(
 	"server.sqlliveness.gc_interval",
 	"duration between attempts to delete extant sessions that have expired",
 	time.Hour,
+	settings.NonNegativeDuration,
 )
 
 // GCJitter specifies the jitter fraction on the interval between attempts to
@@ -212,12 +213,11 @@ func (s *Storage) isAlive(
 		if !s.mu.started {
 			return false, false, singleflight.Future{}, sqlliveness.NotStartedError
 		}
-		sidKey := any(sid)
-		if _, ok := s.mu.deadSessions.Get(sidKey); ok {
+		if _, ok := s.mu.deadSessions.Get(sid); ok {
 			s.metrics.IsAliveCacheHits.Inc(1)
 			return false, false, singleflight.Future{}, nil
 		}
-		if expiration, ok := s.mu.liveSessions.Get(sidKey); ok {
+		if expiration, ok := s.mu.liveSessions.Get(sid); ok {
 			expiration := expiration.(hlc.Timestamp)
 			// The record exists and is valid.
 			if s.clock.Now().Less(expiration) {
@@ -403,6 +403,7 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.Ch():
+			t.MarkRead()
 			s.deleteExpiredSessions(ctx)
 			t.Reset(s.gcInterval())
 		}
@@ -528,7 +529,7 @@ func (s *Storage) Insert(
 
 		}
 		v := encodeValue(expiration)
-		batch.CPut(k, &v, nil /* expValue */)
+		batch.InitPut(k, &v, true)
 
 		return txn.CommitInBatch(ctx, batch)
 	}); err != nil {

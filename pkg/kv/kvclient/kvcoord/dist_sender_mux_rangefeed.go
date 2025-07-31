@@ -283,7 +283,7 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 
 		for !s.transport.IsExhausted() {
 			args := makeRangeFeedRequest(
-				s.Span, s.token.Desc().RangeID, m.cfg.overSystemTable, s.startAfter, m.cfg.withDiff, m.cfg.withFiltering, m.cfg.withMatchingOriginIDs, m.cfg.consumerID, m.cfg.bulkDelivery)
+				s.Span, s.token.Desc().RangeID, m.cfg.overSystemTable, s.startAfter, m.cfg.withDiff, m.cfg.withFiltering, m.cfg.withMatchingOriginIDs)
 			args.Replica = s.transport.NextReplica()
 			args.StreamID = streamID
 			s.ReplicaDescriptor = args.Replica
@@ -368,15 +368,11 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 	nodeID roachpb.NodeID,
 	stream *future.Future[muxStreamOrError],
 ) (retErr error) {
-
-	tags := &logtags.Buffer{}
-	tags = tags.Add("mux_n", nodeID)
+	ctx = logtags.AddTag(ctx, "mux_n", nodeID)
 	// Add "generation" number to the context so that log messages and stacks can
 	// differentiate between multiple instances of mux rangefeed goroutine
 	// (this can happen when one was shutdown, then re-established).
-	tags = tags.Add("gen", atomic.AddInt64(&m.seqID, 1))
-
-	ctx = logtags.AddTags(ctx, tags)
+	ctx = logtags.AddTag(ctx, "gen", atomic.AddInt64(&m.seqID, 1))
 	ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 	defer restore()
 
@@ -400,18 +396,9 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		return future.MustSet(stream, muxStreamOrError{err: err})
 	}
 
-	maybeCloseClient := func() {
-		if closer, ok := mux.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				log.Warningf(ctx, "error closing mux rangefeed client: %v", err)
-			}
-		}
-	}
-
 	ms := muxStream{nodeID: nodeID}
 	ms.mu.sender = mux
 	if err := future.MustSet(stream, muxStreamOrError{stream: &ms}); err != nil {
-		maybeCloseClient()
 		return err
 	}
 
@@ -421,7 +408,6 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		// another goroutine loaded it.  That's fine, since we would not
 		// be able to send new request on this stream anymore, and we'll retry
 		// against another node.
-		maybeCloseClient()
 		m.muxClients.Delete(nodeID)
 
 		if recvErr == io.EOF {

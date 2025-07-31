@@ -24,7 +24,7 @@ raft-state
 2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
 3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
 
-# Set the randomized election timeout to be worth 1 tick-election. This makes the
+# Set the randomized election timeout to be worth 1 tick-electon. This makes the
 # test deterministic. We then have to tick-election twice as the leader heard
 # from followers when it stabilized above. This should then trip the heartbeat
 # lease check quorum condition.
@@ -45,6 +45,7 @@ withdraw-support 3 1
 1 1 1 1
 2 x 1 1
 3 x 1 1
+
 
 tick-election 1
 ----
@@ -68,26 +69,28 @@ INFO 1 leader at term 1 does not support itself in the liveness fabric
 INFO 1 leader at term 1 does not support itself in the liveness fabric
 DEBUG 1 has not received messages from a quorum of peers in the last election timeout
 DEBUG 1 does not have store liveness support from a quorum of peers
-INFO 1 stepped down to follower since quorum is not active
-DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
+WARN 1 stepped down to follower since quorum is not active
 INFO 1 became follower at term 1
-DEBUG 1 reset election elapsed to 0
 
 # Needs resetting post step-down.
 set-randomized-election-timeout 1 timeout=3
 ----
 ok
 
-# Since we don't have store liveness support, we can't campaign.
+# Even though the leader doesn't have store liveness support, it'll still call
+# a pre-vote election until we start checking store liveness before doing so.
 # However, on this ticker, it'll also broadcast a de-fortify to all peers --
 # which is what we're interested in for this test.
 tick-election 1
 ----
-DEBUG 1 cannot campaign since it's not supported by a quorum in store liveness
+INFO 1 is starting a new election at term 1
+INFO 1 became pre-candidate at term 1
+INFO 1 [logterm: 1, index: 11] sent MsgPreVote request to 2 at term 1
+INFO 1 [logterm: 1, index: 11] sent MsgPreVote request to 3 at term 1
 
 raft-state 1
 ----
-1: StateFollower (Voter) Term:1 Lead:0 LeadEpoch:0
+1: StatePreCandidate (Voter) Term:1 Lead:0 LeadEpoch:0
 2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
 3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
 
@@ -95,8 +98,8 @@ raft-state 1
 stabilize
 ----
 > 1 handling Ready
-  Ready:
-  State:StateFollower
+  Ready MustSync=true:
+  State:StatePreCandidate
   HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
@@ -105,37 +108,37 @@ stabilize
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
-  1->2 MsgDeFortifyLeader Term:1 Log:0/0
-  1->3 MsgDeFortifyLeader Term:1 Log:0/0
+  1->2 MsgPreVote Term:2 Log:1/11
+  1->3 MsgPreVote Term:2 Log:1/11
+  INFO 1 received MsgPreVoteResp from 1 at term 1
+  INFO 1 has received 1 MsgPreVoteResp votes and 0 vote rejections
 > 2 receiving messages
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
-  DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 2 is not fortifying 1; de-fortification is a no-op
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 2 is not fortifying 1; de-fortification is a no-op
-  1->2 MsgDeFortifyLeader Term:1 Log:0/0
-  DEBUG 2 is not fortifying 1; de-fortification is a no-op
+  1->2 MsgPreVote Term:2 Log:1/11
+  INFO 2 [logterm: 1, index: 11, vote: 1] ignored MsgPreVote from 1 [logterm: 1, index: 11] at term 1: recently received communication from leader (remaining ticks: 3)
 > 3 receiving messages
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
-  DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 3 is not fortifying 1; de-fortification is a no-op
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 3 is not fortifying 1; de-fortification is a no-op
-  1->3 MsgDeFortifyLeader Term:1 Log:0/0
-  DEBUG 3 is not fortifying 1; de-fortification is a no-op
+  1->3 MsgPreVote Term:2 Log:1/11
+  INFO 3 [logterm: 1, index: 11, vote: 1] ignored MsgPreVote from 1 [logterm: 1, index: 11] at term 1: recently received communication from leader (remaining ticks: 3)
 > 2 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
 > 3 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
 
 # All peers have been de-fortified successfully.
 raft-state
 ----
-1: StateFollower (Voter) Term:1 Lead:0 LeadEpoch:0
+1: StatePreCandidate (Voter) Term:1 Lead:0 LeadEpoch:0
 2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
 3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
 
@@ -149,7 +152,7 @@ ok
 stabilize
 ----
 > 1 handling Ready
-  Ready:
+  Ready MustSync=false:
   Messages:
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
@@ -232,10 +235,8 @@ INFO 2 leader at term 2 does not support itself in the liveness fabric
 INFO 2 leader at term 2 does not support itself in the liveness fabric
 DEBUG 2 has not received messages from a quorum of peers in the last election timeout
 DEBUG 2 does not have store liveness support from a quorum of peers
-INFO 2 stepped down to follower since quorum is not active
-DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
+WARN 2 stepped down to follower since quorum is not active
 INFO 2 became follower at term 2
-DEBUG 2 reset election elapsed to 0
 
 # Tick 1 once to ensure it grants its prevote.
 set-randomized-election-timeout 1 timeout=5
@@ -256,14 +257,12 @@ INFO 3 [logterm: 2, index: 12] sent MsgPreVote request to 2 at term 2
 stabilize 3
 ----
 > 3 handling Ready
-  Ready:
+  Ready MustSync=true:
   State:StatePreCandidate
-  HardState Term:2 Vote:2 Commit:12 Lead:0 LeadEpoch:0
+  HardState Term:2 Commit:12 Lead:0 LeadEpoch:0
   Messages:
   3->1 MsgPreVote Term:3 Log:2/12
   3->2 MsgPreVote Term:3 Log:2/12
-  OnSync:
-  3->3 MsgPreVoteResp Term:3 Log:0/0
   INFO 3 received MsgPreVoteResp from 3 at term 2
   INFO 3 has received 1 MsgPreVoteResp votes and 0 vote rejections
 
@@ -274,14 +273,14 @@ dropped: 3->2 MsgPreVote Term:3 Log:2/12
 stabilize 1 3
 ----
 > 1 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:12 Lead:2 LeadEpoch:0
 > 1 receiving messages
   3->1 MsgPreVote Term:3 Log:2/12
   INFO 1 [logterm: 2, index: 12, vote: 2] cast MsgPreVote for 3 [logterm: 2, index: 12] at term 2
 > 1 handling Ready
-  Ready:
-  OnSync:
+  Ready MustSync=false:
+  Messages:
   1->3 MsgPreVoteResp Term:3 Log:0/0
 > 3 receiving messages
   1->3 MsgPreVoteResp Term:3 Log:0/0
@@ -291,26 +290,23 @@ stabilize 1 3
   INFO 3 [logterm: 2, index: 12] sent MsgVote request to 1 at term 3
   INFO 3 [logterm: 2, index: 12] sent MsgVote request to 2 at term 3
 > 3 handling Ready
-  Ready:
+  Ready MustSync=true:
   State:StateCandidate
   HardState Term:3 Vote:3 Commit:12 Lead:0 LeadEpoch:0
   Messages:
   3->1 MsgVote Term:3 Log:2/12
   3->2 MsgVote Term:3 Log:2/12
-  OnSync:
-  3->3 MsgVoteResp Term:3 Log:0/0
   INFO 3 received MsgVoteResp from 3 at term 3
   INFO 3 has received 1 MsgVoteResp votes and 0 vote rejections
 > 1 receiving messages
   3->1 MsgVote Term:3 Log:2/12
-  INFO 1 [term: 2] received a MsgVote message with higher term from 3 [term: 3], advancing term
+  INFO 1 [term: 2] received a MsgVote message with higher term from 3 [term: 3]
   INFO 1 became follower at term 3
-  DEBUG 1 reset election elapsed to 0
   INFO 1 [logterm: 2, index: 12, vote: 0] cast MsgVote for 3 [logterm: 2, index: 12] at term 3
 > 1 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:3 Vote:3 Commit:12 Lead:0 LeadEpoch:0
-  OnSync:
+  Messages:
   1->3 MsgVoteResp Term:3 Log:0/0
 > 3 receiving messages
   1->3 MsgVoteResp Term:3 Log:0/0
@@ -318,7 +314,7 @@ stabilize 1 3
   INFO 3 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 3 became leader at term 3
 > 3 handling Ready
-  Ready:
+  Ready MustSync=true:
   State:StateLeader
   HardState Term:3 Vote:3 Commit:12 Lead:3 LeadEpoch:1
   Entries:
@@ -328,42 +324,41 @@ stabilize 1 3
   3->2 MsgFortifyLeader Term:3 Log:0/0
   3->1 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
   3->2 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
-  OnSync:
-  3->3 MsgAppResp Term:3 Log:0/13 Commit:12
-  3->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
 > 1 receiving messages
   3->1 MsgFortifyLeader Term:3 Log:0/0
   3->1 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
 > 1 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:3 Vote:3 Commit:12 Lead:3 LeadEpoch:1
   Entries:
   3/13 EntryNormal ""
-  OnSync:
+  Messages:
   1->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   1->3 MsgAppResp Term:3 Log:0/13 Commit:12
 > 3 receiving messages
   1->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   1->3 MsgAppResp Term:3 Log:0/13 Commit:12
 > 3 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:3 Vote:3 Commit:13 Lead:3 LeadEpoch:1
-  Committed: (12,13]
-  Messages:
-  3->1 MsgApp Term:3 Log:3/13 Commit:13
-  Applying:
+  CommittedEntries:
   3/13 EntryNormal ""
+  Messages:
+  3->1 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
+  3->1 MsgApp Term:3 Log:3/13 Commit:13
 > 1 receiving messages
+  3->1 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
   3->1 MsgApp Term:3 Log:3/13 Commit:13
 > 1 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:3 Vote:3 Commit:13 Lead:3 LeadEpoch:1
-  Committed: (12,13]
-  OnSync:
-  1->3 MsgAppResp Term:3 Log:0/13 Commit:13
-  Applying:
+  CommittedEntries:
   3/13 EntryNormal ""
+  Messages:
+  1->3 MsgAppResp Term:3 Log:0/13 Commit:12
+  1->3 MsgAppResp Term:3 Log:0/13 Commit:13
 > 3 receiving messages
+  1->3 MsgAppResp Term:3 Log:0/13 Commit:12
   1->3 MsgAppResp Term:3 Log:0/13 Commit:13
 
 deliver-msgs drop=(2)
@@ -376,7 +371,7 @@ dropped: 3->2 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
 raft-state
 ----
 1: StateFollower (Voter) Term:3 Lead:3 LeadEpoch:1
-2: StateFollower (Voter) Term:2 Lead:0 LeadEpoch:0
+2: StateFollower (Voter) Term:2 Lead:0 LeadEpoch:1
 3: StateLeader (Voter) Term:3 Lead:3 LeadEpoch:1
 
 raft-log 3
@@ -390,11 +385,6 @@ raft-log 2
 1/11 EntryNormal ""
 2/12 EntryNormal ""
 
-# Make sure 2 doesn't attempt to campaign on the next tick-heartbeat.
-set-randomized-election-timeout 2 timeout=5
-----
-ok
-
 # And as a result, it continues to send out de-fortification requests.
 tick-heartbeat 2
 ----
@@ -403,22 +393,16 @@ ok
 stabilize
 ----
 > 2 handling Ready
-  Ready:
+  Ready MustSync=true:
   State:StateFollower
-  HardState Term:2 Vote:2 Commit:12 Lead:0 LeadEpoch:0
+  HardState Term:2 Vote:2 Commit:12 Lead:2 LeadEpoch:0
   Messages:
-  2->1 MsgDeFortifyLeader Term:2 Log:0/0
-  2->3 MsgDeFortifyLeader Term:2 Log:0/0
   2->1 MsgDeFortifyLeader Term:2 Log:0/0
   2->3 MsgDeFortifyLeader Term:2 Log:0/0
 > 1 receiving messages
   2->1 MsgDeFortifyLeader Term:2 Log:0/0
   INFO 1 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
-  2->1 MsgDeFortifyLeader Term:2 Log:0/0
-  INFO 1 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
 > 3 receiving messages
-  2->3 MsgDeFortifyLeader Term:2 Log:0/0
-  INFO 3 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
   2->3 MsgDeFortifyLeader Term:2 Log:0/0
   INFO 3 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
 
@@ -430,37 +414,39 @@ ok
 stabilize
 ----
 > 3 handling Ready
-  Ready:
+  Ready MustSync=false:
   Messages:
   3->2 MsgFortifyLeader Term:3 Log:0/0
   3->2 MsgApp Term:3 Log:2/12 Commit:13 Entries:[3/13 EntryNormal ""]
 > 2 receiving messages
   3->2 MsgFortifyLeader Term:3 Log:0/0
-  INFO 2 [term: 2] received a MsgFortifyLeader message with higher term from 3 [term: 3], new leader indicated, advancing term
+  INFO 2 [term: 2] received a MsgFortifyLeader message with higher term from 3 [term: 3]
   INFO 2 became follower at term 3
-  DEBUG 2 reset election elapsed to 0
   3->2 MsgApp Term:3 Log:2/12 Commit:13 Entries:[3/13 EntryNormal ""]
 > 2 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:3 Commit:13 Lead:3 LeadEpoch:1
   Entries:
   3/13 EntryNormal ""
-  Committed: (12,13]
+  CommittedEntries:
+  3/13 EntryNormal ""
   Messages:
-  2->1 MsgDeFortifyLeader Term:2 Log:0/0
-  2->3 MsgDeFortifyLeader Term:2 Log:0/0
-  OnSync:
   2->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   2->3 MsgAppResp Term:3 Log:0/13 Commit:13
-  Applying:
-  3/13 EntryNormal ""
-> 1 receiving messages
-  2->1 MsgDeFortifyLeader Term:2 Log:0/0
-  INFO 1 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
 > 3 receiving messages
-  2->3 MsgDeFortifyLeader Term:2 Log:0/0
-  INFO 3 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
   2->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  2->3 MsgAppResp Term:3 Log:0/13 Commit:13
+> 3 handling Ready
+  Ready MustSync=false:
+  Messages:
+  3->2 MsgApp Term:3 Log:2/12 Commit:13 Entries:[3/13 EntryNormal ""]
+> 2 receiving messages
+  3->2 MsgApp Term:3 Log:2/12 Commit:13 Entries:[3/13 EntryNormal ""]
+> 2 handling Ready
+  Ready MustSync=false:
+  Messages:
+  2->3 MsgAppResp Term:3 Log:0/13 Commit:13
+> 3 receiving messages
   2->3 MsgAppResp Term:3 Log:0/13 Commit:13
 
 raft-state

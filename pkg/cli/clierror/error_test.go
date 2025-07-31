@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgconn"
 	"github.com/stretchr/testify/assert"
 )
 

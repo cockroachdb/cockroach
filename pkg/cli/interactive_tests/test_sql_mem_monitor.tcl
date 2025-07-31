@@ -71,7 +71,7 @@ start_test "Ensure that memory over-allocation without monitoring crashes the se
 # (importantly, this budget must be larger than vmem).
 send "set distsql_workmem='32GiB';\r"
 eexpect SET
-send "select a, random() AS r, repeat('a', 1000) from generate_series(1,10000000) g(a) order by r;\r"
+send "with a as (select * from generate_series(1,10000000)) select * from a as a, a as b, a as c, a as d limit 10;\r"
 eexpect "connection lost"
 
 # Check that the query crashed the server
@@ -123,7 +123,7 @@ sleep 2
 set spawn_id $client_spawn_id
 send "select 1;\r"
 eexpect root@
-send "select a, random() AS r, repeat('a', 1000) from generate_series(1,10000000) g(a) order by r;\r"
+send "with a as (select * from generate_series(1,100000)) select * from a as a, a as b, a as c, a as d limit 10;\r"
 eexpect "root: memory budget exceeded"
 eexpect root@
 

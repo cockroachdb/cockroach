@@ -19,7 +19,7 @@ import (
 // If hardLimit is set, only that number of rows is collected, but
 // the child node is still run to completion.
 type spoolNode struct {
-	singleInputPlanNode
+	source    planNode
 	rows      *rowcontainer.RowContainer
 	hardLimit int64
 	curRowIdx int
@@ -32,7 +32,7 @@ func (s *spoolNode) startExec(params runParams) error {
 	// If FastPathResults() on the source indicates that the results are
 	// already available (2nd value true), then the computation is
 	// already done at start time and spooling is unnecessary.
-	if f, ok := s.input.(planNodeFastPath); ok {
+	if f, ok := s.source.(planNodeFastPath); ok {
 		_, done := f.FastPathResults()
 		if done {
 			return nil
@@ -41,14 +41,14 @@ func (s *spoolNode) startExec(params runParams) error {
 
 	s.rows = rowcontainer.NewRowContainer(
 		params.p.Mon().MakeBoundAccount(),
-		colinfo.ColTypeInfoFromResCols(planColumns(s.input)),
+		colinfo.ColTypeInfoFromResCols(planColumns(s.source)),
 	)
 
 	// Accumulate all the rows up to the hardLimit, if any.
 	// This also guarantees execution of the child node to completion,
 	// even if Next() on the spool itself is not called for every row.
 	for {
-		next, err := s.input.Next(params)
+		next, err := s.source.Next(params)
 		if err != nil {
 			return err
 		}
@@ -56,7 +56,7 @@ func (s *spoolNode) startExec(params runParams) error {
 			break
 		}
 		if s.hardLimit == 0 || int64(s.rows.Len()) < s.hardLimit {
-			if _, err := s.rows.AddRow(params.ctx, s.input.Values()); err != nil {
+			if _, err := s.rows.AddRow(params.ctx, s.source.Values()); err != nil {
 				return err
 			}
 		}
@@ -74,7 +74,7 @@ func (s *spoolNode) FastPathResults() (int, bool) {
 	// If FastPathResults() on the source says the fast path is unavailable,
 	// then startExec() on the spool will also notice that and
 	// spooling will occur as expected.
-	if f, ok := s.input.(planNodeFastPath); ok {
+	if f, ok := s.source.(planNodeFastPath); ok {
 		return f.FastPathResults()
 	}
 	return 0, false
@@ -96,7 +96,7 @@ func (s *spoolNode) Values() tree.Datums {
 
 // Close is part of the planNode interface.
 func (s *spoolNode) Close(ctx context.Context) {
-	s.input.Close(ctx)
+	s.source.Close(ctx)
 	if s.rows != nil {
 		s.rows.Close(ctx)
 		s.rows = nil
@@ -104,7 +104,7 @@ func (s *spoolNode) Close(ctx context.Context) {
 }
 
 func (s *spoolNode) rowsWritten() int64 {
-	m, ok := s.input.(mutationPlanNode)
+	m, ok := s.source.(mutationPlanNode)
 	if !ok {
 		return 0
 	}

@@ -30,7 +30,7 @@ var (
 	check        = flag.String("check", "", "run operations in specified file and check output for equality")
 	inMem        = flag.Bool("in-mem", false, "use an in-memory filesystem")
 	compareFiles = flag.String("compare-files", "", "comma-separated list of output files to compare; used by TestCompareFiles")
-	opCount      = flag.Int("operations", 10000, "number of MVCC operations to generate and run")
+	opCount      = flag.Int("operations", 20000, "number of MVCC operations to generate and run")
 )
 
 type testRun struct {
@@ -167,34 +167,13 @@ func TestPebbleEquivalence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// This test times out with the race detector enabled.
 	skip.UnderRace(t)
-	runPebbleEquivalenceTest(t)
-}
-
-func TestPebbleEquivalenceNightly(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.IfNotMiscNightly(t)
-
-	// This test times out with the race detector enabled.
-	skip.UnderRace(t)
-	if *opCount < 500000 {
-		oldOpCount := *opCount
-		// Override number of operations to at least half a million.
-		*opCount = 500000
-
-		defer func() {
-			*opCount = oldOpCount
-		}()
-	}
-
 	runPebbleEquivalenceTest(t)
 }
 
 func runPebbleEquivalenceTest(t *testing.T) {
 	ctx := context.Background()
+	// This test times out with the race detector enabled.
 	_, seed := randutil.NewTestRand()
 
 	engineSeqs := make([]engineSequence, 0, numStandardOptions+numRandomOptions)

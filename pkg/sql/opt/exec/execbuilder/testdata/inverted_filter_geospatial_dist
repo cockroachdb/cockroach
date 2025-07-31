@@ -104,7 +104,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX g
 ORDER BY 1
 ----
 start_key              end_key                replicas  lease_holder
-<before:/Table/72>     …/1152921574000000000  {1}       1
+<before:/Table/67>     …/1152921574000000000  {1}       1
 …/1152921574000000000  <after:/Max>           {2}       2
 
 # Distributed. TODO(treilly): This claims to be distributed, but it isn't. What gives?
@@ -174,7 +174,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX g
 ORDER BY 1
 ----
 start_key              end_key                replicas  lease_holder
-<before:/Table/72>     …/1152921574000000000  {2}       2
+<before:/Table/67>     …/1152921574000000000  {2}       2
 …/1152921574000000000  <after:/Max>           {2}       2
 
 # Filtering is placed at node 2. We need a retry here to account for possibly
@@ -246,7 +246,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX g
 ORDER BY 1
 ----
 start_key              end_key                replicas  lease_holder
-<before:/Table/72>     …/1152921574000000000  {2}       2
+<before:/Table/67>     …/1152921574000000000  {2}       2
 …/1152921574000000000  <after:/Max>           {2}       2
 
 query ITTTI colnames,rowsort
@@ -254,7 +254,7 @@ SELECT range_id, start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FR
 ORDER BY lease_holder, start_key
 ----
 range_id  start_key           end_key                                   replicas  lease_holder
-74        <before:/Table/72>  <after:/Table/106/2/1152921574000000000>  {2}       2
+69        <before:/Table/67>  <after:/Table/106/2/1152921574000000000>  {2}       2
 
 # We should see a distributed execution (though need to retry to purge possibly
 # stale dist sender caches).

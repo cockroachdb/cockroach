@@ -459,10 +459,10 @@ func (o *OS) ListFilesWithSuffix(root, suffix string) ([]string, error) {
 
 	output, err := o.Next(command, func() (output string, err error) {
 		var ret []string
-		if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err := filepath.Walk(root, func(path string, info fs.FileInfo, err error) error {
 			// If there's an error walking the tree, throw it away -- there's
 			// nothing interesting we can do with it.
-			if err != nil || d.IsDir() {
+			if err != nil || info.IsDir() {
 				//nolint:returnerrcheck
 				return nil
 			}

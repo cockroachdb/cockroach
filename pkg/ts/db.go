@@ -141,22 +141,18 @@ func (db *DB) PollSource(
 // start begins the goroutine for this poller, which will periodically request
 // time series data from the DataSource and store it.
 func (p *poller) start() (firstDone <-chan struct{}) {
-	ch := make(chan struct{}) // closed on completion of first poll
-	ctx, hdl, err := p.stopper.GetHandle(
-		p.AnnotateCtx(context.Background()), stop.TaskOpts{TaskName: "ts-poller"},
-	)
-	if err != nil {
-		close(ch)
-		return ch
-	}
-	go func(ctx context.Context, ch chan struct{}) {
-		defer hdl.Activate(ctx).Release(ctx)
+	ch := make(chan struct{})
+	// Poll once immediately and synchronously.
+	bgCtx := p.AnnotateCtx(context.Background())
+	if p.stopper.RunAsyncTask(bgCtx, "ts-poller", func(ctx context.Context) {
+		ch := ch // goroutine-local copy
 		var ticker timeutil.Timer
-		ticker.Reset(0) // poll immediately
+		ticker.Reset(0)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
+				ticker.Read = true
 				ticker.Reset(p.frequency)
 				p.poll(ctx)
 				if ch != nil {
@@ -167,7 +163,9 @@ func (p *poller) start() (firstDone <-chan struct{}) {
 				return
 			}
 		}
-	}(ctx, ch)
+	}) != nil {
+		close(ch)
+	}
 	return ch
 }
 

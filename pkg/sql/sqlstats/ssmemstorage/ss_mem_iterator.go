@@ -6,7 +6,6 @@
 package ssmemstorage
 
 import (
-	"slices"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -32,8 +31,8 @@ func NewStmtStatsIterator(
 ) StmtStatsIterator {
 	var stmtKeys stmtList
 	func() {
-		container.mu.Lock()
-		defer container.mu.Unlock()
+		container.mu.RLock()
+		defer container.mu.RUnlock()
 		for k := range container.mu.stmts {
 			stmtKeys = append(stmtKeys, k)
 		}
@@ -67,7 +66,8 @@ func (s *StmtStatsIterator) Next() bool {
 
 	stmtKey := s.stmtKeys[s.idx]
 
-	statementStats := s.container.getStatsForStmtWithKey(stmtKey)
+	statementStats, _, _ :=
+		s.container.getStatsForStmtWithKey(stmtKey, invalidStmtFingerprintID, false /* createIfNonexistent */)
 
 	// If the key is not found (and we expected to find it), the table must
 	// have been cleared between now and the time we read all the keys. In
@@ -77,23 +77,24 @@ func (s *StmtStatsIterator) Next() bool {
 	}
 
 	statementStats.mu.Lock()
-	data := copyDataLocked(statementStats)
+	data := statementStats.mu.data
 	distSQLUsed := statementStats.mu.distSQLUsed
 	vectorized := statementStats.mu.vectorized
 	fullScan := statementStats.mu.fullScan
+	database := statementStats.mu.database
 	querySummary := statementStats.mu.querySummary
 	statementStats.mu.Unlock()
 
 	s.currentValue = &appstatspb.CollectedStatementStatistics{
 		Key: appstatspb.StatementStatisticsKey{
-			Query:                    statementStats.meta.stmtNoConstants,
+			Query:                    stmtKey.stmtNoConstants,
 			QuerySummary:             querySummary,
 			DistSQL:                  distSQLUsed,
 			Vec:                      vectorized,
-			ImplicitTxn:              statementStats.meta.implicitTxn,
+			ImplicitTxn:              stmtKey.implicitTxn,
 			FullScan:                 fullScan,
 			App:                      s.container.appName,
-			Database:                 statementStats.meta.database,
+			Database:                 database,
 			PlanHash:                 stmtKey.planHash,
 			TransactionFingerprintID: stmtKey.transactionFingerprintID,
 		},
@@ -102,20 +103,6 @@ func (s *StmtStatsIterator) Next() bool {
 	}
 
 	return true
-}
-
-// copyDataLocked Copies the statement stat's data object under the mutex.
-// This function requires that there is a lock on the stats object.
-func copyDataLocked(stats *stmtStats) appstatspb.StatementStatistics {
-	stats.mu.AssertHeld()
-	data := stats.mu.data
-	data.Nodes = slices.Clone(data.Nodes)
-	data.KVNodeIDs = slices.Clone(data.KVNodeIDs)
-	data.Regions = slices.Clone(data.Regions)
-	data.PlanGists = slices.Clone(data.PlanGists)
-	data.IndexRecommendations = slices.Clone(data.IndexRecommendations)
-	data.Indexes = slices.Clone(data.Indexes)
-	return data
 }
 
 // Cur returns the appstatspb.CollectedStatementStatistics at the current internal
@@ -171,7 +158,7 @@ func (t *TxnStatsIterator) Next() bool {
 	// We don't want to create the key if it doesn't exist, so it's okay to
 	// pass nil for the statementFingerprintIDs, as they are only set when a key is
 	// constructed.
-	txnStats := t.container.getStatsForTxnWithKey(txnKey)
+	txnStats, _, _ := t.container.getStatsForTxnWithKey(txnKey, nil /* stmtFingerprintIDs */, false /* createIfNonexistent */)
 
 	// If the key is not found (and we expected to find it), the table must
 	// have been cleared between now and the time we read all the keys. In

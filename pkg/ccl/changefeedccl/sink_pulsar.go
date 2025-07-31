@@ -135,7 +135,6 @@ func (p *pulsarSink) EmitRow(
 	updated hlc.Timestamp,
 	mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
-	_headers rowHeaders,
 ) error {
 	// TODO(jayant): cache the encoded topics to save an alloc
 	// TODO(#118863): support updated, mvcc, topic_prefix etc.
@@ -319,13 +318,6 @@ func makePulsarSink(
 	topicNamer, err := MakeTopicNamer(targets)
 	if err != nil {
 		return nil, err
-	}
-
-	switch encodingOpts.Envelope {
-	case changefeedbase.OptEnvelopeEnriched:
-		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			changefeedbase.OptEnvelope, encodingOpts.Envelope)
-	default:
 	}
 
 	sink := &pulsarSink{

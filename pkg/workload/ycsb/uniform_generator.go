@@ -6,9 +6,8 @@
 package ycsb
 
 import (
-	"math/rand/v2"
-
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"golang.org/x/exp/rand"
 )
 
 // UniformGenerator is a random number generator that generates draws from a
@@ -47,5 +46,5 @@ func (z *UniformGenerator) IncrementIMax(count uint64) error {
 func (z *UniformGenerator) Uint64() uint64 {
 	z.mu.Lock()
 	defer z.mu.Unlock()
-	return (uint64)(z.mu.r.Int64N((int64)(z.mu.iMax-z.iMin+1))) + z.iMin
+	return (uint64)(z.mu.r.Int63n((int64)(z.mu.iMax-z.iMin+1))) + z.iMin
 }

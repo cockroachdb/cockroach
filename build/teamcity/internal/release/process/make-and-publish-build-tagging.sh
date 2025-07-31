@@ -36,7 +36,6 @@ fi
 if [[ -z "${DRY_RUN}" ]]; then
   if [[ -z "${is_customized_build}" ]] ; then
     google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS
-    # TODO: please see https://cockroachlabs.atlassian.net/browse/RE-360 in case you change the location of the nightly docker images.
     gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
     # Used for docker login for gcloud
     gcr_hostname="us-docker.pkg.dev"

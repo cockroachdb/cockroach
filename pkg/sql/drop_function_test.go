@@ -13,12 +13,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -59,7 +59,7 @@ CREATE SCHEMA test_sc;
 `,
 	)
 
-	err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		funcDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 109)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
@@ -140,7 +140,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 	// DROP the function and make sure dependencies are cleared.
 	tDB.Exec(t, "DROP FUNCTION f")
-	err = sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 109)
 		require.Error(t, err)
 		require.Regexp(t, regexp.MustCompile(`function \d+ does not exist`), err.Error())
@@ -188,8 +188,6 @@ func TestDropFailOnDependentFunction(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
-	// This test also validates the legacy schema changer so disable schema locked.
-	tDB.Exec(t, "SET create_table_with_schema_locked=false")
 	tDB.Exec(t, `
 CREATE TABLE t(
   a INT PRIMARY KEY,
@@ -313,7 +311,6 @@ func TestDropCascadeRemoveFunction(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	setupQuery := `
-SET create_table_with_schema_locked=false;
 CREATE DATABASE test_db;
 USE test_db;
 CREATE TABLE t(
@@ -383,7 +380,7 @@ $$;
 			// Test drop/rename behavior in legacy schema changer.
 			tDB.Exec(t, "SET use_declarative_schema_changer = off;")
 
-			err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.NoError(t, err)
 				require.Equal(t, "f", fnDesc.GetName())
@@ -394,7 +391,7 @@ $$;
 
 			tDB.Exec(t, tc.stmt)
 
-			err = sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.Error(t, err)
 				require.Regexp(t, regexp.MustCompile(`function \d+ does not exist`), err.Error())
@@ -416,7 +413,7 @@ $$;
 			// Test drop/rename behavior in legacy schema changer.
 			tDB.Exec(t, "SET use_declarative_schema_changer = on;")
 
-			err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.NoError(t, err)
 				require.Equal(t, "f", fnDesc.GetName())
@@ -427,7 +424,7 @@ $$;
 
 			tDB.Exec(t, tc.stmt)
 
-			err = sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.Error(t, err)
 				require.Regexp(t, regexp.MustCompile(`function \d+ does not exist`), err.Error())

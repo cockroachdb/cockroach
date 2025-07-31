@@ -110,15 +110,14 @@ func (p *ProgressTracker) Visit(f func(id pb.PeerID, pr *Progress)) {
 // QuorumActive returns true if the quorum is active from the view of the local
 // raft state machine. Otherwise, it returns false.
 func (p *ProgressTracker) QuorumActive() bool {
-	// TODO(pav-kv): avoid this allocation altogether. There could be a version of
-	// VoteResult which can iterate the progress map directly.
-	votes := make(map[pb.PeerID]bool, len(p.progress))
-	for id, pr := range p.progress {
+	votes := map[pb.PeerID]bool{}
+	p.Visit(func(id pb.PeerID, pr *Progress) {
 		if pr.IsLearner {
-			continue
+			return
 		}
 		votes[id] = pr.RecentActive
-	}
+	})
+
 	return p.config.Voters.VoteResult(votes) == quorum.VoteWon
 }
 
@@ -144,10 +143,9 @@ func (p *ProgressTracker) LearnerNodes() []pb.PeerID {
 func (p *ProgressTracker) WithBasicProgress(visitor func(id pb.PeerID, pr BasicProgress)) {
 	for id, p := range p.progress {
 		visitor(id, BasicProgress{
-			Match:         p.Match,
-			Next:          p.Next,
-			State:         p.State,
-			InflightBytes: p.Inflights.bytes,
+			Match: p.Match,
+			Next:  p.Next,
+			State: p.State,
 		})
 	}
 }

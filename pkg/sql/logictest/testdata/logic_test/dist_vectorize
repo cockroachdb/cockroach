@@ -32,7 +32,7 @@ query TTTI rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE kv WITH DETAILS]
 ORDER by 1
 ----
-<before:/Table/72>  …/1/1                   {1}  1
+<before:/Table/67>  …/1/1                   {1}  1
 …/1/1               …/1/2                   {1}  1
 …/1/2               …/1/3                   {2}  2
 …/1/3               …/1/4                   {3}  3
@@ -102,10 +102,10 @@ SELECT 1::INT2, s COLLATE en FROM t66306;
 ----
 1  foo
 
-# Always disable the direct columnar scans to make the output below
+# Always enable the direct columnar scans to make the output below
 # deterministic.
 statement ok
-SET direct_columnar_scans_enabled = false
+SET direct_columnar_scans_enabled = true
 
 # Sanity check that the wrapped processor is planned for the query above. If it
 # no longer is, we should adjust the query here and above.
@@ -119,7 +119,7 @@ EXPLAIN (VEC) SELECT 1::INT2, s COLLATE en FROM t66306;
   └ *colrpc.Outbox
     └ *colexecbase.castIntInt2Op
       └ *rowexec.noopProcessor
-        └ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchDirectScan
 
 statement ok
 RESET direct_columnar_scans_enabled

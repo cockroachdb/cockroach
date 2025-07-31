@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -156,7 +155,7 @@ func WithMerger(merger scexec.Merger) Option {
 
 func WithIDGenerator(s serverutils.ApplicationLayerInterface) Option {
 	return optionFunc(func(state *TestState) {
-		state.evalCtx.DescIDGenerator = descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB())
+		state.idGenerator = descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB())
 	})
 }
 
@@ -188,12 +187,5 @@ var defaultOptions = []Option{
 		semaCtx := tree.MakeSemaContext(state)
 		semaCtx.SearchPath = &state.SessionData().SearchPath
 		state.semaCtx = &semaCtx
-
-		evalCtx := &eval.Context{
-			SessionDataStack:   sessiondata.NewStack(state.SessionData()),
-			Settings:           state.ClusterSettings(),
-			ClientNoticeSender: state.ClientNoticeSender(),
-		}
-		state.evalCtx = evalCtx
 	}),
 }

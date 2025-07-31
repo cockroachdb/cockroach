@@ -9,12 +9,39 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
+	"github.com/spf13/cobra"
 )
 
-// ExecuteCmdWithPrefix runs a shell command with the given arguments and streams the output.
-// it also adds the specified prefixes
-func ExecuteCmdWithPrefix(ctx context.Context, logPrefix string, cmd string, args ...string) error {
+// Wrap provide `cobra.Command` functions with a standard return code handler.
+// Exit codes come from rperrors.Error.ExitCode().
+//
+// If the wrapped error tree of an error does not contain an instance of
+// rperrors.Error, the error will automatically be wrapped with
+// rperrors.Unclassified.
+func Wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		var err error
+		err = f(cmd, args)
+		if err != nil {
+			drtprodError, ok := rperrors.AsError(err)
+			if !ok {
+				drtprodError = rperrors.Unclassified{Err: err}
+				err = drtprodError
+			}
+
+			cmd.Printf("Error: %+v\n", err)
+
+			os.Exit(drtprodError.ExitCode())
+		}
+	}
+}
+
+// ExecuteCmd runs a shell command with the given arguments and streams the output.
+func ExecuteCmd(ctx context.Context, logPrefix string, cmd string, args ...string) error {
 	// Create a command with the given context and arguments.
 	c := exec.CommandContext(ctx, cmd, args...)
 
@@ -24,6 +51,12 @@ func ExecuteCmdWithPrefix(ctx context.Context, logPrefix string, cmd string, arg
 		return err
 	}
 	stderr, err := c.StderrPipe()
+	if err != nil {
+		return err
+	}
+
+	// Start the command execution
+	err = c.Start()
 	if err != nil {
 		return err
 	}
@@ -49,5 +82,5 @@ func ExecuteCmdWithPrefix(ctx context.Context, logPrefix string, cmd string, arg
 	}()
 
 	// Wait for the command to complete and return any errors encountered.
-	return c.Run()
+	return c.Wait()
 }

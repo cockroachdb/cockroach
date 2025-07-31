@@ -136,13 +136,13 @@ statement ok
 SET tracing = off
 
 query T rowsort
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message ~ '^=== SPAN START: routine-stmt-trace_fn'
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message ~ '^=== SPAN START: udf-stmt-trace_fn'
 ----
-=== SPAN START: routine-stmt-trace_fn-1 ===
-=== SPAN START: routine-stmt-trace_fn-2 ===
-=== SPAN START: routine-stmt-trace_fn-1 ===
-=== SPAN START: routine-stmt-trace_fn-2 ===
-=== SPAN START: routine-stmt-trace_fn-1 ===
-=== SPAN START: routine-stmt-trace_fn-2 ===
+=== SPAN START: udf-stmt-trace_fn-1 ===
+=== SPAN START: udf-stmt-trace_fn-2 ===
+=== SPAN START: udf-stmt-trace_fn-1 ===
+=== SPAN START: udf-stmt-trace_fn-2 ===
+=== SPAN START: udf-stmt-trace_fn-1 ===
+=== SPAN START: udf-stmt-trace_fn-2 ===
 
 subtest end

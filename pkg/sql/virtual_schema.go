@@ -27,10 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -41,12 +38,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -200,8 +195,8 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		nil,
 		sc,
 		id,
-		nil, /* regionConfig */
-		virtualTableCreationTime,
+		nil,       /* regionConfig */
+		startTime, /* creationTime */
 		catpb.NewPrivilegeDescriptor(
 			username.PublicRoleName(),
 			privilege.List{privilege.SELECT},
@@ -323,41 +318,6 @@ func (t virtualSchemaTable) preferIndexOverGenerator(
 	return true
 }
 
-func maybeAdjustVirtualIndexScanForExplain(
-	ctx context.Context, evalCtx *eval.Context, index cat.Index, params exec.ScanParams,
-) (_ cat.Index, _ exec.ScanParams, extraAttribute string) {
-	idx, ok := index.(*optVirtualIndex)
-	if !ok {
-		return index, params, extraAttribute
-	}
-	if idx.idx != nil && idx.idx.GetID() != 1 && params.IndexConstraint != nil {
-		// If we picked the virtual index, check that we can actually use it.
-		spans := params.IndexConstraint.Spans
-		for i := 0; i < spans.Count(); i++ {
-			if !spans.Get(i).HasSingleKey(ctx, evalCtx) {
-				// We'll have to fall back to the full scan of the virtual
-				// table, so adjust the index choice accordingly (and be careful
-				// to not modify the existing struct just to be safe).
-				idxCopy := *idx
-				idxCopy.idx = nil
-				// Also adjust the scan params since under the hood we'll
-				// effectively perform the "full scan" of the primary index of
-				// the virtual table (while filtering out rows that don't fall
-				// within the index constraint).
-				params.IndexConstraint = nil
-				// Include the detail about the filtering mentioned above.
-				extraAttribute = "virtual table filter"
-				return &idxCopy, params, extraAttribute
-			}
-		}
-	}
-	return idx, params, extraAttribute
-}
-
-func init() {
-	explain.MaybeAdjustVirtualIndexScan = maybeAdjustVirtualIndexScanForExplain
-}
-
 // getSchema is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) getSchema() string {
 	return v.schema
@@ -386,7 +346,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		sc.GetID(),
 		id,
 		columns,
-		virtualTableCreationTime,
+		startTime,
 		catpb.NewPrivilegeDescriptor(
 			username.PublicRoleName(),
 			privilege.List{privilege.SELECT},
@@ -428,7 +388,7 @@ var virtualSchemas = map[descpb.ID]virtualSchema{
 	catconstants.PgExtensionSchemaID: pgExtension,
 }
 
-var virtualTableCreationTime = hlc.Timestamp{
+var startTime = hlc.Timestamp{
 	WallTime: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano(),
 }
 
@@ -449,6 +409,9 @@ type VirtualSchemaHolder struct {
 	orderedNames  []string
 
 	catalogCache nstree.MutableCatalog
+	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+	// Remove in v23.2.
+	st *cluster.Settings
 }
 
 var _ VirtualTabler = (*VirtualSchemaHolder)(nil)
@@ -932,6 +895,10 @@ func NewVirtualSchemaHolder(
 		schemasByID:   make(map[descpb.ID]*virtualSchemaEntry, len(virtualSchemas)),
 		orderedNames:  make([]string, len(virtualSchemas)),
 		defsByID:      make(map[descpb.ID]*virtualDefEntry, math.MaxUint32-catconstants.MinVirtualID),
+
+		// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+		// Remove in v23.2.
+		st: st,
 	}
 
 	order := 0
@@ -983,29 +950,16 @@ func NewVirtualSchemaHolder(
 			return tableDesc, entry, nil
 		}
 
-		// Initialize virtual tables concurrently. This happens all at once during
-		// server startup, which is a bottleneck for startup time, especially in
-		// the TestServer used by unit tests. Adding concurrency here speeds up
-		// TestServer startup by about 7% in SharedTenant mode.
-		g := ctxgroup.WithContext(ctx)
-		var mu syncutil.Mutex
 		for id, def := range schema.tableDefs {
-			g.GoCtx(func(ctx context.Context) error {
-				tableDesc, entry, err := doTheWork(id, def, false /* bumpVersion */)
-				if err != nil {
-					return err
-				}
-				mu.Lock()
-				defer mu.Unlock()
-				defs[tableDesc.Name] = entry
-				vs.defsByID[tableDesc.ID] = entry
-				orderedDefNames = append(orderedDefNames, tableDesc.Name)
-				return nil
-			})
+			tableDesc, entry, err := doTheWork(id, def, false /* bumpVersion */)
+			if err != nil {
+				return nil, err
+			}
+			defs[tableDesc.Name] = entry
+			vs.defsByID[tableDesc.ID] = entry
+			orderedDefNames = append(orderedDefNames, tableDesc.Name)
 		}
-		if err := g.Wait(); err != nil {
-			return nil, err
-		}
+
 		sort.Strings(orderedDefNames)
 
 		vse := &virtualSchemaEntry{

@@ -212,7 +212,7 @@ func GetInProjectionOperator(
 			return obj, nil
 		}
 	}
-	return nil, errors.AssertionFailedf("unhandled type: %s", t.Name())
+	return nil, errors.Errorf("unhandled type: %s", t.Name())
 }
 
 func GetInOperator(
@@ -350,7 +350,7 @@ func GetInOperator(
 			return obj, nil
 		}
 	}
-	return nil, errors.AssertionFailedf("unhandled type: %s", t.Name())
+	return nil, errors.Errorf("unhandled type: %s", t.Name())
 }
 
 type selectInOpBool struct {

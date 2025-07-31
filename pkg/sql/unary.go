@@ -15,7 +15,6 @@ import (
 // which is used by select statements that have no table. It is used for its
 // property as the join identity.
 type unaryNode struct {
-	zeroInputPlanNode
 	run unaryRun
 }
 

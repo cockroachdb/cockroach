@@ -450,11 +450,12 @@ func TestRangeFeedMock(t *testing.T) {
 
 		getSpanTimestamp := func(frontier span.Frontier, given roachpb.Span) hlc.Timestamp {
 			maxTS := hlc.MinTimestamp
-			for _, ts := range frontier.SpanEntries(given) {
+			frontier.SpanEntries(given, func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
 				if maxTS.Less(ts) {
 					maxTS = ts
 				}
-			}
+				return span.ContinueMatch
+			})
 			return maxTS
 		}
 
@@ -507,17 +508,19 @@ func TestRangeFeedMock(t *testing.T) {
 			initFrontier, err := span.MakeFrontier(fullSpan)
 			require.NoError(t, err)
 
-			for sp, ts := range externalFrontier.Entries() {
+			externalFrontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
 				_, err := initFrontier.Forward(sp, ts)
 				require.NoError(t, err)
-			}
+				return span.ContinueMatch
+			})
 			require.NoError(t, err)
 
 			onCheckpoint := func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
 				// Ensure the checkpoint timestamp is always greater than the initial timestamp.
-				for _, ts := range initFrontier.SpanEntries(checkpoint.Span) {
+				initFrontier.SpanEntries(checkpoint.Span, func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
 					require.True(t, ts.Less(checkpoint.ResolvedTS), "checkpoint %s", checkpoint)
-				}
+					return span.ContinueMatch
+				})
 				observedUpdates++
 			}
 

@@ -8,7 +8,7 @@ package explain
 import (
 	"bytes"
 	"context"
-	b64 "encoding/base64"
+	"encoding/base64"
 	"encoding/binary"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -23,19 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/base64"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
-	if numOperators != 67 {
+	if numOperators != 63 {
 		// This error occurs when an operator has been added or removed in
 		// pkg/sql/opt/exec/explain/factory.opt. If an operator is added at the
 		// end of factory.opt, simply adjust the hardcoded value above. If an
@@ -92,13 +89,21 @@ func (fp PlanGist) Hash() uint64 {
 type PlanGistFactory struct {
 	wrappedFactory exec.Factory
 
-	// enc accumulates the encoded gist. Data that is written to enc is also
-	// added to hash. The exception is when we're dealing with ids where we will
-	// write the id to buf and the "string" to hash. This allows the hash to be
-	// id agnostic (ie hash's will be stable across plans from different
-	// databases with different DDL history).
-	enc  base64.Encoder
-	hash util.FNV64
+	// buffer is used for reading and writing (i.e. decoding and encoding).
+	// Data that is written to the buffer is also added to the hash. The
+	// exception is when we're dealing with ids where we will write the id to the
+	// buffer and the "string" to the hash. This allows the hash to be id agnostic
+	// (ie hash's will be stable across plans from different databases with
+	// different DDL history).
+	buffer bytes.Buffer
+	hash   util.FNV64
+
+	nodeStack []*Node
+
+	// catalog is used to resolve table and index ids that are stored in the gist.
+	// catalog can be nil when decoding gists via decode_external_plan_gist in which
+	// case we don't attempt to resolve tables or indexes.
+	catalog cat.Catalog
 }
 
 var _ exec.Factory = &PlanGistFactory{}
@@ -110,9 +115,10 @@ func (f *PlanGistFactory) Ctx() context.Context {
 
 // writeAndHash writes an arbitrary slice of bytes to the buffer and hashes each
 // byte.
-func (f *PlanGistFactory) writeAndHash(data []byte) {
-	f.enc.Write(data)
+func (f *PlanGistFactory) writeAndHash(data []byte) int {
+	i, _ := f.buffer.Write(data)
 	f.updateHash(data)
+	return i
 }
 
 func (f *PlanGistFactory) updateHash(data []byte) {
@@ -121,24 +127,13 @@ func (f *PlanGistFactory) updateHash(data []byte) {
 	}
 }
 
-// Init initializes a PlanGistFactory.
-func (f *PlanGistFactory) Init(factory exec.Factory) {
-	*f = PlanGistFactory{
-		wrappedFactory: factory,
-	}
-	f.enc.Init(b64.StdEncoding)
+// NewPlanGistFactory creates a new PlanGistFactory.
+func NewPlanGistFactory(wrappedFactory exec.Factory) *PlanGistFactory {
+	f := new(PlanGistFactory)
+	f.wrappedFactory = wrappedFactory
 	f.hash.Init()
 	f.encodeInt(gistVersion)
-}
-
-// Initialized returns true if the PlanGistFactory has been initialized.
-func (f *PlanGistFactory) Initialized() bool {
-	return f.wrappedFactory != nil
-}
-
-// Reset resets the PlanGistFactory, clearing references to the wrapped factory.
-func (f *PlanGistFactory) Reset() {
-	*f = PlanGistFactory{}
+	return f
 }
 
 // ConstructPlan delegates to the wrapped factory.
@@ -154,24 +149,10 @@ func (f *PlanGistFactory) ConstructPlan(
 	return plan, err
 }
 
-// PlanGist returns an encoded PlanGist. It should only be called once after
-// ConstructPlan.
+// PlanGist returns a pointer to a PlanGist.
 func (f *PlanGistFactory) PlanGist() PlanGist {
-	return PlanGist{
-		gist: f.enc.String(),
-		hash: f.hash.Sum(),
-	}
-}
-
-// planGistDecoder is used to decode a plan gist into a logical plan.
-type planGistDecoder struct {
-	buf       bytes.Reader
-	nodeStack []*Node
-
-	// catalog is used to resolve table and index ids that are stored in the gist.
-	// catalog can be nil when decoding gists via decode_external_plan_gist in which
-	// case we don't attempt to resolve tables or indexes.
-	catalog cat.Catalog
+	return PlanGist{gist: base64.StdEncoding.EncodeToString(f.buffer.Bytes()),
+		hash: f.hash.Sum()}
 }
 
 // DecodePlanGistToRows converts a gist to a logical plan and returns the rows.
@@ -200,7 +181,7 @@ func DecodePlanGistToRows(
 	if err != nil {
 		return nil, err
 	}
-	err = Emit(ctx, evalCtx, explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" }, false /* createPostQueryPlanIfMissing */)
+	err = Emit(ctx, evalCtx, explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
 	if err != nil {
 		return nil, err
 	}
@@ -208,37 +189,39 @@ func DecodePlanGistToRows(
 }
 
 // DecodePlanGistToPlan constructs an explain.Node tree from a gist.
-func DecodePlanGistToPlan(s string, cat cat.Catalog) (plan *Plan, err error) {
-	b, err := b64.StdEncoding.DecodeString(s)
+func DecodePlanGistToPlan(s string, cat cat.Catalog) (plan *Plan, retErr error) {
+	f := NewPlanGistFactory(exec.StubFactory{})
+	f.catalog = cat
+	bytes, err := base64.StdEncoding.DecodeString(s)
+
 	if err != nil {
 		return nil, err
 	}
 
-	var d planGistDecoder
-	d.buf.Reset(b)
-	d.catalog = cat
-
+	// Clear out buffer which will have version in it from NewPlanGistFactory.
+	f.buffer.Reset()
+	f.buffer.Write(bytes)
 	plan = &Plan{}
 
-	ver := d.decodeInt()
+	ver := f.decodeInt()
 	if ver != gistVersion {
 		return nil, errors.Errorf("unsupported gist version %d (expected %d)", ver, gistVersion)
 	}
 
 	for {
-		op := d.decodeOp()
+		op := f.decodeOp()
 		if op == unknownOp {
 			break
 		}
 		switch op {
 		case errorIfRowsOp:
-			plan.Checks = append(plan.Checks, d.popChild())
+			plan.Checks = append(plan.Checks, f.popChild())
 		}
 	}
 
-	plan.Root = d.popChild()
+	plan.Root = f.popChild()
 
-	for _, n := range d.nodeStack {
+	for _, n := range f.nodeStack {
 		subquery := exec.Subquery{
 			Root: n,
 		}
@@ -248,27 +231,27 @@ func DecodePlanGistToPlan(s string, cat cat.Catalog) (plan *Plan, err error) {
 	return plan, nil
 }
 
-func (d *planGistDecoder) decodeOp() execOperator {
-	val, err := d.buf.ReadByte()
+func (f *PlanGistFactory) decodeOp() execOperator {
+	val, err := f.buffer.ReadByte()
 	if err != nil || val == 0 {
 		return unknownOp
 	}
-	n, err := d.decodeOperatorBody(execOperator(val))
+	n, err := f.decodeOperatorBody(execOperator(val))
 	if err != nil {
 		panic(err)
 	}
-	d.nodeStack = append(d.nodeStack, n)
+	f.nodeStack = append(f.nodeStack, n)
 
 	return n.op
 }
 
-func (d *planGistDecoder) popChild() *Node {
-	l := len(d.nodeStack)
+func (f *PlanGistFactory) popChild() *Node {
+	l := len(f.nodeStack)
 	if l == 0 {
 		return nil
 	}
-	n := d.nodeStack[l-1]
-	d.nodeStack = d.nodeStack[:l-1]
+	n := f.nodeStack[l-1]
+	f.nodeStack = f.nodeStack[:l-1]
 
 	return n
 }
@@ -283,8 +266,8 @@ func (f *PlanGistFactory) encodeInt(i int) {
 	f.writeAndHash(buf[:n])
 }
 
-func (d *planGistDecoder) decodeInt() int {
-	val, err := binary.ReadVarint(&d.buf)
+func (f *PlanGistFactory) decodeInt() int {
+	val, err := binary.ReadVarint(&f.buffer)
 	if err != nil {
 		panic(err)
 	}
@@ -297,7 +280,10 @@ func (d *planGistDecoder) decodeInt() int {
 func (f *PlanGistFactory) encodeDataSource(id cat.StableID, name tree.Name) {
 	var buf [binary.MaxVarintLen64]byte
 	n := binary.PutVarint(buf[:], int64(id))
-	f.enc.Write(buf[:n])
+	_, err := f.buffer.Write(buf[:n])
+	if err != nil {
+		panic(err)
+	}
 	f.updateHash([]byte(string(name)))
 }
 
@@ -305,19 +291,18 @@ func (f *PlanGistFactory) encodeID(id cat.StableID) {
 	f.encodeInt(int(id))
 }
 
-func (d *planGistDecoder) decodeID() cat.StableID {
-	return cat.StableID(d.decodeInt())
+func (f *PlanGistFactory) decodeID() cat.StableID {
+	return cat.StableID(f.decodeInt())
 }
 
-func (d *planGistDecoder) decodeTable() cat.Table {
+func (f *PlanGistFactory) decodeTable() cat.Table {
 	// We need to consume the ID even if we don't have the catalog to actually
 	// decode the table.
-	id := d.decodeID()
-	if d.catalog == nil {
+	id := f.decodeID()
+	if f.catalog == nil {
 		return &unknownTable{}
 	}
-	// TODO(mgartner): Do not use the background context.
-	ds, _, err := d.catalog.ResolveDataSourceByID(context.Background(), cat.Flags{}, id)
+	ds, _, err := f.catalog.ResolveDataSourceByID(f.Ctx(), cat.Flags{}, id)
 	if err == nil {
 		return ds.(cat.Table)
 	}
@@ -327,8 +312,8 @@ func (d *planGistDecoder) decodeTable() cat.Table {
 	panic(err)
 }
 
-func (d *planGistDecoder) decodeIndex(tbl cat.Table) cat.Index {
-	id := d.decodeID()
+func (f *PlanGistFactory) decodeIndex(tbl cat.Table) cat.Index {
+	id := f.decodeID()
 	for i, n := 0, tbl.IndexCount(); i < n; i++ {
 		if tbl.Index(i).ID() == id {
 			return tbl.Index(i)
@@ -338,8 +323,8 @@ func (d *planGistDecoder) decodeIndex(tbl cat.Table) cat.Index {
 }
 
 // TODO: implement this and figure out how to test...
-func (d *planGistDecoder) decodeSchema() cat.Schema {
-	id := d.decodeID()
+func (f *PlanGistFactory) decodeSchema() cat.Schema {
+	id := f.decodeID()
 	_ = id
 	return nil
 }
@@ -348,8 +333,8 @@ func (f *PlanGistFactory) encodeNodeColumnOrdinals(vals []exec.NodeColumnOrdinal
 	f.encodeInt(len(vals))
 }
 
-func (d *planGistDecoder) decodeNodeColumnOrdinals() []exec.NodeColumnOrdinal {
-	l := d.decodeInt()
+func (f *PlanGistFactory) decodeNodeColumnOrdinals() []exec.NodeColumnOrdinal {
+	l := f.decodeInt()
 	if l < 0 {
 		return nil
 	}
@@ -361,8 +346,8 @@ func (f *PlanGistFactory) encodeResultColumns(vals colinfo.ResultColumns) {
 	f.encodeInt(len(vals))
 }
 
-func (d *planGistDecoder) decodeResultColumns() colinfo.ResultColumns {
-	numCols := d.decodeInt()
+func (f *PlanGistFactory) decodeResultColumns() colinfo.ResultColumns {
+	numCols := f.decodeInt()
 	if numCols < 0 {
 		return nil
 	}
@@ -370,20 +355,20 @@ func (d *planGistDecoder) decodeResultColumns() colinfo.ResultColumns {
 }
 
 func (f *PlanGistFactory) encodeByte(b byte) {
-	f.enc.Write([]byte{b})
+	f.buffer.WriteByte(b)
 	f.hash.Add(uint64(b))
 }
 
-func (d *planGistDecoder) decodeByte() byte {
-	val, err := d.buf.ReadByte()
+func (f *PlanGistFactory) decodeByte() byte {
+	val, err := f.buffer.ReadByte()
 	if err != nil {
 		panic(err)
 	}
 	return val
 }
 
-func (d *planGistDecoder) decodeJoinType() descpb.JoinType {
-	val := d.decodeByte()
+func (f *PlanGistFactory) decodeJoinType() descpb.JoinType {
+	val := f.decodeByte()
 	return descpb.JoinType(val)
 }
 
@@ -395,22 +380,24 @@ func (f *PlanGistFactory) encodeBool(b bool) {
 	}
 }
 
-func (d *planGistDecoder) decodeBool() bool {
-	val := d.decodeByte()
+func (f *PlanGistFactory) decodeBool() bool {
+	val := f.decodeByte()
 	return val != 0
 }
 
 func (f *PlanGistFactory) encodeFastIntSet(s intsets.Fast) {
-	if err := s.EncodeBase64(&f.enc, &f.hash); err != nil {
+	lenBefore := f.buffer.Len()
+	if err := s.Encode(&f.buffer); err != nil {
 		panic(err)
 	}
+	f.updateHash(f.buffer.Bytes()[lenBefore:])
 }
 
 // TODO: enable this or remove it...
 func (f *PlanGistFactory) encodeColumnOrdering(cols colinfo.ColumnOrdering) {
 }
 
-func (d *planGistDecoder) decodeColumnOrdering() colinfo.ColumnOrdering {
+func (f *PlanGistFactory) decodeColumnOrdering() colinfo.ColumnOrdering {
 	return nil
 }
 
@@ -442,15 +429,15 @@ func (f *PlanGistFactory) encodeScanParams(params exec.ScanParams) {
 	}
 }
 
-func (d *planGistDecoder) decodeScanParams() exec.ScanParams {
+func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
 	neededCols := intsets.Fast{}
-	err := neededCols.Decode(&d.buf)
+	err := neededCols.Decode(&f.buffer)
 	if err != nil {
 		panic(err)
 	}
 
 	var idxConstraint *constraint.Constraint
-	l := d.decodeInt()
+	l := f.decodeInt()
 	if l > 0 {
 		idxConstraint = new(constraint.Constraint)
 		idxConstraint.Spans.Alloc(l)
@@ -459,12 +446,12 @@ func (d *planGistDecoder) decodeScanParams() exec.ScanParams {
 	}
 
 	var invertedConstraint inverted.Spans
-	l = d.decodeInt()
+	l = f.decodeInt()
 	if l > 0 {
 		invertedConstraint = make([]inverted.Span, l)
 	}
 
-	hardLimit := d.decodeInt()
+	hardLimit := f.decodeInt()
 
 	// Since we no longer record the limit value and its just a bool tell the emit code
 	// to just print "limit", instead the misleading "limit: 1".
@@ -484,8 +471,8 @@ func (f *PlanGistFactory) encodeRows(rows [][]tree.TypedExpr) {
 	f.encodeInt(len(rows))
 }
 
-func (d *planGistDecoder) decodeRows() [][]tree.TypedExpr {
-	numRows := d.decodeInt()
+func (f *PlanGistFactory) decodeRows() [][]tree.TypedExpr {
+	numRows := f.decodeInt()
 	if numRows < 0 {
 		return nil
 	}
@@ -498,10 +485,6 @@ func (d *planGistDecoder) decodeRows() [][]tree.TypedExpr {
 type unknownTable struct{}
 
 func (u *unknownTable) ID() cat.StableID {
-	panic(errors.AssertionFailedf("not implemented"))
-}
-
-func (u *unknownTable) Version() uint64 {
 	panic(errors.AssertionFailedf("not implemented"))
 }
 
@@ -531,10 +514,6 @@ func (u *unknownTable) IsSystemTable() bool {
 
 func (u *unknownTable) IsMaterializedView() bool {
 	return false
-}
-
-func (u *unknownTable) LookupColumnOrdinal(descpb.ColumnID) (int, error) {
-	panic(errors.AssertionFailedf("not implemented"))
 }
 
 func (u *unknownTable) ColumnCount() int {
@@ -646,18 +625,8 @@ func (u *unknownTable) HomeRegionColName() (colName string, ok bool) {
 	return "", false
 }
 
-// RegionalByRowUsingConstraint is part of the cat.Table interface.
-func (ot *unknownTable) RegionalByRowUsingConstraint() cat.ForeignKeyConstraint {
-	return nil
-}
-
 // GetDatabaseID is part of the cat.Table interface.
 func (u *unknownTable) GetDatabaseID() descpb.ID {
-	return 0
-}
-
-// GetSchemaID is part of the cat.Table interface.
-func (u *unknownTable) GetSchemaID() descpb.ID {
 	return 0
 }
 
@@ -675,15 +644,6 @@ func (u *unknownTable) TriggerCount() int {
 func (u *unknownTable) Trigger(i int) cat.Trigger {
 	panic(errors.AssertionFailedf("not implemented"))
 }
-
-// IsRowLevelSecurityEnabled is part of the cat.Table interface
-func (u *unknownTable) IsRowLevelSecurityEnabled() bool { return false }
-
-// IsRowLevelSecurityForced is part of the cat.Table interface
-func (u *unknownTable) IsRowLevelSecurityForced() bool { return false }
-
-// Policies is part of the cat.Table interface.
-func (u *unknownTable) Policies() *cat.Policies { return nil }
 
 var _ cat.Table = &unknownTable{}
 
@@ -712,8 +672,8 @@ func (u *unknownIndex) IsUnique() bool {
 	return false
 }
 
-func (u *unknownIndex) Type() idxtype.T {
-	return idxtype.FORWARD
+func (u *unknownIndex) IsInverted() bool {
+	return false
 }
 
 func (u *unknownIndex) GetInvisibility() float64 {
@@ -736,7 +696,7 @@ func (u *unknownIndex) LaxKeyColumnCount() int {
 	return 0
 }
 
-func (u *unknownIndex) PrefixColumnCount() int {
+func (u *unknownIndex) NonInvertedPrefixColumnCount() int {
 	return 0
 }
 
@@ -766,10 +726,6 @@ func (u *unknownIndex) InvertedColumn() cat.IndexColumn {
 	panic(errors.AssertionFailedf("not implemented"))
 }
 
-func (u *unknownIndex) VectorColumn() cat.IndexColumn {
-	panic(errors.AssertionFailedf("not implemented"))
-}
-
 func (u *unknownIndex) Predicate() (string, bool) {
 	return "", false
 }
@@ -794,10 +750,6 @@ func (u *unknownIndex) GeoConfig() geopb.Config {
 	return geopb.Config{}
 }
 
-func (u *unknownIndex) VecConfig() *vecpb.Config {
-	return nil
-}
-
 func (u *unknownIndex) Version() descpb.IndexDescriptorVersion {
 	return descpb.LatestIndexDescriptorVersion
 }
@@ -808,10 +760,6 @@ func (u *unknownIndex) PartitionCount() int {
 
 func (u *unknownIndex) Partition(i int) cat.Partition {
 	panic(errors.AssertionFailedf("not implemented"))
-}
-
-func (u *unknownIndex) IsTemporaryIndexForBackfill() bool {
-	return false
 }
 
 var _ cat.Index = &unknownIndex{}

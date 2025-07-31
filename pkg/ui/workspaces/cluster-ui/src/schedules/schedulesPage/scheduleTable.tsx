@@ -212,9 +212,9 @@ export class ScheduleTable extends React.Component<
     this.setCurrentPageToOneIfSchedulesChanged(prevProps);
   }
 
-  onChangePage = (current: number, pageSize: number) => {
+  onChangePage = (current: number) => {
     const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current, pageSize } });
+    this.setState({ pagination: { ...pagination, current } });
   };
 
   renderEmptyState = () => {
@@ -273,7 +273,6 @@ export class ScheduleTable extends React.Component<
           current={pagination.current}
           total={schedules.length}
           onChange={this.onChangePage}
-          onShowSizeChange={this.onChangePage}
         />
       </React.Fragment>
     );

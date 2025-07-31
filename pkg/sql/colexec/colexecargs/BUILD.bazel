@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "colexecargs",
     srcs = [
-        "closer_registry.go",
         "monitor_registry.go",
         "op_creation.go",
     ],
@@ -21,11 +20,10 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//pkg/util/log",
         "//pkg/util/mon",
-        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_marusama_semaphore//:semaphore",
+        "@com_github_stretchr_testify//require",
     ],
 )

@@ -77,10 +77,8 @@ func distChangefeedFlow(
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
-	description string,
 	localState *cachedState,
 	resultsCh chan<- tree.Datums,
-	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
 ) error {
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	progress := localState.progress
@@ -134,7 +132,7 @@ func distChangefeedFlow(
 		}
 	}
 	return startDistChangefeed(
-		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh, onTracingEvent)
+		ctx, execCtx, jobID, schemaTS, details, initialHighWater, localState, resultsCh)
 }
 
 func fetchTableDescriptors(
@@ -229,11 +227,9 @@ func startDistChangefeed(
 	jobID jobspb.JobID,
 	schemaTS hlc.Timestamp,
 	details jobspb.ChangefeedDetails,
-	description string,
 	initialHighWater hlc.Timestamp,
 	localState *cachedState,
 	resultsCh chan<- tree.Datums,
-	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
 ) error {
 	execCfg := execCtx.ExecCfg()
 	tableDescs, err := fetchTableDescriptors(ctx, execCfg, AllTargets(details), schemaTS)
@@ -257,16 +253,14 @@ func startDistChangefeed(
 	var noTxn *kv.Txn
 
 	dsp := execCtx.DistSQLPlanner()
+	evalCtx := execCtx.ExtendedEvalContext()
 
-	var spanLevelCheckpoint *jobspb.TimestampSpansMap
-	if progress := localState.progress.GetChangefeed(); progress != nil && progress.SpanLevelCheckpoint != nil {
-		spanLevelCheckpoint = progress.SpanLevelCheckpoint
-		if log.V(2) {
-			log.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
-		}
+	var checkpoint *jobspb.ChangefeedProgress_Checkpoint
+	if progress := localState.progress.GetChangefeed(); progress != nil && progress.Checkpoint != nil {
+		checkpoint = progress.Checkpoint
 	}
-	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
-		trackedSpans, spanLevelCheckpoint, localState.drainingNodes)(ctx, dsp)
+	p, planCtx, err := makePlan(execCtx, jobID, details, initialHighWater,
+		trackedSpans, checkpoint, localState.drainingNodes)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -290,9 +284,6 @@ func startDistChangefeed(
 					}
 					localState.aggregatorFrontier = append(localState.aggregatorFrontier, meta.Changefeed.Checkpoint...)
 				}
-				if meta.AggregatorEvents != nil && onTracingEvent != nil {
-					onTracingEvent(ctx, meta.AggregatorEvents)
-				}
 				return nil
 			},
 		)
@@ -304,7 +295,7 @@ func startDistChangefeed(
 			execCtx.ExecCfg().RangeDescriptorCache,
 			noTxn,
 			nil, /* clockUpdater */
-			execCtx.ExtendedEvalContext().Tracing,
+			evalCtx.Tracing,
 		)
 		defer recv.Release()
 
@@ -328,10 +319,10 @@ func startDistChangefeed(
 		// closing (which closes the current planner's monitor) and changefeed
 		// DistSQL flow being cleaned up.
 		planCtx.OverridePlannerMon = execCfg.DistSQLSrv.ChangefeedMonitor
-		// Copy the eval.Context, as dsp.Run() might change it.
-		evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
+		// Copy the evalCtx, as dsp.Run() might change it.
+		evalCtxCopy := *evalCtx
 		// p is the physical plan, recv is the DistSQLReceiver.
-		dsp.Run(ctx, planCtx, noTxn, p, recv, evalCtxCopy, finishedSetupFn)
+		dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)
 		return resultRows.Err()
 	}
 
@@ -382,10 +373,9 @@ func makePlan(
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
-	description string,
 	initialHighWater hlc.Timestamp,
 	trackedSpans []roachpb.Span,
-	spanLevelCheckpoint *jobspb.TimestampSpansMap,
+	checkpoint *jobspb.ChangefeedProgress_Checkpoint,
 	drainingNodes []roachpb.NodeID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
@@ -415,7 +405,7 @@ func makePlan(
 		}
 		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil, /* planner */
 			blankTxn, sql.DistributionType(distMode), oracle, locFilter)
-		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans, sql.PartitionSpansBoundDefault)
+		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -453,28 +443,45 @@ func makePlan(
 			maybeCfKnobs.SpanPartitionsCallback(spanPartitions)
 		}
 
+		// Use the same checkpoint for all aggregators; each aggregator will only look at
+		// spans that are assigned to it.
+		// We could compute per-aggregator checkpoint, but that's probably an overkill.
+		var aggregatorCheckpoint execinfrapb.ChangeAggregatorSpec_Checkpoint
+		var checkpointSpanGroup roachpb.SpanGroup
+
+		if checkpoint != nil {
+			checkpointSpanGroup.Add(checkpoint.Spans...)
+			aggregatorCheckpoint.Spans = checkpoint.Spans
+			aggregatorCheckpoint.Timestamp = checkpoint.Timestamp
+		}
+		if log.V(2) {
+			log.Infof(ctx, "aggregator checkpoint: %s", aggregatorCheckpoint)
+		}
+
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 		for i, sp := range spanPartitions {
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.Infof(ctx, "watched spans for node %d: %v", sp.SQLInstanceID, sp)
 			}
-
 			watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
 			for watchIdx, nodeSpan := range sp.Spans {
+				initialResolved := initialHighWater
+				if checkpointSpanGroup.Encloses(nodeSpan) {
+					initialResolved = checkpoint.Timestamp
+				}
 				watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
-					Span: nodeSpan,
+					Span:            nodeSpan,
+					InitialResolved: initialResolved,
 				}
 			}
 
 			aggregatorSpecs[i] = &execinfrapb.ChangeAggregatorSpec{
-				Watches:             watches,
-				InitialHighWater:    &initialHighWater,
-				SpanLevelCheckpoint: spanLevelCheckpoint,
-				Feed:                details,
-				UserProto:           execCtx.User().EncodeProto(),
-				JobID:               jobID,
-				Select:              execinfrapb.Expression{Expr: details.Select},
-				Description:         description,
+				Watches:    watches,
+				Checkpoint: aggregatorCheckpoint,
+				Feed:       details,
+				UserProto:  execCtx.User().EncodeProto(),
+				JobID:      jobID,
+				Select:     execinfrapb.Expression{Expr: details.Select},
 			}
 		}
 
@@ -483,12 +490,10 @@ func makePlan(
 		// is created, even if it is paused and unpaused, but #28982 describes some
 		// ways that this might happen in the future.
 		changeFrontierSpec := execinfrapb.ChangeFrontierSpec{
-			TrackedSpans:        trackedSpans,
-			SpanLevelCheckpoint: spanLevelCheckpoint,
-			Feed:                details,
-			JobID:               jobID,
-			UserProto:           execCtx.User().EncodeProto(),
-			Description:         description,
+			TrackedSpans: trackedSpans,
+			Feed:         details,
+			JobID:        jobID,
+			UserProto:    execCtx.User().EncodeProto(),
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
@@ -502,14 +507,13 @@ func makePlan(
 		}
 
 		p := planCtx.NewPhysicalPlan()
-		p.AddNoInputStage(aggregatorCorePlacement, execinfrapb.PostProcessSpec{}, changefeedResultTypes, execinfrapb.Ordering{}, nil /* finalizeLastStageCb */)
+		p.AddNoInputStage(aggregatorCorePlacement, execinfrapb.PostProcessSpec{}, changefeedResultTypes, execinfrapb.Ordering{})
 		p.AddSingleGroupStage(
 			ctx,
 			dsp.GatewayID(),
 			execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
 			execinfrapb.PostProcessSpec{},
 			changefeedResultTypes,
-			nil, /* finalizeLastStageCb */
 		)
 
 		p.PlanToStreamColMap = []int{1, 2, 3}

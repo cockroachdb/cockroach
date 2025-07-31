@@ -102,32 +102,8 @@ func CanPushWithPriority(
 	pusherPri, pusheePri = normalize(pusherPri), normalize(pusheePri)
 	switch pushType {
 	case kvpb.PUSH_ABORT:
-		// If the pushee transaction is prepared, never let a PUSH_ABORT through.
-		// A prepared transaction must be guaranteed to succeed if it decides to
-		// commit.
-		if pusheeStatus == roachpb.PREPARED {
-			return false
-		}
-
-		// Otherwise, let the ABORT through if the pusher has a higher priority.
 		return pusherPri > pusheePri
 	case kvpb.PUSH_TIMESTAMP:
-		// If the pushee transaction is prepared, never let a PUSH_TIMESTAMP through
-		// either. Even for isolation levels which tolerate write skew, this could
-		// prevent the transaction from committing due to schema-imposed commit
-		// deadlines. A prepared transaction must be guaranteed to succeed if it
-		// decides to commit.
-		// TODO(nvanbenschoten): if we did want to allow prepared transactions at
-		// weak isolation levels to be pushed, we would need to do something about
-		// commit deadlines. Instead of leasing schema objects and placing deadlines
-		// on the transactions that use those leases, we would probably need to lock
-		// schema objects (for share) and continue to hold those locks while a
-		// transaction is prepared. This would prevent schema changes that would
-		// invalidate the prepared transactions. See #137549.
-		if pusheeStatus == roachpb.PREPARED {
-			return false
-		}
-
 		// If the pushee transaction is STAGING, only let the PUSH_TIMESTAMP through
 		// to disrupt the transaction commit if the pusher has a higher priority. If
 		// the priorities are equal, the PUSH_TIMESTAMP should wait for the commit
@@ -165,10 +141,6 @@ func isPushed(req *kvpb.PushTxnRequest, txn *roachpb.Transaction) bool {
 // TxnExpiration computes the timestamp after which the transaction will be
 // considered expired.
 func TxnExpiration(txn *roachpb.Transaction) hlc.Timestamp {
-	if txn.Status == roachpb.PREPARED {
-		// Prepared transactions have no expiration.
-		return hlc.MaxTimestamp
-	}
 	return txn.LastActive().Add(TxnLivenessThreshold.Load(), 0)
 }
 
@@ -324,7 +296,6 @@ func (q *Queue) Enable(_ roachpb.LeaseSequence) {
 // acquired by the replica.
 func (q *Queue) Clear(disable bool) {
 	q.mu.Lock()
-
 	waitingPushesLists := make([]*list.List, 0, len(q.mu.txns))
 	waitingPushesCount := 0
 	for _, pt := range q.mu.txns {
@@ -335,7 +306,7 @@ func (q *Queue) Clear(disable bool) {
 
 	waitingQueriesMap := q.mu.queries
 	waitingQueriesCount := 0
-	for _, waitingQueries := range q.mu.queries {
+	for _, waitingQueries := range waitingQueriesMap {
 		waitingQueriesCount += waitingQueries.count
 	}
 
@@ -359,71 +330,16 @@ func (q *Queue) Clear(disable bool) {
 		q.mu.queries = map[uuid.UUID]*waitingQueries{}
 	}
 	q.mu.Unlock()
-	// Notify wait channels outside of the mutex lock.
-	q.notifyingWaitingPushesAndQueries(waitingPushesLists, waitingQueriesMap)
 
-}
-
-// ClearGE removes anyone waiting on a key greater or equal to the
-// given key.
-//
-// This method is invoked as part of range split handling.
-func (q *Queue) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
-	q.mu.Lock()
-
-	txnsToClear := make(map[uuid.UUID]struct{}, len(q.mu.txns))
-	waitingPushesLists := make([]*list.List, 0, len(q.mu.txns))
-	waitingPushesCount := 0
-	for uuid, pt := range q.mu.txns {
-		if roachpb.Key(pt.getTxn().Key).Less(key) {
-			continue
-		}
-		txnsToClear[uuid] = struct{}{}
-		waitingPushes := pt.takeWaitingPushes()
-		waitingPushesLists = append(waitingPushesLists, waitingPushes)
-		waitingPushesCount += waitingPushes.Len()
-	}
-
-	waitingQueriesMap := make(map[uuid.UUID]*waitingQueries, len(q.mu.txns))
-	waitingQueriesCount := 0
-	for uuid, waitingQueries := range q.mu.queries {
-		if _, ok := txnsToClear[uuid]; ok {
-			waitingQueriesMap[uuid] = waitingQueries
-			waitingQueriesCount += waitingQueries.count
-		}
-	}
-
-	if log.V(1) {
-		log.Infof(
-			context.Background(),
-			"clearing %d push waiters and %d query waiters",
-			waitingPushesCount,
-			waitingQueriesCount,
-		)
-	}
-
-	metrics := q.cfg.Metrics
-	metrics.PusheeWaiting.Dec(int64(len(txnsToClear)))
-	for uuid := range txnsToClear {
-		delete(q.mu.txns, uuid)
-		delete(q.mu.queries, uuid)
-	}
-	q.mu.Unlock()
-	// Notify wait channels outside of the mutex lock.
-	q.notifyingWaitingPushesAndQueries(waitingPushesLists, waitingQueriesMap)
-	return nil
-}
-
-func (q *Queue) notifyingWaitingPushesAndQueries(
-	pushes []*list.List, queries map[uuid.UUID]*waitingQueries,
-) {
-	for _, w := range pushes {
+	// Send on the pending push waiter channels outside of the mutex lock.
+	for _, w := range waitingPushesLists {
 		for e := w.Front(); e != nil; e = e.Next() {
 			push := e.Value.(*waitingPush)
 			push.pending <- nil
 		}
 	}
-	for _, w := range queries {
+	// Close query waiters outside of the mutex lock.
+	for _, w := range waitingQueriesMap {
 		close(w.pending)
 	}
 }
@@ -627,7 +543,7 @@ func (q *Queue) MaybeWaitForPush(
 
 	pusherStr := "non-txn"
 	if req.PusherTxn.ID != (uuid.UUID{}) {
-		pusherStr = req.PusherTxn.ID.Short().String()
+		pusherStr = req.PusherTxn.ID.Short()
 	}
 	log.VEventf(
 		ctx,
@@ -697,13 +613,13 @@ func (q *Queue) waitForPush(
 	for {
 		select {
 		case <-slowTimer.C:
+			slowTimer.Read = true
 			metrics.PusherSlow.Inc(1)
 			log.Warningf(ctx, "pusher %s: have been waiting %.2fs for pushee %s",
 				req.PusherTxn.ID.Short(),
 				timeutil.Since(tBegin).Seconds(),
 				req.PusheeTxn.ID.Short(),
 			)
-			//nolint:deferloop
 			defer func() {
 				metrics.PusherSlow.Dec(1)
 				log.Warningf(ctx, "pusher %s: finished waiting after %.2fs for pushee %s",
@@ -740,6 +656,7 @@ func (q *Queue) waitForPush(
 
 		case <-pusheeTxnTimer.C:
 			log.VEvent(ctx, 2, "querying pushee")
+			pusheeTxnTimer.Read = true
 			// Periodically check whether the pushee txn has been abandoned.
 			updatedPushee, _, pErr := q.queryTxnStatus(
 				ctx, req.PusheeTxn, false, nil,
@@ -812,7 +729,7 @@ func (q *Queue) waitForPush(
 			_, haveDependency := push.mu.dependents[req.PusheeTxn.ID]
 			dependents := make([]string, 0, len(push.mu.dependents))
 			for id := range push.mu.dependents {
-				dependents = append(dependents, id.Short().String())
+				dependents = append(dependents, id.Short())
 			}
 			log.VEventf(
 				ctx,

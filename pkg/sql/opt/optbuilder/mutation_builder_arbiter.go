@@ -314,12 +314,6 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	if source, ok := texpr.(*tree.AliasedTableExpr); ok {
 		indexFlags = source.IndexFlags
 	}
-	if mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
-		if indexFlags == nil {
-			indexFlags = &tree.IndexFlags{}
-		}
-		indexFlags.AvoidFullScan = true
-	}
 
 	// Build the right side of the anti-join. Use a new metadata instance
 	// of the mutation table so that a different set of column IDs are used for
@@ -335,7 +329,6 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 		locking,
 		inScope,
 		true, /* disableNotVisibleIndex */
-		cat.PolicyScopeExempt,
 	)
 
 	// If the index is a unique partial index, then rows that are not in the
@@ -451,12 +444,6 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 	if source, ok := texpr.(*tree.AliasedTableExpr); ok {
 		indexFlags = source.IndexFlags
 	}
-	if mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
-		if indexFlags == nil {
-			indexFlags = &tree.IndexFlags{}
-		}
-		indexFlags.AvoidFullScan = true
-	}
 
 	// Build the right side of the left outer join. Use a different instance of
 	// table metadata so that col IDs do not overlap.
@@ -475,7 +462,6 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 		locking,
 		inScope,
 		true, /* disableNotVisibleIndex */
-		cat.PolicyScopeExempt,
 	)
 	// Set fetchColIDs to reference the columns created for the fetch values.
 	mb.setFetchColIDs(mb.fetchScope.cols)
@@ -693,7 +679,6 @@ func (h *arbiterPredicateHelper) tableScope() *scope {
 			noRowLocking,
 			h.mb.b.allocScope(),
 			false, /* disableNotVisibleIndex */
-			cat.PolicyScopeExempt,
 		)
 	}
 	return h.tableScopeLazy

@@ -13,11 +13,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func scanCanProvideOrdering(
-	mem *memo.Memo, expr memo.RelExpr, required *props.OrderingChoice,
-) bool {
+func scanCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	ok, _ := ScanPrivateCanProvide(
-		mem.Metadata(),
+		expr.Memo().Metadata(),
 		&expr.(*memo.ScanExpr).ScanPrivate,
 		required,
 	)
@@ -28,9 +26,9 @@ func scanCanProvideOrdering(
 // in order to satisfy the required ordering. If either direction is ok (e.g. no
 // required ordering), reutrns false. The scan must be able to satisfy the
 // required ordering, according to ScanCanProvideOrdering.
-func ScanIsReverse(mem *memo.Memo, scan *memo.ScanExpr, required *props.OrderingChoice) bool {
+func ScanIsReverse(scan *memo.ScanExpr, required *props.OrderingChoice) bool {
 	ok, reverse := ScanPrivateCanProvide(
-		mem.Metadata(),
+		scan.Memo().Metadata(),
 		&scan.ScanPrivate,
 		required,
 	)
@@ -38,33 +36,6 @@ func ScanIsReverse(mem *memo.Memo, scan *memo.ScanExpr, required *props.Ordering
 		panic(errors.AssertionFailedf("scan can't provide required ordering"))
 	}
 	return reverse
-}
-
-// ScanDirection represents the direction of a scan, either for a Scan operator
-// or a LookupJoin.
-type ScanDirection uint8
-
-const (
-	// EitherDirection indicates that the scan can be in either direction.
-	EitherDirection ScanDirection = iota
-	// ForwardDirection indicates a forward scan.
-	ForwardDirection
-	// ReverseDirection indicates a reverse scan.
-	ReverseDirection
-)
-
-// String implements the fmt.Stringer interface.
-func (d ScanDirection) String() string {
-	switch d {
-	case EitherDirection:
-		return "either"
-	case ForwardDirection:
-		return "forward"
-	case ReverseDirection:
-		return "reverse"
-	default:
-		return "unknown"
-	}
 }
 
 // ScanPrivateCanProvide returns true if the scan operator returns rows
@@ -84,18 +55,23 @@ func ScanPrivateCanProvide(
 	// We start off as accepting either a forward or a reverse scan. Until then,
 	// the reverse variable is unset. Once the direction is known, reverseSet is
 	// true and reverse indicates whether we need to do a reverse scan.
-	var direction ScanDirection
+	const (
+		either = 0
+		fwd    = 1
+		rev    = 2
+	)
+	direction := either
 	if s.HardLimit.IsSet() {
 		// When we have a limit, the limit forces a certain scan direction (because
 		// it affects the results, not just their ordering).
-		direction = ForwardDirection
+		direction = fwd
 		if s.HardLimit.Reverse() {
-			direction = ReverseDirection
+			direction = rev
 		}
 	} else if s.Flags.Direction != 0 {
-		direction = ForwardDirection
+		direction = fwd
 		if s.Flags.Direction == tree.Descending {
-			direction = ReverseDirection
+			direction = rev
 		}
 	}
 	index := md.Table(s.Table).Index(s.Index)
@@ -120,13 +96,13 @@ func ScanPrivateCanProvide(
 		}
 		// The directions of the index column and the required column impose either
 		// a forward or a reverse scan.
-		requiredDirection := ForwardDirection
+		required := fwd
 		if indexCol.Descending != reqCol.Descending {
-			requiredDirection = ReverseDirection
+			required = rev
 		}
-		if direction == EitherDirection {
-			direction = requiredDirection
-		} else if direction != requiredDirection {
+		if direction == either {
+			direction = required
+		} else if direction != required {
 			// We already determined the direction, and according to it, this column
 			// has the wrong direction.
 			return false, false
@@ -134,19 +110,17 @@ func ScanPrivateCanProvide(
 		left, right = left+1, right+1
 	}
 	// If direction is either, we prefer forward scan.
-	return true, direction == ReverseDirection
+	return true, direction == rev
 }
 
-func scanBuildProvided(
-	mem *memo.Memo, expr memo.RelExpr, required *props.OrderingChoice,
-) opt.Ordering {
+func scanBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	scan := expr.(*memo.ScanExpr)
-	md := mem.Metadata()
+	md := scan.Memo().Metadata()
 	index := md.Table(scan.Table).Index(scan.Index)
 	fds := &scan.Relational().FuncDeps
 
 	// We need to know the direction of the scan.
-	reverse := ScanIsReverse(mem, scan, required)
+	reverse := ScanIsReverse(scan, required)
 
 	// We generate the longest ordering that this scan can provide, then we trim
 	// it. This is the longest prefix of index columns that are output by the scan

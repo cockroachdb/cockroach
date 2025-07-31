@@ -28,17 +28,20 @@ type requesterClose interface {
 
 // slotGranter implements granterWithLockedCalls.
 type slotGranter struct {
-	coord      *GrantCoordinator
-	workKind   WorkKind
-	requester  requester
-	usedSlots  int
-	totalSlots int
-	// skipSlotEnforcement is a dynamic value that changes based on the sampling
-	// period of cpu load. It is always true when !goschedstats.Supported (see
-	// https://github.com/cockroachdb/cockroach/issues/142262).
+	coord               *GrantCoordinator
+	workKind            WorkKind
+	requester           requester
+	usedSlots           int
+	totalSlots          int
 	skipSlotEnforcement bool
 
-	usedSlotsMetric              *metric.Gauge
+	// Optional. Nil for a slotGranter used for KVWork since the slots for that
+	// slotGranter are directly adjusted by the kvSlotAdjuster (using the
+	// kvSlotAdjuster here would provide a redundant identical signal).
+	cpuOverload cpuOverloadIndicator
+
+	usedSlotsMetric *metric.Gauge
+	// Non-nil for KV slots.
 	slotsExhaustedDurationMetric *metric.Counter
 	exhaustedStart               time.Time
 }
@@ -61,9 +64,12 @@ func (sg *slotGranter) tryGetLocked(count int64, _ int8) grantResult {
 	if count != 1 {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
+	if sg.cpuOverload != nil && sg.cpuOverload.isOverloaded() {
+		return grantFailDueToSharedResource
+	}
 	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement {
 		sg.usedSlots++
-		if sg.usedSlots == sg.totalSlots {
+		if sg.usedSlots == sg.totalSlots && sg.slotsExhaustedDurationMetric != nil {
 			sg.exhaustedStart = timeutil.Now()
 		}
 		sg.usedSlotsMetric.Update(int64(sg.usedSlots))
@@ -85,7 +91,7 @@ func (sg *slotGranter) returnGrantLocked(count int64, _ int8) {
 	if count != 1 {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
-	if sg.usedSlots == sg.totalSlots {
+	if sg.usedSlots == sg.totalSlots && sg.slotsExhaustedDurationMetric != nil {
 		now := timeutil.Now()
 		exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
 		sg.slotsExhaustedDurationMetric.Inc(exhaustedMicros)
@@ -108,7 +114,7 @@ func (sg *slotGranter) tookWithoutPermissionLocked(count int64, _ int8) {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
 	sg.usedSlots++
-	if sg.usedSlots == sg.totalSlots {
+	if sg.usedSlots == sg.totalSlots && sg.slotsExhaustedDurationMetric != nil {
 		sg.exhaustedStart = timeutil.Now()
 	}
 	sg.usedSlotsMetric.Update(int64(sg.usedSlots))
@@ -150,18 +156,19 @@ func (sg *slotGranter) setTotalSlotsLocked(totalSlots int) {
 }
 
 func (sg *slotGranter) setTotalSlotsLockedInternal(totalSlots int) {
-	if totalSlots > sg.totalSlots {
-		if sg.totalSlots <= sg.usedSlots && totalSlots > sg.usedSlots {
-			now := timeutil.Now()
-			exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
-			sg.slotsExhaustedDurationMetric.Inc(exhaustedMicros)
-		}
-	} else if totalSlots < sg.totalSlots {
-		if sg.totalSlots > sg.usedSlots && totalSlots <= sg.usedSlots {
-			sg.exhaustedStart = timeutil.Now()
+	if sg.slotsExhaustedDurationMetric != nil {
+		if totalSlots > sg.totalSlots {
+			if sg.totalSlots <= sg.usedSlots && totalSlots > sg.usedSlots {
+				now := timeutil.Now()
+				exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
+				sg.slotsExhaustedDurationMetric.Inc(exhaustedMicros)
+			}
+		} else if totalSlots < sg.totalSlots {
+			if sg.totalSlots > sg.usedSlots && totalSlots <= sg.usedSlots {
+				sg.exhaustedStart = timeutil.Now()
+			}
 		}
 	}
-
 	sg.totalSlots = totalSlots
 }
 
@@ -173,8 +180,11 @@ type tokenGranter struct {
 	availableBurstTokens int64
 	maxBurstTokens       int64
 	skipTokenEnforcement bool
-	// Non-nil for all uses of tokenGranter (SQLKVResponseWork and
-	// SQLSQLResponseWork).
+	// Optional. Practically, both uses of tokenGranter, for SQLKVResponseWork
+	// and SQLSQLResponseWork have a non-nil value. We don't expect to use
+	// memory overload indicators here since memory accounting and disk spilling
+	// is what should be tasked with preventing OOMs, and we want to finish
+	// processing this lower-level work.
 	cpuOverload cpuOverloadIndicator
 }
 
@@ -198,7 +208,7 @@ func (tg *tokenGranter) tryGet(count int64) bool {
 
 // tryGetLocked implements granterWithLockedCalls.
 func (tg *tokenGranter) tryGetLocked(count int64, _ int8) grantResult {
-	if tg.cpuOverload.isOverloaded() {
+	if tg.cpuOverload != nil && tg.cpuOverload.isOverloaded() {
 		return grantFailDueToSharedResource
 	}
 	if tg.availableBurstTokens > 0 || tg.skipTokenEnforcement {
@@ -292,16 +302,7 @@ type kvStoreTokenGranter struct {
 		// TODO(aaditya): add support for read/IOPS tokens.
 		// Disk bandwidth tokens.
 		diskTokensAvailable diskTokens
-		diskTokensError     struct {
-			// prevObserved{Writes,Reads} is the observed disk metrics in the last
-			// call to adjustDiskTokenErrorLocked. These are used to compute the
-			// delta.
-			prevObservedWrites             uint64
-			prevObservedReads              uint64
-			diskWriteTokensAlreadyDeducted int64
-			diskReadTokensAlreadyDeducted  int64
-		}
-		diskTokensUsed [admissionpb.NumStoreWorkTypes]diskTokens
+		diskTokensUsed      [admissionpb.NumStoreWorkTypes]diskTokens
 	}
 
 	ioTokensExhaustedDurationMetric [admissionpb.NumWorkClasses]*metric.Counter
@@ -422,7 +423,6 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 		if sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] > 0 {
 			sg.subtractIOTokensLocked(count, count, false)
 			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
-			sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskWriteTokens
 			sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskWriteTokens
 			return grantSuccess
 		}
@@ -433,7 +433,6 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 			sg.subtractIOTokensLocked(count, count, false)
 			sg.coordMu.elasticIOTokensUsedByElastic += count
 			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
-			sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskWriteTokens
 			sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskWriteTokens
 			return grantSuccess
 		}
@@ -442,7 +441,6 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 		// writeByteTokens.
 		if sg.coordMu.diskTokensAvailable.writeByteTokens > 0 {
 			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
-			sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskWriteTokens
 			sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskWriteTokens
 			return grantSuccess
 		}
@@ -479,60 +477,13 @@ func (sg *kvStoreTokenGranter) subtractTokensForStoreWorkTypeLocked(
 	case admissionpb.RegularStoreWorkType, admissionpb.ElasticStoreWorkType:
 		diskTokenCount := sg.writeAmpLM.applyLinearModel(count)
 		sg.coordMu.diskTokensAvailable.writeByteTokens -= diskTokenCount
-		sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskTokenCount
 		sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskTokenCount
 	case admissionpb.SnapshotIngestStoreWorkType:
 		// Do not apply the writeAmpLM since these writes do not incur additional
 		// write-amp.
 		sg.coordMu.diskTokensAvailable.writeByteTokens -= count
-		sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += count
 		sg.coordMu.diskTokensUsed[wt].writeByteTokens += count
 	}
-}
-
-// adjustDiskTokenErrorLocked is used to account for extra reads and writes that
-// are in excess of tokens already deducted.
-//
-// (1) For writes, we deduct tokens at admission for each request. If the actual
-// writes seen on disk for a given interval is higher than the tokens already
-// deducted, the delta is the write error. This value is then subtracted from
-// available disk tokens.
-//
-// (2) For reads, we do not deduct any tokens at admission. However, we deduct
-// tokens in advance during token estimation in the diskBandwidthLimiter for the
-// next adjustment interval. These pre-deducted tokens are then allocated at the
-// same interval as write tokens. Any additional reads in the interval are
-// considered error and are subtracted from the available disk write tokens.
-//
-// For both reads, and writes, we reset the
-// disk{read,write}TokensAlreadyDeducted to 0 for the next adjustment interval.
-// For writes, we do this so that we are accounting for errors only in the given
-// interval, and not across them. For reads, this is so that we don't grow
-// arbitrarily large "burst" tokens, since they are not capped to an allocation
-// period.
-func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(readBytes uint64, writeBytes uint64) {
-	intWrites := int64(writeBytes - sg.coordMu.diskTokensError.prevObservedWrites)
-	intReads := int64(readBytes - sg.coordMu.diskTokensError.prevObservedReads)
-
-	// Compensate for error due to writes.
-	writeError := intWrites - sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted
-	if writeError > 0 {
-		sg.coordMu.diskTokensAvailable.writeByteTokens -= writeError
-	}
-
-	// Compensate for error due to reads.
-	readError := intReads - sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted
-	if readError > 0 {
-		sg.coordMu.diskTokensAvailable.writeByteTokens -= readError
-	}
-
-	// We have compensated for error, if any, in this interval, so we reset the
-	// deducted count for the next compensation interval.
-	sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted = 0
-	sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted = 0
-
-	sg.coordMu.diskTokensError.prevObservedWrites = writeBytes
-	sg.coordMu.diskTokensError.prevObservedReads = readBytes
 }
 
 func (sg *kvStoreTokenGranter) tookWithoutPermission(
@@ -640,11 +591,10 @@ func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantRe
 func (sg *kvStoreTokenGranter) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
-	diskWriteTokens int64,
-	diskReadTokens int64,
+	elasticDiskWriteTokens int64,
 	ioTokenCapacity int64,
 	elasticIOTokenCapacity int64,
-	diskWriteTokensCapacity int64,
+	elasticDiskWriteTokensCapacity int64,
 	lastTick bool,
 ) (ioTokensUsed int64, ioTokensUsedByElasticWork int64) {
 	sg.coord.mu.Lock()
@@ -677,8 +627,6 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 		// which case we want availableIOTokens[ElasticWorkClass] to not exceed it.
 		sg.coordMu.availableIOTokens[admissionpb.ElasticWorkClass] =
 			min(sg.coordMu.availableIOTokens[admissionpb.ElasticWorkClass], sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass])
-		// We also want to avoid very negative disk write tokens, so we reset them.
-		sg.coordMu.diskTokensAvailable.writeByteTokens = max(sg.coordMu.diskTokensAvailable.writeByteTokens, 0)
 	}
 	var w admissionpb.WorkClass
 	for w = 0; w < admissionpb.NumWorkClasses; w++ {
@@ -686,16 +634,10 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 	}
 	sg.startingIOTokens = sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass]
 
-	// Allocate disk write and read tokens.
-	sg.coordMu.diskTokensAvailable.writeByteTokens += diskWriteTokens
-	if sg.coordMu.diskTokensAvailable.writeByteTokens > diskWriteTokensCapacity {
-		sg.coordMu.diskTokensAvailable.writeByteTokens = diskWriteTokensCapacity
+	sg.coordMu.diskTokensAvailable.writeByteTokens += elasticDiskWriteTokens
+	if sg.coordMu.diskTokensAvailable.writeByteTokens > elasticDiskWriteTokensCapacity {
+		sg.coordMu.diskTokensAvailable.writeByteTokens = elasticDiskWriteTokensCapacity
 	}
-	// NB: We don't cap the disk read tokens as they are only deducted during the
-	// error accounting loop. So essentially, we give reads the "burst" capacity
-	// of the error accounting interval. See `adjustDiskTokenErrorLocked` for the
-	// error accounting logic, and where we reset this bucket to 0.
-	sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted += diskReadTokens
 
 	return ioTokensUsed, ioTokensUsedByElasticWork
 }
@@ -771,6 +713,17 @@ func (sg *kvStoreTokenGranter) storeReplicatedWorkAdmittedLocked(
 	// decisions, but we don't necessarily need something more sophisticated
 	// like "Dominant Resource Fairness".
 	return additionalL0TokensNeeded
+}
+
+// PebbleMetricsProvider provides the pebble.Metrics for all stores.
+type PebbleMetricsProvider interface {
+	GetPebbleMetrics() []StoreMetrics
+	Close()
+}
+
+// IOThresholdConsumer is informed about updated IOThresholds.
+type IOThresholdConsumer interface {
+	UpdateIOThreshold(roachpb.StoreID, *admissionpb.IOThreshold)
 }
 
 // StoreMetrics are the metrics and some config information for a store.
@@ -916,3 +869,13 @@ var (
 // used to construct the per-store GrantCoordinator. These metrics should be
 // embedded in kvserver.StoreMetrics. We should also separate the metrics
 // related to cpu slots from the IO metrics.
+
+// TODO(sumeer): experiment with approaches to adjust slots for
+// SQLStatementLeafStartWork and SQLStatementRootStartWork for SQL nodes. Note
+// that for these WorkKinds we are currently setting very high slot counts
+// since we rely on other signals like memory and cpuOverloadIndicator to gate
+// admission. One could debate whether we should be using rate limiting
+// instead of counting slots for such work. The only reason the above code
+// uses the term "slot" for these is that we have a completion indicator, and
+// when we do have such an indicator it can be beneficial to be able to keep
+// track of how many ongoing work items we have.

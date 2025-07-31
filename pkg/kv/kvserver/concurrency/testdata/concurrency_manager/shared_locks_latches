@@ -208,13 +208,9 @@ debug-latch-manager
 write count: 3
  read count: 3
 
-debug-advance-clock ts=123
-----
-
 finish req=req7
 ----
 [-] finish req7: finishing request
-[10] sequence req10: latch conflict with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 123.000s
 [10] sequence req10: scanning lock table for conflicting locks
 [10] sequence req10: sequencing complete, returned guard
 
@@ -224,13 +220,9 @@ finish req=req8
 [11] sequence req11: scanning lock table for conflicting locks
 [11] sequence req11: sequencing complete, returned guard
 
-debug-advance-clock ts=323
-----
-
 finish req=req9
 ----
 [-] finish req9: finishing request
-[12] sequence req12: latch conflict with 00000001-0000-0000-0000-000000000000 on ‹"c"› for 446.000s
 [12] sequence req12: scanning lock table for conflicting locks
 [12] sequence req12: sequencing complete, returned guard
 
@@ -326,13 +318,9 @@ debug-latch-manager
 write count: 3
  read count: 3
 
-debug-advance-clock ts=523
-----
-
 finish req=req13
 ----
 [-] finish req13: finishing request
-[16] sequence req16: latch conflict with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 523.000s
 [16] sequence req16: scanning lock table for conflicting locks
 [16] sequence req16: sequencing complete, returned guard
 
@@ -342,13 +330,9 @@ finish req=req14
 [17] sequence req17: scanning lock table for conflicting locks
 [17] sequence req17: sequencing complete, returned guard
 
-debug-advance-clock ts=1023
-----
-
 finish req=req15
 ----
 [-] finish req15: finishing request
-[18] sequence req18: latch conflict with 00000001-0000-0000-0000-000000000000 on ‹"c"› for 1546.000s
 [18] sequence req18: scanning lock table for conflicting locks
 [18] sequence req18: sequencing complete, returned guard
 
@@ -518,13 +502,9 @@ debug-latch-manager
 write count: 3
  read count: 3
 
-debug-advance-clock ts=1123
-----
-
 finish req=req23
 ----
 [-] finish req23: finishing request
-[26] sequence req26: latch conflict with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 1123.000s
 [26] sequence req26: scanning lock table for conflicting locks
 [26] sequence req26: sequencing complete, returned guard
 
@@ -534,13 +514,9 @@ finish req=req24
 [27] sequence req27: scanning lock table for conflicting locks
 [27] sequence req27: sequencing complete, returned guard
 
-debug-advance-clock ts=2023
-----
-
 finish req=req25
 ----
 [-] finish req25: finishing request
-[28] sequence req28: latch conflict with 00000001-0000-0000-0000-000000000000 on ‹"c"› for 3146.000s
 [28] sequence req28: scanning lock table for conflicting locks
 [28] sequence req28: sequencing complete, returned guard
 
@@ -636,13 +612,9 @@ debug-latch-manager
 write count: 3
  read count: 3
 
-debug-advance-clock ts=2123
-----
-
 finish req=req29
 ----
 [-] finish req29: finishing request
-[32] sequence req32: latch conflict with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 2123.000s
 [32] sequence req32: scanning lock table for conflicting locks
 [32] sequence req32: sequencing complete, returned guard
 
@@ -655,7 +627,6 @@ finish req=req30
 finish req=req31
 ----
 [-] finish req31: finishing request
-[34] sequence req34: latch conflict with 00000001-0000-0000-0000-000000000000 on ‹"c"› for 2123.000s
 [34] sequence req34: scanning lock table for conflicting locks
 [34] sequence req34: sequencing complete, returned guard
 
@@ -696,7 +667,7 @@ sequence req=req36
 ----
 [36] sequence req36: sequencing request
 [36] sequence req36: acquiring latches
-[36] sequence req36: waiting to acquire write latch /Local/RangeID‹/1›/‹r›/‹ReplicatedSharedLocksTransactionLatch›/"00000002-0000-0000-0000-000000000000"@0,0 for request Scan(Shared,Replicated) [‹"a"›,‹"f"›), [txn: 00000002], held by write latch /Local/RangeID‹/1›/‹r›/‹ReplicatedSharedLocksTransactionLatch›/"00000002-0000-0000-0000-000000000000"@0,0 for request Get(Shared,Replicated) [‹"c"›], [txn: 00000002]
+[36] sequence req36: waiting to acquire write latch ‹/Local/RangeID/1/r/ReplicatedSharedLocksTransactionLatch/"00000002-0000-0000-0000-000000000000"›@0,0 for request Scan(Shared,Replicated) [‹"a"›,‹"f"›), [txn: 00000002], held by write latch ‹/Local/RangeID/1/r/ReplicatedSharedLocksTransactionLatch/"00000002-0000-0000-0000-000000000000"›@0,0 for request Get(Shared,Replicated) [‹"c"›], [txn: 00000002]
 [36] sequence req36: blocked on select in spanlatch.(*Manager).waitForSignal
 
 new-request name=req37 txn=txn1 ts=11,1

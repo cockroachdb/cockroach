@@ -5,6 +5,7 @@
 
 // {{/*
 //go:build execgen_template
+// +build execgen_template
 
 //
 // This file is the execgen template for default_cmp_proj_op.eg.go and

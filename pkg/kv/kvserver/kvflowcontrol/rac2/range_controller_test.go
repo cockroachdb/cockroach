@@ -40,8 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/errors"
-	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +68,6 @@ type testingRCState struct {
 	setTokenCounters     map[kvflowcontrol.Stream]struct{}
 	initialRegularTokens kvflowcontrol.Tokens
 	initialElasticTokens kvflowcontrol.Tokens
-	maxInflightBytes     uint64
 }
 
 func (s *testingRCState) init(t *testing.T, ctx context.Context) {
@@ -237,29 +234,14 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 		rss.mu.Lock()
 		defer rss.mu.Unlock()
 
-		var inflightBytesStr string
-		// NB: inflightBytes is retrieved from the state of replicaSendStream,
-		// while the starting index of inflight (match + 1) is retrieved from
-		// testRepl. If the change in testRepl state has not been communicated to
-		// replicaSendStream, these can look inconsistent, which is completely
-		// explainable. Typically, test code that advances match (via admit)
-		// should also send an empty raft event so that replicaSendStream is aware
-		// of the change in match.
-		if rss.mu.inflightBytes != 0 {
-			inflightBytesStr = fmt.Sprintf(" (%s)", humanize.IBytes(rss.mu.inflightBytes))
-		}
 		fmt.Fprintf(&b,
-			"state=%v closed=%v inflight=[%v,%v)%s send_queue=[%v,%v) precise_q_size=%v",
+			"state=%v closed=%v inflight=[%v,%v) send_queue=[%v,%v) precise_q_size=%v",
 			rss.mu.connectedState, rss.mu.closed,
-			testRepl.info.Match+1, rss.mu.sendQueue.indexToSend, inflightBytesStr,
+			testRepl.info.Match+1, rss.mu.sendQueue.indexToSend,
 			rss.mu.sendQueue.indexToSend,
 			rss.mu.sendQueue.nextRaftIndex, rss.mu.sendQueue.preciseSizeSum)
-		if rss.mu.sendQueue.forceFlushStopIndex.active() {
-			var stopStr string
-			if !rss.mu.sendQueue.forceFlushStopIndex.untilInfinity() {
-				stopStr = fmt.Sprintf(" (stop=%d)", rss.mu.sendQueue.forceFlushStopIndex)
-			}
-			fmt.Fprintf(&b, " force-flushing%s", stopStr)
+		if rss.mu.sendQueue.forceFlushScheduled {
+			fmt.Fprintf(&b, " force-flushing")
 		}
 		if rss.mu.sendQueue.deductedForSchedulerTokens > 0 {
 			fmt.Fprintf(&b, " deducted=%v", rss.mu.sendQueue.deductedForSchedulerTokens)
@@ -368,17 +350,15 @@ func (s *testingRCState) getOrInitRange(
 			EvalWaitMetrics:        s.evalMetrics,
 			RangeControllerMetrics: s.rcMetrics,
 			WaitForEvalConfig:      s.waitForEvalConfig,
-			RaftMaxInflightBytes:   s.maxInflightBytes,
 			ReplicaMutexAsserter:   makeTestMutexAsserter(),
 			Knobs:                  &kvflowcontrol.TestingKnobs{},
 		}
 
 		init := RangeControllerInitState{
-			Term:            1,
-			ReplicaSet:      r.replicas(),
-			Leaseholder:     r.localReplicaID,
-			NextRaftIndex:   r.nextRaftIndex,
-			ForceFlushIndex: r.forceFlushIndex,
+			Term:          1,
+			ReplicaSet:    r.replicas(),
+			Leaseholder:   r.localReplicaID,
+			NextRaftIndex: r.nextRaftIndex,
 		}
 		options.ReplicaMutexAsserter.RaftMu.Lock()
 		testRC.rc = NewRangeController(s.testCtx, options, init)
@@ -386,20 +366,15 @@ func (s *testingRCState) getOrInitRange(
 		s.ranges[r.rangeID] = testRC
 	}
 	s.maybeSetInitialTokens(r)
-	if !ok {
-		// Send through an empty raft event to trigger creating necessary replica
-		// send streams for the range.
-		event := testRC.makeRaftEventWithReplicasState()
-		event.MsgAppMode = mode
-		func() {
-			testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
-			defer testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
-			require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(s.testCtx, event))
-		}()
-	}
-	// Else, this is an existing testingRCRange. The caller may want to send an
-	// empty raft event too, to enact some changes.
-
+	// Send through an empty raft event to trigger creating necessary replica
+	// send streams for the range.
+	event := testRC.makeRaftEventWithReplicasState()
+	event.MsgAppMode = mode
+	func() {
+		testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
+		defer testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
+		require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(s.testCtx, event))
+	}()
 	return testRC
 }
 
@@ -490,7 +465,7 @@ func (r *testingRCRange) logSnapshot() raft.LogSnapshot {
 }
 
 func (r *testingRCRange) SendMsgAppRaftMuLocked(
-	replicaID roachpb.ReplicaID, ls raft.LeadSlice,
+	replicaID roachpb.ReplicaID, ls raft.LogSlice,
 ) (raftpb.Message, bool) {
 	// TODO(pav-kv): populate the message correctly.
 	// TODO(pav-kv): use the real RawNode instead of fakes.
@@ -505,7 +480,8 @@ func (r *testingRCRange) SendMsgAppRaftMuLocked(
 	if !ok {
 		panic("unknown replica")
 	}
-	testR = updateNext(r, testR, msg.Entries[len(msg.Entries)-1].Index+1)
+	testR.info.Match = max(msg.Entries[0].Index-1, testR.info.Match)
+	testR.info.Next = msg.Entries[len(msg.Entries)-1].Index + 1
 	r.mu.r.replicaSet[replicaID] = testR
 	return msg, true
 }
@@ -549,7 +525,7 @@ func (r *testingRCRange) admit(ctx context.Context, storeID roachpb.StoreID, av 
 				for _, v := range av.Admitted {
 					// Ensure that Match doesn't lag behind the highest index in the
 					// AdmittedVector.
-					replica = tryUpdateMatch(r, replica, v)
+					replica.info.Match = max(replica.info.Match, v)
 				}
 				replicaID = replica.desc.ReplicaID
 				r.mu.r.replicaSet[replicaID] = replica
@@ -568,30 +544,12 @@ func (r *testingRCRange) admit(ctx context.Context, storeID roachpb.StoreID, av 
 	r.rc.AdmitRaftMuLocked(ctx, replicaID, av)
 }
 
-func (r *testingRCRange) updateReplicas(t *testing.T, tr testingRange) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for replicaID, replica := range tr.replicaSet {
-		require.Equal(t, uint64(0), replica.info.InflightBytes)
-		if replica.info.Match+1 < replica.info.Next {
-			entries, err := r.raftLog.Entries(replica.info.Match+1, replica.info.Next, math.MaxUint64)
-			require.NoError(t, err)
-			for i := range entries {
-				replica.info.InflightBytes += uint64(len(entries[i].Data))
-			}
-			tr.replicaSet[replicaID] = replica
-		}
-	}
-	r.mu.r = tr
-}
-
 type testingRange struct {
-	rangeID         roachpb.RangeID
-	tenantID        roachpb.TenantID
-	localReplicaID  roachpb.ReplicaID
-	nextRaftIndex   uint64
-	forceFlushIndex uint64
-	replicaSet      map[roachpb.ReplicaID]testingReplica
+	rangeID        roachpb.RangeID
+	tenantID       roachpb.TenantID
+	localReplicaID roachpb.ReplicaID
+	nextRaftIndex  uint64
+	replicaSet     map[roachpb.ReplicaID]testingReplica
 }
 
 // Used by simulation test.
@@ -633,45 +591,6 @@ const invalidTrackerState = tracker.StateSnapshot + 1
 type testingReplica struct {
 	desc roachpb.ReplicaDescriptor
 	info ReplicaStateInfo
-}
-
-func tryUpdateMatch(r *testingRCRange, replica testingReplica, match uint64) testingReplica {
-	if match <= replica.info.Match {
-		return replica
-	}
-	entries, err := r.raftLog.Entries(replica.info.Match+1, match+1, math.MaxUint64)
-	if err != nil {
-		panic(err)
-	}
-	for i := range entries {
-		entrySize := uint64(len(entries[i].Data))
-		if replica.info.InflightBytes < entrySize {
-			panic(errors.Errorf(
-				"inflight-bytes %d < entrySize %d at index %d", replica.info.InflightBytes, entrySize, i))
-		}
-		replica.info.InflightBytes -= entrySize
-	}
-	replica.info.Match = match
-	return replica
-}
-
-func updateNext(r *testingRCRange, replica testingReplica, next uint64) testingReplica {
-	if next < replica.info.Next {
-		panic(errors.Errorf("next %d < replica.info.Next %d", next, replica.info.Next))
-	}
-	if next == replica.info.Next {
-		return replica
-	}
-	entries, err := r.raftLog.Entries(replica.info.Next, next, math.MaxUint64)
-	if err != nil {
-		panic(err)
-	}
-	for i := range entries {
-		entrySize := uint64(len(entries[i].Data))
-		replica.info.InflightBytes += entrySize
-	}
-	replica.info.Next = next
-	return replica
 }
 
 func scanRanges(t *testing.T, input string) []testingRange {
@@ -770,12 +689,11 @@ func scanReplica(t *testing.T, line string) testingReplica {
 	}
 
 	next := uint64(0)
-	match := uint64(0)
 	// The fourth field is optional, if set it contains the tracker state of the
 	// replica on the leader replica (localReplicaID). The valid states are
 	// Probe, Replicate, and Snapshot.
 	if len(parts) > 3 {
-		require.LessOrEqual(t, 5, len(parts))
+		require.Equal(t, 5, len(parts))
 		parts[3] = strings.TrimSpace(parts[3])
 		require.True(t, strings.HasPrefix(parts[3], "state="))
 		parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "state=")
@@ -795,15 +713,6 @@ func scanReplica(t *testing.T, line string) testingReplica {
 		nextInt, err := strconv.Atoi(parts[4])
 		require.NoError(t, err)
 		next = uint64(nextInt)
-		if len(parts) > 5 {
-			require.Equal(t, 6, len(parts))
-			parts[5] = strings.TrimSpace(parts[5])
-			require.True(t, strings.HasPrefix(parts[5], "match="))
-			parts[5] = strings.TrimPrefix(strings.TrimSpace(parts[5]), "match=")
-			matchInt, err := strconv.Atoi(parts[5])
-			require.NoError(t, err)
-			match = uint64(matchInt)
-		}
 	}
 
 	return testingReplica{
@@ -813,7 +722,7 @@ func scanReplica(t *testing.T, line string) testingReplica {
 			ReplicaID: roachpb.ReplicaID(replicaID),
 			Type:      replicaType,
 		},
-		info: ReplicaStateInfo{State: state, Match: match, Next: next},
+		info: ReplicaStateInfo{State: state, Next: next},
 	}
 }
 
@@ -1029,6 +938,7 @@ func (t *testingProbeToCloseTimerScheduler) ScheduleSendStreamCloseRaftMuLocked(
 			return
 		case <-timer.Ch():
 		}
+		timer.MarkRead()
 		func() {
 			r := t.state.ranges[rangeID]
 			event := r.makeRaftEventWithReplicasState()
@@ -1154,13 +1064,6 @@ func TestRangeController(t *testing.T) {
 					require.NoError(t, err)
 					state.initialElasticTokens = kvflowcontrol.Tokens(elasticInit)
 				}
-				var maxInflightBytesString string
-				d.MaybeScanArgs(t, "max_inflight_bytes", &maxInflightBytesString)
-				if maxInflightBytesString != "" {
-					maxInflightBytes, err := humanizeutil.ParseBytes(maxInflightBytesString)
-					require.NoError(t, err)
-					state.maxInflightBytes = uint64(maxInflightBytes)
-				}
 
 				for _, r := range scanRanges(t, d.Input) {
 					state.getOrInitRange(t, r, MsgAppPush)
@@ -1257,7 +1160,11 @@ func TestRangeController(t *testing.T) {
 				}
 				for _, r := range scanRanges(t, d.Input) {
 					testRC := state.getOrInitRange(t, r, mode)
-					testRC.updateReplicas(t, r)
+					func() {
+						testRC.mu.Lock()
+						defer testRC.mu.Unlock()
+						testRC.mu.r = r
+					}()
 					func() {
 						testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
 						defer testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
@@ -1288,35 +1195,6 @@ func TestRangeController(t *testing.T) {
 					testRC.rc.SetLeaseholderRaftMuLocked(ctx, roachpb.ReplicaID(replicaID))
 				}()
 				return state.rangeStateString()
-
-			case "set_force_flush_index":
-				var rangeID int
-				d.ScanArgs(t, "range_id", &rangeID)
-				var index int
-				d.ScanArgs(t, "index", &index)
-				mode := MsgAppPull
-				if d.HasArg("push-mode") {
-					mode = MsgAppPush
-				}
-				testRC := state.ranges[roachpb.RangeID(rangeID)]
-				func() {
-					testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
-					defer testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
-					testRC.rc.opts.ReplicaMutexAsserter.ReplicaMu.Lock()
-					defer testRC.rc.opts.ReplicaMutexAsserter.ReplicaMu.Unlock()
-					testRC.rc.ForceFlushIndexChangedLocked(ctx, uint64(index))
-				}()
-				// Send an empty raft event in order to trigger any potential changes.
-				event := testRC.makeRaftEventWithReplicasState()
-				event.MsgAppMode = mode
-				func() {
-					testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
-					defer testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
-					require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(ctx, event))
-				}()
-				// Sleep for a bit to allow any timers to fire.
-				time.Sleep(20 * time.Millisecond)
-				return state.sendStreamString(roachpb.RangeID(rangeID))
 
 			case "close_rcs":
 				for _, r := range state.ranges {
@@ -1435,7 +1313,7 @@ func TestRangeController(t *testing.T) {
 								} else {
 									fromIndex := event.sendingEntryRange[replicaID].fromIndex
 									toIndex := event.sendingEntryRange[replicaID].toIndex
-									entries, err := testRC.raftLog.Entries(fromIndex, toIndex+1, infinityEntryIndex)
+									entries, err := testRC.raftLog.Entries(fromIndex, toIndex+1, math.MaxUint64)
 									require.NoError(t, err)
 									msgApp.Entries = entries
 								}
@@ -1444,9 +1322,11 @@ func TestRangeController(t *testing.T) {
 							// Else MsgAppPull mode, so raftEvent.MsgApps is unpopulated.
 
 							if len(msgApp.Entries) > 0 {
-								// Bump the Next field for replicas that have MsgApps being
-								// sent to them.
-								testR = updateNext(testRC, testR, msgApp.Entries[len(msgApp.Entries)-1].Index+1)
+								// Bump the Next and Index fields for replicas that have
+								// MsgApps being sent to them. The Match index is only updated
+								// if it increases.
+								testR.info.Match = max(msgApp.Entries[0].Index-1, testR.info.Match)
+								testR.info.Next = msgApp.Entries[len(msgApp.Entries)-1].Index + 1
 								testRC.mu.r.replicaSet[replicaID] = testR
 							} else if testR.desc.ReplicaID == testRC.mu.r.localReplicaID &&
 								len(raftEvent.Entries) > 0 {
@@ -1454,8 +1334,8 @@ func TestRangeController(t *testing.T) {
 								//
 								// TODO(sumeer): many of the test cases are sending MsgApps to
 								// the leader. Stop doing it.
-								testR = updateNext(
-									testRC, testR, raftEvent.Entries[len(raftEvent.Entries)-1].Index+1)
+								testR.info.Match = max(raftEvent.Entries[0].Index-1, testR.info.Match)
+								testR.info.Next = raftEvent.Entries[len(raftEvent.Entries)-1].Index + 1
 								testRC.mu.r.replicaSet[replicaID] = testR
 							}
 						}
@@ -1521,20 +1401,20 @@ func TestRangeController(t *testing.T) {
 						admissionpb.RegularWorkClass,
 						admissionpb.ElasticWorkClass,
 					} {
-						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Waiting[wc].GetName(false /* useStaticLabels */), evalMetrics.Waiting[wc].Value())
-						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Admitted[wc].GetName(false /* useStaticLabels */), evalMetrics.Admitted[wc].Count())
-						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Errored[wc].GetName(false /* useStaticLabels */), evalMetrics.Errored[wc].Count())
-						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Bypassed[wc].GetName(false /* useStaticLabels */), evalMetrics.Bypassed[wc].Count())
+						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Waiting[wc].GetName(), evalMetrics.Waiting[wc].Value())
+						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Admitted[wc].GetName(), evalMetrics.Admitted[wc].Count())
+						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Errored[wc].GetName(), evalMetrics.Errored[wc].Count())
+						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Bypassed[wc].GetName(), evalMetrics.Bypassed[wc].Count())
 						// We only print the number of recorded durations, instead of any
 						// percentiles or cumulative wait times as these are
 						// non-deterministic in the test.
 						fmt.Fprintf(&buf, "%-50v: %v\n",
-							fmt.Sprintf("%v.count", evalMetrics.Duration[wc].GetName(false /* useStaticLabels */)),
+							fmt.Sprintf("%v.count", evalMetrics.Duration[wc].GetName()),
 							testingFirst(evalMetrics.Duration[wc].CumulativeSnapshot().Total()))
 					}
 				case "range_controller":
 					rcMetrics := state.rcMetrics
-					fmt.Fprintf(&buf, "%v: %v\n", rcMetrics.Count.GetName(false /* useStaticLabels */), rcMetrics.Count.Value())
+					fmt.Fprintf(&buf, "%v: %v\n", rcMetrics.Count.GetName(), rcMetrics.Count.Value())
 				case "send_queue":
 					sendQueueMetrics := state.rcMetrics.SendQueue
 					sendQueueTokenMetrics := state.ssTokenCounter.tokenMetrics.CounterMetrics[SendToken].SendQueue[0]
@@ -1555,17 +1435,17 @@ func TestRangeController(t *testing.T) {
 					}
 					sendQueueMetrics.SizeBytes.Update(sizeBytes)
 					sendQueueMetrics.SizeCount.Update(sizeCount)
-					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.SizeCount.GetName(false /* useStaticLabels */), sendQueueMetrics.SizeCount.Value())
-					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.SizeBytes.GetName(false /* useStaticLabels */), sendQueueMetrics.SizeBytes.Value())
-					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.ForceFlushedScheduledCount.GetName(false /* useStaticLabels */), sendQueueMetrics.ForceFlushedScheduledCount.Value())
-					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.DeductedForSchedulerBytes.GetName(false /* useStaticLabels */), sendQueueMetrics.DeductedForSchedulerBytes.Value())
-					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.PreventionCount.GetName(false /* useStaticLabels */), sendQueueMetrics.PreventionCount.Count())
-					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueTokenMetrics.ForceFlushDeducted.GetName(false /* useStaticLabels */), sendQueueTokenMetrics.ForceFlushDeducted.Count())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.SizeCount.GetName(), sendQueueMetrics.SizeCount.Value())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.SizeBytes.GetName(), sendQueueMetrics.SizeBytes.Value())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.ForceFlushedScheduledCount.GetName(), sendQueueMetrics.ForceFlushedScheduledCount.Value())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.DeductedForSchedulerBytes.GetName(), sendQueueMetrics.DeductedForSchedulerBytes.Value())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.PreventionCount.GetName(), sendQueueMetrics.PreventionCount.Count())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueTokenMetrics.ForceFlushDeducted.GetName(), sendQueueTokenMetrics.ForceFlushDeducted.Count())
 					for _, wc := range []admissionpb.WorkClass{
 						admissionpb.RegularWorkClass,
 						admissionpb.ElasticWorkClass,
 					} {
-						fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueTokenMetrics.PreventionDeducted[wc].GetName(false /* useStaticLabels */), sendQueueTokenMetrics.PreventionDeducted[wc].Count())
+						fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueTokenMetrics.PreventionDeducted[wc].GetName(), sendQueueTokenMetrics.PreventionDeducted[wc].Count())
 					}
 
 				default:
@@ -1765,11 +1645,14 @@ func testingFirst(args ...interface{}) interface{} {
 func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	// raftpb.Entry and raftpb.Message are only partially populated below, which
 	// could be improved in the future.
-	appendMsg := raft.StorageAppend{
-		LeadTerm: 10,
+	appendMsg := raftpb.Message{
+		Type:     raftpb.MsgStorageAppend,
+		LogTerm:  10,
 		Snapshot: &raftpb.Snapshot{},
 		Entries: []raftpb.Entry{
-			{Term: 9},
+			{
+				Term: 9,
+			},
 		},
 	}
 	outboundMsgs := []raftpb.Message{
@@ -1818,7 +1701,7 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	checkSnapAndMap(event)
 	// Only LogSnapshot and ReplicasStateInfo set.
 	event = RaftEventFromMsgStorageAppendAndMsgApps(
-		MsgAppPush, 20, raft.StorageAppend{}, nil, logSnap, msgAppScratch, infoMap)
+		MsgAppPush, 20, raftpb.Message{}, nil, logSnap, msgAppScratch, infoMap)
 	checkSnapAndMap(event)
 	event.LogSnapshot = raft.LogSnapshot{}
 	event.ReplicasStateInfo = nil
@@ -1848,15 +1731,6 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 			return cmp.Compare(a.To, b.To)
 		})
 		require.Equal(t, []raftpb.Message{outboundMsgs[0], outboundMsgs[3], outboundMsgs[2]}, msgApps)
-		checkSnapAndMap(event)
-		// Outbound msgs contains MsgApps for followers, but they are ignored
-		// since in pull mode.
-		event = RaftEventFromMsgStorageAppendAndMsgApps(
-			MsgAppPull, 19, appendMsg, outboundMsgs, logSnap, msgAppScratch, infoMap)
-		require.Equal(t, uint64(10), event.Term)
-		require.Equal(t, appendMsg.Snapshot, event.Snap)
-		require.Equal(t, appendMsg.Entries, event.Entries)
-		require.Nil(t, event.MsgApps)
 		checkSnapAndMap(event)
 	}
 }

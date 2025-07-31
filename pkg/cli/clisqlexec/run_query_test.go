@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -44,7 +44,7 @@ func TestRunQuery(t *testing.T) {
 	c := cli.NewCLITest(cli.TestCLIParams{T: t})
 	defer c.Cleanup()
 
-	url, cleanup := pgurlutils.PGUrl(t, c.Server.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.Server.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
@@ -174,7 +174,7 @@ func TestUtfName(t *testing.T) {
 	c := cli.NewCLITest(cli.TestCLIParams{T: t})
 	defer c.Cleanup()
 
-	url, cleanup := pgurlutils.PGUrl(t, c.Server.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.Server.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())

@@ -7,10 +7,9 @@ package execbuilder
 
 import (
 	"context"
-	"slices"
-	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -36,14 +36,7 @@ var parallelScanResultThreshold = uint64(metamorphic.ConstantWithTestRange(
 	parallelScanResultThresholdProductionValue, /* max */
 ))
 
-const (
-	parallelScanResultThresholdProductionValue = 10000
-
-	// NumRecordedJoinTypes includes all join types except for
-	// descpb.RightSemiJoin and descpb.RightAntiJoin, which are recorded as left
-	// joins.
-	NumRecordedJoinTypes = 8
-)
+const parallelScanResultThresholdProductionValue = 10000
 
 func getParallelScanResultThreshold(forceProductionValue bool) uint64 {
 	if forceProductionValue {
@@ -94,10 +87,6 @@ type Builder struct {
 	// rather than scans.
 	withExprs []builtWithExpr
 
-	// routineResultBuffers allows expressions within the body of a set-returning
-	// PL/pgSQL function to add to the result set during execution.
-	routineResultBuffers map[memo.RoutineResultBufferID]tree.RoutineResultWriter
-
 	// allowAutoCommit is passed through to factory methods for mutation
 	// operators. It allows execution to commit the transaction as part of the
 	// mutation itself. See canAutoCommit().
@@ -107,16 +96,12 @@ type Builder struct {
 	// for EXPLAIN.
 	initialAllowAutoCommit bool
 
-	allowInsertFastPath      bool
-	allowDeleteRangeFastPath bool
+	allowInsertFastPath bool
 
-	// forceForUpdateLocking, if set, is the table ID of the table being mutated
-	// that should be locked using forUpdateLocking in mutation's input
-	// operators to reduce query retries. In other words, it allows us to apply
-	// the implicit locking during the initial scan of the mutation. It will
-	// only be set if we are guaranteed to never scan data that won't be
-	// mutated.
-	forceForUpdateLocking opt.TableID
+	// forceForUpdateLocking is a set of opt catalog table IDs that serve as input
+	// for mutation operators, and should be locked using forUpdateLocking to
+	// reduce query retries.
+	forceForUpdateLocking intsets.Fast
 
 	// planLazySubqueries is true if the builder should plan subqueries that are
 	// lazily evaluated as routines instead of a subquery which is evaluated
@@ -167,12 +152,12 @@ type Builder struct {
 	NanosSinceStatsForecasted time.Duration
 
 	// JoinTypeCounts records the number of times each type of logical join was
-	// used in the query, up to 255.
-	JoinTypeCounts [NumRecordedJoinTypes]uint8
+	// used in the query.
+	JoinTypeCounts map[descpb.JoinType]int
 
-	// JoinAlgorithmCounts records the number of times each type of join
-	// algorithm was used in the query, up to 255.
-	JoinAlgorithmCounts [exec.NumJoinAlgorithms]uint8
+	// JoinAlgorithmCounts records the number of times each type of join algorithm
+	// was used in the query.
+	JoinAlgorithmCounts map[exec.JoinAlgorithm]int
 
 	// ScanCounts records the number of times scans were used in the query.
 	ScanCounts [exec.NumScanCountTypes]int
@@ -191,41 +176,7 @@ type Builder struct {
 	IsANSIDML bool
 
 	// IndexesUsed list the indexes used in query with the format tableID@indexID.
-	IndexesUsed
-}
-
-// IndexesUsed is a list of indexes used in a query.
-type IndexesUsed struct {
-	indexes []struct {
-		tableID cat.StableID
-		indexID cat.StableID
-	}
-}
-
-// add adds the given index to the list, if it is not already present.
-func (iu *IndexesUsed) add(tableID, indexID cat.StableID) {
-	s := struct {
-		tableID cat.StableID
-		indexID cat.StableID
-	}{tableID, indexID}
-	if !slices.Contains(iu.indexes, s) {
-		iu.indexes = append(iu.indexes, s)
-	}
-}
-
-// Strings returns a slice of strings with the format tableID@indexID for each
-// index in the list.
-//
-// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of converting
-// to strings.
-func (iu *IndexesUsed) Strings() []string {
-	res := make([]string, len(iu.indexes))
-	const base = 10
-	for i, u := range iu.indexes {
-		res[i] = strconv.FormatUint(uint64(u.tableID), base) + "@" +
-			strconv.FormatUint(uint64(u.indexID), base)
-	}
-	return res
+	IndexesUsed []string
 }
 
 // New constructs an instance of the execution node builder using the
@@ -282,7 +233,6 @@ func New(
 		b.allowAutoCommit = b.allowAutoCommit && !prohibitAutoCommit
 		b.initialAllowAutoCommit = b.allowAutoCommit
 		b.allowInsertFastPath = sd.InsertFastPath
-		b.allowDeleteRangeFastPath = sd.OptimizerUseDeleteRangeFastPath
 	}
 	return b
 }

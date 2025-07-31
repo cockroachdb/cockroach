@@ -6,9 +6,7 @@
 package workloadindexrec
 
 import (
-	"maps"
 	"math"
-	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -19,24 +17,15 @@ type indexedColumn struct {
 	direction tree.Direction
 }
 
-// index encapsulates the indexed columns and the fingerprints of the that
-// the index was recommended for.
-type index struct {
-	indexedColumns []indexedColumn
-	fingerprints   []uint64
-}
-
 // TrieNode is an implementation of the node of a IndexTrie-tree.
 //
-// TrieNode stores the indexed columns, storing columns, parent node, the
-// indexed column represented by the node (used to assign storings), and the
-// fingerprintId of the that the index was recommended for.
+// TrieNode stores the indexed columns, storing columns, parent node and the
+// indexed column represented by the node (used to assign storings).
 type indexTrieNode struct {
-	children     map[indexedColumn]*indexTrieNode
-	storing      map[string]struct{}
-	fingerprints []uint64
-	parent       *indexTrieNode
-	col          indexedColumn
+	children map[indexedColumn]*indexTrieNode
+	storing  map[string]struct{}
+	parent   *indexTrieNode
+	col      indexedColumn
 }
 
 // indexTrie is an implementation of a indexTrie-tree specific for indexes of
@@ -57,9 +46,7 @@ func NewTrie() *indexTrie {
 }
 
 // Insert parses the columns in ci (CreateIndex) and updates the trie.
-func (trie *indexTrie) Insert(
-	indexedCols tree.IndexElemList, storingCols tree.NameList, fingerprintId uint64,
-) {
+func (trie *indexTrie) Insert(indexedCols tree.IndexElemList, storingCols tree.NameList) {
 	node := trie.root
 	for _, indexedCol := range indexedCols {
 		indexCol := indexedColumn{
@@ -87,7 +74,6 @@ func (trie *indexTrie) Insert(
 		node = node.children[indexCol]
 	}
 
-	node.fingerprints = append(node.fingerprints, fingerprintId)
 	if len(storingCols) > 0 {
 		if node.storing == nil {
 			node.storing = make(map[string]struct{})
@@ -231,21 +217,20 @@ func (node *indexTrieNode) assignStoringToShallowestLeaf(curDep int) (*indexTrie
 
 // collectAllLeavesForTables collects all the indexes represented by the leaf
 // nodes of trie.
-func collectAllLeavesForTable(trie *indexTrie) ([]index, [][]tree.Name) {
-	var indexes []index
+func collectAllLeavesForTable(trie *indexTrie) ([][]indexedColumn, [][]tree.Name) {
+	var indexedColsArray [][]indexedColumn
 	var storingColsArray [][]tree.Name
-	collectAllLeaves(trie.root, &indexes, &storingColsArray, []indexedColumn{}, []uint64{})
-	return indexes, storingColsArray
+	collectAllLeaves(trie.root, &indexedColsArray, &storingColsArray, []indexedColumn{})
+	return indexedColsArray, storingColsArray
 }
 
 // collectAllLeaves collects all the indexes represented by the leaf nodes
 // recursively.
 func collectAllLeaves(
 	node *indexTrieNode,
-	indexes *[]index,
+	indexedCols *[][]indexedColumn,
 	storingCols *[][]tree.Name,
 	curIndexedCols []indexedColumn,
-	fingerprintIds []uint64,
 ) {
 	if len(node.children) == 0 {
 		curStoringCols := make([]tree.Name, len(node.storing))
@@ -254,26 +239,12 @@ func collectAllLeaves(
 			curStoringCols[idx] = tree.Name(storingCol)
 			idx++
 		}
-		// deduplicate fingerprint ids
-		fingerprintMap := make(map[uint64]struct{})
-		for _, fingerprintId := range fingerprintIds {
-			fingerprintMap[fingerprintId] = struct{}{}
-		}
-		*indexes = append(*indexes, index{
-			indexedColumns: curIndexedCols,
-			fingerprints:   slices.Collect(maps.Keys(fingerprintMap)),
-		})
+		*indexedCols = append(*indexedCols, curIndexedCols)
 		*storingCols = append(*storingCols, curStoringCols)
 		return
 	}
 
 	for indexCol, child := range node.children {
-		collectAllLeaves(
-			child,
-			indexes,
-			storingCols,
-			append(curIndexedCols, indexCol),
-			append(fingerprintIds, child.fingerprints...),
-		)
+		collectAllLeaves(child, indexedCols, storingCols, append(curIndexedCols, indexCol))
 	}
 }

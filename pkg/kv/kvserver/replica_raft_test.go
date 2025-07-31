@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
-	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -33,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
@@ -84,9 +83,9 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	now := crtime.NowMono()
-	ts := func(s int) crtime.Mono {
-		return now + crtime.Mono(time.Duration(s)*time.Second)
+	now := timeutil.Now()
+	ts := func(s int) time.Time {
+		return now.Add(time.Duration(s) * time.Second)
 	}
 
 	stats := handleRaftReadyStats{
@@ -103,21 +102,19 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 				numAddSST:                3,
 				numAddSSTCopies:          1,
 			},
-			assertionsRequested:  4,
+			stateAssertions:      4,
 			numConfChangeEntries: 6,
 		},
 		append: logstore.AppendStats{
-			Begin: ts(2),
-			End:   ts(3),
-			EntryStats: logstore.EntryStats{
-				RegularEntries:    7,
-				RegularBytes:      1024,
-				SideloadedEntries: 3,
-				SideloadedBytes:   5 * (1 << 20),
-			},
-			PebbleBegin: ts(3),
-			PebbleEnd:   ts(4),
-			PebbleBytes: 1024 * 5,
+			Begin:             ts(2),
+			End:               ts(3),
+			RegularEntries:    7,
+			RegularBytes:      1024,
+			SideloadedEntries: 3,
+			SideloadedBytes:   5 * (1 << 20),
+			PebbleBegin:       ts(3),
+			PebbleEnd:         ts(4),
+			PebbleBytes:       1024 * 5,
 			PebbleCommitStats: storage.BatchCommitStats{
 				BatchCommitStats: pebble.BatchCommitStats{
 					TotalDuration:               100 * time.Millisecond,
@@ -388,115 +385,4 @@ func checkNoLeakedTraceSpans(t *testing.T, store *Store) {
 		sl := allstacks.Get()
 		return errors.Newf("%s\n\ngoroutines of interest: %v\nstacks:\n\n%s", buf.String(), ids, sl)
 	})
-}
-
-// TestMaybeMarkReplicaUnavailableInLeaderlessWatcher is a basic unit test for
-// the function maybeMarkReplicaUnavailableInLeaderlessWatcher.
-func TestMaybeMarkReplicaUnavailableInLeaderlessWatcher(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	now := time.Now()
-	leaderlessThreshold := time.Second * 60
-
-	testCases := []struct {
-		name                   string
-		initReplicaUnavailable bool
-		// The initial leaderless timestamp of the replica in the leaderlessWatcher.
-		initLeaderlessTimestamp time.Time
-		leader                  raftpb.PeerID
-		disableWatcher          bool
-		expectedLeaderlessTime  time.Time
-		expectedUnavailable     bool
-	}{
-		{
-			name:                    "leader known",
-			initLeaderlessTimestamp: time.Time{},
-			leader:                  raftpb.PeerID(1),
-			disableWatcher:          false,
-			// Since the leader is known, we expect that the replica is considered
-			// available, and the leaderless timestamp is reset.
-			expectedLeaderlessTime: time.Time{},
-			expectedUnavailable:    false,
-		},
-		{
-			name:                    "leader was unknown but is now known",
-			initLeaderlessTimestamp: now.Add(-10 * time.Second),
-			leader:                  raftpb.PeerID(1),
-			disableWatcher:          false,
-			// Since the leader is known, we expect that the replica is considered
-			// available, and the leaderless timestamp is reset.
-			expectedLeaderlessTime: time.Time{},
-			expectedUnavailable:    false,
-		},
-		{
-			name:                    "leader unknown less than threshold",
-			initLeaderlessTimestamp: now.Add(-10 * time.Second),
-			leader:                  raft.None,
-			disableWatcher:          false,
-			// Since the leader has been unknown for less than the threshold, we
-			// expect that the replica is considered available, and the leaderless
-			// time it is set properly.
-			expectedLeaderlessTime: now.Add(-10 * time.Second),
-			expectedUnavailable:    false,
-		},
-		{
-			name:                    "leader unknown exceeds threshold",
-			initLeaderlessTimestamp: now.Add(-leaderlessThreshold),
-			leader:                  raft.None,
-			disableWatcher:          false,
-			// Since the leader has been unknown for the threshold period, we
-			// expect that the replica is considered unavailable, and the leaderless
-			// time it is set properly.
-			expectedLeaderlessTime: now.Add(-leaderlessThreshold),
-			expectedUnavailable:    true,
-		},
-		{
-			name:                    "leader unknown exceeds threshold and watcher disabled",
-			initReplicaUnavailable:  true,
-			initLeaderlessTimestamp: now.Add(-leaderlessThreshold),
-			leader:                  raft.None,
-			disableWatcher:          true,
-			// Since the watcher is disabled, the replica won't be considered
-			// unavailable even if the replica was marked as unavailable, and it's
-			// been leaderless for a long time.
-			expectedLeaderlessTime: time.Time{},
-			expectedUnavailable:    false,
-		},
-	}
-	for _, tc := range testCases {
-		ctx := context.Background()
-		stopper := stop.NewStopper()
-
-		tContext := testContext{}
-		cfg := TestStoreConfig(nil)
-
-		if tc.disableWatcher {
-			ReplicaLeaderlessUnavailableThreshold.Override(ctx, &cfg.Settings.SV, time.Duration(0))
-		} else {
-			ReplicaLeaderlessUnavailableThreshold.Override(ctx, &cfg.Settings.SV, leaderlessThreshold)
-		}
-		tContext.StartWithStoreConfig(ctx, t, stopper, cfg)
-
-		repl := tContext.repl
-		repl.LeaderlessWatcher.mu.unavailable = tc.initReplicaUnavailable
-		repl.LeaderlessWatcher.mu.leaderlessTimestamp = tc.initLeaderlessTimestamp
-		repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, tc.leader, now, cfg.Settings)
-		require.Equal(t, tc.expectedUnavailable, repl.LeaderlessWatcher.IsUnavailable())
-		require.Equal(t, tc.expectedLeaderlessTime, repl.LeaderlessWatcher.mu.leaderlessTimestamp)
-
-		// Attempt to write to the replica to ensure that if it's considered
-		// unavailable, we should get an error.
-		key := roachpb.Key("a")
-		write := putArgs(key, []byte("foo"))
-		_, pErr := tContext.SendWrapped(&write)
-
-		if tc.expectedUnavailable {
-			require.Regexp(t, "replica has been leaderless for 1m0s", pErr)
-		} else {
-			require.NoError(t, pErr.GoError())
-		}
-
-		stopper.Stop(ctx)
-	}
 }

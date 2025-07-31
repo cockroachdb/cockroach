@@ -6,3 +6,12 @@ show_backup_stmt ::=
 	| 'SHOW' 'BACKUP' collectionURI_path 'IN' string_or_placeholder_opt_list 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
 	| 'SHOW' 'BACKUP' collectionURI_path 'IN' string_or_placeholder_opt_list 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
 	| 'SHOW' 'BACKUP' collectionURI_path 'IN' string_or_placeholder_opt_list 
+	| 'SHOW' 'BACKUP' collectionURI_path 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
+	| 'SHOW' 'BACKUP' collectionURI_path 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
+	| 'SHOW' 'BACKUP' collectionURI_path 
+	| 'SHOW' 'BACKUP' 'SCHEMAS' collectionURI_path 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
+	| 'SHOW' 'BACKUP' 'SCHEMAS' collectionURI_path 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
+	| 'SHOW' 'BACKUP' 'SCHEMAS' collectionURI_path 
+	| 'SHOW' 'BACKUP' 'CONNECTION' collectionURI 'WITH' show_backup_connection_options ( ( ',' show_backup_connection_options ) )*
+	| 'SHOW' 'BACKUP' 'CONNECTION' collectionURI 'WITH' 'OPTIONS' '(' show_backup_connection_options ( ( ',' show_backup_connection_options ) )* ')'
+	| 'SHOW' 'BACKUP' 'CONNECTION' collectionURI 

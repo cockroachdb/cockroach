@@ -1,0 +1,171 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module";
+
+.tab-area {
+  margin-bottom: $spacing-large;
+}
+
+.database-table-page {
+  &__indexes {
+    &--value {
+      text-align: right;
+    }
+  }
+}
+
+.sorted-table {
+  width: 100%;
+}
+
+.tab-pane {
+  margin-left: 1px;
+}
+
+.summary-card {
+  h4 {
+    @include text--body-strong;
+    color: $colors--neutral-7;
+  }
+
+  p {
+    @include text--body;
+    overflow-wrap: anywhere;
+  }
+
+  &__error-cell{
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    svg {
+      fill: $colors--warning;
+    }
+  }
+}
+
+.icon {
+  &__container {
+    display: inline;
+    align-items: center;
+  }
+
+  &--md {
+    height: 24px;
+    width: 24px;
+    margin-right: 12px;
+  }
+
+  &--s {
+    height: 16px;
+    width: 16px;
+    margin-right: 10px;
+  }
+
+  &--xxs {
+    height: 8px;
+    width: 8px;
+  }
+
+  &--title {
+    fill: $colors--title;
+  }
+
+  &--primary {
+    fill: $colors--primary-text;
+  }
+}
+
+.index-stats {
+  &__summary-card {
+    width: 75%;
+    padding-right: 9px;
+    padding-left: 9px;
+    margin-right: -9px;
+    margin-left: 9px;
+  }
+
+  &__header {
+    align-items: baseline;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: $spacing-medium $spacing-medium 0;
+  }
+
+  &__reset-info {
+    display: flex;
+    flex-direction: row;
+  }
+
+  &__last-reset {
+    color: $colors--neutral-6;
+    margin-right: $spacing-base;
+  }
+
+  &__reset-btn {
+    color: $colors--primary-blue-3;
+
+    &:hover {
+      color: $colors--primary-blue-3;
+      text-decoration: underline;
+    }
+  }
+
+  &-table {
+    &__col {
+      &-indexes {
+        font-family: $font-family--semi-bold;
+        width: 30em;
+        overflow-wrap: anywhere;
+      }
+      &-last-used {
+        width: 25em;
+      }
+    }
+  }
+}
+
+.index-recommendations {
+  &-icon {
+    &__exist {
+      height: 10px;
+      width: 20px;
+      fill: $colors--warning;
+    }
+
+    &__none {
+      height: 10px;
+      width: 20px;
+      fill: $colors--neutral-11;
+    }
+  }
+
+  &-text {
+    &__border {
+      border-bottom: 1px dashed $colors--disabled;
+    }
+    &__tooltip-anchor {
+      a {
+        font-size: $font-size--small;
+        color: $colors--white;
+        text-decoration: underline;
+        &:hover {
+          opacity: 0.8;
+          color: $colors--white;
+        }
+      }
+    }
+  }
+}
+
+.bold {
+  font-weight: $font-weight--extra-bold;
+  color: $colors--neutral-8;
+}
+
+.row-spaced {
+  margin-top: 20px;
+}

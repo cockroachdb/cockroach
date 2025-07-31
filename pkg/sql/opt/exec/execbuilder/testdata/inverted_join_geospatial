@@ -114,7 +114,6 @@ vectorized: true
             │ equality: (rk1, rk2) = (rk1, rk2)
             │ equality cols are key
             │ pred: st_intersects(geom, geom1) OR st_dwithin(geom1, geom, 2.0)
-            │ parallel
             │
             └── • project
                 │ columns: (lk, geom1, rk1, rk2)
@@ -164,7 +163,6 @@ vectorized: true
             │ equality: (rk1, rk2) = (rk1, rk2)
             │ equality cols are key
             │ pred: st_intersects(geom1, geom) AND st_dwithin(geom, geom1, 2.0)
-            │ parallel
             │
             └── • project
                 │ columns: (lk, geom1, rk1, rk2)
@@ -206,7 +204,6 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: (st_intersects(geom1, geom) AND st_covers(geom2, geom)) AND (st_dfullywithin(geom, geom1, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', geom))
-        │ parallel
         │
         └── • project
             │ columns: (lk, geom1, geom2, rk1, rk2)
@@ -245,7 +242,6 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: st_intersects(geom2, geom)
-        │ parallel
         │
         └── • project
             │ columns: (lk, geom2, rk1, rk2, cont)
@@ -283,7 +279,6 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: st_intersects(geom1, geom)
-        │ parallel
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2, cont)
@@ -317,7 +312,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: custom
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -341,6 +336,7 @@ quality of service: regular
 │           │ regions: <hidden>
 │           │ actual row count: 0
 │           │ KV time: 0µs
+│           │ KV contention time: 0µs
 │           │ KV rows decoded: 0
 │           │ KV bytes read: 0 B
 │           │ KV gRPC calls: 0
@@ -356,6 +352,7 @@ quality of service: regular
 │               │ regions: <hidden>
 │               │ actual row count: 0
 │               │ KV time: 0µs
+│               │ KV contention time: 0µs
 │               │ KV rows decoded: 0
 │               │ KV bytes read: 0 B
 │               │ KV gRPC calls: 0
@@ -374,7 +371,7 @@ quality of service: regular
 ├── • subquery
 │   │ id: @S1
 │   │ original sql: SELECT * FROM ltable WHERE lk > 2
-│   │ exec mode: discard all rows
+│   │ exec mode: all rows
 │   │
 │   └── • buffer
 │       │ sql nodes: <hidden>
@@ -389,6 +386,7 @@ quality of service: regular
 │             regions: <hidden>
 │             actual row count: 0
 │             KV time: 0µs
+│             KV contention time: 0µs
 │             KV rows decoded: 0
 │             KV bytes read: 0 B
 │             KV gRPC calls: 0
@@ -436,7 +434,6 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: st_intersects(geom2, geom)
-        │ parallel
         │
         └── • project
             │ columns: (lk, geom2, rk1, rk2, cont)
@@ -476,7 +473,6 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: st_covers(geom1, geom)
-        │ parallel
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2, cont)
@@ -518,7 +514,6 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: geom1 ~ geom
-        │ parallel
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2)
@@ -555,7 +550,6 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: geom ~ geom1
-        │ parallel
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2)
@@ -592,7 +586,6 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: geom && geom1
-        │ parallel
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2)

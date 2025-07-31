@@ -11,7 +11,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/cmd/roachprod-microbench/util",
         "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_gogo_protobuf//proto",
         "@com_github_prometheus_client_model//go",

@@ -6,9 +6,10 @@
 package faker
 
 import (
-	"math/rand/v2"
 	"strings"
 	"unicode"
+
+	"golang.org/x/exp/rand"
 )
 
 type loremFaker struct {

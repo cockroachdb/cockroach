@@ -81,7 +81,9 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 
 	var args []string
 	args = append(args, "test")
-	addCommonBazelArguments(&args)
+	if numCPUs != 0 {
+		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+	}
 	if timeout > 0 {
 		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 	}

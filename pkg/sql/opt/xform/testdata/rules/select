@@ -329,7 +329,7 @@ memo (optimized, ~19KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
 memo expect-not=GeneratePartialIndexScans
 SELECT * FROM p@{NO_INDEX_JOIN} WHERE i > 0 AND s = 'foo'
 ----
-memo (optimized, ~10KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
+memo (optimized, ~9KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
  ├── G1: (select G2 G3)
  │    └── [presentation: k:1,i:2,f:3,s:4,b:5]
  │         ├── best: (select G2 G3)
@@ -723,7 +723,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k+u = 1
 ----
-memo (optimized, ~11KB, required=[presentation: k:1])
+memo (optimized, ~10KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -775,7 +775,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
 ----
-memo (optimized, ~12KB, required=[presentation: k:1])
+memo (optimized, ~11KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -867,7 +867,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10
 ----
-memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (index-join G4 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G4 b,cols=(1-4))
@@ -1355,7 +1355,7 @@ memo (optimized, ~8KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)
 memo
 SELECT j FROM kifs WHERE s = 'foo'
 ----
-memo (optimized, ~10KB, required=[presentation: j:5])
+memo (optimized, ~9KB, required=[presentation: j:5])
  ├── G1: (project G2 G3 j)
  │    └── [presentation: j:5]
  │         ├── best: (project G2 G3 j)
@@ -1381,7 +1381,7 @@ memo (optimized, ~10KB, required=[presentation: j:5])
 memo
 SELECT i, k FROM kifs WHERE s >= 'foo'
 ----
-memo (optimized, ~9KB, required=[presentation: i:2,k:1])
+memo (optimized, ~8KB, required=[presentation: i:2,k:1])
  ├── G1: (project G2 G3 k i)
  │    └── [presentation: i:2,k:1]
  │         ├── best: (project G2 G3 k i)
@@ -1794,11 +1794,11 @@ memo (optimized, ~24KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 19.12
+ │         └── cost: 19.03
  ├── G2: (select G4 G5) (select G6 G7) (select G8 G7) (select G9 G7) (project G10 G11 i)
  │    └── []
  │         ├── best: (project G10 G11 i)
- │         └── cost: 19.09
+ │         └── cost: 19.00
  ├── G3: (projections)
  ├── G4: (scan p,cols=(2,4))
  │    └── []
@@ -1821,7 +1821,7 @@ memo (optimized, ~24KB, required=[presentation: i:2])
  ├── G10: (scan p@idx2,partial,cols=(2),constrained)
  │    └── []
  │         ├── best: (scan p@idx2,partial,cols=(2),constrained)
- │         └── cost: 19.05
+ │         └── cost: 18.96
  ├── G11: (projections G17)
  ├── G12: (eq G18 G19)
  ├── G13: (eq G20 G17)
@@ -8554,80 +8554,6 @@ project
  └── projections
       └── 1 [as="?column?":15]
 
-# Regression test for #136078. A project expression must be added above an
-# inverted filter to prune output columns to match the original group when there
-# is no index join to do so.
-exec-ddl
-CREATE TABLE t136078 (
-  a INT,
-  b STRING,
-  col3_8 STRING AS (lower(b)) VIRTUAL,
-  PRIMARY KEY (a, b),
-  INVERTED INDEX (col3_8 gin_trgm_ops)
-)
-----
-
-opt expect=GenerateInvertedIndexScans set=(optimizer_use_trigram_similarity_optimization=false)
-SELECT b FROM t136078 WHERE 'abc' % col3_8
-----
-project
- ├── columns: b:2!null
- ├── stable
- └── inverted-filter
-      ├── columns: a:1!null b:2!null
-      ├── inverted expression: /6
-      │    ├── tight: false, unique: false
-      │    └── union spans
-      │         ├── ["  a", "  a"]
-      │         ├── [" ab", " ab"]
-      │         ├── ["abc", "abc"]
-      │         └── ["bc ", "bc "]
-      ├── stable
-      ├── key: (1,2)
-      └── select
-           ├── columns: a:1!null b:2!null col3_8_inverted_key:6!null
-           ├── stable
-           ├── scan t136078@t136078_col3_8_idx,inverted
-           │    ├── columns: a:1!null b:2!null col3_8_inverted_key:6!null
-           │    └── inverted constraint: /6/1/2
-           │         └── spans
-           │              ├── ["  a", "  a"]
-           │              ├── [" ab", " ab"]
-           │              ├── ["abc", "abc"]
-           │              └── ["bc ", "bc "]
-           └── filters
-                └── 'abc' % lower(b:2) [outer=(2), stable]
-
-exec-ddl
-CREATE TABLE t143070 (
-  a STRING,
-  b STRING,
-  c STRING AS (b) VIRTUAL,
-  PRIMARY KEY (a, b),
-  INVERTED INDEX (c gin_trgm_ops)
-)
-----
-
-# Regression test for #143070. The inverted index scan should not produce
-# unneeded PK cols.
-opt expect=GenerateInvertedIndexScans
-SELECT 1 FROM t143070 WHERE c LIKE 'aaa'
-----
-project
- ├── columns: "?column?":7!null
- ├── fd: ()-->(7)
- ├── select
- │    ├── columns: b:2!null
- │    ├── fd: ()-->(2)
- │    ├── scan t143070@t143070_c_idx,inverted
- │    │    ├── columns: b:2!null
- │    │    └── inverted constraint: /6/1/2
- │    │         └── spans: ["aaa", "aaa"]
- │    └── filters
- │         └── b:2 LIKE 'aaa' [outer=(2), constraints=(/2: [/'aaa' - /'aaa']; tight), fd=()-->(2)]
- └── projections
-      └── 1 [as="?column?":7]
-
 
 # --------------------------------------------------
 # GenerateMinimalInvertedIndexScans
@@ -9140,11 +9066,11 @@ inner-join (zigzag pqr@q pqr@r)
 memo expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~18KB, required=[presentation: q:2,r:3])
+memo (optimized, ~17KB, required=[presentation: q:2,r:3])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (zigzag-join G3 pqr@q pqr@r)
  │    └── [presentation: q:2,r:3]
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 30.13
+ │         └── cost: 19.24
  ├── G2: (scan pqr,cols=(2,3))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,3))
@@ -9221,11 +9147,11 @@ inner-join (lookup pqr)
 memo expect=GenerateZigzagJoins
 SELECT q,r,s FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~21KB, required=[presentation: q:2,r:3,s:4])
+memo (optimized, ~20KB, required=[presentation: q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
  │    └── [presentation: q:2,r:3,s:4]
  │         ├── best: (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
- │         └── cost: 40.25
+ │         └── cost: 23.86
  ├── G2: (scan pqr,cols=(2-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2-4))
@@ -9248,7 +9174,7 @@ memo (optimized, ~21KB, required=[presentation: q:2,r:3,s:4])
  ├── G9: (zigzag-join G3 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 30.14
+ │         └── cost: 19.24
  ├── G10: (filters)
  ├── G11: (eq G16 G17)
  ├── G12: (eq G18 G19)
@@ -9286,11 +9212,11 @@ inner-join (zigzag pqr@q pqr@s)
 memo expect=GenerateZigzagJoins
 SELECT q,s FROM pqr WHERE q = 1 AND s = 'foo'
 ----
-memo (optimized, ~15KB, required=[presentation: q:2,s:4])
+memo (optimized, ~14KB, required=[presentation: q:2,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (zigzag-join G3 pqr@q pqr@s)
  │    └── [presentation: q:2,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 30.14
+ │         └── cost: 30.03
  ├── G2: (scan pqr,cols=(2,4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,4))
@@ -9818,11 +9744,11 @@ select
 memo
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 ----
-memo (optimized, ~42KB, required=[presentation: p:1,q:2,r:3,s:4])
+memo (optimized, ~41KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 30.17
+ │         └── cost: 18.17
  ├── G2: (scan pqr,cols=(1-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(1-4))
@@ -9850,7 +9776,7 @@ memo (optimized, ~42KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G11: (zigzag-join G21 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G21 pqr@q pqr@r)
- │         └── cost: 30.14
+ │         └── cost: 19.24
  ├── G12: (filters G16)
  ├── G13: (zigzag-join G5 pqr@r pqr@s)
  │    └── []
@@ -9949,7 +9875,7 @@ memo (optimized, ~12KB, required=[presentation: q:2,t:5])
 memo
 SELECT c FROM zz_redundant WHERE b = 1
 ----
-memo (optimized, ~9KB, required=[presentation: c:3])
+memo (optimized, ~8KB, required=[presentation: c:3])
  ├── G1: (project G2 G3 c)
  │    └── [presentation: c:3]
  │         ├── best: (project G2 G3 c)
@@ -10464,7 +10390,6 @@ inner-join (lookup b)
  │    ├── right fixed columns: [9] = ['\x376300012a0400']
  │    ├── left locking: for-update
  │    ├── right locking: for-update
- │    ├── volatile
  │    └── filters (true)
  └── filters (true)
 
@@ -12038,13 +11963,13 @@ memo (optimized, ~37KB, required=[presentation: a:1] [ordering: +2])
  ├── G8: (union-all G13 G14)
  │    ├── [ordering: +(2|3)]
  │    │    ├── best: (union-all G13 G14="[ordering: +(17|18)]")
- │    │    └── cost: 1107.87
+ │    │    └── cost: 1107.83
  │    ├── [ordering: +1]
  │    │    ├── best: (union-all G13 G14="[ordering: +16]")
- │    │    └── cost: 1107.80
+ │    │    └── cost: 1107.79
  │    └── []
  │         ├── best: (union-all G13 G14)
- │         └── cost: 1107.80
+ │         └── cost: 1107.79
  ├── G9: (aggregations G15 G16)
  ├── G10: (eq G17 G18)
  ├── G11: (or G19 G20)
@@ -12062,7 +11987,7 @@ memo (optimized, ~37KB, required=[presentation: a:1] [ordering: +2])
  ├── G14: (select G28 G29) (select G30 G31)
  │    ├── [ordering: +(17|18)]
  │    │    ├── best: (sort G14)
- │    │    └── cost: 1098.73
+ │    │    └── cost: 1098.70
  │    ├── [ordering: +16]
  │    │    ├── best: (select G28="[ordering: +16]" G29)
  │    │    └── cost: 1098.66

@@ -62,47 +62,6 @@ func toAbsent(from, to NodeVars) rel.Clause {
 	return toAbsentUntyped(from.Target, to.Target)
 }
 
-// TransientPublicPrecedesInitialPublic requires that the transient node
-// is ToTransientPublic and absent before. The other node is targeting ToPublic.
-func TransientPublicPrecedesInitialPublic(transientNode, otherNode NodeVars) rel.Clause {
-	return rel.And(
-		toPublicToTransientPublicUntyped(otherNode.Target, transientNode.Target),
-		transientNode.CurrentStatus(scpb.Status_ABSENT),
-	)
-}
-
-// TransientPublicPrecedesInitialDrop requires that the transient node
-// is ToTransientPublic and absent before. The other node is in ToDrop or
-// ToTransient.
-func TransientPublicPrecedesInitialDrop(transientNode, otherNode NodeVars) rel.Clause {
-	return rel.And(
-		toDropToTransientPublicUntyped(otherNode.Target, transientNode.Target),
-		transientNode.CurrentStatus(scpb.Status_ABSENT),
-	)
-}
-
-// PublicTerminalPrecedesTransientPublic requires the transient node is
-// ToTransientPublic and reached its final state only. The other node
-// is also init its terminal add state.
-func PublicTerminalPrecedesTransientPublic(otherNode, transientNode NodeVars) rel.Clause {
-	return rel.And(
-		toPublicToTransientPublicUntyped(otherNode.Target, transientNode.Target),
-		transientNode.CurrentStatus(scpb.Status_TRANSIENT_PUBLIC),
-		otherNode.CurrentStatus(scpb.Status_PUBLIC),
-	)
-}
-
-// DropTerminalPrecedesTransientPublic requires the transient node is
-// ToTransientPublic and reached its final state only. The other node
-// is also init its terminal drop state.
-func DropTerminalPrecedesTransientPublic(otherNode, transientNode NodeVars) rel.Clause {
-	return rel.And(
-		toDropToTransientPublicUntyped(otherNode.Target, transientNode.Target),
-		transientNode.CurrentStatus(scpb.Status_TRANSIENT_PUBLIC),
-		otherNode.CurrentStatus(scpb.Status_ABSENT),
-	)
-}
-
 // StatusesToAbsent requires that elements have a target of
 // toAbsent and that the current status is fromStatus/toStatus.
 func StatusesToAbsent(
@@ -146,10 +105,6 @@ func JoinOnColumnID(a, b NodeVars, relationIDVar, columnIDVar rel.Var) rel.Claus
 	return joinOnColumnIDUntyped(a.El, b.El, relationIDVar, columnIDVar)
 }
 
-func JoinOnColumnName(a, b NodeVars, relationIDVar, columnNameVar rel.Var) rel.Clause {
-	return joinOnColumnNameUntyped(a.El, b.El, relationIDVar, columnNameVar)
-}
-
 // JoinOnColumnFamilyID joins elements on column ID.
 func JoinOnColumnFamilyID(a, b NodeVars, relationIDVar, columnFamilyIDVar rel.Var) rel.Clause {
 	return joinOnColumnFamilyIDUntyped(a.El, b.El, relationIDVar, columnFamilyIDVar)
@@ -168,18 +123,6 @@ func JoinOnConstraintID(a, b NodeVars, relationIDVar, constraintID rel.Var) rel.
 // JoinOnTriggerID joins elements on trigger ID.
 func JoinOnTriggerID(a, b NodeVars, relationIDVar, triggerID rel.Var) rel.Clause {
 	return joinOnTriggerIDUntyped(a.El, b.El, relationIDVar, triggerID)
-}
-
-// JoinOnPolicyID joins elements on policy ID.
-func JoinOnPolicyID(a, b NodeVars, relationIDVar, policyID rel.Var) rel.Clause {
-	return joinOnPolicyIDUntyped(a.El, b.El, relationIDVar, policyID)
-}
-
-// JoinOnPartitionName joins elements on partition name.
-func JoinOnPartitionName(
-	a, b NodeVars, relationIDVar, indexIDVar, partitionNameVar rel.Var,
-) rel.Clause {
-	return joinOnPartitionNameUntyped(a.El, b.El, relationIDVar, indexIDVar, partitionNameVar)
 }
 
 // ColumnInIndex requires that a column exists within an index.
@@ -203,47 +146,6 @@ func ColumnInSourcePrimaryIndex(
 	return columnInSourcePrimaryIndex(indexColumn.El, index.El, relationIDVar, columnIDVar, indexIDVar)
 }
 
-// IsAlterColumnTypeOp checks if the specified column is undergoing a type alteration.
-// columnIDVar represents the column ID of the new column in the operation.
-// If only the dropped column ID is available, use the alternative function:
-// IsDroppedColumnPartOfAlterColumnTypeOp.
-func IsAlterColumnTypeOp(tableIDVar, columnIDVar rel.Var) rel.Clauses {
-	column := MkNodeVars("column")
-	computeExpression := MkNodeVars("compute-expression")
-	return rel.Clauses{
-		column.Type((*scpb.Column)(nil)),
-		computeExpression.Type((*scpb.ColumnComputeExpression)(nil)),
-		JoinOnColumnID(column, computeExpression, tableIDVar, columnIDVar),
-		computeExpression.El.AttrEq(screl.Usage, scpb.ColumnComputeExpression_ALTER_TYPE_USING),
-		column.JoinTargetNode(),
-		computeExpression.JoinTargetNode(),
-	}
-}
-
-// IsDroppedColumnPartOfAlterColumnTypeOp functions similarly to IsAlterColumnTypeOp
-// but operates using the dropped column ID. It checks for a specific compute expression
-// applied to the new column. This requires joining the old column with the new column
-// by matching on the column name.
-func IsDroppedColumnPartOfAlterColumnTypeOp(tableIDVar, oldColumnIDVar rel.Var) rel.Clauses {
-	oldColumnName := MkNodeVars("old-column-name")
-	newColumnName := MkNodeVars("new-column-name")
-	computeExpression := MkNodeVars("compute-expression")
-	return rel.Clauses{
-		oldColumnName.Type((*scpb.ColumnName)(nil)),
-		newColumnName.Type((*scpb.ColumnName)(nil)),
-		JoinOnColumnName(oldColumnName, newColumnName, tableIDVar, "column-name"),
-		oldColumnName.El.AttrEqVar(screl.ColumnID, oldColumnIDVar),
-		oldColumnName.TargetStatus(scpb.ToAbsent),
-		newColumnName.TargetStatus(scpb.ToPublic),
-		computeExpression.Type((*scpb.ColumnComputeExpression)(nil)),
-		JoinOnColumnID(newColumnName, computeExpression, tableIDVar, "new-column-id"),
-		computeExpression.El.AttrEq(screl.Usage, scpb.ColumnComputeExpression_ALTER_TYPE_USING),
-		oldColumnName.JoinTargetNode(),
-		newColumnName.JoinTargetNode(),
-		computeExpression.JoinTargetNode(),
-	}
-}
-
 // IsPotentialSecondaryIndexSwap determines if a secondary index recreate is
 // occurring because of a primary key alter.
 func IsPotentialSecondaryIndexSwap(indexIdVar rel.Var, tableIDVar rel.Var) rel.Clauses {
@@ -256,7 +158,7 @@ func IsPotentialSecondaryIndexSwap(indexIdVar rel.Var, tableIDVar rel.Var) rel.C
 		oldIndex.Type((*scpb.SecondaryIndex)(nil)),
 		newIndex.Type((*scpb.SecondaryIndex)(nil)),
 		oldIndex.TargetStatus(scpb.ToAbsent),
-		newIndex.TargetStatus(scpb.ToPublic, scpb.TransientAbsent),
+		newIndex.TargetStatus(scpb.ToPublic, scpb.Transient),
 		JoinOnDescID(oldIndex, newIndex, tableIDVar),
 		newIndex.El.AttrEqVar(screl.IndexID, indexIdVar),
 		JoinOn(oldIndex,
@@ -275,8 +177,8 @@ var (
 		"target1", "target2",
 		func(target1 rel.Var, target2 rel.Var) rel.Clauses {
 			return rel.Clauses{
-				target1.AttrIn(screl.TargetStatus, scpb.Status_PUBLIC, scpb.Status_TRANSIENT_ABSENT, scpb.Status_TRANSIENT_PUBLIC),
-				target2.AttrIn(screl.TargetStatus, scpb.Status_PUBLIC, scpb.Status_TRANSIENT_ABSENT, scpb.Status_TRANSIENT_PUBLIC),
+				target1.AttrIn(screl.TargetStatus, scpb.Status_PUBLIC, scpb.Status_TRANSIENT_ABSENT),
+				target2.AttrIn(screl.TargetStatus, scpb.Status_PUBLIC, scpb.Status_TRANSIENT_ABSENT),
 			}
 		})
 
@@ -287,30 +189,6 @@ var (
 			return rel.Clauses{
 				target1.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 				target2.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			}
-		})
-
-	// toDropToTransientPublicUntyped makes sure target1 is targeting
-	// DROP/TRANSIENT_DROP and target2 is targeting TRANSIENT_PUBLIC.
-	toDropToTransientPublicUntyped = screl.Schema.Def2(
-		"toDropToTransientPublicUntyped",
-		"target1", "target2",
-		func(target1 rel.Var, target2 rel.Var) rel.Clauses {
-			return rel.Clauses{
-				target1.AttrIn(screl.TargetStatus, scpb.Status_ABSENT, scpb.Status_TRANSIENT_ABSENT),
-				target2.AttrEq(screl.TargetStatus, scpb.Status_TRANSIENT_PUBLIC),
-			}
-		})
-
-	// toPublicToTransientPublicUntyped makes sure target1 is targeting
-	// PUBLIC and target2 is targeting TRANSIENT_PUBLIC.
-	toPublicToTransientPublicUntyped = screl.Schema.Def2(
-		"toPublicToTransientPublicUntyped",
-		"target1", "target2",
-		func(target1 rel.Var, target2 rel.Var) rel.Clauses {
-			return rel.Clauses{
-				target1.AttrIn(screl.TargetStatus, scpb.Status_PUBLIC),
-				target2.AttrEq(screl.TargetStatus, scpb.Status_TRANSIENT_PUBLIC),
 			}
 		})
 
@@ -364,18 +242,6 @@ var (
 			}
 		},
 	)
-
-	joinOnColumnNameUntyped = screl.Schema.Def4(
-		"joinOnColumnName", "a", "b", "desc-id", "column-name", func(
-			a, b, descID, columnName rel.Var,
-		) rel.Clauses {
-			return rel.Clauses{
-				JoinOnDescIDUntyped(a, b, descID),
-				columnName.Entities(screl.Name, a, b),
-			}
-		},
-	)
-
 	joinOnColumnFamilyIDUntyped = screl.Schema.Def4(
 		"joinOnColumnFamilyID", "a", "b", "desc-id", "family-id", func(
 			a, b, descID, familyID rel.Var,
@@ -403,27 +269,6 @@ var (
 			return rel.Clauses{
 				JoinOnDescIDUntyped(a, b, descID),
 				triggerID.Entities(screl.TriggerID, a, b),
-			}
-		},
-	)
-	joinOnPolicyIDUntyped = screl.Schema.Def4(
-		"joinOnPolicyID", "a", "b", "desc-id", "policy-id", func(
-			a, b, descID, policyID rel.Var,
-		) rel.Clauses {
-			return rel.Clauses{
-				JoinOnDescIDUntyped(a, b, descID),
-				policyID.Entities(screl.PolicyID, a, b),
-			}
-		},
-	)
-	joinOnPartitionNameUntyped = screl.Schema.Def5(
-		"joinOnPartitionName", "a", "b", "desc-id", "index-id", "partition-name", func(
-			a, b, descID, indexID, partitionName rel.Var,
-		) rel.Clauses {
-			return rel.Clauses{
-				JoinOnDescIDUntyped(a, b, descID),
-				indexID.Entities(screl.IndexID, a, b),
-				partitionName.Entities(screl.PartitionName, a, b),
 			}
 		},
 	)
@@ -484,16 +329,6 @@ var (
 		"table-id", "index-id", func(a, b rel.Var) rel.Clauses {
 			return IsPotentialSecondaryIndexSwap(b, a)
 		})
-
-	// IsNotAlterColumnTypeOp determines if no column alteration in progress. The column
-	// passed in must for a new column.
-	IsNotAlterColumnTypeOp = screl.Schema.DefNotJoin2("no column type alteration in progress",
-		"table-id", "column-id", func(t, c rel.Var) rel.Clauses {
-			return IsAlterColumnTypeOp(t, c)
-		})
-
-	IsNotDroppedColumnPartOfAlterColumnTypeOp = screl.Schema.DefNotJoin2("dropped column is not part of column type operation",
-		"table-id", "old-column-id", func(t, c rel.Var) rel.Clauses { return IsDroppedColumnPartOfAlterColumnTypeOp(t, c) })
 )
 
 // ForEachElementInActiveVersion executes a function for each element supported within
@@ -533,7 +368,7 @@ func Not(predicate elementTypePredicate) elementTypePredicate {
 }
 
 // RegisterDepRuleForDrop is a convenience function which calls
-// RegisterDepRule with the cross-product of (ToAbsent,TransientAbsent)^2 Target
+// RegisterDepRule with the cross-product of (ToAbsent,Transient)^2 Target
 // states, which can't easily be composed.
 func RegisterDepRuleForDrop(
 	r *Registry,
@@ -570,7 +405,7 @@ func RegisterDepRuleForDrop(
 	r.RegisterDepRule(ruleName, kind, from, to, func(from, to NodeVars) rel.Clauses {
 		return append(
 			fn(from, to),
-			from.TargetStatus(scpb.TransientAbsent),
+			from.TargetStatus(scpb.Transient),
 			from.CurrentStatus(transientFromStatus),
 			to.TargetStatus(scpb.ToAbsent),
 			to.CurrentStatus(toStatus),
@@ -582,7 +417,7 @@ func RegisterDepRuleForDrop(
 			fn(from, to),
 			from.TargetStatus(scpb.ToAbsent),
 			from.CurrentStatus(fromStatus),
-			to.TargetStatus(scpb.TransientAbsent),
+			to.TargetStatus(scpb.Transient),
 			to.CurrentStatus(transientToStatus),
 		)
 	})

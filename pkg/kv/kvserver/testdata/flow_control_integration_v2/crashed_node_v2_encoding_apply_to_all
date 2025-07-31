@@ -1,41 +1,36 @@
 echo
 ----
 ----
--- (Issuing 5x1MiB, 3x replicated writes that are not admitted.)
+-- (Issuing 5x1MiB, 2x replicated writes that are not admitted.)
 
 
--- Flow token metrics from n1 after issuing 5 1MiB 3x replicated writes
--- that are yet to get admitted. We see 5*1MiB*3=15MiB deductions of
+-- Flow token metrics from n1 after issuing 5 1MiB 2x replicated writes
+-- that are yet to get admitted. We see 5*1MiB*2=10MiB deductions of
 -- {regular,elastic} tokens with no corresponding returns.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
-  kvflowcontrol.tokens.eval.elastic.available                       | 9.0 MiB  
-  kvflowcontrol.tokens.eval.elastic.deducted                        | 15 MiB   
+  kvflowcontrol.tokens.eval.elastic.available                       | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 10 MiB   
   kvflowcontrol.tokens.eval.elastic.returned                        | 0 B      
   kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
   kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
-  kvflowcontrol.tokens.eval.regular.available                       | 33 MiB   
-  kvflowcontrol.tokens.eval.regular.deducted                        | 15 MiB   
+  kvflowcontrol.tokens.eval.regular.available                       | 22 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 10 MiB   
   kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
   kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
   kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
-  kvflowcontrol.tokens.send.elastic.available                       | 9.0 MiB  
-  kvflowcontrol.tokens.send.elastic.deducted                        | 15 MiB   
+  kvflowcontrol.tokens.send.elastic.available                       | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted                        | 10 MiB   
   kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
   kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
   kvflowcontrol.tokens.send.elastic.returned                        | 0 B      
   kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
   kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
-  kvflowcontrol.tokens.send.regular.available                       | 33 MiB   
-  kvflowcontrol.tokens.send.regular.deducted                        | 15 MiB   
+  kvflowcontrol.tokens.send.regular.available                       | 22 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 10 MiB   
   kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
   kvflowcontrol.tokens.send.regular.returned                        | 0 B      
   kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
@@ -43,20 +38,13 @@ ORDER BY
 
 
 -- Observe the per-stream tracked tokens on n1, before n2 is crashed.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  store_id,
-  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-ORDER BY
-  range_id, store_id;
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  a        | 1        | 5.0 MiB               
-  a        | 2        | 5.0 MiB               
-  a        | 3        | 5.0 MiB               
+  70       | 1        | 5.0 MiB               
+  70       | 2        | 5.0 MiB               
 
 
 -- (Crashing n2)
@@ -64,52 +52,40 @@ ORDER BY
 
 -- Observe the per-stream tracked tokens on n1, after n2 crashed. We're no
 -- longer tracking the 5MiB held by n2.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  store_id,
-  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-ORDER BY
-  range_id, store_id;
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  a        | 1        | 5.0 MiB               
-  a        | 3        | 5.0 MiB               
+  70       | 1        | 5.0 MiB               
 
 
 -- Flow token metrics from n1 after n2 crashed. Observe that we've returned the
 -- 5MiB previously held by n2.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
-  kvflowcontrol.tokens.eval.elastic.available                       | 14 MiB   
-  kvflowcontrol.tokens.eval.elastic.deducted                        | 15 MiB   
+  kvflowcontrol.tokens.eval.elastic.available                       | 11 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 10 MiB   
   kvflowcontrol.tokens.eval.elastic.returned                        | 5.0 MiB  
   kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 5.0 MiB  
   kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
-  kvflowcontrol.tokens.eval.regular.available                       | 38 MiB   
-  kvflowcontrol.tokens.eval.regular.deducted                        | 15 MiB   
+  kvflowcontrol.tokens.eval.regular.available                       | 27 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 10 MiB   
   kvflowcontrol.tokens.eval.regular.returned                        | 5.0 MiB  
   kvflowcontrol.tokens.eval.regular.returned.disconnect             | 5.0 MiB  
   kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
-  kvflowcontrol.tokens.send.elastic.available                       | 14 MiB   
-  kvflowcontrol.tokens.send.elastic.deducted                        | 15 MiB   
+  kvflowcontrol.tokens.send.elastic.available                       | 11 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 10 MiB   
   kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
   kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
   kvflowcontrol.tokens.send.elastic.returned                        | 5.0 MiB  
   kvflowcontrol.tokens.send.elastic.returned.disconnect             | 5.0 MiB  
   kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
-  kvflowcontrol.tokens.send.regular.available                       | 38 MiB   
-  kvflowcontrol.tokens.send.regular.deducted                        | 15 MiB   
+  kvflowcontrol.tokens.send.regular.available                       | 27 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 10 MiB   
   kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
   kvflowcontrol.tokens.send.regular.returned                        | 5.0 MiB  
   kvflowcontrol.tokens.send.regular.returned.disconnect             | 5.0 MiB  

@@ -31,7 +31,6 @@ go_library(
         "//pkg/sql/privilege",  # keep
         "//pkg/sql/scanner",
         "//pkg/sql/sem/builtins/builtinsregistry",
-        "//pkg/sql/sem/idxtype",  # keep
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",  # keep
         "//pkg/sql/sem/tree/treecmp",  # keep
@@ -55,16 +54,11 @@ go_test(
         "parse_internal_test.go",
         "parse_test.go",
         "scanner_test.go",
-        "unused_keywords_test.go",
         ":gen-helpmap-test",  # keep
     ],
-    data = glob(["testdata/**"]) + [
-        "sql.y",
-        "unused_keywords.sh",
-    ],
+    data = glob(["testdata/**"]),
     embed = [":parser"],
     deps = [
-        "//pkg/build/bazel",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/randgen",

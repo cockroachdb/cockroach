@@ -33,7 +33,6 @@ go_test(
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/roachpb",
-        "//pkg/util/syncutil",
         "@com_github_stretchr_testify//require",
     ],
 )

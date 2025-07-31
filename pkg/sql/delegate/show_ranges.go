@@ -707,10 +707,6 @@ all_span_stats AS (
 			if colinfo.Ranges[i].Name == "lease_holder" {
 				continue
 			}
-			// Skip the errors column; it's used for internal purposes.
-			if colinfo.Ranges[i].Name == "errors" {
-				continue
-			}
 			fmt.Fprintf(&buf, ",\n  %s", tree.NameString(colinfo.Ranges[i].Name))
 		}
 		buf.WriteString(",\n  span_stats")

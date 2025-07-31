@@ -27,14 +27,14 @@ type StatusInput struct {
 	MinValidObservedTs hlc.ClockTimestamp
 
 	// Information about raft.
-	RaftStatus raft.BasicStatus
+	RaftStatus raft.LeadSupportStatus
 
 	// The current time and the time of the request to evaluate the lease for.
 	Now       hlc.ClockTimestamp
 	RequestTs hlc.Timestamp
 
 	// The lease to evaluate.
-	Lease *roachpb.Lease
+	Lease roachpb.Lease
 }
 
 // Status returns a lease status. The lease status is linked to the desire to
@@ -100,7 +100,7 @@ type StatusInput struct {
 func Status(ctx context.Context, nl NodeLiveness, i StatusInput) kvserverpb.LeaseStatus {
 	lease := i.Lease
 	status := kvserverpb.LeaseStatus{
-		Lease: *lease,
+		Lease: lease,
 		// NOTE: it would not be correct to accept either only the request time
 		// or only the current time in this method, we need both. We need the
 		// request time to determine whether the current lease can serve a given

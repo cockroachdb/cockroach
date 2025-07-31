@@ -134,24 +134,6 @@ define MutationPrivate {
     # the index.
     PartialIndexDelCols OptionalColList
 
-    # VectorIndexDelPartitionCols are columns from the Input expression
-    # containing the keys for the partitions that the deleted or updated rows
-    # should be removed from. The length is always equal to the number of vector
-    # indexes on the table.
-    VectorIndexDelPartitionCols OptionalColList
-
-    # VectorIndexPutPartitionCols are columns from the Input expression
-    # containing the keys for the partitions that the inserted or updated rows
-    # should be added to. The length is always equal to the number of vector
-    # indexes on the table.
-    VectorIndexPutPartitionCols OptionalColList
-
-    # VectorIndexPutQuantizedVecCols are columns from the Input expression
-    # containing the quantized and encoded vectors that should be inserted into
-    # the index. The length is always equal to the number of vector indexes on
-    # the table.
-    VectorIndexPutQuantizedVecCols OptionalColList
-
     # CanaryCol is used only with the Upsert operator. It identifies the column
     # that the execution engine uses to decide whether to insert or to update.
     # If the canary column value is null for a particular input row, then a new
@@ -207,10 +189,6 @@ define MutationPrivate {
 
     # AfterTriggers stores metadata necessary for building AFTER triggers.
     AfterTriggers AfterTriggers
-
-    # VectorInsert indicates that the mutation is an insert with a specialized
-    # vectorized implementation used for Copy statements.
-    VectorInsert bool
 }
 
 # Update evaluates a relational input expression that fetches existing rows from
@@ -403,7 +381,7 @@ define UniqueChecksItemPrivate {
 # The Lock operator does not necessarily have to be at the top of a plan. It
 # could appear within a subtree of the plan, and in this case acts as an
 # optimization barrier to ensure the correct rows are locked.
-[Relational]
+[Relational, Mutation]
 define Lock {
     Input RelExpr
     _ LockPrivate

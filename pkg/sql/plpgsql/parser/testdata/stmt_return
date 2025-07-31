@@ -141,6 +141,84 @@ END;
 error
 DECLARE
 BEGIN
+  RETURN QUERY SELECT 1 + 1;
+END
+----
+----
+at or near "query": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  RETURN QUERY SELECT 1 + 1;
+         ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+error
+DECLARE
+BEGIN
+  RETURN QUERY EXECUTE a dynamic command;
+END
+----
+----
+at or near "query": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  RETURN QUERY EXECUTE a dynamic command;
+         ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+error
+DECLARE
+BEGIN
+  RETURN NEXT 1 + 1;
+END
+----
+----
+at or near "next": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  RETURN NEXT 1 + 1;
+         ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+error
+DECLARE
+BEGIN
   RETURN (NULL;
 END
 ----
@@ -185,12 +263,12 @@ BEGIN
   RETURN 1, 'string';
 END
 ----
-at or near "string": syntax error: query returned 2 columns
+at or near ";": syntax error: query returned 2 columns
 DETAIL: source SQL:
 DECLARE
 BEGIN
   RETURN 1, 'string';
-            ^
+                    ^
 
 error
 DECLARE
@@ -198,9 +276,9 @@ BEGIN
   RETURN 1, (2, 3, 4, 5);
 END
 ----
-at or near ")": syntax error: query returned 2 columns
+at or near ";": syntax error: query returned 2 columns
 DETAIL: source SQL:
 DECLARE
 BEGIN
   RETURN 1, (2, 3, 4, 5);
-                       ^
+                        ^

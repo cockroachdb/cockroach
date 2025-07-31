@@ -24,8 +24,8 @@ enum RegistryVersion {
 // EnvType determines which rocksdb::Env is used and for what purpose.
 enum EnvType {
   // The default Env when no encryption is used.
-  // File using Plain are not recorded in the file registry.
-  Plain = 0;
+  // File using Plaintext are not recorded in the file registry.
+  Plaintext = 0;
   // The Env using store-level keys.
   // Used only to read/write the data key registry.
   Store = 1;

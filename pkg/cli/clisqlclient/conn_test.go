@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 )
@@ -33,7 +33,7 @@ func TestConnRecover(t *testing.T) {
 	defer c.Cleanup()
 	ctx := context.Background()
 
-	url, cleanup := pgurlutils.PGUrl(t, c.Server.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.Server.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
@@ -103,7 +103,7 @@ func simulateServerRestart(
 	t *testing.T, c *cli.TestCLI, p cli.TestCLIParams, conn clisqlclient.Conn,
 ) func() {
 	c.RestartServer(p)
-	url2, cleanup2 := pgurlutils.PGUrl(t, c.Server.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	url2, cleanup2 := sqlutils.PGUrl(t, c.Server.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	conn.SetURL(url2.String())
 	return cleanup2
 }
@@ -116,7 +116,7 @@ func TestTransactionRetry(t *testing.T) {
 	defer c.Cleanup()
 	ctx := context.Background()
 
-	url, cleanup := pgurlutils.PGUrl(t, c.Server.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, c.Server.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())

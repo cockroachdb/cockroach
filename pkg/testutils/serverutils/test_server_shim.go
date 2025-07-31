@@ -22,14 +22,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,8 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
-
-const defaultTestTenantName = roachpb.TenantName("test-tenant")
 
 // defaultTestTenantMessage is a message that is printed when a test is run
 // under cluster virtualization. This is useful for debugging test failures.
@@ -205,23 +201,6 @@ func testTenantDecisionFromEnvironment(
 	return baseArg, false
 }
 
-var globalDefaultDRPCOptionOverride struct {
-	isSet bool
-	value base.DefaultTestDRPCOption
-}
-
-// TestingGlobalDRPCOption sets the package-level DefaultTestDRPCOption.
-//
-// Note: This override will be superseded by any more specific options provided
-// when starting the server or cluster.
-func TestingGlobalDRPCOption(v base.DefaultTestDRPCOption) func() {
-	globalDefaultDRPCOptionOverride.isSet = true
-	globalDefaultDRPCOptionOverride.value = v
-	return func() {
-		globalDefaultDRPCOptionOverride.isSet = false
-	}
-}
-
 // globalDefaultSelectionOverride is used when an entire package needs
 // to override the probabilistic behavior.
 var globalDefaultSelectionOverride struct {
@@ -271,14 +250,10 @@ type TestFataler interface {
 // The first argument is optional. If non-nil; it is used for logging
 // server configuration messages.
 func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInterface, error) {
-	ctx := context.Background()
 	allowAdditionalTenants := params.DefaultTestTenant.AllowAdditionalTenants()
-
 	// Update the flags with the actual decision as to whether we should
 	// start the service for a default test tenant.
 	params.DefaultTestTenant = ShouldStartDefaultTestTenant(t, params.DefaultTestTenant)
-
-	TryEnableDRPCSetting(ctx, t, &params)
 
 	s, err := NewServer(params)
 	if err != nil {
@@ -291,6 +266,8 @@ func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInter
 			w.loggerFn = t.Logf
 		}
 	}
+
+	ctx := context.Background()
 
 	if err := s.Start(ctx); err != nil {
 		return nil, err
@@ -312,24 +289,6 @@ func StartServerOnly(t TestFataler, params base.TestServerArgs) TestServerInterf
 		t.Fatal(err)
 	}
 	return s
-}
-
-var ConfigureSlimTestServer func(params base.TestServerArgs) base.TestServerArgs
-
-func StartSlimServerOnly(
-	t TestFataler, params base.TestServerArgs, slimOpts ...base.SlimServerOption,
-) TestServerInterface {
-	params.SlimServerConfig(slimOpts...)
-	return StartServerOnly(t, params)
-}
-
-func StartSlimServer(
-	t TestFataler, params base.TestServerArgs, slimOpts ...base.SlimServerOption,
-) (TestServerInterface, *gosql.DB, *kv.DB) {
-	s := StartSlimServerOnly(t, params, slimOpts...)
-	goDB := s.ApplicationLayer().SQLConn(t, DBName(params.UseDatabase))
-	kvDB := s.ApplicationLayer().DB()
-	return s, goDB, kvDB
 }
 
 // StartServer creates and starts a test server.
@@ -360,10 +319,6 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 		return nil, errors.AssertionFailedf("programming error: DefaultTestTenant does not contain a decision\n(maybe call ShouldStartDefaultTestTenant?)")
 	}
 
-	if params.DefaultTenantName == "" {
-		params.DefaultTenantName = defaultTestTenantName
-	}
-
 	srv, err := srvFactoryImpl.New(params)
 	if err != nil {
 		return nil, err
@@ -377,7 +332,7 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 func OpenDBConnE(
 	sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) (*gosql.DB, error) {
-	pgURL, cleanupGoDB, err := pgurlutils.PGUrlE(
+	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
 		sqlAddr, "StartServer" /* prefix */, url.User(username.RootUser))
 	if err != nil {
 		return nil, err
@@ -532,37 +487,11 @@ func WaitForTenantCapabilities(
 	t TestFataler,
 	s TestServerInterface,
 	tenID roachpb.TenantID,
-	targetCaps map[tenantcapabilitiespb.ID]string,
+	targetCaps map[tenantcapabilities.ID]string,
 	errPrefix string,
 ) {
 	err := s.TenantController().WaitForTenantCapabilities(context.Background(), tenID, targetCaps, errPrefix)
 	if err != nil {
 		t.Fatal(err)
 	}
-}
-
-// TryEnableDRPCSetting determines whether to enable the DRPC cluster setting
-// based on the `TestServerArgs.DefaultDRPCOption` and updates the
-// `TestServerArgs.Settings` based on that.
-func TryEnableDRPCSetting(ctx context.Context, t TestLogger, args *base.TestServerArgs) {
-	option := args.DefaultDRPCOption
-	if option == base.TestDRPCDisabled && globalDefaultDRPCOptionOverride.isSet {
-		option = globalDefaultDRPCOptionOverride.value
-	}
-	enableDRPC := false
-	switch option {
-	case base.TestDRPCEnabled:
-		enableDRPC = true
-	case base.TestDRPCEnabledRandomly:
-		rng, _ := randutil.NewTestRand()
-		enableDRPC = rng.Intn(2) == 0
-	}
-	if !enableDRPC {
-		return
-	}
-
-	if args.Settings == nil {
-		args.Settings = cluster.MakeClusterSettings()
-	}
-	rpc.ExperimentalDRPCEnabled.Override(ctx, &args.Settings.SV, true)
 }

@@ -6,32 +6,28 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/version"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestClusterNodes(t *testing.T) {
 	c := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNode())}
-	c2 := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(0))}
-	c3 := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(1))}
-	c4 := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(4))}
 	opts := func(opts ...option.Option) []option.Option {
 		return opts
 	}
@@ -50,12 +46,6 @@ func TestClusterNodes(t *testing.T) {
 		{opts(c.Node(2), c.Node(3), c.Node(4)), ":2-4"},
 		{opts(c.CRDBNodes()), ":1-9"},
 		{opts(c.WorkloadNode()), ":10"},
-		{opts(c2.CRDBNodes()), ":1-10"},
-		{opts(c2.WorkloadNode()), ""},
-		{opts(c3.CRDBNodes()), ":1-9"},
-		{opts(c3.WorkloadNode()), ":10"},
-		{opts(c4.CRDBNodes()), ":1-6"},
-		{opts(c4.WorkloadNode()), ":7-10"},
 	}
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -67,46 +57,9 @@ func TestClusterNodes(t *testing.T) {
 	}
 }
 
-func TestSeededRandGroups(t *testing.T) {
-	rng := rand.New(rand.NewSource(1))
-	testCases := []struct {
-		numNodes  int
-		numGroups int
-		expected  []string
-	}{
-		{numNodes: 1, numGroups: 1, expected: []string{":1"}},
-		{numNodes: 10, numGroups: 1, expected: []string{":1-10"}},
-		{numNodes: 10, numGroups: 2, expected: []string{":1,3,8,10", ":2,4-7,9"}},
-		{numNodes: 3, numGroups: 3, expected: []string{":3", ":2", ":1"}},
-		{numNodes: 5, numGroups: 3, expected: []string{":2", ":1,3-4", ":5"}},
-	}
-	for _, tc := range testCases {
-		t.Run("", func(t *testing.T) {
-			c := &clusterImpl{spec: spec.MakeClusterSpec(tc.numNodes)}
-			nodes := c.All()
-			groups, err := nodes.SeededRandGroups(rng, tc.numGroups)
-			require.NoError(t, err)
-			for i, group := range groups {
-				nodeList := c.MakeNodes(group)
-				if tc.expected[i] != nodeList {
-					t.Errorf("expected %s, but found %s", tc.expected[i], nodeList)
-				}
-			}
-		})
-	}
-}
-
 type testWrapper struct {
 	*testing.T
 	l *logger.Logger
-}
-
-func (t testWrapper) GetRunId() string {
-	return "mock-run-id"
-}
-
-func (t testWrapper) Owner() string {
-	return "mock-owner"
 }
 
 func (t testWrapper) ExportOpenmetrics() bool {
@@ -130,7 +83,7 @@ func (t testWrapper) StandardCockroach() string {
 }
 
 func (t testWrapper) RuntimeAssertionsCockroach() string {
-	return "./dummy-path/to/cockroach-ea"
+	return "./dummy-path/to/cockroach-short"
 }
 
 func (t testWrapper) DeprecatedWorkload() string {
@@ -168,27 +121,7 @@ func (t testWrapper) IsDebug() bool {
 	return false
 }
 
-func (t testWrapper) GoWithCancel(_ task.Func, _ ...task.Option) context.CancelFunc {
-	panic("implement me")
-}
-
-func (t testWrapper) Go(_ task.Func, _ ...task.Option) {
-	panic("implement me")
-}
-
-func (t testWrapper) NewGroup(_ ...task.Option) task.Group {
-	panic("implement me")
-}
-
-func (t testWrapper) NewErrorGroup(_ ...task.Option) task.ErrorGroup {
-	panic("implement me")
-}
-
-func (t testWrapper) Monitor() test.Monitor {
-	panic("implement me")
-}
-
-var _ test.Test = testWrapper{}
+var _ test2.Test = testWrapper{}
 
 // ArtifactsDir is part of the test.Test interface.
 func (t testWrapper) ArtifactsDir() string {
@@ -643,134 +576,6 @@ func TestAzureMachineType(t *testing.T) {
 	require.Error(t, err2)
 }
 
-func TestIBMMachineType(t *testing.T) {
-	testCases := []struct {
-		name            string
-		cpus            int
-		mem             spec.MemPerCPU
-		arch            vm.CPUArch
-		expectedMachine string
-		expectedArch    vm.CPUArch
-		expectedError   string
-	}{}
-
-	// Helper function to generate the expected machine type string
-	ibmMachineType := func(series string, cpus int, ramRatio int) string {
-		return fmt.Sprintf("%s-%dx%d", series, cpus, cpus*ramRatio)
-	}
-
-	// IBM Z only supports s390x architecture
-	arch := vm.ArchS390x
-
-	// Add test cases for each memory configuration
-	addTestCases := func(mem spec.MemPerCPU) {
-		var series string
-		var ramRatio int
-
-		switch mem {
-		case spec.Auto, spec.Standard:
-			series = "bz2" // balanced
-			ramRatio = 4
-		case spec.High:
-			series = "mz2" // memory optimized
-			ramRatio = 8
-		case spec.Low:
-			series = "cz2" // compute optimized
-			ramRatio = 2
-		}
-
-		// IBM Z only supports 2, 4, 8, or 16 CPUs
-		for _, cpus := range []int{2, 4, 8, 16} {
-			testName := fmt.Sprintf("valid_%dcpu_%s", cpus, mem)
-			testCases = append(testCases, struct {
-				name            string
-				cpus            int
-				mem             spec.MemPerCPU
-				arch            vm.CPUArch
-				expectedMachine string
-				expectedArch    vm.CPUArch
-				expectedError   string
-			}{
-				name:            testName,
-				cpus:            cpus,
-				mem:             mem,
-				arch:            arch,
-				expectedMachine: ibmMachineType(series, cpus, ramRatio),
-				expectedArch:    arch,
-				expectedError:   "",
-			})
-		}
-
-		// Add test cases for unsupported CPU counts
-		invalidCPUs := []int{1, 6, 10, 32, 96, 128}
-		for _, cpus := range invalidCPUs {
-			testName := fmt.Sprintf("invalid_%dcpu_%s", cpus, mem)
-			testCases = append(testCases, struct {
-				name            string
-				cpus            int
-				mem             spec.MemPerCPU
-				arch            vm.CPUArch
-				expectedMachine string
-				expectedArch    vm.CPUArch
-				expectedError   string
-			}{
-				name:            testName,
-				cpus:            cpus,
-				mem:             mem,
-				arch:            arch,
-				expectedMachine: "",
-				expectedArch:    arch,
-				expectedError:   fmt.Sprintf("invalid number of cpus %d for IBM", cpus),
-			})
-		}
-	}
-
-	// Add test cases for each memory configuration
-	for _, mem := range []spec.MemPerCPU{spec.Auto, spec.Standard, spec.High, spec.Low} {
-		addTestCases(mem)
-	}
-
-	// Add test cases for unsupported architectures
-	for _, invalidArch := range []vm.CPUArch{vm.ArchAMD64, vm.ArchARM64, vm.ArchFIPS} {
-		testName := fmt.Sprintf("invalid_arch_%s", invalidArch)
-		testCases = append(testCases, struct {
-			name            string
-			cpus            int
-			mem             spec.MemPerCPU
-			arch            vm.CPUArch
-			expectedMachine string
-			expectedArch    vm.CPUArch
-			expectedError   string
-		}{
-			name:            testName,
-			cpus:            4,
-			mem:             spec.Auto,
-			arch:            invalidArch,
-			expectedMachine: "",
-			expectedArch:    invalidArch,
-			expectedError:   fmt.Sprintf("invalid architecture %q for IBM", invalidArch),
-		})
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			machineType, selectedArch, err := spec.SelectIBMMachineType(tc.cpus, tc.mem, tc.arch)
-
-			if tc.expectedError != "" {
-				// We expect a specific error
-				require.Error(t, err)
-				require.Equal(t, tc.expectedError, err.Error())
-				require.Equal(t, tc.expectedMachine, machineType)
-				require.Equal(t, tc.expectedArch, selectedArch)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tc.expectedMachine, machineType)
-				require.Equal(t, tc.expectedArch, selectedArch)
-			}
-		})
-	}
-}
-
 func TestMachineTypes(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "cluster_test"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -840,6 +645,21 @@ func TestMachineTypes(t *testing.T) {
 			return out.String()
 		})
 	})
+}
+
+func TestCmdLogFileName(t *testing.T) {
+	ts := time.Date(2000, 1, 1, 15, 4, 12, 0, time.Local)
+
+	const exp = `run_150412.000000000_n1,3-4,9_cockroach-bla-foo-ba`
+	nodes := option.NodeListOption{1, 3, 4, 9}
+	assert.Equal(t,
+		exp,
+		cmdLogFileName(ts, nodes, "./cockroach", "bla", "--foo", "bar"),
+	)
+	assert.Equal(t,
+		exp,
+		cmdLogFileName(ts, nodes, "./cockroach bla --foo bar"),
+	)
 }
 
 func TestVerifyLibraries(t *testing.T) {

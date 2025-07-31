@@ -8,12 +8,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "490e811c644e3cfad4024be91617368a5344515488259c17dfb8ee426662ec25",
-    strip_prefix = "cockroachdb-rules_go-f43cb04",
+    sha256 = "094b2d9b480eb508bd352914a085c5901d0f3c4520833a12b9197394a80619c7",
+    strip_prefix = "cockroachdb-rules_go-548c13b",
     urls = [
-        # cockroachdb/rules_go as of f43cb04354fbc25fb99376248ca74ba7aba2634f
-        # (upstream release-0.53 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-646-gf43cb04.tar.gz",
+        # cockroachdb/rules_go as of 548c13bf30e840418237a12cb5fbd0be391278bd
+        # (upstream release-0.50 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-529-g548c13b.tar.gz",
     ],
 )
 
@@ -167,15 +167,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.24.5.darwin-amd64.tar.gz", "fe734af1e334e3dcf0a56905b7aac464a84520c651deb1d590560ca1cdd1d6d9"),
-        "darwin_arm64": ("go1.24.5.darwin-arm64.tar.gz", "61585ac4a6d3f1154e664e9639b16d3c715d5364a9d5a297ada93a34991cd785"),
-        "linux_amd64": ("go1.24.5.linux-amd64.tar.gz", "65b0631fc8121287cacbfb65ebe65bfa6896336882445ee4577b68378b80b08b"),
-        "linux_arm64": ("go1.24.5.linux-arm64.tar.gz", "de29f7d0591a83d93f587b03008817d0968c0e92c03b17197f782ded9a80f980"),
-        "linux_s390x": ("go1.24.5.linux-s390x.tar.gz", "88cc416c2e9480def4ca2d9a1ef89524a1955a77dba13e1cd70c20a741a5ac9f"),
-        "windows_amd64": ("go1.24.5.windows-amd64.tar.gz", "ee3641b9e28ecd14d0bfaeb7f796548010bedab70a307e59c6acee86eb520b60"),
+        "darwin_amd64": ("go1.22.12.darwin-amd64.tar.gz", "e54faff8dd13db6abf1aab242d08610ec3d129baaa4117b161d241f33a3fd421"),
+        "darwin_arm64": ("go1.22.12.darwin-arm64.tar.gz", "71c44db06d9da3f12dfd086de277b7c1de4d10b9536c41c897ded5ee6095912b"),
+        "linux_amd64": ("go1.22.12.linux-amd64.tar.gz", "62759b3eafe7f87428ecaa1f6160a45b3c3afaaf4624d04d0f414c712dbf06e3"),
+        "linux_arm64": ("go1.22.12.linux-arm64.tar.gz", "8f17f2f914227cc17b23a3d65c83f8b75aaae7c1fcf9b89e05cd89c23a7c224b"),
+        "windows_amd64": ("go1.22.12.windows-amd64.tar.gz", "cebfa2764bc6c29774c13ca76b29561923481bf560625bddc3359a53e21896e0"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250729-211914/{}"],
-    version = "1.24.5",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250728-224751/{}"],
+    version = "1.22.12",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -196,7 +195,6 @@ go_download_sdk(
 go_rules_dependencies()
 
 go_register_toolchains()
-
 go_register_nogo(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
 
 ###############################
@@ -225,12 +223,6 @@ http_archive(
     url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel_features-v0.2.0.tar.gz",
 )
 
-# NOTE: After upgrading this library, run `build/scripts/build-bazel-lib-helpers.sh`.
-# The script will print the path to a directory where the binaries are stored,
-# a directory with a path of the form `aspect-bazel-lib-utils-20250224-115548`.
-# Upload this directory into `gs://public-bazel-artifacts/js`, then update
-# the URL and SHA's in `build/nodejs.bzl`.
-# Do this AFTER, not BEFORE, upgrading the library.
 http_archive(
     name = "aspect_bazel_lib",
     sha256 = "d0529773764ac61184eb3ad3c687fb835df5bee01afedf07f0cf1a45515c96bc",
@@ -336,10 +328,10 @@ load(
 
 http_archive(
     name = "rules_license",
-    sha256 = "26d4021f6898e23b82ef953078389dd49ac2b5618ac564ade4ef87cced147b38",
     urls = [
         "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_license-1.0.0.tar.gz",
     ],
+    sha256 = "26d4021f6898e23b82ef953078389dd49ac2b5618ac564ade4ef87cced147b38",
 )
 
 # keep
@@ -397,7 +389,7 @@ go_repository(
 # org_golang_x_tools handled in DEPS.bzl.
 # org_golang_x_tools_go_vcs handled in DEPS.bzl.
 
-gazelle_dependencies(go_sdk = "go_sdk")
+gazelle_dependencies()
 
 ############################
 # end gazelle dependencies #
@@ -605,6 +597,15 @@ register_toolchains(
 )
 
 http_archive(
+    name = "bazel_gomock",
+    sha256 = "692421b0c5e04ae4bc0bfff42fb1ce8671fe68daee2b8d8ea94657bb1fcddc0a",
+    strip_prefix = "bazel_gomock-fde78c91cf1783cc1e33ba278922ba67a6ee2a84",
+    urls = [
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel_gomock-fde78c91cf1783cc1e33ba278922ba67a6ee2a84.tar.gz",
+    ],
+)
+
+http_archive(
     name = "com_github_cockroachdb_sqllogictest",
     build_file_content = """
 filegroup(
@@ -637,14 +638,6 @@ load("//build/bazelutil:repositories.bzl", "distdir_repositories")
 
 distdir_repositories()
 
-load("//build:pgo.bzl", "pgo_profile")
-
-pgo_profile(
-    name = "pgo_profile",
-    sha256 = "57414977040f9ed887a4e2b0434ca97f0047229928d8456a25acb3e08b4a71f2",
-    url = "https://storage.googleapis.com/cockroach-profiles/20250616172238-909ceb6ada01354d34416f1087fc256a066daa17.pb.gz",
-)
-
 # Download and register the FIPS enabled Go toolchain at the end to avoid toolchain conflicts for gazelle.
 go_download_sdk(
     name = "go_sdk_fips",
@@ -659,8 +652,8 @@ go_download_sdk(
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
     sdks = {
-        "linux_amd64": ("go1.24.5fips.linux-amd64.tar.gz", "85f2fefb498ff4449ba560cf71cb2067e14c504ea91f613cf369f5028a58e034"),
+        "linux_amd64": ("go1.22.12fips.linux-amd64.tar.gz", "501001bad9231bc2b11c83bff79ea5d5f4ce155ccac60518595ab552ed679622"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250729-211914/{}"],
-    version = "1.24.5fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250728-224751/{}"],
+    version = "1.22.12fips",
 )

@@ -117,8 +117,6 @@ package ctxgroup
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -126,12 +124,6 @@ import (
 type Group struct {
 	wrapped *errgroup.Group
 	ctx     context.Context
-	panicMu *recovered
-}
-
-type recovered struct {
-	syncutil.Mutex
-	payload error
 }
 
 // Wait blocks until all function calls from the Go method have returned, then
@@ -145,11 +137,6 @@ func (g Group) Wait() error {
 	}
 	ctxErr := g.ctx.Err()
 	err := g.wrapped.Wait()
-
-	if g.panicMu.payload != nil {
-		panic(g.panicMu.payload)
-	}
-
 	if err != nil {
 		return err
 	}
@@ -162,18 +149,7 @@ func WithContext(ctx context.Context) Group {
 	return Group{
 		wrapped: grp,
 		ctx:     ctx,
-		panicMu: &recovered{},
 	}
-}
-
-// SetLimit limits the number of active goroutines in this group to at most n. A
-// negative value indicates no limit. A limit of zero will prevent any new
-// goroutines from being added. Any subsequent call to the Go method will block
-// until it can add an active goroutine without exceeding the configured limit.
-// The limit must not be modified while any goroutines in the group are active.
-// This delegates to errgroup.Group.SetLimit.
-func (g Group) SetLimit(n int) {
-	g.wrapped.SetLimit(n)
 }
 
 // Go calls the given function in a new goroutine.
@@ -181,21 +157,9 @@ func (g Group) Go(f func() error) {
 	g.wrapped.Go(f)
 }
 
-// GoCtx calls the given function in a new goroutine. If the function passed
-// panics, the shared context is cancelled and then the subsequent call to Wait
-// will panic with the original panic payload wrapped in a Panic error.
-// If multiple tasks in the group panic, their panic errors are combined and
-// thrown as a single panic in Wait().
+// GoCtx calls the given function in a new goroutine.
 func (g Group) GoCtx(f func(ctx context.Context) error) {
-	g.wrapped.Go(func() (err error) {
-		defer func() {
-			if r := recover(); r != nil {
-				err = wrapPanic(1, r)
-				g.panicMu.Lock()
-				defer g.panicMu.Unlock()
-				g.panicMu.payload = errors.CombineErrors(g.panicMu.payload, err)
-			}
-		}()
+	g.wrapped.Go(func() error {
 		return f(g.ctx)
 	})
 }
@@ -221,18 +185,4 @@ func GoAndWait(ctx context.Context, fs ...func(ctx context.Context) error) error
 		}
 	}
 	return group.Wait()
-}
-
-// wrapPanic turns r into an error if it is not one already.
-//
-// TODO(dt): consider raw recovered payload as well.
-//
-// TODO(dt): replace this with logcrash.PanicAsError after moving that to a new
-// standalone pkg (since we cannot depend on `util/log` here) and teaching it to
-// preserve the original payload.
-func wrapPanic(depth int, r interface{}) error {
-	if err, ok := r.(error); ok {
-		return errors.WithStackDepth(err, depth+1)
-	}
-	return errors.NewWithDepthf(depth+1, "panic: %v", r)
 }

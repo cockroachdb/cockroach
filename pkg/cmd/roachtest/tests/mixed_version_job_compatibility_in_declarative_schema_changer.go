@@ -27,15 +27,11 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 	// This test requires us to come back and change the stmts in executeSupportedDDLs to be those
 	// supported in the "previous" major release.
 	r.Add(registry.TestSpec{
-		Name:    "declarative_schema_changer/job-compatibility-mixed-version-V242-V243",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(4),
-		// Disabled on IBM because s390x is only built on master and mixed-version
-		// is impossible to test as of 05/2025.
-		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
-		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
-		Randomized:       true,
+		Name:             "declarative_schema_changer/job-compatibility-mixed-version-V242-V243",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(ctx, t, c)
 		},
@@ -95,7 +91,7 @@ func executeSupportedDDLs(
 	// here because these connnections are managed by the mixedversion
 	// framework, which already closes them at the end of the test.
 	testUtils, err := newCommonTestUtils(
-		ctx, t, c, connectFunc, helper.DefaultService().Descriptor.Nodes,
+		ctx, t, c, connectFunc, helper.DefaultService().Descriptor.Nodes, false, false,
 	)
 	if err != nil {
 		return err

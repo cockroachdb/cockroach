@@ -5,11 +5,7 @@
 
 package iterutil
 
-import (
-	"iter"
-
-	"github.com/cockroachdb/errors"
-)
+import "github.com/cockroachdb/errors"
 
 var errStopIteration = errors.New("stop iteration")
 
@@ -39,42 +35,4 @@ func Map(err error) error {
 		return nil
 	}
 	return err
-}
-
-// Enumerate takes an iter.Seq and returns an iter.Seq2 where the first value
-// is an int counter.
-func Enumerate[E any](seq iter.Seq[E]) iter.Seq2[int, E] {
-	return func(yield func(int, E) bool) {
-		var i int
-		for v := range seq {
-			if !yield(i, v) {
-				return
-			}
-			i++
-		}
-	}
-}
-
-// Keys takes an iter.Seq2 and returns an iter.Seq that iterates over the
-// first value in each pair of values.
-func Keys[K, V any](seq iter.Seq2[K, V]) iter.Seq[K] {
-	return func(yield func(K) bool) {
-		for k := range seq {
-			if !yield(k) {
-				return
-			}
-		}
-	}
-}
-
-// MinFunc returns the minimum element in seq, using cmp to compare elements.
-// If seq has no values, the zero value is returned.
-func MinFunc[E any](seq iter.Seq[E], cmp func(E, E) int) E {
-	var m E
-	for i, v := range Enumerate(seq) {
-		if i == 0 || cmp(v, m) < 0 {
-			m = v
-		}
-	}
-	return m
 }

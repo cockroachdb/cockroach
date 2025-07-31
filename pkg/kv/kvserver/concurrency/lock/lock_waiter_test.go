@@ -49,7 +49,7 @@ func TestWaiterSafeFormat(t *testing.T) {
 		"waiting_txn:6ba7b810 active_waiter:true strength:Exclusive wait_duration:2m15s",
 		redact.Sprint(waiter).Redact())
 	require.EqualValues(t,
-		"waiting_txn:6ba7b810-9dad-11d1-80b4-00c04fd430c8 active_waiter:true strength:Exclusive wait_duration:2m15s",
+		"waiting_txn:‹×› active_waiter:true strength:Exclusive wait_duration:2m15s",
 		redact.Sprintf("%+v", waiter).Redact())
 
 	nonTxnWaiter := &lock.Waiter{

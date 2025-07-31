@@ -128,8 +128,6 @@ func (p *planner) newSchemaChangeBuilderDependencies(statements []string) scbuil
 		p, /* nodesStatusInfo */
 		p, /* regionProvider */
 		p.SemaCtx(),
-		p.EvalContext(),
-		p.execCfg.DefaultZoneConfig,
 	)
 }
 
@@ -208,7 +206,6 @@ func (p *planner) waitForDescriptorSchemaChanges(
 // schemaChangePlanNode is the planNode utilized by the new schema changer to
 // perform all schema changes, unified in the new schema changer.
 type schemaChangePlanNode struct {
-	zeroInputPlanNode
 	sql  string
 	stmt tree.Statement
 	// lastState was the state observed so far while planning for the current

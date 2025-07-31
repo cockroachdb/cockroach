@@ -114,7 +114,7 @@ func newSumOrderedAggAlloc(
 			return &sumIntervalOrderedAggAlloc{aggAllocBase: allocBase}, nil
 		}
 	}
-	return nil, errors.AssertionFailedf("unsupported sum agg type %s", t.Name())
+	return nil, errors.Errorf("unsupported sum agg type %s", t.Name())
 }
 
 type sumInt16OrderedAgg struct {

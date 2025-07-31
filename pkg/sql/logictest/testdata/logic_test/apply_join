@@ -456,7 +456,7 @@ NULL
 
 # Regression test for mixing subqueries in "inner" and "outer" contexts
 # (#66923).
-query error more than one row returned by a subquery used as an expression
+query error unimplemented: apply joins with subqueries in the \"inner\" and \"outer\" contexts are not supported
 VALUES
   (
     (
@@ -476,7 +476,7 @@ VALUES
 
 # Regression tests for not closing the apply join's plan when the physical
 # planning for the main query in that plan fails (#82705, #83368).
-query error pq: could not parse \"\\\\E\" as type time
+query error pq: parse_time\(\): could not parse \"\\\\E\" as type time
 SELECT
   '1 day':::INTERVAL AS col_218767,
   (
@@ -527,7 +527,7 @@ FROM
   )
     AS tab_130094 (col_218765, col_218766);
 
-query error pq: error parsing EWKB: wkb: unknown byte order: 11000000
+query error pq: st_mpointfromwkb\(\): error parsing EWKB: wkb: unknown byte order: 11000000
 WITH
   with_111870 (col_664924) AS (SELECT * FROM (VALUES (true)) AS tab_397795 (col_664924))
 SELECT
@@ -702,7 +702,7 @@ CREATE INDEX on seed (_int8, _float8, _date);
 statement ok
 CREATE INVERTED INDEX on seed (_jsonb);
 
-statement error pgcode 22P02 pq: invalid input syntax for type pg_lsn: \"1\"
+statement error pgcode 22P02 pq: pg_lsn\(\): invalid input syntax for type pg_lsn: \"1\"
 SELECT
   tab378984.crdb_internal_mvcc_timestamp AS "%pcol857759",
   '48 years 7 mons 894 days 13:39:26.674765':::INTERVAL AS col857760,
@@ -735,75 +735,3 @@ WHERE
   )
 ORDER BY tab378983._timestamptz ASC NULLS FIRST
 LIMIT 78:::INT8;
-
-# Test apply joins with subqueries/CTEs in the inner and outer plans.
-subtest inner_outer_subquery
-
-statement ok
-SET testing_optimizer_disable_rule_probability = 1.0;
-
-query ITI rowsort
-WITH foo (bar) AS MATERIALIZED (SELECT 100)
-SELECT * FROM t INNER JOIN LATERAL (
-  SELECT * FROM foo WHERE bar = k*100
-) ON TRUE;
-----
-1  one  100
-
-query ITITI rowsort
-WITH foo AS MATERIALIZED (SELECT 100)
-SELECT * FROM t INNER JOIN LATERAL (
-  SELECT *, (SELECT * FROM foo) FROM u WHERE l = k
-) ON TRUE;
-----
-1  one    1  one    100
-2  two    2  two    100
-3  three  3  three  100
-4  four   4  four   100
-5  five   5  five   100
-
-# Add a few additional subqueries.
-query ITITIII rowsort
-WITH foo AS MATERIALIZED (SELECT 100)
-SELECT *, (SELECT max(m) FROM v)
-FROM t INNER JOIN LATERAL (
-  SELECT *, (SELECT * FROM foo), (SELECT min(m) FROM v) FROM u WHERE l = k
-) ON TRUE;
-----
-1  one    1  one    100  1  5
-2  two    2  two    100  1  5
-3  three  3  three  100  1  5
-4  four   4  four   100  1  5
-5  five   5  five   100  1  5
-
-# Make the nested subquery correlated.
-query ITITIII rowsort
-WITH foo AS MATERIALIZED (SELECT 100)
-SELECT *, (SELECT max(m) FROM v)
-FROM t INNER JOIN LATERAL (
-  SELECT *, (SELECT * FROM foo), (SELECT min(m) + k FROM v) FROM u WHERE l = k
-) ON TRUE;
-----
-1  one    1  one    100  2  5
-2  two    2  two    100  3  5
-3  three  3  three  100  4  5
-4  four   4  four   100  5  5
-5  five   5  five   100  6  5
-
-# Add a CTE to the inner plan. The bound expression is correlated.
-query ITITII rowsort
-WITH foo AS MATERIALIZED (SELECT 100)
-SELECT * FROM t INNER JOIN LATERAL (
-  WITH bar AS (SELECT *, (SELECT * FROM foo) FROM u WHERE l = k) SELECT * FROM bar, foo
-) ON TRUE;
-----
-1  one    1  one    100  100
-2  two    2  two    100  100
-3  three  3  three  100  100
-4  four   4  four   100  100
-5  five   5  five   100  100
-
-statement ok
-RESET testing_optimizer_disable_rule_probability;
-
-subtest end

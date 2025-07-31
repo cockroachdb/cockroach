@@ -116,7 +116,7 @@ func NewLeadOperator(
 				args, &leadDatumWindow{leadBase: base}, argType, mainMemLimit), nil
 		}
 	}
-	return nil, errors.AssertionFailedf("unsupported lead window operator type %s", argType.Name())
+	return nil, errors.Errorf("unsupported lead window operator type %s", argType.Name())
 }
 
 // leadBase extracts common fields and methods of the lead windower

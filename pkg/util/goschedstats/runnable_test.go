@@ -2,8 +2,6 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-//
-//go:build bazel
 
 package goschedstats
 
@@ -35,7 +33,7 @@ func TestNumRunnableGoroutines(t *testing.T) {
 	// running, with the rest waiting.
 	expected := n - runtime.GOMAXPROCS(0) + 1
 	testutils.SucceedsSoon(t, func() error {
-		if n, _ := runtime.NumRunnableGoroutines(); n < expected {
+		if n, _ := numRunnableGoroutines(); n < expected {
 			return fmt.Errorf("only %d runnable goroutines, expected %d", n, expected)
 		}
 		return nil

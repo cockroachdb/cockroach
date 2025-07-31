@@ -10,9 +10,7 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
-	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -77,10 +75,6 @@ type AuthInfo struct {
 	// Subject is the SUBJECT role option. It is used to match the subject
 	// distinguished name in a client certificate.
 	Subject *ldap.DN
-	// ProvisioningSource is the PROVISIONSRC role option. It is used to
-	// identify the source of the user in case a user auto provisioned from an
-	// auth method integration.
-	ProvisioningSource *provisioning.Source
 }
 
 // SettingsCacheKey is the key used for the settingsCache.
@@ -138,11 +132,11 @@ func (a *Cache) GetAuthInfo(
 		if err := txn.Descriptors().MaybeSetReplicationSafeTS(ctx, txn.KV()); err != nil {
 			return err
 		}
-		usersTableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.UsersTableID)
+		_, usersTableDesc, err = descs.PrefixAndTable(ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), UsersTableName)
 		if err != nil {
 			return err
 		}
-		roleOptionsTableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleOptionsTableID)
+		_, roleOptionsTableDesc, err = descs.PrefixAndTable(ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), RoleOptionsTableName)
 		return err
 	})
 	if err != nil {
@@ -167,26 +161,23 @@ func (a *Cache) GetAuthInfo(
 	val, err := a.loadValueOutsideOfCache(
 		ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Normalized(), usersTableVersion, roleOptionsTableVersion),
 		func(loadCtx context.Context) (interface{}, error) {
-			authInfo, err := readFromSystemTables(loadCtx, db, username)
-			if err != nil {
-				return AuthInfo{}, err
-			}
-			// Write data back to the cache if the table version hasn't changed.
-			a.maybeWriteAuthInfoBackToCache(
-				ctx,
-				usersTableVersion,
-				roleOptionsTableVersion,
-				authInfo,
-				username,
-			)
-			return authInfo, nil
-		},
-	)
+			return readFromSystemTables(loadCtx, db, username)
+		})
 	if err != nil {
-		return AuthInfo{}, err
+		return aInfo, err
 	}
 	aInfo = val.(AuthInfo)
-	return aInfo, nil
+
+	// Write data back to the cache if the table version hasn't changed.
+	a.maybeWriteAuthInfoBackToCache(
+		ctx,
+		usersTableVersion,
+		roleOptionsTableVersion,
+		aInfo,
+		username,
+	)
+
+	return aInfo, err
 }
 
 func (a *Cache) readAuthInfoFromCache(
@@ -241,12 +232,12 @@ func (a *Cache) maybeWriteAuthInfoBackToCache(
 	roleOptionsTableVersion descpb.DescriptorVersion,
 	aInfo AuthInfo,
 	user username.SQLUsername,
-) {
+) bool {
 	a.Lock()
 	defer a.Unlock()
 	// Table versions have changed while we were looking: don't cache the data.
 	if a.usersTableVersion != usersTableVersion || a.roleOptionsTableVersion != roleOptionsTableVersion {
-		return
+		return false
 	}
 	// Table version remains the same: update map, unlock, return.
 	const sizeOfUsername = int(unsafe.Sizeof(username.SQLUsername{}))
@@ -266,21 +257,18 @@ func (a *Cache) maybeWriteAuthInfoBackToCache(
 			}
 		}
 	}
-	provisioningSourceSize := 0
-	if aInfo.ProvisioningSource != nil {
-		provisioningSourceSize += aInfo.ProvisioningSource.Size()
-	}
 
 	sizeOfEntry := sizeOfUsername + len(user.Normalized()) +
-		sizeOfAuthInfo + hpSize + sizeOfTimestamp + subjectSize + provisioningSourceSize
+		sizeOfAuthInfo + hpSize + sizeOfTimestamp + subjectSize
 	if err := a.boundAccount.Grow(ctx, int64(sizeOfEntry)); err != nil {
 		// If there is no memory available to cache the entry, we can still
 		// proceed with authentication so that users are not locked out of
 		// the database.
 		log.Ops.Warningf(ctx, "no memory available to cache authentication info: %v", err)
-		return
+	} else {
+		a.authInfoCache[user] = aInfo
 	}
-	a.authInfoCache[user] = aInfo
+	return true
 }
 
 // GetDefaultSettings consults the sessioninit.Cache and returns the list of
@@ -306,7 +294,7 @@ func (a *Cache) GetDefaultSettings(
 	err = db.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
-		dbRoleSettingsTableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.DatabaseRoleSettingsTableID)
+		_, dbRoleSettingsTableDesc, err = descs.PrefixAndTable(ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), DatabaseRoleSettingsTableName)
 		if err != nil {
 			return err
 		}
@@ -360,25 +348,22 @@ func (a *Cache) GetDefaultSettings(
 	val, err := a.loadValueOutsideOfCache(
 		ctx, fmt.Sprintf("defaultsettings-%s-%d-%d", userName.Normalized(), databaseID, dbRoleSettingsTableVersion),
 		func(loadCtx context.Context) (interface{}, error) {
-			defaultSettings, err := readFromSystemTables(loadCtx, db, userName, databaseID)
-			if err != nil {
-				return nil, err
-			}
-			// Write the fetched data back to the cache if the table version hasn't
-			// changed.
-			a.maybeWriteDefaultSettingsBackToCache(
-				ctx,
-				dbRoleSettingsTableVersion,
-				defaultSettings,
-			)
-			return defaultSettings, nil
+			return readFromSystemTables(loadCtx, db, userName, databaseID)
 		},
 	)
 	if err != nil {
 		return nil, err
 	}
 	settingsEntries = val.([]SettingsCacheEntry)
-	return settingsEntries, nil
+
+	// Write the fetched data back to the cache if the table version hasn't
+	// changed.
+	a.maybeWriteDefaultSettingsBackToCache(
+		ctx,
+		dbRoleSettingsTableVersion,
+		settingsEntries,
+	)
+	return settingsEntries, err
 }
 
 func (a *Cache) readDefaultSettingsFromCache(
@@ -427,12 +412,12 @@ func (a *Cache) maybeWriteDefaultSettingsBackToCache(
 	ctx context.Context,
 	dbRoleSettingsTableVersion descpb.DescriptorVersion,
 	settingsEntries []SettingsCacheEntry,
-) {
+) bool {
 	a.Lock()
 	defer a.Unlock()
 	// Table version has changed while we were looking: don't cache the data.
 	if a.dbRoleSettingsTableVersion > dbRoleSettingsTableVersion {
-		return
+		return false
 	}
 
 	// Table version remains the same: update map, unlock, return.
@@ -454,14 +439,15 @@ func (a *Cache) maybeWriteDefaultSettingsBackToCache(
 		// proceed with authentication so that users are not locked out of
 		// the database.
 		log.Ops.Warningf(ctx, "no memory available to cache authentication info: %v", err)
-		return
-	}
-	for _, sEntry := range settingsEntries {
-		// Avoid re-storing an existing key.
-		if _, ok := a.settingsCache[sEntry.SettingsCacheKey]; !ok {
-			a.settingsCache[sEntry.SettingsCacheKey] = sEntry.Settings
+	} else {
+		for _, sEntry := range settingsEntries {
+			// Avoid re-storing an existing key.
+			if _, ok := a.settingsCache[sEntry.SettingsCacheKey]; !ok {
+				a.settingsCache[sEntry.SettingsCacheKey] = sEntry.Settings
+			}
 		}
 	}
+	return true
 }
 
 // clearCacheIfStale compares the cached table versions to the current table

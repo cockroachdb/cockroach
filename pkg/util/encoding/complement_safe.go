@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build !386 && !amd64
+// +build !386,!amd64
 
 package encoding
 

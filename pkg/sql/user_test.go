@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -54,7 +54,7 @@ func TestUserLoginAfterGC(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify that newuser can still log in.
-	newUserURL, cleanup := pgurlutils.PGUrlWithOptionalClientCerts(
+	newUserURL, cleanup := sqlutils.PGUrlWithOptionalClientCerts(
 		t, s.AdvSQLAddr(), t.Name(), url.UserPassword("newuser", "123"), false, /* withClientCerts */
 		"")
 	defer cleanup()
@@ -109,13 +109,13 @@ GRANT admin TO foo`); err != nil {
 	}
 
 	// We'll attempt connections on gateway node 0.
-	fooURL, fooCleanupFn := pgurlutils.PGUrlWithOptionalClientCerts(t,
+	fooURL, fooCleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
 		s.AdvSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"), false, "" /* withClientCerts */)
 	defer fooCleanupFn()
-	barURL, barCleanupFn := pgurlutils.PGUrlWithOptionalClientCerts(t,
+	barURL, barCleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
 		s.AdvSQLAddr(), t.Name(), url.UserPassword("bar", "testabc"), false, "" /* withClientCerts */)
 	defer barCleanupFn()
-	rootURL, rootCleanupFn := pgurlutils.PGUrl(t,
+	rootURL, rootCleanupFn := sqlutils.PGUrl(t,
 		s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer rootCleanupFn()
 

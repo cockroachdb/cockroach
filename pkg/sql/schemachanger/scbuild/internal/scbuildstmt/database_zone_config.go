@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
-// databaseZoneConfigObj is used to represent a database-specific zone
-// configuration object.
+// databaseZoneConfigObj is used to represent a table-specific zone configuration
+// object.
 type databaseZoneConfigObj struct {
 	databaseID catid.DescID
 	zoneConfig *zonepb.ZoneConfig
@@ -27,33 +27,15 @@ type databaseZoneConfigObj struct {
 
 var _ zoneConfigObject = &databaseZoneConfigObj{}
 
-func (dzo *databaseZoneConfigObj) isNoOp() bool {
-	return dzo.zoneConfig == nil
-}
-
-func (dzo *databaseZoneConfigObj) getZoneConfigElemForAdd(
-	_ BuildCtx,
-) (scpb.Element, []scpb.Element) {
+func (dzo *databaseZoneConfigObj) addZoneConfigToBuildCtx(b BuildCtx) scpb.Element {
+	dzo.seqNum += 1
 	elem := &scpb.DatabaseZoneConfig{
 		DatabaseID: dzo.databaseID,
 		ZoneConfig: dzo.zoneConfig,
-		SeqNum:     dzo.seqNum + 1,
+		SeqNum:     dzo.seqNum,
 	}
-	return elem, nil
-}
-
-func (dzo *databaseZoneConfigObj) getZoneConfigElemForDrop(
-	b BuildCtx,
-) ([]scpb.Element, []scpb.Element) {
-	var elems []scpb.Element
-	// Ensure that we drop all elements associated with this database. This
-	// becomes more relevant in explicit txns -- where there could be multiple
-	// zone config elements associated with this database with increasing seqNums.
-	b.QueryByID(dzo.getTargetID()).FilterDatabaseZoneConfig().
-		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DatabaseZoneConfig) {
-			elems = append(elems, e)
-		})
-	return elems, nil
+	b.Add(elem)
+	return elem
 }
 
 func (dzo *databaseZoneConfigObj) checkPrivilegeForSetZoneConfig(
@@ -105,7 +87,7 @@ func (dzo *databaseZoneConfigObj) checkZoneConfigChangePermittedForMultiRegion(
 		return nil
 	}
 
-	return maybeMultiregionErrorWithHint(b, dzo, zs, options)
+	return maybeMultiregionErrorWithHint(options)
 }
 
 func (dzo *databaseZoneConfigObj) getTargetID() catid.DescID {
@@ -152,6 +134,9 @@ func (dzo *databaseZoneConfigObj) retrieveCompleteZoneConfig(
 }
 
 func (dzo *databaseZoneConfigObj) completeZoneConfig(b BuildCtx, zone *zonepb.ZoneConfig) error {
+	if zone.IsComplete() {
+		return nil
+	}
 	// Check if zone is complete. If not, inherit from the default zone config
 	if zone.IsComplete() {
 		return nil

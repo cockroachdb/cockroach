@@ -12,8 +12,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -177,39 +177,14 @@ func (m mockReader) GetGlobalCapabilityState() map[roachpb.TenantID]*tenantcapab
 }
 
 func TestAllBatchCapsAreBoolean(t *testing.T) {
-	checkCap := func(t *testing.T, capID tenantcapabilitiespb.ID) {
-		if capID >= tenantcapabilitiespb.MaxCapabilityID {
+	for _, capID := range reqMethodToCap {
+		if capID >= tenantcapabilities.MaxCapabilityID {
 			// One of the special values.
-			return
+			continue
 		}
 		caps := &tenantcapabilitiespb.TenantCapabilities{}
 		var v *tenantcapabilities.BoolValue
 		require.Implements(t, v, tenantcapabilities.MustGetValueByID(caps, capID))
-	}
-
-	for m, mc := range reqMethodToCap {
-		if mc.capFn != nil {
-			switch m {
-			case kvpb.EndTxn:
-				// Handled below.
-			default:
-				t.Fatalf("unexpected capability function for %s", m)
-			}
-		} else {
-			checkCap(t, mc.capID)
-		}
-	}
-
-	{
-		const method = kvpb.EndTxn
-		mc := reqMethodToCap[method]
-		capIDs := []tenantcapabilitiespb.ID{
-			mc.get(&kvpb.EndTxnRequest{}),
-			mc.get(&kvpb.EndTxnRequest{Prepare: true}),
-		}
-		for _, capID := range capIDs {
-			checkCap(t, capID)
-		}
 	}
 }
 

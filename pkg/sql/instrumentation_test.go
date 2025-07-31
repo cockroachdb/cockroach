@@ -33,7 +33,7 @@ func TestSampledStatsCollection(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	tt := s.ApplicationLayer()
-	sv, sqlStats := &tt.ClusterSettings().SV, tt.SQLServer().(*Server).localSqlStats
+	sv, sqlStats := &tt.ClusterSettings().SV, tt.SQLServer().(*Server).sqlStats
 
 	sqlutils.CreateTable(
 		t, db, "test", "x INT", 10, sqlutils.ToRowFn(sqlutils.RowIdxFn),
@@ -54,6 +54,7 @@ func TestSampledStatsCollection(t *testing.T) {
 			}
 			var stats *appstatspb.CollectedStatementStatistics
 			require.NoError(t, sqlStats.
+				GetLocalMemProvider().
 				IterateStatementStats(
 					ctx,
 					sqlstats.IteratorOptions{},
@@ -80,6 +81,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		var stats *appstatspb.CollectedTransactionStatistics
 
 		require.NoError(t, sqlStats.
+			GetLocalMemProvider().
 			IterateTransactionStats(
 				ctx,
 				sqlstats.IteratorOptions{},
@@ -207,15 +209,15 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 
 	testApp := `sampling-test`
 	ctx := context.Background()
-	var collectedTxnStats []*sqlstats.RecordedTxnStats
+	var collectedTxnStats []sqlstats.RecordedTxnStats
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &ExecutorTestingKnobs{
 				DisableProbabilisticSampling: true,
-				OnRecordTxnFinish: func(isInternal bool, _ *sessionphase.Times, stmt string, txnStats *sqlstats.RecordedTxnStats) {
+				OnRecordTxnFinish: func(isInternal bool, _ *sessionphase.Times, stmt string, txnStats sqlstats.RecordedTxnStats) {
 					// We won't run into a race here because we'll only observe
 					// txns from a single connection.
-					if txnStats.Application == testApp {
+					if txnStats.SessionData.ApplicationName == testApp {
 						if strings.Contains(stmt, `SET application_name`) {
 							return
 						}
@@ -239,8 +241,7 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 			"SELECT 1, 2, 3",
 			"CREATE TABLE IF NOT EXISTS foo (x INT)",
 			"SELECT * FROM foo",
-			// Since the sampling key does not include the txn fingerprint, no
-			// statements in this txn should be sampled.
+			// An explicit txn results in the queries inside being recorded as 'new' statements.
 			"BEGIN; SELECT 1; COMMIT;",
 		}
 
@@ -250,11 +251,10 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 
 		require.Equal(t, len(queries), len(collectedTxnStats))
 
-		// We should have collected stats for each of the queries except the last.
-		for i := range collectedTxnStats[:len(queries)-1] {
+		// We should have collected stats for each of the queries.
+		for i := range collectedTxnStats {
 			require.True(t, collectedTxnStats[i].CollectedExecStats)
 		}
-		require.False(t, collectedTxnStats[len(queries)-1].CollectedExecStats)
 	})
 
 	collectedTxnStats = nil

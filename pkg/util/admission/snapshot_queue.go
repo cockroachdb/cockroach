@@ -7,7 +7,6 @@ package admission
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -50,7 +49,8 @@ var snapshotWorkItemPool = sync.Pool{
 var DiskBandwidthForSnapshotIngest = settings.RegisterBoolSetting(
 	settings.SystemOnly, "kvadmission.store.snapshot_ingest_bandwidth_control.enabled",
 	"if set to true, snapshot ingests will be subject to disk write control in AC",
-	metamorphic.ConstantWithTestBool("kvadmission.store.snapshot_ingest_bandwidth_control.enabled", true),
+	// TODO(aaditya): Enable by default once enough experimentation is done.
+	metamorphic.ConstantWithTestBool("kvadmission.store.snapshot_ingest_bandwidth_control.enabled", false),
 	settings.WithPublic,
 )
 
@@ -197,14 +197,11 @@ func (s *SnapshotQueue) Admit(ctx context.Context, count int64) error {
 			item.mu.cancelled = true
 		}()
 		shouldRelease = false
+		deadline, _ := ctx.Deadline()
 		s.metrics.WaitDurations.RecordValue(waitDur)
-		var deadlineSubstring string
-		if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
-			deadlineSubstring = fmt.Sprintf("deadline: %v, ", deadline)
-		}
 		return errors.Wrapf(ctx.Err(),
-			"context canceled while waiting in queue: %sstart: %v, dur: %v",
-			deadlineSubstring, item.enqueueingTime, waitDur)
+			"context canceled while waiting in queue: deadline: %v, start: %v, dur: %v",
+			deadline, item.enqueueingTime, waitDur)
 	case <-item.admitCh:
 		waitDur := timeutil.Since(item.enqueueingTime).Nanoseconds()
 		s.metrics.WaitDurations.RecordValue(waitDur)

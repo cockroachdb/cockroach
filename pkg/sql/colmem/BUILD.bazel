@@ -47,6 +47,7 @@ go_test(
         "//pkg/util/mon",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
 )

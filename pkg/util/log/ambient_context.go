@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
 )
@@ -67,20 +66,9 @@ type AmbientContext struct {
 	backgroundCtx context.Context
 }
 
-// GetServerIdentificationPayload implements serverident.ServerIdentifier
-func (ac *AmbientContext) GetServerIdentificationPayload() serverident.ServerIdentificationPayload {
-	return ac.ServerIDs
-}
-
 // AddLogTag adds a tag to the ambient context.
 func (ac *AmbientContext) AddLogTag(name string, value interface{}) {
 	ac.tags = ac.tags.Add(name, value)
-	ac.refreshCache()
-}
-
-// AddLogTags adds a set of tags to the ambient context.
-func (ac *AmbientContext) AddLogTags(tags *logtags.Buffer) {
-	ac.tags = ac.tags.Merge(tags)
 	ac.refreshCache()
 }
 
@@ -123,51 +111,31 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 		}
 		return ctx
 	default:
-		bld := ctxutil.WithFastValues(ctx)
-		// We set these unconditionally in case they are already set in the context.
-		bld.Set(ctxutil.LogTagsKey, ac.tags)
-		bld.Set(serverident.ServerIdentificationContextKey, ac.ServerIDs)
-		return bld.Finish()
+		ctx = logtags.WithTags(ctx, ac.tags)
+		if ac.ServerIDs != nil {
+			ctx = serverident.ContextWithServerIdentification(ctx, ac.ServerIDs)
+		}
+		return ctx
 	}
-}
-
-// ResetAndAnnotateCtxPrealloc is like ResetAndAnnotateCtx but allocates a
-// container to avoid allocations on future annotations on the context and its
-// descendants.
-func (ac *AmbientContext) ResetAndAnnotateCtxPrealloc(ctx context.Context) context.Context {
-	bld := ctxutil.WithFastValuesPrealloc(ctx)
-	// We set these unconditionally in case they are already set in the context.
-	bld.Set(ctxutil.LogTagsKey, ac.tags)
-	bld.Set(serverident.ServerIdentificationContextKey, ac.ServerIDs)
-	return bld.Finish()
 }
 
 func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Context {
-	bld := ctxutil.WithFastValues(ctx)
 	if ac.tags != nil {
-		// Note: this is similar to logtags.AddTags but uses a FastValuesBuilder.
-		if v := bld.Get(ctxutil.LogTagsKey); v != nil {
-			existing := v.(*logtags.Buffer)
-			newTags := existing.Merge(ac.tags)
-			if newTags != existing {
-				bld.Set(ctxutil.LogTagsKey, newTags)
-			}
-		} else {
-			bld.Set(ctxutil.LogTagsKey, ac.tags)
-		}
+		ctx = logtags.AddTags(ctx, ac.tags)
 	}
-	if ac.ServerIDs != nil && bld.Get(serverident.ServerIdentificationContextKey) == nil {
-		bld.Set(serverident.ServerIdentificationContextKey, ac.ServerIDs)
+	if ac.ServerIDs != nil && serverident.ServerIdentificationFromContext(ctx) == nil {
+		ctx = serverident.ContextWithServerIdentification(ctx, ac.ServerIDs)
 	}
-	return bld.Finish()
+	return ctx
 }
 
 // AnnotateCtxWithSpan annotates the given context with the information in
-// AmbientContext (see AnnotateCtx).
+// AmbientContext (see AnnotateCtx) and opens a span.
 //
-// If the given context has a trace span, a child span is created. The returned
-// span may be nil, but either way the caller is responsible for eventually
-// closing the span (via Span.Finish, which is valid on the nil Span).
+// If the given context has a span, the new span is a child of that span.
+// Otherwise, the Tracer in AmbientContext is used to create a new root span.
+//
+// The caller is responsible for closing the span (via Span.Finish).
 func (ac *AmbientContext) AnnotateCtxWithSpan(
 	ctx context.Context, opName string,
 ) (context.Context, *tracing.Span) {
@@ -179,10 +147,15 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 			ctx = ac.backgroundCtx
 		}
 	default:
-		ctx = ac.annotateCtxInternal(ctx)
+		if ac.tags != nil {
+			ctx = logtags.AddTags(ctx, ac.tags)
+		}
+		if ac.ServerIDs != nil && serverident.ServerIdentificationFromContext(ctx) == nil {
+			ctx = serverident.ContextWithServerIdentification(ctx, ac.ServerIDs)
+		}
 	}
 
-	return tracing.ChildSpan(ctx, opName)
+	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
 }
 
 // MakeTestingAmbientContext creates an AmbientContext for use in tests,

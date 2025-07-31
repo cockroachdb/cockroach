@@ -1,10 +1,11 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "bulk",
     srcs = [
         "aggregator_stats.go",
         "iterator.go",
+        "tracing_aggregator.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/bulk",
     visibility = ["//visibility:public"],
@@ -16,8 +17,23 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/sql/protoreflect",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "bulk_test",
+    srcs = ["tracing_aggregator_test.go"],
+    deps = [
+        ":bulk",
+        "//pkg/ccl/backupccl/backuppb",
+        "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_stretchr_testify//require",
     ],
 )

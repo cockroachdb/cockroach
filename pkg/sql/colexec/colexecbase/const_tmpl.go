@@ -5,6 +5,7 @@
 
 // {{/*
 //go:build execgen_template
+// +build execgen_template
 
 //
 // This file is the execgen template for const.eg.go. It's formatted in a
@@ -77,7 +78,7 @@ func NewConstOp(
 		}
 		// {{end}}
 	}
-	return nil, errors.AssertionFailedf("unsupported const type %s", t.Name())
+	return nil, errors.Errorf("unsupported const type %s", t.Name())
 }
 
 // {{range .}}

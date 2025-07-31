@@ -25,11 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
@@ -118,10 +118,10 @@ func incrementSequenceHelper(
 
 	var val int64
 	if seqOpts.Virtual {
-		rowid := unique.GenerateUniqueInt(
-			unique.ProcessUniqueID(p.EvalContext().NodeID.SQLInstanceID()),
+		rowid := builtins.GenerateUniqueInt(
+			builtins.ProcessUniqueID(p.EvalContext().NodeID.SQLInstanceID()),
 		)
-		val = rowid
+		val = int64(rowid)
 	} else {
 		val, err = p.incrementSequenceUsingCache(ctx, descriptor)
 	}
@@ -217,7 +217,7 @@ func (p *planner) incrementSequenceUsingCache(
 		}
 	} else {
 		// If cache size option is 1 (default -> not cached), and node cache size option is not 0 (not default -> node-cached), then use node-level cache
-		if seqOpts.SessionCacheSize == 1 && seqOpts.NodeCacheSize != 0 {
+		if seqOpts.CacheSize == 1 && seqOpts.NodeCacheSize != 0 {
 			val, err = p.GetSequenceCacheNode().NextValue(sequenceID, uint32(descriptor.GetVersion()), fetchNextValues)
 		} else {
 			val, err = p.GetOrInitSequenceCache().NextValue(uint32(sequenceID), uint32(descriptor.GetVersion()), fetchNextValues)

@@ -81,7 +81,8 @@ type Context struct {
 	TxnIsSingleStmt bool
 	// TxnIsoLevel is the isolation level of the current transaction.
 	TxnIsoLevel isolation.Level
-	Settings    *cluster.Settings
+
+	Settings *cluster.Settings
 	// ClusterID is the logical cluster ID for this tenant.
 	ClusterID uuid.UUID
 	// ClusterName is the security string used to secure the RPC layer.
@@ -431,7 +432,7 @@ func (ec *Context) MustGetPlaceholderValue(ctx context.Context, p *tree.Placehol
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
 func MakeTestingEvalContext(st *cluster.Settings) Context {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test-monitor"),
+		Name:     "test-monitor",
 		Settings: st,
 	})
 	return MakeTestingEvalContextWithMon(st, monitor)
@@ -823,7 +824,7 @@ func (ec *Context) BoundedStaleness() bool {
 }
 
 // ensureExpectedType will return an error if a datum does not match the
-// provided type. If the expected type is AnyElement or if the datum is a Null
+// provided type. If the expected type is Any or if the datum is a Null
 // type, then no error will be returned.
 func ensureExpectedType(exp *types.T, d tree.Datum) error {
 	if !(exp.Family() == types.AnyFamily || d.ResolvedType().Family() == types.UnknownFamily ||
@@ -919,8 +920,8 @@ type ReplicationStreamManager interface {
 		successfulIngestion bool,
 	) error
 
-	DebugGetProducerStatuses(ctx context.Context) ([]streampb.DebugProducerStatus, error)
-	DebugGetLogicalConsumerStatuses(ctx context.Context) ([]*streampb.DebugLogicalConsumerStatus, error)
+	DebugGetProducerStatuses(ctx context.Context) []streampb.DebugProducerStatus
+	DebugGetLogicalConsumerStatuses(ctx context.Context) []*streampb.DebugLogicalConsumerStatus
 
 	PlanLogicalReplication(
 		ctx context.Context,
@@ -931,9 +932,6 @@ type ReplicationStreamManager interface {
 		ctx context.Context,
 		req streampb.ReplicationProducerRequest,
 	) (streampb.ReplicationProducerSpec, error)
-
-	AuthorizeViaJob(ctx context.Context, streamID streampb.StreamID) error
-	AuthorizeViaReplicationPriv(ctx context.Context, tableNames ...string) error
 }
 
 // StreamIngestManager represents a collection of APIs that streaming replication supports

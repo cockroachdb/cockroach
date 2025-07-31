@@ -12,6 +12,8 @@ syntax = "proto3";
 package cockroach.sql.sem.semenumpb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb";
 
+import "gogoproto/gogo.proto";
+
 // ForeignKeyAction describes the action which should be taken when a foreign
 // key constraint reference is acted upon.
 enum ForeignKeyAction {

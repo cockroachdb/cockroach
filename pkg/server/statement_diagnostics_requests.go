@@ -7,30 +7,37 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// stmtDiagnosticsRequest contains a subset of columns that are stored in
-// system.statement_diagnostics_requests and are exposed in
-// serverpb.StatementDiagnosticsReport.
 type stmtDiagnosticsRequest struct {
-	ID                     int
-	StatementFingerprint   string
+	ID                   int
+	StatementFingerprint string
+	// Empty plan gist indicates that any plan will do.
+	PlanGist string
+	// If true and PlanGist is not empty, then any plan not matching the gist
+	// will do.
+	AntiPlanGist           bool
 	Completed              bool
 	StatementDiagnosticsID int
 	RequestedAt            time.Time
+	// Zero value indicates that we're sampling every execution.
+	SamplingProbability float64
 	// Zero value indicates that there is no minimum latency set on the request.
 	MinExecutionLatency time.Duration
 	// Zero value indicates that the request never expires.
 	ExpiresAt time.Time
+	// Indicates whether redacted bundle is requested.
+	Redacted bool
 }
 
 type stmtDiagnostics struct {
@@ -78,12 +85,6 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 		Report: &serverpb.StatementDiagnosticsReport{},
 	}
 
-	var username string
-	if user, err := authserver.UserFromIncomingRPCContext(ctx); err != nil {
-		return nil, srverrors.ServerError(ctx, err)
-	} else {
-		username = user.Normalized()
-	}
 	err := s.stmtDiagnosticsRequester.InsertRequest(
 		ctx,
 		req.StatementFingerprint,
@@ -93,7 +94,6 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 		req.MinExecutionLatency,
 		req.ExpiresAfter,
 		req.Redacted,
-		username,
 	)
 	if err != nil {
 		return nil, err
@@ -140,19 +140,27 @@ func (s *statusServer) StatementDiagnosticsRequests(
 		return nil, err
 	}
 
+	var extraColumns string
+	if s.st.Version.IsActive(ctx, clusterversion.V24_2_StmtDiagRedacted) {
+		extraColumns = `,
+			redacted`
+	}
 	// TODO(davidh): Add pagination to this request.
 	it, err := s.internalExecutor.QueryIteratorEx(ctx, "stmt-diag-get-all", nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,
-		`SELECT
+		fmt.Sprintf(`SELECT
 			id,
 			statement_fingerprint,
 			completed,
 			statement_diagnostics_id,
 			requested_at,
 			min_execution_latency,
-			expires_at
+			expires_at,
+			sampling_probability,
+			plan_gist,
+			anti_plan_gist%s
 		FROM
-			system.statement_diagnostics_requests`)
+			system.statement_diagnostics_requests`, extraColumns))
 	if err != nil {
 		return nil, err
 	}
@@ -176,6 +184,9 @@ func (s *statusServer) StatementDiagnosticsRequests(
 		if requestedAt, ok := row[4].(*tree.DTimestampTZ); ok {
 			req.RequestedAt = requestedAt.Time
 		}
+		if samplingProbability, ok := row[7].(*tree.DFloat); ok {
+			req.SamplingProbability = float64(*samplingProbability)
+		}
 		if minExecutionLatency, ok := row[5].(*tree.DInterval); ok {
 			req.MinExecutionLatency = time.Duration(minExecutionLatency.Duration.Nanos())
 		}
@@ -186,6 +197,18 @@ func (s *statusServer) StatementDiagnosticsRequests(
 				continue
 			}
 		}
+		if planGist, ok := row[8].(*tree.DString); ok {
+			req.PlanGist = string(*planGist)
+		}
+		if antiGist, ok := row[9].(*tree.DBool); ok {
+			req.AntiPlanGist = bool(*antiGist)
+		}
+		if extraColumns != "" {
+			if redacted, ok := row[10].(*tree.DBool); ok {
+				req.Redacted = bool(*redacted)
+			}
+		}
+
 		requests = append(requests, req)
 	}
 	if err != nil {

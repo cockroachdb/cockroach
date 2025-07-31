@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
 var reg = NewRegistry(1 /* numNodes */, MakeClusterConstructor(func(
@@ -34,7 +34,7 @@ var reg = NewRegistry(1 /* numNodes */, MakeClusterConstructor(func(
 	if _, err := db.Exec("GRANT admin TO testuser"); err != nil {
 		t.Fatal(err)
 	}
-	adminUserURL, adminUserCleanup := pgurlutils.PGUrl(
+	adminUserURL, adminUserCleanup := sqlutils.PGUrl(
 		t, s.ApplicationLayer().AdvSQLAddr(), "rttanalysis", url.User("testuser"),
 	)
 	adminUserConn, err := gosql.Open("postgres", adminUserURL.String())
@@ -45,7 +45,7 @@ var reg = NewRegistry(1 /* numNodes */, MakeClusterConstructor(func(
 	if _, err := db.Exec("CREATE USER testuser2"); err != nil {
 		t.Fatal(err)
 	}
-	nonAdminUserURL, nonAdminUserCleanup := pgurlutils.PGUrl(
+	nonAdminUserURL, nonAdminUserCleanup := sqlutils.PGUrl(
 		t, s.ApplicationLayer().AdvSQLAddr(), "rttanalysis", url.User("testuser2"),
 	)
 	nonAdminUserConn, err := gosql.Open("postgres", nonAdminUserURL.String())

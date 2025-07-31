@@ -14,7 +14,6 @@ import (
 )
 
 type renameTenantNode struct {
-	zeroInputPlanNode
 	tenantSpec tenantSpec
 	newName    tree.TypedExpr
 }

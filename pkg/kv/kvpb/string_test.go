@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -86,7 +85,7 @@ func TestReplicaUnavailableError(t *testing.T) {
 func TestAmbiguousResultError(t *testing.T) {
 	ctx := context.Background()
 
-	wrapped := errors.Errorf("boom with a %s", encoding.Unsafe("secret"))
+	wrapped := errors.Errorf("boom with a %s", redact.Unsafe("secret"))
 	var err error = kvpb.NewAmbiguousResultError(wrapped)
 	err = errors.DecodeError(ctx, errors.EncodeError(ctx, err))
 	require.True(t, errors.Is(err, wrapped), "%+v", err)

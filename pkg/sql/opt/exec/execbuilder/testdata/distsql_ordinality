@@ -25,7 +25,7 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE x
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/72>  …/1/2         {1}       1
+<before:/Table/67>  …/1/2         {1}       1
 …/1/2               …/1/4         {2}       2
 …/1/4               …/1/6         {3}       3
 …/1/6               …/1/7         {4}       4

@@ -12,7 +12,6 @@ package slinstance
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,7 +47,11 @@ type Writer interface {
 type session struct {
 	id    sqlliveness.SessionID
 	start hlc.Timestamp
-	exp   atomic.Pointer[hlc.Timestamp]
+
+	mu struct {
+		syncutil.Mutex
+		exp hlc.Timestamp
+	}
 }
 
 // ID implements the sqlliveness.Session interface.
@@ -57,7 +59,9 @@ func (s *session) ID() sqlliveness.SessionID { return s.id }
 
 // Expiration implements the sqlliveness.Session interface.
 func (s *session) Expiration() hlc.Timestamp {
-	return *s.exp.Load()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.exp
 }
 
 // Start implements the sqlliveness.Session interface.
@@ -66,7 +70,9 @@ func (s *session) Start() hlc.Timestamp {
 }
 
 func (s *session) setExpiration(exp hlc.Timestamp) {
-	s.exp.Swap(&exp)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.exp = exp
 }
 
 // SessionEventListener is an interface used by the Instance to notify
@@ -214,8 +220,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 		// Note: Concurrent access is not possible at this point because
 		// the session has not been returned, so we have no need to acquire
 		// the lock.
-		newExp := s.start.Add(l.ttl().Nanoseconds(), 0)
-		s.exp.Swap(&newExp)
+		s.mu.exp = s.start.Add(l.ttl().Nanoseconds(), 0)
 		i++
 		if err = l.storage.Insert(ctx, s.id, s.Expiration()); err != nil {
 			if ctx.Err() != nil {
@@ -345,6 +350,8 @@ func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
 		case <-ctx.Done():
 			return stop.ErrUnavailable
 		case <-t.C:
+			t.Read = true
+
 			var s *session
 			l.mu.Lock()
 			s = l.mu.s
@@ -408,11 +415,7 @@ func NewSQLInstance(
 		stopper:        stopper,
 		sessionEvents:  sessionEvents,
 		ttl: func() time.Duration {
-			ttl := slbase.DefaultTTL.Get(&settings.SV)
-			if util.RaceEnabled {
-				ttl *= 5
-			}
-			return ttl
+			return slbase.DefaultTTL.Get(&settings.SV)
 		},
 		hb: func() time.Duration {
 			return slbase.DefaultHeartBeat.Get(&settings.SV)

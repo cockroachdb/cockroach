@@ -1,0 +1,151 @@
+# Test schema_only restore
+
+new-cluster name=s1 allow-implicit-access
+----
+
+exec-sql
+CREATE DATABASE d;
+CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE d.t1 (x INT);
+INSERT INTO d.t1 VALUES (1), (2), (3);
+CREATE TABLE d.t2 (x d.greeting);
+INSERT INTO d.t2 VALUES ('hello'), ('howdy');
+COMMENT ON TABLE d.t1 IS 'This comment better get restored from the backed up system table!';
+----
+
+query-sql
+SHOW CREATE TABLE d.t1;
+----
+d.public.t1 CREATE TABLE public.t1 (
+	x INT8 NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
+);
+COMMENT ON TABLE public.t1 IS 'This comment better get restored from the backed up system table!'
+
+# drop and create defaultDB to ensure it has a higher ID than by default. We will check that when
+# this cluster is restored, the default db with the higher id was also restored
+# by default.
+let $d_id
+SELECT id FROM system.namespace WHERE name = 'defaultdb'
+----
+
+exec-sql
+DROP DATABASE defaultdb;
+CREATE DATABASE defaultdb;
+----
+
+query-sql
+SELECT count(*) FROM system.namespace WHERE name = 'defaultdb' AND id > $d_id
+----
+1
+
+exec-sql
+BACKUP INTO 'nodelocal://1/full_cluster_backup/';
+----
+
+exec-sql
+BACKUP Database d INTO 'nodelocal://1/full_database_backup/';
+----
+
+
+# A new cluster in prep for a cluster level schema_only restore.
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access
+----
+
+# First, ensure cluster level schema_only restore fails fast in same ways as a cluster level restore.
+#
+# Fail fast if the user passes new_db_name.
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/' with schema_only, new_db_name='d2';
+----
+pq: new_db_name can only be used for RESTORE DATABASE with a single target database
+
+
+exec-sql cluster=s2
+CREATE USER testuser
+----
+
+# Non admins cannot run schema_only cluster restore
+exec-sql user=testuser
+RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/' with schema_only
+----
+pq: only users with the admin role or the RESTORE system privilege are allowed to perform a cluster restore: user testuser does not have RESTORE system privilege
+
+# Fail fast using a database backup
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/full_database_backup/' with schema_only;
+----
+pq: full cluster RESTORE can only be used on full cluster BACKUP files
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/' with schema_only;
+----
+
+# there should be no data in the restored tables
+query-sql
+SELECT * FROM d.t1;
+----
+
+query-sql
+SELECT * FROM d.t2;
+----
+
+# The backed up cluster was initiated with bank. Ensure it's now empty.
+query-sql
+SELECT * FROM data.bank;
+----
+
+# The backed table d.t1 had a comment stored in a system table. This should have been restored.
+query-sql
+SHOW CREATE TABLE d.t1;
+----
+d.public.t1 CREATE TABLE public.t1 (
+	x INT8 NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
+);
+COMMENT ON TABLE public.t1 IS 'This comment better get restored from the backed up system table!'
+
+# Ensure the defaultdb from the backed up cluster was restored.
+query-sql
+SELECT count(*) FROM system.namespace WHERE name = 'defaultdb' AND id > $d_id
+----
+1
+
+############################################################
+# Ensure Database Level schema_only restore logic is sound
+############################################################
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/full_database_backup/' with schema_only, new_db_name='d2';
+----
+
+
+## ensure no table statistics are inserted on behalf of all previous schema_only restores
+query-sql
+SELECT * FROM system.table_statistics;
+----
+
+
+# There should be no data in the user tables.
+query-sql
+SELECT * FROM d2.t1;
+----
+
+query-sql
+SELECT * FROM d2.t2;
+----
+
+# Each of the restored types should have namespace entries. Test this by
+# trying to create types that would cause namespace conflicts.
+exec-sql
+CREATE TYPE d2.greeting AS ENUM ('hello', 'hiya')
+----
+pq: type "d2.public.greeting" already exists
+
+# We should be able to resolve each restored type. Test this by inserting
+# into each of the restored tables.
+exec-sql
+INSERT INTO d2.t2 VALUES ('hi');
+----

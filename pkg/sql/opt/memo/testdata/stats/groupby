@@ -425,10 +425,10 @@ SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
 ----
 project
  ├── columns: max:7(int!null)
- ├── stats: [rows=133.111]
+ ├── stats: [rows=133.1111]
  └── select
       ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:7(int!null)
-      ├── stats: [rows=133.111, distinct(4)=2, null(4)=0]
+      ├── stats: [rows=133.1111, distinct(4)=2, null(4)=0]
       ├── key: (3,4)
       ├── fd: (3,4)-->(2), (2-4)-->(7)
       ├── group-by (hash)
@@ -509,7 +509,7 @@ project
  │    │    ├── columns: b:4(int) bool_or:5(bool!null)
  │    │    ├── grouping columns: b:4(int)
  │    │    ├── cardinality: [0 - 3]
- │    │    ├── stats: [rows=1.29289, distinct(4)=1.29289, null(4)=1, distinct(5)=1.29289, null(5)=0]
+ │    │    ├── stats: [rows=1.292893, distinct(4)=1.29289, null(4)=1, distinct(5)=1.29289, null(5)=0]
  │    │    ├── key: (4)
  │    │    ├── fd: (4)-->(5)
  │    │    ├── select
@@ -583,11 +583,11 @@ GROUP BY col;
 ----
 project
  ├── columns: count:4(int!null)
- ├── stats: [rows=2.00509e+16]
+ ├── stats: [rows=2.005091e+16]
  └── group-by (hash)
       ├── columns: col:1(timetz!null) count_rows:4(int!null)
       ├── grouping columns: col:1(timetz!null)
-      ├── stats: [rows=2.00509e+16, distinct(1)=2.00509e+16, null(1)=0]
+      ├── stats: [rows=2.005091e+16, distinct(1)=2.00509e+16, null(1)=0]
       ├── key: (1)
       ├── fd: (1)-->(4)
       ├── select
@@ -598,7 +598,7 @@ project
       │    ├── key: (1)
       │    ├── scan t74667
       │    │    ├── columns: col:1(timetz!null)
-      │    │    ├── stats: [rows=1.18852e+18, distinct(1)=9.50815e+17, null(1)=0]
+      │    │    ├── stats: [rows=1.188522e+18, distinct(1)=9.50815e+17, null(1)=0]
       │    │    │   histogram(1)=  0     4.3209e+17     44624        3.3468e+08         4.252e+16        7.1391e+17
       │    │    │                <--- '00:00:00+15:59' ------- '04:40:23.558699+11:08' ----------- '06:12:15.740051+06:40'
       │    │    └── key: (1)

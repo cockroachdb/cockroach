@@ -432,27 +432,27 @@ update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,8-9
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 9}]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)]
 
 # No change since update is using older epoch.
 
-update txn=txn1 ts=10 epoch=0 span=a ignored-seqs=3,8-9
+update txn=txn1 ts=10 epoch=0 span=a ignored-seqs=3,5-7
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 9}]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)]
 
-update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,8-9
+update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,5-7
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 9}]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)]
 
-update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3,8-11
+update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=9-11
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 11}]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 1)]
 
 # No seqnum change since update is using older epoch. But since the update is using
 # a higher timestamp, the ts is advanced.
@@ -461,7 +461,7 @@ update txn=txn1 ts=15 epoch=0 span=a ignored-seqs=1
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 15.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 11}]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 15.000000000,0, info: unrepl [(str: Exclusive seq: 1)]
 
 # No change, since seqnum 3 is not held. Note that the ts is not updated.
 
@@ -469,14 +469,14 @@ update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=3
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 15.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 11}]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 15.000000000,0, info: unrepl [(str: Exclusive seq: 1)]
 
 # Timestamp is updated again.
 update txn=txn1 ts=16 epoch=1 span=a
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 16.000000000,0, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{3 3} {8 11}]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 16.000000000,0, info: unrepl [(str: Exclusive seq: 1)]
 
 # Seqnum 1 is also ignored, so the lock is released. Note that it does not
 # matter that the update is using an older timestamp.

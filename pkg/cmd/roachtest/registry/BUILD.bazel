@@ -17,7 +17,6 @@ go_library(
     deps = [
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/operation",
-        "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
         "//pkg/internal/team",

@@ -201,10 +201,6 @@ func (db *verifyFormatDB) execWithResettableTimeout(
 
 	defer db.Incr(sql)()
 
-	var cancel context.CancelCauseFunc
-	ctx, cancel = context.WithCancelCause(ctx)
-	defer cancel(nil)
-
 	funcdone := make(chan error, 1)
 	go func() {
 		_, err := db.db.ExecContext(ctx, sql)
@@ -268,8 +264,7 @@ func (db *verifyFormatDB) execWithResettableTimeout(
 						// 2 minute wait and miss potential hangs (if the test times out first).
 						// Whereas this approach will wait 2 minutes after the completion of
 						// (1), only waiting an extra second more.
-						remainingDurationSinceLastStmt := db.mu.lastCompletedStmt.Add(duration).Sub(timeutil.Now())
-						targetDuration = duration - remainingDurationSinceLastStmt
+						targetDuration = duration - db.mu.lastCompletedStmt.Add(duration).Sub(timeutil.Now())
 						// Avoid having super tight spins, wait at least a second.
 						if targetDuration <= time.Second {
 							targetDuration = time.Second
@@ -278,13 +273,6 @@ func (db *verifyFormatDB) execWithResettableTimeout(
 						maxResets -= 1
 						return nil
 					}
-				}
-				cancel(errors.Newf("cancelling query after %v", duration))
-				select {
-				case <-funcdone:
-					return nil
-				case <-time.After(5 * time.Second):
-					t.Logf("didn't respect context cancellation within 5 seconds: %s", sql)
 				}
 				b := allstacks.GetWithBuf(make([]byte, 1024*1024))
 				t.Logf("%s\n", b)
@@ -421,18 +409,12 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					// Some spatial function are slow and testing them here
 					// is not worth it.
 					continue
-				case "trigger_in", "trigger_out":
-					// Skip trigger I/O functions since we can't generate random trigger
-					// arguments.
-					continue
 				case "crdb_internal.reset_sql_stats",
 					"crdb_internal.check_consistency",
 					"crdb_internal.request_statement_bundle",
 					"crdb_internal.reset_activity_tables",
 					"crdb_internal.revalidate_unique_constraints_in_all_tables",
-					"crdb_internal.scan_storage_internal_keys",
-					"crdb_internal.validate_ttl_scheduled_jobs",
-					"crdb_internal.fingerprint":
+					"crdb_internal.validate_ttl_scheduled_jobs":
 					// Skipped due to long execution time.
 					continue
 				}

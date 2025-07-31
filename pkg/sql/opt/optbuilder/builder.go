@@ -194,12 +194,6 @@ type Builder struct {
 	// builtTriggerFuncs caches already-built trigger functions for a table. It is
 	// necessary to cache these functions since triggers can recursively reference
 	// one another.
-	//
-	// NOTE: Since we map from StableID, multiple mutations to the same table may
-	// reuse the same cached UDFDefinition to invoke a trigger function. This is
-	// ok because UDFDefinitions are independent of the context in which they are
-	// built, and can be safely reused across different call-sites within the same
-	// memo.
 	builtTriggerFuncs map[cat.StableID][]cachedTriggerFunc
 }
 
@@ -364,9 +358,9 @@ func (b *Builder) buildStmt(
 		case *tree.Select, tree.SelectStatement:
 		case *tree.Insert, *tree.Update, *tree.Delete:
 		case *tree.Call:
-		case *tree.DoBlock:
-			if !b.evalCtx.Settings.Version.ActiveVersion(b.ctx).IsActive(clusterversion.V25_1) {
-				panic(doBlockVersionErr)
+			activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
+			if !activeVersion.IsActive(clusterversion.V24_1) {
+				panic(unimplemented.Newf("stored procedures", "%s usage inside a routine definition is not supported until version 24.1", stmt.StatementTag()))
 			}
 		default:
 			if tree.CanModifySchema(stmt) {
@@ -414,9 +408,6 @@ func (b *Builder) buildStmt(
 
 	case *tree.Call:
 		return b.buildProcedure(stmt, inScope)
-
-	case *tree.DoBlock:
-		return b.buildDo(stmt, inScope)
 
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)

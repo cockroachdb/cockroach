@@ -24,7 +24,7 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN j INT8 
            ├── 3 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 3 (j-)}
            │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j-), TypeName: "INT8"}
-           │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j-), Usage: REGULAR}
+           │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j-)}
            └── 4 Mutation operations
                 ├── RemoveColumnComputeExpression {"ColumnID":3,"TableID":106}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":106}

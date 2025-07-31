@@ -14,6 +14,7 @@ go_library(
         "//pkg/workload/histogram",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_exp//rand",
     ],
 )
 

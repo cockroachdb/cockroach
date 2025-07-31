@@ -6,13 +6,13 @@
 package tpch
 
 import (
-	"math/rand/v2"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"golang.org/x/exp/rand"
 )
 
 var regionNames = [...]string{`AFRICA`, `AMERICA`, `ASIA`, `EUROPE`, `MIDDLE EAST`}
@@ -58,7 +58,8 @@ func (w *tpch) tpchRegionInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	rng := l.seedableRand.Seed(w.seed + uint64(batchIdx))
+	rng := l.rng
+	rng.Seed(w.seed + uint64(batchIdx))
 
 	regionKey := batchIdx
 	cb.Reset(regionTypes, 1, coldata.StandardColumnFactory)
@@ -79,7 +80,8 @@ func (w *tpch) tpchNationInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	rng := l.seedableRand.Seed(w.seed + uint64(batchIdx))
+	rng := l.rng
+	rng.Seed(w.seed + uint64(batchIdx))
 
 	nationKey := batchIdx
 	nation := nations[nationKey]
@@ -105,7 +107,8 @@ func (w *tpch) tpchSupplierInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	rng := l.seedableRand.Seed(w.seed + uint64(batchIdx))
+	rng := l.rng
+	rng.Seed(w.seed + uint64(batchIdx))
 
 	suppKey := int64(batchIdx) + 1
 	nationKey := int16(randInt(rng, 0, 24))
@@ -139,7 +142,8 @@ func makeRetailPriceFromPartKey(partKey int) float32 {
 func (w *tpch) tpchPartInitialRowBatch(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	rng := l.seedableRand.Seed(w.seed + uint64(batchIdx))
+	rng := l.rng
+	rng.Seed(w.seed + uint64(batchIdx))
 
 	partKey := batchIdx + 1
 	cb.Reset(partTypes, 1, coldata.StandardColumnFactory)
@@ -179,7 +183,8 @@ func (w *tpch) tpchPartSuppInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	rng := l.seedableRand.Seed(w.seed + uint64(batchIdx))
+	rng := l.rng
+	rng.Seed(w.seed + uint64(batchIdx))
 
 	partKey := batchIdx + 1
 	cb.Reset(partSuppTypes, numPartSuppPerPart, coldata.StandardColumnFactory)
@@ -225,7 +230,8 @@ func (w *tpch) tpchCustomerInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	rng := l.seedableRand.Seed(w.seed + uint64(batchIdx))
+	rng := l.rng
+	rng.Seed(w.seed + uint64(batchIdx))
 
 	custKey := int64(batchIdx) + 1
 	cb.Reset(customerTypes, 1, coldata.StandardColumnFactory)
@@ -323,7 +329,10 @@ var ordersTypes = []*types.T{
 	types.Bytes,
 }
 
-func populateSharedData(rng *rand.Rand, sf int, data *orderSharedRandomData) {
+func populateSharedData(rng *rand.Rand, seed uint64, sf int, data *orderSharedRandomData) {
+	// Seed the rng here to force orders and lineitems to get the same results.
+	rng.Seed(seed)
+
 	data.nOrders = randInt(rng, 1, 7)
 	data.orderDate = randInt(rng, int(startDateDays), int(endDateDays-151))
 	data.partKeys = data.partKeys[:data.nOrders]
@@ -355,6 +364,7 @@ func (w *tpch) tpchOrdersInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
+	rng := l.rng
 
 	cb.Reset(ordersTypes, numOrderPerCustomer, coldata.StandardColumnFactory)
 
@@ -370,14 +380,12 @@ func (w *tpch) tpchOrdersInitialRowBatch(
 
 	orderStartIdx := numOrderPerCustomer * batchIdx
 	for i := 0; i < numOrderPerCustomer; i++ {
-		// Seed the rng here to force orders and lineitems to get the same results.
-		rng := l.seedableRand.Seed(w.seed + uint64(orderStartIdx+i))
-		populateSharedData(rng, w.scaleFactor, l.orderData)
+		populateSharedData(rng, w.seed+uint64(orderStartIdx+i), w.scaleFactor, l.orderData)
 
 		orderKeyCol[i] = int64(getOrderKey(orderStartIdx + i))
 		// O_CUSTKEY = random value c [1 .. (SF * 150,000)], s.t. c % 3 != 0.
 		numCust := w.scaleFactor * numCustomerPerSF
-		custKeyCol[i] = int64((randInt(rng, 1, w.scaleFactor*(numCustomerPerSF/3))*3 + rng.IntN(2) + 1) % numCust)
+		custKeyCol[i] = int64((randInt(rng, 1, w.scaleFactor*(numCustomerPerSF/3))*3 + rng.Intn(2) + 1) % numCust)
 		// O_ORDERSTATUS = F if all lineitems.LINESTATUS = F; O if all O; P
 		// otherwise.
 		if l.orderData.allF {
@@ -437,6 +445,7 @@ func (w *tpch) tpchLineItemInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
+	rng := l.rng
 
 	cb.Reset(lineItemTypes, numOrderPerCustomer*7, coldata.StandardColumnFactory)
 
@@ -461,9 +470,7 @@ func (w *tpch) tpchLineItemInitialRowBatch(
 	s := w.scaleFactor * 10000
 	offset := 0
 	for i := 0; i < numOrderPerCustomer; i++ {
-		// Seed the rng here to force orders and lineitems to get the same results.
-		rng := l.seedableRand.Seed(w.seed + uint64(orderStartIdx+i))
-		populateSharedData(rng, w.scaleFactor, l.orderData)
+		populateSharedData(rng, w.seed+uint64(orderStartIdx+i), w.scaleFactor, l.orderData)
 
 		orderKey := int64(getOrderKey(orderStartIdx + i))
 		for j := 0; j < l.orderData.nOrders; j++ {
@@ -502,7 +509,7 @@ func (w *tpch) tpchLineItemInitialRowBatch(
 			// then either "R" or "A" is selected at random
 			// else "N" is selected.
 			if receiptDate < currentDateDays {
-				if rng.IntN(2) == 0 {
+				if rng.Intn(2) == 0 {
 					returnFlagCol.Set(idx, []byte("R"))
 				} else {
 					returnFlagCol.Set(idx, []byte("A"))

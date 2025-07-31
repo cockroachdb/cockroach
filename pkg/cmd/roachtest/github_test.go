@@ -2,6 +2,7 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
+
 package main
 
 import (
@@ -16,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -32,12 +33,14 @@ import (
 
 var (
 	teamsYaml = `cockroachdb/unowned:
- aliases:
-   cockroachdb/rfc-prs: other
+  aliases:
+    cockroachdb/rfc-prs: other
+  triage_column_id: 0
 cockroachdb/test-eng:
- label: T-testeng
+  label: T-testeng
+  triage_column_id: 14041337
 cockroachdb/dev-inf:
- label: T-dev-inf`
+  triage_column_id: 10210759`
 
 	validTeamsFn   = func() (team.Map, error) { return loadYamlTeams(teamsYaml) }
 	invalidTeamsFn = func() (team.Map, error) { return loadYamlTeams("invalid yaml") }
@@ -136,12 +139,12 @@ func TestCreatePostRequest(t *testing.T) {
 
 		ti := &testImpl{
 			spec:        testSpec,
+			l:           nilLogger(),
 			start:       time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC),
 			end:         time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC),
 			cockroach:   "cockroach",
-			cockroachEA: "cockroach-ea",
+			cockroachEA: "cockroach-short",
 		}
-		ti.ReplaceL(nilLogger())
 
 		testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64, name: "foo"}
 		vo := vm.DefaultCreateOpts()
@@ -153,9 +156,10 @@ func TestCreatePostRequest(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			if d.Cmd == "post" {
 				github := &githubIssues{
-					teamLoader: teamLoadFn,
+					vmCreateOpts: vmOpts,
+					cluster:      testClusterImpl,
+					teamLoader:   teamLoadFn,
 				}
-				issueInfo := newGithubIssueInfo(testClusterImpl, vmOpts)
 
 				// See: `formatFailure` which formats failures for roachtests. Try to
 				// follow it here.
@@ -171,11 +175,10 @@ func TestCreatePostRequest(t *testing.T) {
 				}
 				message := b.String()
 
-				params := getTestParameters(ti, issueInfo.cluster, issueInfo.vmCreateOpts)
+				params := getTestParameters(ti, github.cluster, github.vmCreateOpts)
 				req, err := github.createPostRequest(
 					testName, ti.start, ti.end, testSpec, testCase.failures,
-					message, roachtestutil.UsingRuntimeAssertions(ti), ti.goCoverEnabled, params,
-					issueInfo,
+					message, tests.UsingRuntimeAssertions(ti), ti.goCoverEnabled, params,
 				)
 				if testCase.loadTeamsFailed {
 					// Assert that if TEAMS.yaml cannot be loaded then function errors.
@@ -211,8 +214,6 @@ func TestCreatePostRequest(t *testing.T) {
 							refError = vmPreemptionError("my_VM")
 						case "vm-host-error":
 							refError = vmHostError("my_VM")
-						case "live-migration-error":
-							refError = liveMigrationError("my_VM")
 						case "error-with-owner-sql-foundations":
 							refError = registry.ErrorWithOwner(registry.OwnerSQLFoundations, refError)
 						case "error-with-owner-test-eng":
@@ -290,10 +291,6 @@ func formatPostRequest(req issues.PostRequest) (string, error) {
 	q := u.Query()
 	q.Add("title", formatter.Title(data))
 	q.Add("body", post.String())
-	// Adding a template parameter is required to be able to view the rendered
-	// template on GitHub, otherwise it just takes you to the template selection
-	// page.
-	q.Add("template", "none")
 	u.RawQuery = q.Encode()
 	post.WriteString(fmt.Sprintf("Rendered:\n%s", u.String()))
 

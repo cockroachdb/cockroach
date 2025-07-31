@@ -641,7 +641,6 @@ upsert xy
  │    │    │    ├── fd: ()-->(7,8)
  │    │    │    ├── scan xy
  │    │    │    │    ├── columns: xy.x:7!null y:8
- │    │    │    │    ├── flags: avoid-full-scan
  │    │    │    │    ├── key: (7)
  │    │    │    │    └── fd: (7)-->(8)
  │    │    │    └── filters
@@ -678,8 +677,7 @@ upsert xy
       │         │         ├── key: ()
       │         │         └── fd: ()-->(15)
       │         ├── scan fks
-      │         │    ├── columns: r1:18!null
-      │         │    └── flags: avoid-full-scan
+      │         │    └── columns: r1:18!null
       │         └── filters
       │              └── x:14 = r1:18 [outer=(14,18), constraints=(/14: (/NULL - ]; /18: (/NULL - ]), fd=(14)==(18), (18)==(14)]
       └── f-k-checks-item: fks(r2) -> xy(x)
@@ -710,8 +708,7 @@ upsert xy
                 │         ├── key: ()
                 │         └── fd: ()-->(23)
                 ├── scan fks
-                │    ├── columns: r2:27
-                │    └── flags: avoid-full-scan
+                │    └── columns: r2:27
                 └── filters
                      └── x:22 = r2:27 [outer=(22,27), constraints=(/22: (/NULL - ]; /27: (/NULL - ]), fd=(22)==(27), (27)==(22)]
 
@@ -745,7 +742,6 @@ insert xy
       │    ├── fd: ()-->(7)
       │    ├── scan xy
       │    │    ├── columns: x:7!null
-      │    │    ├── flags: avoid-full-scan
       │    │    └── key: (7)
       │    └── filters
       │         └── x:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
@@ -787,7 +783,6 @@ upsert nullablecols
       │    └── (1, 2, 2, unique_rowid())
       ├── scan nullablecols
       │    ├── columns: c1:11 c2:12 c3:13 rowid:14!null
-      │    ├── flags: avoid-full-scan
       │    ├── key: (14)
       │    └── fd: (14)-->(11-13), (11)~~>(12-14), (12,13)~~>(11,14)
       └── filters
@@ -826,7 +821,6 @@ upsert xy
  │    │    │    └── fd: (5)-->(6)
  │    │    ├── scan xy
  │    │    │    ├── columns: xy.x:12!null y:13
- │    │    │    ├── flags: avoid-full-scan
  │    │    │    ├── key: (12)
  │    │    │    └── fd: (12)-->(13)
  │    │    └── filters
@@ -852,8 +846,7 @@ upsert xy
       │         │         └── mapping:
       │         │              └──  upsert_x:17 => x:20
       │         ├── scan fks
-      │         │    ├── columns: r1:23!null
-      │         │    └── flags: avoid-full-scan
+      │         │    └── columns: r1:23!null
       │         └── filters
       │              └── x:19 = r1:23 [outer=(19,23), constraints=(/19: (/NULL - ]; /23: (/NULL - ]), fd=(19)==(23), (23)==(19)]
       └── f-k-checks-item: fks(r2) -> xy(x)
@@ -874,8 +867,7 @@ upsert xy
                 │         └── mapping:
                 │              └──  upsert_x:17 => x:28
                 ├── scan fks
-                │    ├── columns: r2:32
-                │    └── flags: avoid-full-scan
+                │    └── columns: r2:32
                 └── filters
                      └── x:27 = r2:32 [outer=(27,32), constraints=(/27: (/NULL - ]; /32: (/NULL - ]), fd=(27)==(32), (32)==(27)]
 
@@ -923,7 +915,6 @@ upsert xy
  │    │    │              └── c2:6
  │    │    ├── scan xy
  │    │    │    ├── columns: xy.x:11!null y:12
- │    │    │    ├── flags: avoid-full-scan
  │    │    │    ├── key: (11)
  │    │    │    └── fd: (11)-->(12)
  │    │    └── filters
@@ -949,8 +940,7 @@ upsert xy
       │         │         └── mapping:
       │         │              └──  upsert_x:16 => x:19
       │         ├── scan fks
-      │         │    ├── columns: r1:22!null
-      │         │    └── flags: avoid-full-scan
+      │         │    └── columns: r1:22!null
       │         └── filters
       │              └── x:18 = r1:22 [outer=(18,22), constraints=(/18: (/NULL - ]; /22: (/NULL - ]), fd=(18)==(22), (22)==(18)]
       └── f-k-checks-item: fks(r2) -> xy(x)
@@ -971,8 +961,7 @@ upsert xy
                 │         └── mapping:
                 │              └──  upsert_x:16 => x:27
                 ├── scan fks
-                │    ├── columns: r2:31
-                │    └── flags: avoid-full-scan
+                │    └── columns: r2:31
                 └── filters
                      └── x:26 = r2:31 [outer=(26,31), constraints=(/26: (/NULL - ]; /31: (/NULL - ]), fd=(26)==(31), (31)==(26)]
 
@@ -1016,7 +1005,6 @@ upsert xy
  │    │    │              └── b:6
  │    │    ├── scan xy
  │    │    │    ├── columns: xy.x:10!null y:11
- │    │    │    ├── flags: avoid-full-scan
  │    │    │    ├── key: (10)
  │    │    │    └── fd: (10)-->(11)
  │    │    └── filters
@@ -1042,8 +1030,7 @@ upsert xy
       │         │         └── mapping:
       │         │              └──  upsert_x:15 => x:18
       │         ├── scan fks
-      │         │    ├── columns: r1:21!null
-      │         │    └── flags: avoid-full-scan
+      │         │    └── columns: r1:21!null
       │         └── filters
       │              └── x:17 = r1:21 [outer=(17,21), constraints=(/17: (/NULL - ]; /21: (/NULL - ]), fd=(17)==(21), (21)==(17)]
       └── f-k-checks-item: fks(r2) -> xy(x)
@@ -1064,8 +1051,7 @@ upsert xy
                 │         └── mapping:
                 │              └──  upsert_x:15 => x:26
                 ├── scan fks
-                │    ├── columns: r2:30
-                │    └── flags: avoid-full-scan
+                │    └── columns: r2:30
                 └── filters
                      └── x:25 = r2:30 [outer=(25,30), constraints=(/25: (/NULL - ]; /30: (/NULL - ]), fd=(25)==(30), (30)==(25)]
 
@@ -1445,7 +1431,6 @@ upsert nullablecols
       │    │              └── k:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
       │    ├── scan nullablecols
       │    │    ├── columns: c1:23 c2:24 c3:25 rowid:26!null
-      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (26)
       │    │    └── fd: (26)-->(23-25), (23)~~>(24-26), (24,25)~~>(23,26)
       │    └── filters
@@ -1534,14 +1519,14 @@ SELECT min(f) FROM a GROUP BY i, s, k
 project
  ├── columns: min:8
  └── group-by (hash)
-      ├── columns: k:1!null min:8
-      ├── grouping columns: k:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(8)
+      ├── columns: i:2!null s:4!null min:8
+      ├── grouping columns: i:2!null s:4!null
+      ├── key: (2,4)
+      ├── fd: (2,4)-->(8)
       ├── scan a
-      │    ├── columns: k:1!null f:3
-      │    ├── key: (1)
-      │    └── fd: (1)-->(3)
+      │    ├── columns: i:2!null f:3 s:4!null
+      │    ├── key: (2,4)
+      │    └── fd: (2,4)-->(3), (2,3)~~>(4)
       └── aggregations
            └── min [as=min:8, outer=(3)]
                 └── f:3
@@ -1643,7 +1628,6 @@ insert xy
       │    │         └── CAST(NULL AS INT8) [as=y_default:9]
       │    ├── scan xy
       │    │    ├── columns: x:10!null
-      │    │    ├── flags: avoid-full-scan
       │    │    └── key: (10)
       │    └── filters
       │         └── y:6 = x:10 [outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
@@ -1698,7 +1682,6 @@ upsert xy
       │    │              └── CAST(NULL AS INT8) [as=y_default:9]
       │    ├── scan xy
       │    │    ├── columns: x:10!null y:11
-      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (10)
       │    │    └── fd: (10)-->(11)
       │    └── filters
@@ -1742,7 +1725,6 @@ insert xy
       │    │         └── CAST(NULL AS INT8) [as=y_default:9]
       │    ├── scan xy
       │    │    ├── columns: x:10!null
-      │    │    ├── flags: avoid-full-scan
       │    │    └── key: (10)
       │    └── filters
       │         └── y:6 = x:10 [outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
@@ -1800,7 +1782,6 @@ upsert xy
       │    │              └── y_default:9
       │    ├── scan xy
       │    │    ├── columns: x:10!null y:11
-      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (10)
       │    │    └── fd: (10)-->(11)
       │    └── filters
@@ -1853,7 +1834,6 @@ upsert abc
       │              └── "?column?":12
       ├── scan abc
       │    ├── columns: a:13!null b:14!null c:15!null
-      │    ├── flags: avoid-full-scan
       │    └── key: (13-15)
       └── filters
            ├── "?column?":11 = a:13 [outer=(11,13), constraints=(/11: (/NULL - ]; /13: (/NULL - ]), fd=(11)==(13), (13)==(11)]
@@ -1911,7 +1891,6 @@ upsert abc
       │    │              └── b:7
       │    ├── scan abc
       │    │    ├── columns: a:12!null b:13!null c:14!null
-      │    │    ├── flags: avoid-full-scan
       │    │    └── key: (12-14)
       │    └── filters
       │         ├── "?column?":11 = a:12 [outer=(11,12), constraints=(/11: (/NULL - ]; /12: (/NULL - ]), fd=(11)==(12), (12)==(11)]
@@ -2380,7 +2359,6 @@ insert a
       │    │    ├── fd: ()-->(22)
       │    │    ├── scan a
       │    │    │    ├── columns: i:20!null s:22!null
-      │    │    │    ├── flags: avoid-full-scan
       │    │    │    └── key: (20,22)
       │    │    └── filters
       │    │         └── s:22 = 'foo' [outer=(22), constraints=(/22: [/'foo' - /'foo']; tight), fd=()-->(22)]
@@ -2486,7 +2464,6 @@ upsert a
       │    │              └── 'foo' [as="?column?":16]
       │    ├── scan a
       │    │    ├── columns: k:19!null i:20!null f:21 s:22!null j:23
-      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (19)
       │    │    └── fd: (19)-->(20-23), (20,22)-->(19,21,23), (20,21)~~>(19,22,23)
       │    └── filters
@@ -2811,7 +2788,6 @@ insert a
       │         └── CAST(NULL AS JSONB) [as=j_default:12]
       ├── scan a
       │    ├── columns: i:14!null s:16!null
-      │    ├── flags: avoid-full-scan
       │    └── key: (14,16)
       └── filters
            ├── column3:10 = i:14 [outer=(10,14), constraints=(/10: (/NULL - ]; /14: (/NULL - ]), fd=(10)==(14), (14)==(10)]
@@ -2860,7 +2836,6 @@ upsert a
       │    │         └── CAST(NULL AS JSONB) [as=j_default:12]
       │    ├── scan a
       │    │    ├── columns: k:13!null i:14!null f:15 s:16!null j:17
-      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (13)
       │    │    └── fd: (13)-->(14-17), (14,16)-->(13,15,17), (14,15)~~>(13,16,17)
       │    └── filters
@@ -2929,7 +2904,6 @@ upsert a
       │    │              └── j_default:12
       │    ├── scan a
       │    │    ├── columns: k:13!null i:14!null f:15 s:16!null j:17
-      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (13)
       │    │    └── fd: (13)-->(14-17), (14,16)-->(13,15,17), (14,15)~~>(13,16,17)
       │    └── filters
@@ -2980,20 +2954,17 @@ insert a
       │    │    │         └── CAST(NULL AS JSONB) [as=j_default:12]
       │    │    ├── scan a
       │    │    │    ├── columns: k:13!null
-      │    │    │    ├── flags: avoid-full-scan
       │    │    │    └── key: (13)
       │    │    └── filters
       │    │         └── column1:8 = k:13 [outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
       │    ├── scan a
       │    │    ├── columns: i:21!null s:23!null
-      │    │    ├── flags: avoid-full-scan
       │    │    └── key: (21,23)
       │    └── filters
       │         ├── column3:10 = i:21 [outer=(10,21), constraints=(/10: (/NULL - ]; /21: (/NULL - ]), fd=(10)==(21), (21)==(10)]
       │         └── column2:9 = s:23 [outer=(9,23), constraints=(/9: (/NULL - ]; /23: (/NULL - ]), fd=(9)==(23), (23)==(9)]
       ├── scan a
       │    ├── columns: i:28!null f:29
-      │    ├── flags: avoid-full-scan
       │    └── lax-key: (28,29)
       └── filters
            ├── column3:10 = i:28 [outer=(10,28), constraints=(/10: (/NULL - ]; /28: (/NULL - ]), fd=(10)==(28), (28)==(10)]
@@ -3055,20 +3026,17 @@ insert a
       │    │    │    │    │         └── CAST(NULL AS JSONB) [as=j_default:12]
       │    │    │    │    ├── scan a
       │    │    │    │    │    ├── columns: k:13!null
-      │    │    │    │    │    ├── flags: avoid-full-scan
       │    │    │    │    │    └── key: (13)
       │    │    │    │    └── filters
       │    │    │    │         └── column1:8 = k:13 [outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
       │    │    │    ├── scan a
       │    │    │    │    ├── columns: i:21!null s:23!null
-      │    │    │    │    ├── flags: avoid-full-scan
       │    │    │    │    └── key: (21,23)
       │    │    │    └── filters
       │    │    │         ├── i_default:11 = i:21 [outer=(11,21), constraints=(/11: (/NULL - ]; /21: (/NULL - ]), fd=(11)==(21), (21)==(11)]
       │    │    │         └── column2:9 = s:23 [outer=(9,23), constraints=(/9: (/NULL - ]; /23: (/NULL - ]), fd=(9)==(23), (23)==(9)]
       │    │    ├── scan a
       │    │    │    ├── columns: i:28!null f:29
-      │    │    │    ├── flags: avoid-full-scan
       │    │    │    └── lax-key: (28,29)
       │    │    └── filters
       │    │         ├── i_default:11 = i:28 [outer=(11,28), constraints=(/11: (/NULL - ]; /28: (/NULL - ]), fd=(11)==(28), (28)==(11)]
@@ -3143,20 +3111,17 @@ insert a
       │    │    │    │         └── CAST(NULL AS JSONB) [as=j_default:12]
       │    │    │    ├── scan a
       │    │    │    │    ├── columns: k:13!null
-      │    │    │    │    ├── flags: avoid-full-scan
       │    │    │    │    └── key: (13)
       │    │    │    └── filters
       │    │    │         └── column1:8 = k:13 [outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
       │    │    ├── scan a
       │    │    │    ├── columns: i:21!null s:23!null
-      │    │    │    ├── flags: avoid-full-scan
       │    │    │    └── key: (21,23)
       │    │    └── filters
       │    │         ├── column3:10 = i:21 [outer=(10,21), constraints=(/10: (/NULL - ]; /21: (/NULL - ]), fd=(10)==(21), (21)==(10)]
       │    │         └── column2:9 = s:23 [outer=(9,23), constraints=(/9: (/NULL - ]; /23: (/NULL - ]), fd=(9)==(23), (23)==(9)]
       │    ├── scan a
       │    │    ├── columns: i:28!null f:29
-      │    │    ├── flags: avoid-full-scan
       │    │    └── lax-key: (28,29)
       │    └── filters
       │         ├── column3:10 = i:28 [outer=(10,28), constraints=(/10: (/NULL - ]; /28: (/NULL - ]), fd=(10)==(28), (28)==(10)]
@@ -3211,7 +3176,6 @@ insert a
       │    │    ├── fd: ()-->(21)
       │    │    ├── scan a
       │    │    │    ├── columns: i:19!null s:21!null
-      │    │    │    ├── flags: avoid-full-scan
       │    │    │    └── key: (19,21)
       │    │    └── filters
       │    │         └── s:21 = 'foo' [outer=(21), constraints=(/21: [/'foo' - /'foo']; tight), fd=()-->(21)]
@@ -4444,470 +4408,3 @@ scalar-group-by
  └── aggregations
       └── sum [as=sum:6, outer=(1)]
            └── a:1
-
-# --------------------------------------------------
-# FoldGroupByAndWindow
-# --------------------------------------------------
-
-# Case with one partition column and an aggregate that references an input col.
-# NOTE: the "foo" and "bar" grouping columns are simplified to ConstAgg.
-norm expect=FoldGroupByAndWindow
-SELECT sum(v), foo, bar
-FROM (
-  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
-  FROM uvwz
-  WINDOW w AS (
-    PARTITION BY u ORDER BY z
-    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-  )
-)
-GROUP BY u, foo, bar;
-----
-project
- ├── columns: sum:10!null foo:8!null bar:9!null
- └── group-by (hash)
-      ├── columns: u:1!null count:8!null array_agg:9!null sum:10!null
-      ├── grouping columns: u:1!null
-      ├── internal-ordering: +4 opt(1)
-      ├── key: (1)
-      ├── fd: (1)-->(8-10)
-      ├── sort
-      │    ├── columns: u:1!null v:2!null z:4!null
-      │    ├── key: (1,2)
-      │    ├── fd: (1,2)-->(4)
-      │    ├── ordering: +4 opt(1) [actual: +4]
-      │    └── scan uvwz
-      │         ├── columns: u:1!null v:2!null z:4!null
-      │         ├── key: (1,2)
-      │         └── fd: (1,2)-->(4)
-      └── aggregations
-           ├── sum [as=sum:10, outer=(2)]
-           │    └── v:2
-           ├── count-rows [as=count:8]
-           └── array-agg [as=array_agg:9, outer=(4)]
-                └── z:4
-
-# Case with a ConstAgg referencing an input column.
-norm expect=FoldGroupByAndWindow
-SELECT sum(v), foo, bar
-FROM (
-  SELECT *, count(w) OVER w AS foo
-  FROM (SELECT *, 100 AS bar FROM uvwz)
-  WINDOW w AS (
-    PARTITION BY u ORDER BY z
-    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-  )
-)
-GROUP BY u, foo, bar;
-----
-project
- ├── columns: sum:10!null foo:9!null bar:8!null
- ├── fd: ()-->(8)
- └── group-by (hash)
-      ├── columns: u:1!null bar:8!null count:9!null sum:10!null
-      ├── grouping columns: u:1!null
-      ├── internal-ordering: +4 opt(1,8)
-      ├── key: (1)
-      ├── fd: ()-->(8), (1)-->(8-10)
-      ├── project
-      │    ├── columns: bar:8!null u:1!null v:2!null z:4!null
-      │    ├── key: (1,2)
-      │    ├── fd: ()-->(8), (1,2)-->(4)
-      │    ├── ordering: +4 opt(1,8) [actual: +4]
-      │    ├── sort
-      │    │    ├── columns: u:1!null v:2!null z:4!null
-      │    │    ├── key: (1,2)
-      │    │    ├── fd: (1,2)-->(4)
-      │    │    ├── ordering: +4 opt(1) [actual: +4]
-      │    │    └── scan uvwz
-      │    │         ├── columns: u:1!null v:2!null z:4!null
-      │    │         ├── key: (1,2)
-      │    │         └── fd: (1,2)-->(4)
-      │    └── projections
-      │         └── 100 [as=bar:8]
-      └── aggregations
-           ├── sum [as=sum:10, outer=(2)]
-           │    └── v:2
-           ├── const-agg [as=bar:8, outer=(8)]
-           │    └── bar:8
-           └── count-rows [as=count:9]
-
-# Case with no partition columns.
-norm expect=FoldGroupByAndWindow
-SELECT sum(v), foo, bar
-FROM (
-  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
-  FROM uvwz
-  WINDOW w AS (
-    ORDER BY z
-    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-  )
-)
-GROUP BY foo, bar;
-----
-group-by (streaming)
- ├── columns: sum:10!null foo:8!null bar:9!null
- ├── internal-ordering: +4
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(8-10)
- ├── sort
- │    ├── columns: v:2!null z:4!null
- │    ├── ordering: +4
- │    └── scan uvwz
- │         └── columns: v:2!null z:4!null
- └── aggregations
-      ├── sum [as=sum:10, outer=(2)]
-      │    └── v:2
-      ├── count-rows [as=count:8]
-      └── array-agg [as=array_agg:9, outer=(4)]
-           └── z:4
-
-# Case with multiple partition columns.
-norm expect=FoldGroupByAndWindow
-SELECT sum(v), foo, bar
-FROM (
-  SELECT *, count(v) OVER w AS foo, array_agg(z) OVER w AS bar
-  FROM uvwz
-  WINDOW w AS (
-    PARTITION BY u, w ORDER BY z
-    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-  )
-)
-GROUP BY u, w, foo, bar;
-----
-project
- ├── columns: sum:10!null foo:8!null bar:9!null
- └── group-by (hash)
-      ├── columns: u:1!null w:3!null count:8!null array_agg:9!null sum:10!null
-      ├── grouping columns: u:1!null w:3!null
-      ├── internal-ordering: +4 opt(1,3)
-      ├── key: (1,3)
-      ├── fd: (1,3)-->(8-10)
-      ├── sort
-      │    ├── columns: u:1!null v:2!null w:3!null z:4!null
-      │    ├── key: (2,3)
-      │    ├── fd: (1,2)-->(3,4), (2,3)-->(1,4)
-      │    ├── ordering: +4 opt(1,3) [actual: +4]
-      │    └── scan uvwz
-      │         ├── columns: u:1!null v:2!null w:3!null z:4!null
-      │         ├── key: (2,3)
-      │         └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
-      └── aggregations
-           ├── sum [as=sum:10, outer=(2)]
-           │    └── v:2
-           ├── count-rows [as=count:8]
-           └── array-agg [as=array_agg:9, outer=(4)]
-                └── z:4
-
-# Case with grouping/partitioning on key columns.
-norm expect=FoldGroupByAndWindow
-SELECT sum(w), foo, bar
-FROM (
-  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
-  FROM uvwz
-  WINDOW w AS (
-    PARTITION BY u, v ORDER BY z
-    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-  )
-)
-GROUP BY u, v, foo, bar;
-----
-project
- ├── columns: sum:10!null foo:8!null bar:9!null
- └── group-by (hash)
-      ├── columns: u:1!null v:2!null count:8!null array_agg:9!null sum:10!null
-      ├── grouping columns: u:1!null v:2!null
-      ├── key: (1,2)
-      ├── fd: (1,2)-->(8-10)
-      ├── scan uvwz
-      │    ├── columns: u:1!null v:2!null w:3!null z:4!null
-      │    ├── key: (2,3)
-      │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
-      └── aggregations
-           ├── sum [as=sum:10, outer=(3)]
-           │    └── w:3
-           ├── count-rows [as=count:8]
-           └── array-agg [as=array_agg:9, outer=(4)]
-                └── z:4
-
-# No-op because of an ordered GroupBy.
-norm expect-not=FoldGroupByAndWindow
-SELECT array_agg(v), foo, bar
-FROM (
-  SELECT * FROM (
-    SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
-    FROM uvwz
-    WINDOW w AS (
-      PARTITION BY u ORDER BY z
-      ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-    )
-  )
-  ORDER BY v DESC
-)
-GROUP BY u, foo, bar;
-----
-project
- ├── columns: array_agg:10!null foo:8 bar:9
- └── group-by (hash)
-      ├── columns: u:1!null count:8 array_agg:9 array_agg:10!null
-      ├── grouping columns: u:1!null
-      ├── internal-ordering: -2 opt(1,8,9)
-      ├── key: (1)
-      ├── fd: (1)-->(8-10)
-      ├── sort
-      │    ├── columns: u:1!null v:2!null w:3!null z:4!null count:8 array_agg:9
-      │    ├── key: (2,3)
-      │    ├── fd: (1,2)-->(3,4), (2,3)-->(1,4), (1)-->(8,9)
-      │    ├── ordering: -2 opt(1,8,9) [actual: -2]
-      │    └── window partition=(1) ordering=+4 opt(1)
-      │         ├── columns: u:1!null v:2!null w:3!null z:4!null count:8 array_agg:9
-      │         ├── key: (2,3)
-      │         ├── fd: (1,2)-->(3,4), (2,3)-->(1,4), (1)-->(8,9)
-      │         ├── scan uvwz
-      │         │    ├── columns: u:1!null v:2!null w:3!null z:4!null
-      │         │    ├── key: (2,3)
-      │         │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
-      │         └── windows
-      │              ├── count [as=count:8, frame="rows from unbounded to unbounded", outer=(3)]
-      │              │    └── w:3
-      │              └── array-agg [as=array_agg:9, frame="rows from unbounded to unbounded", outer=(4)]
-      │                   └── z:4
-      └── aggregations
-           ├── array-agg [as=array_agg:10, outer=(2)]
-           │    └── v:2
-           ├── const-agg [as=count:8, outer=(8)]
-           │    └── count:8
-           └── const-agg [as=array_agg:9, outer=(9)]
-                └── array_agg:9
-
-# No-op because the grouping columns reference a window function.
-norm expect-not=FoldGroupByAndWindow
-SELECT sum(v), foo, bar
-FROM (
-  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar, row_number() OVER w AS baz
-  FROM uvwz
-  WINDOW w AS (
-    PARTITION BY u ORDER BY z
-    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-  )
-)
-GROUP BY u, foo, bar, baz;
-----
-project
- ├── columns: sum:11!null foo:8 bar:9
- └── group-by (hash)
-      ├── columns: u:1!null count:8 array_agg:9 row_number:10 sum:11!null
-      ├── grouping columns: u:1!null row_number:10
-      ├── key: (1,10)
-      ├── fd: (1)-->(8,9), (1,10)-->(8,9,11)
-      ├── window partition=(1) ordering=+4 opt(1)
-      │    ├── columns: u:1!null v:2!null w:3!null z:4!null count:8 array_agg:9 row_number:10
-      │    ├── key: (2,3)
-      │    ├── fd: (1,2)-->(3,4), (2,3)-->(1,4,10), (1)-->(8,9)
-      │    ├── scan uvwz
-      │    │    ├── columns: u:1!null v:2!null w:3!null z:4!null
-      │    │    ├── key: (2,3)
-      │    │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
-      │    └── windows
-      │         ├── count [as=count:8, frame="rows from unbounded to unbounded", outer=(3)]
-      │         │    └── w:3
-      │         ├── array-agg [as=array_agg:9, frame="rows from unbounded to unbounded", outer=(4)]
-      │         │    └── z:4
-      │         └── row-number [as=row_number:10, frame="rows from unbounded to unbounded"]
-      └── aggregations
-           ├── sum [as=sum:11, outer=(2)]
-           │    └── v:2
-           ├── const-agg [as=count:8, outer=(8)]
-           │    └── count:8
-           └── const-agg [as=array_agg:9, outer=(9)]
-                └── array_agg:9
-
-# No-op because the grouping columns are not the same as the partition columns.
-norm expect-not=FoldGroupByAndWindow
-SELECT sum(u), foo, bar
-FROM (
-  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
-  FROM uvwz
-  WINDOW w AS (
-    PARTITION BY u ORDER BY z
-    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-  )
-)
-GROUP BY v, foo, bar;
-----
-project
- ├── columns: sum:10!null foo:8 bar:9
- └── group-by (hash)
-      ├── columns: v:2!null count:8 array_agg:9 sum:10!null
-      ├── grouping columns: v:2!null count:8 array_agg:9
-      ├── key: (2,8,9)
-      ├── fd: (2,8,9)-->(10)
-      ├── window partition=(1) ordering=+4 opt(1)
-      │    ├── columns: u:1!null v:2!null w:3!null z:4!null count:8 array_agg:9
-      │    ├── key: (2,3)
-      │    ├── fd: (1,2)-->(3,4), (2,3)-->(1,4), (1)-->(8,9)
-      │    ├── scan uvwz
-      │    │    ├── columns: u:1!null v:2!null w:3!null z:4!null
-      │    │    ├── key: (2,3)
-      │    │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
-      │    └── windows
-      │         ├── count [as=count:8, frame="rows from unbounded to unbounded", outer=(3)]
-      │         │    └── w:3
-      │         └── array-agg [as=array_agg:9, frame="rows from unbounded to unbounded", outer=(4)]
-      │              └── z:4
-      └── aggregations
-           └── sum [as=sum:10, outer=(1)]
-                └── u:1
-
-# No-op because the grouping columns are not the same as the partition columns.
-norm expect-not=FoldGroupByAndWindow
-SELECT sum(v), foo, bar
-FROM (
-  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
-  FROM uvwz
-  WINDOW w AS (
-    ORDER BY z
-    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-  )
-)
-GROUP BY u, foo, bar;
-----
-project
- ├── columns: sum:10!null foo:8 bar:9
- ├── fd: ()-->(8,9)
- └── group-by (hash)
-      ├── columns: u:1!null count:8 array_agg:9 sum:10!null
-      ├── grouping columns: u:1!null
-      ├── key: (1)
-      ├── fd: ()-->(8,9), (1)-->(8-10)
-      ├── window partition=() ordering=+4
-      │    ├── columns: u:1!null v:2!null w:3!null z:4!null count:8 array_agg:9
-      │    ├── key: (2,3)
-      │    ├── fd: ()-->(8,9), (1,2)-->(3,4), (2,3)-->(1,4)
-      │    ├── scan uvwz
-      │    │    ├── columns: u:1!null v:2!null w:3!null z:4!null
-      │    │    ├── key: (2,3)
-      │    │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
-      │    └── windows
-      │         ├── count [as=count:8, frame="rows from unbounded to unbounded", outer=(3)]
-      │         │    └── w:3
-      │         └── array-agg [as=array_agg:9, frame="rows from unbounded to unbounded", outer=(4)]
-      │              └── z:4
-      └── aggregations
-           ├── sum [as=sum:10, outer=(2)]
-           │    └── v:2
-           ├── const-agg [as=count:8, outer=(8)]
-           │    └── count:8
-           └── const-agg [as=array_agg:9, outer=(9)]
-                └── array_agg:9
-
-# No-op because the window frame is not unbounded.
-norm expect-not=FoldGroupByAndWindow
-SELECT sum(v), foo, bar
-FROM (
-  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
-  FROM uvwz
-  WINDOW w AS (
-    PARTITION BY u ORDER BY z
-  )
-)
-GROUP BY u, foo, bar;
-----
-project
- ├── columns: sum:10!null foo:8 bar:9
- └── group-by (hash)
-      ├── columns: u:1!null count:8 array_agg:9 sum:10!null
-      ├── grouping columns: u:1!null count:8 array_agg:9
-      ├── key: (1,8,9)
-      ├── fd: (1,8,9)-->(10)
-      ├── window partition=(1) ordering=+4 opt(1)
-      │    ├── columns: u:1!null v:2!null w:3!null z:4!null count:8 array_agg:9
-      │    ├── key: (2,3)
-      │    ├── fd: (1,2)-->(3,4), (2,3)-->(1,4,8,9)
-      │    ├── scan uvwz
-      │    │    ├── columns: u:1!null v:2!null w:3!null z:4!null
-      │    │    ├── key: (2,3)
-      │    │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
-      │    └── windows
-      │         ├── count [as=count:8, outer=(3)]
-      │         │    └── w:3
-      │         └── array-agg [as=array_agg:9, outer=(4)]
-      │              └── z:4
-      └── aggregations
-           └── sum [as=sum:10, outer=(2)]
-                └── v:2
-
-# No-op because the (non ConstAgg-like) Sum GroupBy aggregate references a
-# Window aggregate.
-norm expect-not=FoldGroupByAndWindow
-SELECT sum(foo), foo, bar
-FROM (
-  SELECT *, count(w) OVER w AS foo, array_agg(z) OVER w AS bar
-  FROM uvwz
-  WINDOW w AS (
-    PARTITION BY u ORDER BY z
-    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-  )
-)
-GROUP BY u, foo, bar;
-----
-project
- ├── columns: sum:10 foo:8 bar:9
- └── group-by (hash)
-      ├── columns: u:1!null count:8 array_agg:9 sum:10
-      ├── grouping columns: u:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(8-10)
-      ├── window partition=(1) ordering=+4 opt(1)
-      │    ├── columns: u:1!null w:3!null z:4!null count:8 array_agg:9
-      │    ├── fd: (1)-->(8,9)
-      │    ├── scan uvwz
-      │    │    └── columns: u:1!null w:3!null z:4!null
-      │    └── windows
-      │         ├── count [as=count:8, frame="rows from unbounded to unbounded", outer=(3)]
-      │         │    └── w:3
-      │         └── array-agg [as=array_agg:9, frame="rows from unbounded to unbounded", outer=(4)]
-      │              └── z:4
-      └── aggregations
-           ├── sum [as=sum:10, outer=(8)]
-           │    └── count:8
-           ├── const-agg [as=count:8, outer=(8)]
-           │    └── count:8
-           └── const-agg [as=array_agg:9, outer=(9)]
-                └── array_agg:9
-
-# No-op case with row_number, which can produce a different result for each row
-# in a window frame.
-norm expect-not=FoldGroupByAndWindow
-SELECT sum(v), foo
-FROM (
-  SELECT *, row_number() OVER w AS foo
-  FROM uvwz
-  WINDOW w AS (
-    PARTITION BY u ORDER BY z
-    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-  )
-)
-GROUP BY u, foo;
-----
-project
- ├── columns: sum:9!null foo:8
- └── group-by (hash)
-      ├── columns: u:1!null row_number:8 sum:9!null
-      ├── grouping columns: u:1!null row_number:8
-      ├── key: (1,8)
-      ├── fd: (1,8)-->(9)
-      ├── window partition=(1) ordering=+4 opt(1)
-      │    ├── columns: u:1!null v:2!null z:4!null row_number:8
-      │    ├── key: (1,2)
-      │    ├── fd: (1,2)-->(4,8)
-      │    ├── scan uvwz
-      │    │    ├── columns: u:1!null v:2!null z:4!null
-      │    │    ├── key: (1,2)
-      │    │    └── fd: (1,2)-->(4)
-      │    └── windows
-      │         └── row-number [as=row_number:8, frame="rows from unbounded to unbounded"]
-      └── aggregations
-           └── sum [as=sum:9, outer=(2)]
-                └── v:2

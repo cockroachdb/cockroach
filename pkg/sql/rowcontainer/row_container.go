@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
@@ -199,29 +198,9 @@ func (mc *MemRowContainer) InitWithMon(
 	mc.evalCtx = evalCtx
 }
 
-// compareDatums compares two datum rows according to a column ordering. Returns:
-//   - 0 if lhs and rhs are equal on the ordering columns;
-//   - less than 0 if lhs comes first;
-//   - greater than 0 if rhs comes first.
-func compareDatums(
-	ctx context.Context, ordering colinfo.ColumnOrdering, evalCtx *eval.Context, lhs, rhs tree.Datums,
-) int {
-	for _, c := range ordering {
-		if cmp, err := lhs[c.ColIdx].Compare(ctx, evalCtx, rhs[c.ColIdx]); err != nil {
-			panic(err)
-		} else if cmp != 0 {
-			if c.Direction == encoding.Descending {
-				cmp = -cmp
-			}
-			return cmp
-		}
-	}
-	return 0
-}
-
 // Less is part of heap.Interface and is only meant to be used internally.
 func (mc *MemRowContainer) Less(i, j int) bool {
-	cmp := compareDatums(mc.ctx, mc.ordering, mc.evalCtx, mc.At(i), mc.At(j))
+	cmp := colinfo.CompareDatums(mc.ctx, mc.ordering, mc.evalCtx, mc.At(i), mc.At(j))
 	if mc.invertSorting {
 		cmp = -cmp
 	}
@@ -439,9 +418,8 @@ type DiskBackedRowContainer struct {
 
 	// The following fields are used to create a DiskRowContainer when spilling
 	// to disk.
-	engine              diskmap.Factory
-	unlimitedMemMonitor *mon.BytesMonitor
-	diskMonitor         *mon.BytesMonitor
+	engine      diskmap.Factory
+	diskMonitor *mon.BytesMonitor
 }
 
 var _ ReorderableRowContainer = &DiskBackedRowContainer{}
@@ -457,8 +435,6 @@ var _ DeDupingRowContainer = &DiskBackedRowContainer{}
 //   - memoryMonitor is used to monitor the DiskBackedRowContainer's memory usage.
 //     If this monitor denies an allocation, the DiskBackedRowContainer will
 //     spill to disk.
-//   - unlimitedMemMonitor is used to monitor the memory usage of the internal
-//     disk row container if the DiskBackedRowContainer spills to disk.
 //   - diskMonitor is used to monitor the DiskBackedRowContainer's disk usage if
 //     and when it spills to disk.
 func (f *DiskBackedRowContainer) Init(
@@ -467,7 +443,6 @@ func (f *DiskBackedRowContainer) Init(
 	evalCtx *eval.Context,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
-	unlimitedMemMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 ) {
 	mrc := MemRowContainer{}
@@ -475,7 +450,6 @@ func (f *DiskBackedRowContainer) Init(
 	f.mrc = &mrc
 	f.src = &mrc
 	f.engine = engine
-	f.unlimitedMemMonitor = unlimitedMemMonitor
 	f.diskMonitor = diskMonitor
 	f.encodings = make([]catenumpb.DatumEncoding, len(ordering))
 	for i, orderInfo := range ordering {
@@ -643,10 +617,6 @@ func (f *DiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (
 	if !sqlerrors.IsOutOfMemoryError(err) {
 		return false, nil
 	}
-	if f.UsingDisk() {
-		// Return the original error if we already spilled to disk.
-		return false, err
-	}
 	if spillErr := f.SpillToDisk(ctx); spillErr != nil {
 		return false, spillErr
 	}
@@ -660,8 +630,7 @@ func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	if f.UsingDisk() {
 		return errors.New("already using disk")
 	}
-	memAcc := f.unlimitedMemMonitor.MakeBoundAccount()
-	drc, err := MakeDiskRowContainer(ctx, memAcc, f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
+	drc, err := MakeDiskRowContainer(ctx, f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
 	if err != nil {
 		return err
 	}
@@ -749,8 +718,6 @@ var _ IndexedRowContainer = &DiskBackedIndexedRowContainer{}
 //   - engine is the underlying store that rows are stored on when the container
 //     spills to disk.
 //   - memoryMonitor is used to monitor this container's memory usage.
-//   - unlimitedMemMonitor is used to track memory usage of the internal disk
-//     row container if DiskBackedIndexedRowContainer spills to disk.
 //   - diskMonitor is used to monitor this container's disk usage.
 func NewDiskBackedIndexedRowContainer(
 	ordering colinfo.ColumnOrdering,
@@ -758,7 +725,6 @@ func NewDiskBackedIndexedRowContainer(
 	evalCtx *eval.Context,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
-	unlimitedMemMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 ) *DiskBackedIndexedRowContainer {
 	d := DiskBackedIndexedRowContainer{}
@@ -769,7 +735,7 @@ func NewDiskBackedIndexedRowContainer(
 	d.storedTypes[len(d.storedTypes)-1] = types.Int
 	d.scratchEncRow = make(rowenc.EncDatumRow, len(d.storedTypes))
 	d.DiskBackedRowContainer = &DiskBackedRowContainer{}
-	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, unlimitedMemMonitor, diskMonitor)
+	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor)
 	d.maxCacheSize = maxIndexedRowsCacheSize
 	d.cacheMemAcc = memoryMonitor.MakeBoundAccount()
 	return &d

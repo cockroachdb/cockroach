@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -176,7 +176,7 @@ func TestServerQuery(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := conn.NewTimeSeriesClient()
+	client := tspb.NewTimeSeriesClient(conn)
 	response, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
 		EndNanos:   526 * 1e9,
@@ -272,7 +272,7 @@ func TestServerQueryStarvation(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := conn.NewTimeSeriesClient()
+	client := tspb.NewTimeSeriesClient(conn)
 
 	queries := make([]tspb.Query, 0, seriesCount)
 	for i := 0; i < seriesCount; i++ {
@@ -442,7 +442,7 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := conn.NewTimeSeriesClient()
+	client := tspb.NewTimeSeriesClient(conn)
 	aggregatedResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 400 * 1e9,
 		EndNanos:   500 * 1e9,
@@ -575,10 +575,10 @@ func TestServerQueryTenant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	capability := map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewTSDBMetrics: "true"}
+	capability := map[tenantcapabilities.ID]string{tenantcapabilities.CanViewTSDBMetrics: "true"}
 	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
 	tenantConn := tenant.RPCClientConn(t, username.RootUserName())
-	tenantClient := tenantConn.NewTimeSeriesClient()
+	tenantClient := tspb.NewTimeSeriesClient(tenantConn)
 
 	tenantResponse, err := tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 400 * 1e9,
@@ -642,7 +642,7 @@ func TestServerQueryTenant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	capability = map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewAllMetrics: "true"}
+	capability = map[tenantcapabilities.ID]string{tenantcapabilities.CanViewAllMetrics: "true"}
 	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
 
 	tenantResponse, err = tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
@@ -696,7 +696,7 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := conn.NewTimeSeriesClient()
+	client := tspb.NewTimeSeriesClient(conn)
 
 	queries := make([]tspb.Query, 0, seriesCount)
 	for i := 0; i < seriesCount; i++ {
@@ -773,7 +773,7 @@ func TestServerDump(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := conn.NewTimeSeriesClient()
+	client := tspb.NewTimeSeriesClient(conn)
 
 	dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
 		Names:      names,
@@ -784,7 +784,7 @@ func TestServerDump(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readDataFromDump := func(t *testing.T, dumpClient tspb.RPCTimeSeries_DumpClient) (totalMsgCount int, _ map[string]map[string]tspb.TimeSeriesData) {
+	readDataFromDump := func(t *testing.T, dumpClient tspb.TimeSeries_DumpClient) (totalMsgCount int, _ map[string]map[string]tspb.TimeSeriesData) {
 		t.Helper()
 		// Read data from dump command.
 		resultMap := make(map[string]map[string]tspb.TimeSeriesData)
@@ -869,7 +869,7 @@ func TestServerDump(t *testing.T) {
 		require.NoError(t, s.DB().Run(ctx, &b))
 
 		conn := s.RPCClientConn(t, username.RootUserName())
-		client := conn.NewTimeSeriesClient()
+		client := tspb.NewTimeSeriesClient(conn)
 
 		dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
 			Names:      names,
@@ -899,7 +899,7 @@ func BenchmarkServerQuery(b *testing.B) {
 	}
 
 	conn := s.RPCClientConn(b, username.RootUserName())
-	client := conn.NewTimeSeriesClient()
+	client := tspb.NewTimeSeriesClient(conn)
 
 	queries := make([]tspb.Query, 0, seriesCount)
 	for i := 0; i < seriesCount; i++ {

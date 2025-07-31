@@ -146,6 +146,9 @@ export type StatementMetadata = {
 type LatencyInfo = {
   max: number;
   min: number;
+  p50: number;
+  p90: number;
+  p99: number;
 };
 
 type Statistics = {
@@ -238,6 +241,9 @@ export function convertStatementRawFormatToAggregatedStatistics(
       latency_info: {
         max: s.statistics.statistics.latencyInfo.max,
         min: s.statistics.statistics.latencyInfo.min,
+        p50: s.statistics.statistics.latencyInfo.p50,
+        p90: s.statistics.statistics.latencyInfo.p90,
+        p99: s.statistics.statistics.latencyInfo.p99,
       },
       max_retries: s.statistics.statistics.maxRetries,
       nodes: s.statistics.statistics.nodes,

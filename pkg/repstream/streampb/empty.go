@@ -57,7 +57,6 @@ func (h *DebugProducerStatusHolder) Flushed(size int64, reason FlushReason, seqN
 	defer h.mu.Unlock()
 	h.s.Flushes.Batches++
 	h.s.Flushes.Bytes += size
-	h.s.Flushes.LastSize = size
 	h.s.SeqNum = seqNum
 
 	switch reason {
@@ -66,7 +65,7 @@ func (h *DebugProducerStatusHolder) Flushed(size int64, reason FlushReason, seqN
 	case FlushReady:
 		h.s.Flushes.Ready++
 	case FlushCheckpoint:
-		h.s.Flushes.Forced++
+		h.s.Flushes.Checkpoints++
 	}
 }
 

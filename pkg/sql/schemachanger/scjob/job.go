@@ -65,7 +65,7 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 	// Permanent error has been hit, so there is no rollback
 	// from here. Only if the status is reverting will these be
 	// treated as fatal.
-	if jobs.IsPermanentJobError(err) && n.job.State() == jobs.StateReverting {
+	if jobs.IsPermanentJobError(err) && n.job.Status() == jobs.StatusReverting {
 		log.Warningf(ctx, "schema change will not rollback; permanent error detected: %v", err)
 		return nil
 	}
@@ -156,11 +156,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		// If a descriptor can't be found, we additionally mark the error as a
 		// permanent job error, so that non-cancelable jobs don't get retried. If a
 		// descriptor has gone missing, it isn't likely to come back.
-		// We also mark assertion errors as permanent job errors, since they are
-		// never expected.
-		if errors.IsAny(
-			err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped, catalog.ErrReferencedDescriptorNotFound,
-		) || errors.HasAssertionFailure(err) {
+		if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped, catalog.ErrReferencedDescriptorNotFound) {
 			return jobs.MarkAsPermanentJobError(err)
 		}
 		return err

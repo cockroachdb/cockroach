@@ -12,27 +12,12 @@ import "gogoproto/gogo.proto";
 // AdmissionWorkQueueStats is recorded for work items waiting in the admission
 // work queue.
 message AdmissionWorkQueueStats {
-  option (gogoproto.goproto_stringer) = false;
-
-  // WaitDurationNanos is the time spent waiting.
+  // Duration spent waiting.
   int64 wait_duration_nanos = 1 [(gogoproto.casttype) = "time.Duration"];
-
-  // QueueKind is the string name of the admission queue kind.
+  // String representation of admission queue kind.
   string queue_kind = 2;
-
-  reserved 3;
-
-  // DeadlineExceededCount counts the number of times -- usually zero or one
-  // unless the stats are an aggregate -- that the deadline was exceeded while
-  // waiting in the queue.
-  int32 deadline_exceeded_count = 5;
-
-  reserved 4;
-  // WorkPriority is the integer representation of work priority, or if the
-  // AdmissionWorkQueueStats represents an aggregation of stats, the minimum of
-  // the priorities across the aggregated stats.
-  int32 work_priority = 6;
-
-  // TODO(dt): consider adding map <string, AdmissionWorkQueueStats> agg = 7 to
-  // aggregate events from separate queues separately when rolling up events.
+  // Set to true if deadline was exceeded.
+  bool deadline_exceeded = 3;
+  // String representation of work priority.
+  string work_priority = 4;
 }

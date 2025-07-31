@@ -2015,7 +2015,7 @@ func (a *Allocator) ValidLeaseTargets(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetCompactedIndex() kvpb.RaftIndex
+		GetFirstIndex() kvpb.RaftIndex
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	opts allocator.TransferLeaseOptions,
@@ -2079,7 +2079,7 @@ func (a *Allocator) ValidLeaseTargets(
 		}
 
 		candidates = append(validSnapshotCandidates, excludeReplicasInNeedOfSnapshots(
-			ctx, status, leaseRepl.GetCompactedIndex(), candidates)...)
+			ctx, status, leaseRepl.GetFirstIndex(), candidates)...)
 		candidates = excludeReplicasInNeedOfCatchup(
 			ctx, leaseRepl.SendStreamStats, candidates)
 	}
@@ -2189,7 +2189,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetCompactedIndex() kvpb.RaftIndex
+		GetFirstIndex() kvpb.RaftIndex
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
@@ -2222,7 +2222,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	preferred := a.PreferredLeaseholders(storePool, conf, candidates)
 	if exclReplsInNeedOfSnapshots {
 		preferred = excludeReplicasInNeedOfSnapshots(
-			ctx, leaseRepl.RaftStatus(), leaseRepl.GetCompactedIndex(), preferred)
+			ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), preferred)
 		preferred = excludeReplicasInNeedOfCatchup(
 			ctx, leaseRepl.SendStreamStats, preferred)
 	}
@@ -2282,7 +2282,7 @@ func (a *Allocator) TransferLeaseTarget(
 		StoreID() roachpb.StoreID
 		GetRangeID() roachpb.RangeID
 		RaftStatus() *raft.Status
-		GetCompactedIndex() kvpb.RaftIndex
+		GetFirstIndex() kvpb.RaftIndex
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	usageInfo allocator.RangeUsageInfo,
@@ -2651,7 +2651,7 @@ func (a *Allocator) ShouldTransferLease(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetCompactedIndex() kvpb.RaftIndex
+		GetFirstIndex() kvpb.RaftIndex
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	usageInfo allocator.RangeUsageInfo,
@@ -3033,12 +3033,12 @@ func FilterBehindReplicas(
 func excludeReplicasInNeedOfSnapshots(
 	ctx context.Context,
 	st *raft.Status,
-	compacted kvpb.RaftIndex,
+	firstIndex kvpb.RaftIndex,
 	replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	filled := 0
 	for _, repl := range replicas {
-		snapStatus := raftutil.ReplicaMayNeedSnapshot(st, compacted, repl.ReplicaID)
+		snapStatus := raftutil.ReplicaMayNeedSnapshot(st, firstIndex, repl.ReplicaID)
 		if snapStatus != raftutil.NoSnapshotNeeded {
 			log.KvDistribution.VEventf(
 				ctx,

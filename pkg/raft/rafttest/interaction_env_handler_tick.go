@@ -1,6 +1,3 @@
-// This code has been modified from its original form by The Cockroach Authors.
-// All modifications are Copyright 2024 The Cockroach Authors.
-//
 // Copyright 2019 The etcd Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,8 +31,8 @@ func (env *InteractionEnv) handleTickHeartbeat(t *testing.T, d datadriven.TestDa
 }
 
 // Tick the node at the given index the given number of times.
-func (env *InteractionEnv) Tick(idx int, num int64) error {
-	for i := int64(0); i < num; i++ {
+func (env *InteractionEnv) Tick(idx int, num int) error {
+	for i := 0; i < num; i++ {
 		env.Nodes[idx].Tick()
 	}
 	return nil

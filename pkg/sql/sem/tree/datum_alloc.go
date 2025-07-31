@@ -46,7 +46,6 @@ type DatumAlloc struct {
 	duuidAlloc        []DUuid
 	dipnetAlloc       []DIPAddr
 	djsonAlloc        []DJSON
-	djsonpathAlloc    []DJsonpath
 	dtupleAlloc       []DTuple
 	doidAlloc         []DOid
 	dvoidAlloc        []DVoid
@@ -249,14 +248,6 @@ func (a *DatumAlloc) NewDCollatedString(contents string, locale string) (*DColla
 		return NewDCollatedString(contents, locale, &CollationEnvironment{})
 	}
 	return NewDCollatedString(contents, locale, &a.env)
-}
-
-// NewDCIText allocates a DCIText.
-func (a *DatumAlloc) NewDCIText(contents string) (Datum, error) {
-	if a == nil {
-		return NewDCIText(contents, &CollationEnvironment{})
-	}
-	return NewDCIText(contents, &a.env)
 }
 
 // NewDName allocates a DName.
@@ -688,26 +679,6 @@ func (a *DatumAlloc) NewDJSON(v DJSON) *DJSON {
 			allocSize = a.DefaultAllocSize
 		}
 		*buf = make([]DJSON, allocSize)
-	}
-	r := &(*buf)[0]
-	*r = v
-	*buf = (*buf)[1:]
-	return r
-}
-
-func (a *DatumAlloc) NewDJsonpath(v DJsonpath) *DJsonpath {
-	if a == nil {
-		r := new(DJsonpath)
-		*r = v
-		return r
-	}
-	buf := &a.djsonpathAlloc
-	if len(*buf) == 0 {
-		allocSize := defaultDatumAllocSize
-		if a.DefaultAllocSize != 0 {
-			allocSize = a.DefaultAllocSize
-		}
-		*buf = make([]DJsonpath, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v

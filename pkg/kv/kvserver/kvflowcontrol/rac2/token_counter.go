@@ -22,6 +22,40 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// TokenWaitingHandle is the interface for waiting for positive tokens from a
+// token counter.
+//
+// TODO(sumeer): remove this interface since there is only one implementation.
+type TokenWaitingHandle interface {
+	// WaitChannel is the channel that will be signaled if tokens are possibly
+	// available. If signaled, the caller must call
+	// ConfirmHaveTokensAndUnblockNextWaiter. There is no guarantee of tokens
+	// being available after this channel is signaled, just that tokens were
+	// available recently. A typical usage pattern is:
+	//
+	//   for {
+	//     select {
+	//     case <-handle.WaitChannel():
+	//       if handle.ConfirmHaveTokensAndUnblockNextWaiter() {
+	//         break
+	//       }
+	//     }
+	//   }
+	//   tokenCounter.Deduct(...)
+	//
+	// There is a possibility for races, where multiple goroutines may be
+	// signaled and deduct tokens, sending the counter into debt. These cases are
+	// acceptable, as in aggregate the counter provides pacing over time.
+	WaitChannel() <-chan struct{}
+	// ConfirmHaveTokensAndUnblockNextWaiter is called to confirm tokens are
+	// available. True is returned if tokens are available, false otherwise. If
+	// no tokens are available, the caller can resume waiting using WaitChannel.
+	ConfirmHaveTokensAndUnblockNextWaiter() bool
+	// StreamString returns a string representation of the stream. Used for
+	// tracing.
+	StreamString() string
+}
+
 // tokenCounterPerWorkClass is a helper struct for implementing tokenCounter.
 // tokens are protected by the mutex in tokenCounter. Operations on the
 // signalCh may not be protected by that mutex -- see the comment below.
@@ -57,8 +91,6 @@ type tokenCounterPerWorkClass struct {
 type deltaStats struct {
 	noTokenDuration                time.Duration
 	tokensDeducted, tokensReturned kvflowcontrol.Tokens
-	// Can only be non-zero for send tokens.
-	tokensDeductedForceFlush, tokensDeductedPreventSendQueue kvflowcontrol.Tokens
 }
 
 func makeTokenCounterPerWorkClass(
@@ -76,11 +108,7 @@ func makeTokenCounterPerWorkClass(
 
 // adjustTokensLocked adjusts the tokens for the given work class by delta.
 func (twc *tokenCounterPerWorkClass) adjustTokensLocked(
-	ctx context.Context,
-	delta kvflowcontrol.Tokens,
-	now time.Time,
-	isReset bool,
-	flag TokenAdjustFlag,
+	ctx context.Context, delta kvflowcontrol.Tokens, now time.Time, isReset bool,
 ) (adjustment, unaccounted kvflowcontrol.Tokens) {
 	before := twc.tokens
 	twc.tokens += delta
@@ -96,12 +124,6 @@ func (twc *tokenCounterPerWorkClass) adjustTokensLocked(
 		}
 	} else {
 		twc.stats.tokensDeducted -= delta
-		switch flag {
-		case AdjForceFlush:
-			twc.stats.tokensDeductedForceFlush -= delta
-		case AdjPreventSendQueue:
-			twc.stats.tokensDeductedPreventSendQueue -= delta
-		}
 		if before > 0 && twc.tokens <= 0 {
 			twc.stats.noTokenStartTime = now
 		}
@@ -120,14 +142,14 @@ func (twc *tokenCounterPerWorkClass) setLimitLocked(
 ) {
 	before := twc.limit
 	twc.limit = limit
-	twc.adjustTokensLocked(ctx, twc.limit-before, now, false /* isReset */, AdjNormal)
+	twc.adjustTokensLocked(ctx, twc.limit-before, now, false /* isReset */)
 }
 
 func (twc *tokenCounterPerWorkClass) resetLocked(ctx context.Context, now time.Time) {
 	if twc.limit <= twc.tokens {
 		return
 	}
-	twc.adjustTokensLocked(ctx, twc.limit-twc.tokens, now, true /* isReset */, AdjNormal)
+	twc.adjustTokensLocked(ctx, twc.limit-twc.tokens, now, true /* isReset */)
 }
 
 func (twc *tokenCounterPerWorkClass) signal() {
@@ -181,43 +203,6 @@ func (f TokenType) SafeFormat(p redact.SafePrinter, _ rune) {
 	}
 }
 
-// Wrapper type to give mutex contention events in mutex profiles a leaf frame
-// that references tokenCounterMu. This makes it easier to look at contention
-// on this mutex specifically.
-type tokenCounterMu syncutil.RWMutex
-
-func (mu *tokenCounterMu) Lock() {
-	(*syncutil.RWMutex)(mu).Lock()
-}
-
-func (mu *tokenCounterMu) TryLock() {
-	(*syncutil.RWMutex)(mu).TryLock()
-}
-
-func (mu *tokenCounterMu) Unlock() {
-	(*syncutil.RWMutex)(mu).Unlock()
-}
-
-func (mu *tokenCounterMu) RLock() {
-	(*syncutil.RWMutex)(mu).RLock()
-}
-
-func (mu *tokenCounterMu) TryRLock() {
-	(*syncutil.RWMutex)(mu).TryRLock()
-}
-
-func (mu *tokenCounterMu) RUnlock() {
-	(*syncutil.RWMutex)(mu).RUnlock()
-}
-
-func (mu *tokenCounterMu) AssertHeld() {
-	(*syncutil.RWMutex)(mu).AssertHeld()
-}
-
-func (mu *tokenCounterMu) AssertRHeld() {
-	(*syncutil.RWMutex)(mu).AssertRHeld()
-}
-
 // tokenCounter holds flow tokens for {regular,elastic} traffic over a
 // kvflowcontrol.Stream. It's used to synchronize handoff between threads
 // returning and waiting for flow tokens.
@@ -231,7 +216,7 @@ type tokenCounter struct {
 	tokenType TokenType
 
 	mu struct {
-		tokenCounterMu
+		syncutil.RWMutex
 
 		counters [admissionpb.NumWorkClasses]tokenCounterPerWorkClass
 	}
@@ -332,16 +317,15 @@ func (t *tokenCounter) limit(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
 	return t.mu.counters[wc].limit
 }
 
-// TokensAvailable returns true if tokens are available, in which case handle
-// is empty and should be ignored. If false, it returns a handle that may be
-// used for waiting for tokens to become available.
+// TokensAvailable returns true if tokens are available. If false, it returns
+// a handle that may be used for waiting for tokens to become available.
 func (t *tokenCounter) TokensAvailable(
 	wc admissionpb.WorkClass,
-) (available bool, handle tokenWaitHandle) {
+) (available bool, handle TokenWaitingHandle) {
 	if t.tokens(wc) > 0 {
-		return true, tokenWaitHandle{}
+		return true, nil
 	}
-	return false, tokenWaitHandle{wc: wc, b: t}
+	return false, waitHandle{wc: wc, b: t}
 }
 
 // TryDeduct attempts to deduct flow tokens for the given work class. If there
@@ -357,15 +341,15 @@ func (t *tokenCounter) TryDeduct(
 		expensiveLog = true
 	}
 	t.mu.Lock()
+	defer t.mu.Unlock()
 
-	tokensAvailable := t.tokensLocked(wc) // nolint:deferunlockcheck
+	tokensAvailable := t.tokensLocked(wc)
 	if tokensAvailable <= 0 {
-		t.mu.Unlock() // nolint:deferunlockcheck
 		return 0
 	}
 
 	adjust := min(tokensAvailable, tokens)
-	t.adjustLockedAndUnlock(ctx, wc, -adjust, now, flag, expensiveLog)
+	t.adjustLocked(ctx, wc, -adjust, now, flag, expensiveLog)
 	return adjust
 }
 
@@ -388,23 +372,25 @@ func (t *tokenCounter) Return(
 	t.adjust(ctx, wc, tokens, flag)
 }
 
-// tokenWaitHandle is a handle for waiting for tokens to become available from
-// a token counter.
-type tokenWaitHandle struct {
+// waitHandle is a handle for waiting for tokens to become available from a
+// token counter.
+type waitHandle struct {
 	wc admissionpb.WorkClass
 	b  *tokenCounter
 }
 
-// waitChannel is the channel that will be signaled if tokens are possibly
+var _ TokenWaitingHandle = waitHandle{}
+
+// WaitChannel is the channel that will be signaled if tokens are possibly
 // available. If signaled, the caller must call
-// confirmHaveTokensAndUnblockNextWaiter. There is no guarantee of tokens being
+// ConfirmHaveTokensAndUnblockNextWaiter. There is no guarantee of tokens being
 // available after this channel is signaled, just that tokens were available
 // recently. A typical usage pattern is:
 //
 //	for {
 //	  select {
-//	  case <-handle.waitChannel():
-//	    if handle.confirmHaveTokensAndUnblockNextWaiter() {
+//	  case <-handle.WaitChannel():
+//	    if handle.ConfirmHaveTokensAndUnblockNextWaiter() {
 //	      break
 //	    }
 //	  }
@@ -414,14 +400,14 @@ type tokenWaitHandle struct {
 // There is a possibility for races, where multiple goroutines may be signaled
 // and deduct tokens, sending the counter into debt. These cases are
 // acceptable, as in aggregate the counter provides pacing over time.
-func (wh tokenWaitHandle) waitChannel() <-chan struct{} {
+func (wh waitHandle) WaitChannel() <-chan struct{} {
 	return wh.b.mu.counters[wh.wc].signalCh
 }
 
-// confirmHaveTokensAndUnblockNextWaiter is called to confirm tokens are
+// ConfirmHaveTokensAndUnblockNextWaiter is called to confirm tokens are
 // available. True is returned if tokens are available, false otherwise. If no
-// tokens are available, the caller can resume waiting using waitChannel.
-func (wh tokenWaitHandle) confirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
+// tokens are available, the caller can resume waiting using WaitChannel.
+func (wh waitHandle) ConfirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
 	haveTokens = wh.b.tokens(wh.wc) > 0
 	if haveTokens {
 		// Signal the next waiter if we have tokens available before returning.
@@ -430,15 +416,14 @@ func (wh tokenWaitHandle) confirmHaveTokensAndUnblockNextWaiter() (haveTokens bo
 	return haveTokens
 }
 
-// streamString returns a string representation of the stream. Used for
-// tracing.
-func (wh tokenWaitHandle) streamString() string {
+// StreamString implements TokenWaitingHandle.
+func (wh waitHandle) StreamString() string {
 	return wh.b.stream.String()
 }
 
 type tokenWaitingHandleInfo struct {
-	// Can be empty, in which case no methods should be called on it.
-	handle tokenWaitHandle
+	// Can be nil, in which case the wait on this can never succeed.
+	handle TokenWaitingHandle
 	// requiredWait will be set for the leaseholder and leader for regular work.
 	// For elastic work this will be set for the aforementioned, and all replicas
 	// which are in StateReplicate.
@@ -520,8 +505,8 @@ func WaitForEval(
 			requiredWaitCount++
 		}
 		var chanValue reflect.Value
-		if h.handle != (tokenWaitHandle{}) {
-			chanValue = reflect.ValueOf(h.handle.waitChannel())
+		if h.handle != nil {
+			chanValue = reflect.ValueOf(h.handle.WaitChannel())
 		}
 		// Else, zero Value, so will never be selected.
 		scratch = append(scratch,
@@ -558,7 +543,7 @@ func WaitForEval(
 			return ReplicaRefreshWaitSignaled, scratch
 		default:
 			handleInfo := handles[chosen-3]
-			if available := handleInfo.handle.confirmHaveTokensAndUnblockNextWaiter(); !available {
+			if available := handleInfo.handle.ConfirmHaveTokensAndUnblockNextWaiter(); !available {
 				// The handle was signaled but does not currently have tokens
 				// available. Continue waiting on this handle.
 				continue
@@ -566,7 +551,7 @@ func WaitForEval(
 
 			if traceIndividualWaits {
 				log.Eventf(ctx, "wait-for-eval: waited until %s tokens available",
-					handleInfo.handle.streamString())
+					handleInfo.handle.StreamString())
 			}
 			if handleInfo.partOfQuorum {
 				signaledQuorumCount++
@@ -636,11 +621,15 @@ func (t *tokenCounter) adjust(
 	if log.V(2) {
 		expensiveLog = true
 	}
-	t.mu.Lock()
-	t.adjustLockedAndUnlock(ctx, class, delta, now, flag, expensiveLog) // nolint:deferunlockcheck
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.adjustLocked(ctx, class, delta, now, flag, expensiveLog)
+	}()
+
 }
 
-func (t *tokenCounter) adjustLockedAndUnlock(
+func (t *tokenCounter) adjustLocked(
 	ctx context.Context,
 	class admissionpb.WorkClass,
 	delta kvflowcontrol.Tokens,
@@ -648,33 +637,20 @@ func (t *tokenCounter) adjustLockedAndUnlock(
 	flag TokenAdjustFlag,
 	expensiveLog bool,
 ) {
-	t.mu.AssertHeld()
 	var adjustment, unaccounted tokensPerWorkClass
-	// Only populated when expensiveLog is true.
-	var regularTokens, elasticTokens kvflowcontrol.Tokens
-	func() {
-		defer t.mu.Unlock()
-		switch class {
-		case regular:
-			adjustment.regular, unaccounted.regular =
-				t.mu.counters[regular].adjustTokensLocked(
-					ctx, delta, now, false /* isReset */, flag)
+	switch class {
+	case admissionpb.RegularWorkClass:
+		adjustment.regular, unaccounted.regular =
+			t.mu.counters[admissionpb.RegularWorkClass].adjustTokensLocked(ctx, delta, now, false /* isReset */)
 			// Regular {deductions,returns} also affect elastic flow tokens.
-			adjustment.elastic, unaccounted.elastic =
-				t.mu.counters[elastic].adjustTokensLocked(
-					ctx, delta, now, false /* isReset */, flag)
+		adjustment.elastic, unaccounted.elastic =
+			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta, now, false /* isReset */)
 
-		case elastic:
-			// Elastic {deductions,returns} only affect elastic flow tokens.
-			adjustment.elastic, unaccounted.elastic =
-				t.mu.counters[elastic].adjustTokensLocked(
-					ctx, delta, now, false /* isReset */, flag)
-		}
-		if expensiveLog {
-			regularTokens = t.tokensLocked(regular)
-			elasticTokens = t.tokensLocked(elastic)
-		}
-	}()
+	case admissionpb.ElasticWorkClass:
+		// Elastic {deductions,returns} only affect elastic flow tokens.
+		adjustment.elastic, unaccounted.elastic =
+			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta, now, false /* isReset */)
+	}
 
 	// Adjust metrics if any tokens were actually adjusted or unaccounted for
 	// tokens were detected.
@@ -686,7 +662,7 @@ func (t *tokenCounter) adjustLockedAndUnlock(
 	}
 	if expensiveLog {
 		log.Infof(ctx, "adjusted %v flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
-			t.tokenType, class, t.stream, delta, flag, regularTokens, elasticTokens)
+			t.tokenType, class, t.stream, delta, flag, t.tokensLocked(regular), t.tokensLocked(elastic))
 	}
 }
 
@@ -699,7 +675,7 @@ func (t *tokenCounter) testingSetTokens(
 	defer t.mu.Unlock()
 
 	t.mu.counters[wc].adjustTokensLocked(ctx,
-		tokens-t.mu.counters[wc].tokens, t.clock.PhysicalTime(), false /* isReset */, AdjNormal)
+		tokens-t.mu.counters[wc].tokens, t.clock.PhysicalTime(), false /* isReset */)
 }
 
 func (t *tokenCounter) GetAndResetStats(now time.Time) (regularStats, elasticStats deltaStats) {

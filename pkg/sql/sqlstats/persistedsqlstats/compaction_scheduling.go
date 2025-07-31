@@ -47,7 +47,7 @@ func CreateSQLStatsCompactionScheduleIfNotYetExist(
 	schedule := scheduledjobs.MaybeRewriteCronExpr(
 		clusterID, SQLStatsCleanupRecurrence.Get(&st.SV),
 	)
-	if err := compactionSchedule.SetScheduleAndNextRun(schedule); err != nil {
+	if err := compactionSchedule.SetSchedule(schedule); err != nil {
 		return nil, err
 	}
 
@@ -70,7 +70,7 @@ func CreateSQLStatsCompactionScheduleIfNotYetExist(
 		jobspb.ExecutionArguments{Args: args},
 	)
 
-	compactionSchedule.SetScheduleStatus(string(jobs.StatePending))
+	compactionSchedule.SetScheduleStatus(string(jobs.StatusPending))
 	if err := jobs.ScheduledJobTxn(txn).Create(ctx, compactionSchedule); err != nil {
 		return nil, err
 	}

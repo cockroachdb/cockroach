@@ -8,7 +8,6 @@ package persistedsqlstats_test
 import (
 	"context"
 	"fmt"
-	"math"
 	"regexp"
 	"sync/atomic"
 	"testing"
@@ -21,15 +20,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,6 +69,8 @@ func TestSQLStatsCompactorNilTestingKnobCheck(t *testing.T) {
 func TestSQLStatsCompactor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 120761)
 
 	ctx := context.Background()
 
@@ -124,13 +126,12 @@ func TestSQLStatsCompactor(t *testing.T) {
 			tc.maxPersistedRowLimit,
 			tc.rowsToDeletePerTxn,
 		), func(t *testing.T) {
-			kvInterceptor := newKVScanIntercceptor()
+			kvInterceptor := kvScanInterceptor{}
 			cleanupInterceptor := cleanupInterceptor{}
 
-			stubSqlStatsTime := timeutil.Now().Add(-2 * time.Hour).Truncate(time.Hour)
 			knobs := sqlstats.CreateTestingKnobs()
 			knobs.StubTimeNow = func() time.Time {
-				return stubSqlStatsTime
+				return timeutil.Now().Add(-2 * time.Hour)
 			}
 			srv, conn, _ := serverutils.StartServer(
 				t, base.TestServerArgs{
@@ -150,12 +151,26 @@ func TestSQLStatsCompactor(t *testing.T) {
 			internalExecutor := server.InternalExecutor().(isql.Executor)
 
 			func() {
-				// Set the codec from the live server, which determines the tenant
-				// ID prefix to strip.
-				kvInterceptor.codec = server.Codec()
+				// Determine the actual ID of the stat tables.
+				sID, err := server.QueryTableID(ctx, username.RootUserName(),
+					"system", string(catconstants.StatementStatisticsTableName))
+				require.NoError(t, err)
+				tID, err := server.QueryTableID(ctx, username.RootUserName(),
+					"system", string(catconstants.TransactionStatisticsTableName))
+				require.NoError(t, err)
+
+				// Configure the KV interceptor. We also need the codec from
+				// the live server, which determines the tenant ID prefix to
+				// strip.
+				kvInterceptor.mu.Lock()
+				defer kvInterceptor.mu.Unlock()
+
+				kvInterceptor.mu.codec = server.Codec()
+				kvInterceptor.mu.stmtStatsTableID = uint32(sID)
+				kvInterceptor.mu.txnStatsTableID = uint32(tID)
 			}()
 
-			// Disable automatic flush since the test will insert mocked data manually.
+			// Disable automatic flush since the test will handle the flush manually.
 			sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '24h'")
 			// Disable activity update flush which also does a scan on the stats table
 			sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.activity.flush.enabled = false")
@@ -179,6 +194,10 @@ func TestSQLStatsCompactor(t *testing.T) {
 				"TRUNCATE system.transaction_statistics",
 			)
 			require.NoError(t, err)
+			serverSQLStats :=
+				server.
+					SQLServer().(*sql.Server).
+					GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 			sqlConn.Exec(t,
 				"SET CLUSTER SETTING sql.stats.persisted_rows.max = $1",
 				tc.maxPersistedRowLimit)
@@ -191,17 +210,8 @@ func TestSQLStatsCompactor(t *testing.T) {
 				sqlConn.Exec(t, "RESET CLUSTER SETTING sql.stats.cleanup.rows_to_delete_per_txn")
 			}
 
-			stmts := make([]appstatspb.CollectedStatementStatistics, tc.stmtCount)
-			txns := make([]appstatspb.CollectedTransactionStatistics, tc.stmtCount)
-			for i := 0; i < tc.stmtCount; i++ {
-				stmts[i].ID = appstatspb.StmtFingerprintID(i)
-				stmts[i].Key.TransactionFingerprintID = appstatspb.TransactionFingerprintID(i)
-				stmts[i].AggregatedTs = stubSqlStatsTime
-				txns[i].TransactionFingerprintID = appstatspb.TransactionFingerprintID(i)
-				txns[i].AggregatedTs = stubSqlStatsTime
-			}
-			require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtStats(ctx, internalExecutor, stmts, 1))
-			require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnStats(ctx, internalExecutor, txns, 1))
+			generateFingerprints(t, sqlConn, tc.stmtCount)
+			serverSQLStats.MaybeFlush(ctx, server.AppStopper())
 
 			sqlStatsKnobs := sqlstats.CreateTestingKnobs()
 			sqlStatsKnobs.OnCleanupStartForShard = cleanupInterceptor.intercept
@@ -216,10 +226,9 @@ func TestSQLStatsCompactor(t *testing.T) {
 			expectedDeletedStmtFingerprints, expectedDeletedTxnFingerprints :=
 				getTopSortedFingerprints(t, sqlConn, tc.maxPersistedRowLimit)
 
-			expectedCount := int(math.Min(float64(tc.stmtCount), float64(tc.maxPersistedRowLimit)))
 			// Sanity check.
-			require.Equal(t, expectedCount, len(expectedDeletedStmtFingerprints))
-			require.Equal(t, expectedCount, len(expectedDeletedTxnFingerprints))
+			require.Equal(t, tc.maxPersistedRowLimit, len(expectedDeletedStmtFingerprints))
+			require.Equal(t, tc.maxPersistedRowLimit, len(expectedDeletedTxnFingerprints))
 
 			// The two interceptors (kvInterceptor and cleanupInterceptor) are
 			// injected into kvserver and StatsCompactor respectively.
@@ -247,8 +256,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 			actualStmtFingerprints, actualTxnFingerprints :=
 				getTopSortedFingerprints(t, sqlConn, 0 /* limit */)
 
-			require.GreaterOrEqual(t, expectedCount, len(actualStmtFingerprints))
-			require.GreaterOrEqual(t, expectedCount, len(actualTxnFingerprints))
+			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, len(actualStmtFingerprints))
 			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, len(actualTxnFingerprints))
 
 			for fingerprintID := range actualStmtFingerprints {
@@ -267,8 +275,8 @@ func TestSQLStatsCompactor(t *testing.T) {
 			err = statsCompactor.DeleteOldestEntries(ctx)
 			require.NoError(t, err)
 			stmtStatsCnt, txnStatsCnt := getPersistedStatsEntry(t, sqlConn)
-			require.GreaterOrEqual(t, expectedCount, stmtStatsCnt)
-			require.GreaterOrEqual(t, expectedCount, txnStatsCnt)
+			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, stmtStatsCnt)
+			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, txnStatsCnt)
 		})
 	}
 }
@@ -372,10 +380,14 @@ ORDER BY aggregated_ts`
 	return stmtFingerprints, txnFingerprints
 }
 
-const (
-	StatementStatisticsTableID   = 42
-	TransactionStatisticsTableID = 43
-)
+func generateFingerprints(t *testing.T, sqlConn *sqlutils.SQLRunner, distinctFingerprints int) {
+	stmt := "SELECT 1"
+	for i := 0; i < distinctFingerprints; i++ {
+		sqlConn.Exec(t, stmt)
+		// Mutate the stmt to create different fingerprint.
+		stmt = fmt.Sprintf("%s, 1", stmt)
+	}
+}
 
 // Tables 42 and 43 and are the IDs of the statement and transactions
 // tables respectively. See `StatementStatisticsTableID` and
@@ -383,34 +395,26 @@ const (
 var kvReqWideScanStartKeyPattern = regexp.MustCompile(`(/Tenant/\d+)?/Table/((42)|(43))/[0-9]{1,2}/[0-9]$`)
 
 type kvScanInterceptor struct {
-	totalWideScan   atomic.Int64
+	totalWideScan   int64
 	enabled         int32
 	wideScanDetails []string
 
-	// The codec must be set before the interceptor is enabled.
-	codec keys.SQLCodec
-
 	mu struct {
 		syncutil.Mutex
-		// Track the txnIDs of the scans since
-		// the txn could be retried.
-		txnIDs map[uuid.UUID]struct{}
+
+		stmtStatsTableID uint32
+		txnStatsTableID  uint32
+		codec            keys.SQLCodec
 	}
 }
 
-func newKVScanIntercceptor() *kvScanInterceptor {
-	k := kvScanInterceptor{}
-	k.mu.txnIDs = make(map[uuid.UUID]struct{})
-	return &k
-}
-
 func (k *kvScanInterceptor) reset() {
-	k.totalWideScan.Store(0)
+	atomic.StoreInt64(&k.totalWideScan, 0)
 	k.wideScanDetails = []string{}
 }
 
 func (k *kvScanInterceptor) getTotalWideScans() int64 {
-	return k.totalWideScan.Load()
+	return atomic.LoadInt64(&k.totalWideScan)
 }
 
 func (k *kvScanInterceptor) enable() {
@@ -425,63 +429,42 @@ func (k *kvScanInterceptor) intercept(ctx context.Context, ba *kvpb.BatchRequest
 	if atomic.LoadInt32(&k.enabled) == 0 {
 		return nil
 	}
-
-	req, ok := ba.GetArg(kvpb.Scan)
-	if !ok {
-		return nil
-	}
-
-	_, tableID, err := k.codec.DecodeTablePrefix(req.(*kvpb.ScanRequest).Key)
-	if err != nil {
-		log.Warningf(ctx, "unable to decode prefix: %v", err)
-	}
-
-	// Ensure the request is for one of the sql stats tables.
-	if tableID != StatementStatisticsTableID && tableID != TransactionStatisticsTableID {
-		return nil
-	}
-
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	// Avoid double counting the same txn.
-	if ba.Txn != nil {
-		txnID := ba.Txn.ID
-		if _, ok := k.mu.txnIDs[txnID]; ok {
-			return nil
+	if req, ok := ba.GetArg(kvpb.Scan); ok {
+		k.mu.Lock()
+		defer k.mu.Unlock()
+		_, tableID, err := k.mu.codec.DecodeTablePrefix(req.(*kvpb.ScanRequest).Key)
+		if err != nil {
+			log.Warningf(ctx, "unable to decode prefix: %v", err)
 		}
-		k.mu.txnIDs[txnID] = struct{}{}
-	}
+		if tableID == k.mu.stmtStatsTableID || tableID == k.mu.txnStatsTableID {
+			prettyKey := roachpb.PrettyPrintKey([]encoding.Direction{}, req.(*kvpb.ScanRequest).Key)
 
-	prettyKey := roachpb.PrettyPrintKey([]encoding.Direction{}, req.(*kvpb.ScanRequest).Key)
-	keyMatchedWideScan := kvReqWideScanStartKeyPattern.MatchString(prettyKey)
+			keyMatchedWideScan := kvReqWideScanStartKeyPattern.MatchString(prettyKey)
 
-	if keyMatchedWideScan {
-		k.wideScanDetails = append(k.wideScanDetails, fmt.Sprintf("wide scan in %v", ba))
-		k.totalWideScan.Add(1)
+			if keyMatchedWideScan {
+				k.wideScanDetails = append(k.wideScanDetails, fmt.Sprintf("wide scan in %v", ba))
+				atomic.AddInt64(&k.totalWideScan, 1)
+			}
+		}
 	}
 
 	return nil
 }
 
 type cleanupInterceptor struct {
-	expectedNumberOfWideScans atomic.Int64
+	expectedNumberOfWideScans int64
 }
 
 func (c *cleanupInterceptor) reset() {
-	c.expectedNumberOfWideScans.Store(0)
+	atomic.StoreInt64(&c.expectedNumberOfWideScans, 0)
 }
 
-func (c *cleanupInterceptor) intercept(_ int, existingCountInShard, shardLimit int64) {
+func (c *cleanupInterceptor) intercept(shardIdx int, existingCountInShard, shardLimit int64) {
 	if existingCountInShard > shardLimit {
-		c.expectedNumberOfWideScans.Add(1)
+		atomic.AddInt64(&c.expectedNumberOfWideScans, 1)
 	}
 }
 
 func (c *cleanupInterceptor) getExpectedNumberOfWideScans() int64 {
-	// The first part of the equation is the number of wide scans that
-	// result from getting the shard count for each shard in each table.
-	// The second part is the number of wide scans that result from the
-	// delete statement, which is only executed if the number of rows
-	// in the shard exceeds the shard limit.
-	return systemschema.SQLStatsHashShardBucketCount*2 + c.expectedNumberOfWideScans.Load()
+	return systemschema.SQLStatsHashShardBucketCount*2 + atomic.LoadInt64(&c.expectedNumberOfWideScans)
 }

@@ -15,188 +15,74 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT);
 ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
 ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i);
 
-# Full table scan (no stats) - distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv] WHERE info LIKE 'distribution%'
-----
-distribution: full
-
-# Constrained scan (no stats) - don't distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1] WHERE info LIKE 'distribution%'
-----
-distribution: local
-
-# Sort (no stats) - distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v] WHERE info LIKE 'distribution%'
-----
-distribution: full
-
-# Hash join (no stats) - distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv AS t1, kv AS t2 WHERE t1.k = t2.k+1 AND t1.k>1 AND t2.k>1] WHERE info LIKE 'distribution%'
-----
-distribution: full
-
-# Cross join (no stats) - don't distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv AS t1, kv AS t2 WHERE t1.k>1 AND t2.k>1] WHERE info LIKE 'distribution%'
-----
-distribution: local
-
-statement ok
-ALTER TABLE kv INJECT STATISTICS '[
-  {
-    "columns": ["k"],
-    "created_at": "2024-01-01 1:00:00.00000+00:00",
-    "row_count": 5000,
-    "distinct_count": 5000
-  }
-]';
-
 # Verify the JSON variant.
 query T
 EXPLAIN (DISTSQL, JSON) SELECT 1
 ----
 {"sql":"EXPLAIN (DISTSQL, JSON) SELECT 1","nodeNames":["1"],"processors":[{"nodeIdx":0,"inputs":[],"core":{"title":"local values 0/0","details":[]},"outputs":[],"stage":1,"processorID":0},{"nodeIdx":0,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[],"stage":0,"processorID":-1}],"edges":[{"sourceProc":0,"sourceOutput":0,"destProc":1,"destInput":0,"streamID":0}],"flow_id":"00000000-0000-0000-0000-000000000000","flags":{"ShowInputTypes":false,"MakeDeterministic":true}}
 
-# Full table scan of a small table - don't distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv] WHERE info LIKE 'distribution%'
-----
-distribution: local
 
-# Force full table scan of a small table to be distributed.
-statement ok
-SET always_distribute_full_scans = true;
 
+# Full table scan - distribute.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv] WHERE info LIKE 'distribution%'
 ----
 distribution: full
 
-statement ok
-RESET always_distribute_full_scans;
+# Partial scan - don't distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k=1] WHERE info LIKE 'distribution%'
+----
+distribution: local
 
-# Small constrained scan - don't distribute.
+# Partial scan - don't distribute.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1] WHERE info LIKE 'distribution%'
 ----
 distribution: local
 
-# Consider the following scans large.
-statement ok
-SET distribute_scan_row_count_threshold = 1;
-
-# Full scan of a large table - distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv] WHERE info LIKE 'distribution%'
-----
-distribution: full
-
-# Large constrained scan - distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1] WHERE info LIKE 'distribution%'
-----
-distribution: full
-
-# Large constrained scan with filter - distribute.
+# Partial scan with filter - don't distribute.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 AND v=1] WHERE info LIKE 'distribution%'
 ----
+distribution: local
+
+# Sort - distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v] WHERE info LIKE 'distribution%'
+----
 distribution: full
 
-# Hard limit in a large scan - don't distribute.
+# Aggregation - distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k] WHERE info LIKE 'distribution%'
+----
+distribution: full
+
+# Hard limit in scan - don't distribute.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv LIMIT 1] WHERE info LIKE 'distribution%'
 ----
 distribution: local
 
-# TODO(yuzefovich): we shouldn't distribute this query due to a soft limit, but
-# soft limits are currently ignored.
+# Soft limit in scan - don't distribute.
+# TODO(yuzefovich): soft limits are currently ignored in scans.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1] WHERE info LIKE 'distribution%'
 ----
 distribution: full
 
-# Now consider all constrained scans through the end of the file small.
-statement ok
-SET distribute_scan_row_count_threshold = 100000;
-
-# Small constrained scan - don't distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1] WHERE info LIKE 'distribution%'
-----
-distribution: local
-
-# Small constrained scan with filter - don't distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 AND v=1] WHERE info LIKE 'distribution%'
-----
-distribution: local
-
-# Sort of a large set of rows - distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v] WHERE info LIKE 'distribution%'
-----
-distribution: full
-
-# Top K over a large set of rows - distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v LIMIT 1] WHERE info LIKE 'distribution%'
-----
-distribution: full
-
-# Now consider the same set of rows small.
-statement ok
-SET distribute_sort_row_count_threshold = 10000;
-
-# Sort of a small table - don't distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v] WHERE info LIKE 'distribution%'
-----
-distribution: local
-
-# Top K over a small set of rows - distribute.
+# Limit after sort (i.e. top K sort) - don't distribute.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v LIMIT 1] WHERE info LIKE 'distribution%'
 ----
 distribution: local
 
-statement ok
-RESET distribute_sort_row_count_threshold;
-
-# Aggregation over a large set of rows - distribute.
+# General sort - distribute.
 query T
-SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k] WHERE info LIKE 'distribution%'
+SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v] WHERE info LIKE 'distribution%'
 ----
 distribution: full
-
-# Scalar aggregation over a large set of rows - distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT sum(v) FROM kv WHERE k>1] WHERE info LIKE 'distribution%'
-----
-distribution: full
-
-# Now consider the same set of rows small.
-statement ok
-SET distribute_group_by_row_count_threshold = 10000;
-
-# Aggregation over a small set of rows - don't distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k] WHERE info LIKE 'distribution%'
-----
-distribution: local
-
-# Scalar aggregation over a small set of rows - don't distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT sum(v) FROM kv WHERE k>1] WHERE info LIKE 'distribution%'
-----
-distribution: local
-
-statement ok
-RESET distribute_group_by_row_count_threshold;
 
 # Limit after aggregation - distribute.
 query T
@@ -204,45 +90,20 @@ SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1]
 ----
 distribution: full
 
-# Hash join over large inputs - distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv AS t1, kv AS t2 WHERE t1.k = t2.k+1 AND t1.k>1 AND t2.k>1] WHERE info LIKE 'distribution%'
-----
-distribution: full
-
-# Cross join over large inputs - don't distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv AS t1, kv AS t2 WHERE t1.k>1 AND t2.k>1] WHERE info LIKE 'distribution%'
-----
-distribution: local
-
-# Now consider the inputs small.
-statement ok
-SET distribute_join_row_count_threshold = 100000;
-
-# Hash join over small inputs - don't distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv AS t1, kv AS t2 WHERE t1.k = t2.k+1 AND t1.k>1 AND t2.k>1] WHERE info LIKE 'distribution%'
-----
-distribution: local
-
-statement ok
-RESET distribute_join_row_count_threshold;
-
 statement ok
 CREATE TABLE kw (k INT PRIMARY KEY, w INT);
 ALTER TABLE kw SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
 ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
 
-# Large hash join - distribute.
+# Join - distribute.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv NATURAL JOIN kw] WHERE info LIKE 'distribution%'
 ----
 distribution: full
 
-# Large hash join with the data living on the remote node - distribute.
+# Join with the data living on the remote node - distribute.
 query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv NATURAL JOIN kw WHERE k=2 OR k>5] WHERE info LIKE 'distribution%'
+SELECT info FROM [EXPLAIN SELECT * FROM kv NATURAL JOIN kw WHERE k=2] WHERE info LIKE 'distribution%'
 ----
 distribution: full
 

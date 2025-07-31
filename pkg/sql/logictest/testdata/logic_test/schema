@@ -167,9 +167,6 @@ SELECT * FROM myschema3.tb2
 # The names should be drained after executing, so we should be able
 # to make another schema with the old name.
 statement ok
-SET autocommit_before_ddl = false
-
-statement ok
 CREATE SCHEMA myschema2
 
 statement ok
@@ -183,9 +180,6 @@ ALTER SCHEMA another_schema RENAME TO another_one
 
 statement ok
 ROLLBACK
-
-statement ok
-RESET autocommit_before_ddl
 
 # We should be able to drop an empty schema without CASCADE.
 statement ok
@@ -307,17 +301,9 @@ subtest drop_schemas_with_database_prefixes
 # Test that empty schemas from different databases can be dropped
 statement ok
 CREATE DATABASE scdrop4_db;
-
-statement ok
 CREATE DATABASE scdrop6_db;
-
-statement ok
 CREATE SCHEMA scdrop4_db.scdrop4;
-
-statement ok
 CREATE SCHEMA scdrop5;
-
-statement ok
 CREATE SCHEMA scdrop6_db.scdrop6;
 
 statement ok
@@ -787,16 +773,16 @@ subtest show_tables
 statement ok
 CREATE DATABASE for_show;
 
-statement ok
+statement ok;
 USE for_show;
 
-statement ok
+statement ok;
 CREATE TABLE t1 (i INT PRIMARY KEY);
 
-statement ok
+statement ok;
 CREATE SCHEMA sc1;
 
-statement ok
+statement ok;
 CREATE TABLE sc1.t1 (i INT PRIMARY KEY);
 
 query TT rowsort
@@ -1509,7 +1495,7 @@ statement error pgcode 42601 pq: empty schema name
 CREATE SCHEMA ""."";
 
 onlyif config local-legacy-schema-changer
-statement error pgcode 42601 pq: empty database name
+statement error pgcode 3D000 pq: database \"\" does not exist
 CREATE SCHEMA ""."";
 
 statement error pgcode 42601 pq: .*empty schema name

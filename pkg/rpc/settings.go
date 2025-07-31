@@ -11,7 +11,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,9 +46,7 @@ var useDialback = settings.RegisterBoolSetting(
 
 var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", true)
 
-func getWindowSize(
-	ctx context.Context, name string, c rpcbase.ConnectionClass, defaultSize int,
-) int32 {
+func getWindowSize(ctx context.Context, name string, c ConnectionClass, defaultSize int) int32 {
 	s := envutil.EnvOrDefaultInt(name, defaultSize)
 	if s > maximumWindowSize {
 		log.Warningf(ctx, "%s value too large; trimmed to %d", name, maximumWindowSize)
@@ -85,7 +82,7 @@ type windowSizeSettings struct {
 func (s *windowSizeSettings) maybeInit(ctx context.Context) {
 	s.values.init.Do(func() {
 		s.values.initialWindowSize = getWindowSize(ctx,
-			"COCKROACH_RPC_INITIAL_WINDOW_SIZE", rpcbase.DefaultClass, defaultInitialWindowSize)
+			"COCKROACH_RPC_INITIAL_WINDOW_SIZE", DefaultClass, defaultInitialWindowSize)
 		s.values.initialConnWindowSize = s.values.initialWindowSize * 16
 		if s.values.initialConnWindowSize > maximumWindowSize {
 			s.values.initialConnWindowSize = maximumWindowSize
@@ -122,8 +119,7 @@ var sourceAddr = func() net.Addr {
 }()
 
 type serverOpts struct {
-	interceptor        func(fullMethod string) error
-	metricsInterceptor RequestMetricsInterceptor
+	interceptor func(fullMethod string) error
 }
 
 // ServerOption is a configuration option passed to NewServer.
@@ -144,12 +140,5 @@ func WithInterceptor(f func(fullMethod string) error) ServerOption {
 				return f(fullMethod)
 			}
 		}
-	}
-}
-
-// WithMetricsServerInterceptor adds a RequestMetricsInterceptor to the grpc server.
-func WithMetricsServerInterceptor(interceptor RequestMetricsInterceptor) ServerOption {
-	return func(opts *serverOpts) {
-		opts.metricsInterceptor = interceptor
 	}
 }

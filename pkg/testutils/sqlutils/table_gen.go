@@ -26,12 +26,19 @@ const TestDB = "test"
 type GenRowFn func(row int) []tree.Datum
 
 // genValues writes a string of generated values "(a,b,c),(d,e,f)...".
-func genValues(w io.Writer, firstRow, lastRow int, fn GenRowFn) {
+func genValues(w io.Writer, firstRow, lastRow int, fn GenRowFn, shouldPrint bool) {
 	for rowIdx := firstRow; rowIdx <= lastRow; rowIdx++ {
 		if rowIdx > firstRow {
 			fmt.Fprint(w, ",")
 		}
 		row := fn(rowIdx)
+		if shouldPrint {
+			var strs []string
+			for _, v := range row {
+				strs = append(strs, v.String())
+			}
+			fmt.Printf("(%v),\n", strings.Join(strs, ","))
+		}
 		fmt.Fprintf(w, "(%s", tree.Serialize(row[0]))
 		for _, v := range row[1:] {
 			fmt.Fprintf(w, ",%s", tree.Serialize(v))
@@ -45,10 +52,26 @@ func genValues(w io.Writer, firstRow, lastRow int, fn GenRowFn) {
 func CreateTable(
 	tb testing.TB, sqlDB *gosql.DB, tableName, schema string, numRows int, fn GenRowFn,
 ) {
+	CreateTableDebug(tb, sqlDB, tableName, schema, numRows, fn, false /* print */)
+}
+
+// CreateTableDebug is identical to debug, but allows for the added option of
+// printing the table and its contents upon creation.
+func CreateTableDebug(
+	tb testing.TB,
+	sqlDB *gosql.DB,
+	tableName, schema string,
+	numRows int,
+	fn GenRowFn,
+	shouldPrint bool,
+) {
 	r := MakeSQLRunner(sqlDB)
 	stmt := fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s;`, TestDB)
 	stmt += fmt.Sprintf(`CREATE TABLE %s.%s (%s);`, TestDB, tableName, schema)
 	r.Exec(tb, stmt)
+	if shouldPrint {
+		fmt.Printf("Creating table: %s\n%s\n", tableName, schema)
+	}
 	for i := 1; i <= numRows; {
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, `INSERT INTO %s.%s VALUES `, TestDB, tableName)
@@ -56,7 +79,7 @@ func CreateTable(
 		if batchEnd > numRows {
 			batchEnd = numRows
 		}
-		genValues(&buf, i, batchEnd, fn)
+		genValues(&buf, i, batchEnd, fn, shouldPrint)
 
 		r.Exec(tb, buf.String())
 		i = batchEnd + 1

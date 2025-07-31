@@ -7,7 +7,6 @@ package storage
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
@@ -84,7 +83,7 @@ func IsDiskFull(fs vfs.FS, spec base.StoreSpec) (bool, error) {
 // smaller.
 func BallastSizeBytes(spec base.StoreSpec, diskUsage vfs.DiskUsage) int64 {
 	if spec.BallastSize != nil {
-		v := spec.BallastSize.Bytes
+		v := spec.BallastSize.InBytes
 		if spec.BallastSize.Percent != 0 {
 			v = int64(float64(diskUsage.TotalBytes) * spec.BallastSize.Percent / 100)
 		}
@@ -104,8 +103,8 @@ func BallastSizeBytes(spec base.StoreSpec, diskUsage vfs.DiskUsage) int64 {
 // explicit ballast size (either in bytes or as a percentage of the disk's total
 // capacity), that size is used. A zero value for cacheSize results in no
 // secondary cache.
-func SecondaryCacheBytes(cacheSize storageconfig.Size, diskUsage vfs.DiskUsage) int64 {
-	v := cacheSize.Bytes
+func SecondaryCacheBytes(cacheSize base.SizeSpec, diskUsage vfs.DiskUsage) int64 {
+	v := cacheSize.InBytes
 	if cacheSize.Percent != 0 {
 		v = int64(float64(diskUsage.TotalBytes) * cacheSize.Percent / 100)
 	}

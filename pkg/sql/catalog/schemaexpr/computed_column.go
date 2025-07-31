@@ -29,8 +29,8 @@ import (
 // ValidateComputedColumnExpression verifies that an expression is a valid
 // computed column expression. It returns the serialized expression and its type
 // if valid, and an error otherwise. The returned type is only useful if d has
-// type AnyElement which indicates the expression's type is unknown and does not
-// have to match a specific type.
+// type Any which indicates the expression's type is unknown and does not have
+// to match a specific type.
 //
 // A computed column expression is valid if all of the following are true:
 //
@@ -144,25 +144,6 @@ func ValidateComputedColumnExpression(
 		}
 	}
 
-	// If this is a REGIONAL BY ROW table using a foreign key to populate the
-	// region column, we need to check that the expression does not reference
-	// the region column. This is because the values of every (possibly computed)
-	// foreign-key column must be known in order to determine the value for the
-	// region column.
-	if desc.GetRegionalByRowUsingConstraint() != descpb.ConstraintID(0) {
-		regionColName, err := desc.GetRegionalByRowTableRegionColumnName()
-		if err != nil {
-			return "", nil, err
-		}
-		col, err := catalog.MustFindColumnByName(desc, string(regionColName))
-		if err != nil {
-			return "", nil, errors.WithAssertionFailure(err)
-		}
-		if depColIDs.Contains(col.GetID()) {
-			return "", nil, sqlerrors.NewComputedColReferencesRegionColError(d.Name, col.ColName())
-		}
-	}
-
 	return expr, typ, nil
 }
 
@@ -242,7 +223,7 @@ func MakeComputedExprs(
 		return nil, catalog.TableColSet{}, err
 	}
 
-	nr := newNameResolver(tableDesc.GetID(), tn, sourceColumns)
+	nr := newNameResolver(evalCtx, tableDesc.GetID(), tn, sourceColumns)
 	nr.addIVarContainerToSemaCtx(semaCtx)
 
 	var txCtx transform.ExprTransformContext
@@ -271,14 +252,6 @@ func MakeComputedExprs(
 		if err != nil {
 			return nil, catalog.TableColSet{}, err
 		}
-
-		// If the expression has a type that is not identical to the
-		// column's type, wrap the computed column expression in an assignment cast.
-		typedExpr, err = wrapWithAssignmentCast(ctx, typedExpr, col, semaCtx)
-		if err != nil {
-			return nil, catalog.TableColSet{}, err
-		}
-
 		if typedExpr, err = txCtx.NormalizeExpr(ctx, evalCtx, typedExpr); err != nil {
 			return nil, catalog.TableColSet{}, err
 		}

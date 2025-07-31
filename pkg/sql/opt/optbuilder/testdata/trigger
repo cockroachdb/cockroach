@@ -99,8 +99,7 @@ root
  │         │         │    │         │    │    ├── select
  │         │         │    │         │    │    │    ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         │         │    │         │    │    │    ├── scan xy
- │         │         │    │         │    │    │    │    ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
- │         │         │    │         │    │    │    │    └── flags: avoid-full-scan
+ │         │         │    │         │    │    │    │    └── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         │         │    │         │    │    │    └── filters
  │         │         │    │         │    │    │         └── x:5 = 1
  │         │         │    │         │    │    └── projections
@@ -144,8 +143,7 @@ root
            │         │         │    │         │    ├── inner-join (hash)
            │         │         │    │         │    │    ├── columns: k:32 child.x:33 x_old:36 x_new:37
            │         │         │    │         │    │    ├── scan child
-           │         │         │    │         │    │    │    ├── columns: k:32 child.x:33
-           │         │         │    │         │    │    │    └── flags: avoid-full-scan
+           │         │         │    │         │    │    │    └── columns: k:32 child.x:33
            │         │         │    │         │    │    ├── select
            │         │         │    │         │    │    │    ├── columns: x_old:36 x_new:37
            │         │         │    │         │    │    │    ├── with-scan &1
@@ -180,8 +178,7 @@ root
                           │    └── filters
                           │         └── x:55 IS NOT NULL
                           ├── scan xy
-                          │    ├── columns: xy.x:56
-                          │    └── flags: avoid-full-scan
+                          │    └── columns: xy.x:56
                           └── filters
                                └── x:55 = xy.x:56
 
@@ -210,8 +207,7 @@ root
  │              │    │         ├── select
  │              │    │         │    ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │              │    │         │    ├── scan xy
- │              │    │         │    │    ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
- │              │    │         │    │    └── flags: avoid-full-scan
+ │              │    │         │    │    └── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │              │    │         │    └── filters
  │              │    │         │         └── x:5 = 1
  │              │    │         └── projections
@@ -243,8 +239,7 @@ root
                      │         │    │         ├── semi-join (hash)
                      │         │    │         │    ├── columns: k:28 child.x:29
                      │         │    │         │    ├── scan child
-                     │         │    │         │    │    ├── columns: k:28 child.x:29
-                     │         │    │         │    │    └── flags: avoid-full-scan
+                     │         │    │         │    │    └── columns: k:28 child.x:29
                      │         │    │         │    ├── with-scan &1
                      │         │    │         │    │    ├── columns: x:32
                      │         │    │         │    │    └── mapping:
@@ -320,8 +315,7 @@ root
  │         │    │         │    │         │    │    │         │    │         │    │         └── first-agg [as=column2:6]
  │         │    │         │    │         │    │    │         │    │         │    │              └── column2:6
  │         │    │         │    │         │    │    │         │    │         │    ├── scan xy
- │         │    │         │    │         │    │    │         │    │         │    │    ├── columns: x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
- │         │    │         │    │         │    │    │         │    │         │    │    └── flags: avoid-full-scan
+ │         │    │         │    │         │    │    │         │    │         │    │    └── columns: x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    │         │    │         │    │    │         │    │         │    └── filters
  │         │    │         │    │         │    │    │         │    │         │         └── column1:5 = x:7
  │         │    │         │    │         │    │    │         │    │         └── projections
@@ -375,8 +369,7 @@ root
            │         │         │    │         │    ├── inner-join (hash)
            │         │         │    │         │    │    ├── columns: k:39 child.x:40 x_old:43 x_new:44
            │         │         │    │         │    │    ├── scan child
-           │         │         │    │         │    │    │    ├── columns: k:39 child.x:40
-           │         │         │    │         │    │    │    └── flags: avoid-full-scan
+           │         │         │    │         │    │    │    └── columns: k:39 child.x:40
            │         │         │    │         │    │    ├── select
            │         │         │    │         │    │    │    ├── columns: x_old:43 x_new:44
            │         │         │    │         │    │    │    ├── with-scan &1
@@ -411,8 +404,7 @@ root
                           │    └── filters
                           │         └── x:62 IS NOT NULL
                           ├── scan xy
-                          │    ├── columns: xy.x:63
-                          │    └── flags: avoid-full-scan
+                          │    └── columns: xy.x:63
                           └── filters
                                └── x:62 = xy.x:63
 
@@ -478,8 +470,7 @@ root
  │         │    │         │    │         │    │    │    │         │    │         │    │         └── first-agg [as=column2:6]
  │         │    │         │    │         │    │    │    │         │    │         │    │              └── column2:6
  │         │    │         │    │         │    │    │    │         │    │         │    ├── scan xy
- │         │    │         │    │         │    │    │    │         │    │         │    │    ├── columns: x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
- │         │    │         │    │         │    │    │    │         │    │         │    │    └── flags: avoid-full-scan
+ │         │    │         │    │         │    │    │    │         │    │         │    │    └── columns: x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    │         │    │         │    │    │    │         │    │         │    └── filters
  │         │    │         │    │         │    │    │    │         │    │         │         └── column1:5 = x:7
  │         │    │         │    │         │    │    │    │         │    │         └── projections
@@ -535,8 +526,7 @@ root
            │         │         │    │         │    ├── inner-join (hash)
            │         │         │    │         │    │    ├── columns: k:40 child.x:41 x_old:44 x_new:45
            │         │         │    │         │    │    ├── scan child
-           │         │         │    │         │    │    │    ├── columns: k:40 child.x:41
-           │         │         │    │         │    │    │    └── flags: avoid-full-scan
+           │         │         │    │         │    │    │    └── columns: k:40 child.x:41
            │         │         │    │         │    │    ├── select
            │         │         │    │         │    │    │    ├── columns: x_old:44 x_new:45
            │         │         │    │         │    │    │    ├── with-scan &1
@@ -571,8 +561,7 @@ root
                           │    └── filters
                           │         └── x:63 IS NOT NULL
                           ├── scan xy
-                          │    ├── columns: xy.x:64
-                          │    └── flags: avoid-full-scan
+                          │    └── columns: xy.x:64
                           └── filters
                                └── x:63 = xy.x:64
 
@@ -648,12 +637,11 @@ update computed
       │    │         │    │         │    ├── columns: k:6 v:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │         │    │         │    ├── scan computed
       │    │         │    │         │    │    ├── columns: k:6 v:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │         │    │         │    │    ├── computed column expressions
-      │    │         │    │         │    │    │    ├── v:7
-      │    │         │    │         │    │    │    │    └── k:6 + 1
-      │    │         │    │         │    │    │    └── w:8
-      │    │         │    │         │    │    │         └── k:6 + 2
-      │    │         │    │         │    │    └── flags: avoid-full-scan
+      │    │         │    │         │    │    └── computed column expressions
+      │    │         │    │         │    │         ├── v:7
+      │    │         │    │         │    │         │    └── k:6 + 1
+      │    │         │    │         │    │         └── w:8
+      │    │         │    │         │    │              └── k:6 + 2
       │    │         │    │         │    └── filters
       │    │         │    │         │         └── k:6 = 1
       │    │         │    │         └── projections
@@ -890,8 +878,7 @@ root
  │         ├── select
  │         │    ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         │    ├── scan xy
- │         │    │    ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
- │         │    │    └── flags: avoid-full-scan
+ │         │    │    └── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         │    └── filters
  │         │         └── x:5 = 1
  │         └── projections
@@ -934,8 +921,7 @@ root
  │    └── select
  │         ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         ├── scan xy
- │         │    ├── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
- │         │    └── flags: avoid-full-scan
+ │         │    └── columns: x:5 y:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         └── filters
  │              └── x:5 = 1
  ├── cascade
@@ -961,8 +947,7 @@ root
  │                   │         │    │         ├── select
  │                   │         │    │         │    ├── columns: k:13 child.x:14
  │                   │         │    │         │    ├── scan child
- │                   │         │    │         │    │    ├── columns: k:13 child.x:14
- │                   │         │    │         │    │    └── flags: avoid-full-scan
+ │                   │         │    │         │    │    └── columns: k:13 child.x:14
  │                   │         │    │         │    └── filters
  │                   │         │    │         │         ├── child.x:14 = 1
  │                   │         │    │         │         └── child.x:14 IS DISTINCT FROM CAST(NULL AS INT8)
@@ -1026,8 +1011,7 @@ root
  │         │    │         └── first-agg [as=column2:6]
  │         │    │              └── column2:6
  │         │    ├── scan xy
- │         │    │    ├── columns: x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
- │         │    │    └── flags: avoid-full-scan
+ │         │    │    └── columns: x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    └── filters
  │         │         └── column1:5 = x:7
  │         └── projections
@@ -1091,8 +1075,7 @@ root
  │         │    │    │         └── first-agg [as=column2:6]
  │         │    │    │              └── column2:6
  │         │    │    ├── scan xy
- │         │    │    │    ├── columns: x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
- │         │    │    │    └── flags: avoid-full-scan
+ │         │    │    │    └── columns: x:7 y:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    │    └── filters
  │         │    │         └── column1:5 = x:7
  │         │    └── projections
@@ -1198,7 +1181,6 @@ insert t133329
  │                   ├── values
  │                   │    └── (1, 1)
  │                   ├── scan t133329
- │                   │    └── flags: avoid-full-scan
  │                   └── filters
  │                        ├── a = t133329.a
  │                        └── k != t133329.k
@@ -1206,7 +1188,6 @@ insert t133329
       └── fast-path-unique-checks-item: t133329(a)
            └── select
                 ├── scan t133329
-                │    └── flags: avoid-full-scan
                 └── filters
                      └── t133329.a = 1
 
@@ -1249,7 +1230,6 @@ insert t133329
                 └── semi-join (hash)
                      ├── with-scan &1
                      ├── scan t133329
-                     │    └── flags: avoid-full-scan
                      └── filters
                           ├── a = t133329.a
                           └── k != t133329.k

@@ -6,15 +6,10 @@
 package admissionpb
 
 import (
-	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/gogo/protobuf/proto"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 // WorkPriority represents the priority of work. In an WorkQueue, it is only
@@ -242,89 +237,6 @@ func (w WorkClass) SafeFormat(p redact.SafePrinter, verb rune) {
 		p.SafeString("elastic")
 	default:
 		p.SafeString("<unknown-class>")
-	}
-}
-
-var _ tracing.AggregatorEvent = &AdmissionWorkQueueStats{}
-
-// Identity implements the tracing.AggregatorEvent interface.
-func (s *AdmissionWorkQueueStats) Identity() tracing.AggregatorEvent {
-	return &AdmissionWorkQueueStats{WorkPriority: int32(HighPri)}
-}
-
-// Combine implements the tracing.AggregatorEvent interface.
-func (s *AdmissionWorkQueueStats) Combine(other tracing.AggregatorEvent) {
-	otherStats, ok := other.(*AdmissionWorkQueueStats)
-	if !ok {
-		panic(errors.Newf("`other` is not of type AdmissionWorkQueueStats: %T", other))
-	}
-	s.WaitDurationNanos += otherStats.WaitDurationNanos
-	s.DeadlineExceededCount += otherStats.DeadlineExceededCount
-	s.WorkPriority = min(s.WorkPriority, otherStats.WorkPriority)
-
-	if s.QueueKind == "" {
-		s.QueueKind = otherStats.QueueKind
-	} else if s.QueueKind != otherStats.QueueKind {
-		s.QueueKind = "multiple-queues"
-		// TODO(dt): consider adding a map of queue kinds to counts, e.g.:
-		/*
-			if s.Agg == nil {
-				s.Agg = make(map[string]*AdmissionWorkQueueStats)
-				s.Agg[otherStats.QueueKind] = otherStats
-			} else if perQueue, ok := s.Agg[otherStats.QueueKind]; !ok {
-				s.Agg[otherStats.QueueKind] = otherStats
-			} else {
-				perQueue.Combine(otherStats)
-			}
-		*/
-	}
-}
-
-// ProtoName implements the tracing.AggregatorEvent interface.
-func (s *AdmissionWorkQueueStats) ProtoName() string {
-	return proto.MessageName(s)
-}
-
-func (s *AdmissionWorkQueueStats) ToText() []byte {
-	return []byte(s.String())
-}
-
-func (s *AdmissionWorkQueueStats) String() string {
-	return fmt.Sprintf("queue (%s/%s) wait: %s",
-		redact.SafeString(s.QueueKind),
-		WorkPriority(s.WorkPriority),
-		humanizeutil.Duration(s.WaitDurationNanos),
-	)
-
-	// TODO(dt): consider supporting a map over multiple queues when aggregating
-	// into a single stat, e.g. treat the above as a fast-path if the map is nil
-	// but otherwise do something like this:
-	/*
-		var b strings.Builder
-		fmt.Fprintf(&b, "queue (%s/%s) wait: %s (",
-			redact.SafeString(s.QueueKind),
-			WorkPriority(s.WorkPriority),
-			humanizeutil.Duration(s.WaitDurationNanos),
-		)
-
-		for _, v := range s.Agg {
-			fmt.Fprintf(&b, "%s[%s]: %s;",
-				redact.SafeString(v.QueueKind),
-				WorkPriority(s.WorkPriority),
-				humanizeutil.Duration(v.WaitDurationNanos),
-			)
-		}
-		b.WriteString(")")
-		return b.String()
-	*/
-}
-
-// Render implements the AggregatorEvent interface.
-func (s *AdmissionWorkQueueStats) Render() []attribute.KeyValue {
-	return []attribute.KeyValue{
-		{Key: "queue_wait", Value: attribute.StringValue(string(humanizeutil.Duration(s.WaitDurationNanos)))},
-		{Key: "queue_kind", Value: attribute.StringValue(s.QueueKind)},
-		{Key: "queue_priority", Value: attribute.StringValue(WorkPriority(s.WorkPriority).String())},
 	}
 }
 

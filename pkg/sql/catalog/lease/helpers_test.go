@@ -114,7 +114,11 @@ func (m *Manager) ExpireLeases(clock *hlc.Clock) {
 	defer m.names.mu.Unlock()
 	_ = m.names.descriptors.IterateByID(func(entry catalog.NameEntry) error {
 		desc := entry.(*descriptorVersionState)
-		desc.expiration.Store(&past)
+		desc.mu.Lock()
+		defer desc.mu.Unlock()
+		desc.mu.expiration = past
+		// Wipe the session as if this is an expired version
+		desc.mu.session = nil
 		return nil
 	})
 }

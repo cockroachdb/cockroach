@@ -123,6 +123,7 @@ func (ch *Chaos) Runner(
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-t.C:
+				t.Read = true
 			}
 
 			period, downTime := ch.Timer.Timing()
@@ -169,7 +170,7 @@ func (ch *Chaos) Runner(
 				// Use a one-off context to restart the node because ours is
 				// already canceled.
 				tCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel() //nolint:deferloop
+				defer cancel()
 				startOpts := option.DefaultStartOpts()
 				startOpts.RoachtestOpts.Worker = true
 				settings := install.MakeClusterSettings()

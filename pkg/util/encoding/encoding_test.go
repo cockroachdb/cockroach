@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
@@ -2564,6 +2565,56 @@ func TestValueEncodingRand(t *testing.T) {
 			if decoded != value {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
 			}
+		}
+	}
+}
+
+func TestPrettyPrintValueEncoded(t *testing.T) {
+	uuidStr := "63616665-6630-3064-6465-616462656562"
+	u, err := uuid.FromString(uuidStr)
+	if err != nil {
+		t.Fatalf("Bad test case. Attempted uuid.FromString(%q) got err: %d", uuidStr, err)
+	}
+	ip := "192.168.0.1/10"
+	var ipAddr ipaddr.IPAddr
+	err = ipaddr.ParseINet(ip, &ipAddr)
+	if err != nil {
+		t.Fatalf("Bad test case. Attempted ipaddr.ParseINet(%q) got err: %d", ip, err)
+	}
+	ba := bitarray.MakeBitArrayFromInt64(6, 9, 5)
+	tests := []struct {
+		buf      []byte
+		expected string
+	}{
+		{EncodeNullValue(nil, NoColumnID), "NULL"},
+		{EncodeBoolValue(nil, NoColumnID, true), "true"},
+		{EncodeBoolValue(nil, NoColumnID, false), "false"},
+		{EncodeIntValue(nil, NoColumnID, 7), "7"},
+		{EncodeFloatValue(nil, NoColumnID, 6.28), "6.28"},
+		{EncodeDecimalValue(nil, NoColumnID, apd.New(628, -2)), "6.28"},
+		{EncodeTimeValue(nil, NoColumnID,
+			time.Date(2016, 6, 29, 16, 2, 50, 5, time.UTC)), "2016-06-29T16:02:50.000000005Z"},
+		{EncodeTimeTZValue(nil, NoColumnID,
+			timetz.MakeTimeTZ(timeofday.New(10, 11, 12, 0), 5*60*60+24)), "10:11:12-05:00:24"},
+		{EncodeDurationValue(nil, NoColumnID,
+			duration.DecodeDuration(1, 2, 3)), "1 mon 2 days 00:00:00+3ns"},
+		{EncodeBytesValue(nil, NoColumnID, []byte{0x1, 0x2, 0xF, 0xFF}), "0x01020fff"},
+		{EncodeBytesValue(nil, NoColumnID, []byte("foo")), "foo"}, // printable bytes
+		{EncodeBytesValue(nil, NoColumnID, []byte{0x89}), "0x89"}, // non-printable bytes
+		{EncodeIPAddrValue(nil, NoColumnID, ipAddr), ip},
+		{EncodeUUIDValue(nil, NoColumnID, u), uuidStr},
+		{EncodeBitArrayValue(nil, NoColumnID, ba), "B001001"},
+	}
+	for i, test := range tests {
+		remaining, str, err := PrettyPrintValueEncoded(test.buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(remaining) != 0 {
+			t.Errorf("%d: expected all bytes to be consumed but was left with %s", i, remaining)
+		}
+		if str != test.expected {
+			t.Errorf("%d: got %q expected %q", i, str, test.expected)
 		}
 	}
 }

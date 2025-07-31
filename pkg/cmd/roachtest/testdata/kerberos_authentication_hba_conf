@@ -1,2 +1,0 @@
-host    all           roachprod           0.0.0.0/0          password
-host all all all gss include_realm=0 krb_realm=MY.EX

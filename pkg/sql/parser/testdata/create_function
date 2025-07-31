@@ -469,6 +469,16 @@ CREATE FUNCTION _()
 	LANGUAGE plpgsql
 	AS $$_$$ -- identifiers removed
 
+error
+CREATE FUNCTION f() RETURNS TABLE 'SELECT 1' LANGUAGE SQL
+----
+at or near "table": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE FUNCTION f() RETURNS TABLE 'SELECT 1' LANGUAGE SQL
+                            ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/100226/
+
 parse
 CREATE OR REPLACE FUNCTION f(a int = 7) RETURNS INT EXTERNAL SECURITY DEFINER AS 'SELECT 1' LANGUAGE SQL
 ----
@@ -564,165 +574,3 @@ CREATE OR REPLACE FUNCTION _(_ INT8 DEFAULT 7)
 	SECURITY INVOKER
 	LANGUAGE SQL
 	AS $$_$$ -- identifiers removed
-
-parse
-CREATE FUNCTION f(OUT x INT) RETURNS SETOF INT LANGUAGE SQL AS $$ SELECT 1 $$;
-----
-CREATE FUNCTION f(OUT x INT8)
-	RETURNS SETOF INT8
-	LANGUAGE SQL
-	AS $$ SELECT 1 $$ -- normalized!
-CREATE FUNCTION f(OUT x INT8)
-	RETURNS SETOF INT8
-	LANGUAGE SQL
-	AS $$ SELECT 1 $$ -- fully parenthesized
-CREATE FUNCTION f(OUT x INT8)
-	RETURNS SETOF INT8
-	LANGUAGE SQL
-	AS $$_$$ -- literals removed
-CREATE FUNCTION _(OUT _ INT8)
-	RETURNS SETOF INT8
-	LANGUAGE SQL
-	AS $$_$$ -- identifiers removed
-
-parse
-CREATE FUNCTION f(OUT x INT, OUT y INT) RETURNS SETOF RECORD LANGUAGE SQL AS $$ SELECT 1, 2 $$;
-----
-CREATE FUNCTION f(OUT x INT8, OUT y INT8)
-	RETURNS SETOF RECORD
-	LANGUAGE SQL
-	AS $$ SELECT 1, 2 $$ -- normalized!
-CREATE FUNCTION f(OUT x INT8, OUT y INT8)
-	RETURNS SETOF RECORD
-	LANGUAGE SQL
-	AS $$ SELECT 1, 2 $$ -- fully parenthesized
-CREATE FUNCTION f(OUT x INT8, OUT y INT8)
-	RETURNS SETOF RECORD
-	LANGUAGE SQL
-	AS $$_$$ -- literals removed
-CREATE FUNCTION _(OUT _ INT8, OUT _ INT8)
-	RETURNS SETOF RECORD
-	LANGUAGE SQL
-	AS $$_$$ -- identifiers removed
-
-parse
-CREATE FUNCTION f() RETURNS TABLE(x INT) LANGUAGE SQL AS $$ SELECT 1 $$;
-----
-CREATE FUNCTION f(OUT x INT8)
-	RETURNS SETOF INT8
-	LANGUAGE SQL
-	AS $$ SELECT 1 $$ -- normalized!
-CREATE FUNCTION f(OUT x INT8)
-	RETURNS SETOF INT8
-	LANGUAGE SQL
-	AS $$ SELECT 1 $$ -- fully parenthesized
-CREATE FUNCTION f(OUT x INT8)
-	RETURNS SETOF INT8
-	LANGUAGE SQL
-	AS $$_$$ -- literals removed
-CREATE FUNCTION _(OUT _ INT8)
-	RETURNS SETOF INT8
-	LANGUAGE SQL
-	AS $$_$$ -- identifiers removed
-
-parse
-CREATE FUNCTION f() RETURNS TABLE(x INT, y INT) LANGUAGE SQL AS $$ SELECT 1, 2 $$;
-----
-CREATE FUNCTION f(OUT x INT8, OUT y INT8)
-	RETURNS SETOF RECORD
-	LANGUAGE SQL
-	AS $$ SELECT 1, 2 $$ -- normalized!
-CREATE FUNCTION f(OUT x INT8, OUT y INT8)
-	RETURNS SETOF RECORD
-	LANGUAGE SQL
-	AS $$ SELECT 1, 2 $$ -- fully parenthesized
-CREATE FUNCTION f(OUT x INT8, OUT y INT8)
-	RETURNS SETOF RECORD
-	LANGUAGE SQL
-	AS $$_$$ -- literals removed
-CREATE FUNCTION _(OUT _ INT8, OUT _ INT8)
-	RETURNS SETOF RECORD
-	LANGUAGE SQL
-	AS $$_$$ -- identifiers removed
-
-# When formatting the function body, non-conflicting delimiters should be chosen
-# for the quotes.
-parse
-CREATE FUNCTION f() RETURNS TEXT LANGUAGE SQL AS $$ SELECT $foo$ bar baz $foo$ $$;
-----
-CREATE FUNCTION f()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $$ SELECT $foo$ bar baz $foo$ $$ -- normalized!
-CREATE FUNCTION f()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $$ SELECT $foo$ bar baz $foo$ $$ -- fully parenthesized
-CREATE FUNCTION f()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $$_$$ -- literals removed
-CREATE FUNCTION _()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $$_$$ -- identifiers removed
-
-parse no-parse-without-literals
-CREATE FUNCTION f() RETURNS TEXT LANGUAGE SQL AS ' SELECT $$ bar baz $$ ';
-----
-CREATE FUNCTION f()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $funcbody$ SELECT $$ bar baz $$ $funcbody$ -- normalized!
-CREATE FUNCTION f()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $funcbody$ SELECT $$ bar baz $$ $funcbody$ -- fully parenthesized
-CREATE FUNCTION f()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $funcbody$_$funcbody$ -- literals removed
-CREATE FUNCTION _()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $funcbody$_$funcbody$ -- identifiers removed
-
-parse no-parse-without-literals
-CREATE FUNCTION f() RETURNS TEXT LANGUAGE SQL AS $foo$ SELECT $$ bar $$ + $funcbody$ baz $funcbody$ $foo$;
-----
-CREATE FUNCTION f()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $funcbodyx$ SELECT $$ bar $$ + $funcbody$ baz $funcbody$ $funcbodyx$ -- normalized!
-CREATE FUNCTION f()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $funcbodyx$ SELECT $$ bar $$ + $funcbody$ baz $funcbody$ $funcbodyx$ -- fully parenthesized
-CREATE FUNCTION f()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $funcbodyx$_$funcbodyx$ -- literals removed
-CREATE FUNCTION _()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $funcbodyx$_$funcbodyx$ -- identifiers removed
-
-parse no-parse-without-literals
-CREATE FUNCTION f() RETURNS TEXT LANGUAGE SQL AS $foo$ SELECT $$ bar $$ + $funcbody$ baz $funcbody$ + $funcbodyx$ $funcbodyx$ $foo$;
-----
-CREATE FUNCTION f()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $funcbodyxx$ SELECT $$ bar $$ + $funcbody$ baz $funcbody$ + $funcbodyx$ $funcbodyx$ $funcbodyxx$ -- normalized!
-CREATE FUNCTION f()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $funcbodyxx$ SELECT $$ bar $$ + $funcbody$ baz $funcbody$ + $funcbodyx$ $funcbodyx$ $funcbodyxx$ -- fully parenthesized
-CREATE FUNCTION f()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $funcbodyxx$_$funcbodyxx$ -- literals removed
-CREATE FUNCTION _()
-	RETURNS STRING
-	LANGUAGE SQL
-	AS $funcbodyxx$_$funcbodyxx$ -- identifiers removed

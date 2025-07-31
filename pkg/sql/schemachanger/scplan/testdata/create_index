@@ -154,7 +154,7 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
-      RunningStatus: 'Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 1 of 7).'
+      RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
       Statements:
       - statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
         redactedstatement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money)
@@ -280,10 +280,6 @@ deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
-  kind: Precedence
-  rule: ensure index columns are added in increasing order
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1, RecreateSourceIndexID: 0}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
@@ -291,10 +287,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1, RecreateSourceIndexID: 0}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  kind: Precedence
-  rule: ensure index columns are added in increasing order
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -478,7 +470,6 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
         SourceIndexID: 1
         TableID: 104
         TemporaryIndexID: 3
-        Type: 1
       IsSecondaryIndex: true
     *scop.AddColumnToIndex
       ColumnID: 1
@@ -502,7 +493,6 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
         IsInverted: true
         SourceIndexID: 1
         TableID: 104
-        Type: 1
       IsSecondaryIndex: true
     *scop.AddColumnToIndex
       ColumnID: 1
@@ -546,7 +536,6 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         SourceIndexID: 1
         TableID: 104
         TemporaryIndexID: 3
-        Type: 1
       IsSecondaryIndex: true
     *scop.MaybeAddSplitForIndex
       IndexID: 2
@@ -573,7 +562,6 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         IsInverted: true
         SourceIndexID: 1
         TableID: 104
-        Type: 1
       IsSecondaryIndex: true
     *scop.MaybeAddSplitForIndex
       IndexID: 3
@@ -598,7 +586,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
-      RunningStatus: 'Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 1 of 7).'
+      RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
       Statements:
       - statement: CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name gin_trgm_ops)
         redactedstatement: CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.public.t1 (id, name gin_trgm_ops)
@@ -718,10 +706,6 @@ deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
-  kind: Precedence
-  rule: ensure index columns are added in increasing order
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1, RecreateSourceIndexID: 0}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
@@ -729,10 +713,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1, RecreateSourceIndexID: 0}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  kind: Precedence
-  rule: ensure index columns are added in increasing order
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence

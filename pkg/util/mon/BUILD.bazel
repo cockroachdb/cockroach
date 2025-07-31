@@ -22,7 +22,6 @@ go_library(
         "//pkg/util/log/logcrash",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
-        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",

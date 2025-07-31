@@ -50,14 +50,11 @@ SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp('boom')
 statement error pq: AS OF SYSTEM TIME: only constant expressions, with_min_timestamp, with_max_staleness, or follower_read_timestamp are allowed
 SELECT * FROM t AS OF SYSTEM TIME now()
 
-statement error pq: AS OF SYSTEM TIME: interval value '10s' is in the future
+statement error pq: request timestamp .* too far in future
 SELECT * FROM t AS OF SYSTEM TIME '10s'
 
-statement error pq: AS OF SYSTEM TIME: interval value '00:00:00.000001' is in the future
-SELECT * FROM t AS OF SYSTEM TIME interval '1 microsecond'
-
 query I
-SELECT * FROM t AS OF SYSTEM TIME '-1μs'
+SELECT * FROM t AS OF SYSTEM TIME interval '1 microsecond'
 ----
 2
 
@@ -137,9 +134,6 @@ statement ok
 ROLLBACK
 
 statement ok
-SET kv_transaction_buffered_writes_enabled = false;
-
-statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 statement ok
@@ -150,24 +144,6 @@ SET TRANSACTION AS OF system time '-1s'
 
 statement ok
 ROLLBACK
-
-statement ok
-SET kv_transaction_buffered_writes_enabled = true;
-
-statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
-
-statement ok
-INSERT INTO t VALUES(1)
-
-statement error cannot set fixed timestamp, .* already performed reads
-SET TRANSACTION AS OF system time '-1s'
-
-statement ok
-ROLLBACK
-
-statement ok
-RESET kv_transaction_buffered_writes_enabled;
 
 # Verify that an expression that requires normalization does not result in an
 # internal error.
@@ -191,34 +167,3 @@ WITH x AS (UPDATE t SET i = 3 WHERE i = 2 RETURNING i) SELECT * FROM x AS OF SYS
 
 statement error cannot execute SELECT FOR UPDATE in a read-only transaction
 SELECT * FROM t AS OF SYSTEM TIME '-1ms' FOR UPDATE
-
-subtest as_of_future
-
-statement error pq: AS OF SYSTEM TIME: interval value '1 microsecond' is in the future
-REFRESH MATERIALIZED VIEW nonexistent AS OF SYSTEM TIME ('1 microsecond')
-
-statement error pq: AS OF SYSTEM TIME: interval value '00:00:00.000001' is in the future
-REFRESH MATERIALIZED VIEW nonexistent AS OF SYSTEM TIME (INTERVAL '1 microsecond')
-
-statement error pq: AS OF SYSTEM TIME: timestamp '2090-05-08 12:00:00' is in the future
-REFRESH MATERIALIZED VIEW nonexistent AS OF SYSTEM TIME '2090-05-08 12:00:00'
-
-statement error pq: AS OF SYSTEM TIME: interval value '1 microsecond' is in the future
-CREATE TABLE wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME ('1 microsecond')
-
-statement error pq: AS OF SYSTEM TIME: interval value '00:00:00.000001' is in the future
-CREATE TABLE wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME (INTERVAL '1 microsecond')
-
-statement error pq: AS OF SYSTEM TIME: timestamp '2090-05-08 12:00:00' is in the future
-CREATE TABLE wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME '2090-05-08 12:00:00'
-
-statement error pq: AS OF SYSTEM TIME: interval value '1 microsecond' is in the future
-CREATE VIEW wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME ('1 microsecond')
-
-statement error pq: AS OF SYSTEM TIME: interval value '00:00:00.000001' is in the future
-CREATE VIEW wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME (INTERVAL '1 microsecond')
-
-statement error pq: AS OF SYSTEM TIME: timestamp '2090-05-08 12:00:00' is in the future
-CREATE VIEW wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME '2090-05-08 12:00:00'
-
-subtest end

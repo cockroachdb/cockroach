@@ -35,9 +35,6 @@ import (
 // times to cause tokens to be set in the testGranterWithIOTokens:
 // set-state admitted=<int> l0-bytes=<int> l0-added=<int> l0-files=<int> l0-sublevels=<int> ...
 func TestIOLoadListener(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
 	req := &testRequesterForIOLL{}
 	kvGranter := &testGranterWithIOTokens{}
 	var ioll *ioLoadListener
@@ -132,17 +129,17 @@ func TestIOLoadListener(t *testing.T) {
 				var metrics pebble.Metrics
 				var l0Bytes uint64
 				d.ScanArgs(t, "l0-bytes", &l0Bytes)
-				metrics.Levels[0].TablesSize = int64(l0Bytes)
+				metrics.Levels[0].Size = int64(l0Bytes)
 				var l0AddedWrite, l0AddedIngested uint64
 				d.ScanArgs(t, "l0-added-write", &l0AddedWrite)
-				metrics.Levels[0].TableBytesFlushed = l0AddedWrite
+				metrics.Levels[0].BytesFlushed = l0AddedWrite
 				if d.HasArg("l0-added-ingested") {
 					d.ScanArgs(t, "l0-added-ingested", &l0AddedIngested)
 				}
-				metrics.Levels[0].TableBytesIngested = l0AddedIngested
+				metrics.Levels[0].BytesIngested = l0AddedIngested
 				var l0Files int
 				d.ScanArgs(t, "l0-files", &l0Files)
-				metrics.Levels[0].TablesCount = int64(l0Files)
+				metrics.Levels[0].NumFiles = int64(l0Files)
 				var l0SubLevels int
 				d.ScanArgs(t, "l0-sublevels", &l0SubLevels)
 				metrics.Levels[0].Sublevels = int32(l0SubLevels)
@@ -160,10 +157,10 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("base-level") {
 					var baseLevel int
 					d.ScanArgs(t, "base-level", &baseLevel)
-					metrics.Levels[baseLevel].TablesSize = 1000
+					metrics.Levels[baseLevel].Size = 1000
 					var compactedBytes int
 					d.ScanArgs(t, "compacted-bytes", &compactedBytes)
-					metrics.Levels[baseLevel].TableBytesCompacted = uint64(compactedBytes)
+					metrics.Levels[baseLevel].BytesCompacted = uint64(compactedBytes)
 				}
 
 				cumFlushIdle += time.Duration(flushIdleSec) * time.Second
@@ -258,19 +255,15 @@ func TestIOLoadListener(t *testing.T) {
 }
 
 func TestIOLoadListenerOverflow(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
 	req := &testRequesterForIOLL{}
 	kvGranter := &testGranterWithIOTokens{}
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	ioll := ioLoadListener{
-		settings:             st,
-		kvRequester:          req,
-		diskBandwidthLimiter: newDiskBandwidthLimiter(),
-		l0CompactedBytes:     metric.NewCounter(l0CompactedBytes),
-		l0TokensProduced:     metric.NewCounter(l0TokensProduced),
+		settings:         st,
+		kvRequester:      req,
+		l0CompactedBytes: metric.NewCounter(l0CompactedBytes),
+		l0TokensProduced: metric.NewCounter(l0TokensProduced),
 	}
 	ioll.kvGranter = kvGranter
 	// Bug 1: overflow when totalNumByteTokens is too large.
@@ -285,8 +278,8 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	// Bug2: overflow when bytes added delta is 0.
 	m := pebble.Metrics{}
 	m.Levels[0] = pebble.LevelMetrics{
-		Sublevels:   100,
-		TablesCount: 10000,
+		Sublevels: 100,
+		NumFiles:  10000,
 	}
 	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
 	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
@@ -298,9 +291,6 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 // of what is logged below, and the rest is logged with 0 values. Expand this
 // test to call adjustTokens.
 func TestAdjustTokensInnerAndLogging(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
 	const mb = 12 + 1<<20
 	tests := []struct {
 		name      redact.SafeString
@@ -321,11 +311,11 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 				totalNumByteTokens:           int64(201 * mb),
 			},
 			l0Metrics: pebble.LevelMetrics{
-				Sublevels:          27,
-				TablesCount:        195,
-				TablesSize:         900 * mb,
-				TableBytesIngested: 1801 * mb,
-				TableBytesFlushed:  178 * mb,
+				Sublevels:     27,
+				NumFiles:      195,
+				Size:          900 * mb,
+				BytesIngested: 1801 * mb,
+				BytesFlushed:  178 * mb,
 			},
 		},
 	}
@@ -349,9 +339,6 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 // TestBadIOLoadListenerStats tests that bad stats (non-monotonic cumulative
 // stats and negative values) don't cause panics or tokens to be negative.
 func TestBadIOLoadListenerStats(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
 	var m pebble.Metrics
 	var d DiskStats
 	req := &testRequesterForIOLL{}
@@ -360,11 +347,11 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 	randomValues := func() {
 		// Use uints, and cast so that we get bad negative values.
 		m.Levels[0].Sublevels = int32(rand.Uint32())
-		m.Levels[0].TablesCount = int64(rand.Uint64())
-		m.Levels[0].TablesSize = int64(rand.Uint64())
-		m.Levels[0].TableBytesFlushed = rand.Uint64()
+		m.Levels[0].NumFiles = int64(rand.Uint64())
+		m.Levels[0].Size = int64(rand.Uint64())
+		m.Levels[0].BytesFlushed = rand.Uint64()
 		for i := range m.Levels {
-			m.Levels[i].TableBytesIngested = rand.Uint64()
+			m.Levels[i].BytesIngested = rand.Uint64()
 		}
 		d.BytesRead = rand.Uint64()
 		d.BytesWritten = rand.Uint64()
@@ -401,10 +388,8 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 			require.LessOrEqual(t, float64(0), ioll.flushUtilTargetFraction)
 			require.LessOrEqual(t, int64(0), ioll.totalNumByteTokens)
 			require.LessOrEqual(t, int64(0), ioll.byteTokensAllocated)
-			require.LessOrEqual(t, int64(0), ioll.diskWriteTokens)
-			require.LessOrEqual(t, int64(0), ioll.diskWriteTokensAllocated)
-			require.LessOrEqual(t, int64(0), ioll.diskReadTokens)
-			require.LessOrEqual(t, int64(0), ioll.diskReadTokensAllocated)
+			require.LessOrEqual(t, int64(0), ioll.elasticDiskWriteTokens)
+			require.LessOrEqual(t, int64(0), ioll.elasticDiskWriteTokensAllocated)
 		}
 	}
 }
@@ -442,19 +427,16 @@ func (g *testGranterWithIOTokens) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
 	elasticDiskBandwidthTokens int64,
-	elasticReadBandwidthTokens int64,
 	maxIOTokens int64,
 	maxElasticIOTokens int64,
 	maxElasticDiskBandwidthTokens int64,
 	lastTick bool,
 ) (tokensUsed int64, tokensUsedByElasticWork int64) {
 	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s(elastic %s) "+
-		"elastic-disk-bw-tokens=%s read-bw-tokens=%s "+
-		"max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s lastTick=%t",
+		"elastic-disk-bw-tokens=%s max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s lastTick=%t",
 		tokensForTokenTickDurationToString(ioTokens),
 		tokensForTokenTickDurationToString(elasticIOTokens),
 		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens),
-		tokensForTokenTickDurationToString(elasticReadBandwidthTokens),
 		tokensForTokenTickDurationToString(maxIOTokens),
 		tokensForTokenTickDurationToString(maxElasticIOTokens),
 		tokensForTokenTickDurationToString(maxElasticDiskBandwidthTokens),
@@ -508,7 +490,6 @@ func (g *testGranterNonNegativeTokens) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
 	elasticDiskBandwidthTokens int64,
-	elasticDiskReadBandwidthTokens int64,
 	_ int64,
 	_ int64,
 	_ int64,
@@ -517,7 +498,6 @@ func (g *testGranterNonNegativeTokens) setAvailableTokens(
 	require.LessOrEqual(g.t, int64(0), ioTokens)
 	require.LessOrEqual(g.t, int64(0), elasticIOTokens)
 	require.LessOrEqual(g.t, int64(0), elasticDiskBandwidthTokens)
-	require.LessOrEqual(g.t, int64(0), elasticDiskReadBandwidthTokens)
 	return 0, 0
 }
 
@@ -546,9 +526,6 @@ func (g *testGranterNonNegativeTokens) setLinearModels(
 // Tests if the tokenAllocationTicker produces correct adjustment interval
 // durations for both loaded and unloaded systems.
 func TestTokenAllocationTickerAdjustmentCalculation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
 	// TODO(bananabrick): We might want to use a timeutil.TimeSource and
 	// ManualTime for the tokenAllocationTicker, so that we can run this test
 	// without any worry about flakes.
@@ -560,7 +537,7 @@ func TestTokenAllocationTickerAdjustmentCalculation(t *testing.T) {
 	ticker.adjustmentStart(true /* loaded */)
 	adjustmentChanged := false
 	for {
-		<-ticker.ticker.C
+		ticker.tick()
 		remainingTicks := ticker.remainingTicks()
 		if remainingTicks == 0 {
 			if adjustmentChanged {
@@ -585,40 +562,7 @@ func TestTokenAllocationTickerAdjustmentCalculation(t *testing.T) {
 	}
 }
 
-func TestTokenAllocationTickerErrorAdjustmentThreshold(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ticker := tokenAllocationTicker{}
-	defer ticker.stop()
-	ticker.adjustmentStart(false /* loaded */)
-
-	// Knowing we are using unloaded duration. The first iteration will have 60 ticks.
-	require.False(t, ticker.shouldAdjustForError(60 /* remainingTicks */, false /* loaded */))
-	// Verify that we correctly reset the lastErrorAdjustmentTick value.
-	require.Equal(t, uint64(60), ticker.lastErrorAdjustmentTick)
-
-	// We should not do error adjustment unless 1s has passed. i.e. 4 ticks.
-	require.False(t, ticker.shouldAdjustForError(58 /* remainingTicks */, false /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(56 /* remainingTicks */, false /* loaded */))
-	require.Equal(t, uint64(56), ticker.lastErrorAdjustmentTick)
-
-	// We should adjust for error on the last tick.
-	require.True(t, ticker.shouldAdjustForError(0 /* remainingTicks */, false /* loaded */))
-
-	// Re-run the above with loaded system. Now the error adjustment threshold is every 1000 ticks.
-	require.False(t, ticker.shouldAdjustForError(15000 /* remainingTicks */, true /* loaded */))
-	require.Equal(t, uint64(15000), ticker.lastErrorAdjustmentTick)
-	require.False(t, ticker.shouldAdjustForError(14001 /* remainingTicks */, true /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(14000 /* remainingTicks */, true /* loaded */))
-	require.Equal(t, uint64(14000), ticker.lastErrorAdjustmentTick)
-	require.True(t, ticker.shouldAdjustForError(0 /* remainingTicks */, true /* loaded */))
-}
-
 func TestTokenAllocationTicker(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
 	// TODO(bananabrick): This might be flaky, in which case we should use a
 	// timeutil.TimeSource and ManualTime in the tokenAllocationTicker for these
 	// tests.
@@ -695,16 +639,16 @@ func TestComputeCumStoreCompactionStats(t *testing.T) {
 			var cumWriteBytes uint64
 			divisor := int64(len(m.Levels) - tc.baseLevel)
 			for i := tc.baseLevel; i < len(m.Levels); i++ {
-				m.Levels[i].TablesSize = tc.sizeBytes / divisor
-				cumSizeBytes += m.Levels[i].TablesSize
-				m.Levels[i].TableBytesCompacted = uint64(tc.writeBytes / divisor)
-				cumWriteBytes += m.Levels[i].TableBytesCompacted
+				m.Levels[i].Size = tc.sizeBytes / divisor
+				cumSizeBytes += m.Levels[i].Size
+				m.Levels[i].BytesCompacted = uint64(tc.writeBytes / divisor)
+				cumWriteBytes += m.Levels[i].BytesCompacted
 			}
 			if cumSizeBytes < tc.sizeBytes {
-				m.Levels[tc.baseLevel].TablesSize += tc.sizeBytes - cumSizeBytes
+				m.Levels[tc.baseLevel].Size += tc.sizeBytes - cumSizeBytes
 			}
 			if cumWriteBytes < uint64(tc.writeBytes) {
-				m.Levels[tc.baseLevel].TableBytesCompacted += uint64(tc.writeBytes) - cumWriteBytes
+				m.Levels[tc.baseLevel].BytesCompacted += uint64(tc.writeBytes) - cumWriteBytes
 			}
 			require.Equal(t, tc.expected, computeCumStoreCompactionStats(&m))
 		})

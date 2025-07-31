@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -165,7 +166,10 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		},
 		{
 			err: nil,
-			fun: func() error { return ss.TruncateTo(ctx, 122) },
+			fun: func() error {
+				_, _, err := ss.TruncateTo(ctx, 123)
+				return err
+			},
 		},
 		{
 			err: nil,
@@ -216,28 +220,33 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	assertExists(true)
 
 	for n := range payloads {
-		index := payloads[n] // (0, index] + (index, ...]
-		_, total, err := ss.Stats(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
+		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, payloads[n])
 		require.NoError(t, err)
-		_, prefixBytes, err := ss.Stats(ctx, kvpb.RaftSpan{Last: index})
+		freedWhatWasRetained, retainedNothing, err :=
+			ss.BytesIfTruncatedFromTo(ctx, payloads[n], math.MaxUint64)
 		require.NoError(t, err)
-		_, suffixBytes, err := ss.Stats(ctx, kvpb.RaftSpan{
-			After: index, Last: math.MaxUint64,
-		})
-		require.NoError(t, err)
-		require.Equal(t, total, prefixBytes+suffixBytes)
-		// Truncate indexes <= payloads[n] (payloads is sorted in increasing order).
-		require.NoError(t, ss.TruncateTo(ctx, index))
-		// Indexes > payloads[n] are still there at both terms.
+		require.Zero(t, retainedNothing)
+		require.Equal(t, freedWhatWasRetained, retained)
+		// Truncate indexes < payloads[n] (payloads is sorted in increasing order).
+		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, payloads[n])
+		if err != nil {
+			t.Fatalf("%d: %+v", n, err)
+		}
+		require.Equal(t, freedByTruncateTo, freed)
+		require.Equal(t, retainedByTruncateTo, retained)
+		// Index payloads[n] and above are still there (truncation is exclusive)
+		// at both terms.
 		for _, term := range []kvpb.RaftTerm{lowTerm, highTerm} {
-			for _, i := range payloads[n+1:] {
-				_, err := ss.Get(ctx, i, term)
-				require.NoErrorf(t, err, "%d.%d", n, i)
+			for _, i := range payloads[n:] {
+				if _, err := ss.Get(ctx, i, term); err != nil {
+					t.Fatalf("%d.%d: %+v", n, i, err)
+				}
 			}
-			// Indexes <= payloads[n] are gone.
-			for _, i := range payloads[:n+1] {
-				_, err := ss.Get(ctx, i, term)
-				require.ErrorIs(t, err, errSideloadedFileNotFound)
+			// Indexes below are gone.
+			for _, i := range payloads[:n] {
+				if _, err := ss.Get(ctx, i, term); !errors.Is(err, errSideloadedFileNotFound) {
+					t.Fatalf("%d.%d: %+v", n, i, err)
+				}
 			}
 		}
 	}
@@ -254,64 +263,60 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		// we will be prevented from removing it below.
 		require.NoError(t, f.Close())
 
-		require.NoError(t, ss.TruncateTo(ctx, math.MaxUint64))
+		_, _, err = ss.TruncateTo(ctx, math.MaxUint64)
 		// The sideloaded storage should not error out here; removing files
 		// is optional. But the file should still be there!
-		_, err = eng.Env().Stat(nonRemovableFile)
 		require.NoError(t, err)
+		{
+			_, err := eng.Env().Stat(nonRemovableFile)
+			require.NoError(t, err)
+		}
 
 		// Now remove extra file and let truncation proceed to remove directory.
 		require.NoError(t, eng.Env().Remove(nonRemovableFile))
 
 		// Test that directory is removed when filepath.Glob returns 0 matches.
-		require.NoError(t, ss.TruncateTo(ctx, math.MaxUint64))
+		_, _, err = ss.TruncateTo(ctx, math.MaxUint64)
+		require.NoError(t, err)
 		// Ensure directory is removed, now that all files should be gone.
 		_, err = eng.Env().Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
-		// Ensure that Stats don't find anything.
-		count, size, err := ss.Stats(ctx, kvpb.RaftSpan{Last: 10000})
+		// Ensure HasAnyEntry doesn't find anything.
+		found, err := ss.HasAnyEntry(ctx, 0, 10000)
 		require.NoError(t, err)
-		require.Zero(t, count)
-		require.Zero(t, size)
+		require.False(t, found)
 
 		// Repopulate with some random indexes to test deletion when there are a
 		// non-zero number of filepath.Glob matches.
 		payloads := []kvpb.RaftIndex{3, 5, 7, 9, 10}
-		sizes := make([]int64, len(payloads)+1)
 		for n := range rand.Perm(len(payloads)) {
 			i := payloads[n]
-			content := file(i, highTerm)
-			sizes[n+1] = sizes[n] + int64(len(content))
-			require.NoError(t, ss.Put(ctx, i, highTerm, content))
-		}
-		spanSize := func(from, to int) int64 {
-			return sizes[to] - sizes[from]
+			require.NoError(t, ss.Put(ctx, i, highTerm, file(i, highTerm)))
 		}
 		assertExists(true)
-		// Verify the Stats computation.
+		// Verify the HasAnyEntry semantics.
 		for _, check := range []struct {
-			from, to  kvpb.RaftIndex
-			wantCount uint64
-			wantSize  int64
+			from, to kvpb.RaftIndex
+			want     bool
 		}{
-			// Not found cases.
-			{from: 0, to: 2}, // 2 is included
-			{from: 3, to: 4},
-			{from: 49, to: 59},
-			// Found cases.
-			{from: 0, to: 3, wantCount: 1, wantSize: spanSize(0, 1)}, // 3 is included
-			{from: 2, to: 4, wantCount: 1, wantSize: spanSize(0, 1)}, // 2 is excluded
-			{from: 0, to: 9, wantCount: 4, wantSize: spanSize(0, 4)},
-			{from: 0, to: 10, wantCount: 5, wantSize: spanSize(0, 5)},
-			{from: 0, to: 100, wantCount: 5, wantSize: spanSize(0, 5)},
-			{from: 3, to: 10, wantCount: 4, wantSize: spanSize(1, 5)},
+			{from: 0, to: 3, want: false}, // 3 is excluded
+			{from: 0, to: 4, want: true},  // but included if to == 4
+			{from: 3, to: 5, want: true},  // 3 is included
+			{from: 4, to: 5, want: false},
+			{from: 50, to: 60, want: false},
+			{from: 1, to: 10, want: true},
 		} {
-			count, size, err := ss.Stats(ctx, kvpb.RaftSpan{After: check.from, Last: check.to})
+			found, err := ss.HasAnyEntry(ctx, check.from, check.to)
 			require.NoError(t, err)
-			require.Equal(t, check.wantCount, count)
-			require.Equal(t, check.wantSize, size)
+			require.Equal(t, check.want, found)
 		}
-		require.NoError(t, ss.TruncateTo(ctx, math.MaxUint64))
+		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, math.MaxUint64)
+		require.NoError(t, err)
+		require.Zero(t, retained)
+		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, math.MaxUint64)
+		require.NoError(t, err)
+		require.Zero(t, retainedByTruncateTo)
+		require.Equal(t, freedByTruncateTo, freed)
 		// Ensure directory is removed when all records are removed.
 		_, err = eng.Env().Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
@@ -321,12 +326,16 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	assertExists(false)
 
-	// Sanity check that Stats returns zeroes when the directory does not exist.
-	count, size, err := ss.Stats(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
+	// Sanity check that we can call BytesIfTruncatedFromTo and TruncateTo
+	// without the directory existing.
+	freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, 1)
 	require.NoError(t, err)
-	require.Zero(t, count)
-	require.Zero(t, size)
-	require.NoError(t, ss.TruncateTo(ctx, 0))
+	require.Zero(t, freed)
+	require.Zero(t, retained)
+	freed, retained, err = ss.TruncateTo(ctx, 1)
+	require.NoError(t, err)
+	require.Zero(t, freed)
+	require.Zero(t, retained)
 
 	assertExists(false)
 
@@ -367,20 +376,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	v1, v2 := raftlog.EntryEncodingStandardWithAC, raftlog.EntryEncodingSideloadedWithAC
 	rangeID := roachpb.RangeID(1)
 
-	sstFat := kvserverpb.ReplicatedEvalResult_AddSSTable{
-		Data:  []byte("foo"),
-		CRC32: 0, // not checked
-	}
-	sstThin := kvserverpb.ReplicatedEvalResult_AddSSTable{
-		CRC32: 0, // not checked
-	}
-
-	putOnDisk := func(_ *raftentry.Cache, ss SideloadStorage) {
-		require.NoError(t, ss.Put(context.Background(), 5, 6, sstFat.Data))
-	}
-
-	for _, test := range []struct {
-		name string
+	type testCase struct {
 		// Entry passed into maybeInlineSideloadedRaftCommand and the entry
 		// after having (perhaps) been modified.
 		thin, fat raftpb.Entry
@@ -390,69 +386,101 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		expErr string
 		// If nonempty, a regex that the recorded trace span must match.
 		expTrace string
-	}{
+	}
+
+	sstFat := kvserverpb.ReplicatedEvalResult_AddSSTable{
+		Data:  []byte("foo"),
+		CRC32: 0, // not checked
+	}
+	sstThin := kvserverpb.ReplicatedEvalResult_AddSSTable{
+		CRC32: 0, // not checked
+	}
+
+	putOnDisk := func(ec *raftentry.Cache, ss SideloadStorage) {
+		if err := ss.Put(context.Background(), 5, 6, sstFat.Data); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	testCases := map[string]testCase{
 		// Plain old v1 Raft command without payload. Don't touch.
-		{name: "v1-no-payload", thin: mkEnt(v1, 5, 6, &sstThin), fat: mkEnt(v1, 5, 6, &sstThin)},
+		"v1-no-payload": {thin: mkEnt(v1, 5, 6, &sstThin), fat: mkEnt(v1, 5, 6, &sstThin)},
 		// With payload, but command is v1. Don't touch. Note that the
 		// first of the two shouldn't happen in practice or we have a
 		// huge problem once we try to apply this entry.
-		{name: "v1-slim-with-payload", thin: mkEnt(v1, 5, 6, &sstThin), fat: mkEnt(v1, 5, 6, &sstThin)},
-		{name: "v1-with-payload", thin: mkEnt(v1, 5, 6, &sstFat), fat: mkEnt(v1, 5, 6, &sstFat)},
+		"v1-slim-with-payload": {thin: mkEnt(v1, 5, 6, &sstThin), fat: mkEnt(v1, 5, 6, &sstThin)},
+		"v1-with-payload":      {thin: mkEnt(v1, 5, 6, &sstFat), fat: mkEnt(v1, 5, 6, &sstFat)},
 		// v2 with payload, but payload is AWOL. This would be fatal in practice.
-		{
-			name: "v2-with-payload-missing-file",
+		"v2-with-payload-missing-file": {
 			thin: mkEnt(v2, 5, 6, &sstThin), fat: mkEnt(v2, 5, 6, &sstThin),
 			expErr: "not found",
 		},
 		// v2 with payload that's actually there. The request we'll see in
 		// practice.
-		{
-			name: "v2-with-payload-with-file-no-cache",
+		"v2-with-payload-with-file-no-cache": {
 			thin: mkEnt(v2, 5, 6, &sstThin), fat: mkEnt(v2, 5, 6, &sstFat),
 			setup: putOnDisk, expTrace: "inlined entry not cached",
 		},
-		{
-			name: "v2-with-payload-with-file-with-cache",
+		"v2-with-payload-with-file-with-cache": {
 			thin: mkEnt(v2, 5, 6, &sstThin), fat: mkEnt(v2, 5, 6, &sstFat),
 			setup: func(ec *raftentry.Cache, ss SideloadStorage) {
 				putOnDisk(ec, ss)
 				ec.Add(rangeID, []raftpb.Entry{mkEnt(v2, 5, 6, &sstFat)}, true)
 			}, expTrace: "using cache hit",
 		},
-		{
-			name: "v2-fat-without-file",
+		"v2-fat-without-file": {
 			thin: mkEnt(v2, 5, 6, &sstFat), fat: mkEnt(v2, 5, 6, &sstFat),
 			setup:    func(ec *raftentry.Cache, ss SideloadStorage) {},
 			expTrace: "already inlined",
 		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(
-				context.Background(), tracing.NewTracer(), "test-recording")
-			defer getRecAndFinish()
+	}
 
-			eng := storage.NewDefaultInMemForTesting()
-			defer eng.Close()
-			ss := newTestingSideloadStorage(eng)
-			ec := raftentry.NewCache(1024) // large enough
-			if test.setup != nil {
-				test.setup(ec, ss)
-			}
+	runOne := func(k string, test testCase) {
+		ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(
+			context.Background(), tracing.NewTracer(), "test-recording")
+		defer getRecAndFinish()
 
-			thinCopy := *(protoutil.Clone(&test.thin).(*raftpb.Entry))
-			newEnt, err := MaybeInlineSideloadedRaftCommand(ctx, rangeID, thinCopy, ss, ec)
-			if want := test.expErr; want != "" {
-				require.ErrorContains(t, err, want)
-			} else {
-				require.NoError(t, err)
-				mustEntryEq(t, thinCopy, test.thin)
-			}
-			mustEntryEq(t, newEnt, test.fat)
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+		ss := newTestingSideloadStorage(eng)
+		ec := raftentry.NewCache(1024) // large enough
+		if test.setup != nil {
+			test.setup(ec, ss)
+		}
 
-			if want := test.expTrace; want != "" {
-				require.Contains(t, getRecAndFinish().String(), want)
+		thinCopy := *(protoutil.Clone(&test.thin).(*raftpb.Entry))
+		newEnt, err := MaybeInlineSideloadedRaftCommand(ctx, rangeID, thinCopy, ss, ec)
+		if err != nil {
+			if test.expErr == "" || !testutils.IsError(err, test.expErr) {
+				t.Fatalf("%s: %+v", k, err)
 			}
-		})
+		} else if test.expErr != "" {
+			t.Fatalf("%s: success, but expected error: %s", k, test.expErr)
+		} else {
+			mustEntryEq(t, thinCopy, test.thin)
+		}
+
+		if newEnt == nil {
+			newEnt = &thinCopy
+		}
+		mustEntryEq(t, *newEnt, test.fat)
+
+		if dump := getRecAndFinish().String(); test.expTrace != "" {
+			if ok, err := regexp.MatchString(test.expTrace, dump); err != nil {
+				t.Fatalf("%s: %+v", k, err)
+			} else if !ok {
+				t.Fatalf("%s: expected trace matching:\n%s\n\nbut got\n%s", k, test.expTrace, dump)
+			}
+		}
+	}
+
+	keys := make([]string, 0, len(testCases))
+	for k := range testCases {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		runOne(k, testCases[k])
 	}
 }
 
@@ -520,22 +548,22 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 			sideloaded := newTestingSideloadStorage(eng)
-			postEnts, stats, err := MaybeSideloadEntries(ctx, test.preEnts, sideloaded)
+			postEnts, numSideloaded, size, nonSideloadedSize, err := MaybeSideloadEntries(ctx, test.preEnts, sideloaded)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if len(addSST.Data) == 0 {
 				t.Fatal("invocation mutated original AddSSTable struct in memory")
 			}
-			require.Equal(t, test.nonSideloadedSize, stats.RegularBytes)
+			require.Equal(t, test.nonSideloadedSize, nonSideloadedSize)
 			var expNumSideloaded int
 			if test.size > 0 {
 				expNumSideloaded = 1
 			}
-			require.Equal(t, expNumSideloaded, stats.SideloadedEntries)
+			require.Equal(t, expNumSideloaded, numSideloaded)
 			require.Equal(t, test.postEnts, postEnts)
-			if test.size != stats.SideloadedBytes {
-				t.Fatalf("expected %d sideloadedSize, but found %d", test.size, stats.SideloadedBytes)
+			if test.size != size {
+				t.Fatalf("expected %d sideloadedSize, but found %d", test.size, size)
 			}
 			actKeys, err := sideloaded.eng.Env().List(sideloaded.Dir())
 			if oserror.IsNotExist(err) {

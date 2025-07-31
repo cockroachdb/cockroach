@@ -20,19 +20,11 @@ import (
 
 func registerImportMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		// TODO(jeffswenson): re-enable mixed version import once #144818 is
-		// backported. This test is fragile because it expects the special
-		// 'workload://' fixtures to be deterministic across versions. A better
-		// version of this test would use actual CSV fixtures.
-		Skip:    "Issue #143870",
-		Name:    "import/mixed-versions",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(4),
-		// Disabled on IBM because s390x is only built on master and mixed-version
-		// is impossible to test as of 05/2025.
-		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
-		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
+		Name:             "import/mixed-versions",
+		Owner:            registry.OwnerSQLQueries,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			warehouses := 100
@@ -55,6 +47,12 @@ func runImportMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster,
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
 		// Only use the latest version of each release to work around #127029.
 		mixedversion.AlwaysUseLatestPredecessors,
+		// This test sometimes flake on separate-process
+		// deployments. Needs investigation.
+		mixedversion.EnabledDeploymentModes(
+			mixedversion.SystemOnlyDeployment,
+			mixedversion.SharedProcessDeployment,
+		),
 	)
 	runImport := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 		if err := h.Exec(r, "DROP DATABASE IF EXISTS tpcc CASCADE;"); err != nil {

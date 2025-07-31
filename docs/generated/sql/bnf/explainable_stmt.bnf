@@ -3,4 +3,3 @@ explainable_stmt ::=
 	| comment_stmt
 	| execute_stmt
 	| call_stmt
-	| do_stmt

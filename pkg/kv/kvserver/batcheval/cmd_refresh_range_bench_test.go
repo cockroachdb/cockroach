@@ -217,7 +217,7 @@ func setupData(
 	if opts.rwMode == fs.ReadOnly {
 		readOnlyStr = "_readonly"
 	}
-	name := fmt.Sprintf("refresh_range_bench_data_%s_%s%s_%d_%d_%d_v2",
+	name := fmt.Sprintf("refresh_range_bench_data_%s_%s%s_%d_%d_%d",
 		verStr, orderStr, readOnlyStr, opts.numKeys, opts.valueBytes, opts.lBaseMaxBytes)
 
 	dir := testfixtures.ReuseOrGenerate(b, name, func(dir string) {

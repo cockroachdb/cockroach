@@ -23,24 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testBufferedStream struct {
-	Stream
-}
-
-var _ BufferedStream = (*testBufferedStream)(nil)
-
-func (tb *testBufferedStream) SendBuffered(
-	e *kvpb.RangeFeedEvent, _ *SharedBudgetAllocation,
-) error {
-	// In production code, buffered stream would be responsible for properly using
-	// and releasing the alloc. We just ignore memory accounting here.
-	return tb.SendUnbuffered(e)
-}
-
-func (tb *testBufferedStream) Disconnect(err *kvpb.Error) {
-	tb.Stream.SendError(err)
-}
-
 func makeLogicalOp(val interface{}) enginepb.MVCCLogicalOp {
 	var op enginepb.MVCCLogicalOp
 	op.MustSetValue(val)
@@ -207,12 +189,11 @@ const testProcessorEventCCap = 16
 const testProcessorEventCTimeout = 10 * time.Millisecond
 
 type processorTestHelper struct {
-	span                     roachpb.RSpan
-	rts                      *resolvedTimestamp
-	syncEventC               func()
-	sendSpanSync             func(*roachpb.Span)
-	scheduler                *ClientScheduler
-	toBufferedStreamIfNeeded func(s Stream) Stream
+	span         roachpb.RSpan
+	rts          *resolvedTimestamp
+	syncEventC   func()
+	sendSpanSync func(*roachpb.Span)
+	scheduler    *ClientScheduler
 }
 
 // syncEventAndRegistrations waits for all previously sent events to be
@@ -252,47 +233,41 @@ func (h *processorTestHelper) triggerTxnPushUntilPushed(t *testing.T, pushedC <-
 	}
 }
 
-type rangefeedTestType bool
+type procType bool
 
-var (
-	scheduledProcessorWithUnbufferedSender rangefeedTestType
-	scheduledProcessorWithBufferedSender   rangefeedTestType
+const (
+	legacyProcessor    procType = false
+	schedulerProcessor          = true
 )
 
-var testTypes = []rangefeedTestType{
-	scheduledProcessorWithUnbufferedSender,
-	scheduledProcessorWithBufferedSender,
-}
+var testTypes = []procType{legacyProcessor, schedulerProcessor}
 
-func (t rangefeedTestType) String() string {
-	switch t {
-	case scheduledProcessorWithUnbufferedSender:
-		return "scheduled"
-	case scheduledProcessorWithBufferedSender:
-		return "scheduled/registration=buffered"
-	default:
-		panic("unknown rangefeed test type")
+func (t procType) String() string {
+	if t {
+		return "scheduler"
 	}
+	return "legacy"
 }
 
 type testConfig struct {
 	Config
-	isc      IntentScannerConstructor
-	feedType rangefeedTestType
+	useScheduler bool
+	isc          IntentScannerConstructor
 }
 
 type option func(*testConfig)
 
 func withPusher(txnPusher TxnPusher) option {
 	return func(config *testConfig) {
+		config.PushTxnsInterval = 10 * time.Millisecond
 		config.PushTxnsAge = 50 * time.Millisecond
 		config.TxnPusher = txnPusher
 	}
 }
 
-func withRangefeedTestType(t rangefeedTestType) option {
+func withProcType(t procType) option {
 	return func(config *testConfig) {
-		config.feedType = t
+		config.useScheduler = bool(t)
 	}
 }
 
@@ -350,6 +325,7 @@ func withSettings(st *cluster.Settings) option {
 
 func withPushTxnsIntervalAge(interval, age time.Duration) option {
 	return func(config *testConfig) {
+		config.PushTxnsInterval = interval
 		config.PushTxnsAge = age
 	}
 }
@@ -425,25 +401,34 @@ func newTestProcessor(
 	for _, o := range opts {
 		o(&cfg)
 	}
-	sch := NewScheduler(SchedulerConfig{
-		Workers:         1,
-		PriorityWorkers: 1,
-		Metrics:         NewSchedulerMetrics(time.Second),
-	})
-	require.NoError(t, sch.Start(context.Background(), stopper))
-	cfg.Scheduler = sch
-	// Also create a dummy priority processor to populate priorityIDs for
-	// BenchmarkRangefeed. It should never be called.
-	noop := func(e processorEventType) processorEventType {
-		if e != Stopped {
-			t.Errorf("unexpected event %s for noop priority processor", e)
+	if cfg.useScheduler {
+		sch := NewScheduler(SchedulerConfig{
+			Workers:         1,
+			PriorityWorkers: 1,
+			Metrics:         NewSchedulerMetrics(time.Second),
+		})
+		require.NoError(t, sch.Start(context.Background(), stopper))
+		cfg.Scheduler = sch
+		// Also create a dummy priority processor to populate priorityIDs for
+		// BenchmarkRangefeed. It should never be called.
+		noop := func(e processorEventType) processorEventType {
+			if e != Stopped {
+				t.Errorf("unexpected event %s for noop priority processor", e)
+			}
+			return 0
 		}
-		return 0
+		require.NoError(t, sch.register(9, noop, true /* priority */))
 	}
-	require.NoError(t, sch.register(9, noop, true /* priority */))
 	s := NewProcessor(cfg.Config)
 	h := processorTestHelper{}
 	switch p := s.(type) {
+	case *LegacyProcessor:
+		h.rts = &p.rts
+		h.span = p.Span
+		h.syncEventC = p.syncEventC
+		h.sendSpanSync = func(span *roachpb.Span) {
+			p.syncEventCWithEvent(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
+		}
 	case *ScheduledProcessor:
 		h.rts = &p.rts
 		h.span = p.Span
@@ -452,18 +437,6 @@ func newTestProcessor(
 			p.syncSendAndWait(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
 		}
 		h.scheduler = &p.scheduler
-		switch cfg.feedType {
-		case scheduledProcessorWithUnbufferedSender:
-			h.toBufferedStreamIfNeeded = func(s Stream) Stream {
-				return s
-			}
-		case scheduledProcessorWithBufferedSender:
-			h.toBufferedStreamIfNeeded = func(s Stream) Stream {
-				return &testBufferedStream{Stream: s}
-			}
-		default:
-			panic("unknown rangefeed test type")
-		}
 	default:
 		panic("unknown processor type")
 	}

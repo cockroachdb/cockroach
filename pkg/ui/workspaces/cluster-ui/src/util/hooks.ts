@@ -4,14 +4,12 @@
 // included in the /LICENSE file.
 
 import moment from "moment/moment";
-import { useEffect, useCallback, useRef, useContext, useState } from "react";
+import { useEffect, useCallback, useRef, useContext } from "react";
 import useSWR, { SWRConfiguration, SWRResponse } from "swr";
 import { Arguments, Fetcher } from "swr/_internal";
 import useSWRImmutable from "swr/immutable";
-import useSWRMutation, { SWRMutationConfiguration } from "swr/mutation";
 
 import { ClusterDetailsContext } from "../contexts";
-import { ISortedTablePagination } from "../sortedtable";
 
 export const usePrevious = <T>(value: T): T | undefined => {
   const ref = useRef<T>();
@@ -170,57 +168,4 @@ export const useSwrImmutableWithClusterId = <
 ): SWRResponse<Data, Error, SWROptions> => {
   const keyWithClusterId = useSwrKeyWithClusterId(key) as SWRKey;
   return useSWRImmutable(keyWithClusterId, fetcher, config);
-};
-
-/**
- * useSwrMutationWithClusterId is a wrapper around useSWRMutation that adds the cluster id to the key.
- *
- * @param key The key, in combination with the clusterId, that will be used for useSWRMutation.
- * @param fetcher The fetcher to be called by useSWRMutation.
- * @param config the config to be provided to useSWRMutation.
- */
-export const useSwrMutationWithClusterId = <
-  Data = any,
-  Error = any,
-  SWRKey = Arguments,
-  SWROptions extends
-    | SWRMutationConfiguration<Data, Error, SWRKey>
-    | undefined = SWRMutationConfiguration<Data, Error, SWRKey> | undefined,
->(
-  key: SWRKey,
-  fetcher: Fetcher<Data, SWRKey> | null,
-  config?: SWROptions,
-) => {
-  const keyWithClusterId = useSwrKeyWithClusterId(key) as SWRKey;
-  return useSWRMutation(keyWithClusterId, fetcher, config);
-};
-
-/**
- * usePagination creates a pagination state and provides functions to update and reset it. The update function
- * is compatible with the Ant Design Table component.
- * @param defaultPage the default page to be used for pagination
- * @param defaultPageSize the default page size to be used for pagination
- */
-export const usePagination = (
-  defaultPage: number,
-  defaultPageSize: number,
-): [
-  ISortedTablePagination,
-  (current: number, pageSize: number) => void,
-  () => void,
-] => {
-  const [pagination, setPagination] = useState<ISortedTablePagination>({
-    current: defaultPage,
-    pageSize: defaultPageSize,
-  });
-  const updatePagination = (current: number, pageSize: number) => {
-    setPagination({
-      current,
-      pageSize,
-    });
-  };
-  const resetPagination = () => {
-    updatePagination(defaultPage, defaultPageSize);
-  };
-  return [pagination, updatePagination, resetPagination];
 };

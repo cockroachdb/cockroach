@@ -33,18 +33,22 @@ message Span {
 }
 
 // ValueType defines a set of type constants placed in the "tag" field of Value
-// messages. These are defined as a protocol buffer enumeration for historical
-// reasons.
+// messages. These are defined as a protocol buffer enumeration so that they
+// can be used portably between our Go and C code. The tags are used by the
+// RocksDB Merge Operator to perform specialized merges.
 enum ValueType {
   // This is a subset of the SQL column type values, representing the underlying
-  // storage for various types.
+  // storage for various types. The DELIMITED_foo entries each represent a foo
+  // variant that self-delimits length.
   UNKNOWN = 0;
-  reserved 7, 8, 9;
+  reserved 7;
   INT = 1;
   FLOAT = 2;
   BYTES = 3;
+  DELIMITED_BYTES = 8;
   TIME = 4;
   DECIMAL = 5;
+  DELIMITED_DECIMAL = 9;
   DURATION = 6;
   TIMETZ = 12;
   GEO = 13;
@@ -133,7 +137,7 @@ message SplitTrigger {
   // UseEstimatesBecauseExternalBytesArePresent is true if we should consider estimating MVCC
   // stats when calculating them in the splitTrigger.
   bool use_estimates_because_external_bytes_are_present = 7;
-
+  
   // ManualSplit indicates that this split is manually triggered via an AdminSplitRequest by a sql client.
   bool manualSplit = 8;
 }
@@ -313,18 +317,10 @@ enum TransactionStatus {
   option (gogoproto.goproto_enum_prefix) = false;
 
   // PENDING is the default state for a new transaction. Transactions
-  // move from PENDING to one of PREPARED, STAGING, COMMITTED, or
-  // ABORTED. Mutations made as part of a PENDING transactions are
-  // recorded as "intents" in the underlying MVCC model.
+  // move from PENDING to one of COMMITTED or ABORTED. Mutations made
+  // as part of a PENDING transactions are recorded as "intents" in
+  // the underlying MVCC model.
   PENDING = 0;
-  // PREPARED is the state for a transaction which has been prepared as
-  // part of the XA two-phase commit protocol. Transactions in state
-  // PREPARED can be subsequently moved to either state COMMITTED or
-  // ABORTED. Once a transaction is in state PREPARED, it is guaranteed
-  // to be able to commit if the coordinator node decides to do so;
-  // conflicting transactions cannot prevent it from doing so by pushing
-  // it to a higher timestamp or aborting it.
-  PREPARED = 4;
   // STAGING is the state for a transaction which has issued all of
   // its writes and is in the process of committing. Mutations made
   // as part of a transaction in this state may still be in-flight
@@ -449,7 +445,35 @@ message Transaction {
   // slice should be treated as immutable and all updates should be performed
   // on a copy of the slice.
   repeated ObservedTimestamp observed_timestamps = 8 [(gogoproto.nullable) = false];
-
+  // If set, a write performed by the transaction could not be performed at the
+  // transaction's read timestamp because a newer value was present. Had our
+  // write been performed, it would have overwritten the other value even though
+  // that value might not have been read by a previous read in the transaction
+  // (i.e. lost update anomaly). The write is still performed, but this flag is
+  // set and the txn's write timestamp is bumped, so the client will not be able
+  // to commit without performing a refresh.
+  //
+  // Since 20.1, errors do not carry this flag; only successful BatchResponses
+  // do. When possible, such a BatchResponse is preferred to a WriteTooOldError
+  // because the former leaves intents behind to act as locks.
+  //
+  // On the client, the txnSpanRefresher terminates this flag by refreshing
+  // eagerly when the flag is set. If the key that generated the write too old
+  // condition had been previously read by the transaction, a refresh of the
+  // transaction's read span will surely fail. The client is not currently smart
+  // enough to avoid hopeless refreshes, though.
+  //
+  // Historically, this field was also important for SNAPSHOT transactions which
+  // could commit in other situations when the write timestamp is bumped, but
+  // not when this flag is set (since lost updates cannot be tolerated even in
+  // SNAPSHOT). In SERIALIZABLE isolation, transactions generally don't commit
+  // with a bumped write timestamp, so this flag is only telling us that a
+  // refresh is less likely to succeed than in other cases where
+  // ReadTimestamp != WriteTimestamp.
+  //
+  // TODO(nvanbenschoten): this flag is no longer assigned by v23.2 nodes.
+  // Remove it when compatibility with v23.1 nodes is no longer a concern.
+  bool write_too_old = 12;
   // Set of spans that the transaction has acquired locks within. These are
   // spans which must be resolved on txn completion. Note that these spans
   // may be condensed to cover aggregate spans if the keys locked by the
@@ -465,7 +489,6 @@ message Transaction {
   // treated as immutable and all updates should be performed on a copy
   // of the slice.
   repeated Span lock_spans = 11 [(gogoproto.nullable) = false];
-
   // Set of in-flight intent writes that have been issued by the transaction but
   // which may not have succeeded yet. If any in-flight writes are provided, a
   // committing EndTxn request will move a PENDING transaction to the STAGING
@@ -507,7 +530,7 @@ message Transaction {
   // choose which writes are exported on a per-transaction basis.
   bool omit_in_rangefeeds = 20;
 
-  reserved 3, 6, 9, 12, 13, 14;
+  reserved 3, 6, 9, 13, 14;
 }
 
 // A TransactionRecord message contains the subset of the fields in a
@@ -741,18 +764,6 @@ message AbortSpanEntry {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnPriority"];
 }
 
-// BufferedWrite contains information about all writes buffered on the root txn
-// for a given key.
-message BufferedWrite {
-  message Val {
-    Value val = 1 [(gogoproto.nullable) = false];
-    int32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
-  }
-  uint64 id = 1 [(gogoproto.customname) = "ID"];
-  bytes key = 2 [(gogoproto.casttype) = "Key"];
-  repeated Val vals = 3 [(gogoproto.nullable) = false];
-}
-
 // LeafTxnInputState is the state from a transaction coordinator
 // necessary and sufficient to set up a leaf transaction coordinator
 // on another node.
@@ -769,9 +780,6 @@ message LeafTxnInputState {
   // in_flight_writes stores all writes that are in-flight and have not yet
   // been proven to have succeeded. Overlapping requests must chain on to
   // their success using a QueryIntent request.
-  //
-  // If DistSQLUseReducedLeafWriteSets is enabled, then this set might only
-  // include writes overlapping with key spans that the caller will read.
   repeated SequencedWrite in_flight_writes = 8 [(gogoproto.nullable) = false];
   // Whether stepping mode is enabled. False indicates synchronous
   // read-own-writes, where every KV read is able to observe the
@@ -784,13 +792,6 @@ message LeafTxnInputState {
   // updated via the (kv.TxnSender).Step() operation.
   int32 read_seq_num = 10 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
-  // buffered_writes stores all writes that are buffered on the root txn (on the
-  // gateway node). Overlapping read requests need to be aware of these in order
-  // to support read-your-own-writes.
-  //
-  // If DistSQLUseReducedLeafWriteSets is enabled, then this set might only
-  // include writes overlapping with key spans that the caller will read.
-  repeated BufferedWrite buffered_writes = 11 [(gogoproto.nullable) = false];
 }
 
 // LeafTxnFinalState is the state from a leaf transaction coordinator
@@ -802,11 +803,17 @@ message LeafTxnFinalState {
   // record. This can be simplified.
   // See: https://github.com/cockroachdb/cockroach/issues/43192
   Transaction txn = 1 [(gogoproto.nullable) = false];
-  reserved 2, 3;
+  reserved 2;
+  // deprecated_command_count indicates that at least one request
+  // has been processed in this transaction.
+  // Populated only for compatibility with pre-20.1 nodes.
+  // TODO(knz,andrei): Remove this in 20.2.
+  int32 deprecated_command_count = 3;
   // refresh_spans contains the key spans read by the leaf. The root will add
   // them to its own tracking of reads.
   repeated Span refresh_spans = 4 [(gogoproto.nullable) = false];
-  reserved 5, 6;
+  reserved 5;
+  reserved 6;
   // refresh_invalid is set if refresh spans have not been collected. In this
   // case, refresh_spans is empty. It may be set because the leaf was asked not
   // to collect spans or because the leaf's reads exceeded the tracking memory

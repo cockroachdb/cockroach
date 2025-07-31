@@ -15,8 +15,7 @@ delete child
  └── select
       ├── columns: c:5!null p:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
       ├── scan child
-      │    ├── columns: c:5!null p:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
-      │    └── flags: avoid-full-scan
+      │    └── columns: c:5!null p:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
       └── filters
            └── c:5 = 4
 
@@ -30,8 +29,7 @@ delete parent
  ├── select
  │    ├── columns: x:6 parent.p:7!null other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
  │    ├── scan parent
- │    │    ├── columns: x:6 parent.p:7!null other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
- │    │    └── flags: avoid-full-scan
+ │    │    └── columns: x:6 parent.p:7!null other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
  │    └── filters
  │         └── parent.p:7 = 3
  └── f-k-checks
@@ -44,7 +42,7 @@ delete parent
                 │         └──  parent.p:7 => p:11
                 ├── scan child
                 │    ├── columns: child.p:13!null
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:11 = child.p:13
 
@@ -62,8 +60,7 @@ delete parent
  ├── select
  │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
  │    ├── scan parent
- │    │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
- │    │    └── flags: avoid-full-scan
+ │    │    └── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
  │    └── filters
  │         └── parent.p:7 = 3
  └── f-k-checks
@@ -76,7 +73,7 @@ delete parent
       │         │         └──  parent.p:7 => p:11
       │         ├── scan child
       │         │    ├── columns: child.p:13!null
-      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── p:11 = child.p:13
       └── f-k-checks-item: child2(p) -> parent(other)
@@ -88,7 +85,7 @@ delete parent
                 │         └──  parent.other:8 => other:16
                 ├── scan child2
                 │    ├── columns: child2.p:18!null
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── other:16 = child2.p:18
 
@@ -110,8 +107,7 @@ delete doubleparent
  ├── select
  │    ├── columns: doubleparent.p1:6!null doubleparent.p2:7!null other:8 doubleparent.crdb_internal_mvcc_timestamp:9 doubleparent.tableoid:10
  │    ├── scan doubleparent
- │    │    ├── columns: doubleparent.p1:6!null doubleparent.p2:7!null other:8 doubleparent.crdb_internal_mvcc_timestamp:9 doubleparent.tableoid:10
- │    │    └── flags: avoid-full-scan
+ │    │    └── columns: doubleparent.p1:6!null doubleparent.p2:7!null other:8 doubleparent.crdb_internal_mvcc_timestamp:9 doubleparent.tableoid:10
  │    └── filters
  │         └── doubleparent.p1:6 = 10
  └── f-k-checks
@@ -125,7 +121,7 @@ delete doubleparent
                 │         └──  doubleparent.p2:7 => p2:12
                 ├── scan doublechild
                 │    ├── columns: doublechild.p1:14 doublechild.p2:15
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── p1:11 = doublechild.p1:14
                      └── p2:12 = doublechild.p2:15
@@ -139,8 +135,7 @@ delete doublechild
  └── select
       ├── columns: c:6!null p1:7!null p2:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       ├── scan doublechild
-      │    ├── columns: c:6!null p1:7 p2:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    └── flags: avoid-full-scan
+      │    └── columns: c:6!null p1:7 p2:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       └── filters
            └── p1:7 = 10
 
@@ -155,8 +150,7 @@ delete parent
  ├── select
  │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
  │    ├── scan parent
- │    │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
- │    │    └── flags: avoid-full-scan
+ │    │    └── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
  │    └── filters
  │         └── parent.p:7 = 3
  └── f-k-checks
@@ -170,7 +164,7 @@ delete parent
       │         │         └──  parent.p:7 => p:11
       │         ├── scan child
       │         │    ├── columns: child.p:13!null
-      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── p:11 = child.p:13
       └── f-k-checks-item: child2(p) -> parent(other)
@@ -183,7 +177,7 @@ delete parent
                 │         └──  parent.other:8 => other:16
                 ├── scan child2
                 │    ├── columns: child2.p:18!null
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── other:16 = child2.p:18
 
@@ -198,8 +192,7 @@ delete parent
  ├── select
  │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
  │    ├── scan parent
- │    │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
- │    │    └── flags: avoid-full-scan
+ │    │    └── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
  │    └── filters
  │         └── parent.p:7 = 3
  └── f-k-checks
@@ -212,7 +205,7 @@ delete parent
       │         │         └──  parent.p:7 => p:11
       │         ├── scan child
       │         │    ├── columns: child.p:13!null
-      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── p:11 = child.p:13
       └── f-k-checks-item: child2(p) -> parent(other)
@@ -224,6 +217,6 @@ delete parent
                 │         └──  parent.other:8 => other:16
                 ├── scan child2
                 │    ├── columns: child2.p:18!null
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── other:16 = child2.p:18

@@ -37,10 +37,6 @@ export enum AxisUnits {
    * Units are percentages expressed as fractional values of 1 (1.0 = 100%).
    */
   Percentage,
-  /**
-   * DurationMillis are durations expressed in nanoseconds, but which force the max Y-axis to be at least 1000000.
-   */
-  DurationMillis,
 }
 
 // The number of ticks to display on a Y axis.
@@ -324,11 +320,6 @@ export function calculateYAxisDomain(
       return ComputeDurationAxisDomain(yExtent);
     case AxisUnits.Percentage:
       return ComputePercentageAxisDomain(yExtent[0], yExtent[1]);
-    case AxisUnits.DurationMillis:
-      return ComputeDurationAxisDomain([
-        min(allDatapoints),
-        max([max(allDatapoints), 1000000]),
-      ]);
     default:
       return ComputeCountAxisDomain(yExtent);
   }

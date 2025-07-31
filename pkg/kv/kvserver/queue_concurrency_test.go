@@ -58,6 +58,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		// We don't care about these, but we don't want to crash.
 		successes:       metric.NewCounter(metric.Metadata{Name: "processed"}),
 		failures:        metric.NewCounter(metric.Metadata{Name: "failures"}),
+		storeFailures:   metric.NewCounter(metric.Metadata{Name: "store_failures"}),
 		pending:         metric.NewGauge(metric.Metadata{Name: "pending"}),
 		processingNanos: metric.NewCounter(metric.Metadata{Name: "processingnanos"}),
 		purgatory:       metric.NewGauge(metric.Metadata{Name: "purgatory"}),

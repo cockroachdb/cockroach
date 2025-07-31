@@ -142,12 +142,11 @@ func (dv *datumVec) Cap() int {
 }
 
 // MarshalAt implements coldata.DatumVec interface.
-func (dv *datumVec) MarshalAt(appendTo []byte, i int) (_ []byte, err error) {
+func (dv *datumVec) MarshalAt(appendTo []byte, i int) ([]byte, error) {
 	dv.maybeSetDNull(i)
-	appendTo, dv.scratch, err = valueside.EncodeWithScratch(
-		appendTo, valueside.NoColumnID, dv.data[i], dv.scratch[:0],
+	return valueside.Encode(
+		appendTo, valueside.NoColumnID, dv.data[i], dv.scratch,
 	)
-	return appendTo, err
 }
 
 // UnmarshalTo implements coldata.DatumVec interface.

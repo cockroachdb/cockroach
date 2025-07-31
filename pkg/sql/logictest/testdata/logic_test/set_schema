@@ -194,9 +194,6 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
-SET LOCAL autocommit_before_ddl=off;
-
-statement ok
 ALTER TABLE s1.t3 SET SCHEMA s2
 
 # ALTER TABLE SET SCHEMA changes should inside the transaction.
@@ -237,9 +234,6 @@ CREATE TABLE s1.t4(x INT)
 # Ensure set schema gets rolled back if the transaction is canceled.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-
-statement ok
-SET LOCAL autocommit_before_ddl=off;
 
 statement ok
 ALTER TABLE s1.t4 SET SCHEMA s2
@@ -386,9 +380,6 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
-SET LOCAL autocommit_before_ddl=off;
-
-statement ok
 ALTER TYPE s1.typ3 SET SCHEMA s2
 
 # ALTER TYPE SET SCHEMA changes should reflect in the transaction.
@@ -422,9 +413,6 @@ CREATE TYPE s1.typ4 AS ENUM ('hello')
 # Ensure set schema gets rolled back if the transaction is canceled.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-
-statement ok
-SET LOCAL autocommit_before_ddl=off;
 
 statement ok
 ALTER TYPE s1.typ4 SET SCHEMA s2

@@ -11,9 +11,7 @@ syntax = "proto3";
 package cockroach.sql.catalog.catpb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb";
 
-// NOTE: When adding new enum types to this file, consider implementing the
-// redact.SafeValue interface if the values are safe to display in redacted logs.
-// This implementation can be added to the redact.go file in this package.
+import "gogoproto/gogo.proto";
 
 // SystemColumnKind is an enum representing the different kind of system
 // columns that can be synthesized by the execution engine.
@@ -51,29 +49,4 @@ enum InvertedIndexColumnKind {
   // TRIGRAM is the trigram kind of inverted index column. It's only valid on
   // text columns.
   TRIGRAM = 1;
-}
-
-// Type represents the category of policy.
-//
-// NOTE: When adding a new enum value, ensure it is only utilized after
-// verifying that the cluster version has been finalized. Older versions
-// will validate that only recognized enum values are present.
-enum PolicyType {
-  POLICYTYPE_UNUSED = 0;
-  PERMISSIVE = 1;
-  RESTRICTIVE = 2;
-}
-
-// PolicyCommand specifies the SQL commands to which the policy applies.
-//
-// NOTE: When adding a new enum value, ensure it is only utilized after
-// verifying that the cluster version has been finalized. Older versions
-// will validate that only recognized enum values are present.
-enum PolicyCommand {
-  POLICYCOMMAND_UNUSED = 0;
-  ALL = 1;
-  SELECT = 2;
-  INSERT = 3;
-  UPDATE = 4;
-  DELETE = 5;
 }

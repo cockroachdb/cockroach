@@ -144,6 +144,9 @@ SELECT 1::pg_catalog.special_int
 query error pq: type "crdb_internal.mytype" does not exist
 SELECT 1::crdb_internal.mytype
 
+statement ok
+SET legacy_varchar_typing = off
+
 # Untyped string literals in binary operators assume the type of the other
 # argument, if an overload exists with exactly matching parameter types. The
 # values are adjusted as necessary, e.g., trailing spaces are trimmed from
@@ -284,6 +287,9 @@ SELECT bp = c FROM
   (VALUES ('foo  ')) v2(c)
 ----
 false
+
+statement ok
+SET legacy_varchar_typing = on
 
 # Regression tests for #15050
 

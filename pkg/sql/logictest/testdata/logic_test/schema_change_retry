@@ -5,12 +5,9 @@
 
 # Prevent transaction refreshes so we encounter the necessary
 # TransactionRetryError below.
+
 statement ok
 SET CLUSTER SETTING kv.transaction.max_refresh_spans_bytes = 0;
-
-# Disable autocommit behavior for schema changes.
-statement ok
-SET autocommit_before_ddl = false
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -19,7 +16,7 @@ statement ok
 SAVEPOINT cockroach_restart
 
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT) WITH (schema_locked=false);
+CREATE TABLE t (x INT PRIMARY KEY, y INT);
 
 # It doesn't matter that we're creating the table and index in the
 # same transaction, but it does matter that the index creation is not
@@ -50,7 +47,7 @@ statement ok
 SAVEPOINT cockroach_restart
 
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT)  WITH (schema_locked=false);;
+CREATE TABLE t (x INT PRIMARY KEY, y INT);
 
 statement ok
 CREATE INDEX y_idx ON t (y);

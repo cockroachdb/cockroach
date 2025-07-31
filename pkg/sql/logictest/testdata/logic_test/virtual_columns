@@ -706,27 +706,27 @@ CREATE TABLE uniq_no_index (
   UNIQUE WITHOUT INDEX (v)
 )
 
-skipif config #110873 weak-iso-level-configs
+skipif config weak-iso-level-configs 110873
 statement ok
 INSERT INTO uniq_no_index VALUES (1, 10), (2, 20)
 
-skipif config #110873 weak-iso-level-configs
+skipif config weak-iso-level-configs 110873
 statement error duplicate key value violates unique constraint
 INSERT INTO uniq_no_index VALUES (3, 8)
 
-skipif config #110873 weak-iso-level-configs
+skipif config weak-iso-level-configs 110873
 statement error duplicate key value violates unique constraint
 UPDATE uniq_no_index SET b=b+11 WHERE a < 2
 
-skipif config #110873 weak-iso-level-configs
+skipif config weak-iso-level-configs 110873
 statement error duplicate key value violates unique constraint
 UPSERT INTO uniq_no_index VALUES (2, 30), (5, 6)
 
-skipif config #110873 weak-iso-level-configs
+skipif config weak-iso-level-configs 110873
 statement ok
 INSERT INTO uniq_no_index VALUES (5, 6) ON CONFLICT (v) DO UPDATE SET b=15
 
-skipif config #110873 weak-iso-level-configs
+skipif config weak-iso-level-configs 110873
 query III colnames,rowsort
 SELECT * FROM uniq_no_index
 ----
@@ -743,23 +743,23 @@ CREATE TABLE uniq_no_index_multi (
   UNIQUE WITHOUT INDEX (v, c)
 )
 
-skipif config #110873 weak-iso-level-configs
+skipif config weak-iso-level-configs 110873
 statement ok
 INSERT INTO uniq_no_index_multi VALUES (1, 1, 1), (2, 4, 2), (3, 3, 3)
 
-skipif config #110873 weak-iso-level-configs
+skipif config weak-iso-level-configs 110873
 statement error duplicate key value violates unique constraint
 INSERT INTO uniq_no_index_multi VALUES (4, 2, 2)
 
-skipif config #110873 weak-iso-level-configs
+skipif config weak-iso-level-configs 110873
 statement error duplicate key value violates unique constraint
 UPDATE uniq_no_index_multi SET c=2 WHERE a=3
 
-skipif config #110873 weak-iso-level-configs
+skipif config weak-iso-level-configs 110873
 statement ok
 UPSERT INTO uniq_no_index_multi VALUES (3, 3, 10)
 
-skipif config #110873 weak-iso-level-configs
+skipif config weak-iso-level-configs 110873
 statement error duplicate key value violates unique constraint
 UPSERT INTO uniq_no_index_multi VALUES (3, 3, 2)
 
@@ -821,14 +821,9 @@ a  b   v
 2  20  22
 3  30  33
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE sc SET (schema_locked = false);
-
 # Add virtual columns inside an explicit transactions.
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
+BEGIN
 
 statement ok
 ALTER TABLE sc ADD COLUMN w1 INT AS (a*b) VIRTUAL
@@ -838,10 +833,6 @@ ALTER TABLE sc ADD COLUMN w2 INT AS (b*2) VIRTUAL
 
 statement ok
 COMMIT
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE sc SET (schema_locked = true);
 
 query IIIII rowsort,colnames
 SELECT * FROM sc
@@ -885,14 +876,9 @@ DROP INDEX v_idx
 statement ok
 ALTER TABLE sc DROP COLUMN v
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE sc SET (schema_locked = false);
-
 # Add a column and an index on that column in the same transaction.
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
+BEGIN
 
 statement ok
 ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
@@ -902,10 +888,6 @@ CREATE INDEX v_idx ON sc(v)
 
 statement ok
 END
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE sc SET (schema_locked = true);
 
 query I rowsort
 SELECT a FROM sc@v_idx
@@ -920,15 +902,10 @@ DROP INDEX v_idx
 statement ok
 ALTER TABLE sc DROP COLUMN v
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE sc SET (schema_locked = false);
-
 # Adding a column and a partial index using that column in the predicate in the
 # same transaction is not allowed.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
@@ -938,10 +915,6 @@ CREATE INDEX partial_idx ON sc(b) WHERE v > 20
 
 statement ok
 END
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE sc SET (schema_locked = true);
 
 statement ok
 ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
@@ -1103,7 +1076,7 @@ SELECT k, iv, jv FROM inv@iv_jv_idx WHERE iv = 20 AND jv @> '{"b": "c"}' ORDER B
 subtest referencing_mutations
 
 statement ok
-CREATE TABLE t_ref (i INT PRIMARY KEY) WITH (schema_locked = false);
+CREATE TABLE t_ref (i INT PRIMARY KEY);
 
 statement error pgcode 0A000 virtual computed column "k" referencing columns \("j"\) added in the current transaction
 ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
@@ -1111,7 +1084,6 @@ ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
 
 statement error pgcode 0A000 virtual computed column "l" referencing columns \("j", "k"\) added in the current transaction
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-    SET LOCAL autocommit_before_ddl = false;
     ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42;
     ALTER TABLE t_ref ADD COLUMN k INT NOT NULL DEFAULT 42;
     ALTER TABLE t_ref ADD COLUMN l INT AS (i+j+k) VIRTUAL;
@@ -1128,7 +1100,6 @@ DROP TABLE t_ref;
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-    SET LOCAL autocommit_before_ddl = false;
     CREATE TABLE t_ref (i INT PRIMARY KEY);
     ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42;
     ALTER TABLE t_ref ADD COLUMN k INT AS (i+j) VIRTUAL;
@@ -1209,7 +1180,6 @@ statement ok
 CREATE TABLE t63167_a (a INT, v INT AS (a + 1) VIRTUAL);
 CREATE TABLE t63167_b (LIKE t63167_a INCLUDING ALL);
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t63167_b]
 ----
@@ -1218,18 +1188,7 @@ CREATE TABLE public.t63167_b (
   v INT8 NULL AS (a + 1:::INT8) VIRTUAL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t63167_b_pkey PRIMARY KEY (rowid ASC)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t63167_b]
-----
-CREATE TABLE public.t63167_b (
-  a INT8 NULL,
-  v INT8 NULL AS (a + 1:::INT8) VIRTUAL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t63167_b_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true);
+)
 
 # Test that columns backfills to tables with virtual columns work.
 subtest column_backfill
@@ -1334,29 +1293,19 @@ ALTER TABLE virtual_pk ADD COLUMN d INT NOT NULL DEFAULT 42;
 statement ok
 ALTER TABLE virtual_pk DROP COLUMN d;
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE virtual_pk SET (schema_locked = false)
-
 # Run the operations in an explicit transaction, explicitly using
 # the legacy schema changer.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
 SET LOCAL use_declarative_schema_changer = off;
 ALTER TABLE virtual_pk ADD COLUMN d INT NOT NULL DEFAULT 42;
 COMMIT;
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
 SET LOCAL use_declarative_schema_changer = off;
 ALTER TABLE virtual_pk DROP COLUMN d;
 COMMIT;
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE virtual_pk SET (schema_locked = true)
 
 # This tests that the type of a computed expression properly reflects the
 # user's intention. Before this test was added, the declarative schema changer
@@ -1373,8 +1322,10 @@ ALTER TABLE t_added ADD COLUMN i4n INT4 GENERATED ALWAYS AS (NULL) VIRTUAL;
 statement ok
 ALTER TABLE t_added ADD COLUMN dn DECIMAL(5, 2) GENERATED ALWAYS AS (NULL) VIRTUAL;
 
+# Note that we really should not be able to add this column as the expression
+# does not fit into the type. See #81698.
 statement ok
-ALTER TABLE t_added ADD COLUMN d DECIMAL(5, 2) GENERATED ALWAYS AS (123.1::DECIMAL) VIRTUAL;
+ALTER TABLE t_added ADD COLUMN d DECIMAL(5, 2) GENERATED ALWAYS AS (123456.000000::DECIMAL) VIRTUAL;
 
 statement ok
 ALTER TABLE t_added ADD COLUMN i4 INT4 GENERATED ALWAYS AS (4) VIRTUAL;
@@ -1389,13 +1340,12 @@ ALTER TABLE t_added ADD COLUMN i2 INT2 GENERATED ALWAYS AS (2) VIRTUAL;
 #    i INT8 NOT NULL,
 #    i4n UNKNOWN NULL AS (NULL) VIRTUAL,
 #    dn UNKNOWN NULL AS (NULL) VIRTUAL,
-#    d DECIMAL NULL AS (123.1:::DECIMAL) VIRTUAL,
+#    d DECIMAL NULL AS (123456.000000:::DECIMAL) VIRTUAL,
 #    i4 INT8 NULL AS (4:::INT8) VIRTUAL,
 #    i2 INT8 NULL AS (2:::INT8) VIRTUAL,
 #    CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
 # )
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_added]
 ----
@@ -1403,25 +1353,11 @@ CREATE TABLE public.t_added (
   i INT8 NOT NULL,
   i4n INT4 NULL AS (NULL) VIRTUAL,
   dn DECIMAL(5,2) NULL AS (NULL) VIRTUAL,
-  d DECIMAL(5,2) NULL AS (123.1:::DECIMAL) VIRTUAL,
+  d DECIMAL(5,2) NULL AS (123456.000000:::DECIMAL) VIRTUAL,
   i4 INT4 NULL AS (4:::INT8) VIRTUAL,
   i2 INT2 NULL AS (2:::INT8) VIRTUAL,
   CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t_added]
-----
-CREATE TABLE public.t_added (
-  i INT8 NOT NULL,
-  i4n INT4 NULL AS (NULL) VIRTUAL,
-  dn DECIMAL(5,2) NULL AS (NULL) VIRTUAL,
-  d DECIMAL(5,2) NULL AS (123.1:::DECIMAL) VIRTUAL,
-  i4 INT4 NULL AS (4:::INT8) VIRTUAL,
-  i2 INT2 NULL AS (2:::INT8) VIRTUAL,
-  CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
-) WITH (schema_locked = true);
+)
 
 statement ok
 DROP TABLE t_added

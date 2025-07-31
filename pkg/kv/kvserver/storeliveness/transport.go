@@ -12,8 +12,8 @@ import (
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
-	"storj.io/drpc"
 )
 
 const (
@@ -37,7 +36,7 @@ const (
 	batchDuration = 10 * time.Millisecond
 
 	// connClass is the rpc ConnectionClass used by Store Liveness traffic.
-	connClass = rpcbase.SystemClass
+	connClass = rpc.SystemClass
 )
 
 var logQueueFullEvery = log.Every(1 * time.Second)
@@ -77,8 +76,8 @@ type Transport struct {
 	// handlers stores the MessageHandler for each store on the node.
 	handlers syncutil.Map[roachpb.StoreID, MessageHandler]
 
-	// TransportKnobs includes all knobs for testing.
-	knobs *TransportKnobs
+	// TransportTestingKnobs includes all knobs for testing.
+	knobs *TransportTestingKnobs
 }
 
 var _ MessageSender = (*Transport)(nil)
@@ -90,11 +89,10 @@ func NewTransport(
 	clock *hlc.Clock,
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
-	drpcMux drpc.Mux,
-	knobs *TransportKnobs,
-) (*Transport, error) {
+	knobs *TransportTestingKnobs,
+) *Transport {
 	if knobs == nil {
-		knobs = &TransportKnobs{}
+		knobs = &TransportTestingKnobs{}
 	}
 	t := &Transport{
 		AmbientContext: ambient,
@@ -107,19 +105,7 @@ func NewTransport(
 	if grpcServer != nil {
 		slpb.RegisterStoreLivenessServer(grpcServer, t)
 	}
-	if drpcMux != nil {
-		if err := slpb.DRPCRegisterStoreLiveness(drpcMux, t.AsDRPCServer()); err != nil {
-			return nil, err
-		}
-	}
-	return t, nil
-}
-
-type drpcTransport Transport
-
-// AsDRPCServer returns the DRPC server implementation for the StoreLiveness service.
-func (t *Transport) AsDRPCServer() slpb.DRPCStoreLivenessServer {
-	return (*drpcTransport)(t)
+	return t
 }
 
 // Metrics returns metrics tracking this transport.
@@ -137,18 +123,6 @@ func (t *Transport) ListenMessages(storeID roachpb.StoreID, handler MessageHandl
 // only within the same RPC call; in other words, this guarantee does not hold
 // across stream re-connects.
 func (t *Transport) Stream(stream slpb.StoreLiveness_StreamServer) error {
-	return t.stream(stream)
-}
-
-// Stream proxies the incoming requests to the corresponding store's
-// MessageHandler. Messages between a pair of nodes are delivered in order
-// only within the same RPC call; in other words, this guarantee does not hold
-// across stream re-connects.
-func (t *drpcTransport) Stream(stream slpb.DRPCStoreLiveness_StreamStream) error {
-	return (*Transport)(t).stream(stream)
-}
-
-func (t *Transport) stream(stream slpb.RPCStoreLiveness_StreamStream) error {
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
@@ -309,11 +283,13 @@ func (t *Transport) startProcessNewQueue(
 			log.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
 		}
 		defer cleanup()
-		client, err := slpb.DialStoreLivenessClient(t.dialer, ctx, toNodeID, connClass)
+		conn, err := t.dialer.Dial(ctx, toNodeID, connClass)
 		if err != nil {
 			// DialNode already logs sufficiently, so just return.
 			return
 		}
+
+		client := slpb.NewStoreLivenessClient(conn)
 		streamCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
@@ -344,9 +320,7 @@ func (t *Transport) startProcessNewQueue(
 // designated queue via that stream, exiting when an error is received or when
 // it idles out. All messages remaining in the queue at that point are lost and
 // a new instance of processQueue will be started by the next message to be sent.
-func (t *Transport) processQueue(
-	q *sendQueue, stream slpb.RPCStoreLiveness_StreamClient,
-) (err error) {
+func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamClient) (err error) {
 	defer func() {
 		_, closeErr := stream.CloseAndRecv()
 		err = errors.Join(err, closeErr)
@@ -371,6 +345,7 @@ func (t *Transport) processQueue(
 			return nil
 
 		case <-idleTimer.C:
+			idleTimer.Read = true
 			t.metrics.SendQueueIdle.Inc(1)
 			return nil
 
@@ -381,14 +356,14 @@ func (t *Transport) processQueue(
 
 			// Pull off as many queued requests as possible within batchDuration.
 			batchTimer.Reset(batchDuration)
-			for done := false; !done; {
+			for !batchTimer.Read {
 				select {
 				case msg = <-q.messages:
 					batch.Messages = append(batch.Messages, msg)
 					t.metrics.SendQueueSize.Dec(1)
 					t.metrics.SendQueueBytes.Dec(int64(msg.Size()))
 				case <-batchTimer.C:
-					done = true
+					batchTimer.Read = true
 				}
 			}
 
@@ -408,4 +383,12 @@ func (t *Transport) processQueue(
 			batch.Now = hlc.ClockTimestamp{}
 		}
 	}
+}
+
+// TransportTestingKnobs includes all knobs that facilitate testing Transport.
+type TransportTestingKnobs struct {
+	// OverrideIdleTimeout overrides the idleTimeout, which controls how
+	// long until an instance of processQueue winds down after not observing any
+	// messages.
+	OverrideIdleTimeout func() time.Duration
 }

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -94,7 +93,7 @@ func PlanCDCExpression(
 
 	familyID, err := extractFamilyID(cdcExpr)
 	if err != nil {
-		return CDCExpressionPlan{}, err
+		return cdcPlan, err
 	}
 
 	cdcCat := &cdcOptCatalog{
@@ -110,10 +109,10 @@ func PlanCDCExpression(
 
 	memo, err := opc.buildExecMemo(ctx)
 	if err != nil {
-		return CDCExpressionPlan{}, err
+		return cdcPlan, err
 	}
 	if log.V(2) {
-		log.Infof(ctx, "Optimized CDC expression: %s", memo)
+		log.Infof(ctx, "Optimized CDC expression: %s", memo.RootExpr().String())
 	}
 
 	const allowAutoCommit = false
@@ -122,69 +121,55 @@ func PlanCDCExpression(
 		ctx, &p.curPlan, &p.stmt, newExecFactory(ctx, p), memo, p.SemaCtx(),
 		p.EvalContext(), allowAutoCommit, disableTelemetryAndPlanGists,
 	); err != nil {
-		return CDCExpressionPlan{}, err
-	}
-
-	// The top node contains the list of columns to return.
-	presentation := planColumns(p.curPlan.main.planNode)
-
-	// SELECT statement provided by the user yields zero columns.
-	// If some user actually wants to have a changefeed for the
-	// hidden rowid column of a zero-column table, then they can be explicit
-	// about it: CREATE CHANGEFEED ... SELECT rowid ....
-	if len(presentation) == 0 {
-		return CDCExpressionPlan{}, errors.WithHintf(
-			errors.New("SELECT yields no columns"),
-			"Specify at least one column in your SELECT statement or use SELECT rowid if you need a changefeed for the hidden rowid column of a zero-column table.",
-		)
+		return cdcPlan, err
 	}
 
 	// Walk the plan, perform sanity checks and extract information we need.
 	var spans roachpb.Spans
-	var validatePlanAndCollectSpans func(p planNode) error
-	validatePlanAndCollectSpans = func(p planNode) error {
-		switch n := p.(type) {
-		case *scanNode:
-			// Collect spans we wanted to scan. The select statement used for
-			// this plan should result in a single table scan of primary index
-			// span.
-			if len(spans) > 0 {
-				return errors.AssertionFailedf("unexpected multiple primary index scan operations")
-			}
-			if n.index.GetID() != n.desc.GetPrimaryIndexID() {
-				return errors.AssertionFailedf(
-					"expect scan of primary index, found scan of %d", n.index.GetID())
-			}
-			spans = n.spans
-		case *zeroNode:
-			return errors.Newf(
-				"changefeed expression %s does not match any rows", tree.AsString(cdcExpr))
-		default:
-			// Recurse into input nodes.
-			for i, n := 0, p.InputCount(); i < n; i++ {
-				input, err := p.Input(i)
-				if err != nil {
-					return err
+	var presentation colinfo.ResultColumns
+
+	if err := walkPlan(ctx, p.curPlan.main.planNode, planObserver{
+		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
+			switch n := plan.(type) {
+			case *scanNode:
+				// Collect spans we wanted to scan.  The select statement used for this
+				// plan should result in a single table scan of primary index span.
+				if len(spans) > 0 {
+					return false, errors.AssertionFailedf("unexpected multiple primary index scan operations")
 				}
-				if err = validatePlanAndCollectSpans(input); err != nil {
-					return err
+				if n.index.GetID() != n.desc.GetPrimaryIndexID() {
+					return false, errors.AssertionFailedf(
+						"expect scan of primary index, found scan of %d", n.index.GetID())
 				}
+				spans = n.spans
+			case *zeroNode:
+				return false, errors.Newf(
+					"changefeed expression %s does not match any rows", tree.AsString(cdcExpr))
 			}
-		}
-		return nil
-	}
-	if err := validatePlanAndCollectSpans(p.curPlan.main.planNode); err != nil {
-		return CDCExpressionPlan{}, err
+
+			// Because the walk is top down, the top node is the node containing the
+			// list of columns to return.
+			if len(presentation) == 0 {
+				presentation = planColumns(plan)
+			}
+			return true, nil
+		},
+	}); err != nil {
+		return cdcPlan, err
 	}
 
 	if len(spans) == 0 {
 		// Should have been handled by the zeroNode check above.
-		return CDCExpressionPlan{}, errors.AssertionFailedf("expected at least 1 span to scan")
+		return cdcPlan, errors.AssertionFailedf("expected at least 1 span to scan")
+	}
+
+	if len(presentation) == 0 {
+		return cdcPlan, errors.AssertionFailedf("unable to determine result columns")
 	}
 
 	if len(p.curPlan.subqueryPlans) > 0 || len(p.curPlan.cascades) > 0 ||
 		len(p.curPlan.checkPlans) > 0 || len(p.curPlan.triggers) > 0 {
-		return CDCExpressionPlan{}, errors.AssertionFailedf("unexpected query structure")
+		return cdcPlan, errors.AssertionFailedf("unexpected query structure")
 	}
 
 	planCtx := p.DistSQLPlanner().NewPlanningCtx(ctx, &p.extendedEvalCtx, p, p.txn, LocalDistribution)
@@ -236,31 +221,20 @@ func prepareCDCPlan(
 	// CDCExpressionPlan) with a cdcValuesNode that reads from the source, which
 	// includes specified column IDs.
 	replaced := false
-	var replaceScanNode func(plan planNode) (planNode, error)
-	replaceScanNode = func(plan planNode) (planNode, error) {
-		if scan, ok := plan.(*scanNode); ok {
+	v := makePlanVisitor(ctx, planObserver{
+		replaceNode: func(ctx context.Context, nodeName string, plan planNode) (planNode, error) {
+			scan, ok := plan.(*scanNode)
+			if !ok {
+				return nil, nil
+			}
 			replaced = true
 			defer scan.Close(ctx)
 			return newCDCValuesNode(scan, source, sourceCols)
-		}
-		for i, n := 0, plan.InputCount(); i < n; i++ {
-			input, err := plan.Input(i)
-			if err != nil {
-				return nil, err
-			}
-			input, err = replaceScanNode(input)
-			if err != nil {
-				return nil, err
-			}
-			if err := plan.SetInput(i, input); err != nil {
-				return nil, err
-			}
-		}
-		return plan, nil
-	}
-	plan, err := replaceScanNode(plan)
-	if err != nil {
-		return nil, err
+		},
+	})
+	plan = v.visit(plan)
+	if v.err != nil {
+		return nil, v.err
 	}
 	if !replaced {
 		return nil, errors.AssertionFailedf("expected to find one scan node, found none")
@@ -271,30 +245,20 @@ func prepareCDCPlan(
 // CollectPlanColumns invokes collector callback for each column accessed
 // by this plan.  Collector may return false to stop iteration.
 // Collector function may be invoked multiple times for the same column.
-func (p CDCExpressionPlan) CollectPlanColumns(
-	collector func(column colinfo.ResultColumn) bool,
-) error {
-	var walkPlan func(plan planNode) error
-	walkPlan = func(plan planNode) error {
-		cols := planColumns(plan)
-		for _, c := range cols {
-			stop := collector(c)
-			if stop {
-				return nil
+func (p CDCExpressionPlan) CollectPlanColumns(collector func(column colinfo.ResultColumn) bool) {
+	v := makePlanVisitor(context.Background(), planObserver{
+		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
+			cols := planColumns(plan)
+			for _, c := range cols {
+				stop := collector(c)
+				if stop {
+					return false, nil
+				}
 			}
-		}
-		for i, n := 0, plan.InputCount(); i < n; i++ {
-			input, err := plan.Input(i)
-			if err != nil {
-				return err
-			}
-			if err := walkPlan(input); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	return walkPlan(p.Plan.planNode)
+			return true, nil // Continue onto the next node.
+		},
+	})
+	_ = v.visit(p.Plan.planNode)
 }
 
 // cdcValuesNode replaces regular scanNode with cdc specific implementation
@@ -303,12 +267,11 @@ func (p CDCExpressionPlan) CollectPlanColumns(
 // datums must match the number of inputs (and types) expected by this flow
 // (verified below).
 type cdcValuesNode struct {
-	zeroInputPlanNode
-	source   execinfra.RowSource
-	datumRow []tree.Datum
-	colOrd   []int
-	columns  colinfo.ResultColumns
-	alloc    tree.DatumAlloc
+	source        execinfra.RowSource
+	datumRow      []tree.Datum
+	colOrd        []int
+	resultColumns []colinfo.ResultColumn
+	alloc         tree.DatumAlloc
 }
 
 var _ planNode = (*cdcValuesNode)(nil)
@@ -317,13 +280,13 @@ func newCDCValuesNode(
 	scan *scanNode, source execinfra.RowSource, sourceCols catalog.TableColMap,
 ) (planNode, error) {
 	v := cdcValuesNode{
-		source:   source,
-		datumRow: make([]tree.Datum, len(scan.columns)),
-		columns:  scan.columns,
-		colOrd:   make([]int, len(scan.catalogCols)),
+		source:        source,
+		datumRow:      make([]tree.Datum, len(scan.resultColumns)),
+		resultColumns: scan.resultColumns,
+		colOrd:        make([]int, len(scan.cols)),
 	}
 
-	for i, c := range scan.catalogCols {
+	for i, c := range scan.cols {
 		sourceOrd, ok := sourceCols.Get(c.GetID())
 		if !ok {
 			return nil, errors.Newf("source does not contain column %s (id %d)", c.GetName(), c.GetID())
@@ -414,18 +377,6 @@ func (c *cdcOptCatalog) ResolveDataSource(
 	_, desc, err := resolver.ResolveExistingTableObject(ctx, c.planner, name, lflags)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
-	}
-
-	// We block tables with row-level security enabled because they can inject
-	// filters into the select op. This conflicts with the CDC expression's
-	// expectation that the SELECT contains no filters — that all filters are
-	// converted into a projection for the __crdb_filter column (see
-	// predicateAsProjection). Since the RLS filters aren’t included in
-	// __crdb_filter, we block this functionality until that work is complete.
-	if desc.IsRowLevelSecurityEnabled() {
-		return nil, cat.DataSourceName{}, unimplemented.NewWithIssuef(
-			142171,
-			"CDC queries are not supported on tables with row-level security enabled")
 	}
 
 	ds, err := c.newCDCDataSource(ctx, desc, c.targetFamilyID)
@@ -590,11 +541,6 @@ func (d *familyTableDescriptor) EnforcedCheckConstraints() []catalog.CheckConstr
 		}
 	}
 	return filtered
-}
-
-// EnforcedCheckValidators implements catalog.TableDescriptor interface.
-func (d *familyTableDescriptor) EnforcedCheckValidators() []catalog.CheckConstraintValidator {
-	panic(errors.AssertionFailedf("not implemented"))
 }
 
 // familyColumns returns column list adopted for targeted column family.

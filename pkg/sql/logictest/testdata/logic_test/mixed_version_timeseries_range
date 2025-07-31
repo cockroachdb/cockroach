@@ -1,0 +1,17 @@
+# LogicTest: cockroach-go-testserver-24.2
+
+query TT
+SELECT target, raw_config_sql FROM [SHOW ZONE CONFIGURATIONS] WHERE target = 'RANGE timeseries'
+----
+
+upgrade all
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+# The zone config should exist after upgrading.
+query TT
+SELECT target, raw_config_sql FROM [SHOW ZONE CONFIGURATIONS] WHERE target = 'RANGE timeseries'
+----
+RANGE timeseries  ALTER RANGE timeseries CONFIGURE ZONE USING
+                    gc.ttlseconds = 14400

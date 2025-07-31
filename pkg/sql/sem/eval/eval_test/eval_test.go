@@ -95,7 +95,7 @@ func TestEval(t *testing.T) {
 			}
 			// expr.TypeCheck to avoid constant folding.
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
-			typedExpr, err := expr.TypeCheck(ctx, &semaCtx, types.AnyElement)
+			typedExpr, err := expr.TypeCheck(ctx, &semaCtx, types.Any)
 			if err != nil {
 				// An error here should have been found above by QueryRow.
 				t.Fatal(err)
@@ -112,7 +112,7 @@ func TestEval(t *testing.T) {
 						continue
 					}
 					// Figure out the type of the tuple value.
-					expr, err := tuple.Exprs[i].TypeCheck(ctx, &semaCtx, types.AnyElement)
+					expr, err := tuple.Exprs[i].TypeCheck(ctx, &semaCtx, types.Any)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -139,8 +139,6 @@ func TestEval(t *testing.T) {
 		rng, _ := randutil.NewTestRand()
 		var monitorRegistry colexecargs.MonitorRegistry
 		defer monitorRegistry.Close(ctx)
-		var closerRegistry colexecargs.CloserRegistry
-		defer closerRegistry.Close(ctx)
 		walk(t, func(t *testing.T, d *datadriven.TestData) string {
 			st := cluster.MakeTestingClusterSettings()
 			flowCtx := &execinfra.FlowCtx{
@@ -148,6 +146,10 @@ func TestEval(t *testing.T) {
 				EvalCtx: evalCtx,
 				Mon:     evalCtx.TestingMon,
 			}
+			memMonitor := execinfra.NewTestMemMonitor(ctx, st)
+			defer memMonitor.Stop(ctx)
+			acc := memMonitor.MakeBoundAccount()
+			defer acc.Close(ctx)
 			expr, err := parser.ParseExpr(d.Input)
 			require.NoError(t, err)
 			if _, ok := expr.(*tree.RangeCond); ok {
@@ -156,7 +158,7 @@ func TestEval(t *testing.T) {
 				return strings.TrimSpace(d.Expected)
 			}
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
-			typedExpr, err := expr.TypeCheck(ctx, &semaCtx, types.AnyElement)
+			typedExpr, err := expr.TypeCheck(ctx, &semaCtx, types.Any)
 			if err != nil {
 				// Skip this test as it's testing an expected error which would be
 				// caught before execution.
@@ -189,11 +191,11 @@ func TestEval(t *testing.T) {
 							return batch
 						}},
 				}},
+				StreamingMemAccount: &acc,
 				// Unsupported post-processing specs are wrapped and run through
 				// the row execution engine.
 				ProcessorConstructor: rowexec.NewProcessor,
 				MonitorRegistry:      &monitorRegistry,
-				CloserRegistry:       &closerRegistry,
 			}
 			// If the expression is of the boolean type, in 50% cases we'll
 			// additionally run it as a filter (i.e. as a "selection" operator

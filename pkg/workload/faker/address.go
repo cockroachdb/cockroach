@@ -7,8 +7,9 @@ package faker
 
 import (
 	"fmt"
-	"math/rand/v2"
 	"strconv"
+
+	"golang.org/x/exp/rand"
 )
 
 type addressFaker struct {
@@ -32,7 +33,7 @@ func (f *addressFaker) streetName(rng *rand.Rand) string {
 }
 
 func (f *addressFaker) firstOrLastName(rng *rand.Rand) string {
-	switch rng.IntN(3) {
+	switch rng.Intn(3) {
 	case 0:
 		return f.name.firstNameFemale.Rand(rng).(string)
 	case 1:
@@ -44,11 +45,11 @@ func (f *addressFaker) firstOrLastName(rng *rand.Rand) string {
 }
 
 func secondaryAddress(rng *rand.Rand) string {
-	switch rng.IntN(2) {
+	switch rng.Intn(2) {
 	case 0:
-		return fmt.Sprintf(`Apt. %d`, rng.IntN(100))
+		return fmt.Sprintf(`Apt. %d`, rng.Intn(100))
 	case 1:
-		return fmt.Sprintf(`Suite %d`, rng.IntN(100))
+		return fmt.Sprintf(`Suite %d`, rng.Intn(100))
 	}
 	panic(`unreachable`)
 }

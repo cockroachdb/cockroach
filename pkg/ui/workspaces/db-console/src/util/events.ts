@@ -210,8 +210,6 @@ export function getEventDescription(e: clusterUiApi.EventColumns): string {
       return `Disk Slowness Detected: Node ${info.NodeID} Store ${info.StoreID} is experiencing a slow disk`;
     case eventTypes.DISK_SLOWNESS_CLEARED:
       return `Disk Slowness Cleared: Node ${info.NodeID} Store ${info.StoreID} is no longer experiencing a slow disk`;
-    case eventTypes.LOW_DISK_SPACE:
-      return `Available disk space below ${info.PercentThreshold}%: Node ${info.NodeID} Store ${info.StoreID}`;
     default:
       return `Event: ${e.eventType}, content: ${JSON.stringify(info, null, 2)}`;
   }
@@ -275,9 +273,6 @@ export interface EventInfo {
   PreviousDescriptor?: string;
   NewDescriptor?: string;
   StoreID?: string;
-  PercentThreshold?: string;
-  AvailableBytes?: string;
-  TotalBytes?: string;
 }
 
 export function getDroppedObjectsText(eventInfo: EventInfo): string {

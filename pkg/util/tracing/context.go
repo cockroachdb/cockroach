@@ -5,13 +5,9 @@
 
 package tracing
 
-import (
-	"context"
+import "context"
 
-	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
-)
-
-var activeSpanKey = ctxutil.RegisterFastValueKey()
+type activeSpanKey struct{}
 
 // noCtx is a singleton that we use internally to unify code paths that only
 // optionally take a Context. The specific construction here does not matter,
@@ -21,8 +17,9 @@ var noCtx context.Context = &struct{ context.Context }{context.Background()}
 
 // SpanFromContext returns the *Span contained in the Context, if any.
 func SpanFromContext(ctx context.Context) *Span {
-	if v := ctxutil.FastValue(ctx, activeSpanKey); v != nil {
-		return v.(*Span)
+	val := ctx.Value(activeSpanKey{})
+	if sp, ok := val.(*Span); ok {
+		return sp
 	}
 	return nil
 }
@@ -44,21 +41,22 @@ func maybeWrapCtx(ctx context.Context, sp *Span) (context.Context, *Span) {
 	if ctx == noCtx {
 		return noCtx, sp
 	}
-	// NB: Some callers want to remove a Span from a Context, and thus pass nil.
-	if sp == nil {
-		// If the context originally had the nil span, and we would now be wrapping
-		// the nil span in it again, we don't have to wrap at all and can save an
+	// NB: we check sp != nil explicitly because some callers want to remove a
+	// Span from a Context, and thus pass nil.
+	if sp != nil && sp.IsNoop() {
+		// If the context originally had the noop span, and we would now be wrapping
+		// the noop span in it again, we don't have to wrap at all and can save an
 		// allocation.
 		//
 		// Note that applying this optimization for a nontrivial ctxSp would
 		// constitute a bug: A real, non-recording span might later start recording.
 		// Besides, the caller expects to get their own span, and will .Finish() it,
 		// leading to an extra, premature call to Finish().
-		if ctxSp := SpanFromContext(ctx); ctxSp == nil {
+		if ctxSp := SpanFromContext(ctx); ctxSp != nil && ctxSp.IsNoop() {
 			return ctx, sp
 		}
 	}
-	return ctxutil.WithFastValue(ctx, activeSpanKey, sp), sp
+	return context.WithValue(ctx, activeSpanKey{}, sp), sp
 }
 
 // ContextWithSpan returns a Context wrapping the supplied Span.

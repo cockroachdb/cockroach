@@ -136,7 +136,7 @@ message SampledQuery {
   // The regions of the nodes where SQL processors ran.
   repeated string regions = 38 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
-  // The number of network bytes by DistSQL components.
+  // The number of network bytes sent by nodes for this query.
   int64 network_bytes_sent = 39 [(gogoproto.jsontag) = ',omitempty'];
 
   // The maximum amount of memory usage by nodes for this query.
@@ -154,8 +154,7 @@ message SampledQuery {
   // The number of rows read at the KV layer for this query.
   int64 kv_rows_read = 43 [(gogoproto.customname) = "KVRowsRead", (gogoproto.jsontag) = ',omitempty'];
 
-  // The number of network messages sent by nodes for this query by DistSQL
-  // components.
+  // The number of network messages sent by nodes for this query.
   int64 network_messages = 44 [(gogoproto.jsontag) = ',omitempty'];
 
   // Generated index recommendations for this query.
@@ -312,8 +311,7 @@ message SampledQuery {
 // Fields in this struct should be updated in sync with apps_stats.proto.
 message SampledExecStats {
 
-  // NetworkBytes collects the number of bytes sent over the network by DistSQL
-  // components.
+  // NetworkBytes collects the number of bytes sent over the network.
   int64 network_bytes = 1 [(gogoproto.jsontag) = ",includeempty"];
 
   // MaxMemUsage collects the maximum memory usage that occurred on a node.
@@ -323,7 +321,7 @@ message SampledExecStats {
   int64 contention_time = 3 [(gogoproto.jsontag) = ",omitempty"];
 
   // NetworkMessages collects the number of messages that were sent over the
-  // network by DistSQL components.
+  // network.
   int64 network_messages = 4 [(gogoproto.jsontag) = ",includeempty"];
 
   // MaxDiskUsage collects the maximum temporary disk usage that occurred. This
@@ -728,4 +726,47 @@ message SchemaSnapshotMetadata {
   // Errors records any errors encountered when post-processing this snapshot,
   // which includes the redaction of any potential PII.
   repeated string errors = 5 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// HotRangesStats
+message HotRangesStats {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  int64 range_id = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "RangeID"];
+
+  double qps = 3 [(gogoproto.jsontag) = ",includeempty"];
+
+  // DatabaseName is the name of the database in which the index was created.
+  string database_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // TableName is the name of the table on which the index was created.
+  string table_name = 5 [(gogoproto.jsontag) = ",omitempty"];
+
+  // IndexName is the name of the index within the scope of the given table.
+  string index_name = 6 [(gogoproto.jsontag) = ",omitempty"];
+
+  // SchemaName is the name of the schema in which the index was created.
+  string schema_name = 7 [(gogoproto.jsontag) = ",omitempty"];
+
+  // LeaseholderNodeID indicates the Node ID that is the current leaseholder for the given range.
+  int32 leaseholder_node_id = 8 [(gogoproto.customname) = "LeaseholderNodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // Writes per second is the recent number of keys written per second on
+  // this range.
+  double writes_per_second = 9 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Reads per second is the recent number of keys read per second on
+  // this range.
+  double reads_per_second = 10 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Write bytes per second is the recent number of bytes written per second on
+  // this range.
+  double write_bytes_per_second = 11 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Read bytes per second is the recent number of bytes read per second on
+  // this range.
+  double read_bytes_per_second = 12 [(gogoproto.jsontag) = ",omitempty"];
+
+  // CPU time per second is the recent cpu usage in nanoseconds of this range.
+  double cpu_time_per_second = 13 [(gogoproto.customname) = "CPUTimePerSecond", (gogoproto.jsontag) = ",omitempty"];
 }

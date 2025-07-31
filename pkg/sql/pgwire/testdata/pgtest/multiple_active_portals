@@ -8,17 +8,6 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-# This test relies on transactions not being autocommitted.
-send crdb_only
-Query {"String": "SET autocommit_before_ddl = 'false'"}
-----
-
-until crdb_only
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"SET"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
 subtest select_from_individual_resources
 
 send
@@ -468,7 +457,7 @@ ReadyForQuery
 {"Type":"PortalSuspended"}
 {"Type":"DataRow","Values":[{"text":"2"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/dev"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v24.3"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send crdb_only
@@ -515,7 +504,7 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"f"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/dev"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v24.3"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send crdb_only
@@ -564,7 +553,7 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"10"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/dev"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v24.3"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send crdb_only
@@ -613,7 +602,7 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"1"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/dev"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v24.3"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send crdb_only
@@ -957,7 +946,7 @@ ReadyForQuery
 {"Type":"PortalSuspended"}
 {"Type":"DataRow","Values":[{"text":"10"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/dev"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v24.3"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send
@@ -1335,7 +1324,7 @@ Query {"String": "CREATE TABLE t110486_1 (k1 PRIMARY KEY) AS VALUES (1), (2), (3
 Query {"String": "CREATE TABLE t110486_2 (k2 PRIMARY KEY) AS VALUES (1), (2), (3);"}
 ----
 
-until ignore=NoticeResponse
+until
 ReadyForQuery
 ReadyForQuery
 ----
@@ -1413,31 +1402,6 @@ until crdb_only ignore=NoticeResponse
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"RESET"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-subtest end
-
-subtest internal_error_special_stmts
-
-send
-Query {"String": "CREATE TABLE IF NOT EXISTS t (k INT PRIMARY KEY);"}
-Parse {"Name": "q4", "Query": "ALTER TABLE t SCATTER;"}
-Bind {"DestinationPortal": "p4", "PreparedStatement": "q4"}
-Execute {"Portal": "p4", "MaxRows": 1}
-Execute {"Portal": "p4", "MaxRows": 1}
-Sync
-----
-
-until ignore=DataRow
-ReadyForQuery
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
-{"Type":"CommandComplete","CommandTag":"SCATTER 1"}
-{"Type":"CommandComplete","CommandTag":"SCATTER 0"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 subtest end

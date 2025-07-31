@@ -10,7 +10,6 @@ import (
 	"hash"
 	"hash/crc32"
 	"runtime"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -19,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -28,14 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // eventContext holds metadata pertaining to event.
@@ -104,27 +99,9 @@ func newEventConsumer(
 	enablePacer := changefeedbase.PerEventElasticCPUControlEnabled.Get(&cfg.Settings.SV)
 
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
-		sourceData := enrichedSourceData{}
-		if encodingOpts.Envelope == changefeedbase.OptEnvelopeEnriched {
-			var schemaInfo map[descpb.ID]tableSchemaInfo
-			if inSet(changefeedbase.EnrichedPropertySource, encodingOpts.EnrichedProperties) {
-				schemaInfo, err = GetTableSchemaInfo(ctx, cfg, feed.Targets)
-				if err != nil {
-					return nil, err
-				}
-			}
-			sourceData, err = newEnrichedSourceData(ctx, cfg, spec, sink.getConcreteType(), schemaInfo)
-			if err != nil {
-				return nil, err
-			}
-		}
-		esp, err := newEnrichedSourceProvider(encodingOpts, sourceData)
-		if err != nil {
-			return nil, err
-		}
+		var err error
 		encoder, err := getEncoder(ctx, encodingOpts, feed.Targets, spec.Select.Expr != "",
-			makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics, esp,
-		)
+			makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics)
 		if err != nil {
 			return nil, err
 		}
@@ -453,28 +430,23 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	if err != nil {
 		return err
 	}
-	c.scratch, keyCopy = c.scratch.Copy(encodedKey)
+	c.scratch, keyCopy = c.scratch.Copy(encodedKey, 0 /* extraCap */)
 	// TODO(yevgeniy): Some refactoring is needed in the encoder: namely, prevRow
 	// might not be available at all when working with changefeed expressions.
 	encodedValue, err := c.encoder.EncodeValue(ctx, evCtx, updatedRow, prevRow)
 	if err != nil {
 		return err
 	}
-	c.scratch, valueCopy = c.scratch.Copy(encodedValue)
+	c.scratch, valueCopy = c.scratch.Copy(encodedValue, 0 /* extraCap */)
 
 	// Since we're done processing/converting this event, and will not use much more
 	// than len(key)+len(bytes) worth of resources, adjust allocation to match.
 	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
 	stop()
 
-	headers, err := c.makeRowHeaders(ctx, updatedRow)
-	if err != nil {
-		return err
-	}
-
 	c.metrics.Timers.EmitRow.Time(func() {
 		err = c.sink.EmitRow(
-			ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc, headers,
+			ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
 		)
 	})
 	if err != nil {
@@ -485,63 +457,9 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 		return err
 	}
 	if log.V(3) {
-		log.Infof(ctx, `r %s: %s(%+v) -> %s`, updatedRow.TableName, keyCopy, headers, valueCopy)
+		log.Infof(ctx, `r %s: %s -> %s`, updatedRow.TableName, keyCopy, valueCopy)
 	}
 	return nil
-}
-
-var jsonHeaderWrongTypeLogLim = log.Every(1 * time.Minute)
-var jsonHeaderWrongValTypeLogLim = log.Every(1 * time.Minute)
-
-type rowHeaders map[string][]byte
-
-func (c *kvEventToRowConsumer) makeRowHeaders(
-	ctx context.Context, updatedRow cdcevent.Row,
-) (rowHeaders, error) {
-	if c.encodingOpts.HeadersJSONColName == "" {
-		return nil, nil
-	}
-
-	headersJSON, err := readOneJSONValue(updatedRow, c.encodingOpts.HeadersJSONColName)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read headers column %s: %s", c.encodingOpts.HeadersJSONColName, updatedRow.DebugString())
-	}
-	// Allow & ignore both kinds of null.
-	if headersJSON == nil || headersJSON.Type() == json.NullJSONType {
-		return nil, nil
-	}
-
-	headers := make(rowHeaders, headersJSON.Len())
-	objIt, err := headersJSON.ObjectIter()
-	if err != nil {
-		return nil, err
-	}
-	if objIt == nil {
-		if jsonHeaderWrongTypeLogLim.ShouldLog() || log.V(2) {
-			log.Warningf(ctx, "headers column %s must be a JSON object, was %s, in: %s", c.encodingOpts.HeadersJSONColName, redact.SafeString(headersJSON.Type().String()), updatedRow.DebugString())
-		}
-		return nil, nil
-	}
-	// Format the object's kv pairs. The intended use case is to have string
-	// values, but permit & stringify other primitive types. Nested arrays &
-	// objects will be skipped with a rate-limited warning. Nulls are skipped.
-	for objIt.Next() {
-		switch objIt.Value().Type() {
-		case json.StringJSONType:
-			str, _ := objIt.Value().AsText()
-			headers[objIt.Key()] = []byte(*str)
-		case json.NullJSONType:
-			continue
-		case json.NumberJSONType, json.TrueJSONType, json.FalseJSONType:
-			headers[objIt.Key()] = []byte(objIt.Value().String())
-		default:
-			if jsonHeaderWrongValTypeLogLim.ShouldLog() || log.V(2) {
-				log.Warningf(ctx, "headers column %s must be a JSON object with primitive values, got %s - %s, in: %s",
-					c.encodingOpts.HeadersJSONColName, redact.SafeString(objIt.Value().Type().String()), objIt.Value(), updatedRow.DebugString())
-			}
-		}
-	}
-	return headers, nil
 }
 
 // Close closes this consumer.
@@ -686,9 +604,6 @@ func (c *parallelEventConsumer) startWorkers() error {
 		id := i
 		consumer := consumers[i]
 		workerClosure := func(ctx2 context.Context) error {
-			ctx2, sp := tracing.ChildSpan(ctx2, "changefeed.parallel_event_consumer.worker")
-			defer sp.Finish()
-
 			return c.workerLoop(ctx2, consumer, id)
 		}
 		c.g.GoCtx(workerClosure)
@@ -714,9 +629,8 @@ func (c *parallelEventConsumer) workerLoop(
 			return nil
 		case <-c.termCh:
 			c.mu.Lock()
-			termErr := c.mu.termErr
-			c.mu.Unlock()
-			return termErr
+			defer c.mu.Unlock()
+			return c.mu.termErr
 		case e := <-c.workerCh[id]:
 			if err := consumer.ConsumeEvent(ctx, e); err != nil {
 				return c.setWorkerError(err)
@@ -807,34 +721,4 @@ func (c *parallelEventConsumer) Close() error {
 	// it will be returned by c.g.Wait().
 	close(c.doneCh)
 	return c.g.Wait()
-}
-
-// readOneJSONValue reads exactly one JSON value from the given row and converts
-// it to json. It returns nil if the value is a SQL NULL.
-func readOneJSONValue(row cdcevent.Row, colName string) (*tree.DJSON, error) {
-	it, err := row.DatumNamed(colName)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get column")
-	}
-
-	var valJSON *tree.DJSON
-	var ok bool
-	num := 0
-	err = it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		num++
-		if d == tree.DNull {
-			return nil
-		}
-		if valJSON, ok = tree.AsDJSON(d); !ok {
-			return errors.Newf("expected a JSON object, got %s", d.ResolvedType())
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	if num != 1 {
-		return nil, errors.AssertionFailedf("expected exactly one column got %d", num)
-	}
-	return valJSON, nil
 }

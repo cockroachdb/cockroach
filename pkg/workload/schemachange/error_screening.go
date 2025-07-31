@@ -72,6 +72,12 @@ func (og *operationGenerator) tableHasRows(
 	return og.scanBool(ctx, tx, fmt.Sprintf(`SELECT EXISTS (SELECT * FROM %s)`, tableName.String()))
 }
 
+func (og *operationGenerator) scanInt(
+	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
+) (i int, err error) {
+	return Scan[int](ctx, og, tx, query, args...)
+}
+
 func (og *operationGenerator) scanBool(
 	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
 ) (b bool, err error) {
@@ -98,16 +104,8 @@ func (og *operationGenerator) fnExists(
 	)`, fnName, argTypes)
 }
 
-// tableHasDependencies reports whether the given table has any schema dependencies,
-// optionally excluding foreign keys and/or self-references.
-//
-// A dependency is ignored if:
-// 1. It is a foreign key and includeFKs is false.
-// 2. It is a self-dependency (i.e., the table depends on itself) and:
-// a) It is a foreign key, or
-// b) skipSelfRef is true (regardless of dependency type).
 func (og *operationGenerator) tableHasDependencies(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, includeFKs, skipSelfRef bool,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, includeFKs bool,
 ) (bool, error) {
 	fkFilter := ""
 	if !includeFKs {
@@ -125,18 +123,12 @@ func (og *operationGenerator) tableHasDependencies(
                             ns.oid = c.relnamespace
                      WHERE c.relname = $1 AND ns.nspname = $2
                 )
-           AND NOT (
-             fd.descriptor_id = fd.dependedonby_id
-             AND (
-               fd.dependedonby_type = 'fk'
-               OR $3::BOOL = true
-             )
-           )
+           AND fd.descriptor_id != fd.dependedonby_id
            AND fd.dependedonby_type != 'sequence'
            %s
        )
 	`, fkFilter)
-	return og.scanBool(ctx, tx, q, tableName.Object(), tableName.Schema(), skipSelfRef)
+	return og.scanBool(ctx, tx, q, tableName.Object(), tableName.Schema())
 }
 
 // columnRemovalWillDropFKBackingIndexes determines if dropping this column
@@ -398,6 +390,43 @@ func (og *operationGenerator) colIsRefByComputed(
 		}
 	}
 	return colIsRefByGeneratedExpr, nil
+}
+
+func (og *operationGenerator) columnIsDependedOnByView(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `SELECT EXISTS(
+		SELECT source.column_id
+			FROM (
+			   SELECT DISTINCT column_id
+			     FROM (
+			           SELECT unnest(
+			                   string_to_array(
+			                    rtrim(
+			                     ltrim(
+			                      fd.dependedonby_details,
+			                      'Columns: ['
+			                     ),
+			                     ']'
+			                    ),
+			                    ' '
+			                   )::INT8[]
+			                  ) AS column_id
+			             FROM crdb_internal.forward_dependencies
+			                   AS fd
+			            WHERE fd.descriptor_id
+			                  = $1::REGCLASS
+                    AND fd.dependedonby_type != 'sequence'
+			            )
+			 ) AS cons
+			 INNER JOIN (
+			   SELECT ordinal_position AS column_id
+			     FROM information_schema.columns
+			    WHERE table_schema = $2
+			      AND table_name = $3
+			      AND column_name = $4
+			  ) AS source ON source.column_id = cons.column_id
+)`, tableName.String(), tableName.Schema(), tableName.Object(), columnName)
 }
 
 func (og *operationGenerator) colIsPrimaryKey(
@@ -1003,6 +1032,66 @@ func (og *operationGenerator) constraintExists(
 	 )`, string(tableName), string(constraintName))
 }
 
+func (og *operationGenerator) rowsSatisfyFkConstraint(
+	ctx context.Context,
+	tx pgx.Tx,
+	parentTable *tree.TableName,
+	parentColumn *column,
+	childTable *tree.TableName,
+	childColumn *column,
+) (bool, error) {
+	// Self referential foreign key constraints are acceptable.
+	selfReferential, err := og.scanBool(ctx, tx,
+		`SELECT $1:::REGCLASS=$2:::REGCLASS`,
+		parentTable.String(), childTable.String())
+	if err != nil {
+		return false, err
+	}
+	if selfReferential && parentColumn.name == childColumn.name {
+		return true, nil
+	}
+
+	// Validate the parent table has rows.
+	childRows, err := og.scanInt(ctx, tx,
+		fmt.Sprintf(`
+SELECT count(*) FROM %s
+		`, childTable.String()),
+	)
+	if err != nil {
+		return false, err
+	}
+
+	// If child table is empty then no violation can exist.
+	if childRows == 0 {
+		return true, nil
+	}
+
+	q := fmt.Sprintf(`
+	  SELECT count(*)
+	    FROM %s as t1
+		  LEFT JOIN %s as t2
+				     ON t1.%s = t2.%s
+			WHERE t2.%s IS NOT NULL
+`, childTable.String(), parentTable.String(), childColumn.name.String(), parentColumn.name.String(), parentColumn.name.String())
+
+	joinTx, err := tx.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	numJoinRows, err := og.scanInt(ctx, joinTx, q)
+	if err != nil {
+		rbkErr := joinTx.Rollback(ctx)
+		// UndefinedFunction errors mean that the column type is not comparable.
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
+			((pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction) ||
+				(pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedColumn)) {
+			return false, rbkErr
+		}
+		return false, errors.WithSecondaryError(err, rbkErr)
+	}
+	return numJoinRows == childRows, joinTx.Commit(ctx)
+}
+
 var (
 	// regexpUnknownSchemaErr matches unknown schema errors with
 	// a descriptor ID, which will have the form: unknown schema "[123]"
@@ -1033,21 +1122,14 @@ func (og *operationGenerator) violatesFkConstraints(
 	tableName *tree.TableName,
 	nonGeneratedColNames []tree.Name,
 	rows [][]string,
-) (expectedViolation, potentialViolation bool, err error) {
+) (bool, error) {
 	// TODO(annie): readd the join on active constraints once #120702 is resolved.
 	//
 	// N.B. We add random noise to column names that makes it hard to just directly call on these names. This is
 	// not the case with table/schema names; thus, only column names are quote_ident'ed to ensure that they get
 	// referenced properly.
 	fkConstraints, err := og.scanStringArrayRows(ctx, tx, fmt.Sprintf(`
-		  SELECT array[
-			  parent.table_schema,
-			  parent.table_name,
-			  parent.column_name,
-			  parent.is_generated,
-			  child.column_name,
-			  child.is_generated
-		  ]
+		SELECT array[parent.table_schema, parent.table_name, parent.column_name, child.column_name]
 		  FROM (
 		        SELECT conname, conkey, confkey, conrelid, confrelid
 		          FROM pg_constraint
@@ -1055,7 +1137,7 @@ func (og *operationGenerator) violatesFkConstraints(
 		           AND conrelid = '%s'::REGCLASS::INT8
 		       ) AS con
 		  JOIN (
-		        SELECT column_name, ordinal_position, column_default, is_generated
+		        SELECT column_name, ordinal_position, column_default
 		          FROM information_schema.columns
 		         WHERE table_schema = '%s'
 		           AND table_name = '%s'
@@ -1065,8 +1147,7 @@ func (og *operationGenerator) violatesFkConstraints(
 		               cols.table_schema,
 		               cols.table_name,
 		               cols.column_name,
-		               cols.ordinal_position,
-		               cols.is_generated
+		               cols.ordinal_position
 		          FROM pg_class AS pc
 		          JOIN pg_namespace AS pn ON pc.relnamespace = pn.oid
 		          JOIN information_schema.columns AS cols ON (pc.relname = cols.table_name AND pn.nspname = cols.table_schema)
@@ -1077,15 +1158,15 @@ func (og *operationGenerator) violatesFkConstraints(
 		 WHERE child.column_name != 'rowid';
 `, tableName.String(), tableName.Schema(), tableName.Object()))
 	if err != nil {
-		return false, false, og.checkAndAdjustForUnknownSchemaErrors(err)
+		return false, og.checkAndAdjustForUnknownSchemaErrors(err)
 	}
 
-	// Maps a non-generated column name to its index. This way, the value of a
-	// column in a row can be looked up using row[colToIndexMap["columnName"]] = "valueForColumn"
-	nonGeneratedColumnNameToIndexMap := map[tree.Name]int{}
+	// Maps a column name to its index. This way, the value of a column in a row can be looked up
+	// using row[colToIndexMap["columnName"]] = "valueForColumn"
+	columnNameToIndexMap := map[tree.Name]int{}
 
 	for i, name := range nonGeneratedColNames {
-		nonGeneratedColumnNameToIndexMap[name] = i
+		columnNameToIndexMap[name] = i
 	}
 
 	for _, row := range rows {
@@ -1093,9 +1174,7 @@ func (og *operationGenerator) violatesFkConstraints(
 			parentTableSchema := tree.Name(constraint[0])
 			parentTableName := tree.Name(constraint[1])
 			parentColumnName := tree.Name(constraint[2])
-			parentIsGenerated := constraint[3] == "ALWAYS"
-			childColumnName := tree.Name(constraint[4])
-			childIsGenerated := constraint[5] == "ALWAYS"
+			childColumnName := tree.Name(constraint[3])
 
 			// If self referential, there cannot be a violation.
 			parentAndChildAreSame := parentTableSchema == tableName.SchemaName && parentTableName == tableName.ObjectName
@@ -1103,37 +1182,27 @@ func (og *operationGenerator) violatesFkConstraints(
 				continue
 			}
 
-			// If the foreign key involves any generated columns, skip detailed FK checking
-			// and conservatively assume a violation may occur. This avoids the complexity
-			// of reasoning about values that are automatically computed by the database.
-			if parentIsGenerated || childIsGenerated {
-				return false, true, nil
-			}
-
 			violation, err := og.violatesFkConstraintsHelper(
-				ctx, tx, nonGeneratedColumnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, childColumnName, tableName, parentAndChildAreSame, row, rows,
+				ctx, tx, columnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, childColumnName, tableName, parentAndChildAreSame, row, rows,
 			)
 			if err != nil {
-				return false, false, err
+				return false, err
 			}
 			if violation {
-				return true, false, nil
+				return true, nil
 			}
 		}
 	}
 
-	return false, false, nil
+	return false, nil
 }
 
-// violatesFkConstraintsHelper checks if inserting a single row would violate a
-// foreign key constraint between the given child and parent columns.
-//
-// This function assumes that neither the parent nor child columns are generated.
-// The caller must ensure this; generated columns are not supported.
+// violatesFkConstraintsHelper checks if a single row will violate a foreign key constraint
+// between the childColumn and parentColumn.
 func (og *operationGenerator) violatesFkConstraintsHelper(
 	ctx context.Context,
 	tx pgx.Tx,
-	nonGeneratedColumnNameToIndexMap map[tree.Name]int,
+	columnNameToIndexMap map[tree.Name]int,
 	parentTableSchema, parentTableName, parentColumn, childColumn tree.Name,
 	childTableName *tree.TableName,
 	parentAndChildAreSameTable bool,
@@ -1141,7 +1210,7 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	allRows [][]string,
 ) (bool, error) {
 
-	childIndex, ok := nonGeneratedColumnNameToIndexMap[childColumn]
+	childIndex, ok := columnNameToIndexMap[childColumn]
 	if !ok {
 		return false, errors.Newf("child column %s does not exist in table %s", childColumn, childTableName)
 	}
@@ -1154,12 +1223,41 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	// insert may satisfy the same constraint.
 	var parentAndChildSameQueryColumns []string
 	if parentAndChildAreSameTable {
-		for _, otherRow := range allRows {
-			parentIdx, ok := nonGeneratedColumnNameToIndexMap[parentColumn]
-			if !ok {
-				return false, errors.Newf("parent column %s does not exist in table %s", parentColumn, childTableName)
+		colsInfo, err := og.getTableColumns(ctx, tx, childTableName, false)
+		if err != nil {
+			return false, err
+		}
+
+		var parentColInfo *column
+		for _, colInfo := range colsInfo {
+			if colInfo.name == parentColumn {
+				parentColInfo = &colInfo
+				break
 			}
-			parentValueInSameInsert := otherRow[parentIdx]
+		}
+		if parentColInfo == nil {
+			return false, errors.Newf("column %s not found in columns for %s", parentColumn, childTableName)
+		}
+
+		for _, otherRow := range allRows {
+			var parentValueInSameInsert string
+			if parentColInfo.generated {
+				// If the parent column is a computed column, spend time to generate the value.
+				columnsToValues := map[tree.Name]string{}
+				for name, idx := range columnNameToIndexMap {
+					columnsToValues[name] = rowToInsert[idx]
+				}
+				parentValueInSameInsert, err = og.generateColumn(ctx, tx, *parentColInfo, columnsToValues)
+				if err != nil {
+					return false, err
+				}
+			} else {
+				parentIdx, ok := columnNameToIndexMap[parentColumn]
+				if !ok {
+					return false, errors.Newf("parent column %s does not exist in table %s", parentColumn, childTableName)
+				}
+				parentValueInSameInsert = otherRow[parentIdx]
+			}
 
 			// Skip over NULL values.
 			if parentValueInSameInsert == "NULL" {
@@ -1715,34 +1813,5 @@ func (og *operationGenerator) tableHasUniqueConstraintMutation(
 			FROM table_desc)
 			WHERE (m->>'direction')::STRING IN ('ADD', 'DROP')
 			AND (m->'index'->>'unique')::BOOL IS TRUE
-		);`, tableName)
-}
-
-// tableHasForeignKeyMutation determines if a table has any foreign key constraint
-// mutation ongoing. This means either being added or dropped.
-func (og *operationGenerator) tableHasForeignKeyMutation(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
-) (bool, error) {
-	return og.scanBool(ctx, tx, `
-		WITH table_desc AS (
-			SELECT crdb_internal.pb_to_json(
-				'desc',
-				descriptor,
-				false
-			)->'table' as d
-			FROM system.descriptor
-			WHERE id = $1::REGCLASS
-		)
-		SELECT EXISTS (
-			SELECT * FROM (
-			SELECT jsonb_array_elements(
-				CASE WHEN d->'mutations' IS NULL
-				THEN '[]'::JSONB
-				ELSE d->'mutations'
-				END
-			) as m
-			FROM table_desc)
-			WHERE (m->>'direction')::STRING IN ('ADD', 'DROP')
-			AND (m->'constraint'->>'foreign_key') IS NOT NULL
 		);`, tableName)
 }

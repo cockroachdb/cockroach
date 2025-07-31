@@ -9,6 +9,7 @@ import {
   SqlStatsSortType,
   DEFAULT_STATS_REQ_OPTIONS,
 } from "src/api/statementsApi";
+import { ViewMode } from "src/databaseDetailsPage/types";
 import { WorkloadInsightEventFilters } from "src/insights";
 import { defaultFilters, Filters } from "src/queryFilter/";
 
@@ -78,6 +79,7 @@ export type LocalStorageState = {
   "typeSetting/JobsPage": number;
   "statusSetting/JobsPage": string;
   "showSetting/JobsPage": string;
+  [LocalStorageKeys.DB_DETAILS_VIEW_MODE]: ViewMode;
   [LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED]: boolean;
   "requestTime/StatementsPage": moment.Moment;
   "requestTime/TransactionsPage": moment.Moment;
@@ -116,6 +118,8 @@ const defaultNameSortSetting: SortSetting = {
   ascending: true,
   columnTitle: "name",
 };
+
+export const defaultDatabaseDetailsViewMode = ViewMode.Tables;
 
 const defaultFiltersActiveExecutions = {
   app: "",
@@ -269,6 +273,9 @@ const initialState: LocalStorageState = {
   "statusSetting/JobsPage":
     JSON.parse(localStorage.getItem("statusSetting/JobsPage")) ||
     defaultJobStatusSetting,
+  [LocalStorageKeys.DB_DETAILS_VIEW_MODE]:
+    JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_VIEW_MODE)) ||
+    defaultDatabaseDetailsViewMode,
   [LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED]:
     JSON.parse(
       localStorage.getItem(

@@ -57,12 +57,12 @@ func TestValidateExpr(t *testing.T) {
 		{"b + 1", false, "", types.Bool, volatility.Immutable},
 
 		// Validates that the expression has no variable expressions.
-		{"$1", false, "", types.AnyElement, volatility.Immutable},
+		{"$1", false, "", types.Any, volatility.Immutable},
 
 		// Validates the volatility check.
 		{"now()", true, "now():::TIMESTAMPTZ", types.TimestampTZ, volatility.Volatile},
 		{"now()", true, "now():::TIMESTAMPTZ", types.TimestampTZ, volatility.Stable},
-		{"now()", false, "", types.AnyElement, volatility.Immutable},
+		{"now()", false, "", types.Any, volatility.Immutable},
 		{"uuid_v4()::STRING", true, "uuid_v4()::STRING", types.String, volatility.Volatile},
 		{"uuid_v4()::STRING", false, "", types.String, volatility.Stable},
 		{"uuid_v4()::STRING", false, "", types.String, volatility.Immutable},

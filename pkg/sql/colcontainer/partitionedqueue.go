@@ -221,7 +221,7 @@ func (p *PartitionedDiskQueue) Enqueue(
 			idxToClose, found := p.partitionIdxToIndex[p.lastEnqueuedPartitionIdx]
 			if !found {
 				// This would be unexpected.
-				return errors.AssertionFailedf("PartitionerStrategyCloseOnNewPartition unable to find last Enqueued partition")
+				return errors.New("PartitionerStrategyCloseOnNewPartition unable to find last Enqueued partition")
 			}
 			if p.partitions[idxToClose].state == partitionStateWriting {
 				// Close the last enqueued partition. No need to release or acquire a new
@@ -255,9 +255,9 @@ func (p *PartitionedDiskQueue) Enqueue(
 	}
 	if state := p.partitions[idx].state; state != partitionStateWriting {
 		if state == partitionStatePermanentlyClosed {
-			return errors.AssertionFailedf("partition at index %d permanently closed, cannot Enqueue", partitionIdx)
+			return errors.Errorf("partition at index %d permanently closed, cannot Enqueue", partitionIdx)
 		}
-		return errors.AssertionFailedf("Enqueue illegally called after Dequeue or CloseAllOpenWriteFileDescriptors")
+		return errors.New("Enqueue illegally called after Dequeue or CloseAllOpenWriteFileDescriptors")
 	}
 	p.lastEnqueuedPartitionIdx = partitionIdx
 	return p.partitions[idx].Enqueue(ctx, batch)
@@ -290,7 +290,7 @@ func (p *PartitionedDiskQueue) Dequeue(
 	case partitionStateReading:
 	// Do nothing.
 	case partitionStatePermanentlyClosed:
-		return errors.AssertionFailedf("partition at index %d permanently closed, cannot Dequeue", partitionIdx)
+		return errors.Errorf("partition at index %d permanently closed, cannot Dequeue", partitionIdx)
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unhandled state %d", state))
 	}

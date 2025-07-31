@@ -19,9 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -206,24 +204,20 @@ func (ls *Stores) SendWithWriteBytes(
 // RangeFeed registers a rangefeed over the specified span. It sends
 // updates to the provided stream and returns a future with an optional error
 // when the rangefeed is complete.
-func (ls *Stores) RangeFeed(
-	streamCtx context.Context,
-	args *kvpb.RangeFeedRequest,
-	stream rangefeed.Stream,
-	perConsumerCatchupLimiter *limit.ConcurrentRequestLimiter,
-) (rangefeed.Disconnector, error) {
+func (ls *Stores) RangeFeed(args *kvpb.RangeFeedRequest, stream rangefeed.Stream) error {
+	ctx := stream.Context()
 	if args.RangeID == 0 {
-		log.Fatal(streamCtx, "rangefeed request missing range ID")
+		log.Fatal(ctx, "rangefeed request missing range ID")
 	} else if args.Replica.StoreID == 0 {
-		log.Fatal(streamCtx, "rangefeed request missing store ID")
+		log.Fatal(ctx, "rangefeed request missing store ID")
 	}
 
 	store, err := ls.GetStore(args.Replica.StoreID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return store.RangeFeed(streamCtx, args, stream, perConsumerCatchupLimiter)
+	return store.RangeFeed(args, stream)
 }
 
 // ReadBootstrapInfo implements the gossip.Storage interface. Read
@@ -326,27 +320,4 @@ func (ls *Stores) CloseDiskMonitors() {
 		}
 		return nil
 	})
-}
-
-// GetStoreMetricRegistry returns the metric registry of the provided store ID.
-func (ls *Stores) GetStoreMetricRegistry(storeID roachpb.StoreID) *metric.Registry {
-	if s, ok := ls.storeMap.Load(storeID); ok {
-		return s.Registry()
-	}
-	return nil
-}
-
-// GetAggregatedStoreStats returns the aggregated cpu usage across all stores and
-// the count of stores.
-func (ls *Stores) GetAggregatedStoreStats(useCached bool) (storesCPURate int64, numStores int32) {
-	_ = ls.VisitStores(func(s *Store) error {
-		c, err := s.Capacity(context.Background(), useCached)
-		if err != nil {
-			panic(err)
-		}
-		storesCPURate += int64(c.CPUPerSecond)
-		numStores++
-		return nil
-	})
-	return storesCPURate, numStores
 }

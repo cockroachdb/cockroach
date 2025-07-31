@@ -7,18 +7,21 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -134,6 +137,10 @@ func (a *apiV2Server) GetTableMetadata(w http.ResponseWriter, r *http.Request) {
 	// TODO (kyle): build http method handling directly into route registration
 	if r.Method != http.MethodGet {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	if !checkVersion(ctx, w, a.sqlServer.execCfg.Settings) {
 		return
 	}
 
@@ -262,6 +269,9 @@ func (a *apiV2Server) GetTableMetadataWithDetails(w http.ResponseWriter, r *http
 	}
 
 	ctx := a.sqlServer.AnnotateCtx(r.Context())
+	if !checkVersion(ctx, w, a.sqlServer.execCfg.Settings) {
+		return
+	}
 	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
 	pathVars := mux.Vars(r)
 	tableId, err := strconv.Atoi(pathVars["table_id"])
@@ -603,6 +613,9 @@ func (a *apiV2Server) GetDbMetadata(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
+	if !checkVersion(ctx, w, a.sqlServer.execCfg.Settings) {
+		return
+	}
 	queryValues := r.URL.Query()
 
 	dbName := queryValues.Get(nameKey)
@@ -712,6 +725,9 @@ func (a *apiV2Server) GetDbMetadataWithDetails(w http.ResponseWriter, r *http.Re
 	}
 
 	ctx := a.sqlServer.AnnotateCtx(r.Context())
+	if !checkVersion(ctx, w, a.sqlServer.execCfg.Settings) {
+		return
+	}
 	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
 	pathVars := mux.Vars(r)
 	databaseId, err := strconv.Atoi(pathVars["database_id"])
@@ -918,6 +934,9 @@ func rowToDatabaseMetadata(scanner resultScanner, row tree.Datums) (dbm dbMetada
 func (a *apiV2Server) TableMetadataJob(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = a.sqlServer.AnnotateCtx(ctx)
+	if !checkVersion(ctx, w, a.sqlServer.execCfg.Settings) {
+		return
+	}
 	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
 	authorized, err := a.updateTableMetadataJobAuthorized(ctx, sqlUser)
 	if err != nil {
@@ -1073,6 +1092,30 @@ func (a *apiV2Server) updateTableMetadataJobAuthorized(
 	return count > 0, nil
 }
 
+func checkVersion(ctx context.Context, w http.ResponseWriter, settings *cluster.Settings) bool {
+	if !settings.Version.IsActive(context.TODO(), clusterversion.V24_3_AddTableMetadataCols) {
+		message := "This API is not accessible on this version of CockroachDB."
+		resp := versionConflictResponse{
+			Version: settings.Version.ActiveVersion(ctx).Version.String(),
+			Message: message,
+		}
+		b, err := json.Marshal(&resp)
+		if err != nil {
+			srverrors.APIV2InternalError(ctx, err, w)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, err = w.Write(b)
+		if err != nil {
+			log.Warningf(ctx, "HTTP short write: %v", err)
+		}
+		return false
+	}
+
+	return true
+}
+
 type PaginatedResponse[T any] struct {
 	Results        T              `json:"results"`
 	PaginationInfo paginationInfo `json:"pagination_info"`
@@ -1138,4 +1181,9 @@ type tableMetadataWithDetailsResponse struct {
 
 type dbMetadataWithDetailsResponse struct {
 	Metadata dbMetadata `json:"metadata"`
+}
+
+type versionConflictResponse struct {
+	Version string
+	Message string
 }

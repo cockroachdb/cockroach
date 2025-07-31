@@ -6,7 +6,6 @@
 package ttlschedule
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -21,17 +20,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	pbtypes "github.com/gogo/protobuf/types"
 )
 
@@ -141,8 +138,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 	// which may make debugging quite confusing if the label gets out of whack.
 	p, cleanup := cfg.PlanHookMaker(
 		ctx,
-		// TableID is not sensitive.
-		redact.SafeString(fmt.Sprintf("invoke-row-level-ttl-%d", args.TableID)),
+		fmt.Sprintf("invoke-row-level-ttl-%d", args.TableID),
 		txn.KV(),
 		username.NodeUserName(),
 	)
@@ -172,12 +168,12 @@ func (s rowLevelTTLExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus jobs.State,
+	jobStatus jobs.Status,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
 ) error {
-	if jobStatus == jobs.StateFailed {
+	if jobStatus == jobs.StatusFailed {
 		jobs.DefaultHandleFailedRun(
 			sj,
 			"row level ttl for table [%d] job failed",
@@ -187,7 +183,7 @@ func (s rowLevelTTLExecutor) NotifyJobTermination(
 		return nil
 	}
 
-	if jobStatus == jobs.StateSucceeded {
+	if jobStatus == jobs.StatusSucceeded {
 		s.metrics.NumSucceeded.Inc(1)
 	}
 
@@ -225,15 +221,9 @@ func makeTTLJobDescription(
 ) (string, error) {
 	relationName := tn.FQString()
 	pkIndex := tableDesc.GetPrimaryIndex().IndexDesc()
-	pkColNames := make([]string, 0, len(pkIndex.KeyColumnNames))
-	var buf bytes.Buffer
-	for _, name := range pkIndex.KeyColumnNames {
-		lexbase.EncodeRestrictedSQLIdent(&buf, name, lexbase.EncNoFlags)
-		pkColNames = append(pkColNames, buf.String())
-		buf.Reset()
-	}
+	pkColNames := pkIndex.KeyColumnNames
 	pkColDirs := pkIndex.KeyColumnDirections
-	pkColTypes, err := spanutils.GetPKColumnTypes(tableDesc, pkIndex)
+	pkColTypes, err := ttljob.GetPKColumnTypes(tableDesc, pkIndex)
 	if err != nil {
 		return "", err
 	}
@@ -241,7 +231,7 @@ func makeTTLJobDescription(
 	ttlExpirationExpr := rowLevelTTL.GetTTLExpr()
 	numPkCols := len(pkColNames)
 	selectBatchSize := ttlbase.GetSelectBatchSize(sv, rowLevelTTL)
-	selectQuery, err := ttlbase.BuildSelectQuery(
+	selectQuery := ttlbase.BuildSelectQuery(
 		relationName,
 		pkColNames,
 		pkColDirs,
@@ -253,9 +243,6 @@ func makeTTLJobDescription(
 		selectBatchSize,
 		true, /*startIncl*/
 	)
-	if err != nil {
-		return "", err
-	}
 	deleteQuery := ttlbase.BuildDeleteQuery(
 		relationName,
 		pkColNames,

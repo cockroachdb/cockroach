@@ -9,7 +9,6 @@ import (
 	"context"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -59,15 +58,6 @@ type Fabric interface {
 	// Liveness is not sending heartbeats but is still responding to heartbeats
 	// to ensure any promise by the local store to provide support is still kept.
 	SupportFromEnabled(ctx context.Context) bool
-
-	// RegisterSupportWithdrawalCallback allows the local store to register a
-	// callback which will be invoked every time the local store withdraws support
-	// from any remote stores. The callback is used to wake up a potentially
-	// asleep replica when it no longer considers its leader alive (in store
-	// liveness). The replica may need to help elect a new leader.
-	//
-	// Returns the set of stores for which support was withdrawn.
-	RegisterSupportWithdrawalCallback(func(storeIDs map[roachpb.StoreID]struct{}))
 }
 
 // InspectFabric is an interface that exposes all in-memory support state for a

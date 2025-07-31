@@ -314,9 +314,9 @@ type JoinOrderBuilder struct {
 	// once does not exceed the session limit.
 	joinCount int
 
-	// equivs is an EquivGroups set used to keep track of equivalence relations
-	// when assembling filters.
-	equivs props.EquivGroups
+	// equivs is an EquivSet used to keep track of equivalence relations when
+	// assembling filters.
+	equivs props.EquivSet
 
 	// rebuildAllJoins is true when the filters in the original matched join tree
 	// were not pushed down as far as possible. When this is true, all joins
@@ -345,6 +345,7 @@ func (jb *JoinOrderBuilder) Init(ctx context.Context, f *norm.Factory, evalCtx *
 		applicableEdges: make(map[vertexSet]edgeSet),
 		onReorderFunc:   jb.onReorderFunc,
 		onAddJoinFunc:   jb.onAddJoinFunc,
+		equivs:          props.NewEquivSet(),
 	}
 }
 
@@ -886,8 +887,8 @@ func (jb *JoinOrderBuilder) addJoin(
 }
 
 // areFiltersRedundant returns true if the given FiltersExpr contains a single
-// equality filter that is already represented by the given EquivGroups set.
-func areFiltersRedundant(equivs *props.EquivGroups, filters memo.FiltersExpr) bool {
+// equality filter that is already represented by the given FuncDepSet.
+func areFiltersRedundant(equivs *props.EquivSet, filters memo.FiltersExpr) bool {
 	if len(filters) != 1 {
 		return false
 	}

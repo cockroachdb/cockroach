@@ -5,6 +5,7 @@
 
 // {{/*
 //go:build execgen_template
+// +build execgen_template
 
 //
 // This file is the execgen template for relative_rank.eg.go. It's formatted in
@@ -86,7 +87,7 @@ func NewRelativeRankOperator(
 			relativeRankInitFields: rrInitFields,
 		}, nil
 	default:
-		return nil, errors.AssertionFailedf("unsupported relative rank type %s", windowFn)
+		return nil, errors.Errorf("unsupported relative rank type %s", windowFn)
 	}
 }
 

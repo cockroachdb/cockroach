@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
@@ -49,7 +48,7 @@ func TestTelemetryLogging(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			EventLog: &eventlog.EventLogTestingKnobs{
+			EventLog: &EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic
 				// number of statements run by internal executor.
 				SyncWrites: true,
@@ -135,12 +134,12 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedIndexes:         false,
 			queryLevelStats: execstats.QueryLevelStats{
 				ContentionTime:                     0 * time.Nanosecond,
-				DistSQLNetworkBytesSent:            1,
+				NetworkBytesSent:                   1,
 				MaxMemUsage:                        2,
 				MaxDiskUsage:                       3,
 				KVBytesRead:                        4,
 				KVRowsRead:                         5,
-				DistSQLNetworkMessages:             6,
+				NetworkMessages:                    6,
 				MvccValueBytes:                     100,
 				MvccSteps:                          101,
 				MvccStepsInternal:                  102,
@@ -202,10 +201,10 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedWrite:           false,
 			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
-				ContentionTime:          2 * time.Nanosecond,
-				DistSQLNetworkBytesSent: 1,
-				MaxMemUsage:             2,
-				DistSQLNetworkMessages:  6,
+				ContentionTime:   2 * time.Nanosecond,
+				NetworkBytesSent: 1,
+				MaxMemUsage:      2,
+				NetworkMessages:  6,
 			},
 			enableTracing: false,
 		},
@@ -227,13 +226,13 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedWrite:           false,
 			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
-				ContentionTime:          3 * time.Nanosecond,
-				DistSQLNetworkBytesSent: 1124,
-				MaxMemUsage:             132,
-				MaxDiskUsage:            3,
-				KVBytesRead:             4,
-				KVRowsRead:              2345,
-				DistSQLNetworkMessages:  36,
+				ContentionTime:   3 * time.Nanosecond,
+				NetworkBytesSent: 1124,
+				MaxMemUsage:      132,
+				MaxDiskUsage:     3,
+				KVBytesRead:      4,
+				KVRowsRead:       2345,
+				NetworkMessages:  36,
 			},
 			enableTracing: false,
 		},
@@ -255,12 +254,12 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedWrite:           false,
 			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
-				ContentionTime:          0 * time.Nanosecond,
-				DistSQLNetworkBytesSent: 124235,
-				MaxMemUsage:             12412,
-				MaxDiskUsage:            3,
-				KVRowsRead:              5,
-				DistSQLNetworkMessages:  6235,
+				ContentionTime:   0 * time.Nanosecond,
+				NetworkBytesSent: 124235,
+				MaxMemUsage:      12412,
+				MaxDiskUsage:     3,
+				KVRowsRead:       5,
+				NetworkMessages:  6235,
 			},
 			enableTracing: false,
 		},
@@ -282,11 +281,11 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedWrite:           true,
 			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
-				ContentionTime:          0 * time.Nanosecond,
-				DistSQLNetworkBytesSent: 1,
-				KVBytesRead:             4,
-				KVRowsRead:              5,
-				DistSQLNetworkMessages:  6,
+				ContentionTime:   0 * time.Nanosecond,
+				NetworkBytesSent: 1,
+				KVBytesRead:      4,
+				KVRowsRead:       5,
+				NetworkMessages:  6,
 			},
 			enableTracing: false,
 		},
@@ -328,13 +327,13 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedWrite:           false,
 			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
-				ContentionTime:          2 * time.Nanosecond,
-				DistSQLNetworkBytesSent: 10,
-				MaxMemUsage:             20,
-				MaxDiskUsage:            33,
-				KVBytesRead:             24,
-				KVRowsRead:              55,
-				DistSQLNetworkMessages:  66,
+				ContentionTime:   2 * time.Nanosecond,
+				NetworkBytesSent: 10,
+				MaxMemUsage:      20,
+				MaxDiskUsage:     33,
+				KVBytesRead:      24,
+				KVRowsRead:       55,
+				NetworkMessages:  66,
 			},
 			enableTracing: true,
 		},
@@ -375,13 +374,13 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
 				ContentionTime:                     9223372036854775807 * time.Nanosecond,
-				DistSQLNetworkBytesSent:            9223372036854775807,
+				NetworkBytesSent:                   9223372036854775807,
 				MaxMemUsage:                        9223372036854775807,
 				MaxDiskUsage:                       9223372036854775807,
 				KVBytesRead:                        9223372036854775807,
 				KVPairsRead:                        9223372036854775807,
 				KVRowsRead:                         9223372036854775807,
-				DistSQLNetworkMessages:             9223372036854775807,
+				NetworkMessages:                    9223372036854775807,
 				MvccValueBytes:                     9223372036854775807,
 				MvccSteps:                          9223372036854775807,
 				MvccStepsInternal:                  9223372036854775807,
@@ -489,7 +488,7 @@ func TestTelemetryLogging(t *testing.T) {
 
 					logCount++
 
-					costRe := regexp.MustCompile("\"CostEstimate\":[0-9]*\\.?[0-9]*")
+					costRe := regexp.MustCompile("\"CostEstimate\":[0-9]*\\.[0-9]*")
 					if !costRe.MatchString(e.Message) {
 						t.Errorf("expected to find CostEstimate but none was found")
 					}
@@ -632,10 +631,10 @@ func TestTelemetryLogging(t *testing.T) {
 						t.Errorf("expected no ContentionNanos field, but was found")
 					}
 					networkBytesSent := regexp.MustCompile("\"NetworkBytesSent\":[0-9]*")
-					if tc.queryLevelStats.DistSQLNetworkBytesSent > 0 && !networkBytesSent.MatchString(e.Message) {
+					if tc.queryLevelStats.NetworkBytesSent > 0 && !networkBytesSent.MatchString(e.Message) {
 						// If we have sent network bytes, we expect the NetworkBytesSent field to be populated.
 						t.Errorf("expected to find NetworkBytesSent but none was found")
-					} else if tc.queryLevelStats.DistSQLNetworkBytesSent == 0 && networkBytesSent.MatchString(e.Message) {
+					} else if tc.queryLevelStats.NetworkBytesSent == 0 && networkBytesSent.MatchString(e.Message) {
 						// If we have not sent network bytes, expect no NetworkBytesSent field.
 						t.Errorf("expected no NetworkBytesSent field, but was found")
 					}
@@ -672,10 +671,10 @@ func TestTelemetryLogging(t *testing.T) {
 						t.Errorf("expected no KVRowsRead field, but was found")
 					}
 					networkMessages := regexp.MustCompile("\"NetworkMessages\":[0-9]*")
-					if tc.queryLevelStats.DistSQLNetworkMessages > 0 && !networkMessages.MatchString(e.Message) {
+					if tc.queryLevelStats.NetworkMessages > 0 && !networkMessages.MatchString(e.Message) {
 						// If we have network messages, we expect the NetworkMessages field to be populated.
 						t.Errorf("expected to find NetworkMessages but none was found")
-					} else if tc.queryLevelStats.DistSQLNetworkMessages == 0 && networkMessages.MatchString(e.Message) {
+					} else if tc.queryLevelStats.NetworkMessages == 0 && networkMessages.MatchString(e.Message) {
 						// If we do not have network messages, expect no NetworkMessages field.
 						t.Errorf("expected no NetworkMessages field, but was found")
 					}
@@ -716,7 +715,7 @@ func TestTelemetryLoggingInternalEnabled(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			EventLog: &eventlog.EventLogTestingKnobs{
+			EventLog: &EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic
 				// number of statements run by internal executor.
 				SyncWrites: true,
@@ -805,7 +804,7 @@ func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			EventLog: &eventlog.EventLogTestingKnobs{
+			EventLog: &EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic
 				// number of statements run by internal executor.
 				SyncWrites: true,
@@ -1582,7 +1581,7 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			EventLog: &eventlog.EventLogTestingKnobs{
+			EventLog: &EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic
 				// number of statements run by internal executor.
 				SyncWrites: true,

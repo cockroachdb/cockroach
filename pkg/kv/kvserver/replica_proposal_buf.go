@@ -7,21 +7,24 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -121,6 +124,7 @@ type admitEntHandle struct {
 
 type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
+	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
 	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raftpb.StateType)
 	registerForTracing(*ProposalData, raftpb.Entry) bool
 }
@@ -176,7 +180,17 @@ func (b *propBuf) Init(
 	b.clock = clock
 	b.evalTracker = tracker
 	b.settings = settings
-	b.assignedLAI = max(p.leaseAppliedIndex(), stateloader.InitialLeaseAppliedIndex)
+	b.assignedLAI = p.leaseAppliedIndex()
+
+	// Reserve LAI 1 for out-of-order proposals in tests. A bunch of tests
+	// override proposal's LAI to 1, in order to force reproposals. If these
+	// modified proposals race with a "real" proposal with LAI 1, this can cause a
+	// closed timestamp regression.
+	//
+	// https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1881165404
+	if b.testing.leaseIndexFilter != nil {
+		b.forwardAssignedLAILocked(1)
+	}
 }
 
 // AllocatedIdx returns the highest index that was allocated. This generally
@@ -718,7 +732,6 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// applies. The command application side doesn't bother protecting against
 	// such regressions. Besides, the considerations for brand new leases below
 	// also apply.
-	//
 	// - For a brand new lease, one might think that the lease start time can be
 	// considered a closed timestamp(*) since, if this replica gets the lease, it
 	// will not evaluate writes at lower timestamps. Unfortunately, there's a
@@ -727,24 +740,14 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// happen that the range is in the process of merging with its left neighbor.
 	// If this range has already been Subsumed as the RHS of a merge then, after
 	// merge, the joint range will allow writes to the former RHS's key space at
-	// timestamps above the RHS's closed timestamp (say t1) at freeze start
-	// (which is below the start time of this lease, say t2). Thus, if this
-	// lease were to close its start timestamp (t2) while subsumed, then it'd be
-	// possible for follower reads to be served before the merge finalizes at
-	// timestamps that would become un-closed after the merge, i.e., interval
-	// (t1, t2].
-	//
+	// timestamps above the RHS's freeze start (which is below the start time of
+	// this lease). Thus, if this lease were to close its start timestamp while
+	// subsumed, then it'd be possible for follower reads to be served before the
+	// merge finalizes at timestamps that would become un-closed after the merge.
 	// Since this scenario is about subsumed ranges, we could make a distinction
 	// between brand new leases for subsumed ranges versus other brand new leases,
 	// and let the former category close the lease start time. But, for
 	// simplicity, we don't close timestamps on any lease requests.
-	//
-	// The same logic applies to SubsumeRequest (when it performs a write): the
-	// closed timestamp it gathers in SubsumeResponse.ClosedTimestamp is t1, but
-	// if the proposal of the SubsumeRequest advances the closed timestamp to
-	// t2, reads would be allowed over the interval (t1, t2] which would
-	// subsequently become un-closed. So SubsumeRequests also don't advance the
-	// closed timestamp.
 	//
 	// As opposed to lease requests, lease transfers behave like regular
 	// proposals: they get a closed timestamp based on closedTSTarget. Note that
@@ -760,7 +763,7 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// timestamps carried by lease requests, make sure to resurrect the old
 	// TestRejectedLeaseDoesntDictateClosedTimestamp and protect against that
 	// scenario.
-	if p.Request.IsSingleRequestLeaseRequest() || p.Request.IsSingleSubsumeRequest() {
+	if p.Request.IsSingleRequestLeaseRequest() {
 		return lai, hlc.Timestamp{}, nil
 	}
 
@@ -875,6 +878,16 @@ func proposeBatch(
 	if err != nil {
 		return err
 	}
+	// Now that we know what raft log position[1] this proposal is to end up
+	// in, deduct flow tokens for it. This is done without blocking (we've
+	// already waited for available flow tokens pre-evaluation). The tokens
+	// will later be returned once we're informed of the entry being
+	// admitted below raft.
+	//
+	// [1]: We're relying on an undocumented side effect of upstream raft
+	//      API where it populates the index and term for the passed in
+	//      slice of entries. See etcd-io/raft#57.
+	maybeDeductFlowTokens(ctx, p.flowControlHandle(ctx), handles, ents)
 
 	// Register the proposal with rafttrace. This will add the trace to the raft
 	// lifecycle. We trace at most one entry per batch, so break after the first
@@ -885,6 +898,46 @@ func proposeBatch(
 		}
 	}
 	return nil
+}
+
+func maybeDeductFlowTokens(
+	ctx context.Context, h kvflowcontrol.Handle, admitHandles []admitEntHandle, ents []raftpb.Entry,
+) {
+	if len(admitHandles) != len(ents) || cap(admitHandles) != cap(ents) {
+		panic(
+			fmt.Sprintf("mismatched slice sizes: len(admit)=%d len(ents)=%d cap(admit)=%d cap(ents)=%d",
+				len(admitHandles), len(ents), cap(admitHandles), cap(ents)),
+		)
+	}
+	for i, admitHandle := range admitHandles {
+		if admitHandle.handle == nil {
+			continue // nothing to do
+		}
+		if ents[i].Term == 0 && ents[i].Index == 0 {
+			// It's possible to have lost raft leadership right before stepping
+			// proposals through raft. They'll get forwarded to the new raft
+			// leader, and for flow token purposes, there's no tracking
+			// necessary. The token deductions below asserts on monotonic
+			// observations of log positions, which this empty position would
+			// otherwise violate. There's integration code elsewhere that will
+			// free up all tracked tokens as a result of this leadership change.
+			return
+		}
+		log.VInfof(ctx, 1, "bound index/log terms for proposal entry: %s",
+			raft.DescribeEntry(ents[i], func(bytes []byte) string {
+				return "<omitted>"
+			}),
+		)
+		h.DeductTokensFor(
+			admitHandle.pCtx,
+			admissionpb.WorkPriority(admitHandle.handle.AdmissionPriority),
+			kvflowcontrolpb.RaftLogPosition{
+				Term:  ents[i].Term,
+				Index: ents[i].Index,
+			},
+			kvflowcontrol.Tokens(int64(len(ents[i].Data))),
+		)
+	}
 }
 
 // FlushLockedWithoutProposing is like FlushLockedWithRaftGroup but it does not
@@ -1194,6 +1247,14 @@ func (rp *replicaProposer) campaignLocked(ctx context.Context) {
 	(*Replica)(rp).campaignLocked(ctx)
 }
 
+func (rp *replicaProposer) flowControlHandle(ctx context.Context) kvflowcontrol.Handle {
+	handle, found := rp.mu.replicaFlowControlIntegration.handle()
+	if !found {
+		return kvflowhandle.Noop{}
+	}
+	return handle
+}
+
 func (rp *replicaProposer) verifyLeaseRequestSafetyRLocked(
 	ctx context.Context,
 	raftGroup proposerRaft,
@@ -1208,12 +1269,11 @@ func (rp *replicaProposer) verifyLeaseRequestSafetyRLocked(
 		LocalReplicaID:     r.ReplicaID(),
 		Desc:               r.descRLocked(),
 		RaftStatus:         &raftStatus,
-		RaftCompacted:      r.raftCompactedIndexRLocked(),
+		RaftFirstIndex:     r.raftFirstIndexRLocked(),
 		PrevLease:          prevLease,
 		PrevLeaseExpired:   !r.ownsValidLeaseRLocked(ctx, r.Clock().NowAsClockTimestamp()),
 		NextLeaseHolder:    nextLease.Replica,
 		BypassSafetyChecks: bypassSafetyChecks,
-		DesiredLeaseType:   r.desiredLeaseType(r.descRLocked()),
 	}
 	if err := leases.Verify(ctx, st, in); err != nil {
 		if in.Transfer() {

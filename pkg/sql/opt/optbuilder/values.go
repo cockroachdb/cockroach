@@ -54,7 +54,7 @@ func (b *Builder) buildValuesClause(
 
 	colTypes := make([]*types.T, numCols)
 	for colIdx := range colTypes {
-		desired := types.AnyElement
+		desired := types.Any
 		if colIdx < len(desiredTypes) {
 			desired = desiredTypes[colIdx]
 		}

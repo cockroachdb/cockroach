@@ -501,9 +501,3 @@ INSERT INTO t126773 (pk, v) values (1, tsvector('splendid water fowl'));
 
 statement ok
 SELECT t126773::t126773 FROM t126773;
-
-# Regression test for TSMatch operator producing an internal error with a NULL
-# argument (#132483).
-query T
-WITH cte(s) AS (SELECT NULL::TSQUERY) SELECT a FROM a, cte WHERE a @@ s;
-----

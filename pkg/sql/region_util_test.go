@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
-	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/proto"
@@ -1900,7 +1899,7 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			zc, err := regions.ZoneConfigForMultiRegionPartition(tc.region, tc.regionConfig)
+			zc, err := zoneConfigForMultiRegionPartition(tc.region, tc.regionConfig)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, zc)
 		})

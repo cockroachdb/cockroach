@@ -54,6 +54,7 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 				Owner:            registry.OwnerSQLQueries,
 				NativeLibs:       registry.LibGEOS,
 				Timeout:          time.Hour * 1,
+				RequiresLicense:  true,
 				Cluster:          clusterSpec,
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Nightly),

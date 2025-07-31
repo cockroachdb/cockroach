@@ -23,7 +23,7 @@ CREATE TABLE t()
 ----
 
 spy-sql unixSecs=0.1
-BEGIN; SET LOCAL autocommit_before_ddl=off; TRUNCATE t; COMMIT
+BEGIN; TRUNCATE t; COMMIT
 ----
 {
 	"ApplicationName": "telemetry-logging-datadriven",
@@ -32,21 +32,9 @@ BEGIN; SET LOCAL autocommit_before_ddl=off; TRUNCATE t; COMMIT
 	"EventType": "sampled_query",
 	"PlanGist": "Ais=",
 	"SkippedQueries": 1,
-	"Statement": "SET LOCAL autocommit_before_ddl = off",
-	"StatementFingerprintID": "12756973544607263707",
-	"StmtPosInTxn": 1,
-	"Tag": "SET",
-	"User": "root"
-}
-{
-	"ApplicationName": "telemetry-logging-datadriven",
-	"Database": "defaultdb",
-	"Distribution": "local",
-	"EventType": "sampled_query",
-	"PlanGist": "Ais=",
 	"Statement": "TRUNCATE TABLE defaultdb.public.t",
 	"StatementFingerprintID": "554456288574568545",
-	"StmtPosInTxn": 2,
+	"StmtPosInTxn": 1,
 	"Tag": "TRUNCATE",
 	"User": "root"
 }
@@ -57,7 +45,7 @@ BEGIN; SET LOCAL autocommit_before_ddl=off; TRUNCATE t; COMMIT
 	"EventType": "sampled_query",
 	"Statement": "COMMIT TRANSACTION",
 	"StatementFingerprintID": "6247508841109746112",
-	"StmtPosInTxn": 3,
+	"StmtPosInTxn": 2,
 	"Tag": "COMMIT",
 	"User": "root"
 }
@@ -69,10 +57,9 @@ BEGIN; SET LOCAL autocommit_before_ddl=off; TRUNCATE t; COMMIT
 	"RowsRead": 0,
 	"RowsWritten": 0,
 	"StatementFingerprintIDs": [
-		"12756973544607263707",
 		"554456288574568545"
 	],
-	"TransactionFingerprintID": "779223648613753517",
+	"TransactionFingerprintID": "12164906773462273982",
 	"User": "root"
 }
 
@@ -208,7 +195,7 @@ SELECT * FROM t LIMIT 2
 {
 	"ApplicationName": "telemetry-logging-datadriven",
 	"Database": "defaultdb",
-	"Distribution": "local",
+	"Distribution": "full",
 	"EventType": "sampled_query",
 	"PlanGist": "AgHQAQQAAAAAAg==",
 	"ScanCount": 1,
@@ -246,7 +233,7 @@ BEGIN; SELECT * FROM t LIMIT 4; SELECT * FROM t LIMIT 5; COMMIT
 {
 	"ApplicationName": "telemetry-logging-datadriven",
 	"Database": "defaultdb",
-	"Distribution": "local",
+	"Distribution": "full",
 	"EventType": "sampled_query",
 	"PlanGist": "AgHQAQQAAAAAAg==",
 	"ScanCount": 1,
@@ -260,7 +247,7 @@ BEGIN; SELECT * FROM t LIMIT 4; SELECT * FROM t LIMIT 5; COMMIT
 {
 	"ApplicationName": "telemetry-logging-datadriven",
 	"Database": "defaultdb",
-	"Distribution": "local",
+	"Distribution": "full",
 	"EventType": "sampled_query",
 	"PlanGist": "AgHQAQQAAAAAAg==",
 	"ScanCount": 1,
@@ -385,7 +372,7 @@ COMMIT;
 	"ApplicationName": "telemetry-logging-datadriven",
 	"Database": "defaultdb",
 	"Distribution": "local",
-	"ErrorText": "TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()",
+	"ErrorText": "crdb_internal.force_retry(): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()",
 	"EventType": "sampled_query",
 	"OutputRowsEstimate": 1,
 	"PlanGist": "AgICAgYC",
@@ -442,7 +429,7 @@ COMMIT;
 	"ApplicationName": "telemetry-logging-datadriven",
 	"Committed": true,
 	"EventType": "sampled_transaction",
-	"LastAutoRetryReason": "TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()",
+	"LastAutoRetryReason": "crdb_internal.force_retry(): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()",
 	"NumRetries": 1,
 	"NumRows": 2,
 	"RowsRead": 0,

@@ -1,6 +1,6 @@
 initial-keys tenant=system
 ----
-143 keys:
+133 keys:
  /Table/3/1/1/2/1
  /Table/3/1/3/2/1
  /Table/3/1/4/2/1
@@ -59,11 +59,6 @@ initial-keys tenant=system
  /Table/3/1/65/2/1
  /Table/3/1/66/2/1
  /Table/3/1/67/2/1
- /Table/3/1/68/2/1
- /Table/3/1/69/2/1
- /Table/3/1/70/2/1
- /Table/3/1/71/2/1
- /Table/3/1/72/2/1
  /Table/5/1/0/2/1
  /Table/5/1/1/2/1
  /Table/5/1/11/2/1
@@ -87,10 +82,6 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"eventlog"/4/1
  /NamespaceTable/30/1/1/29/"external_connections"/4/1
  /NamespaceTable/30/1/1/29/"job_info"/4/1
- /NamespaceTable/30/1/1/29/"job_message"/4/1
- /NamespaceTable/30/1/1/29/"job_progress"/4/1
- /NamespaceTable/30/1/1/29/"job_progress_history"/4/1
- /NamespaceTable/30/1/1/29/"job_status"/4/1
  /NamespaceTable/30/1/1/29/"jobs"/4/1
  /NamespaceTable/30/1/1/29/"join_tokens"/4/1
  /NamespaceTable/30/1/1/29/"lease"/4/1
@@ -98,7 +89,6 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"migrations"/4/1
  /NamespaceTable/30/1/1/29/"mvcc_statistics"/4/1
  /NamespaceTable/30/1/1/29/"namespace"/4/1
- /NamespaceTable/30/1/1/29/"prepared_transactions"/4/1
  /NamespaceTable/30/1/1/29/"privileges"/4/1
  /NamespaceTable/30/1/1/29/"protected_ts_meta"/4/1
  /NamespaceTable/30/1/1/29/"protected_ts_records"/4/1
@@ -144,7 +134,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"zones"/4/1
  /Table/48/1/0/0
  /Table/63/1/0/0
-68 splits:
+63 splits:
  /Table/3
  /Table/4
  /Table/5
@@ -208,15 +198,10 @@ initial-keys tenant=system
  /Table/65
  /Table/66
  /Table/67
- /Table/68
- /Table/69
- /Table/70
- /Table/71
- /Table/72
 
 initial-keys tenant=5
 ----
-134 keys:
+124 keys:
  /Tenant/5/Table/3/1/1/2/1
  /Tenant/5/Table/3/1/3/2/1
  /Tenant/5/Table/3/1/4/2/1
@@ -275,11 +260,6 @@ initial-keys tenant=5
  /Tenant/5/Table/3/1/65/2/1
  /Tenant/5/Table/3/1/66/2/1
  /Tenant/5/Table/3/1/67/2/1
- /Tenant/5/Table/3/1/68/2/1
- /Tenant/5/Table/3/1/69/2/1
- /Tenant/5/Table/3/1/70/2/1
- /Tenant/5/Table/3/1/71/2/1
- /Tenant/5/Table/3/1/72/2/1
  /Tenant/5/Table/5/1/0/2/1
  /Tenant/5/Table/7/1/0/0
  /Tenant/5/Table/8/1/1/0
@@ -294,10 +274,6 @@ initial-keys tenant=5
  /Tenant/5/NamespaceTable/30/1/1/29/"eventlog"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"external_connections"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"job_info"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"job_message"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"job_progress"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"job_progress_history"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"job_status"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"jobs"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"join_tokens"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"lease"/4/1
@@ -305,148 +281,6 @@ initial-keys tenant=5
  /Tenant/5/NamespaceTable/30/1/1/29/"migrations"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"mvcc_statistics"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"namespace"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"prepared_transactions"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"privileges"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"protected_ts_meta"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"protected_ts_records"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"rangelog"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"region_liveness"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"replication_constraint_stats"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"replication_critical_localities"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"replication_stats"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"reports_meta"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"role_id_seq"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"role_members"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"role_options"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"scheduled_jobs"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"settings"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"span_configurations"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"span_count"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"span_stats_buckets"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"span_stats_samples"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"span_stats_tenant_boundaries"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"span_stats_unique_keys"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"sql_instances"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"sqlliveness"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"statement_activity"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"statement_bundle_chunks"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"statement_diagnostics"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"statement_diagnostics_requests"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"statement_execution_insights"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"statement_statistics"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"table_metadata"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"table_statistics"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"task_payloads"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"tenant_id_seq"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"tenant_settings"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"tenant_tasks"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"tenant_usage"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"tenants"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"transaction_activity"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"transaction_execution_insights"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"transaction_statistics"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"ui"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"users"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"web_sessions"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"zones"/4/1
- /Tenant/5/Table/48/1/0/0
- /Tenant/5/Table/63/1/0/0
-2 splits:
- /Tenant/5
- /Tenant/6
-
-initial-keys tenant=5
-----
-134 keys:
- /Tenant/5/Table/3/1/1/2/1
- /Tenant/5/Table/3/1/3/2/1
- /Tenant/5/Table/3/1/4/2/1
- /Tenant/5/Table/3/1/5/2/1
- /Tenant/5/Table/3/1/6/2/1
- /Tenant/5/Table/3/1/7/2/1
- /Tenant/5/Table/3/1/8/2/1
- /Tenant/5/Table/3/1/9/2/1
- /Tenant/5/Table/3/1/11/2/1
- /Tenant/5/Table/3/1/12/2/1
- /Tenant/5/Table/3/1/13/2/1
- /Tenant/5/Table/3/1/14/2/1
- /Tenant/5/Table/3/1/15/2/1
- /Tenant/5/Table/3/1/19/2/1
- /Tenant/5/Table/3/1/20/2/1
- /Tenant/5/Table/3/1/21/2/1
- /Tenant/5/Table/3/1/23/2/1
- /Tenant/5/Table/3/1/24/2/1
- /Tenant/5/Table/3/1/25/2/1
- /Tenant/5/Table/3/1/26/2/1
- /Tenant/5/Table/3/1/27/2/1
- /Tenant/5/Table/3/1/28/2/1
- /Tenant/5/Table/3/1/30/2/1
- /Tenant/5/Table/3/1/31/2/1
- /Tenant/5/Table/3/1/32/2/1
- /Tenant/5/Table/3/1/33/2/1
- /Tenant/5/Table/3/1/34/2/1
- /Tenant/5/Table/3/1/35/2/1
- /Tenant/5/Table/3/1/36/2/1
- /Tenant/5/Table/3/1/37/2/1
- /Tenant/5/Table/3/1/39/2/1
- /Tenant/5/Table/3/1/40/2/1
- /Tenant/5/Table/3/1/41/2/1
- /Tenant/5/Table/3/1/42/2/1
- /Tenant/5/Table/3/1/43/2/1
- /Tenant/5/Table/3/1/44/2/1
- /Tenant/5/Table/3/1/45/2/1
- /Tenant/5/Table/3/1/46/2/1
- /Tenant/5/Table/3/1/47/2/1
- /Tenant/5/Table/3/1/48/2/1
- /Tenant/5/Table/3/1/50/2/1
- /Tenant/5/Table/3/1/51/2/1
- /Tenant/5/Table/3/1/52/2/1
- /Tenant/5/Table/3/1/53/2/1
- /Tenant/5/Table/3/1/54/2/1
- /Tenant/5/Table/3/1/55/2/1
- /Tenant/5/Table/3/1/56/2/1
- /Tenant/5/Table/3/1/57/2/1
- /Tenant/5/Table/3/1/58/2/1
- /Tenant/5/Table/3/1/59/2/1
- /Tenant/5/Table/3/1/60/2/1
- /Tenant/5/Table/3/1/61/2/1
- /Tenant/5/Table/3/1/62/2/1
- /Tenant/5/Table/3/1/63/2/1
- /Tenant/5/Table/3/1/64/2/1
- /Tenant/5/Table/3/1/65/2/1
- /Tenant/5/Table/3/1/66/2/1
- /Tenant/5/Table/3/1/67/2/1
- /Tenant/5/Table/3/1/68/2/1
- /Tenant/5/Table/3/1/69/2/1
- /Tenant/5/Table/3/1/70/2/1
- /Tenant/5/Table/3/1/71/2/1
- /Tenant/5/Table/3/1/72/2/1
- /Tenant/5/Table/5/1/0/2/1
- /Tenant/5/Table/7/1/0/0
- /Tenant/5/Table/8/1/1/0
- /Tenant/5/Table/8/2/"system"/0
- /Tenant/5/Table/8/3/2/1/0
- /Tenant/5/NamespaceTable/30/1/0/0/"system"/4/1
- /Tenant/5/NamespaceTable/30/1/1/0/"public"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"comments"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"database_role_settings"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"descriptor"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"descriptor_id_seq"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"eventlog"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"external_connections"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"job_info"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"job_message"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"job_progress"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"job_progress_history"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"job_status"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"jobs"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"join_tokens"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"lease"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"locations"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"migrations"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"mvcc_statistics"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"namespace"/4/1
- /Tenant/5/NamespaceTable/30/1/1/29/"prepared_transactions"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"privileges"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"protected_ts_meta"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"protected_ts_records"/4/1
@@ -498,7 +332,7 @@ initial-keys tenant=5
 
 initial-keys tenant=999
 ----
-134 keys:
+124 keys:
  /Tenant/999/Table/3/1/1/2/1
  /Tenant/999/Table/3/1/3/2/1
  /Tenant/999/Table/3/1/4/2/1
@@ -557,11 +391,6 @@ initial-keys tenant=999
  /Tenant/999/Table/3/1/65/2/1
  /Tenant/999/Table/3/1/66/2/1
  /Tenant/999/Table/3/1/67/2/1
- /Tenant/999/Table/3/1/68/2/1
- /Tenant/999/Table/3/1/69/2/1
- /Tenant/999/Table/3/1/70/2/1
- /Tenant/999/Table/3/1/71/2/1
- /Tenant/999/Table/3/1/72/2/1
  /Tenant/999/Table/5/1/0/2/1
  /Tenant/999/Table/7/1/0/0
  /Tenant/999/Table/8/1/1/0
@@ -576,10 +405,6 @@ initial-keys tenant=999
  /Tenant/999/NamespaceTable/30/1/1/29/"eventlog"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"external_connections"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"job_info"/4/1
- /Tenant/999/NamespaceTable/30/1/1/29/"job_message"/4/1
- /Tenant/999/NamespaceTable/30/1/1/29/"job_progress"/4/1
- /Tenant/999/NamespaceTable/30/1/1/29/"job_progress_history"/4/1
- /Tenant/999/NamespaceTable/30/1/1/29/"job_status"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"jobs"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"join_tokens"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"lease"/4/1
@@ -587,7 +412,6 @@ initial-keys tenant=999
  /Tenant/999/NamespaceTable/30/1/1/29/"migrations"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"mvcc_statistics"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"namespace"/4/1
- /Tenant/999/NamespaceTable/30/1/1/29/"prepared_transactions"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"privileges"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"protected_ts_meta"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"protected_ts_records"/4/1

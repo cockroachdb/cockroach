@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
@@ -120,16 +119,10 @@ func safeToUpgradeTenant(
 	codec keys.SQLCodec,
 	overrides cluster.OverridesInformer,
 	tenantClusterVersion clusterversion.ClusterVersion,
-	tenantInfoAccessor mtinfo.ReadFromTenantInfoAccessor,
 ) (bool, error) {
 	if codec.ForSystemTenant() {
 		// Unconditionally run upgrades for the system tenant.
 		return true, nil
-	}
-	if tenantInfoAccessor != nil {
-		if id, _, _ := tenantInfoAccessor.ReadFromTenantInfo(ctx); id.IsSet() {
-			return false, errors.Newf("reader virtual clusters cannot be upgraded. Instead, drop the current read only virtual cluster, and recreate a new one via ALTER VIRTUAL CLUSTER...")
-		}
 	}
 	// The overrides informer can be nil, but only in a system tenant.
 	if overrides == nil {
@@ -338,7 +331,7 @@ func (m *Manager) Migrate(
 	}
 
 	// Determine whether it's safe to perform the upgrade for secondary tenants.
-	if safe, err := safeToUpgradeTenant(ctx, m.codec, m.settings.OverridesInformer, from, m.deps.TenantInfoAccessor); !safe {
+	if safe, err := safeToUpgradeTenant(ctx, m.codec, m.settings.OverridesInformer, from); !safe {
 		return err
 	}
 
@@ -586,7 +579,7 @@ func bumpClusterVersion(
 	req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &clusterVersion}
 	op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
 	return forEveryNodeUntilClusterStable(ctx, op, c, func(
-		ctx context.Context, client serverpb.RPCMigrationClient,
+		ctx context.Context, client serverpb.MigrationClient,
 	) error {
 		_, err := client.BumpClusterVersion(ctx, req)
 		return err
@@ -601,7 +594,7 @@ func validateTargetClusterVersion(
 	req := &serverpb.ValidateTargetClusterVersionRequest{ClusterVersion: &clusterVersion}
 	op := fmt.Sprintf("validate-cluster-version=%s", req.ClusterVersion.PrettyPrint())
 	return forEveryNodeUntilClusterStable(ctx, op, c, func(
-		tx context.Context, client serverpb.RPCMigrationClient,
+		tx context.Context, client serverpb.MigrationClient,
 	) error {
 		_, err := client.ValidateTargetClusterVersion(ctx, req)
 		// The tenant upgrade interlock is new in 23.1, as a result, before
@@ -624,7 +617,7 @@ func forEveryNodeUntilClusterStable(
 	ctx context.Context,
 	op string,
 	c upgrade.Cluster,
-	f func(ctx context.Context, client serverpb.RPCMigrationClient) error,
+	f func(ctx context.Context, client serverpb.MigrationClient) error,
 ) error {
 	log.Infof(ctx, "executing operation %s", redact.Safe(op))
 	return c.UntilClusterStable(ctx, retry.Options{
@@ -775,7 +768,7 @@ WITH
 running_migration_jobs AS (
     SELECT id, status
     FROM system.jobs
-    WHERE status IN ` + jobs.NonTerminalStateTupleString + `
+    WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
     AND job_type = 'MIGRATION'
 ),
 payloads AS (
@@ -807,8 +800,8 @@ func (m *Manager) getRunningMigrationJob(
 	if err != nil {
 		return false, 0, err
 	}
-	parseRow := func(row tree.Datums) (id jobspb.JobID, status jobs.State) {
-		return jobspb.JobID(*row[0].(*tree.DInt)), jobs.State(*row[1].(*tree.DString))
+	parseRow := func(row tree.Datums) (id jobspb.JobID, status jobs.Status) {
+		return jobspb.JobID(*row[0].(*tree.DInt)), jobs.Status(*row[1].(*tree.DString))
 	}
 	switch len(rows) {
 	case 0:
@@ -835,14 +828,7 @@ func (m *Manager) getRunningMigrationJob(
 
 func (m *Manager) listBetween(from roachpb.Version, to roachpb.Version) []roachpb.Version {
 	if m.knobs.ListBetweenOverride != nil {
-		result := m.knobs.ListBetweenOverride(from, to)
-		// Sanity check result to catch invalid overrides.
-		for _, v := range result {
-			if v.LessEq(from) || to.Less(v) {
-				panic(fmt.Sprintf("ListBetweenOverride(%s, %s) returned invalid version %s", from, to, v))
-			}
-		}
-		return result
+		return m.knobs.ListBetweenOverride(from, to)
 	}
 	return clusterversion.ListBetween(from, to)
 }

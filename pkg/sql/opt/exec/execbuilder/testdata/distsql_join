@@ -18,7 +18,7 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE d
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/72>  …/1/1         {1}       1
+<before:/Table/67>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -282,32 +282,3 @@ EXPLAIN (VEC)
       )
     AND c_custkey = o_custkey;
 RESET vectorize
-
-statement ok
-CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k, v));
-ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
-ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i);
-
-statement ok
-ALTER TABLE kv INJECT STATISTICS '[
-  {
-    "columns": ["k"],
-    "created_at": "2024-01-01 1:00:00.00000+00:00",
-    "row_count": 1000,
-    "distinct_count": 1000
-  }
-]';
-
-# Force the distribution of the next plan.
-statement ok
-SET distribute_scan_row_count_threshold = 1;
-
-# Verify that when merging plans where each has a single result router (n3 and
-# n4), we plan the joiner on the same node as the right input (n4).
-query T
-SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM kv AS t1, kv AS t2 WHERE t1.k = 3 AND t2.k = 4] WHERE info LIKE 'Diagram%';
-----
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFv2jAUhd_3K6wrTYXJjDjJk6VJoJKp2Sh0BGmTKlR55EKthDizHboK8d-nhLKSqKTd_BDl2sffPcf2DsyvFDhEwTi4nJMP5PNsek1ugx8342E4IZ1RGM2jb-MuqQuSLRlGxDJ6_HPJ96tgFpCOZR8T8ol4XTKcjEjHulXpdxdPApmtFBmHXwNyMZJircXm_QVQyFSME7FBA_wWGFDwgIIPCwq5Vks0RulyaVcJw_g3cIeCzPLCltMLCkulEfgOrLQpAoeJ6qm8X1JitEKmlWxPQRX2eZOxYo3A_ZMu4Qi4t6cnjVh7o7n4meIMRYy679TaQbIdJNu7PMFHoHCp0mKTGU4SSrZAIcpFWfW9vgPnjLGGMadmzH27MfYfxvwWY27DGDtr7NlPkSkdo8a4eSevS15IdyXM_RclM9R9tx5uWlhOBowOXDrw6MA_G8JrhHBrIV55XzM0ucoMvumBOY1OPVZGwniNhyMyqtBLvNFqWWkP5bQCVRMxGntY9Q9FmB2XjNUoNn8fxymJtZK8Gom1ktx_ILmnJNYkea0k53w6tzyxVaoe7mQMHJyn0XvhcxxQbhBrU15bdK8eKuz8MS8PfSVSgxSuRYIjtKg3MpPGyiVwqwvc79_9CQAA__-phZ3F
-
-statement ok
-RESET distribute_scan_row_count_threshold;

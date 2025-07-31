@@ -61,15 +61,14 @@ type windower struct {
 	// runningState represents the state of the windower. This is in addition to
 	// ProcessorBase.State - the runningState is only relevant when
 	// ProcessorBase.State == StateRunning.
-	runningState        windowerState
-	input               execinfra.RowSource
-	inputDone           bool
-	inputTypes          []*types.T
-	outputTypes         []*types.T
-	datumAlloc          tree.DatumAlloc
-	acc                 mon.BoundAccount
-	unlimitedMemMonitor *mon.BytesMonitor
-	diskMonitor         *mon.BytesMonitor
+	runningState windowerState
+	input        execinfra.RowSource
+	inputDone    bool
+	inputTypes   []*types.T
+	outputTypes  []*types.T
+	datumAlloc   tree.DatumAlloc
+	acc          mon.BoundAccount
+	diskMonitor  *mon.BytesMonitor
 
 	scratch       []byte
 	cancelChecker cancelchecker.CancelChecker
@@ -173,11 +172,9 @@ func newWindower(
 		return nil, err
 	}
 
-	mn := mon.MakeName("windower")
-	w.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, mn.Unlimited())
-	w.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, mn.Disk())
+	w.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "windower-disk")
 	w.allRowsPartitioned = rowcontainer.NewHashDiskBackedRowContainer(
-		w.evalCtx, w.MemMonitor, w.unlimitedMemMonitor, w.diskMonitor, flowCtx.Cfg.TempStorage,
+		w.evalCtx, w.MemMonitor, w.diskMonitor, flowCtx.Cfg.TempStorage,
 	)
 	if err := w.allRowsPartitioned.Init(
 		ctx,
@@ -247,7 +244,6 @@ func (w *windower) close() {
 		}
 		w.acc.Close(w.Ctx())
 		w.MemMonitor.Stop(w.Ctx())
-		w.unlimitedMemMonitor.Stop(w.Ctx())
 		w.diskMonitor.Stop(w.Ctx())
 	}
 }
@@ -619,7 +615,6 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *eval.Con
 		w.FlowCtx.EvalCtx,
 		w.FlowCtx.Cfg.TempStorage,
 		w.MemMonitor,
-		w.unlimitedMemMonitor,
 		w.diskMonitor,
 	)
 	i, err := w.allRowsPartitioned.NewAllRowsIterator(ctx)
@@ -820,7 +815,7 @@ func (w *windower) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		Exec: execinfrapb.ExecStats{
-			MaxAllocatedMem:  optional.MakeUint(uint64(w.MemMonitor.MaximumBytes() + w.unlimitedMemMonitor.MaximumBytes())),
+			MaxAllocatedMem:  optional.MakeUint(uint64(w.MemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: optional.MakeUint(uint64(w.diskMonitor.MaximumBytes())),
 		},
 		Output: w.OutputHelper.Stats(),

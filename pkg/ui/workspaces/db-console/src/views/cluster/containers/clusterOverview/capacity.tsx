@@ -4,9 +4,7 @@
 // included in the /LICENSE file.
 
 import { util } from "@cockroachlabs/cluster-ui";
-import { Axis, axisBottom } from "d3-axis";
-import { NumberValue, ScaleLinear, scaleLinear } from "d3-scale";
-import { Selection } from "d3-selection";
+import d3 from "d3";
 
 const LOW_DISK_SPACE_RATIO = 0.15;
 
@@ -35,14 +33,9 @@ function capacityChart() {
   const TICK_SIZE = 6;
   const AXIS_MARGIN = 4;
 
-  const scale: ScaleLinear<number, number> = scaleLinear().range([
-    0,
-    size.width,
-  ]);
+  const scale = d3.scale.linear().range([0, size.width]);
 
-  const axis: Axis<NumberValue> = axisBottom(scale)
-    .tickSize(TICK_SIZE)
-    .ticks(5);
+  const axis = d3.svg.axis().scale(scale).tickSize(TICK_SIZE).ticks(5);
 
   function recomputeScale(capacity: CapacityChartProps) {
     // Compute the appropriate scale factor for a value slightly smaller than the
@@ -59,12 +52,11 @@ function capacityChart() {
       return d + " " + byteScale.units;
     });
     scale.domain([0, scaled.usable]);
+
     return scaled;
   }
 
-  return function chart(
-    svg: Selection<SVGElement, CapacityChartProps, null, undefined>,
-  ) {
+  return function chart(svg: d3.Selection<CapacityChartProps>) {
     const rect = (svg.node().parentNode as HTMLElement).getBoundingClientRect();
     size.width = rect.width;
 
@@ -74,81 +66,58 @@ function capacityChart() {
       .attr("width", size.width + margin.left + margin.right)
       .attr("height", size.height + margin.top + margin.bottom);
 
-    const mainGroup = svg
+    const el = svg
       .selectAll(".main")
       .data((d: CapacityChartProps) => [recomputeScale(d)]);
 
-    const mainGroupEnter = mainGroup
-      .enter()
+    el.enter()
       .append("g")
       .attr("class", "main")
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // Merge the enter and update selections
-    const main = mainGroupEnter.merge(mainGroup as any);
+    const axisGroup = el.selectAll("g.axis").data(() => [0]);
 
-    // AXIS GROUP
-    const axisGroup = main.selectAll("g.axis").data(() => [0]);
-
-    const axisGroupEnter = axisGroup
+    axisGroup
       .enter()
       .append("g")
       .attr("class", "axis")
       .attr("transform", `translate(0,${size.height + AXIS_MARGIN})`);
 
-    axisGroupEnter
-      .merge(axisGroup as any)
-      .call(axis)
-      .selectAll("text")
-      .attr("y", AXIS_MARGIN + TICK_SIZE);
+    axisGroup.call(axis);
+    axisGroup.selectAll("text").attr("y", AXIS_MARGIN + TICK_SIZE);
 
     const lowDiskSpaceWidth = size.width * LOW_DISK_SPACE_RATIO;
     const lowDiskSpacePosition = size.width - lowDiskSpaceWidth;
 
-    // Background Normal
-    const bgNormal = main
+    const bgNormal = el
       .selectAll(".bg-normal")
       .data((d: CapacityChartProps) => [d]);
 
-    const bgNormalEnter = bgNormal
-      .enter()
-      .append("rect")
-      .attr("class", "bg-normal");
+    bgNormal.enter().append("rect").attr("class", "bg-normal");
 
-    bgNormalEnter
-      .merge(bgNormal as any)
-      .attr("width", lowDiskSpacePosition)
-      .attr("height", size.height);
+    bgNormal.attr("width", lowDiskSpacePosition).attr("height", size.height);
 
-    // Background Low Disk Space
-    const bgLowDiskSpace = main
+    const bgLowDiskSpace = el
       .selectAll(".bg-low-disk-space")
       .data((d: CapacityChartProps) => [d]);
 
-    const bgLowDiskSpaceEnter = bgLowDiskSpace
-      .enter()
-      .append("rect")
-      .attr("class", "bg-low-disk-space");
+    bgLowDiskSpace.enter().append("rect").attr("class", "bg-low-disk-space");
 
-    bgLowDiskSpaceEnter
-      .merge(bgLowDiskSpace as any)
+    bgLowDiskSpace
       .attr("x", lowDiskSpacePosition)
       .attr("width", lowDiskSpaceWidth)
       .attr("height", size.height);
 
-    // BAR
-    const bar = main.selectAll(".bar").data((d: CapacityChartProps) => [d]);
+    const bar = el.selectAll(".bar").data((d: CapacityChartProps) => [d]);
 
-    const barEnter = bar
+    bar
       .enter()
       .append("rect")
       .attr("class", "bar")
       .attr("height", 10)
       .attr("y", 5);
 
-    barEnter
-      .merge(bar as any)
-      .attr("width", (d: CapacityChartProps) => scale(d.used));
+    bar.attr("width", (d: CapacityChartProps) => scale(d.used));
   };
 }
 

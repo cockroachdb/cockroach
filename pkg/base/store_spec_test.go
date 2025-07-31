@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -68,23 +68,23 @@ target_file_size=2097152`
 		// attributes
 		{"path=/mnt/hda1,attrs=ssd", "", StoreSpec{
 			Path:       "/mnt/hda1",
-			Attributes: []string{"ssd"},
+			Attributes: roachpb.Attributes{Attrs: []string{"ssd"}},
 		}},
 		{"path=/mnt/hda1,attrs=ssd:hdd", "", StoreSpec{
 			Path:       "/mnt/hda1",
-			Attributes: []string{"hdd", "ssd"},
+			Attributes: roachpb.Attributes{Attrs: []string{"hdd", "ssd"}},
 		}},
 		{"path=/mnt/hda1,attrs=hdd:ssd", "", StoreSpec{
 			Path:       "/mnt/hda1",
-			Attributes: []string{"hdd", "ssd"},
+			Attributes: roachpb.Attributes{Attrs: []string{"hdd", "ssd"}},
 		}},
 		{"attrs=ssd:hdd,path=/mnt/hda1", "", StoreSpec{
 			Path:       "/mnt/hda1",
-			Attributes: []string{"hdd", "ssd"},
+			Attributes: roachpb.Attributes{Attrs: []string{"hdd", "ssd"}},
 		}},
 		{"attrs=hdd:ssd,path=/mnt/hda1,", "", StoreSpec{
 			Path:       "/mnt/hda1",
-			Attributes: []string{"hdd", "ssd"},
+			Attributes: roachpb.Attributes{Attrs: []string{"hdd", "ssd"}},
 		}},
 		{"attrs=hdd:ssd", "no path specified", StoreSpec{}},
 		{"path=/mnt/hda1,attrs=", "no value specified for attrs", StoreSpec{}},
@@ -92,53 +92,53 @@ target_file_size=2097152`
 		{"path=/mnt/hda1,attrs=hdd,attrs=ssd", "attrs field was used twice in store definition", StoreSpec{}},
 
 		// size
-		{"path=/mnt/hda1,size=671088640", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 671088640}}},
-		{"path=/mnt/hda1,size=20GB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 20000000000}}},
-		{"size=20GiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 21474836480}}},
-		{"size=0.1TiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 109951162777}}},
-		{"path=/mnt/hda1,size=.1TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 109951162777}}},
-		{"path=/mnt/hda1,size=123TB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 123000000000000}}},
-		{"path=/mnt/hda1,size=123TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 135239930216448}}},
+		{"path=/mnt/hda1,size=671088640", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 671088640}}},
+		{"path=/mnt/hda1,size=20GB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 20000000000}}},
+		{"size=20GiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 21474836480}}},
+		{"size=0.1TiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 109951162777}}},
+		{"path=/mnt/hda1,size=.1TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 109951162777}}},
+		{"path=/mnt/hda1,size=123TB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 123000000000000}}},
+		{"path=/mnt/hda1,size=123TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{InBytes: 135239930216448}}},
 		// %
 		{"path=/mnt/hda1,size=50.5%", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 50.5}}},
 		{"path=/mnt/hda1,size=100%", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 100}}},
 		{"path=/mnt/hda1,size=1%", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 1}}},
-		{"path=/mnt/hda1,size=0.999999%", "size (0.999999%) must be between 1% and 100%", StoreSpec{}},
-		{"path=/mnt/hda1,size=100.0001%", "size (100.0001%) must be between 1% and 100%", StoreSpec{}},
+		{"path=/mnt/hda1,size=0.999999%", "store size (0.999999%) must be between 1.000000% and 100.000000%", StoreSpec{}},
+		{"path=/mnt/hda1,size=100.0001%", "store size (100.0001%) must be between 1.000000% and 100.000000%", StoreSpec{}},
 		// 0.xxx
 		{"path=/mnt/hda1,size=0.99", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 99}}},
 		{"path=/mnt/hda1,size=0.5000000", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 50}}},
 		{"path=/mnt/hda1,size=0.01", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 1}}},
-		{"path=/mnt/hda1,size=0.009999", "size (0.009999) must be between 1% and 100%", StoreSpec{}},
+		{"path=/mnt/hda1,size=0.009999", "store size (0.009999) must be between 1.000000% and 100.000000%", StoreSpec{}},
 		// .xxx
 		{"path=/mnt/hda1,size=.999", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 99.9}}},
 		{"path=/mnt/hda1,size=.5000000", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 50}}},
 		{"path=/mnt/hda1,size=.01", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 1}}},
-		{"path=/mnt/hda1,size=.009999", "size (.009999) must be between 1% and 100%", StoreSpec{}},
+		{"path=/mnt/hda1,size=.009999", "store size (.009999) must be between 1.000000% and 100.000000%", StoreSpec{}},
 		// errors
-		{"path=/mnt/hda1,size=0", "size (0) must be at least 640 MiB", StoreSpec{}},
-		{"path=/mnt/hda1,size=abc", "could not parse size (abc): strconv.ParseFloat: parsing \"\": invalid syntax", StoreSpec{}},
+		{"path=/mnt/hda1,size=0", "store size (0) must be larger than 640 MiB", StoreSpec{}},
+		{"path=/mnt/hda1,size=abc", "could not parse store size (abc): strconv.ParseFloat: parsing \"\": invalid syntax", StoreSpec{}},
 		{"path=/mnt/hda1,size=", "no value specified for size", StoreSpec{}},
 		{"size=20GiB,path=/mnt/hda1,size=20GiB", "size field was used twice in store definition", StoreSpec{}},
 		{"size=123TB", "no path specified", StoreSpec{}},
 
 		// ballast size
-		{"path=/mnt/hda1,ballast-size=671088640", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Bytes: 671088640}}},
-		{"path=/mnt/hda1,ballast-size=20GB", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Bytes: 20000000000}}},
+		{"path=/mnt/hda1,ballast-size=671088640", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{InBytes: 671088640}}},
+		{"path=/mnt/hda1,ballast-size=20GB", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{InBytes: 20000000000}}},
 		{"path=/mnt/hda1,ballast-size=1%", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Percent: 1}}},
-		{"path=/mnt/hda1,ballast-size=100.000%", "ballast: size (100.000%) must be between 0% and 50%", StoreSpec{}},
+		{"path=/mnt/hda1,ballast-size=100.000%", "ballast size (100.000%) must be between 0.000000% and 50.000000%", StoreSpec{}},
 		{"ballast-size=20GiB,path=/mnt/hda1,ballast-size=20GiB", "ballast-size field was used twice in store definition", StoreSpec{}},
 
 		// type
-		{"type=mem,size=20GiB", "", StoreSpec{Size: SizeSpec{Bytes: 21474836480}, InMemory: true}},
-		{"size=20GiB,type=mem", "", StoreSpec{Size: SizeSpec{Bytes: 21474836480}, InMemory: true}},
-		{"size=20.5GiB,type=mem", "", StoreSpec{Size: SizeSpec{Bytes: 22011707392}, InMemory: true}},
+		{"type=mem,size=20GiB", "", StoreSpec{Size: SizeSpec{InBytes: 21474836480}, InMemory: true}},
+		{"size=20GiB,type=mem", "", StoreSpec{Size: SizeSpec{InBytes: 21474836480}, InMemory: true}},
+		{"size=20.5GiB,type=mem", "", StoreSpec{Size: SizeSpec{InBytes: 22011707392}, InMemory: true}},
 		{"size=20GiB,type=mem,attrs=mem", "", StoreSpec{
-			Size:       SizeSpec{Bytes: 21474836480},
+			Size:       SizeSpec{InBytes: 21474836480},
 			InMemory:   true,
-			Attributes: []string{"mem"},
+			Attributes: roachpb.Attributes{Attrs: []string{"mem"}},
 		}},
-		{"type=mem,size=20", "size (20) must be at least 640 MiB", StoreSpec{}},
+		{"type=mem,size=20", "store size (20) must be larger than 640 MiB", StoreSpec{}},
 		{"type=mem,size=", "no value specified for size", StoreSpec{}},
 		{"type=mem,attrs=ssd", "size must be specified for an in memory store", StoreSpec{}},
 		{"path=/mnt/hda1,type=mem", "path specified for in memory store", StoreSpec{}},
@@ -147,10 +147,13 @@ target_file_size=2097152`
 
 		// provisioned rate
 		{"path=/mnt/hda1,provisioned-rate=bandwidth=200MiB/s", "",
-			StoreSpec{Path: "/mnt/hda1", ProvisionedRate: storageconfig.ProvisionedRate{ProvisionedBandwidth: 200 << 20}}},
+			StoreSpec{Path: "/mnt/hda1", ProvisionedRateSpec: base.ProvisionedRateSpec{ProvisionedBandwidth: 200 << 20}}},
 		{"path=/mnt/hda1,provisioned-rate=bandwidth=200MiB", "provisioned-rate field does not have bandwidth sub-field 200MiB ending in /s", StoreSpec{}},
 		{"path=/mnt/hda1,provisioned-rate=200MiB/s", "provisioned-rate field has invalid value 200MiB/s", StoreSpec{}},
 		{"path=/mnt/hda1,provisioned-rate=bandwidth=0B/s", "provisioned-rate field is trying to set bandwidth to 0", StoreSpec{}},
+
+		// RocksDB
+		{"path=/,rocksdb=key1=val1;key2=val2", "", StoreSpec{Path: "/", RocksDBOptions: "key1=val1;key2=val2"}},
 
 		// Pebble
 		{"path=/,pebble=[Options] l0_compaction_threshold=2 l0_stop_writes_threshold=10", "", StoreSpec{Path: "/",
@@ -161,13 +164,13 @@ target_file_size=2097152`
 		// all together
 		{"path=/mnt/hda1,attrs=hdd:ssd,size=20GiB", "", StoreSpec{
 			Path:       "/mnt/hda1",
-			Size:       SizeSpec{Bytes: 21474836480},
-			Attributes: []string{"hdd", "ssd"},
+			Size:       SizeSpec{InBytes: 21474836480},
+			Attributes: roachpb.Attributes{Attrs: []string{"hdd", "ssd"}},
 		}},
 		{"type=mem,attrs=hdd:ssd,size=20GiB", "", StoreSpec{
-			Size:       SizeSpec{Bytes: 21474836480},
+			Size:       SizeSpec{InBytes: 21474836480},
 			InMemory:   true,
-			Attributes: []string{"hdd", "ssd"},
+			Attributes: roachpb.Attributes{Attrs: []string{"hdd", "ssd"}},
 		}},
 
 		// other error cases
@@ -201,14 +204,14 @@ target_file_size=2097152`
 		}
 
 		// Now test String() to make sure the result can be parsed.
-		storeSpecString := base.StoreSpecCmdLineString(storeSpec)
+		storeSpecString := storeSpec.String()
 		storeSpec2, err := base.NewStoreSpec(storeSpecString)
 		if err != nil {
 			t.Errorf("%d(%s): error parsing String() result: %s", i, testCase.value, err)
 			continue
 		}
 		// Compare strings to deal with floats not matching exactly.
-		if !reflect.DeepEqual(storeSpecString, base.StoreSpecCmdLineString(storeSpec2)) {
+		if !reflect.DeepEqual(storeSpecString, storeSpec2.String()) {
 			t.Errorf("%d(%s): actual doesn't match expected\nactual:   %#+v\nexpected: %#+v", i, testCase.value,
 				storeSpec, storeSpec2)
 		}
@@ -218,8 +221,46 @@ target_file_size=2097152`
 // StoreSpec aliases base.StoreSpec for convenience.
 type StoreSpec = base.StoreSpec
 
-// Size aliases storageconfig.Size for convenience.
-type SizeSpec = storageconfig.Size
+// SizeSpec aliases base.SizeSpec for convenience.
+type SizeSpec = base.SizeSpec
+
+func TestJoinListType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		join string
+		exp  string
+		err  string
+	}{
+		{"", "", "no address specified in --join"},
+		{":", "--join=:" + base.DefaultPort, ""},
+		{"a", "--join=a:" + base.DefaultPort, ""},
+		{"a,b", "--join=a:" + base.DefaultPort + " --join=b:" + base.DefaultPort, ""},
+		{"a,,b", "--join=a:" + base.DefaultPort + " --join=b:" + base.DefaultPort, ""},
+		{",a", "--join=a:" + base.DefaultPort, ""},
+		{"a,", "--join=a:" + base.DefaultPort, ""},
+		{"a:123,b", "--join=a:123 --join=b:" + base.DefaultPort, ""},
+		{"[::1]:123,b", "--join=[::1]:123 --join=b:" + base.DefaultPort, ""},
+		{"[::1,b", "", `address \[::1: missing ']' in address`},
+	}
+
+	for _, test := range testData {
+		t.Run(test.join, func(t *testing.T) {
+			var jls base.JoinListType
+			err := jls.Set(test.join)
+			if !testutils.IsError(err, test.err) {
+				t.Fatalf("error: expected %q, got: %+v", test.err, err)
+			}
+			if test.err != "" {
+				return
+			}
+			actual := jls.String()
+			if actual != test.exp {
+				t.Errorf("expected: %q, got: %q", test.exp, actual)
+			}
+		})
+	}
+}
 
 func TestStoreSpecListPreventedStartupMessage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -247,7 +288,7 @@ func TestStoreSpecListPreventedStartupMessage(t *testing.T) {
 	err := ssl.PriorCriticalAlertError()
 	require.NoError(t, err)
 
-	require.NoError(t, os.WriteFile(base.PreventedStartupFile(okAuxDir), []byte("boom"), 0644))
+	require.NoError(t, os.WriteFile(ssl.Specs[2].PreventedStartupFile(), []byte("boom"), 0644))
 
 	err = ssl.PriorCriticalAlertError()
 	require.Error(t, err)

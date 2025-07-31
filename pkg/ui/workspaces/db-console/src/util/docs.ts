@@ -124,7 +124,9 @@ export const recomputeDocsURLs = () => {
   reduceStorageOfTimeSeriesDataOperationalFlags = docsURL(
     "operational-faqs.html#can-i-reduce-or-disable-the-storage-of-time-series-data",
   );
-  performanceBestPracticesHotSpots = docsURL("understand-hotspots.html");
+  performanceBestPracticesHotSpots = docsURL(
+    "performance-best-practices-overview.html#hot-spots",
+  );
   uiDebugPages = docsURL("ui-debug-pages.html");
   readsAndWritesOverviewPage = docsURLNoVersion(
     "architecture/reads-and-writes-overview.html#important-concepts",

@@ -37,7 +37,5 @@ func crdbInternalSendNotice(ctx context.Context, evalCtx *eval.Context, err erro
 	if evalCtx.ClientNoticeSender == nil {
 		return errors.AssertionFailedf("notice sender not set")
 	}
-	return evalCtx.ClientNoticeSender.SendClientNotice(
-		ctx, pgnotice.Notice(err), true, /* immediateFlush */
-	)
+	return evalCtx.ClientNoticeSender.SendClientNotice(ctx, pgnotice.Notice(err))
 }

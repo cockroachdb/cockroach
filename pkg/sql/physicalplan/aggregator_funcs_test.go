@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -62,12 +62,12 @@ func runTestFlow(
 ) (rowenc.EncDatumRows, error) {
 	distSQLSrv := ts.DistSQLServer().(*distsql.ServerImpl)
 
-	leafInputState, err := txn.GetLeafTxnInputState(context.Background(), nil /* readsTree */)
+	leafInputState, err := txn.GetLeafTxnInputState(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	req := execinfrapb.SetupFlowRequest{
-		Version:           execversion.Latest,
+		Version:           execinfra.Version,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID:     execinfrapb.FlowID{UUID: uuid.MakeV4()},

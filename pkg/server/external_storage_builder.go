@@ -49,14 +49,13 @@ func (e *externalStorageBuilder) init(
 	db isql.DB,
 	recorder multitenant.TenantSideExternalIORecorder,
 	registry *metric.Registry,
-	externalIODir string,
 ) {
 	var blobClientFactory blobs.BlobClientFactory
 	if p, ok := testingKnobs.Server.(*TestingKnobs); ok && p.BlobClientFactory != nil {
 		blobClientFactory = p.BlobClientFactory
 	}
 	if blobClientFactory == nil {
-		blobClientFactory = blobs.NewBlobClientFactory(nodeIDContainer, nodeDialer, externalIODir, allowLocalFastpath)
+		blobClientFactory = blobs.NewBlobClientFactory(nodeIDContainer, nodeDialer, settings.ExternalIODir, allowLocalFastpath)
 	}
 	e.conf = conf
 	e.settings = settings

@@ -30,12 +30,11 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.ColumnName) *scop.SetColumnName {
-					op := &scop.SetColumnName{
+					return &scop.SetColumnName{
 						TableID:  this.TableID,
 						ColumnID: this.ColumnID,
 						Name:     tabledesc.ColumnNamePlaceholder(this.ColumnID),
 					}
-					return op
 				}),
 			),
 		),

@@ -50,14 +50,6 @@ type ManagerTestingKnobs struct {
 	// the lease manager attempts to acquire a lease for descriptor `id`.
 	TestingBeforeAcquireLeaseDuringRefresh func(id descpb.ID) error
 
-	// TestingOnNewVersion invoked when the range feed detects a new descriptor.
-	TestingOnNewVersion func(id descpb.ID)
-
-	// TestingOnLeaseGenerationBumpForNewVersion invoked when the lease generation,
-	// after a new descriptor or initial descriptor version are observed via
-	// the range feed.
-	TestingOnLeaseGenerationBumpForNewVersion func(id descpb.ID)
-
 	// To disable the deletion of orphaned leases at server startup.
 	DisableDeleteOrphanedLeases bool
 

@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -248,7 +248,7 @@ func (bse *boundedStalenessEvents) onStmtTrace(nodeIdx int, rec tracingpb.Record
 					operation:    spans[sp.ParentSpanID].Operation,
 					nodeIdx:      nodeIdx,
 					localRead:    tracing.LogsContainMsg(sp, kvbase.RoutingRequestLocallyMsg),
-					followerRead: kvtestutils.OnlyFollowerReads(rec),
+					followerRead: kv.OnlyFollowerReads(rec),
 					remoteLeaseholderRead: tracing.LogsContainMsg(sp, "[NotLeaseHolderError] lease held by different store;") &&
 						tracing.LogsContainMsg(sp, "trying next peer"),
 				})
@@ -264,7 +264,6 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	const msg = "1μs staleness reads may actually succeed due to the slow environment"
 	skip.UnderStress(t, msg)
 	skip.UnderRace(t, msg)
-	skip.UnderDeadlock(t, msg)
 	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()

@@ -61,7 +61,6 @@ var TenantServiceModeValues = map[string]TenantServiceMode{
 	"none":     ServiceModeNone,
 	"external": ServiceModeExternal,
 	"shared":   ServiceModeShared,
-	"stopping": ServiceModeStopping,
 }
 
 // TenantDataState describes the state of a tenant's logical keyspace.

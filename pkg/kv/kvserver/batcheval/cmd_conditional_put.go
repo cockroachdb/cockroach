@@ -54,16 +54,16 @@ func ConditionalPut(
 		ts = h.Timestamp
 	}
 
-	if err := args.Validate(h); err != nil {
+	if err := args.Validate(); err != nil {
 		return result.Result{}, err
 	}
 
 	originTimestampForValueHeader := h.WriteOptions.GetOriginTimestamp()
 	if args.OriginTimestamp.IsSet() {
 		originTimestampForValueHeader = args.OriginTimestamp
-		if h.WriteOptions.GetOriginTimestamp().IsSet() && args.OriginTimestamp != h.WriteOptions.GetOriginTimestamp() {
-			return result.Result{}, errors.AssertionFailedf("OriginTimestamp passed via CPut arg must match the origin timestamp in the request header")
-		}
+	}
+	if args.OriginTimestamp.IsSet() && h.WriteOptions.GetOriginTimestamp().IsSet() {
+		return result.Result{}, errors.AssertionFailedf("OriginTimestamp cannot be passed via CPut arg and in request header")
 	}
 
 	opts := storage.ConditionalPutWriteOptions{
@@ -79,8 +79,9 @@ func ConditionalPut(
 			TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 			Category:                       fs.BatchEvalReadCategory,
 		},
-		AllowIfDoesNotExist: storage.CPutMissingBehavior(args.AllowIfDoesNotExist),
-		OriginTimestamp:     args.OriginTimestamp,
+		AllowIfDoesNotExist:         storage.CPutMissingBehavior(args.AllowIfDoesNotExist),
+		OriginTimestamp:             args.OriginTimestamp,
+		ShouldWinOriginTimestampTie: args.ShouldWinOriginTimestampTie,
 	}
 
 	var err error

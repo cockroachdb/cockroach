@@ -164,7 +164,7 @@ func (r *Registry) waitForJobs(
 			decodedErr := errors.DecodeError(ctx, *j.Payload().FinalResumeError)
 			return decodedErr
 		}
-		if j.State() == StatePaused {
+		if j.Status() == StatusPaused {
 			if reason := j.Payload().PauseReason; reason != "" {
 				return errors.Newf("job %d was paused before it completed with reason: %s", jobs[i], reason)
 			}
@@ -180,11 +180,11 @@ func (r *Registry) waitForJobs(
 func makeWaitForJobsQuery(jobs []jobspb.JobID) string {
 	var buf strings.Builder
 	buf.WriteString(`SELECT count(*) FROM system.jobs WHERE status NOT IN ( ` +
-		`'` + string(StateSucceeded) + `', ` +
-		`'` + string(StateFailed) + `',` +
-		`'` + string(StateCanceled) + `',` +
-		`'` + string(StateRevertFailed) + `',` +
-		`'` + string(StatePaused) + `'` +
+		`'` + string(StatusSucceeded) + `', ` +
+		`'` + string(StatusFailed) + `',` +
+		`'` + string(StatusCanceled) + `',` +
+		`'` + string(StatusRevertFailed) + `',` +
+		`'` + string(StatusPaused) + `'` +
 		` ) AND id IN (`)
 	for i, id := range jobs {
 		if i > 0 {
@@ -225,7 +225,7 @@ type jobWaitingSets map[jobspb.JobID]map[*waitingSet]struct{}
 // Registry.removeFromWaitingSet() were placed anywhere in the package, no
 // resources would be wasted. In order to deal with the fact that the waiting
 // set is an optimization, the caller still polls the job state to wait for it
-// to transition to a terminal state (or paused). This is unavoidable: the job
+// to transition to a terminal status (or paused). This is unavoidable: the job
 // may end up running elsewhere.
 type waitingSet struct {
 	// jobDoneCh is closed when the set becomes empty because all
@@ -252,7 +252,7 @@ func newJobIDSet(ids ...jobspb.JobID) jobIDSet {
 }
 
 // installWaitingSet constructs a waiting set and installs it in the registry.
-// If all the jobs execute to a terminal state in this registry, the done
+// If all the jobs execute to a terminal status in this registry, the done
 // channel will be closed. The cleanup function must be called to avoid
 // leaking memory.
 func (r *Registry) installWaitingSet(

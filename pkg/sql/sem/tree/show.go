@@ -86,6 +86,8 @@ const (
 	// BackupValidateDetails identifies a SHOW BACKUP VALIDATION
 	// statement.
 	BackupValidateDetails
+	// BackupConnectionTest identifies a SHOW BACKUP CONNECTION statement
+	BackupConnectionTest
 )
 
 // TODO (msbutler): 22.2 after removing old style show backup syntax, rename
@@ -104,7 +106,7 @@ type ShowBackup struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ShowBackup) Format(ctx *FmtCtx) {
-	if node.Path == nil {
+	if node.InCollection != nil && node.Path == nil {
 		ctx.WriteString("SHOW BACKUPS IN ")
 		ctx.FormatURIs(node.InCollection)
 		return
@@ -118,16 +120,21 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.WriteString("FILES ")
 	case BackupSchemaDetails:
 		ctx.WriteString("SCHEMAS ")
+	case BackupConnectionTest:
+		ctx.WriteString("CONNECTION ")
 	}
 
 	if node.From {
 		ctx.WriteString("FROM ")
 	}
 
-	ctx.FormatNode(node.Path)
-	ctx.WriteString(" IN ")
-	ctx.FormatURIs(node.InCollection)
-
+	if node.InCollection != nil {
+		ctx.FormatNode(node.Path)
+		ctx.WriteString(" IN ")
+		ctx.FormatURIs(node.InCollection)
+	} else {
+		ctx.FormatURI(node.Path)
+	}
 	if !node.Options.IsDefault() {
 		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
@@ -154,6 +161,7 @@ type ShowBackupOptions struct {
 	// `ENCRYPTION-INFO` file necessary to decode the incremental backup lives in
 	// the full backup dir.
 	EncryptionInfoDir Expr
+	DebugMetadataSST  bool
 
 	CheckConnectionTransferSize Expr
 	CheckConnectionDuration     Expr
@@ -216,6 +224,10 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("skip size")
 	}
+	if o.DebugMetadataSST {
+		maybeAddSep()
+		ctx.WriteString("debug_dump_metadata_sst")
+	}
 
 	// The following are only used in connection-check SHOW.
 	if o.CheckConnectionConcurrency != nil {
@@ -245,6 +257,7 @@ func (o ShowBackupOptions) IsDefault() bool {
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.Privileges == options.Privileges &&
 		o.SkipSize == options.SkipSize &&
+		o.DebugMetadataSST == options.DebugMetadataSST &&
 		o.EncryptionInfoDir == options.EncryptionInfoDir &&
 		o.CheckConnectionTransferSize == options.CheckConnectionTransferSize &&
 		o.CheckConnectionDuration == options.CheckConnectionDuration &&
@@ -314,6 +327,11 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 		return err
 	}
 	o.SkipSize, err = combineBools(o.SkipSize, other.SkipSize, "skip size")
+	if err != nil {
+		return err
+	}
+	o.DebugMetadataSST, err = combineBools(o.DebugMetadataSST, other.DebugMetadataSST,
+		"debug_dump_metadata_sst")
 	if err != nil {
 		return err
 	}
@@ -859,28 +877,12 @@ func (node *ShowCreateAllTables) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ALL TABLES")
 }
 
-// ShowCreateAllTriggers represents a SHOW CREATE ALL TRIGGERS statement.
-type ShowCreateAllTriggers struct{}
-
-// Format implements the NodeFormatter interface.
-func (node *ShowCreateAllTriggers) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CREATE ALL TRIGGERS")
-}
-
 // ShowCreateAllTypes represents a SHOW CREATE ALL TYPES statement.
 type ShowCreateAllTypes struct{}
 
 // Format implements the NodeFormatter interface.
 func (node *ShowCreateAllTypes) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ALL TYPES")
-}
-
-// ShowCreateAllRoutines represents a SHOW CREATE ALL ROUTINES statement.
-type ShowCreateAllRoutines struct{}
-
-// Format implements the NodeFormatter interface.
-func (node *ShowCreateAllRoutines) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CREATE ALL ROUTINES")
 }
 
 // ShowCreateSchedules represents a SHOW CREATE SCHEDULE statement.
@@ -1334,19 +1336,6 @@ func (node *ShowPartitions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Table)
 	}
 }
-
-// ShowPolicies represents a SHOW POLICIES statement.
-type ShowPolicies struct {
-	Table *UnresolvedObjectName
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ShowPolicies) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW POLICIES FOR ")
-	ctx.FormatNode(node.Table)
-}
-
-var _ Statement = &ShowPolicies{}
 
 // ScheduledJobExecutorType is a type identifying the names of
 // the supported scheduled job executors.

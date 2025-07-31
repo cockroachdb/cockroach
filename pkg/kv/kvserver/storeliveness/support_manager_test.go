@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +28,7 @@ var (
 	store       = slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: roachpb.StoreID(1)}
 	remoteStore = slpb.StoreIdent{NodeID: roachpb.NodeID(2), StoreID: roachpb.StoreID(2)}
 	options     = Options{
-		SupportDuration:         6 * time.Millisecond,
+		LivenessInterval:        6 * time.Millisecond,
 		HeartbeatInterval:       3 * time.Millisecond,
 		SupportExpiryInterval:   1 * time.Millisecond,
 		IdleSupportFromInterval: 1 * time.Minute,
@@ -49,7 +50,7 @@ func TestSupportManagerRequestsSupport(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats to the remote store by calling SupportFrom.
@@ -123,13 +124,7 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
-	cb := func(supportWithdrawn map[roachpb.StoreID]struct{}) {
-		require.Equal(t, 1, len(supportWithdrawn))
-		_, ok := supportWithdrawn[roachpb.StoreID(2)]
-		require.True(t, ok)
-	}
-	sm.RegisterSupportWithdrawalCallback(cb)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
 	require.NoError(t, sm.Start(ctx))
 
 	// Pause the clock so support is not withdrawn before calling SupportFor.
@@ -141,7 +136,7 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: sm.clock.Now().AddDuration(options.SupportDuration),
+		Expiration: sm.clock.Now().AddDuration(options.LivenessInterval),
 	}
 	require.NoError(t, sm.HandleMessage(heartbeat))
 
@@ -210,7 +205,7 @@ func TestSupportManagerEnableDisable(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats by calling SupportFrom.
@@ -244,7 +239,7 @@ func TestSupportManagerRestart(t *testing.T) {
 	clock := hlc.NewClockForTesting(manual)
 	clockBehind := hlc.NewClockForTesting(manualBehind)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
 	// Initialize the SupportManager without starting the main goroutine.
 	require.NoError(t, sm.onRestart(ctx))
 
@@ -267,17 +262,17 @@ func TestSupportManagerRestart(t *testing.T) {
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: clock.Now().AddDuration(sm.options.SupportDuration),
+		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
 	}
 	sm.handleMessages(ctx, []*slpb.Message{heartbeatResp, heartbeat})
 	manual.Resume()
-	manual.Increment(sm.options.SupportDuration.Nanoseconds())
+	manual.Increment(sm.options.LivenessInterval.Nanoseconds())
 	sm.withdrawSupport(ctx)
 	withdrawalTime := sm.supporterStateHandler.supporterState.meta.MaxWithdrawn.ToTimestamp()
 
 	// Simulate a restart by creating a new SupportManager with the same engine.
 	// Use a regressed clock.
-	sm = NewSupportManager(store, engine, options, settings, stopper, clockBehind, nil, sender, nil)
+	sm = NewSupportManager(store, engine, options, settings, stopper, clockBehind, sender)
 	now := sm.clock.Now()
 	require.False(t, requestedTime.Less(now))
 	require.False(t, withdrawalTime.Less(now))
@@ -299,7 +294,10 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	engine := NewTestEngine(store)
+	engine := &testEngine{
+		Engine:     storage.NewDefaultInMemForTesting(),
+		blockingCh: make(chan struct{}, 1),
+	}
 	defer engine.Close()
 	settings := clustersettings.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
@@ -307,7 +305,7 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
 	// Initialize the SupportManager without starting the main goroutine.
 	require.NoError(t, sm.onRestart(ctx))
 
@@ -328,12 +326,12 @@ func TestSupportManagerDiskStall(t *testing.T) {
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: clock.Now().AddDuration(sm.options.SupportDuration),
+		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
 	}
 	sm.handleMessages(ctx, []*slpb.Message{heartbeatResp, heartbeat})
 
 	// Start blocking writes.
-	engine.SetBlockOnWrite(true)
+	engine.setBlockOnWrite(true)
 	sender.drainSentMessages()
 
 	// Send heartbeats in a separate goroutine. It will block on writing the
@@ -354,7 +352,8 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	require.True(t, supported)
 
 	// Stop blocking writes.
-	engine.SetBlockOnWrite(false)
+	engine.blockingCh <- struct{}{}
+	engine.setBlockOnWrite(false)
 
 	// Ensure the heartbeat is unblocked and sent out.
 	ensureHeartbeats(t, sender, 1)
@@ -375,7 +374,7 @@ func TestSupportManagerReceiveQueueLimit(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
 	// Initialize the SupportManager without starting the main goroutine.
 	require.NoError(t, sm.onRestart(ctx))
 
@@ -384,7 +383,7 @@ func TestSupportManagerReceiveQueueLimit(t *testing.T) {
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: clock.Now().AddDuration(sm.options.SupportDuration),
+		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
 	}
 
 	for i := 0; i < maxReceiveQueueSize; i++ {
@@ -419,7 +418,7 @@ func TestSupportManagerHeartbeatNewStore(t *testing.T) {
 	// Set a very large heartbeat interval to ensure heartbeats for new stores are
 	// sent out before the heartbeat ticker is signalled.
 	options.HeartbeatInterval = time.Hour
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats to the remote store by calling SupportFrom.
@@ -464,4 +463,88 @@ func ensureNoHeartbeats(
 		}, hbInterval*10,
 	)
 	require.Regexp(t, err, "no heartbeats")
+}
+
+// testMessageSender implements the MessageSender interface and stores all sent
+// messages in a slice.
+type testMessageSender struct {
+	mu       syncutil.Mutex
+	messages []slpb.Message
+}
+
+func (tms *testMessageSender) SendAsync(_ context.Context, msg slpb.Message) (sent bool) {
+	tms.mu.Lock()
+	defer tms.mu.Unlock()
+	tms.messages = append(tms.messages, msg)
+	return true
+}
+
+func (tms *testMessageSender) drainSentMessages() []slpb.Message {
+	tms.mu.Lock()
+	defer tms.mu.Unlock()
+	msgs := tms.messages
+	tms.messages = nil
+	return msgs
+}
+
+func (tms *testMessageSender) getNumSentMessages() int {
+	tms.mu.Lock()
+	defer tms.mu.Unlock()
+	return len(tms.messages)
+}
+
+var _ MessageSender = (*testMessageSender)(nil)
+
+// testEngine is a wrapper around storage.Engine that helps simulate failed and
+// stalled writes.
+type testEngine struct {
+	storage.Engine
+	mu           syncutil.Mutex
+	blockingCh   chan struct{}
+	blockOnWrite bool
+	errorOnWrite bool
+}
+
+func (te *testEngine) NewBatch() storage.Batch {
+	return testBatch{
+		Batch:        te.Engine.NewBatch(),
+		blockingCh:   te.blockingCh,
+		blockOnWrite: te.blockOnWrite,
+		errorOnWrite: te.errorOnWrite,
+	}
+}
+
+func (te *testEngine) setBlockOnWrite(bow bool) {
+	te.mu.Lock()
+	defer te.mu.Unlock()
+	te.blockOnWrite = bow
+}
+
+func (te *testEngine) PutUnversioned(key roachpb.Key, value []byte) error {
+	te.mu.Lock()
+	defer te.mu.Unlock()
+	if te.blockOnWrite {
+		<-te.blockingCh
+	}
+	if te.errorOnWrite {
+		return errors.New("error writing")
+	}
+	return te.Engine.PutUnversioned(key, value)
+}
+
+type testBatch struct {
+	storage.Batch
+	blockingCh   chan struct{}
+	blockOnWrite bool
+	errorOnWrite bool
+}
+
+func (tb testBatch) Commit(sync bool) error {
+	if tb.blockOnWrite {
+		<-tb.blockingCh
+	}
+	if tb.errorOnWrite {
+		return errors.New("error committing batch")
+	}
+	return tb.Batch.Commit(sync)
 }

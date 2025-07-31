@@ -290,17 +290,6 @@ func (i *immediateVisitor) UpdateTableBackReferencesInSequences(
 				}
 				ids.ForEach(forwardRefs.Add)
 			}
-			for _, p := range tbl.GetPolicies() {
-				for _, pexpr := range []string{p.WithCheckExpr, p.UsingExpr} {
-					if pexpr != "" {
-						ids, err := sequenceIDsInExpr(pexpr)
-						if err != nil {
-							return err
-						}
-						ids.ForEach(forwardRefs.Add)
-					}
-				}
-			}
 		}
 	}
 	for _, seqID := range op.SequenceIDs {
@@ -400,65 +389,6 @@ func (i *immediateVisitor) RemoveTableColumnBackReferencesInFunctions(
 	return nil
 }
 
-func (i *immediateVisitor) AddTableIndexBackReferencesInFunctions(
-	ctx context.Context, op scop.AddTableIndexBackReferencesInFunctions,
-) error {
-	tblDesc, err := i.checkOutTable(ctx, op.BackReferencedTableID)
-	if err != nil {
-		return err
-	}
-	var fnIDsInUse catalog.DescriptorIDSet
-	if !tblDesc.Dropped() {
-		// If table is dropped then there is no functions in use.
-		fnIDsInUse, err = tblDesc.GetAllReferencedFunctionIDsInIndex(op.BackReferencedIndexID)
-		if err != nil {
-			return err
-		}
-	}
-	for _, id := range op.FunctionIDs {
-		// If the fnIDsInUse are functions that we are not "adding" back in, do nothing.
-		if !fnIDsInUse.Contains(id) {
-			continue
-		}
-		fnDesc, err := i.checkOutFunction(ctx, id)
-		if err != nil {
-			return err
-		}
-		if err = fnDesc.AddIndexReference(op.BackReferencedTableID, op.BackReferencedIndexID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (i *immediateVisitor) RemoveTableIndexBackReferencesInFunctions(
-	ctx context.Context, op scop.RemoveTableIndexBackReferencesInFunctions,
-) error {
-	tblDesc, err := i.checkOutTable(ctx, op.BackReferencedTableID)
-	if err != nil {
-		return err
-	}
-	var fnIDsInUse catalog.DescriptorIDSet
-	if !tblDesc.Dropped() {
-		// If table is dropped then there is no functions in use.
-		fnIDsInUse, err = tblDesc.GetAllReferencedFunctionIDsInIndex(op.BackReferencedIndexID)
-		if err != nil {
-			return err
-		}
-	}
-	for _, id := range op.FunctionIDs {
-		if fnIDsInUse.Contains(id) {
-			continue
-		}
-		fnDesc, err := i.checkOutFunction(ctx, id)
-		if err != nil {
-			return err
-		}
-		fnDesc.RemoveIndexReference(op.BackReferencedTableID, op.BackReferencedIndexID)
-	}
-	return nil
-}
-
 func (i *immediateVisitor) AddTriggerBackReferencesInRoutines(
 	ctx context.Context, op scop.AddTriggerBackReferencesInRoutines,
 ) error {
@@ -487,37 +417,6 @@ func (i *immediateVisitor) RemoveTriggerBackReferencesInRoutines(
 	return nil
 }
 
-func (i *immediateVisitor) AddPolicyBackReferenceInFunctions(
-	ctx context.Context, op scop.AddPolicyBackReferenceInFunctions,
-) error {
-	for _, id := range op.FunctionIDs {
-		fnDesc, err := i.checkOutFunction(ctx, id)
-		if err != nil {
-			return err
-		}
-		if err := fnDesc.AddPolicyReference(op.BackReferencedTableID, op.BackReferencedPolicyID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (i *immediateVisitor) RemovePolicyBackReferenceInFunctions(
-	ctx context.Context, op scop.RemovePolicyBackReferenceInFunctions,
-) error {
-	for _, id := range op.FunctionIDs {
-		fnDesc, err := i.checkOutFunction(ctx, id)
-		if err != nil {
-			return err
-		}
-		fnDesc.RemovePolicyReference(op.BackReferencedTableID, op.BackReferencedPolicyID)
-	}
-	return nil
-}
-
-// updateBackReferencesInSequences will maintain the back-references in the
-// sequence to a given table (and optional column).
-//
 // Look through `seqID`'s dependedOnBy slice, find the back-reference to `tblID`,
 // and update it to either
 //   - upsert `colID` to ColumnIDs field of that back-reference, if `forwardRefs` contains `seqID`; or
@@ -535,21 +434,15 @@ func updateBackReferencesInSequences(
 		return err
 	}
 	var current, updated catalog.TableColSet
-	var hasExistingFwdRef bool
 	_ = seq.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
 		if dep.ID == tblID {
-			hasExistingFwdRef = true
 			current = catalog.MakeTableColSet(dep.ColumnIDs...)
 			return iterutil.StopIteration()
 		}
 		return nil
 	})
 	if forwardRefs.Contains(seqID) {
-		// The sequence should maintain a back reference to the table. Check if the
-		// current reference is sufficient. We can skip updating if the forward reference
-		// already points to the correct column (if specified) or, if no column is given,
-		// the table itself has an existing reference.
-		if current.Contains(colID) || (colID == 0 && hasExistingFwdRef) {
+		if current.Contains(colID) {
 			return nil
 		}
 		updated.UnionWith(current)
@@ -557,10 +450,7 @@ func updateBackReferencesInSequences(
 			updated.Add(colID)
 		}
 	} else {
-		// The sequence should no longer reference the table—either for the specified
-		// column (if provided) or for the entire table if no column is given. Check
-		// if an update is needed.
-		if (colID != 0 && !current.Contains(colID)) || (colID == 0 && !hasExistingFwdRef) {
+		if !current.Contains(colID) && colID != 0 {
 			return nil
 		}
 		current.ForEach(func(id descpb.ColumnID) {
@@ -748,21 +638,14 @@ func (i *immediateVisitor) UpdateTableBackReferencesInRelations(
 	if err != nil {
 		return err
 	}
-	// Collect all forward references from this table, excluding foreign keys.
-	// Foreign key dependencies are not tracked via DependedOnBy, so we skip them here.
-	forwardRefs := backRefTbl.GetAllReferencedRelationIDsExceptFKs()
-	for _, ref := range op.RelationReferences {
-		referenced, err := i.checkOutTable(ctx, ref.ID)
+	forwardRefs := backRefTbl.GetAllReferencedTableIDs()
+	for _, relID := range op.RelationIDs {
+		referenced, err := i.checkOutTable(ctx, relID)
 		if err != nil {
 			return err
 		}
 		newBackRefIsDupe := false
-		newBackRef := descpb.TableDescriptor_Reference{
-			ID:        op.TableID,
-			IndexID:   ref.IndexID,
-			ColumnIDs: ref.ColumnIDs,
-			ByID:      referenced.IsSequence(),
-		}
+		newBackRef := descpb.TableDescriptor_Reference{ID: op.TableID, ByID: referenced.IsSequence()}
 		removeBackRefs := !forwardRefs.Contains(referenced.GetID())
 		newDependedOnBy := referenced.DependedOnBy[:0]
 		for _, backRef := range referenced.DependedOnBy {

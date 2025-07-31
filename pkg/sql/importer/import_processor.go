@@ -50,33 +50,45 @@ const readImportDataProcessorName = "readImportDataProcessor"
 
 var progressUpdateInterval = time.Second * 10
 
-var importPKAdderBufferSize = settings.RegisterByteSizeSetting(
-	settings.ApplicationLevel,
-	"kv.bulk_ingest.pk_buffer_size",
-	"the initial size of the BulkAdder buffer handling primary index imports",
-	32<<20,
-)
+var importPKAdderBufferSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		settings.ApplicationLevel,
+		"kv.bulk_ingest.pk_buffer_size",
+		"the initial size of the BulkAdder buffer handling primary index imports",
+		32<<20,
+	)
+	return s
+}()
 
-var importPKAdderMaxBufferSize = settings.RegisterByteSizeSetting(
-	settings.ApplicationLevel,
-	"kv.bulk_ingest.max_pk_buffer_size",
-	"the maximum size of the BulkAdder buffer handling primary index imports",
-	128<<20,
-)
+var importPKAdderMaxBufferSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		settings.ApplicationLevel,
+		"kv.bulk_ingest.max_pk_buffer_size",
+		"the maximum size of the BulkAdder buffer handling primary index imports",
+		128<<20,
+	)
+	return s
+}()
 
-var importIndexAdderBufferSize = settings.RegisterByteSizeSetting(
-	settings.ApplicationLevel,
-	"kv.bulk_ingest.index_buffer_size",
-	"the initial size of the BulkAdder buffer handling secondary index imports",
-	32<<20,
-)
+var importIndexAdderBufferSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		settings.ApplicationLevel,
+		"kv.bulk_ingest.index_buffer_size",
+		"the initial size of the BulkAdder buffer handling secondary index imports",
+		32<<20,
+	)
+	return s
+}()
 
-var importIndexAdderMaxBufferSize = settings.RegisterByteSizeSetting(
-	settings.ApplicationLevel,
-	"kv.bulk_ingest.max_index_buffer_size",
-	"the maximum size of the BulkAdder buffer handling secondary index imports",
-	512<<20,
-)
+var importIndexAdderMaxBufferSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		settings.ApplicationLevel,
+		"kv.bulk_ingest.max_index_buffer_size",
+		"the maximum size of the BulkAdder buffer handling secondary index imports",
+		512<<20,
+	)
+	return s
+}()
 
 var readerParallelismSetting = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
@@ -86,7 +98,7 @@ var readerParallelismSetting = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-// importBufferConfigSizes determines the minimum, maximum and step size for the
+// ImportBufferConfigSizes determines the minimum, maximum and step size for the
 // BulkAdder buffer used in import.
 func importBufferConfigSizes(st *cluster.Settings, isPKAdder bool) (int64, func() int64) {
 	if isPKAdder {
@@ -259,22 +271,24 @@ func makeInputConverter(
 		}
 	}
 
-	if singleTable == nil {
-		return nil, errors.Errorf("%s only supports reading a single, pre-specified table", spec.Format.Format.String())
+	if format := spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
+		return nil, errors.Errorf("%s only supports reading a single, pre-specified table", format.String())
 	}
 
-	// If we're using a format like CSV where data columns are not "named", and
-	// therefore cannot be mapped to schema columns, then require the user to
-	// use IMPORT INTO.
-	//
-	// We could potentially do something smarter here and check that only a
-	// suffix of the columns are computed, and then expect the data file to have
-	// #(visible columns) - #(computed columns).
-	if len(singleTableTargetCols) == 0 && !formatHasNamedColumns(spec.Format.Format) {
-		for _, col := range singleTable.VisibleColumns() {
-			if col.IsComputed() {
-				return nil, unimplemented.NewWithIssueDetail(56002, "import.computed",
-					"to use computed columns, use IMPORT INTO")
+	if singleTable != nil {
+		// If we're using a format like CSV where data columns are not "named", and
+		// therefore cannot be mapped to schema columns, then require the user to
+		// use IMPORT INTO.
+		//
+		// We could potentially do something smarter here and check that only a
+		// suffix of the columns are computed, and then expect the data file to have
+		// #(visible columns) - #(computed columns).
+		if len(singleTableTargetCols) == 0 && !formatHasNamedColumns(spec.Format.Format) {
+			for _, col := range singleTable.VisibleColumns() {
+				if col.IsComputed() {
+					return nil, unimplemented.NewWithIssueDetail(56002, "import.computed",
+						"to use computed columns, use IMPORT INTO")
+				}
 			}
 		}
 	}
@@ -306,9 +320,15 @@ func makeInputConverter(
 		return newMysqloutfileReader(
 			semaCtx, spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
 			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
+	case roachpb.IOFileFormat_Mysqldump:
+		return newMysqldumpReader(ctx, semaCtx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx,
+			spec.Format.MysqlDump, db)
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(semaCtx, spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
 			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
+	case roachpb.IOFileFormat_PgDump:
+		return newPgDumpReader(ctx, semaCtx, int64(spec.Progress.JobID), kvCh, spec.Format.PgDump,
+			spec.WalltimeNanos, spec.Tables, evalCtx, db)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
 			semaCtx, kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,

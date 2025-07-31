@@ -33,7 +33,6 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
 {"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"auto-committing transaction before processing DDL due to autocommit_before_ddl setting","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAutoCommitBeforeDDL","UnknownFields":null}
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
 {"Type":"NoData"}
@@ -83,6 +82,7 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
+Query {"String": "SET autocommit_before_ddl=on"}
 Query {"String": "BEGIN"}
 Bind {"PreparedStatement": "ddl_stmt_t"}
 Execute
@@ -92,7 +92,10 @@ Sync
 until crdb_only
 ReadyForQuery
 ReadyForQuery
+ReadyForQuery
 ----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"auto-committing transaction before processing DDL due to autocommit_before_ddl setting","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAutoCommitBeforeDDL","UnknownFields":null}

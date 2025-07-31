@@ -97,12 +97,6 @@ func (s *CurrentState) Rollback() {
 		switch t.TargetStatus {
 		case Status_ABSENT:
 			t.TargetStatus = Status_PUBLIC
-		// TransientAbsent public elements always have the end goal
-		// of always returning back to public. So, the target
-		// always stays the same (i.e. turn schema locked off
-		// and on again).
-		case Status_TRANSIENT_PUBLIC:
-			t.TargetStatus = Status_TRANSIENT_PUBLIC
 		default:
 			t.TargetStatus = Status_ABSENT
 		}
@@ -153,19 +147,10 @@ type ZoneConfigElement interface {
 	GetTargetID() catid.DescID
 }
 
-var _ ZoneConfigElement = &NamedRangeZoneConfig{}
 var _ ZoneConfigElement = &DatabaseZoneConfig{}
 var _ ZoneConfigElement = &TableZoneConfig{}
 var _ ZoneConfigElement = &IndexZoneConfig{}
 var _ ZoneConfigElement = &PartitionZoneConfig{}
-
-func (e *NamedRangeZoneConfig) GetSeqNum() uint32 {
-	return e.SeqNum
-}
-
-func (e *NamedRangeZoneConfig) GetTargetID() catid.DescID {
-	return e.RangeID
-}
 
 func (e *DatabaseZoneConfig) GetSeqNum() uint32 {
 	return e.SeqNum

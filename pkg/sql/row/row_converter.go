@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,22 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
-	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
-// KVInserter implements the row.Putter interface.
+// KVInserter implements the putter interface.
 type KVInserter func(roachpb.KeyValue)
 
-// CPut implements the row.Putter interface.
+// CPut is not implmented.
 func (i KVInserter) CPut(key, value interface{}, expValue []byte) {
-	if expValue != nil {
-		panic(errors.AssertionFailedf("unexpected non-nil expValue in CPut in KVInserter: %v", expValue))
-	}
-	i(roachpb.KeyValue{
-		Key:   *key.(*roachpb.Key),
-		Value: *value.(*roachpb.Value),
-	})
+	panic("unimplemented")
 }
 
 // Del is not implemented.
@@ -59,15 +53,7 @@ func (i KVInserter) Del(key ...interface{}) {
 	// empty).
 }
 
-// DelMustAcquireExclusiveLock is not implemented.
-func (i KVInserter) DelMustAcquireExclusiveLock(key ...interface{}) {
-	// Lock acquisition ask has no influence on the KVInserter - the KVInserter
-	// function simply accumulates KVs and doesn't care about the KV request
-	// details.
-	i.Del(key)
-}
-
-// Put method of the row.Putter interface.
+// Put method of the putter interface.
 func (i KVInserter) Put(key, value interface{}) {
 	i(roachpb.KeyValue{
 		Key:   *key.(*roachpb.Key),
@@ -75,32 +61,23 @@ func (i KVInserter) Put(key, value interface{}) {
 	})
 }
 
-func (i KVInserter) PutMustAcquireExclusiveLock(key, value interface{}) {
-	// Lock acquisition ask has no influence on the KVInserter - the KVInserter
-	// function simply accumulates KVs and doesn't care about the KV request
-	// details.
-	i.Put(key, value)
+// InitPut method of the putter interface.
+func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
+	i(roachpb.KeyValue{
+		Key:   *key.(*roachpb.Key),
+		Value: *value.(*roachpb.Value),
+	})
 }
-func (i KVInserter) CPutWithOriginTimestamp(
-	key, value interface{}, expValue []byte, ts hlc.Timestamp,
+func (c KVInserter) CPutWithOriginTimestamp(
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
 ) {
-	panic(errors.AssertionFailedf("unimplemented"))
 }
-func (i KVInserter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte) {
-	panic(errors.AssertionFailedf("unimplemented"))
-}
-func (i KVInserter) CPutTuplesEmpty(kys []roachpb.Key, values [][]byte) {
-	panic(errors.AssertionFailedf("unimplemented"))
-}
-func (i KVInserter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value) {
-	panic(errors.AssertionFailedf("unimplemented"))
-}
-func (i KVInserter) PutBytes(kys []roachpb.Key, values [][]byte) {
-	panic(errors.AssertionFailedf("unimplemented"))
-}
-func (i KVInserter) PutTuples(kys []roachpb.Key, values [][]byte) {
-	panic(errors.AssertionFailedf("unimplemented"))
-}
+func (c KVInserter) CPutTuplesEmpty(kys []roachpb.Key, values [][]byte)        {}
+func (c KVInserter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value) {}
+func (c KVInserter) PutBytes(kys []roachpb.Key, values [][]byte)               {}
+func (c KVInserter) InitPutBytes(kys []roachpb.Key, values [][]byte)           {}
+func (c KVInserter) PutTuples(kys []roachpb.Key, values [][]byte)              {}
+func (c KVInserter) InitPutTuples(kys []roachpb.Key, values [][]byte)          {}
 
 // GenerateInsertRow prepares a row tuple for insertion. It fills in default
 // expressions, verifies non-nullable columns, and checks column widths.
@@ -252,7 +229,6 @@ type DatumRowConverter struct {
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
 	FractionFn     func() float32
-	kvInserter     KVInserter
 
 	db *kv.DB
 }
@@ -348,10 +324,6 @@ func NewDatumRowConverter(
 		EvalCtx: evalCtx.Copy(),
 		db:      db,
 	}
-	c.kvInserter = func(kv roachpb.KeyValue) {
-		c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
-		c.KvBatch.MemSize += int64(cap(kv.Key) + cap(kv.Value.RawBytes))
-	}
 
 	var targetCols []catalog.Column
 	var err error
@@ -389,12 +361,15 @@ func NewDatumRowConverter(
 	}
 
 	ri, err := MakeInserter(
+		ctx,
+		nil, /* txn */
 		evalCtx.Codec,
 		tableDesc,
 		nil, /* uniqueWithTombstoneIndexes */
 		cols,
-		evalCtx.SessionData(),
+		&tree.DatumAlloc{},
 		&evalCtx.Settings.SV,
+		evalCtx.SessionData().Internal,
 		metrics,
 	)
 	if err != nil {
@@ -444,8 +419,6 @@ func NewDatumRowConverter(
 				// been identified now (e.g. "IMPORT PGDUMP...") and we want to
 				// throw an error only at the "Row" stage when the targeted columns
 				// have been identified.
-				// TODO(yuzefovich): can this check be now removed? PGDUMP is
-				// gone.
 				c.defaultCache[i] = &unsafeErrExpr{
 					err: errors.Wrapf(err, "default expression %s unsafe for import", defaultExprs[i].String()),
 				}
@@ -521,7 +494,7 @@ func NewDatumRowConverter(
 	return c, nil
 }
 
-const rowIDBits = 64 - unique.UniqueIntNodeIDBits
+const rowIDBits = 64 - builtinconstants.UniqueIntNodeIDBits
 
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.
@@ -582,22 +555,17 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		c.EvalCtx.PopIVarContainer()
 	}
 
-	// TODO(mw5h, drewk): call into the vector index library to determine the partitions
-	// to update.
-	var vh VectorIndexUpdateHelper
-	var oth OriginTimestampCPutHelper
-
 	if err := c.ri.InsertRow(
 		ctx,
-		c.kvInserter,
+		KVInserter(func(kv roachpb.KeyValue) {
+			kv.Value.InitChecksum(kv.Key)
+			c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
+			c.KvBatch.MemSize += int64(cap(kv.Key) + cap(kv.Value.RawBytes))
+		}),
 		insertRow,
 		pm,
-		vh,
-		oth,
-		// Lock acquisition ask doesn't matter for the DatumRowConverter, but
-		// we're being conservative and are choosing a "safer" option of asking
-		// for the lock.
-		PutMustAcquireExclusiveLockOp,
+		nil,   /* OriginTimestampCPutHelper */
+		true,  /* ignoreConflicts */
 		false, /* traceKV */
 	); err != nil {
 		return errors.Wrap(err, "insert row")

@@ -298,11 +298,6 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 	}
 
 	log.Infof(ctx, "established range feed over system.zones starting at time %s", startTS)
-
-	if s.knobs != nil && s.knobs.OnWatchForZoneConfigUpdatesEstablished != nil {
-		s.knobs.OnWatchForZoneConfigUpdatesEstablished()
-	}
-
 	return rf, nil
 }
 

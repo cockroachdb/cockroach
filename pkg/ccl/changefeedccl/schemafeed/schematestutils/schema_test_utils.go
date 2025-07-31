@@ -166,58 +166,53 @@ func FetchDescVersionModificationTime(
 		t.Fatal(pErr.GoError())
 	}
 	for _, file := range res.(*kvpb.ExportResponse).Files {
-		ts, found := func() (hlc.Timestamp, bool) {
-			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-				LowerBound: keys.MinKey,
-				UpperBound: keys.MaxKey,
-			})
+		it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			LowerBound: keys.MinKey,
+			UpperBound: keys.MaxKey,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer it.Close()
+		for it.SeekGE(storage.NilKey); ; it.Next() {
+			if ok, err := it.Valid(); err != nil {
+				t.Fatal(err)
+			} else if !ok {
+				continue
+			}
+			k := it.UnsafeKey()
+			if _, hasRange := it.HasPointAndRange(); hasRange {
+				t.Fatalf("unexpected MVCC range key at %s", k)
+			}
+			remaining, _, _, err := s.Codec().DecodeIndexPrefix(k.Key)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer it.Close()
-			for it.SeekGE(storage.NilKey); ; it.Next() {
-				if ok, err := it.Valid(); err != nil {
-					t.Fatal(err)
-				} else if !ok {
-					return hlc.Timestamp{}, false
-				}
-				k := it.UnsafeKey()
-				if _, hasRange := it.HasPointAndRange(); hasRange {
-					t.Fatalf("unexpected MVCC range key at %s", k)
-				}
-				remaining, _, _, err := s.Codec().DecodeIndexPrefix(k.Key)
-				if err != nil {
-					t.Fatal(err)
-				}
-				_, tableID, err := encoding.DecodeUvarintAscending(remaining)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if tableID != uint64(dropColTblID) {
-					continue
-				}
-				unsafeValue, err := it.UnsafeValue()
-				require.NoError(t, err)
-				if unsafeValue == nil {
-					t.Fatal(errors.New(`value was dropped or truncated`))
-				}
-				value := roachpb.Value{RawBytes: unsafeValue, Timestamp: k.Timestamp}
-				b, err := descbuilder.FromSerializedValue(&value)
-				if err != nil {
-					t.Fatal(err)
-				}
-				require.NotNil(t, b)
-				if b.DescriptorType() == catalog.Table {
-					tbl := b.BuildImmutable().(catalog.TableDescriptor)
-					if int(tbl.GetVersion()) == version {
-						return tbl.GetModificationTime(), true
-					}
+			_, tableID, err := encoding.DecodeUvarintAscending(remaining)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tableID != uint64(dropColTblID) {
+				continue
+			}
+			unsafeValue, err := it.UnsafeValue()
+			require.NoError(t, err)
+			if unsafeValue == nil {
+				t.Fatal(errors.New(`value was dropped or truncated`))
+			}
+			value := roachpb.Value{RawBytes: unsafeValue, Timestamp: k.Timestamp}
+			b, err := descbuilder.FromSerializedValue(&value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			require.NotNil(t, b)
+			if b.DescriptorType() == catalog.Table {
+				tbl := b.BuildImmutable().(catalog.TableDescriptor)
+				if int(tbl.GetVersion()) == version {
+					return tbl.GetModificationTime()
 				}
 			}
-		}()
-		if found {
-			return ts
 		}
 	}
 	t.Fatal(errors.New(`couldn't find table desc for given version`))

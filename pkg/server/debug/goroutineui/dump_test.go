@@ -22,21 +22,6 @@ func init() {
 	}
 }
 
-func TestDumpEmpty(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	dump := NewDump()
-	dump.agg = nil
-
-	assert.NotPanics(t, func() {
-		dump.SortWaitDesc()
-		dump.SortCountDesc()
-	})
-
-	act := dump.HTMLString()
-	assert.Contains(t, act, "goroutineui: empty goroutine dump")
-}
-
 func TestDumpHTML(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

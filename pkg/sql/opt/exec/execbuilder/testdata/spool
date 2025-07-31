@@ -25,7 +25,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1 (a)
@@ -56,7 +56,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: DELETE FROM t RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1 (a)
@@ -68,7 +68,6 @@ vectorized: true
                   missing stats
                   table: t@t_pkey
                   spans: FULL SCAN
-                  locking strength: for update
 
 
 query T
@@ -89,7 +88,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: UPDATE t SET x = x + 1 RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1 (a)
@@ -125,7 +124,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: UPSERT INTO t VALUES (2), (3) RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1 (a)
@@ -155,7 +154,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1
@@ -185,7 +184,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: DELETE FROM t RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1
@@ -197,7 +196,6 @@ vectorized: true
                   missing stats
                   table: t@t_pkey
                   spans: FULL SCAN
-                  locking strength: for update
 
 query T
 EXPLAIN SELECT * FROM [UPDATE t SET x = x + 1 RETURNING x] LIMIT 1
@@ -216,7 +214,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: UPDATE t SET x = x + 1 RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1
@@ -251,7 +249,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: UPSERT INTO t VALUES (2), (3) RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1
@@ -280,7 +278,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1
@@ -314,7 +312,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1
@@ -349,7 +347,7 @@ vectorized: true
 ├── • subquery
 │   │ id: @S1
 │   │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x
-│   │ exec mode: discard all rows
+│   │ exec mode: all rows
 │   │
 │   └── • buffer
 │       │ label: buffer 1 (a)
@@ -365,7 +363,7 @@ vectorized: true
 └── • subquery
     │ id: @S2
     │ original sql: INSERT INTO t SELECT x + 1 FROM a RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 2 (b)
@@ -393,7 +391,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1
@@ -427,7 +425,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1
@@ -461,7 +459,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x + 10 AS r
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1
@@ -494,7 +492,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x + 10 AS r
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1

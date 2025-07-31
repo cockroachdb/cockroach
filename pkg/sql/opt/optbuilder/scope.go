@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -110,17 +111,6 @@ type scope struct {
 
 	// atRoot is whether we are currently at a root context.
 	atRoot bool
-
-	// checkMaxParamOrd is true if attempts to resolve a routine parameter via
-	// ordinal reference syntax (like $1) should be checked against the
-	// maxParamOrd.
-	checkMaxParamOrd bool
-
-	// maxParamOrd, if set, is the maximum 1-based ordinal reference that can be
-	// used to resolve a routine parameter. This is used to selectively allow
-	// references to internally-generated parameters such as those for PL/pgSQL
-	// sub-routines.
-	maxParamOrd int
 }
 
 // exprKind is used to represent the kind of the current expression in the
@@ -226,6 +216,28 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 	// the new scope.
 	for i := l; i < len(s.cols); i++ {
 		s.cols[i].scalar = nil
+	}
+}
+
+// appendOrdinaryColumnsFromTable adds all non-mutation and non-system columns from the
+// given table metadata to this scope.
+func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tree.TableName) {
+	tab := tabMeta.Table
+	if s.cols == nil {
+		s.cols = make([]scopeColumn, 0, tab.ColumnCount())
+	}
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		tabCol := tab.Column(i)
+		if tabCol.Kind() != cat.Ordinary {
+			continue
+		}
+		s.cols = append(s.cols, scopeColumn{
+			name:       scopeColName(tabCol.ColName()),
+			table:      *alias,
+			typ:        tabCol.DatumType(),
+			id:         tabMeta.MetaID.ColumnID(i),
+			visibility: columnVisibility(tabCol.Visibility()),
+		})
 	}
 }
 
@@ -495,7 +507,7 @@ func (s *scope) resolveTypeAndReject(
 
 // ensureNullType tests the type of the given expression. If types.Unknown, then
 // ensureNullType wraps the expression in a CAST to the desired type (assuming
-// it is not types.AnyElement). types.Unknown is a special type used for null values,
+// it is not types.Any). types.Unknown is a special type used for null values,
 // and can be cast to any other type.
 func (s *scope) ensureNullType(texpr tree.TypedExpr, desired *types.T) tree.TypedExpr {
 	if desired.Family() != types.AnyFamily && texpr.ResolvedType().Family() == types.UnknownFamily {
@@ -650,19 +662,28 @@ func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *sco
 }
 
 // findFuncArgCol returns the column that represents a function argument and has
-// an ordinal matching the given 0-based ordinal position. If such a column is
-// not found in the current scope, ancestor scopes are successively searched.
-// If no matching function argument column is found, nil is returned.
-func (s *scope) findFuncArgCol(ord int) *scopeColumn {
+// an ordinal matching the given placeholder index. If such a column is not
+// found in the current scope, ancestor scopes are successively searched. If no
+// matching function argument column is found, nil is returned.
+func (s *scope) findFuncArgCol(idx tree.PlaceholderIdx) *scopeColumn {
 	for ; s != nil; s = s.parent {
-		if s.checkMaxParamOrd && ord > (s.maxParamOrd-1) {
-			// Referencing this function parameter by ordinal is not allowed. Subtract
-			// 1 from maxParamOrd to convert it to a 0-based ordinal.
-			return nil
-		}
 		for i := range s.cols {
 			col := &s.cols[i]
-			if col.funcParamReferencedBy(ord) {
+			if col.funcParamReferencedBy(idx) {
+				return col
+			}
+		}
+	}
+	return nil
+}
+
+// findAnonymousColumnWithMetadataName returns the first anonymous column that
+// has the given name in the query metadata.
+func (s *scope) findAnonymousColumnWithMetadataName(metadataName string) *scopeColumn {
+	for ; s != nil; s = s.parent {
+		for i := range s.cols {
+			col := &s.cols[i]
+			if col.name.refName == "" && col.name.metadataName == metadataName {
 				return col
 			}
 		}
@@ -851,7 +872,7 @@ func (s *scope) FindSourceProvidingColumn(
 			if candidate.ambiguous {
 				return nil, nil, -1, s.newAmbiguousColumnError(colName, candidate.matchClass)
 			}
-			return &col.table, col, int(col.id), col.resolveErr
+			return &col.table, col, int(col.id), nil
 		}
 		// No matches in this scope; proceed to the parent scope.
 	}
@@ -994,7 +1015,7 @@ func (s *scope) Resolve(
 		if col.visibility != inaccessible &&
 			col.name.MatchesReferenceName(colName) &&
 			sourceNameMatches(*prefix, col.table) {
-			return col, col.resolveErr
+			return col, nil
 		}
 	}
 
@@ -1083,7 +1104,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		// NOTE: This likely won't work if we want to allow PREPARE statements
 		// within user-defined function bodies. We'll need to avoid replacing
 		// placeholders that are prepared statement parameters.
-		if col := s.findFuncArgCol(int(t.Idx)); col != nil {
+		if col := s.findFuncArgCol(t.Idx); col != nil {
 			return false, col
 		}
 
@@ -1185,7 +1206,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.ResolvedFunctionDefinitio
 		tree.RejectAggregates|tree.RejectWindowApplications|tree.RejectNestedGenerators)
 
 	expr := f.Walk(s)
-	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.AnyElement)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
 	if err != nil {
 		panic(err)
 	}
@@ -1286,7 +1307,7 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.ResolvedFunctionDef
 		copy(fCopy.Exprs, oldExprs)
 
 		// Add implicit column to the input expressions.
-		fCopy.Exprs = append(fCopy.Exprs, s.resolveType(fCopy.OrderBy[0].Expr, types.AnyElement))
+		fCopy.Exprs = append(fCopy.Exprs, s.resolveType(fCopy.OrderBy[0].Expr, types.Any))
 	}
 
 	expr := fCopy.Walk(s)
@@ -1305,14 +1326,14 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.ResolvedFunctionDef
 			defer func() { s.builder.semaCtx.Properties.Restore(oldProps) }()
 
 			s.builder.semaCtx.Properties.Require("FILTER", tree.RejectSpecial)
-			_, err := tree.TypeCheck(s.builder.ctx, expr.(*tree.FuncExpr).Filter, s.builder.semaCtx, types.AnyElement)
+			_, err := tree.TypeCheck(s.builder.ctx, expr.(*tree.FuncExpr).Filter, s.builder.semaCtx, types.Any)
 			if err != nil {
 				panic(err)
 			}
 		}()
 	}
 
-	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.AnyElement)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
 	if err != nil {
 		panic(err)
 	}
@@ -1384,7 +1405,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefi
 
 	expr := fCopy.Walk(s)
 
-	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.AnyElement)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
 	if err != nil {
 		panic(err)
 	}
@@ -1405,7 +1426,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefi
 	oldPartitions := f.WindowDef.Partitions
 	f.WindowDef.Partitions = make(tree.Exprs, len(oldPartitions))
 	for i, e := range oldPartitions {
-		typedExpr := s.resolveType(e, types.AnyElement)
+		typedExpr := s.resolveType(e, types.Any)
 		f.WindowDef.Partitions[i] = typedExpr
 	}
 
@@ -1416,7 +1437,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefi
 		if ord.OrderType != tree.OrderByColumn {
 			panic(errOrderByIndexInWindow)
 		}
-		typedExpr := s.resolveType(ord.Expr, types.AnyElement)
+		typedExpr := s.resolveType(ord.Expr, types.Any)
 		ord.Expr = typedExpr
 		f.WindowDef.OrderBy[i] = &ord
 	}
@@ -1468,7 +1489,7 @@ func (s *scope) replaceSQLFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefinit
 	s.builder.semaCtx.Properties.Require("SQL function", tree.RejectSpecial)
 
 	expr := f.Walk(s)
-	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.AnyElement)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
 	if err != nil {
 		panic(err)
 	}
@@ -1614,7 +1635,7 @@ func (s *scope) replaceCount(
 			// We call TypeCheck to fill in FuncExpr internals. This is a fixed
 			// expression; we should not hit an error here.
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
-			if _, err := e.TypeCheck(s.builder.ctx, &semaCtx, types.AnyElement); err != nil {
+			if _, err := e.TypeCheck(s.builder.ctx, &semaCtx, types.Any); err != nil {
 				panic(err)
 			}
 			newDef, err := e.Func.Resolve(s.builder.ctx, s.builder.semaCtx.SearchPath, nil /* resolver */)

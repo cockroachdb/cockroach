@@ -28,7 +28,7 @@ import (
 const pausedJobsCountQuery = string(`
 	SELECT job_type, count(*)
 	FROM system.jobs
-	WHERE status = '` + jobs.StatePaused + `'
+	WHERE status = '` + jobs.StatusPaused + `'
   GROUP BY job_type`)
 
 // updatePausedMetrics counts the number of paused jobs per job type.
@@ -81,7 +81,7 @@ func updatePausedMetrics(ctx context.Context, execCtx sql.JobExecContext) error 
 // in the result, e.g. a new changefeed that is still in initial scan would not
 // change the result of the query, but if after its initial scan it was several
 // minutes behind and was the most lagged changefeed, that would be reflected.
-const lowTSForTypeQuery = `SELECT min(high_water_timestamp) FROM crdb_internal.jobs WHERE job_type = $1 AND status IN ` + jobs.NonTerminalStateTupleString
+const lowTSForTypeQuery = `SELECT min(high_water_timestamp) FROM crdb_internal.jobs WHERE job_type = $1 AND status IN ` + jobs.NonTerminalStatusTupleString
 
 // updateTSMetrics updates the metrics for jobs that have registered for ts
 // tracking.

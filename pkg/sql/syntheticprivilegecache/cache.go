@@ -85,18 +85,14 @@ func (c *Cache) Get(
 	}
 	privDesc, err := c.c.LoadValueOutsideOfCacheSingleFlight(ctx, fmt.Sprintf("%s-%d", spo.GetPath(), desc.GetVersion()),
 		func(loadCtx context.Context) (_ interface{}, retErr error) {
-			privDesc, err := c.readFromStorage(loadCtx, txn, spo)
-			if err != nil {
-				return nil, err
-			}
-			entrySize := int64(len(spo.GetPath())) + computePrivDescSize(privDesc)
-			// Only write back to the cache if the table version is committed.
-			c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), *privDesc, entrySize)
-			return privDesc, nil
+			return c.readFromStorage(loadCtx, txn, spo)
 		})
 	if err != nil {
 		return nil, err
 	}
+	entrySize := int64(len(spo.GetPath())) + computePrivDescSize(privDesc)
+	// Only write back to the cache if the table version is committed.
+	c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), *privDesc, entrySize)
 	return privDesc, nil
 }
 

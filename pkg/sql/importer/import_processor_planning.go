@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
@@ -62,7 +63,6 @@ func distImport(
 	walltime int64,
 	testingKnobs importTestingKnobs,
 	procsPerNode int,
-	initialSplitsPerProc int,
 ) (kvpb.BulkOpSummary, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "importer.distImport")
 	defer sp.Finish()
@@ -87,10 +87,8 @@ func distImport(
 			sqlInstanceIDs[i], sqlInstanceIDs[j] = sqlInstanceIDs[j], sqlInstanceIDs[i]
 		})
 
-		inputSpecs := makeImportReaderSpecs(
-			job, tables, typeDescs, from, format, len(sqlInstanceIDs), /* numSQLInstances */
-			walltime, execCtx.User(), procsPerNode, initialSplitsPerProc,
-		)
+		inputSpecs := makeImportReaderSpecs(job, tables, typeDescs, from, format, sqlInstanceIDs, walltime,
+			execCtx.User(), procsPerNode)
 
 		p := planCtx.NewPhysicalPlan()
 
@@ -106,7 +104,6 @@ func distImport(
 			// The direct-ingest readers will emit a binary encoded BulkOpSummary.
 			[]*types.T{types.Bytes, types.Bytes},
 			execinfrapb.Ordering{},
-			nil, /* finalizeLastStageCb */
 		)
 
 		p.PlanToStreamColMap = []int{0, 1}
@@ -119,6 +116,7 @@ func distImport(
 	if err != nil {
 		return kvpb.BulkOpSummary{}, err
 	}
+	evalCtx := planCtx.ExtendedEvalCtx
 
 	// accumulatedBulkSummary accumulates the BulkOpSummary returned from each
 	// processor in their progress updates. It stores stats about the amount of
@@ -211,7 +209,7 @@ func distImport(
 		return nil
 	})
 
-	if planCtx.ExtendedEvalCtx.Codec.ForSystemTenant() {
+	if evalCtx.Codec.ForSystemTenant() {
 		if err := presplitTableBoundaries(ctx, execCtx.ExecCfg(), tables); err != nil {
 			return kvpb.BulkOpSummary{}, err
 		}
@@ -224,7 +222,7 @@ func distImport(
 		nil, /* rangeCache */
 		nil, /* txn - the flow does not read or write the database */
 		nil, /* clockUpdater */
-		planCtx.ExtendedEvalCtx.Tracing,
+		evalCtx.Tracing,
 	)
 	defer recv.Release()
 
@@ -269,9 +267,9 @@ func distImport(
 		execCfg := execCtx.ExecCfg()
 		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, job.ID())
 
-		// Copy the eval.Context, as dsp.Run() might change it.
-		evalCtxCopy := planCtx.ExtendedEvalCtx.Context.Copy()
-		dsp.Run(ctx, planCtx, nil, p, recv, evalCtxCopy, testingKnobs.onSetupFinish)
+		// Copy the evalCtx, as dsp.Run() might change it.
+		evalCtxCopy := *evalCtx
+		dsp.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, testingKnobs.onSetupFinish)
 		return rowResultWriter.Err()
 	})
 
@@ -296,15 +294,14 @@ func makeImportReaderSpecs(
 	typeDescs []*descpb.TypeDescriptor,
 	from []string,
 	format roachpb.IOFileFormat,
-	numSQLInstances int,
+	sqlInstanceIDs []base.SQLInstanceID,
 	walltime int64,
 	user username.SQLUsername,
 	procsPerNode int,
-	initialSplitsPerProc int,
 ) []*execinfrapb.ReadImportDataSpec {
 	details := job.Details().(jobspb.ImportDetails)
 	// For each input file, assign it to a node.
-	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, numSQLInstances*procsPerNode)
+	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, len(sqlInstanceIDs)*procsPerNode)
 	progress := job.Progress()
 	importProgress := progress.GetImport()
 	for i, input := range from {
@@ -325,7 +322,7 @@ func makeImportReaderSpecs(
 				ResumePos:             make(map[int32]int64),
 				UserProto:             user.EncodeProto(),
 				DatabasePrimaryRegion: details.DatabasePrimaryRegion,
-				InitialSplits:         int32(initialSplitsPerProc),
+				InitialSplits:         int32(len(sqlInstanceIDs)),
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}

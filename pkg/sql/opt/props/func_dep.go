@@ -413,7 +413,7 @@ import (
 //     section above, this library takes a simplified approach so that it
 //     doesn't need to allocate virtual columns in property derivation code.
 type FuncDepSet struct {
-	// deps contains the non-equiv functional dependencies that have a non-trivial
+	// deps contains the functional dependencies that have a non-trivial
 	// determinant and dependant (i.e. not empty, with no overlapping columns):
 	//
 	//   (a)-->(b,c)
@@ -426,9 +426,6 @@ type FuncDepSet struct {
 	// This slice is owned by this FuncDepSet and shouldn't be shared unless
 	// all referencing sets are treated as immutable.
 	deps []funcDep
-
-	// equiv tracks the equivalencies separately from deps as an optimization.
-	equiv EquivGroups
 
 	// hasKey is:
 	//  - strictKey if the relation has no duplicate rows, which means at least
@@ -486,6 +483,11 @@ type funcDep struct {
 	// can map to different dependant values. See the NULL Values section in the
 	// FuncDeps comment for more details.
 	strict bool
+
+	// equiv is true if the value of the determinant equals the value of each of
+	// the dependant columns, and false if there's no known equality relationship.
+	// If equiv is true, the determinant may only consist of a single column.
+	equiv bool
 }
 
 // StrictKey returns a strict key for the relation, if there is one.
@@ -510,7 +512,7 @@ func (f *FuncDepSet) LaxKey() (_ opt.ColSet, ok bool) {
 
 // Empty is true if the set contains no FDs and no key.
 func (f *FuncDepSet) Empty() bool {
-	return len(f.deps) == 0 && f.equiv.Empty() && f.hasKey == noKey
+	return len(f.deps) == 0 && f.hasKey == noKey
 }
 
 // ColSet returns all columns referenced by the FD set.
@@ -520,9 +522,6 @@ func (f *FuncDepSet) ColSet() opt.ColSet {
 		fd := &f.deps[i]
 		cols.UnionWith(fd.from)
 		cols.UnionWith(fd.to)
-	}
-	for i := 0; i < f.equiv.GroupCount(); i++ {
-		cols.UnionWith(f.equiv.Group(i))
 	}
 	if f.hasKey != noKey {
 		// There are cases where key columns don't show up in FDs. For example:
@@ -542,7 +541,6 @@ func (f *FuncDepSet) CopyFrom(fdset *FuncDepSet) {
 	// Make certain to copy FDs to the slice owned by this set.
 	f.deps = f.deps[:0]
 	f.deps = append(f.deps, fdset.deps...)
-	f.equiv.CopyFrom(&fdset.equiv)
 	f.key = fdset.key
 	f.hasKey = fdset.hasKey
 }
@@ -560,27 +558,32 @@ func (f *FuncDepSet) RemapFrom(fdset *FuncDepSet, oldCols, newCols opt.ColList) 
 		f.ProjectCols(colSet.Intersection(fromSet))
 	}
 	n := 0
+	var newEquivCols []opt.ColSet
 	for i := 0; i < len(f.deps); i++ {
-		f.deps[i].from = opt.TranslateColSetStrict(f.deps[i].from, oldCols, newCols)
-		f.deps[i].to = opt.TranslateColSetStrict(f.deps[i].to, oldCols, newCols)
+		remappedFrom := opt.TranslateColSetStrict(f.deps[i].from, oldCols, newCols)
+		remappedTo := opt.TranslateColSetStrict(f.deps[i].to, oldCols, newCols)
+		if f.deps[i].equiv && remappedFrom.Len() != 1 {
+			// The original "from" column maps to more than one "to" column. Remove
+			// this FD, and keep track of the set of equivalent columns to be handled
+			// after the loop.
+			remappedFrom.UnionWith(remappedTo)
+			newEquivCols = append(newEquivCols, remappedFrom)
+			continue
+		}
+		f.deps[i].from = remappedFrom
+		f.deps[i].to = remappedTo
 		if n != i {
 			f.deps[n] = f.deps[i]
 		}
 		n++
 	}
 	f.deps = f.deps[:n]
-	f.equiv.TranslateColsStrict(oldCols, newCols)
 	f.key = opt.TranslateColSetStrict(f.key, oldCols, newCols)
-	var seenOldCols opt.ColSet
-	for i := range oldCols {
-		// If a "from" column maps to more than one "to" column, it is possible that
-		// there will be a new equivalency between the "to" columns that can be used
-		// to reduce the key.
-		if seenOldCols.Contains(oldCols[i]) {
-			f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
-			break
+	if len(newEquivCols) > 0 {
+		for i := range newEquivCols {
+			f.addEquivalency(newEquivCols[i])
 		}
-		seenOldCols.Add(oldCols[i])
+		f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 	}
 }
 
@@ -641,18 +644,13 @@ func (f *FuncDepSet) ConstantCols() opt.ColSet {
 // so, then the column is redundant. This algorithm has decent running time, but
 // will not necessarily find the candidate key with the fewest columns.
 func (f *FuncDepSet) ReduceCols(cols opt.ColSet) opt.ColSet {
-	if f.hasKey == strictKey && f.key.SubsetOf(cols) {
-		// Fast path: take advantage of the reduction that was already performed for
-		// an existing key.
-		cols = f.key
-	}
 	var removed opt.ColSet
 	cols = cols.Copy()
 	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
-		// First check if the column is present in any "to" set of a dependency or
-		// is involved in an equivalency. If not, then it is not redundant and must
-		// remain in the set. This is a fast-path to avoid the more expensive
-		// functional-dependency-closure test below, when possible.
+		// First check if the column is present in any "to" set of a dependency.
+		// If not, then it is not redundant and must remain in the set. This is
+		// a fast-path to avoid the more expensive functional-dependency-closure
+		// test below, when possible.
 		inToSet := false
 		for j := range f.deps {
 			if f.deps[j].to.Contains(i) {
@@ -660,7 +658,7 @@ func (f *FuncDepSet) ReduceCols(cols opt.ColSet) opt.ColSet {
 				break
 			}
 		}
-		if !inToSet && !f.equiv.ContainsCol(i) {
+		if !inToSet {
 			continue
 		}
 
@@ -697,20 +695,14 @@ func (f *FuncDepSet) InClosureOf(cols, in opt.ColSet) bool {
 // will be duplicates, since all other columns will be equal.
 func (f *FuncDepSet) ComputeClosure(cols opt.ColSet) opt.ColSet {
 	cols = cols.Copy()
-	for {
-		restart := false
-		cols = f.equiv.ComputeEquivClosureNoCopy(cols)
-		for i := 0; i < len(f.deps); i++ {
-			fd := &f.deps[i]
-			if fd.strict && fd.from.SubsetOf(cols) && !fd.to.SubsetOf(cols) {
-				cols.UnionWith(fd.to)
+	for i := 0; i < len(f.deps); i++ {
+		fd := &f.deps[i]
 
-				// Restart iteration to get transitive closure.
-				restart = true
-			}
-		}
-		if !restart {
-			break
+		if fd.strict && fd.from.SubsetOf(cols) && !fd.to.SubsetOf(cols) {
+			cols.UnionWith(fd.to)
+
+			// Restart iteration to get transitive closure.
+			i = -1
 		}
 	}
 	return cols
@@ -718,7 +710,20 @@ func (f *FuncDepSet) ComputeClosure(cols opt.ColSet) opt.ColSet {
 
 // AreColsEquiv returns true if the two given columns are equivalent.
 func (f *FuncDepSet) AreColsEquiv(col1, col2 opt.ColumnID) bool {
-	return f.equiv.AreColsEquiv(col1, col2)
+	if col1 == col2 {
+		return true
+	}
+	for i := range f.deps {
+		fd := &f.deps[i]
+
+		if fd.equiv && fd.strict {
+			if (fd.from.Contains(col1) && fd.to.Contains(col2)) ||
+				(fd.from.Contains(col2) && fd.to.Contains(col1)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ComputeEquivClosure returns the equivalence closure of the given columns. The
@@ -743,7 +748,15 @@ func (f *FuncDepSet) ComputeEquivClosure(cols opt.ColSet) opt.ColSet {
 // be used when it is ok to mutate the argument. This avoids allocations when
 // columns overflow the small set of intsets.Fast.
 func (f *FuncDepSet) ComputeEquivClosureNoCopy(cols opt.ColSet) opt.ColSet {
-	return f.equiv.ComputeEquivClosureNoCopy(cols)
+	// Don't need to get transitive closure, because equivalence closures are
+	// already maintained for every column.
+	for i := range f.deps {
+		fd := &f.deps[i]
+		if fd.equiv && fd.from.SubsetOf(cols) && !fd.to.SubsetOf(cols) {
+			cols.UnionWith(fd.to)
+		}
+	}
+	return cols
 }
 
 // AddStrictKey adds an FD for a new key. The given key columns are reduced to a
@@ -764,7 +777,7 @@ func (f *FuncDepSet) AddStrictKey(keyCols, allCols opt.ColSet) {
 	// Ensure we have candidate key (i.e. has no columns that are functionally
 	// determined by other columns).
 	keyCols = f.ReduceCols(keyCols)
-	f.addDependency(keyCols, allCols, true /* strict */)
+	f.addDependency(keyCols, allCols, true /* strict */, false /* equiv */)
 
 	// Try to use the new FD to reduce any existing key first.
 	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
@@ -790,7 +803,7 @@ func (f *FuncDepSet) AddLaxKey(keyCols, allCols opt.ColSet) {
 
 	// Ensure we have candidate key (i.e. has no columns that are functionally
 	// determined by other columns).
-	f.addDependency(keyCols, allCols, false /* strict */)
+	f.addDependency(keyCols, allCols, false /* strict */, false /* equiv */)
 
 	// TODO(radu): without null column information, we cannot reduce lax keys (see
 	// tryToReduceKey). Consider passing that information (or storing it with the
@@ -823,10 +836,39 @@ func (f *FuncDepSet) AddLaxKey(keyCols, allCols opt.ColSet) {
 func (f *FuncDepSet) MakeMax1Row(cols opt.ColSet) {
 	// Remove all FDs except for equivalency FDs with columns that are a subset
 	// of cols.
-	f.deps = f.deps[:0]
-	f.equiv.ProjectCols(cols)
+	copyIdx := 0
+	for i := range f.deps {
+		fd := &f.deps[i]
+
+		// Skip non-equivalence dependencies.
+		if !fd.equiv {
+			continue
+		}
+
+		// If fd is an equivalence dependency, from has a single column.
+		fromCol, ok := fd.from.Next(0)
+		if !ok {
+			panic(errors.AssertionFailedf("equivalence dependency from cannot be empty"))
+		}
+
+		// Add a new equivalence dependency with the same from column and the to
+		// columns that are present in cols.
+		if cols.Contains(fromCol) && fd.to.Intersects(cols) {
+			f.deps[copyIdx] = funcDep{
+				from:   fd.from,
+				to:     fd.to.Intersection(cols),
+				strict: true,
+				equiv:  true,
+			}
+			copyIdx++
+		}
+	}
+	f.deps = f.deps[:copyIdx]
+
 	if !cols.Empty() {
 		f.deps = append(f.deps, funcDep{to: cols, strict: true})
+		// The constant FD must be the first in the set.
+		f.deps[0], f.deps[len(f.deps)-1] = f.deps[len(f.deps)-1], f.deps[0]
 	}
 	f.setKey(opt.ColSet{}, strictKey)
 }
@@ -859,9 +901,9 @@ func (f *FuncDepSet) MakeNotNull(notNullCols opt.ColSet) {
 	}
 
 	if firstLaxFD != nil {
-		f.addDependency(firstLaxFD.from, firstLaxFD.to, true /* strict */)
+		f.addDependency(firstLaxFD.from, firstLaxFD.to, true /* strict */, false /* equiv */)
 		for i := range otherLaxFDs {
-			f.addDependency(otherLaxFDs[i].from, otherLaxFDs[i].to, true /* strict */)
+			f.addDependency(otherLaxFDs[i].from, otherLaxFDs[i].to, true /* strict */, false /* equiv */)
 		}
 	}
 
@@ -876,7 +918,7 @@ func (f *FuncDepSet) MakeNotNull(notNullCols opt.ColSet) {
 //	(a)==(b)
 //	(b)==(a)
 func (f *FuncDepSet) AddEquivalency(a, b opt.ColumnID) {
-	if f.AreColsEquiv(a, b) {
+	if a == b {
 		return
 	}
 
@@ -884,12 +926,6 @@ func (f *FuncDepSet) AddEquivalency(a, b opt.ColumnID) {
 	equiv.Add(a)
 	equiv.Add(b)
 	f.addEquivalency(equiv)
-	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
-}
-
-// AddStrictDependency adds a new strict dependency to the set.
-func (f *FuncDepSet) AddStrictDependency(from, to opt.ColSet) {
-	f.addDependency(from, to, true /* strict */)
 	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
@@ -929,25 +965,28 @@ func (f *FuncDepSet) addConstantsNoKeyReduction(cols opt.ColSet) {
 		f.deps[0].to = cols
 	}
 
-	// Remove any other non-equiv FDs made redundant by adding the constants.
+	// Remove any other FDs made redundant by adding the constants.
 	n := 1
 	for i := 1; i < len(f.deps); i++ {
 		fd := &f.deps[i]
 
-		if fd.strict {
-			// Constant columns can be removed from the determinant of a strict
-			// FD. If all determinant columns are constant, then the entire FD
-			// can be removed, since this means that the dependant columns must
-			// also be constant (and were part of constant closure added to the
-			// constant FD above).
-			if !fd.removeFromCols(cols) {
+		// Always retain equivalency information, even for constants.
+		if !fd.equiv {
+			if fd.strict {
+				// Constant columns can be removed from the determinant of a strict
+				// FD. If all determinant columns are constant, then the entire FD
+				// can be removed, since this means that the dependant columns must
+				// also be constant (and were part of constant closure added to the
+				// constant FD above).
+				if !fd.removeFromCols(cols) {
+					continue
+				}
+			}
+
+			// Dependant constants are redundant, so remove them.
+			if !fd.removeToCols(cols) {
 				continue
 			}
-		}
-
-		// Dependant constants are redundant, so remove them.
-		if !fd.removeToCols(cols) {
-			continue
 		}
 
 		if n != i {
@@ -974,7 +1013,7 @@ func (f *FuncDepSet) AddSynthesizedCol(from opt.ColSet, col opt.ColumnID) {
 
 	var colSet opt.ColSet
 	colSet.Add(col)
-	f.addDependency(from, colSet, true /* strict */)
+	f.addDependency(from, colSet, true /* strict */, false /* equiv */)
 
 	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
@@ -1012,7 +1051,7 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 	// won't be lost. Also, track list of un-projected columns that are part of
 	// non-equivalent determinants. It's possible these can be mapped to
 	// equivalent columns.
-	var constCols, detCols opt.ColSet
+	var constCols, detCols, equivCols opt.ColSet
 	for i := range f.deps {
 		fd := &f.deps[i]
 
@@ -1023,22 +1062,31 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 
 		// Add closures to dependants containing un-projected columns.
 		if !fd.to.SubsetOf(cols) {
-			fd.to = f.ComputeClosure(fd.to)
-			// Maintain the invariant that from and to columns don't overlap.
-			fd.to.DifferenceWith(fd.from)
+			// Equivalence dependencies already maintain closure, so skip them.
+			if !fd.equiv {
+				fd.to = f.ComputeClosure(fd.to)
+				// Maintain the invariant that from and to columns don't overlap.
+				fd.to.DifferenceWith(fd.from)
+			}
 		}
 
 		// Track list of un-projected columns that can possibly be mapped to
 		// equivalent columns.
-		if !fd.from.SubsetOf(cols) {
+		if !fd.equiv && !fd.from.SubsetOf(cols) {
 			detCols.UnionWith(fd.from)
+			detCols.DifferenceWith(cols)
+		}
+
+		// Track all columns that have equivalent alternates that are part of the
+		// projection.
+		if fd.equiv && fd.to.Intersects(cols) {
+			equivCols.UnionWith(fd.from)
 		}
 	}
 
 	// Construct equivalence map that supports substitution of an equivalent
 	// column in place of a removed column.
-	detCols.DifferenceWith(cols)
-	detCols.IntersectionWith(f.ComputeEquivClosure(cols))
+	detCols.IntersectionWith(equivCols)
 	equivMap := f.makeEquivMap(detCols, cols)
 
 	// If constants were found, then normalize constants to preserve FDs in a
@@ -1055,9 +1103,6 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 		f.AddConstants(constCols)
 	}
 
-	// Forget all equivalencies that involve un-projected columns.
-	f.equiv.ProjectCols(cols)
-
 	// During second pass, remove all dependencies with un-projected columns.
 	var newFDs []funcDep
 	n := 0
@@ -1068,7 +1113,7 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 		// constant columns from dependants for nicer presentation.
 		if !fd.to.SubsetOf(cols) {
 			fd.to = fd.to.Intersection(cols)
-			if !fd.isConstant() {
+			if !fd.isConstant() && !fd.equiv {
 				fd.to.DifferenceWith(constCols)
 			}
 			if !fd.removeToCols(fd.from) {
@@ -1078,6 +1123,12 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 
 		// Try to substitute equivalent columns for removed determinant columns.
 		if !fd.from.SubsetOf(cols) {
+			if fd.equiv {
+				// Always discard equivalency with removed determinant, since other
+				// equivalencies will already include this column.
+				continue
+			}
+
 			// Start with "before" list of columns that need to be mapped, and try
 			// to find an "after" list containing equivalent columns.
 			var afterCols opt.ColSet
@@ -1094,7 +1145,7 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 				// Dependency can be remapped using equivalencies.
 				from := fd.from.Union(afterCols)
 				from.DifferenceWith(beforeCols)
-				newFDs = append(newFDs, funcDep{from: from, to: fd.to, strict: fd.strict})
+				newFDs = append(newFDs, funcDep{from: from, to: fd.to, strict: fd.strict, equiv: fd.equiv})
 			}
 			continue
 		}
@@ -1108,7 +1159,7 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 
 	for i := range newFDs {
 		fd := &newFDs[i]
-		f.addDependency(fd.from, fd.to, fd.strict)
+		f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
 	}
 
 	// Ensure that key still determines all other columns.
@@ -1122,13 +1173,9 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 // "compatible", meaning that they operate on the same relations, with the same
 // keys, same columns, etc.
 func (f *FuncDepSet) AddFrom(fdset *FuncDepSet) {
-	for i := 0; i < fdset.equiv.GroupCount(); i++ {
-		// NOTE: the ColSet of an equiv group is immutable.
-		f.addEquivalency(fdset.equiv.Group(i))
-	}
 	for i := range fdset.deps {
 		fd := &fdset.deps[i]
-		f.addDependency(fd.from, fd.to, fd.strict)
+		f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
 	}
 	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
@@ -1136,9 +1183,11 @@ func (f *FuncDepSet) AddFrom(fdset *FuncDepSet) {
 // AddEquivFrom is similar to AddFrom, except that it only adds equivalence
 // dependencies from the given set to this set.
 func (f *FuncDepSet) AddEquivFrom(fdset *FuncDepSet) {
-	for i := 0; i < fdset.equiv.GroupCount(); i++ {
-		// NOTE: the ColSet of an equiv group is immutable.
-		f.addEquivalency(fdset.equiv.Group(i))
+	for i := range fdset.deps {
+		fd := &fdset.deps[i]
+		if fd.equiv {
+			f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
+		}
 	}
 	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
@@ -1150,32 +1199,24 @@ func (f *FuncDepSet) AddEquivFrom(fdset *FuncDepSet) {
 // concatenated, rather than simplified via calls to addDependency (except for
 // case of constant columns).
 func (f *FuncDepSet) MakeProduct(inner *FuncDepSet) {
-	f.equiv.AppendFromDisjoint(&inner.equiv)
-
-	// Save the old key and clear it so that addDependency doesn't attempt to
-	// reduce it. We'll handle the key below, and key reduction is expensive.
-	// Note that the ColSet used for the key is immutable, so it is safe to keep
-	// the reference to the old key.
-	oldKey, oldHasKey := f.key, f.hasKey
-	f.clearKey()
 	for i := range inner.deps {
 		fd := &inner.deps[i]
 		if fd.isConstant() {
-			f.addDependency(fd.from, fd.to, fd.strict)
+			f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
 		} else {
 			f.deps = append(f.deps, *fd)
 		}
 	}
 
-	if oldHasKey != noKey && inner.hasKey != noKey {
+	if f.hasKey != noKey && inner.hasKey != noKey {
 		// If both sides have a strict key, the union of keys is a strict key.
 		// If one side has a lax key and the other has a lax or strict key, the
 		// union is a lax key.
 		typ := laxKey
-		if oldHasKey == strictKey && inner.hasKey == strictKey {
+		if f.hasKey == strictKey && inner.hasKey == strictKey {
 			typ = strictKey
 		}
-		f.setKey(oldKey.Union(inner.key), typ)
+		f.setKey(f.key.Union(inner.key), typ)
 	} else {
 		f.clearKey()
 	}
@@ -1207,26 +1248,18 @@ func (f *FuncDepSet) MakeProduct(inner *FuncDepSet) {
 //	 5. If both the outer and inner inputs of the apply join have keys, then the
 //	    concatenation of those keys is a key on the apply join result.
 func (f *FuncDepSet) MakeApply(inner *FuncDepSet) {
-	for i := 0; i < inner.equiv.GroupCount(); i++ {
-		// NOTE: the ColSet of an equiv group is immutable.
-		f.addEquivalency(inner.equiv.Group(i))
-	}
-	// Save the old key and clear it so that addDependency doesn't attempt to
-	// reduce it. We'll handle the key below, and key reduction is expensive.
-	// Note that the ColSet used for the key is immutable, so it is safe to keep
-	// the reference to the old key.
-	oldKey, oldHasKey := f.key, f.hasKey
-	f.clearKey()
 	for i := range inner.deps {
 		fd := &inner.deps[i]
-		if !fd.isConstant() && oldHasKey == strictKey {
-			f.addDependency(oldKey.Union(fd.from), fd.to, fd.strict)
+		if fd.equiv {
+			f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
+		} else if !fd.isConstant() && f.hasKey == strictKey {
+			f.addDependency(f.key.Union(fd.from), fd.to, fd.strict, fd.equiv)
 		}
 		// TODO(radu): can we use a laxKey here?
 	}
 
-	if oldHasKey == strictKey && inner.hasKey == strictKey {
-		f.setKey(oldKey.Union(inner.key), strictKey)
+	if f.hasKey == strictKey && inner.hasKey == strictKey {
+		f.setKey(f.key.Union(inner.key), strictKey)
 		f.ensureKeyClosure(inner.ColSet())
 	} else {
 		// TODO(radu): can we use a laxKey here?
@@ -1523,7 +1556,7 @@ func (f *FuncDepSet) nullExtendRightRows(rightCols, notNullInputCols opt.ColSet)
 
 					// Rule #2, described above. Note that this rule does not apply to
 					// equivalence FDs, which remain valid.
-					if fd.strict && !fd.from.Intersects(notNullInputCols) {
+					if fd.strict && !fd.equiv && !fd.from.Intersects(notNullInputCols) {
 						newFDs = append(newFDs, funcDep{from: fd.from, to: fd.to})
 						continue
 					}
@@ -1543,28 +1576,9 @@ func (f *FuncDepSet) nullExtendRightRows(rightCols, notNullInputCols opt.ColSet)
 	}
 	f.deps = f.deps[:n]
 
-	// Equivalence is maintained between columns from the same side of the join,
-	// but not between columns on either side. An equiv group that only references
-	// one side is left as-is. A group that references both sides is split into
-	// two equiv groups (which may be empty). In addition, lax dependencies are
-	// added from each row-supplying column to all null-extended columns.
-	//
-	// Add the lax dependencies from row-supplying to null-extended cols.
-	for i := 0; i < f.equiv.GroupCount(); i++ {
-		group := f.equiv.Group(i)
-		if group.Intersects(rightCols) && !group.SubsetOf(rightCols) {
-			left, right := group.Intersection(rightCols), group.Difference(rightCols)
-			left.ForEach(func(col opt.ColumnID) {
-				newFDs = append(newFDs, funcDep{from: opt.MakeColSet(col), to: right})
-			})
-		}
-	}
-	// Split the equiv groups that reference both sides of the join.
-	f.equiv.PartitionBy(rightCols)
-
 	for i := range newFDs {
 		fd := &newFDs[i]
-		f.addDependency(fd.from, fd.to, fd.strict)
+		f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
 	}
 }
 
@@ -1573,9 +1587,13 @@ func (f *FuncDepSet) nullExtendRightRows(rightCols, notNullInputCols opt.ColSet)
 // from each equivalency group.
 func (f *FuncDepSet) EquivReps() opt.ColSet {
 	var reps opt.ColSet
-	for i := 0; i < f.equiv.GroupCount(); i++ {
-		col, _ := f.equiv.Group(i).Next(0)
-		reps.Add(col)
+
+	// Equivalence closures are already maintained for every column.
+	for i := 0; i < len(f.deps); i++ {
+		fd := &f.deps[i]
+		if fd.equiv && !fd.to.Intersects(reps) {
+			reps.UnionWith(fd.from)
+		}
 	}
 	return reps
 }
@@ -1598,7 +1616,7 @@ func (f *FuncDepSet) ensureKeyClosure(cols opt.ColSet) {
 			// If we have a strict key, we add a strict dependency; otherwise we add a
 			// lax dependency.
 			strict := f.hasKey == strictKey
-			f.addDependency(f.key, cols, strict)
+			f.addDependency(f.key, cols, strict, false /* equiv */)
 		}
 	}
 }
@@ -1631,17 +1649,19 @@ func (f *FuncDepSet) Verify() {
 				panic(errors.AssertionFailedf("expected constant FD to be strict: %s", redact.Safe(f)))
 			}
 		}
-	}
 
-	for i := 0; i < f.equiv.GroupCount(); i++ {
-		group := f.equiv.Group(i)
+		if fd.equiv {
+			if !fd.strict {
+				panic(errors.AssertionFailedf("expected equivalency to be strict: %s (%d)", f, i))
+			}
 
-		if group.Len() <= 1 {
-			panic(errors.AssertionFailedf("expected equivalence group to be more than one col: %s", redact.Safe(group)))
-		}
+			if fd.from.Len() != 1 {
+				panic(errors.AssertionFailedf("expected equivalence determinant to be single col: %s (%d)", redact.Safe(f), redact.Safe(i)))
+			}
 
-		if !f.ComputeEquivClosure(group).Equals(group) {
-			panic(errors.AssertionFailedf("expected equivalence group to be its closure: %s", redact.Safe(group)))
+			if !f.ComputeEquivClosure(fd.from).Equals(fd.from.Union(fd.to)) {
+				panic(errors.AssertionFailedf("expected equivalence dependants to be its closure: %s (%d)", redact.Safe(f), redact.Safe(i)))
+			}
 		}
 	}
 
@@ -1685,7 +1705,7 @@ func (f FuncDepSet) String() string {
 			b.WriteString("lax-")
 		}
 		fmt.Fprintf(&b, "key%s", f.key)
-		if len(f.deps) > 0 || !f.equiv.Empty() {
+		if len(f.deps) > 0 {
 			b.WriteString("; ")
 		}
 	}
@@ -1695,24 +1715,11 @@ func (f FuncDepSet) String() string {
 }
 
 func (f FuncDepSet) formatFDs(b *strings.Builder) {
-	needComma := false
 	for i := range f.deps {
-		if needComma {
+		if i != 0 {
 			b.WriteString(", ")
 		}
-		needComma = true
 		f.deps[i].format(b)
-	}
-	for i := 0; i < f.equiv.GroupCount(); i++ {
-		group := f.equiv.Group(i)
-		group.ForEach(func(col opt.ColumnID) {
-			if needComma {
-				b.WriteString(", ")
-			}
-			needComma = true
-			from := opt.MakeColSet(col)
-			fmt.Fprintf(b, "%s==%s", from, group.Difference(from))
-		})
 	}
 }
 
@@ -1765,10 +1772,7 @@ func (f *FuncDepSet) inClosureOf(cols, in opt.ColSet, strict bool) bool {
 		return true
 	}
 
-	in = f.ComputeEquivClosure(in)
-	if cols.SubsetOf(in) {
-		return true
-	}
+	in = in.Copy()
 
 	// Lax dependencies are not transitive (see figure 2.1 in the paper for
 	// properties that hold for lax dependencies), so only include them if they
@@ -1781,39 +1785,40 @@ func (f *FuncDepSet) inClosureOf(cols, in opt.ColSet, strict bool) bool {
 			if fd.from.SubsetOf(in) && !fd.to.SubsetOf(in) {
 				laxIn.UnionWith(fd.to)
 
+				// Equivalencies are always transitive.
+				if fd.equiv {
+					in.UnionWith(fd.to)
+
+					// Restart iteration to get transitive closure.
+					i = -1
+				}
+
 				// Short-circuit if the "laxIn" set now contains all the columns.
 				if cols.SubsetOf(laxIn) {
 					return true
 				}
 			}
 		}
+
 		// Use the set that includes columns reached via lax dependencies.
-		in = f.ComputeEquivClosureNoCopy(laxIn)
+		in = laxIn
 	}
 
 	// Now continue with full transitive closure of strict dependencies.
-	for {
-		restart := false
-		if cols.SubsetOf(in) {
-			return true
-		}
-		for i := 0; i < len(f.deps); i++ {
-			fd := &f.deps[i]
-			if fd.strict && fd.from.SubsetOf(in) && !fd.to.SubsetOf(in) {
-				in.UnionWith(fd.to)
+	for i := 0; i < len(f.deps); i++ {
+		fd := &f.deps[i]
 
-				// Short-circuit if the "in" set now contains all the columns.
-				if cols.SubsetOf(in) {
-					return true
-				}
-				// Restart iteration to get transitive closure.
-				restart = true
+		if fd.strict && fd.from.SubsetOf(in) && !fd.to.SubsetOf(in) {
+			in.UnionWith(fd.to)
+
+			// Short-circuit if the "in" set now contains all the columns.
+			if cols.SubsetOf(in) {
+				return true
 			}
+
+			// Restart iteration to get transitive closure.
+			i = -1
 		}
-		if !restart {
-			break
-		}
-		in = f.ComputeEquivClosureNoCopy(in)
 	}
 	return false
 }
@@ -1821,9 +1826,15 @@ func (f *FuncDepSet) inClosureOf(cols, in opt.ColSet, strict bool) bool {
 // addDependency adds a new dependency into the set. If another FD implies the
 // new FD, then it's not added. If it can be merged with an existing FD, that is
 // done. Otherwise, a brand new FD is added to the set.
-func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict bool) {
+func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict, equiv bool) {
 	// Fast-path for trivial no-op dependency.
 	if to.SubsetOf(from) {
+		return
+	}
+
+	// Delegate equivalence dependency.
+	if equiv {
+		f.addEquivalency(from.Union(to))
 		return
 	}
 
@@ -1841,18 +1852,13 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict bool) {
 		return
 	}
 
-	// Non-constant FDs are weaker than equivalence constraints.
-	if f.equiv.AreAllColsEquiv2(to, from) {
-		return
-	}
-
 	// Any column in the "from" set is already an implied "to" column, so no
 	// need to include it.
 	if to.Intersects(from) {
 		to = to.Difference(from)
 	}
 
-	newFD := funcDep{from: from, to: to, strict: strict}
+	newFD := funcDep{from: from, to: to, strict: strict, equiv: equiv}
 
 	// Merge the new dependency into the existing set.
 	n := 0
@@ -1871,6 +1877,7 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict bool) {
 			fd.from = from
 			fd.to = to
 			fd.strict = strict
+			fd.equiv = equiv
 
 			// Keep searching, in case there's another implied FD.
 			added = true
@@ -1878,7 +1885,7 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict bool) {
 			if fd.implies(&newFD) {
 				// The new FD does not add any additional information.
 				added = true
-			} else if fd.strict == strict && fd.from.Equals(from) {
+			} else if fd.strict == strict && fd.equiv == equiv && fd.from.Equals(from) {
 				// The new FD can at least add its determinant to an existing FD.
 				fd.to = fd.to.Union(to)
 				added = true
@@ -1900,13 +1907,16 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict bool) {
 }
 
 // addEquivalency adds a new equivalency into the set.
-// NOTE: The caller must consider the given ColSet as immutable, since it may
-// be added directly to the EquivSet groups slice.
+// NOTE: The given equiv column set may be mutated.
 func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
-	equiv = f.equiv.AddNoCopy(equiv)
+	var addConst bool
+	var found opt.ColSet
+
+	// Start by finding complete set of all columns that are equivalent to the
+	// given set.
+	equiv = f.ComputeEquivClosureNoCopy(equiv)
 
 	n := 0
-	var addConst bool
 	for i := 0; i < len(f.deps); i++ {
 		fd := &f.deps[i]
 
@@ -1917,10 +1927,18 @@ func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
 			}
 		} else if fd.from.SubsetOf(equiv) {
 			// All determinant columns are equivalent to one another.
-			// Remove dependant columns that are equivalent, because equivalence
-			// is a stronger relationship than a strict or lax dependency.
-			if !fd.removeToCols(equiv) {
-				continue
+			if fd.equiv {
+				// Ensure that each equivalent column directly maps to all other
+				// columns in the group.
+				fd.to = fd.to.Union(equiv)
+				fd.to.DifferenceWith(fd.from)
+				found.UnionWith(fd.from)
+			} else {
+				// Remove dependant columns that are equivalent, because equivalence
+				// is a stronger relationship than a strict or lax dependency.
+				if !fd.removeToCols(equiv) {
+					continue
+				}
 			}
 		}
 
@@ -1934,6 +1952,21 @@ func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
 	if addConst {
 		// Ensure that all equivalent columns are marked as constant.
 		f.addConstantsNoKeyReduction(equiv)
+	}
+
+	if !equiv.SubsetOf(found) {
+		add := equiv.Difference(found)
+		deps := make([]funcDep, 0, len(f.deps)+add.Len())
+		deps = append(deps, f.deps...)
+
+		for id, ok := add.Next(0); ok; id, ok = add.Next(id + 1) {
+			fd := funcDep{strict: true, equiv: true}
+			fd.from.Add(id)
+			fd.to = equiv.Copy()
+			fd.to.Remove(id)
+			deps = append(deps, fd)
+		}
+		f.deps = deps
 	}
 }
 
@@ -2007,10 +2040,10 @@ func (f *funcDep) isConstant() bool {
 // is true when:
 //   - the determinant is a subset of the given FD's determinant
 //   - the dependant is a superset of the given FD's dependant
-//   - the FD is at least as strict as the given FD
+//   - the FD is at least as strict and equivalent as the given FD
 func (f *funcDep) implies(fd *funcDep) bool {
 	if f.from.SubsetOf(fd.from) && fd.to.SubsetOf(f.to) {
-		if f.strict || !fd.strict {
+		if (f.strict || !fd.strict) && (f.equiv || !fd.equiv) {
 			return true
 		}
 	}
@@ -2025,6 +2058,7 @@ func (f *funcDep) removeFromCols(remove opt.ColSet) bool {
 		f.from = f.from.Difference(remove)
 	}
 	return !f.isConstant()
+
 }
 
 // removeToCols removes columns in the given set from this FD's dependant set.
@@ -2038,10 +2072,17 @@ func (f *funcDep) removeToCols(remove opt.ColSet) bool {
 }
 
 func (f *funcDep) format(b *strings.Builder) {
-	if f.strict {
-		fmt.Fprintf(b, "%s-->%s", f.from, f.to)
+	if f.equiv {
+		if !f.strict {
+			panic(errors.AssertionFailedf("lax equivalent columns are not supported"))
+		}
+		fmt.Fprintf(b, "%s==%s", f.from, f.to)
 	} else {
-		fmt.Fprintf(b, "%s~~>%s", f.from, f.to)
+		if f.strict {
+			fmt.Fprintf(b, "%s-->%s", f.from, f.to)
+		} else {
+			fmt.Fprintf(b, "%s~~>%s", f.from, f.to)
+		}
 	}
 }
 

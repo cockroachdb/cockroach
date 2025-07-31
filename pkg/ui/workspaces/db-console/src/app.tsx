@@ -14,6 +14,7 @@ import {
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
 import { History } from "history";
+import "nvd3/build/nv.d3.min.css";
 import React from "react";
 import { Provider, ReactReduxContext } from "react-redux";
 import { Redirect, Route, Switch } from "react-router-dom";
@@ -54,6 +55,9 @@ import { EventPage } from "src/views/cluster/containers/events";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
+import { DatabaseDetailsPageLegacy } from "src/views/databases/databaseDetailsPage";
+import { DatabasesPageLegacy } from "src/views/databases/databasesPage";
+import { DatabaseTablePage } from "src/views/databases/databaseTablePage";
 import { IndexDetailsPage } from "src/views/databases/indexDetailsPage";
 import Raft from "src/views/devtools/containers/raft";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
@@ -216,16 +220,31 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                           path={`/table/:${tableIdAttr}`}
                           component={TableDetailsPageV2}
                         />
+                        <Route
+                          exact
+                          path="/legacy/databases"
+                          component={DatabasesPageLegacy}
+                        />
                         <Redirect
                           from={`/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
                           to={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
                         />
 
                         <Redirect exact from="/database" to="/databases" />
+                        <Route
+                          exact
+                          path={`/database/:${databaseNameAttr}`}
+                          component={DatabaseDetailsPageLegacy}
+                        />
                         <Redirect
                           exact
                           from={`/database/:${databaseNameAttr}/table`}
                           to={`/database/:${databaseNameAttr}`}
+                        />
+                        <Route
+                          exact
+                          path={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
+                          component={DatabaseTablePage}
                         />
                         <Route
                           exact
@@ -473,15 +492,10 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         {/* hot ranges */}
                         <Route
                           exact
-                          path={`/topranges`}
-                          component={HotRangesPage}
-                        />
-                        {/* old route redirects */}
-                        <Route
-                          exact
                           path={`/hotranges`}
                           component={HotRangesPage}
                         />
+                        {/* old route redirects */}
                         <Redirect
                           exact
                           from="/cluster"

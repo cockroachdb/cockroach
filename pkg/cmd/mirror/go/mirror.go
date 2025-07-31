@@ -304,7 +304,9 @@ func dumpBuildDirectivesForRepo(repoName string) {
 		"gazelle:go_grpc_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
 	}
 
-	if repoName == "com_github_cockroachdb_errors" {
+	if repoName == "com_github_cockroachdb_pebble" {
+		directives = append(directives, "gazelle:build_tags invariants")
+	} else if repoName == "com_github_cockroachdb_errors" {
 		directives = append(directives, protoDirectives...)
 	} else if repoName == "com_github_prometheus_client_model" {
 		directives = append(directives,

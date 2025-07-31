@@ -17,14 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,7 +56,7 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 	})
 
 	t.Run("authenticate with token", func(t *testing.T) {
-		pgURL, cleanup := pgurlutils.PGUrl(
+		pgURL, cleanup := sqlutils.PGUrl(
 			t,
 			tenant.SQLAddr(),
 			"TestToken2",
@@ -81,7 +81,7 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 	})
 
 	t.Run("use a token with invalid signature", func(t *testing.T) {
-		pgURL, cleanup := pgurlutils.PGUrl(
+		pgURL, cleanup := sqlutils.PGUrl(
 			t,
 			tenant.SQLAddr(),
 			"TestToken",
@@ -117,7 +117,7 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 	})
 
 	t.Run("use a token that is not in base64 format", func(t *testing.T) {
-		pgURL, cleanup := pgurlutils.PGUrl(
+		pgURL, cleanup := sqlutils.PGUrl(
 			t,
 			tenant.SQLAddr(),
 			"TestToken",

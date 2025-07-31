@@ -66,7 +66,7 @@ SELECT * FROM t122312 WHERE g = 'hi';
 COMMIT;
 
 # Regression test related to #139381. Do not collect histograms on non-indexed
-# JSON columns by default.
+# JSON columns when sql.stats.non_indexed_json_histograms.enabled is false.
 statement ok
 CREATE TABLE t139381 (
   k INT PRIMARY KEY,
@@ -74,6 +74,9 @@ CREATE TABLE t139381 (
   v STRING AS (j->>'name') VIRTUAL,
   INDEX (v)
 )
+
+statement ok
+SET CLUSTER SETTING sql.stats.non_indexed_json_histograms.enabled = false
 
 statement ok
 INSERT INTO t139381
@@ -106,19 +109,3 @@ FROM [SHOW STATISTICS FOR TABLE t139381]
 {k}  histogram_collected
 {j}  histogram_collected
 {v}  histogram_collected
-
-# Regression test for inflating the distinct count due to including column ID
-# delta in the sketch (#141448).
-statement ok
-CREATE TABLE t141448 (i INT, f FLOAT, b BOOL);
-
-statement ok
-INSERT INTO t141448 VALUES (NULL, NULL, false), (NULL, 1, false), (1, 1, false);
-
-statement ok
-ANALYZE t141448;
-
-query II
-SELECT row_count, distinct_count FROM [SHOW STATISTICS FOR TABLE t141448] WHERE column_names = ARRAY['b'];
-----
-3  1

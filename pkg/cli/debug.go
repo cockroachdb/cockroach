@@ -29,11 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -67,7 +68,7 @@ import (
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/ttycolor"
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
@@ -92,6 +93,16 @@ Create a ballast file to fill the store directory up to a given amount
 	Args: cobra.ExactArgs(1),
 	RunE: runDebugBallast,
 }
+
+// PopulateEnvConfigHook is a callback set by CCL code.
+// It populates any needed fields in the EnvConfig.
+// It must stay unset in OSS code.
+var PopulateEnvConfigHook func(dir string, cfg *fs.EnvConfig) error
+
+// EncryptedStorePathsHook is a callback set by CCL code.
+// It returns the store paths that are encrypted.
+// It must stay unset in OSS code.
+var EncryptedStorePathsHook func() []string
 
 func parsePositiveInt(arg string) (int64, error) {
 	i, err := strconv.ParseInt(arg, 10, 64)
@@ -164,8 +175,10 @@ func (f *keyFormat) Type() string {
 // 1 reference and the caller must ensure it's closed.
 func OpenFilesystemEnv(dir string, rw fs.RWMode) (*fs.Env, error) {
 	envConfig := fs.EnvConfig{RW: rw}
-	if err := fillEncryptionOptionsForStore(dir, &envConfig); err != nil {
-		return nil, err
+	if PopulateEnvConfigHook != nil {
+		if err := PopulateEnvConfigHook(dir, &envConfig); err != nil {
+			return nil, err
+		}
 	}
 	return fs.InitEnv(context.Background(), vfs.Default, dir, envConfig, nil /* diskWriteStats */)
 }
@@ -312,13 +325,13 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 			}
 			return strings.Join(pairs, ", "), nil
 		}
-		print.DebugSprintMVCCKeyValueDecoders = append(print.DebugSprintMVCCKeyValueDecoders, fn)
+		kvserver.DebugSprintMVCCKeyValueDecoders = append(kvserver.DebugSprintMVCCKeyValueDecoders, fn)
 	}
 	printer := printKey
 	rangeKeyPrinter := printRangeKey
 	if debugCtx.values {
-		printer = print.PrintMVCCKeyValue
-		rangeKeyPrinter = print.PrintMVCCRangeKeyValue
+		printer = kvserver.PrintMVCCKeyValue
+		rangeKeyPrinter = kvserver.PrintMVCCRangeKeyValue
 	}
 
 	keyTypeOptions := keyTypeParams[debugCtx.keyTypes]
@@ -401,7 +414,7 @@ func runDebugBallast(cmd *cobra.Command, args []string) error {
 	if math.Abs(p) > 100 {
 		return errors.Errorf("absolute percentage value %f greater than 100", p)
 	}
-	b := debugCtx.ballastSize.Bytes
+	b := debugCtx.ballastSize.InBytes
 	if p != 0 && b != 0 {
 		return errors.New("expected exactly one of percentage or bytes non-zero, found both")
 	}
@@ -467,8 +480,8 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 
 	earlyBootAccessor := cloud.NewEarlyBootExternalStorageAccessor(serverCfg.Settings, serverCfg.ExternalIODirConfig, cidr.NewLookup(&serverCfg.Settings.SV))
 	opts := []storage.ConfigOption{storage.MustExist, storage.RemoteStorageFactory(earlyBootAccessor)}
-	if serverCfg.StorageConfig.SharedStorage.URI != "" {
-		es, err := cloud.ExternalStorageFromURI(ctx, serverCfg.StorageConfig.SharedStorage.URI,
+	if serverCfg.SharedStorage != "" {
+		es, err := cloud.ExternalStorageFromURI(ctx, serverCfg.SharedStorage,
 			base.ExternalIODirConfig{}, serverCfg.Settings, nil, username.RootUserName(), nil,
 			nil, cloud.NilMetrics)
 		if err != nil {
@@ -495,49 +508,43 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	defer snapshot.Close()
 
 	var results int
-	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, rditer.SelectOpts{
-		Ranged: rditer.SelectRangedOptions{
-			SystemKeys: true,
-			LockTable:  true,
-			UserKeys:   true,
-		},
-		ReplicatedByRangeID:   true,
-		UnreplicatedByRangeID: !debugCtx.replicated,
-	}, func(iter storage.EngineIterator, _ roachpb.Span) error {
-		for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-			hasPoint, hasRange := iter.HasPointAndRange()
-			if hasPoint {
-				key, err := iter.UnsafeEngineKey()
-				if err != nil {
-					return err
-				}
-				v, err := iter.UnsafeValue()
-				if err != nil {
-					return err
-				}
-				print.PrintEngineKeyValue(key, v)
-				results++
-				if results == debugCtx.maxResults {
-					return iterutil.StopIteration()
-				}
-			}
-
-			if hasRange && iter.RangeKeyChanged() {
-				bounds, err := iter.EngineRangeBounds()
-				if err != nil {
-					return err
-				}
-				for _, v := range iter.EngineRangeKeys() {
-					print.PrintEngineRangeKeyValue(bounds, v)
+	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, debugCtx.replicated,
+		rditer.ReplicatedSpansAll,
+		func(iter storage.EngineIterator, _ roachpb.Span) error {
+			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+				hasPoint, hasRange := iter.HasPointAndRange()
+				if hasPoint {
+					key, err := iter.UnsafeEngineKey()
+					if err != nil {
+						return err
+					}
+					v, err := iter.UnsafeValue()
+					if err != nil {
+						return err
+					}
+					kvserver.PrintEngineKeyValue(key, v)
 					results++
 					if results == debugCtx.maxResults {
 						return iterutil.StopIteration()
 					}
 				}
+
+				if hasRange && iter.RangeKeyChanged() {
+					bounds, err := iter.EngineRangeBounds()
+					if err != nil {
+						return err
+					}
+					for _, v := range iter.EngineRangeKeys() {
+						kvserver.PrintEngineRangeKeyValue(bounds, v)
+						results++
+						if results == debugCtx.maxResults {
+							return iterutil.StopIteration()
+						}
+					}
+				}
 			}
-		}
-		return err
-	})
+			return err
+		})
 }
 
 var debugRangeDescriptorsCmd = &cobra.Command{
@@ -559,7 +566,7 @@ func loadRangeDescriptor(
 			// We only want values, not MVCCMetadata.
 			return nil
 		}
-		if err := print.IsRangeDescriptorKey(kv.Key); err != nil {
+		if err := kvserver.IsRangeDescriptorKey(kv.Key); err != nil {
 			// Range descriptor keys are interleaved with others, so if it
 			// doesn't parse as a range descriptor just skip it.
 			return nil //nolint:returnerrcheck
@@ -615,10 +622,10 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyAndIntentsIterKind,
 		storage.IterKeyTypePointsOnly, fs.UnknownReadCategory,
 		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			if print.IsRangeDescriptorKey(kv.Key) != nil {
+			if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
 				return nil
 			}
-			print.PrintMVCCKeyValue(kv)
+			kvserver.PrintMVCCKeyValue(kv)
 			return nil
 		})
 }
@@ -699,7 +706,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			//   is already a roachpb.Key, so make a half-assed attempt to support both.
 			if !isTS {
 				if k, ok := storage.DecodeEngineKey(bs[0]); ok {
-					print.PrintEngineKeyValue(k, bs[1])
+					kvserver.PrintEngineKeyValue(k, bs[1])
 					return nil
 				}
 				fmt.Printf("unable to decode key: %v, assuming it's a roachpb.Key with fake timestamp;\n"+
@@ -711,7 +718,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			}
 		}
 
-		print.PrintMVCCKeyValue(storage.MVCCKeyValue{
+		kvserver.PrintMVCCKeyValue(storage.MVCCKeyValue{
 			Key:   k,
 			Value: bs[1],
 		})
@@ -793,7 +800,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyIterKind,
 		storage.IterKeyTypePointsOnly, fs.UnknownReadCategory,
 		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			print.PrintMVCCKeyValue(kv)
+			kvserver.PrintMVCCKeyValue(kv)
 			return nil
 		})
 }
@@ -884,25 +891,23 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, desc := range descs {
-		info, err := func() (gc.Info, error) {
-			snap := db.NewSnapshot()
-			defer snap.Close()
-			now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			thresh := gc.CalculateThreshold(now, gcTTL)
-			return gc.Run(
-				context.Background(),
-				&desc, snap,
-				now, thresh,
-				gc.RunOptions{
-					LockAgeThreshold:              lockAgeThreshold,
-					MaxLocksPerIntentCleanupBatch: lockBatchSize,
-					TxnCleanupThreshold:           txnCleanupThreshold,
-				},
-				gcTTL, gc.NoopGCer{},
-				func(_ context.Context, _ []roachpb.Lock) error { return nil },
-				func(_ context.Context, _ *roachpb.Transaction) error { return nil },
-			)
-		}()
+		snap := db.NewSnapshot()
+		defer snap.Close()
+		now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		thresh := gc.CalculateThreshold(now, gcTTL)
+		info, err := gc.Run(
+			context.Background(),
+			&desc, snap,
+			now, thresh,
+			gc.RunOptions{
+				LockAgeThreshold:              lockAgeThreshold,
+				MaxLocksPerIntentCleanupBatch: lockBatchSize,
+				TxnCleanupThreshold:           txnCleanupThreshold,
+			},
+			gcTTL, gc.NoopGCer{},
+			func(_ context.Context, _ []roachpb.Lock) error { return nil },
+			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
+		)
 		if err != nil {
 			return err
 		}
@@ -919,8 +924,9 @@ var debugPebbleOpts = struct {
 	exciseEntireTenant bool
 }{}
 
-// debugPebbleCmd is the root of all debug pebble commands.
-var debugPebbleCmd = &cobra.Command{
+// DebugPebbleCmd is the root of all debug pebble commands.
+// Exported to allow modification by CCL code.
+var DebugPebbleCmd = &cobra.Command{
 	Use:   "pebble [command]",
 	Short: "run a Pebble introspection tool command",
 	Long: `
@@ -963,6 +969,11 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 		storage.MustExist,
 		storage.DisableAutomaticCompactions,
 		storage.MaxConcurrentCompactions(debugCompactOpts.maxConcurrency),
+		// Currently, any concurrency over 0 enables Writer parallelism.
+		storage.MaxWriterConcurrency(1),
+		// Force Writer Parallelism will allow Writer parallelism to
+		// be enabled without checking the CPU.
+		storage.ForceWriterParallelism,
 	)
 	if err != nil {
 		return err
@@ -979,7 +990,7 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	// Begin compacting the store in a separate goroutine.
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- errors.Wrap(db.Compact(context.Background()), "while compacting")
+		errCh <- errors.Wrap(db.Compact(), "while compacting")
 	}()
 
 	// Print the current LSM every minute.
@@ -1037,13 +1048,12 @@ func runDebugGossipValues(cmd *cobra.Command, args []string) error {
 			return errors.Wrap(err, "failed to parse provided file as gossip.InfoStatus")
 		}
 	} else {
-		conn, finish, err := newClientConn(ctx, serverCfg)
+		status, finish, err := getStatusClient(ctx, serverCfg)
 		if err != nil {
 			return err
 		}
 		defer finish()
 
-		status := conn.NewStatusClient()
 		gossipInfo, err = status.Gossip(ctx, &serverpb.GossipRequest{})
 		if err != nil {
 			return errors.Wrap(err, "failed to retrieve gossip from server")
@@ -1071,6 +1081,16 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %v", key, clusterID))
+		} else if key == gossip.KeyDeprecatedSystemConfig {
+			if debugCtx.printSystemConfig {
+				var config config.SystemConfigEntries
+				if err := protoutil.Unmarshal(bytes, &config); err != nil {
+					return "", errors.Wrapf(err, "failed to parse value for key %q", key)
+				}
+				output = append(output, fmt.Sprintf("%q: %+v", key, config))
+			} else {
+				output = append(output, fmt.Sprintf("%q: omitted", key))
+			}
 		} else if key == gossip.KeyFirstRangeDescriptor {
 			var desc roachpb.RangeDescriptor
 			if err := protoutil.Unmarshal(bytes, &desc); err != nil {
@@ -1364,7 +1384,7 @@ var debugCmds = []*cobra.Command{
 	debugRecoverCmd,
 }
 
-// DebugCmd is the root of all debug commands.
+// DebugCmd is the root of all debug commands. Exported to allow modification by CCL code.
 var DebugCmd = &cobra.Command{
 	Use:   "debug [command]",
 	Short: "debugging commands",
@@ -1388,7 +1408,7 @@ func (m mvccValueFormatter) Format(f fmt.State, c rune) {
 		errors.FormatError(m.err, f, c)
 		return
 	}
-	fmt.Fprint(f, print.SprintMVCCKeyValue(m.kv, false /* printKey */))
+	fmt.Fprint(f, kvserver.SprintMVCCKeyValue(m.kv, false /* printKey */))
 }
 
 // lockValueFormatter is a fmt.Formatter for lock values.
@@ -1398,7 +1418,7 @@ type lockValueFormatter struct {
 
 // Format implements the fmt.Formatter interface.
 func (m lockValueFormatter) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, print.SprintIntent(m.value))
+	fmt.Fprint(f, kvserver.SprintIntent(m.value))
 }
 
 // pebbleToolFS is the vfs.FS that the pebble tool should use.
@@ -1433,7 +1453,7 @@ func init() {
 	// to write those files.
 	pebbleTool := tool.New(
 		tool.Mergers(storage.MVCCMerger),
-		tool.DefaultComparer(&storage.EngineComparer),
+		tool.DefaultComparer(storage.EngineComparer),
 		tool.KeySchema(storage.DefaultKeySchema),
 		tool.KeySchemas(storage.KeySchemas...),
 		tool.FS(pebbleToolFS),
@@ -1448,13 +1468,12 @@ func init() {
 		}),
 		tool.OpenOptions(pebbleOpenOptionLockDir{pebbleToolFS}),
 		tool.WithDBExciseSpanFn(pebbleExciseSpanFn),
-		tool.WithDBRemoteStorageFn(pebbleRemoteStorageFn),
 	)
-	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
-	f := debugPebbleCmd.PersistentFlags()
+	DebugPebbleCmd.AddCommand(pebbleTool.Commands...)
+	f := DebugPebbleCmd.PersistentFlags()
 	f.StringVarP(&debugPebbleOpts.sharedStorageURI, cliflags.SharedStorage.Name, cliflags.SharedStorage.Shorthand, "", cliflags.SharedStorage.Usage())
-	initPebbleCmds(debugPebbleCmd, pebbleTool)
-	DebugCmd.AddCommand(debugPebbleCmd)
+	initPebbleCmds(DebugPebbleCmd, pebbleTool)
+	DebugCmd.AddCommand(DebugPebbleCmd)
 
 	doctorExamineCmd.AddCommand(doctorExamineClusterCmd, doctorExamineZipDirCmd)
 	doctorRecreateCmd.AddCommand(doctorRecreateClusterCmd, doctorRecreateZipDirCmd)
@@ -1567,7 +1586,7 @@ func init() {
 		"Name of the cluster to associate with the debug zip artifacts. This can be used to identify data in the upstream observability tool.")
 	f.Var(&debugZipUploadOpts.from, "from", "oldest timestamp to include (inclusive)")
 	f.Var(&debugZipUploadOpts.to, "to", "newest timestamp to include (inclusive)")
-	f.StringVar(&debugZipUploadOpts.logFormat, "log-format", "crdb-v1-zip-upload",
+	f.StringVar(&debugZipUploadOpts.logFormat, "log-format", "crdb-v1",
 		"log format of the input files")
 	// the log-format flag is depricated. It will
 	// eventually be removed completely. keeping it hidden for now incase we ever
@@ -1575,9 +1594,6 @@ func init() {
 	f.Lookup("log-format").Hidden = true
 	f.StringVar(&debugZipUploadOpts.gcpProjectID, "gcp-project-id",
 		defaultGCPProjectID, "GCP project ID to use to send debug.zip logs to GCS")
-	// --dry-run is a hidden flag that is only meant to be used for testing and diagnostics
-	f.BoolVar(&debugZipUploadOpts.dryRun, "dry-run", false, "run in dry-run mode without making any actual uploads")
-	f.Lookup("dry-run").Hidden = true
 
 	f = debugDecodeKeyCmd.Flags()
 	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")
@@ -1611,13 +1627,6 @@ func init() {
 	f.StringVar(&debugTimeSeriesDumpOpts.ddApiKey, "dd-api-key", getEnvOrDefault(datadogAPIKeyEnvVar, ""),
 		"Datadog API key to use to send to the datadog formatter")
 	f.StringVar(&debugTimeSeriesDumpOpts.httpToken, "http-token", "", "HTTP header to use with the json export format")
-	f.StringVar(&debugTimeSeriesDumpOpts.clusterID, "cluster-id", "", "cluster ID to use in datadog upload")
-	f.StringVar(&debugTimeSeriesDumpOpts.zendeskTicket, "zendesk-ticket", "", "zendesk ticket to use in datadog upload")
-	f.StringVar(&debugTimeSeriesDumpOpts.organizationName, "org-name", "", "organization name to use in datadog upload")
-	f.StringVar(&debugTimeSeriesDumpOpts.userName, "user-name", "", "name of the user to perform datadog upload")
-	f.StringVar(&debugTimeSeriesDumpOpts.storeToNodeMapYAMLFile, "store-to-node-map-file", "", "yaml file path which contains the mapping of store ID to node ID for datadog upload.")
-	f.BoolVar(&debugTimeSeriesDumpOpts.dryRun, "dry-run", false, "run in dry-run mode without making any actual uploads")
-	f.IntVar(&debugTimeSeriesDumpOpts.noOfUploadWorkers, "upload-workers", 50, "number of workers to upload the time series data in parallel")
 
 	f = debugSendKVBatchCmd.Flags()
 	f.StringVar(&debugSendKVBatchContext.traceFormat, "trace", debugSendKVBatchContext.traceFormat,
@@ -1717,40 +1726,20 @@ func pebbleExciseSpanFn() (pebble.KeyRange, error) {
 	}, nil
 }
 
-func pebbleRemoteStorageFn(uri string) (remote.Storage, error) {
-	es, err := cloud.ExternalStorageFromURI(
-		context.Background(),
-		uri,
-		base.ExternalIODirConfig{},
-		cluster.MakeClusterSettings(),
-		nil, /* blobClientFactory: */
-		username.PublicRoleName(),
-		nil, /* db */
-		nil, /* limiters */
-		cloud.NilMetrics,
-	)
-	if err != nil {
-		return nil, err
-	}
-	wrapper := storage.MakeExternalStorageWrapper(context.Background(), es)
-	return wrapper, nil
-}
-
 func pebbleCryptoInitializer(ctx context.Context) {
-	var encryptedPaths []string
-	for _, spec := range encryptionSpecs.Specs {
-		encryptedPaths = append(encryptedPaths, spec.Path)
-	}
-	resolveFn := func(dir string) (*fs.Env, error) {
-		var envConfig fs.EnvConfig
-		if err := fillEncryptionOptionsForStore(dir, &envConfig); err != nil {
-			return nil, err
+	if EncryptedStorePathsHook != nil && PopulateEnvConfigHook != nil {
+		encryptedPaths := EncryptedStorePathsHook()
+		resolveFn := func(dir string) (*fs.Env, error) {
+			var envConfig fs.EnvConfig
+			if err := PopulateEnvConfigHook(dir, &envConfig); err != nil {
+				return nil, err
+			}
+			env, err := fs.InitEnv(ctx, vfs.Default, dir, envConfig, nil /* diskWriteStats */)
+			if err != nil {
+				return nil, err
+			}
+			return env, nil
 		}
-		env, err := fs.InitEnv(ctx, vfs.Default, dir, envConfig, nil /* diskWriteStats */)
-		if err != nil {
-			return nil, err
-		}
-		return env, nil
+		pebbleToolFS.Init(encryptedPaths, resolveFn)
 	}
-	pebbleToolFS.Init(encryptedPaths, resolveFn)
 }

@@ -245,41 +245,25 @@ func (c *CustomFuncs) ConvertConstArrayToTuple(arr *memo.ConstExpr) opt.ScalarEx
 // collated string constant with the given locale.
 func (c *CustomFuncs) CastToCollatedString(str opt.ScalarExpr, locale string) opt.ScalarExpr {
 	datum := str.(*memo.ConstExpr).Value
-	datum = tree.UnwrapDOidWrapper(datum)
-
-	// buildCollated is a recursive helper function to handle casting arrays.
-	var buildCollated func(datum tree.Datum) tree.Datum
-	buildCollated = func(datum tree.Datum) tree.Datum {
-		if datum == tree.DNull {
-			return tree.DNull
-		}
-		var value string
-		switch t := datum.(type) {
-		case *tree.DString:
-			value = string(*t)
-		case *tree.DCollatedString:
-			value = t.Contents
-		case *tree.DArray:
-			a := tree.NewDArray(types.MakeCollatedType(t.ParamTyp, locale))
-			a.Array = make(tree.Datums, 0, len(t.Array))
-			for _, elem := range t.Array {
-				collatedElem := buildCollated(elem)
-				if err := a.Append(collatedElem); err != nil {
-					panic(err)
-				}
-			}
-			return a
-		default:
-			panic(errors.AssertionFailedf("unexpected type for COLLATE: %T", t))
-		}
-		d, err := tree.NewDCollatedString(value, locale, &c.f.evalCtx.CollationEnv)
-		if err != nil {
-			panic(err)
-		}
-		return d
+	if wrap, ok := datum.(*tree.DOidWrapper); ok {
+		datum = wrap.Wrapped
 	}
 
-	return c.f.ConstructConst(buildCollated(datum), types.MakeCollatedType(str.DataType(), locale))
+	var value string
+	switch t := datum.(type) {
+	case *tree.DString:
+		value = string(*t)
+	case *tree.DCollatedString:
+		value = t.Contents
+	default:
+		panic(errors.AssertionFailedf("unexpected type for COLLATE: %T", t))
+	}
+
+	d, err := tree.NewDCollatedString(value, locale, &c.f.evalCtx.CollationEnv)
+	if err != nil {
+		panic(err)
+	}
+	return c.f.ConstructConst(d, types.MakeCollatedString(str.DataType(), locale))
 }
 
 // MakeUnorderedSubquery returns a SubqueryPrivate that specifies no ordering.

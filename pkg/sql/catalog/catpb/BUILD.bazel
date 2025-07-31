@@ -40,7 +40,6 @@ go_library(
         "job_id.go",
         "multiregion.go",
         "privilege.go",
-        "redact.go",
         ":gen-privilegedescversion-stringer",  # keep
     ],
     embed = [":catpb_go_proto"],

@@ -29,14 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -96,16 +94,14 @@ func TestTableSet(t *testing.T) {
 			s := &descriptorVersionState{
 				Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: op.version}).BuildImmutable(),
 			}
-			ts := hlc.Timestamp{WallTime: op.expiration}
-			s.expiration.Store(&ts)
+			s.mu.expiration = hlc.Timestamp{WallTime: op.expiration}
 			set.insert(s)
 
 		case remove:
 			s := &descriptorVersionState{
 				Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: op.version}).BuildImmutable(),
 			}
-			ts := hlc.Timestamp{WallTime: op.expiration}
-			s.expiration.Store(&ts)
+			s.mu.expiration = hlc.Timestamp{WallTime: op.expiration}
 			set.remove(s)
 
 		case newest:
@@ -234,8 +230,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableVersion := &descriptorVersionState{
 		Descriptor: tables[0],
 	}
-	modTS := tables[5].GetModificationTime()
-	tableVersion.expiration.Store(&modTS)
+	tableVersion.mu.expiration = tables[5].GetModificationTime()
 	ts.mu.active.insert(tableVersion)
 	ts.mu.Unlock()
 	if numLeases := getNumVersions(ts); numLeases != 2 {
@@ -537,7 +532,15 @@ func TestNameCacheContainsLatestLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	removalTracker := NewLeaseRemovalTracker()
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &ManagerTestingKnobs{
+			LeaseStoreTestingKnobs: StorageTestingKnobs{
+				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
+			},
+		},
+	}
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: testingKnobs})
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 	leaseManager := s.LeaseManager().(*Manager)
@@ -570,6 +573,8 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
 	expiration := lease.Expiration(context.Background())
+	tracker := removalTracker.TrackRemoval(lease.Descriptor)
+
 	// Acquire another lease.
 	if _, err := acquireNodeLease(
 		context.Background(), leaseManager, tableDesc.GetID(), AcquireBlock,
@@ -582,13 +587,18 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if newLease == nil {
 		t.Fatalf("name cache doesn't contain entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
-
-	if newLease.Expiration(context.Background()).Less(expiration) {
-		t.Fatalf("unexpected lease extension %s %s", expiration.GoTime(), newLease.Expiration(context.Background()).GoTime())
+	if newLease.Expiration(context.Background()) == expiration {
+		t.Fatalf("same lease %s %s", expiration.GoTime(), newLease.Expiration(context.Background()).GoTime())
 	}
 
 	// TODO(ajwerner): does this matter?
 	lease.Release(context.Background())
+
+	// The first lease acquisition was released.
+	if err := tracker.WaitForRemoval(); err != nil {
+		t.Fatal(err)
+	}
+
 	newLease.Release(context.Background())
 }
 
@@ -1146,13 +1156,13 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 				t:          descStates[tableID],
 				Descriptor: versionDesc(v),
 			}
+			addedDescVState.mu.Lock()
 			if v < maxVersion {
-				ts := versionTS(v + 1)
-				addedDescVState.expiration.Store(&ts)
+				addedDescVState.mu.expiration = versionTS(v + 1)
 			} else {
-				ts := hlc.MaxTimestamp
-				addedDescVState.expiration.Store(&ts)
+				addedDescVState.mu.expiration = hlc.MaxTimestamp
 			}
+			addedDescVState.mu.Unlock()
 			descStates[tableID].mu.active.insert(addedDescVState)
 		}
 	}
@@ -1565,6 +1575,108 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 	require.Equal(t, numRequests, 1)
 }
 
+// TestSessionLeasingClusterSetting sanity testing for the new
+// experimental_use_session_based_leasing cluster setting and interfaces used
+// to consume it.
+func TestSessionLeasingClusterSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	// Validate all settings can be set and the provider works correctly.
+	for setting, sessionMode := range SessionBasedLeasingModeByName {
+		// Automatic mode is based off the version number so the tests below do
+		// not apply.
+		if sessionMode == SessionBasedLeasingAuto {
+			continue
+		}
+		_, err := sqlDB.Exec("SET CLUSTER SETTING sql.catalog.experimental_use_session_based_leasing=$1::STRING", setting)
+		require.NoError(t, err)
+		lm := srv.LeaseManager().(*Manager)
+
+		// Validate that the mode we just set is active and the provider handles
+		// it properly.
+		require.True(t, lm.sessionBasedLeasingModeAtLeast(ctx, sessionMode))
+		require.Equal(t, lm.getSessionBasedLeasingMode(ctx), sessionMode)
+		// Validate that the previous minimums are active and forwards ones are not.
+		for mode := SessionBasedLeasingOff; mode <= sessionMode; mode++ {
+			require.True(t, lm.sessionBasedLeasingModeAtLeast(ctx, mode))
+		}
+		for mode := sessionMode + 1; mode <= SessionBasedOnly; mode++ {
+			require.False(t, lm.sessionBasedLeasingModeAtLeast(ctx, mode))
+		}
+	}
+}
+
+// TestLeaseCountDetailCrossNode will test out the extra debugging info that is
+// emitted from countLeasesWithDetail. This version tests leases that are spread
+// across multiple nodes.
+func TestLeaseCountDetailCrossNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// We are going to disable session based leasing as its easier to add a lot of
+	// fake leases into system.leases.
+	LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, SessionBasedLeasingOff)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings:          st,
+		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+		Knobs:             base.TestingKnobs{},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	idb := srv.InternalDB().(isql.DB)
+	executor := idb.Executor()
+
+	// Do cross node lease testing. It is easy to mock this if we use the old
+	// version of the lease table, which lets you insert your own expiration
+	// times.
+	descID := 10 // Descriptor ID that we will insert and query in this test
+	// Insert using a synthetic descriptor.
+	err := executor.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V23_2()}, func() error {
+		nodeIDs := []string{"2", "2", "8", "3", "2"}
+		for i, nodeID := range nodeIDs {
+			version := i + 1
+			expiration := "2124-06-12-10:10:10" // Choose a long expiration, so they are unexpired when we count
+			region := enum.One
+			_, err := executor.Exec(ctx, "add-rows-for-test", nil,
+				fmt.Sprintf("INSERT INTO system.lease VALUES (%d, %d, %s, '%s', '\\x%x')",
+					descID, version, nodeID, expiration, region))
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	codec := s.Codec()
+	now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	// Count leases for any version
+	detail, err := countLeasesWithDetail(ctx, idb, codec, nil, st,
+		[]IDVersion{{ID: descpb.ID(descID), Version: 1}}, now, true)
+	require.NoError(t, err)
+	require.Equal(t, 5, detail.count)
+	require.Equal(t, 3, detail.numSQLInstances)
+	require.Equal(t, 2, detail.sampleSQLInstanceID)
+
+	// Count leases only for a specific version
+	detail, err = countLeasesWithDetail(ctx, idb, codec, nil, st,
+		[]IDVersion{{ID: descpb.ID(descID), Version: 3}}, now, false)
+	require.NoError(t, err)
+	// We should see the fake leases we added plus the one added by the system.
+	require.Equal(t, 1, detail.count)
+	require.Equal(t, 1, detail.numSQLInstances)
+	require.Equal(t, 8, detail.sampleSQLInstanceID)
+}
+
 // TestLeaseCountDetailSessionBased will test out the extra debugging info that
 // comes from countLeasesWithDetail. This version targets session based leasing.
 func TestLeaseCountDetailSessionBased(t *testing.T) {
@@ -1610,125 +1722,4 @@ func TestLeaseCountDetailSessionBased(t *testing.T) {
 	require.Equal(t, 1, detail.count)
 	require.Equal(t, 1, detail.numSQLInstances)
 	require.Equal(t, 0, detail.sampleSQLInstanceID)
-}
-
-// fakeSessionProvider session provider that only overloads the Session function
-// with a callback.
-type fakeSessionProvider struct {
-	syncutil.Mutex
-	sqlliveness.Provider
-	getSession func() *sqllivenesstestutils.FakeSession
-}
-
-var _ sqlliveness.Provider = &fakeSessionProvider{}
-
-// Session implements sqlliveness.Provider
-func (p *fakeSessionProvider) Session(ctx context.Context) (sqlliveness.Session, error) {
-	p.Lock()
-	defer p.Unlock()
-	if f := p.getSession(); f != nil {
-		return f, nil
-	}
-	return p.Provider.Session(ctx)
-}
-
-// TestLeaseManagerSessionIDChanges validates that the lease manager can acquire
-// and release leases properly even if the SessionID changes. This can happen
-// during a fail over scenario, where a new SessionID could be picked up. Which,
-// should cause us to reacquire leases.
-func TestLeaseManagerSessionIDChanges(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	srv, sqlDB, kvDB := serverutils.StartServer(
-		t, base.TestServerArgs{
-			// Avoid using tenants since async tenant migration steps can acquire
-			// leases on our user tables.
-			DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
-		})
-	defer srv.Stopper().Stop(context.Background())
-	s := srv.ApplicationLayer()
-	leaseManager := s.LeaseManager().(*Manager)
-
-	runner := sqlutils.MakeSQLRunner(sqlDB)
-	runner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
-	runner.Exec(t, `SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled = false`)
-	// Disable the range feed for this test. This prevents a race condition
-	// where the range feed could insert a lease with the real session ID
-	// (if the session ID hook was disabled) before the initial descriptor
-	// acquisition completes.
-	leaseManager.TestingSetDisableRangeFeedCheckpointFn(true)
-	runner.Exec(t, `
-CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
-`)
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
-
-	getLatestLeasedDesc := func() *descriptorVersionState {
-		state := leaseManager.findDescriptorState(tableDesc.GetID(), false)
-		state.mu.Lock()
-		defer state.mu.Unlock()
-		descState := state.mu.active.findNewest()
-		return descState
-	}
-
-	// Set up a fake session provider that will keep changing IDs and every session
-	// will instantly expire. This is like having a zero duration lease in the expiry
-	// model.
-	var nextSessionID atomic.Int64
-	var enableHook atomic.Bool
-
-	fs := fakeSessionProvider{
-		Provider: leaseManager.storage.livenessProvider,
-		getSession: func() *sqllivenesstestutils.FakeSession {
-			if !enableHook.Load() {
-				return nil
-			}
-			now := s.Clock().Now()
-			return &sqllivenesstestutils.FakeSession{
-				SessionID: sqlliveness.SessionID(fmt.Sprintf("session-%d", nextSessionID.Load())),
-				ExpTS:     now,
-				StartTS:   now,
-			}
-		},
-	}
-
-	// Replace the session provider which only returns expired leases.
-	leaseManager.storage.livenessProvider = &fs
-	defer func() {
-		// Restore the original provider so valid session IDs
-		// are assigned.
-		leaseManager.storage.livenessProvider = fs.Provider
-		leaseManager.TestingSetDisableRangeFeedCheckpointFn(false)
-	}()
-
-	// Repeatedly lease the same descriptor, with the session ID continuously changing
-	// and each one always being expired. This validates that in fail over scenarios,
-	// nothing bad happens if the session is expired.
-	ctx := context.Background()
-	var previousSessionID sqlliveness.SessionID
-	var previousExpiry hlc.Timestamp
-	for count := 0; count < 10; count++ {
-		enableHook.Swap(true)
-		nextSessionID.Add(1)
-		now := s.Clock().Now()
-		desc, err := leaseManager.Acquire(ctx, now, tableDesc.GetID())
-		require.NoError(t, err)
-		// We expect a new session ID each time, and the descriptor
-		// to be expired.
-		newSessionID := getLatestLeasedDesc().getSessionID()
-		newExpiry := getLatestLeasedDesc().getExpiration(ctx)
-		require.NotEqualf(t, previousSessionID, newSessionID, "session ID should not match %v %v", previousSessionID, newSessionID)
-		require.Truef(t, previousExpiry.Less(newExpiry), "session expiry should be later.")
-		// Disable the hook before the lease query.
-		enableHook.Swap(false)
-		// Sanity: Validate that system.lease only has a single lease with new
-		// id.
-		runner.CheckQueryResults(t, fmt.Sprintf("SELECT session_id FROM system.lease WHERE desc_id=%d", tableDesc.GetID()),
-			[][]string{{string(newSessionID.UnsafeBytes())}})
-		previousExpiry = newExpiry
-		previousSessionID = newSessionID
-		desc.Release(ctx)
-	}
-
 }

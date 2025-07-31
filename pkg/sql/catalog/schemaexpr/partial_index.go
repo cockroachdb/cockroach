@@ -169,7 +169,7 @@ func makePartialIndexHelper(
 	semaCtx *tree.SemaContext,
 ) partialIndexHelper {
 	tn := tree.NewUnqualifiedTableName(tree.Name(table.GetName()))
-	nr := newNameResolver(table.GetID(), tn, cols)
+	nr := newNameResolver(evalCtx, table.GetID(), tn, cols)
 	nr.addIVarContainerToSemaCtx(semaCtx)
 	return partialIndexHelper{
 		nr:        nr,

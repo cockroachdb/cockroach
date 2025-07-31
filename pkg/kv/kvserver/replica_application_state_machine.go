@@ -42,7 +42,7 @@ type applyCommittedEntriesStats struct {
 	appBatchStats
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
 	numBatchesProcessed     int // TODO(sep-raft-log): numBatches
-	assertionsRequested     int
+	stateAssertions         int
 	numConfChangeEntries    int
 }
 
@@ -143,13 +143,9 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	// make it safer.
 	b.r = r
 	b.applyStats = &sm.applyStats
-	// TODO(#144627): most commands do not need to read. Use NewWriteBatch because
-	// it is more efficient. If there are exceptions, sparingly use NewReader or
-	// NewBatch (if it needs to read its own writes, which is unlikely).
 	b.batch = r.store.TODOEngine().NewBatch()
 	r.mu.RLock()
 	b.state = r.shMu.state
-	b.truncState = r.asLogStorage().shMu.trunc
 	b.state.Stats = &sm.stats
 	*b.state.Stats = *r.shMu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
@@ -206,9 +202,14 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		// Some tests (TestRangeStatsInit) assumes that once the store has started
 		// and the first range has a lease that there will not be a later hard-state.
 		if shouldAssert {
-			// Queue a check that the on-disk state doesn't diverge from the in-memory
+			// Assert that the on-disk state doesn't diverge from the in-memory
 			// state as a result of the side effects.
-			sm.applyStats.assertionsRequested++
+			sm.r.mu.RLock()
+			// TODO(sep-raft-log): either check only statemachine invariants or
+			// pass both engines in.
+			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
+			sm.r.mu.RUnlock()
+			sm.applyStats.stateAssertions++
 		}
 	} else if res := cmd.ReplicatedResult(); !res.IsZero() {
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)
@@ -286,11 +287,25 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		log.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
 	}
 
+	isRaftLogTruncationDeltaTrusted := true
 	if rResult.State != nil {
 		if newLease := rResult.State.Lease; newLease != nil {
 			sm.r.handleLeaseResult(ctx, newLease, rResult.PriorReadSummary)
 			rResult.State.Lease = nil
 			rResult.PriorReadSummary = nil
+		}
+
+		// This strongly coupled truncation code will be removed in the release
+		// following LooselyCoupledRaftLogTruncation.
+		if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
+			raftLogDelta, expectedFirstIndexWasAccurate := sm.r.handleTruncatedStateResult(
+				ctx, newTruncState, rResult.RaftExpectedFirstIndex)
+			if !expectedFirstIndexWasAccurate && rResult.RaftExpectedFirstIndex != 0 {
+				isRaftLogTruncationDeltaTrusted = false
+			}
+			rResult.RaftLogDelta += raftLogDelta
+			rResult.State.TruncatedState = nil
+			rResult.RaftExpectedFirstIndex = 0
 		}
 
 		if newVersion := rResult.State.Version; newVersion != nil {
@@ -308,11 +323,12 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		}
 	}
 
-	// TODO(#93248): the strongly coupled truncation code will be removed once the
-	// loosely coupled truncations are the default.
-	if rResult.GetRaftTruncatedState() != nil {
-		sm.r.finalizeTruncationRaftMuLocked(ctx)
-		rResult.DiscardRaftTruncation()
+	if rResult.RaftLogDelta != 0 {
+		// This code path will be taken exactly when the preceding block has
+		// newTruncState != nil. It is needlessly confusing that these two are not
+		// in the same place.
+		sm.r.handleRaftLogDeltaResult(ctx, rResult.RaftLogDelta, isRaftLogTruncationDeltaTrusted)
+		rResult.RaftLogDelta = 0
 	}
 
 	// The rest of the actions are "nontrivial" and may have large effects on the

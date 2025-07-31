@@ -195,7 +195,11 @@ CREATE TABLE abcdef (
   e STRING,
   f STRING
 );
+
+statement ok
 INSERT INTO abcdef (a, b, c, d, e, f) VALUES ('a', 0, 0, 0, 'e', 'f');
+
+statement ok
 CREATE TABLE ghijkl (
   g INT4,
   h INT4,
@@ -204,7 +208,11 @@ CREATE TABLE ghijkl (
   k STRING,
   l STRING
 );
+
+statement ok
 INSERT INTO ghijkl (g, h, i, j, k, l) VALUES (0, 0, true, -1, 'k', 'l');
+
+statement ok
 SELECT c7, c1 >= (SELECT c FROM abcdef WHERE e != c3), c5
 FROM (
   SELECT

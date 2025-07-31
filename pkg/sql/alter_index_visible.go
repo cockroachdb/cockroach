@@ -19,7 +19,6 @@ import (
 )
 
 type alterIndexVisibleNode struct {
-	zeroInputPlanNode
 	n         *tree.AlterIndexVisible
 	tableDesc *tabledesc.Mutable
 	index     catalog.Index
@@ -66,7 +65,7 @@ func (p *planner) AlterIndexVisible(
 	}
 
 	// Disallow schema changes if this table's schema is locked.
-	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
+	if err := checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
 		return nil, err
 	}
 

@@ -17,11 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -173,9 +171,8 @@ type Index interface {
 	IsCreatedExplicitly() bool
 	GetInvisibility() float64
 	GetPredicate() string
-	GetType() idxtype.T
+	GetType() descpb.IndexDescriptor_Type
 	GetGeoConfig() geopb.Config
-	GetVecConfig() vecpb.Config
 	GetVersion() descpb.IndexDescriptorVersion
 	GetEncodingType() catenumpb.IndexDescriptorEncodingType
 
@@ -225,18 +222,6 @@ type Index interface {
 	// index.
 	InvertedColumnKind() catpb.InvertedIndexColumnKind
 
-	// VectorColumnName returns the name of the vector column of the vector
-	// index.
-	//
-	// Panics if the index is not a vector index.
-	VectorColumnName() string
-
-	// VectorColumnID returns the ColumnID of the vector column of the vector
-	// index.
-	//
-	// Panics if the index is not a vector index.
-	VectorColumnID() descpb.ColumnID
-
 	NumPrimaryStoredColumns() int
 	NumSecondaryStoredColumns() int
 	GetStoredColumnID(storedColumnOrdinal int) descpb.ColumnID
@@ -249,7 +234,7 @@ type Index interface {
 	NumCompositeColumns() int
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
 	UseDeletePreservingEncoding() bool
-	// ForcePut forces all writes to use Put rather than CPut.
+	// ForcePut forces all writes to use Put rather than CPut or InitPut.
 	//
 	// Users of this options should take great care as it
 	// effectively mean unique constraints are not respected.
@@ -550,26 +535,6 @@ type CheckConstraint interface {
 	IsHashShardingConstraint() bool
 }
 
-// CheckConstraintValidator interface is designed for evaluating whether check
-// constraints are violated. It represents a subset of the CheckConstraint
-// interface, excluding certain elements that are not applicable to synthetic
-// constraints added for row-level security.
-type CheckConstraintValidator interface {
-	// GetName returns the name of this constraint update mutation.
-	GetName() string
-
-	// GetExpr returns the check expression as a string.
-	GetExpr() string
-
-	// IsRLSConstraint returns true iff ths check constraint is the synthethic one
-	// to enforce row-level security policies.
-	IsRLSConstraint() bool
-
-	// IsCheckFailed returns true if the constraint was violated based on the
-	// input given.
-	IsCheckFailed(boolVal, isNull bool) bool
-}
-
 // ForeignKeyConstraint is an interface around a check constraint.
 type ForeignKeyConstraint interface {
 	WithoutIndexConstraint
@@ -800,11 +765,6 @@ func ForEachPartialIndex(desc TableDescriptor, f func(idx Index) error) error {
 	return forEachIndex(desc.PartialIndexes(), f)
 }
 
-// ForEachVectorIndex is like ForEachIndex over VectorIndexes().
-func ForEachVectorIndex(desc TableDescriptor, f func(idx Index) error) error {
-	return forEachIndex(desc.VectorIndexes(), f)
-}
-
 // ForEachNonPrimaryIndex is like ForEachIndex over
 // NonPrimaryIndexes().
 func ForEachNonPrimaryIndex(desc TableDescriptor, f func(idx Index) error) error {
@@ -871,16 +831,10 @@ func FindNonDropIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.NonDropIndexes(), test)
 }
 
-// FindPartialIndex returns the first index in PartialIndexes() for which test
+// FindPartialIndex returns the first index in PartialIndex() for which test
 // returns true.
 func FindPartialIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.PartialIndexes(), test)
-}
-
-// FindVectorIndex returns the first index in VectorIndexes() for which test
-// returns true.
-func FindVectorIndex(desc TableDescriptor, test func(idx Index) bool) Index {
-	return findIndex(desc.VectorIndexes(), test)
 }
 
 // FindPublicNonPrimaryIndex returns the first index in PublicNonPrimaryIndex()
@@ -1009,6 +963,20 @@ func ColumnIDToOrdinalMap(columns []Column) TableColMap {
 		m.Set(col.GetID(), col.Ordinal())
 	}
 	return m
+}
+
+// ColumnTypesWithInvertedCol returns the types of all given columns,
+// If invertedCol is non-nil, substitutes the type of the inverted
+// column instead of the column with the same ID.
+func ColumnTypesWithInvertedCol(columns []Column, invertedCol Column) []*types.T {
+	t := make([]*types.T, len(columns))
+	for i, col := range columns {
+		t[i] = col.GetType()
+		if invertedCol != nil && col.GetID() == invertedCol.GetID() {
+			t[i] = invertedCol.GetType()
+		}
+	}
+	return t
 }
 
 // ColumnsByIDs returns a map of Columns keyed by their ID for the given table.
@@ -1206,19 +1174,6 @@ func FindTriggerByID(tbl TableDescriptor, id descpb.TriggerID) *descpb.TriggerDe
 	for i := range triggers {
 		if triggers[i].ID == id {
 			return &triggers[i]
-		}
-	}
-	return nil
-}
-
-// FindPolicyByID traverses the slice returned by the GetPolicies method on the
-// table descriptor and returns the first policy that matches the desired ID,
-// or nil if none was found.
-func FindPolicyByID(tbl TableDescriptor, id descpb.PolicyID) *descpb.PolicyDescriptor {
-	policies := tbl.GetPolicies()
-	for i := range policies {
-		if policies[i].ID == id {
-			return &policies[i]
 		}
 	}
 	return nil

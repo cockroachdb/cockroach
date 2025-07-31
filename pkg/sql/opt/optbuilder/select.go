@@ -155,7 +155,7 @@ func (b *Builder) buildDataSource(
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
-			policyCommandScope, locking := b.prepForTableScan(lockCtx.locking, tabMeta)
+			locking := b.lockingSpecForTableScan(lockCtx.locking, tabMeta)
 			return b.buildScan(
 				tabMeta,
 				tableOrdinals(t, columnKinds{
@@ -165,7 +165,6 @@ func (b *Builder) buildDataSource(
 				}),
 				indexFlags, locking, inScope,
 				false, /* disableNotVisibleIndex */
-				policyCommandScope,
 			)
 
 		case cat.Sequence:
@@ -205,6 +204,11 @@ func (b *Builder) buildDataSource(
 		// This is the special '[ ... ]' syntax. We treat this as syntactic sugar
 		// for a top-level CTE, so it cannot refer to anything in the input scope.
 		// See #41078.
+		if b.insideFuncDef {
+			panic(unimplemented.NewWithIssue(
+				92961, "statement source (square bracket syntax) within user-defined function",
+			))
+		}
 		emptyScope := b.allocScope()
 		innerScope := b.buildStmt(source.Statement, nil /* desiredTypes */, emptyScope)
 		if len(innerScope.cols) == 0 {
@@ -479,11 +483,9 @@ func (b *Builder) buildScanFromTableRef(
 
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
 	tabMeta := b.addTable(tab, &tn)
-	var policyCommandScope cat.PolicyCommandScope
-	policyCommandScope, locking = b.prepForTableScan(locking, tabMeta)
+	locking = b.lockingSpecForTableScan(locking, tabMeta)
 	return b.buildScan(
 		tabMeta, ordinals, indexFlags, locking, inScope, false, /* disableNotVisibleIndex */
-		policyCommandScope,
 	)
 }
 
@@ -526,6 +528,18 @@ func errorOnInvalidMultiregionDB(
 // be in the list (in practice, this coincides with all "ordinary" table columns
 // being in the list).
 //
+// If scanMutationCols is true, then include columns being added or dropped from
+// the table. These are currently required by the execution engine as "fetch
+// columns", when performing mutation DML statements (INSERT, UPDATE, UPSERT,
+// DELETE).
+//
+// NOTE: Callers must take care that mutation columns (columns that are being
+//
+//	added or dropped from the table) are only used when performing mutation
+//	DML statements (INSERT, UPDATE, UPSERT, DELETE). They cannot be used in
+//	any other way because they may not have been initialized yet by the
+//	backfiller!
+//
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
 func (b *Builder) buildScan(
@@ -535,7 +549,6 @@ func (b *Builder) buildScan(
 	locking lockingSpec,
 	inScope *scope,
 	disableNotVisibleIndex bool,
-	policyCommandScope cat.PolicyCommandScope,
 ) (outScope *scope) {
 	if ordinals == nil {
 		panic(errors.AssertionFailedf("no ordinals"))
@@ -770,11 +783,6 @@ func (b *Builder) buildScan(
 		outScope.expr = b.factory.ConstructProject(outScope.expr, proj, scanColIDs)
 	}
 
-	// Apply any filters required to enforce RLS policies. This must be done
-	// after adding projections for virtual columns, in case any policies
-	// reference them.
-	b.addRowLevelSecurityFilter(tabMeta, outScope, policyCommandScope)
-
 	if b.trackSchemaDeps {
 		dep := opt.SchemaDep{DataSource: tab}
 		dep.ColumnIDToOrd = make(map[opt.ColumnID]int)
@@ -828,7 +836,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 
 	// Create a scope that can be used for building the scalar expressions.
 	tableScope := b.allocScope()
-	b.appendOrdinaryColumnsFromTable(tableScope, tabMeta, &tabMeta.Alias)
+	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 	// Synthesized CHECK expressions, e.g., for columns of ENUM types, may
 	// reference inaccessible columns. This can happen when the type of an
 	// indexed expression is an ENUM. We make these columns visible so that they
@@ -925,7 +933,7 @@ func (b *Builder) addComputedColsForTable(
 
 		if tableScope == nil {
 			tableScope = b.allocScope()
-			b.appendOrdinaryColumnsFromTable(tableScope, tabMeta, &tabMeta.Alias)
+			tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 		}
 
 		colType := tabCol.DatumType()
@@ -944,7 +952,10 @@ func (b *Builder) addComputedColsForTable(
 							scalarType, colType, string(tabCol.ColName()),
 						))
 					}
-					scalar = b.factory.ConstructAssignmentCast(scalar, colType)
+					// TODO(mgartner): This should be an assignment cast, but
+					// until #81698 is addressed, that could cause reads to
+					// error after adding a virtual computed column to a table.
+					scalar = b.factory.ConstructCast(scalar, colType)
 				}
 			})
 			// Check if the expression contains non-immutable operators.
@@ -1222,7 +1233,7 @@ func (b *Builder) buildSelectClause(
 	fromScope := b.buildFrom(sel.From, lockCtx, inScope)
 
 	b.processWindowDefs(sel, fromScope)
-	b.buildWhere(sel.Where, fromScope, nil /* colRefs */)
+	b.buildWhere(sel.Where, fromScope)
 
 	projectionsScope := fromScope.replace()
 
@@ -1250,7 +1261,7 @@ func (b *Builder) buildSelectClause(
 		having = b.buildHaving(havingExpr, fromScope)
 	}
 
-	b.buildProjectionList(fromScope, projectionsScope, nil /* colRefs */)
+	b.buildProjectionList(fromScope, projectionsScope)
 	b.buildOrderBy(fromScope, projectionsScope, orderByScope)
 	b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
 	b.buildLockArgs(fromScope, projectionsScope, lockScope)
@@ -1335,13 +1346,9 @@ func (b *Builder) processWindowDefs(sel *tree.SelectClause, fromScope *scope) {
 
 // buildWhere builds a set of memo groups that represent the given WHERE clause.
 //
-// colRefs is an optional output parameter that, if provided, is populated
-// with the columns referenced in the WHERE clause expression. Pass nil if the
-// referenced columns are not needed.
-//
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
-func (b *Builder) buildWhere(where *tree.Where, inScope *scope, colRefs *opt.ColSet) {
+func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 	if where == nil {
 		return
 	}
@@ -1352,7 +1359,6 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope, colRefs *opt.Col
 		exprKindWhere,
 		tree.RejectGenerators|tree.RejectWindowApplications|tree.RejectProcedures,
 		inScope,
-		colRefs,
 	)
 
 	// Wrap the filter in a FiltersOp.
@@ -1492,16 +1498,6 @@ func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
 		panic(err)
 	}
 
-	// We need to look at the original statement to know if the AOST clause was
-	// specified for a backfill, This must be set correctly in order to pass
-	// the validations below.
-	switch s := b.stmt.(type) {
-	case *tree.CreateTable, *tree.RefreshMaterializedView:
-		asOf.ForBackfill = true
-	case *tree.CreateView:
-		asOf.ForBackfill = s.Materialized
-	}
-
 	if b.evalCtx.AsOfSystemTime == nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"AS OF SYSTEM TIME must be provided on a top-level statement"))
@@ -1562,28 +1558,4 @@ func (b *Builder) rejectIfLocking(locking lockingSpec, context string) {
 func (b *Builder) raiseLockingContextError(locking lockingSpec, context string) {
 	panic(pgerror.Newf(pgcode.FeatureNotSupported,
 		"%s is not allowed with %s", locking.get().Strength, context))
-}
-
-// getPolicyCommandScopeForScan returns the applicable cat.PolicyCommandScope
-// for the current scan.
-func (b *Builder) getPolicyCommandScopeForScan(lockingSpec lockingSpec) cat.PolicyCommandScope {
-	// For policy enforcement, SELECT ... FOR UPDATE|SHARE is treated as an UPDATE
-	// command. This ensures that only rows subject to UPDATE policies are returned.
-	if lockingSpec.get().IsLocking() {
-		return cat.PolicyScopeUpdate
-	}
-	return cat.PolicyScopeSelect
-}
-
-// prepForTableScan computes the necessary inputs for the buildScan call.
-// This is handled in a helper function because the order in which these
-// inputs are generated is important.
-func (b *Builder) prepForTableScan(
-	locking lockingSpec, tabMeta *opt.TableMeta,
-) (cat.PolicyCommandScope, lockingSpec) {
-	// Determine the policy command scope first, as it can be influenced by
-	// the locking spec. However, since lockingSpecForTableScan may modify
-	// the locking spec, this check must be performed beforehand.
-	policyCommandScope := b.getPolicyCommandScopeForScan(locking)
-	return policyCommandScope, b.lockingSpecForTableScan(locking, tabMeta)
 }

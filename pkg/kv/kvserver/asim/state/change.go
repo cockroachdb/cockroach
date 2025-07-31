@@ -404,7 +404,7 @@ func (rc *ReplicaChange) Blocking() bool {
 // pushed before a change.
 type replicaChanger struct {
 	lastTicket     int
-	completeAt     *btree.BTreeG[*pendingChange]
+	completeAt     *btree.BTree
 	pendingTickets map[int]Change
 	pendingTarget  map[StoreID]time.Time
 	pendingRange   map[RangeID]int
@@ -414,7 +414,7 @@ type replicaChanger struct {
 // replica changes.
 func NewReplicaChanger() Changer {
 	return &replicaChanger{
-		completeAt:     btree.NewG[*pendingChange](8, (*pendingChange).Less),
+		completeAt:     btree.New(8),
 		pendingTickets: make(map[int]Change),
 		pendingTarget:  make(map[StoreID]time.Time),
 		pendingRange:   make(map[RangeID]int),
@@ -426,10 +426,11 @@ type pendingChange struct {
 	completeAt time.Time
 }
 
-func (pc *pendingChange) Less(than *pendingChange) bool {
-	// Order on (completeAt, ticket).
-	return pc.completeAt.Before(than.completeAt) ||
-		(pc.completeAt.Equal(than.completeAt) && pc.ticket < than.ticket)
+// Less is part of the btree.Item interface.
+func (pc *pendingChange) Less(than btree.Item) bool {
+	// Targettal order on (completeAt, ticket)
+	return pc.completeAt.Before(than.(*pendingChange).completeAt) ||
+		(pc.completeAt.Equal(than.(*pendingChange).completeAt) && pc.ticket < than.(*pendingChange).ticket)
 }
 
 // Push appends a state change to occur. There must not be more than one
@@ -476,7 +477,8 @@ func (rc *replicaChanger) Tick(tick time.Time, state State) {
 	// NB: Add the smallest unit of time, in order to find all items in
 	// [smallest, tick].
 	pivot := &pendingChange{completeAt: tick.Add(time.Nanosecond)}
-	rc.completeAt.AscendLessThan(pivot, func(nextChange *pendingChange) bool {
+	rc.completeAt.AscendLessThan(pivot, func(i btree.Item) bool {
+		nextChange, _ := i.(*pendingChange)
 		changeList = append(changeList, nextChange)
 		return true
 	})

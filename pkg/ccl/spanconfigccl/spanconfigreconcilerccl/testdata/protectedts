@@ -97,11 +97,6 @@ state offset=51
 /Table/6{5-6}                              database system (host)
 /Table/6{6-7}                              database system (host)
 /Table/6{7-8}                              database system (host)
-/Table/6{8-9}                              database system (host)
-/Table/{69-70}                             database system (host)
-/Table/7{0-1}                              database system (host)
-/Table/7{1-2}                              database system (host)
-/Table/7{2-3}                              database system (host)
 /Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
 /Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
 
@@ -161,11 +156,6 @@ state offset=57
 /Table/6{5-6}                              database system (host)
 /Table/6{6-7}                              database system (host)
 /Table/6{7-8}                              database system (host)
-/Table/6{8-9}                              database system (host)
-/Table/{69-70}                             database system (host)
-/Table/7{0-1}                              database system (host)
-/Table/7{1-2}                              database system (host)
-/Table/7{2-3}                              database system (host)
 /Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
 /Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
 
@@ -191,10 +181,5 @@ state offset=57
 /Table/6{5-6}                              database system (host)
 /Table/6{6-7}                              database system (host)
 /Table/6{7-8}                              database system (host)
-/Table/6{8-9}                              database system (host)
-/Table/{69-70}                             database system (host)
-/Table/7{0-1}                              database system (host)
-/Table/7{1-2}                              database system (host)
-/Table/7{2-3}                              database system (host)
 /Table/10{6-7}                             range default
 /Table/10{7-8}                             range default

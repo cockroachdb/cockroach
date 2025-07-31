@@ -43,7 +43,7 @@ func NewStopWatch() *StopWatch {
 // addition to wall-clock time.
 func NewStopWatchWithCPU() *StopWatch {
 	w := newStopWatch(Now)
-	if grunning.Supported {
+	if grunning.Supported() {
 		w.mu.cpuStopWatch = &cpuStopWatch{}
 	}
 	return w

@@ -10,7 +10,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"math/rand/v2"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/rand"
 )
 
 func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string) {
@@ -90,7 +90,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 		// Don't mock assets in this test, we're creating our own one-off certs.
 		securityassets.ResetLoader()
 		defer ResetTest()
-		tenant = uint64(rand.Int64())
+		tenant = uint64(rand.Int63())
 		certsDir = makeTenantCerts(t, tenant)
 	} else {
 		certsDir = certnames.EmbeddedCertsDir

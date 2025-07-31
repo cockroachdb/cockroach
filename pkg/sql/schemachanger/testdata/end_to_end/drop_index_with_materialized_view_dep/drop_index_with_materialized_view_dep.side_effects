@@ -62,7 +62,6 @@ upsert descriptor #105
   -    name: idx
   -    partitioning: {}
   -    sharded: {}
-  -    vecConfig: {}
   -    version: 4
   +  indexes: []
      isMaterializedView: true
@@ -87,7 +86,6 @@ upsert descriptor #105
   +      name: idx
   +      partitioning: {}
   +      sharded: {}
-  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: WRITE_ONLY
@@ -174,7 +172,6 @@ upsert descriptor #105
   -    name: idx
   -    partitioning: {}
   -    sharded: {}
-  -    vecConfig: {}
   -    version: 4
   +  indexes: []
      isMaterializedView: true
@@ -199,7 +196,6 @@ upsert descriptor #105
   +      name: idx
   +      partitioning: {}
   +      sharded: {}
-  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: WRITE_ONLY
@@ -259,7 +255,6 @@ upsert descriptor #105
   +      name: crdb_internal_index_2_name_placeholder
          partitioning: {}
          sharded: {}
-  ...
          version: 4
        mutationId: 1
   -    state: WRITE_ONLY
@@ -275,7 +270,7 @@ upsert descriptor #105
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
   descriptor IDs: [106]
-update progress of schema change job #1: "Pending: Updating schema metadata (2 operations) — PostCommitNonRevertible phase (stage 2 of 2)."
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to [105]
 commit transaction #3
@@ -338,7 +333,6 @@ upsert descriptor #105
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
   -      sharded: {}
-  -      vecConfig: {}
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY

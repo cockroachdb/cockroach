@@ -36,7 +36,7 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 	}
 
 	const (
-		nodesPerRegion = 13
+		nodesPerRegion = 20
 		// These values are somewhat arbitrary: currently, they are
 		// sufficient to keep the cluster relatively busy (CPU utilization
 		// varying from 10-60%). In the future, these values might be
@@ -60,8 +60,7 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 		),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		CompatibleClouds:  registry.OnlyGCE,
-		Suites:            registry.Suites(registry.MixedVersion, registry.Weekly),
-		Monitor:           true,
+		Suites:            registry.Suites(registry.Weekly),
 		Randomized:        true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			partitionConfig := fmt.Sprintf(
@@ -76,7 +75,7 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 				mixedversion.NeverUseFixtures,
 				// Allow migrations to run for a longer period of time due to
 				// added latency and cluster size.
-				mixedversion.UpgradeTimeout(2*time.Hour),
+				mixedversion.UpgradeTimeout(1*time.Hour),
 				// There are known issues upgrading from older patch releases
 				// in MR clusters (e.g., #113908), so use the latest patch
 				// releases to avoid flakes.

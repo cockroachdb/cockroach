@@ -7,7 +7,6 @@ stmt_without_legacy_transaction ::=
 	| execute_stmt
 	| deallocate_stmt
 	| discard_stmt
-	| do_stmt
 	| grant_stmt
 	| prepare_stmt
 	| revoke_stmt

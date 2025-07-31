@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // BuildStages builds the plan's stages for this and all subsequent phases.
@@ -229,7 +228,6 @@ func buildStages(bc buildContext) (stages []Stage) {
 	default:
 		panic(errors.AssertionFailedf("unknown phase %s", currentPhase))
 	}
-
 	return stages
 }
 
@@ -827,7 +825,7 @@ func (bc buildContext) updateJobProgressOp(
 	if next != nil {
 		toRemove = descIDsPresentBefore.Difference(descIDsPresentAfter)
 	} else {
-		// If the next stage is nil, simply remove all the descriptors, we are
+		// If the next stage is nil, simply remove al the descriptors, we are
 		// done processing
 		toRemove = descIDsPresentBefore
 	}
@@ -959,21 +957,9 @@ func isRevertible(next *Stage) bool {
 	return next != nil && next.Phase < scop.PostCommitNonRevertiblePhase
 }
 
-func runningStatus(next *Stage) redact.RedactableString {
+func runningStatus(next *Stage) string {
 	if next == nil {
 		return "all stages completed"
 	}
-
-	var buf redact.StringBuilder
-	buf.SafeString("Pending: ")
-
-	if opsDesc := next.OpsDescription(); len(opsDesc) > 0 {
-		buf.Print(opsDesc)
-		buf.SafeString(" — ")
-	}
-
-	phaseName, _ := strings.CutSuffix(next.Phase.String(), "Phase")
-	buf.Printf("%s phase (stage %d of %d).", redact.RedactableString(phaseName), next.Ordinal, next.StagesInPhase)
-
-	return buf.RedactableString()
+	return fmt.Sprintf("%s pending", next)
 }

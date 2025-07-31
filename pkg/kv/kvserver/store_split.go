@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -39,7 +38,7 @@ func splitPreApply(
 	//
 	// The exception to that is if the DisableEagerReplicaRemoval testing flag is
 	// enabled.
-	_, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
+	rightDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	_, hasLeftDesc := split.LeftDesc.GetReplicaDescriptor(r.StoreID())
 	if !hasRightDesc || !hasLeftDesc {
 		log.Fatalf(ctx, "cannot process split on s%s which does not exist in the split: %+v",
@@ -131,23 +130,19 @@ func splitPreApply(
 		return
 	}
 
-	// The RHS replica exists and is uninitialized. We are initializing it here.
-	// This is the common case.
-	//
-	// Update the raft HardState with the new Commit index (taken from the
-	// applied state in the write batch), and use existing[*] or default Term
-	// and Vote. Also write the initial RaftTruncatedState.
-	//
-	// [*] Note that uninitialized replicas may cast votes, and if they have, we
-	// can't load the default Term and Vote values.
+	// Update the raft HardState with the new Commit value now that the
+	// replica is initialized (combining it with existing or default
+	// Term and Vote). This is the common case.
 	rsl := stateloader.Make(split.RightDesc.RangeID)
 	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
-	if err := rsl.SetRaftTruncatedState(ctx, readWriter, &kvserverpb.RaftTruncatedState{
-		Index: stateloader.RaftInitialLogIndex,
-		Term:  stateloader.RaftInitialLogTerm,
-	}); err != nil {
+	// Write the RaftReplicaID for the RHS to maintain the invariant that any
+	// replica (uninitialized or initialized), with persistent state, has a
+	// RaftReplicaID. NB: this invariant will not be universally true until we
+	// introduce node startup code that will write this value for existing
+	// ranges.
+	if err := rsl.SetRaftReplicaID(ctx, readWriter, rightDesc.ReplicaID); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 	// Persist the closed timestamp.
@@ -253,9 +248,7 @@ func prepareRightReplicaForSplit(
 	// Already holding raftMu, see above.
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
-	if err := rightRepl.initRaftMuLockedReplicaMuLocked(
-		state, false, /* waitForPrevLeaseToExpire */
-	); err != nil {
+	if err := rightRepl.initRaftMuLockedReplicaMuLocked(state); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 
@@ -311,11 +304,11 @@ func (s *Store) SplitRange(
 	defer s.mu.Unlock()
 	leftRepl.setDescRaftMuLocked(ctx, newLeftDesc)
 
-	// Clear or split the LHS lock and txn wait-queues, to redirect to the RHS if
+	// Clear the LHS lock and txn wait-queues, to redirect to the RHS if
 	// appropriate. We do this after setDescWithoutProcessUpdate to ensure
 	// that no pre-split commands are inserted into the wait-queues after we
 	// clear them.
-	locksToAcquireOnRHS := leftRepl.concMgr.OnRangeSplit(roachpb.Key(rightDesc.StartKey))
+	leftRepl.concMgr.OnRangeSplit()
 
 	if rightReplOrNil == nil {
 		// There is no RHS replica, so (heuristically) halve the load stats for the
@@ -325,13 +318,6 @@ func (s *Store) SplitRange(
 		return nil
 	}
 	rightRepl := rightReplOrNil
-
-	// Acquire unreplicated locks on the RHS. We expect locksToAcquireOnRHS to be
-	// empty if UnreplicatedLockReliabilityUpgrade is false.
-	log.VInfof(ctx, 2, "acquiring %d locks on the RHS", len(locksToAcquireOnRHS))
-	for _, l := range locksToAcquireOnRHS {
-		rightRepl.concMgr.OnLockAcquired(ctx, &l)
-	}
 
 	// Split the replica load of the LHS evenly (50:50) with the RHS. NB: this
 	// ignores the split point, and makes as simplifying assumption that

@@ -133,9 +133,9 @@ func isDoneGC(progress *jobspb.SchemaChangeGCProgress) bool {
 	return true
 }
 
-// statusGC generates a status string which always remains under
+// runningStatusGC generates a RunningStatus string which always remains under
 // a certain size, given any progress struct.
-func statusGC(progress *jobspb.SchemaChangeGCProgress) jobs.StatusMessage {
+func runningStatusGC(progress *jobspb.SchemaChangeGCProgress) jobs.RunningStatus {
 	var anyWaitingForMVCCGC bool
 	maybeSetAnyDeletedOrWaitingForMVCCGC := func(status jobspb.SchemaChangeGCProgress_Status) {
 		switch status {
@@ -204,11 +204,11 @@ func statusGC(progress *jobspb.SchemaChangeGCProgress) jobs.StatusMessage {
 	switch {
 	// `flag` not set implies we're not GCing anything.
 	case !flag && anyWaitingForMVCCGC:
-		return sql.StatusWaitingForMVCCGC
+		return sql.RunningStatusWaitingForMVCCGC
 	case !flag:
-		return sql.StatusWaitingGC // legacy status
+		return sql.RunningStatusWaitingGC // legacy status
 	default:
-		return jobs.StatusMessage(b.String())
+		return jobs.RunningStatus(b.String())
 	}
 }
 
@@ -255,14 +255,14 @@ func persistProgress(
 	execCfg *sql.ExecutorConfig,
 	job *jobs.Job,
 	progress *jobspb.SchemaChangeGCProgress,
-	status jobs.StatusMessage,
+	runningStatus jobs.RunningStatus,
 ) {
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
 			}
-			md.Progress.StatusMessage = string(status)
+			md.Progress.RunningStatus = string(runningStatus)
 			md.Progress.Details = jobspb.WrapProgressDetails(*progress)
 			ju.UpdateProgress(md.Progress)
 			return nil
@@ -270,7 +270,7 @@ func persistProgress(
 	}); err != nil {
 		log.Warningf(ctx, "failed to update job's progress payload or running status err: %+v", err)
 	}
-	log.Infof(ctx, "updated progress status: %s, payload: %+v", status, progress)
+	log.Infof(ctx, "updated progress status: %s, payload: %+v", runningStatus, progress)
 }
 
 // getDropTimes returns the data stored in details as a map for convenience.

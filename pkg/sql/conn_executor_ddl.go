@@ -26,7 +26,7 @@ var defaultAutocommitBeforeDDL = settings.RegisterBoolSetting(
 	"sql.defaults.autocommit_before_ddl.enabled",
 	"default value for autocommit_before_ddl session setting; "+
 		"forces transactions to autocommit before running any DDL statement",
-	true,
+	false,
 )
 
 // maybeAutoCommitBeforeDDL checks if the current transaction needs to be
@@ -51,7 +51,6 @@ func (ex *connExecutor) maybeAutoCommitBeforeDDL(
 		if err := ex.planner.SendClientNotice(
 			ctx,
 			pgnotice.Newf("auto-committing transaction before processing DDL due to autocommit_before_ddl setting"),
-			false, /* immediateFlush */
 		); err != nil {
 			return ex.makeErrEvent(err, ast)
 		}
@@ -66,14 +65,11 @@ func (ex *connExecutor) maybeAutoCommitBeforeDDL(
 	return nil, nil
 }
 
-// maybeAdjustTxnForDDL checks if the statement is a schema change and adjusts
-// the txn if it is. The following adjustments will be performed:
-// - upgrading to serializable isolation. If the txn contains multiple
-// statements, and an upgrade was attempted, an error is returned.
-// - disabling buffered writes.
-// TODO(#140695): we disable buffered writes out of caution. We should consider
-// allowing this in the future.
-func (ex *connExecutor) maybeAdjustTxnForDDL(ctx context.Context, stmt Statement) error {
+// maybeUpgradeToSerializable checks if the statement is a schema change, and
+// upgrades the transaction to serializable isolation if it is. If the
+// transaction contains multiple statements, and an upgrade was attempted, an
+// error is returned.
+func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Statement) error {
 	p := &ex.planner
 	if tree.CanModifySchema(stmt.AST) {
 		if ex.state.mu.txn.IsoLevel().ToleratesWriteSkew() {
@@ -86,9 +82,6 @@ func (ex *connExecutor) maybeAdjustTxnForDDL(ctx context.Context, stmt Statement
 			} else {
 				return txnSchemaChangeErr
 			}
-		}
-		if ex.state.mu.txn.BufferedWritesEnabled() {
-			ex.state.mu.txn.SetBufferedWritesEnabled(false /* enabled */)
 		}
 	}
 	return nil

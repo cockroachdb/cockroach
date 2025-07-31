@@ -90,10 +90,6 @@ var histogramsMaxLatency = runFlags.Duration(
 	"histograms-max-latency", 100*time.Second,
 	"Expected maximum latency of running a query")
 
-var disableTempHistogramFile = runFlags.Bool("disable-temp-hist-file", false,
-	"If true, disables the use of a temporary file for incremental histogram data. Instead, data is written directly to the final file. "+
-		"Note: If the workload stops abruptly, the final file may become corrupted.")
-
 var openmetricsLabels = runFlags.String("openmetrics-labels", "",
 	"Comma separated list of key value pairs used as labels, used by openmetrics exporter. Eg 'cloud=aws, workload=tpcc'")
 
@@ -440,7 +436,23 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	if err != nil {
 		return errors.Wrap(err, "error creating metrics exporter")
 	}
-	defer closeExporter(ctx, metricsExporter, file)
+	defer func() {
+		if metricsExporter != nil {
+			if err = metricsExporter.Close(func() error {
+				if file == nil {
+					log.Infof(ctx, "no file to close")
+					return nil
+				}
+
+				if err := file.Close(); err != nil {
+					return err
+				}
+				return nil
+			}); err != nil {
+				log.Warningf(ctx, "failed to close metrics exporter: %v", err)
+			}
+		}
+	}()
 
 	reg := histogram.NewRegistryWithPublisherAndExporter(
 		*histogramsMaxLatency,
@@ -462,21 +474,18 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	var ops workload.QueryLoad
 	prepareStart := timeutil.Now()
 	log.Infof(ctx, "creating load generator...")
-
+	// We set up a timer that cancels this context after prepareTimeout,
+	// but we'll collect the stacks before we do, so that they can be
+	// logged.
 	prepareCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stacksCh := make(chan []byte, 1)
-
+	const prepareTimeout = 90 * time.Minute
+	defer time.AfterFunc(prepareTimeout, func() {
+		stacksCh <- allstacks.Get()
+		cancel()
+	}).Stop()
 	if prepareErr := func(ctx context.Context) error {
-		// We set up a timer that cancels this context after prepareTimeout,
-		// but we'll collect the stacks before we do, so that they can be
-		// logged.
-		const prepareTimeout = 90 * time.Minute
-		defer time.AfterFunc(prepareTimeout, func() {
-			stacksCh <- allstacks.Get()
-			cancel()
-		}).Stop()
-
 		retry := retry.StartWithCtx(ctx, retry.Options{})
 		var err error
 		for retry.Next() {
@@ -664,8 +673,6 @@ func maybeInitAndCreateExporter() (exporter.Exporter, *os.File, error) {
 
 	var metricsExporter exporter.Exporter
 	var file *os.File
-	var tempFilePath string
-	var finalPath string
 
 	switch *histogramExportFormat {
 	case "json":
@@ -674,7 +681,7 @@ func maybeInitAndCreateExporter() (exporter.Exporter, *os.File, error) {
 		labelValues := strings.Split(*openmetricsLabels, ",")
 		labels := make(map[string]string)
 		for _, label := range labelValues {
-			parts := strings.SplitN(label, "=", 2)
+			parts := strings.Split(label, "=")
 			if len(parts) != 2 {
 				return nil, nil, errors.Errorf("invalid histogram label %q", label)
 			}
@@ -698,17 +705,7 @@ func maybeInitAndCreateExporter() (exporter.Exporter, *os.File, error) {
 		return nil, nil, err
 	}
 
-	// Create a temporary file path
-	finalPath = *histograms
-	dir := filepath.Dir(finalPath)
-	tempFilePath = filepath.Join(dir, fmt.Sprintf(".%s.tmp.%d", filepath.Base(finalPath), timeutil.Now().UnixNano()))
-
-	// Create the file based on the disableTempHistogramFile flag
-	if *disableTempHistogramFile {
-		file, err = os.Create(finalPath)
-	} else {
-		file, err = os.Create(tempFilePath)
-	}
+	file, err = os.Create(*histograms)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -717,52 +714,4 @@ func maybeInitAndCreateExporter() (exporter.Exporter, *os.File, error) {
 	metricsExporter.Init(&writer)
 
 	return metricsExporter, file, nil
-}
-
-func closeExporter(ctx context.Context, metricsExporter exporter.Exporter, file *os.File) {
-	if metricsExporter != nil {
-		if err := metricsExporter.Close(func() error {
-			if file == nil {
-				log.Infof(ctx, "no file to close")
-				return nil
-			}
-
-			// if disableTempHistogramFile is enabled, directly close the final file.
-			if *disableTempHistogramFile {
-				return file.Close()
-
-			}
-
-			return renameTempFile(file, *histograms)
-		}); err != nil {
-			log.Warningf(ctx, "failed to close metrics exporter: %v", err)
-		}
-	}
-}
-
-func renameTempFile(file *os.File, finalPath string) error {
-	tempPath := file.Name()
-	defer func() {
-		_ = os.Remove(tempPath) // Clean up the temp folder if still exists
-	}()
-
-	// Sync file to ensure all data is written to disk
-	if err := file.Sync(); err != nil {
-		// If we are not able to sync the file, we should not attempt to rename it.
-		// This is to avoid the case where an incomplete file is renamed.
-		return err
-	}
-
-	// Close the file
-	if err := file.Close(); err != nil {
-		return err
-	}
-
-	// Rename from temp to final path
-	// This is atomic on all unix-like systems
-	if err := os.Rename(tempPath, finalPath); err != nil {
-		return errors.Wrap(err, "failed to rename temporary file")
-	}
-
-	return nil
 }

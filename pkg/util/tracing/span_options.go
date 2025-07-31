@@ -85,7 +85,7 @@ type spanOptions struct {
 }
 
 func (opts *spanOptions) parentTraceID() tracingpb.TraceID {
-	if !opts.Parent.empty() {
+	if !opts.Parent.empty() && !opts.Parent.IsNoop() {
 		return opts.Parent.i.crdb.traceID
 	} else if !opts.RemoteParent.Empty() {
 		return opts.RemoteParent.traceID
@@ -94,7 +94,7 @@ func (opts *spanOptions) parentTraceID() tracingpb.TraceID {
 }
 
 func (opts *spanOptions) parentSpanID() tracingpb.SpanID {
-	if !opts.Parent.empty() {
+	if !opts.Parent.empty() && !opts.Parent.IsNoop() {
 		return opts.Parent.i.crdb.spanID
 	} else if !opts.RemoteParent.Empty() {
 		return opts.RemoteParent.spanID
@@ -102,19 +102,13 @@ func (opts *spanOptions) parentSpanID() tracingpb.SpanID {
 	return 0
 }
 
-// recordingType computes the resulting recording type of the span
-// based on various settings. Please note that some of this logic is
-// partially duplicates in `Tracer.startSpanFast` which is used for
-// spans without a parent and avoids calling this method for
-// performance reasons. If you modify this method, make sure to modify
-// `startSpanFast` as well.
 func (opts *spanOptions) recordingType() tracingpb.RecordingType {
 	if opts.recordingTypeExplicit {
 		return opts.recordingTypeOpt
 	}
 
 	var recordingType tracingpb.RecordingType
-	if !opts.Parent.empty() {
+	if !opts.Parent.empty() && !opts.Parent.IsNoop() {
 		recordingType = opts.Parent.i.crdb.recordingType()
 	} else if !opts.RemoteParent.Empty() {
 		recordingType = opts.RemoteParent.recordingType
@@ -167,8 +161,11 @@ type parentOption spanRef
 // applying this option will be a root span, just as if this option hadn't been
 // specified) in the following cases:
 //   - if `sp` is nil
+//   - if `sp` is a no-op span
 //   - if `sp` is a sterile span (i.e. a span explicitly marked as not wanting
-//     children).
+//     children). Note that the singleton Tracer.noop span is marked as sterile,
+//     which makes this condition mostly encompass the previous one, however in
+//     theory there could be no-op spans other than the singleton one.
 //
 // The child inherits the parent's log tags. The data collected in the
 // child trace will be retrieved automatically when the parent's data is
@@ -176,7 +173,10 @@ type parentOption spanRef
 // must not) manually propagate the recording to the parent Span.
 //
 // The child will start recording if the parent is recording at the time
-// of child instantiation.
+// of child instantiation. If the parent span is not recording, the child
+// could be a "noop span" (depending on whether the Tracer is configured
+// to trace to an external tracing system) which does not support
+// recording, unless the WithForceRealSpan option is passed to StartSpan.
 //
 // By default, children are derived using a ChildOf relationship,
 // which corresponds to the expectation that the parent span will
@@ -206,9 +206,16 @@ func WithParent(sp *Span) SpanOption {
 	// below.
 	_ = sp.detectUseAfterFinish()
 
-	// Sterile spans don't get children and its children will be a root span.
-	if sp.IsSterile() {
-		return (parentOption)(spanRef{})
+	// Noop spans and sterile spans don't get children; a span constructed with
+	// WithParent(sterile-or-noop-span) will be a root span. We could return a
+	// zero parentOption here, but instead we return a parentOption referencing
+	// the tracer's noopSpan. This is so that, when constructing the "child" span
+	// using the returned option we can assert that the Tracer used to construct
+	// the child is the same as sp's Tracer.
+	if sp.IsNoop() || sp.IsSterile() {
+		return parentOption{
+			Span: sp.Tracer().noopSpan,
+		}
 	}
 
 	ref, _ /* ok */ := tryMakeSpanRef(sp)
@@ -375,9 +382,9 @@ type forceRealSpanOption struct{}
 var forceRealSpanSingleton = SpanOption(forceRealSpanOption{})
 
 // WithForceRealSpan forces StartSpan to create of a real Span regardless of the
-// Tracer's tracing mode.
+// Tracer's tracing mode (instead of a low-overhead non-recordable noop span).
 //
-// When tracing is disabled all spans are nil; these spans aren't
+// When tracing is disabled all spans are noopSpans; these spans aren't
 // capable of recording, so this option should be passed to StartSpan if the
 // caller wants to be able to call SetVerbose(true) on the span later. If the
 // span should be recording from the beginning, use WithRecording() instead.

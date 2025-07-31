@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,8 +53,6 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 
 	grpcServer, err := rpc.NewServer(ctx, rpcC)
 	require.NoError(t, err)
-	drpcServer, err := rpc.NewDRPCServer(ctx, rpcC)
-	require.NoError(t, err)
 	// RegisterMultiRaftServer(grpcServer, mrs)
 
 	var addr net.Addr
@@ -73,7 +71,9 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		hlc.NewClockForTesting(nil),
 		nodedialer.New(rpcC, resolver),
 		grpcServer,
-		drpcServer,
+		kvflowdispatch.NewDummyDispatch(),
+		NoopStoresFlowControlIntegration{},
+		NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
@@ -92,7 +92,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		}
 	}()
 
-	if _, existingQueue := tp.getQueue(1, rpcbase.SystemClass); existingQueue {
+	if _, existingQueue := tp.getQueue(1, rpc.SystemClass); existingQueue {
 		t.Fatal("queue already exists")
 	}
 	timeout := time.Duration(rand.Int63n(int64(5 * time.Millisecond)))
@@ -108,7 +108,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		ln = nil
 		wg.Done()
 	}()
-	tp.startProcessNewQueue(ctxBoom, 1, rpcbase.SystemClass)
+	tp.startProcessNewQueue(ctxBoom, 1, rpc.SystemClass)
 
 	wg.Wait()
 }

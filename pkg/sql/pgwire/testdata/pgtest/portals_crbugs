@@ -30,7 +30,6 @@ ReadyForQuery
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"DROP TABLE"}
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"auto-committing transaction before processing DDL due to autocommit_before_ddl setting","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_ddl.go","Line":0,"Routine":"maybeAutoCommitBeforeDDL","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
@@ -119,7 +118,6 @@ ReadyForQuery
 
 send
 Query {"String": "BEGIN"}
-Query {"String": "SET LOCAL autocommit_before_ddl=off"}
 Parse {"Name": "ddl_stmt", "Query": "DROP ROLE foo"}
 Bind {"DestinationPortal": "ddl_portal", "PreparedStatement": "ddl_stmt"}
 Execute {"Portal": "ddl_portal", "MaxRows": 1}
@@ -129,11 +127,8 @@ Sync
 until
 ReadyForQuery
 ReadyForQuery
-ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
-{"Type":"ReadyForQuery","TxStatus":"T"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
@@ -234,7 +229,6 @@ subtest bind_before_update
 
 send
 Query {"String": "BEGIN"}
-Query {"String": "SET LOCAL autocommit_before_ddl=off"}
 Query {"String": "CREATE TABLE mytable (x int)"}
 Query {"String": "INSERT INTO mytable VALUES (1),(2),(3)"}
 Parse {"Name": "q3", "Query": "SELECT * FROM mytable"}
@@ -247,11 +241,8 @@ ReadyForQuery
 ReadyForQuery
 ReadyForQuery
 ReadyForQuery
-ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
-{"Type":"ReadyForQuery","TxStatus":"T"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
@@ -352,7 +343,6 @@ ReadyForQuery
 ReadyForQuery
 ReadyForQuery
 ErrorResponse
-ReadyForQuery
 ----
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CommandComplete","CommandTag":"SET"}
@@ -377,7 +367,6 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"(1,1)"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/dev"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v24.3"}
 
 subtest end

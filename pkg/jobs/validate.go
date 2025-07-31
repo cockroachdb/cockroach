@@ -45,8 +45,8 @@ func ValidateJobReferencesInDescriptor(
 		if j.Payload.Type() != jobspb.TypeSchemaChange {
 			errorAccFn(errors.AssertionFailedf("mutation job %d is of type %q, expected schema change job", m.JobID, j.Payload.Type()))
 		}
-		if j.State.Terminal() {
-			errorAccFn(errors.AssertionFailedf("mutation job %d has terminal state (%s)", m.JobID, j.State))
+		if j.Status.Terminal() {
+			errorAccFn(errors.AssertionFailedf("mutation job %d has terminal status (%s)", m.JobID, j.Status))
 		}
 	}
 }
@@ -61,8 +61,8 @@ func ValidateDescriptorReferencesInJob(
 	errorAccFn func(error),
 	infoAccFn func(string),
 ) {
-	switch j.State {
-	case StateRunning, StatePaused, StatePauseRequested:
+	switch j.Status {
+	case StatusRunning, StatusPaused, StatusPauseRequested:
 		// Proceed.
 	default:
 		return
@@ -82,15 +82,15 @@ func ValidateDescriptorReferencesInJob(
 	switch j.Payload.Type() {
 	case jobspb.TypeSchemaChange:
 		errorAccFn(errors.AssertionFailedf("%s schema change refers to missing descriptor(s) %+v",
-			j.State, missing.Ordered()))
+			j.Status, missing.Ordered()))
 	case jobspb.TypeSchemaChangeGC:
 		isSafeToDelete := existing.Len() == 0 && len(j.Progress.GetSchemaChangeGC().Indexes) == 0
 		infoAccFn(fmt.Sprintf("%s schema change GC refers to missing table "+
 			"descriptor(s) %+v; existing descriptors that still need to be dropped %+v; job safe to "+
-			"delete: %v", j.State, missing.Ordered(), existing.Ordered(), isSafeToDelete))
+			"delete: %v", j.Status, missing.Ordered(), existing.Ordered(), isSafeToDelete))
 	case jobspb.TypeTypeSchemaChange:
 		errorAccFn(errors.AssertionFailedf("%s type schema change refers to missing type descriptor %v",
-			j.State, missing.Ordered()))
+			j.Status, missing.Ordered()))
 	}
 }
 

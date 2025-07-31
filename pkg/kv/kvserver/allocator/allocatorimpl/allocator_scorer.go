@@ -1159,7 +1159,7 @@ func rankedCandidateListForAllocation(
 			continue
 		}
 
-		diversityScore := diversityAllocateScore(s.Locality(), existingStoreLocalities)
+		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
 		balanceScore := options.balanceScore(validStoreList, s.Capacity)
 		var hasNonVoter bool
 		if targetType == VoterTarget {
@@ -1656,10 +1656,9 @@ func rankedCandidateListForRebalancing(
 			// this stage, in additon to hard checks and validation.
 			// TODO(kvoli,ayushshah15): Refactor this to make it harder to
 			// inadvertently break the invariant above,
-			locality := store.Locality()
 			constraintsOK, necessary, voterNecessary := rebalanceConstraintsChecker(store, existing.store)
 			diversityScore := diversityRebalanceFromScore(
-				locality, existing.store.StoreID, existingStoreLocalities)
+				store, existing.store.StoreID, existingStoreLocalities)
 			cand := candidate{
 				store:          store,
 				valid:          constraintsOK,
@@ -1677,7 +1676,7 @@ func rankedCandidateListForRebalancing(
 						"s%d: should-rebalance(necessary/diversity=s%d): oldNecessary:%t, newNecessary:%t, "+
 							"oldDiversity:%f, newDiversity:%f, locality:%q",
 						existing.store.StoreID, store.StoreID, existing.necessary, cand.necessary,
-						existing.diversityScore, cand.diversityScore, locality)
+						existing.diversityScore, cand.diversityScore, store.Locality())
 				}
 			}
 		}
@@ -2237,7 +2236,7 @@ func RangeDiversityScore(existingStoreLocalities map[roachpb.StoreID]roachpb.Loc
 // desirable it would be to add a replica to store. A higher score means the
 // store is a better fit.
 func diversityAllocateScore(
-	storeLocality roachpb.Locality, existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
+	store roachpb.StoreDescriptor, existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 ) float64 {
 	var sumScore float64
 	var numSamples int
@@ -2246,7 +2245,7 @@ func diversityAllocateScore(
 	// consider adding the pairwise average diversity of the existing replicas
 	// is the same.
 	for _, locality := range existingStoreLocalities {
-		newScore := storeLocality.DiversityScore(locality)
+		newScore := store.Locality().DiversityScore(locality)
 		sumScore += newScore
 		numSamples++
 	}
@@ -2297,9 +2296,8 @@ func diversityRebalanceScore(
 	var maxScore float64
 	// For every existing node, calculate what the diversity score would be if we
 	// remove that node's replica to replace it with one on the provided store.
-	storeLocality := store.Locality()
 	for removedStoreID := range existingStoreLocalities {
-		score := diversityRebalanceFromScore(storeLocality, removedStoreID, existingStoreLocalities)
+		score := diversityRebalanceFromScore(store, removedStoreID, existingStoreLocalities)
 		if score > maxScore {
 			maxScore = score
 		}
@@ -2314,7 +2312,7 @@ func diversityRebalanceScore(
 // A higher score indicates that the provided store is a better fit for the
 // range.
 func diversityRebalanceFromScore(
-	storeLocality roachpb.Locality,
+	store roachpb.StoreDescriptor,
 	fromStoreID roachpb.StoreID,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 ) float64 {
@@ -2326,7 +2324,7 @@ func diversityRebalanceFromScore(
 		if storeID == fromStoreID {
 			continue
 		}
-		newScore := storeLocality.DiversityScore(locality)
+		newScore := store.Locality().DiversityScore(locality)
 		sumScore += newScore
 		numSamples++
 		for otherStoreID, otherLocality := range existingStoreLocalities {

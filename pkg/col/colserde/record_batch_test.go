@@ -227,9 +227,7 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 		)
 		for i := range data {
 			d := randgen.RandDatum(rng, t, false /* nullOk */)
-			data[i], scratch, err = valueside.EncodeWithScratch(
-				data[i], valueside.NoColumnID, d, scratch[:0],
-			)
+			data[i], err = valueside.Encode(data[i], valueside.NoColumnID, d, scratch)
 			if err != nil {
 				panic(err)
 			}

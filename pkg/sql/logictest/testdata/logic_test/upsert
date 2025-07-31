@@ -618,15 +618,11 @@ UPSERT INTO tn2(x, y) VALUES (123, 'abcd')
 
 subtest regression_29494
 
-statement disable-cf-mutator ok
-CREATE TABLE t29494(x INT) WITH (schema_locked=false);
-
 statement ok
-INSERT INTO t29494 VALUES (12)
+CREATE TABLE t29494(x INT); INSERT INTO t29494 VALUES (12)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 # Check that the new column is not visible
@@ -637,7 +633,7 @@ CREATE TABLE public.t29494 (
   x INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC)
-);
+)
 
 # Check that the new column is not usable in RETURNING
 statement error column "y" does not exist
@@ -647,7 +643,6 @@ UPSERT INTO t29494(x) VALUES (123) RETURNING y
 statement ok
 ROLLBACK;
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error column "y" does not exist
@@ -658,7 +653,6 @@ ROLLBACK
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 query I
@@ -696,11 +690,10 @@ UPSERT INTO tc VALUES (1,2)
 subtest regression_29497
 
 statement ok
-CREATE TABLE t29497(x INT PRIMARY KEY) WITH (schema_locked=false);
+CREATE TABLE t29497(x INT PRIMARY KEY);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error UPSERT has more expressions than target columns
@@ -711,7 +704,6 @@ ROLLBACK;
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error column "y" does not exist
@@ -723,11 +715,7 @@ ROLLBACK
 subtest visible_returning_columns
 
 statement ok
-ALTER TABLE tc SET (schema_locked=false);
-
-statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE tc DROP COLUMN y
 
 query I colnames,rowsort
@@ -739,9 +727,6 @@ x
 
 statement ok
 COMMIT
-
-statement ok
-ALTER TABLE tc SET (schema_locked=true);
 
 subtest regression_32762
 
@@ -985,11 +970,10 @@ NULL
 # ------------------------------------------------------------------------------
 
 statement ok
-CREATE TABLE table38627 (a INT PRIMARY KEY, b INT) WITH (schema_locked=false); INSERT INTO table38627 VALUES(1,1)
+CREATE TABLE table38627 (a INT PRIMARY KEY, b INT); INSERT INTO table38627 VALUES(1,1)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
 
 statement ok

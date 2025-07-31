@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type rowBasedFlow struct {
@@ -457,20 +458,20 @@ func (f *rowBasedFlow) setupRouter(
 	}
 	// Create monitors after successfully connecting the streams.
 	memoryMonitors := make([]*mon.BytesMonitor, len(spec.Streams))
-	unlimitedMemMonitors := make([]*mon.BytesMonitor, len(spec.Streams))
 	diskMonitors := make([]*mon.BytesMonitor, len(spec.Streams))
 	for i := range spec.Streams {
-		// NB: Stream IDs are indexes into slices, so we'd expect to OOM long
-		// before a stream ID exceeds 2^31.
-		mn := mon.MakeName("router").WithID(int32(spec.Streams[i].StreamID))
-		memoryMonitors[i] = execinfra.NewLimitedMonitor(ctx, f.Mon, &f.FlowCtx, mn.Limited())
-		unlimitedMemMonitors[i] = execinfra.NewMonitor(ctx, f.Mon, mn.Unlimited())
-		diskMonitors[i] = execinfra.NewMonitor(ctx, f.DiskMonitor, mn.Disk())
+		memoryMonitors[i] = execinfra.NewLimitedMonitor(
+			ctx, f.Mon, &f.FlowCtx,
+			redact.Sprintf("router-limited-%d", spec.Streams[i].StreamID),
+		)
+		diskMonitors[i] = execinfra.NewMonitor(
+			ctx, f.DiskMonitor,
+			redact.Sprintf("router-disk-%d", spec.Streams[i].StreamID),
+		)
 	}
 	f.monitors = append(f.monitors, memoryMonitors...)
-	f.monitors = append(f.monitors, unlimitedMemMonitors...)
 	f.monitors = append(f.monitors, diskMonitors...)
-	return makeRouter(spec, streams, memoryMonitors, unlimitedMemMonitors, diskMonitors)
+	return makeRouter(spec, streams, memoryMonitors, diskMonitors)
 }
 
 // Release releases this rowBasedFlow back to the pool.
@@ -486,7 +487,7 @@ func (f *rowBasedFlow) Release() {
 func (f *rowBasedFlow) Cleanup(ctx context.Context) {
 	startCleanup, endCleanup := f.FlowBase.GetOnCleanupFns()
 	startCleanup()
-	defer endCleanup(ctx)
+	defer endCleanup()
 	for i := range f.monitors {
 		f.monitors[i].Stop(ctx)
 	}

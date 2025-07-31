@@ -6,12 +6,10 @@
 package roachtestflags
 
 import (
-	"fmt"
 	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/spf13/pflag"
 )
@@ -88,7 +86,7 @@ var (
 	SelectiveTests = false
 	_              = registerRunFlag(&SelectiveTests, FlagInfo{
 		Name:  "selective-tests",
-		Usage: `Use selective tests to run based on previous test execution. Incompatible with --select-probability`,
+		Usage: `Use selective tests to run based on previous test execution. this is considered only if the select-probability is 1.0`,
 	})
 
 	SuccessfulTestsSelectPct = 0.35
@@ -266,13 +264,6 @@ var (
 			binary)`,
 	})
 
-	ForceCpuProfile bool
-	_               = registerRunFlag(&ForceCpuProfile, FlagInfo{
-		Name: "force-cpu-profile",
-		Usage: `
-                        Enable unconditional collection of CPU profiles`,
-	})
-
 	Parallelism int = 10
 	_               = registerRunFlag(&Parallelism, FlagInfo{
 		Name:  "parallelism",
@@ -328,12 +319,6 @@ var (
 		Usage: `flag to denote if roachtest should export openmetrics file for performance metrics.`,
 	})
 
-	OpenmetricsLabels string = ""
-	_                        = registerRunFlag(&OpenmetricsLabels, FlagInfo{
-		Name:  "openmetrics-labels",
-		Usage: `flag to pass custom labels to pass to openmetrics for performance metrics,`,
-	})
-
 	DatadogSite string = "us5.datadoghq.com"
 	_                  = registerRunOpsFlag(&DatadogSite, FlagInfo{
 		Name:  "datadog-site",
@@ -358,45 +343,6 @@ var (
 		Usage: `A comma-separated list of tags to attach to telemetry data (e.g., key1:val1,key2:val2).`,
 	})
 
-	DBName string = ""
-	_             = registerRunOpsFlag(&DBName, FlagInfo{
-		Name: "db",
-		Usage: "Specify the name of the database to run the operation against (e.g., tpcc, tpch). If the given database " +
-			"does not exist, the operation fails. If not provided, a random database is selected, excluding system-created databases",
-	})
-
-	TableName string = ""
-	_                = registerRunOpsFlag(&TableName, FlagInfo{
-		Name: "db-table",
-		Usage: "Specifies the name of the database table to run the operation against, using the database provided in the --db flag. " +
-			"If the table does not exist, the operation fails. If not provided, a random table is selected.",
-	})
-
-	OperationParallelism int = 1
-	_                        = registerRunOpsFlag(&OperationParallelism, FlagInfo{
-		Name:  "parallelism",
-		Usage: fmt.Sprintf("Number of operations to run in parallel, max value is %d", MaxOperationParallelism),
-	})
-
-	WaitBeforeNextExecution time.Duration = 15 * time.Minute
-	_                                     = registerRunOpsFlag(&WaitBeforeNextExecution, FlagInfo{
-		Name:  "wait-before-next-execution",
-		Usage: "Interval to wait before the operation next execution after the previous run.",
-	})
-
-	RunForever bool = false
-	_               = registerRunOpsFlag(&RunForever, FlagInfo{
-		Name:  "run-forever",
-		Usage: "Execute operations indefinitely until the command is terminated, (default false).",
-	})
-
-	WorkloadCluster string = ""
-	_                      = registerRunOpsFlag(&WorkloadCluster, FlagInfo{
-		Name: "workload-cluster",
-		Usage: "Specify the name of the workload cluster. The workload cluster is the one running operations and " +
-			"workloads, such as TPC-C, on the cluster",
-	})
-
 	PreferLocalSSD bool = true
 	_                   = registerRunFlag(&PreferLocalSSD, FlagInfo{
 		Name:  "local-ssd",
@@ -410,7 +356,7 @@ var (
 			List of <version>=<path to cockroach binary>. If a certain version <ver>
 			is present in the list, the respective binary will be used when a
 			mixed-version test asks for the respective binary, instead of roachprod
-			stage <ver>. Example: v20.1.4=cockroach-20.1,v20.2.0=cockroach-20.2.`,
+			stage <ver>. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.`,
 	})
 
 	SlackToken string
@@ -449,8 +395,8 @@ var (
 	_                         = registerRunFlag(&SelectProbability, FlagInfo{
 		Name: "select-probability",
 		Usage: `
-			The probability of a matched test being selected to run. Incompatible with --selective-tests.
-			Note: this will run at least one test per prefix.`,
+			The probability of a matched test being selected to run. Note: this will
+			run at least one test per prefix.`,
 	})
 
 	UseSpotVM = NeverUseSpot
@@ -549,7 +495,6 @@ const (
 	NeverUseSpot                  = "never"
 	AlwaysUseSpot                 = "always"
 	AutoUseSpot                   = "auto"
-	MaxOperationParallelism       = 10
 )
 
 // FlagInfo contains the name and usage of a flag. Used to make the code
@@ -582,9 +527,6 @@ func AddListFlags(cmdFlags *pflag.FlagSet) {
 // command flag set.
 func AddRunFlags(cmdFlags *pflag.FlagSet) {
 	globalMan.AddFlagsToCommand(runCmdID, cmdFlags)
-	for _, provider := range vm.Providers {
-		provider.ConfigureProviderFlags(cmdFlags, vm.SingleProject)
-	}
 }
 
 // AddRunOpsFlags adds all flags registered for the run-operations command to

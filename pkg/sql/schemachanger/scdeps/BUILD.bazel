@@ -48,7 +48,6 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
     ],
 )

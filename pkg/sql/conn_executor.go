@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -53,11 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
-	"github.com/cockroachdb/cockroach/pkg/sql/prep"
-	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -68,30 +63,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/sentryutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tochar"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -142,22 +132,6 @@ var maxNumNonRootConnectionsReason = settings.RegisterStringSetting(
 		"server.cockroach_cloud.max_client_connections_per_gateway",
 	"cluster connections are limited",
 )
-
-// detailedLatencyMetrics enables separate per-statement-fingerprint latency histograms. The utility of this extra
-// detail is expected to exceed its costs in most workloads.
-var detailedLatencyMetrics = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.stats.detailed_latency_metrics.enabled",
-	"label latency metrics with the statement fingerprint. Workloads with tens of thousands of "+
-		"distinct query fingerprints should leave this setting false. "+
-		"(experimental, affects performance for workloads with high "+
-		"fingerprint cardinality)",
-	false,
-	settings.WithPublic,
-)
-
-// The metric label name we'll use to facet latency metrics by statement fingerprint.
-var detailedLatencyMetricLabel = "fingerprint"
 
 // A connExecutor is in charge of executing queries received on a given client
 // connection. The connExecutor implements a state machine (dictated by the
@@ -281,13 +255,13 @@ var detailedLatencyMetricLabel = "fingerprint"
 // the fact that there's two distinct categories of errors to speak of. There
 // are "query execution errors" and there are the rest. Most things fall in the
 // former category: invalid queries, queries that fail constraints at runtime,
-// data unavailability errors, retryable errors (i.e. serializability
+// data unavailability errors, retriable errors (i.e. serializability
 // violations) "internal errors" (e.g. connection problems in the cluster). This
 // category of errors doesn't represent dramatic events as far as the connExecutor
 // is concerned: they produce "results" for the query to be passed to the client
 // just like more successful queries do and they produce Events for the
 // state machine just like the successful queries (the events in question
-// are generally event{non}RetryableErr and they generally cause the
+// are generally event{non}RetriableErr and they generally cause the
 // state machine to move to the Aborted state, but the connExecutor doesn't
 // concern itself with this). The way the connExecutor reacts to these errors is
 // the same as how it reacts to a successful query completing: it moves the
@@ -336,15 +310,12 @@ type Server struct {
 
 	cfg *ExecutorConfig
 
-	// sqlStats provides the mechanisms for writing sql stats to system tables.
+	// sqlStats tracks per-application statistics for all applications on each
+	// node. Newly collected statistics flow into sqlStats.
 	sqlStats *persistedsqlstats.PersistedSQLStats
 
-	// localSqlStats tracks per-application statistics for all applications on each
-	// node. Newly collected statistics flow into localSqlStats.
-	localSqlStats *sslocal.SQLStats
-
-	// sqlStatsIngester provides the interface to consume stats about a sql execution.
-	sqlStatsIngester *sslocal.SQLStatsIngester
+	// sqlStatsController is the control-plane interface for sqlStats.
+	sqlStatsController *persistedsqlstats.Controller
 
 	// schemaTelemetryController is the control-plane interface for schema
 	// telemetry.
@@ -357,7 +328,11 @@ type Server struct {
 	// reportedStats is a pool of stats that is held for reporting, and is
 	// cleared on a lower interval than sqlStats. Stats from sqlStats flow
 	// into reported stats when sqlStats is cleared.
-	reportedStats *sslocal.SQLStats
+	reportedStats sqlstats.Provider
+
+	// reportedStatsController is the control-plane interface for
+	// reportedStatsController.
+	reportedStatsController *sslocal.Controller
 
 	insights *insights.Provider
 
@@ -435,9 +410,15 @@ type ServerMetrics struct {
 // NewServer creates a new Server. Start() needs to be called before the Server
 // is used.
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
-	metrics := makeMetrics(false /* internal */, &cfg.Settings.SV)
+	metrics := makeMetrics(false /* internal */)
 	serverMetrics := makeServerMetrics(cfg)
-	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics)
+	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics, cfg.InsightsTestingKnobs)
+	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
+	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
+		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
+			insightsProvider.Writer().Clear()
+		}
+	})
 	reportedSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
@@ -447,7 +428,9 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool,
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
+		insightsProvider.Anomalies(),
 	)
+	reportedSQLStatsController := reportedSQLStats.GetController(cfg.SQLStatusServer)
 	memSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -457,26 +440,19 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool,
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
+		insightsProvider.Anomalies(),
 	)
-	sqlStatsIngester := sslocal.NewSQLStatsIngester(cfg.SQLStatsTestingKnobs, insightsProvider)
-	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
-	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
-		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
-			sqlStatsIngester.Clear()
-		}
-	})
 	s := &Server{
-		cfg:               cfg,
-		Metrics:           metrics,
-		InternalMetrics:   makeMetrics(true /* internal */, &cfg.Settings.SV),
-		ServerMetrics:     serverMetrics,
-		pool:              pool,
-		localSqlStats:     memSQLStats,
-		reportedStats:     reportedSQLStats,
-		sqlStatsIngester:  sqlStatsIngester,
-		insights:          insightsProvider,
-		reCache:           tree.NewRegexpCache(512),
-		toCharFormatCache: tochar.NewFormatCache(512),
+		cfg:                     cfg,
+		Metrics:                 metrics,
+		InternalMetrics:         makeMetrics(true /* internal */),
+		ServerMetrics:           serverMetrics,
+		pool:                    pool,
+		reportedStats:           reportedSQLStats,
+		reportedStatsController: reportedSQLStatsController,
+		insights:                insightsProvider,
+		reCache:                 tree.NewRegexpCache(512),
+		toCharFormatCache:       tochar.NewFormatCache(512),
 		indexUsageStats: idxusage.NewLocalIndexUsageStats(&idxusage.Config{
 			ChannelSize: idxusage.DefaultChannelSize,
 			Setting:     cfg.Settings,
@@ -501,7 +477,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		ClusterID:               s.cfg.NodeInfo.LogicalClusterID,
 		SQLIDContainer:          cfg.NodeInfo.NodeID,
 		JobRegistry:             s.cfg.JobRegistry,
-		FanoutServer:            cfg.SQLStatusServer,
 		Knobs:                   cfg.SQLStatsTestingKnobs,
 		FlushesSuccessful:       serverMetrics.StatsMetrics.SQLStatsFlushesSuccessful,
 		FlushDoneSignalsIgnored: serverMetrics.StatsMetrics.SQLStatsFlushDoneSignalsIgnored,
@@ -511,6 +486,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
+	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
 	schemaTelemetryIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
 	schemaTelemetryIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
 	s.schemaTelemetryController = schematelemetrycontroller.NewController(
@@ -525,33 +501,13 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	return s
 }
 
-func makeMetrics(internal bool, sv *settings.Values) Metrics {
-	// For internal metrics, don't facet the latency metrics on the fingerprint
-	facetLabels := make([]string, 0, 1)
-	if !internal {
-		facetLabels = append(facetLabels, detailedLatencyMetricLabel)
-	}
-
-	sqlExecLatencyDetail := metric.NewExportedHistogramVec(
-		getMetricMeta(MetaSQLExecLatencyDetail, internal),
-		metric.IOLatencyBuckets,
-		facetLabels,
-	)
-
-	// Clear the latency metrics when we toggle the fingerprint detail setting on or off
-	detailedLatencyMetrics.SetOnChange(sv, func(ctx context.Context) {
-		sqlExecLatencyDetail.Clear()
-	})
-
+func makeMetrics(internal bool) Metrics {
 	return Metrics{
 		EngineMetrics: EngineMetrics{
-			DistSQLSelectCount:            metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
-			DistSQLSelectDistributedCount: metric.NewCounter(getMetricMeta(MetaDistSQLSelectDistributed, internal)),
-			SQLOptPlanCacheHits:           metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
-			SQLOptPlanCacheMisses:         metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
-			StatementFingerprintCount:     metric.NewUniqueCounter(getMetricMeta(MetaUniqueStatementCount, internal)),
-			SQLExecLatencyDetail:          sqlExecLatencyDetail,
-
+			DistSQLSelectCount:    metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
+			SQLOptFallbackCount:   metric.NewCounter(getMetricMeta(MetaSQLOptFallback, internal)),
+			SQLOptPlanCacheHits:   metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
+			SQLOptPlanCacheMisses: metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
 			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
 			DistSQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
@@ -565,57 +521,33 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
-			SQLExecLatencyConsistent: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
-				Metadata:     getMetricMeta(MetaSQLExecLatencyConsistent, internal),
-				Duration:     6 * metricsSampleInterval,
-				BucketConfig: metric.IOLatencyBuckets,
-			}),
-			SQLExecLatencyHistorical: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
-				Metadata:     getMetricMeta(MetaSQLExecLatencyHistorical, internal),
-				Duration:     6 * metricsSampleInterval,
-				BucketConfig: metric.IOLatencyBuckets,
-			}),
 			DistSQLServiceLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaDistSQLServiceLatency, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
-			SQLServiceLatency: aggmetric.NewSQLHistogram(metric.HistogramOptions{
+			SQLServiceLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLServiceLatency, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
-			SQLServiceLatencyConsistent: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
-				Metadata:     getMetricMeta(MetaSQLServiceLatencyConsistent, internal),
-				Duration:     6 * metricsSampleInterval,
-				BucketConfig: metric.IOLatencyBuckets,
-			}),
-			SQLServiceLatencyHistorical: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
-				Metadata:     getMetricMeta(MetaSQLServiceLatencyHistorical, internal),
-				Duration:     6 * metricsSampleInterval,
-				BucketConfig: metric.IOLatencyBuckets,
-			}),
-			SQLTxnLatency: aggmetric.NewSQLHistogram(metric.HistogramOptions{
+			SQLTxnLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLTxnLatency, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
-			SQLTxnsOpen:         aggmetric.NewSQLGauge(getMetricMeta(MetaSQLTxnsOpen, internal)),
-			SQLActiveStatements: aggmetric.NewSQLGauge(getMetricMeta(MetaSQLActiveQueries, internal)),
+			SQLTxnsOpen:         metric.NewGauge(getMetricMeta(MetaSQLTxnsOpen, internal)),
+			SQLActiveStatements: metric.NewGauge(getMetricMeta(MetaSQLActiveQueries, internal)),
 			SQLContendedTxns:    metric.NewCounter(getMetricMeta(MetaSQLTxnContended, internal)),
 
 			TxnAbortCount:                     metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
-			FailureCount:                      aggmetric.NewSQLCounter(getMetricMeta(MetaFailure, internal)),
+			FailureCount:                      metric.NewCounter(getMetricMeta(MetaFailure, internal)),
 			StatementTimeoutCount:             metric.NewCounter(getMetricMeta(MetaStatementTimeout, internal)),
 			TransactionTimeoutCount:           metric.NewCounter(getMetricMeta(MetaTransactionTimeout, internal)),
-			FullTableOrIndexScanCount:         aggmetric.NewSQLCounter(getMetricMeta(MetaFullTableOrIndexScan, internal)),
+			FullTableOrIndexScanCount:         metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScan, internal)),
 			FullTableOrIndexScanRejectedCount: metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScanRejected, internal)),
 			TxnRetryCount:                     metric.NewCounter(getMetricMeta(MetaTxnRetry, internal)),
 			StatementRetryCount:               metric.NewCounter(getMetricMeta(MetaStatementRetry, internal)),
@@ -660,7 +592,7 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     MetaSQLStatsFlushLatency,
 				Duration:     6 * metricsSampleInterval,
-				BucketConfig: metric.BatchProcessLatencyBuckets,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLStatsRemovedRows: metric.NewCounter(MetaSQLStatsRemovedRows),
 			SQLTxnStatsCollectionOverhead: metric.NewHistogram(metric.HistogramOptions{
@@ -683,7 +615,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// should be accounted for in their costs.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 
-	s.sqlStatsIngester.Start(ctx, stopper)
+	s.insights.Start(ctx, stopper)
 	s.sqlStats.Start(ctx, stopper)
 
 	s.schemaTelemetryController.Start(ctx, stopper)
@@ -694,6 +626,12 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.reportedStats.Start(ctx, stopper)
 
 	s.txnIDCache.Start(ctx, stopper)
+}
+
+// GetSQLStatsController returns the persistedsqlstats.Controller for current
+// sql.Server's SQL Stats.
+func (s *Server) GetSQLStatsController() *persistedsqlstats.Controller {
+	return s.sqlStatsController
 }
 
 // GetSchemaTelemetryController returns the schematelemetryschedule.Controller
@@ -715,24 +653,14 @@ func (s *Server) GetInsightsReader() *insights.LockingStore {
 }
 
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.
-func (s *Server) GetSQLStatsProvider() *persistedsqlstats.PersistedSQLStats {
+func (s *Server) GetSQLStatsProvider() sqlstats.Provider {
 	return s.sqlStats
 }
 
-// GetLocalSQLStatsProvider returns the in-memory provider for the sqlstats subsystem.
-func (s *Server) GetLocalSQLStatsProvider() *sslocal.SQLStats {
-	return s.localSqlStats
-}
-
-// GetReportedSQLStatsProvider returns the provider for the in-memory reported
-// sql stats sink.
-func (s *Server) GetReportedSQLStatsProvider() *sslocal.SQLStats {
-	return s.reportedStats
-}
-
-// GetSQLStatsIngester returns the sqlstats.Ingester for the current sql.Server.
-func (s *Server) GetSQLStatsIngester() *sslocal.SQLStatsIngester {
-	return s.sqlStatsIngester
+// GetReportedSQLStatsController returns the sqlstats.Controller for the current
+// sql.Server's reported SQL Stats.
+func (s *Server) GetReportedSQLStatsController() *sslocal.Controller {
+	return s.reportedStatsController
 }
 
 // GetTxnIDCache returns the txnidcache.Cache for the current sql.Server.
@@ -746,7 +674,7 @@ func (s *Server) GetTxnIDCache() *txnidcache.Cache {
 func (s *Server) GetScrubbedStmtStats(
 	ctx context.Context,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
-	return s.getScrubbedStmtStats(ctx, s.localSqlStats, math.MaxInt32, true)
+	return s.getScrubbedStmtStats(ctx, s.sqlStats.GetLocalMemProvider(), math.MaxInt32)
 }
 
 // Avoid lint errors.
@@ -762,7 +690,7 @@ func (s *Server) GetUnscrubbedStmtStats(
 		stmtStats = append(stmtStats, *stat)
 		return nil
 	}
-	err := s.localSqlStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{}, stmtStatsVisitor)
+	err := s.sqlStats.GetLocalMemProvider().IterateStatementStats(ctx, sqlstats.IteratorOptions{}, stmtStatsVisitor)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch statement stats")
@@ -781,7 +709,7 @@ func (s *Server) GetUnscrubbedTxnStats(
 		txnStats = append(txnStats, *stat)
 		return nil
 	}
-	err := s.localSqlStats.IterateTransactionStats(ctx, sqlstats.IteratorOptions{}, txnStatsVisitor)
+	err := s.sqlStats.GetLocalMemProvider().IterateTransactionStats(ctx, sqlstats.IteratorOptions{}, txnStatsVisitor)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch statement stats")
@@ -793,23 +721,19 @@ func (s *Server) GetUnscrubbedTxnStats(
 // GetScrubbedReportingStats does the same thing as GetScrubbedStmtStats but
 // returns statistics from the reported stats pool.
 func (s *Server) GetScrubbedReportingStats(
-	ctx context.Context, limit int, includeInternal bool,
+	ctx context.Context, limit int,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
-	return s.getScrubbedStmtStats(ctx, s.reportedStats, limit, includeInternal)
+	return s.getScrubbedStmtStats(ctx, s.reportedStats, limit)
 }
 
 func (s *Server) getScrubbedStmtStats(
-	ctx context.Context, statsProvider *sslocal.SQLStats, limit int, includeInternal bool,
+	ctx context.Context, statsProvider sqlstats.Provider, limit int,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
 	salt := ClusterSecret.Get(&s.cfg.Settings.SV)
 
 	var scrubbedStats []appstatspb.CollectedStatementStatistics
 	stmtStatsVisitor := func(_ context.Context, stat *appstatspb.CollectedStatementStatistics) error {
 		if limit <= (len(scrubbedStats)) {
-			return nil
-		}
-
-		if !includeInternal && strings.HasPrefix(stat.Key.App, catconstants.InternalAppNamePrefix) {
 			return nil
 		}
 
@@ -846,7 +770,7 @@ func (s *Server) getScrubbedStmtStats(
 // GetStmtStatsLastReset returns the time at which the statement statistics were
 // last cleared.
 func (s *Server) GetStmtStatsLastReset() time.Time {
-	return s.localSqlStats.GetLastReset()
+	return s.sqlStats.GetLastReset()
 }
 
 // GetExecutorConfig returns this server's executor config.
@@ -857,11 +781,6 @@ func (s *Server) GetExecutorConfig() *ExecutorConfig {
 // GetBytesMonitor returns this server's BytesMonitor.
 func (s *Server) GetBytesMonitor() *mon.BytesMonitor {
 	return s.pool
-}
-
-func (s *Server) UpdateLabelValueConfig(sv *settings.Values, registry *metric.Registry) {
-	registry.ReinitialiseChildMetrics(metric.DBNameLabelEnabled.Get(sv),
-		metric.AppNameLabelEnabled.Get(sv))
 }
 
 // SetupConn creates a connExecutor for the client connection.
@@ -909,14 +828,6 @@ func (s *Server) SetupConn(
 		return ConnectionHandler{}, err
 	}
 
-	// Usage of the InternalAppNamePrefix is usually done using an InternalExecutor which already is set up
-	// to use the InternalMetrics. However, some external connections use the prefix as well, for example
-	// the debug zip cli tool.
-	metrics := &s.Metrics
-	if strings.HasPrefix(sd.ApplicationName, catconstants.InternalAppNamePrefix) {
-		metrics = &s.InternalMetrics
-	}
-
 	ex := s.newConnExecutor(
 		ctx,
 		executorTypeExec,
@@ -924,8 +835,8 @@ func (s *Server) SetupConn(
 		stmtBuf,
 		clientComm,
 		memMetrics,
-		metrics,
-		s.localSqlStats.GetApplicationStats(sd.ApplicationName),
+		&s.Metrics,
+		s.sqlStats.GetApplicationStats(sd.ApplicationName),
 		sessionID,
 		false, /* underOuterTxn */
 		nil,   /* postSetupFn */
@@ -1113,7 +1024,7 @@ func (s *Server) newConnExecutor(
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
-	applicationStats *ssmemstorage.Container,
+	applicationStats sqlstats.ApplicationStats,
 	sessionID clusterunique.ID,
 	underOuterTxn bool,
 	postSetupFn func(ex *connExecutor),
@@ -1121,19 +1032,19 @@ func (s *Server) newConnExecutor(
 	// Create the various monitors.
 	// The session monitors are started in activate().
 	sessionRootMon := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("session root"),
+		Name:     "session root",
 		CurCount: memMetrics.CurBytesCount,
 		MaxHist:  memMetrics.MaxBytesHist,
 		Settings: s.cfg.Settings,
 	})
 	sessionMon := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("session"),
+		Name:     "session",
 		CurCount: memMetrics.SessionCurBytesCount,
 		MaxHist:  memMetrics.SessionMaxBytesHist,
 		Settings: s.cfg.Settings,
 	})
 	sessionPreparedMon := mon.NewMonitor(mon.Options{
-		Name:      mon.MakeName("session prepared statements"),
+		Name:      "session prepared statements",
 		CurCount:  memMetrics.SessionPreparedCurBytesCount,
 		MaxHist:   memMetrics.SessionPreparedMaxBytesHist,
 		Increment: 1024,
@@ -1141,7 +1052,7 @@ func (s *Server) newConnExecutor(
 	})
 	// The txn monitor is started in txnState.resetForNewSQLTxn().
 	txnMon := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("txn"),
+		Name:     "txn",
 		CurCount: memMetrics.TxnCurBytesCount,
 		MaxHist:  memMetrics.TxnMaxBytesHist,
 		Settings: s.cfg.Settings,
@@ -1206,20 +1117,6 @@ func (s *Server) newConnExecutor(
 		}
 		return ex.state.setReadOnlyMode(mode)
 	}
-	// kv_transaction_buffered_writes_enabled is special since it won't affect
-	// the current explicit txn, so we want to let the user know.
-	ex.dataMutatorIterator.setBufferedWritesEnabled = func(enabled bool) {
-		if ex.state.mu.txn.BufferedWritesEnabled() == enabled {
-			return
-		}
-		if !ex.implicitTxn() {
-			action := "enabling"
-			if !enabled {
-				action = "disabling"
-			}
-			ex.planner.BufferClientNotice(ctx, pgnotice.Newf("%s buffered writes will apply after the current txn commits", action))
-		}
-	}
 	ex.dataMutatorIterator.onTempSchemaCreation = func() {
 		ex.hasCreatedTemporarySchema = true
 	}
@@ -1249,29 +1146,37 @@ func (s *Server) newConnExecutor(
 	ex.applicationStats = applicationStats
 	// We ignore statements and transactions run by the internal executor by
 	// passing a nil writer.
+	var writer *insights.ConcurrentBufferIngester
+	if !ex.sessionData().Internal {
+		writer = ex.server.insights.Writer()
+	}
 	ex.statsCollector = sslocal.NewStatsCollector(
 		s.cfg.Settings,
 		applicationStats,
-		s.sqlStatsIngester,
+		writer,
 		ex.phaseTimes,
-		s.localSqlStats.GetCounters(),
+		s.sqlStats.GetCounters(),
 		underOuterTxn,
 		s.cfg.SQLStatsTestingKnobs,
 	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
-		ex.applicationStats = ex.server.localSqlStats.GetApplicationStats(newName)
-		if strings.HasPrefix(newName, catconstants.InternalAppNamePrefix) {
-			ex.metrics = &ex.server.InternalMetrics
-		} else {
-			ex.metrics = &ex.server.Metrics
-		}
+		ex.applicationStats = ex.server.sqlStats.GetApplicationStats(newName)
 	}
 
+	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
+
 	ex.extraTxnState.underOuterTxn = underOuterTxn
-	ex.extraTxnState.prepStmtsNamespace.prepStmts.Init(ctx)
-	ex.extraTxnState.prepStmtsNamespace.portals = make(map[string]PreparedPortal)
-	ex.extraTxnState.prepStmtsNamespace.portalsSnapshot = make(map[string]PreparedPortal)
+	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
+		prepStmts:    make(map[string]*PreparedStatement),
+		prepStmtsLRU: make(map[string]struct{ prev, next string }),
+		portals:      make(map[string]PreparedPortal),
+	}
+	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos = prepStmtNamespace{
+		prepStmts:    make(map[string]*PreparedStatement),
+		prepStmtsLRU: make(map[string]struct{ prev, next string }),
+		portals:      make(map[string]PreparedPortal),
+	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(sdMutIterator.sds)
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.NewCollection(
@@ -1292,8 +1197,17 @@ func (s *Server) newConnExecutor(
 
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 
-	// Determine if we are running on a PCR reader catalog.
-	ex.initPCRReaderCatalog(ctx)
+	if lm := ex.server.cfg.LeaseManager; executorType == executorTypeExec && lm != nil {
+		if desc, err := lm.Acquire(ctx, ex.server.cfg.Clock.Now(), keys.SystemDatabaseID); err != nil {
+			log.Infof(ctx, "unable to lease system database to determine if PCR reader is in use: %s", err)
+		} else {
+			defer desc.Release(ctx)
+			// The system database ReplicatedPCRVersion is set during reader tenant bootstrap,
+			// which guarantees that all user tenant sql connections to the reader tenant will
+			// correctly set this
+			ex.isPCRReaderCatalog = desc.Underlying().(catalog.DatabaseDescriptor).GetReplicatedPCRVersion() != 0
+		}
+	}
 
 	if postSetupFn != nil {
 		postSetupFn(ex)
@@ -1365,7 +1279,10 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
-	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForExplicitClose); err != nil {
+	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
+		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+	)
+	if err := ex.extraTxnState.sqlCursors.closeAll(cursorCloseForExplicitClose); err != nil {
 		log.Warningf(ctx, "error closing cursors: %v", err)
 	}
 
@@ -1374,11 +1291,11 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	var payloadErr error
 	if closeType == normalClose {
-		// We'll cleanup the SQL txn by creating a non-retryable (commit:true) event.
+		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
-		ev := eventNonRetryableErr{IsCommit: fsm.True}
+		ev := eventNonRetriableErr{IsCommit: fsm.True}
 		payloadErr = connExecutorNormalCloseErr
-		payload := eventNonRetryableErrPayload{err: payloadErr}
+		payload := eventNonRetriableErrPayload{err: payloadErr}
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
 			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 		}
@@ -1386,7 +1303,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		case stateNoTxn:
 			// No txn to finish.
 		case stateAborted:
-			// A non-retryable error with IsCommit set to true causes the transaction
+			// A non-retriable error with IsCommit set to true causes the transaction
 			// to be cleaned up.
 		case stateCommitWait:
 			ex.state.finishSQLTxn()
@@ -1423,7 +1340,10 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	if closeType != panicClose {
 		// Close all statements and prepared portals. The cursors have already been
 		// closed.
-		ex.extraTxnState.prepStmtsNamespace.clear(
+		ex.extraTxnState.prepStmtsNamespace.resetToEmpty(
+			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+		)
+		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.resetToEmpty(
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.extraTxnState.prepStmtsNamespaceMemAcc.Close(ctx)
@@ -1439,7 +1359,6 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	// is not called.
 	ex.mu.IdleInSessionTimeout.Stop()
 	ex.mu.IdleInTransactionSessionTimeout.Stop()
-	ex.mu.TransactionTimeout.Stop()
 
 	ex.txnFingerprintIDAcc.Close(ctx)
 	if closeType != panicClose {
@@ -1588,18 +1507,26 @@ type connExecutor struct {
 		// Set via setTxnRewindPos().
 		txnRewindPos CmdPos
 
-		// prepStmtNamespace contains the portals and prepared statements that
-		// the session currently has access to. To interact properly with
-		// automatic transaction retries, we need the ability to restore portals
-		// and prepared statements as they were at the previous txnRewindPos. To
-		// achieve this for portals we take a snapshot even time txnRewindPos is
-		// advanced. For prepared statements we use the Commit and Rewind
-		// methods of prep.Cache.
-		//
-		// Prepared statements are not transactional and so it's a bit weird
-		// that they're part of extraTxnState, but it's convenient to put them
-		// here because they need the same kind of snapshotting as the portals.
+		// prepStmtNamespace contains the prepared statements and portals that the
+		// session currently has access to.
+		// Portals are bound to a transaction and they're all destroyed once the
+		// transaction finishes.
+		// Prepared statements are not transactional and so it's a bit weird that
+		// they're part of extraTxnState, but it's convenient to put them here
+		// because they need the same kind of "snapshoting" as the portals (see
+		// prepStmtsNamespaceAtTxnRewindPos).
 		prepStmtsNamespace prepStmtNamespace
+
+		// prepStmtsNamespaceAtTxnRewindPos is a snapshot of the prep stmts/portals
+		// (ex.prepStmtsNamespace) before processing the command at position
+		// txnRewindPos.
+		// Here's the deal: prepared statements are not transactional, but they do
+		// need to interact properly with automatic retries (i.e. rewinding the
+		// command buffer). When doing a rewind, we need to be able to restore the
+		// prep stmts as they were. We do this by taking a snapshot every time
+		// txnRewindPos is advanced. Prepared statements are shared between the two
+		// collections, but these collections are periodically reconciled.
+		prepStmtsNamespaceAtTxnRewindPos prepStmtNamespace
 
 		// prepStmtsNamespaceMemAcc is the memory account that is shared
 		// between prepStmtsNamespace and prepStmtsNamespaceAtTxnRewindPos. It
@@ -1624,7 +1551,7 @@ type connExecutor struct {
 		// txnFinishClosure contains fields that ex.onTxnFinish uses to execute.
 		txnFinishClosure struct {
 			// txnStartTime is the time that the transaction started.
-			txnStartTime crtime.Mono
+			txnStartTime time.Time
 			// implicit is whether the transaction was implicit.
 			implicit bool
 		}
@@ -1651,12 +1578,6 @@ type connExecutor struct {
 			// checks for resumeProc in buildExecMemo, and executes it as the next
 			// statement if it is non-nil.
 			resumeProc *memo.Memo
-
-			// resumeStmt is set if resumeProc is set. If the stored procedure was
-			// executed via a portal in the extended wire protocol, this statement
-			// will be used to synthesize an ExecStmt command to avoid attempting to
-			// execute the portal twice.
-			resumeStmt statements.Statement[tree.Statement]
 		}
 
 		// shouldExecuteOnTxnRestart indicates that ex.onTxnRestart will be
@@ -1756,7 +1677,7 @@ type connExecutor struct {
 	// applicationStats records per-application SQL usage statistics. It is
 	// maintained to represent statistics for the application currently identified
 	// by sessiondata.ApplicationName.
-	applicationStats *ssmemstorage.Container
+	applicationStats sqlstats.ApplicationStats
 
 	// statsCollector is used to collect statistics about SQL statements and
 	// transactions.
@@ -1830,11 +1751,6 @@ type connExecutor struct {
 		// cancels the session if the idle time in a transaction exceeds the
 		// idle_in_transaction_session_timeout.
 		IdleInTransactionSessionTimeout timeout
-
-		// TransactionTimeout is configured if the transaction_timeout is set and
-		// the connExecutor is in an explicit transaction. It fires if we are
-		// waiting for the next statement while the timeout is exceeded.
-		TransactionTimeout timeout
 	}
 
 	// curStmtAST is the statement that's currently being prepared or executed, if
@@ -1939,14 +1855,23 @@ func (ch *ctxHolder) unhijack() {
 type prepStmtNamespace struct {
 	// prepStmts contains the prepared statements currently available on the
 	// session.
-	prepStmts prep.Cache
+	prepStmts map[string]*PreparedStatement
+	// prepStmtsLRU is a circular doubly-linked list containing the prepared
+	// statement names ordered by most recent access (needed to determine
+	// evictions when prepared_statements_cache_size is set). There is a special
+	// entry for the empty string which is both the head and tail of the
+	// list. (Consequently, if it exists, the actual prepared statement for the
+	// empty string does not have an entry in this list and cannot be evicted.)
+	prepStmtsLRU map[string]struct{ prev, next string }
+	// prepStmtsLRUAlloc is the total amount of memory allocated for prepared
+	// statements in prepStmtsLRU. This will sometimes be less than
+	// ex.sessionPreparedMon.AllocBytes() because refcounting causes us to hold
+	// onto more PreparedStatements than are currently in the LRU list.
+	prepStmtsLRUAlloc int64
 	// portals contains the portals currently available on the session. Note
 	// that PreparedPortal.accountForCopy needs to be called if a copy of a
 	// PreparedPortal is retained.
 	portals map[string]PreparedPortal
-	// portalsSnapshot is a snapshot of portals at the time of the last call to
-	// commit.
-	portalsSnapshot map[string]PreparedPortal
 }
 
 // HasActivePortals returns true if there are portals in the session.
@@ -1960,34 +1885,95 @@ func (ns *prepStmtNamespace) HasPortal(s string) bool {
 	return ok
 }
 
+const prepStmtsLRUHead = ""
+const prepStmtsLRUTail = ""
+
+// addLRUEntry adds a new prepared statement name to the LRU list. It is an
+// error to re-add an existing name to the LRU list.
+func (ns *prepStmtNamespace) addLRUEntry(name string, alloc int64) {
+	if name == prepStmtsLRUHead {
+		return
+	}
+	if _, ok := ns.prepStmtsLRU[name]; ok {
+		// Assert that we're not re-adding an existing name to the LRU list.
+		panic(errors.AssertionFailedf(
+			"prepStmtsLRU unexpected existing entry (%s): %v", name, ns.prepStmtsLRU,
+		))
+	}
+	var this struct{ prev, next string }
+	this.prev = prepStmtsLRUHead
+	// Note: must do this serially in case head and next are the same entry.
+	head := ns.prepStmtsLRU[this.prev]
+	this.next = head.next
+	head.next = name
+	ns.prepStmtsLRU[prepStmtsLRUHead] = head
+	next, ok := ns.prepStmtsLRU[this.next]
+	if !ok || next.prev != prepStmtsLRUHead {
+		// Assert that the chain isn't broken before we modify it.
+		panic(errors.AssertionFailedf(
+			"prepStmtsLRU head entry not correct (%s): %v", this.next, ns.prepStmtsLRU,
+		))
+	}
+	next.prev = name
+	ns.prepStmtsLRU[this.next] = next
+	ns.prepStmtsLRU[name] = this
+	ns.prepStmtsLRUAlloc += alloc
+}
+
+// delLRUEntry removes a prepared statement name from the LRU list. (It is not an
+// error to remove a non-existent prepared statement.)
+func (ns *prepStmtNamespace) delLRUEntry(name string, alloc int64) {
+	if name == prepStmtsLRUHead {
+		return
+	}
+	this, ok := ns.prepStmtsLRU[name]
+	if !ok {
+		// Not an error to remove a non-existent prepared statement.
+		return
+	}
+	// Note: must do this serially in case prev and next are the same entry.
+	prev, ok := ns.prepStmtsLRU[this.prev]
+	if !ok || prev.next != name {
+		// Assert that the chain isn't broken before we modify it.
+		panic(errors.AssertionFailedf(
+			"prepStmtsLRU prev entry not correct (%s): %v", this.prev, ns.prepStmtsLRU,
+		))
+	}
+	prev.next = this.next
+	ns.prepStmtsLRU[this.prev] = prev
+	next, ok := ns.prepStmtsLRU[this.next]
+	if !ok || next.prev != name {
+		// Assert that the chain isn't broken before we modify it.
+		panic(errors.AssertionFailedf(
+			"prepStmtsLRU next entry not correct (%s): %v", this.next, ns.prepStmtsLRU,
+		))
+	}
+	next.prev = this.prev
+	ns.prepStmtsLRU[this.next] = next
+	delete(ns.prepStmtsLRU, name)
+	ns.prepStmtsLRUAlloc -= alloc
+}
+
+// touchLRUEntry moves an existing prepared statement to the front of the LRU
+// list.
+func (ns *prepStmtNamespace) touchLRUEntry(name string) {
+	if name == prepStmtsLRUHead {
+		return
+	}
+	if ns.prepStmtsLRU[prepStmtsLRUHead].next == name {
+		// Already at the front of the list.
+		return
+	}
+	ns.delLRUEntry(name, 0)
+	ns.addLRUEntry(name, 0)
+}
+
 func (ns *prepStmtNamespace) closeAllPortals(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
 ) {
 	for name, p := range ns.portals {
 		p.close(ctx, prepStmtsNamespaceMemAcc, name)
 		delete(ns.portals, name)
-	}
-	for name, p := range ns.portalsSnapshot {
-		p.close(ctx, prepStmtsNamespaceMemAcc, name)
-		delete(ns.portalsSnapshot, name)
-	}
-}
-
-func (ns *prepStmtNamespace) closePortals(
-	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
-) {
-	for name, p := range ns.portals {
-		p.close(ctx, prepStmtsNamespaceMemAcc, name)
-		delete(ns.portals, name)
-	}
-}
-
-func (ns *prepStmtNamespace) closeSnapshotPortals(
-	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
-) {
-	for name, p := range ns.portalsSnapshot {
-		p.close(ctx, prepStmtsNamespaceMemAcc, name)
-		delete(ns.portalsSnapshot, name)
 	}
 }
 
@@ -2003,18 +1989,14 @@ func (ns *prepStmtNamespace) closeAllPausablePortals(
 }
 
 // MigratablePreparedStatements returns a mapping of all prepared statements.
-func (ns *prepStmtNamespace) MigratablePreparedStatements() (
-	[]sessiondatapb.MigratableSession_PreparedStatement,
-	error,
-) {
-	if ns.prepStmts.Dirty() {
-		return nil, errors.AssertionFailedf("cannot serialize dirty prepared statements cache")
-	}
+func (ns *prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
+	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, len(ns.prepStmts))
 
 	// Serialize prepared statements from least-recently used to most-recently
 	// used, so that we build the LRU list correctly when deserializing.
-	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, ns.prepStmts.Len())
-	ns.prepStmts.ForEachLRU(func(name string, stmt *prep.Statement) {
+	for e, ok := ns.prepStmtsLRU[prepStmtsLRUTail]; ok && e.prev != prepStmtsLRUHead; e, ok = ns.prepStmtsLRU[e.prev] {
+		name := e.prev
+		stmt := ns.prepStmts[name]
 		ret = append(
 			ret,
 			sessiondatapb.MigratableSession_PreparedStatement{
@@ -2023,22 +2005,33 @@ func (ns *prepStmtNamespace) MigratablePreparedStatements() (
 				SQL:                  stmt.SQL,
 			},
 		)
-	})
-	return ret, nil
+	}
+	// Finally, serialize the anonymous prepared statement (if it exists).
+	if stmt, ok := ns.prepStmts[""]; ok {
+		ret = append(
+			ret,
+			sessiondatapb.MigratableSession_PreparedStatement{
+				Name:                 "",
+				PlaceholderTypeHints: stmt.InferredTypes,
+				SQL:                  stmt.SQL,
+			},
+		)
+	}
+
+	return ret
 }
 
 func (ns *prepStmtNamespace) String() string {
 	var sb strings.Builder
 	sb.WriteString("Prep stmts: ")
-	if ns.prepStmts.Dirty() {
-		sb.WriteString("<dirty>")
-	} else {
-		ns.prepStmts.ForEachLRU(func(name string, stmt *prep.Statement) {
-			sb.WriteString(name)
-			sb.WriteByte(' ')
-		})
+	// Put the anonymous prepared statement first (if it exists).
+	if _, ok := ns.prepStmts[""]; ok {
+		sb.WriteString("\"\" ")
 	}
-	fmt.Fprintf(&sb, "Size: %d ", ns.prepStmts.Size())
+	for e, ok := ns.prepStmtsLRU[prepStmtsLRUHead]; ok && e.next != prepStmtsLRUTail; e, ok = ns.prepStmtsLRU[e.next] {
+		sb.WriteString(e.next + " ")
+	}
+	fmt.Fprintf(&sb, "LRU alloc: %d ", ns.prepStmtsLRUAlloc)
 	sb.WriteString("Portals: ")
 	for name := range ns.portals {
 		sb.WriteString(name + " ")
@@ -2046,41 +2039,42 @@ func (ns *prepStmtNamespace) String() string {
 	return sb.String()
 }
 
-// clear empties the prepStmtNamespace.
-func (ns *prepStmtNamespace) clear(
+// resetToEmpty deallocates the prepStmtNamespace.
+func (ns *prepStmtNamespace) resetToEmpty(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
 ) {
-	ns.prepStmts.Init(ctx)
+	// No errors could occur since we're releasing the resources.
+	_ = ns.resetTo(ctx, &prepStmtNamespace{}, prepStmtsNamespaceMemAcc)
+}
+
+// resetTo resets a namespace to equate another one (`to`). All the receiver's
+// references are released and all the to's references are duplicated.
+//
+// An empty `to` can be passed in to deallocate everything.
+//
+// It can only return an error if we've reached the memory limit and had to make
+// a copy of portals.
+func (ns *prepStmtNamespace) resetTo(
+	ctx context.Context, to *prepStmtNamespace, prepStmtsNamespaceMemAcc *mon.BoundAccount,
+) error {
+	for name, p := range ns.prepStmts {
+		p.decRef(ctx)
+		delete(ns.prepStmts, name)
+	}
+	for name := range ns.prepStmtsLRU {
+		delete(ns.prepStmtsLRU, name)
+	}
 	ns.closeAllPortals(ctx, prepStmtsNamespaceMemAcc)
-}
 
-func (ns *prepStmtNamespace) commit(
-	ctx context.Context, maxSize int64, prepStmtsNamespaceMemAcc *mon.BoundAccount,
-) error {
-	evicted := ns.prepStmts.Commit(ctx, maxSize)
-	for i := range evicted {
-		log.VEventf(
-			ctx, 1,
-			"prepared statements are using more than prepared_statements_cache_size (%s), "+
-				"automatically deallocating %s", string(humanizeutil.IBytes(maxSize)), evicted[i],
-		)
+	for name, ps := range to.prepStmts {
+		ps.incRef(ctx)
+		ns.prepStmts[name] = ps
 	}
-	ns.closeSnapshotPortals(ctx, prepStmtsNamespaceMemAcc)
-	for name, p := range ns.portals {
-		if err := p.accountForCopy(ctx, prepStmtsNamespaceMemAcc, name); err != nil {
-			return err
-		}
-		ns.portalsSnapshot[name] = p
+	for name, entry := range to.prepStmtsLRU {
+		ns.prepStmtsLRU[name] = entry
 	}
-	return nil
-}
-
-func (ns *prepStmtNamespace) rewind(
-	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
-) error {
-	ns.prepStmts.Rewind(ctx)
-	ns.closePortals(ctx, prepStmtsNamespaceMemAcc)
-	for name, p := range ns.portalsSnapshot {
+	ns.prepStmtsLRUAlloc = to.prepStmtsLRUAlloc
+	for name, p := range to.portals {
 		if err := p.accountForCopy(ctx, prepStmtsNamespaceMemAcc, name); err != nil {
 			return err
 		}
@@ -2117,27 +2111,22 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 	}
 
 	// Close all portals.
-	ex.extraTxnState.prepStmtsNamespace.closePortals(
+	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 
 	// Close all (non HOLD) cursors.
-	var closeReason cursorCloseReason
-	switch ev.eventType {
-	case txnCommit:
-		closeReason = cursorCloseForTxnCommit
-	case txnPrepare:
-		closeReason = cursorCloseForTxnPrepare
-	default:
+	closeReason := cursorCloseForTxnCommit
+	if ev.eventType != txnCommit {
 		closeReason = cursorCloseForTxnRollback
 	}
-	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, closeReason); err != nil {
+	if err := ex.extraTxnState.sqlCursors.closeAll(closeReason); err != nil {
 		log.Warningf(ctx, "error closing cursors: %v", err)
 	}
 
 	switch ev.eventType {
-	case txnCommit, txnRollback, txnPrepare:
-		ex.extraTxnState.prepStmtsNamespace.closeSnapshotPortals(
+	case txnCommit, txnRollback:
+		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.extraTxnState.savepoints.clear()
@@ -2306,15 +2295,6 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		return err // err could be io.EOF
 	}
 
-	// Special handling for COMMIT/ROLLBACK in PL/pgSQL stored procedures. See the
-	// makeCmdForStoredProcResume comment for details.
-	if ex.extraTxnState.storedProcTxnState.resumeProc != nil {
-		cmd, err = ex.makeCmdForStoredProcResume(cmd)
-		if err != nil {
-			return err
-		}
-	}
-
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",
 			ex.machine.CurState(), pos, cmd)
@@ -2374,7 +2354,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// - ex.statsCollector merely contains a copy of the times, that
 		//   was created when the statement started executing (via the
 		//   Reset() method).
-		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, crtime.NowMono())
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
 		if err != nil {
 			return err
 		}
@@ -2387,8 +2367,8 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// message, it is not any more part of the statistics collected
 		// for this execution. In that case, we simply report that
 		// parsing took no time.
-		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartParse, 0)
-		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndParse, 0)
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartParse, time.Time{})
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndParse, time.Time{})
 		// We use a closure for the body of the execution so as to
 		// guarantee that the full service time is captured below.
 		err := func() error {
@@ -2397,8 +2377,8 @@ func (ex *connExecutor) execCmd() (retErr error) {
 			if !ok {
 				err := pgerror.Newf(
 					pgcode.InvalidCursorName, "unknown portal %q", portalName)
-				ev = eventNonRetryableErr{IsCommit: fsm.False}
-				payload = eventNonRetryableErrPayload{err: err}
+				ev = eventNonRetriableErr{IsCommit: fsm.False}
+				payload = eventNonRetriableErrPayload{err: err}
 				res = ex.clientComm.CreateErrorResult(pos)
 				return nil
 			}
@@ -2423,7 +2403,8 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				}
 				copyRes := ex.clientComm.CreateCopyOutResult(copyCmd, pos)
 				res = copyRes
-				ev, payload = ex.execCopyOut(ctx, copyCmd, copyRes)
+				stmtCtx := withStatement(ctx, copyTo)
+				ev, payload = ex.execCopyOut(stmtCtx, copyCmd, copyRes)
 				return nil
 			}
 
@@ -2433,14 +2414,6 @@ func (ex *connExecutor) execCmd() (retErr error) {
 					Types:     portal.Stmt.Types,
 				},
 				Values: portal.Qargs,
-			}
-
-			if tcmd.Limit != 0 && tree.ReturnsAtMostOneRow(portal.Stmt.AST) {
-				// When a statement returns at most one row, the result row
-				// limit doesn't matter. We set it to 0 to fetch all rows, which
-				// allows us to clean up resources sooner if using a pausable
-				// portal.
-				tcmd.Limit = 0
 			}
 
 			// If this is the first-time execution of a portal without a limit set,
@@ -2485,7 +2458,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		//   reset() method).
 		// TODO(sql-sessions): fix the phase time for pausable portals.
 		// https://github.com/cockroachdb/cockroach/issues/99410
-		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, crtime.NowMono())
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
 		if err != nil {
 			return err
 		}
@@ -2499,7 +2472,8 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	case PrepareStmt:
 		ex.curStmtAST = tcmd.AST
 		res = ex.clientComm.CreatePrepareResult(pos)
-		ev, payload = ex.execPrepare(ctx, tcmd)
+		stmtCtx := withStatement(ctx, ex.curStmtAST)
+		ev, payload = ex.execPrepare(stmtCtx, tcmd)
 	case DescribeStmt:
 		descRes := ex.clientComm.CreateDescribeResult(pos)
 		res = descRes
@@ -2512,8 +2486,8 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		ev, payload = ex.execDelPrepStmt(ctx, tcmd)
 	case SendError:
 		res = ex.clientComm.CreateErrorResult(pos)
-		ev = eventNonRetryableErr{IsCommit: fsm.False}
-		payload = eventNonRetryableErrPayload{err: tcmd.Err}
+		ev = eventNonRetriableErr{IsCommit: fsm.False}
+		payload = eventNonRetriableErrPayload{err: tcmd.Err}
 	case Sync:
 		// The Postgres docs say: "At completion of each series of extended-query
 		// messages, the frontend should issue a Sync message. This parameterless
@@ -2548,7 +2522,8 @@ func (ex *connExecutor) execCmd() (retErr error) {
 
 		copyRes := ex.clientComm.CreateCopyInResult(tcmd, pos)
 		res = copyRes
-		ev, payload = ex.execCopyIn(ctx, tcmd, copyRes)
+		stmtCtx := withStatement(ctx, tcmd.Stmt)
+		ev, payload = ex.execCopyIn(stmtCtx, tcmd, copyRes)
 
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
 		// because:
@@ -2556,14 +2531,15 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// - ex.statsCollector merely contains a copy of the times, that
 		//   was created when the statement started executing (via the
 		//   reset() method).
-		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, crtime.NowMono())
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
 	case CopyOut:
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceived, tcmd.TimeReceived)
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartParse, tcmd.ParseStart)
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndParse, tcmd.ParseEnd)
 		copyRes := ex.clientComm.CreateCopyOutResult(tcmd, pos)
 		res = copyRes
-		ev, payload = ex.execCopyOut(ctx, tcmd, copyRes)
+		stmtCtx := withStatement(ctx, tcmd.Stmt)
+		ev, payload = ex.execCopyOut(stmtCtx, tcmd, copyRes)
 
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
 		// because:
@@ -2571,7 +2547,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// - ex.statsCollector merely contains a copy of the times, that
 		//   was created when the statement started executing (via the
 		//   reset() method).
-		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, crtime.NowMono())
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
 	case DrainRequest:
 		// We received a drain request. We terminate immediately if we're not in a
 		// transaction. If we are in a transaction, we'll finish as soon as a Sync
@@ -2595,7 +2571,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	// otherwise there will be leftover bytes.
 	shouldClosePausablePortalsAndCursors := func(payload fsm.EventPayload) bool {
 		switch payload.(type) {
-		case eventNonRetryableErrPayload, eventRetryableErrPayload:
+		case eventNonRetriableErrPayload, eventRetriableErrPayload:
 			return true
 		default:
 			return false
@@ -2610,7 +2586,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 			// txnState.finishSQLTxn() is being called, as the underlying resources of
 			// pausable portals hasn't been cleared yet.
 			ex.extraTxnState.prepStmtsNamespace.closeAllPausablePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
-			if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForTxnRollback); err != nil {
+			if err := ex.extraTxnState.sqlCursors.closeAll(cursorCloseForTxnRollback); err != nil {
 				log.Warningf(ctx, "error closing cursors: %v", err)
 			}
 		}
@@ -2731,7 +2707,6 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// and transaction modes. The stored procedure has finished execution,
 		// either successfully or with an error.
 		ex.extraTxnState.storedProcTxnState.resumeProc = nil
-		ex.extraTxnState.storedProcTxnState.resumeStmt = statements.Statement[tree.Statement]{}
 		ex.extraTxnState.storedProcTxnState.txnModes = nil
 	}
 
@@ -2908,35 +2883,6 @@ func stateToTxnStatusIndicator(s fsm.State) TransactionStatusIndicator {
 	}
 }
 
-// makeCmdForStoredProcResume creates a Command that can be used to resume
-// execution of a stored procedure that has ended the previous transaction via
-// COMMIT or ROLLBACK. It is not enough to just process the original command
-// again, because it may have been an ExecPortal statement, and the portal will
-// already have been closed after the first phase of execution.
-func (ex *connExecutor) makeCmdForStoredProcResume(curCmd Command) (Command, error) {
-	if !ex.sessionData().UseProcTxnControlExtendedProtocolFix {
-		// The fix is not enabled, so return the original command.
-		return curCmd, nil
-	}
-	var timeReceived crtime.Mono
-	switch t := curCmd.(type) {
-	case ExecStmt:
-		// NOTE: it is not strictly necessary to replace ExecStmt. However, it seems
-		// best to handle the commands in a consistent way.
-		timeReceived = t.TimeReceived
-	case ExecPortal:
-		timeReceived = t.TimeReceived
-	default:
-		return nil, errors.AssertionFailedf(
-			"unexpected command type %T for stored procedure resume", t,
-		)
-	}
-	return ExecStmt{
-		Statement:    ex.extraTxnState.storedProcTxnState.resumeStmt,
-		TimeReceived: timeReceived,
-	}, nil
-}
-
 // isCopyToExternalStorage returns true if the CopyIn command is writing to an
 // ExternalStorage such as nodelocal or userfile. It does so by checking the
 // target table/schema names against the sentinel, internal table/schema names
@@ -2963,14 +2909,12 @@ func (ex *connExecutor) execCopyOut(
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
 	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
-	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1,
-		ex.sessionData().Database, ex.sessionData().ApplicationName)
+	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
 	defer func() {
 		ex.removeActiveQuery(queryID, cmd.Stmt)
 		cancelQuery()
-		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1,
-			ex.sessionData().Database, ex.sessionData().ApplicationName)
+		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
 		if !payloadHasError(retPayload) {
 			ex.incrementExecutedStmtCounter(cmd.Stmt)
 		}
@@ -3039,10 +2983,10 @@ func (ex *connExecutor) execCopyOut(
 			// Even in the cases where the error is a retryable error, we want to
 			// intercept the event and payload returned here to ensure that the query
 			// is not retried.
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetryableErrPayload{err: cancelchecker.QueryCanceledError}
+			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
 		}
 
 		// If the query timed out, we intercept the error, payload, and event here
@@ -3058,21 +3002,21 @@ func (ex *connExecutor) execCopyOut(
 		if queryTimedOut {
 			// A timed out query should never produce retryable errors/events/payloads
 			// so we intercept and overwrite them all here.
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetryableErrPayload{err: sqlerrors.QueryTimeoutError}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
 		} else if txnTimedOut {
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetryableErrPayload{err: sqlerrors.TxnTimeoutError}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
 		}
 	}(ctx)
 
 	if ex.sessionData().StmtTimeout > 0 {
 		timerDuration :=
-			ex.sessionData().StmtTimeout - ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived).Elapsed()
+			ex.sessionData().StmtTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
 		// There's no need to proceed with execution if the timer has already expired.
 		if timerDuration < 0 {
 			queryTimedOut = true
@@ -3089,7 +3033,7 @@ func (ex *connExecutor) execCopyOut(
 	}
 	if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() {
 		timerDuration :=
-			ex.sessionData().TransactionTimeout - ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted).Elapsed()
+			ex.sessionData().TransactionTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted))
 
 		// If the timer already expired, but the transaction is not yet aborted,
 		// we should error immediately without executing. If the timer
@@ -3139,8 +3083,8 @@ func (ex *connExecutor) execCopyOut(
 
 		return nil
 	}); copyErr != nil {
-		ev := eventNonRetryableErr{IsCommit: fsm.False}
-		payload := eventNonRetryableErrPayload{err: copyErr}
+		ev := eventNonRetriableErr{IsCommit: fsm.False}
+		payload := eventNonRetriableErrPayload{err: copyErr}
 		return ev, payload
 	}
 	return nil, nil
@@ -3177,14 +3121,12 @@ func (ex *connExecutor) execCopyIn(
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
 	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
-	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1,
-		ex.sessionData().Database, ex.sessionData().ApplicationName)
+	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
 	defer func() {
 		ex.removeActiveQuery(queryID, cmd.Stmt)
 		cancelQuery()
-		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1,
-			ex.sessionData().Database, ex.sessionData().ApplicationName)
+		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
 		if !payloadHasError(retPayload) {
 			ex.incrementExecutedStmtCounter(cmd.Stmt)
 		}
@@ -3203,10 +3145,6 @@ func (ex *connExecutor) execCopyIn(
 
 	// The connExecutor state machine has already set us up with a txn at this
 	// point.
-	//
-	// Disable the buffered writes for COPY since there is no benefit in this
-	// ability here.
-	ex.state.mu.txn.SetBufferedWritesEnabled(false /* enabled */)
 	txnOpt := copyTxnOpt{
 		txn:           ex.state.mu.txn,
 		txnTimestamp:  ex.state.sqlTimestamp,
@@ -3272,8 +3210,8 @@ func (ex *connExecutor) execCopyIn(
 		)
 	}
 	if copyErr != nil {
-		ev := eventNonRetryableErr{IsCommit: fsm.False}
-		payload := eventNonRetryableErrPayload{err: copyErr}
+		ev := eventNonRetriableErr{IsCommit: fsm.False}
+		payload := eventNonRetriableErrPayload{err: copyErr}
 		return ev, payload
 	}
 
@@ -3313,10 +3251,10 @@ func (ex *connExecutor) execCopyIn(
 			// Even in the cases where the error is a retryable error, we want to
 			// intercept the event and payload returned here to ensure that the query
 			// is not retried.
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetryableErrPayload{err: cancelchecker.QueryCanceledError}
+			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
 		}
 
 		cm.Close(ctx)
@@ -3334,21 +3272,21 @@ func (ex *connExecutor) execCopyIn(
 		if queryTimedOut {
 			// A timed out query should never produce retryable errors/events/payloads
 			// so we intercept and overwrite them all here.
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetryableErrPayload{err: sqlerrors.QueryTimeoutError}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
 		} else if txnTimedOut {
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetryableErrPayload{err: sqlerrors.TxnTimeoutError}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
 		}
 	}(ctx)
 
 	if ex.sessionData().StmtTimeout > 0 {
 		timerDuration :=
-			ex.sessionData().StmtTimeout - ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived).Elapsed()
+			ex.sessionData().StmtTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
 		// There's no need to proceed with execution if the timer has already expired.
 		if timerDuration < 0 {
 			queryTimedOut = true
@@ -3365,7 +3303,7 @@ func (ex *connExecutor) execCopyIn(
 	}
 	if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() {
 		timerDuration :=
-			ex.sessionData().TransactionTimeout - ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted).Elapsed()
+			ex.sessionData().TransactionTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted))
 
 		// If the timer already expired, but the transaction is not yet aborted,
 		// we should error immediately without executing. If the timer
@@ -3406,7 +3344,7 @@ func (ex *connExecutor) execCopyIn(
 		}
 		return cm.run(ctx)
 	}); copyErr != nil {
-		// TODO(andrei): We don't have a full retryable error story for the copy machine.
+		// TODO(andrei): We don't have a full retriable error story for the copy machine.
 		// When running outside of a txn, the copyMachine should probably do retries
 		// internally - this is partially done, see `copyMachine.insertRows`.
 		// When not, it's unclear what we should do. For now, we abort
@@ -3414,8 +3352,8 @@ func (ex *connExecutor) execCopyIn(
 		// We also don't have a story for distinguishing communication errors (which
 		// should terminate the connection) from query errors. For now, we treat all
 		// errors as query errors.
-		ev := eventNonRetryableErr{IsCommit: fsm.False}
-		payload := eventNonRetryableErrPayload{err: copyErr}
+		ev := eventNonRetriableErr{IsCommit: fsm.False}
+		payload := eventNonRetriableErrPayload{err: copyErr}
 		return ev, payload
 	}
 	return nil, nil
@@ -3430,17 +3368,16 @@ func stmtHasNoData(stmt tree.Statement) bool {
 // commitPrepStmtNamespace deallocates everything in
 // prepStmtsNamespaceAtTxnRewindPos that's not part of prepStmtsNamespace.
 func (ex *connExecutor) commitPrepStmtNamespace(ctx context.Context) error {
-	cacheSize := ex.sessionData().PreparedStatementsCacheSize
-	return ex.extraTxnState.prepStmtsNamespace.commit(
-		ctx, cacheSize, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+	return ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.resetTo(
+		ctx, &ex.extraTxnState.prepStmtsNamespace, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 }
 
-// rewindPrepStmtNamespace deallocates everything in prepStmtsNamespace that's
+// commitPrepStmtNamespace deallocates everything in prepStmtsNamespace that's
 // not part of prepStmtsNamespaceAtTxnRewindPos.
 func (ex *connExecutor) rewindPrepStmtNamespace(ctx context.Context) error {
-	return ex.extraTxnState.prepStmtsNamespace.rewind(
-		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
+	return ex.extraTxnState.prepStmtsNamespace.resetTo(
+		ctx, &ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 }
 
@@ -3471,25 +3408,25 @@ func isCommit(stmt tree.Statement) bool {
 	return ok
 }
 
-var retryableMinTimestampBoundUnsatisfiableError = errors.Newf(
-	"retryable MinTimestampBoundUnsatisfiableError",
+var retriableMinTimestampBoundUnsatisfiableError = errors.Newf(
+	"retriable MinTimestampBoundUnsatisfiableError",
 )
 
-// errIsRetryable is true if the error is a client-visible retry error
+// errIsRetriable is true if the error is a client-visible retry error
 // or the error is a special error that is handled internally and retried.
-func errIsRetryable(err error) bool {
+func errIsRetriable(err error) bool {
 	return errors.HasInterface(err, (*pgerror.ClientVisibleRetryError)(nil)) ||
-		errors.Is(err, retryableMinTimestampBoundUnsatisfiableError) ||
+		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError) ||
 		descs.IsTwoVersionInvariantViolationError(err)
 }
 
-// convertRetryableErrorIntoUserVisibleError converts internal retryable
+// convertRetriableErrorIntoUserVisibleError converts internal retriable
 // errors into external, so that the client goes and retries this
 // transaction. One example of this is two version invariant errors, which
 // happens when a schema change is waiting for a schema change transition to
 // propagate. When this happens, we either need to retry externally or internally,
 // depending on if we are in an explicit transaction.
-func (ex *connExecutor) convertRetryableErrorIntoUserVisibleError(
+func (ex *connExecutor) convertRetriableErrorIntoUserVisibleError(
 	ctx context.Context, origErr error,
 ) (modifiedErr error, err error) {
 	if descs.IsTwoVersionInvariantViolationError(origErr) {
@@ -3505,8 +3442,8 @@ func (ex *connExecutor) convertRetryableErrorIntoUserVisibleError(
 	return origErr, nil
 }
 
-// makeErrEvent takes an error and returns either an eventRetryableErr or an
-// eventNonRetryableErr, depending on the error type.
+// makeErrEvent takes an error and returns either an eventRetriableErr or an
+// eventNonRetriableErr, depending on the error type.
 func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event, fsm.EventPayload) {
 	// Check for MinTimestampBoundUnsatisfiableError errors.
 	// If this is detected, it means we are potentially able to retry with a lower
@@ -3530,41 +3467,41 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 				)
 			}
 			if aost.Timestamp.Less(minTSErr.MinTimestampBound) {
-				err = errors.Mark(err, retryableMinTimestampBoundUnsatisfiableError)
+				err = errors.Mark(err, retriableMinTimestampBoundUnsatisfiableError)
 			}
 		}
 	}
 
-	retryable := errIsRetryable(err)
-	if retryable && execinfra.IsDynamicQueryHasNoHomeRegionError(err) {
+	retriable := errIsRetriable(err)
+	if retriable && execinfra.IsDynamicQueryHasNoHomeRegionError(err) {
 		// Retry only # of remote regions times if the retry is due to the
 		// enforce_home_region setting.
-		retryable = int(ex.state.mu.autoRetryCounter) < len(ex.planner.EvalContext().RemoteRegions)
-		if !retryable {
+		retriable = int(ex.state.mu.autoRetryCounter) < len(ex.planner.EvalContext().RemoteRegions)
+		if !retriable {
 			err = execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(err)
 		}
 	}
-	if retryable {
+	if retriable {
 		var rc rewindCapability
 		var canAutoRetry bool
 		if ex.implicitTxn() || !ex.sessionData().InjectRetryErrorsEnabled {
 			rc, canAutoRetry = ex.getRewindTxnCapability()
 		}
 
-		ev := eventRetryableErr{
+		ev := eventRetriableErr{
 			IsCommit:     fsm.FromBool(isCommit(stmt)),
 			CanAutoRetry: fsm.FromBool(canAutoRetry),
 		}
-		payload := eventRetryableErrPayload{
+		payload := eventRetriableErrPayload{
 			err:    err,
 			rewCap: rc,
 		}
 		return ev, payload
 	}
-	ev := eventNonRetryableErr{
+	ev := eventNonRetriableErr{
 		IsCommit: fsm.FromBool(isCommit(stmt)),
 	}
-	payload := eventNonRetryableErrPayload{err: err}
+	payload := eventNonRetriableErrPayload{err: err}
 	return ev, payload
 }
 
@@ -3588,9 +3525,6 @@ func (ex *connExecutor) setTransactionModes(
 		level := ex.txnIsolationLevelToKV(ctx, modes.Isolation)
 		if err := ex.state.setIsolationLevel(level); err != nil {
 			return pgerror.WithCandidateCode(err, pgcode.ActiveSQLTransaction)
-		}
-		if !ex.bufferedWritesIsAllowedForIsolationLevel(ctx, level) {
-			ex.state.mu.txn.SetBufferedWritesEnabled(false)
 		}
 	}
 	rwMode := modes.ReadWriteMode
@@ -3628,13 +3562,6 @@ var allowRepeatableReadIsolation = settings.RegisterBoolSetting(
 	false,
 	settings.WithName("sql.txn.repeatable_read_isolation.enabled"),
 	settings.WithPublic,
-)
-
-var allowBufferedWritesForWeakIsolation = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.txn.write_buffering_for_weak_isolation.enabled",
-	"set to true to allow write buffering for transactions at weak isolation levels",
-	false,
 )
 
 var logIsolationLevelLimiter = log.Every(10 * time.Second)
@@ -3768,35 +3695,6 @@ func (ex *connExecutor) omitInRangefeeds() bool {
 	return ex.sessionData().DisableChangefeedReplication
 }
 
-func (ex *connExecutor) bufferedWritesEnabled(ctx context.Context) bool {
-	if ex.sessionData() == nil {
-		return false
-	}
-	return ex.sessionData().BufferedWritesEnabled && ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V25_2)
-}
-
-func (ex *connExecutor) bufferedWritesIsAllowedForIsolationLevel(
-	ctx context.Context, isoLevel isolation.Level,
-) bool {
-	return bufferedWritesIsAllowedForIsolationLevel(ctx, ex.server.cfg.Settings, isoLevel)
-}
-
-func bufferedWritesIsAllowedForIsolationLevel(
-	ctx context.Context, st *cluster.Settings, isoLevel isolation.Level,
-) bool {
-	if isoLevel == isolation.Serializable {
-		return true
-	}
-
-	// We are at a weaker isolation level that requires lock loss detection which
-	// is only available on 25.3 or greater.
-	if !st.Version.IsActive(ctx, clusterversion.V25_3) {
-		return false
-	}
-
-	return allowBufferedWritesForWeakIsolation.Get(&st.SV)
-}
-
 // initEvalCtx initializes the fields of an extendedEvalContext that stay the
 // same across multiple statements. resetEvalCtx must also be called before each
 // statement, to reinitialize other fields.
@@ -3817,7 +3715,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SessionDataStack:               ex.sessionDataStack,
 			ReCache:                        ex.server.reCache,
 			ToCharFormatCache:              ex.server.toCharFormatCache,
-			SQLStatsController:             ex.server.sqlStats,
+			SQLStatsController:             ex.server.sqlStatsController,
 			SchemaTelemetryController:      ex.server.schemaTelemetryController,
 			IndexUsageStatsController:      ex.server.indexUsageStatsController,
 			ConsistencyChecker:             p.execCfg.ConsistencyChecker,
@@ -3839,39 +3737,10 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		jobs:                 ex.extraTxnState.jobs,
 		validateDbZoneConfig: &ex.extraTxnState.validateDbZoneConfig,
 		statsProvider:        ex.server.sqlStats,
-		localStatsProvider:   ex.server.localSqlStats,
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
-}
-
-// initPCRReaderCatalog leases the system database to determine if
-// we are connecting to a PCR reader catalog, if this has not been attempted
-// before.
-func (ex *connExecutor) initPCRReaderCatalog(ctx context.Context) {
-	// Wait up to 10 seconds attempting to acquire the lease on the system
-	// database. Normally we should already have a lease on this object,
-	// unless there is some availability issue.
-	const initPCRReaderCatalogTimeout = 10 * time.Second
-	err := timeutil.RunWithTimeout(ctx, "detect-pcr-reader-catalog", initPCRReaderCatalogTimeout,
-		func(ctx context.Context) error {
-			if lm := ex.server.cfg.LeaseManager; ex.executorType == executorTypeExec && lm != nil {
-				desc, err := lm.Acquire(ctx, ex.server.cfg.Clock.Now(), keys.SystemDatabaseID)
-				if err != nil {
-					return err
-				}
-				defer desc.Release(ctx)
-				// The system database ReplicatedPCRVersion is set during reader tenant bootstrap,
-				// which guarantees that all user tenant sql connections to the reader tenant will
-				// correctly set this
-				ex.isPCRReaderCatalog = desc.Underlying().(catalog.DatabaseDescriptor).GetReplicatedPCRVersion() != 0
-			}
-			return nil
-		})
-	if err != nil {
-		log.Infof(ctx, "unable to lease system database to determine if PCR reader is in use: %s", err)
-	}
 }
 
 // GetPCRReaderTimestamp if the system database is setup as PCR
@@ -3923,7 +3792,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	// See resetPlanner for more context on setting the maximum timestamp for
 	// AOST read retries.
 	var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError
-	if err := ex.state.mu.autoRetryReason; err != nil && errors.Is(err, minTSErr) {
+	if err := ex.state.mu.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
 		evalCtx.AsOfSystemTime.MaxTimestampBound = ex.extraTxnState.descCollection.GetMaxTimestampBound()
 	} else if newTxn {
 		evalCtx.AsOfSystemTime = nil
@@ -3974,7 +3843,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 func (ex *connExecutor) maybeAdjustMaxTimestampBound(p *planner, txn *kv.Txn) {
 	if autoRetryReason := ex.state.mu.autoRetryReason; autoRetryReason != nil {
 		// If we are retrying due to an unsatisfiable timestamp bound which is
-		// retryable, it means we were unable to serve the previous minimum
+		// retriable, it means we were unable to serve the previous minimum
 		// timestamp as there was a schema update in between. When retrying, we
 		// want to keep the same minimum timestamp for the AOST read, but set
 		// the maximum timestamp to the point just before our failed read to
@@ -4039,7 +3908,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	err := func() error {
 		ex.mu.Lock()
 		defer ex.mu.Unlock()
-		return ex.machine.ApplyWithPayload(ex.Ctx(), ev, payload)
+		return ex.machine.ApplyWithPayload(withStatement(ex.Ctx(), ex.curStmtAST), ev, payload)
 	}()
 	if err != nil {
 		if errors.HasType(err, (*fsm.TransitionNotFoundError)(nil)) {
@@ -4080,19 +3949,14 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err != nil {
 				return advanceInfo{}, err
 			}
+
 			if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
-				// TODO (xinhaoz): This is a temporary hook until
-				// https://github.com/cockroachdb/cockroach/issues/141024
-				// is resolved. The reason this exists is because we
-				// need to recompute the statement fingerprint id for
-				// statements currently in the stats collector, which
-				// were computed once already for insights. There is an
-				// acknowledgement that this means the fingerprint id
-				// given to insights for upgraded transactions are
-				// currently incorrect.
 				ex.extraTxnState.txnFinishClosure.implicit = false
-				ex.statsCollector.UpgradeToExplicitTransaction()
+				if err = ex.statsCollector.UpgradeImplicitTxn(ex.Ctx()); err != nil {
+					return advanceInfo{}, err
+				}
 			}
+
 		}
 	case txnStart:
 		ex.recordTransactionStart(advInfo.txnEvent.txnID)
@@ -4100,7 +3964,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// Session is considered active when executing a transaction.
 		ex.totalActiveTimeStopWatch.Start()
 
-		if err := ex.maybeSetSQLLivenessSessionAndGeneration(); err != nil {
+		if err := ex.maybeSetSQLLivenessSession(); err != nil {
 			return advanceInfo{}, err
 		}
 	case txnCommit:
@@ -4166,25 +4030,13 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if err != nil {
 			return advanceInfo{}, err
 		}
-		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, crtime.NowMono())
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, timeutil.Now())
 		if err := ex.waitForTxnJobs(); err != nil {
 			handleErr(err)
 		}
-		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, crtime.NowMono())
-		// If descriptors are either modified or created wait then we may have to
-		// wait for one version (if no job exists) or the initial version to be
-		// acquired.
-		if ex.extraTxnState.descCollection.HasUncommittedDescriptors() {
-			cachedRegions, err := regions.NewCachedDatabaseRegions(ex.Ctx(), ex.server.cfg.DB, ex.server.cfg.LeaseManager)
-			if err != nil {
-				return advanceInfo{}, err
-			}
-			if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs, cachedRegions); err != nil {
-				return advanceInfo{}, err
-			}
-			if err := ex.waitForInitialVersionForNewDescriptors(cachedRegions); err != nil {
-				return advanceInfo{}, err
-			}
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
+		if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs); err != nil {
+			return advanceInfo{}, err
 		}
 		if ex.extraTxnState.descCollection.HasUncommittedNewOrDroppedDescriptors() {
 			execCfg := ex.planner.ExecCfg()
@@ -4193,11 +4045,11 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			}
 		}
 		fallthrough
-	case txnRollback, txnPrepare:
+	case txnRollback:
 		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, payloadErr)
-		// Since we're finalizing the SQL transaction (commit, rollback, prepare),
-		// there's no need to keep the prepared stmts for a txn rewind.
-		ex.extraTxnState.prepStmtsNamespace.closeSnapshotPortals(
+		// Since we're doing a complete rollback, there's no need to keep the
+		// prepared stmts for a txn rewind.
+		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
 			ex.Ctx(), &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.resetPlanner(ex.Ctx(), &ex.planner, nil, ex.server.cfg.Clock.PhysicalTime())
@@ -4205,7 +4057,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// In addition to resetting the extraTxnState, the restart event may
 		// also need to reset the sqlliveness.Session.
 		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, payloadErr)
-		if err := ex.maybeSetSQLLivenessSessionAndGeneration(); err != nil {
+		if err := ex.maybeSetSQLLivenessSession(); err != nil {
 			return advanceInfo{}, err
 		}
 	default:
@@ -4232,7 +4084,7 @@ func (ex *connExecutor) waitForTxnJobs() error {
 	jobWaitCtx := ex.ctxHolder.ctx()
 	var queryTimedout atomic.Bool
 	if ex.sessionData().StmtTimeout > 0 {
-		timePassed := ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived).Elapsed()
+		timePassed := timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
 		if timePassed > ex.sessionData().StmtTimeout {
 			queryTimedout.Store(true)
 		} else {
@@ -4266,21 +4118,17 @@ func (ex *connExecutor) waitForTxnJobs() error {
 			}
 			jobList.WriteString(j.String())
 		}
-		if err := ex.planner.noticeSender.SendNotice(
-			ex.ctxHolder.connCtx,
-			pgnotice.Newf(
-				"The statement has timed out, but the following "+
-					"background jobs have been created and will continue running: %s.",
-				jobList.String()),
-			false, /* immediateFlush */
-		); err != nil {
+		if err := ex.planner.noticeSender.SendNotice(ex.ctxHolder.connCtx,
+			pgnotice.Newf("The statement has timed out, but the following "+
+				"background jobs have been created and will continue running: %s.",
+				jobList.String())); err != nil {
 			return err
 		}
 	}
 	return retErr
 }
 
-func (ex *connExecutor) maybeSetSQLLivenessSessionAndGeneration() error {
+func (ex *connExecutor) maybeSetSQLLivenessSession() error {
 	if !ex.server.cfg.Codec.ForSystemTenant() ||
 		ex.server.cfg.TestingKnobs.ForceSQLLivenessSession {
 		// Update the leased descriptor collection with the current sqlliveness.Session.
@@ -4295,8 +4143,6 @@ func (ex *connExecutor) maybeSetSQLLivenessSessionAndGeneration() error {
 		}
 		ex.extraTxnState.descCollection.SetSession(session)
 	}
-	// Reset the lease generation at the same time.
-	ex.extraTxnState.descCollection.ResetLeaseGeneration()
 	return nil
 }
 
@@ -4399,11 +4245,10 @@ func (ex *connExecutor) serialize() serverpb.Session {
 
 	if txn != nil {
 		id := txn.ID()
-		elapsedTime := crtime.MonoFromTime(timeNow).Sub(ex.state.mu.txnStart)
 		activeTxnInfo = &serverpb.TxnInfo{
 			ID:                    id,
-			Start:                 timeNow.Add(-elapsedTime),
-			ElapsedTime:           elapsedTime,
+			Start:                 ex.state.mu.txnStart,
+			ElapsedTime:           timeNow.Sub(ex.state.mu.txnStart),
 			NumStatementsExecuted: int32(ex.state.mu.stmtCount),
 			NumRetries:            int32(txn.Epoch()),
 			NumAutoRetries:        ex.state.mu.autoRetryCounter,
@@ -4467,12 +4312,12 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		}
 		sql := truncateSQL(query.stmt.SQL)
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
-		elapsedTime := crtime.MonoFromTime(timeNow).Sub(query.start)
+		queryStart := query.start.UTC()
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			TxnID:          query.txnID,
 			ID:             id.String(),
-			Start:          timeNow.Add(-elapsedTime),
-			ElapsedTime:    elapsedTime,
+			Start:          queryStart,
+			ElapsedTime:    timeNow.Sub(queryStart),
 			Sql:            sql,
 			SqlNoConstants: sqlNoConstants,
 			SqlSummary:     formatStatementSummary(parsed.AST),
@@ -4512,10 +4357,11 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	}
 
 	return serverpb.Session{
-		Username:          sd.SessionUser().Normalized(),
-		ClientAddress:     remoteStr,
-		ApplicationName:   ex.applicationName.Load().(string),
-		Start:             ex.phaseTimes.InitTime(),
+		Username:        sd.SessionUser().Normalized(),
+		ClientAddress:   remoteStr,
+		ApplicationName: ex.applicationName.Load().(string),
+		// TODO(yuzefovich): this seems like not a concurrency safe call.
+		Start:             ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionInit).UTC(),
 		ActiveQueries:     activeQueries,
 		ActiveTxn:         activeTxnInfo,
 		NumTxnsExecuted:   ex.extraTxnState.txnCounter.Load(),
@@ -4600,23 +4446,18 @@ type StatementCounters struct {
 	QueryCount telemetry.CounterWithMetric
 
 	// Basic CRUD statements.
-	SelectCount telemetry.CounterWithAggMetric
-	UpdateCount telemetry.CounterWithAggMetric
-	InsertCount telemetry.CounterWithAggMetric
-	DeleteCount telemetry.CounterWithAggMetric
+	SelectCount telemetry.CounterWithMetric
+	UpdateCount telemetry.CounterWithMetric
+	InsertCount telemetry.CounterWithMetric
+	DeleteCount telemetry.CounterWithMetric
 	// CRUDQueryCount includes all 4 CRUD statements above.
-	CRUDQueryCount telemetry.CounterWithAggMetric
+	CRUDQueryCount telemetry.CounterWithMetric
 
 	// Transaction operations.
-	TxnBeginCount    telemetry.CounterWithAggMetric
-	TxnCommitCount   telemetry.CounterWithAggMetric
-	TxnRollbackCount telemetry.CounterWithAggMetric
+	TxnBeginCount    telemetry.CounterWithMetric
+	TxnCommitCount   telemetry.CounterWithMetric
+	TxnRollbackCount telemetry.CounterWithMetric
 	TxnUpgradedCount *metric.Counter
-
-	// Transaction XA two-phase commit operations.
-	TxnPrepareCount          telemetry.CounterWithMetric
-	TxnCommitPreparedCount   telemetry.CounterWithMetric
-	TxnRollbackPreparedCount telemetry.CounterWithMetric
 
 	// Savepoint operations. SavepointCount is for real SQL savepoints;
 	// the RestartSavepoint variants are for the
@@ -4635,15 +4476,11 @@ type StatementCounters struct {
 	// non-atomic was the default, in 22.2 COPY became atomic by default
 	// but we want to know if there's customers using the
 	// 'CopyFromAtomicEnabled' session variable to go back to non-atomic
-	// COPYs).
+	// COPYs.
 	CopyNonAtomicCount telemetry.CounterWithMetric
 
 	// DdlCount counts all statements whose StatementReturnType is DDL.
 	DdlCount telemetry.CounterWithMetric
-
-	// CallStoredProcCount counts all stored procedure invocations via the CALL
-	// stmt.
-	CallStoredProcCount telemetry.CounterWithMetric
 
 	// MiscCount counts all statements not covered by a more specific stat above.
 	MiscCount telemetry.CounterWithMetric
@@ -4651,20 +4488,14 @@ type StatementCounters struct {
 
 func makeStartedStatementCounters(internal bool) StatementCounters {
 	return StatementCounters{
-		TxnBeginCount: telemetry.NewCounterWithAggMetric(
+		TxnBeginCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaTxnBeginStarted, internal)),
-		TxnCommitCount: telemetry.NewCounterWithAggMetric(
+		TxnCommitCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaTxnCommitStarted, internal)),
-		TxnRollbackCount: telemetry.NewCounterWithAggMetric(
+		TxnRollbackCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaTxnRollbackStarted, internal)),
 		TxnUpgradedCount: metric.NewCounter(
 			getMetricMeta(MetaTxnUpgradedFromWeakIsolation, internal)),
-		TxnPrepareCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaTxnPrepareStarted, internal)),
-		TxnCommitPreparedCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaTxnCommitPreparedStarted, internal)),
-		TxnRollbackPreparedCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaTxnRollbackPreparedStarted, internal)),
 		RestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRestartSavepointStarted, internal)),
 		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
@@ -4677,15 +4508,15 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaReleaseSavepointStarted, internal)),
 		RollbackToSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRollbackToSavepointStarted, internal)),
-		SelectCount: telemetry.NewCounterWithAggMetric(
+		SelectCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaSelectStarted, internal)),
-		UpdateCount: telemetry.NewCounterWithAggMetric(
+		UpdateCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaUpdateStarted, internal)),
-		InsertCount: telemetry.NewCounterWithAggMetric(
+		InsertCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaInsertStarted, internal)),
-		DeleteCount: telemetry.NewCounterWithAggMetric(
+		DeleteCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDeleteStarted, internal)),
-		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
+		CRUDQueryCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaCRUDStarted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDdlStarted, internal)),
@@ -4693,8 +4524,6 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaCopyStarted, internal)),
 		CopyNonAtomicCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaCopyNonAtomicStarted, internal)),
-		CallStoredProcCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaCallStoredProcStarted, internal)),
 		MiscCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaMiscStarted, internal)),
 		QueryCount: telemetry.NewCounterWithMetric(
@@ -4704,20 +4533,14 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 
 func makeExecutedStatementCounters(internal bool) StatementCounters {
 	return StatementCounters{
-		TxnBeginCount: telemetry.NewCounterWithAggMetric(
+		TxnBeginCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaTxnBeginExecuted, internal)),
-		TxnCommitCount: telemetry.NewCounterWithAggMetric(
+		TxnCommitCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaTxnCommitExecuted, internal)),
-		TxnRollbackCount: telemetry.NewCounterWithAggMetric(
+		TxnRollbackCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaTxnRollbackExecuted, internal)),
 		TxnUpgradedCount: metric.NewCounter(
 			getMetricMeta(MetaTxnUpgradedFromWeakIsolation, internal)),
-		TxnPrepareCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaTxnPrepareExecuted, internal)),
-		TxnCommitPreparedCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaTxnCommitPreparedExecuted, internal)),
-		TxnRollbackPreparedCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaTxnRollbackPreparedExecuted, internal)),
 		RestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRestartSavepointExecuted, internal)),
 		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
@@ -4730,15 +4553,15 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaReleaseSavepointExecuted, internal)),
 		RollbackToSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRollbackToSavepointExecuted, internal)),
-		SelectCount: telemetry.NewCounterWithAggMetric(
+		SelectCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaSelectExecuted, internal)),
-		UpdateCount: telemetry.NewCounterWithAggMetric(
+		UpdateCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaUpdateExecuted, internal)),
-		InsertCount: telemetry.NewCounterWithAggMetric(
+		InsertCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaInsertExecuted, internal)),
-		DeleteCount: telemetry.NewCounterWithAggMetric(
+		DeleteCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDeleteExecuted, internal)),
-		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
+		CRUDQueryCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaCRUDExecuted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDdlExecuted, internal)),
@@ -4746,8 +4569,6 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaCopyExecuted, internal)),
 		CopyNonAtomicCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaCopyNonAtomicExecuted, internal)),
-		CallStoredProcCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaCallStoredProcExecuted, internal)),
 		MiscCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaMiscExecuted, internal)),
 		QueryCount: telemetry.NewCounterWithMetric(
@@ -4757,39 +4578,31 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 
 func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statement) {
 	sc.QueryCount.Inc()
-	dbName := ex.sessionData().Database
-	appName := ex.sessionData().ApplicationName
 	switch t := stmt.(type) {
 	case *tree.BeginTransaction:
-		sc.TxnBeginCount.Inc(dbName, appName)
+		sc.TxnBeginCount.Inc()
 	case *tree.Select:
-		sc.SelectCount.Inc(dbName, appName)
-		sc.CRUDQueryCount.Inc(dbName, appName)
+		sc.SelectCount.Inc()
+		sc.CRUDQueryCount.Inc()
 	case *tree.Update:
-		sc.UpdateCount.Inc(dbName, appName)
-		sc.CRUDQueryCount.Inc(dbName, appName)
+		sc.UpdateCount.Inc()
+		sc.CRUDQueryCount.Inc()
 	case *tree.Insert:
-		sc.InsertCount.Inc(dbName, appName)
-		sc.CRUDQueryCount.Inc(dbName, appName)
+		sc.InsertCount.Inc()
+		sc.CRUDQueryCount.Inc()
 	case *tree.Delete:
-		sc.DeleteCount.Inc(dbName, appName)
-		sc.CRUDQueryCount.Inc(dbName, appName)
+		sc.DeleteCount.Inc()
+		sc.CRUDQueryCount.Inc()
 	case *tree.CommitTransaction:
-		sc.TxnCommitCount.Inc(dbName, appName)
+		sc.TxnCommitCount.Inc()
 	case *tree.RollbackTransaction:
 		// The CommitWait state means that the transaction has already committed
 		// after a specially handled `RELEASE SAVEPOINT cockroach_restart` command.
 		if ex.getTransactionState() == CommitWaitStateStr {
-			sc.TxnCommitCount.Inc(dbName, appName)
+			sc.TxnCommitCount.Inc()
 		} else {
-			sc.TxnRollbackCount.Inc(dbName, appName)
+			sc.TxnRollbackCount.Inc()
 		}
-	case *tree.PrepareTransaction:
-		sc.TxnPrepareCount.Inc()
-	case *tree.CommitPrepared:
-		sc.TxnCommitPreparedCount.Inc()
-	case *tree.RollbackPrepared:
-		sc.TxnRollbackPreparedCount.Inc()
 	case *tree.Savepoint:
 		if ex.isCommitOnReleaseSavepoint(t.Name) {
 			sc.RestartSavepointCount.Inc()
@@ -4813,8 +4626,6 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 		if !ex.sessionData().CopyFromAtomicEnabled {
 			sc.CopyNonAtomicCount.Inc()
 		}
-	case *tree.Call:
-		sc.CallStoredProcCount.Inc()
 	default:
 		if stmt.StatementReturnType() == tree.DDL || stmt.StatementType() == tree.TypeDDL {
 			sc.DdlCount.Inc()
@@ -4833,49 +4644,74 @@ type connExPrepStmtsAccessor struct {
 var _ preparedStatementsAccessor = connExPrepStmtsAccessor{}
 
 // List is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) List() map[string]*prep.Statement {
-	prepStmts := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts
-	ret := make(map[string]*prep.Statement, prepStmts.Len())
-	prepStmts.ForEach(func(name string, stmt *prep.Statement) {
-		ret[name] = stmt
-	})
+func (ps connExPrepStmtsAccessor) List() map[string]*PreparedStatement {
+	// Return a copy of the data, to prevent modification of the map.
+	stmts := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts
+	ret := make(map[string]*PreparedStatement, len(stmts))
+	for key, stmt := range stmts {
+		ret[key] = stmt
+	}
 	return ret
 }
 
 // Get is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) Get(name string) (*prep.Statement, bool) {
-	prepStmts := &ps.ex.extraTxnState.prepStmtsNamespace.prepStmts
-	return prepStmts.Get(name)
+func (ps connExPrepStmtsAccessor) Get(name string, touchLRU bool) (*PreparedStatement, bool) {
+	s, ok := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+	if ok && touchLRU {
+		ps.ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(name)
+	}
+	return s, ok
 }
 
 // Delete is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name string) bool {
-	prepStmts := &ps.ex.extraTxnState.prepStmtsNamespace.prepStmts
-	if !prepStmts.Has(name) {
+	_, ok := ps.Get(name, false /* touchLRU */)
+	if !ok {
 		return false
 	}
-	prepStmts.Remove(name)
+	ps.ex.deletePreparedStmt(ctx, name)
 	return true
 }
 
 // DeleteAll is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) DeleteAll(ctx context.Context) {
-	ps.ex.extraTxnState.prepStmtsNamespace.clear(
+	ps.ex.extraTxnState.prepStmtsNamespace.resetToEmpty(
 		ctx, &ps.ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 }
 
-var contextPlanGistKey = ctxutil.RegisterFastValueKey()
+// contextStatementKey is an empty type for the handle associated with the
+// statement value (see context.Value).
+type contextStatementKey struct{}
+
+// withStatement adds a SQL statement to the provided context. The statement
+// will then be included in crash reports which use that context.
+func withStatement(ctx context.Context, stmt tree.Statement) context.Context {
+	return context.WithValue(ctx, contextStatementKey{}, stmt)
+}
+
+// statementFromCtx returns the statement value from a context, or nil if unset.
+func statementFromCtx(ctx context.Context) tree.Statement {
+	stmt := ctx.Value(contextStatementKey{})
+	if stmt == nil {
+		return nil
+	}
+	return stmt.(tree.Statement)
+}
+
+// contextGistKey is an empty type for the handle associated with the
+// gist value (see context.Value).
+type contextPlanGistKey struct{}
 
 func withPlanGist(ctx context.Context, gist string) context.Context {
 	if gist == "" {
 		return ctx
 	}
-	return ctxutil.WithFastValue(ctx, contextPlanGistKey, gist)
+	return context.WithValue(ctx, contextPlanGistKey{}, gist)
 }
 
 func planGistFromCtx(ctx context.Context) string {
-	val := ctxutil.FastValue(ctx, contextPlanGistKey)
+	val := ctx.Value(contextPlanGistKey{})
 	if val != nil {
 		return val.(string)
 	}
@@ -4883,7 +4719,15 @@ func planGistFromCtx(ctx context.Context) string {
 }
 
 func init() {
-	// Register a function to include the plan gist in crash reports.
+	// Register a function to include the anonymized statement in crash reports.
+	logcrash.RegisterTagFn("statement", func(ctx context.Context) string {
+		stmt := statementFromCtx(ctx)
+		if stmt == nil {
+			return ""
+		}
+		// Anonymize the statement for reporting.
+		return anonymizeStmtAndConstants(stmt, nil /* VirtualTabler */, nil /* ClientNoticeSender */)
+	})
 	logcrash.RegisterTagFn("gist", func(ctx context.Context) string {
 		return planGistFromCtx(ctx)
 	})

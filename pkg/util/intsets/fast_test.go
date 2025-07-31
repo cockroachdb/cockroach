@@ -7,13 +7,10 @@ package intsets
 
 import (
 	"bytes"
-	b64 "encoding/base64"
 	"fmt"
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/base64"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -115,22 +112,6 @@ func TestFast(t *testing.T) {
 							t.Fatalf("error during Decode: %v", err)
 						}
 						assertSame(s, s2)
-						// Verify that EncodeBase64 decodes to the result of
-						// Encoded.
-						var enc base64.Encoder
-						var hash util.FNV64
-						enc.Init(b64.StdEncoding)
-						hash.Init()
-						if err := s.EncodeBase64(&enc, &hash); err != nil {
-							t.Fatalf("error during EncodeBase64: %v", err)
-						}
-						dec, err := b64.StdEncoding.DecodeString(enc.String())
-						if err != nil {
-							t.Fatalf("error during base64 Decode: %v", err)
-						}
-						if encoded != string(dec) {
-							t.Fatalf("expected decoded base64, %q, to match encoding %q", string(dec), encoded)
-						}
 						// Verify that decoding into a non-empty set still works.
 						var s3 Fast
 						s3.Add(minVal + rng.Intn(maxVal-minVal))

@@ -14,15 +14,13 @@ import { QualifiedIdentifier } from "../safesql";
 
 import ResetIndexUsageStatsResponse = cockroach.server.serverpb.ResetIndexUsageStatsResponse;
 
+type IndexRecType = cockroach.sql.IndexRecommendation.RecommendationType;
+
 type GetTableIndexesRequest = {
   dbName: string;
   schemaName: string;
   tableName: string;
 };
-
-type IndexRecType = cockroach.sql.IndexRecommendation.RecommendationType;
-export const IndexRecTypeEnum =
-  cockroach.sql.IndexRecommendation.RecommendationType;
 
 export type IndexRecommendation = {
   id: number;

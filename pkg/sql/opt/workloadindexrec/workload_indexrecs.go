@@ -11,10 +11,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -22,7 +20,7 @@ import (
 // timestamp ts within the space budget represented by budgetBytes.
 func FindWorkloadRecs(
 	ctx context.Context, evalCtx *eval.Context, ts *tree.DTimestampTZ,
-) ([]WorkloadIndexRec, error) {
+) ([]string, error) {
 	cis, dis, err := collectIndexRecs(ctx, evalCtx, ts)
 	if err != nil {
 		return nil, err
@@ -34,14 +32,19 @@ func FindWorkloadRecs(
 		return nil, err
 	}
 
+	var res = make([]string, len(newCis))
+
+	for i, ci := range newCis {
+		res[i] = ci.String() + ";"
+	}
+
 	// Since we collect all the indexes represented by the leaf nodes, all the
 	// indexes with "DROP INDEX" has been covered, so we can directly drop all of
 	// them without duplicates.
-	var disMap = make(map[tree.TableIndexName][]uint64)
-	for _, indx := range dis {
-		di := indx.index
+	var disMap = make(map[tree.TableIndexName]bool)
+	for _, di := range dis {
 		for _, index := range di.IndexList {
-			disMap[*index] = append(disMap[*index], indx.fingerprintId)
+			disMap[*index] = true
 		}
 	}
 
@@ -49,21 +52,18 @@ func FindWorkloadRecs(
 		dropCmd := tree.DropIndex{
 			IndexList: []*tree.TableIndexName{&index},
 		}
-		newCis = append(newCis, WorkloadIndexRec{
-			Index:          dropCmd.String() + ";",
-			FingerprintIds: disMap[index],
-		})
+		res = append(res, dropCmd.String()+";")
 	}
 
-	return newCis, nil
+	return res, nil
 }
 
 // collectIndexRecs collects all the index recommendations stored in the
 // system.statement_statistics with the time later than ts.
 func collectIndexRecs(
 	ctx context.Context, evalCtx *eval.Context, ts *tree.DTimestampTZ,
-) ([]createIndex, []dropIndex, error) {
-	query := `SELECT index_recommendations, fingerprint_id FROM system.statement_statistics
+) ([]tree.CreateIndex, []tree.DropIndex, error) {
+	query := `SELECT index_recommendations FROM system.statement_statistics
 						 WHERE (statistics -> 'statistics' ->> 'lastExecAt')::TIMESTAMPTZ > $1
 						 AND array_length(index_recommendations, 1) > 0;`
 	indexRecs, err := evalCtx.Planner.QueryIteratorEx(ctx, "get-candidates-for-workload-indexrecs",
@@ -73,8 +73,8 @@ func collectIndexRecs(
 	}
 
 	var p parser.Parser
-	var cis []createIndex
-	var dis []dropIndex
+	var cis []tree.CreateIndex
+	var dis []tree.DropIndex
 	var ok bool
 
 	// The index recommendation starts with "creation", "replacement" or
@@ -93,10 +93,6 @@ func collectIndexRecs(
 		}
 
 		indexes := tree.MustBeDArray(indexRecs.Cur()[0])
-		fingerprintId, e := sqlstatsutil.DatumToUint64(indexRecs.Cur()[1])
-		if e != nil {
-			return cis, dis, err
-		}
 		for _, index := range indexes.Array {
 			indexStr, ok := index.(*tree.DString)
 			if !ok {
@@ -128,12 +124,12 @@ func collectIndexRecs(
 			for _, stmt := range stmts {
 				switch stmt := stmt.AST.(type) {
 				case *tree.CreateIndex:
-					// Ignore all the inverted, vector, partial, sharded, etc. indexes right now.
-					if stmt.Type == idxtype.FORWARD && stmt.Predicate == nil && stmt.Sharded == nil {
-						cis = append(cis, createIndex{fingerprintId: fingerprintId, index: *stmt})
+					// Ignore all the inverted, partial and sharded indexes right now.
+					if !stmt.Inverted && stmt.Predicate == nil && stmt.Sharded == nil {
+						cis = append(cis, *stmt)
 					}
 				case *tree.DropIndex:
-					dis = append(dis, dropIndex{fingerprintId: fingerprintId, index: *stmt})
+					dis = append(dis, *stmt)
 				}
 			}
 		}
@@ -142,37 +138,15 @@ func collectIndexRecs(
 	return cis, dis, nil
 }
 
-// WorkloadIndexRec contains an index recommendation and the fingerprint ids
-// that the index is recommended for.
-type WorkloadIndexRec struct {
-	Index          string
-	FingerprintIds []uint64
-}
-
-// createIndex contains a recommended tree.CreateIndex and the fingerprint id
-// that the index is recommended for.
-type createIndex struct {
-	fingerprintId uint64
-	index         tree.CreateIndex
-}
-
-// dropIndex contains a recommended tree.DropIndex and the fingerprint id
-// that the index is recommended for.
-type dropIndex struct {
-	fingerprintId uint64
-	index         tree.DropIndex
-}
-
 // buildTrieForIndexRecs builds the relation among all the indexRecs by a trie tree.
-func buildTrieForIndexRecs(cis []createIndex) map[tree.TableName]*indexTrie {
+func buildTrieForIndexRecs(cis []tree.CreateIndex) map[tree.TableName]*indexTrie {
 	trieMap := make(map[tree.TableName]*indexTrie)
-	for _, idx := range cis {
-		ci := idx.index
+	for _, ci := range cis {
 		if _, ok := trieMap[ci.Table]; !ok {
 			trieMap[ci.Table] = NewTrie()
 		}
 
-		trieMap[ci.Table].Insert(ci.Columns, ci.Storing, idx.fingerprintId)
+		trieMap[ci.Table].Insert(ci.Columns, ci.Storing)
 	}
 	return trieMap
 }
@@ -181,14 +155,14 @@ func buildTrieForIndexRecs(cis []createIndex) map[tree.TableName]*indexTrie {
 // whether it is covered by some leaf nodes. If yes, discard it; Otherwise,
 // assign it to the shallowest leaf node. Then extractIndexCovering collects all
 // the indexes represented by the leaf node.
-func extractIndexCovering(tm map[tree.TableName]*indexTrie) ([]WorkloadIndexRec, error) {
+func extractIndexCovering(tm map[tree.TableName]*indexTrie) ([]tree.CreateIndex, error) {
 	for _, t := range tm {
 		t.RemoveStorings()
 	}
 	for _, t := range tm {
 		t.AssignStoring()
 	}
-	var wcis []WorkloadIndexRec
+	var cis []tree.CreateIndex
 	for table, trie := range tm {
 		indexedColsArray, storingColsArray := collectAllLeavesForTable(trie)
 		// The length of indexedCols and storingCols must be equal
@@ -196,8 +170,8 @@ func extractIndexCovering(tm map[tree.TableName]*indexTrie) ([]WorkloadIndexRec,
 			return nil, errors.Newf("The length of indexedColsArray and storingColsArray after collecting leaves from table %s is not equal!", table)
 		}
 		for i, indexedCols := range indexedColsArray {
-			cisIndexedCols := make([]tree.IndexElem, len(indexedCols.indexedColumns))
-			for j, col := range indexedCols.indexedColumns {
+			cisIndexedCols := make([]tree.IndexElem, len(indexedCols))
+			for j, col := range indexedCols {
 				cisIndexedCols[j] = tree.IndexElem{
 					Column:    col.column,
 					Direction: col.direction,
@@ -207,16 +181,12 @@ func extractIndexCovering(tm map[tree.TableName]*indexTrie) ([]WorkloadIndexRec,
 					cisIndexedCols[j].Direction = tree.DefaultDirection
 				}
 			}
-			index := tree.CreateIndex{
+			cis = append(cis, tree.CreateIndex{
 				Table:   table,
 				Columns: cisIndexedCols,
 				Storing: storingColsArray[i],
-			}
-			wcis = append(wcis, WorkloadIndexRec{
-				Index:          index.String() + ";",
-				FingerprintIds: indexedCols.fingerprints,
 			})
 		}
 	}
-	return wcis, nil
+	return cis, nil
 }

@@ -2,10 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "nodedialer",
-    srcs = [
-        "nodedialer.go",
-        "nodedialer_drpc.go",
-    ],
+    srcs = ["nodedialer.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/rpc/nodedialer",
     visibility = ["//visibility:public"],
     deps = [
@@ -14,16 +11,11 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/rpc/rpcbase",
-        "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/util/circuit",
         "//pkg/util/log",
-        "//pkg/util/metamorphic",
         "//pkg/util/stop",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
-        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
     ],
 )
@@ -38,7 +30,6 @@ go_test(
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/rpc/rpcbase",
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/util/circuit",

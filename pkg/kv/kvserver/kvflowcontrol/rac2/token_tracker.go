@@ -33,9 +33,6 @@ type Tracker struct {
 	// tracked contains the per-priority tracked log entries ordered by log index.
 	// All the tracked entries are in the term's leader log.
 	tracked [raftpb.NumPriorities]ring.Buffer[tracked]
-	// deducted contains the per-priority token deduction totals.
-	// Invariant: deducted[pri] = sum(tracked[pri][i].tokens)
-	deducted [raftpb.NumPriorities]kvflowcontrol.Tokens
 
 	stream kvflowcontrol.Stream // used for logging only
 }
@@ -48,8 +45,9 @@ type tracked struct {
 
 func (t *Tracker) Init(term uint64, stream kvflowcontrol.Stream) {
 	*t = Tracker{
-		term:   term,
-		stream: stream,
+		term:    term,
+		tracked: [raftpb.NumPriorities]ring.Buffer[tracked]{},
+		stream:  stream,
 	}
 }
 
@@ -84,7 +82,6 @@ func (t *Tracker) Track(
 		}
 	}
 	t.tracked[pri].Push(tracked{id: id, tokens: tokens})
-	t.deducted[pri] += tokens
 
 	if log.V(1) {
 		log.Infof(ctx, "tracking %v flow control tokens for pri=%s stream=%s log-position=%d/%d",
@@ -119,7 +116,6 @@ func (t *Tracker) Untrack(
 				break
 			}
 			returnedSend[pri] += deduction.tokens
-			t.deducted[pri] -= deduction.tokens
 			if deduction.id.index >= evalTokensGEIndex {
 				returnedEval[pri] += deduction.tokens
 			}
@@ -135,8 +131,12 @@ func (t *Tracker) Untrack(
 // UntrackAll removes all tracked deductions, and returns the total amount of
 // previously tracked tokens for each priority.
 func (t *Tracker) UntrackAll() (returned [raftpb.NumPriorities]kvflowcontrol.Tokens) {
-	returned = t.deducted
-	t.deducted = [raftpb.NumPriorities]kvflowcontrol.Tokens{}
+	for pri := range t.tracked {
+		n := t.tracked[pri].Length()
+		for i := 0; i < n; i++ {
+			returned[pri] += t.tracked[pri].At(i).tokens
+		}
+	}
 	t.tracked = [raftpb.NumPriorities]ring.Buffer[tracked]{}
 	return returned
 }
@@ -171,6 +171,7 @@ func (t *Tracker) Inspect() ([]kvflowinspectpb.TrackedDeduction, kvflowcontrol.T
 		n := t.tracked[pri].Length()
 		for i := 0; i < n; i++ {
 			deduction := t.tracked[pri].At(i)
+			totalTokens += deduction.tokens
 			res = append(res, kvflowinspectpb.TrackedDeduction{
 				Tokens: int64(deduction.tokens),
 				RaftLogPosition: kvflowcontrolpb.RaftLogPosition{
@@ -180,8 +181,6 @@ func (t *Tracker) Inspect() ([]kvflowinspectpb.TrackedDeduction, kvflowcontrol.T
 				Priority: int32(RaftToAdmissionPriority(raftpb.Priority(pri))),
 			})
 		}
-		// TODO(pav-kv): consider returning per-priority deductions instead of total.
-		totalTokens += t.deducted[pri]
 	}
 	return res, totalTokens
 }

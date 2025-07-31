@@ -82,9 +82,6 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 			return nil, pgerror.Newf(pgcode.AmbiguousAlias,
 				"more than one function named '%s'", funcDef.Name)
 		}
-		if funcDef.UnsupportedWithIssue != 0 {
-			return nil, funcDef.MakeUnsupportedError()
-		}
 		overload := funcDef.Overloads[0]
 		return tree.NewDOidWithTypeAndName(overload.Oid, t, funcDef.Name), nil
 	case oid.T_regprocedure:
@@ -113,16 +110,16 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 
 		if len(fd.Overloads) == 1 {
 			// This is a hack to be compatible with some ORMs which depends on some
-			// builtin function not implemented in CRDB. We just use `AnyElement` as the arg
+			// builtin function not implemented in CRDB. We just use `Any` as the arg
 			// type while some ORMs sends more meaningful function signatures whose
-			// arg type list mismatch with `AnyElement` type. For this case we just
+			// arg type list mismatch with `Any` type. For this case we just
 			// short-circuit it to return the oid. For example, `array_in` is defined
-			// to take in a `AnyElement` type, but some ORM sends
+			// to take in a `Any` type, but some ORM sends
 			// `'array_in(cstring,oid,integer)'::REGPROCEDURE` for introspection.
 			ol := fd.Overloads[0]
 			if !catid.IsOIDUserDefined(ol.Oid) &&
 				ol.Types.Length() == 1 &&
-				ol.Types.GetAt(0).Identical(types.AnyElement) {
+				ol.Types.GetAt(0).Identical(types.Any) {
 				return tree.NewDOidWithTypeAndName(ol.Oid, t, fd.Name), nil
 			}
 		}

@@ -5,6 +5,8 @@
 
 package clusterstats
 
+//go:generate mockgen -package=clusterstats -destination mocks_generated_test.go github.com/cockroachdb/cockroach/pkg/roachprod/prometheus Client
+
 import (
 	"context"
 	"time"

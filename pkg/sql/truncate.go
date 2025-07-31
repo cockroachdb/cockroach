@@ -29,7 +29,6 @@ import (
 )
 
 type truncateNode struct {
-	zeroInputPlanNode
 	n *tree.Truncate
 }
 

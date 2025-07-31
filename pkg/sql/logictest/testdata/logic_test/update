@@ -479,11 +479,10 @@ UPDATE derived SET y = 'abcd'
 subtest regression_29494
 
 statement ok
-CREATE TABLE t29494(x INT PRIMARY KEY) WITH (schema_locked = false); INSERT INTO t29494 VALUES (12)
+CREATE TABLE t29494(x INT PRIMARY KEY); INSERT INTO t29494 VALUES (12)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 # Check that the new column is not visible
@@ -493,7 +492,7 @@ SELECT create_statement FROM [SHOW CREATE t29494]
 CREATE TABLE public.t29494 (
   x INT8 NOT NULL,
   CONSTRAINT t29494_pkey PRIMARY KEY (x ASC)
-);
+)
 
 # Check that the new column is not usable in RETURNING
 statement error column "y" does not exist
@@ -504,7 +503,6 @@ UPDATE t29494 SET x = 123 RETURNING y
 statement ok
 ROLLBACK;
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 # Returning * doesn't return y
@@ -521,7 +519,6 @@ UPDATE t29494 SET y = 123
 statement ok
 ROLLBACK;
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error column "y" is being backfilled
@@ -532,7 +529,7 @@ COMMIT
 
 # Use delete-only mutation columns with default and computed expressions.
 statement ok
-CREATE TABLE mutation (m INT PRIMARY KEY, n INT) WITH (schema_locked = false)
+CREATE TABLE mutation (m INT PRIMARY KEY, n INT)
 
 statement ok
 INSERT INTO mutation VALUES (1, 1)

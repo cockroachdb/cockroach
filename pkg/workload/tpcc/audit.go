@@ -23,19 +23,6 @@ type auditor struct {
 	syncutil.Mutex
 
 	warehouses int
-	// These are needed while checking for remote payments for order-line and
-	// payments table.
-	// partitionAffinity - partitionIds for which to do these checks
-	// partitioner - helps map which warehouseId belongs to those partitions
-	partitionAffinity []int
-	partitioner       *partitioner
-	// CountOfTotalPartitions / CountOfAffinityPartitions
-	// Used in audit checks, if load is generated only for
-	// some partition, the audit checks should also be reduced
-	// by that factor.
-	// Used specially in case there are multiple workload nodes
-	// generating load for different partitions.
-	partitionFactor int
 
 	// transaction counts
 	newOrderTransactions    atomic.Uint64
@@ -62,19 +49,9 @@ type auditor struct {
 	skippedDelivieries atomic.Uint64
 }
 
-func newAuditor(warehouses int, partitioner *partitioner, partitionAffinity []int) *auditor {
+func newAuditor(warehouses int) *auditor {
 	return &auditor{
-		warehouses:        warehouses,
-		partitioner:       partitioner,
-		partitionAffinity: partitionAffinity,
-		partitionFactor: func() int {
-			countAffinity := len(partitionAffinity)
-			if countAffinity == 0 || partitioner.parts == 0 {
-				return 1
-			} else {
-				return partitioner.parts / countAffinity
-			}
-		}(),
+		warehouses:                   warehouses,
 		orderLinesFreq:               make(map[int]uint64),
 		orderLineRemoteWarehouseFreq: make(map[int]uint64),
 		paymentRemoteWarehouseFreq:   make(map[int]uint64),
@@ -235,31 +212,15 @@ func check92253(a *auditor) auditResult {
 	// least once. We need the number of remote order-lines to be at least 15
 	// times the number of warehouses (experimentally determined) to have this
 	// expectation.
-	//
-	var warehouses []int
-	if len(a.partitionAffinity) == 0 {
-		warehouses = make([]int, a.warehouses)
-		for i := 0; i < a.warehouses; i++ {
-			warehouses[i] = i
-		}
-	} else {
-		for _, partition := range a.partitionAffinity {
-			warehouses = append(warehouses, a.partitioner.partElems[partition]...)
+	if remoteOrderLines < 15*uint64(a.warehouses) {
+		return newSkipResult("insufficient data for remote warehouse distribution check")
+	}
+	for i := 0; i < a.warehouses; i++ {
+		if _, ok := a.orderLineRemoteWarehouseFreq[i]; !ok {
+			return newFailResult("no remote order-lines for warehouses %d", i)
 		}
 	}
 
-	checkRemoteOrderLines := func(warehouses []int, orderLineRemoteWarehouseFreq map[int]uint64) error {
-		for _, warehouse := range warehouses {
-			if _, ok := orderLineRemoteWarehouseFreq[warehouse]; !ok {
-				return fmt.Errorf("no remote order-lines for warehouse %d", warehouse)
-			}
-		}
-		return nil
-	}
-
-	if err := checkRemoteOrderLines(warehouses, a.orderLineRemoteWarehouseFreq); err != nil {
-		return newFailResult("%s", err.Error())
-	}
 	return passResult
 }
 
@@ -289,32 +250,13 @@ func check92254(a *auditor) auditResult {
 			"remote payment percent %.1f is not between allowed bounds [14, 16]", remotePct)
 	}
 
-	if remotePayments < 15*uint64(a.warehouses/a.partitionFactor) {
+	if remotePayments < 15*uint64(a.warehouses) {
 		return newSkipResult("insufficient data for remote warehouse distribution check")
 	}
-
-	var warehouses []int
-	if len(a.partitionAffinity) == 0 {
-		warehouses = make([]int, a.warehouses)
-		for i := 0; i < a.warehouses; i++ {
-			warehouses[i] = i
+	for i := 0; i < a.warehouses; i++ {
+		if _, ok := a.paymentRemoteWarehouseFreq[i]; !ok {
+			return newFailResult("no remote payments for warehouses %d", i)
 		}
-	} else {
-		for _, partition := range a.partitionAffinity {
-			warehouses = append(warehouses, a.partitioner.partElems[partition]...)
-		}
-	}
-	checkRemotePayments := func(warehouses []int, paymentRemoteWarehouseFreq map[int]uint64) error {
-		for _, warehouse := range warehouses {
-			if _, ok := paymentRemoteWarehouseFreq[warehouse]; !ok {
-				return fmt.Errorf("no remote payments for warehouses %d", warehouse)
-			}
-		}
-		return nil
-	}
-
-	if err := checkRemotePayments(warehouses, a.paymentRemoteWarehouseFreq); err != nil {
-		return newFailResult("%s", err.Error())
 	}
 
 	return passResult

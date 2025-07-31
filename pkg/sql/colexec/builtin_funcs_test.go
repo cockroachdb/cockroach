@@ -220,7 +220,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	p := &colexectestutils.MockTypeContext{Typs: typs}
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	semaCtx.IVarContainer = p
-	typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.AnyElement)
+	typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 	if err != nil {
 		b.Fatal(err)
 	}

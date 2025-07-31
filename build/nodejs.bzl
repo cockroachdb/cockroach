@@ -5,39 +5,33 @@ load("@rules_nodejs//nodejs/private:nodejs_repo_host_os_alias.bzl", "nodejs_repo
 load("@rules_nodejs//nodejs/private:toolchains_repo.bzl", "toolchains_repo")
 
 _NODE_VERSION = "16.14.2"
-_NODE_VERSIONS = {
+_VERSIONS = {
     "darwin_amd64": ("node-v16.14.2-darwin-x64.tar.gz", "node-v16.14.2-darwin-x64", "d3076ca7fcc7269c8ff9b03fe7d1c277d913a7e84a46a14eff4af7791ff9d055"),
     "darwin_arm64": ("node-v16.14.2-darwin-arm64.tar.gz", "node-v16.14.2-darwin-arm64", "a66d9217d2003bd416d3dd06dfd2c7a044c4c9ff2e43a27865790bd0d59c682d"),
     "linux_amd64": ("node-v16.14.2-linux-x64.tar.xz", "node-v16.14.2-linux-x64", "e40c6f81bfd078976d85296b5e657be19e06862497741ad82902d0704b34bb1b"),
     "linux_arm64": ("node-v16.14.2-linux-arm64.tar.xz", "node-v16.14.2-linux-arm64", "f7c5a573c06a520d6c2318f6ae204141b8420386553a692fc359f8ae3d88df96"),
-    "linux_s390x": ("node-v16.14.2-linux-s390x.tar.xz", "node-v16.14.2-linux-s390x", "3197925919ca357e17a31132dc6ef4e5afae819fa09905cfe9f7ff7924a00bf5"),
     "windows_amd64": ("node-v16.14.2-win-x64.zip", "node-v16.14.2-win-x64", "4731da4fbb2015d414e871fa9118cabb643bdb6dbdc8a69a3ed563266ac93229"),
 }
 
 # Versions of copy_directory and copy_to_directory from bazel-lib (github.com/aspect-build/bazel-lib)
-# These are built by `build/scripts/build-bazel-lib-helpers.sh`.
-# Update these when updating `aspect_bazel_lib` (see comment in `WORKSPACE`)
-_URL_PREFIX = "https://storage.googleapis.com/public-bazel-artifacts/js/aspect-bazel-lib-utils-20250224-115846"
-_COPY_DIRECTORY_URL_PREFIX = _URL_PREFIX + "/copy_directory-"
+_COPY_DIRECTORY_URL_PREFIX = "https://storage.googleapis.com/public-bazel-artifacts/js/aspect-bazel-lib-utils-2024-04-29/copy_directory-"
 
 _COPY_DIRECTORY_VERSIONS = {
-    "darwin_amd64": "2f4befad49d25f867221f9beb7d03b174c03af5395fc860c24447c85fbdd2d7d",
-    "darwin_arm64": "e8ca2ab1655cc71fab3106d433dd4274389bdf9f143f586ab83a6f8ab7aeabad",
-    "linux_amd64": "fae863215e3acc6e5e50ac2979e6d9d29c95b57fa1eb719de801926db57e5941",
-    "linux_arm64": "7dff652aa2b1e4d5ab163cf2be841038da1cc3530e9875d5fb2cef0ef4e9efb8",
-    "linux_s390x": "8238e319e64371f188914992fd0745d153452bd79155185a069b939d52f6407f",
-    "windows_amd64": "a12cd040fa48e7989a47e6a1388b8a84ed1b6b825370e03973f48e6cf273b7f8",
+    "darwin_amd64": "107e90a5ffc8cc86869dc8a037e70c736c426f40b75ee57c23871406d699ec61",
+    "darwin_arm64": "0c7daf978934312ca9fa59ef7e288ebb489f73eb594a025420e16d85238c32f8",
+    "linux_amd64": "406148a22bdcd33f766daae4c3f24be0b6e0815f3d9e609fb119032bb7f3e206",
+    "linux_arm64": "9525248829a141a4b13cd0da5bc372f9c8a95b57dcbcda205f9131df3375efce",
+    "windows_amd64": "8a8014c5c48984c446eed8216510c7fd68c04d41148d5c8d3750acd81028cc9b",
 }
 
-_COPY_TO_DIRECTORY_URL_PREFIX = _URL_PREFIX + "/copy_to_directory-"
+_COPY_TO_DIRECTORY_URL_PREFIX = "https://storage.googleapis.com/public-bazel-artifacts/js/aspect-bazel-lib-utils-2024-04-29/copy_to_directory-"
 
 _COPY_TO_DIRECTORY_VERSIONS = {
-    "darwin_amd64": "6132ce07141ed17d658acb72a777bf619b17a18b6f3950b3689ac057f81ebdb0",
-    "darwin_arm64": "fe8ba630878178adcebe52097dde407b1554c6118c3a17b67c0f47f461c7b3d5",
-    "linux_amd64": "6ce36555a198a42fa1642b19fcd685d9584fb71e0da9b9fec15dc14f43527171",
-    "linux_arm64": "17015a948a3d106222c157925a4b5edc832d336beb5fc7f8d34a7ee0c827809d",
-    "linux_s390x": "5bf65abc6c189febccee635d6865ab009e33825bc9de9be2d13b801bbe3d2da3",
-    "windows_amd64": "15f857eeb830a02b4eeb421ac0988a90f8255d95ee109596259aaf129fb4edbd",
+    "darwin_amd64": "1f415f43721b17d4579743b22e45479f335612d910b8b66af3629362f8437a5e",
+    "darwin_arm64": "3372dc06b0aa23966f799a9ea377fbf13449db579b593400fed0ce7c0ba5daad",
+    "linux_amd64": "ccd984ed134c4d126aad4db0d380b7b7003734aabb1ef1545a29b61c1c09e0a8",
+    "linux_arm64": "5611bf54c941c07c3ebccbfc805251d45758b945dbf3937f0844e611e75f1fb6",
+    "windows_amd64": "f8270fb9f4f49c3e1729b6542072b847e28a885cc2d448ebffc4a39e8dda1d1a",
 }
 
 # NOTE: This code is adapted from upstream at
@@ -102,11 +96,11 @@ copy_to_directory_platform_repo = repository_rule(
 # We do this to have more control over how this stuff is created, to use our
 # node mirrors, etc.
 def declare_nodejs_repos():
-    for name in _NODE_VERSIONS:
+    for name in _VERSIONS:
         node_repositories(
             name = "nodejs_" + name,
             node_repositories = {
-                _NODE_VERSION + "-" + name: _NODE_VERSIONS[name]
+                _NODE_VERSION + "-" + name: _VERSIONS[name]
             },
             node_urls = [
                 "https://storage.googleapis.com/public-bazel-artifacts/js/node/v{version}/{filename}",

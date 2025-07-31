@@ -36,12 +36,6 @@ func configureForSharedStorage(opts *pebble.Options, remoteStorage remote.Storag
 // over a range's user key span; IterateReplicaKeySpans must be called to
 // iterate over the other key spans.
 //
-// If this method returns pebble.ErrInvalidSkipSharedIteration, only the
-// shared external visitors may have been invoked. In particular, no
-// local data has been visited yet.
-// The above contract appears true for the current implementation of this
-// method, but is likely untested.
-//
 // Must use a reader with consistent iterators.
 func iterateReplicaKeySpansShared(
 	ctx context.Context,
@@ -65,10 +59,8 @@ func iterateReplicaKeySpansShared(
 		return pebble.ErrInvalidSkipSharedIteration
 	}
 	spans := rditer.Select(desc.RangeID, rditer.SelectOpts{
-		Ranged: rditer.SelectRangedOptions{
-			RSpan:    desc.RSpan(),
-			UserKeys: true,
-		},
+		ReplicatedSpansFilter: rditer.ReplicatedSpansUserOnly,
+		ReplicatedBySpan:      desc.RSpan(),
 	})
 	span := spans[0]
 	return reader.ScanInternal(ctx, span.Key, span.EndKey, visitPoint, visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)

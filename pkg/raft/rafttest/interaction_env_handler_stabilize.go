@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/datadriven"
 )
@@ -31,7 +32,6 @@ func (env *InteractionEnv) handleStabilize(t *testing.T, d datadriven.TestData) 
 		for i := range arg.Vals {
 			switch arg.Key {
 			case "log-level":
-				//nolint:deferloop
 				defer func(old int) {
 					env.Output.Lvl = old
 				}(env.Output.Lvl)
@@ -75,7 +75,10 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 			}
 		}
 		for _, rn := range nodes {
-			if id := rn.Status().ID; env.hasMessages(id) {
+			id := rn.Status().ID
+			// NB: we grab the messages just to see whether to print the header.
+			// DeliverMsgs will do it again.
+			if msgs, _ := splitMsgs(env.Messages, id, -1 /* typ */, false /* drop */); len(msgs) > 0 {
 				fmt.Fprintf(env.Output, "> %d receiving messages\n", id)
 				env.withIndent(func() { env.DeliverMsgs(-1 /* typ */, Recipient{ID: id}) })
 				done = false
@@ -97,9 +100,9 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 		}
 		for _, rn := range nodes {
 			idx := int(rn.Status().ID - 1)
-			if !rn.ApplyWork.Empty() {
+			if len(rn.ApplyWork) > 0 {
 				fmt.Fprintf(env.Output, "> %d processing apply thread\n", idx+1)
-				for !rn.ApplyWork.Empty() {
+				for len(rn.ApplyWork) > 0 {
 					env.withIndent(func() { env.ProcessApplyThread(idx) })
 				}
 				done = false
@@ -111,26 +114,23 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 	}
 }
 
-func (env *InteractionEnv) hasMessages(id raftpb.PeerID) bool {
-	if int(id) <= len(env.Nodes) && len(env.Nodes[id-1].AppendAcks) > 0 {
-		return true
-	}
-	msgs, _ := splitMsgs(env.Messages, id, -1 /* typ */)
-	return len(msgs) > 0
-}
-
 // splitMsgs extracts messages for the given recipient of the given type (-1 for
 // all types) from msgs, and returns them along with the remainder of msgs.
 func splitMsgs(
-	msgs []raftpb.Message, to raftpb.PeerID, typ raftpb.MessageType,
+	msgs []raftpb.Message, to raftpb.PeerID, typ raftpb.MessageType, drop bool,
 ) (toMsgs []raftpb.Message, rmdr []raftpb.Message) {
 	// NB: this method does not reorder messages.
 	for _, msg := range msgs {
-		if msg.To == to && (typ < 0 || msg.Type == typ) {
+		if msg.To == to && !(drop && isLocalMsg(msg)) && (typ < 0 || msg.Type == typ) {
 			toMsgs = append(toMsgs, msg)
 		} else {
 			rmdr = append(rmdr, msg)
 		}
 	}
 	return toMsgs, rmdr
+}
+
+// Don't drop local messages, which require reliable delivery.
+func isLocalMsg(msg raftpb.Message) bool {
+	return msg.From == msg.To || raft.IsLocalMsgTarget(msg.From) || raft.IsLocalMsgTarget(msg.To)
 }

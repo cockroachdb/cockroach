@@ -78,26 +78,20 @@ outer:
 	bucket := fmt.Sprintf("gs://%s/operation-backup-restore/%d/?AUTH=implicit", testutils.BackupTestingBucket(), timeutil.Now().UnixNano())
 
 	backupTS := hlc.Timestamp{WallTime: timeutil.Now().Add(-10 * time.Second).UTC().UnixNano()}
+	_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP DATABASE %s INTO '%s' AS OF SYSTEM TIME '%s'", dbName, bucket, backupTS.AsOfSystemTime()))
+	if err != nil {
+		o.Fatal(err)
+	}
 
 	if !online {
-		_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP DATABASE %s INTO '%s' AS OF SYSTEM TIME '%s' WITH revision_history", dbName, bucket, backupTS.AsOfSystemTime()))
-		if err != nil {
-			o.Fatal(err)
-		}
 		for i := range 24 {
 			o.Status(fmt.Sprintf("backing up db %s (incremental layer %d)", dbName, i))
 			// Update backupTS to match the latest layer.
 			backupTS = hlc.Timestamp{WallTime: timeutil.Now().Add(-10 * time.Second).UTC().UnixNano()}
-			_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP DATABASE %s INTO LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH revision_history", dbName, bucket, backupTS.AsOfSystemTime()))
+			_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP DATABASE %s INTO LATEST IN '%s' AS OF SYSTEM TIME '%s'", dbName, bucket, backupTS.AsOfSystemTime()))
 			if err != nil {
 				o.Fatal(err)
 			}
-		}
-	} else {
-		// Revision history doesn't work with online restore.
-		_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP DATABASE %s INTO '%s' AS OF SYSTEM TIME '%s'", dbName, bucket, backupTS.AsOfSystemTime()))
-		if err != nil {
-			o.Fatal(err)
 		}
 	}
 

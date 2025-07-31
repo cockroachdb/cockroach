@@ -1493,7 +1493,7 @@ func (e *evaluator) EvalPowDecimalIntOp(
 	r := tree.MustBeDInt(right)
 	dd := &tree.DDecimal{}
 	dd.SetInt64(int64(r))
-	err := DecimalPow(tree.DecimalCtx, &dd.Decimal, l, &dd.Decimal)
+	_, err := tree.DecimalCtx.Pow(&dd.Decimal, l, &dd.Decimal)
 	return dd, err
 }
 
@@ -1503,7 +1503,7 @@ func (e *evaluator) EvalPowDecimalOp(
 	l := &left.(*tree.DDecimal).Decimal
 	r := &right.(*tree.DDecimal).Decimal
 	dd := &tree.DDecimal{}
-	err := DecimalPow(tree.DecimalCtx, &dd.Decimal, l, r)
+	_, err := tree.DecimalCtx.Pow(&dd.Decimal, l, r)
 	return dd, err
 }
 
@@ -1521,7 +1521,7 @@ func (e *evaluator) EvalPowIntDecimalOp(
 	r := &right.(*tree.DDecimal).Decimal
 	dd := &tree.DDecimal{}
 	dd.SetInt64(int64(l))
-	err := DecimalPow(tree.DecimalCtx, &dd.Decimal, &dd.Decimal, r)
+	_, err := tree.DecimalCtx.Pow(&dd.Decimal, &dd.Decimal, r)
 	return dd, err
 }
 

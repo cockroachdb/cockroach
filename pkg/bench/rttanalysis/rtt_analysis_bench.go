@@ -38,12 +38,10 @@ type RoundTripBenchTestCase struct {
 	// new tables so that the test is not bothered by the lease acquisition. The
 	// lease acquisition cannot be done in the same transaction as the one
 	// creating the table.
-	SetupEx  []string
-	Stmt     string
-	StmtArgs []interface{}
-	Reset    string
-	// ResetEx is like Reset, but allows the test to send multiple statements.
-	ResetEx   []string
+	SetupEx   []string
+	Stmt      string
+	StmtArgs  []interface{}
+	Reset     string
 	SkipIssue int
 	// NonAdminUser specifies that the test should be run as a user without admin
 	// privileges. The setup and reset portions of the test will still be run as
@@ -208,9 +206,6 @@ func executeRoundTripTest(
 
 		adminSQL.Exec(b, "DROP DATABASE bench;")
 		adminSQL.Exec(b, tc.Reset)
-		for _, s := range tc.ResetEx {
-			adminSQL.Exec(b, s)
-		}
 	}
 
 	if measureRoundtrips {

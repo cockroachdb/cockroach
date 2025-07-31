@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build !fast_int_set_small && !fast_int_set_large
+// +build !fast_int_set_small,!fast_int_set_large
 
 package intsets
 
@@ -13,8 +14,6 @@ import (
 	"io"
 	"math/bits"
 
-	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/base64"
 	"github.com/cockroachdb/errors"
 )
 
@@ -302,37 +301,12 @@ func (s Fast) SubsetOf(rhs Fast) bool {
 //
 // If the set has only elements in the range [0, 63], we encode a 0 followed by
 // a 64-bit bitmap. Otherwise, we encode a length followed by each element.
-func (s *Fast) Encode(buf *bytes.Buffer) error {
-	return s.encodeImpl(buf, nil, nil)
-}
-
-// EncodeBase64 is similar to Encode. It writes the encoded set to enc. It also
-// adds each pre-base64-encoded byte to hash.
-//
-// Closures or interfaces could be used to merge both methods into one, but they
-// are intentionally avoided to prevent extra allocations of temporary buffers
-// used during encoding.
 //
 // WARNING: this is used by plan gists, so if this encoding changes,
 // explain.gistVersion needs to be bumped.
-func (s *Fast) EncodeBase64(enc *base64.Encoder, hash *util.FNV64) error {
-	return s.encodeImpl(nil, enc, hash)
-}
-
-func (s *Fast) encodeImpl(buf *bytes.Buffer, enc *base64.Encoder, hash *util.FNV64) error {
+func (s *Fast) Encode(buf *bytes.Buffer) error {
 	if s.large != nil && s.large.Min() < 0 {
 		return errors.AssertionFailedf("Encode used with negative elements")
-	}
-
-	write := func(b []byte) {
-		if buf != nil {
-			buf.Write(b)
-		} else {
-			enc.Write(b)
-			for i := range b {
-				hash.Add(uint64(b[i]))
-			}
-		}
 	}
 
 	// This slice should stay on stack. We only need enough bytes to encode a 0
@@ -340,17 +314,16 @@ func (s *Fast) encodeImpl(buf *bytes.Buffer, enc *base64.Encoder, hash *util.FNV
 	//gcassert:noescape
 	tmp := make([]byte, binary.MaxVarintLen64+1)
 
-	var n int
 	if s.small.hi == 0 && s.fitsInSmall() {
-		n = binary.PutUvarint(tmp, 0)
+		n := binary.PutUvarint(tmp, 0)
 		n += binary.PutUvarint(tmp[n:], s.small.lo)
-		write(tmp[:n])
+		buf.Write(tmp[:n])
 	} else {
-		n = binary.PutUvarint(tmp, uint64(s.Len()))
-		write(tmp[:n])
+		n := binary.PutUvarint(tmp, uint64(s.Len()))
+		buf.Write(tmp[:n])
 		for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
 			n := binary.PutUvarint(tmp, uint64(i))
-			write(tmp[:n])
+			buf.Write(tmp[:n])
 		}
 	}
 	return nil

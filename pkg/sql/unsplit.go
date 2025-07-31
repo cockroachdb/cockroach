@@ -16,12 +16,12 @@ import (
 )
 
 type unsplitNode struct {
-	singleInputPlanNode
 	optColumnsSlot
 
 	tableDesc catalog.TableDescriptor
 	index     catalog.Index
 	run       unsplitRun
+	rows      planNode
 }
 
 // unsplitRun contains the run-time state of unsplitNode during local execution.
@@ -34,11 +34,11 @@ func (n *unsplitNode) startExec(runParams) error {
 }
 
 func (n *unsplitNode) Next(params runParams) (bool, error) {
-	if ok, err := n.input.Next(params); err != nil || !ok {
+	if ok, err := n.rows.Next(params); err != nil || !ok {
 		return ok, err
 	}
 
-	row := n.input.Values()
+	row := n.rows.Values()
 	rowKey, err := getRowKey(params.ExecCfg().Codec, n.tableDesc, n.index, row)
 	if err != nil {
 		return false, err
@@ -63,11 +63,10 @@ func (n *unsplitNode) Values() tree.Datums {
 }
 
 func (n *unsplitNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.rows.Close(ctx)
 }
 
 type unsplitAllNode struct {
-	zeroInputPlanNode
 	optColumnsSlot
 
 	tableDesc catalog.TableDescriptor

@@ -11,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -25,43 +26,67 @@ var (
 	// ErrFingerprintLimitReached is returned from the Container when we have
 	// more fingerprints than the limit specified in the cluster setting.
 	ErrFingerprintLimitReached = errors.New("sql stats fingerprint limit reached")
+
+	// ErrExecStatsFingerprintFlushed is returned from the Container when the
+	// stats object for the fingerprint has been flushed to system table before
+	// the appstatspb.ExecStats can be recorded.
+	ErrExecStatsFingerprintFlushed = errors.New("stmtStats flushed before execution stats can be recorded")
 )
 
 var timestampSize = int64(unsafe.Sizeof(time.Time{}))
 
+var _ sqlstats.Writer = &Container{}
+
+// RecordStatement implements sqlstats.Writer interface.
 // RecordStatement saves per-statement statistics.
+//
+// samplePlanDescription can be nil, as these are only sampled periodically
+// per unique fingerprint.
+// RecordStatement always returns a valid stmtFingerprintID corresponding to the given
+// stmt regardless of whether the statement is actually recorded or not.
 //
 // If the statement is not actually recorded due to either:
 // 1. the memory budget has been exceeded
 // 2. the unique statement fingerprint limit has been exceeded
-// an error is returned.
+// and error is being returned.
 // Note: This error is only related to the operation of recording the statement
 // statistics into in-memory structs. It is unrelated to the stmtErr in the
 // arguments.
-func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.RecordedStmtStats) error {
+func (s *Container) RecordStatement(
+	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
+) (appstatspb.StmtFingerprintID, error) {
+	createIfNonExistent := true
+	// If the statement is below the latency threshold, or stats aren't being
+	// recorded we don't need to create an entry in the stmts map for it. We do
+	// still need stmtFingerprintID for transaction level metrics tracking.
 	t := sqlstats.StatsCollectionLatencyThreshold.Get(&s.st.SV)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.StmtStatsEnable.Get(&s.st.SV) || (t > 0 && t.Seconds() >= value.ServiceLatencySec) {
-		return nil
-	}
-
-	statementKey := stmtKey{
-		fingerprintID:            value.FingerprintID,
-		planHash:                 value.PlanHash,
-		transactionFingerprintID: value.TransactionFingerprintID,
+		createIfNonExistent = false
 	}
 
 	// Get the statistics object.
-	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, sampledPlanKey{
-		stmtNoConstants: value.Query,
-		implicitTxn:     value.ImplicitTxn,
-		database:        value.Database,
-	})
+	stats, statementKey, stmtFingerprintID, created, throttled := s.getStatsForStmt(
+		key.Query,
+		key.ImplicitTxn,
+		key.Database,
+		key.PlanHash,
+		key.TransactionFingerprintID,
+		createIfNonExistent,
+	)
 
 	// This means we have reached the limit of unique fingerprintstats. We don't
 	// record anything and abort the operation.
 	if throttled {
-		return ErrFingerprintLimitReached
+		return stmtFingerprintID, ErrFingerprintLimitReached
+	}
+
+	// This statement was below the latency threshold or sql stats aren't being
+	// recorded. Either way, we don't need to record anything in the stats object
+	// for this statement, though we do need to return the statement fingerprint ID for
+	// transaction level metrics collection.
+	if !createIfNonExistent {
+		return stmtFingerprintID, nil
 	}
 
 	// Collect the per-statement statisticstats.
@@ -70,15 +95,15 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 
 	stats.mu.data.Count++
 	if value.Failed {
-		// StatementError shouldn't be nil if Failed is true, but let's check to be cautious.
-		if value.StatementError != nil {
-			stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
-			stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
-		}
+		stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
+		stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
 		stats.mu.data.FailureCount++
 	}
-	if value.Generic {
-		stats.mu.data.GenericCount++
+	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
+	if value.Plan != nil {
+		stats.mu.data.SensitiveInfo.MostRecentPlanDescription = *value.Plan
+		stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = s.getTimeNow()
+		s.setLogicalPlanLastSampled(statementKey.sampledPlanKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
 	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
@@ -103,93 +128,114 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 	if value.ExecStats != nil {
 		stats.mu.data.Regions = util.CombineUnique(stats.mu.data.Regions, value.ExecStats.Regions)
 		stats.mu.data.UsedFollowerRead = stats.mu.data.UsedFollowerRead || value.ExecStats.UsedFollowerRead
-		stats.recordExecStatsLocked(*value.ExecStats)
 	}
 	stats.mu.data.PlanGists = util.CombineUnique(stats.mu.data.PlanGists, []string{value.PlanGist})
 	stats.mu.data.IndexRecommendations = value.IndexRecommendations
 	stats.mu.data.Indexes = util.CombineUnique(stats.mu.data.Indexes, value.Indexes)
 
+	// Percentile latencies are only being sampled if the latency was above the
+	// AnomalyDetectionLatencyThreshold.
+	latencies := s.anomalies.GetPercentileValues(stmtFingerprintID)
 	latencyInfo := appstatspb.LatencyInfo{
 		Min: value.ServiceLatencySec,
 		Max: value.ServiceLatencySec,
+		P50: latencies.P50,
+		P90: latencies.P90,
+		P99: latencies.P99,
 	}
-	stats.mu.data.LatencyInfo.MergeMaxMin(latencyInfo)
+	stats.mu.data.LatencyInfo.Add(latencyInfo)
 
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.
 	// TODO(asubiotto): Record the aforementioned fields here when always-on
 	//  tracing is a thing.
-	stats.mu.vectorized = value.Vec
-	stats.mu.distSQLUsed = value.DistSQL
-	stats.mu.fullScan = value.FullScan
-	stats.mu.querySummary = value.QuerySummary
+	stats.mu.vectorized = key.Vec
+	stats.mu.distSQLUsed = key.DistSQL
+	stats.mu.fullScan = key.FullScan
+	stats.mu.database = key.Database
+	stats.mu.querySummary = key.QuerySummary
 
 	if created {
 		// stats size + stmtKey size + hash of the statementKey
 		estimatedMemoryAllocBytes := stats.sizeUnsafeLocked() + statementKey.size() + 8
 
-		// We also account for the memory used for s.sampledStatementCache.
+		// We also account for the memory used for s.sampledPlanMetadataCache.
 		// timestamp size + key size + hash.
-		estimatedMemoryAllocBytes += timestampSize + 8
+		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
+		s.mu.Lock()
+		defer s.mu.Unlock()
 
 		// If the monitor is nil, we do not track memory usage.
-		if s.acc == nil {
-			return nil
+		if s.mu.acc.Monitor() == nil {
+			return stats.ID, nil
 		}
 
 		// We attempt to account for all the memory we used. If we have exceeded our
 		// memory budget, delete the entry that we just created and report the error.
-		if err := s.acc.Grow(ctx, estimatedMemoryAllocBytes); err != nil {
-			s.mu.Lock()
-			defer s.mu.Unlock()
+		if err := s.mu.acc.Grow(ctx, estimatedMemoryAllocBytes); err != nil {
 			delete(s.mu.stmts, statementKey)
-			return ErrMemoryPressure
+			return stats.ID, ErrMemoryPressure
 		}
 	}
 
+	return stats.ID, nil
+}
+
+// RecordStatementExecStats implements sqlstats.Writer interface.
+func (s *Container) RecordStatementExecStats(
+	key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats,
+) error {
+	stmtStats, _, _, _, _ :=
+		s.getStatsForStmt(
+			key.Query,
+			key.ImplicitTxn,
+			key.Database,
+			key.PlanHash,
+			key.TransactionFingerprintID,
+			false, /* createIfNotExists */
+		)
+	if stmtStats == nil {
+		return ErrExecStatsFingerprintFlushed
+	}
+	stmtStats.recordExecStats(stats)
 	return nil
 }
 
-// StatementSampled returns true if the statement with the given fingerprint
-// exists in the sampled statement cache.
-func (s *Container) StatementSampled(fingerprint string, implicitTxn bool, database string) bool {
-	key := sampledPlanKey{
-		stmtNoConstants: fingerprint,
-		implicitTxn:     implicitTxn,
-		database:        database,
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, ok := s.mu.sampledStatementCache[key]
-	return ok
-}
-
-// TrySetStatementSampled attempts to add the statement to the sampled
-// statement cache. If the statement is already in the cache, it returns false.
-func (s *Container) TrySetStatementSampled(
+// ShouldSample implements sqlstats.Writer interface.
+func (s *Container) ShouldSample(
 	fingerprint string, implicitTxn bool, database string,
-) bool {
-	key := sampledPlanKey{
+) (previouslySampled, savePlanForStats bool) {
+	lastSampled, previouslySampled := s.getLogicalPlanLastSampled(sampledPlanKey{
 		stmtNoConstants: fingerprint,
 		implicitTxn:     implicitTxn,
 		database:        database,
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.mu.sampledStatementCache[key]; ok {
-		return false
-	}
-	s.mu.sampledStatementCache[key] = struct{}{}
-	return true
+	})
+	savePlanForStats = s.shouldSaveLogicalPlanDescription(lastSampled)
+	return previouslySampled, savePlanForStats
 }
 
-// RecordTransaction saves per-transaction statistics.
-func (s *Container) RecordTransaction(ctx context.Context, value *sqlstats.RecordedTxnStats) error {
+// RecordTransaction implements sqlstats.Writer interface and saves
+// per-transaction statistics.
+func (s *Container) RecordTransaction(
+	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
+) error {
 	s.recordTransactionHighLevelStats(value.TransactionTimeSec, value.Committed, value.ImplicitTxn)
 
+	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
+	if !sqlstats.TxnStatsEnable.Get(&s.st.SV) {
+		return nil
+	}
+	// Do not collect transaction statistics if the stats collection latency
+	// threshold is set, since our transaction UI relies on having stats for every
+	// statement in the transaction.
+	t := sqlstats.StatsCollectionLatencyThreshold.Get(&s.st.SV)
+	if t > 0 {
+		return nil
+	}
+
 	// Get the statistics object.
-	stats, created, throttled := s.tryCreateStatsForTxnWithKey(value.FingerprintID, value.StatementFingerprintIDs)
+	stats, created, throttled := s.getStatsForTxnWithKey(key, value.StatementFingerprintIDs, true /* createIfNonexistent */)
 
 	if throttled {
 		return ErrFingerprintLimitReached
@@ -206,14 +252,15 @@ func (s *Container) RecordTransaction(ctx context.Context, value *sqlstats.Recor
 	// fingerprints for this app. We also abort the operation and return an error.
 	if created {
 		estimatedMemAllocBytes :=
-			stats.sizeUnsafeLocked() + value.FingerprintID.Size() + 8 /* hash of transaction key */
+			stats.sizeUnsafeLocked() + key.Size() + 8 /* hash of transaction key */
 		if err := func() error {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+
 			// If the monitor is nil, we do not track memory usage.
-			if s.acc != nil {
-				if err := s.acc.Grow(ctx, estimatedMemAllocBytes); err != nil {
-					s.mu.Lock()
-					defer s.mu.Unlock()
-					delete(s.mu.txns, value.FingerprintID)
+			if s.mu.acc.Monitor() != nil {
+				if err := s.mu.acc.Grow(ctx, estimatedMemAllocBytes); err != nil {
+					delete(s.mu.txns, key)
 					return ErrMemoryPressure
 				}
 			}
@@ -239,10 +286,10 @@ func (s *Container) RecordTransaction(ctx context.Context, value *sqlstats.Recor
 
 	if value.CollectedExecStats {
 		stats.mu.data.ExecStats.Count++
-		stats.mu.data.ExecStats.NetworkBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.DistSQLNetworkBytesSent))
+		stats.mu.data.ExecStats.NetworkBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.NetworkBytesSent))
 		stats.mu.data.ExecStats.MaxMemUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxMemUsage))
 		stats.mu.data.ExecStats.ContentionTime.Record(stats.mu.data.ExecStats.Count, value.ExecStats.ContentionTime.Seconds())
-		stats.mu.data.ExecStats.NetworkMessages.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.DistSQLNetworkMessages))
+		stats.mu.data.ExecStats.NetworkMessages.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.NetworkMessages))
 		stats.mu.data.ExecStats.MaxDiskUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxDiskUsage))
 		stats.mu.data.ExecStats.CPUSQLNanos.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.CPUTime.Nanoseconds()))
 

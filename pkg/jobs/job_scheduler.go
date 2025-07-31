@@ -106,7 +106,7 @@ func lookupNumRunningJobs(
 ) (int64, error) {
 	lookupStmt := fmt.Sprintf(
 		"SELECT count(*) FROM %s WHERE created_by_type = '%s' AND created_by_id = %d AND status IN %s",
-		env.SystemJobsTableName(), CreatedByScheduledJobs, scheduleID, NonTerminalStateTupleString)
+		env.SystemJobsTableName(), CreatedByScheduledJobs, scheduleID, NonTerminalStatusTupleString)
 	row, err := txn.QueryRowEx(
 		ctx, "lookup-num-running",
 		txn.KV(),
@@ -446,7 +446,6 @@ var schedulerPaceSetting = settings.RegisterDurationSetting(
 	"jobs.scheduler.pace",
 	"how often to scan system.scheduled_jobs table",
 	time.Minute,
-	settings.PositiveDuration,
 )
 
 var schedulerMaxJobsPerIterationSetting = settings.RegisterIntSetting(

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -46,6 +46,9 @@ const (
 	sortContentionTimeDesc = `(statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC`
 	sortPCTRuntimeDesc     = `((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
                          (statistics -> 'statistics' ->> 'cnt')::FLOAT) DESC`
+	sortLatencyInfoP50Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p50')::FLOAT DESC`
+	sortLatencyInfoP90Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p90')::FLOAT DESC`
+	sortLatencyInfoP99Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::FLOAT DESC`
 	sortLatencyInfoMinDesc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'min')::FLOAT DESC`
 	sortLatencyInfoMaxDesc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'max')::FLOAT DESC`
 	sortRowsProcessedDesc  = `((statistics -> 'statistics' -> 'rowsRead' ->> 'mean')::FLOAT + 
@@ -87,7 +90,7 @@ func (s *statusServer) CombinedStatementStats(
 	return getCombinedStatementStats(
 		ctx,
 		req,
-		s.sqlServer.pgServer.SQLServer.GetLocalSQLStatsProvider(),
+		s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider(),
 		s.internalExecutor,
 		s.st,
 		s.sqlServer.execCfg.SQLStatsTestingKnobs)
@@ -103,7 +106,7 @@ type statementStatsRunner struct {
 func getCombinedStatementStats(
 	ctx context.Context,
 	req *serverpb.CombinedStatementsStatsRequest,
-	statsProvider *sslocal.SQLStats,
+	statsProvider sqlstats.Provider,
 	ie *sql.InternalExecutor,
 	settings *cluster.Settings,
 	testingKnobs *sqlstats.TestingKnobs,
@@ -501,6 +504,7 @@ func isSortOptionOnActivityTable(sort serverpb.StatsSortOptions) bool {
 	case serverpb.StatsSortOptions_SERVICE_LAT,
 		serverpb.StatsSortOptions_CPU_TIME,
 		serverpb.StatsSortOptions_EXECUTION_COUNT,
+		serverpb.StatsSortOptions_P99_STMTS_ONLY,
 		serverpb.StatsSortOptions_CONTENTION_TIME,
 		serverpb.StatsSortOptions_PCT_RUNTIME:
 		return true
@@ -516,8 +520,14 @@ func getStmtColumnFromSortOption(sort serverpb.StatsSortOptions) string {
 		return sortCPUTimeDesc
 	case serverpb.StatsSortOptions_EXECUTION_COUNT:
 		return sortExecCountDesc
+	case serverpb.StatsSortOptions_P99_STMTS_ONLY:
+		return sortLatencyInfoP99Desc
 	case serverpb.StatsSortOptions_CONTENTION_TIME:
 		return sortContentionTimeDesc
+	case serverpb.StatsSortOptions_LATENCY_INFO_P50:
+		return sortLatencyInfoP50Desc
+	case serverpb.StatsSortOptions_LATENCY_INFO_P90:
+		return sortLatencyInfoP90Desc
 	case serverpb.StatsSortOptions_LATENCY_INFO_MIN:
 		return sortLatencyInfoMinDesc
 	case serverpb.StatsSortOptions_LATENCY_INFO_MAX:
@@ -686,6 +696,10 @@ FROM (SELECT fingerprint_id,
           app_name) %s
 %s`
 	metadataAggFn := mergeAggStmtMetadataColumnLatest
+	if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
+		// Use the older, less performant metadata aggregation function for versions below 24.1.
+		metadataAggFn = mergeAggStmtMetadata_V23_2
+	}
 	activityQuery := strings.Join([]string{`
 SELECT 
     fingerprint_id,

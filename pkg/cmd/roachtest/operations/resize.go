@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/helpers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/errors"
 )
@@ -36,8 +35,8 @@ func (cl *cleanupResize) Cleanup(ctx context.Context, o operation.Operation, c c
 		}
 	}()
 	for i := 0; i < cl.growCount; i++ {
-		helpers.DrainNode(ctx, o, c, c.Node(cl.origClusterSize+i+1))
-		helpers.DecommissionNode(ctx, o, c, c.Node(cl.origClusterSize+i+1))
+		drainNode(ctx, o, c, c.Node(cl.origClusterSize+i+1))
+		decommissionNode(ctx, o, c, c.Node(cl.origClusterSize+i+1))
 	}
 }
 
@@ -73,11 +72,6 @@ func resizeCluster(
 	if err != nil {
 		o.Fatal(err)
 	}
-	// Grow command generate new certificates, update certificate on workload cluster.
-	if wc := o.WorkloadCluster(); wc != nil {
-		_ = c.Get(ctx, o.L(), "certs", path.Join(tmpDir, "certs"), c.Node(1))
-		wc.Put(ctx, path.Join(tmpDir, "certs"), "./", wc.All())
-	}
 	newNodes := c.Range(origClusterSize+1, origClusterSize+growCount)
 
 	// Copy the required files to the new nodes.
@@ -86,7 +80,7 @@ func resizeCluster(
 
 	// Start the new nodes.
 	startOpts := o.StartOpts()
-	startOpts.RoachprodOpts.IsRestart = false
+	startOpts.RoachprodOpts.IsRestart = true
 	c.Start(ctx, o.L(), startOpts, o.ClusterSettings(), newNodes)
 
 	return &cleanupResize{growCount: growCount, origClusterSize: origClusterSize}

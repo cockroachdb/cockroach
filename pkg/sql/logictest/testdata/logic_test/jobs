@@ -1,14 +1,9 @@
-# Disable declarative schema changer for this test and schema locked by
-# default for this test.
+# Disable declarative schema changer for this test.
 statement ok
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 
-statement ok
-SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked = 'off'
-
-statement ok
+statement ok;
 SET use_declarative_schema_changer = 'off';
-SET create_table_with_schema_locked = 'off';
 
 # These test verify that a user's job are visible via
 # crdb_internal.jobs and SHOW JOBS.
@@ -275,7 +270,7 @@ SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'POLL JOBS STATS' AN
 
 subtest control_job_priv
 
-user testuser2
+user testuser
 
 statement ok
 CREATE TABLE t_control_job_priv(x INT)
@@ -289,9 +284,7 @@ statement ok
 DROP TABLE t_control_job_priv
 
 let $job_id
-SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv'
-
-user testuser
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv'
 
 statement error user testuser does not have privileges for job
 PAUSE JOB (SELECT $job_id)
@@ -315,7 +308,7 @@ subtest end
 
 subtest control_job_priv_inherited
 
-user testuser2
+user testuser
 
 statement ok
 CREATE TABLE t_control_job_priv_inherited(x INT)
@@ -329,9 +322,7 @@ statement ok
 DROP TABLE t_control_job_priv_inherited
 
 let $job_id
-SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv_inherited'
-
-user testuser
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv_inherited'
 
 statement error user testuser does not have privileges for job
 PAUSE JOB (SELECT $job_id)

@@ -18,10 +18,10 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
@@ -166,7 +166,7 @@ func TestJSONRoundTrip(t *testing.T) {
 		`true`,
 		` true `,
 		`
-
+		
 		  true
 		  `,
 		`false`,
@@ -742,79 +742,6 @@ func TestBuildFixedKeysJSONObjectErrors(t *testing.T) {
 		_, err = b.Build()
 		require.Error(t, err)
 	})
-}
-
-func TestPartialObject(t *testing.T) {
-	base := map[string]JSON{
-		"a": mustMakeJSON(t, 1),
-		"b": mustMakeJSON(t, 2),
-	}
-	newKeys := []string{"c"}
-	po, err := NewPartialObject(base, newKeys)
-	require.NoError(t, err)
-
-	newData := map[string]JSON{"c": mustMakeJSON(t, 3)}
-	j, err := po.NewObject(newData)
-	require.NoError(t, err)
-
-	expected := mustMakeJSON(t, map[string]any{"a": 1, "b": 2, "c": 3})
-	require.JSONEq(t, expected.String(), j.String())
-
-	j2, err := po.NewObject(map[string]JSON{"c": mustMakeJSON(t, 4)})
-	require.NoError(t, err)
-	expected = mustMakeJSON(t, map[string]any{"a": 1, "b": 2, "c": 4})
-	require.JSONEq(t, expected.String(), j2.String())
-}
-
-func TestPartialObjectErrors(t *testing.T) {
-	t.Run("duplicate newKeys", func(t *testing.T) {
-		base := map[string]JSON{
-			"a": mustMakeJSON(t, 1),
-			"b": mustMakeJSON(t, 2),
-		}
-		newKeys := []string{"c", "c"}
-		_, err := NewPartialObject(base, newKeys)
-		require.Error(t, err)
-	})
-
-	t.Run("overlapping keys", func(t *testing.T) {
-		base := map[string]JSON{
-			"a": mustMakeJSON(t, 1),
-			"b": mustMakeJSON(t, 2),
-		}
-		newKeys := []string{"b"}
-		_, err := NewPartialObject(base, newKeys)
-		require.Error(t, err)
-	})
-
-	t.Run("wrong new key", func(t *testing.T) {
-		base := map[string]JSON{
-			"a": mustMakeJSON(t, 1),
-			"b": mustMakeJSON(t, 2),
-		}
-		newKeys := []string{"c"}
-		po, err := NewPartialObject(base, newKeys)
-		require.NoError(t, err)
-		_, err = po.NewObject(map[string]JSON{"d": mustMakeJSON(t, 3)})
-		require.Error(t, err)
-	})
-	t.Run("missing new key", func(t *testing.T) {
-		base := map[string]JSON{
-			"a": mustMakeJSON(t, 1),
-			"b": mustMakeJSON(t, 2),
-		}
-		newKeys := []string{"c"}
-		po, err := NewPartialObject(base, newKeys)
-		require.NoError(t, err)
-		_, err = po.NewObject(map[string]JSON{})
-		require.Error(t, err)
-	})
-}
-
-func mustMakeJSON(t *testing.T, v any) JSON {
-	j, err := MakeJSON(v)
-	require.NoError(t, err)
-	return j
 }
 
 func parseJSON(tb testing.TB, s string) JSON {
@@ -1645,8 +1572,8 @@ func TestEncodeJSONInvertedIndex(t *testing.T) {
 		// Make sure that the expected encoding slice is sorted, as well as the
 		// output of the function under test, because the function under test can
 		// reorder the keys it's returning if there are arrays inside.
-		enc = deduplicate.ByteSlices(enc)
-		c.expEnc = deduplicate.ByteSlices(c.expEnc)
+		enc = unique.UniquifyByteSlices(enc)
+		c.expEnc = unique.UniquifyByteSlices(c.expEnc)
 		for j, path := range enc {
 			if !bytes.Equal(path, c.expEnc[j]) {
 				t.Errorf("unexpected encoding mismatch for %v. expected [%#v], got [%#v]",

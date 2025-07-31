@@ -24,15 +24,6 @@ var SQLStatsFlushInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDurationWithMaximum(time.Hour*24),
 	settings.WithPublic)
 
-// SQLStatsFlushBatchSize is the cluster setting that controls how many
-// rows are inserted per upsert during a sql stats flush.
-var SQLStatsFlushBatchSize = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"sql.stats.flush.batch_size",
-	"the number of rows to flush per upsert",
-	10,
-	settings.NonNegativeInt)
-
 // MinimumInterval is the cluster setting that controls the minimum interval
 // between each flush operation. If flush operations get triggered faster
 // than what is allowed by this setting, (e.g. when too many fingerprints are
@@ -45,6 +36,7 @@ var MinimumInterval = settings.RegisterDurationSetting(
 		"flush operation starts within less than the minimum interval, the flush "+
 		"operation will be aborted",
 	0,
+	settings.NonNegativeDuration,
 )
 
 // DiscardInMemoryStatsWhenFlushDisabled is the cluster setting that allows the
@@ -149,4 +141,5 @@ var SQLStatsLimitTableCheckInterval = settings.RegisterDurationSetting(
 	"controls what interval the check is done if the statement and "+
 		"transaction statistics tables have grown past sql.stats.persisted_rows.max",
 	1*time.Hour,
+	settings.NonNegativeDuration,
 )

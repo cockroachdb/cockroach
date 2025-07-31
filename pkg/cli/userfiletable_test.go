@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -22,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -447,12 +446,12 @@ func TestUserFileUploadRecursive(t *testing.T) {
 					dstDir = tc.destination + "/" + filepath.Base(testDir)
 				}
 
-				err = filepath.WalkDir(testDir,
-					func(path string, d fs.DirEntry, err error) error {
+				err = filepath.Walk(testDir,
+					func(path string, info os.FileInfo, err error) error {
 						if err != nil {
 							return err
 						}
-						if d.IsDir() {
+						if info.IsDir() {
 							return nil
 						}
 						relPath := strings.TrimPrefix(path, testDir+"/")
@@ -843,7 +842,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 	err := os.WriteFile(localFilePath, []byte("a"), 0666)
 	require.NoError(t, err)
 
-	rootURL, cleanup := pgurlutils.PGUrl(t, c.Server.AdvSQLAddr(), t.Name(),
+	rootURL, cleanup := sqlutils.PGUrl(t, c.Server.AdvSQLAddr(), t.Name(),
 		url.User(username.RootUser))
 	defer cleanup()
 
@@ -882,7 +881,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 			err = conn.Exec(ctx, privsUserQuery)
 			require.NoError(t, err)
 
-			userURL, cleanup2 := pgurlutils.PGUrlWithOptionalClientCerts(t,
+			userURL, cleanup2 := sqlutils.PGUrlWithOptionalClientCerts(t,
 				c.Server.AdvSQLAddr(), t.Name(),
 				url.UserPassword(tc.username, "a"), false, "")
 			defer cleanup2()

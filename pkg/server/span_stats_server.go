@@ -35,6 +35,7 @@ var SpanStatsNodeTimeout = settings.RegisterDurationSetting(
 	"the duration allowed for a single node to return span stats data before"+
 		" the request is cancelled; if set to 0, there is no timeout",
 	time.Minute,
+	settings.NonNegativeDuration,
 )
 
 const defaultRangeStatsBatchLimit = 100
@@ -116,7 +117,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 			return nil, nil
 		}
 
-		resp, err := client.(serverpb.RPCStatusClient).SpanStats(ctx,
+		resp, err := client.(serverpb.StatusClient).SpanStats(ctx,
 			&roachpb.SpanStatsRequest{
 				NodeID: nodeID.String(),
 				Spans:  spansPerNode[nodeID],
@@ -190,7 +191,6 @@ func collectSpanStatsResponses(
 
 			// Logical values: take the values from the node that responded first.
 			// TODO: This should really be read from the leaseholder.
-			// https://github.com/cockroachdb/cockroach/issues/138792
 			if _, ok := responses[spanStr]; !ok {
 				res.SpanToStats[spanStr].TotalStats = spanStats.TotalStats
 				res.SpanToStats[spanStr].RangeCount = spanStats.RangeCount
@@ -330,16 +330,16 @@ func (s *systemStatusServer) statsForSpan(
 				return nil, err
 			}
 		}
-	}
 
-	spanStats.StoreIDs = make([]roachpb.StoreID, 0, len(storeIDs))
-	for storeID := range storeIDs {
-		spanStats.StoreIDs = append(spanStats.StoreIDs, storeID)
-	}
-	sort.Slice(spanStats.StoreIDs, func(i, j int) bool {
-		return spanStats.StoreIDs[i] < spanStats.StoreIDs[j]
-	})
+		spanStats.StoreIDs = make([]roachpb.StoreID, 0, len(storeIDs))
+		for storeID := range storeIDs {
+			spanStats.StoreIDs = append(spanStats.StoreIDs, storeID)
+		}
+		sort.Slice(spanStats.StoreIDs, func(i, j int) bool {
+			return spanStats.StoreIDs[i] < spanStats.StoreIDs[j]
+		})
 
+	}
 	// If we still have some remaining ranges, request range stats for the current batch.
 	if len(fullyContainedKeysBatch) > 0 {
 		// Obtain stats for fully contained ranges via RangeStats.

@@ -5,6 +5,7 @@
 
 // {{/*
 //go:build execgen_template
+// +build execgen_template
 
 //
 // This file is the execgen template for select_in.eg.go. It's formatted in a
@@ -108,7 +109,7 @@ func GetInProjectionOperator(
 		}
 		// {{end}}
 	}
-	return nil, errors.AssertionFailedf("unhandled type: %s", t.Name())
+	return nil, errors.Errorf("unhandled type: %s", t.Name())
 }
 
 func GetInOperator(
@@ -137,7 +138,7 @@ func GetInOperator(
 		}
 		// {{end}}
 	}
-	return nil, errors.AssertionFailedf("unhandled type: %s", t.Name())
+	return nil, errors.Errorf("unhandled type: %s", t.Name())
 }
 
 // {{range .}}

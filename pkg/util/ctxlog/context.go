@@ -7,8 +7,8 @@ package ctxlog
 
 import (
 	"context"
+	"runtime/debug"
 
-	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -23,7 +23,7 @@ func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, cont
 	}
 	return ctx, func() {
 		if log.V(2) {
-			log.InfofDepth(ctx, 1, "canceling context:\n%s", debugutil.Stack())
+			log.InfofDepth(ctx, 1, "canceling context:\n%s", debug.Stack())
 		} else if log.V(1) {
 			log.InfofDepth(ctx, 1, "canceling context")
 		}

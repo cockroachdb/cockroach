@@ -142,23 +142,3 @@ func TestMapFrom(t *testing.T) {
 		return i, i * i
 	}))
 }
-
-func TestReduce(t *testing.T) {
-	t.Run("empty slice", func(t *testing.T) {
-		require.Equal(t, 15, Reduce([]int{}, func(acc, i, _ int) int {
-			return acc + i
-		}, 15))
-	})
-
-	t.Run("reduce to same type", func(t *testing.T) {
-		require.Equal(t, 15, Reduce([]int{1, 2, 3, 4, 5}, func(acc, i, _ int) int {
-			return acc + i
-		}, 0))
-	})
-
-	t.Run("reduce to different type", func(t *testing.T) {
-		require.Equal(t, 11, Reduce([]string{"hello", "world!"}, func(acc int, i string, _ int) int {
-			return acc + len(i)
-		}, 0))
-	})
-}

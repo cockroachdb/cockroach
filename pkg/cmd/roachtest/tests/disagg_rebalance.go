@@ -28,6 +28,7 @@ func registerDisaggRebalance(r registry.Registry) {
 		Suites:            registry.Suites(registry.Nightly),
 		Owner:             registry.OwnerStorage,
 		Cluster:           disaggRebalanceSpec,
+		RequiresLicense:   true,
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Timeout:           4 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -46,13 +47,13 @@ func registerDisaggRebalance(r registry.Registry) {
 				"./cockroach workload fixtures import tpcc --warehouses=%d --checks=false {pgurl:1}",
 				warehouses,
 			)
-			m := c.NewDeprecatedMonitor(ctx, c.Range(1, 3))
+			m := c.NewMonitor(ctx, c.Range(1, 3))
 			m.Go(func(ctx context.Context) error {
 				return c.RunE(ctx, option.WithNodes(c.Node(1)), cmd)
 			})
 			m.Wait()
 
-			m2 := c.NewDeprecatedMonitor(ctx, c.Range(1, 3))
+			m2 := c.NewMonitor(ctx, c.Range(1, 3))
 
 			m2.Go(func(ctx context.Context) error {
 				t.Status("run tpcc")

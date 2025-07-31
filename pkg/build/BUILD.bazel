@@ -25,8 +25,7 @@ go_library(
     deps = [
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
-        "@com_github_cockroachdb_redact//:redact",
-        "@com_github_cockroachdb_version//:version",
+        "//pkg/util/version",
     ],
 )
 
@@ -51,8 +50,5 @@ go_test(
     name = "build_test",
     srcs = ["info_test.go"],
     embed = [":build"],
-    deps = [
-        "@com_github_cockroachdb_version//:version",
-        "@com_github_stretchr_testify//require",
-    ],
+    deps = ["@com_github_stretchr_testify//require"],
 )

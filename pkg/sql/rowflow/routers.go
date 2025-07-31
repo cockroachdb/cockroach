@@ -47,7 +47,7 @@ type router interface {
 func makeRouter(
 	spec *execinfrapb.OutputRouterSpec,
 	streams []execinfra.RowReceiver,
-	memoryMonitors, unlimitedMemMonitors, diskMonitors []*mon.BytesMonitor,
+	memoryMonitors, diskMonitors []*mon.BytesMonitor,
 ) (router, error) {
 	if len(streams) == 0 {
 		return nil, errors.Errorf("no streams in router")
@@ -60,7 +60,7 @@ func makeRouter(
 	}
 
 	var rb routerBase
-	rb.setupStreams(spec, streams, memoryMonitors, unlimitedMemMonitors, diskMonitors)
+	rb.setupStreams(spec, streams, memoryMonitors, diskMonitors)
 
 	switch spec.Type {
 	case execinfrapb.OutputRouterSpec_BY_HASH:
@@ -109,9 +109,8 @@ type routerOutput struct {
 
 	stats execinfrapb.ComponentStats
 
-	// memoryMonitor, unlimitedMemMonitor, and diskMonitor are mu.rowContainer's
-	// monitors.
-	memoryMonitor, unlimitedMemMonitor, diskMonitor *mon.BytesMonitor
+	// memoryMonitor and diskMonitor are mu.rowContainer's monitors.
+	memoryMonitor, diskMonitor *mon.BytesMonitor
 
 	rowAlloc            rowenc.EncDatumRowAlloc
 	rowBufToPushFrom    [routerRowBufSize]rowenc.EncDatumRow
@@ -245,7 +244,7 @@ func (rb *routerBase) aggStatus() execinfra.ConsumerStatus {
 func (rb *routerBase) setupStreams(
 	spec *execinfrapb.OutputRouterSpec,
 	streams []execinfra.RowReceiver,
-	memoryMonitors, unlimitedMemMonitors, diskMonitors []*mon.BytesMonitor,
+	memoryMonitors, diskMonitors []*mon.BytesMonitor,
 ) {
 	rb.numNonDrainingStreams = int32(len(streams))
 	n := len(streams)
@@ -265,7 +264,6 @@ func (rb *routerBase) setupStreams(
 		ro.mu.cond = sync.NewCond(&ro.mu.Mutex)
 		ro.mu.streamStatus = execinfra.NeedMoreRows
 		ro.memoryMonitor = memoryMonitors[i]
-		ro.unlimitedMemMonitor = unlimitedMemMonitors[i]
 		ro.diskMonitor = diskMonitors[i]
 	}
 }
@@ -295,7 +293,6 @@ func (rb *routerBase) init(
 			flowCtx.EvalCtx,
 			flowCtx.Cfg.TempStorage,
 			rb.outputs[i].memoryMonitor,
-			rb.outputs[i].unlimitedMemMonitor,
 			rb.outputs[i].diskMonitor,
 		)
 
@@ -378,7 +375,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 				// No rows or metadata buffered; see if the producer is done.
 				if ro.mu.producerDone {
 					if rb.statsCollectionEnabled {
-						ro.stats.Exec.MaxAllocatedMem.Set(uint64(ro.memoryMonitor.MaximumBytes() + ro.unlimitedMemMonitor.MaximumBytes()))
+						ro.stats.Exec.MaxAllocatedMem.Set(uint64(ro.memoryMonitor.MaximumBytes()))
 						ro.stats.Exec.MaxAllocatedDisk.Set(uint64(ro.diskMonitor.MaximumBytes()))
 						span.RecordStructured(&ro.stats)
 						if meta := execinfra.GetTraceDataAsMetadata(rb.flowCtx, span); meta != nil {

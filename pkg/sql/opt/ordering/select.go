@@ -17,7 +17,7 @@ func selectCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice)
 }
 
 func selectBuildChildReqOrdering(
-	mem *memo.Memo, parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
 ) props.OrderingChoice {
 	if childIdx != 0 {
 		return props.OrderingChoice{}
@@ -42,7 +42,7 @@ func selectBuildChildReqOrdering(
 	// down +1,+2,+3 as the required ordering to avoid an unnecessary sort.
 	//
 	// See #33023 for more details.
-	orders := DeriveInterestingOrderings(mem, child)
+	orders := DeriveInterestingOrderings(child)
 	for i := range orders {
 		if orders[i].Implies(required) {
 			// Get the common prefix of this ordering and the required ordering to

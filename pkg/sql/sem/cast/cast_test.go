@@ -201,7 +201,7 @@ func TestTupleCastVolatility(t *testing.T) {
 		},
 		{
 			from: []*types.T{types.Int, types.Int},
-			to:   []*types.T{types.AnyElement},
+			to:   []*types.T{types.Any},
 			exp:  "stable",
 		},
 		{

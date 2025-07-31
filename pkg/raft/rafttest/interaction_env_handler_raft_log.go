@@ -34,15 +34,14 @@ func (env *InteractionEnv) handleRaftLog(t *testing.T, d datadriven.TestData) er
 // RaftLog pretty prints the raft log to the output buffer.
 func (env *InteractionEnv) RaftLog(idx int) error {
 	s := env.Nodes[idx].Storage
-	ci, li := s.Compacted(), s.LastIndex()
-	if li <= ci {
+	fi, li := s.FirstIndex(), s.LastIndex()
+	if li < fi {
 		// TODO(tbg): this is what MemoryStorage returns, but unclear if it's
 		// the "correct" thing to do.
-		fmt.Fprintf(env.Output, "log is empty: compacted index=%d, last index=%d", ci, li)
+		fmt.Fprintf(env.Output, "log is empty: first index=%d, last index=%d", fi, li)
 		return nil
 	}
-	// TODO(pav-kv): convert Entries() to the (begin, end] addressing.
-	ents, err := s.Entries(ci+1, li+1, math.MaxUint64)
+	ents, err := s.Entries(fi, li+1, math.MaxUint64)
 	if err != nil {
 		return err
 	}

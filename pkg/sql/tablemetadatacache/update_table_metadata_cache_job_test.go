@@ -41,7 +41,6 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 	// Server setup.
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			TableMetadata: &tablemetadatacacheutil.TestingKnobs{
 				TableMetadataUpdater: &updater,
 			},

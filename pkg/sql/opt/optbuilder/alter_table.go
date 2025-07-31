@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -198,7 +197,7 @@ func getIndexColumnNamesAndTypes(index cat.Index) (colNames []string, colTypes [
 		colNames[i] = string(c.ColName())
 		colTypes[i] = c.DatumType()
 	}
-	if index.Type() == idxtype.INVERTED && !index.GeoConfig().IsEmpty() {
+	if index.IsInverted() && !index.GeoConfig().IsEmpty() {
 		// TODO(sumeer): special case Array too. JSON is harder since the split
 		// needs to be a Datum and the JSON inverted column is not.
 		//

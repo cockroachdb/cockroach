@@ -5,7 +5,6 @@ add-nodes 1 voters=(1) index=2
 ----
 INFO 1 switched to configuration voters=(1)
 INFO 1 became follower at term 0
-DEBUG 1 reset election elapsed to 0
 INFO newRaft 1 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
 
 campaign 1
@@ -15,11 +14,9 @@ INFO 1 became candidate at term 1
 
 process-ready 1
 ----
-Ready:
+Ready MustSync=true:
 State:StateCandidate
 HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
-OnSync:
-1->1 MsgVoteResp Term:1 Log:0/0
 INFO 1 received MsgVoteResp from 1 at term 1
 INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
 INFO 1 became leader at term 1
@@ -35,7 +32,6 @@ add-nodes 1
 ----
 INFO 2 switched to configuration voters=()
 INFO 2 became follower at term 0
-DEBUG 2 reset election elapsed to 0
 INFO newRaft 2 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
 
 # n1 commits the conf change using itself as commit quorum, immediately transitions into
@@ -44,40 +40,34 @@ INFO newRaft 2 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastter
 stabilize
 ----
 > 1 handling Ready
-  Ready:
+  Ready MustSync=true:
   State:StateLeader
   HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:1
   Entries:
   1/3 EntryNormal ""
   1/4 EntryConfChange v2
-  OnSync:
-  1->1 MsgAppResp Term:1 Log:0/3 Commit:2
-  1->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-  1->1 MsgAppResp Term:1 Log:0/4 Commit:2
 > 1 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:4 Lead:1 LeadEpoch:1
-  Committed: (2,4]
-  Applying:
+  CommittedEntries:
   1/3 EntryNormal ""
   1/4 EntryConfChange v2
   INFO 1 switched to configuration voters=(1 2)
 > 1 handling Ready
-  Ready:
+  Ready MustSync=false:
   Messages:
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->2 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChange v2]
 > 2 receiving messages
   1->2 MsgFortifyLeader Term:1 Log:0/0
-  INFO 2 [term: 0] received a MsgFortifyLeader message with higher term from 1 [term: 1], new leader indicated, advancing term
+  INFO 2 [term: 0] received a MsgFortifyLeader message with higher term from 1 [term: 1]
   INFO 2 became follower at term 1
-  DEBUG 2 reset election elapsed to 0
   1->2 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChange v2]
   DEBUG 2 [logterm: 0, index: 3] rejected MsgApp [logterm: 1, index: 3] from 1
 > 2 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:1 Commit:0 Lead:1 LeadEpoch:1
-  OnSync:
+  Messages:
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   2->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
 > 1 receiving messages
@@ -88,11 +78,14 @@ stabilize
   DEBUG 1 [firstindex: 3, commit: 4] sent snapshot[index: 4, term: 1] to 2 [StateProbe match=0 next=1 sentCommit=0 matchCommit=0]
   DEBUG 1 paused sending replication messages to 2 [StateSnapshot match=0 next=5 sentCommit=4 matchCommit=0 paused pendingSnap=4]
 > 1 handling Ready
-  Ready:
+  Ready MustSync=false:
   Messages:
+  1->2 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChange v2]
   1->2 MsgSnap Term:1 Log:0/0
     Snapshot: Index:4 Term:1 ConfState:Voters:[1 2] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 > 2 receiving messages
+  1->2 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChange v2]
+  DEBUG 2 [logterm: 0, index: 3] rejected MsgApp [logterm: 1, index: 3] from 1
   1->2 MsgSnap Term:1 Log:0/0
     Snapshot: Index:4 Term:1 ConfState:Voters:[1 2] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   INFO log [committed=0, applied=0, applying=0, unstable.offset=1, unstable.offsetInProgress=1, len(unstable.Entries)=0] starts to restore snapshot [index: 4, term: 1]
@@ -100,11 +93,14 @@ stabilize
   INFO 2 [commit: 4, lastindex: 4, lastterm: 1] restored snapshot [index: 4, term: 1]
   INFO 2 [commit: 4] restored snapshot [index: 4, term: 1]
 > 2 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:1 Commit:4 Lead:1 LeadEpoch:1
   Snapshot Index:4 Term:1 ConfState:Voters:[1 2] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-  OnSync:
+  Messages:
+  2->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
   2->1 MsgAppResp Term:1 Log:0/4 Commit:4
 > 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
+  DEBUG 1 received MsgAppResp(rejected, hint: (index 0, term 0)) from 2 for index 3
   2->1 MsgAppResp Term:1 Log:0/4 Commit:4
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 2 [StateSnapshot match=4 next=5 sentCommit=4 matchCommit=4 paused pendingSnap=4]

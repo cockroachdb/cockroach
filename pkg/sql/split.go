@@ -22,11 +22,11 @@ import (
 )
 
 type splitNode struct {
-	singleInputPlanNode
 	optColumnsSlot
 
 	tableDesc      catalog.TableDescriptor
 	index          catalog.Index
+	rows           planNode
 	run            splitRun
 	expirationTime hlc.Timestamp
 }
@@ -46,12 +46,12 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 	// the split keys and then perform the splits in parallel (e.g. split at the
 	// middle key and recursively to the left and right).
 
-	if ok, err := n.input.Next(params); err != nil || !ok {
+	if ok, err := n.rows.Next(params); err != nil || !ok {
 		return ok, err
 	}
 
 	execCfg := params.ExecCfg()
-	rowKey, err := getRowKey(execCfg.Codec, n.tableDesc, n.index, n.input.Values())
+	rowKey, err := getRowKey(execCfg.Codec, n.tableDesc, n.index, n.rows.Values())
 	if err != nil {
 		return false, err
 	}
@@ -79,7 +79,7 @@ func (n *splitNode) Values() tree.Datums {
 }
 
 func (n *splitNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.rows.Close(ctx)
 }
 
 // getRowKey generates a key that corresponds to a row (or prefix of a row) in a table or index.

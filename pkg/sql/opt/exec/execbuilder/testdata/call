@@ -139,7 +139,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: custom
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -162,7 +162,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: custom
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal

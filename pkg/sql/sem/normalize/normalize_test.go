@@ -224,7 +224,7 @@ func TestNormalizeExpr(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
-			typedExpr, err := expr.TypeCheck(ctx, &semaCtx, types.AnyElement)
+			typedExpr, err := expr.TypeCheck(ctx, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}

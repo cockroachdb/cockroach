@@ -16,7 +16,7 @@ CREATE TABLE kv (
   FAMILY (s)
 )
 
-statement ok
+statement OK
 INSERT INTO kv VALUES
 (1, 2, 3, 1.0, 1, 'a', true, '1min'),
 (3, 4, 5, 2, 8, 'a', true, '2sec'),
@@ -651,7 +651,7 @@ SELECT avg(k) OVER w, avg(k) OVER w + 1 FROM kv WINDOW w AS (PARTITION BY v ORDE
 7.0000000000000000000  8.0000000000000000000
 8.0000000000000000000  9.0000000000000000000
 
-statement ok
+statement OK
 INSERT INTO kv VALUES
 (9, 2, 9, .1, DEFAULT, DEFAULT, DEFAULT),
 (10, 4, 9, .2, DEFAULT, DEFAULT, DEFAULT),
@@ -3647,14 +3647,14 @@ SELECT *, avg(w) OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY z, w, y 
 2  10  2  0  2.0000000000000000000
 4  10  2  0  4.0000000000000000000
 
-statement ok
+statement OK
 CREATE TABLE string_agg_test (
   id INT PRIMARY KEY,
   company_id INT,
   employee STRING
 )
 
-statement ok
+statement OK
 INSERT INTO string_agg_test VALUES
   (1, 1, 'A'),
   (2, 2, 'B'),
@@ -3943,7 +3943,7 @@ OVER (PARTITION BY company_id)
 FROM string_agg_test
 ORDER BY company_id, id;
 
-statement ok
+statement OK
 DROP TABLE string_agg_test
 
 # Test that windower respects the memory limit set via the session variable.

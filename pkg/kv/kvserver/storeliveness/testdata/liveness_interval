@@ -1,6 +1,6 @@
 # -------------------------------------------------------------
 # In this test a store (n1, s1) requests support with different
-# values for the support duration.
+# values for the liveness interval.
 # -------------------------------------------------------------
 
 support-from node-id=2 store-id=2
@@ -9,10 +9,10 @@ epoch: 0, expiration: 0,0
 
 # -------------------------------------------------------------
 # Store (n1, s1) requests and receives support with
-# support-duration=10s.
+# liveness-interval=10s.
 # -------------------------------------------------------------
 
-send-heartbeats now=100 support-duration=10s
+send-heartbeats now=100 liveness-interval=10s
 ----
 heartbeats:
 {Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:110.000000000,0}
@@ -27,11 +27,11 @@ epoch: 1, expiration: 110.000000000,0
 
 
 # -------------------------------------------------------------
-# Store (n1, s1) requests support with support-duration=20s
+# Store (n1, s1) requests support with liveness-interval=20s
 # and successfully extends support from (n2, s2).
 # -------------------------------------------------------------
 
-send-heartbeats now=101 support-duration=20s
+send-heartbeats now=101 liveness-interval=20s
 ----
 heartbeats:
 {Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:121.000000000,0}
@@ -46,11 +46,11 @@ epoch: 1, expiration: 121.000000000,0
 
 
 # -------------------------------------------------------------
-# Store (n1, s1) requests support with support-duration=5s.
+# Store (n1, s1) requests support with liveness-interval=5s.
 # The support expiration does not regress.
 # -------------------------------------------------------------
 
-send-heartbeats now=102 support-duration=5s
+send-heartbeats now=102 liveness-interval=5s
 ----
 heartbeats:
 {Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:121.000000000,0}

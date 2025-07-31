@@ -64,7 +64,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX g
 ORDER BY 1
 ----
 start_key              end_key                replicas  lease_holder
-<before:/Table/72>     …/1152921574000000000  {1}       1
+<before:/Table/67>     …/1152921574000000000  {1}       1
 …/1152921574000000000  <after:/Max>           {2}       2
 
 # Distributed.
@@ -94,7 +94,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX g
 ORDER BY 1
 ----
 start_key              end_key                replicas  lease_holder
-<before:/Table/72>     …/1152921574000000000  {2}       2
+<before:/Table/67>     …/1152921574000000000  {2}       2
 …/1152921574000000000  <after:/Max>           {2}       2
 
 query I

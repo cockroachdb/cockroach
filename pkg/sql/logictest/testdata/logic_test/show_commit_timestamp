@@ -260,12 +260,11 @@ select * from foo as of system time $commit_ts
 
 statement ok
 drop table foo;
-create table foo (i int primary key) WITH (schema_locked=false);
+create table foo (i int primary key);
 insert into foo values (1);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 alter table foo add check (i <= 0)
 
 # Verify that SHOW COMMIT TIMESTAMP will wait for the schema changes.

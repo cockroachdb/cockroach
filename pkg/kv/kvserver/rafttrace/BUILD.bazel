@@ -28,7 +28,6 @@ go_test(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/raft",
         "//pkg/raft/raftpb",
         "//pkg/settings/cluster",
         "//pkg/testutils",

@@ -28,7 +28,6 @@ func TestLogGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
-	skip.UnderDeadlock(t, "takes >1 min under deadlock")
 
 	ctx := context.Background()
 	a := assert.New(t)
@@ -68,7 +67,7 @@ func TestLogGC(t *testing.T) {
 			a.NoError(err)
 		}
 	}
-	maxTS1 := timeutil.Now().Add(time.Duration(-24*7) * time.Hour)
+	maxTS1 := timeutil.Now()
 	maxTS2 := maxTS1.Add(time.Second)
 	maxTS3 := maxTS2.Add(time.Second)
 	maxTS4 := maxTS3.Add(time.Second)

@@ -222,21 +222,6 @@ func ValidateRolesInDescriptor(
 				priv.User())
 		}
 	}
-	// If a table descriptor, validate the roles that are stored in the policies.
-	if tbDesc, isTable := descriptor.(TableDescriptor); isTable {
-		for _, p := range tbDesc.GetPolicies() {
-			for _, r := range p.RoleNames {
-				exists, err := RoleExists(username.MakeSQLUsernameFromPreNormalizedString(r))
-				if err != nil {
-					return err
-				}
-				if !exists {
-					return errors.AssertionFailedf("policy %q on table %q has a role %q that doesn't exist",
-						p.Name, tbDesc.GetName(), r)
-				}
-			}
-		}
-	}
 	return nil
 }
 

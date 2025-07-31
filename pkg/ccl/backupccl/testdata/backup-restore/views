@@ -1,0 +1,68 @@
+# Make sure that db names are rewritten in a view restored to a new db name.
+new-cluster name=s
+----
+
+exec-sql
+CREATE DATABASE db1;
+----
+
+exec-sql
+USE db1;
+----
+
+exec-sql
+CREATE SCHEMA sc1;
+----
+
+exec-sql
+CREATE TYPE sc1.enum1 AS ENUM('Good');
+----
+
+exec-sql
+CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql
+CREATE VIEW sc1.v1 AS SELECT a, 'Good'::sc1.enum1 FROM sc1.tbl1;
+----
+
+exec-sql
+INSERT INTO sc1.tbl1 VALUES (123);
+----
+
+query-sql
+SELECT * FROM sc1.v1;
+----
+123 Good
+
+query-sql
+SHOW CREATE VIEW sc1.v1;
+----
+sc1.v1 CREATE VIEW sc1.v1 (
+	a,
+	enum1
+) AS SELECT a, 'Good':::sc1.enum1 FROM db1.sc1.tbl1
+
+exec-sql
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
+----
+
+exec-sql
+DROP DATABASE db1
+----
+
+exec-sql
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name = db1_new
+----
+
+exec-sql
+USE db1_new
+----
+
+query-sql
+SHOW CREATE VIEW db1_new.sc1.v1;
+----
+db1_new.sc1.v1 CREATE VIEW sc1.v1 (
+	a,
+	enum1
+) AS SELECT a, 'Good':::sc1.enum1 FROM db1_new.sc1.tbl1

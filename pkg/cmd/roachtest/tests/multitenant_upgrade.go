@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -31,9 +30,7 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 		Timeout:          5 * time.Hour,
 		Cluster:          r.MakeClusterSpec(7),
 		CompatibleClouds: registry.CloudsWithServiceRegistration,
-		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
-		Randomized:       true,
+		Suites:           registry.Suites(registry.Nightly),
 		Owner:            registry.OwnerServer,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runMultitenantUpgrade(ctx, t, c)
@@ -159,18 +156,20 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 		wg.Add(len(tenants))
 
 		for _, tenant := range tenants {
-			h.Go(func(ctx context.Context, l *logger.Logger) error {
-				defer wg.Done()
-				return fn(ctx, l, tenant)
-			}, task.Name(fmt.Sprintf("%s: %s", desc, tenant.name)))
+			h.Background(
+				fmt.Sprintf("%s: %s", desc, tenant.name),
+				func(ctx context.Context, l *logger.Logger) error {
+					defer wg.Done()
+					return fn(ctx, l, tenant)
+				},
+			)
 		}
 
 		returnCh := make(chan struct{})
-		h.Go(func(context.Context, *logger.Logger) error {
+		go func() {
 			wg.Wait()
 			close(returnCh)
-			return nil
-		})
+		}()
 
 		return returnCh
 	}
@@ -179,26 +178,19 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 	// parallel. The returned channel is closed once the workload
 	// finishes running on every tenant.
 	runTPCC := func(
-		ctx context.Context, h *mixedversion.Helper, version *clusterupgrade.Version,
+		ctx context.Context, c cluster.Cluster, binaryPath string, h *mixedversion.Helper,
 	) chan struct{} {
 		return forEachTenant(
 			"run tpcc",
 			ctx,
 			h,
 			func(ctx context.Context, l *logger.Logger, tenant *tenantUpgradeStatus) error {
-				nodes := c.Node(tenant.nodes[0])
-				// We may attempt to runTPCC using a cockroach binary version
-				// that was never uploaded. See #142807.
-				binaryPath, err := clusterupgrade.UploadCockroach(ctx, t, l, c, nodes, version)
-				if err != nil {
-					return errors.Wrapf(err, "uploading cockroach %s", version)
-				}
 				cmd := fmt.Sprintf(
 					"%s workload run tpcc --warehouses %d --duration %s %s",
 					binaryPath, numWarehouses, tpccDuration, tenant.pgurl(),
 				)
 
-				return c.RunE(ctx, option.WithNodes(nodes), cmd)
+				return c.RunE(ctx, option.WithNodes(c.Node(tenant.nodes[0])), cmd)
 			},
 		)
 	}
@@ -248,8 +240,9 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 				}
 			}
 
+			binaryPath := clusterupgrade.BinaryPathForVersion(t, h.Context().FromVersion, "cockroach")
 			l.Printf("waiting for tpcc to run on tenants...")
-			<-runTPCC(ctx, h, h.Context().FromVersion)
+			<-runTPCC(ctx, c, binaryPath, h)
 			return nil
 		},
 	)
@@ -270,7 +263,8 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 				}
 			}
 
-			tpccFinished := runTPCC(ctx, h, h.Context().ToVersion)
+			binaryPath := clusterupgrade.BinaryPathForVersion(t, h.Context().ToVersion, "cockroach")
+			tpccFinished := runTPCC(ctx, c, binaryPath, h)
 
 			upgradeFinished := forEachTenant(
 				"finalize upgrade",
@@ -297,19 +291,21 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 				},
 			)
 
-			g := h.NewGroup()
-			g.Go(func(_ context.Context, l *logger.Logger) error {
+			var wg sync.WaitGroup
+			wg.Add(2) // tpcc worklaod and upgrade finalization
+
+			go func() {
+				defer wg.Done()
 				<-tpccFinished
 				l.Printf("tpcc workload finished running on tenants")
-				return nil
-			})
-			g.Go(func(_ context.Context, l *logger.Logger) error {
+			}()
+			go func() {
+				defer wg.Done()
 				<-upgradeFinished
 				l.Printf("tenant upgrades finished")
-				return nil
-			})
-			g.Wait()
+			}()
 
+			wg.Wait()
 			return nil
 		},
 	)

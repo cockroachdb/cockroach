@@ -214,10 +214,6 @@ func (f fakeLeaseManager) GetSafeReplicationTS() hlc.Timestamp {
 	return hlc.Timestamp{}
 }
 
-func (f fakeLeaseManager) GetLeaseGeneration() int64 {
-	return 0
-}
-
 var _ descs.LeaseManager = (*fakeLeaseManager)(nil)
 
 type fakeSystemDatabase struct {

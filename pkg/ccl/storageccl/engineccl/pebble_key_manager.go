@@ -13,7 +13,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -50,7 +50,7 @@ type registryFormat string
 const (
 	// registryFormatMonolith is the existing format of the data keys
 	// registry file used by the DataKeyManager. The format is a single
-	// serialized enginepb.DataKeysRegistry protocol buffer.
+	// serialized enginepbccl.DataKeysRegistry protocol buffer.
 	registryFormatMonolith registryFormat = "monolith"
 )
 
@@ -60,14 +60,14 @@ type PebbleKeyManager interface {
 	// ActiveKeyForWriter returns the currently active key for a writer. If
 	// plaintext should be used it can return nil or a key with encryption_type
 	// = Plaintext.
-	ActiveKeyForWriter(ctx context.Context) (*enginepb.SecretKey, error)
+	ActiveKeyForWriter(ctx context.Context) (*enginepbccl.SecretKey, error)
 
 	// ActiveKeyInfoForStats returns the currently active key info for stats. It
 	// returns nil for the same case(s) as documented in ActiveKeyForWriter.
-	ActiveKeyInfoForStats() *enginepb.KeyInfo
+	ActiveKeyInfoForStats() *enginepbccl.KeyInfo
 
 	// GetKey gets the key for the given id. Returns an error if the key was not found.
-	GetKey(id string) (*enginepb.SecretKey, error)
+	GetKey(id string) (*enginepbccl.SecretKey, error)
 }
 
 var _ PebbleKeyManager = &StoreKeyManager{}
@@ -84,8 +84,8 @@ type StoreKeyManager struct {
 	oldKeyFilename    string
 
 	// Implementation. Both are not nil after a successful call to Load().
-	activeKey *enginepb.SecretKey
-	oldKey    *enginepb.SecretKey
+	activeKey *enginepbccl.SecretKey
+	oldKey    *enginepbccl.SecretKey
 }
 
 // Load must be called before calling other functions.
@@ -105,12 +105,12 @@ func (m *StoreKeyManager) Load(ctx context.Context) error {
 }
 
 // ActiveKeyForWriter implements PebbleKeyManager.
-func (m *StoreKeyManager) ActiveKeyForWriter(ctx context.Context) (*enginepb.SecretKey, error) {
+func (m *StoreKeyManager) ActiveKeyForWriter(ctx context.Context) (*enginepbccl.SecretKey, error) {
 	return m.activeKey, nil
 }
 
 // ActiveKeyInfoForStats implements PebbleKeyManager.
-func (m *StoreKeyManager) ActiveKeyInfoForStats() *enginepb.KeyInfo {
+func (m *StoreKeyManager) ActiveKeyInfoForStats() *enginepbccl.KeyInfo {
 	if m.activeKey != nil {
 		return m.activeKey.Info
 	}
@@ -118,7 +118,7 @@ func (m *StoreKeyManager) ActiveKeyInfoForStats() *enginepb.KeyInfo {
 }
 
 // GetKey implements PebbleKeyManager.GetKey.
-func (m *StoreKeyManager) GetKey(id string) (*enginepb.SecretKey, error) {
+func (m *StoreKeyManager) GetKey(id string) (*enginepbccl.SecretKey, error) {
 	if m.activeKey.Info.KeyId == id {
 		return m.activeKey, nil
 	}
@@ -129,12 +129,12 @@ func (m *StoreKeyManager) GetKey(id string) (*enginepb.SecretKey, error) {
 }
 
 // LoadKeyFromFile reads a secret key from the given file.
-func LoadKeyFromFile(fs vfs.FS, filename string) (*enginepb.SecretKey, error) {
+func LoadKeyFromFile(fs vfs.FS, filename string) (*enginepbccl.SecretKey, error) {
 	now := kmTimeNow().Unix()
-	key := &enginepb.SecretKey{}
-	key.Info = &enginepb.KeyInfo{}
+	key := &enginepbccl.SecretKey{}
+	key.Info = &enginepbccl.KeyInfo{}
 	if filename == storeFileNamePlain {
-		key.Info.EncryptionType = enginepb.EncryptionType_Plaintext
+		key.Info.EncryptionType = enginepbccl.EncryptionType_Plaintext
 		key.Info.KeyId = plainKeyID
 		key.Info.CreationTime = now
 		key.Info.Source = storeFileNamePlain
@@ -170,7 +170,7 @@ func LoadKeyFromFile(fs vfs.FS, filename string) (*enginepb.SecretKey, error) {
 		if jwKey.KeyType() != jwa.OctetSeq {
 			return nil, fmt.Errorf("expected kty=oct, found %s", jwKey.KeyType())
 		}
-		key.Info.EncryptionType, err = enginepb.EncryptionTypeFromJWKAlgorithm(jwKey.Algorithm().String())
+		key.Info.EncryptionType, err = enginepbccl.EncryptionTypeFromJWKAlgorithm(jwKey.Algorithm().String())
 		if err != nil {
 			return nil, err
 		}
@@ -185,11 +185,11 @@ func LoadKeyFromFile(fs vfs.FS, filename string) (*enginepb.SecretKey, error) {
 		keyLength := len(b) - keyIDLength
 		switch keyLength {
 		case 16:
-			key.Info.EncryptionType = enginepb.EncryptionType_AES128_CTR
+			key.Info.EncryptionType = enginepbccl.EncryptionType_AES128_CTR
 		case 24:
-			key.Info.EncryptionType = enginepb.EncryptionType_AES192_CTR
+			key.Info.EncryptionType = enginepbccl.EncryptionType_AES192_CTR
 		case 32:
-			key.Info.EncryptionType = enginepb.EncryptionType_AES256_CTR
+			key.Info.EncryptionType = enginepbccl.EncryptionType_AES256_CTR
 		default:
 			return nil, errors.Wrapf(jwkErr, "could not parse store key. "+
 				"Key length %d is not valid for old-style key. Parse error for new-style key", keyLength)
@@ -230,9 +230,9 @@ type DataKeyManager struct {
 			syncutil.RWMutex
 			// Non-nil after Load(). The StoreKeys and DataKeys maps contain non-nil
 			// values.
-			keyRegistry *enginepb.DataKeysRegistry
+			keyRegistry *enginepbccl.DataKeysRegistry
 			// rotationEnabled => non-nil.
-			activeKey *enginepb.SecretKey
+			activeKey *enginepbccl.SecretKey
 		}
 		// Transitions to true when SetActiveStoreKeyInfo() is called for the
 		// first time.
@@ -247,10 +247,10 @@ type DataKeyManager struct {
 	}
 }
 
-func makeRegistryProto() *enginepb.DataKeysRegistry {
-	return &enginepb.DataKeysRegistry{
-		StoreKeys: make(map[string]*enginepb.KeyInfo),
-		DataKeys:  make(map[string]*enginepb.SecretKey),
+func makeRegistryProto() *enginepbccl.DataKeysRegistry {
+	return &enginepbccl.DataKeysRegistry{
+		StoreKeys: make(map[string]*enginepbccl.KeyInfo),
+		DataKeys:  make(map[string]*enginepbccl.SecretKey),
 	}
 }
 
@@ -329,7 +329,7 @@ func (m *DataKeyManager) Load(ctx context.Context) error {
 //
 // TODO(sbhola): do rotation via a background activity instead of in this function so that we don't
 // slow down creation of files.
-func (m *DataKeyManager) ActiveKeyForWriter(ctx context.Context) (*enginepb.SecretKey, error) {
+func (m *DataKeyManager) ActiveKeyForWriter(ctx context.Context) (*enginepbccl.SecretKey, error) {
 	m.writeMu.Lock()
 	defer m.writeMu.Unlock()
 	if m.writeMu.rotationEnabled {
@@ -346,7 +346,7 @@ func (m *DataKeyManager) ActiveKeyForWriter(ctx context.Context) (*enginepb.Secr
 }
 
 // ActiveKeyInfoForStats implements PebbleKeyManager.
-func (m *DataKeyManager) ActiveKeyInfoForStats() *enginepb.KeyInfo {
+func (m *DataKeyManager) ActiveKeyInfoForStats() *enginepbccl.KeyInfo {
 	m.writeMu.mu.RLock()
 	defer m.writeMu.mu.RUnlock()
 	if m.writeMu.mu.activeKey != nil {
@@ -356,7 +356,7 @@ func (m *DataKeyManager) ActiveKeyInfoForStats() *enginepb.KeyInfo {
 }
 
 // GetKey implements PebbleKeyManager.GetKey.
-func (m *DataKeyManager) GetKey(id string) (*enginepb.SecretKey, error) {
+func (m *DataKeyManager) GetKey(id string) (*enginepbccl.SecretKey, error) {
 	m.writeMu.mu.RLock()
 	defer m.writeMu.mu.RUnlock()
 	key, found := m.writeMu.mu.keyRegistry.DataKeys[id]
@@ -375,7 +375,7 @@ func (m *DataKeyManager) GetKey(id string) (*enginepb.SecretKey, error) {
 //
 // This function should not be called for a read only store.
 func (m *DataKeyManager) SetActiveStoreKeyInfo(
-	ctx context.Context, storeKeyInfo *enginepb.KeyInfo,
+	ctx context.Context, storeKeyInfo *enginepbccl.KeyInfo,
 ) error {
 	if m.readOnly {
 		return errors.New("read only")
@@ -392,7 +392,7 @@ func (m *DataKeyManager) SetActiveStoreKeyInfo(
 		return nil
 	}
 	// For keys other than plaintext, make sure the user is not reusing inactive keys.
-	if storeKeyInfo.EncryptionType != enginepb.EncryptionType_Plaintext {
+	if storeKeyInfo.EncryptionType != enginepbccl.EncryptionType_Plaintext {
 		if _, found := m.writeMu.mu.keyRegistry.StoreKeys[storeKeyInfo.KeyId]; found {
 			return fmt.Errorf("new active store key ID %s already exists as an inactive key -- this"+
 				"is really dangerous", storeKeyInfo.KeyId)
@@ -404,7 +404,7 @@ func (m *DataKeyManager) SetActiveStoreKeyInfo(
 	proto.Merge(keyRegistry, m.writeMu.mu.keyRegistry)
 	keyRegistry.StoreKeys[storeKeyInfo.KeyId] = storeKeyInfo
 	keyRegistry.ActiveStoreKeyId = storeKeyInfo.KeyId
-	if storeKeyInfo.EncryptionType == enginepb.EncryptionType_Plaintext {
+	if storeKeyInfo.EncryptionType == enginepbccl.EncryptionType_Plaintext {
 		// Mark all data keys as exposed.
 		for _, key := range keyRegistry.DataKeys {
 			key.Info.WasExposed = true
@@ -418,7 +418,7 @@ func (m *DataKeyManager) SetActiveStoreKeyInfo(
 }
 
 // For stats.
-func (m *DataKeyManager) getScrubbedRegistry() *enginepb.DataKeysRegistry {
+func (m *DataKeyManager) getScrubbedRegistry() *enginepbccl.DataKeysRegistry {
 	m.writeMu.mu.RLock()
 	defer m.writeMu.mu.RUnlock()
 	r := makeRegistryProto()
@@ -430,7 +430,7 @@ func (m *DataKeyManager) getScrubbedRegistry() *enginepb.DataKeysRegistry {
 }
 
 // validateRegistry must not modify keyRegistry.
-func validateRegistry(keyRegistry *enginepb.DataKeysRegistry) error {
+func validateRegistry(keyRegistry *enginepbccl.DataKeysRegistry) error {
 	if keyRegistry.ActiveStoreKeyId != "" {
 		if k, ok := keyRegistry.StoreKeys[keyRegistry.ActiveStoreKeyId]; !ok || k == nil {
 			return fmt.Errorf("active store key %s not found", keyRegistry.ActiveStoreKeyId)
@@ -446,30 +446,30 @@ func validateRegistry(keyRegistry *enginepb.DataKeysRegistry) error {
 
 // Generates a new data key and adds it to the keyRegistry proto and sets it as the active key.
 func generateAndSetNewDataKey(
-	ctx context.Context, keyRegistry *enginepb.DataKeysRegistry,
-) (*enginepb.SecretKey, error) {
+	ctx context.Context, keyRegistry *enginepbccl.DataKeysRegistry,
+) (*enginepbccl.SecretKey, error) {
 	activeStoreKey := keyRegistry.StoreKeys[keyRegistry.ActiveStoreKeyId]
 	if activeStoreKey == nil {
 		panic("expected registry with active store key")
 	}
-	key := &enginepb.SecretKey{}
-	key.Info = &enginepb.KeyInfo{}
+	key := &enginepbccl.SecretKey{}
+	key.Info = &enginepbccl.KeyInfo{}
 	key.Info.EncryptionType = activeStoreKey.EncryptionType
 	key.Info.CreationTime = kmTimeNow().Unix()
 	key.Info.Source = "data key manager"
 	key.Info.ParentKeyId = activeStoreKey.KeyId
 
-	if activeStoreKey.EncryptionType == enginepb.EncryptionType_Plaintext {
+	if activeStoreKey.EncryptionType == enginepbccl.EncryptionType_Plaintext {
 		key.Info.KeyId = plainKeyID
 		key.Info.WasExposed = true
 	} else {
 		var keyLength int
 		switch activeStoreKey.EncryptionType {
-		case enginepb.EncryptionType_AES128_CTR, enginepb.EncryptionType_AES_128_CTR_V2:
+		case enginepbccl.EncryptionType_AES128_CTR, enginepbccl.EncryptionType_AES_128_CTR_V2:
 			keyLength = 16
-		case enginepb.EncryptionType_AES192_CTR, enginepb.EncryptionType_AES_192_CTR_V2:
+		case enginepbccl.EncryptionType_AES192_CTR, enginepbccl.EncryptionType_AES_192_CTR_V2:
 			keyLength = 24
-		case enginepb.EncryptionType_AES256_CTR, enginepb.EncryptionType_AES_256_CTR_V2:
+		case enginepbccl.EncryptionType_AES256_CTR, enginepbccl.EncryptionType_AES_256_CTR_V2:
 			keyLength = 32
 		default:
 			return nil, fmt.Errorf("unknown encryption type %d for key ID %s",
@@ -501,7 +501,7 @@ func generateAndSetNewDataKey(
 
 // REQUIRES: m.writeMu is held.
 func (m *DataKeyManager) rotateDataKeyAndWrite(
-	ctx context.Context, keyRegistry *enginepb.DataKeysRegistry,
+	ctx context.Context, keyRegistry *enginepbccl.DataKeysRegistry,
 ) (err error) {
 	defer func() {
 		if err != nil {
@@ -512,7 +512,7 @@ func (m *DataKeyManager) rotateDataKeyAndWrite(
 		}
 	}()
 
-	var newKey *enginepb.SecretKey
+	var newKey *enginepbccl.SecretKey
 	if newKey, err = generateAndSetNewDataKey(ctx, keyRegistry); err != nil {
 		return
 	}

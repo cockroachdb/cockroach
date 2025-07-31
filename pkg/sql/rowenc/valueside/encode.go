@@ -29,111 +29,96 @@ import (
 // datum types (JSON, arrays, tuples).
 //
 // See also: docs/tech-notes/encoding.md, keyside.Encode().
-func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum) ([]byte, error) {
-	res, _, err := EncodeWithScratch(appendTo, colID, val, nil /* scratch */)
-	return res, err
-}
-
-// EncodeWithScratch is similar to Encode, but requires a scratch buffer that is
-// used as a temporary buffer for certain datum types (JSON, arrays, tuples). It
-// may overwrite any existing values in the scratch buffer. If successful it
-// returns the encoded bytes and the scratch buffer, which allows reusing a
-// scratch buffer that has grown during encoding.
-func EncodeWithScratch(
-	appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte,
-) (res []byte, newScratch []byte, err error) {
+func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte) ([]byte, error) {
 	if val == tree.DNull {
-		return encoding.EncodeNullValue(appendTo, uint32(colID)), scratch, nil
+		return encoding.EncodeNullValue(appendTo, uint32(colID)), nil
 	}
 	switch t := tree.UnwrapDOidWrapper(val).(type) {
 	case *tree.DBitArray:
-		return encoding.EncodeBitArrayValue(appendTo, uint32(colID), t.BitArray), scratch, nil
+		return encoding.EncodeBitArrayValue(appendTo, uint32(colID), t.BitArray), nil
 	case *tree.DBool:
-		return encoding.EncodeBoolValue(appendTo, uint32(colID), bool(*t)), scratch, nil
+		return encoding.EncodeBoolValue(appendTo, uint32(colID), bool(*t)), nil
 	case *tree.DInt:
-		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), scratch, nil
+		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
 	case *tree.DFloat:
-		return encoding.EncodeFloatValue(appendTo, uint32(colID), float64(*t)), scratch, nil
+		return encoding.EncodeFloatValue(appendTo, uint32(colID), float64(*t)), nil
 	case *tree.DDecimal:
-		return encoding.EncodeDecimalValue(appendTo, uint32(colID), &t.Decimal), scratch, nil
+		return encoding.EncodeDecimalValue(appendTo, uint32(colID), &t.Decimal), nil
 	case *tree.DString:
-		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeBytes()), scratch, nil
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeBytes()), nil
 	case *tree.DBytes:
-		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeBytes()), scratch, nil
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeBytes()), nil
 	case *tree.DEncodedKey:
-		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeBytes()), scratch, nil
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeBytes()), nil
 	case *tree.DDate:
-		return encoding.EncodeIntValue(appendTo, uint32(colID), t.UnixEpochDaysWithOrig()), scratch, nil
+		return encoding.EncodeIntValue(appendTo, uint32(colID), t.UnixEpochDaysWithOrig()), nil
 	case *tree.DPGLSN:
-		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.LSN)), scratch, nil
+		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.LSN)), nil
 	case *tree.DBox2D:
-		res, err = encoding.EncodeBox2DValue(appendTo, uint32(colID), t.CartesianBoundingBox.BoundingBox)
-		return res, scratch, err
+		return encoding.EncodeBox2DValue(appendTo, uint32(colID), t.CartesianBoundingBox.BoundingBox)
 	case *tree.DGeography:
-		res, err = encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObjectRef())
-		return res, scratch, err
+		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObjectRef())
 	case *tree.DGeometry:
-		res, err = encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObjectRef())
-		return res, scratch, err
+		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObjectRef())
 	case *tree.DTime:
-		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), scratch, nil
+		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
 	case *tree.DTimeTZ:
-		return encoding.EncodeTimeTZValue(appendTo, uint32(colID), t.TimeTZ), scratch, nil
+		return encoding.EncodeTimeTZValue(appendTo, uint32(colID), t.TimeTZ), nil
 	case *tree.DTimestamp:
-		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), scratch, nil
+		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
 	case *tree.DTimestampTZ:
-		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), scratch, nil
+		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
 	case *tree.DInterval:
-		return encoding.EncodeDurationValue(appendTo, uint32(colID), t.Duration), scratch, nil
+		return encoding.EncodeDurationValue(appendTo, uint32(colID), t.Duration), nil
 	case *tree.DUuid:
-		return encoding.EncodeUUIDValue(appendTo, uint32(colID), t.UUID), scratch, nil
+		return encoding.EncodeUUIDValue(appendTo, uint32(colID), t.UUID), nil
 	case *tree.DIPAddr:
-		return encoding.EncodeIPAddrValue(appendTo, uint32(colID), t.IPAddr), scratch, nil
+		return encoding.EncodeIPAddrValue(appendTo, uint32(colID), t.IPAddr), nil
 	case *tree.DJSON:
-		scratch, err = json.EncodeJSON(scratch[:0], t.JSON)
+		encoded, err := json.EncodeJSON(scratch, t.JSON)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		return encoding.EncodeJSONValue(appendTo, uint32(colID), scratch), scratch, nil
+		return encoding.EncodeJSONValue(appendTo, uint32(colID), encoded), nil
 	case *tree.DTSQuery:
-		scratch, err = tsearch.EncodeTSQuery(scratch[:0], t.TSQuery)
+		encoded, err := tsearch.EncodeTSQuery(scratch, t.TSQuery)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		return encoding.EncodeTSQueryValue(appendTo, uint32(colID), scratch), scratch, nil
+		return encoding.EncodeTSQueryValue(appendTo, uint32(colID), encoded), nil
 	case *tree.DTSVector:
-		scratch, err = tsearch.EncodeTSVector(scratch[:0], t.TSVector)
+		encoded, err := tsearch.EncodeTSVector(scratch, t.TSVector)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		return encoding.EncodeTSVectorValue(appendTo, uint32(colID), scratch), scratch, nil
+		return encoding.EncodeTSVectorValue(appendTo, uint32(colID), encoded), nil
 	case *tree.DPGVector:
-		scratch, err = vector.Encode(scratch[:0], t.T)
+		encoded, err := vector.Encode(scratch, t.T)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		return encoding.EncodePGVectorValue(appendTo, uint32(colID), scratch), scratch, nil
+		return encoding.EncodePGVectorValue(appendTo, uint32(colID), encoded), nil
 	case *tree.DArray:
-		scratch, err = encodeArray(t, scratch[:0])
+		a, err := encodeArray(t, scratch)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		return encoding.EncodeArrayValue(appendTo, uint32(colID), scratch), scratch, nil
+		return encoding.EncodeArrayValue(appendTo, uint32(colID), a), nil
 	case *tree.DTuple:
-		return encodeTuple(t, appendTo, uint32(colID), scratch[:0])
+		return encodeTuple(t, appendTo, uint32(colID), scratch)
 	case *tree.DCollatedString:
-		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeContentBytes()), scratch, nil
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeContentBytes()), nil
 	case *tree.DOid:
-		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.Oid)), scratch, nil
+		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.Oid)), nil
 	case *tree.DEnum:
-		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.PhysicalRep), scratch, nil
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.PhysicalRep), nil
 	case *tree.DVoid:
-		return encoding.EncodeVoidValue(appendTo, uint32(colID)), scratch, nil
+		return encoding.EncodeVoidValue(appendTo, uint32(colID)), nil
 	default:
 		if buildutil.CrdbTestBuild {
-			return nil, nil, errors.AssertionFailedf("unable to encode table value: %T", t)
+			return nil, errors.AssertionFailedf("unable to encode table value: %T", t)
 		}
-		return nil, nil, errors.Errorf("unable to encode table value: %T", t)
+		return nil, errors.Errorf("unable to encode table value: %T", t)
 	}
 }
 

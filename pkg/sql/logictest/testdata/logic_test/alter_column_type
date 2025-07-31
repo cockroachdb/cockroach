@@ -1,5 +1,3 @@
-# LogicTest: !local-legacy-schema-changer
-
 # A basic sanity check to demonstrate column type changes.
 subtest SanityCheck
 
@@ -67,12 +65,8 @@ statement ok
 CREATE INDEX idx2 ON t (i)
 
 statement ok
-ALTER TABLE t ALTER COLUMN i DROP STORED
+ALTER TABLE t ALTER COLUMN i DROP STORED, DROP COLUMN b CASCADE
 
-statement ok
-ALTER TABLE t DROP COLUMN b CASCADE
-
-onlyif config schema-locked-disabled
 query TT colnames
 show create table t
 ----
@@ -82,19 +76,7 @@ t           CREATE TABLE public.t (
               i INT8 NULL,
               CONSTRAINT t_pkey PRIMARY KEY (a ASC),
               INDEX idx2 (i ASC)
-            );
-
-skipif config schema-locked-disabled
-query TT colnames
-show create table t
-----
-table_name  create_statement
-t           CREATE TABLE public.t (
-              a INT8 NOT NULL,
-              i INT8 NULL,
-              CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-              INDEX idx2 (i ASC)
-            ) WITH (schema_locked = true);
+            )
 
 statement ok
 ALTER TABLE t RENAME COLUMN i TO b
@@ -188,6 +170,9 @@ CREATE TABLE t1 (date string)
 statement ok
 INSERT INTO t1 VALUES ('2024-07-26')
 
+statement error pq: ALTER COLUMN TYPE from string to date is only supported experimentally
+ALTER TABLE t1 ALTER COLUMN date TYPE DATE USING date::DATE
+
 # After setting enable_experimental_alter_column_type_general, ALTER COLUMN TYPE should work.
 statement ok
 SET enable_experimental_alter_column_type_general = true
@@ -220,7 +205,7 @@ INSERT INTO t2 VALUES ('5')
 # Verify ALTER COLUMN TYPE from INT to STRING works correctly.
 # Column order should stay the same.
 statement ok
-CREATE TABLE t3 (id int, id2 int, id3 int, family f1 (id3, id2, id))
+CREATE TABLE t3 (id int, id2 int, id3 int)
 
 statement ok
 INSERT INTO t3 VALUES (1,1,1), (2,2,2), (3,3,3)
@@ -235,34 +220,6 @@ id     INT8    true   NULL            ·  {t3_pkey}  false
 id2    STRING  true   NULL            ·  {t3_pkey}  false
 id3    INT8    true   NULL            ·  {t3_pkey}  false
 rowid  INT8    false  unique_rowid()  ·  {t3_pkey}  true
-
-onlyif config schema-locked-disabled
-query TT colnames
-show create table t3
-----
-table_name  create_statement
-t3          CREATE TABLE public.t3 (
-              id INT8 NULL,
-              id2 STRING NULL,
-              id3 INT8 NULL,
-              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
-              FAMILY f1 (id3, id2, id, rowid)
-            );
-
-skipif config schema-locked-disabled
-query TT colnames
-show create table t3
-----
-table_name  create_statement
-t3          CREATE TABLE public.t3 (
-              id INT8 NULL,
-              id2 STRING NULL,
-              id3 INT8 NULL,
-              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
-              FAMILY f1 (id3, id2, id, rowid)
-            ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO t3 VALUES (4,'4',4)
@@ -308,12 +265,17 @@ INSERT INTO t6 VALUES (1), (2), (3);
 statement ok
 ALTER TABLE t6 ALTER COLUMN id2 TYPE STRING;
 
-query TTBTTTB rowsort
-SHOW COLUMNS FROM t6
+query TT
+SHOW CREATE TABLE t6
 ----
-id     INT8    true   NULL            ·  {t6_pkey}  false
-id2    STRING  true   NULL            ·  {t6_pkey}  false
-rowid  INT8    false  unique_rowid()  ·  {t6_pkey}  true
+t6  CREATE TABLE public.t6 (
+      id INT8 NULL,
+      id2 STRING NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      FAMILY f1 (id, rowid),
+      FAMILY f2 (id2)
+    )
 
 # Ensure the type of the default column is checked
 statement ok
@@ -329,7 +291,7 @@ statement error default for column "x" cannot be cast automatically to type DATE
 ALTER TABLE t7 ALTER COLUMN x TYPE DATE USING x::DATE;
 
 # Ensure a runtime error correctly rolls back and the table is unchanged.
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t8 (x STRING)
 
 statement ok
@@ -338,10 +300,9 @@ INSERT INTO t8 VALUES ('hello')
 statement error pq: column "x" cannot be cast automatically to type INT8\nHINT: You might need to specify "USING x::INT8".
 ALTER TABLE t8 ALTER COLUMN x TYPE INT
 
-statement error .*could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
+statement error pq: could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
 ALTER TABLE t8 ALTER COLUMN x TYPE INT USING x::INT8
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t8
 ----
@@ -349,17 +310,7 @@ t8  CREATE TABLE public.t8 (
       x STRING NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC)
-    );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t8
-----
-t8  CREATE TABLE public.t8 (
-      x STRING NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC)
-    ) WITH (schema_locked = true);
+    )
 
 # Ensure ALTER COLUMN TYPE is disallowed if column is part of primary key.
 statement ok
@@ -383,7 +334,7 @@ CREATE TABLE t11 (x INT)
 statement ok
 CREATE TABLE t12 (x INT check (x > 0))
 
-statement error pq: unimplemented: ALTER COLUMN TYPE requiring a rewrite of on-disk data is not supported for columns that have constraints
+statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
 ALTER TABLE t12 ALTER COLUMN x TYPE STRING
 
 statement ok
@@ -392,7 +343,7 @@ SET experimental_enable_unique_without_index_constraints = true;
 statement ok
 CREATE TABLE uniq (x INT, y INT, UNIQUE WITHOUT INDEX (x, y))
 
-statement error pq: unimplemented: ALTER COLUMN TYPE requiring a rewrite of on-disk data is not supported for columns that have constraints
+statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
 ALTER TABLE uniq ALTER COLUMN x TYPE STRING
 
 # Ensure we cannot change the column type of a column stored in a secondary index.
@@ -448,7 +399,6 @@ ALTER TABLE t17 ALTER COLUMN y TYPE INT
 statement error on update for column "y" cannot be cast automatically to type INT8
 ALTER TABLE t17 ALTER COLUMN y TYPE INT USING y::INT8
 
-onlyif config schema-locked-disabled
 query TT colnames
 show create table t17
 ----
@@ -459,20 +409,8 @@ t17         CREATE TABLE public.t17 (
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t17_pkey PRIMARY KEY (rowid ASC),
               FAMILY f1 (x, y, rowid)
-            );
+            )
 
-skipif config schema-locked-disabled
-query TT colnames
-show create table t17
-----
-table_name  create_statement
-t17         CREATE TABLE public.t17 (
-              x STRING NULL DEFAULT 'HELLO':::STRING,
-              y STRING NULL ON UPDATE 'HELLO':::STRING,
-              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT t17_pkey PRIMARY KEY (rowid ASC),
-              FAMILY f1 (x, y, rowid)
-            ) WITH (schema_locked = true);
 
 # Ensure ALTER COLUMN TYPE fails if the column is part of an FK relationship.
 statement ok
@@ -481,23 +419,20 @@ CREATE TABLE t18 (x INT NOT NULL PRIMARY KEY);
 statement ok
 CREATE TABLE t19 (y INT NOT NULL REFERENCES t18 (x), INDEX(y));
 
-statement error pq: unimplemented: ALTER COLUMN TYPE requiring a rewrite of on-disk data is not supported for columns that have constraints
+statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
 ALTER TABLE t18 ALTER COLUMN x TYPE STRING
 
-statement error pq: unimplemented: ALTER COLUMN TYPE requiring a rewrite of on-disk data is not supported for columns that have constraints
+statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
 ALTER TABLE t19 ALTER COLUMN y TYPE STRING
 
 # Ensure ALTER COLUMN TYPE does not work inside a transaction.
 statement ok
-CREATE TABLE t20 (x INT) WITH (schema_locked=false);
+CREATE TABLE t20 (x INT);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
-statement ok
-SET LOCAL autocommit_before_ddl=off;
-
-statement error pq: unimplemented: ALTER COLUMN TYPE requiring a rewrite of on-disk data is not supported inside a transaction
+statement error pq: unimplemented: ALTER COLUMN TYPE is not supported inside a transaction
 ALTER TABLE t20 ALTER COLUMN x TYPE STRING
 
 statement ok
@@ -505,40 +440,16 @@ ROLLBACK
 
 # Ensure ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands.
 statement ok
-CREATE TABLE t21 (x INT) WITH (schema_locked=false);
+CREATE TABLE t21 (x INT);
 
-statement ok
-INSERT INTO t21 VALUES (888),(-32760);
-
-statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
+statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
 ALTER TABLE t21 ALTER COLUMN x TYPE STRING, ALTER COLUMN x SET NOT NULL;
-
-statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
-ALTER TABLE t21 ALTER COLUMN x TYPE VARCHAR(30), ALTER COLUMN x SET NOT VISIBLE;
-
-statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
-ALTER TABLE t21 ADD COLUMN y BIGINT, ALTER COLUMN x SET DATA TYPE TEXT;
-
-query TTBTTTB rowsort
-SHOW COLUMNS FROM t21
-----
-x      INT8    true   NULL            ·  {t21_pkey}  false
-rowid  INT8    false  unique_rowid()  ·  {t21_pkey}  true
 
 statement ok
 CREATE TABLE t22 (x INT);
 
-statement ok
-INSERT INTO t22 VALUES (0),(-5);
-
-statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
+statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
 ALTER TABLE t22 ALTER COLUMN x SET NOT NULL, ALTER COLUMN x TYPE STRING;
-
-query TTBTTTB rowsort
-SHOW COLUMNS FROM t22
-----
-x      INT8    true   NULL            ·  {t22_pkey}  false
-rowid  INT8    false  unique_rowid()  ·  {t22_pkey}  true
 
 # Ensure ALTER COLUMN TYPE USING EXPRESSION works.
 statement ok
@@ -560,16 +471,15 @@ true
 true
 
 # Ensure ALTER COLUMN TYPE rolls back if is not applicable to value in the column.
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t24 (x STRING);
 
 statement ok
 INSERT INTO t24 VALUES ('1'), ('hello');
 
-statement error .*could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
+statement error pq: could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
 ALTER TABLE t24  ALTER COLUMN x TYPE INT USING (x::int + 5)
 
-onlyif config schema-locked-disabled
 query TT colnames
 show create table t24
 ----
@@ -578,18 +488,7 @@ t24         CREATE TABLE public.t24 (
               x STRING NULL,
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC)
-            );
-
-skipif config schema-locked-disabled
-query TT colnames
-show create table t24
-----
-table_name  create_statement
-t24         CREATE TABLE public.t24 (
-              x STRING NULL,
-              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC)
-            ) WITH (schema_locked = true);
+            )
 
 # Ensure USING EXPRESSION rolls back if the USING EXPRESSION does not conform
 # to the new type of the column.
@@ -686,7 +585,7 @@ INSERT INTO t30 VALUES (e'a\\01');
 statement error pq: column "x" cannot be cast automatically to type BYTES\nHINT: You might need to specify "USING x::BYTES".
 ALTER TABLE t30 ALTER COLUMN x TYPE BYTES
 
-statement error .*could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
+statement error pq: could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
 ALTER TABLE t30 ALTER COLUMN x TYPE BYTES USING x::BYTES
 
 # Ensure that dependent views prevent column type modification.
@@ -812,7 +711,6 @@ SELECT vis1, hid1 FROM t_with_hidden ORDER BY vis1
 2 1
 3 1
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_with_hidden
 ----
@@ -822,19 +720,7 @@ t_with_hidden  CREATE TABLE public.t_with_hidden (
                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                  CONSTRAINT t_with_hidden_pkey PRIMARY KEY (rowid ASC),
                  FAMILY f1 (vis1, hid1, rowid)
-               );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t_with_hidden
-----
-t_with_hidden  CREATE TABLE public.t_with_hidden (
-                 vis1 INT8 NULL,
-                 hid1 STRING NOT VISIBLE NULL DEFAULT 1:::INT8,
-                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                 CONSTRAINT t_with_hidden_pkey PRIMARY KEY (rowid ASC),
-                 FAMILY f1 (vis1, hid1, rowid)
-               ) WITH (schema_locked = true);
+               )
 
 statement ok
 DROP TABLE t_with_hidden;
@@ -892,7 +778,6 @@ SELECT a, b FROM t_with_on_update ORDER BY a
 1001 3
 10000 NULL
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_with_on_update
 ----
@@ -901,18 +786,7 @@ t_with_on_update  CREATE TABLE public.t_with_on_update (
                     b STRING NULL ON UPDATE 3:::INT8,
                     CONSTRAINT t_with_on_update_pkey PRIMARY KEY (a ASC),
                     FAMILY f1 (a, b)
-                  );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t_with_on_update
-----
-t_with_on_update  CREATE TABLE public.t_with_on_update (
-                    a INT8 NOT NULL,
-                    b STRING NULL ON UPDATE 3:::INT8,
-                    CONSTRAINT t_with_on_update_pkey PRIMARY KEY (a ASC),
-                    FAMILY f1 (a, b)
-                  ) WITH (schema_locked = true);
+                  )
 
 statement ok
 DROP TABLE t_with_on_update;
@@ -941,7 +815,6 @@ SELECT * FROM t_with_default ORDER BY c1
 ----
 32767
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_with_default
 ----
@@ -950,18 +823,7 @@ t_with_default  CREATE TABLE public.t_with_default (
                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                   CONSTRAINT t_with_default_pkey PRIMARY KEY (rowid ASC),
                   FAMILY f1 (rowid, c1)
-                );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t_with_default
-----
-t_with_default  CREATE TABLE public.t_with_default (
-                  c1 INT2 NULL DEFAULT 32767:::INT8,
-                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                  CONSTRAINT t_with_default_pkey PRIMARY KEY (rowid ASC),
-                  FAMILY f1 (rowid, c1)
-                ) WITH (schema_locked = true);
+                )
 
 statement ok
 DROP TABLE t_with_default;
@@ -1018,12 +880,8 @@ CREATE TABLE T1_FOR_SEQ (C1 INT);
 statement ok
 CREATE SEQUENCE SEQ1 OWNED BY T1_FOR_SEQ.C1;
 
-statement error pq: unimplemented: ALTER COLUMN TYPE requiring a rewrite of on-disk data is not supported for columns that own a sequence
+statement error pq: unimplemented: ALTER COLUMN TYPE for a column that owns a sequence is currently not supported
 ALTER TABLE T1_FOR_SEQ ALTER COLUMN C1 SET DATA TYPE TEXT;
-
-# Changes that don't rewrite the data are allowed though
-statement ok
-ALTER TABLE T1_FOR_SEQ ALTER COLUMN C1 SET DATA TYPE SMALLINT
 
 statement ok
 DROP TABLE T1_FOR_SEQ CASCADE;
@@ -1052,6 +910,9 @@ ALTER TABLE t_bytes ALTER COLUMN c1 SET DATA TYPE STRING;
 # When the above alter is done in the legacy schema changer, the column is
 # rewritten, but with different result. The correct one is from the
 # declarative schema changer. So we skip when running the legacy schema changer.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query T
 SELECT c1 FROM t_bytes ORDER BY c1;
 ----
@@ -1061,6 +922,9 @@ hello
 # The legacy schema changer doesn't properly handle this case. It will actually
 # allow it, which is wrong. So we expect success for legacy, but correctly fail
 # for dsc.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_bytes ALTER COLUMN c2 SET DATA TYPE CHAR(4);
 
@@ -1079,7 +943,7 @@ ALTER TABLE t_bytes ALTER COLUMN c2 SET DATA TYPE CHAR(4);
 statement error pq: column "c3" cannot be cast automatically to type UUID\nHINT: You might need to specify "USING c3::UUID".
 ALTER TABLE t_bytes ALTER COLUMN c3 SET DATA TYPE UUID;
 
-statement error .*could not parse "worldhello" as type uuid: uuid: UUID must be exactly 16 bytes long, got 10 bytes
+statement error pq: could not parse "worldhello" as type uuid: uuid: UUID must be exactly 16 bytes long, got 10 bytes
 ALTER TABLE t_bytes ALTER COLUMN c3 SET DATA TYPE UUID USING c3::UUID;
 
 statement ok
@@ -1091,66 +955,44 @@ ALTER TABLE t_bytes ALTER COLUMN c3 SET DATA TYPE UUID USING c3::UUID;
 # The alter of C2 will produce different output depending on the schema changer.
 # The output for the the dsc is correct, but wrong for legacy. So, skipping if
 # legacy.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TT
 SELECT c2,c3 FROM t_bytes ORDER BY c1;
 ----
 w    NULL
 w    3b5692c8-0f73-49ec-9186-8f1478f3064a
 
-query TTBTTTB rowsort
-SHOW COLUMNS FROM t_bytes;
+query TT
+SHOW CREATE TABLE t_bytes;
 ----
-c1     STRING  true   NULL            ·  {t_bytes_pkey}  false
-c2     CHAR(4) true   NULL            ·  {t_bytes_pkey}  false
-c3     UUID    true   NULL            ·  {t_bytes_pkey}  false
-rowid  INT8    false  unique_rowid()  ·  {t_bytes_pkey}  true
-
-onlyif config schema-locked-disabled
-query TT colnames
-show create table t_bytes
-----
-table_name  create_statement
-t_bytes     CREATE TABLE public.t_bytes (
-              c1 STRING NULL,
-              c2 CHAR(4) NULL,
-              c3 UUID NULL,
-              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT t_bytes_pkey PRIMARY KEY (rowid ASC),
-              FAMILY f1 (c1, c2, c3, rowid)
-            );
-
-skipif config schema-locked-disabled
-query TT colnames
-show create table t_bytes
-----
-table_name  create_statement
-t_bytes     CREATE TABLE public.t_bytes (
-              c1 STRING NULL,
-              c2 CHAR(4) NULL,
-              c3 UUID NULL,
-              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT t_bytes_pkey PRIMARY KEY (rowid ASC),
-              FAMILY f1 (c1, c2, c3, rowid)
-            ) WITH (schema_locked = true);
+t_bytes  CREATE TABLE public.t_bytes (
+           c1 STRING NULL,
+           c2 CHAR(4) NULL,
+           c3 UUID NULL,
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT t_bytes_pkey PRIMARY KEY (rowid ASC),
+           FAMILY f1 (c1, c2, c3, rowid)
+         )
 
 statement ok
 DROP TABLE t_bytes;
 
-subtest rewrite_decimal
+subtest validation_only_decimal
 
 statement ok
-CREATE TABLE t_decimal (c1 DECIMAL(20,5), c2 DECIMAL(10,5), c3 DECIMAL(10,0), FAMILY F1(c1,c2,c3,rowid));
+CREATE TABLE t_decimal (c1 DECIMAL(20,5), c2 DECIMAL(10,5), FAMILY F1(c1,c2,rowid));
 
 statement ok
-INSERT INTO t_decimal VALUES (12345.6, 1.23456, 44.1234),(NULL,NULL,NULL),(100012.34,4563.21,22.9871),(99.77777,99.77777,-5.51);
+INSERT INTO t_decimal VALUES (12345.6, 1.23456),(NULL,NULL),(100012.34,4563.21);
 
-query FFF
+query FF
 SELECT * FROM t_decimal ORDER BY c1;
 ----
-NULL  NULL  NULL
-99.77777 99.77777 -6
-12345.6  1.23456 44
-100012.34  4563.21 23
+NULL  NULL
+12345.6  1.23456
+100012.34  4563.21
 
 # Reduce the overall precision of the decimal
 statement error pq: .*value with precision 7, scale 2 must round to an absolute value less than 10\^5
@@ -1163,58 +1005,44 @@ UPDATE t_decimal SET c1 = 10012.34 WHERE c1 = 100012.34;
 statement ok
 ALTER TABLE t_decimal ALTER COLUMN c1 SET DATA TYPE DECIMAL(7,2);
 
+# Reduce just the scale of the decimal. The legacy schema changer doesn't
+# properly detect this case.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
+statement error pq: validation of CHECK ".*" failed on row.*
+ALTER TABLE t_decimal ALTER COLUMN c2 SET DATA TYPE DECIMAL(10,2);
+
+query FF
+SELECT * FROM t_decimal ORDER BY c1;
+----
+NULL         NULL
+10012.34000  4563.21000
+12345.60000  1.23456
+
+statement ok
+UPDATE t_decimal SET c2 = 1.23 WHERE c1 = 12345.6;
+
 statement ok
 ALTER TABLE t_decimal ALTER COLUMN c2 SET DATA TYPE DECIMAL(10,2);
 
-statement ok
-ALTER TABLE t_decimal ALTER COLUMN c3 SET DATA TYPE DECIMAL(5,2);
-
-statement ok
-ALTER TABLE t_decimal ALTER COLUMN c3 SET DATA TYPE DECIMAL(6,1);
-
-query FFF
+query FF
 SELECT * FROM t_decimal ORDER BY c1;
 ----
-NULL         NULL NULL
-99.78 99.78 -6.0
-10012.34  4563.21 23.0
-12345.60  1.23 44.0
+NULL  NULL
+10012.34  4563.21
+12345.60  1.23
 
-query TTBTTTB rowsort
-SHOW COLUMNS FROM t_decimal;
+query TT
+SHOW CREATE TABLE t_decimal;
 ----
-c1     DECIMAL(7,2)  true   NULL            ·  {t_decimal_pkey}  false
-c2     DECIMAL(10,2) true   NULL            ·  {t_decimal_pkey}  false
-c3     DECIMAL(6,1)  true   NULL            ·  {t_decimal_pkey}  false
-rowid  INT8          false  unique_rowid()  ·  {t_decimal_pkey}  true
-
-onlyif config schema-locked-disabled
-query TT colnames
-show create table t_decimal
-----
-table_name  create_statement
-t_decimal   CREATE TABLE public.t_decimal (
-              c1 DECIMAL(7,2) NULL,
-              c2 DECIMAL(10,2) NULL,
-              c3 DECIMAL(6,1) NULL,
-              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT t_decimal_pkey PRIMARY KEY (rowid ASC),
-              FAMILY f1 (c1, c2, c3, rowid)
-            );
-
-skipif config schema-locked-disabled
-query TT colnames
-show create table t_decimal
-----
-table_name  create_statement
-t_decimal   CREATE TABLE public.t_decimal (
-              c1 DECIMAL(7,2) NULL,
-              c2 DECIMAL(10,2) NULL,
-              c3 DECIMAL(6,1) NULL,
-              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT t_decimal_pkey PRIMARY KEY (rowid ASC),
-              FAMILY f1 (c1, c2, c3, rowid)
-            ) WITH (schema_locked = true);
+t_decimal  CREATE TABLE public.t_decimal (
+             c1 DECIMAL(7,2) NULL,
+             c2 DECIMAL(10,2) NULL,
+             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+             CONSTRAINT t_decimal_pkey PRIMARY KEY (rowid ASC),
+             FAMILY f1 (c1, c2, rowid)
+           )
 
 statement ok
 DROP TABLE t_decimal;
@@ -1234,12 +1062,18 @@ SELECT c1,c2,c3,c4,c5 FROM t_bit_string ORDER BY pk;
 NULL  NULL  NULL   NULL   NULL
 
 # Skip for the legacy schema changer as it doesn't allow multiple alters in one statement.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_bit_string ALTER COLUMN c1 SET DATA TYPE BIT(4), ALTER COLUMN c2 SET DATA TYPE VARBIT(4);
 
 statement ok
 UPDATE t_bit_string SET C2=B'1010' WHERE pk = 1;
 
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 statement ok
 ALTER TABLE t_bit_string ALTER COLUMN c1 SET DATA TYPE VARBIT(8), ALTER COLUMN c2 SET DATA TYPE VARBIT(4);
 
@@ -1271,6 +1105,9 @@ ALTER TABLE t_bit_string ALTER COLUMN c3 SET DATA TYPE BYTES USING C3::BYTES;
 
 # Skipping this for legacy since it allows the data type conversion when it
 # shouldn't be allowed.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_bit_string ALTER COLUMN c4 SET DATA TYPE CHAR(4);
 
@@ -1294,6 +1131,9 @@ NULL  NULL  NULL   NULL   NULL
 
 # Change c5 from VARCHAR(30) to CHAR(6). This is erroneously allowed in the
 # legacy schema changer so skipping in that mode.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_bit_string ALTER COLUMN c5 SET DATA TYPE CHAR(6);
 
@@ -1315,15 +1155,19 @@ SELECT c1,c2,c3,c4,c5 FROM t_bit_string ORDER BY pk;
 1010 1010  hello  worl  worldh
 NULL  NULL  NULL   NULL   NULL
 
-query TTBTTTB rowsort
-SHOW COLUMNS FROM t_bit_string;
+query TT
+SHOW CREATE TABLE t_bit_string;
 ----
-c1     BIT(4)     true   NULL  ·  {t_bit_string_pkey}  false
-c2     VARBIT(4)  true   NULL  ·  {t_bit_string_pkey}  false
-c3     BYTES      true   NULL  ·  {t_bit_string_pkey}  false
-c4     VARCHAR(4) true   NULL  ·  {t_bit_string_pkey}  false
-c5     CHAR(6)    true   NULL  ·  {t_bit_string_pkey}  false
-pk     INT8       false  NULL  ·  {t_bit_string_pkey}  false
+t_bit_string  CREATE TABLE public.t_bit_string (
+                pk INT8 NOT NULL,
+                c1 BIT(4) NULL,
+                c2 VARBIT(4) NULL,
+                c3 BYTES NULL,
+                c4 VARCHAR(4) NULL,
+                c5 CHAR(6) NULL,
+                CONSTRAINT t_bit_string_pkey PRIMARY KEY (pk ASC),
+                FAMILY f1 (pk, c1, c2, c3, c4, c5)
+              )
 
 statement ok
 DROP TABLE t_bit_string;
@@ -1366,11 +1210,15 @@ SELECT c1 FROM t_int ORDER BY pk;
 32767
 NULL
 
-query TTBTTTB rowsort
-SHOW COLUMNS FROM t_int;
+query TT
+SHOW CREATE TABLE t_int;
 ----
-c1     INT2     true   NULL  ·  {t_int_pkey}  false
-pk     INT8     false  NULL  ·  {t_int_pkey}  false
+t_int  CREATE TABLE public.t_int (
+         pk INT8 NOT NULL,
+         c1 INT2 NULL,
+         CONSTRAINT t_int_pkey PRIMARY KEY (pk ASC),
+         FAMILY f1 (pk, c1)
+       )
 
 statement ok
 DROP TABLE t_int;
@@ -1391,627 +1239,5 @@ alter table roach_village alter column age set data type bigint;
 
 statement ok
 alter table roach_village alter column legs set data type bigint;
-
-subtest convert_column_many
-
-statement ok
-create table t_many (c1 smallint);
-
-statement ok
-insert into t_many values (0),(100),(-32);
-
-# Without USING but auto cast works
-statement ok
-alter table t_many alter column c1 set data type text;
-
-query T rowsort
-SELECT * FROM t_many;
-----
-0
-100
--32
-
-query TTBTTTB rowsort
-SHOW COLUMNS FROM t_many;
-----
-c1     STRING true   NULL            ·  {t_many_pkey}  false
-rowid  INT8   false  unique_rowid()  ·  {t_many_pkey}  true
-
-# STRING -> SMALLINT with USING
-statement ok
-alter table t_many alter column c1 set data type smallint using c1::smallint;
-
-query I rowsort
-SELECT * FROM t_many;
-----
-0
-100
--32
-
-query TTBTTTB rowsort
-SHOW COLUMNS FROM t_many;
-----
-c1     INT2   true   NULL            ·  {t_many_pkey}  false
-rowid  INT8   false  unique_rowid()  ·  {t_many_pkey}  true
-
-statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
-alter table t_many alter column c1 set not null, alter column c1 set data type VARCHAR(10) using concat(c1::text, 'boo');
-
-statement ok
-alter table t_many alter column c1 set data type VARCHAR(10) using concat(c1::text, 'boo');
-
-query T rowsort
-SELECT c1 FROM t_many;
-----
-0boo
-100boo
--32boo
-
-query TTBTTTB rowsort
-SHOW COLUMNS FROM t_many;
-----
-c1     VARCHAR(10) true   NULL            ·  {t_many_pkey}  false
-rowid  INT8        false  unique_rowid()  ·  {t_many_pkey}  true
-
-# VARCHAR(10) -> INT4 attempt, but fail because of USING expression failure
-statement error .*could not parse "" as type int: strconv.ParseInt: parsing ""
-alter table t_many alter column c1 set data type int4 using trim('boo', c1)::int4;
-
-query TTBTTTB rowsort
-SHOW COLUMNS FROM t_many;
-----
-c1     VARCHAR(10) true   NULL            ·  {t_many_pkey}  false
-rowid  INT8        false  unique_rowid()  ·  {t_many_pkey}  true
-
-# Attempt again but with expression fixed.
-statement ok
-alter table t_many alter column c1 set data type int4 using trim(trailing 'boo' from c1)::int4;
-
-query I rowsort
-SELECT * FROM t_many;
-----
-0
-100
--32
-
-query TTBTTTB rowsort
-SHOW COLUMNS FROM t_many;
-----
-c1     INT4   true   NULL            ·  {t_many_pkey}  false
-rowid  INT8   false  unique_rowid()  ·  {t_many_pkey}  true
-
-statement ok
-DROP TABLE t_many;
-
-subtest stored_compute
-
-statement ok
-CREATE TABLE stored1 (A INT NOT NULL PRIMARY KEY, COMP1 SMALLINT NOT NULL AS (A) STORED, FAMILY F1(A, COMP1));
-
-statement ok
-INSERT INTO stored1 VALUES (10),(150),(190),(2000);
-
-query II
-SELECT * FROM stored1 ORDER BY A;
-----
-10 10
-150 150
-190 190
-2000 2000
-
-# Do trivial column change (SMALLINT -> BIGINT)
-statement ok
-ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE BIGINT;
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE stored1;
-----
-stored1  CREATE TABLE public.stored1 (
-           a INT8 NOT NULL,
-           comp1 INT8 NOT NULL AS (a) STORED,
-           CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
-           FAMILY f1 (a, comp1)
-         );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE stored1;
-----
-stored1  CREATE TABLE public.stored1 (
-          a INT8 NOT NULL,
-          comp1 INT8 NOT NULL AS (a) STORED,
-          CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
-          FAMILY f1 (a, comp1)
-        ) WITH (schema_locked = true);
-
-query II
-SELECT * FROM stored1 ORDER BY A;
-----
-10 10
-150 150
-190 190
-2000 2000
-
-# Do validation-only change (BIGINT -> INT4). But first insert a row that will violate INT4.
-statement ok
-INSERT INTO stored1 VALUES (2147483648),(2147483647);
-
-statement error pq: validate check constraint: integer out of range for type int4
-ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
-
-statement ok
-DELETE FROM stored1 WHERE a = 2147483648;
-
-statement ok
-ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE stored1;
-----
-stored1  CREATE TABLE public.stored1 (
-           a INT8 NOT NULL,
-           comp1 INT4 NOT NULL AS (a) STORED,
-           CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
-           FAMILY f1 (a, comp1)
-         );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE stored1;
-----
-stored1  CREATE TABLE public.stored1 (
-           a INT8 NOT NULL,
-           comp1 INT4 NOT NULL AS (a) STORED,
-           CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
-           FAMILY f1 (a, comp1)
-         ) WITH (schema_locked = true);
-
-query II
-SELECT * FROM stored1 ORDER BY A;
-----
-10 10
-150 150
-190 190
-2000 2000
-2147483647  2147483647
-
-# Attempt to convert to a type that is incompatible with the computed expression
-statement error pq: expected STORED COMPUTED COLUMN expression to have type bool, but 'a' has type int
-ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE BOOL;
-
-statement error pq: expected STORED COMPUTED COLUMN expression to have type string, but 'a' has type int
-ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE TEXT;
-
-# Convert the type to something compatible, but specify a custom value for the
-# column with the USING expression. This will force a type conversion with a backfill.
-statement ok
-ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT2 USING -1;
-
-statement ok
-INSERT INTO stored1 VALUES (-1000);
-
-skipif config local-mixed-24.3
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE stored1;
-----
-stored1  CREATE TABLE public.stored1 (
-           a INT8 NOT NULL,
-           comp1 INT2 NOT NULL AS (a) STORED,
-           CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
-           FAMILY f1 (a, comp1)
-         );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE stored1;
-----
-stored1  CREATE TABLE public.stored1 (
-           a INT8 NOT NULL,
-           comp1 INT2 NOT NULL AS (a) STORED,
-           CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
-           FAMILY f1 (a, comp1)
-         ) WITH (schema_locked = true);
-
-query II
-SELECT * FROM stored1 ORDER BY A;
-----
--1000 -1000
-10 -1
-150 -1
-190 -1
-2000 -1
-2147483647  -1
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE stored1 SET (schema_locked=false);
-
-# Attempt to drop stored along with changing the column type
-statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
-ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT4 USING -1, ALTER COLUMN comp1 drop stored;
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE stored1 SET (schema_locked=true);
-
-statement ok
-DROP TABLE stored1;
-
-subtest virtual_compute
-
-statement ok
-CREATE TABLE virt1 (c1 BIGINT NOT NULL PRIMARY KEY, v1 BIGINT NOT NULL AS (c1) virtual);
-
-statement ok
-INSERT INTO virt1 VALUES (100), (2147483647);
-
-# Ensure the USING expression cannot be used
-statement error pq: type change for virtual column "v1" cannot be altered with a USING expression
-ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT4 USING 10;
-
-statement ok
-ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT4;
-
-query II
-SELECT * from virt1 ORDER BY c1;
-----
-100 100
-2147483647 2147483647
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE virt1;
-----
-virt1  CREATE TABLE public.virt1 (
-         c1 INT8 NOT NULL,
-         v1 INT4 NOT NULL AS (c1) VIRTUAL,
-         CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
-       );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE virt1;
-----
-virt1  CREATE TABLE public.virt1 (
-         c1 INT8 NOT NULL,
-         v1 INT4 NOT NULL AS (c1) VIRTUAL,
-         CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
-       ) WITH (schema_locked = true);
-
-statement error pq: validate check constraint: integer out of range for type int2
-ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT2;
-
-statement ok
-DELETE FROM virt1 WHERE c1 = 2147483647;
-
-statement ok
-ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT2;
-
-statement ok
-INSERT INTO virt1 VALUES (-9999);
-
-query II
-SELECT * from virt1 ORDER BY c1;
-----
--9999 -9999
-100 100
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE virt1;
-----
-virt1  CREATE TABLE public.virt1 (
-         c1 INT8 NOT NULL,
-         v1 INT2 NOT NULL AS (c1) VIRTUAL,
-         CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
-       );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE virt1;
-----
-virt1  CREATE TABLE public.virt1 (
-         c1 INT8 NOT NULL,
-         v1 INT2 NOT NULL AS (c1) VIRTUAL,
-         CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
-       ) WITH (schema_locked = true);
-
-statement error pq: expected STORED COMPUTED COLUMN expression to have type string, but 'c1' has type int
-ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE TEXT;
-
-statement error pq: expected STORED COMPUTED COLUMN expression to have type float, but 'c1' has type int
-ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE FLOAT;
-
-statement ok
-DROP TABLE virt1;
-
-subtest virtual_compute_tz
-
-statement ok
-CREATE TABLE virt2 (C1 TIMESTAMP(6) NOT NULL PRIMARY KEY, v1 TIMESTAMP(3) AS (c1) VIRTUAL);
-
-statement ok
-INSERT INTO virt2 VALUES ('2024-10-31 16:50:00.123456');
-
-query TT
-SELECT * FROM virt2 ORDER BY c1;
-----
-2024-10-31 16:50:00.123456 +0000 +0000  2024-10-31 16:50:00.123 +0000 +0000
-
-statement ok
-ALTER TABLE virt2 ALTER COLUMN v1 SET DATA TYPE TIMESTAMP(2);
-
-query TT
-SELECT * FROM virt2 ORDER BY c1;
-----
-2024-10-31 16:50:00.123456 +0000 +0000  2024-10-31 16:50:00.12 +0000 +0000
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE virt2;
-----
-virt2  CREATE TABLE public.virt2 (
-         c1 TIMESTAMP(6) NOT NULL,
-         v1 TIMESTAMP(2) NULL AS (c1) VIRTUAL,
-         CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
-       );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE virt2;
-----
-virt2  CREATE TABLE public.virt2 (
-         c1 TIMESTAMP(6) NOT NULL,
-         v1 TIMESTAMP(2) NULL AS (c1) VIRTUAL,
-         CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
-       ) WITH (schema_locked = true);
-
-statement ok
-ALTER TABLE virt2 ALTER COLUMN v1 SET DATA TYPE TIMESTAMP(5);
-
-query TT
-SELECT * FROM virt2 ORDER BY c1;
-----
-2024-10-31 16:50:00.123456 +0000 +0000  2024-10-31 16:50:00.12346 +0000 +0000
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE virt2;
-----
-virt2  CREATE TABLE public.virt2 (
-         c1 TIMESTAMP(6) NOT NULL,
-         v1 TIMESTAMP(5) NULL AS (c1) VIRTUAL,
-         CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
-       );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE virt2;
-----
-virt2  CREATE TABLE public.virt2 (
-         c1 TIMESTAMP(6) NOT NULL,
-         v1 TIMESTAMP(5) NULL AS (c1) VIRTUAL,
-         CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
-       ) WITH (schema_locked = true);
-
-statement ok
-DROP TABLE virt2;
-
-subtest virtual_compute_decimal
-
-statement ok
-CREATE TABLE virt3 (C1 DECIMAL(6,3) NOT NULL PRIMARY KEY, v1 DECIMAL(6,3) AS (c1) VIRTUAL);
-
-statement ok
-INSERT INTO virt3 VALUES (1.23456),(12.34567),(-123.4);
-
-query TT
-SELECT * FROM virt3 ORDER BY c1;
-----
--123.400 -123.400
-1.235 1.235
-12.346 12.346
-
-statement ok
-ALTER TABLE virt3 ALTER COLUMN v1 SET DATA TYPE DECIMAL(6,2);
-
-query TT
-SELECT * FROM virt3 ORDER BY c1;
-----
--123.400 -123.40
-1.235 1.24
-12.346 12.35
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE virt3;
-----
-virt3  CREATE TABLE public.virt3 (
-         c1 DECIMAL(6,3) NOT NULL,
-         v1 DECIMAL(6,2) NULL AS (c1) VIRTUAL,
-         CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
-       );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE virt3;
-----
-virt3  CREATE TABLE public.virt3 (
-         c1 DECIMAL(6,3) NOT NULL,
-         v1 DECIMAL(6,2) NULL AS (c1) VIRTUAL,
-         CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
-       ) WITH (schema_locked = true);
-
-statement error pq: validate check constraint: .*value with precision 5, scale 4 must round to an absolute value less than 10\^1
-ALTER TABLE virt3 ALTER COLUMN v1 SET DATA TYPE DECIMAL(5,4);
-
-statement ok
-ALTER TABLE virt3 ALTER COLUMN v1 SET DATA TYPE DECIMAL(8,4);
-
-query TT
-SELECT * FROM virt3 ORDER BY c1;
-----
--123.400 -123.4000
-1.235 1.2350
-12.346 12.3460
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE virt3;
-----
-virt3  CREATE TABLE public.virt3 (
-         c1 DECIMAL(6,3) NOT NULL,
-         v1 DECIMAL(8,4) NULL AS (c1) VIRTUAL,
-         CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
-       );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE virt3;
-----
-virt3  CREATE TABLE public.virt3 (
-         c1 DECIMAL(6,3) NOT NULL,
-         v1 DECIMAL(8,4) NULL AS (c1) VIRTUAL,
-         CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
-       ) WITH (schema_locked = true);
-
-statement ok
-DROP TABLE virt3;
-
-subtest alter_dropped_col
-
-# Force DSC always so that we use it within a transaction
-let $schema_changer_state
-SELECT value FROM information_schema.session_variables where variable='use_declarative_schema_changer'
-
-statement ok
-set use_declarative_schema_changer = 'unsafe_always';
-
-statement disable-cf-mutator ok
-create table t_droppedcol (dropme int);
-
-statement ok
-SET autocommit_before_ddl = false
-
-statement ok
-begin;
-
-statement ok
-alter table t_droppedcol drop column dropme;
-
-statement error pq: column "dropme" does not exist
-alter table t_droppedcol alter column dropme set data type text;
-
-statement ok
-rollback;
-
-statement ok
-RESET autocommit_before_ddl
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t_droppedcol;
-----
-t_droppedcol  CREATE TABLE public.t_droppedcol (
-                dropme INT8 NULL,
-                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
-              );
-
-onlyif config local-schmea-locked
-query TT
-SHOW CREATE TABLE t_droppedcol;
-----
-t_droppedcol  CREATE TABLE public.t_droppedcol (
-                dropme INT8 NULL,
-                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
-              ) WITH (schema_locked = true);
-
-statement ok
-DROP TABLE t_droppedcol;
-
-# Restore the schema changer state back.
-statement ok
-SET use_declarative_schema_changer = $schema_changer_state
-
-subtest multi_alter_txn
-
-# Force DSC always so that we use it within a transaction
-let $schema_changer_state
-SELECT value FROM information_schema.session_variables where variable='use_declarative_schema_changer'
-
-statement ok
-set use_declarative_schema_changer = 'unsafe_always';
-
-statement ok
-CREATE TABLE t_multi_alter (c1 INT NOT NULL PRIMARY KEY, c2 TEXT NOT NULL, drop DATE, FAMILY F1 (c1, c2, drop));
-
-statement ok
-INSERT INTO t_multi_alter VALUES (10,'ten','1984-09-06'),(20,'twenty','2024-08-10');
-
-# The add column operation creates multiple primary keys, with all but one being
-# temporary. Previously, this caused the alter type to fail because it
-# encountered more primary keys than expected.
-statement ok
-begin;
-ALTER TABLE t_multi_alter ADD COLUMN c3 TEXT DEFAULT '<default>', DROP COLUMN drop;
-ALTER TABLE t_multi_alter ALTER COLUMN c2 SET DATA TYPE BIGINT USING c1::BIGINT;
-commit;
-
-query IIT
-select * from t_multi_alter order by c1;
-----
-10 10 <default>
-20 20 <default>
-
-statement ok
-begin;
-ALTER TABLE t_multi_alter ALTER COLUMN c3 SET DEFAULT NULL;
-ALTER TABLE t_multi_alter ALTER COLUMN c3 SET DATA TYPE DATE USING '2024-04-22'::DATE;
-commit;
-
-query IIT
-select * from t_multi_alter order by c1;
-----
-10 10 2024-04-22 00:00:00 +0000 +0000
-20 20 2024-04-22 00:00:00 +0000 +0000
-
-skipif config local-mixed-24.3
-onlyif config schema-locked-disabled
-query TT colnames
-show create table t_multi_alter
-----
-table_name     create_statement
-t_multi_alter  CREATE TABLE public.t_multi_alter (
-                 c1 INT8 NOT NULL,
-                 c2 INT8 NOT NULL,
-                 c3 DATE NULL,
-                 CONSTRAINT t_multi_alter_pkey PRIMARY KEY (c1 ASC),
-                 FAMILY f1 (c1, c2, c3)
-               );
-
-skipif config schema-locked-disabled
-query TT colnames
-show create table t_multi_alter
-----
-table_name     create_statement
-t_multi_alter  CREATE TABLE public.t_multi_alter (
-                 c1 INT8 NOT NULL,
-                 c2 INT8 NOT NULL,
-                 c3 DATE NULL,
-                 CONSTRAINT t_multi_alter_pkey PRIMARY KEY (c1 ASC),
-                 FAMILY f1 (c1, c2, c3)
-               ) WITH (schema_locked = true);
-
-statement ok
-drop table t_multi_alter;
-
-# Restore the schema changer state back.
-statement ok
-SET use_declarative_schema_changer = $schema_changer_state
 
 subtest end

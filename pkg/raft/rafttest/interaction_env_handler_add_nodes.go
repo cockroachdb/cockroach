@@ -18,6 +18,7 @@
 package rafttest
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/datadriven"
@@ -35,10 +37,6 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 	n := firstAsInt(t, d)
 	var snap pb.Snapshot
 	cfg := raftConfigStub()
-	// NB: the datadriven tests use the async storage API, but have an option to
-	// sync writes immediately in imitation of the previous synchronous API.
-	var asyncWrites bool
-
 	for _, arg := range d.CmdArgs[1:] {
 		for i := range arg.Vals {
 			switch arg.Key {
@@ -60,7 +58,7 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 			case "content":
 				arg.Scan(t, i, &snap.Data)
 			case "async-storage-writes":
-				arg.Scan(t, i, &asyncWrites)
+				arg.Scan(t, i, &cfg.AsyncStorageWrites)
 			case "lazy-replication":
 				arg.Scan(t, i, &cfg.LazyReplication)
 			case "prevote":
@@ -85,7 +83,7 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 			}
 		}
 	}
-	return env.AddNodes(n, cfg, snap, asyncWrites)
+	return env.AddNodes(n, cfg, snap)
 }
 
 type snapOverrideStorage struct {
@@ -104,9 +102,7 @@ var _ raft.Storage = snapOverrideStorage{}
 
 // AddNodes adds n new nodes initialized from the given snapshot (which may be
 // empty), and using the cfg as template. They will be assigned consecutive IDs.
-func (env *InteractionEnv) AddNodes(
-	n int, cfg raft.Config, snap pb.Snapshot, asyncWrites bool,
-) error {
+func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) error {
 	bootstrap := !reflect.DeepEqual(snap, pb.Snapshot{})
 	for i := 0; i < n; i++ {
 		id := pb.PeerID(1 + len(env.Nodes))
@@ -133,12 +129,12 @@ func (env *InteractionEnv) AddNodes(
 			if err := s.ApplySnapshot(snap); err != nil {
 				return err
 			}
-			ci := s.Compacted()
+			fi := s.FirstIndex()
 			// At the time of writing and for *MemoryStorage, applying a
 			// snapshot also truncates appropriately, but this would change with
 			// other storage engines potentially.
-			if exp := snap.Metadata.Index; ci != exp {
-				return fmt.Errorf("failed to establish compacted index %d; got %d", exp, ci)
+			if exp := snap.Metadata.Index + 1; fi != exp {
+				return fmt.Errorf("failed to establish first index %d; got %d", exp, fi)
 			}
 		}
 		cfg := cfg // fork the config stub
@@ -150,7 +146,12 @@ func (env *InteractionEnv) AddNodes(
 			cfg.CRDBVersion = cluster.MakeTestingClusterSettings().Version
 		}
 
-		cfg.StoreLiveness = newStoreLiveness(env.Fabric, id)
+		// Disable store liveness if the CRDB version is less than 24.3.
+		if cfg.CRDBVersion.IsActive(context.TODO(), clusterversion.V24_3_StoreLivenessEnabled) {
+			cfg.StoreLiveness = newStoreLiveness(env.Fabric, id)
+		} else {
+			cfg.StoreLiveness = raftstoreliveness.Disabled{}
+		}
 
 		cfg.Metrics = raft.NewMetrics()
 
@@ -176,10 +177,9 @@ func (env *InteractionEnv) AddNodes(
 			RawNode: rn,
 			// TODO(tbg): allow a more general Storage, as long as it also allows
 			// us to apply snapshots, append entries, and update the HardState.
-			Storage:     s,
-			asyncWrites: asyncWrites,
-			Config:      &cfg,
-			History:     []pb.Snapshot{snap},
+			Storage: s,
+			Config:  &cfg,
+			History: []pb.Snapshot{snap},
 		}
 		env.Nodes = append(env.Nodes, node)
 	}

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -97,7 +96,7 @@ func benchmarkSharedProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 			return errors.Newf("capabilities not yet ready")
 		}
 		if !tenantcapabilities.MustGetBoolByID(
-			capabilities, tenantcapabilitiespb.ExemptFromRateLimiting,
+			capabilities, tenantcapabilities.ExemptFromRateLimiting,
 		) {
 			return errors.Newf("capabilities not yet ready")
 		}

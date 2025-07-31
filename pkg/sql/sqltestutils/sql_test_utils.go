@@ -17,14 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -162,15 +158,4 @@ func PGXConn(t *testing.T, connURL url.URL) (*pgx.Conn, error) {
 		t.Fatal(err)
 	}
 	return pgx.ConnectConfig(context.Background(), pgxConfig)
-}
-
-// TestingDescsTxn is a convenience function for running a transaction on
-// descriptors when you have a serverutils.ApplicationLayerInterface.
-func TestingDescsTxn(
-	ctx context.Context,
-	s serverutils.ApplicationLayerInterface,
-	f func(ctx context.Context, txn isql.Txn, col *descs.Collection) error,
-) error {
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	return sql.DescsTxn(ctx, &execCfg, f)
 }

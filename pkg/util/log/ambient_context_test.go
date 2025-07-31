@@ -65,13 +65,16 @@ func TestAnnotateCtxSpan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Annotate a context that has no span. The tracer will not create a span.
+	// Annotate a context that has no span. The tracer will create a non-recordable
+	// span. We just check here that AnnotateCtxWithSpan properly returns it to the
+	// caller.
 
 	ac.Tracer = tracer
 	ctx, sp := ac.AnnotateCtxWithSpan(context.Background(), "s")
 	defer sp.Finish()
-	require.Nil(t, sp)
 	require.Equal(t, sp, tracing.SpanFromContext(ctx))
+	require.NotNil(t, sp)
+	require.False(t, sp.IsVerbose())
 }
 
 func TestAnnotateCtxNodeStoreReplica(t *testing.T) {

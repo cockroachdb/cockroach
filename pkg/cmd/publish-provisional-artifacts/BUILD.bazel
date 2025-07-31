@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/release",
-        "@com_github_cockroachdb_version//:version",
+        "//pkg/util/version",
         "@com_github_kr_pretty//:pretty",
     ],
 )

@@ -10,21 +10,20 @@ proto_library(
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb:kvflowinspectpb_proto",
         "//pkg/kv/kvserver/storeliveness/storelivenesspb:storelivenesspb_proto",
+        "@go_googleapis//google/api:annotations_proto",
     ],
 )
 
 go_proto_library(
     name = "inspectzpb_go_proto",
-    compilers = [
-        "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
-        "//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler",
-    ],
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
     importpath = "github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb",
     proto = ":inspectzpb_proto",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/kv/kvserver/storeliveness/storelivenesspb",
+        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
     ],
 )
 

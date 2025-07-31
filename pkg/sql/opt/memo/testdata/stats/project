@@ -182,12 +182,12 @@ SELECT * FROM a WHERE EXISTS (SELECT s < v FROM kuv GROUP BY s < v)
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=666.667]
+ ├── stats: [rows=666.6667]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── select
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) a.crdb_internal_mvcc_timestamp:5(decimal) a.tableoid:6(oid)
-      ├── stats: [rows=666.667]
+      ├── stats: [rows=666.6667]
       ├── key: (1)
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan a

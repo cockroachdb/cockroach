@@ -558,23 +558,23 @@ project
       ├── key columns: [10] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=1, distinct(1)=0.999992, null(1)=0, distinct(10)=0.999992, null(10)=0]
+      ├── stats: [rows=1, distinct(1)=0.00191974, null(1)=0, distinct(10)=0.00191974, null(10)=0]
       ├── key: (10)
       ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1)
       ├── index-join cardsinfo
       │    ├── columns: dealerid:9!null cardid:10!null buyprice:11!null sellprice:12!null discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null version:17!null
       │    ├── immutable
-      │    ├── stats: [rows=1, distinct(9)=1, null(9)=0, distinct(10)=0.999992, null(10)=0, distinct(17)=0.0221969, null(17)=0, distinct(9,17)=1, null(9,17)=0]
-      │    │   histogram(17)=  0                0                 0.022197           0
-      │    │                 <--- 1584421773604892000.0000000000 ---------- 1584421778604892000
+      │    ├── stats: [rows=0.001919738, distinct(9)=0.00191974, null(9)=0, distinct(10)=0.00191974, null(10)=0, distinct(17)=0.00191974, null(17)=0, distinct(9,17)=0.00191974, null(9,17)=0]
+      │    │   histogram(17)=  0                0                 0.0019197           0
+      │    │                 <--- 1584421773604892000.0000000000 ----------- 1584421778604892000
       │    ├── key: (10)
       │    ├── fd: ()-->(9), (10)-->(11-17), (17)-->(10-16)
       │    └── scan cardsinfo@cardsinfoversionindex
       │         ├── columns: dealerid:9!null cardid:10!null version:17!null
       │         ├── constraint: /9/17: (/1/1584421773604892000.0000000000 - /1]
-      │         ├── stats: [rows=1, distinct(9)=1, null(9)=0, distinct(10)=0.999992, null(10)=0, distinct(17)=0.0221969, null(17)=0, distinct(9,17)=1, null(9,17)=0]
-      │         │   histogram(17)=  0                0                 0.022197           0
-      │         │                 <--- 1584421773604892000.0000000000 ---------- 1584421778604892000
+      │         ├── stats: [rows=0.001919738, distinct(9)=0.00191974, null(9)=0, distinct(10)=0.00191974, null(10)=0, distinct(17)=0.00191974, null(17)=0, distinct(9,17)=0.00191974, null(9,17)=0]
+      │         │   histogram(17)=  0                0                 0.0019197           0
+      │         │                 <--- 1584421773604892000.0000000000 ----------- 1584421778604892000
       │         ├── key: (10)
       │         └── fd: ()-->(9), (10)-->(17), (17)-->(10)
       └── filters (true)
@@ -704,21 +704,21 @@ project
       │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null sellprice:6!null buyprice:7!null transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null
       │    ├── key columns: [20 21 3] = [11 12 13]
       │    ├── lookup columns are key
-      │    ├── stats: [rows=478.647, distinct(3)=478.647, null(3)=0, distinct(13)=478.647, null(13)=0]
+      │    ├── stats: [rows=478.6466, distinct(3)=478.647, null(3)=0, distinct(13)=478.647, null(13)=0]
       │    ├── key: (5,13)
       │    ├── fd: ()-->(1,2,4,11,12), (3,5)-->(6,7), (13)-->(14,15), (3)==(13), (13)==(3)
       │    ├── ordering: -(3|13) opt(1,2,4,11,12) [actual: -3]
       │    ├── limit hint: 20.00
       │    ├── project
       │    │    ├── columns: "lookup_join_const_col_@11":20!null "lookup_join_const_col_@12":21!null transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null sellprice:6!null buyprice:7!null
-      │    │    ├── stats: [rows=478.647]
+      │    │    ├── stats: [rows=478.6466]
       │    │    ├── key: (3,5)
       │    │    ├── fd: ()-->(1,2,4,20,21), (3,5)-->(6,7)
       │    │    ├── ordering: -3 opt(1,2,4,20,21) [actual: -3]
       │    │    ├── limit hint: 100.00
       │    │    ├── index-join transactiondetails
       │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null sellprice:6!null buyprice:7!null
-      │    │    │    ├── stats: [rows=478.647, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=478.647, null(3)=0, distinct(4)=1, null(4)=0, distinct(1,2,4)=1, null(1,2,4)=0]
+      │    │    │    ├── stats: [rows=478.6466, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=478.647, null(3)=0, distinct(4)=1, null(4)=0, distinct(1,2,4)=1, null(1,2,4)=0]
       │    │    │    ├── key: (3,5)
       │    │    │    ├── fd: ()-->(1,2,4), (3,5)-->(6,7)
       │    │    │    ├── ordering: -3 opt(1,2,4) [actual: -3]
@@ -726,7 +726,7 @@ project
       │    │    │    └── scan transactiondetails@detailscardidindex,rev
       │    │    │         ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null
       │    │    │         ├── constraint: /1/2/4/3/5: [/1/false/21953 - /1/false/21953]
-      │    │    │         ├── stats: [rows=478.647, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=478.647, null(3)=0, distinct(4)=1, null(4)=0, distinct(1,2,4)=1, null(1,2,4)=0]
+      │    │    │         ├── stats: [rows=478.6466, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=478.647, null(3)=0, distinct(4)=1, null(4)=0, distinct(1,2,4)=1, null(1,2,4)=0]
       │    │    │         ├── key: (3,5)
       │    │    │         ├── fd: ()-->(1,2,4)
       │    │    │         ├── ordering: -3 opt(1,2,4) [actual: -3]
@@ -816,7 +816,7 @@ project
  │    │    ├── grouping columns: name:2!null setname:4 number:5!null cardsinfo.cardid:10!null
  │    │    ├── internal-ordering: +2,+4,+5 opt(9)
  │    │    ├── immutable
- │    │    ├── stats: [rows=29618.5, distinct(2,4,5,10)=29618.5, null(2,4,5,10)=0]
+ │    │    ├── stats: [rows=29618.46, distinct(2,4,5,10)=29618.5, null(2,4,5,10)=0]
  │    │    ├── key: (10)
  │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(1-6,11-17,30), (17)-->(10-16), (1)==(10), (10)==(1)
  │    │    ├── ordering: +2,+4,+5
@@ -830,15 +830,15 @@ project
  │    │    │    │         ├── "lookup_join_const_col_@21":39 = isbuy:21 [outer=(21,39), constraints=(/21: (/NULL - ]; /39: (/NULL - ]), fd=(21)==(39), (39)==(21)]
  │    │    │    │         └── id:1 = transactiondetails.cardid:23 [outer=(1,23), constraints=(/1: (/NULL - ]; /23: (/NULL - ]), fd=(1)==(23), (23)==(1)]
  │    │    │    ├── immutable
- │    │    │    ├── stats: [rows=519622, distinct(10)=19000, null(10)=0, distinct(23)=19000, null(23)=0, distinct(2,4,5,10)=29618.5, null(2,4,5,10)=0]
+ │    │    │    ├── stats: [rows=519622.1, distinct(10)=19000, null(10)=0, distinct(23)=19000, null(23)=0, distinct(2,4,5,10)=29618.5, null(2,4,5,10)=0]
  │    │    │    ├── key: (10,22-24)
- │    │    │    ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (10,22-24)-->(20,21), (1)==(10), (10)==(1)
+ │    │    │    ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1), (10,22-24)-->(20,21)
  │    │    │    ├── ordering: +2,+4,+5 opt(9) [actual: +2,+4,+5]
  │    │    │    ├── limit hint: 877.19
  │    │    │    ├── project
  │    │    │    │    ├── columns: "lookup_join_const_col_@20":38!null "lookup_join_const_col_@21":39!null id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null
  │    │    │    │    ├── immutable
- │    │    │    │    ├── stats: [rows=29618.5]
+ │    │    │    │    ├── stats: [rows=29618.46]
  │    │    │    │    ├── key: (10)
  │    │    │    │    ├── fd: ()-->(9,38,39), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1)
  │    │    │    │    ├── ordering: +2,+4,+5 opt(9,38,39) [actual: +2,+4,+5]
@@ -848,7 +848,7 @@ project
  │    │    │    │    │    ├── key columns: [32 1] = [9 10]
  │    │    │    │    │    ├── lookup columns are key
  │    │    │    │    │    ├── immutable
- │    │    │    │    │    ├── stats: [rows=29618.5, distinct(1)=19000, null(1)=0, distinct(10)=19000, null(10)=0, distinct(2,4,5,10)=29618.5, null(2,4,5,10)=0]
+ │    │    │    │    │    ├── stats: [rows=29618.46, distinct(1)=19000, null(1)=0, distinct(10)=19000, null(10)=0, distinct(2,4,5,10)=29618.5, null(2,4,5,10)=0]
  │    │    │    │    │    ├── key: (10)
  │    │    │    │    │    ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1)
  │    │    │    │    │    ├── ordering: +2,+4,+5 opt(9) [actual: +2,+4,+5]
@@ -958,39 +958,45 @@ sort
       ├── project
       │    ├── columns: column39:39!null column41:41!null column43:43!null column45:45
       │    ├── stable
-      │    ├── stats: [rows=19245.3, distinct(45)=9748.52, null(45)=0]
+      │    ├── stats: [rows=19245.27, distinct(45)=9748.52, null(45)=0]
       │    ├── inner-join (hash)
-      │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null cardsinfo.dealerid:28!null cardsinfo.cardid:29!null
+      │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null id:20!null
       │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │    │    ├── stats: [rows=19245.3, distinct(3)=9748.52, null(3)=0, distinct(4)=11100.2, null(4)=0, distinct(29)=11100.2, null(29)=0]
-      │    │    ├── key: (5,13,29)
-      │    │    ├── fd: ()-->(1,2,11,12,28), (3-5)-->(6,7), (13)-->(14,15), (3)==(13), (13)==(3), (4)==(29), (29)==(4)
-      │    │    ├── scan cardsinfo@cardsinfoversionindex
-      │    │    │    ├── columns: cardsinfo.dealerid:28!null cardsinfo.cardid:29!null
-      │    │    │    ├── constraint: /28/36: [/1 - /1]
-      │    │    │    ├── stats: [rows=58333.3, distinct(28)=1, null(28)=0, distinct(29)=37420.4, null(29)=0]
-      │    │    │    ├── key: (29)
-      │    │    │    └── fd: ()-->(28)
+      │    │    ├── stats: [rows=19245.27, distinct(3)=9748.52, null(3)=0, distinct(4)=11100.2, null(4)=0, distinct(20)=11100.2, null(20)=0]
+      │    │    ├── key: (5,13,20)
+      │    │    ├── fd: ()-->(1,2,11,12), (3-5)-->(6,7), (13)-->(14,15), (3)==(13), (13)==(3), (4)==(20), (20)==(4)
+      │    │    ├── project
+      │    │    │    ├── columns: id:20!null
+      │    │    │    ├── stats: [rows=58333.33, distinct(20)=37420.4, null(20)=0]
+      │    │    │    ├── key: (20)
+      │    │    │    ├── scan cardsinfo@cardsinfoversionindex
+      │    │    │    │    ├── columns: cardsinfo.dealerid:28!null cardsinfo.cardid:29!null
+      │    │    │    │    ├── constraint: /28/36: [/1 - /1]
+      │    │    │    │    ├── stats: [rows=58333.33, distinct(28)=1, null(28)=0, distinct(29)=37420.4, null(29)=0]
+      │    │    │    │    ├── key: (29)
+      │    │    │    │    └── fd: ()-->(28)
+      │    │    │    └── projections
+      │    │    │         └── cardsinfo.cardid:29 [as=id:20, outer=(29)]
       │    │    ├── inner-join (lookup transactiondetails)
       │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null
       │    │    │    ├── key columns: [52 53 13] = [1 2 3]
-      │    │    │    ├── stats: [rows=12345.7, distinct(3)=12345.7, null(3)=0, distinct(4)=11100.2, null(4)=0, distinct(13)=12345.7, null(13)=0]
+      │    │    │    ├── stats: [rows=12345.68, distinct(3)=12345.7, null(3)=0, distinct(4)=11100.2, null(4)=0, distinct(13)=12345.7, null(13)=0]
       │    │    │    ├── key: (4,5,13)
       │    │    │    ├── fd: ()-->(1,2,11,12), (3-5)-->(6,7), (13)-->(14,15), (3)==(13), (13)==(3)
       │    │    │    ├── project
       │    │    │    │    ├── columns: "lookup_join_const_col_@1":52!null "lookup_join_const_col_@2":53!null transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null
-      │    │    │    │    ├── stats: [rows=12345.7, distinct(13)=12345.7, null(13)=0, distinct(52)=1, null(52)=0, distinct(53)=1, null(53)=0]
+      │    │    │    │    ├── stats: [rows=12345.68, distinct(13)=12345.7, null(13)=0, distinct(52)=1, null(52)=0, distinct(53)=1, null(53)=0]
       │    │    │    │    ├── key: (13)
       │    │    │    │    ├── fd: ()-->(11,12,52,53), (13)-->(14,15)
       │    │    │    │    ├── select
       │    │    │    │    │    ├── columns: transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null
-      │    │    │    │    │    ├── stats: [rows=12345.7, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=12345.7, null(13)=0, distinct(14)=12345.7, null(14)=0, distinct(15)=12345.7, null(15)=0, distinct(11,12)=1, null(11,12)=0, distinct(13-15)=12345.7, null(13-15)=0, distinct(11-15)=12345.7, null(11-15)=0]
+      │    │    │    │    │    ├── stats: [rows=12345.68, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=12345.7, null(13)=0, distinct(14)=12345.7, null(14)=0, distinct(15)=12345.7, null(15)=0, distinct(11,12)=1, null(11,12)=0, distinct(13-15)=12345.7, null(13-15)=0, distinct(11-15)=12345.7, null(11-15)=0]
       │    │    │    │    │    ├── key: (13)
       │    │    │    │    │    ├── fd: ()-->(11,12), (13)-->(14,15)
       │    │    │    │    │    ├── scan transactions
       │    │    │    │    │    │    ├── columns: transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null
       │    │    │    │    │    │    ├── constraint: /11/12/13: [/1/false/'2020-02-23 00:00:00+00' - /1/false/'2020-03-01 00:00:00+00']
-      │    │    │    │    │    │    ├── stats: [rows=111111, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=111111, null(13)=0, distinct(11,12)=1, null(11,12)=0, distinct(11-13)=111111, null(11-13)=0]
+      │    │    │    │    │    │    ├── stats: [rows=111111.1, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=111111, null(13)=0, distinct(11,12)=1, null(11,12)=0, distinct(11-13)=111111, null(11-13)=0]
       │    │    │    │    │    │    ├── key: (13)
       │    │    │    │    │    │    └── fd: ()-->(11,12), (13)-->(14,15)
       │    │    │    │    │    └── filters
@@ -1002,7 +1008,7 @@ sort
       │    │    │    └── filters
       │    │    │         └── (transactiondate:3 >= '2020-02-23 00:00:00+00') AND (transactiondate:3 <= '2020-03-01 00:00:00+00') [outer=(3), constraints=(/3: [/'2020-02-23 00:00:00+00' - /'2020-03-01 00:00:00+00']; tight)]
       │    │    └── filters
-      │    │         └── cardsinfo.cardid:29 = transactiondetails.cardid:4 [outer=(4,29), constraints=(/4: (/NULL - ]; /29: (/NULL - ]), fd=(4)==(29), (29)==(4)]
+      │    │         └── id:20 = transactiondetails.cardid:4 [outer=(4,20), constraints=(/4: (/NULL - ]; /20: (/NULL - ]), fd=(4)==(20), (20)==(4)]
       │    └── projections
       │         ├── transactiondetails.sellprice:6 * quantity:5 [as=column39:39, outer=(5,6), immutable]
       │         ├── transactiondetails.buyprice:7 * quantity:5 [as=column41:41, outer=(5,7), immutable]
@@ -1257,7 +1263,6 @@ upsert transactions
       ├── scan transactions
       │    ├── columns: dealerid:19!null isbuy:20!null date:21!null accountname:22!null customername:23!null operationid:24 version:25!null
       │    ├── constraint: /19/20/21: [/1/false/'2020-03-01 00:00:00+00' - /1/false/'2020-03-01 00:00:00+00']
-      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(19-25)
@@ -1402,7 +1407,6 @@ delete inventorydetails
       │    ├── [/1/294/'some-account' - /1/294/'some-account']
       │    ├── [/1/1793/'some-account' - /1/1793/'some-account']
       │    └── [/1/29483/'some-account' - /1/29483/'some-account']
-      ├── flags: avoid-full-scan
       ├── cardinality: [0 - 3]
       ├── key: (9)
       └── fd: ()-->(8,10)

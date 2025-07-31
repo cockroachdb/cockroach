@@ -5,12 +5,11 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 proto_library(
     name = "enginepb_proto",
     srcs = [
+        "engine.proto",
         "file_registry.proto",
-        "key_registry.proto",
         "mvcc.proto",
         "mvcc3.proto",
         "rocksdb.proto",
-        "stats.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
@@ -39,8 +38,8 @@ go_library(
     name = "enginepb",
     srcs = [
         "decode.go",
+        "engine.go",
         "file_registry.go",
-        "key_registry.go",
         "mvcc.go",
         "mvcc3.go",
         "mvcc3_valueheader.go",
@@ -50,6 +49,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvnemesis/kvnemesisutil",
+        "//pkg/util/buildutil",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",

@@ -460,12 +460,12 @@ func TestExamineDescriptors(t *testing.T) {
 				{
 					ID:      123,
 					Payload: &jobspb.Payload{Details: jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{})},
-					State:   jobs.StateCanceled,
+					Status:  jobs.StatusCanceled,
 				},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
   ParentID  52, ParentSchemaID 29: relation "t" (51): mutation in state UNKNOWN, direction NONE, and no column/index descriptor
-  ParentID  52, ParentSchemaID 29: relation "t" (51): mutation job 123 has terminal state (canceled)
+  ParentID  52, ParentSchemaID 29: relation "t" (51): mutation job 123 has terminal status (canceled)
 `,
 		},
 	}
@@ -511,7 +511,7 @@ func TestExamineJobs(t *testing.T) {
 				{
 					ID:      1,
 					Payload: &jobspb.Payload{Details: jobspb.WrapPayloadDetails(jobspb.BackupDetails{})},
-					State:   jobs.StateRunning,
+					Status:  jobs.StatusRunning,
 				},
 			},
 			valid:    true,
@@ -538,7 +538,7 @@ func TestExamineJobs(t *testing.T) {
 								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR},
 							},
 						})},
-					State: jobs.StateRunning,
+					Status: jobs.StatusRunning,
 				},
 				{
 					ID:      200,
@@ -550,7 +550,7 @@ func TestExamineJobs(t *testing.T) {
 								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR},
 							},
 						})},
-					State: jobs.StatePauseRequested,
+					Status: jobs.StatusPauseRequested,
 				},
 				{
 					ID:      300,
@@ -565,7 +565,7 @@ func TestExamineJobs(t *testing.T) {
 								{IndexID: 10, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR},
 							},
 						})},
-					State: jobs.StatePaused,
+					Status: jobs.StatusPaused,
 				},
 			},
 			valid: true,
@@ -581,7 +581,7 @@ job 300: paused schema change GC refers to missing table descriptor(s) [3]; exis
 					ID:       100,
 					Payload:  &jobspb.Payload{Details: jobspb.WrapPayloadDetails(jobspb.TypeSchemaChangeDetails{TypeID: 500})},
 					Progress: &jobspb.Progress{Details: jobspb.WrapProgressDetails(jobspb.TypeSchemaChangeProgress{})},
-					State:    jobs.StateRunning,
+					Status:   jobs.StatusRunning,
 				},
 			},
 			expected: `Examining 1 jobs...
@@ -602,7 +602,7 @@ job 100: running type schema change refers to missing type descriptor [500].
 					ID:       100,
 					Payload:  &jobspb.Payload{Details: jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{DescID: 2, DroppedDatabaseID: 500})},
 					Progress: &jobspb.Progress{Details: jobspb.WrapProgressDetails(jobspb.SchemaChangeProgress{})},
-					State:    jobs.StateRunning,
+					Status:   jobs.StatusRunning,
 				},
 			},
 			expected: `Examining 1 jobs...

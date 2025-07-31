@@ -205,6 +205,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 		spec = func(node int, store int) base.StoreSpec {
 			return base.StoreSpec{
 				Path: filepath.Join(td, fmt.Sprintf("n%ds%d", node, store)),
+				Size: base.SizeSpec{},
 			}
 		}
 		t.Cleanup(func() {
@@ -1765,7 +1766,7 @@ func filterRangeLog(
 	eventType kvserverpb.RangeLogEventType,
 	reason kvserverpb.RangeLogEventReason,
 ) ([]kvserverpb.RangeLogEvent_Info, error) {
-	return queryRangeLog(conn, `SELECT info FROM system.rangelog WHERE "rangeID" = $1 AND "eventType" = $2 AND info LIKE concat('%', $3::STRING, '%') ORDER BY timestamp ASC;`, rangeID, eventType.String(), reason)
+	return queryRangeLog(conn, `SELECT info FROM system.rangelog WHERE "rangeID" = $1 AND "eventType" = $2 AND info LIKE concat('%', $3, '%') ORDER BY timestamp ASC;`, rangeID, eventType.String(), reason)
 }
 
 func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
@@ -1959,19 +1960,19 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 			0: {
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: []string{"n1"},
+					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n1"}},
 				}},
 			},
 			1: {
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: []string{"n2"},
+					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n2"}},
 				}},
 			},
 			2: {
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: []string{"n3"},
+					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n3"}},
 				}},
 			},
 		},
@@ -2147,8 +2148,7 @@ func iterateOverAllStores(
 // the non-voters in Region 2 and Region 3 are promoted to voters.
 func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	scope := log.Scope(t)
-	defer scope.Close(t)
+	defer log.Scope(t).Close(t)
 
 	// This test is slow under stress/race and can time out when upreplicating /
 	// rebalancing to ensure all stores have the same range count initially, due
@@ -2156,8 +2156,6 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	skip.UnderStress(t)
 	skip.UnderDeadlock(t)
 	skip.UnderRace(t)
-
-	defer testutils.StartExecTrace(t, scope.GetDirectory()).Finish(t)
 
 	ctx := context.Background()
 

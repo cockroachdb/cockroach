@@ -223,11 +223,6 @@ var _ eval.WindowFunc = &nthValueWindow{}
 
 // aggregateWindowFunc aggregates over the current row's window frame, using
 // the internal eval.AggregateFunc to perform the aggregation.
-//
-// INVARIANT: the rows within a window frame are always processed in the same
-// order, regardless of whether the user specified an ordering. This means that
-// two rows with the exact same frame will produce the same result for a given
-// aggregation.
 type aggregateWindowFunc struct {
 	agg     eval.AggregateFunc
 	peerRes tree.Datum

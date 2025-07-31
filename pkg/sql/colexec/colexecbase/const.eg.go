@@ -154,7 +154,7 @@ func NewConstOp(
 			}, nil
 		}
 	}
-	return nil, errors.AssertionFailedf("unsupported const type %s", t.Name())
+	return nil, errors.Errorf("unsupported const type %s", t.Name())
 }
 
 type constBoolOp struct {

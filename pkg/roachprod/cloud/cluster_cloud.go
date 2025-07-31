@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"slices"
 	"sort"
 	"text/tabwriter"
 	"time"
@@ -263,11 +262,11 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 			// Parse cluster/user from VM name, but only for non-local VMs
 			userName, err := v.UserName()
 			if err != nil {
-				v.Errors = append(v.Errors, vm.ErrInvalidUserName)
+				v.Errors = append(v.Errors, vm.ErrInvalidName)
 			}
 			clusterName, err := v.ClusterName()
 			if err != nil {
-				v.Errors = append(v.Errors, vm.ErrInvalidClusterName)
+				v.Errors = append(v.Errors, vm.ErrInvalidName)
 			}
 
 			// Anything with an error gets tossed into the BadInstances slice, and we'll correct
@@ -322,17 +321,6 @@ type ClusterCreateOpts struct {
 	Nodes                 int
 	CreateOpts            vm.CreateOpts
 	ProviderOptsContainer vm.ProviderOptionsContainer
-}
-
-// Extracts o.CreateOpts.VMProviders from the provided opts.
-func Providers(opts ...*ClusterCreateOpts) []string {
-	providers := []string{}
-	for _, o := range opts {
-		providers = append(providers, o.CreateOpts.VMProviders...)
-	}
-	// Remove dupes, if any.
-	slices.Sort(providers)
-	return slices.Compact(providers)
 }
 
 // CreateCluster TODO(peter): document
@@ -494,11 +482,11 @@ func (c *Cluster) DeletePrometheusConfig(ctx context.Context, l *logger.Logger) 
 
 	for _, node := range c.VMs {
 
-		reachability := promhelperclient.ProviderReachability(
-			node.Provider,
-			promhelperclient.CloudEnvironment(node.Project),
-		)
-		if reachability == promhelperclient.None {
+		// only gce is supported for prometheus
+		if !cl.IsSupportedNodeProvider(node.Provider) {
+			continue
+		}
+		if !cl.IsSupportedPromProject(node.Project) {
 			continue
 		}
 

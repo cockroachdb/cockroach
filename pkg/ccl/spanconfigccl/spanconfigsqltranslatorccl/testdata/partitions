@@ -253,26 +253,3 @@ translate database=db table=part
 /Table/111/2/{51-60}                       range default
 /Table/111/2/6{0-1}                        num_replicas=11
 /Table/11{1/2/61-2}                        range default
-
-exec-sql
-CREATE TABLE db.foo(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
-  PARTITION p VALUES IN (1, 5)
-);
-CREATE INDEX idx ON db.foo(j) PARTITION BY LIST (j) (
-  PARTITION p VALUES IN (2, 4)
-);
-ALTER PARTITION p OF INDEX db.foo@foo_pkey CONFIGURE ZONE USING gc.ttlseconds = 2;
-ALTER PARTITION p OF INDEX db.foo@idx CONFIGURE ZONE USING gc.ttlseconds = 5;
-----
-
-translate database=db table=foo
-----
-/Table/112{-/1/1}                          range default
-/Table/112/1/{1-2}                         ttl_seconds=2
-/Table/112/1/{2-5}                         range default
-/Table/112/1/{5-6}                         ttl_seconds=2
-/Table/112/{1/6-2/2}                       range default
-/Table/112/2/{2-3}                         ttl_seconds=5
-/Table/112/2/{3-4}                         range default
-/Table/112/2/{4-5}                         ttl_seconds=5
-/Table/11{2/2/5-3}                         range default

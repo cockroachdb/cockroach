@@ -7,59 +7,10 @@ syntax = "proto3";
 package cockroach.kv.kvserver.ctupdate;
 option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb";
 
+import "roachpb/data.proto";
 import "util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
-
-// RangeClosedTimestampPolicy defines a range's closed timestamp policy. All
-// ranges in a cluster are placed in a closed timestamp policy bucket, which is
-// decided by the leaseholder replica of the range. The side transport sender
-// periodically transmits closed timestamp updates for ranges it's responsible
-// for, closing timestamps on a per-bucket basis.
-//
-// NB: The policy is only used inside kvserver, and shouldn't leak to the
-// client. See roachpb.ClosedTimestampPolicy and toClientClosedTsPolicy for the
-// client side equivalent.
-//
-// Closed timestamp policies on the server can be dynamically adjusted based on
-// observed network latencies between the leaseholder and its farthest follower.
-// Each range is bucketed based on observed network latencies, and buckets may
-// change as network latencies change, or the range's SpanConfig changes.
-enum RangeClosedTimestampPolicy {
-  option (gogoproto.goproto_enum_prefix) = false;
-  // LAG_BY_CLUSTER_SETTING indicates that the range's closed timestamp is
-  // configured to lag behind present time by the value configured for the
-  // `kv.closed_timestamp.target_duration` cluster setting.
-  LAG_BY_CLUSTER_SETTING = 0;
-  // The following policies correspond to roachpb.LEAD_FOR_GLOBAL_READS policy.
-  // LEAD_FOR_GLOBAL_READS indicates that the range's closed timestamp is
-  // configured to lead present time such that all followers of the range are
-  // able to serve consistent, present time reads.
-  //
-  // Lead policy for global reads with no locality information. It uses a
-  // hardcoded network latency 150ms by default.
-  LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO = 1;
-  // Lead policy for ranges with global reads policy. The following policies are
-  // selected based on max leaseholder-to-follower latency.
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS = 2;  // [0,20)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS = 3;  // [20,40)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS = 4;  // [40,60)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_80MS = 5;  // [60,80)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_100MS = 6;  // [80,100)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS = 7;  // [100,120)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_140MS = 8;  // [120,140)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_160MS = 9;  // [140,160)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_180MS = 10; // [160,180)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_200MS = 11; // [180,200)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_220MS = 12; // [200,220)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_240MS = 13; // [220,240)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_260MS = 14; // [240,260)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_280MS = 15; // [260,280)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS = 16; // [280,300)ms
-  LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS = 17; // >=300ms
-  // Sentinel value for slice sizing.
-  MAX_CLOSED_TIMESTAMP_POLICY = 18;
-}
 
 // Update contains information about (the advancement of) closed timestamps for
 // ranges with leases on the sender node. Updates are of two types: snapshots
@@ -106,7 +57,7 @@ message Update {
   // and the regular Raft transport are possible, as are races between two
   // side-transport streams for an outgoing and incoming leaseholder.
   message GroupUpdate {
-    RangeClosedTimestampPolicy policy = 1;
+    roachpb.RangeClosedTimestampPolicy policy = 1;
     util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
   }
   repeated GroupUpdate closed_timestamps = 4 [(gogoproto.nullable) = false];
@@ -129,7 +80,7 @@ message Update {
   message RangeUpdate {
     uint64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
     uint64 lai = 2 [(gogoproto.customname) = "LAI", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
-    RangeClosedTimestampPolicy policy = 3;
+    roachpb.RangeClosedTimestampPolicy policy = 3;
   }
   repeated RangeUpdate added_or_updated = 6 [(gogoproto.nullable) = false];
 }

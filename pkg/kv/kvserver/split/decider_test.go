@@ -7,7 +7,7 @@ package split
 
 import (
 	"context"
-	"math/rand/v2"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -22,11 +22,10 @@ import (
 // testLoadSplitConfig implements the LoadSplitConfig interface and may be used
 // in testing.
 type testLoadSplitConfig struct {
-	randSource          RandSource
-	useWeighted         bool
-	statRetention       time.Duration
-	statThreshold       float64
-	sampleResetDuration time.Duration
+	randSource    RandSource
+	useWeighted   bool
+	statRetention time.Duration
+	statThreshold float64
 }
 
 // NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
@@ -51,12 +50,6 @@ func (t *testLoadSplitConfig) StatThreshold(_ SplitObjective) float64 {
 	return t.statThreshold
 }
 
-// SampleResetDuration returns the duration that any sampling structure should
-// retain data for before resetting.
-func (t *testLoadSplitConfig) SampleResetDuration() time.Duration {
-	return t.sampleResetDuration
-}
-
 func ld(n int) func(SplitObjective) int {
 	return func(_ SplitObjective) int {
 		return n
@@ -71,27 +64,22 @@ func ms(i int) time.Time {
 	return ts.Add(time.Duration(i) * time.Millisecond)
 }
 
-func newSplitterMetrics() *LoadSplitterMetrics {
-	return &LoadSplitterMetrics{
-		PopularKeyCount:     metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount:     metric.NewCounter(metric.Metadata{}),
-		ClearDirectionCount: metric.NewCounter(metric.Metadata{}),
-	}
-}
-
 func TestDecider(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rng := rand.New(rand.NewPCG(12, 12))
+	rand := rand.New(rand.NewSource(12))
 	loadSplitConfig := testLoadSplitConfig{
-		randSource:    rng,
+		randSource:    rand,
 		useWeighted:   false,
 		statRetention: 2 * time.Second,
 		statThreshold: 10,
 	}
 
 	var d Decider
-	Init(&d, &loadSplitConfig, newSplitterMetrics(),
+	Init(&d, &loadSplitConfig, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	},
 		SplitQPS,
 	)
 
@@ -244,17 +232,20 @@ func TestDecider(t *testing.T) {
 
 func TestDecider_MaxStat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	rand := rand.New(rand.NewSource(11))
 
-	rng := rand.New(rand.NewPCG(11, 11))
 	loadSplitConfig := testLoadSplitConfig{
-		randSource:    rng,
+		randSource:    rand,
 		useWeighted:   false,
 		statRetention: 10 * time.Second,
 		statThreshold: 100,
 	}
 
 	var d Decider
-	Init(&d, &loadSplitConfig, newSplitterMetrics(), SplitQPS)
+	Init(&d, &loadSplitConfig, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	}, SplitQPS)
 
 	assertMaxStat := func(i int, expMaxStat float64, expOK bool) {
 		t.Helper()
@@ -383,120 +374,25 @@ func TestMaxStatTracker(t *testing.T) {
 	require.Equal(t, 1, mt.curIdx)
 }
 
-func TestSplitStatisticsGeneral(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	for _, test := range []struct {
-		name        string
-		useWeighted bool
-		expected    *SplitStatistics
-	}{
-		{"unweighted", false, &SplitStatistics{
-			AccessDirection: 0.4945791444904396,
-			PopularKey: PopularKey{
-				Key:       keys.SystemSQLCodec.TablePrefix(uint32(52)),
-				Frequency: 0.05,
-			},
-		}},
-		{"weighted", true, &SplitStatistics{
-			AccessDirection: 0.3885786802030457,
-			PopularKey: PopularKey{
-				Key:       keys.SystemSQLCodec.TablePrefix(uint32(111)),
-				Frequency: 0.05,
-			},
-		}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			rand := rand.New(rand.NewPCG(11, 11))
-			timeStart := 1000
-
-			var decider Decider
-			loadSplitConfig := testLoadSplitConfig{
-				randSource:    rand,
-				useWeighted:   test.useWeighted,
-				statRetention: time.Second,
-				statThreshold: 1,
-			}
-
-			Init(&decider, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
-
-			for i := 1; i <= 1000; i++ {
-				k := i
-				if i > 500 {
-					k = 500 - i
-				}
-				decider.Record(context.Background(), ms(timeStart+i*50), ld(1), func() roachpb.Span {
-					return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(k))}
-				})
-			}
-
-			assert.Equal(t, decider.SplitStatistics(), test.expected)
-		})
-	}
-}
-
-func TestSplitStatisticsPopularKey(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	for _, test := range []struct {
-		name        string
-		useWeighted bool
-		expected    *SplitStatistics
-	}{
-		{"unweighted", false, &SplitStatistics{
-			AccessDirection: 1,
-			PopularKey: PopularKey{
-				Key:       keys.SystemSQLCodec.TablePrefix(uint32(100)),
-				Frequency: 1,
-			},
-		}},
-		{"weighted", true, &SplitStatistics{
-			AccessDirection: 1,
-			PopularKey: PopularKey{
-				Key:       keys.SystemSQLCodec.TablePrefix(uint32(100)),
-				Frequency: 1,
-			},
-		}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			rand := rand.New(rand.NewPCG(11, 11))
-			timeStart := 1000
-
-			var decider Decider
-			loadSplitConfig := testLoadSplitConfig{
-				randSource:    rand,
-				useWeighted:   test.useWeighted,
-				statRetention: time.Second,
-				statThreshold: 1,
-			}
-
-			Init(&decider, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
-
-			for i := 1; i <= 1000; i++ {
-				decider.Record(context.Background(), ms(timeStart+i*50), ld(1), func() roachpb.Span {
-					return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(100))}
-				})
-			}
-
-			assert.Equal(t, decider.SplitStatistics(), test.expected)
-		})
-	}
-}
-
 func TestDeciderMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rng := rand.New(rand.NewPCG(11, 11))
+	rand := rand.New(rand.NewSource(11))
 	timeStart := 1000
 
 	var dPopular Decider
 	loadSplitConfig := testLoadSplitConfig{
-		randSource:    rng,
+		randSource:    rand,
 		useWeighted:   false,
 		statRetention: time.Second,
 		statThreshold: 1,
 	}
 
-	Init(&dPopular, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
+	Init(&dPopular, &loadSplitConfig, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	}, SplitCPU)
 
-	// No split key, popular key, clear direction
+	// No split key, popular key
 	for i := 0; i < 20; i++ {
 		dPopular.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
 			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
@@ -510,11 +406,13 @@ func TestDeciderMetrics(t *testing.T) {
 
 	assert.Equal(t, dPopular.loadSplitterMetrics.PopularKeyCount.Count(), int64(2))
 	assert.Equal(t, dPopular.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(2))
-	assert.Equal(t, dPopular.loadSplitterMetrics.ClearDirectionCount.Count(), int64(2))
 
-	// No split key, not popular key, clear direction
+	// No split key, not popular key
 	var dNotPopular Decider
-	Init(&dNotPopular, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
+	Init(&dNotPopular, &loadSplitConfig, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	}, SplitCPU)
 
 	for i := 0; i < 20; i++ {
 		dNotPopular.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
@@ -529,29 +427,13 @@ func TestDeciderMetrics(t *testing.T) {
 
 	assert.Equal(t, dNotPopular.loadSplitterMetrics.PopularKeyCount.Count(), int64(0))
 	assert.Equal(t, dNotPopular.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(2))
-	assert.Equal(t, dNotPopular.loadSplitterMetrics.ClearDirectionCount.Count(), int64(2))
-
-	// no split key, no popular key, no clear direction
-	var dNoClearDirection Decider
-	Init(&dNoClearDirection, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
-	for i := 0; i < 20; i++ {
-		dNoClearDirection.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
-			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(i))}
-		})
-	}
-	for i := 1; i <= 2000; i++ {
-		dNoClearDirection.Record(context.Background(), ms(timeStart+i*1000), ld(1), func() roachpb.Span {
-			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(i % 20))}
-		})
-	}
-
-	assert.Equal(t, dNoClearDirection.loadSplitterMetrics.PopularKeyCount.Count(), int64(0))
-	assert.Equal(t, dNoClearDirection.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(0))
-	assert.Equal(t, dNoClearDirection.loadSplitterMetrics.ClearDirectionCount.Count(), int64(0))
 
 	// No split key, all insufficient counters
 	var dAllInsufficientCounters Decider
-	Init(&dAllInsufficientCounters, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
+	Init(&dAllInsufficientCounters, &loadSplitConfig, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	}, SplitCPU)
 	for i := 0; i < 20; i++ {
 		dAllInsufficientCounters.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
 			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
@@ -565,69 +447,4 @@ func TestDeciderMetrics(t *testing.T) {
 
 	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.PopularKeyCount.Count(), int64(0))
 	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(0))
-	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.ClearDirectionCount.Count(), int64(0))
-
-}
-
-// TestDeciderSampleReset tests the sample reset functionality of the decider,
-// when the sample reset duration is non-zero, the split finder should be reset
-// after the given duration. When the sample reset duration is zero, the split
-// finder should not be reset.
-func TestDeciderSampleReset(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	rng := rand.New(rand.NewPCG(12, 12))
-	loadSplitConfig := testLoadSplitConfig{
-		randSource:          rng,
-		useWeighted:         false,
-		statRetention:       2 * time.Second,
-		statThreshold:       1,
-		sampleResetDuration: 10 * time.Second,
-	}
-	ctx := context.Background()
-	tick := 0
-
-	var d Decider
-	Init(&d, &loadSplitConfig, newSplitterMetrics(), SplitQPS)
-
-	require.Nil(t, d.mu.splitFinder)
-	d.Record(ctx, ms(tick), ld(100), func() roachpb.Span {
-		return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
-	})
-	// The split finder should be created as the second sample is recorded and
-	// the stat remains above the threshold (1) each tick.
-	for i := 0; i < 10; i++ {
-		tick += 1000
-		d.Record(ctx, ms(tick), ld(100), func() roachpb.Span {
-			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
-		})
-		require.NotNil(t, d.mu.splitFinder, (*lockedDecider)(&d))
-	}
-
-	// Tick one more time, now the sample reset duration (10s) has passed and the
-	// split finder should be reset.
-	tick += 1000
-	d.Record(ctx, ms(tick), ld(100), func() roachpb.Span {
-		return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
-	})
-	require.Nil(t, d.mu.splitFinder, (*lockedDecider)(&d))
-
-	// Immediately following the last tick where the splitFinder was reset, it
-	// should be recreated as the stat is still above the threshold.
-	for i := 0; i < 10; i++ {
-		tick += 1000
-		d.Record(ctx, ms(tick), ld(100), func() roachpb.Span {
-			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
-		})
-		require.NotNil(t, d.mu.splitFinder, (*lockedDecider)(&d))
-	}
-	// Set the sample reset duration to 0, which should cause the split finder to
-	// not be reset in the next tick, unlike before when the sample reset
-	// duration was 10s.
-	loadSplitConfig.sampleResetDuration = 0
-	tick += 1000
-	d.Record(ctx, ms(tick), ld(100), func() roachpb.Span {
-		return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
-	})
-	require.NotNil(t, d.mu.splitFinder, (*lockedDecider)(&d))
 }

@@ -1,4 +1,5 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test", "gomock")
+load("@bazel_gomock//:gomock.bzl", "gomock")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scexec",
@@ -38,7 +39,6 @@ go_library(
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/sem/catid",
-        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sessiondata",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
@@ -71,12 +71,14 @@ go_test(
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/settings/cluster",
+        "//pkg/sql",
         "//pkg/sql/catalog",
         # catalogkeys is required to build the generated output of mock_scexec
         "//pkg/sql/catalog/catalogkeys",  # keep
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/isql",
@@ -106,12 +108,9 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_golang_mock//gomock",
         "@com_github_stretchr_testify//require",
-        "//pkg/sql/sem/idxtype",
-        "//pkg/sql/catalog/lease",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/testutils/testcluster",
         "//pkg/util/ctxgroup",
-        "//pkg/sql",
     ],
 )
 

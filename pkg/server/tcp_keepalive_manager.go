@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 )
 
 var KeepAliveProbeCount = settings.RegisterIntSetting(
@@ -61,20 +62,27 @@ func (k *tcpKeepAliveManager) configure(ctx context.Context, conn net.Conn) {
 
 	// Only log success/failure once.
 	doLog := atomic.CompareAndSwapInt32(&k.loggedKeepAliveStatus, 0, 1)
+	if err := tcpConn.SetKeepAlive(true); err != nil {
+		if doLog {
+			log.Ops.Warningf(ctx, "failed to enable TCP keep-alive for pgwire: %v", err)
+		}
+		return
+
+	}
 	// Based on the maximum connection life span and probe interval, pick a maximum
 	// probe count.
 	probeCount := KeepAliveProbeCount.Get(&k.settings.SV)
 	probeFrequency := KeepAliveProbeFrequency.Get(&k.settings.SV)
 
-	err := tcpConn.SetKeepAliveConfig(net.KeepAliveConfig{
-		Enable:   true,
-		Idle:     probeFrequency,
-		Interval: probeFrequency,
-		Count:    int(probeCount),
-	})
-	if err != nil {
+	if err := sysutil.SetKeepAliveCount(tcpConn, int(probeCount)); err != nil {
 		if doLog {
-			log.Ops.Warningf(ctx, "failed to configure TCP keep-alive for pgwire: %v", err)
+			log.Ops.Warningf(ctx, "failed to set TCP keep-alive probe count for pgwire: %v", err)
+		}
+	}
+
+	if err := tcpConn.SetKeepAlivePeriod(probeFrequency); err != nil {
+		if doLog {
+			log.Ops.Warningf(ctx, "failed to set TCP keep-alive duration for pgwire: %v", err)
 		}
 		return
 	}

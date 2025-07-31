@@ -137,6 +137,7 @@ func (j *mvccStatisticsUpdateJob) runTenantGlobalMetricsExporter(
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-timer.C:
+			timer.Read = true
 			if err := runTask(); err != nil {
 				log.Errorf(ctx, "mvcc statistics update job error: %v", err)
 			}

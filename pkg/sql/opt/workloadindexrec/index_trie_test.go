@@ -322,7 +322,7 @@ func TestIndexTrie(t *testing.T) {
 	for idx, testCase := range testCases {
 		trie := NewTrie()
 		for i, indexedCols := range testCase.indexedColLists {
-			trie.Insert(indexedCols, testCase.storingColLists[i], uint64(i))
+			trie.Insert(indexedCols, testCase.storingColLists[i])
 		}
 
 		if testCase.testType == insertRemoveStoring || testCase.testType == insertRemoveAndAssignStoring {
@@ -339,10 +339,10 @@ func TestIndexTrie(t *testing.T) {
 			for i, retIndexedColList := range retIndexedColLists {
 				// Find one matched indexes.
 				for j, expectedIndexedColList := range testCase.expectedIndexedColLists {
-					if !expectedIndexHit[j] && len(retIndexedColList.indexedColumns) == len(expectedIndexedColList) && len(retStoringColLists[i]) == len(testCase.expectedStoringColLists[j]) {
+					if !expectedIndexHit[j] && len(retIndexedColList) == len(expectedIndexedColList) && len(retStoringColLists[i]) == len(testCase.expectedStoringColLists[j]) {
 						var same = true
 						// Compare the indexedCol.
-						for k, retIndexedCol := range retIndexedColList.indexedColumns {
+						for k, retIndexedCol := range retIndexedColList {
 							if retIndexedCol != expectedIndexedColList[k] {
 								same = false
 								break

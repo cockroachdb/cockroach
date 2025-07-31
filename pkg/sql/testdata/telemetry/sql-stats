@@ -37,12 +37,10 @@ CREATE TABLE baz.t (x INT, y INT);
 INSERT INTO baz.t VALUES (1, 1), (2, 2);
 ----
 sql-stats
- ├── $ some other app
- │    ├── [nodist] CREATE DATABASE _
- │    ├── [nodist] CREATE TABLE _ (_ INT8, _ INT8)
- │    └── [nodist] SET application_name = _
  └── b16e4363
       ├── [nodist] CREATE DATABASE _
+      ├── [nodist] CREATE DATABASE _
+      ├── [nodist] CREATE TABLE _ (_ INT8, _ INT8)
       ├── [nodist] CREATE TABLE _ (_ INT8, _ INT8)
       ├── [nodist] CREATE TABLE _ (_ INT8, _ INT8)
       ├── [nodist] INSERT INTO _ VALUES (_, __more__), (__more__)

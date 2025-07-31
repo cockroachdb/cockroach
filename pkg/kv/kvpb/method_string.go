@@ -46,23 +46,23 @@ func _() {
 	_ = x[LeaseInfo-30]
 	_ = x[ComputeChecksum-31]
 	_ = x[CheckConsistency-32]
-	_ = x[WriteBatch-33]
-	_ = x[Export-34]
-	_ = x[AdminScatter-35]
-	_ = x[AddSSTable-36]
-	_ = x[LinkExternalSSTable-37]
-	_ = x[Migrate-38]
-	_ = x[RecomputeStats-39]
-	_ = x[Refresh-40]
-	_ = x[RefreshRange-41]
-	_ = x[Subsume-42]
-	_ = x[RangeStats-43]
-	_ = x[QueryResolvedTimestamp-44]
-	_ = x[Barrier-45]
-	_ = x[Probe-46]
-	_ = x[IsSpanEmpty-47]
-	_ = x[Excise-48]
-	_ = x[FlushLockTable-49]
+	_ = x[InitPut-33]
+	_ = x[WriteBatch-34]
+	_ = x[Export-35]
+	_ = x[AdminScatter-36]
+	_ = x[AddSSTable-37]
+	_ = x[LinkExternalSSTable-38]
+	_ = x[Migrate-39]
+	_ = x[RecomputeStats-40]
+	_ = x[Refresh-41]
+	_ = x[RefreshRange-42]
+	_ = x[Subsume-43]
+	_ = x[RangeStats-44]
+	_ = x[AdminVerifyProtectedTimestamp-45]
+	_ = x[QueryResolvedTimestamp-46]
+	_ = x[Barrier-47]
+	_ = x[Probe-48]
+	_ = x[IsSpanEmpty-49]
 	_ = x[MaxMethod-49]
 	_ = x[NumMethods-50]
 }
@@ -135,6 +135,8 @@ func (i Method) String() string {
 		return "ComputeChecksum"
 	case CheckConsistency:
 		return "CheckConsistency"
+	case InitPut:
+		return "InitPut"
 	case WriteBatch:
 		return "WriteBatch"
 	case Export:
@@ -157,6 +159,8 @@ func (i Method) String() string {
 		return "Subsume"
 	case RangeStats:
 		return "RangeStats"
+	case AdminVerifyProtectedTimestamp:
+		return "AdminVerifyProtectedTimestamp"
 	case QueryResolvedTimestamp:
 		return "QueryResolvedTimestamp"
 	case Barrier:
@@ -165,10 +169,6 @@ func (i Method) String() string {
 		return "Probe"
 	case IsSpanEmpty:
 		return "IsSpanEmpty"
-	case Excise:
-		return "Excise"
-	case FlushLockTable:
-		return "FlushLockTable"
 	case NumMethods:
 		return "NumMethods"
 	default:
@@ -177,56 +177,56 @@ func (i Method) String() string {
 }
 
 var StringToMethodMap = map[string]Method{
-	"Get":                    0,
-	"Put":                    1,
-	"ConditionalPut":         2,
-	"Increment":              3,
-	"Delete":                 4,
-	"DeleteRange":            5,
-	"ClearRange":             6,
-	"RevertRange":            7,
-	"Scan":                   8,
-	"ReverseScan":            9,
-	"EndTxn":                 10,
-	"AdminSplit":             11,
-	"AdminUnsplit":           12,
-	"AdminMerge":             13,
-	"AdminTransferLease":     14,
-	"AdminChangeReplicas":    15,
-	"AdminRelocateRange":     16,
-	"HeartbeatTxn":           17,
-	"GC":                     18,
-	"PushTxn":                19,
-	"RecoverTxn":             20,
-	"QueryLocks":             21,
-	"QueryTxn":               22,
-	"QueryIntent":            23,
-	"ResolveIntent":          24,
-	"ResolveIntentRange":     25,
-	"Merge":                  26,
-	"TruncateLog":            27,
-	"RequestLease":           28,
-	"TransferLease":          29,
-	"LeaseInfo":              30,
-	"ComputeChecksum":        31,
-	"CheckConsistency":       32,
-	"WriteBatch":             33,
-	"Export":                 34,
-	"AdminScatter":           35,
-	"AddSSTable":             36,
-	"LinkExternalSSTable":    37,
-	"Migrate":                38,
-	"RecomputeStats":         39,
-	"Refresh":                40,
-	"RefreshRange":           41,
-	"Subsume":                42,
-	"RangeStats":             43,
-	"QueryResolvedTimestamp": 44,
-	"Barrier":                45,
-	"Probe":                  46,
-	"IsSpanEmpty":            47,
-	"Excise":                 48,
-	"FlushLockTable":         49,
-	"MaxMethod":              49,
-	"NumMethods":             50,
+	"Get":                           0,
+	"Put":                           1,
+	"ConditionalPut":                2,
+	"Increment":                     3,
+	"Delete":                        4,
+	"DeleteRange":                   5,
+	"ClearRange":                    6,
+	"RevertRange":                   7,
+	"Scan":                          8,
+	"ReverseScan":                   9,
+	"EndTxn":                        10,
+	"AdminSplit":                    11,
+	"AdminUnsplit":                  12,
+	"AdminMerge":                    13,
+	"AdminTransferLease":            14,
+	"AdminChangeReplicas":           15,
+	"AdminRelocateRange":            16,
+	"HeartbeatTxn":                  17,
+	"GC":                            18,
+	"PushTxn":                       19,
+	"RecoverTxn":                    20,
+	"QueryLocks":                    21,
+	"QueryTxn":                      22,
+	"QueryIntent":                   23,
+	"ResolveIntent":                 24,
+	"ResolveIntentRange":            25,
+	"Merge":                         26,
+	"TruncateLog":                   27,
+	"RequestLease":                  28,
+	"TransferLease":                 29,
+	"LeaseInfo":                     30,
+	"ComputeChecksum":               31,
+	"CheckConsistency":              32,
+	"InitPut":                       33,
+	"WriteBatch":                    34,
+	"Export":                        35,
+	"AdminScatter":                  36,
+	"AddSSTable":                    37,
+	"LinkExternalSSTable":           38,
+	"Migrate":                       39,
+	"RecomputeStats":                40,
+	"Refresh":                       41,
+	"RefreshRange":                  42,
+	"Subsume":                       43,
+	"RangeStats":                    44,
+	"AdminVerifyProtectedTimestamp": 45,
+	"QueryResolvedTimestamp":        46,
+	"Barrier":                       47,
+	"Probe":                         48,
+	"IsSpanEmpty":                   49,
+	"MaxMethod":                     49,
+	"NumMethods":                    50,
 }

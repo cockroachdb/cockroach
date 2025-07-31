@@ -540,9 +540,6 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.ScanOp:
 		cost = c.computeScanCost(candidate.(*memo.ScanExpr), required)
 
-	case opt.PlaceholderScanOp:
-		cost = c.computePlaceholderScanCost(candidate.(*memo.PlaceholderScanExpr), required)
-
 	case opt.SelectOp:
 		cost = c.computeSelectCost(candidate.(*memo.SelectExpr), required)
 
@@ -595,12 +592,6 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 
 	case opt.ProjectSetOp:
 		cost = c.computeProjectSetCost(candidate.(*memo.ProjectSetExpr))
-
-	case opt.VectorSearchOp:
-		cost = c.computeVectorSearchCost(candidate.(*memo.VectorSearchExpr))
-
-	case opt.VectorMutationSearchOp:
-		cost = c.computeVectorMutationSearchCost(candidate.(*memo.VectorMutationSearchExpr))
 
 	case opt.InsertOp:
 		insertExpr, _ := candidate.(*memo.InsertExpr)
@@ -766,16 +757,6 @@ func (c *coster) computeDistributeCost(
 	return DistributeCost
 }
 
-func (c *coster) computeVectorSearchCost(search *memo.VectorSearchExpr) memo.Cost {
-	// TODO(drewk, mw5h): implement a proper cost function.
-	return memo.Cost{C: cpuCostFactor * search.Relational().Statistics().RowCount}
-}
-
-func (c *coster) computeVectorMutationSearchCost(search *memo.VectorMutationSearchExpr) memo.Cost {
-	// TODO(drewk, mw5h): implement a proper cost function.
-	return memo.Cost{C: cpuCostFactor * search.Relational().Statistics().RowCount}
-}
-
 func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Required) memo.Cost {
 	if scan.Flags.ForceIndex && scan.Flags.Index != scan.Index || scan.Flags.ForceZigzag {
 		// If we are forcing an index, any other index has a very high cost. In
@@ -800,8 +781,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 
 	stats := scan.Relational().Statistics()
 	rowCount := stats.RowCount
-	if isUnfiltered && c.evalCtx != nil && c.evalCtx.SessionData().DisallowFullTableScans &&
-		!c.evalCtx.SessionData().Internal {
+	if isUnfiltered && c.evalCtx != nil && c.evalCtx.SessionData().DisallowFullTableScans {
 		if !scan.IsVirtualTable(c.mem.Metadata()) {
 			// Don't apply the huge cost to full scans of virtual tables since
 			// we don't reject them anyway. In other words, we would only
@@ -840,7 +820,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	// choose a reverse scan over a sort, add the reverse scan cost before we
 	// alter the row count for unbounded scan penalties below. This cost must also
 	// be added before adjusting the row count for the limit hint.
-	if ordering.ScanIsReverse(c.mem, scan, &required.Ordering) {
+	if ordering.ScanIsReverse(scan, &required.Ordering) {
 		if rowCount > 1 {
 			// Need to do binary search to seek to the previous row.
 			perRowCost.C += math.Log2(rowCount) * cpuCostFactor
@@ -884,7 +864,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	if scan.Distribution.Regions != nil {
 		regionsAccessed = scan.Distribution
 	} else {
-		tabMeta := c.mem.Metadata().TableMeta(scan.Table)
+		tabMeta := scan.Memo().Metadata().TableMeta(scan.Table)
 		regionsAccessed.FromIndexScan(c.ctx, c.evalCtx, tabMeta, scan.Index, scan.Constraint)
 	}
 	if scan.LocalityOptimized {
@@ -893,58 +873,11 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	extraCost := c.distributionCost(regionsAccessed)
 	cost.Add(extraCost)
 
-	if isFullScan {
-		cost.IncrFullScanCount()
-		if scan.Flags.AvoidFullScan {
-			// Apply a penalty for a full scan if needed.
-			cost.Flags.FullScanPenalty = true
-		}
+	// Apply a penalty for a full scan if needed.
+	if scan.Flags.AvoidFullScan && isFullScan {
+		cost.Flags.FullScanPenalty = true
 	}
 
-	return cost
-}
-
-// computePlaceholderScanCost computes the cost of a placeholder scan. It mimics
-// the logic in computeScanCost that is relevant for placeholder scans.
-func (c *coster) computePlaceholderScanCost(
-	scan *memo.PlaceholderScanExpr, required *physical.Required,
-) memo.Cost {
-	if !scan.Flags.Empty() {
-		panic(errors.AssertionFailedf("expected empty flags for placeholder scan"))
-	}
-
-	stats := scan.Relational().Statistics()
-	rowCount := stats.RowCount
-	const numSpans = 1 // A placeholder scan always has a single span.
-	baseCost := memo.Cost{C: numSpans * randIOCostFactor}
-
-	// Add the IO cost of retrieving and the CPU cost of emitting the rows. The
-	// row cost depends on the size of the columns scanned.
-	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols)
-
-	// If this is a virtual scan, add the cost of fetching table descriptors.
-	if c.mem.Metadata().Table(scan.Table).IsVirtualTable() {
-		baseCost.C += virtualScanTableDescriptorFetchCost
-	}
-
-	// Add a penalty if the cardinality exceeds the row count estimate. Adding a
-	// few rows worth of cost helps prevent surprising plans for very small tables
-	// or for when stats are stale.
-	//
-	// Note: we add this to the baseCost rather than the rowCount, so that the
-	// number of index columns does not have an outsized effect on the cost of
-	// the scan. See issue #68556.
-	baseCost.Add(c.largeCardinalityCostPenalty(scan.Relational().Cardinality, rowCount))
-
-	if required.LimitHint != 0 {
-		rowCount = math.Min(rowCount, required.LimitHint)
-	}
-
-	cost := baseCost
-	cost.C += rowCount * (seqIOCostFactor + perRowCost.C)
-
-	// TODO(#148315): Consider adding distribution cost for RBR tables.
-	cost.Add(SmallDistributeCost)
 	return cost
 }
 
@@ -1157,7 +1090,7 @@ func (c *coster) computeLookupJoinCost(
 		join.LocalityOptimized,
 	)
 	_, provided := distribution.BuildLookupJoinLookupTableDistribution(
-		c.ctx, c.evalCtx, c.mem, join, required, c.MaybeGetBestCostRelation)
+		c.ctx, c.evalCtx, join, required, c.MaybeGetBestCostRelation)
 	extraCost := c.distributionCost(provided)
 	cost.Add(extraCost)
 	return cost
@@ -1315,7 +1248,7 @@ func (c *coster) computeInvertedJoinCost(
 
 	cost.C += rowsProcessed * perRowCost.C
 
-	provided := distribution.BuildInvertedJoinLookupTableDistribution(c.ctx, c.evalCtx, c.mem, join)
+	provided := distribution.BuildInvertedJoinLookupTableDistribution(c.ctx, c.evalCtx, join)
 	extraCost := c.distributionCost(provided)
 	cost.Add(extraCost)
 	return cost

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	crdblog "github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -126,8 +127,8 @@ func (cfg *Config) NewLogger(path string) (*Logger, error) {
 		return &Logger{
 			Stdout:  newSafeWriter(stdout),
 			Stderr:  newSafeWriter(stderr),
-			stdoutL: log.New(stdout, cfg.Prefix, logFlags),
-			stderrL: log.New(stderr, cfg.Prefix, logFlags),
+			stdoutL: log.New(os.Stdout, cfg.Prefix, logFlags),
+			stderrL: log.New(os.Stderr, cfg.Prefix, logFlags),
 		}, nil
 	}
 
@@ -283,6 +284,25 @@ func (l *Logger) PrintfCtx(ctx context.Context, f string, args ...interface{}) {
 // can be passed.
 func (l *Logger) Printf(f string, args ...interface{}) {
 	l.PrintfCtxDepth(context.Background(), 2 /* depth */, f, args...)
+}
+
+// FatalfCtxDepth is like ErrorfCtxDepth, except that it closes the logger after
+// logging the message and then exits the process with status 1.
+func (l *Logger) FatalfCtxDepth(ctx context.Context, depth int, f string, args ...interface{}) {
+	l.ErrorfCtxDepth(ctx, depth, f, args...)
+	l.Close()
+	exit.WithCode(exit.UnspecifiedError())
+}
+
+// FatalfCtx is like FatalfCtxDepth, except without having to pass depth explicitly.
+func (l *Logger) FatalfCtx(ctx context.Context, f string, args ...interface{}) {
+	l.FatalfCtxDepth(ctx, 2 /* depth */, f, args...)
+}
+
+// Fatalf is like FatalfCtx, except it doesn't take a ctx and thus no log tags
+// can be passed.
+func (l *Logger) Fatalf(f string, args ...interface{}) {
+	l.FatalfCtx(context.Background(), f, args...)
 }
 
 // PrintfCtxDepth is like PrintfCtx, except that it allows the caller to control

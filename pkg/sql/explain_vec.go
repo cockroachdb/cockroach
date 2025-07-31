@@ -38,7 +38,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	distribution, _ := getPlanDistribution(
 		params.ctx, params.p.Descriptors().HasUncommittedTypes(),
-		params.extendedEvalCtx.SessionData(), n.plan.main, &params.p.distSQLVisitor,
+		params.extendedEvalCtx.SessionData().DistSQLMode, n.plan.main, &params.p.distSQLVisitor,
 	)
 	outerSubqueries := params.p.curPlan.subqueryPlans
 	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.plan.subqueryPlans, distribution)
@@ -87,7 +87,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 
 func newFlowCtxForExplainPurposes(ctx context.Context, p *planner) *execinfra.FlowCtx {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("explain"),
+		Name:     "explain",
 		Settings: p.execCfg.Settings,
 	})
 	// Note that we do not use planner's monitor here in order to not link any
@@ -146,30 +146,4 @@ func (n *explainVecNode) Next(runParams) (bool, error) {
 func (n *explainVecNode) Values() tree.Datums { return n.run.values }
 func (n *explainVecNode) Close(ctx context.Context) {
 	n.plan.close(ctx)
-}
-
-func (n *explainVecNode) InputCount() int {
-	// We check whether planNode is nil because the input might be represented
-	// physically, which we can't traverse into currently.
-	// TODO(yuzefovich/mgartner): Figure out a way to traverse into physical
-	// plans, if necessary.
-	if n.plan.main.planNode != nil {
-		return 1
-	}
-	return 0
-}
-
-func (n *explainVecNode) Input(i int) (planNode, error) {
-	if i == 0 && n.plan.main.planNode != nil {
-		return n.plan.main.planNode, nil
-	}
-	return nil, errors.AssertionFailedf("input index %d is out of range", i)
-}
-
-func (n *explainVecNode) SetInput(i int, p planNode) error {
-	if i == 0 && n.plan.main.planNode != nil {
-		n.plan.main.planNode = p
-		return nil
-	}
-	return errors.AssertionFailedf("input index %d is out of range", i)
 }

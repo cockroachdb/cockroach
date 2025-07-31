@@ -27,18 +27,6 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 			isAllowed: true,
 		},
 		{
-			stmt:      "ALTER INDEX idx NOT VISIBLE",
-			isAllowed: true,
-		},
-		{
-			stmt:      "ALTER INDEX idx CONFIGURE ZONE USING num_replicas = 3",
-			isAllowed: true,
-		},
-		{
-			stmt:      "ALTER INDEX idx RENAME TO idx2",
-			isAllowed: true,
-		},
-		{
 			stmt:      "CREATE UNIQUE INDEX idx ON t (a)",
 			isAllowed: false,
 		},
@@ -48,18 +36,6 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 		},
 		{
 			stmt:      "DROP INDEX idx",
-			isAllowed: true,
-		},
-		{
-			stmt:      "ALTER TABLE t ALTER COLUMN a SET DEFAULT 10",
-			isAllowed: true,
-		},
-		{
-			stmt:      "ALTER TABLE t ALTER COLUMN a DROP DEFAULT",
-			isAllowed: true,
-		},
-		{
-			stmt:      "ALTER TABLE t ALTER COLUMN a SET NOT VISIBLE",
 			isAllowed: true,
 		},
 		{
@@ -87,14 +63,6 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 			isAllowed: false,
 		},
 		{
-			stmt:      "ALTER TABLE t RENAME COLUMN a TO b",
-			isAllowed: false,
-		},
-		{
-			stmt:      "ALTER TABLE t DROP COLUMN a",
-			isAllowed: false,
-		},
-		{
 			stmt:      "ALTER TABLE t SET (ttl = 'on', ttl_expire_after = '5m')",
 			isAllowed: false,
 		},
@@ -118,7 +86,7 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 			}
 			// Tests for virtual column checks are in
 			// TestLogicalReplicationCreationChecks.
-			if got := tree.IsAllowedLDRSchemaChange(stmt.AST, nil /* virtualColNames */, true); got != tc.isAllowed {
+			if got := tree.IsAllowedLDRSchemaChange(stmt.AST, nil /* virtualColNames */); got != tc.isAllowed {
 				t.Errorf("expected %v, got %v", tc.isAllowed, got)
 			}
 		})

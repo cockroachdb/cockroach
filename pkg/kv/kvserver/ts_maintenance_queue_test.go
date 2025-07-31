@@ -282,7 +282,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	}
 
 	memMon := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test"),
+		Name:     "test",
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	memMon.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))

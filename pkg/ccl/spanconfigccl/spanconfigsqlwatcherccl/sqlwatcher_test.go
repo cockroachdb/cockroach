@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/cockroachdb/cockroach/pkg/backup"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/jobs"

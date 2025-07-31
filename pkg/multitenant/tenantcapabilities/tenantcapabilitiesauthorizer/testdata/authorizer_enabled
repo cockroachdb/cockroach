@@ -8,7 +8,7 @@ client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRe
 
 has-capability-for-batch ten=10 cmds=(Merge)
 ----
-client tenant does not have capability "ID(15)" (*kvpb.MergeRequest)
+client tenant does not have capability "ID(14)" (*kvpb.MergeRequest)
 
 has-node-status-capability ten=10
 ----
@@ -38,7 +38,7 @@ ok
 
 has-capability-for-batch ten=10 cmds=(Merge)
 ----
-client tenant does not have capability "ID(15)" (*kvpb.MergeRequest)
+client tenant does not have capability "ID(14)" (*kvpb.MergeRequest)
 
 has-node-status-capability ten=10
 ----
@@ -50,7 +50,7 @@ client tenant does not have capability to query timeseries data
 
 has-tsdb-all-capability ten=10
 ----
-client tenant does not have capability to query non-tenant metrics
+client tenant does not have capability to query timeseries data
 
 # Disable the capability checks by allowing all requests.
 set-authorizer-mode value=allow-all

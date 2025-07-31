@@ -6,6 +6,8 @@
 package spanconfigsqlwatcher
 
 import (
+	"runtime/debug"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -13,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,7 +40,7 @@ func (zd *zonesDecoder) DecodePrimaryKey(key roachpb.Key) (descpb.ID, error) {
 	types := []*types.T{tbl.PublicColumns()[0].GetType()}
 	startKeyRow := make([]rowenc.EncDatum, 1)
 	if _, err := rowenc.DecodeIndexKey(zd.codec, startKeyRow, nil /* colDirs */, key); err != nil {
-		return descpb.InvalidID, errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode key in system.zones %v %v", key, debugutil.Stack())
+		return descpb.InvalidID, errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode key in system.zones %v %v", key, string(debug.Stack()))
 	}
 	if err := startKeyRow[0].EnsureDecoded(types[0], &zd.alloc); err != nil {
 		return descpb.InvalidID, errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode key in system.zones %v", key)

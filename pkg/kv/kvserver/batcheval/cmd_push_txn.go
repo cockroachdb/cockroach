@@ -305,10 +305,6 @@ func PushTxn(
 	// Determine what to do with the pushee, based on the push type.
 	switch pushType {
 	case kvpb.PUSH_ABORT:
-		if existTxn.Status == roachpb.PREPARED {
-			return result.Result{}, errors.AssertionFailedf(
-				"PUSH_ABORT succeeded against a PREPARED txn: %+v", existTxn)
-		}
 		// If aborting the transaction, set the new status.
 		reply.PusheeTxn.Status = roachpb.ABORTED
 		// Forward the timestamp to accommodate AbortSpan GC. See method comment for

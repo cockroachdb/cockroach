@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 )
 
 // DistSQLMetrics contains pointers to the metrics for monitoring DistSQL
@@ -17,9 +16,8 @@ import (
 type DistSQLMetrics struct {
 	QueriesActive               *metric.Gauge
 	QueriesTotal                *metric.Counter
-	DistributedCount            *metric.Counter
-	ContendedQueriesCount       *aggmetric.SQLCounter
-	CumulativeContentionNanos   *aggmetric.SQLCounter
+	ContendedQueriesCount       *metric.Counter
+	CumulativeContentionNanos   *metric.Counter
 	FlowsActive                 *metric.Gauge
 	FlowsTotal                  *metric.Counter
 	MaxBytesHist                metric.IHistogram
@@ -42,20 +40,14 @@ var _ metric.Struct = DistSQLMetrics{}
 var (
 	metaQueriesActive = metric.Metadata{
 		Name:        "sql.distsql.queries.active",
-		Help:        "Number of invocations of the execution engine currently active (multiple of which may occur for a single SQL statement)",
-		Measurement: "DistSQL runs",
+		Help:        "Number of SQL queries currently active",
+		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaQueriesTotal = metric.Metadata{
 		Name:        "sql.distsql.queries.total",
-		Help:        "Number of invocations of the execution engine executed (multiple of which may occur for a single SQL statement)",
-		Measurement: "DistSQL runs",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaDistributedCount = metric.Metadata{
-		Name:        "sql.distsql.distributed_exec.count",
-		Help:        "Number of invocations of the execution engine executed with full or partial distribution (multiple of which may occur for a single SQL statement)",
-		Measurement: "DistSQL runs",
+		Help:        "Number of SQL queries executed",
+		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaContendedQueriesCount = metric.Metadata{
@@ -63,9 +55,6 @@ var (
 		Help:        "Number of SQL queries that experienced contention",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    `This metric is incremented whenever there is a non-trivial amount of contention experienced by a statement whether read-write or write-write conflicts. Monitor this metric to correlate possible workload performance issues to contention conflicts.`,
 	}
 	metaCumulativeContentionNanos = metric.Metadata{
 		Name:        "sql.distsql.cumulative_contention_nanos",
@@ -156,9 +145,8 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 	return DistSQLMetrics{
 		QueriesActive:             metric.NewGauge(metaQueriesActive),
 		QueriesTotal:              metric.NewCounter(metaQueriesTotal),
-		DistributedCount:          metric.NewCounter(metaDistributedCount),
-		ContendedQueriesCount:     aggmetric.NewSQLCounter(metaContendedQueriesCount),
-		CumulativeContentionNanos: aggmetric.NewSQLCounter(metaCumulativeContentionNanos),
+		ContendedQueriesCount:     metric.NewCounter(metaContendedQueriesCount),
+		CumulativeContentionNanos: metric.NewCounter(metaCumulativeContentionNanos),
 		FlowsActive:               metric.NewGauge(metaFlowsActive),
 		FlowsTotal:                metric.NewCounter(metaFlowsTotal),
 		MaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
@@ -185,17 +173,14 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 	}
 }
 
-// RunStart registers the start of an invocation of the DistSQL engine.
-func (m *DistSQLMetrics) RunStart(distributed bool) {
+// QueryStart registers the start of a new DistSQL query.
+func (m *DistSQLMetrics) QueryStart() {
 	m.QueriesActive.Inc(1)
 	m.QueriesTotal.Inc(1)
-	if distributed {
-		m.DistributedCount.Inc(1)
-	}
 }
 
-// RunStop registers the end of an invocation of the DistSQL engine.
-func (m *DistSQLMetrics) RunStop() {
+// QueryStop registers the end of a DistSQL query.
+func (m *DistSQLMetrics) QueryStop() {
 	m.QueriesActive.Dec(1)
 }
 

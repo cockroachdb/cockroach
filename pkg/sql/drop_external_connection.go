@@ -18,7 +18,6 @@ import (
 const dropExternalConnectionOp = "DROP EXTERNAL CONNECTION"
 
 type dropExternalConnectionNode struct {
-	zeroInputPlanNode
 	n *tree.DropExternalConnection
 }
 

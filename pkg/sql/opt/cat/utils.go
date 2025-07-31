@@ -11,9 +11,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -81,11 +79,6 @@ func FormatTable(
 	}
 
 	for i := 0; i < tab.CheckCount(); i++ {
-		// We only show constraints that are constant and known when the catalog is
-		// built. For this reason, skip the one we add for row-level security.
-		if tab.Check(i).IsRLSConstraint() {
-			continue
-		}
 		child.Childf("CHECK (%s)", MaybeMarkRedactable(tab.Check(i).Constraint(), redactableValues))
 	}
 
@@ -123,19 +116,14 @@ func FormatTable(
 // formatCatalogIndex nicely formats a catalog index using a treeprinter for
 // debugging and testing.
 func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node, redactableValues bool) {
-	index := tab.Index(ord)
-	indexType := ""
-	if index.Ordinal() == PrimaryIndex {
-		indexType = "PRIMARY "
-	} else if index.IsUnique() {
-		indexType = "UNIQUE "
-	} else {
-		switch index.Type() {
-		case idxtype.INVERTED:
-			indexType = "INVERTED "
-		case idxtype.VECTOR:
-			indexType = "VECTOR "
-		}
+	idx := tab.Index(ord)
+	idxType := ""
+	if idx.Ordinal() == PrimaryIndex {
+		idxType = "PRIMARY "
+	} else if idx.IsUnique() {
+		idxType = "UNIQUE "
+	} else if idx.IsInverted() {
+		idxType = "INVERTED "
 	}
 	mutation := ""
 	if IsMutationIndex(tab, ord) {
@@ -143,7 +131,7 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node, redactableValue
 	}
 
 	idxVisibililty := ""
-	if invisibility := index.GetInvisibility(); invisibility != 0.0 {
+	if invisibility := idx.GetInvisibility(); invisibility != 0.0 {
 		if invisibility == 1.0 {
 			idxVisibililty = " NOT VISIBLE"
 		} else {
@@ -151,41 +139,41 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node, redactableValue
 		}
 	}
 
-	child := tp.Childf("%sINDEX %s%s%s", indexType, index.Name(), mutation, idxVisibililty)
+	child := tp.Childf("%sINDEX %s%s%s", idxType, idx.Name(), mutation, idxVisibililty)
 
 	var buf bytes.Buffer
-	colCount := index.ColumnCount()
+	colCount := idx.ColumnCount()
 	if ord == PrimaryIndex {
 		// Omit the "stored" columns from the primary index.
-		colCount = index.KeyColumnCount()
+		colCount = idx.KeyColumnCount()
 	}
 
 	for i := 0; i < colCount; i++ {
 		buf.Reset()
 
-		idxCol := index.Column(i)
+		idxCol := idx.Column(i)
 		formatColumn(idxCol.Column, &buf, redactableValues)
 		if idxCol.Descending {
 			fmt.Fprintf(&buf, " desc")
 		}
 
-		if i >= index.LaxKeyColumnCount() {
+		if i >= idx.LaxKeyColumnCount() {
 			fmt.Fprintf(&buf, " (storing)")
 		}
 
-		if i < index.ImplicitColumnCount() {
+		if i < idx.ImplicitColumnCount() {
 			fmt.Fprintf(&buf, " (implicit)")
 		}
 
 		child.Child(buf.String())
 	}
 
-	FormatZone(index.Zone(), child)
+	FormatZone(idx.Zone(), child)
 
-	if n := index.PartitionCount(); n > 0 {
+	if n := idx.PartitionCount(); n > 0 {
 		c := child.Child("partitions")
 		for i := 0; i < n; i++ {
-			p := index.Partition(i)
+			p := idx.Partition(i)
 			part := c.Child(p.Name())
 			prefixes := part.Child("partition by list prefixes")
 			for _, datums := range p.PartitionByListPrefixes() {
@@ -194,7 +182,7 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node, redactableValue
 			FormatZone(p.Zone(), part)
 		}
 	}
-	if pred, isPartial := index.Predicate(); isPartial {
+	if pred, isPartial := idx.Predicate(); isPartial {
 		child.Childf("WHERE %s", MaybeMarkRedactable(pred, redactableValues))
 	}
 }
@@ -336,7 +324,7 @@ func formatFamily(family Family, buf *bytes.Buffer) {
 // markRedactable is true.
 func MaybeMarkRedactable(unsafe string, markRedactable bool) string {
 	if markRedactable {
-		return string(redact.Sprintf("%s", encoding.Unsafe(unsafe)))
+		return string(redact.Sprintf("%s", redact.Unsafe(unsafe)))
 	}
 	return unsafe
 }

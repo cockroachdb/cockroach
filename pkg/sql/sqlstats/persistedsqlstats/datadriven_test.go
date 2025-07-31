@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -84,7 +84,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	defer cluster.Stopper().Stop(ctx)
 
 	server := cluster.Server(0 /* idx */).ApplicationLayer()
-	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider()
+	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
 	appStats := sqlStats.GetApplicationStats("app1")
 
@@ -94,6 +94,10 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	observerConn := cluster.ServerConn(1 /* idx */)
 
 	observer := sqlutils.MakeSQLRunner(observerConn)
+	_, err := sqlConn.Exec(`SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = true;`)
+	if err != nil {
+		t.Errorf("failed to enable plan collection due to %s", err.Error())
+	}
 
 	execDataDrivenTestCmd := func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
@@ -145,41 +149,16 @@ func TestSQLStatsDataDriven(t *testing.T) {
 			// them.
 			fingerprint = strings.Replace(fingerprint, "%", " ", -1)
 
-			previouslySampled := appStats.StatementSampled(
+			previouslySampled, savePlanForStats := appStats.ShouldSample(
 				fingerprint,
 				implicitTxn,
 				dbName,
 			)
-			return fmt.Sprintf("%t", previouslySampled)
+			return fmt.Sprintf("%t, %t", previouslySampled, savePlanForStats)
 		case "skip":
 			var issue int
 			d.ScanArgs(t, "issue-num", &issue)
 			skip.WithIssue(t, issue)
-			return ""
-		case "wait-for-stmt-stats":
-			// Wait for the in-memory statement stats to be recorded.
-			var count int
-			var app string
-			d.ScanArgs(t, "count", &count)
-			d.ScanArgs(t, "app", &app)
-			filters := sqlstatstestutil.StatementFilter{
-				App: app,
-			}
-			sqlstatstestutil.WaitForStatementEntriesAtLeast(t, observer, count, filters)
-			return ""
-		case "wait-for-txn-stats":
-			// Wait for the in-memory transaction stats to be recorded.
-			var count, execCount int
-			var app string
-			d.ScanArgs(t, "count", &count)
-			d.ScanArgs(t, "app", &app)
-			d.MaybeScanArgs(t, "execCount", &execCount)
-			filters := sqlstatstestutil.TransactionFilter{
-				App:       app,
-				ExecCount: execCount,
-			}
-
-			sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, observer, count, filters)
 			return ""
 		}
 

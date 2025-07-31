@@ -453,13 +453,6 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	// Tables introduced in 24.3
 	target.AddDescriptor(systemschema.TableMetadata)
 
-	// Tables introduced in 25.1
-	target.AddDescriptor(systemschema.SystemJobProgressTable)
-	target.AddDescriptor(systemschema.SystemJobProgressHistoryTable)
-	target.AddDescriptor(systemschema.SystemJobStatusTable)
-	target.AddDescriptor(systemschema.SystemJobMessageTable)
-	target.AddDescriptor(systemschema.PreparedTransactionsTable)
-
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
 	// If adding a call to AddDescriptor or AddDescriptorForSystemTenant, please
@@ -472,7 +465,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 // NumSystemTablesForSystemTenant is the number of system tables defined on
 // the system tenant. This constant is only defined to avoid having to manually
 // update auto stats tests every time a new system table is added.
-const NumSystemTablesForSystemTenant = 62
+const NumSystemTablesForSystemTenant = 57
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
 // MetadataSchema.

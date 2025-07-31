@@ -17,8 +17,8 @@ import (
 	"path"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/version"
 	"github.com/spf13/cobra"
 )
 
@@ -35,8 +35,6 @@ Release justification: non-production (release infra) change.
 const (
 	releasedVersionFlag = "released-version"
 	nextVersionFlag     = "next-version"
-	versionBumpOnly     = "version-bump-only"
-	versionFile         = "pkg/build/version.txt"
 )
 
 var updateVersionsFlags = struct {
@@ -48,7 +46,6 @@ var updateVersionsFlags = struct {
 	smtpHost           string
 	smtpPort           int
 	emailAddresses     []string
-	versionBumpOnly    bool
 }{}
 
 var updateVersionsCmd = &cobra.Command{
@@ -60,7 +57,6 @@ var updateVersionsCmd = &cobra.Command{
 
 func init() {
 	updateVersionsCmd.Flags().BoolVar(&updateVersionsFlags.dryRun, dryRun, false, "print diff and emails without any side effects")
-	updateVersionsCmd.Flags().BoolVar(&updateVersionsFlags.versionBumpOnly, versionBumpOnly, false, "only bump the version, do not create any other PRs")
 	updateVersionsCmd.Flags().StringVar(&updateVersionsFlags.releasedVersionStr, releasedVersionFlag, "", "released cockroachdb version")
 	updateVersionsCmd.Flags().StringVar(&updateVersionsFlags.nextVersionStr, nextVersionFlag, "", "next cockroachdb version")
 	updateVersionsCmd.Flags().StringVar(&updateVersionsFlags.templatesDir, templatesDir, "", "templates directory")
@@ -104,10 +100,6 @@ type prRepo struct {
 	fn             func(gitDir string) error
 	// workOnRepoError is set to workOnRepo() result
 	workOnRepoError error
-}
-
-type metadata struct {
-	PRs []string `json:"prs"`
 }
 
 func (r prRepo) String() string {
@@ -169,7 +161,7 @@ func (r prRepo) commit() error {
 	cmd.Dir = r.checkoutDir()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed committing to %s with message '%s': %w", r.name(), string(out), err)
+		return fmt.Errorf("failed commiting to %s with message '%s': %w", r.name(), string(out), err)
 	}
 	log.Printf("changes committed to %s: %s\n", r.name(), string(out))
 	return nil
@@ -255,18 +247,16 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	var nextVersion version.Version
-	if updateVersionsFlags.nextVersionStr != "" {
-		nextVersion, err = parseVersion(updateVersionsFlags.nextVersionStr)
-		if err != nil {
-			return fmt.Errorf("parsing next version: %w", err)
-		}
-	} else {
-		nextVersion, err = bumpVersion(updateVersionsFlags.releasedVersionStr)
+	if updateVersionsFlags.nextVersionStr == "" {
+		updateVersionsFlags.nextVersionStr, err = bumpVersion(updateVersionsFlags.releasedVersionStr)
 		if err != nil {
 			return fmt.Errorf("bumping version: %w", err)
 		}
-		log.Printf("Next version is not passed, using calculated value of %s", nextVersion.String())
+		log.Printf("Next version is not passed, using calculated value of %s", updateVersionsFlags.nextVersionStr)
+	}
+	nextVersion, err := parseVersion(updateVersionsFlags.nextVersionStr)
+	if err != nil {
+		return fmt.Errorf("parsing next version: %w", err)
 	}
 
 	globalWorkDir, err := os.MkdirTemp("", "")
@@ -280,7 +270,7 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("finding latest: %w", err)
 	}
 	if latest {
-		log.Printf("Assuming %s is the latest stable release", releasedVersion.String())
+		log.Printf("Assuming %s is the latest stable release", releasedVersion.Original())
 	}
 	reposToWorkOn, err := generateRepoList(releasedVersion, nextVersion, latest, updateVersionsFlags.dryRun)
 	if err != nil {
@@ -292,8 +282,7 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 	var prs []string
 	var workOnRepoErrors []error
 	for _, repo := range reposToWorkOn {
-		err := workOnRepo(repo)
-		repo.workOnRepoError = err
+		repo.workOnRepoError = workOnRepo(repo)
 		if repo.workOnRepoError != nil {
 			err = fmt.Errorf("workOnRepo: error occurred while working on repo %s: %w", repo.name(), err)
 			workOnRepoErrors = append(workOnRepoErrors, err)
@@ -345,33 +334,13 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 		workOnRepoErrors = append(workOnRepoErrors, err)
 		log.Printf("%s", err)
 	}
-	if artifactsDir != "" {
-		if err := saveMetadata(artifactsDir, metadata{PRs: prs}); err != nil {
-			err = fmt.Errorf("error saving metadata: %w", err)
-			workOnRepoErrors = append(workOnRepoErrors, err)
-			log.Printf("%s", err)
-		}
-	}
 	if len(workOnRepoErrors) > 0 {
 		return errors.Join(workOnRepoErrors...)
 	}
 	return nil
 }
 
-func saveMetadata(dir string, meta metadata) error {
-	dest := path.Join(dir, "prs.json")
-	log.Printf("saving metadata to %s", dest)
-	data, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return fmt.Errorf("error marshaling PR metadata: %w", err)
-	}
-	if err := os.WriteFile(dest, data, 0o644); err != nil {
-		return fmt.Errorf("error writing PR metadata file: %w", err)
-	}
-	return nil
-}
-
-func sendPrReport(ver version.Version, prs []string, smtpPassword string) error {
+func sendPrReport(version *semver.Version, prs []string, smtpPassword string) error {
 	log.Println("========================================================")
 	log.Println("The following PRs are created:")
 	for i, pr := range prs {
@@ -379,7 +348,7 @@ func sendPrReport(ver version.Version, prs []string, smtpPassword string) error 
 	}
 	log.Println("========================================================")
 	args := messageDataUpdateVersions{
-		Version: ver.String(),
+		Version: version.Original(),
 	}
 	for _, pr := range prs {
 		args.PRs = append(args.PRs, template.URL(pr))
@@ -412,7 +381,7 @@ func randomString(n int) string {
 }
 
 func generateRepoList(
-	releasedVersion version.Version, nextVersion version.Version, isLatest bool, dryRun bool,
+	releasedVersion *semver.Version, nextVersion *semver.Version, isLatest bool, dryRun bool,
 ) ([]prRepo, error) {
 	owner := "cockroachdb"
 	prefix := ""
@@ -433,17 +402,17 @@ func generateRepoList(
 	// 1. Bump the version. Branches we need to bump the version on:
 	// stable releases: release-major.minor and all RC branches of the same release series.
 	// alpha, beta, rc: 1) master or 2) release-major.minor and all RC branches for the same release series
-	maybeVersionBumpBranches, err := listRemoteBranches(releasedVersion.Format("release-%X.%Y.*"))
+	maybeVersionBumpBranches, err := listRemoteBranches(fmt.Sprintf("release-%d.%d.*", releasedVersion.Major(), releasedVersion.Minor()))
 	if err != nil {
 		return []prRepo{}, fmt.Errorf("listing staging branches: %w", err)
 	}
-	if !releasedVersion.IsPrerelease() {
-		maybeVersionBumpBranches = append(maybeVersionBumpBranches, releasedVersion.Format("release-%X.%Y"))
+	if releasedVersion.Prerelease() == "" {
+		maybeVersionBumpBranches = append(maybeVersionBumpBranches, fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor()))
 	} else {
 		// For alpha/betas/rc releases, if we have not created the dot-zero branch
 		// (which is covered by the `release-major.minor.*` pattern), then use either the `release-major.minor` or the master branch for version bump.
 		// First, try to find the `release-major.minor` branch.
-		maybeReleaseBranches, err := listRemoteBranches(releasedVersion.Format("release-%X.%Y"))
+		maybeReleaseBranches, err := listRemoteBranches(fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor()))
 		if err != nil {
 			return []prRepo{}, fmt.Errorf("listing release branches: %w", err)
 		}
@@ -461,24 +430,28 @@ func generateRepoList(
 	log.Printf("will bump version in the following branches: %s", strings.Join(maybeVersionBumpBranches, ", "))
 
 	for _, branch := range maybeVersionBumpBranches {
-		// skip extraordinary branches
-		if strings.HasPrefix(branch, "staging-") {
-			log.Printf("not bumping version on staging branch %s", branch)
+		// skip extraordinary and baking branches
+		if strings.HasPrefix(branch, "staging-") || strings.HasSuffix(branch, "-rc") {
+			log.Printf("not bumping version on staging/backing branch %s", branch)
 			continue
 		}
-		if branch == releasedVersion.Format("release-%X.%Y.%Z-rc") {
-			log.Printf("not bumping version on the same branch %s", branch)
+		ok, err := fileExistsInGit(branch, versionFile)
+		if err != nil {
+			return []prRepo{}, fmt.Errorf("checking version file: %w", err)
+		}
+		if !ok {
+			log.Printf("skipping version bump on the %s branch, because %s does not exist on that branch", branch, versionFile)
 			continue
 		}
 		curVersion, err := fileContent(remoteOrigin+"/"+branch, versionFile)
 		if err != nil {
 			return []prRepo{}, fmt.Errorf("reading git file content: %w", err)
 		}
-		if strings.TrimSpace(curVersion) == nextVersion.String() {
+		if strings.TrimSpace(curVersion) == nextVersion.Original() {
 			log.Printf("skipping version bump on the %s branch, because the versions are the same", branch)
 			continue
 		}
-		prBranch := fmt.Sprintf("update-versions-%s-%s-%s", branch, releasedVersion.String(), randomString(4))
+		prBranch := fmt.Sprintf("update-versions-%s-%s-%s", branch, releasedVersion.Original(), randomString(4))
 		commitMessagePrefix := "release"
 		if branch != "master" {
 			commitMessagePrefix = branch
@@ -491,31 +464,22 @@ func generateRepoList(
 			githubUsername: "cockroach-teamcity",
 			commitMessage:  generateCommitMessage(commitMessagePrefix, releasedVersion, nextVersion),
 			fn: func(gitDir string) error {
-				contents := []byte(nextVersion.String() + "\n")
-				dest := path.Join(gitDir, versionFile)
-				if err := os.WriteFile(dest, contents, 0644); err != nil {
-					return fmt.Errorf("cannot write version.txt: %w", err)
-				}
-				return nil
+				return updateVersionFile(path.Join(gitDir, versionFile), nextVersion.Original())
 			},
 		}
 		reposToWorkOn = append(reposToWorkOn, repo)
 	}
-	if updateVersionsFlags.versionBumpOnly {
-		log.Println("Version bump only, skipping other PRs")
-		return reposToWorkOn, nil
-	}
 
 	// 2. Brew. Update for all stable releases
-	if !releasedVersion.IsPrerelease() {
+	if releasedVersion.Prerelease() == "" {
 		reposToWorkOn = append(reposToWorkOn, prRepo{
 			owner:          owner,
 			repo:           prefix + "homebrew-tap",
 			pushToOrigin:   true,
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
-			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.String(), randomString(4)),
-			commitMessage:  fmt.Sprintf("release: advance to %s", releasedVersion.String()),
+			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.Original(), randomString(4)),
+			commitMessage:  fmt.Sprintf("release: advance to %s", releasedVersion.Original()),
 			fn: func(gitDir string) error {
 				if dryRun {
 					log.Printf("brew fetches and verifies the binaries, so it's likely it'll fail in dry-run mode. Skipping..")
@@ -526,39 +490,38 @@ func generateRepoList(
 		})
 	}
 	// 3. Helm. Only for latest stable releases
-	if isLatest && !releasedVersion.IsPrerelease() {
+	if isLatest && releasedVersion.Prerelease() == "" {
 		reposToWorkOn = append(reposToWorkOn, prRepo{
 			owner:          owner,
 			repo:           prefix + "helm-charts",
 			pushToOrigin:   true,
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
-			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.String(), randomString(4)),
-			commitMessage:  fmt.Sprintf("release: advance to %s", releasedVersion.String()),
+			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.Original(), randomString(4)),
+			commitMessage:  fmt.Sprintf("release: advance to %s", releasedVersion.Original()),
 			fn: func(gitDir string) error {
-				// Helm charts use the version without the "v" prefix.
-				return updateHelm(gitDir, releasedVersion.Format("%X.%Y.%Z"))
+				return updateHelm(gitDir, releasedVersion.Original())
 			},
 		})
 	}
 	// 4. Orchestration. Only for latest stable releases
-	if isLatest && !releasedVersion.IsPrerelease() {
+	if isLatest && releasedVersion.Prerelease() == "" {
 		reposToWorkOn = append(reposToWorkOn, prRepo{
 			owner:          owner,
 			repo:           prefix + "cockroach",
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
-			prBranch:       fmt.Sprintf("update-orchestration-versions-%s-%s", releasedVersion.String(), randomString(4)),
+			prBranch:       fmt.Sprintf("update-orchestration-versions-%s-%s", releasedVersion.Original(), randomString(4)),
 			commitMessage:  generateCommitMessage("orchestration", releasedVersion, nextVersion),
 			fn: func(gitDir string) error {
-				return updateOrchestration(gitDir, releasedVersion.String())
+				return updateOrchestration(gitDir, releasedVersion.Original())
 			},
 		})
 	}
 	// 5. Merge baking branch back to the release branch.
 	maybeBakingbranches := []string{
-		releasedVersion.Format("release-%X.%Y.%Z-rc"),
-		releasedVersion.Format("staging-v%X.%Y.%Z"),
+		fmt.Sprintf("release-%s-rc", releasedVersion.String()), // e.g. release-23.1.17-rc
+		fmt.Sprintf("staging-%s", releasedVersion.Original()),  // e.g. staging-v23.1.17
 	}
 	var bakingBranches []string
 	for _, branch := range maybeBakingbranches {
@@ -571,102 +534,23 @@ func generateRepoList(
 	if len(bakingBranches) > 1 {
 		return []prRepo{}, fmt.Errorf("too many baking branches: %s", strings.Join(maybeBakingbranches, ", "))
 	}
-	// 6. Merge baking branch to the main release branch (e.g. release-25.1).
-	// For pre-releases we may have no baking branches, thus we use `for` loop
-	// to simplify the code.
 	for _, mergeBranch := range bakingBranches {
-		baseBranch := releasedVersion.Format("release-%X.%Y")
-		// Sometimes there are no changes on the baking/staging branches and a merge is not needed.
-		alreadyOnBaseBranch, err := isAncestor(mergeBranch, baseBranch)
-		if err != nil {
-			return []prRepo{}, fmt.Errorf("checking if %s is ancestor of %s: %w", baseBranch, mergeBranch, err)
-		}
-		if alreadyOnBaseBranch {
-			log.Printf("skipping merge of %s to %s, because %s is already an ancestor of %s", mergeBranch, baseBranch, mergeBranch, baseBranch)
-			continue
-		}
-		// TODO: add a check to make sure the merge generates no unexpected
-		// changes (we can ignore version.txt changes). The "ours" strategy
-		// doesn't account for changes in the merge branch.
-		commitMessage := generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, baseBranch), releasedVersion, nextVersion)
-		commitMessage += "\nDocs: noop merge\n"
+		baseBranch := fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor())
 		repo := prRepo{
 			owner:          owner,
 			repo:           prefix + "cockroach",
 			branch:         baseBranch,
 			prBranch:       fmt.Sprintf("merge-%s-to-%s-%s", mergeBranch, baseBranch, randomString(4)),
 			githubUsername: "cockroach-teamcity",
-			commitMessage:  commitMessage,
+			commitMessage:  generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, baseBranch), releasedVersion, nextVersion),
 			fn: func(gitDir string) error {
-				cmd := exec.Command("git", "merge", "-s", "ours", "--no-commit", remoteOrigin+"/"+mergeBranch)
+				cmd := exec.Command("git", "merge", "-s", "ours", "--no-commit", "origin/"+mergeBranch)
 				cmd.Dir = gitDir
 				out, err := cmd.CombinedOutput()
 				if err != nil {
 					return fmt.Errorf("failed running '%s' with message '%s': %w", cmd.String(), string(out), err)
 				}
 				log.Printf("ran '%s': %s\n", cmd.String(), string(out))
-				return nil
-			},
-		}
-		reposToWorkOn = append(reposToWorkOn, repo)
-	}
-	// 7. Merge staging branch to the next release RC branch if it is present.
-	for _, mergeBranch := range bakingBranches {
-		// When we have extraordinary releases, we may have next release RC
-		// branches created. Make sure we merge this branch to the RC branch
-		// only if there are changes.
-		if !strings.HasPrefix(mergeBranch, "staging-") {
-			log.Printf("skipping merge of %s, because it's not a staging branch", mergeBranch)
-			continue
-		}
-		nextRCBranch := nextVersion.Format("release-%X.%Y.%Z-rc")
-		maybeNextReleaseRCBranches, err := listRemoteBranches(nextRCBranch)
-		if err != nil {
-			return []prRepo{}, fmt.Errorf("listing rc branch %s: %w", nextRCBranch, err)
-		}
-		if len(maybeNextReleaseRCBranches) < 1 {
-			log.Printf("no next release RC branches found, skipping merge to %s", nextRCBranch)
-			continue
-		}
-		alreadyOnRCBranch, err := isAncestor(mergeBranch, nextRCBranch)
-		if err != nil {
-			return []prRepo{}, fmt.Errorf("checking if %s is ancestor of %s: %w", mergeBranch, nextRCBranch, err)
-		}
-		if alreadyOnRCBranch {
-			log.Printf("skipping merge of %s to %s, because %s is already an ancestor of %s", mergeBranch, nextRCBranch, mergeBranch, nextRCBranch)
-			continue
-		}
-		// try to merge and see if anything is changed, ignore version.txt changes.
-		createsMergeCommit, err := mergeCreatesContentChanges(mergeBranch, nextRCBranch, []string{versionFile})
-		if err != nil {
-			return []prRepo{}, fmt.Errorf("checking if merge creates content changes: %w", err)
-		}
-		if !createsMergeCommit {
-			log.Printf("skipping merge of %s to %s, because the merge does not create content changes", mergeBranch, nextRCBranch)
-			continue
-		}
-		repo := prRepo{
-			owner:          owner,
-			repo:           prefix + "cockroach",
-			branch:         nextRCBranch,
-			prBranch:       fmt.Sprintf("merge-%s-to-%s-%s", mergeBranch, nextRCBranch, randomString(4)),
-			githubUsername: "cockroach-teamcity",
-			commitMessage:  generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, nextRCBranch), releasedVersion, nextVersion),
-			fn: func(gitDir string) error {
-				cmd := exec.Command("git", "merge", "-X", "ours", "--strategy=recursive", "--no-commit", "--no-ff", remoteOrigin+"/"+mergeBranch)
-				cmd.Dir = gitDir
-				out, err := cmd.CombinedOutput()
-				if err != nil {
-					return fmt.Errorf("failed running '%s' with message '%s': %w", cmd.String(), string(out), err)
-				}
-				log.Printf("ran '%s': %s\n", cmd.String(), string(out))
-				coCmd := exec.Command("git", "checkout", remoteOrigin+"/"+nextRCBranch, "--", versionFile)
-				coCmd.Dir = gitDir
-				out, err = coCmd.CombinedOutput()
-				if err != nil {
-					return fmt.Errorf("failed running '%s' with message '%s': %w", coCmd.String(), string(out), err)
-				}
-				log.Printf("ran '%s': %s\n", coCmd.String(), string(out))
 				return nil
 			},
 		}
@@ -688,7 +572,7 @@ func workOnRepo(repo prRepo) error {
 	if err := repo.apply(); err != nil {
 		return fmt.Errorf("cannot mutate repo %s: %w", repo.name(), err)
 	}
-	log.Printf("committing changes to repo %s", repo.name())
+	log.Printf("commiting changes to repo %s", repo.name())
 	if err := repo.commit(); err != nil {
 		return fmt.Errorf("cannot commit changes in repo %s: %w", repo.name(), err)
 	}
@@ -696,7 +580,7 @@ func workOnRepo(repo prRepo) error {
 	return nil
 }
 
-func isLatestStableBranch(ver version.Version) (bool, error) {
+func isLatestStableBranch(version *semver.Version) (bool, error) {
 	// Here we ignore pre-releases (alphas and betas), because we still want to run these operations.
 	// This way we exclude greater pre-release versions from this decision.
 	latestRelease, err := findPreviousRelease("", true /* ignorePrerelease */)
@@ -704,27 +588,48 @@ func isLatestStableBranch(ver version.Version) (bool, error) {
 		return false, fmt.Errorf("cannot find latest version: %w", err)
 	}
 	log.Printf("The latest released version is %s", latestRelease)
-	latestVersion, err := version.Parse(latestRelease)
+	latestVersion, err := semver.NewVersion(latestRelease)
 	if err != nil {
 		return false, fmt.Errorf("cannot parse latest version: %w", err)
 	}
 	// Check if the version we processing here is greater than or equal
 	// to the latest known released version.
-	return ver.AtLeast(latestVersion), nil
+	return version.Compare(latestVersion) >= 0, nil
 }
 
-func parseVersion(versionStr string) (version.Version, error) {
+func parseVersion(versionStr string) (*semver.Version, error) {
 	// make sure we have the leading "v" in the version
 	leadingV := "v" + strings.TrimPrefix(versionStr, "v")
-	ver, err := version.Parse(leadingV)
+	version, err := semver.NewVersion(leadingV)
 	if err != nil {
-		return version.Version{}, fmt.Errorf("cannot parse version %s: %w", versionStr, err)
+		return nil, fmt.Errorf("cannot parse version %s: %w", versionStr, err)
 	}
 
-	return ver, nil
+	return version, nil
 }
 
-func generateCommitMessage(prefix string, released, next version.Version) string {
-	nextVersionMsg := ". Next version: " + next.String()
+// hasVersionTxt returns whether a given version uses the version.txt
+// file to determine binary version.
+func hasVersionTxt(version *semver.Version) bool {
+	return version.Major() >= 23
+}
+
+func generateCommitMessage(prefix string, released, next *semver.Version) string {
+	var nextVersionMsg string
+	if hasVersionTxt(released) {
+		nextVersionMsg = ". Next version: " + next.String()
+	}
 	return fmt.Sprintf(commitTemplate, prefix, released, nextVersionMsg)
+}
+
+// nextReleaseSeries parses the version and returns the next release series assuming we have 2 releases yearly
+func nextReleaseSeries(version *semver.Version) string {
+	nextMinor := version.IncMinor()
+	// TODO(rail): revisit when we have more than 2 releases a year
+	if nextMinor.Minor() > 2 {
+		nextMinor = nextMinor.IncMajor()
+		// IncMajor() resets all version parts to 0, thus we need to bump the minor part to match our version schema.
+		nextMinor = nextMinor.IncMinor()
+	}
+	return fmt.Sprintf("%d.%d", nextMinor.Major(), nextMinor.Minor())
 }

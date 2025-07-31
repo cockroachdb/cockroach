@@ -44,11 +44,16 @@ type SideloadStorage interface {
 	Purge(_ context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm) (int64, error)
 	// Clear files that may have been written by this SideloadStorage.
 	Clear(context.Context) error
-	// TruncateTo removes all files belonging to an index <= the given index.
-	TruncateTo(_ context.Context, index kvpb.RaftIndex) error
-	// Stats returns the number and the total size of the sideloaded entries in
-	// the given log span.
-	Stats(_ context.Context, _ kvpb.RaftSpan) (entries uint64, size int64, _ error)
+	// HasAnyEntry returns whether there is any entry in [from, to).
+	HasAnyEntry(_ context.Context, from, to kvpb.RaftIndex) (bool, error)
+	// TruncateTo removes all files belonging to an index strictly smaller than
+	// the given one. Returns the number of bytes freed, the number of bytes in
+	// files that remain, or an error.
+	TruncateTo(_ context.Context, index kvpb.RaftIndex) (freed, retained int64, _ error)
+	// BytesIfTruncatedFromTo returns the number of bytes that would be freed,
+	// if one were to truncate [from, to). Additionally, it returns the number
+	// of bytes that would be retained >= to.
+	BytesIfTruncatedFromTo(_ context.Context, from kvpb.RaftIndex, to kvpb.RaftIndex) (freed, retained int64, _ error)
 	// Returns an absolute path to the file that Get() would return the contents
 	// of. Does not check whether the file actually exists.
 	Filename(_ context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm) (string, error)
@@ -69,17 +74,21 @@ type SideloadStorage interface {
 // in parts or entirely by the same memory.
 func MaybeSideloadEntries(
 	ctx context.Context, input []raftpb.Entry, sideloaded SideloadStorage,
-) ([]raftpb.Entry, EntryStats, error) {
-	var stats EntryStats
+) (
+	_ []raftpb.Entry,
+	numSideloaded int,
+	sideloadedEntriesSize int64,
+	otherEntriesSize int64,
+	_ error,
+) {
 	var output []raftpb.Entry
 	for i := range input {
 		typ, pri, err := raftlog.EncodingOf(input[i])
 		if err != nil {
-			return nil, EntryStats{}, err
+			return nil, 0, 0, 0, err
 		}
 		if !typ.IsSideloaded() {
-			stats.RegularEntries++
-			stats.RegularBytes += int64(len(input[i].Data))
+			otherEntriesSize += int64(len(input[i].Data))
 			continue
 		}
 
@@ -96,7 +105,7 @@ func MaybeSideloadEntries(
 		// Unmarshal the command into an object that we can mutate.
 		e, err := raftlog.NewEntry(input[i])
 		if err != nil {
-			return nil, EntryStats{}, err
+			return nil, 0, 0, 0, err
 		}
 		if e.Cmd.ReplicatedEvalResult.AddSSTable == nil {
 			// Still no AddSSTable; someone must've proposed a v2 command
@@ -105,6 +114,7 @@ func MaybeSideloadEntries(
 			log.Warning(ctx, "encountered sideloaded Raft command without inlined payload")
 			continue
 		}
+		numSideloaded++
 
 		// Actually strip the command.
 		dataToSideload := e.Cmd.ReplicatedEvalResult.AddSSTable.Data
@@ -118,36 +128,34 @@ func MaybeSideloadEntries(
 			raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID, pri)
 			_, err := protoutil.MarshalToSizedBuffer(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 			if err != nil {
-				return nil, EntryStats{}, errors.Wrap(err, "while marshaling stripped sideloaded command")
+				return nil, 0, 0, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
 			}
 			outputEnt.Data = data
 		}
 
 		log.Eventf(ctx, "writing payload at index=%d term=%d", outputEnt.Index, outputEnt.Term)
 		if err := sideloaded.Put(ctx, kvpb.RaftIndex(outputEnt.Index), kvpb.RaftTerm(outputEnt.Term), dataToSideload); err != nil { // TODO could verify checksum here
-			return nil, EntryStats{}, err
+			return nil, 0, 0, 0, err
 		}
-
-		stats.SideloadedEntries++
-		stats.SideloadedBytes += int64(len(dataToSideload))
+		sideloadedEntriesSize += int64(len(dataToSideload))
 	}
 
 	if output != nil { // there is at least one sideloaded command
 		// Sync the sideloaded storage directory so that the commands are durable.
 		if err := sideloaded.Sync(); err != nil {
-			return nil, EntryStats{}, err
+			return nil, 0, 0, 0, err
 		}
 	} else { // we never saw a sideloaded command
 		output = input
 	}
 
-	return output, stats, nil
+	return output, numSideloaded, sideloadedEntriesSize, otherEntriesSize, nil
 }
 
 // MaybeInlineSideloadedRaftCommand takes an entry and inspects it. If its
 // command encoding version indicates a sideloaded entry, it uses the entryCache
-// or SideloadStorage to inline the payload, and returns a new entry (which must
-// be treated as immutable by the caller).
+// or SideloadStorage to inline the payload, returning a new entry (which must
+// be treated as immutable by the caller) or nil (if inlining does not apply)
 //
 // If a payload is missing, returns an error whose Cause() is
 // errSideloadedFileNotFound.
@@ -157,24 +165,36 @@ func MaybeInlineSideloadedRaftCommand(
 	ent raftpb.Entry,
 	sideloaded SideloadStorage,
 	entryCache *raftentry.Cache,
-) (raftpb.Entry, error) {
+) (*raftpb.Entry, error) {
 	typ, pri, err := raftlog.EncodingOf(ent)
-	if err != nil || !typ.IsSideloaded() {
-		return ent, err
+	if err != nil {
+		return nil, err
+	}
+	if !typ.IsSideloaded() {
+		return nil, nil
 	}
 	log.Event(ctx, "inlining sideloaded SSTable")
-	// We could unmarshal this yet again, but if it's committed we are very likely
-	// to have appended it recently, in which case we can save work.
-	if entry, hit := entryCache.Get(rangeID, kvpb.RaftIndex(ent.Index)); hit {
+	// We could unmarshal this yet again, but if it's committed we
+	// are very likely to have appended it recently, in which case
+	// we can save work.
+	cachedSingleton, _, _, _ := entryCache.Scan(
+		nil, rangeID, kvpb.RaftIndex(ent.Index), kvpb.RaftIndex(ent.Index+1), 1<<20,
+	)
+
+	if len(cachedSingleton) > 0 {
 		log.Event(ctx, "using cache hit")
-		return entry, nil
+		return &cachedSingleton[0], nil
 	}
+
+	// Make a shallow copy.
+	entCpy := ent
+	ent = entCpy
 
 	log.Event(ctx, "inlined entry not cached")
 	// (Bad) luck, for whatever reason the inlined proposal isn't in the cache.
 	e, err := raftlog.NewEntry(ent)
 	if err != nil {
-		return ent, err
+		return nil, err
 	}
 
 	if len(e.Cmd.ReplicatedEvalResult.AddSSTable.Data) > 0 {
@@ -186,12 +206,12 @@ func MaybeInlineSideloadedRaftCommand(
 		// be as a result of log entries that are very old, written
 		// when sending the log with snapshots was still possible).
 		log.Event(ctx, "entry already inlined")
-		return ent, nil
+		return &ent, nil
 	}
 
 	sideloadedData, err := sideloaded.Get(ctx, kvpb.RaftIndex(ent.Index), kvpb.RaftTerm(ent.Term))
 	if err != nil {
-		return ent, errors.Wrap(err, "loading sideloaded data")
+		return nil, errors.Wrap(err, "loading sideloaded data")
 	}
 	e.Cmd.ReplicatedEvalResult.AddSSTable.Data = sideloadedData
 	// TODO(tbg): there should be a helper that properly encodes a command, given
@@ -201,11 +221,11 @@ func MaybeInlineSideloadedRaftCommand(
 		raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID, pri)
 		_, err := protoutil.MarshalToSizedBuffer(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 		if err != nil {
-			return ent, err
+			return nil, err
 		}
 		ent.Data = data
 	}
-	return ent, nil
+	return &ent, nil
 }
 
 // AssertSideloadedRaftCommandInlined asserts that if the provided entry is a

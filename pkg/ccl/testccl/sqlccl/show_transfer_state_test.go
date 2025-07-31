@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -95,7 +95,7 @@ func TestShowTransferState(t *testing.T) {
 
 	var state, token string
 	t.Run("with_transfer_key", func(t *testing.T) {
-		pgURL, cleanup := pgurlutils.PGUrl(
+		pgURL, cleanup := sqlutils.PGUrl(
 			t,
 			tenant.SQLAddr(),
 			"TestShowTransferState-with_transfer_key",
@@ -160,7 +160,7 @@ func TestShowTransferState(t *testing.T) {
 	})
 
 	t.Run("successful_transfer", func(t *testing.T) {
-		pgURL, cleanup := pgurlutils.PGUrl(
+		pgURL, cleanup := sqlutils.PGUrl(
 			t,
 			tenant.SQLAddr(),
 			"TestShowTransferState-successful_transfer",
@@ -250,7 +250,7 @@ func TestShowTransferState(t *testing.T) {
 		})
 
 		t.Run("temp_tables", func(t *testing.T) {
-			pgURL, cleanup := pgurlutils.PGUrl(
+			pgURL, cleanup := sqlutils.PGUrl(
 				t,
 				tenant.SQLAddr(),
 				"TestShowTransferState-errors-temp_tables",

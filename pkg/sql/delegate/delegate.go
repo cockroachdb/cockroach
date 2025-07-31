@@ -50,9 +50,6 @@ func TryDelegate(
 	case *tree.ShowDatabases:
 		return d.delegateShowDatabases(t)
 
-	case *tree.ShowPolicies:
-		return d.delegateShowPolicies(t)
-
 	case *tree.ShowEnums:
 		return d.delegateShowEnums(t)
 
@@ -71,14 +68,8 @@ func TryDelegate(
 	case *tree.ShowCreateAllTables:
 		return d.delegateShowCreateAllTables()
 
-	case *tree.ShowCreateAllTriggers:
-		return d.delegateShowCreateAllTriggers()
-
 	case *tree.ShowCreateAllTypes:
 		return d.delegateShowCreateAllTypes()
-
-	case *tree.ShowCreateAllRoutines:
-		return d.delegateShowCreateAllRoutines()
 
 	case *tree.ShowDatabaseIndexes:
 		return d.delegateShowDatabaseIndexes(t)

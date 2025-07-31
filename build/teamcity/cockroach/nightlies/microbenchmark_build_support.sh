@@ -63,7 +63,6 @@ EOF
 current_sha=$(git rev-parse HEAD)
 shas=("$@")
 for sha in "${shas[@]}"; do
-  git fetch origin "$sha"
   git checkout "$sha"
   build_and_upload_binaries "$sha"
 done

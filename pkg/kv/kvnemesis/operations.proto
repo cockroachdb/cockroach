@@ -33,8 +33,6 @@ message ClosureTxnOperation {
   cockroach.kv.kvserver.concurrency.isolation.Level iso_level = 7;
   Result result = 5 [(gogoproto.nullable) = false];
   roachpb.Transaction txn = 6;
-  bool buffered_writes = 8;
-  double user_priority = 9 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.UserPriority"];
 }
 
 message GetOperation {
@@ -97,12 +95,6 @@ message BarrierOperation {
   bytes end_key = 2;
   bool with_lease_applied_index = 3;
   Result result = 4 [(gogoproto.nullable) = false];
-}
-
-message FlushLockTableOperation {
-  bytes key = 1;
-  bytes end_key = 2;
-  Result result = 3 [(gogoproto.nullable) = false];
 }
 
 message SplitOperation {
@@ -190,7 +182,6 @@ message Operation {
   SavepointReleaseOperation savepoint_release = 21;
   SavepointRollbackOperation savepoint_rollback = 22;
   BarrierOperation barrier = 23;
-  FlushLockTableOperation flush_lock_table = 24;
 }
 
 enum ResultType {

@@ -17,9 +17,83 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
+
+// Writer is the interface that provides methods to record statement and
+// transaction stats.
+type Writer interface {
+	// RecordStatement records statistics for a statement.
+	RecordStatement(ctx context.Context, key appstatspb.StatementStatisticsKey, value RecordedStmtStats) (appstatspb.StmtFingerprintID, error)
+
+	// RecordStatementExecStats records execution statistics for a statement.
+	// This is sampled and not recorded for every single statement.
+	RecordStatementExecStats(key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats) error
+
+	// ShouldSample returns two booleans, the first one indicates whether we
+	// ever sampled (i.e. collected statistics for) the given combination of
+	// statement metadata, and the second one whether we should save the logical
+	// plan description for it.
+	ShouldSample(fingerprint string, implicitTxn bool, database string) (previouslySampled, savePlanForStats bool)
+
+	// RecordTransaction records statistics for a transaction.
+	RecordTransaction(ctx context.Context, key appstatspb.TransactionFingerprintID, value RecordedTxnStats) error
+}
+
+// Reader provides methods to retrieve transaction/statement statistics from
+// the Storage.
+type Reader interface {
+	// IterateStatementStats iterates through all the collected statement statistics
+	// by using StatementVisitor. Caller can specify iteration behavior, such
+	// as ordering, through IteratorOptions argument. StatementVisitor can return
+	// error, if an error is returned after the execution of the visitor, the
+	// iteration is aborted.
+	IterateStatementStats(context.Context, IteratorOptions, StatementVisitor) error
+
+	// IterateTransactionStats iterates through all the collected transaction
+	// statistics by using TransactionVisitor. It behaves similarly to
+	// IterateStatementStats.
+	IterateTransactionStats(context.Context, IteratorOptions, TransactionVisitor) error
+
+	// IterateAggregatedTransactionStats iterates through all the collected app-level
+	// transactions statistics. It behaves similarly to IterateStatementStats.
+	IterateAggregatedTransactionStats(context.Context, IteratorOptions, AggregatedTransactionVisitor) error
+}
+
+// ApplicationStats is an interface to read from or write to the statistics
+// belongs to an application.
+type ApplicationStats interface {
+	Reader
+	Writer
+
+	// MergeApplicationStatementStats merges the other application's statement
+	// statistics into the current ApplicationStats. It returns how many number
+	// of statistics were being discarded due to memory constraint. The
+	// TransactionFingerprintID of all other's statement statistics keys is
+	// updated to the provided one.
+	MergeApplicationStatementStats(
+		ctx context.Context,
+		other ApplicationStats,
+		transactionFingerprintID appstatspb.TransactionFingerprintID,
+	) uint64
+
+	// MaybeLogDiscardMessage is used to possibly log a message when statistics
+	// are being discarded because of memory limits.
+	MaybeLogDiscardMessage(ctx context.Context)
+
+	// NewApplicationStatsWithInheritedOptions returns a new ApplicationStats
+	// interface that inherits all memory limits of the existing
+	NewApplicationStatsWithInheritedOptions() ApplicationStats
+
+	// Free frees the current ApplicationStats and zeros out the memory counts
+	// and fingerprint counts.
+	Free(context.Context)
+
+	// Clear is like Free but also prepares the container for reuse.
+	Clear(context.Context)
+}
 
 // IteratorOptions provides the ability to the caller to change how it iterates
 // the statements and transactions.
@@ -53,53 +127,65 @@ type TransactionVisitor func(context.Context, *appstatspb.CollectedTransactionSt
 // the visitor, the iteration is aborted.
 type AggregatedTransactionVisitor func(appName string, statistics *appstatspb.TxnStats) error
 
+// Storage provides clients with interface to perform read and write operations
+// to sql statistics.
+type Storage interface {
+	Reader
+
+	// GetLastReset returns the last time when the sqlstats is being reset.
+	GetLastReset() time.Time
+
+	// GetApplicationStats returns an ApplicationStats instance for the given
+	// application name.
+	GetApplicationStats(appName string) ApplicationStats
+
+	// Reset resets all the statistics stored in-memory in the current Storage.
+	Reset(context.Context) error
+}
+
+// Provider is a wrapper around sqlstats subsystem for external consumption.
+type Provider interface {
+	Storage
+
+	Start(ctx context.Context, stopper *stop.Stopper)
+}
+
 // RecordedStmtStats stores the statistics of a statement to be recorded.
 type RecordedStmtStats struct {
-	FingerprintID            appstatspb.StmtFingerprintID
-	Query                    string
-	App                      string
-	DistSQL                  bool
-	ImplicitTxn              bool
-	Vec                      bool
-	FullScan                 bool
-	Database                 string
-	PlanHash                 uint64
-	QuerySummary             string
-	TransactionFingerprintID appstatspb.TransactionFingerprintID
-	SessionID                clusterunique.ID
-	StatementID              clusterunique.ID
-	TransactionID            uuid.UUID
-	AutoRetryCount           int
-	Failed                   bool
-	Generic                  bool
-	AutoRetryReason          error
-	RowsAffected             int
-	IdleLatencySec           float64
-	ParseLatencySec          float64
-	PlanLatencySec           float64
-	RunLatencySec            float64
-	ServiceLatencySec        float64
-	OverheadLatencySec       float64
-	BytesRead                int64
-	RowsRead                 int64
-	RowsWritten              int64
-	Nodes                    []int64
-	KVNodeIDs                []int32
-	StatementType            tree.StatementType
-	Plan                     *appstatspb.ExplainTreePlanNode
-	PlanGist                 string
-	StatementError           error
-	IndexRecommendations     []string
-	StartTime                time.Time
-	EndTime                  time.Time
-	ExecStats                *execstats.QueryLevelStats
-	Indexes                  []string
-	QueryTags                []sqlcommenter.QueryTag
+	SessionID            clusterunique.ID
+	StatementID          clusterunique.ID
+	TransactionID        uuid.UUID
+	AutoRetryCount       int
+	Failed               bool
+	AutoRetryReason      error
+	RowsAffected         int
+	IdleLatencySec       float64
+	ParseLatencySec      float64
+	PlanLatencySec       float64
+	RunLatencySec        float64
+	ServiceLatencySec    float64
+	OverheadLatencySec   float64
+	BytesRead            int64
+	RowsRead             int64
+	RowsWritten          int64
+	Nodes                []int64
+	KVNodeIDs            []int32
+	StatementType        tree.StatementType
+	Plan                 *appstatspb.ExplainTreePlanNode
+	PlanGist             string
+	StatementError       error
+	IndexRecommendations []string
+	Query                string
+	StartTime            time.Time
+	EndTime              time.Time
+	FullScan             bool
+	ExecStats            *execstats.QueryLevelStats
+	Indexes              []string
+	Database             string
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
 type RecordedTxnStats struct {
-	FingerprintID           appstatspb.TransactionFingerprintID
 	SessionID               clusterunique.ID
 	TransactionID           uuid.UUID
 	TransactionTimeSec      float64
@@ -121,24 +207,6 @@ type RecordedTxnStats struct {
 	RowsWritten             int64
 	BytesRead               int64
 	Priority                roachpb.UserPriority
+	SessionData             *sessiondata.SessionData
 	TxnErr                  error
-	Application             string
-	// Normalized user name.
-	UserNormalized string
-}
-
-// SSDrainer is the interface for draining or resetting sql stats.
-type SSDrainer interface {
-	// DrainStats Stats that are drained will permanently be removed from their
-	// source. Once the stats are drained, they cannot be processed again.
-	// DrainStats returns the collected statement and transaction statistics, as
-	// well as the total number of fingerprints drained.
-	DrainStats(ctx context.Context) (
-		[]*appstatspb.CollectedStatementStatistics,
-		[]*appstatspb.CollectedTransactionStatistics,
-		int64,
-	)
-	// Reset will reset all the stats in the drainer. Once reset, the stats will
-	// be lost.
-	Reset(ctx context.Context) error
 }

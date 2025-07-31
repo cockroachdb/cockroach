@@ -8,21 +8,6 @@ SELECT
 		b
 	),
 	min(
-		a ORDER BY
-			b
-	),
-	min(
-		a ORDER BY
-			b,
-			c
-	),
-	min(
-		a ORDER BY
-			b,
-			c,
-			d
-	),
-	min(
 		DISTINCT
 		a,
 		b
@@ -84,21 +69,6 @@ SELECT
 SELECT min(
 		a,
 		b
-       ),
-       min(
-		a ORDER BY
-			b
-       ),
-       min(
-		a ORDER BY
-			b,
-			c
-       ),
-       min(
-		a ORDER BY
-			b,
-			c,
-			d
        ),
        min(
 		DISTINCT
@@ -164,21 +134,6 @@ SELECT min(
 		b
        ),
        min(
-		a ORDER BY
-			b
-       ),
-       min(
-		a ORDER BY
-			b,
-			c
-       ),
-       min(
-		a ORDER BY
-			b,
-			c,
-			d
-       ),
-       min(
 		DISTINCT
 		a,
 		b
@@ -240,20 +195,6 @@ SELECT min(
 		b
        ),
        min(
-		a ORDER BY
-			b
-       ),
-       min(
-		a ORDER BY
-			b, c
-       ),
-       min(
-		a ORDER BY
-			b,
-			c,
-			d
-       ),
-       min(
 		DISTINCT
 		a,
 		b
@@ -309,20 +250,6 @@ SELECT min(
 17:
 -----------------
 SELECT min(a, b),
-       min(
-		a ORDER BY
-			b
-       ),
-       min(
-		a ORDER BY
-			b, c
-       ),
-       min(
-		a ORDER BY
-			b,
-			c,
-			d
-       ),
        min(
 		DISTINCT
 		a,
@@ -380,20 +307,6 @@ SELECT min(a, b),
 ------------------
 SELECT min(a, b),
        min(
-		a ORDER BY
-			b
-       ),
-       min(
-		a ORDER BY
-			b, c
-       ),
-       min(
-		a ORDER BY
-			b,
-			c,
-			d
-       ),
-       min(
 		DISTINCT
 		a,
 		b
@@ -448,18 +361,6 @@ SELECT min(a, b),
 -------------------
 SELECT min(a, b),
        min(
-		a ORDER BY
-			b
-       ),
-       min(
-		a ORDER BY
-			b, c
-       ),
-       min(
-		a ORDER BY
-			b, c, d
-       ),
-       min(
 		DISTINCT
 		a,
 		b
@@ -512,17 +413,6 @@ SELECT min(a, b),
 --------------------
 SELECT min(a, b),
        min(
-		a ORDER BY b
-       ),
-       min(
-		a ORDER BY
-			b, c
-       ),
-       min(
-		a ORDER BY
-			b, c, d
-       ),
-       min(
 		DISTINCT
 		a,
 		b
@@ -574,18 +464,6 @@ SELECT min(a, b),
 ---------------------
 SELECT min(a, b),
        min(
-		a ORDER BY b
-       ),
-       min(
-		a ORDER BY b,
-		           c
-       ),
-       min(
-		a ORDER BY b,
-		           c,
-		           d
-       ),
-       min(
 		DISTINCT
 		a,
 		b
@@ -636,18 +514,6 @@ SELECT min(a, b),
 ----------------------
 SELECT min(a, b),
        min(
-		a ORDER BY b
-       ),
-       min(
-		a ORDER BY b,
-		           c
-       ),
-       min(
-		a ORDER BY b,
-		           c,
-		           d
-       ),
-       min(
 		DISTINCT
 		a,
 		b
@@ -697,17 +563,6 @@ SELECT min(a, b),
 -----------------------
 SELECT min(a, b),
        min(
-		a ORDER BY b
-       ),
-       min(
-		a ORDER BY b, c
-       ),
-       min(
-		a ORDER BY b,
-		           c,
-		           d
-       ),
-       min(
 		DISTINCT
 		a,
 		b
@@ -754,15 +609,6 @@ SELECT min(a, b),
 25:
 -------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(
-		a ORDER BY b, c
-       ),
-       min(
-		a ORDER BY b,
-		           c,
-		           d
-       ),
        min(
 		DISTINCT
 		a,
@@ -808,13 +654,6 @@ SELECT min(a, b),
 26:
 --------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(
-		a ORDER BY b, c
-       ),
-       min(
-		a ORDER BY b, c, d
-       ),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -856,57 +695,6 @@ SELECT min(a, b),
 27:
 ---------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(
-		a ORDER BY b, c
-       ),
-       min(
-		a ORDER BY b, c, d
-       ),
-       min(DISTINCT a, b),
-       min(),
-       min() OVER (),
-       min() OVER (
-		ORDER BY x
-       ),
-       min() FILTER (
-		WHERE x > 3
-		      AND y < 4
-       ),
-       min() FILTER (
-		WHERE x > 3
-		      AND y < 4
-       ) OVER (ORDER BY x),
-       min() OVER (
-		RANGE BETWEEN
-				UNBOUNDED PRECEDING
-		      AND
-				UNBOUNDED FOLLOWING
-       ),
-       min() OVER (
-		ROWS BETWEEN
-				1 FOLLOWING
-		     AND
-				1 FOLLOWING
-       ),
-       min() OVER (
-		             w
-		PARTITION BY a, b
-		    ORDER BY x, y
-		        ROWS BETWEEN
-						1 FOLLOWING
-		             AND
-						1 FOLLOWING
-       )
-
-28:
-----------------------------
-SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(
-		a ORDER BY b, c, d
-       ),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -946,11 +734,6 @@ SELECT min(a, b),
 29:
 -----------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(
-		a ORDER BY b, c, d
-       ),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -988,9 +771,6 @@ SELECT min(a, b),
 31:
 -------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1026,9 +806,6 @@ SELECT min(a, b),
 32:
 --------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1062,9 +839,6 @@ SELECT min(a, b),
 40:
 ----------------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1096,9 +870,6 @@ SELECT min(a, b),
 41:
 -----------------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1128,9 +899,6 @@ SELECT min(a, b),
 44:
 --------------------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1158,9 +926,6 @@ SELECT min(a, b),
 48:
 ------------------------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1187,9 +952,6 @@ SELECT min(a, b),
 50:
 --------------------------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1216,9 +978,6 @@ SELECT min(a, b),
 56:
 --------------------------------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1244,9 +1003,6 @@ SELECT min(a, b),
 61:
 -------------------------------------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1270,9 +1026,6 @@ SELECT min(a, b),
 62:
 --------------------------------------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1294,9 +1047,6 @@ SELECT min(a, b),
 65:
 -----------------------------------------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1317,9 +1067,6 @@ SELECT min(a, b),
 78:
 ------------------------------------------------------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1338,9 +1085,6 @@ SELECT min(a, b),
 82:
 ----------------------------------------------------------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1356,9 +1100,6 @@ SELECT min(a, b),
 94:
 ----------------------------------------------------------------------------------------------
 SELECT min(a, b),
-       min(a ORDER BY b),
-       min(a ORDER BY b, c),
-       min(a ORDER BY b, c, d),
        min(DISTINCT a, b),
        min(),
        min() OVER (),
@@ -1369,8 +1110,8 @@ SELECT min(a, b),
        min() OVER (ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING),
        min() OVER (w PARTITION BY a, b ORDER BY x, y ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING)
 
-459:
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-SELECT min(a, b), min(a ORDER BY b), min(a ORDER BY b, c), min(a ORDER BY b, c, d), min(DISTINCT a, b), min(), min() OVER (), min() OVER (ORDER BY x), min() FILTER (WHERE x > 3 AND y < 4), min() FILTER (WHERE x > 3 AND y < 4) OVER (ORDER BY x), min() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING), min() OVER (ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING), min() OVER (w PARTITION BY a, b ORDER BY x, y ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING)
+393:
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SELECT min(a, b), min(DISTINCT a, b), min(), min() OVER (), min() OVER (ORDER BY x), min() FILTER (WHERE x > 3 AND y < 4), min() FILTER (WHERE x > 3 AND y < 4) OVER (ORDER BY x), min() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING), min() OVER (ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING), min() OVER (w PARTITION BY a, b ORDER BY x, y ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING)
 
 

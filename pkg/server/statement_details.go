@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
@@ -99,6 +100,9 @@ func getStatementDetails(
 	// This expression is used to merge the metadata column from statement
 	// activity table.
 	mergeAggStmtMetadataColExpr := mergeAggStmtMetadataColumnLatest
+	if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
+		mergeAggStmtMetadataColExpr = mergeAggStmtMetadata_V23_2
+	}
 
 	rb := statementDetailsRespBuilder{
 		ie:                          ie,

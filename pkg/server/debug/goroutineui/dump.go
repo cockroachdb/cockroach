@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
-	"github.com/cockroachdb/errors"
 	"github.com/maruel/panicparse/v2/stack"
 )
 
@@ -43,9 +42,6 @@ func (d Dump) SortCountDesc() {
 	if d.err != nil {
 		return
 	}
-	if d.agg == nil {
-		return
-	}
 	sort.Slice(d.agg.Buckets, func(i, j int) bool {
 		a, b := d.agg.Buckets[i], d.agg.Buckets[j]
 		return len(a.IDs) > len(b.IDs)
@@ -58,9 +54,6 @@ func (d Dump) SortWaitDesc() {
 	if d.err != nil {
 		return
 	}
-	if d.agg == nil {
-		return
-	}
 	sort.Slice(d.agg.Buckets, func(i, j int) bool {
 		a, b := d.agg.Buckets[i], d.agg.Buckets[j]
 		return a.SleepMax > b.SleepMax
@@ -71,9 +64,6 @@ func (d Dump) SortWaitDesc() {
 func (d Dump) HTML(w io.Writer) error {
 	if d.err != nil {
 		return d.err
-	}
-	if d.agg == nil {
-		return errors.New("goroutineui: empty goroutine dump")
 	}
 	return d.agg.ToHTML(w, "" /* footer */)
 }

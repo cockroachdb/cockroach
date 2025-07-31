@@ -75,7 +75,7 @@ num=1
 # When uncontented=false one or more active waiters marks the lock as contented.
 query span=a,c
 ----
-num locks: 1, bytes returned: 79, resume reason: RESUME_UNKNOWN, resume span: <nil>
+num locks: 1, bytes returned: 85, resume reason: RESUME_UNKNOWN, resume span: <nil>
  locks:
   range_id=3 key="a" holder=<nil> durability=Unreplicated duration=0s
    waiters:

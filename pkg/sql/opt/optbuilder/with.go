@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -122,6 +123,9 @@ func (b *Builder) buildCTEs(
 ) (outScope *scope, correlatedCTEs cteSources) {
 	if with == nil {
 		return inScope, nil
+	}
+	if b.insideFuncDef {
+		panic(unimplemented.New("user-defined functions", "CTE usage inside a function definition"))
 	}
 
 	outScope = inScope.push()

@@ -77,9 +77,8 @@ CREATE TABLE public.t (
   PARTITION three VALUES IN (('three')),
   PARTITION four VALUES IN (('four')),
   PARTITION five VALUES IN (('five'))
-) WITH (schema_locked = true)
+)
 -- Warning: Partitioned table with no zone configurations.
-;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -161,15 +160,7 @@ SET tracing = kv
 
 # Test a blind write.
 statement ok
-UPSERT INTO overwrite VALUES (1, 'two', 3)
-
-# Test a blind rewrite. No tombstones because the PK doesn't change.
-statement ok
-UPSERT INTO overwrite VALUES (1, 'two', 4)
-
-# Test a blind overwrite.
-statement ok
-UPSERT INTO overwrite VALUES (1, 'three', 5)
+UPSERT INTO overwrite VALUES (1, 'two', 3);
 
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'CPut%'
@@ -179,16 +170,6 @@ CPut /Table/111/1/" "/1/0 -> nil (tombstone)
 CPut /Table/111/1/"\x80"/1/0 -> nil (tombstone)
 CPut /Table/111/1/"\xa0"/1/0 -> nil (tombstone)
 CPut /Table/111/1/"\xc0"/1/0 -> nil (tombstone)
-CPut /Table/111/1/"\x80"/1/0 -> /TUPLE/3:3:Int/5
-CPut /Table/111/1/" "/1/0 -> nil (tombstone)
-CPut /Table/111/1/"@"/1/0 -> nil (tombstone)
-CPut /Table/111/1/"\xa0"/1/0 -> nil (tombstone)
-CPut /Table/111/1/"\xc0"/1/0 -> nil (tombstone)
-
-query ITI
-SELECT * FROM overwrite ORDER BY pk
-----
-1  three  5
 
 query T
 EXPLAIN INSERT INTO t VALUES (1, 'two', 3, 4, 5)
@@ -252,13 +233,12 @@ update t
  ├── unique w/tombstone indexes: t_c_key
  └── project
       ├── scan t
-      │    ├── constraint: /12/11
-      │    │    ├── [/'one'/2 - /'one'/2]
-      │    │    ├── [/'two'/2 - /'two'/2]
-      │    │    ├── [/'three'/2 - /'three'/2]
-      │    │    ├── [/'four'/2 - /'four'/2]
-      │    │    └── [/'five'/2 - /'five'/2]
-      │    └── flags: avoid-full-scan
+      │    └── constraint: /12/11
+      │         ├── [/'one'/2 - /'one'/2]
+      │         ├── [/'two'/2 - /'two'/2]
+      │         ├── [/'three'/2 - /'three'/2]
+      │         ├── [/'four'/2 - /'four'/2]
+      │         └── [/'five'/2 - /'five'/2]
       └── projections
            └── 4
 
@@ -396,17 +376,11 @@ CPut /Table/111/1/" "/1/0 -> nil (tombstone)
 CPut /Table/111/1/"\x80"/1/0 -> nil (tombstone)
 CPut /Table/111/1/"\xa0"/1/0 -> nil (tombstone)
 CPut /Table/111/1/"\xc0"/1/0 -> nil (tombstone)
-CPut /Table/111/1/"\x80"/1/0 -> /TUPLE/3:3:Int/5
-CPut /Table/111/1/" "/1/0 -> nil (tombstone)
-CPut /Table/111/1/"@"/1/0 -> nil (tombstone)
-CPut /Table/111/1/"\xa0"/1/0 -> nil (tombstone)
-CPut /Table/111/1/"\xc0"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"@"/1/0 -> /TUPLE/3:3:Int/3/1:4:Int/4/1:5:Int/5
 CPut /Table/110/1/" "/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\x80"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\xa0"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\xc0"/1/0 -> nil (tombstone)
-CPut /Table/110/2/"@"/4/0 -> /BYTES/0x89
 CPut /Table/110/2/" "/4/0 -> nil (tombstone)
 CPut /Table/110/2/"\x80"/4/0 -> nil (tombstone)
 CPut /Table/110/2/"\xa0"/4/0 -> nil (tombstone)
@@ -416,7 +390,6 @@ CPut /Table/110/1/"@"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\x80"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\xa0"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\xc0"/1/0 -> nil (tombstone)
-CPut /Table/110/2/" "/6/0 -> /BYTES/0x89
 CPut /Table/110/2/"@"/6/0 -> nil (tombstone)
 CPut /Table/110/2/"\x80"/6/0 -> nil (tombstone)
 CPut /Table/110/2/"\xa0"/6/0 -> nil (tombstone)
@@ -426,7 +399,6 @@ CPut /Table/110/1/" "/2/0 -> nil (tombstone)
 CPut /Table/110/1/"@"/2/0 -> nil (tombstone)
 CPut /Table/110/1/"\xa0"/2/0 -> nil (tombstone)
 CPut /Table/110/1/"\xc0"/2/0 -> nil (tombstone)
-CPut /Table/110/2/"\x80"/4/0 -> /BYTES/0x8a
 CPut /Table/110/2/" "/4/0 -> nil (tombstone)
 CPut /Table/110/2/"@"/4/0 -> nil (tombstone)
 CPut /Table/110/2/"\xa0"/4/0 -> nil (tombstone)
@@ -436,7 +408,6 @@ CPut /Table/110/1/" "/2/0 -> nil (tombstone)
 CPut /Table/110/1/"@"/2/0 -> nil (tombstone)
 CPut /Table/110/1/"\x80"/2/0 -> nil (tombstone)
 CPut /Table/110/1/"\xc0"/2/0 -> nil (tombstone)
-CPut /Table/110/2/"\xa0"/6/0 -> /BYTES/0x8a
 CPut /Table/110/2/" "/6/0 -> nil (tombstone)
 CPut /Table/110/2/"@"/6/0 -> nil (tombstone)
 CPut /Table/110/2/"\x80"/6/0 -> nil (tombstone)
@@ -446,8 +417,7 @@ CPut /Table/110/1/" "/1/0 -> nil (tombstone)
 CPut /Table/110/1/"@"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\x80"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\xc0"/1/0 -> nil (tombstone)
-CPut /Table/110/2/"\xa0"/6/0 -> /BYTES/0x89
-CPut /Table/110/2/"\xa0"/4/0 -> /BYTES/0x8a
+CPut /Table/110/2/"\xa0"/4/0 -> /BYTES/0x8a (expecting does not exist)
 CPut /Table/110/2/" "/4/0 -> nil (tombstone)
 CPut /Table/110/2/"@"/4/0 -> nil (tombstone)
 CPut /Table/110/2/"\x80"/4/0 -> nil (tombstone)
@@ -457,7 +427,6 @@ CPut /Table/110/1/" "/1/0 -> nil (tombstone)
 CPut /Table/110/1/"@"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\x80"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\xa0"/1/0 -> nil (tombstone)
-CPut /Table/110/2/"\xc0"/4/0 -> /BYTES/0x89
 CPut /Table/110/2/" "/4/0 -> nil (tombstone)
 CPut /Table/110/2/"@"/4/0 -> nil (tombstone)
 CPut /Table/110/2/"\x80"/4/0 -> nil (tombstone)

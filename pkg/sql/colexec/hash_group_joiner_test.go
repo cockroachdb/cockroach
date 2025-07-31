@@ -54,8 +54,6 @@ func TestHashGroupJoiner(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
-	var closerRegistry colexecargs.CloserRegistry
-	defer closerRegistry.Close(ctx)
 
 	tcs := []groupJoinTestCase{
 		{
@@ -152,36 +150,26 @@ func TestHashGroupJoiner(t *testing.T) {
 			}
 			log.Infof(ctx, "%s%s", tc.description, suffix)
 			var spilled bool
-			var numRuns int
 			colexectestutils.RunTests(
 				t, testAllocator, []colexectestutils.Tuples{tc.jtc.leftTuples, tc.jtc.rightTuples}, tc.atc.expected, colexectestutils.UnorderedVerifier,
 				func(inputs []colexecop.Operator) (colexecop.Operator, error) {
-					numRuns++
-					return createDiskBackedHashGroupJoiner(
-						ctx, flowCtx, tc, inputs, func() { spilled = true },
-						queueCfg, &monitorRegistry, &closerRegistry,
+					hgjOp, closers, err := createDiskBackedHashGroupJoiner(
+						ctx, flowCtx, tc, inputs, func() { spilled = true }, queueCfg, &monitorRegistry,
 					)
+					// Expect ten closers:
+					// - 1: for the in-memory hash group joiner
+					// - 6: 2 (the disk spiller and the external sort) for each
+					//   input to the hash join as well as the input to the hash
+					//   aggregator
+					// - 1: for the external hash joiner
+					// - 1: for the external hash aggregator
+					// - 1: for the disk spiller around the hash group joiner.
+					require.Equal(t, 10, len(closers))
+					return hgjOp, err
+
 				},
 			)
 			require.Equal(t, spillForced, spilled)
-			// We always add the in-memory hash group joiner and the disk
-			// spiller for the hash group join into the closers.
-			numExpectedClosers := 2
-			if spilled {
-				// If we spill, then we also add the following five closers:
-				// - the hash-based partitioner (1) for the external hash join
-				// - the disk spiller (2), (3) for each disk-backed sort on top
-				// of the inputs to the merge join used in the fallback strategy
-				// in the external hash join
-				// - the hash-based partitioner (4) for the external hash
-				// aggregator
-				// - the disk spiller (5) for the disk-backed sort used in the
-				// external hash aggregator.
-				numExpectedClosers += 5
-			}
-			require.Equal(t, numExpectedClosers*numRuns, closerRegistry.NumClosers())
-			closerRegistry.Close(ctx)
-			closerRegistry.Reset()
 		}
 	}
 }
@@ -194,8 +182,7 @@ func createDiskBackedHashGroupJoiner(
 	spillingCallbackFn func(),
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	monitorRegistry *colexecargs.MonitorRegistry,
-	closerRegistry *colexecargs.CloserRegistry,
-) (colexecop.Operator, error) {
+) (colexecop.Operator, []colexecop.Closer, error) {
 	tc.jtc.init()
 	hjSpec := createSpecForHashJoiner(&tc.jtc)
 	tc.atc.unorderedInput = true
@@ -213,13 +200,13 @@ func createDiskBackedHashGroupJoiner(
 			Core:        execinfrapb.ProcessorCoreUnion{HashGroupJoiner: &hgjSpec},
 			ResultTypes: tc.outputTypes,
 		},
-		Inputs:          colexectestutils.MakeInputs(inputs),
-		DiskQueueCfg:    diskQueueCfg,
-		FDSemaphore:     &colexecop.TestingSemaphore{},
-		MonitorRegistry: monitorRegistry,
-		CloserRegistry:  closerRegistry,
+		Inputs:              colexectestutils.MakeInputs(inputs),
+		StreamingMemAccount: testMemAcc,
+		DiskQueueCfg:        diskQueueCfg,
+		FDSemaphore:         &colexecop.TestingSemaphore{},
+		MonitorRegistry:     monitorRegistry,
 	}
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Root, err
+	return result.Root, result.ToClose, err
 }

@@ -19,7 +19,7 @@ func TestCanHaveCompositeKeyEncoding(t *testing.T) {
 		typ *types.T
 		exp bool
 	}{
-		{types.AnyElement, true},
+		{types.Any, true},
 		{types.AnyArray, true},
 		{types.AnyCollatedString, true},
 		{types.AnyEnum, false},

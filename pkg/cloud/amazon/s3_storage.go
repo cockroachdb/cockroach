@@ -636,11 +636,6 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		return s3Client{}, "", errors.Wrap(err, "could not initialize an aws config")
 	}
 
-	if s.opts.skipChecksum {
-		cfg.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
-		cfg.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
-	}
-
 	var endpointURI string
 	if s.opts.endpoint != "" {
 		var err error

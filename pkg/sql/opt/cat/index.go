@@ -9,9 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 )
 
 // IndexOrdinal identifies an index (in the context of a Table).
@@ -47,11 +45,11 @@ type Index interface {
 	// Specifically idx = Table().Index(idx.Ordinal).
 	Ordinal() IndexOrdinal
 
-	// Type returns the type of this index: forward, inverted, vector, etc.
-	Type() idxtype.T
-
 	// IsUnique returns true if this index is declared as UNIQUE in the schema.
 	IsUnique() bool
+
+	// IsInverted returns true if this is an inverted index.
+	IsInverted() bool
 
 	// GetInvisibility returns index invisibility.
 	GetInvisibility() float64
@@ -126,12 +124,12 @@ type Index interface {
 	// columns is data-dependent, not schema-dependent.
 	LaxKeyColumnCount() int
 
-	// PrefixColumnCount can only be called for inverted or vector indexes, and
-	// will panic otherwise. It returns the number of forward-indexed columns that
-	// prefix the inverted or vector column. This is only the case for a
-	// multi-column inverted/vector index. Therefore, a non-zero value is only
-	// returned for multi-column inverted/vector indexes.
-	PrefixColumnCount() int
+	// NonInvertedPrefixColumnCount returns the number of non-inverted columns
+	// in the inverted index. An inverted index only has non-inverted columns if
+	// it is a multi-column inverted index. Therefore, a non-zero value is only
+	// returned for multi-column inverted indexes. This function panics if the
+	// index is not an inverted index.
+	NonInvertedPrefixColumnCount() int
 
 	// Column returns the ith IndexColumn within the index definition, where
 	// i < ColumnCount.
@@ -140,10 +138,6 @@ type Index interface {
 	// InvertedColumn returns the inverted IndexColumn of the index. Panics if
 	// the index is not an inverted index.
 	InvertedColumn() IndexColumn
-
-	// VectorColumn returns the vector IndexColumn of the index. Panics if the
-	// index is not a vector index.
-	VectorColumn() IndexColumn
 
 	// Predicate returns the partial index predicate expression and true if the
 	// index is a partial index. If it is not a partial index, the empty string
@@ -195,10 +189,6 @@ type Index interface {
 	// describes the configuration for this geospatial inverted index.
 	GeoConfig() geopb.Config
 
-	// VecConfig returns a vector index configuration. If not empty, it describes
-	// the configuration for this vector index.
-	VecConfig() *vecpb.Config
-
 	// Version returns the IndexDescriptorVersion of the index.
 	Version() descpb.IndexDescriptorVersion
 
@@ -209,10 +199,6 @@ type Index interface {
 	// Partition returns the ith PARTITION BY LIST partition within the index
 	// definition, where i < PartitionCount.
 	Partition(i int) Partition
-
-	// IsTemporaryIndexForBackfill returns true iff the index is an index being
-	// used as the temporary index being used by an in-progress index backfill.
-	IsTemporaryIndexForBackfill() bool
 }
 
 // IndexColumn describes a single column that is part of an index definition.

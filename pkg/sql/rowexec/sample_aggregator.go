@@ -94,6 +94,9 @@ func newSampleAggregator(
 		if len(s.Columns) == 0 {
 			return nil, errors.Errorf("no columns")
 		}
+		if _, ok := supportedSketchTypes[s.SketchType]; !ok {
+			return nil, errors.Errorf("unsupported sketch type %s", s.SketchType)
+		}
 		if s.GenerateHistogram && s.HistogramMaxBuckets == 0 {
 			return nil, errors.Errorf("histogram max buckets not specified")
 		}
@@ -238,7 +241,7 @@ func (s *sampleAggregator) mainLoop(
 		// If it changed by less than 1%, just check for cancellation (which is more
 		// efficient).
 		if fractionCompleted < 1.0 && fractionCompleted < lastReportedFractionCompleted+0.01 {
-			return job.NoTxn().CheckState(ctx)
+			return job.NoTxn().CheckStatus(ctx)
 		}
 		lastReportedFractionCompleted = fractionCompleted
 		return job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted))

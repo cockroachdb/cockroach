@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -41,10 +40,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
-
-func init() {
-	sql.TestForceDisableCreateTableWithSchemaLocked()
-}
 
 func TestPlanDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -279,7 +274,7 @@ func TestExplainPlanIsMemoryMonitored(t *testing.T) {
 	})
 
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test-sc-plan-mon"),
+		Name:     "test-sc-plan-mon",
 		Settings: tt.ClusterSettings(),
 	})
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(5.243e+6 /* 5MiB */))

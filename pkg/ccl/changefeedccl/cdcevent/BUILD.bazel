@@ -78,7 +78,6 @@ go_test(
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sqltestutils",
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

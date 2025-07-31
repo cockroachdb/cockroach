@@ -45,7 +45,7 @@ GRANT CREATE ON DATABASE test TO new_role
 
 user testuser
 
-# Ensure the current user is a member of the role we are setting to.
+# Ensure the current user is a member of the role we're setting to.
 statement error pq: permission denied to reassign objects\nHINT: user must be a member of the new role
 REASSIGN OWNED BY old_role TO new_role
 

@@ -121,25 +121,25 @@ on-txn-updated txn=txn1 status=committed
 [-] update txn: committing txn1
 [2] sequence req2: resolving intent ‹"k"› for txn 00000001 with COMMITTED status
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[2] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
 [3] sequence req3: resolving intent ‹"k"› for txn 00000001 with COMMITTED status
 [3] sequence req3: lock wait-queue event: wait for txn 00000002 running request @ key ‹"k"› (queuedLockingRequests: 3, queuedReaders: 0)
-[3] sequence req3: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[3] sequence req3: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [3] sequence req3: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req3: pushing txn 00000002 to detect request deadlock
 [3] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
 [4] sequence req4: resolving intent ‹"k"› for txn 00000001 with COMMITTED status
 [4] sequence req4: lock wait-queue event: wait for txn 00000002 running request @ key ‹"k"› (queuedLockingRequests: 3, queuedReaders: 0)
-[4] sequence req4: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[4] sequence req4: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [4] sequence req4: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence req4: pushing txn 00000002 to detect request deadlock
 [4] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
 [5] sequence req5r: resolving intent ‹"k"› for txn 00000001 with COMMITTED status
 [5] sequence req5r: lock wait-queue event: done waiting
-[5] sequence req5r: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[5] sequence req5r: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [5] sequence req5r: acquiring latches
 [5] sequence req5r: scanning lock table for conflicting locks
 [5] sequence req5r: sequencing complete, returned guard
@@ -200,13 +200,13 @@ on-txn-updated txn=txn2 status=aborted
 [-] update txn: aborting txn2
 [3] sequence req3: resolving intent ‹"k"› for txn 00000002 with ABORTED status
 [3] sequence req3: lock wait-queue event: done waiting
-[3] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[3] sequence req3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [3] sequence req3: acquiring latches
 [3] sequence req3: scanning lock table for conflicting locks
 [3] sequence req3: sequencing complete, returned guard
 [4] sequence req4: resolving intent ‹"k"› for txn 00000002 with ABORTED status
 [4] sequence req4: lock wait-queue event: wait for txn 00000003 running request @ key ‹"k"› (queuedLockingRequests: 2, queuedReaders: 0)
-[4] sequence req4: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[4] sequence req4: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [4] sequence req4: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence req4: pushing txn 00000003 to detect request deadlock
 [4] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -215,7 +215,7 @@ finish req=req3
 ----
 [-] finish req3: finishing request
 [4] sequence req4: lock wait-queue event: done waiting
-[4] sequence req4: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[4] sequence req4: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [4] sequence req4: acquiring latches
 [4] sequence req4: scanning lock table for conflicting locks
 [4] sequence req4: sequencing complete, returned guard

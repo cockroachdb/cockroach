@@ -1,0 +1,195 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.multitenant.tenantcapabilitiespb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb";
+
+import "gogoproto/gogo.proto";
+import "roachpb/span_config.proto";
+
+// TenantCapabilities encapsulates a set of capabilities[1] for a specific
+// tenant. Capabilities for a specific tenant are stored in the system.tenants
+// table and are checked against in KV when the tenant performs a privileged
+// operation.
+//
+// [1] Certain requests in the system are considered "privileged", and as such,
+// tenants are only allowed to perform them if they have the appropriate
+// capability. For example, performing an AdminSplit.
+//
+// When adding new capabilities to this list, please make sure to add support
+// for the new values to `show_tenant.go` and `tenant_capability.go` in order to
+// integrate them with the SQL infrastructure for managing capabilities.
+message TenantCapabilities {
+  option (gogoproto.equal) = true;
+
+  // DisableAdminSplit, if set to true, revokes the tenants ability to
+  // successfully perform `AdminSplit` requests.
+  //
+  // This field uses the "disabled" verbiage, unlike the other fields on this
+  // proto. Doing so ensures the zero value translates to `AdminSplits` being
+  // allowed by default for secondary tenants. This is because splits and
+  // scatters are integral to the performance of IMPORT/RESTORE.
+  bool disable_admin_split = 1;
+
+  // DisableAdminScatter, if set to true, revokes a tenant's the ability to
+  // successfully perform `AdminScatter` requests.
+  //
+  // This field uses the "disabled" verbiage, unlike the other fields on this
+  // proto. Doing so ensures the zero value translates to `AdminScatters` being
+  // allowed by default for secondary tenants. This is because splits and
+  // scatters are integral to the performance of IMPORT/RESTORE.
+  bool disable_admin_scatter = 6;
+
+  // CanViewNodeInfo, if set to true, grants the tenant the ability
+  // retrieve node-level observability data at endpoints such as `_status/nodes`
+  // and in the DB Console overview page.
+  bool can_view_node_info = 2;
+
+  // CanViewTSDBMetrics, if set to true, grants the tenant the ability to
+  // make arbitrary queries of the TSDB of the entire cluster. Currently,
+  // we do not store per-tenant metrics so this will surface system metrics
+  // to the tenant.
+  // TODO(davidh): Revise this once tenant-scoped metrics are implemented in
+  // https://github.com/cockroachdb/cockroach/issues/96438
+  bool can_view_tsdb_metrics = 3 [(gogoproto.customname) = "CanViewTSDBMetrics"];
+
+  // SpanConfigBounds, if set, bound the allowable values of span
+  // configurations enacted by the tenant. Note that the tenant can install
+  // span configs which do not conform to its bounds; the bounds result in
+  // post-hoc clamping of the span configs to conform. This model diverges
+  // from other capabilities because the span config infrastructure is
+  // stateful and asynchronous. The bounds may change after a span config
+  // has been accepted, in which case no error would flow to the user.
+  // Furthermore the span config reconciliation infrastructure is poorly
+  // positioned to surface errors to the user.
+  SpanConfigBounds span_config_bounds = 4;
+
+  // CanAdminUnsplit if, set to true, grants the tenant the ability to
+  // successfully perform `AdminUnsplit` requests.
+  bool can_admin_unsplit = 5;
+
+  // CanAdminRelocateRange if set to true, grants the tenant the ability to
+  // successfully perform `AdminChangeReplicas`, `AdminRelocateRange`,
+  // `AdminTransferLease` requests.
+  bool can_admin_relocate_range = 7;
+
+  // ExemptFromRateLimiting, if set to true, exempts the tenant from the KV-side tenant
+  // rate limiter.
+  bool exempt_from_rate_limiting = 8;
+
+  // CanUseNodelocalStorage if set to true, grants the tenant the ability
+  // to use nodelocal storage  on any KV node.
+  bool can_use_nodelocal_storage = 9;
+
+  // CanCheckConsistency if set to true, grants the tenant the ability to run
+  // range consistency checks.
+  bool can_check_consistency = 10;
+
+  // CanDebugProcess, if set to true, grants the tenant the ability to
+  // set vmodule on the process and run pprof profiles and tools.
+  bool can_debug_process = 11;
+
+  // CanViewAllMetrics, if set to true, grants the tenant the ability
+  // to query any metrics from the host.
+  bool can_view_all_metrics = 12;
+};
+
+// SpanConfigBound is used to constrain the possible values a SpanConfig may
+// contain.
+message SpanConfigBounds {
+  option (gogoproto.equal) = true;
+
+
+
+  // GcTtlSeconds bounds the configuration of gc.ttl_seconds.
+  Int32Range gc_ttl_seconds = 1 [(gogoproto.customname) = "GCTTLSeconds"];
+
+  // RangeMaxSize bounds the configuration of range_max_bytes.
+  Int64Range range_max_bytes = 2;
+
+  // RangeMinSize bounds the configuration of range_min_bytes.
+  Int64Range range_min_bytes = 3;
+
+  // NumReplicas bounds the configuration of num_replicas.
+  Int32Range num_replicas = 4;
+
+  // NumVoters bounds the configuration of num_voters.
+  Int32Range num_voters = 5;
+
+  // ConstraintBounds is used to bound the replication constraint fields of
+  // a span config: constraints, voter_constraints, and
+  // leaseholder_preferences.
+  ConstraintBounds constraint_bounds = 6;
+
+  // Int32Range is an interval of int32 representing [start, end].
+  // If end is less than start, it is interpreted to be equal
+  // start; there is no invalid representation.
+  message Int32Range {
+    option (gogoproto.equal) = true;
+    int32 start = 1;
+    int32 end = 2;
+  }
+
+  // Int64Range is an interval of int64 representing [start, end].
+  // If end is less than start, it is interpreted to be equal
+  // start; there is no invalid representation.
+  message Int64Range {
+    option (gogoproto.equal) = true;
+    int64 start = 1;
+    int64 end = 2;
+  }
+
+  // ConstraintsConjunction is like the roachpb equivalent with the same name,
+  // but lacking a num_replicas field. This message is used when clamping a
+  // SpanConfig constraint which is out of conformance.
+  message ConstraintsConjunction {
+    option (gogoproto.equal) = true;
+    repeated cockroach.roachpb.Constraint constraints = 1 [(gogoproto.nullable) = false];
+  }
+
+  // ConstraintBounds represents bounds on voter_constraints, constraints,
+  // and lease_preferences. These fields are bound by the same constraints,
+  // because they need to be internally consistent.
+  //
+  // The basic structure is that these fields will be checked against
+  // the allowed constraint bounds, and, if the values fall outside
+  // those bounds, they will be clamped using the values in fallback.
+  // See spanconfigbounds/doc.go for more discussion.
+  //
+  // Note: the fallback constraints should conform to the allowed constraints,
+  // but if they do not, then a clamped configuration may not conform.
+  //
+  // TODO(ajwerner): Perhaps add a fallback rule on conformance to say that
+  // a constraint conforms if its constraints exactly match fallback. If we
+  // did that, then we would be able to say that a clamped constraint always
+  // conforms and we wouldn't have any sort of invalid state.
+  message ConstraintBounds {
+    option (gogoproto.equal) = true;
+
+    // Constraints is a *sorted* slice of permitted constraints.
+    //
+    // If a constraint in a SpanConfig does not match a constraint in this
+    // slice, the entire field is considered invalid and will be clamped.
+    //
+    // The logic for clamping is to mirror the structure of the existing
+    // distribution of replicas, to the extent possible, but as applied to
+    // the fallback constraints.
+    repeated cockroach.roachpb.Constraint allowed = 1 [(gogoproto.nullable) = false];
+
+    // FallbackConstraints are used to determine the constraints to use when
+    // clamping a configuration which is out of conformance.
+    //
+    // If the existing constraint had just one entry with no numeric bound,
+    // the first element will be used as the constraint.
+    //
+    // If the existing constraint had just one entry with a numeric constraint,
+    // we'll clamp this to the num_replicas/2.
+    //
+    // If the existing constraint had more than one entry with numeric
+    // constraints, we'll clamp accordingly.
+    repeated ConstraintsConjunction fallback = 2 [(gogoproto.nullable) = false];
+  }
+}

@@ -20,7 +20,6 @@ limit
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
  ├── cost: 160.090001
- ├── cost-flags: unbounded-cardinality
  ├── key: ()
  ├── fd: ()-->(15-17)
  ├── distribution: test
@@ -31,7 +30,6 @@ limit
  │    ├── right columns: a.x:8 a.y:9 a.z:10
  │    ├── stats: [rows=20]
  │    ├── cost: 160.070001
- │    ├── cost-flags: unbounded-cardinality
  │    ├── limit hint: 1.00
  │    ├── distribution: test
  │    ├── prune: (15,17)
@@ -39,7 +37,6 @@ limit
  │    │    ├── columns: a.x:1 a.y:2 a.z:3
  │    │    ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  │    │    ├── cost: 80.0200006
- │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: ()-->(2), (1)-->(3)
  │    │    ├── limit hint: 1.00
@@ -50,7 +47,6 @@ limit
  │    │         ├── constraint: /2/1: [/1 - /1]
  │    │         ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  │    │         ├── cost: 19.1
- │    │         ├── cost-flags: unbounded-cardinality
  │    │         ├── key: (1)
  │    │         ├── fd: ()-->(2)
  │    │         ├── limit hint: 1.00
@@ -59,7 +55,6 @@ limit
  │         ├── columns: a.x:8 a.y:9 a.z:10
  │         ├── stats: [rows=10, distinct(9)=1, null(9)=0]
  │         ├── cost: 80.0200006
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (8)
  │         ├── fd: ()-->(9), (8)-->(10)
  │         ├── limit hint: 1.00
@@ -70,7 +65,6 @@ limit
  │              ├── constraint: /9/8: [/2 - /2]
  │              ├── stats: [rows=10, distinct(9)=1, null(9)=0]
  │              ├── cost: 19.1
- │              ├── cost-flags: unbounded-cardinality
  │              ├── key: (8)
  │              ├── fd: ()-->(9)
  │              ├── limit hint: 1.00
@@ -89,7 +83,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -110,6 +104,7 @@ quality of service: regular
     │   │ regions: <hidden>
     │   │ actual row count: 1
     │   │ KV time: 0µs
+    │   │ KV contention time: 0µs
     │   │ KV rows decoded: 1
     │   │ KV pairs read: 2
     │   │ KV bytes read: 8 B
@@ -124,6 +119,7 @@ quality of service: regular
     │         regions: <hidden>
     │         actual row count: 1
     │         KV time: 0µs
+    │         KV contention time: 0µs
     │         KV rows decoded: 1
     │         KV pairs read: 2
     │         KV bytes read: 8 B
@@ -138,6 +134,7 @@ quality of service: regular
         │ regions: <hidden>
         │ actual row count: 0
         │ KV time: 0µs
+        │ KV contention time: 0µs
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
@@ -150,6 +147,7 @@ quality of service: regular
               regions: <hidden>
               actual row count: 0
               KV time: 0µs
+              KV contention time: 0µs
               KV rows decoded: 0
               KV bytes read: 0 B
               KV gRPC calls: 0
@@ -173,7 +171,7 @@ vectorized: <hidden>
 plan type: generic, reused
 rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -193,6 +191,7 @@ quality of service: regular
     │   │ regions: <hidden>
     │   │ actual row count: 1
     │   │ KV time: 0µs
+    │   │ KV contention time: 0µs
     │   │ KV rows decoded: 1
     │   │ KV pairs read: 2
     │   │ KV bytes read: 8 B
@@ -206,6 +205,7 @@ quality of service: regular
     │         regions: <hidden>
     │         actual row count: 1
     │         KV time: 0µs
+    │         KV contention time: 0µs
     │         KV rows decoded: 1
     │         KV pairs read: 2
     │         KV bytes read: 8 B
@@ -219,6 +219,7 @@ quality of service: regular
         │ regions: <hidden>
         │ actual row count: 0
         │ KV time: 0µs
+        │ KV contention time: 0µs
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
@@ -230,6 +231,7 @@ quality of service: regular
               regions: <hidden>
               actual row count: 0
               KV time: 0µs
+              KV contention time: 0µs
               KV rows decoded: 0
               KV bytes read: 0 B
               KV gRPC calls: 0
@@ -282,7 +284,6 @@ project
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
  ├── cost: 29.145
- ├── cost-flags: unbounded-cardinality
  ├── key: ()
  ├── fd: ()-->(8)
  ├── distribution: test
@@ -292,9 +293,8 @@ project
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1]
       ├── cost: 29.125
-      ├── cost-flags: unbounded-cardinality
       ├── key: ()
-      ├── fd: ()-->(1,8), (1)==(8), (8)==(1)
+      ├── fd: ()-->(1,8), (8)==(1), (1)==(8)
       ├── distribution: test
       ├── inner-join (lookup b)
       │    ├── columns: a.x:1 b.x:8
@@ -302,7 +302,6 @@ project
       │    ├── lookup columns are key
       │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
       │    ├── cost: 29.105
-      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (8)
       │    ├── fd: (1)==(8), (8)==(1)
       │    ├── limit hint: 1.00
@@ -311,7 +310,6 @@ project
       │    │    ├── columns: a.x:1
       │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
       │    │    ├── cost: 19.035
-      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── key: (1)
       │    │    ├── limit hint: 1.00
       │    │    ├── distribution: test
@@ -333,7 +331,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -348,6 +346,7 @@ quality of service: regular
     │ regions: <hidden>
     │ actual row count: 1
     │ KV time: 0µs
+    │ KV contention time: 0µs
     │ KV rows decoded: 1
     │ KV pairs read: 2
     │ KV bytes read: 8 B
@@ -364,6 +363,7 @@ quality of service: regular
           regions: <hidden>
           actual row count: 1
           KV time: 0µs
+          KV contention time: 0µs
           KV rows decoded: 1
           KV pairs read: 2
           KV bytes read: 8 B
@@ -384,7 +384,6 @@ limit
  ├── cardinality: [0 - 2]
  ├── stats: [rows=2]
  ├── cost: 63.99
- ├── cost-flags: unbounded-cardinality
  ├── key: (8,9)
  ├── fd: (1)-->(2), (1)==(8), (8)==(1)
  ├── ordering: +2,+(1|8) [actual: +2,+1]
@@ -397,7 +396,6 @@ limit
  │    ├── key columns: [1] = [8]
  │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
  │    ├── cost: 63.96
- │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (8,9)
  │    ├── fd: (1)-->(2), (1)==(8), (8)==(1)
  │    ├── ordering: +2,+(1|8) [actual: +2,+1]
@@ -409,7 +407,6 @@ limit
  │    │    ├── columns: a.x:1 a.y:2
  │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │    │    ├── cost: 19.04
- │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── ordering: +2,+1
@@ -433,7 +430,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -448,6 +445,7 @@ quality of service: regular
     │ regions: <hidden>
     │ actual row count: 2
     │ KV time: 0µs
+    │ KV contention time: 0µs
     │ KV rows decoded: 2
     │ KV pairs read: 4
     │ KV bytes read: 16 B
@@ -464,6 +462,7 @@ quality of service: regular
           regions: <hidden>
           actual row count: 2
           KV time: 0µs
+          KV contention time: 0µs
           KV rows decoded: 2
           KV pairs read: 4
           KV bytes read: 16 B

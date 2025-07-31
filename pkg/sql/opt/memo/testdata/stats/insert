@@ -41,7 +41,7 @@ WHERE z > 1.0
 with &1
  ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
  ├── volatile, mutations
- ├── stats: [rows=66.5106, distinct(14)=43.4214, null(14)=0]
+ ├── stats: [rows=66.51058, distinct(14)=43.4214, null(14)=0]
  ├── fd: ()-->(12), (13)-->(14)
  ├── insert xyz
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float)
@@ -77,7 +77,7 @@ with &1
  │                   └── b:7 = 'foo' [type=bool, outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
  └── select
       ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
-      ├── stats: [rows=66.5106, distinct(14)=43.4214, null(14)=0]
+      ├── stats: [rows=66.51058, distinct(14)=43.4214, null(14)=0]
       ├── fd: ()-->(12), (13)-->(14)
       ├── with-scan &1
       │    ├── columns: x:12(string!null) y:13(int!null) z:14(float)
@@ -167,7 +167,7 @@ ALTER TABLE p137547 INJECT STATISTICS '[
 # Regression test for #137547. Estimate that the FK check WithScan produces at
 # least 1 row to avoid a lookup into the secondary index of p137547 using just
 # the region column.
-opt locality=(region=us)
+opt locality=(region=us) set=(optimizer_check_input_min_row_count=1)
 INSERT INTO c137547 VALUES ('us', 'foo', 'foo') ON CONFLICT DO NOTHING
 ----
 insert c137547
@@ -200,9 +200,8 @@ insert c137547
  │    ├── scan c137547
  │    │    ├── columns: c137547.region:9(string!null) c137547.id:10(string!null)
  │    │    ├── constraint: /9/10: [/'us'/'foo' - /'us'/'foo']
- │    │    ├── flags: avoid-full-scan
  │    │    ├── cardinality: [0 - 1]
- │    │    ├── stats: [rows=1, distinct(9)=1, null(9)=0, distinct(10)=1, null(10)=0, distinct(9,10)=1, null(9,10)=0]
+ │    │    ├── stats: [rows=0.91, distinct(9)=0.91, null(9)=0, distinct(10)=0.91, null(10)=0, distinct(9,10)=0.91, null(9,10)=0]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(9,10)
  │    │    └── distribution: us

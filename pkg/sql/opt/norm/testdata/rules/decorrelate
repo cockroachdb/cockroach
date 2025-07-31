@@ -82,7 +82,6 @@ update xy
       ├── fd: (5)-->(6,9,10), (9)-->(10)
       ├── scan xy
       │    ├── columns: x:5!null y:6
-      │    ├── flags: avoid-full-scan
       │    ├── key: (5)
       │    └── fd: (5)-->(6)
       ├── scan uv
@@ -135,7 +134,6 @@ upsert xy
       │    │    │    └── (3, 4)
       │    │    ├── scan xy
       │    │    │    ├── columns: x:7!null y:8
-      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (7)
       │    │    │    └── fd: (7)-->(8)
       │    │    └── filters
@@ -164,7 +162,6 @@ delete xy
       ├── key: (5)
       ├── scan xy
       │    ├── columns: x:5!null
-      │    ├── flags: avoid-full-scan
       │    └── key: (5)
       ├── scan uv
       │    ├── columns: u:9!null
@@ -280,12 +277,12 @@ WHERE i = 3
 ----
 project
  ├── columns: u:1!null v:2 rank:12 i:6!null
- ├── key: (1)
- ├── fd: ()-->(6), (1)-->(2,12)
+ ├── key: (1,12)
+ ├── fd: ()-->(6), (1)-->(2)
  └── window partition=(1)
       ├── columns: u:1!null v:2 k:5!null i:6!null rank:12
       ├── key: (5)
-      ├── fd: ()-->(6), (1)-->(2,5,12), (1)==(5), (5)==(1)
+      ├── fd: ()-->(6), (1)-->(2), (1)==(5), (5)==(1)
       ├── inner-join (hash)
       │    ├── columns: u:1!null v:2 k:5!null i:6!null
       │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
@@ -380,7 +377,7 @@ project
       ├── columns: column1:1!null k:2!null i:3 row_number:9 rownum:10!null
       ├── cardinality: [0 - 3]
       ├── key: (10)
-      ├── fd: (10)-->(1-3,9), (2)-->(3), (1)==(2), (2)==(1)
+      ├── fd: (10)-->(1), (2)-->(3), (1)==(2), (2)==(1)
       ├── inner-join (hash)
       │    ├── columns: column1:1!null k:2!null i:3 rownum:10!null
       │    ├── cardinality: [0 - 3]
@@ -463,7 +460,7 @@ project
       ├── columns: column1:1!null i:3 row_number:9 rownum:11!null
       ├── cardinality: [0 - 3]
       ├── key: (11)
-      ├── fd: (11)-->(1,3,9), (1)-->(3)
+      ├── fd: (11)-->(1), (1)-->(3)
       ├── project
       │    ├── columns: column1:1!null i:3 rownum:11!null
       │    ├── cardinality: [0 - 3]
@@ -510,7 +507,7 @@ project
       ├── columns: column1:1!null column2:2!null i:4 row_number:10 rownum:13!null
       ├── cardinality: [0 - 3]
       ├── key: (13)
-      ├── fd: (13)-->(1,2,4,10), (1)-->(4)
+      ├── fd: (13)-->(1,2), (1)-->(4)
       ├── project
       │    ├── columns: column1:1!null column2:2!null i:4 rownum:13!null
       │    ├── cardinality: [0 - 3]
@@ -552,7 +549,7 @@ FROM
 window partition=(1)
  ├── columns: u:1!null v:2 row_number:12 i:6
  ├── key: (1)
- ├── fd: (1)-->(2,6,12)
+ ├── fd: (1)-->(2,6)
  ├── project
  │    ├── columns: u:1!null v:2 i:6
  │    ├── key: (1)
@@ -584,12 +581,12 @@ FROM
 ----
 project
  ├── columns: u:1!null v:2 row_number:12 i:6
- ├── key: (1)
- ├── fd: (1)-->(2,6,12)
+ ├── key: (1,12)
+ ├── fd: (1)-->(2,6)
  └── window partition=(1)
       ├── columns: u:1!null v:2 k:5!null i:6 row_number:12
       ├── key: (5)
-      ├── fd: (1)-->(2,5,6,12), (5)-->(6), (1)==(5), (5)==(1)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
       ├── inner-join (hash)
       │    ├── columns: u:1!null v:2 k:5!null i:6
       │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
@@ -823,7 +820,7 @@ project
       ├── cardinality: [0 - 1]
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── key: ()
-      ├── fd: ()-->(1-5,8), (1)==(8), (8)==(1)
+      ├── fd: ()-->(1-5,8), (8)==(1), (1)==(8)
       ├── select
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    ├── key: (1)
@@ -956,7 +953,7 @@ project
       ├── cardinality: [0 - 1]
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── key: ()
-      ├── fd: ()-->(1-5,8,9), (1)==(8), (8)==(1)
+      ├── fd: ()-->(1-5,8,9), (8)==(1), (1)==(8)
       ├── scan a
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    ├── key: (1)
@@ -1452,7 +1449,7 @@ project
       │    │    ├── columns: k:1!null x:8 u:12
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(8,12), (8)==(12), (12)==(8)
+      │    │    ├── fd: (8)==(12), (12)==(8), (1)-->(8,12)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null
       │    │    │    └── key: (1)
@@ -1545,7 +1542,7 @@ semi-join-apply
 # --------------------------------------------------
 # TryDecorrelateInnerLeftJoin
 # --------------------------------------------------
-norm expect=TryDecorrelateInnerLeftJoin disable=HoistJoinProjectRight
+norm expect=TryDecorrelateInnerLeftJoin
 SELECT *
 FROM (VALUES (1), (2)) AS v(v1)
 WHERE EXISTS(
@@ -1577,7 +1574,7 @@ select
            │         │    ├── columns: k:2!null i:3!null x:9!null y:10!null
            │         │    ├── cardinality: [0 - 1]
            │         │    ├── key: ()
-           │         │    ├── fd: ()-->(2,3,9,10), (2)==(9), (9)==(2), (3)==(10), (10)==(3)
+           │         │    ├── fd: ()-->(2,3,9,10), (9)==(2), (3)==(10), (10)==(3), (2)==(9)
            │         │    ├── inner-join (hash)
            │         │    │    ├── columns: k:2!null i:3!null x:9!null y:10!null
            │         │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
@@ -2690,7 +2687,7 @@ group-by (hash)
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: x:1!null y:2 k:5!null i:6 i:13!null f:14!null column21:21!null
  │    │    │    ├── immutable
- │    │    │    ├── fd: (1)-->(2), (2)-->(21), (5)-->(6), (14)==(21), (21)==(14)
+ │    │    │    ├── fd: (1)-->(2), (2)-->(21), (14)==(21), (21)==(14), (5)-->(6)
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: x:1!null y:2 i:13!null f:14!null column21:21!null
  │    │    │    │    ├── immutable
@@ -2979,7 +2976,7 @@ project
       │    ├── left-join (hash)
       │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8!null u:12 v:13
       │    │    ├── key: (1,12)
-      │    │    ├── fd: (1)-->(2-5), (12)-->(13), (1)==(8), (8)==(1)
+      │    │    ├── fd: (1)-->(2-5), (1)==(8), (8)==(1), (12)-->(13)
       │    │    ├── select
       │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8!null
       │    │    │    ├── key: (1)
@@ -3237,11 +3234,11 @@ group-by (hash)
  ├── select
  │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null u:12!null v:13!null row_num:16!null
  │    ├── key: (1,12)
- │    ├── fd: (1)-->(2-5), (12)-->(13), (1,8,12)-->(16), (2)==(13), (13)==(2), (8)==(12), (12)==(8)
+ │    ├── fd: (1)-->(2-5), (12)-->(13), (2)==(13), (13)==(2), (8)==(12), (12)==(8), (1,12)-->(16)
  │    ├── window partition=(1,8)
  │    │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null u:12!null v:13!null row_num:16
  │    │    ├── key: (1,8,12)
- │    │    ├── fd: (1)-->(2-5), (12)-->(13), (1,8,12)-->(16), (2)==(13), (13)==(2)
+ │    │    ├── fd: (1)-->(2-5), (12)-->(13), (2)==(13), (13)==(2)
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null u:12!null v:13!null
  │    │    │    ├── key: (1,8,12)
@@ -3311,18 +3308,18 @@ project
  │    │    │    ├── outer: (1)
  │    │    │    ├── cardinality: [0 - 3]
  │    │    │    ├── key: (9)
- │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11), (5,9)-->(16), (5)==(9), (9)==(5)
+ │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11,16), (5)==(9), (9)==(5)
  │    │    │    ├── select
  │    │    │    │    ├── columns: u:5!null uv.v:6 k:9!null i:10!null f:11 row_num:16!null
  │    │    │    │    ├── outer: (1)
  │    │    │    │    ├── key: (9)
- │    │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11), (5,9)-->(16), (5)==(9), (9)==(5)
+ │    │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11,16), (5)==(9), (9)==(5)
  │    │    │    │    ├── limit hint: 3.00
  │    │    │    │    ├── window partition=(5) ordering=+11 opt(5-8,10)
  │    │    │    │    │    ├── columns: u:5!null uv.v:6 k:9!null i:10!null f:11 row_num:16
  │    │    │    │    │    ├── outer: (1)
  │    │    │    │    │    ├── key: (5,9)
- │    │    │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11), (5,9)-->(16)
+ │    │    │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11)
  │    │    │    │    │    ├── limit hint: 8999.57
  │    │    │    │    │    ├── inner-join (cross)
  │    │    │    │    │    │    ├── columns: u:5!null uv.v:6 k:9!null i:10!null f:11
@@ -3482,12 +3479,12 @@ project
       ├── columns: x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3 xy.tableoid:4 u:5!null v:6 foo:9 row_num:10!null
       ├── immutable
       ├── key: (5)
-      ├── fd: (1)-->(2-4), (5)-->(6), (2,6)-->(9), (1,5)-->(10), (1)==(5), (5)==(1)
+      ├── fd: (1)-->(2-4), (5)-->(6,10), (2,6)-->(9), (1)==(5), (5)==(1)
       ├── window partition=(1)
       │    ├── columns: x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3 xy.tableoid:4 u:5!null v:6 foo:9 row_num:10
       │    ├── immutable
       │    ├── key: (1,5)
-      │    ├── fd: (1)-->(2-4), (5)-->(6), (2,6)-->(9), (1,5)-->(10)
+      │    ├── fd: (1)-->(2-4), (5)-->(6), (2,6)-->(9)
       │    ├── project
       │    │    ├── columns: foo:9 x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3 xy.tableoid:4 u:5!null v:6
       │    │    ├── immutable
@@ -4137,7 +4134,7 @@ project
       ├── columns: k:1!null i:2!null f:3 s:4 j:5 y:9!null
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(1-5,9), (2)==(9), (9)==(2)
+      ├── fd: ()-->(1-5,9), (9)==(2), (2)==(9)
       ├── limit
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5 y:9
       │    ├── cardinality: [0 - 1]
@@ -4764,7 +4761,7 @@ project
       ├── cardinality: [0 - 1]
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── key: ()
-      ├── fd: ()-->(1-5,12), (1)==(12), (12)==(1)
+      ├── fd: ()-->(1-5,12), (12)==(1), (1)==(12)
       ├── scan a
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    ├── key: (1)
@@ -4797,7 +4794,7 @@ project
       ├── cardinality: [0 - 1]
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── key: ()
-      ├── fd: ()-->(1-5,8), (1)==(8), (8)==(1)
+      ├── fd: ()-->(1-5,8), (8)==(1), (1)==(8)
       ├── scan a
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    ├── key: (1)
@@ -4885,7 +4882,7 @@ project
  ├── fd: ()-->(23)
  ├── inner-join (hash)
  │    ├── columns: t1.i:2!null t2.i:9!null "?column?":22!null
- │    ├── fd: ()-->(2,9,22), (2)==(9,22), (9)==(2,22), (22)==(2,9)
+ │    ├── fd: ()-->(2,9,22), (2)==(9,22), (22)==(2,9), (9)==(2,22)
  │    ├── inner-join (hash)
  │    │    ├── columns: t1.i:2!null "?column?":22!null
  │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -4943,11 +4940,11 @@ project
  ├── fd: ()-->(31)
  ├── inner-join (hash)
  │    ├── columns: t1.i:2!null t2.i:9!null "?column?":22!null "?column?":30!null
- │    ├── fd: ()-->(2,9,22,30), (2)==(9,22,30), (9)==(2,22,30), (22)==(2,9,30), (30)==(2,9,22)
+ │    ├── fd: ()-->(2,9,22,30), (2)==(9,22,30), (30)==(2,9,22), (22)==(2,9,30), (9)==(2,22,30)
  │    ├── inner-join (hash)
  │    │    ├── columns: t1.i:2!null "?column?":22!null "?column?":30!null
  │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │    │    ├── fd: ()-->(2,22,30), (2)==(22,30), (22)==(2,30), (30)==(2,22)
+ │    │    ├── fd: ()-->(2,22,30), (2)==(22,30), (30)==(2,22), (22)==(2,30)
  │    │    ├── inner-join (hash)
  │    │    │    ├── columns: t1.i:2!null "?column?":30!null
  │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -5062,7 +5059,7 @@ project
  ├── fd: ()-->(19)
  ├── inner-join (hash)
  │    ├── columns: t1.i:2!null t2.i:9!null x:15!null
- │    ├── fd: ()-->(2,9,15), (2)==(9,15), (9)==(2,15), (15)==(2,9)
+ │    ├── fd: ()-->(2,9,15), (2)==(9,15), (15)==(2,9), (9)==(2,15)
  │    ├── inner-join (hash)
  │    │    ├── columns: t1.i:2!null x:15!null
  │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -7332,7 +7329,7 @@ SELECT * FROM xy_decimal INNER JOIN LATERAL (SELECT a, a+x FROM ab_decimal) ON a
 project
  ├── columns: x:1!null y:2 a:5!null "?column?":10!null
  ├── immutable
- ├── fd: (1)-->(2), (5)-->(10), (1)==(5), (5)==(1)
+ ├── fd: (1)-->(2), (1)==(5), (5)==(1), (5)-->(10)
  ├── inner-join (hash)
  │    ├── columns: x:1!null y:2 a:5!null
  │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
@@ -8137,7 +8134,7 @@ project
 # HoistUnboundFilterFromExistsSubquery
 # --------------------------------------------------
 
-norm expect=HoistUnboundFilterFromExistsSubquery
+norm expect=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy WHERE xy.x = a.k AND a.i = 1000
 );
@@ -8163,7 +8160,7 @@ semi-join (hash)
       └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Case with a projection.
-norm expect=HoistUnboundFilterFromExistsSubquery
+norm expect=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT true FROM xy WHERE xy.x = a.k AND a.i = 1000
 );
@@ -8189,7 +8186,7 @@ semi-join (hash)
       └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Case with multiple filters.
-norm expect=HoistUnboundFilterFromExistsSubquery
+norm expect=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy
   WHERE xy.x = a.k
@@ -8230,7 +8227,7 @@ semi-join (hash)
 
 # Case where hoisting the filter "a.k = 1000" allows the optimizer to infer
 # a filter on "uv.u".
-norm expect=HoistUnboundFilterFromExistsSubquery
+norm expect=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a LEFT JOIN uv ON a.k = uv.u WHERE EXISTS (
   SELECT * FROM xy WHERE xy.y = a.i AND a.k = 1000
 );
@@ -8276,7 +8273,7 @@ left-join (hash)
       └── k:1 = u:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Case with an ANY filter that gets normalized to EXISTS.
-norm expect=HoistUnboundFilterFromExistsSubquery
+norm expect=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE a.k = ANY (
   SELECT xy.x FROM xy WHERE a.i = 100
 );
@@ -8302,7 +8299,7 @@ semi-join (hash)
       └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Case with an IN filter that gets normalized to EXISTS.
-norm expect=HoistUnboundFilterFromExistsSubquery
+norm expect=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE a.k IN (
   SELECT xy.x FROM xy WHERE a.i = 100
 );
@@ -8354,7 +8351,7 @@ semi-join (hash)
       └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # No-op with no filters.
-norm expect-not=HoistUnboundFilterFromExistsSubquery
+norm expect-not=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (SELECT * FROM xy);
 ----
 select
@@ -8384,7 +8381,7 @@ select
            └── false
 
 # No-op because all filters reference xy.
-norm expect-not=HoistUnboundFilterFromExistsSubquery
+norm expect-not=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy WHERE xy.x = a.k AND xy.y = 1000
 );
@@ -8411,7 +8408,7 @@ semi-join (hash)
       └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # No-op because all filters reference xy.
-norm expect-not=HoistUnboundFilterFromExistsSubquery
+norm expect-not=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy WHERE xy.x = a.k AND xy.y + a.i = 1000
 );
@@ -8434,7 +8431,7 @@ semi-join (hash)
       └── (y:9 + i:2) = 1000 [outer=(2,9), immutable]
 
 # No-op case with NOT EXISTS.
-norm expect-not=HoistUnboundFilterFromExistsSubquery
+norm expect-not=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE NOT EXISTS (
   SELECT * FROM xy WHERE xy.x = a.k AND a.i = 1000
 );
@@ -8455,7 +8452,7 @@ anti-join (hash)
       └── i:2 = 1000 [outer=(2), constraints=(/2: [/1000 - /1000]; tight), fd=()-->(2)]
 
 # No-op because the top expression in the subquery isn't a Select.
-norm expect-not=HoistUnboundFilterFromExistsSubquery
+norm expect-not=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT sum(xy.y) OVER () FROM xy WHERE xy.x = a.k AND a.i = 1000
 );
@@ -8489,7 +8486,7 @@ project
 # HoistUnboundJoinFilterFromExistsSubquery
 # --------------------------------------------------
 
-norm expect=HoistUnboundJoinFilterFromExistsSubquery
+norm expect=HoistUnboundJoinFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy INNER JOIN uv ON x = u AND a.i = 100
 );
@@ -8514,7 +8511,7 @@ select
       │    │         │    ├── columns: x:8!null u:12!null
       │    │         │    ├── cardinality: [0 - 1]
       │    │         │    ├── key: ()
-      │    │         │    ├── fd: ()-->(8,12), (8)==(12), (12)==(8)
+      │    │         │    ├── fd: ()-->(8,12), (12)==(8), (8)==(12)
       │    │         │    ├── inner-join (hash)
       │    │         │    │    ├── columns: x:8!null u:12!null
       │    │         │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
@@ -8535,7 +8532,7 @@ select
       │    └── false
       └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
 
-norm expect=HoistUnboundJoinFilterFromExistsSubquery
+norm expect=HoistUnboundJoinFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy INNER JOIN LATERAL (
     WITH foo(u, v) AS MATERIALIZED (SELECT * FROM uv WHERE y > 5) SELECT * FROM foo
@@ -8562,7 +8559,7 @@ select
       │    │         │    ├── columns: x:8!null y:9 u:16!null
       │    │         │    ├── cardinality: [0 - 1]
       │    │         │    ├── key: ()
-      │    │         │    ├── fd: ()-->(8,9,16), (8)==(16), (16)==(8)
+      │    │         │    ├── fd: ()-->(8,9,16), (16)==(8), (8)==(16)
       │    │         │    ├── inner-join-apply
       │    │         │    │    ├── columns: x:8!null y:9 u:16!null
       │    │         │    │    ├── key: (16)
@@ -8601,7 +8598,7 @@ select
       │    └── false
       └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
 
-norm expect=HoistUnboundJoinFilterFromExistsSubquery
+norm expect=HoistUnboundJoinFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy WHERE EXISTS (
     SELECT * FROM uv WHERE x = u AND a.i = 100
@@ -8647,7 +8644,7 @@ select
       │    └── false
       └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
 
-norm expect=HoistUnboundJoinFilterFromExistsSubquery
+norm expect=HoistUnboundJoinFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy WHERE EXISTS (
     SELECT * FROM (
@@ -8716,7 +8713,7 @@ select
       └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
 
 # No-op because of the left-join.
-norm expect-not=HoistUnboundJoinFilterFromExistsSubquery
+norm expect-not=HoistUnboundJoinFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy LEFT JOIN uv ON x = u AND a.i = 100
 );
@@ -8747,7 +8744,7 @@ semi-join-apply
  └── filters (true)
 
 # No-op because of the full-join.
-norm expect-not=HoistUnboundJoinFilterFromExistsSubquery
+norm expect-not=HoistUnboundJoinFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy FULL JOIN uv ON x = u AND a.i = 100
 );

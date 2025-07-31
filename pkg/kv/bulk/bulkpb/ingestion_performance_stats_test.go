@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/codahale/hdrhistogram"
@@ -51,8 +52,8 @@ func TestIngestionPerformanceStatsAggregation(t *testing.T) {
 		}
 	}
 
-	assertAggContainsStats := func(t *testing.T, agg *tracing.TracingAggregator, expected *IngestionPerformanceStats) {
-		agg.ForEachAggregatedEvent(func(name string, event tracing.AggregatorEvent) {
+	assertAggContainsStats := func(t *testing.T, agg *bulk.TracingAggregator, expected *IngestionPerformanceStats) {
+		agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
 			require.Equal(t, name, proto.MessageName(expected))
 			var actual *IngestionPerformanceStats
 			var ok bool
@@ -66,14 +67,14 @@ func TestIngestionPerformanceStatsAggregation(t *testing.T) {
 	// First, start a root tracing span with a tracing aggregator.
 	ctx, root := tr.StartSpanCtx(ctx, "root", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer root.Finish()
-	agg := tracing.TracingAggregatorForContext(ctx)
+	agg := bulk.TracingAggregatorForContext(ctx)
 	ctx, withListener := tr.StartSpanCtx(ctx, "withListener",
 		tracing.WithEventListeners(agg), tracing.WithParent(root))
 	defer withListener.Finish()
 
 	// Second, start a child span on the root that also has its own tracing
 	// aggregator.
-	child1Agg := tracing.TracingAggregatorForContext(ctx)
+	child1Agg := bulk.TracingAggregatorForContext(ctx)
 	child1Ctx, child1AggSp := tr.StartSpanCtx(ctx, "child1",
 		tracing.WithEventListeners(child1Agg), tracing.WithParent(withListener))
 	defer child1AggSp.Finish()

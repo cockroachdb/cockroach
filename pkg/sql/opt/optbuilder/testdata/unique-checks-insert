@@ -42,7 +42,7 @@ insert uniq
       │              │         └──  column5:12 => y:24
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:22 = uniq.w:15
       │                   └── k:20 != uniq.k:13
@@ -61,7 +61,7 @@ insert uniq
                      │         └──  column5:12 => y:36
                      ├── scan uniq
                      │    ├── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:35 = uniq.x:28
                           ├── y:36 = uniq.y:29
@@ -101,7 +101,7 @@ insert uniq
       │              │         └──  column5:12 => y:24
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:22 = uniq.w:15
       │                   └── k:20 != uniq.k:13
@@ -120,7 +120,7 @@ insert uniq
                      │         └──  column5:12 => y:36
                      ├── scan uniq
                      │    ├── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:35 = uniq.x:28
                           ├── y:36 = uniq.y:29
@@ -159,7 +159,7 @@ insert uniq
                      │         └──  column5:12 => y:24
                      ├── scan uniq
                      │    ├── columns: uniq.k:13!null uniq.x:16 uniq.y:17
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:23 = uniq.x:16
                           ├── y:24 = uniq.y:17
@@ -197,7 +197,7 @@ insert uniq
                      │         └──  column3:10 => w:22
                      ├── scan uniq
                      │    ├── columns: uniq.k:13!null uniq.w:15
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── w:22 = uniq.w:15
                           └── k:20 != uniq.k:13
@@ -234,7 +234,7 @@ insert uniq
                      │         └──  column3:10 => w:22
                      ├── scan uniq
                      │    ├── columns: uniq.k:13!null uniq.w:15
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── w:22 = uniq.w:15
                           └── k:20 != uniq.k:13
@@ -298,22 +298,22 @@ insert uniq
       │    │    │    │    │    │    │    │    └── (1, 2, 3, 4, 5)
       │    │    │    │    │    │    │    ├── scan uniq
       │    │    │    │    │    │    │    │    ├── columns: k:13!null v:14 w:15 x:16 y:17
-      │    │    │    │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    │    │    └── filters
       │    │    │    │    │    │    │         └── column1:8 = k:13
       │    │    │    │    │    │    ├── scan uniq
       │    │    │    │    │    │    │    ├── columns: k:20!null v:21 w:22 x:23 y:24
-      │    │    │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    │    └── filters
       │    │    │    │    │    │         └── column2:9 = v:21
       │    │    │    │    │    ├── scan uniq
       │    │    │    │    │    │    ├── columns: k:27!null v:28 w:29 x:30 y:31
-      │    │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── column3:10 = w:29
       │    │    │    │    ├── scan uniq
       │    │    │    │    │    ├── columns: k:34!null v:35 w:36 x:37 y:38
-      │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    └── filters
       │    │    │    │         ├── column4:11 = x:37
       │    │    │    │         └── column5:12 = y:38
@@ -376,7 +376,7 @@ insert uniq
  │    │    │    └── (1, 2, 3, 4, 5)
  │    │    ├── scan uniq
  │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
- │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── column3:10 = uniq.w:15
  │    └── aggregations
@@ -399,7 +399,7 @@ insert uniq
  │                   │    └── (1, 2, 3, 4, 5)
  │                   ├── scan uniq
  │                   │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
- │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   │    └── flags: disabled not visible index feature
  │                   └── filters
  │                        ├── x:30 = uniq.x:23
  │                        ├── y:31 = uniq.y:24
@@ -410,7 +410,7 @@ insert uniq
                 ├── columns: uniq.k:32!null uniq.v:33 uniq.w:34 uniq.x:35!null uniq.y:36!null
                 ├── scan uniq
                 │    ├── columns: uniq.k:32!null uniq.v:33 uniq.w:34 uniq.x:35 uniq.y:36
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── uniq.x:35 = 4
                      └── uniq.y:36 = 5
@@ -441,7 +441,7 @@ insert uniq
  │    │    │    └── (6, 7, 8, 9, 10)
  │    │    ├── scan uniq
  │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
- │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── column3:10 = uniq.w:15
  │    └── aggregations
@@ -469,7 +469,7 @@ insert uniq
                      │         └──  column5:12 => y:31
                      ├── scan uniq
                      │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:30 = uniq.x:23
                           ├── y:31 = uniq.y:24
@@ -498,7 +498,7 @@ insert uniq
  │    │    │    └── (1, 2, 3, 4, 5)
  │    │    ├── scan uniq
  │    │    │    ├── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
- │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    └── flags: disabled not visible index feature
  │    │    └── filters
  │    │         └── column3:10 = uniq.w:15
  │    └── aggregations
@@ -521,7 +521,7 @@ insert uniq
  │                   │    └── (1, 2, 3, 4, 5)
  │                   ├── scan uniq
  │                   │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
- │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   │    └── flags: disabled not visible index feature
  │                   └── filters
  │                        ├── x:30 = uniq.x:23
  │                        ├── y:31 = uniq.y:24
@@ -532,7 +532,7 @@ insert uniq
                 ├── columns: uniq.k:32!null uniq.v:33 uniq.w:34 uniq.x:35!null uniq.y:36!null
                 ├── scan uniq
                 │    ├── columns: uniq.k:32!null uniq.v:33 uniq.w:34 uniq.x:35 uniq.y:36
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── uniq.x:35 = 4
                      └── uniq.y:36 = 5
@@ -574,7 +574,7 @@ insert uniq
       │              │         └──  other.y:12 => y:27
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:16!null uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── w:25 = uniq.w:18
       │                   └── k:23 != uniq.k:16
@@ -593,7 +593,7 @@ insert uniq
                      │         └──  other.y:12 => y:39
                      ├── scan uniq
                      │    ├── columns: uniq.k:28!null uniq.v:29 uniq.w:30 uniq.x:31 uniq.y:32
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── x:38 = uniq.x:31
                           ├── y:39 = uniq.y:32
@@ -646,7 +646,7 @@ insert uniq_overlaps_pk
       │              │         └──  column4:10 => d:20
       │              ├── scan uniq_overlaps_pk
       │              │    ├── columns: uniq_overlaps_pk.a:11!null uniq_overlaps_pk.b:12!null uniq_overlaps_pk.c:13 uniq_overlaps_pk.d:14
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:18 = uniq_overlaps_pk.b:12
       │                   ├── c:19 = uniq_overlaps_pk.c:13
@@ -665,7 +665,7 @@ insert uniq_overlaps_pk
       │              │         └──  column4:10 => d:30
       │              ├── scan uniq_overlaps_pk
       │              │    ├── columns: uniq_overlaps_pk.a:21!null uniq_overlaps_pk.b:22!null uniq_overlaps_pk.c:23 uniq_overlaps_pk.d:24
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:27 = uniq_overlaps_pk.a:21
       │                   └── b:28 != uniq_overlaps_pk.b:22
@@ -683,7 +683,7 @@ insert uniq_overlaps_pk
                      │         └──  column4:10 => d:40
                      ├── scan uniq_overlaps_pk
                      │    ├── columns: uniq_overlaps_pk.a:31!null uniq_overlaps_pk.b:32!null uniq_overlaps_pk.c:33 uniq_overlaps_pk.d:34
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── c:39 = uniq_overlaps_pk.c:33
                           ├── d:40 = uniq_overlaps_pk.d:34
@@ -722,7 +722,7 @@ insert uniq_overlaps_pk
       │              │         └──  y:11 => d:24
       │              ├── scan uniq_overlaps_pk
       │              │    ├── columns: uniq_overlaps_pk.a:15!null uniq_overlaps_pk.b:16!null uniq_overlaps_pk.c:17 uniq_overlaps_pk.d:18
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:22 = uniq_overlaps_pk.b:16
       │                   ├── c:23 = uniq_overlaps_pk.c:17
@@ -741,7 +741,7 @@ insert uniq_overlaps_pk
       │              │         └──  y:11 => d:34
       │              ├── scan uniq_overlaps_pk
       │              │    ├── columns: uniq_overlaps_pk.a:25!null uniq_overlaps_pk.b:26!null uniq_overlaps_pk.c:27 uniq_overlaps_pk.d:28
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:31 = uniq_overlaps_pk.a:25
       │                   └── b:32 != uniq_overlaps_pk.b:26
@@ -759,7 +759,7 @@ insert uniq_overlaps_pk
                      │         └──  y:11 => d:44
                      ├── scan uniq_overlaps_pk
                      │    ├── columns: uniq_overlaps_pk.a:35!null uniq_overlaps_pk.b:36!null uniq_overlaps_pk.c:37 uniq_overlaps_pk.d:38
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── c:43 = uniq_overlaps_pk.c:37
                           ├── d:44 = uniq_overlaps_pk.d:38
@@ -815,7 +815,7 @@ insert uniq_hidden_pk
       │              │         └──  rowid_default:12 => rowid:24
       │              ├── scan uniq_hidden_pk
       │              │    ├── columns: uniq_hidden_pk.a:13 uniq_hidden_pk.b:14 uniq_hidden_pk.c:15 uniq_hidden_pk.d:16 uniq_hidden_pk.rowid:17!null
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:21 = uniq_hidden_pk.b:14
       │                   ├── c:22 = uniq_hidden_pk.c:15
@@ -835,7 +835,7 @@ insert uniq_hidden_pk
       │              │         └──  rowid_default:12 => rowid:36
       │              ├── scan uniq_hidden_pk
       │              │    ├── columns: uniq_hidden_pk.a:25 uniq_hidden_pk.b:26 uniq_hidden_pk.c:27 uniq_hidden_pk.d:28 uniq_hidden_pk.rowid:29!null
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:32 = uniq_hidden_pk.a:25
       │                   ├── b:33 = uniq_hidden_pk.b:26
@@ -856,7 +856,7 @@ insert uniq_hidden_pk
                      │         └──  rowid_default:12 => rowid:48
                      ├── scan uniq_hidden_pk
                      │    ├── columns: uniq_hidden_pk.a:37 uniq_hidden_pk.b:38 uniq_hidden_pk.c:39 uniq_hidden_pk.d:40 uniq_hidden_pk.rowid:41!null
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:44 = uniq_hidden_pk.a:37
                           └── rowid:48 != uniq_hidden_pk.rowid:41
@@ -899,7 +899,7 @@ insert uniq_hidden_pk
       │              │         └──  rowid_default:16 => rowid:28
       │              ├── scan uniq_hidden_pk
       │              │    ├── columns: uniq_hidden_pk.a:17 uniq_hidden_pk.b:18 uniq_hidden_pk.c:19 uniq_hidden_pk.d:20 uniq_hidden_pk.rowid:21!null
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── b:25 = uniq_hidden_pk.b:18
       │                   ├── c:26 = uniq_hidden_pk.c:19
@@ -919,7 +919,7 @@ insert uniq_hidden_pk
       │              │         └──  rowid_default:16 => rowid:40
       │              ├── scan uniq_hidden_pk
       │              │    ├── columns: uniq_hidden_pk.a:29 uniq_hidden_pk.b:30 uniq_hidden_pk.c:31 uniq_hidden_pk.d:32 uniq_hidden_pk.rowid:33!null
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:36 = uniq_hidden_pk.a:29
       │                   ├── b:37 = uniq_hidden_pk.b:30
@@ -940,7 +940,7 @@ insert uniq_hidden_pk
                      │         └──  rowid_default:16 => rowid:52
                      ├── scan uniq_hidden_pk
                      │    ├── columns: uniq_hidden_pk.a:41 uniq_hidden_pk.b:42 uniq_hidden_pk.c:43 uniq_hidden_pk.d:44 uniq_hidden_pk.rowid:45!null
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:48 = uniq_hidden_pk.a:41
                           └── rowid:52 != uniq_hidden_pk.rowid:45
@@ -983,7 +983,7 @@ insert uniq_partial
                      │         └──  column3:8 => b:16
                      ├── scan uniq_partial
                      │    ├── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:15 = uniq_partial.a:10
                           ├── b:16 > 0
@@ -1020,7 +1020,7 @@ insert uniq_partial
                      │         └──  column3:8 => b:16
                      ├── scan uniq_partial
                      │    ├── columns: uniq_partial.k:9!null uniq_partial.a:10 uniq_partial.b:11
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:15 = uniq_partial.a:10
                           ├── b:16 > 0
@@ -1077,14 +1077,14 @@ insert uniq_partial
            │    │    │    │    │    └── (2, 2, 3)
            │    │    │    │    ├── scan uniq_partial
            │    │    │    │    │    ├── columns: k:9!null a:10 b:11
-           │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+           │    │    │    │    │    └── flags: disabled not visible index feature
            │    │    │    │    └── filters
            │    │    │    │         └── column1:6 = k:9
            │    │    │    ├── select
            │    │    │    │    ├── columns: k:14!null a:15 b:16!null
            │    │    │    │    ├── scan uniq_partial
            │    │    │    │    │    ├── columns: k:14!null a:15 b:16
-           │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+           │    │    │    │    │    └── flags: disabled not visible index feature
            │    │    │    │    └── filters
            │    │    │    │         └── b:16 > 0
            │    │    │    └── filters
@@ -1144,7 +1144,7 @@ insert uniq_partial
            │    │    │    ├── columns: k:9!null a:10 b:11!null
            │    │    │    ├── scan uniq_partial
            │    │    │    │    ├── columns: k:9!null a:10 b:11
-           │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+           │    │    │    │    └── flags: disabled not visible index feature
            │    │    │    └── filters
            │    │    │         └── b:11 > 0
            │    │    └── filters
@@ -1187,7 +1187,7 @@ insert uniq_partial
                      │         └──  w:8 => b:21
                      ├── scan uniq_partial
                      │    ├── columns: uniq_partial.k:14!null uniq_partial.a:15 uniq_partial.b:16
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:20 = uniq_partial.a:15
                           ├── b:21 > 0
@@ -1242,7 +1242,7 @@ insert uniq_partial_overlaps_pk
       │              │         └──  column4:10 => d:20
       │              ├── scan uniq_partial_overlaps_pk
       │              │    ├── columns: uniq_partial_overlaps_pk.a:11!null uniq_partial_overlaps_pk.b:12!null uniq_partial_overlaps_pk.c:13 uniq_partial_overlaps_pk.d:14
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── c:19 = uniq_partial_overlaps_pk.c:13
       │                   ├── d:20 > 0
@@ -1262,7 +1262,7 @@ insert uniq_partial_overlaps_pk
       │              │         └──  column4:10 => d:30
       │              ├── scan uniq_partial_overlaps_pk
       │              │    ├── columns: uniq_partial_overlaps_pk.a:21!null uniq_partial_overlaps_pk.b:22!null uniq_partial_overlaps_pk.c:23 uniq_partial_overlaps_pk.d:24
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:27 = uniq_partial_overlaps_pk.a:21
       │                   ├── d:30 > 0
@@ -1282,7 +1282,7 @@ insert uniq_partial_overlaps_pk
                      │         └──  column4:10 => d:40
                      ├── scan uniq_partial_overlaps_pk
                      │    ├── columns: uniq_partial_overlaps_pk.a:31!null uniq_partial_overlaps_pk.b:32!null uniq_partial_overlaps_pk.c:33 uniq_partial_overlaps_pk.d:34
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:38 = uniq_partial_overlaps_pk.b:32
                           ├── c:39 = uniq_partial_overlaps_pk.c:33
@@ -1323,7 +1323,7 @@ insert uniq_partial_overlaps_pk
       │              │         └──  y:11 => d:24
       │              ├── scan uniq_partial_overlaps_pk
       │              │    ├── columns: uniq_partial_overlaps_pk.a:15!null uniq_partial_overlaps_pk.b:16!null uniq_partial_overlaps_pk.c:17 uniq_partial_overlaps_pk.d:18
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── c:23 = uniq_partial_overlaps_pk.c:17
       │                   ├── d:24 > 0
@@ -1343,7 +1343,7 @@ insert uniq_partial_overlaps_pk
       │              │         └──  y:11 => d:34
       │              ├── scan uniq_partial_overlaps_pk
       │              │    ├── columns: uniq_partial_overlaps_pk.a:25!null uniq_partial_overlaps_pk.b:26!null uniq_partial_overlaps_pk.c:27 uniq_partial_overlaps_pk.d:28
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:31 = uniq_partial_overlaps_pk.a:25
       │                   ├── d:34 > 0
@@ -1363,7 +1363,7 @@ insert uniq_partial_overlaps_pk
                      │         └──  y:11 => d:44
                      ├── scan uniq_partial_overlaps_pk
                      │    ├── columns: uniq_partial_overlaps_pk.a:35!null uniq_partial_overlaps_pk.b:36!null uniq_partial_overlaps_pk.c:37 uniq_partial_overlaps_pk.d:38
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:42 = uniq_partial_overlaps_pk.b:36
                           ├── c:43 = uniq_partial_overlaps_pk.c:37
@@ -1417,7 +1417,7 @@ insert uniq_partial_hidden_pk
                      │         └──  rowid_default:10 => rowid:20
                      ├── scan uniq_partial_hidden_pk
                      │    ├── columns: uniq_partial_hidden_pk.a:11 uniq_partial_hidden_pk.b:12 uniq_partial_hidden_pk.c:13 uniq_partial_hidden_pk.rowid:14!null
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:18 = uniq_partial_hidden_pk.b:12
                           ├── c:19 > 0
@@ -1460,7 +1460,7 @@ insert uniq_partial_hidden_pk
                      │         └──  rowid_default:16 => rowid:26
                      ├── scan uniq_partial_hidden_pk
                      │    ├── columns: uniq_partial_hidden_pk.a:17 uniq_partial_hidden_pk.b:18 uniq_partial_hidden_pk.c:19 uniq_partial_hidden_pk.rowid:20!null
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:24 = uniq_partial_hidden_pk.b:18
                           ├── c:25 > 0
@@ -1512,7 +1512,7 @@ insert uniq_partial_constraint_and_index
  │    │    │    │    ├── columns: uniq_partial_constraint_and_index.a:10
  │    │    │    │    ├── partial index predicates
  │    │    │    │    │    └── uniq_partial_constraint_and_index_a_key: filters (true)
- │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │    │    │    └── flags: disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── uniq_partial_constraint_and_index.a:10 = 1
  │    │    └── filters (true)
@@ -1562,7 +1562,7 @@ insert uniq_constraint_and_partial_index
       │    │    │    ├── partial index predicates
       │    │    │    │    └── uniq_constraint_and_partial_index_a_key: filters
       │    │    │    │         └── b:11 > 0
-      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    │    └── flags: disabled not visible index feature
       │    │    └── filters
       │    │         └── a:10 = 1
       │    └── filters (true)
@@ -1624,7 +1624,7 @@ insert uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    │    │    ├── partial index predicates
       │         │    │         │    │    │    │    │    │    └── uniq_partial_constraint_and_partial_index_a_key: filters
       │         │    │         │    │    │    │    │    │         └── b:11 > 0
-      │         │    │         │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    │         │    │    │    │    │    └── flags: disabled not visible index feature
       │         │    │         │    │    │    │    └── filters
       │         │    │         │    │    │    │         └── b:11 > 0
       │         │    │         │    │    │    └── filters
@@ -1637,7 +1637,7 @@ insert uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    │    ├── partial index predicates
       │         │    │         │    │    │    │    │    └── uniq_partial_constraint_and_partial_index_a_key: filters
       │         │    │         │    │    │    │    │         └── b:16 > 0
-      │         │    │         │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    │         │    │    │    │    └── flags: disabled not visible index feature
       │         │    │         │    │    │    └── filters
       │         │    │         │    │    │         └── b:16 > 10
       │         │    │         │    │    └── filters
@@ -1733,7 +1733,7 @@ insert uniq_computed_pk
                      │    │    │    │    └── uniq_computed_pk.d:35
                      │    │    │    └── uniq_computed_pk.c_d_expr:39
                      │    │    │         └── uniq_computed_pk.d:35::STRING
-                     │    │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    │    └── flags: disabled not visible index feature
                      │    └── projections
                      │         └── uniq_computed_pk.s:34 [as=uniq_computed_pk.c_s:37]
                      └── filters
@@ -1776,7 +1776,7 @@ insert uniq_default
  │              │    ├── columns: uniq_default.k:9!null uniq_default.a:10!null uniq_default.b:11!null
  │              │    ├── scan uniq_default
  │              │    │    ├── columns: uniq_default.k:9!null uniq_default.a:10 uniq_default.b:11
- │              │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │              │    │    └── flags: disabled not visible index feature
  │              │    └── filters
  │              │         ├── uniq_default.a:10 = 10
  │              │         ├── uniq_default.b:11 = 100
@@ -1788,7 +1788,7 @@ insert uniq_default
                 ├── columns: uniq_default.k:17!null uniq_default.a:18!null uniq_default.b:19!null
                 ├── scan uniq_default
                 │    ├── columns: uniq_default.k:17!null uniq_default.a:18 uniq_default.b:19
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── uniq_default.a:18 = 10
                      └── uniq_default.b:19 = 100
@@ -1846,7 +1846,7 @@ insert t
                      │    ├── partial index predicates
                      │    │    └── t_r_a_idx: filters
                      │    │         └── t.k:13 != 1
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── a:21 = t.a:15
                           ├── k:19 != 1
@@ -1914,7 +1914,7 @@ insert t
  │                   │    ├── computed column expressions
  │                   │    │    └── t.b:15
  │                   │    │         └── t.k:12 % 9
- │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   │    └── flags: disabled not visible index feature
  │                   └── filters
  │                        ├── a:20 = t.a:14
  │                        └── k:18 != t.k:12
@@ -1929,7 +1929,7 @@ insert t
                 │    ├── computed column expressions
                 │    │    └── t.b:25
                 │    │         └── t.k:22 % 9
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── t.a:24 = 10
 
@@ -1997,7 +1997,7 @@ insert t
       │              │    ├── computed column expressions
       │              │    │    └── t.b:15
       │              │    │         └── t.k:12 % 9
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:20 = t.a:14
       │                   └── k:18 != t.k:12
@@ -2020,7 +2020,7 @@ insert t
                      │    ├── computed column expressions
                      │    │    └── t.b:31
                      │    │         └── t.k:28 % 9
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── b:37 = t.b:31
                           └── k:34 != t.k:28
@@ -2079,7 +2079,7 @@ insert t
  │    │              │    ├── columns: t.k:12!null t.r:13!null t.a:14 t.b:15
  │    │              │    ├── check constraint expressions
  │    │              │    │    └── t.r:13 IN ('east', 'west')
- │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              │    └── flags: disabled not visible index feature
  │    │              └── filters
  │    │                   ├── a:20 = t.a:14
  │    │                   └── k:18 != t.k:12
@@ -2095,7 +2095,7 @@ insert t
  │    │              │    ├── columns: t.k:28!null t.r:29!null t.a:30 t.b:31
  │    │              │    ├── check constraint expressions
  │    │              │    │    └── t.r:29 IN ('east', 'west')
- │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              │    └── flags: disabled not visible index feature
  │    │              └── filters
  │    │                   ├── b:37 = t.b:31
  │    │                   └── k:34 != t.k:28
@@ -2111,7 +2111,7 @@ insert t
  │    │              │    ├── columns: t.k:44!null t.r:45!null t.a:46 t.b:47
  │    │              │    ├── check constraint expressions
  │    │              │    │    └── t.r:45 IN ('east', 'west')
- │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              │    └── flags: disabled not visible index feature
  │    │              └── filters
  │    │                   ├── r:51 = t.r:45
  │    │                   ├── a:52 = t.a:46
@@ -2129,7 +2129,7 @@ insert t
  │                   │    ├── columns: t.k:60!null t.r:61!null t.a:62 t.b:63
  │                   │    ├── check constraint expressions
  │                   │    │    └── t.r:61 IN ('east', 'west')
- │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   │    └── flags: disabled not visible index feature
  │                   └── filters
  │                        ├── a:68 = t.a:62
  │                        ├── b:69 = t.b:63
@@ -2142,7 +2142,7 @@ insert t
       │         │    ├── columns: t.k:22!null t.r:23!null t.a:24 t.b:25
       │         │    ├── check constraint expressions
       │         │    │    └── t.r:23 IN ('east', 'west')
-      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── t.a:24 = 10
       ├── fast-path-unique-checks-item: t(b)
@@ -2152,7 +2152,7 @@ insert t
       │         │    ├── columns: t.k:38!null t.r:39!null t.a:40 t.b:41
       │         │    ├── check constraint expressions
       │         │    │    └── t.r:39 IN ('east', 'west')
-      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── t.b:41 = 100
       ├── fast-path-unique-checks-item: t(r,a,b)
@@ -2162,7 +2162,7 @@ insert t
       │         │    ├── columns: t.k:54!null t.r:55!null t.a:56 t.b:57
       │         │    ├── check constraint expressions
       │         │    │    └── t.r:55 IN ('east', 'west')
-      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              ├── t.r:55 = 'east'
       │              ├── t.a:56 = 10
@@ -2174,7 +2174,7 @@ insert t
                 │    ├── columns: t.k:70!null t.r:71!null t.a:72 t.b:73
                 │    ├── check constraint expressions
                 │    │    └── t.r:71 IN ('east', 'west')
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── t.a:72 = 10
                      └── t.b:73 = 100
@@ -2216,7 +2216,7 @@ insert t
  │    │              │    ├── columns: t.k:12!null t.r:13!null t.a:14 t.b:15
  │    │              │    ├── check constraint expressions
  │    │              │    │    └── t.r:13 IN ('east', 'west')
- │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              │    └── flags: disabled not visible index feature
  │    │              └── filters
  │    │                   ├── a:20 = t.a:14
  │    │                   └── k:18 != t.k:12
@@ -2236,7 +2236,7 @@ insert t
  │    │              │    ├── columns: t.k:28!null t.r:29!null t.a:30 t.b:31
  │    │              │    ├── check constraint expressions
  │    │              │    │    └── t.r:29 IN ('east', 'west')
- │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              │    └── flags: disabled not visible index feature
  │    │              └── filters
  │    │                   ├── b:37 = t.b:31
  │    │                   └── k:34 != t.k:28
@@ -2256,7 +2256,7 @@ insert t
  │    │              │    ├── columns: t.k:44!null t.r:45!null t.a:46 t.b:47
  │    │              │    ├── check constraint expressions
  │    │              │    │    └── t.r:45 IN ('east', 'west')
- │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              │    └── flags: disabled not visible index feature
  │    │              └── filters
  │    │                   ├── r:51 = t.r:45
  │    │                   ├── a:52 = t.a:46
@@ -2278,7 +2278,7 @@ insert t
  │                   │    ├── columns: t.k:60!null t.r:61!null t.a:62 t.b:63
  │                   │    ├── check constraint expressions
  │                   │    │    └── t.r:61 IN ('east', 'west')
- │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   │    └── flags: disabled not visible index feature
  │                   └── filters
  │                        ├── a:68 = t.a:62
  │                        ├── b:69 = t.b:63
@@ -2291,7 +2291,7 @@ insert t
       │         │    ├── columns: t.k:22!null t.r:23!null t.a:24 t.b:25
       │         │    ├── check constraint expressions
       │         │    │    └── t.r:23 IN ('east', 'west')
-      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── t.a:24 = 10
       ├── fast-path-unique-checks-item: t(b)
@@ -2301,7 +2301,7 @@ insert t
       │         │    ├── columns: t.k:38!null t.r:39!null t.a:40 t.b:41
       │         │    ├── check constraint expressions
       │         │    │    └── t.r:39 IN ('east', 'west')
-      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── t.b:41 = 100
       ├── fast-path-unique-checks-item: t(r,a,b)
@@ -2311,7 +2311,7 @@ insert t
       │         │    ├── columns: t.k:54!null t.r:55!null t.a:56 t.b:57
       │         │    ├── check constraint expressions
       │         │    │    └── t.r:55 IN ('east', 'west')
-      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              ├── t.r:55 = 'east'
       │              ├── t.a:56 = 10
@@ -2323,7 +2323,7 @@ insert t
                 │    ├── columns: t.k:70!null t.r:71!null t.a:72 t.b:73
                 │    ├── check constraint expressions
                 │    │    └── t.r:71 IN ('east', 'west')
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      ├── t.a:72 = 10
                      └── t.b:73 = 100
@@ -2378,7 +2378,7 @@ insert child
  │    │              │    └── (100, 1, 2, 3, 'east')
  │    │              ├── scan child
  │    │              │    ├── columns: child.c:14!null child.p:15!null child.a:16 child.b:17 child.r:18
- │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              │    └── flags: disabled not visible index feature
  │    │              └── filters
  │    │                   ├── a:23 = child.a:16
  │    │                   └── c:21 != child.c:14
@@ -2392,7 +2392,7 @@ insert child
  │    │              │    └── (100, 1, 2, 3, 'east')
  │    │              ├── scan child
  │    │              │    ├── columns: child.c:33!null child.p:34!null child.a:35 child.b:36 child.r:37
- │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              │    └── flags: disabled not visible index feature
  │    │              └── filters
  │    │                   ├── b:43 = child.b:36
  │    │                   └── c:40 != child.c:33
@@ -2406,7 +2406,7 @@ insert child
  │    │              │    └── (100, 1, 2, 3, 'east')
  │    │              ├── scan child
  │    │              │    ├── columns: child.c:52!null child.p:53!null child.a:54 child.b:55 child.r:56
- │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              │    └── flags: disabled not visible index feature
  │    │              └── filters
  │    │                   ├── a:61 = child.a:54
  │    │                   ├── b:62 = child.b:55
@@ -2422,7 +2422,7 @@ insert child
  │                   │    └── (100, 1, 2, 3, 'east')
  │                   ├── scan child
  │                   │    ├── columns: child.c:71!null child.p:72!null child.a:73 child.b:74 child.r:75
- │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   │    └── flags: disabled not visible index feature
  │                   └── filters
  │                        ├── a:80 = child.a:73
  │                        ├── b:81 = child.b:74
@@ -2433,7 +2433,7 @@ insert child
  │    │         ├── columns: child.c:26!null child.p:27!null child.a:28!null child.b:29 child.r:30
  │    │         ├── scan child
  │    │         │    ├── columns: child.c:26!null child.p:27!null child.a:28 child.b:29 child.r:30
- │    │         │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │         │    └── flags: disabled not visible index feature
  │    │         └── filters
  │    │              └── child.a:28 = 2
  │    ├── fast-path-unique-checks-item: child(b)
@@ -2441,7 +2441,7 @@ insert child
  │    │         ├── columns: child.c:45!null child.p:46!null child.a:47 child.b:48!null child.r:49
  │    │         ├── scan child
  │    │         │    ├── columns: child.c:45!null child.p:46!null child.a:47 child.b:48 child.r:49
- │    │         │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │         │    └── flags: disabled not visible index feature
  │    │         └── filters
  │    │              └── child.b:48 = 3
  │    ├── fast-path-unique-checks-item: child(a,b,r)
@@ -2449,7 +2449,7 @@ insert child
  │    │         ├── columns: child.c:64!null child.p:65!null child.a:66!null child.b:67!null child.r:68!null
  │    │         ├── scan child
  │    │         │    ├── columns: child.c:64!null child.p:65!null child.a:66 child.b:67 child.r:68
- │    │         │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │         │    └── flags: disabled not visible index feature
  │    │         └── filters
  │    │              ├── child.a:66 = 2
  │    │              ├── child.b:67 = 3
@@ -2459,7 +2459,7 @@ insert child
  │              ├── columns: child.c:83!null child.p:84!null child.a:85!null child.b:86!null child.r:87
  │              ├── scan child
  │              │    ├── columns: child.c:83!null child.p:84!null child.a:85 child.b:86 child.r:87
- │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │              │    └── flags: disabled not visible index feature
  │              └── filters
  │                   ├── child.a:85 = 2
  │                   └── child.b:86 = 3
@@ -2473,7 +2473,7 @@ insert child
                 │         └──  column2:9 => p:90
                 ├── scan parent
                 │    ├── columns: parent.p:91!null
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:90 = parent.p:91
 
@@ -2541,7 +2541,7 @@ insert t1
       │              │    ├── computed column expressions
       │              │    │    └── t1.b:17
       │              │    │         └── t1.a:16 % 9
-      │              │    └── flags: avoid-full-scan disabled not visible index feature
+      │              │    └── flags: disabled not visible index feature
       │              └── filters
       │                   ├── a:23 = t1.a:16
       │                   └── k:21 != t1.k:14
@@ -2565,7 +2565,7 @@ insert t1
                      │    ├── computed column expressions
                      │    │    └── t1.b:29
                      │    │         └── t1.a:28 % 9
-                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    └── flags: disabled not visible index feature
                      └── filters
                           ├── c:37 = t1.c:30
                           └── k:33 != t1.k:26
@@ -2616,7 +2616,7 @@ insert t1
  │    │              │    ├── computed column expressions
  │    │              │    │    └── t1.b:17
  │    │              │    │         └── t1.a:16 % 9
- │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              │    └── flags: disabled not visible index feature
  │    │              └── filters
  │    │                   ├── a:23 = t1.a:16
  │    │                   └── k:21 != t1.k:14
@@ -2640,7 +2640,7 @@ insert t1
  │                   │    ├── computed column expressions
  │                   │    │    └── t1.b:36
  │                   │    │         └── t1.a:35 % 9
- │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   │    └── flags: disabled not visible index feature
  │                   └── filters
  │                        ├── c:44 = t1.c:37
  │                        └── k:40 != t1.k:33
@@ -2655,7 +2655,7 @@ insert t1
       │         │    ├── computed column expressions
       │         │    │    └── t1.b:29
       │         │    │         └── t1.a:28 % 9
-      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    └── flags: disabled not visible index feature
       │         └── filters
       │              └── t1.a:28 = 10
       └── fast-path-unique-checks-item: t1(c)
@@ -2668,6 +2668,6 @@ insert t1
                 │    ├── computed column expressions
                 │    │    └── t1.b:48
                 │    │         └── t1.a:47 % 9
-                │    └── flags: avoid-full-scan disabled not visible index feature
+                │    └── flags: disabled not visible index feature
                 └── filters
                      └── t1.c:49 = 20

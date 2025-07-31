@@ -35,8 +35,6 @@ class=regular delta=+2MiB
 class=elastic delta=+2MiB
 class=regular delta=+6MiB
 ----
-regular: deducted: +16 MiB, returned: +16 MiB, force-flush: +0 B, prevent-send-q: +0 B
-elastic: deducted: +18 MiB, returned: +18 MiB, force-flush: +0 B, prevent-send-q: +0 B
 
 history
 ----
@@ -114,8 +112,6 @@ class=regular delta=-9MiB
 class=regular delta=+17MiB
 class=elastic delta=+1MiB
 ----
-regular: deducted: +23 MiB, returned: +23 MiB, force-flush: +0 B, prevent-send-q: +0 B
-elastic: deducted: +30 MiB, returned: +30 MiB, force-flush: +0 B, prevent-send-q: +0 B
 
 
 history
@@ -155,8 +151,6 @@ metrics
 adjust
 class=regular delta=-16MiB
 ----
-regular: deducted: +16 MiB, returned: +0 B, force-flush: +0 B, prevent-send-q: +0 B
-elastic: deducted: +16 MiB, returned: +0 B, force-flush: +0 B, prevent-send-q: +0 B
 
 metrics
 ----

@@ -197,24 +197,3 @@ func (c *CustomFuncs) LimitToRowNumberFilter(
 		),
 	}
 }
-
-// WindowsAreAggregations returns true if all the window functions are aggregate
-// functions.
-func (c *CustomFuncs) WindowsAreAggregations(windows memo.WindowsExpr) bool {
-	for i := range windows {
-		if !opt.IsAggregateOp(windows[i].Function) {
-			return false
-		}
-	}
-	return true
-}
-
-// WindowFuncOutputCols collects all columns projected by the given set of
-// window functions.
-func (c *CustomFuncs) WindowFuncOutputCols(windows memo.WindowsExpr) opt.ColSet {
-	var cols opt.ColSet
-	for i := range windows {
-		cols.Add(windows[i].Col)
-	}
-	return cols
-}

@@ -38,7 +38,7 @@ func TestJSONFormats(t *testing.T) {
 
 	ctx := context.Background()
 	sysIDPayload := testIDPayload{tenantID: "1"}
-	ctx = serverident.ContextWithServerIdentification(ctx, sysIDPayload)
+	ctx = context.WithValue(ctx, serverident.ServerIdentificationContextKey{}, sysIDPayload)
 	ctx = logtags.AddTag(ctx, "noval", nil)
 	ctx = logtags.AddTag(ctx, "s", "1")
 	ctx = logtags.AddTag(ctx, "long", "2")
