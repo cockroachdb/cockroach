@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -1397,7 +1398,7 @@ func (s *state) RegisterConfigChangeListener(listener ConfigChangeListener) {
 func (s *state) SetClusterSetting(Key string, Value interface{}) {
 	switch Key {
 	case "LBRebalancingMode":
-		kvserver.LoadBasedRebalancingMode.Override(context.Background(), &s.settings.ST.SV, kvserver.LBRebalancingMode(Value.(int64)))
+		kvserverbase.LoadBasedRebalancingMode.Override(context.Background(), &s.settings.ST.SV, kvserverbase.LBRebalancingMode(Value.(int64)))
 	default:
 		panic("other cluster settings not supported")
 	}

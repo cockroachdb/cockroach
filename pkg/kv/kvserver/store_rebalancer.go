@@ -15,12 +15,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -70,52 +68,6 @@ func makeStoreRebalancerMetrics() StoreRebalancerMetrics {
 		ImbalancedStateOverfullOptionsExhausted: metric.NewCounter(metaStoreRebalancerImbalancedOverfullOptionsExhausted),
 	}
 }
-
-var ErrMultiMetricRebalancingNotSupported = unimplemented.NewWithIssue(
-	103320, "multi-metric rebalancing not supported for production use")
-
-// LoadBasedRebalancingMode controls whether range rebalancing takes
-// additional variables such as write load and disk usage into account.
-// If disabled, rebalancing is done purely based on replica count.
-var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
-	settings.SystemOnly,
-	"kv.allocator.load_based_rebalancing",
-	"whether to rebalance based on the distribution of load across stores",
-	"leases and replicas",
-	map[LBRebalancingMode]string{
-		LBRebalancingOff:               "off",
-		LBRebalancingLeasesOnly:        "leases",
-		LBRebalancingLeasesAndReplicas: "leases and replicas",
-		LBRebalancingMultiMetric:       "multi-metric",
-	},
-	settings.WithPublic,
-	settings.WithValidateEnum(func(enumStr string) error {
-		if buildutil.CrdbTestBuild || enumStr != "multi-metric" {
-			return nil
-		}
-		return ErrMultiMetricRebalancingNotSupported
-	}),
-)
-
-// LBRebalancingMode controls if and when we do store-level rebalancing
-// based on load.
-type LBRebalancingMode int64
-
-const (
-	// LBRebalancingOff means that we do not do store-level rebalancing
-	// based on load statistics.
-	LBRebalancingOff LBRebalancingMode = iota
-	// LBRebalancingLeasesOnly means that we rebalance leases based on
-	// store-level load imbalances.
-	LBRebalancingLeasesOnly
-	// LBRebalancingLeasesAndReplicas means that we rebalance both leases and
-	// replicas based on store-level load imbalances.
-	LBRebalancingLeasesAndReplicas
-	// LBRebalancingMultiMetric means that the store rebalancer yields to the
-	// multi-metric store rebalancer, balancing both leases and replicas based on
-	// store-level load imbalances.
-	LBRebalancingMultiMetric
-)
 
 // RebalanceSearchOutcome returns the result of a rebalance target search. It
 // is used to determine whether to transition from lease to range based
@@ -216,8 +168,8 @@ func NewStoreRebalancer(
 			return !rq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty()
 		},
 		disabled: func() bool {
-			mode := LoadBasedRebalancingMode.Get(&st.SV)
-			return mode == LBRebalancingOff || mode == LBRebalancingMultiMetric ||
+			mode := kvserverbase.LoadBasedRebalancingMode.Get(&st.SV)
+			return mode == kvserverbase.LBRebalancingOff || mode == kvserverbase.LBRebalancingMultiMetric ||
 				rq.store.cfg.TestingKnobs.DisableStoreRebalancer
 		},
 	}
@@ -255,16 +207,16 @@ type RebalanceContext struct {
 	loadDimension                      load.Dimension
 	maxThresholds                      load.Load
 	options                            *allocatorimpl.LoadScorerOptions
-	mode                               LBRebalancingMode
+	mode                               kvserverbase.LBRebalancingMode
 	allStoresList                      storepool.StoreList
 	hottestRanges, rebalanceCandidates []CandidateReplica
 	leftoverCandidates                 []CandidateReplica
 }
 
 // RebalanceMode returns the mode of the store rebalancer. See
-// LoadBasedRebalancingMode.
-func (sr *StoreRebalancer) RebalanceMode() LBRebalancingMode {
-	return LoadBasedRebalancingMode.Get(&sr.st.SV)
+// kvserverbase.LoadBasedRebalancingMode.
+func (sr *StoreRebalancer) RebalanceMode() kvserverbase.LBRebalancingMode {
+	return kvserverbase.LoadBasedRebalancingMode.Get(&sr.st.SV)
 }
 
 // RebalanceDimension returns the dimension the store rebalancer is balancing.
@@ -385,7 +337,7 @@ func (sr *StoreRebalancer) NewRebalanceContext(
 	ctx context.Context,
 	options *allocatorimpl.LoadScorerOptions,
 	hottestRanges []CandidateReplica,
-	rebalancingMode LBRebalancingMode,
+	rebalancingMode kvserverbase.LBRebalancingMode,
 ) *RebalanceContext {
 	allStoresList, _, _ := sr.storePool.GetStoreList(storepool.StoreFilterSuspect)
 	// Find the store descriptor for the local store.
@@ -504,7 +456,7 @@ func (sr *StoreRebalancer) ShouldRebalanceStore(ctx context.Context, rctx *Rebal
 		return false
 	}
 
-	if !(rctx.mode == LBRebalancingLeasesOnly || rctx.mode == LBRebalancingLeasesAndReplicas) {
+	if !(rctx.mode == kvserverbase.LBRebalancingLeasesOnly || rctx.mode == kvserverbase.LBRebalancingLeasesAndReplicas) {
 		// There's nothing to do, the store rebalancer is disabled. Note that this
 		// is redundant when called via the store rebalancer's Start method, but
 		// it's necessary when called from tests, which don't start the store
@@ -663,7 +615,7 @@ func (sr *StoreRebalancer) TransferToRebalanceRanges(
 		return false
 	}
 
-	if rctx.mode != LBRebalancingLeasesAndReplicas {
+	if rctx.mode != kvserverbase.LBRebalancingLeasesAndReplicas {
 		log.KvDistribution.Infof(ctx,
 			"ran out of leases worth transferring and load %s is still above desired threshold %s",
 			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)

@@ -10,10 +10,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -129,7 +129,7 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 	log.Infof(ctx, "registering external lease transfer change: usage=%v changes=%v",
 		usage, replicaChanges)
 	var changeIDs []mmaprototype.ChangeID
-	if kvserver.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserver.LBRebalancingMultiMetric {
+	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserverbase.LBRebalancingMultiMetric {
 		changeIDs = as.mmAllocator.RegisterExternalChanges(replicaChanges[:])
 		if changeIDs == nil {
 			log.Info(ctx, "mma did not track lease transfer, skipping")
@@ -220,7 +220,7 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 	log.Infof(ctx, "registering external replica change: chgs=%v usage=%v changes=%v",
 		changes, usage, replicaChanges)
 	var changeIDs []mmaprototype.ChangeID
-	if kvserver.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserver.LBRebalancingMultiMetric {
+	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserverbase.LBRebalancingMultiMetric {
 		changeIDs = as.mmAllocator.RegisterExternalChanges(replicaChanges)
 		if changeIDs == nil {
 			log.Info(ctx, "cluster does not have a range for the external replica change, skipping")
@@ -347,7 +347,7 @@ func (as *AllocatorSync) PostApply(ctx context.Context, syncChangeID SyncChangeI
 		}
 		delete(as.mu.trackedChanges, syncChangeID)
 	}()
-	if kvserver.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserver.LBRebalancingMultiMetric {
+	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserverbase.LBRebalancingMultiMetric {
 		if changeIDs := tracked.changeIDs; changeIDs != nil {
 			log.Infof(ctx, "PostApply: tracked=%v change_ids=%v success: %v", tracked, changeIDs, success)
 			as.updateMetrics(success, tracked.typ, tracked.author)
