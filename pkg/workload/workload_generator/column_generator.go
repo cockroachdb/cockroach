@@ -20,7 +20,7 @@ import (
 //   - batchIdx:  which batch we’re in (0,1,2…)
 //   - baseBatchSize: how many rows per batch (for sequences)
 //   - schema:    full YAML schema, so we can recurse on FKs
-func buildGenerator(col ColumnMeta, batchIdx, batchSize int, schema Schema) Generator {
+func buildGenerator(col *ColumnMeta, batchIdx, batchSize int, schema Schema) Generator {
 	// seed the per-batch RNG
 	origSeed := getIntArg(col.Args, "seed", 0)
 	seed64 := buildBatchSeed(origSeed, batchIdx)
@@ -80,7 +80,7 @@ func buildGenerator(col ColumnMeta, batchIdx, batchSize int, schema Schema) Gene
 		parentTable := pathSegments[len(pathSegments)-1] // "district"
 
 		// now look up in your schema map:
-		parentMeta := schema[parentTable][0].Columns[childCol]
+		parentMeta := schema[parentTable].Columns[childCol]
 		parentGen := buildGenerator(parentMeta, batchIdx, batchSize, schema)
 		base = NewFkWrapper(parentGen, col.Fanout)
 	}
@@ -150,13 +150,20 @@ func buildBatchSeed(origSeed, batchIdx int) int64 {
 }
 
 // buildSequenceGenerator creates a SequenceGen that generates sequential integers
-func buildSequenceGenerator(col ColumnMeta, batchIdx int, batchSize int) Generator {
-	baseStart := getIntArg(col.Args, "start", 0)
-	return &SequenceGen{cur: baseStart + batchIdx*batchSize}
+func buildSequenceGenerator(col *ColumnMeta, batchIdx int, batchSize int) Generator {
+	current := 0
+	// LastValue should always be present in the YAML. Just in case this value is not set, the default behavior
+	// is to start from the "start" argument, which defaults to 0 + batchIdx*batchSize.
+	if col.LastValue != "" {
+		current, _ = strconv.Atoi(col.LastValue)
+	} else {
+		current = getIntArg(col.Args, "start", 0) + batchIdx*batchSize
+	}
+	return &SequenceGen{cur: current}
 }
 
 // buildIntegerGenerator creates an IntegerGen that generates random integers
-func buildIntegerGenerator(col ColumnMeta, rng *rand.Rand) Generator {
+func buildIntegerGenerator(col *ColumnMeta, rng *rand.Rand) Generator {
 	minArg := getIntArg(col.Args, "min", 0)
 	maxArg := getIntArg(col.Args, "max", 0)
 	nullPct := getFloatArg(col.Args, "null_pct", 0.0)
@@ -164,7 +171,7 @@ func buildIntegerGenerator(col ColumnMeta, rng *rand.Rand) Generator {
 }
 
 // buildFloatGenerator creates a FloatGen that generates random floats
-func buildFloatGenerator(col ColumnMeta, rng *rand.Rand) Generator {
+func buildFloatGenerator(col *ColumnMeta, rng *rand.Rand) Generator {
 	minArg := getFloatArg(col.Args, "min", 0.0)
 	maxArg := getFloatArg(col.Args, "max", 0.0)
 	round := getIntArg(col.Args, "round", 2)
@@ -173,7 +180,7 @@ func buildFloatGenerator(col ColumnMeta, rng *rand.Rand) Generator {
 }
 
 // buildStringGenerator creates a StringGen that generates random strings
-func buildStringGenerator(col ColumnMeta, rng *rand.Rand) Generator {
+func buildStringGenerator(col *ColumnMeta, rng *rand.Rand) Generator {
 	minArg := getIntArg(col.Args, "min", 0)
 	maxArg := getIntArg(col.Args, "max", 0)
 	nullPct := getFloatArg(col.Args, "null_pct", 0.0)
@@ -181,7 +188,7 @@ func buildStringGenerator(col ColumnMeta, rng *rand.Rand) Generator {
 }
 
 // buildTimestampGenerator creates a TimestampGen that generates random timestamps
-func buildTimestampGenerator(col ColumnMeta, rng *rand.Rand) Generator {
+func buildTimestampGenerator(col *ColumnMeta, rng *rand.Rand) Generator {
 	// parse Python-style format → Go layout
 	startStr := getStringArg(col.Args, "start", "2000-01-01")
 	endStr := getStringArg(col.Args, "end", timeutil.Now().Format("2006-01-02"))
@@ -211,18 +218,18 @@ func buildTimestampGenerator(col ColumnMeta, rng *rand.Rand) Generator {
 }
 
 // buildUuidGenerator creates a UUIDGen that generates random UUIDs
-func buildUuidGenerator(_ ColumnMeta, rng *rand.Rand) Generator {
+func buildUuidGenerator(_ *ColumnMeta, rng *rand.Rand) Generator {
 	return &UUIDGen{r: rng}
 }
 
 // buildBooleanGenerator creates a BoolGen that generates random booleans
-func buildBooleanGenerator(col ColumnMeta, rng *rand.Rand) Generator {
+func buildBooleanGenerator(col *ColumnMeta, rng *rand.Rand) Generator {
 	nullPct := getFloatArg(col.Args, "null_pct", 0.0)
 	return &BoolGen{r: rng, nullPct: nullPct}
 }
 
 // buildJsonGenerator creates a JsonGen that generates random JSON strings
-func buildJsonGenerator(col ColumnMeta, rng *rand.Rand) Generator {
+func buildJsonGenerator(col *ColumnMeta, rng *rand.Rand) Generator {
 	// JSON is just a StringGen plus a wrapper
 	minArg := getIntArg(col.Args, "min", defaultJSONMinLen)
 	maxArg := getIntArg(col.Args, "max", defaultJSONMaxLen)
@@ -232,7 +239,7 @@ func buildJsonGenerator(col ColumnMeta, rng *rand.Rand) Generator {
 }
 
 // buildBitGenerator produces random BIT(n) values as strings of '0'/'1'.
-func buildBitGenerator(col ColumnMeta, rng *rand.Rand) Generator {
+func buildBitGenerator(col *ColumnMeta, rng *rand.Rand) Generator {
 	// size comes from mapBitType → args["size"]
 	size := getIntArg(col.Args, "size", 1)
 	nullPct := getFloatArg(col.Args, "null_pct", 0.0)
@@ -240,7 +247,7 @@ func buildBitGenerator(col ColumnMeta, rng *rand.Rand) Generator {
 }
 
 // buildBytesGenerator produces random []byte for BYTEA/BYTES columns.
-func buildBytesGenerator(col ColumnMeta, rng *rand.Rand) Generator {
+func buildBytesGenerator(col *ColumnMeta, rng *rand.Rand) Generator {
 	size := getIntArg(col.Args, "size", 1)
 	nullPct := getFloatArg(col.Args, "null_pct", 0.0)
 	return &BytesGen{r: rng, min: size, max: size, nullPct: nullPct}
