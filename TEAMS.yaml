@@ -29,6 +29,8 @@ cockroachdb/kv:
     'cockroachdb/kv-triage ': unittest
     cockroachdb/kv-prs: other
   label: T-kv
+cockroachdb/kv-distribution:
+  label: T-kv,A-kv-distribution
 cockroachdb/admission-control:
   label: T-kv,A-admission-control
 cockroachdb/spatial:

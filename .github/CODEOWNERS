@@ -321,9 +321,9 @@
 /pkg/kv/kvserver/*rangefeed*.go         @cockroachdb/kv-prs
 /pkg/kv/kvserver/*sideload*.go          @cockroachdb/kv-prs
 /pkg/kv/kvserver/abortspan/             @cockroachdb/kv-prs
-/pkg/kv/kvserver/allocator/             @cockroachdb/kv-prs
+/pkg/kv/kvserver/allocator/             @cockroachdb/kv-prs @cockroachdb/kv-distribution
 /pkg/kv/kvserver/apply/                 @cockroachdb/kv-prs
-/pkg/kv/kvserver/asim/                  @cockroachdb/kv-prs
+/pkg/kv/kvserver/asim/                  @cockroachdb/kv-prs @cockroachdb/kv-distribution
 /pkg/kv/kvserver/batcheval/             @cockroachdb/kv-prs
 /pkg/kv/kvserver/benignerror/           @cockroachdb/kv-prs
 /pkg/kv/kvserver/closedts/              @cockroachdb/kv-prs
@@ -547,7 +547,7 @@
 # that mention this team.
 #!/pkg/docs/                   @cockroachdb/docs-infra-prs
 #!/pkg/featureflag/            @cockroachdb/unowned
-/pkg/gossip/                 @cockroachdb/kv-prs
+/pkg/gossip/                 @cockroachdb/kv-prs  @cockroachdb/kv-distribution
 /pkg/internal/client/requestbatcher/ @cockroachdb/kv-prs
 /pkg/internal/codeowners/    @cockroachdb/test-eng
 /pkg/internal/reporoot       @cockroachdb/dev-inf
@@ -586,21 +586,21 @@
 /pkg/security/               @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/clientsecopts/ @cockroachdb/sql-foundations @cockroachdb/security-engineering @cockroachdb/product-security
 #!/pkg/settings/             @cockroachdb/unowned
-/pkg/spanconfig/                         @cockroachdb/kv-prs @cockroachdb/sql-foundations
+/pkg/spanconfig/                         @cockroachdb/kv-prs @cockroachdb/sql-foundations @cockroachdb/kv-distribution
 /pkg/spanconfig/spanconfigbounds/        @cockroachdb/sql-foundations
 /pkg/spanconfig/spanconfigjob/           @cockroachdb/sql-foundations
-/pkg/spanconfig/spanconfigkvaccessor/    @cockroachdb/kv-prs
-/pkg/spanconfig/spanconfigkvsubscriber/  @cockroachdb/kv-prs
+/pkg/spanconfig/spanconfigkvaccessor/    @cockroachdb/kv-prs @cockroachdb/kv-distribution
+/pkg/spanconfig/spanconfigkvsubscriber/  @cockroachdb/kv-prs @cockroachdb/kv-distribution
 /pkg/spanconfig/spanconfiglimiter/       @cockroachdb/sql-foundations
 /pkg/spanconfig/spanconfigmanager/       @cockroachdb/sql-foundations
-/pkg/spanconfig/spanconfigptsreader/     @cockroachdb/kv-prs
-/pkg/spanconfig/spanconfigreconciler/    @cockroachdb/kv-prs
-/pkg/spanconfig/spanconfigreporter/      @cockroachdb/kv-prs
+/pkg/spanconfig/spanconfigptsreader/     @cockroachdb/kv-prs @cockroachdb/kv-distribution
+/pkg/spanconfig/spanconfigreconciler/    @cockroachdb/kv-prs @cockroachdb/kv-distribution
+/pkg/spanconfig/spanconfigreporter/      @cockroachdb/kv-prs @cockroachdb/kv-distribution
 /pkg/spanconfig/spanconfigsplitter/      @cockroachdb/sql-foundations
 /pkg/spanconfig/spanconfigsqltranslator/ @cockroachdb/sql-foundations
 /pkg/spanconfig/spanconfigsqlwatcher/    @cockroachdb/sql-foundations
-/pkg/spanconfig/spanconfigstore/         @cockroachdb/kv-prs
-/pkg/spanconfig/spanconfigtestutils/     @cockroachdb/kv-prs @cockroachdb/sql-foundations
+/pkg/spanconfig/spanconfigstore/         @cockroachdb/kv-prs @cockroachdb/kv-distribution
+/pkg/spanconfig/spanconfigtestutils/     @cockroachdb/kv-prs @cockroachdb/sql-foundations @cockroachdb/kv-distribution
 /pkg/repstream/              @cockroachdb/disaster-recovery
 #!/pkg/testutils/              @cockroachdb/test-eng-noreview
 /pkg/testutils/reduce/       @cockroachdb/sql-queries-prs
