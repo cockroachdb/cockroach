@@ -29,19 +29,18 @@ CockroachDB is a distributed SQL database written in Go, built with Bazel and ma
 ./dev test pkg/sql --stress          # Run repeatedly until failure
 ./dev testlogic                      # Run all SQL logic tests
 ./dev testlogic ccl                  # Run enterprise logic tests
-./dev testlogic --files='prepare|fk' # Run specific test files
+./dev testlogic base --config=local --files='prepare|fk' # Run specific test files under a specific configuration
 ```
 
 Note that when filtering tests via `-f` to include the `-v` flag which
 will warn you in the output if your filter didn't match anything. Look
 for `testing: warning: no tests to run` in the output.
 
-**Code Generation and Linting:**
+**Code Generation:**
 ```bash
 ./dev generate            # Generate all code (protobuf, parsers, etc.)
 ./dev generate go         # Generate Go code only
-./dev lint                # Run all linters
-./dev lint --short        # Run fast subset of linters
+./dev generate bazel      # Update BUILD.bazel files when dependencies change
 ```
 
 ### Architecture Overview
@@ -67,20 +66,21 @@ SQL Layer (pkg/sql/) → Distributed KV (pkg/kv/) → Storage (pkg/storage/)
 
 ### Development Workflow
 
-1. **Environment Setup**: Run `./dev doctor` to ensure all dependencies are installed
-2. **Building**: Use `./dev build short` for iterative development, `./dev build cockroach` for full builds
-3. **Testing**: Run package-specific tests with `./dev test pkg/[package]` 
-4. **Code Generation**: After schema/proto changes, run `./dev generate go`
-5. **Quality Checks**: Run `./dev lint` before committing
+1. **Environment Setup**: Run `./dev doctor` to ensure all dependencies are installed.
+2. **Building**: Use `./dev build short` for iterative development, `./dev build cockroach` for full builds.
+3. **Testing**: Run package-specific tests with `./dev test pkg/[package]`.
+4. **Code Generation**: After schema/proto changes, run `./dev generate go`.
+5. **Linting**: Run with `./dev lint` or `./dev lint --short`. This takes a while, so no need to run it regularly.
 
 ### Testing Strategy
 
 CockroachDB has comprehensive testing infrastructure:
-- **Unit Tests**: Standard Go tests throughout `/pkg/` packages
-- **Logic Tests**: SQL correctness tests using `./dev testlogic`
-- **Roachtests**: Distributed system integration tests
-- **Acceptance Tests**: End-to-end testing in `/pkg/acceptance/`
-- **Stress Testing**: Continuous testing with `--stress` flag
+- **Unit Tests**: Standard Go tests throughout `/pkg/` packages.
+- **Logic Tests**: SQL correctness tests using `./dev testlogic`.
+- **Roachtests**: Distributed system integration tests.
+- **Acceptance Tests**: End-to-end testing in `/pkg/acceptance/`.
+- **Stress Testing**: Continuous testing with `--stress` flag.
+
 
 ### Build System
 
@@ -93,6 +93,8 @@ CockroachDB has comprehensive testing infrastructure:
 
 **Package Structure:**
 - `/pkg/sql/` - SQL layer (parser, optimizer, executor)
+- `/pkg/sql/opt` - Query optimizer and planner
+- `/pkg/sql/schemachanger` - Declarative schema changer
 - `/pkg/kv/` - Key-value layer and transaction management
 - `/pkg/storage/` - Storage engine interface
 - `/pkg/server/` - Node and cluster management
