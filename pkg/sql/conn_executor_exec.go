@@ -322,6 +322,7 @@ func (ex *connExecutor) execPortal(
 			return nil, nil, nil
 		}
 		ev, payload, retErr = ex.execStmt(ctx, portal.Stmt.Statement, &portal, pinfo, stmtRes, canAutoCommit)
+
 		// For a non-pausable portal, it is considered exhausted regardless of the
 		// fact whether an error occurred or not - if it did, we still don't want
 		// to re-execute the portal from scratch.
@@ -2934,12 +2935,25 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
 		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 			ctx, err = ex.makeExecPlan(ctx, planner)
-			if flags := planner.curPlan.flags; err == nil && (flags.IsSet(planFlagContainsMutation) || flags.IsSet(planFlagIsDDL)) {
+			// TODO(janexing): This is a temporary solution to disallow procedure
+			// call statements that contain mutations for pausable portals. Since
+			// relational.CanMutate is not yet propagated from the function body
+			// via builder.BuildCall(), we must temporarily disallow all
+			// TCL statements, which includes the CALL statements.
+			// This should be removed once CanMutate is fully propagated.
+			// (pending https://github.com/cockroachdb/cockroach/issues/147568)
+			isTCL := planner.curPlan.stmt.AST.StatementType() == tree.TypeTCL
+			if flags := planner.curPlan.flags; err == nil && (isTCL || flags.IsSet(planFlagContainsMutation) || flags.IsSet(planFlagIsDDL)) {
 				telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
 				// We don't allow mutations in a pausable portal. Set it back to
 				// an un-pausable (normal) portal.
 				planner.pausablePortal.pauseInfo = nil
 				err = res.RevokePortalPausability()
+				// If this plan is a transaction control statement, we don't
+				// even execute it but just early exit.
+				if isTCL {
+					err = errors.CombineErrors(err, ErrStmtNotSupportedForPausablePortal)
+				}
 				defer planner.curPlan.close(ctx)
 			} else {
 				ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
