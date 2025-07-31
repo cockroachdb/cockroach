@@ -721,8 +721,18 @@ func getBackupChain(
 	map[int]*backupinfo.IterFactory,
 	error,
 ) {
+	defaultCollectionURI, _, err := backupdest.GetURIsByLocalityKV(dest.To, "")
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	resolvedSubdir, err := resolveBackupSubdir(
+		ctx, execCfg, user, defaultCollectionURI, dest.Subdir,
+	)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 	resolvedBaseDirs, resolvedIncDirs, _, err := resolveBackupDirs(
-		ctx, execCfg, user, dest.To, dest.IncrementalStorage, dest.Subdir,
+		ctx, execCfg, user, dest.To, dest.IncrementalStorage, resolvedSubdir,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -764,8 +774,8 @@ func getBackupChain(
 	defer mem.Close(ctx)
 
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
-		ctx, &mem, baseStores, incStores, mkStore, resolvedBaseDirs,
-		resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
+		ctx, &mem, defaultCollectionURI, baseStores, incStores, mkStore, resolvedSubdir,
+		resolvedBaseDirs, resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
 		user, false /*includeSkipped */, true, /*includeCompacted */
 	)
 	if err != nil {

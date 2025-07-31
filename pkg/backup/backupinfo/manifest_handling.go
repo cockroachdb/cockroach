@@ -951,6 +951,20 @@ func ValidateEndTimeAndTruncate(
 		return nil, nil, nil, err
 	}
 
+	// All the logic below assumes the backups are sorted in increasing order by
+	// end time, with ties broken by increasing start times.
+	slices.SortFunc(backupEntries, func(a, b BackupTreeEntry) int {
+		if a.Manifest.EndTime.Less(b.Manifest.EndTime) {
+			return -1
+		} else if b.Manifest.EndTime.Less(a.Manifest.EndTime) {
+			return 1
+		} else if a.Manifest.StartTime.Less(b.Manifest.StartTime) {
+			return -1
+		} else {
+			return 1
+		}
+	})
+
 	if !includeCompacted {
 		backupEntries = skipCompactedBackups(backupEntries)
 	}
@@ -1079,8 +1093,6 @@ func elideSkippedLayers(backupEntries []BackupTreeEntry) []BackupTreeEntry {
 //
 // Note: This assumes that the provided backups are sorted in increasing order
 // by end time, and then sorted in increasing order by start time to break ties.
-// This is the case for backups being returned by storage clients due to us
-// encoding backup paths in a way that ensures this order.
 func elideDuplicateEndTimes(backupEntries []BackupTreeEntry) []BackupTreeEntry {
 	for i := range len(backupEntries) - 1 {
 		j := i + 1

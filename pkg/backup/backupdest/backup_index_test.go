@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -486,6 +488,77 @@ func TestIndexExists(t *testing.T) {
 	}
 }
 
+func TestListIndexes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanup := testutils.TempDir(t)
+	defer dirCleanup()
+
+	st := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.Latest.Version(),
+		clusterversion.Latest.Version(),
+		true,
+	)
+	execCfg := &sql.ExecutorConfig{Settings: st}
+
+	const collectionURI = "nodelocal://1/test"
+	storage, err := cloud.ExternalStorageFromURI(
+		ctx,
+		collectionURI,
+		base.ExternalIODirConfig{},
+		st,
+		blobs.TestBlobServiceClient(dir),
+		username.RootUserName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+	require.NoError(t, err)
+	defer storage.Close()
+	storageFactory := func(
+		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
+	) (cloud.ExternalStorage, error) {
+		return storage, nil
+	}
+
+	end := time.Date(2025, 8, 13, 0, 0, 0, 0, time.UTC)
+	fullSubdir := end.Format(backupbase.DateBasedIntoFolderName)
+	details := jobspb.BackupDetails{
+		Destination: jobspb.BackupDetails_Destination{
+			To:     []string{collectionURI},
+			Subdir: fullSubdir,
+		},
+		StartTime:     hlc.Timestamp{},
+		EndTime:       hlc.Timestamp{WallTime: end.UnixNano()},
+		CollectionURI: collectionURI,
+		// URI does not need to be set properly for this test since we are not
+		// reading the contents of the files.
+		URI: collectionURI + "/" + fullSubdir,
+	}
+
+	const numBackups = 4
+	for range numBackups {
+		require.NoError(
+			t, WriteBackupIndexMetadata(ctx, execCfg, username.RootUserName(), storageFactory, details),
+		)
+		start := end
+		end = end.Add(1 * time.Hour)
+		details.StartTime = hlc.Timestamp{WallTime: start.UnixNano()}
+		details.EndTime = hlc.Timestamp{WallTime: end.UnixNano()}
+	}
+
+	indexes, err := ListIndexes(ctx, storage, fullSubdir)
+	require.NoError(t, err)
+
+	require.Len(t, indexes, numBackups)
+
+	expectedSort := indexes[:]
+	slices.Sort(expectedSort)
+	require.Equal(t, expectedSort, indexes)
+}
+
 type fakeExternalStorage struct {
 	cloud.ExternalStorage
 	files map[string]*closableBytesWriter
@@ -497,6 +570,10 @@ func newFakeExternalStorage() *fakeExternalStorage {
 	return &fakeExternalStorage{
 		files: make(map[string]*closableBytesWriter),
 	}
+}
+
+func (f *fakeExternalStorage) Close() error {
+	return nil
 }
 
 func (f *fakeExternalStorage) Conf() cloudpb.ExternalStorage {
