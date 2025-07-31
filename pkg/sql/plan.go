@@ -716,6 +716,9 @@ const (
 	planFlagContainsInsert
 	planFlagContainsUpdate
 	planFlagContainsUpsert
+
+	// planFlagIsCallProcedure is the plan is for calling a procedure.
+	planFlagIsCallProcedure
 )
 
 // IsSet returns true if the receiver has all of the given flags set.

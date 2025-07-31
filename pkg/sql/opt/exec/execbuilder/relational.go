@@ -3689,6 +3689,13 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("expected non-nil UDF definition")
 	}
 
+	// TODO(janexing): This is a temporary solution to disallow procedure
+	// statements that contain mutations for pausable portals. Since
+	// relational.CanMutate is not yet propagated from the function body,
+	// we must temporarily disallow all procedure statements. This should be
+	// removed once CanMutate is fully propagated.
+	b.flags.Set(exec.PlanFlagIsCallProcedure)
+
 	// Build the argument expressions.
 	var args tree.TypedExprs
 	if len(udf.Args) > 0 {

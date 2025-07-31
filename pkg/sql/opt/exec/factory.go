@@ -90,6 +90,9 @@ const (
 	// PlanFlagContainsUpsert is set if at least one UPSERT stmt is found in the
 	// whole plan.
 	PlanFlagContainsUpsert
+
+	// PlanFlagIsCallProcedure is set if the statement is a procedure call.
+	PlanFlagIsCallProcedure
 )
 
 // IsSet returns true if the receiver has all of the given flags set.

@@ -2934,12 +2934,17 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
 		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 			ctx, err = ex.makeExecPlan(ctx, planner)
-			if flags := planner.curPlan.flags; err == nil && (flags.IsSet(planFlagContainsMutation) || flags.IsSet(planFlagIsDDL)) {
+			if flags := planner.curPlan.flags; err == nil && (flags.IsSet(planFlagContainsMutation) || flags.IsSet(planFlagIsDDL) || flags.IsSet(planFlagIsCallProcedure)) {
 				telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
 				// We don't allow mutations in a pausable portal. Set it back to
 				// an un-pausable (normal) portal.
 				planner.pausablePortal.pauseInfo = nil
 				err = res.RevokePortalPausability()
+				// If this plan is a procedure call, we don't even execute it but
+				// just early exit.
+				if flags.IsSet(planFlagIsCallProcedure) {
+					err = errors.CombineErrors(err, ErrStmtNotSupportedForPausablePortal)
+				}
 				defer planner.curPlan.close(ctx)
 			} else {
 				ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan

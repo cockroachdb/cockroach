@@ -1441,3 +1441,104 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 subtest end
+
+subtest disallow_call_procedure_with_pausable_portal
+
+send crdb_only
+Query {"String": "SET multiple_active_portals_enabled = 'true';"}
+Query {"String": "CREATE TABLE tbl (x timestamp, y int);"}
+Query {"String": "CREATE OR REPLACE PROCEDURE insert_one() LANGUAGE PLpgSQL AS $$ BEGIN INSERT INTO tbl (x, y) VALUES (now(), 1); END; $$;"}
+----
+
+until crdb_only
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE PROCEDURE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Parse {"Name": "foo1", "Query": "CALL insert_one()"}
+Bind {"DestinationPortal": "foo1", "PreparedStatement": "foo1"}
+Execute {"Portal": "foo1", "MaxRows": 100}
+Sync
+----
+
+until crdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/dev"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# If calling this procedure without `"MaxRows": 100`, it will work.
+send crdb_only
+Bind {"DestinationPortal": "foo1", "PreparedStatement": "foo1"}
+Execute {"Portal": "foo1"}
+Query {"String": "SELECT y FROM tbl"}
+Sync
+----
+
+until crdb_only ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"CALL"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET multiple_active_portals_enabled = 'true';"}
+Query {"String": "CREATE TABLE sensors (id STRING NOT NULL, ts TIMESTAMPTZ NOT NULL, val FLOAT8 NULL, CONSTRAINT pk PRIMARY KEY (id ASC, ts ASC));"}
+Query {"String": "CREATE TABLE sensors_summary (id STRING NOT NULL, val FLOAT8 NULL, CONSTRAINT pk PRIMARY KEY (id ASC));"}
+Query {"String": "CREATE TYPE k AS (x STRING, y FLOAT8);"}
+Query {"String": "CREATE OR REPLACE PROCEDURE fab5() LANGUAGE PLpgSQL AS $$ DECLARE i k := ('', 0.0 ); id_array k[]; BEGIN begin commit; set transaction as of system time '-5s'; SELECT array_agg((id, avg_val)) FROM (SELECT id, avg(val) as avg_val FROM sensors where now() - INTERVAL '3 days' < ts group by id) INTO id_array; end; commit; INSERT INTO sensors_summary (id, val) select (arr).x, (arr).y from (select unnest(id_array) as arr); RAISE NOTICE 'Inserted % rows', array_length(id_array, 1); END $$;"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TYPE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE PROCEDURE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Parse {"Name": "foo", "Query": "CALL fab5()"}
+Bind {"DestinationPortal": "foo", "PreparedStatement": "foo"}
+Bind {"DestinationPortal": "foo2", "PreparedStatement": "foo"}
+Execute {"Portal": "foo", "MaxRows": 100}
+Sync
+----
+
+until crdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/dev"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
