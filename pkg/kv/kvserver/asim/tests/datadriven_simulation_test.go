@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -550,7 +550,7 @@ func TestDataDriven(t *testing.T) {
 				} else {
 					var rebalanceMode int64
 					if exists := scanIfExists(t, d, "rebalance_mode", &rebalanceMode); exists {
-						kvserver.LoadBasedRebalancingMode.Override(ctx, &settingsGen.Settings.ST.SV, kvserver.LBRebalancingMode(rebalanceMode))
+						kvserverbase.LoadBasedRebalancingMode.Override(ctx, &settingsGen.Settings.ST.SV, kvserverbase.LBRebalancingMode(rebalanceMode))
 					}
 				}
 				return ""
