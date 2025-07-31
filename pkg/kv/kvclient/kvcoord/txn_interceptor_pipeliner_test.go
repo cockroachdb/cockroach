@@ -2480,6 +2480,10 @@ func (s descriptorDBRangeIterator) Error() error {
 	return nil
 }
 
+func (s descriptorDBRangeIterator) Desc() *roachpb.RangeDescriptor {
+	return &s.curDesc
+}
+
 // Test that the pipeliner rejects requests when the lock span budget is
 // exceeded, if configured to do so.
 func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
@@ -2752,8 +2756,4 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 			}
 		})
 	}
-}
-
-func (s descriptorDBRangeIterator) Desc() *roachpb.RangeDescriptor {
-	return &s.curDesc
 }
