@@ -90,7 +90,7 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 				return st
 			}(),
 			want: want{
-				format:             sstable.TableFormatPebblev5,
+				format:             sstable.TableFormatPebblev7,
 				disableValueBlocks: false,
 			},
 		},
@@ -102,7 +102,7 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 				return st
 			}(),
 			want: want{
-				format:             sstable.TableFormatPebblev5,
+				format:             sstable.TableFormatPebblev7,
 				disableValueBlocks: true,
 			},
 		},

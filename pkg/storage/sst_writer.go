@@ -82,9 +82,7 @@ func (*noopFinishAbort) Abort() {}
 // also used when constructing sstables for backups (because these sstables may
 // ultimately be ingested during online restore).
 func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstable.WriterOptions {
-	// TODO(jackson): Tie the table format to the cluster version using
-	// FormatMajorVersion.MaxTableFormat.
-	format := sstable.TableFormatPebblev5
+	format := pebbleFormatVersion(cs.Version.ActiveVersion(ctx).Version).MaxTableFormat()
 
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
 	// By default, compress with the algorithm used for L6 in a Pebble store.
@@ -119,9 +117,7 @@ func makeSSTRewriteOptions(
 // scanned and their keys inserted into new sstables (NB: constructed using
 // MakeIngestionSSTWriter) that ultimately are uploaded to object storage.
 func MakeTransportSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer) SSTWriter {
-	// TODO(jackson): Tie the table format to the cluster version using
-	// FormatMajorVersion.MaxTableFormat.
-	format := sstable.TableFormatPebblev5
+	format := pebbleFormatVersion(cs.Version.ActiveVersion(ctx).Version).MaxTableFormat()
 
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
 
