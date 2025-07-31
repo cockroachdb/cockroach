@@ -229,7 +229,8 @@ func TestDataDriven(t *testing.T) {
 				// Catch tests that set unrealistically small or unrealistically large
 				// CPU consumptions. This isn't exact because it doesn't account for
 				// replication, but it's close enough.
-				approxVCPUs := (rate * (float64(requestCPUPerAccess)*rwRatio + float64(raftCPUPerAccess)*(1.0-rwRatio))) / 1e9
+				// NB: writes also consume requestCPUPerAccess.
+				approxVCPUs := (rate * (float64(requestCPUPerAccess) + float64(raftCPUPerAccess)*(1.0-rwRatio))) / 1e9
 				// Ditto for writes. Here too we don't account for replication. Note
 				// that at least under uniform writes, real clusters can have a write
 				// amp that easily surpasses 20, so writing at 40mb/s to a small set
