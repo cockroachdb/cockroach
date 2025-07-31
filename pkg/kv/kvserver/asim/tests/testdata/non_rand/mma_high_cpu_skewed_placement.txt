@@ -27,22 +27,22 @@ OK
 
 plot stat=cpu sample=1
 ----
-last store values: [s1=14767, s2=14600, s3=14511, s4=14474, s5=14351, s6=14342, s7=14413] (stddev=139.68, mean=14494.00, sum=101458)
-mma_high_cpu_skewed_placement_1_cpu.png (d7cf433062fa8013)
+last store values: [s1=14752, s2=14661, s3=14420, s4=14406, s5=14355, s6=14440, s7=14420] (stddev=139.07, mean=14493.43, sum=101454)
+mma_high_cpu_skewed_placement_1_cpu.png (7a0a24d5aabb9360)
 
 plot stat=write_bytes_per_second
 ----
-last store values: [s1=4991, s2=3576, s3=2152, s4=1414, s5=941, s6=951, s7=945] (stddev=1463.70, mean=2138.57, sum=14970)
-mma_high_cpu_skewed_placement_1_write_bytes_per_second.png (13424a5015478d67)
+last store values: [s1=4761, s2=3331, s3=1887, s4=1432, s5=1444, s6=951, s7=1179] (stddev=1291.46, mean=2140.71, sum=14985)
+mma_high_cpu_skewed_placement_1_write_bytes_per_second.png (a5f861263709501e)
 
 plot stat=replicas sample=1
 ----
-initial store values: [s1=21, s2=17, s3=11, s4=4, s5=4, s6=4, s7=2] (stddev=6.93, mean=9.00, sum=63)
-last store values: [s1=21, s2=15, s3=9, s4=6, s5=4, s6=4, s7=4] (stddev=6.14, mean=9.00, sum=63)
-mma_high_cpu_skewed_placement_1_replicas.png (575aad6bcf249fd7)
+initial store values: [s1=21, s2=17, s3=10, s4=6, s5=4, s6=3, s7=2] (stddev=6.85, mean=9.00, sum=63)
+last store values: [s1=20, s2=14, s3=8, s4=6, s5=6, s6=4, s7=5] (stddev=5.42, mean=9.00, sum=63)
+mma_high_cpu_skewed_placement_1_replicas.png (566ee5c60ea021a4)
 
 plot stat=leases sample=1
 ----
-initial store values: [s1=11, s2=5, s3=3, s4=0, s5=1, s6=1, s7=0] (stddev=3.66, mean=3.00, sum=21)
+initial store values: [s1=11, s2=5, s3=2, s4=2, s5=0, s6=1, s7=0] (stddev=3.63, mean=3.00, sum=21)
 last store values: [s1=3, s2=3, s3=3, s4=3, s5=3, s6=3, s7=3] (stddev=0.00, mean=3.00, sum=21)
-mma_high_cpu_skewed_placement_1_leases.png (feacb28c84336b4f)
+mma_high_cpu_skewed_placement_1_leases.png (8cf2cdb808fd55cf)

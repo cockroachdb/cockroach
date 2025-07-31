@@ -35,17 +35,17 @@ mma_high_write_uniform_cpu_1_cpu.png (ee5994f0e5949397)
 
 plot stat=write_bytes_per_second
 ----
-last store values: [s1=5987749, s2=6014369, s3=5995794, s4=5994510, s5=6013338, s6=5991392, s7=5995224, s8=6010245, s9=5993349, s10=5999974] (stddev=9092.56, mean=5999594.40, sum=59995944)
-mma_high_write_uniform_cpu_1_write_bytes_per_second.png (981640536be8ab40)
+last store values: [s1=5987983, s2=5994822, s3=5992147, s4=6010824, s5=5991846, s6=5993816, s7=5993780, s8=6013651, s9=5996138, s10=6012394] (stddev=9123.97, mean=5998740.10, sum=59987401)
+mma_high_write_uniform_cpu_1_write_bytes_per_second.png (b202f5d92a24fba7)
 
 plot stat=replicas
 ----
-initial store values: [s1=39, s2=31, s3=23, s4=17, s5=13, s6=13, s7=13, s8=13, s9=9, s10=9] (stddev=9.48, mean=18.00, sum=180)
+initial store values: [s1=39, s2=33, s3=23, s4=16, s5=13, s6=12, s7=11, s8=11, s9=11, s10=11] (stddev=9.76, mean=18.00, sum=180)
 last store values: [s1=18, s2=18, s3=18, s4=18, s5=18, s6=18, s7=18, s8=18, s9=18, s10=18] (stddev=0.00, mean=18.00, sum=180)
-mma_high_write_uniform_cpu_1_replicas.png (03be80bde4915e53)
+mma_high_write_uniform_cpu_1_replicas.png (49d48c00eacd014d)
 
 plot stat=leases
 ----
-initial store values: [s1=18, s2=10, s3=6, s4=4, s5=4, s6=4, s7=4, s8=4, s9=3, s10=3] (stddev=4.45, mean=6.00, sum=60)
-last store values: [s1=12, s2=8, s3=4, s4=4, s5=4, s6=4, s7=5, s8=6, s9=7, s10=6] (stddev=2.41, mean=6.00, sum=60)
-mma_high_write_uniform_cpu_1_leases.png (a3ba2736c35aa9b4)
+initial store values: [s1=19, s2=11, s3=6, s4=3, s5=3, s6=3, s7=4, s8=3, s9=4, s10=4] (stddev=4.92, mean=6.00, sum=60)
+last store values: [s1=10, s2=6, s3=6, s4=3, s5=6, s6=4, s7=4, s8=6, s9=9, s10=6] (stddev=2.05, mean=6.00, sum=60)
+mma_high_write_uniform_cpu_1_leases.png (c3f7bcfd6ffdd5d2)

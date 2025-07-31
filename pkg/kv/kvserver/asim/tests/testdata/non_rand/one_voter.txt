@@ -12,14 +12,14 @@ OK
 
 plot stat=replicas
 ----
-initial store values: [s1=50, s2=50] (stddev=0.00, mean=50.00, sum=100)
-last store values: [s1=50, s2=50] (stddev=0.00, mean=50.00, sum=100)
-one_voter_1_replicas.png (079890acdf6dfba9)
+initial store values: [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
+last store values: [s1=51, s2=49] (stddev=1.00, mean=50.00, sum=100)
+one_voter_1_replicas.png (0712b9e5ea09ce1f)
 
 plot stat=leases
 ----
-initial store values: [s1=50, s2=50] (stddev=0.00, mean=50.00, sum=100)
-last store values: [s1=50, s2=50] (stddev=0.00, mean=50.00, sum=100)
-one_voter_1_leases.png (079890acdf6dfba9)
+initial store values: [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
+last store values: [s1=51, s2=49] (stddev=1.00, mean=50.00, sum=100)
+one_voter_1_leases.png (0712b9e5ea09ce1f)
 
 # vim:ft=sh
