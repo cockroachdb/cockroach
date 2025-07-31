@@ -314,7 +314,7 @@ func TestDataDriven(t *testing.T) {
 				var nodes = 3
 				var storesPerNode = 1
 				var storeByteCapacity int64 = 256 << 30 /* 256 GiB  */
-				var nodeCPURateCapacity int64
+				var nodeCPURateCapacity int64 = 8 * 1e9 // 8 vcpus
 				var region []string
 				var nodesPerRegion []int
 				scanIfExists(t, d, "nodes", &nodes)
@@ -334,9 +334,13 @@ func TestDataDriven(t *testing.T) {
 				var buf strings.Builder
 				if c := float64(nodeCPURateCapacity) / 1e9; c < 1 {
 					// The load is very small, which is likely an accident.
+					// TODO(mma): fix up the tests that trigger this warning.
+					// TODO(mma): print a warning whenever the measured CPU utilization
+					// on a node exceeds this capacity, as that's likely not what the test
+					// intended.
 					_, _ = fmt.Fprintf(&buf, "WARNING: node CPU capacity of ≈%.2f cores is likely accidental\n", c)
 				}
-				return ""
+				return buf.String()
 			case "load_cluster":
 				var cfg string
 				scanMustExist(t, d, "config", &cfg)

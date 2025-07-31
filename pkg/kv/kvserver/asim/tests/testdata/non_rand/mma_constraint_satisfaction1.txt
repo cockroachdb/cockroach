@@ -5,6 +5,7 @@ skip_under_ci
 # a(n1.n2) b(n3,n4) c(n5) d(n6-n9)
 gen_cluster nodes=9 region=(a,b,c,d) nodes_per_region=(3,2,1,3) node_cpu_rate_capacity=50000
 ----
+WARNING: node CPU capacity of ≈0.00 cores is likely accidental
 
 # specify non-voters
 # (s1-3: region a) (s4-5: region b) (s6: region c) (s7-9: region d)
