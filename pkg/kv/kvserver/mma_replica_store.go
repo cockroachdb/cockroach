@@ -124,10 +124,10 @@ func (mr *mmaReplica) isLeaseholderWithDescAndConfig(
 	return
 }
 
-// constructMMAUpdate constructs the mmaprototype.StoreIDAndReplicaState from
+// constructRangeMsgReplicas constructs the mmaprototype.StoreIDAndReplicaState from
 // the range descriptor. This method is only valid when called on the
 // leaseholder replica.
-func constructMMAUpdate(
+func constructRangeMsgReplicas(
 	desc *roachpb.RangeDescriptor, raftStatus *raft.Status, leaseholderReplicaStoreID roachpb.StoreID,
 ) []mmaprototype.StoreIDAndReplicaState {
 	if raftStatus == nil && buildutil.CrdbTestBuild {
@@ -208,7 +208,7 @@ func (mr *mmaReplica) tryConstructMMARangeMsg(
 		}
 	}
 	// At this point, we know r is the leaseholder replica.
-	replicas := constructMMAUpdate(desc, raftStatus, r.StoreID() /*leaseholderReplicaStoreID*/)
+	replicas := constructRangeMsgReplicas(desc, raftStatus, r.StoreID() /*leaseholderReplicaStoreID*/)
 	rLoad := mr.mmaRangeLoad()
 	if mr.maybePromiseSpanConfigUpdate() {
 		return true, false, mmaprototype.RangeMsg{
