@@ -244,7 +244,7 @@ func cgroupFileToUint64(filepath, desc string) (res uint64, err error) {
 	if err != nil {
 		return 0, errors.Wrapf(err, "error when parsing %s from cgroup v1 at %s", desc, filepath)
 	}
-	return res, err
+	return res, nil
 }
 
 func cgroupFileToInt64(filepath, desc string) (res int64, err error) {
@@ -271,7 +271,7 @@ func detectCPUQuotaInV1(cRoot string) (period, quota int64, err error) {
 		return 0, 0, err
 	}
 
-	return period, quota, err
+	return period, quota, nil
 }
 
 func detectCPUUsageInV1(cRoot string) (stime, utime uint64, err error) {
@@ -286,7 +286,7 @@ func detectCPUUsageInV1(cRoot string) (stime, utime uint64, err error) {
 		return 0, 0, err
 	}
 
-	return stime, utime, err
+	return stime, utime, nil
 }
 
 func detectCPUQuotaInV2(cRoot string) (period, quota int64, err error) {

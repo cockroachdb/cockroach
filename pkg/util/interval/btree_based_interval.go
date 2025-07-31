@@ -993,10 +993,10 @@ func (c *copyOnWriteContext) freeNode(n *node) freeType {
 	return ftNotOwned
 }
 
-func (t *btree) Insert(e Interface, fast bool) (err error) {
+func (t *btree) Insert(e Interface, fast bool) error {
 	// t.metrics("Insert")
-	if err = isValidInterface(e); err != nil {
-		return
+	if err := isValidInterface(e); err != nil {
+		return err
 	}
 
 	if t.root == nil {
@@ -1027,19 +1027,19 @@ func (t *btree) Insert(e Interface, fast bool) (err error) {
 	if out == nil {
 		t.length++
 	}
-	return
+	return nil
 }
 
-func (t *btree) Delete(e Interface, fast bool) (err error) {
+func (t *btree) Delete(e Interface, fast bool) error {
 	// t.metrics("Delete")
-	if err = isValidInterface(e); err != nil {
-		return
+	if err := isValidInterface(e); err != nil {
+		return err
 	}
 	if !t.overlappable(e.Range()) {
-		return
+		return nil
 	}
 	t.delete(e, removeItem, fast)
-	return
+	return nil
 }
 
 func (t *btree) delete(e Interface, typ toRemove, fast bool) Interface {

@@ -120,7 +120,7 @@ func (s *sqlRowWriter) UpdateRow(
 	if rowsAffected != 1 {
 		return errStalePreviousValue
 	}
-	return err
+	return nil
 }
 
 func newSQLRowWriter(

@@ -73,7 +73,7 @@ func (r *sqlRows) Next(values []driver.Value) error {
 	// After the first row was received, we want to delay all
 	// further notices until the end of execution.
 	r.conn.delayNotices = true
-	return err
+	return nil
 }
 
 // NextResultSet prepares the next result set for reading.

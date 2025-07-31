@@ -1204,7 +1204,7 @@ func (p *planner) ResolveMutableTableDescriptorExAllowNoPrimaryKey(
 		return catalog.ResolvedObjectPrefix{}, nil, err
 	}
 
-	return prefix, table, err
+	return prefix, table, nil
 }
 
 // See ResolveUncachedTableDescriptor.

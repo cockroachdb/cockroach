@@ -343,7 +343,7 @@ func (vdg *validationDescGetterImpl) GetTypeDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	return descriptor, err
+	return descriptor, nil
 }
 
 func (vdg *validationDescGetterImpl) GetFunctionDescriptor(

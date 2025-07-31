@@ -63,17 +63,18 @@ func parseAuthMethod(sourceStr string) (authMethod string, idp string, err error
 	return "", "", errors.Newf("PROVISIONSRC %q was not prefixed with any valid auth methods %q", sourceStr, supportedProvisioningMethods)
 }
 
-func parseIDP(idp string) (u *url.URL, err error) {
+func parseIDP(idp string) (*url.URL, error) {
 	if len(idp) == 0 {
 		return nil, errors.Newf("PROVISIONSRC IDP cannot be empty")
 	}
-	if u, err = url.Parse(idp); err != nil {
+	u, err := url.Parse(idp)
+	if err != nil {
 		return nil, errors.Wrapf(err, "provided IDP %q in PROVISIONSRC is non parseable", idp)
 	}
 	if len(u.Port()) != 0 || u.Opaque != "" {
 		return nil, errors.Newf("unknown PROVISIONSRC IDP url format in %q", idp)
 	}
-	return
+	return u, nil
 }
 
 func (source *Source) Size() int {

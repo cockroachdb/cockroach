@@ -3624,12 +3624,12 @@ func (tssi *tableSpanStatsIterator) fetchSpanStats(ctx context.Context) (bool, e
 	// If we have spans, request span stats
 	if len(spans) > 0 {
 		tssi.currStatsResponse, err = tssi.p.SpanStats(ctx, spans)
+		if err != nil {
+			return false, err
+		}
 	}
 
-	if err != nil {
-		return false, err
-	}
-	return ok, err
+	return ok, nil
 }
 
 // Values implements the eval.ValueGenerator interface.

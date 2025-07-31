@@ -4265,7 +4265,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		associateWithPlanNode(&plan.PhysicalPlan)
 	}
 
-	return plan, err
+	return plan, nil
 }
 
 // wrapPlan produces a DistSQL processor for an arbitrary planNode. This is

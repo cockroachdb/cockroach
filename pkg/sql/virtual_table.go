@@ -278,13 +278,12 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 		return errors.AssertionFailedf("unexpected join type for virtual lookup join: %s", v.joinType.String())
 	}
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
-	var err error
 	db, err := params.p.byNameGetterBuilder().Get().Database(params.ctx, v.dbName)
 	if err != nil {
 		return err
 	}
 	v.db = db
-	return err
+	return nil
 }
 
 // Next implements the planNode interface.

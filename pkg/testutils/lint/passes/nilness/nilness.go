@@ -78,7 +78,7 @@ type analyzerConfig struct {
 }
 
 var crdbConfig = analyzerConfig{
-	reportDegenerateIfConditions: false,
+	reportDegenerateIfConditions: true,
 	argExtractors: map[string]argExtractor{
 		"github.com/cockroachdb/errors.Handled":                          firstArg,
 		"github.com/cockroachdb/errors.HandledWithMessage":               firstArg,
@@ -130,6 +130,10 @@ func (a *analyzerConfig) run(pass *analysis.Pass) (interface{}, error) {
 	}
 	return nil, nil
 }
+
+var errorType = types.Universe.Lookup("error").Type()
+
+const constNilName = "nil:error"
 
 func (a *analyzerConfig) runFunc(pass *analysis.Pass, fn *ssa.Function) {
 	reportf := func(category string, pos token.Pos, format string, args ...interface{}) {
@@ -213,6 +217,19 @@ func (a *analyzerConfig) runFunc(pass *analysis.Pass, fn *ssa.Function) {
 			case *ssa.Panic:
 				if nilnessOf(stack, instr.X) == isnil {
 					reportf("nilpanic", instr.Pos(), "panic with nil value")
+				}
+			}
+		}
+
+		for _, instr := range b.Instrs {
+			switch instr := instr.(type) {
+			case *ssa.Return:
+				for _, retVal := range instr.Results {
+					if retVal.Type() == errorType && retVal.Name() != constNilName {
+						if nilnessOf(stack, retVal) == isnil {
+							reportf("nilreturn", instr.Pos(), "return with non-constant, known-nil")
+						}
+					}
 				}
 			}
 		}

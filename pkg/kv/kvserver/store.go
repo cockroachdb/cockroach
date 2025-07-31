@@ -3985,7 +3985,7 @@ func (s *Store) AllocatorCheckRange(
 
 	// In the case that the action does not require a target, return immediately.
 	if !(action.Add() || action.Replace()) {
-		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
+		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), nil
 	}
 
 	filteredVoters, filteredNonVoters, replacing, nothingToDo, err :=

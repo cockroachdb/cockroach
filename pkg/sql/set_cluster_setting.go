@@ -664,10 +664,10 @@ func setVersionSetting(
 			// servers present at the time of the settings update, matches the
 			// set that was present when the fence bump occurred (see comment in
 			// upgrademanager.Migrate() for more details).
-			if err = postSettingValidate(ctx, txn); err != nil {
+			if err := postSettingValidate(ctx, txn); err != nil {
 				return err
 			}
-			return err
+			return nil
 		})
 	}
 

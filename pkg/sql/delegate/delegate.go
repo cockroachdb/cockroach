@@ -217,7 +217,7 @@ func (d *delegator) parse(sql string) (tree.Statement, error) {
 		return s.AST, err
 	}
 	d.evalCtx.Planner.MaybeReallocateAnnotations(s.NumAnnotations)
-	return s.AST, err
+	return s.AST, nil
 }
 
 // We avoid the cache so that we can observe the details without
@@ -288,7 +288,7 @@ func (d *delegator) getCommentQuery(
 	commentJoin := fmt.Sprintf(`
 			LEFT JOIN
 				(
-					SELECT 
+					SELECT
 						objoid, description as comment
 					FROM
 						%s

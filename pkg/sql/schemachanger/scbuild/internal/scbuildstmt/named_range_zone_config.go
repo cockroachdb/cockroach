@@ -160,7 +160,7 @@ func (rzo *namedRangeZoneConfigObj) getZoneConfig(
 	}
 	// If the zone config exists, return.
 	if zc != nil {
-		return zc, err
+		return zc, nil
 	}
 
 	// Otherwise, no zone config for this ID. Retrieve the default zone config,

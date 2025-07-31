@@ -310,7 +310,7 @@ func (kr *KeyRewriter) rewriteKey(
 		rekeyed = tmp
 	}
 
-	return rekeyed, ok, err
+	return rekeyed, ok, nil
 }
 
 // checkAndRewriteTableKey rewrites the table IDs in the key. It assumes that

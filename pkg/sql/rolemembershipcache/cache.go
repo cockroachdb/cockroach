@@ -278,7 +278,7 @@ func (m *MembershipCache) GetRolesForMember(
 				if err != nil {
 					return err
 				}
-				return err
+				return nil
 			})
 			if err != nil {
 				return nil, err

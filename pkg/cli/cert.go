@@ -403,7 +403,7 @@ func encodeURI(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return "", err
 		}
-		return string(content), err
+		return string(content), nil
 	}
 
 	if encodeURIOpts.caCertPath != "" {

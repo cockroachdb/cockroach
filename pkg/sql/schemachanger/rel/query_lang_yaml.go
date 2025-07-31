@@ -61,7 +61,7 @@ func exprToString(e expr) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), err
+	return strings.TrimSpace(string(out)), nil
 }
 
 func (f tripleDecl) MarshalYAML() (interface{}, error) {

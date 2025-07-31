@@ -518,7 +518,7 @@ func toTSQuery(config string, interpose tsOperator, input string) (TSQuery, erro
 			return query, pgerror.Newf(pgcode.Syntax, "text-search query doesn't contain lexemes: %s", input)
 		}
 	}
-	return query, err
+	return query, nil
 }
 
 func cleanupStopwords(query TSQuery) TSQuery {

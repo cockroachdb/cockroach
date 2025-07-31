@@ -55,7 +55,7 @@ func SpatialObjectToEWKT(so geopb.SpatialObject, maxDecimalDigits int) (geopb.EW
 	if t.SRID() != 0 {
 		ret = fmt.Sprintf("SRID=%d;%s", t.SRID(), ret)
 	}
-	return geopb.EWKT(ret), err
+	return geopb.EWKT(ret), nil
 }
 
 // SpatialObjectToWKB transforms a given SpatialObject to WKB.

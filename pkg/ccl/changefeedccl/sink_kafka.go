@@ -306,7 +306,7 @@ func (s *kafkaSink) newClient(config *sarama.Config) (kafkaClient, error) {
 		return nil, pgerror.Wrapf(err, pgcode.CannotConnectNow,
 			`connecting to kafka: %s`, s.bootstrapAddrs)
 	}
-	return client, err
+	return client, nil
 }
 
 func (s *kafkaSink) newAsyncProducer(client kafkaClient) (sarama.AsyncProducer, error) {

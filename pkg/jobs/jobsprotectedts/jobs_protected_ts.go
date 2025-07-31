@@ -109,10 +109,10 @@ func encodeID(id int64) []byte {
 }
 
 // DecodeID decodes ID stored in the PTS record.
-func DecodeID(meta []byte) (id int64, err error) {
-	id, err = strconv.ParseInt(string(meta), 10, 64)
+func DecodeID(meta []byte) (int64, error) {
+	id, err := strconv.ParseInt(string(meta), 10, 64)
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed to interpret meta %q as bytes", meta)
 	}
-	return id, err
+	return id, nil
 }

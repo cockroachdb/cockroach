@@ -65,7 +65,7 @@ func (u *SinkURL) ConsumeBool(param string, dest *bool) (wasSet bool, err error)
 		if err != nil {
 			return false, errors.Wrapf(err, "param %s must be a bool", param)
 		}
-		return wasSet, err
+		return wasSet, nil
 	}
 	return false, nil
 }

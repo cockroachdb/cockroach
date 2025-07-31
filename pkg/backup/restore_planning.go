@@ -1364,7 +1364,7 @@ func restorePlanHook(
 				if err != nil {
 					return nil, err
 				}
-				return &tid, err
+				return &tid, nil
 			}()
 			if err != nil {
 				return nil, nil, false, err

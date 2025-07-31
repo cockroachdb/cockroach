@@ -443,7 +443,7 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 
 	// Block until the initial pod watcher client stream is constructed.
 	waitInit.Wait()
-	return err
+	return nil
 }
 
 // updateTenantPodEntry keeps tenant directory entries up-to-date by handling pod

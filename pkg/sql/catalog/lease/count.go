@@ -155,7 +155,7 @@ func countLeasesNonMultiRegion(
 	ctx context.Context, txn isql.Txn, at hlc.Timestamp, whereClauses []string,
 ) (countDetail, error) {
 	stmt := fmt.Sprintf(
-		`SELECT %[1]s FROM system.public.lease AS OF SYSTEM TIME '%[2]s' WHERE 
+		`SELECT %[1]s FROM system.public.lease AS OF SYSTEM TIME '%[2]s' WHERE
 crdb_region=$2 AND %[3]s`,
 		getCountLeaseColumns(),
 		at.AsOfSystemTime(),
@@ -280,5 +280,5 @@ func handleRegionLivenessErrors(
 		}
 		return err
 	}
-	return err
+	return nil
 }

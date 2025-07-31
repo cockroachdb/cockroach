@@ -1140,11 +1140,10 @@ func (r *Replica) leaseGoodToGoRLocked(
 ) (kvserverpb.LeaseStatus, error) {
 	st := r.leaseStatusForRequest(ctx, now, reqTS, r.mu.minLeaseProposedTS,
 		r.mu.minValidObservedTimestamp, r.shMu.state.Lease, r.raftBasicStatusRLocked())
-	err := r.leaseGoodToGoForStatus(ctx, now, reqTS, st, r.descRLocked())
-	if err != nil {
+	if err := r.leaseGoodToGoForStatus(ctx, now, reqTS, st, r.descRLocked()); err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
-	return st, err
+	return st, nil
 }
 
 func (r *Replica) leaseGoodToGoForStatus(

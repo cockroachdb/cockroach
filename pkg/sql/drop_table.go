@@ -166,7 +166,7 @@ func (p *planner) prepareDrop(
 		return nil, err
 	}
 	if tableDesc == nil {
-		return nil, err
+		return nil, nil
 	}
 	if err := p.canDropTable(ctx, tableDesc, true /* checkOwnership */); err != nil {
 		return nil, err

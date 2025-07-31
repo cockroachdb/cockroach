@@ -2372,7 +2372,7 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*eval.AsOfSy
 		return nil, err
 	}
 	asOfRet.ForBackfill = forBackfill
-	return &asOfRet, err
+	return &asOfRet, nil
 }
 
 // isSavepoint returns true if ast is a SAVEPOINT statement.

@@ -488,7 +488,7 @@ func newBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *b
 				// ensue.
 				return nil, err
 			}
-			return repl, err
+			return repl, nil
 		},
 	}
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}

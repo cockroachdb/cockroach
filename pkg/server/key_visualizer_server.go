@@ -82,7 +82,7 @@ func (s *KeyVisualizerServer) getSamplesFromFanOut(
 		if err != nil {
 			return nil, err
 		}
-		return samples, err
+		return samples, nil
 	}
 
 	globalSamples := make(map[int64][]keyvispb.Sample)

@@ -121,7 +121,7 @@ func (t *tenantFanoutClient) nodesList(ctx context.Context) (*serverpb.NodesList
 		}
 		resp.Nodes = append(resp.Nodes, nodeDetails)
 	}
-	return &resp, err
+	return &resp, nil
 }
 
 var _ ServerIterator = &tenantFanoutClient{}

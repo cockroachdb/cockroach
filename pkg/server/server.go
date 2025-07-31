@@ -1411,7 +1411,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		inspectzServer:            inspectzServer,
 	}
 
-	return lateBoundServer, err
+	return lateBoundServer, nil
 }
 
 // newClockFromConfig creates a HLC clock from the server configuration.

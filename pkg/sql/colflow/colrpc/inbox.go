@@ -167,7 +167,7 @@ func NewInboxWithAdmissionControl(
 	}
 	i.admissionQ = admissionQ
 	i.admissionInfo = admissionInfo
-	return i, err
+	return i, nil
 }
 
 // close closes the inbox, ensuring that any call to RunWithStream will return

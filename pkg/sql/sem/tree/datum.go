@@ -2966,7 +2966,7 @@ func ParseDTimestampTZ(
 	if err != nil {
 		return nil, false, err
 	}
-	return &DTimestampTZ{Time: t}, dependsOnContext, err
+	return &DTimestampTZ{Time: t}, dependsOnContext, nil
 }
 
 // DZeroTimestampTZ is the zero-valued DTimestampTZ.

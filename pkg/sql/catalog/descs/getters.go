@@ -175,7 +175,7 @@ func (g MutableByIDGetter) Descs(
 	for i, desc := range descs {
 		ret[i] = desc.(catalog.MutableDescriptor)
 	}
-	return ret, err
+	return ret, nil
 }
 
 // Desc looks up a mutable descriptor by ID.

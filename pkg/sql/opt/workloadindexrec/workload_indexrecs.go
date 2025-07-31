@@ -95,7 +95,7 @@ func collectIndexRecs(
 		indexes := tree.MustBeDArray(indexRecs.Cur()[0])
 		fingerprintId, e := sqlstatsutil.DatumToUint64(indexRecs.Cur()[1])
 		if e != nil {
-			return cis, dis, err
+			return cis, dis, e
 		}
 		for _, index := range indexes.Array {
 			indexStr, ok := index.(*tree.DString)

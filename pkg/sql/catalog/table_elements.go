@@ -1087,7 +1087,7 @@ func FindTargetIndexNameByID(desc TableDescriptor, indexID descpb.IndexID) (stri
 	if err != nil {
 		return "", err
 	}
-	return index.GetName(), err
+	return index.GetName(), nil
 }
 
 // ColumnNamesForIDs returns the names for the given column IDs, or an error

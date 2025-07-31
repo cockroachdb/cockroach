@@ -1644,7 +1644,7 @@ func filterAttempt(
 			return false, err
 		}
 		if ok {
-			return true, err
+			return true, nil
 		}
 	}
 	s.overloadIdxs = before

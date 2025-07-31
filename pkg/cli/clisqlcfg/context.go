@@ -99,18 +99,20 @@ func (c *Context) LoadDefaults(cmdOut, cmdErr *os.File) {
 // populated into the configuration fields.
 // The specified input stream is only used if the configuration
 // does not otherwise specify a file to read from.
-func (c *Context) Open(defaultInput *os.File) (closeFn func(), err error) {
+func (c *Context) Open(defaultInput *os.File) (func(), error) {
 	if c.opened {
 		return nil, errors.AssertionFailedf("programming error: Open called twice")
 	}
 
+	var closeFn func()
+	var err error
 	c.cmdIn, closeFn, err = c.getInputFile(defaultInput)
 	if err != nil {
-		return nil, err
+		return closeFn, err
 	}
 	c.checkInteractive()
 	c.opened = true
-	return closeFn, err
+	return closeFn, nil
 }
 
 // getInputFile establishes where we are reading from.

@@ -194,7 +194,7 @@ func ResolveZoneSpecifier(
 	if err != nil {
 		return 0, err
 	}
-	return tableID, err
+	return tableID, nil
 }
 
 func (c Constraint) String() string {

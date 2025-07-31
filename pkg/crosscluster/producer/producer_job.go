@@ -236,7 +236,7 @@ func (p *producerJobResumer) removeJobFromTenantRecord(
 		if err := sql.UpdateTenantRecord(ctx, execCfg.Settings, txn, tenantRecord); err != nil {
 			return err
 		}
-		return err
+		return nil
 	})
 }
 

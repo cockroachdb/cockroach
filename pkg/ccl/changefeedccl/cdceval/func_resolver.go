@@ -92,7 +92,7 @@ func (rs *cdcFunctionResolver) ResolveFunctionByOID(
 	if err := checkOverloadSupported(fnName.Object(), overload); err != nil {
 		return nil, nil, err
 	}
-	return fnName, overload, err
+	return fnName, overload, nil
 }
 
 // checkOverloadsSupported verifies function overload is supported by CDC.
