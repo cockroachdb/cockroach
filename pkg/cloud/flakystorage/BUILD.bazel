@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "flakystorage",
+    srcs = [
+        "flaky_config.go",
+        "flaky_storage.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cloud/flakystorage",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/ioctx",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

@@ -1091,6 +1091,7 @@ GO_TARGETS = [
     "//pkg/cloud/externalconn/testutils:testutils",
     "//pkg/cloud/externalconn/utils:utils",
     "//pkg/cloud/externalconn:externalconn",
+    "//pkg/cloud/flakystorage:flakystorage",
     "//pkg/cloud/gcp:gcp",
     "//pkg/cloud/gcp:gcp_test",
     "//pkg/cloud/httpsink:httpsink",

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/flakystorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantio"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -85,10 +86,12 @@ func (e *externalStorageBuilder) makeExternalStorage(
 	if !e.initCalled {
 		return nil, errors.AssertionFailedf("cannot create external storage before init")
 	}
-	return cloud.MakeExternalStorage(
+	storage, err := cloud.MakeExternalStorage(
 		ctx, dest, e.conf, e.settings, e.blobClientFactory, e.db, e.limiters, e.metrics,
 		append(e.defaultOptions(), opts...)...,
 	)
+	storage = flakystorage.MaybeWrapStorage(ctx, e.settings, storage)
+	return storage, err
 }
 
 func (e *externalStorageBuilder) makeExternalStorageFromURI(
@@ -97,10 +100,12 @@ func (e *externalStorageBuilder) makeExternalStorageFromURI(
 	if !e.initCalled {
 		return nil, errors.AssertionFailedf("cannot create external storage before init")
 	}
-	return cloud.ExternalStorageFromURI(
+	storage, err := cloud.ExternalStorageFromURI(
 		ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.db, e.limiters, e.metrics,
 		append(e.defaultOptions(), opts...)...,
 	)
+	storage = flakystorage.MaybeWrapStorage(ctx, e.settings, storage)
+	return storage, err
 }
 
 func (e *externalStorageBuilder) defaultOptions() []cloud.ExternalStorageOption {
