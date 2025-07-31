@@ -45,18 +45,6 @@ func (mr *mmaReplica) mmaRangeLoad() mmaprototype.RangeLoad {
 // should be sent to mma and overrides mmaSpanConfigIsUpToDate as true. The
 // contract is: if this returns true, mmaReplica must send a fully populated
 // range message to mma.
-//
-// Ideally, this would be called within isLeaseholderWithDescAndConfig so that we
-// acquire the lock on the replica only once. However, we can't do that because,
-// at that point, it's still unclear whether the message will be sent. We only
-// want to set mmaSpanConfigIsUpToDate to true that the message will definitely
-// be sent to MMA. Technically, it should be fine since mmaSpanConfigIsUpToDate
-// would be set to true soonly after during markSpanConfigNeedsUpdate, but it
-// would be wrong if tryConstructMMARangeMsg is concurrent. Specifically, if
-// another call to tryConstructMMARangeMsg sees mmaSpanConfigIsUpToDate as true,
-// it may decide to drop the span config even though the most up-to-date span
-// config might end up being dropped. In addition, isLeaseholderWithDescAndConfig
-// would only need a read lock on the replica without this.
 func (mr *mmaReplica) maybePromiseSpanConfigUpdate() (needed bool) {
 	r := (*Replica)(mr)
 	r.mu.Lock()
@@ -68,7 +56,7 @@ func (mr *mmaReplica) maybePromiseSpanConfigUpdate() (needed bool) {
 
 // markSpanConfigNeedsUpdate marks the span config as needing an update. This is
 // called by tryConstructMMARangeMsg when it cannot construct the RangeMsg. It
-// is signaled that mma might have deleted this range state (including the span
+// signals that mma might have deleted this range state (including the span
 // config), so we need to send a full range message to mma the next time
 // mmaReplica is the leaseholder.
 func (mr *mmaReplica) markSpanConfigNeedsUpdate() {
@@ -110,7 +98,7 @@ func (mr *mmaReplica) isLeaseholderWithDescAndConfig(
 	defer r.mu.RUnlock()
 	now := r.store.Clock().NowAsClockTimestamp()
 	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
-	// TODO(wenyihu6): Alternatively, we could just read r.shMu.state.Leas` and
+	// TODO(wenyihu6): Alternatively, we could just read r.shMu.state.Lease and
 	// check if it is non-nil and call OwnedBy(r.store.StoreID()), which would be
 	// cheaper. One tradeoff is that if the lease has expired, and a new lease has
 	// not been installed in the state machine, the cheaper approach would think
@@ -124,10 +112,10 @@ func (mr *mmaReplica) isLeaseholderWithDescAndConfig(
 	return
 }
 
-// constructMMAUpdate constructs the mmaprototype.StoreIDAndReplicaState from
+// constructRangeMsgReplicas constructs the mmaprototype.StoreIDAndReplicaState from
 // the range descriptor. This method is only valid when called on the
 // leaseholder replica.
-func constructMMAUpdate(
+func constructRangeMsgReplicas(
 	desc *roachpb.RangeDescriptor, raftStatus *raft.Status, leaseholderReplicaStoreID roachpb.StoreID,
 ) []mmaprototype.StoreIDAndReplicaState {
 	if raftStatus == nil && buildutil.CrdbTestBuild {
@@ -174,6 +162,14 @@ func constructMMAUpdate(
 // Called periodically by the same entity (and must not be called concurrently).
 // If this method returned isLeaseholder=true and shouldBeSkipped=false the last
 // time, that message must have been fed to the allocator.
+//
+// Concurrency concerns:
+// Caller1 may call into maybePromiseSpanConfigUpdate() and include the SpanConfig
+// (marking it as no longer needed an update), and then Caller2 decides not to
+// include the SpanConfig in the rangeMsg. But caller2 may get ahead and call
+// into mma first with a RangeMsg that is lacking a SpanConfig and mma wouldn't
+// know how to initialize a range it knows nothing about. More thinking is needed
+// to claim this method is not racy.
 func (mr *mmaReplica) tryConstructMMARangeMsg(
 	ctx context.Context, knownStores map[roachpb.StoreID]struct{},
 ) (isLeaseholder bool, shouldBeSkipped bool, msg mmaprototype.RangeMsg) {
@@ -208,7 +204,7 @@ func (mr *mmaReplica) tryConstructMMARangeMsg(
 		}
 	}
 	// At this point, we know r is the leaseholder replica.
-	replicas := constructMMAUpdate(desc, raftStatus, r.StoreID() /*leaseholderReplicaStoreID*/)
+	replicas := constructRangeMsgReplicas(desc, raftStatus, r.StoreID() /*leaseholderReplicaStoreID*/)
 	rLoad := mr.mmaRangeLoad()
 	if mr.maybePromiseSpanConfigUpdate() {
 		return true, false, mmaprototype.RangeMsg{

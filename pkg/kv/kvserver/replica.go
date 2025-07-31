@@ -1007,7 +1007,7 @@ type Replica struct {
 		// when the range is not included in the store's leaseholder message either
 		// due to non-leaseholder replica or unknown store). The invariant is that
 		// mma must hold the latest span config of the range when the range messages
-		// sent to mma.
+		// is sent to mma.
 		mmaSpanConfigIsUpToDate bool
 	}
 
@@ -1846,8 +1846,8 @@ func (r *Replica) RaftBasicStatus() raft.BasicStatus {
 // NB: This incurs deep copies of Status.Config and Status.Progress.Inflights
 // and is not suitable for use in hot paths. See raftSparseStatusRLocked().
 //
-// TODO(wenyihu6): odd that this is returning a pointer while holding only an
-// RLock.
+// TODO(wenyihu6): returning a pointer here incurs an unnecessary heap
+// allocation. We should return raft.Status instead.
 func (r *Replica) raftStatusRLocked() *raft.Status {
 	if rg := r.mu.internalRaftGroup; rg != nil {
 		s := rg.Status()
@@ -1860,8 +1860,8 @@ func (r *Replica) raftStatusRLocked() *raft.Status {
 // Progress.Inflights which are expensive to copy, or nil if the Raft group has
 // not been initialized yet. Progress is only populated on the leader.
 //
-// TODO(wenyihu6): odd that this is returning a pointer while holding only an
-// RLock.
+// TODO(wenyihu6): returning a pointer here incurs an unnecessary heap
+// allocation. We should return raft.SparseStatus instead.
 func (r *Replica) raftSparseStatusRLocked() *raft.SparseStatus {
 	rg := r.mu.internalRaftGroup
 	if rg == nil {
