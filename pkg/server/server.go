@@ -905,9 +905,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	mmaAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
 		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
 	nodeRegistry.AddMetricStruct(mmaAllocator.Metrics())
-	allocatorSync := mmaprototypehelpers.NewAllocatorSync(storePool, mmaAllocator, func() bool {
-		return kvserver.LoadBasedRebalancingMode.Get(&st.SV) == kvserver.LBRebalancingMultiMetric
-	})
+	allocatorSync := mmaprototypehelpers.NewAllocatorSync(storePool, mmaAllocator, st)
 	g.RegisterCallback(
 		gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
 		func(_ string, content roachpb.Value, origTimestampNanos int64) {

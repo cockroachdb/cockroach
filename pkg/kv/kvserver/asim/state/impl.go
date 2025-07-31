@@ -433,9 +433,7 @@ func (s *state) AddNode() Node {
 		stores:      []StoreID{},
 		mmAllocator: mmAllocator,
 		storepool:   sp,
-		as: mmaprototypehelpers.NewAllocatorSync(sp, mmAllocator, func() bool {
-			return kvserverbase.LoadBasedRebalancingMode.Get(&s.settings.ST.SV) == kvserverbase.LBRebalancingMultiMetric
-		}),
+		as:          mmaprototypehelpers.NewAllocatorSync(sp, mmAllocator, s.settings.ST),
 	}
 	s.nodes[nodeID] = node
 	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
