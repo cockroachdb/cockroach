@@ -602,7 +602,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
 	watchDog := newSchemaChangeWatchDog(w.watchDogPool.Get(), w.logger)
-	if err := watchDog.Start(ctx, tx); err != nil {
+	if err := watchDog.Start(ctx, w.id, tx); err != nil {
 		return errors.Wrapf(err, "unable to start watch dog")
 	}
 	defer watchDog.Stop()
