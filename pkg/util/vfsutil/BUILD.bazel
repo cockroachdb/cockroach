@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "vfsutil",
+    srcs = ["copy.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/vfsutil",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_pebble//vfs"],
+)
+
+go_test(
+    name = "vfsutil_test",
+    srcs = ["copy_test.go"],
+    deps = [
+        ":vfsutil",
+        "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_stretchr_testify//require",
+    ],
+)
