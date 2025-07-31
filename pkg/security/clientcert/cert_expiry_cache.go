@@ -99,7 +99,7 @@ func (c *Cache) Upsert(ctx context.Context, user string, serial string, newExpir
 	if _, ok := c.cache[user]; !ok {
 		err := c.account.Grow(ctx, 2*GaugeSize)
 		if err != nil {
-			log.Ops.Warningf(ctx, "no memory available to cache cert expiry: %v", err)
+			log.Warningf(ctx, "no memory available to cache cert expiry: %v", err)
 			return
 		}
 		c.cache[user] = map[string]certInfo{}
