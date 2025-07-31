@@ -31,6 +31,8 @@ cockroachdb/kv:
   label: T-kv
 cockroachdb/admission-control:
   label: T-kv,A-admission-control
+cockroachdb/kv-distribution:
+  label: T-kv,A-kv-distribution
 cockroachdb/spatial:
   label: T-spatial
 cockroachdb/dev-inf:
