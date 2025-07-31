@@ -7,6 +7,7 @@
 #     rebalancing away from the store occurs.
 gen_cluster nodes=5 node_cpu_rate_capacity=90000
 ----
+WARNING: node CPU capacity of ≈0.00 cores is likely accidental
 
 setting split_queue_enabled=false
 ----

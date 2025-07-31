@@ -5,6 +5,7 @@ skip_under_ci
 
 gen_cluster nodes=2 node_cpu_rate_capacity=100000
 ----
+WARNING: node CPU capacity of ≈0.00 cores is likely accidental
 
 gen_ranges ranges=100 repl_factor=1 min_key=1 max_key=10000 placement_type=replica_placement bytes=26843545
 {s1}:1
