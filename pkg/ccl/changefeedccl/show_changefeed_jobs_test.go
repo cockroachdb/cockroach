@@ -58,6 +58,97 @@ func (d *fakeResumer) CollectProfile(context.Context, interface{}) error {
 	return nil
 }
 
+func TestShowChangefeedJobsDatabaseLevel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, stopServer := makeServer(t)
+	defer stopServer()
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	t.Run("test", func(t *testing.T) {
+		createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo INTO '%s'`, "null://")
+		var jobID jobspb.JobID
+		sqlDB.QueryRow(t, createStmt).Scan(&jobID)
+		var sinkURI, description string
+		sqlDB.QueryRow(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOB $1]", jobID).Scan(&sinkURI, &description)
+		require.Equal(t, "null://", sinkURI)
+		sqlDB.Exec(t, `UPDATE system.jobs SET description = 'CREATE DATABASE CHANGEFEED FOR d' WHERE id = $1`, jobID)
+		query := `SELECT job_id, full_table_names FROM [SHOW CHANGEFEED JOBS WITH FULL_TABLES]`
+		rowResults := sqlDB.Query(t, query)
+		rowResults.Next()
+
+		var fullTableNames []uint8
+		require.NoError(t, rowResults.Scan(&jobID, &fullTableNames))
+		require.Equal(t, "{d}", string(fullTableNames))
+	})
+
+	t.Run("actual db-level changefeed", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE db`)
+		sqlDB.Exec(t, `CREATE TABLE db.foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO db.foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO db.foo VALUES (0, 'updated')`)
+		var jobID jobspb.JobID
+		sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR DATABASE db INTO 'null://'`).Scan(&jobID)
+		var sinkURI, description string
+		sqlDB.QueryRow(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOB $1]", jobID).Scan(&sinkURI, &description)
+		require.Equal(t, "null://", sinkURI)
+	})
+
+	// testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+	// 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+	// 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	// 	createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo INTO '%s'`, "null://")
+	// 	var jobID jobspb.JobID
+	// 	sqlDB.QueryRow(t, createStmt).Scan(&jobID)
+	// 	var sinkURI, description string
+	// 	sqlDB.QueryRow(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOB $1]", jobID).Scan(&sinkURI, &description)
+	// 	require.Equal(t, "null://", sinkURI)
+
+	// create 6 tables in the db
+	// sqlDB.Exec(t, `CREATE TABLE foo1 (a INT PRIMARY KEY, b STRING)`)
+	// sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+	// sqlDB.Exec(t, `CREATE TABLE foo3 (a INT PRIMARY KEY, b STRING)`)
+	// sqlDB.Exec(t, `CREATE TABLE foo4 (a INT PRIMARY KEY, b STRING)`)
+	// sqlDB.Exec(t, `CREATE TABLE foo5 (a INT PRIMARY KEY, b STRING)`)
+	// sqlDB.Exec(t, `CREATE TABLE foo6 (a INT PRIMARY KEY, b STRING)`)
+
+	// var jobID jobspb.JobID
+	// sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR foo1, foo2, foo3, foo4, foo5, foo6 into 'null://'`).Scan(&jobID)
+	// sqlDB.Exec(t, `CREATE CHANGEFEED FOR foo1, foo2, foo3, foo4, foo5, foo6 into 'null://'`)
+	// sqlDB.Exec(t, `UPDATE system.jobs SET description = 'CREATE DATABASE CHANGEFEED FOR d' WHERE job_id = $1`, jobID)
+
+	// rowResults := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo1, foo2, foo3, foo4, foo5, foo6 into 'null://'`)
+	// if !rowResults.Next() {
+	// 	t.Fatalf("Error encountered while querying the next row: %v", rowResults.Err())
+	// }
+	// var jobID jobspb.JobID
+	// err := rowResults.Scan(&jobID)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// sqlDB.Exec(t, `UPDATE system.jobs SET description = 'CREATE DATABASE CHANGEFEED FOR d' WHERE job_id = $1`, jobID)
+
+	// var query string
+	// query = `SELECT job_id, full_table_names FROM [SHOW CHANGEFEED JOBS]`
+	// var rowResults *gosql.Rows
+	// rowResults = sqlDB.Query(t, query)
+	// // var jobID jobspb.JobID
+	// var fullTableNames []uint8
+	// rowResults.Next()
+	// require.NoError(t, rowResults.Scan(&jobID, &fullTableNames))
+	// require.Equal(t, "{d}", string(fullTableNames))
+
+	// query = `SELECT job_id, full_table_names FROM [SHOW CHANGEFEED JOBS WITH FULL_TABLES]`
+	// rowResults = sqlDB.Query(t, query)
+	// rowResults.Next()
+	// require.NoError(t, rowResults.Scan(&jobID, &fullTableNames))
+	// require.Equal(t, "{d}", string(fullTableNames))
+
+	// }
+	// cdcTest(t, testFn)
+}
 func TestShowChangefeedJobsBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
