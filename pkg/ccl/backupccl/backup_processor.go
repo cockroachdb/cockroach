@@ -309,6 +309,14 @@ type exportedSpan struct {
 	resumeKey      roachpb.Key
 }
 
+type errInjectingStorage struct {
+	cloud.ExternalStorage
+}
+
+func (e errInjectingStorage) Writer(_ context.Context, _ string) (io.WriteCloser, error) {
+	return nil, errors.New("injected error")
+}
+
 func runBackupProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -409,11 +417,18 @@ func runBackupProcessor(
 		progCh:   progCh,
 		settings: &flowCtx.Cfg.Settings.SV,
 	}
+
 	storage, err := flowCtx.Cfg.ExternalStorage(ctx, dest, cloud.WithClientName("backup"))
 	if err != nil {
 		return err
 	}
 	defer logClose(ctx, storage, "external storage")
+
+	if backupKnobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+		if fn := backupKnobs.InjectErrorsInBackupRowDataStorage; fn != nil && fn() {
+			storage = errInjectingStorage{storage}
+		}
+	}
 
 	// Start start a group of goroutines which each pull spans off of `todo` and
 	// send export requests. Any spans that encounter lock conflict errors during
@@ -707,7 +722,7 @@ func runBackupProcessor(
 							var writeErr error
 							resumeSpan.span.Key, writeErr = sink.write(ctx, ret)
 							if writeErr != nil {
-								return err
+								return writeErr
 							}
 						}
 						// Emit the stats for the processed ExportRequest.
