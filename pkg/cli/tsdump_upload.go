@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -38,6 +39,7 @@ const (
 	UploadStatusPartialSuccess = "Partial Success"
 	UploadStatusFailure        = "Failed"
 	nodeKey                    = "node_id"
+	processDeltaEnvVar         = "COCKROACH_TSDUMP_DELTA"
 )
 
 var (
@@ -117,6 +119,8 @@ type datadogWriter struct {
 	fileMutex syncutil.Mutex
 	// hasFailedRequestsInUpload tracks if any failed requests were saved during upload
 	hasFailedRequestsInUpload bool
+	// cumulativeToDeltaProcessor is used to convert cumulative counter metrics to delta metrics
+	cumulativeToDeltaProcessor *CumulativeToDeltaProcessor
 }
 
 func makeDatadogWriter(
@@ -130,17 +134,12 @@ func makeDatadogWriter(
 ) (*datadogWriter, error) {
 	currentTime := getCurrentTime()
 
-	var metricTypeMap map[string]string
-	if init {
-		// we only need to load the metric types map when the command is
-		// datadogInit. It's ok to keep it nil otherwise.
-		var err error
-		metricTypeMap, err = loadMetricTypesMap(context.Background())
-		if err != nil {
-			fmt.Printf(
-				"error loading metric types map: %v\nThis may lead to some metrics not behaving correctly on Datadog.\n", err)
-		}
+	metricTypeMap, err := loadMetricTypesMap(context.Background())
+	if err != nil {
+		fmt.Printf(
+			"error loading metric types map: %v\nThis may lead to some metrics not behaving correctly on Datadog.\n", err)
 	}
+
 	ctx := context.WithValue(
 		context.Background(),
 		datadog.ContextAPIKeys,
@@ -184,6 +183,7 @@ func makeDatadogWriter(
 		metricTypeMap:                   metricTypeMap,
 		noOfUploadWorkers:               noOfUploadWorkers,
 		isPartialUploadOfFailedRequests: isPartialUploadOfFailedRequests,
+		cumulativeToDeltaProcessor:      NewCumulativeToDeltaProcessor(),
 	}, nil
 }
 
@@ -247,6 +247,8 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 		appendTag(series, nodeKey, "0")
 	}
 
+	isSorted := true
+	var previousTimestamp int64
 	for i := 0; i < idata.SampleCount(); i++ {
 		if idata.IsColumnar() {
 			series.Points[i].Timestamp = datadog.PtrInt64(idata.TimestampForOffset(idata.Offset[i]) / 1_000_000_000)
@@ -256,7 +258,30 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 			series.Points[i].Value = datadog.PtrFloat64(idata.Samples[i].Sum)
 		}
 
+		if !isSorted {
+			// if we already found a point out of order, we can skip further checks
+			continue
+		}
+
+		// Check if timestamps are in ascending order. We cannot assume time series
+		// data is sorted because:
+		// 1. pkg/ts/tspb/timeseries.go ToInternal() explicitly states "returned slice will not be sorted"
+		// 2. pkg/storage/pebble_merge.go sortAndDeduplicateRows/Columns shows storage merge
+		//    operations can result in out-of-order data before final sorting
+		// 3. Data from different storage slabs may be interleaved during tsdump reads
+		currentTimestamp := *series.Points[i].Timestamp
+		if i > 0 && previousTimestamp > currentTimestamp {
+			isSorted = false
+		}
+		previousTimestamp = currentTimestamp
 	}
+
+	if envutil.EnvOrDefaultInt(processDeltaEnvVar, 0) == 1 {
+		if err := d.cumulativeToDeltaProcessor.processCounterMetric(series, isSorted); err != nil {
+			return nil, err
+		}
+	}
+
 	return series, nil
 }
 
@@ -415,13 +440,6 @@ func (d *datadogWriter) retryFailedRequests(fileName string) error {
 }
 
 func (d *datadogWriter) resolveMetricType(metricName string) *datadogV2.MetricIntakeType {
-	if !d.init {
-		// in this is not datadogInit command, we don't need to resolve the metric
-		// type. We can just return DatadogSeriesTypeUnknown. Datadog only expects
-		// us to send the type information only once.
-		return datadogV2.METRICINTAKETYPE_UNSPECIFIED.Ptr()
-	}
-
 	typeLookupKey := strings.TrimPrefix(metricName, "cr.store.")
 	typeLookupKey = strings.TrimPrefix(typeLookupKey, "cr.node.")
 	metricType := d.metricTypeMap[typeLookupKey]
