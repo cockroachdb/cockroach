@@ -34,26 +34,26 @@ setting split_queue_enabled=false
 # TODO(tbg): it's interesting that sma-only does better on write throughput than
 # mma-only. Looking at the graphs, the mma-only flavor is much slower in moving
 # load around. Possibly a bug?
-eval duration=25m samples=1 seed=42 cfgs=(sma-only,mma-only,both) metrics=(cpu,leases,replicas,write_bytes_per_second)
+eval duration=35m samples=1 seed=42 cfgs=(sma-only,mma-only,both) metrics=(cpu,leases,replicas,write_bytes_per_second)
 ----
-cpu#1: last:  [s1=982940936, s2=1124761473, s3=703160445, s4=419608218, s5=433166047, s6=559500704, s7=142034380, s8=283068916, s9=424915810] (stddev=302515030.44, mean=563684103.22, sum=5073156929)
+cpu#1: last:  [s1=984642922, s2=1126669982, s3=703798726, s4=419425213, s5=432156047, s6=559114683, s7=142318086, s8=283346689, s9=424209084] (stddev=303225920.55, mean=563964603.56, sum=5075681432)
 leases#1: first: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0, s7=36, s8=0, s9=0] (stddev=16.97, mean=12.00, sum=108)
 leases#1: last:  [s1=13, s2=12, s3=12, s4=17, s5=11, s6=9, s7=15, s8=10, s9=9] (stddev=2.54, mean=12.00, sum=108)
 replicas#1: first: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36, s7=36, s8=36, s9=36] (stddev=0.00, mean=36.00, sum=324)
 replicas#1: last:  [s1=36, s2=37, s3=33, s4=37, s5=36, s6=36, s7=36, s8=35, s9=38] (stddev=1.33, mean=36.00, sum=324)
-write_bytes_per_second#1: last:  [s1=5622, s2=5642, s3=5273, s4=6273, s5=6149, s6=6143, s7=6160, s8=5848, s9=6281] (stddev=333.87, mean=5932.33, sum=53391)
-artifacts[sma-only]: 8ef01f277549d66c
-cpu#1: last:  [s1=571156345, s2=574013308, s3=572240865, s4=557659843, s5=555035321, s6=558361955, s7=571461627, s8=553015044, s9=553186626] (stddev=8525740.24, mean=562903437.11, sum=5066130934)
+write_bytes_per_second#1: last:  [s1=5619, s2=5639, s3=5275, s4=6269, s5=6137, s6=6150, s7=6187, s8=5861, s9=6290] (stddev=336.10, mean=5936.33, sum=53427)
+artifacts[sma-only]: 6f86408eff3edb14
+cpu#1: last:  [s1=572909386, s2=573979147, s3=572126524, s4=557253107, s5=557048324, s6=558469521, s7=571735501, s8=555522023, s9=554214626] (stddev=8138152.97, mean=563695351.00, sum=5073258159)
 leases#1: first: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0, s7=36, s8=0, s9=0] (stddev=16.97, mean=12.00, sum=108)
 leases#1: last:  [s1=4, s2=4, s3=4, s4=40, s5=4, s6=4, s7=40, s8=4, s9=4] (stddev=14.97, mean=12.00, sum=108)
 replicas#1: first: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36, s7=36, s8=36, s9=36] (stddev=0.00, mean=36.00, sum=324)
 replicas#1: last:  [s1=28, s2=28, s3=28, s4=40, s5=40, s6=40, s7=40, s8=40, s9=40] (stddev=5.66, mean=36.00, sum=324)
-write_bytes_per_second#1: last:  [s1=3878, s2=3886, s3=3868, s4=6933, s5=6926, s6=6923, s7=7002, s8=6965, s9=6983] (stddev=1451.20, mean=5929.33, sum=53364)
-artifacts[mma-only]: 128d9476f0f4f2d8
-cpu#1: last:  [s1=843671963, s2=704595967, s3=568586424, s4=287235599, s5=581231173, s6=560335784, s7=439386168, s8=558888116, s9=556326015] (stddev=145473094.48, mean=566695245.44, sum=5100257209)
+write_bytes_per_second#1: last:  [s1=3898, s2=3891, s3=3878, s4=6939, s5=6939, s6=6929, s7=6990, s8=6964, s9=6978] (stddev=1446.16, mean=5934.00, sum=53406)
+artifacts[mma-only]: 1d73e264a60412ba
+cpu#1: last:  [s1=572415460, s2=566578888, s3=569096957, s4=556745916, s5=570328363, s6=558184663, s7=560070762, s8=557855218, s9=558141451] (stddev=5893908.39, mean=563268630.89, sum=5069417678)
 leases#1: first: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0, s7=36, s8=0, s9=0] (stddev=16.97, mean=12.00, sum=108)
-leases#1: last:  [s1=8, s2=10, s3=8, s4=15, s5=13, s6=13, s7=17, s8=12, s9=12] (stddev=2.83, mean=12.00, sum=108)
+leases#1: last:  [s1=7, s2=10, s3=8, s4=17, s5=13, s6=13, s7=16, s8=12, s9=12] (stddev=3.13, mean=12.00, sum=108)
 replicas#1: first: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36, s7=36, s8=36, s9=36] (stddev=0.00, mean=36.00, sum=324)
-replicas#1: last:  [s1=35, s2=33, s3=33, s4=36, s5=37, s6=38, s7=38, s8=36, s9=38] (stddev=1.89, mean=36.00, sum=324)
-write_bytes_per_second#1: last:  [s1=4944, s2=4976, s3=4781, s4=6189, s5=6335, s6=6594, s7=6548, s8=6274, s9=6568] (stddev=728.69, mean=5912.11, sum=53209)
-artifacts[both]: 1b274f06b29c24aa
+replicas#1: last:  [s1=36, s2=34, s3=36, s4=37, s5=36, s6=36, s7=37, s8=36, s9=36] (stddev=0.82, mean=36.00, sum=324)
+write_bytes_per_second#1: last:  [s1=5194, s2=5256, s3=5415, s4=6318, s5=6216, s6=6171, s7=6283, s8=6298, s9=6257] (stddev=461.69, mean=5934.22, sum=53408)
+artifacts[both]: 4fab04c2e6adb6a5
