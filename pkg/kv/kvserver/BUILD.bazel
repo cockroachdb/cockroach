@@ -558,6 +558,7 @@ go_test(
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
+        "//pkg/util/vfsutil",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_datadriven//:datadriven",
