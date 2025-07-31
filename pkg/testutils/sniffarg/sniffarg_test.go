@@ -46,3 +46,18 @@ func TestDo(t *testing.T) {
 	assert.Zero(t, notFound)
 
 }
+
+func TestDoBoolUnknownSingleDashFlag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// This is a regression test: in the past, `-show-logs` would trigger pflag to
+	// output the help and return an error, due to the `-h` shorthand in
+	// `-show-logs`.
+
+	args := []string{
+		"-show-logs", "-rewrite",
+	}
+	var rewrite bool
+	require.NoError(t, Do(args, "rewrite", &rewrite))
+	require.True(t, rewrite)
+}
