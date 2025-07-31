@@ -718,7 +718,6 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3)", collections...)
-	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3)", collections...)
 	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) WITH incremental_location=($4, $5, $6)",
 		append(collections, incrementals...)...)
 
@@ -747,8 +746,6 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 		[][]string{
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", full1, collections[0],
 				collections[1], collections[2])},
-			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", full1,
-				collections[0], collections[1], collections[2])},
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s') WITH OPTIONS (incremental_location = ('%s', '%s', '%s'))",
 				full1, collections[0], collections[1], collections[2], incrementals[0],
 				incrementals[1], incrementals[2])},
@@ -761,33 +758,37 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 			collections[1], collections[2])}})
 
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
-	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3)", append(collections, full1)...)
-
-	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
 	sqlDB.Exec(t, "RESTORE DATABASE data FROM $7 IN ($1, $2, "+
 		"$3) WITH incremental_location=($4, $5, $6)",
 		append(collections, incrementals[0], incrementals[1], incrementals[2], full1)...)
 
 	// Test restoring from the AOST backup
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
-	sqlDB.Exec(t, "RESTORE DATABASE data FROM LATEST IN ($1, $2, $3)", collections...)
+	sqlDB.Exec(
+		t, "RESTORE DATABASE data FROM $7 IN ($1, $2, $3) WITH incremental_location=($4, $5, $6)",
+		append(collections, incrementals[0], incrementals[1], incrementals[2], asOf1)...,
+	)
 
+	// Test restoring from LATEST IN
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
-	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3)", append(collections, asOf1)...)
+	sqlDB.Exec(
+		t, "RESTORE DATABASE data FROM LATEST IN ($1, $2, $3) WITH incremental_location=($4, $5, $6)",
+		append(collections, incrementals[0], incrementals[1], incrementals[2])...,
+	)
 
 	sqlDB.CheckQueryResults(
 		t, "SELECT description FROM crdb_internal.jobs WHERE job_type='RESTORE' ORDER BY created",
 		[][]string{
-			{fmt.Sprintf("RESTORE DATABASE data FROM '%s' IN ('%s', '%s', '%s')",
-				full1, collections[0], collections[1], collections[2])},
 			{fmt.Sprintf("RESTORE DATABASE data FROM '%s' IN ('%s', '%s', '%s') WITH OPTIONS (incremental_location = ('%s', '%s', '%s'))",
 				full1, collections[0], collections[1], collections[2],
 				incrementals[0], incrementals[1], incrementals[2])},
-			{fmt.Sprintf("RESTORE DATABASE data FROM '%s' IN ('%s', '%s', '%s')",
-				asOf1, collections[0], collections[1], collections[2])},
+			{fmt.Sprintf("RESTORE DATABASE data FROM '%s' IN ('%s', '%s', '%s') WITH OPTIONS (incremental_location = ('%s', '%s', '%s'))",
+				asOf1, collections[0], collections[1], collections[2],
+				incrementals[0], incrementals[1], incrementals[2])},
 			// and again from LATEST IN...
-			{fmt.Sprintf("RESTORE DATABASE data FROM '%s' IN ('%s', '%s', '%s')",
-				asOf1, collections[0], collections[1], collections[2])},
+			{fmt.Sprintf("RESTORE DATABASE data FROM '%s' IN ('%s', '%s', '%s') WITH OPTIONS (incremental_location = ('%s', '%s', '%s'))",
+				asOf1, collections[0], collections[1], collections[2],
+				incrementals[0], incrementals[1], incrementals[2])},
 		},
 	)
 }
@@ -3705,31 +3706,22 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		// to times in the middle.
 		sqlDB.Exec(t, `CREATE DATABASE err`)
 
-		// fullWithRevision covers up to ts[2], incWithRevision to ts[5] and ts[8]
-		sqlDB.ExpectErr(
-			t, "invalid RESTORE timestamp",
-			fmt.Sprintf(`RESTORE TABLE data.* FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH into_db='err'`, ts[3]),
-			fullWithRevision,
-		)
-
 		for _, i := range ts {
 
 			if i == ts[2] {
 				// fullNoRevision is _at_ ts2 so that is the time, and the only time, at
 				// which restoring it is allowed.
 				sqlDB.Exec(
-					t, fmt.Sprintf(`RESTORE TABLE data.* FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
+					t, fmt.Sprintf(
+						`RESTORE TABLE data.* FROM LATEST IN $1 AS OF SYSTEM TIME %s
+						WITH into_db='err', incremental_location=$2`, i,
+					),
 					fullNoRevision,
+					incNoRevision,
 				)
 				sqlDB.Exec(t, `DROP DATABASE err`)
 				sqlDB.Exec(t, `CREATE DATABASE err`)
 
-			} else {
-				sqlDB.ExpectErr(
-					t, "invalid RESTORE timestamp",
-					fmt.Sprintf(`RESTORE TABLE data.* FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
-					fullNoRevision,
-				)
 			}
 
 			if i == ts[2] || i == ts[5] {
@@ -3753,8 +3745,12 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 		sqlDB.ExpectErr(
 			t, "invalid RESTORE timestamp",
-			fmt.Sprintf(`RESTORE TABLE data.* FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH into_db='err'`, after),
+			fmt.Sprintf(
+				`RESTORE TABLE data.* FROM LATEST IN $1 AS OF SYSTEM TIME %s
+				WITH into_db='err', incremental_location=$2`, after,
+			),
 			fullNoRevision,
+			incNoRevision,
 		)
 	})
 
@@ -9362,13 +9358,23 @@ func TestBackupRestoreSeparateIncrementalPrefix(t *testing.T) {
 	}
 
 	for _, br := range tests {
-
+		addSpecified := func(s string) string {
+			uri, err := url.Parse(s[1 : len(s)-1]) // remove quotes
+			require.NoError(t, err)
+			uri.Path = path.Join(uri.Path, "spec-inc")
+			return "'" + uri.String() + "'"
+		}
+		// The backup index does not support multiple incremental locations off the
+		// same full chain, so we create two full backups, one for each incremental
+		// location.
 		dest := strings.Join(br.dest, ", ")
+		specIncDest := strings.Join(util.Map(br.dest, addSpecified), ", ")
 		inc := strings.Join(br.inc, ", ")
 
 		if len(br.dest) > 1 {
 			dest = "(" + dest + ")"
 			inc = "(" + inc + ")"
+			specIncDest = "(" + specIncDest + ")"
 		}
 		// create db
 		sqlDB.Exec(t, `CREATE DATABASE fkdb`)
@@ -9377,14 +9383,20 @@ func TestBackupRestoreSeparateIncrementalPrefix(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, i)
 		}
-		fb := fmt.Sprintf("BACKUP DATABASE fkdb INTO %s", dest)
-		sqlDB.Exec(t, fb)
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE fkdb INTO %s", dest))
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE fkdb INTO %s", specIncDest))
 
 		sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, 200)
 
-		sib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location=%s", dest, inc)
+		sib := fmt.Sprintf(
+			"BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location=%s",
+			specIncDest, inc,
+		)
 		sqlDB.Exec(t, sib)
-		sir := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'inc_fkdb', incremental_location=%s", dest, inc)
+		sir := fmt.Sprintf(
+			"RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'inc_fkdb', incremental_location=%s",
+			specIncDest, inc,
+		)
 		sqlDB.Exec(t, sir)
 
 		ib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s", dest)
@@ -9958,118 +9970,6 @@ func TestUserfileNormalizationIncrementalShowBackup(t *testing.T) {
 	sqlDB.Exec(t, query)
 }
 
-// TestBackupRestoreOldIncrementalDefaults tests that a call to restore
-// will correctly load an incremental backup in the old "default" directory.
-// That old default is literally just "the same directory as the full backup",
-// so write that manually with the `incremental_location` option then check that
-// a read without that option contains the same data.
-func TestBackupRestoreOldIncrementalDefault(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "multinode cluster setup times out under race, likely due to resource starvation.")
-
-	const numAccounts = 1
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
-	defer cleanupFn()
-
-	const c1, c2, c3 = `nodelocal://1/full/`, `nodelocal://1/full/`, `nodelocal://2/full/`
-
-	// Deliberately the same. We're simulating an incremental backup in the old
-	// default directory, i.e. the top-level collection directory.
-	const i1, i2, i3 = `nodelocal://1/full/`, `nodelocal://1/full/`, `nodelocal://2/full/`
-
-	collections := []string{
-		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", c1, url.QueryEscape("default")),
-		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", c2, url.QueryEscape("dc=dc1")),
-		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", c3, url.QueryEscape("dc=dc2")),
-	}
-
-	incrementals := []string{
-		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", i1, url.QueryEscape("default")),
-		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", i2, url.QueryEscape("dc=dc1")),
-		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", i3, url.QueryEscape("dc=dc2")),
-	}
-	tests := []struct {
-		dest []string
-		inc  []string
-	}{{dest: []string{collections[0]}, inc: []string{incrementals[0]}},
-		{dest: collections, inc: incrementals}}
-
-	for _, br := range tests {
-		dest := strings.Join(br.dest, ", ")
-		inc := strings.Join(br.inc, ", ")
-
-		if len(br.dest) > 1 {
-			dest = "(" + dest + ")"
-			inc = "(" + inc + ")"
-		}
-		// create db
-		sqlDB.Exec(t, `CREATE DATABASE fkdb`)
-		sqlDB.Exec(t, `CREATE TABLE fkdb.fk (ind INT)`)
-
-		for i := 0; i < 10; i++ {
-			sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, i)
-		}
-		fb := fmt.Sprintf("BACKUP DATABASE fkdb INTO %s", dest)
-		sqlDB.Exec(t, fb)
-
-		sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, 200)
-
-		sib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location=%s", dest, inc)
-		sqlDB.Exec(t, sib)
-
-		sir := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'inc_fkdb'", dest)
-		sqlDB.Exec(t, sir)
-
-		sqlDB.CheckQueryResults(t, `SELECT * FROM inc_fkdb.fk`, sqlDB.QueryStr(t, `SELECT * FROM fkdb.fk`))
-
-		sqlDB.Exec(t, "DROP DATABASE fkdb")
-		sqlDB.Exec(t, "DROP DATABASE inc_fkdb;")
-	}
-}
-
-func TestBackupRestoreErrorsOnBothDefaultsPopulated(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	const numAccounts = 1
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
-	defer cleanupFn()
-
-	base := `'nodelocal://1/full/'`
-	oldInc := base
-	newInc := `'nodelocal://1/full/incrementals'`
-
-	// create db
-	sqlDB.Exec(t, `CREATE DATABASE fkdb`)
-	sqlDB.Exec(t, `CREATE TABLE fkdb.fk (ind INT)`)
-
-	for i := 0; i < 10; i++ {
-		sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, i)
-	}
-	fb := fmt.Sprintf("BACKUP DATABASE fkdb INTO %s", base)
-	sqlDB.Exec(t, fb)
-
-	sibOld := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location=%s", base, oldInc)
-	sqlDB.Exec(t, sibOld)
-
-	sibNew := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location=%s", base, newInc)
-	sqlDB.Exec(t, sibNew)
-
-	irDefault := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'trad_fkdb'", base)
-	sqlDB.ExpectErr(t, "pq: Incremental layers found in both old and new default locations. "+
-		"Please choose a location manually with the `incremental_location` parameter.", irDefault)
-
-	irOld := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'trad_fkdb_old_default', "+
-		"incremental_location=%s", base, base)
-	sqlDB.Exec(t, irOld)
-
-	irNew := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'trad_fkdb_new_default', "+
-		"incremental_location=%s", base, newInc)
-	sqlDB.Exec(t, irNew)
-}
-
 // TestBackupRestoreSeparateExplicitIsDefault tests that a backup/restore round
 // trip using the 'incremental_location' parameter restores the same db as a BR
 // round trip without the parameter, even when that location is in fact the default.
@@ -10108,10 +10008,21 @@ func TestBackupRestoreSeparateExplicitIsDefault(t *testing.T) {
 	for _, br := range tests {
 
 		dest := strings.Join(br.dest, ", ")
+		specInc, err := util.MapE(br.dest, func(s string) (string, error) {
+			uri, err := url.Parse(s[1 : len(s)-1])
+			if err != nil {
+				return "", err
+			}
+			uri.Path = path.Join(uri.Path, "/spec-inc")
+			return fmt.Sprintf("'%s'", uri.String()), nil
+		})
+		require.NoError(t, err)
+		destSpecInc := strings.Join(specInc, ", ")
 		inc := strings.Join(br.inc, ", ")
 
 		if len(br.dest) > 1 {
 			dest = "(" + dest + ")"
+			destSpecInc = "(" + destSpecInc + ")"
 			inc = "(" + inc + ")"
 		}
 		// create db
@@ -10123,10 +10034,12 @@ func TestBackupRestoreSeparateExplicitIsDefault(t *testing.T) {
 		}
 		fb := fmt.Sprintf("BACKUP DATABASE fkdb INTO %s", dest)
 		sqlDB.Exec(t, fb)
+		fbSpecInc := fmt.Sprintf("BACKUP DATABASE fkdb INTO %s", destSpecInc)
+		sqlDB.Exec(t, fbSpecInc)
 
 		sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, 200)
 
-		sib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location=%s", dest, inc)
+		sib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location=%s", destSpecInc, inc)
 		sqlDB.Exec(t, sib)
 		{
 			// Locality Aware Show Backup validation
@@ -10148,15 +10061,14 @@ func TestBackupRestoreSeparateExplicitIsDefault(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUPS IN %s", dest))
 			sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s", dest))
 
-			// Locality aware show backups will eventually fail if not all localities are provided,
-			// but for now, they're ok.
+			// Locality aware show backups only works if the default URI is provided.
 			if len(br.dest) > 1 {
-				sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s", br.dest[1]))
+				sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s", br.dest[0]))
 			}
 
-			sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH incremental_location= %s", dest, inc))
+			sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH incremental_location= %s", destSpecInc, inc))
 		}
-		sir := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'inc_fkdb', incremental_location=%s", dest, inc)
+		sir := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'inc_fkdb', incremental_location=%s", destSpecInc, inc)
 		sqlDB.Exec(t, sir)
 
 		ib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s", dest)

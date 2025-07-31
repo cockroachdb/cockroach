@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -1000,11 +1001,38 @@ func validateContinuity(manifests []backuppb.BackupManifest) error {
 // ElideSkippedLayers removes backups that are skipped in the backup chain and
 // ensures only backups that will be used in the restore are returned.
 //
-// Note: This assumes that the provided backups are sorted in increasing order
-// by end time, and then sorted in increasing order by start time to break ties.
+// Note: This will mutate the underlying memory of the slices passed in as it
+// needs to sort them.
 func ElideSkippedLayers(
 	uris []string, backups []backuppb.BackupManifest, loc []jobspb.RestoreDetails_BackupLocalityInfo,
 ) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	// First we sort our backups and their corresponding URIs/locality info by
+	// increasing end time and then by increasing start time to break ties. The
+	// latter ensures that when we elide duplicate end times, we keep the most
+	// compacted backup.
+	permutation := make([]int, len(backups))
+	for i := range permutation {
+		permutation[i] = i
+	}
+	slices.SortFunc(permutation, func(i, j int) int {
+		if backups[i].EndTime.Less(backups[j].EndTime) {
+			return -1
+		} else if backups[j].EndTime.Less(backups[i].EndTime) {
+			return 1
+		} else {
+			if backups[i].StartTime.Less(backups[j].StartTime) {
+				return -1
+			} else {
+				return 1
+			}
+		}
+	})
+	util.ApplyPermutation(permutation, func(i, j int) {
+		uris[i], uris[j] = uris[j], uris[i]
+		backups[i], backups[j] = backups[j], backups[i]
+		loc[i], loc[j] = loc[j], loc[i]
+	})
+
 	uris, backups, loc = elideDuplicateEndTimes(uris, backups, loc)
 	i := len(backups) - 1
 	for i > 0 {

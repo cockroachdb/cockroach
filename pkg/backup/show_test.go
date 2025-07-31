@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -315,7 +317,7 @@ ORDER BY object_type, object_name`, full)
 		fullClusterInc := localFoo + "/full_cluster_inc"
 		sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH incremental_location = $2;`, fullCluster, fullClusterInc)
 
-		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT is_full_cluster FROM [SHOW BACKUP FROM LATEST IN '%s']`, fullCluster))
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT is_full_cluster FROM [SHOW BACKUP FROM LATEST IN '%s' WITH incremental_location='%s']`, fullCluster, fullClusterInc))
 		isFullCluster = showBackupRows[0][0]
 		if !eqWhitespace(isFullCluster, "true") {
 			t.Fatal("expected show backup to indicate that backup was full cluster")
@@ -435,10 +437,12 @@ func TestShowBackups(t *testing.T) {
 	defer cleanupEmptyCluster()
 
 	const full = localFoo + "/full"
+	const fullRemoteInc = localFoo + "/fullRemoteInc"
 	const remoteInc = localFoo + "/inc"
 
 	// Make an initial backup.
 	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
+	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, fullRemoteInc)
 	// Add Incremental changes to it 3 times.
 	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
 	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
@@ -451,8 +455,8 @@ func TestShowBackups(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
 	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
 	// Make 2 remote incremental backups, chaining to the third full backup
-	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_location = $2`, full, remoteInc)
-	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_location = $2`, full, remoteInc)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_location = $2`, fullRemoteInc, remoteInc)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_location = $2`, fullRemoteInc, remoteInc)
 
 	rows := sqlDBRestore.QueryStr(t, `SHOW BACKUPS IN $1`, full)
 
@@ -473,9 +477,10 @@ func TestShowBackups(t *testing.T) {
 
 	// check that full and remote incremental backups appear
 	b3 := sqlDBRestore.QueryStr(t,
-		`SELECT * FROM [SHOW BACKUP FROM LATEST IN $1 WITH incremental_location = $2 ] WHERE object_type ='table'`, full, remoteInc)
+		`SELECT * FROM [SHOW BACKUP FROM LATEST IN $1 WITH incremental_location = $2 ] WHERE object_type ='table'`,
+		fullRemoteInc, remoteInc,
+	)
 	require.Equal(t, 3, len(b3))
-
 }
 
 func TestShowNonDefaultBackups(t *testing.T) {
@@ -506,18 +511,11 @@ func TestShowNonDefaultBackups(t *testing.T) {
 
 	// Increase the number of files,schemas, and ranges that will be in the backup chain
 	sqlDB.Exec(t, `CREATE TABLE data.blob (a INT PRIMARY KEY); INSERT INTO data.blob VALUES (0)`)
-	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1`, fullNonDefault)
 	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH incremental_location=$2`, fullNonDefault, incNonDefault)
 
 	// Show backup should contain more rows as new files/schemas/ranges were
 	// added in the incremental backup
 	for i, typ := range []string{"FILES", "SCHEMAS", "RANGES"} {
-		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s']`, typ,
-			fullNonDefault)
-		newCount, err := strconv.Atoi(sqlDB.QueryStr(t, query)[0][0])
-		require.NoError(t, err, "error converting new count to integer")
-		require.Greater(t, newCount, oldCount[i])
-
 		queryInc := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s' WITH incremental_location='%s']`, typ,
 			fullNonDefault, incNonDefault)
 		newCountInc, err := strconv.Atoi(sqlDB.QueryStr(t, queryInc)[0][0])
@@ -766,10 +764,21 @@ func TestShowBackupCheckFiles(t *testing.T) {
 
 	for _, test := range tests {
 		dest := strings.Join(test.dest, ", ")
+		specInc, err := util.MapE(test.dest, func(s string) (string, error) {
+			uri, err := url.Parse(s[1 : len(s)-1])
+			if err != nil {
+				return "", err
+			}
+			uri.Path = path.Join(uri.Path, "/spec-inc")
+			return fmt.Sprintf("'%s'", uri.String()), nil
+		})
+		require.NoError(t, err)
+		destSpecInc := strings.Join(specInc, ", ")
 		inc := strings.Join(test.inc, ", ")
 
 		if len(test.dest) > 1 {
 			dest = "(" + dest + ")"
+			destSpecInc = "(" + destSpecInc + ")"
 			inc = "(" + inc + ")"
 		}
 
@@ -778,10 +787,14 @@ func TestShowBackupCheckFiles(t *testing.T) {
 		}
 		fb := fmt.Sprintf("BACKUP DATABASE fkdb INTO %s", dest)
 		sqlDB.Exec(t, fb)
+		fbSpecInc := fmt.Sprintf("BACKUP DATABASE fkdb INTO %s", destSpecInc)
+		sqlDB.Exec(t, fbSpecInc)
 
 		sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, 200)
 
-		sib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location = %s", dest, inc)
+		sib := fmt.Sprintf(
+			"BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location = %s", destSpecInc, inc,
+		)
 		sqlDB.Exec(t, sib)
 
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s", dest))
@@ -876,9 +889,9 @@ func TestShowBackupCheckFiles(t *testing.T) {
 			// Break on an incremental backup stored at incremental_location.
 			fileInfo := sqlDB.QueryStr(t,
 				fmt.Sprintf(`SELECT path, locality FROM [SHOW BACKUP FILES FROM LATEST IN %s WITH incremental_location = %s]`,
-					dest, inc))
+					destSpecInc, inc))
 
-			incCheckQuery := fmt.Sprintf(`SHOW BACKUP FROM LATEST IN %s WITH check_files, incremental_location = %s`, dest, inc)
+			incCheckQuery := fmt.Sprintf(`SHOW BACKUP FROM LATEST IN %s WITH check_files, incremental_location = %s`, destSpecInc, inc)
 			breakCheckFiles(incLocRoot, test.inc, fileInfo[len(fileInfo)-1][0], fileInfo[len(fileInfo)-1][1], incCheckQuery)
 		}
 	}

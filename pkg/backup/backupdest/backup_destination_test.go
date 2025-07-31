@@ -111,6 +111,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 			// - BACKUP INTO full1 IN collection, incremental_location = inc_storage_path @ 9
 			// - BACKUP INTO full1 IN collection, incremental_location = inc_storage_path @ 9:30
 			// - BACKUP INTO LATEST IN collection, incremental_location = inc_storage_path @ 10
+			// - BACKUP INTO collection (full 3) @ 10:30
 			t.Run("collection", func(t *testing.T) {
 				collectionLoc := fmt.Sprintf("nodelocal://1/%s?AUTH=implicit", t.Name())
 				// Note that this default is NOT arbitrary, but rather hard-coded as
@@ -134,9 +135,6 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 				inc6Time := inc5Time.Add(time.Minute * 30)
 				inc7Time := inc6Time.Add(time.Minute * 30)
 				full3Time := inc7Time.Add(time.Minute * 30)
-				inc8Time := full3Time.Add(time.Minute * 30)
-				inc9Time := inc8Time.Add(time.Minute * 30)
-				full4Time := inc9Time.Add(time.Minute * 30)
 
 				// firstBackupChain is maintained throughout the tests as the history of
 				// backups that were taken based on the initial full backup.
@@ -155,6 +153,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 				testCollectionBackup := func(t *testing.T, backupTime time.Time,
 					expectedDefault, expectedSuffix, expectedIncDir string, expectedPrevBackups []string,
 					appendToLatest bool, subdir string, incrementalTo []string) {
+					t.Helper()
 
 					endTime := hlc.Timestamp{WallTime: backupTime.UnixNano()}
 
@@ -335,60 +334,16 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 						true /* intoLatest */, expectedSubdir, customIncrementalTo)
 					writeManifest(t, expectedDefault, inc7Time)
 				}
-
 				// A new full backup: BACKUP INTO collection
-				var backup3Location string
 				{
 					expectedSuffix := "/2020/12/25-103000.00"
 					expectedIncDir := ""
 					expectedDefault := fmt.Sprintf("nodelocal://1/%s%s?AUTH=implicit", t.Name(), expectedSuffix)
-					backup3Location = expectedDefault
 
 					testCollectionBackup(t, full3Time,
 						expectedDefault, expectedSuffix, expectedIncDir, []string(nil),
 						false /* intoLatest */, noExplicitSubDir, noIncrementalStorage)
 					writeManifest(t, expectedDefault, full3Time)
-					// We also wrote a new full backup, so let's update the latest.
-					writeLatest(t, collectionLoc, expectedSuffix)
-				}
-
-				// A remote incremental into the third full backup: BACKUP INTO LATEST
-				// IN collection, BUT with a trick. Write a (fake) incremental backup
-				// to the old directory, to be sure that subsequent incremental backups
-				// go there as well (and not the newer incrementals/ subdir.)
-				{
-					expectedSuffix := "/2020/12/25-103000.00"
-					expectedIncDir := "/20201225/110000.00-20201225-103000.00"
-
-					// Writes the (fake) incremental backup.
-					oldStyleDefault := fmt.Sprintf("nodelocal://1/%s%s%s?AUTH=implicit",
-						t.Name(),
-						expectedSuffix, expectedIncDir)
-					writeManifest(t, oldStyleDefault, inc8Time)
-
-					expectedSuffix = "/2020/12/25-103000.00"
-					expectedIncDir = "/20201225/113000.00-20201225-110000.00"
-					expectedSubdir := expectedSuffix
-					expectedDefault := fmt.Sprintf("nodelocal://1/%s%s%s?AUTH=implicit",
-						t.Name(),
-						expectedSuffix, expectedIncDir)
-
-					testCollectionBackup(t, inc9Time,
-						expectedDefault, expectedSuffix, expectedIncDir, []string{backup3Location, oldStyleDefault},
-						true /* intoLatest */, expectedSubdir, noIncrementalStorage)
-					writeManifest(t, expectedDefault, inc9Time)
-				}
-
-				// A new full backup: BACKUP INTO collection
-				{
-					expectedSuffix := "/2020/12/25-120000.00"
-					expectedIncDir := ""
-					expectedDefault := fmt.Sprintf("nodelocal://1/%s%s?AUTH=implicit", t.Name(), expectedSuffix)
-
-					testCollectionBackup(t, full4Time,
-						expectedDefault, expectedSuffix, expectedIncDir, []string(nil),
-						false /* intoLatest */, noExplicitSubDir, noIncrementalStorage)
-					writeManifest(t, expectedDefault, full4Time)
 					// We also wrote a new full backup, so let's update the latest.
 					writeLatest(t, collectionLoc, expectedSuffix)
 				}
