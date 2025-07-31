@@ -303,6 +303,10 @@ func (di *DescIterator) Next() {
 			break
 		}
 	}
+	if di.backing.iterError != nil {
+		di.err = di.backing.iterError
+		return
+	}
 
 	di.value = nextValue
 }
