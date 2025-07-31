@@ -198,9 +198,9 @@ func (cm *CertificateManager) RegisterSignalHandler(
 	})
 }
 
-var CertCacheMemLimit = settings.RegisterIntSetting(
-	settings.SystemVisible,
-	"security.clienc_cert.cache_memory_limit",
+var certCacheMemLimit = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"security.client_cert.cache_memory_limit",
 	"memory limit for the client certificate expiration cache",
 	1<<29, // 512MiB
 )
@@ -214,7 +214,7 @@ func (cm *CertificateManager) RegisterExpirationCache(
 	parentMon *mon.BytesMonitor,
 	st *cluster.Settings,
 ) error {
-	limit := CertCacheMemLimit.Get(&st.SV)
+	limit := certCacheMemLimit.Get(&st.SV)
 	m := mon.NewMonitorInheritWithLimit(mon.MakeName("client-expiration-caches"), limit, parentMon, true /* longLiving */)
 	acc := m.MakeConcurrentBoundAccount()
 	m.StartNoReserved(ctx, parentMon)
