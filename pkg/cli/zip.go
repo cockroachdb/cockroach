@@ -594,6 +594,12 @@ func (zc *debugZipContext) dumpTableDataForZip(
 				return err
 			}
 
+			// Many of the table data queries use full scans, so allow them.
+			err = conn.Exec(ctx, `SET disallow_full_table_scans = off`)
+			if err != nil {
+				return err
+			}
+
 			w, err := zc.z.createLocked(name, time.Time{})
 			if err != nil {
 				return err
