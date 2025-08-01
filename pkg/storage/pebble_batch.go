@@ -85,7 +85,7 @@ func (wb *writeBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 // ClearMVCC implements the Writer interface.
 func (wb *writeBatch) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 	if key.Timestamp.IsEmpty() {
-		return errors.AssertionFailedf("ClearMVCC timestamp is empty")
+		panic("ClearMVCC timestamp is empty")
 	}
 	return wb.clear(key, opts)
 }
@@ -113,7 +113,7 @@ func (wb *writeBatch) ClearMVCCIteratorRange(
 ) error {
 	// TODO(jackson): Remove this method. See the TODO in its definition within
 	// the Writer interface.
-	return errors.AssertionFailedf("batch is write-only")
+	panic("batch is write-only")
 }
 
 func (wb *writeBatch) clear(key MVCCKey, opts ClearOptions) error {
@@ -242,7 +242,7 @@ func (wb *writeBatch) PutInternalRangeKey(start, end []byte, key rangekey.Key) e
 	case pebble.InternalKeyKindRangeKeyDelete:
 		return wb.batch.RangeKeyDelete(start, end, nil /* writeOptions */)
 	default:
-		return errors.AssertionFailedf("unexpected range key kind")
+		panic("unexpected range key kind")
 	}
 }
 
@@ -272,7 +272,7 @@ func (wb *writeBatch) Merge(key MVCCKey, value []byte) error {
 // PutMVCC implements the Writer interface.
 func (wb *writeBatch) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
-		return errors.AssertionFailedf("PutMVCC timestamp is empty")
+		panic("PutMVCC timestamp is empty")
 	}
 	return wb.putMVCC(key, value)
 }
@@ -280,7 +280,7 @@ func (wb *writeBatch) PutMVCC(key MVCCKey, value MVCCValue) error {
 // PutRawMVCC implements the Writer interface.
 func (wb *writeBatch) PutRawMVCC(key MVCCKey, value []byte) error {
 	if key.Timestamp.IsEmpty() {
-		return errors.AssertionFailedf("PutRawMVCC timestamp is empty")
+		panic("PutRawMVCC timestamp is empty")
 	}
 	return wb.put(key, value)
 }
@@ -352,7 +352,7 @@ func (wb *writeBatch) Commit(sync bool) error {
 		opts = pebble.Sync
 	}
 	if wb.batch == nil {
-		return errors.AssertionFailedf("called with nil batch")
+		panic("called with nil batch")
 	}
 	err := wb.batch.Commit(opts)
 	if err != nil {
@@ -373,7 +373,7 @@ func (wb *writeBatch) Commit(sync bool) error {
 // CommitNoSyncWait implements the WriteBatch interface.
 func (wb *writeBatch) CommitNoSyncWait() error {
 	if wb.batch == nil {
-		return errors.AssertionFailedf("called with nil batch")
+		panic("called with nil batch")
 	}
 	err := wb.db.ApplyNoSyncWait(wb.batch, pebble.Sync)
 	if err != nil {
@@ -392,7 +392,7 @@ func (wb *writeBatch) CommitNoSyncWait() error {
 // SyncWait implements the WriteBatch interface.
 func (wb *writeBatch) SyncWait() error {
 	if wb.batch == nil {
-		return errors.AssertionFailedf("called with nil batch")
+		panic("called with nil batch")
 	}
 	err := wb.batch.SyncWait()
 	if err != nil {
@@ -459,7 +459,7 @@ func (wb *writeBatch) Close() {
 
 func (wb *writeBatch) close() {
 	if wb.closed {
-		panic(errors.AssertionFailedf("closing an already-closed writeBatch"))
+		panic("closing an already-closed writeBatch")
 	}
 	wb.closed = true
 	_ = wb.batch.Close()
@@ -633,7 +633,7 @@ func (p *pebbleBatch) NewBatchOnlyMVCCIterator(
 	ctx context.Context, opts IterOptions,
 ) (MVCCIterator, error) {
 	if !p.batch.Indexed() {
-		return nil, errors.AssertionFailedf("unindexed batch")
+		panic("unindexed batch")
 	}
 	var err error
 	iter := pebbleIterPool.Get().(*pebbleIterator)
@@ -695,7 +695,7 @@ func (p *pebbleBatch) ScanInternal(
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
 	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
-	return errors.AssertionFailedf("ScanInternal only supported on Engine and Snapshot.")
+	panic("ScanInternal only supported on Engine and Snapshot.")
 }
 
 // ConsistentIterators implements the Batch interface.

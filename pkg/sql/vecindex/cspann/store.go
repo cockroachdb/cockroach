@@ -44,15 +44,6 @@ type PartitionToSearch struct {
 	Count int
 }
 
-// PartitionMetadataToGet contains information about partition metadata to be
-// fetched by the TryGetPartitionMetadata method.
-type PartitionMetadataToGet struct {
-	// Key specifies which partition's metadata to fetch and is set by the caller.
-	Key PartitionKey
-	// Metadata is the metadata for the partition and is set by the Store.
-	Metadata PartitionMetadata
-}
-
 // Store encapsulates the component that's actually storing the vectors, whether
 // that's in a CRDB cluster for production or in memory for testing and
 // benchmarking. Callers can use Store to start and commit transactions against
@@ -101,14 +92,13 @@ type Store interface {
 		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
 	) (*Partition, error)
 
-	// TryGetPartitionMetadata returns the metadata of the requested partitions.
-	// If a partition does not exist, its state is set to Missing.
-	//
-	// NOTE: The caller owns the "toGet" memory. The Store implementation should
-	// not try to use it after returning.
+	// TryGetPartitionMetadata returns just the metadata of the requested
+	// partition, if it exists, else it returns ErrPartitionNotFound. This is
+	// more efficient than loading the entire partition when only metadata is
+	// needed.
 	TryGetPartitionMetadata(
-		ctx context.Context, treeKey TreeKey, toGet []PartitionMetadataToGet,
-	) error
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
+	) (PartitionMetadata, error)
 
 	// TryUpdatePartitionMetadata updates the partition's metadata only if it's
 	// equal to the expected value, else it returns a ConditionFailedError. If
@@ -129,9 +119,6 @@ type Store interface {
 	// metadata and returns a ConditionFailedError if it is not the same as the
 	// expected metadata. If the partition does not exist, it returns
 	// ErrPartitionNotFound.
-	//
-	// NOTE: The caller owns the vectors, childKeys, and valueBytes memory. The
-	// Store implementation should not try to use it after returning.
 	TryAddToPartition(
 		ctx context.Context,
 		treeKey TreeKey,
@@ -144,7 +131,7 @@ type Store interface {
 
 	// TryRemoveFromPartition removes vectors from the given partition by their
 	// child keys and returns true if any vector is removed. If a key is not
-	// present in the partition, it is skipped.
+	// present in the partition, it is a no-op.
 	//
 	// Before performing any action, TryRemoveFromPartition checks the partition's
 	// metadata and returns a ConditionFailedError if it is not the same as the
@@ -157,28 +144,6 @@ type Store interface {
 		childKeys []ChildKey,
 		expected PartitionMetadata,
 	) (removed bool, err error)
-
-	// TryMoveVector attempts to move a single vector from the source partition to
-	// the target partition, as an atommic operation. If either partition does not
-	// exist, it returns moved=false. If the vector does not exist in the source
-	// partition, or already exists in the target partition, it returns
-	// moved=false.
-	//
-	// Before performing any action, TryMoveVector checks the target partition's
-	// metadata and returns a ConditionFailedError if it is not the same as the
-	// expected metadata.
-	//
-	// NOTE: The source and target partitions must be on the same level. Results
-	// are not defined if this is not true.
-	TryMoveVector(
-		ctx context.Context,
-		treeKey TreeKey,
-		sourcePartitionKey, targetPartitionKey PartitionKey,
-		vec vector.T,
-		childKey ChildKey,
-		valueBytes ValueBytes,
-		expected PartitionMetadata,
-	) (moved bool, err error)
 
 	// TryClearPartition removes all vectors in the specified partition and
 	// returns the number of vectors that were cleared. It returns
@@ -209,9 +174,11 @@ type Txn interface {
 	// is true, fetching the metadata is part of a mutation operation; the store
 	// can perform any needed locking in this case.
 	//
-	// If the partition does not exist, GetPartitionMetadata returns empty
-	// metadata with a Missing state. It returns ErrRestartOperation if the caller
-	// should retry the operation that triggered this call.
+	// GetPartitionMetadata returns ConditionFailedError if "forUpdate" is true
+	// and the partition is in a state that does not allow updates. It returns
+	// ErrPartitionNotFound if the partition cannot be found, or
+	// ErrRestartOperation if the caller should retry the operation that triggered
+	// this call.
 	GetPartitionMetadata(
 		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, forUpdate bool,
 	) (PartitionMetadata, error)
@@ -224,9 +191,6 @@ type Txn interface {
 	// state that does not allow adds. It returns ErrPartitionNotFound if the
 	// partition cannot be found, or ErrRestartOperation if the caller should
 	// retry the insert operation that triggered this call.
-	//
-	// NOTE: The caller owns the vec, childKey, and valueBytes memory. The Store
-	// implementation should not try to use it after returning.
 	AddToPartition(
 		ctx context.Context,
 		treeKey TreeKey,
@@ -278,7 +242,7 @@ type Txn interface {
 	// corresponding reference will be set to nil. If a partition cannot be found,
 	// GetFullVectors returns ErrPartitionNotFound.
 	//
-	// NOTE: Returned vectors should be treated as immutable. Neither the caller
-	// or the Store implementation should modify the memory.
+	// NOTE: The caller takes ownership of any vector memory returned in "refs".
+	// The Store implementation should not try to use it after returning it.
 	GetFullVectors(ctx context.Context, treeKey TreeKey, refs []VectorWithKey) error
 }

@@ -61,7 +61,7 @@ func TestServer(t *testing.T) {
 	}
 
 	txn := kv.NewTxn(ctx, kvDB, srv.NodeID())
-	leafInputState, err := txn.GetLeafTxnInputState(ctx, nil /* readsTree */)
+	leafInputState, err := txn.GetLeafTxnInputState(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestServer(t *testing.T) {
 			t.Run(fmt.Sprintf("%d", tc.version), func(t *testing.T) {
 				req := *req
 				req.Version = tc.version
-				distSQLClient := conn.NewDistSQLClient()
+				distSQLClient := execinfrapb.NewDistSQLClient(conn)
 				resp, err := distSQLClient.SetupFlow(ctx, &req)
 				if err == nil && resp.Error != nil {
 					err = resp.Error.ErrorDetail(ctx)

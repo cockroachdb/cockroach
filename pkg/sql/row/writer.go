@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -93,7 +94,7 @@ func prepareInsertOrUpdateBatch(
 	kvKey *roachpb.Key,
 	kvValue *roachpb.Value,
 	rawValueBuf []byte,
-	oth OriginTimestampCPutHelper,
+	oth *OriginTimestampCPutHelper,
 	oldValues []tree.Datum,
 	kvOp KVInsertOp,
 	mustValidateOldPKValues bool,
@@ -108,7 +109,7 @@ func prepareInsertOrUpdateBatch(
 	if oth.IsSet() && len(families) > 1 {
 		return nil, errors.AssertionFailedf("OriginTimestampCPutHelper is not yet testing with multi-column family writes")
 	}
-	var putFn func(context.Context, Putter, *roachpb.Key, *roachpb.Value, bool, *RowHelper, lazyIndexDirs)
+	var putFn func(context.Context, Putter, *roachpb.Key, *roachpb.Value, bool, []encoding.Direction)
 	var oldKeysLocked, overwrite bool
 	switch kvOp {
 	case CPutOp:
@@ -207,10 +208,10 @@ func prepareInsertOrUpdateBatch(
 					// If the new family contains a NULL value, then we must
 					// delete any pre-existing row.
 					if mustValidateOldPKValues {
-						delWithCPutFn(ctx, batch, kvKey, oldVal, traceKV, helper, primaryIndexDirs)
+						delWithCPutFn(ctx, batch, kvKey, oldVal, traceKV, helper.primIndexValDirs)
 					} else {
 						needsLock := !oldKeysLocked
-						delFn(ctx, batch, kvKey, needsLock, traceKV, helper, primaryIndexDirs)
+						delFn(ctx, batch, kvKey, needsLock, traceKV, helper.primIndexValDirs)
 					}
 				}
 			} else {
@@ -224,7 +225,7 @@ func prepareInsertOrUpdateBatch(
 				if oth.IsSet() {
 					oth.CPutFn(ctx, batch, kvKey, &marshaled, oldVal, traceKV)
 				} else if mustValidateOldPKValues {
-					updateCPutFn(ctx, batch, kvKey, &marshaled, oldVal, traceKV, helper, primaryIndexDirs)
+					updateCPutFn(ctx, batch, kvKey, &marshaled, oldVal, traceKV, helper.primIndexValDirs)
 				} else {
 					// TODO(yuzefovich): in case of multiple column families,
 					// whenever we locked the primary index during the initial
@@ -237,7 +238,7 @@ func prepareInsertOrUpdateBatch(
 					// However, at the moment we disable the lock eliding
 					// optimization with multiple column families, so we'll use
 					// the locking Put because of that.
-					putFn(ctx, batch, kvKey, &marshaled, traceKV, helper, primaryIndexDirs)
+					putFn(ctx, batch, kvKey, &marshaled, traceKV, helper.primIndexValDirs)
 				}
 			}
 
@@ -286,10 +287,10 @@ func prepareInsertOrUpdateBatch(
 				// The family might have already existed but every column in it is being
 				// set to NULL, so delete it.
 				if mustValidateOldPKValues {
-					delWithCPutFn(ctx, batch, kvKey, expBytes, traceKV, helper, primaryIndexDirs)
+					delWithCPutFn(ctx, batch, kvKey, expBytes, traceKV, helper.primIndexValDirs)
 				} else {
 					needsLock := !oldKeysLocked
-					delFn(ctx, batch, kvKey, needsLock, traceKV, helper, primaryIndexDirs)
+					delFn(ctx, batch, kvKey, needsLock, traceKV, helper.primIndexValDirs)
 				}
 			}
 		} else {
@@ -303,9 +304,9 @@ func prepareInsertOrUpdateBatch(
 			if oth.IsSet() {
 				oth.CPutFn(ctx, batch, kvKey, kvValue, expBytes, traceKV)
 			} else if mustValidateOldPKValues {
-				updateCPutFn(ctx, batch, kvKey, kvValue, expBytes, traceKV, helper, primaryIndexDirs)
+				updateCPutFn(ctx, batch, kvKey, kvValue, expBytes, traceKV, helper.primIndexValDirs)
 			} else {
-				putFn(ctx, batch, kvKey, kvValue, traceKV, helper, primaryIndexDirs)
+				putFn(ctx, batch, kvKey, kvValue, traceKV, helper.primIndexValDirs)
 			}
 		}
 

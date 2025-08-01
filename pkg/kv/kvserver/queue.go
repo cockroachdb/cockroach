@@ -51,7 +51,8 @@ const (
 var queueGuaranteedProcessingTimeBudget = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"kv.queue.process.guaranteed_time_budget",
-	"the guaranteed duration before which the processing of a queue may time out",
+	"the guaranteed duration before which the processing of a queue may "+
+		"time out",
 	defaultProcessTimeout,
 	settings.WithVisibility(settings.Reserved),
 )
@@ -598,22 +599,18 @@ func (bq *baseQueue) Async(
 		log.InfofDepth(ctx, 2, "%s", redact.Safe(opName))
 	}
 	opName += " (" + bq.name + ")"
-	bgCtx, hdl, err := bq.store.stopper.GetHandle(
-		bq.AnnotateCtx(context.Background()), stop.TaskOpts{
+	bgCtx := bq.AnnotateCtx(context.Background())
+	if err := bq.store.stopper.RunAsyncTaskEx(bgCtx,
+		stop.TaskOpts{
 			TaskName:   opName,
 			Sem:        bq.addOrMaybeAddSem,
 			WaitForSem: wait,
-		})
-	if err != nil {
-		if bq.addLogN.ShouldLog() {
-			log.Infof(ctx, "rate limited in %s: %s", redact.Safe(opName), err)
-		}
-		return
+		},
+		func(ctx context.Context) {
+			fn(ctx, baseQueueHelper{bq})
+		}); err != nil && bq.addLogN.ShouldLog() {
+		log.Infof(ctx, "rate limited in %s: %s", redact.Safe(opName), err)
 	}
-	go func(ctx context.Context) {
-		defer hdl.Activate(ctx).Release(ctx)
-		fn(ctx, baseQueueHelper{bq})
-	}(bgCtx)
 }
 
 // MaybeAddAsync offers the replica to the queue. The queue will only process a

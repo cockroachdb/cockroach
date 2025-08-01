@@ -20,6 +20,10 @@ import (
 // the role modify cluster settings within the cluster.
 type GlobalPrivilege struct{}
 
+// GlobalPrivilegeObjectType represents the object type for
+// GlobalPrivilege.
+const GlobalPrivilegeObjectType = "Global"
+
 var _ Object = &GlobalPrivilege{}
 
 // GetPath implements the Object interface.

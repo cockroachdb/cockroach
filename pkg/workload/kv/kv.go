@@ -439,7 +439,7 @@ func (w *kv) Tables() []workload.Table {
 					rowOffset := rowIdx - rowBegin
 					var payload []byte
 					blockSize, uniqueSize := w.randBlockSize(rndBlock)
-					*a, payload = a.Alloc(blockSize)
+					*a, payload = a.Alloc(blockSize, 0 /* extraCap */)
 					w.randFillBlock(rndBlock, payload, uniqueSize)
 					valCol.Set(rowOffset, payload)
 				}

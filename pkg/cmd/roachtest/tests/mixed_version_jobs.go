@@ -30,7 +30,6 @@ func registerJobsMixedVersions(r registry.Registry) {
 		),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
 		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runJobsMixedVersions(ctx, t, c)

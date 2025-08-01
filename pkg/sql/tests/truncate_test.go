@@ -97,7 +97,6 @@ func TestTruncateWithConcurrentMutations(t *testing.T) {
 
 		tdb := sqlutils.MakeSQLRunner(db)
 		tdb.ExecMultiple(t, strings.Split(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer = 'off';
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 `, `;`)...)

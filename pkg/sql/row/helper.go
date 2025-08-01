@@ -91,11 +91,9 @@ type RowHelper struct {
 	UniqueWithTombstoneIndexes intsets.Fast
 	indexEntries               map[catalog.Index][]rowenc.IndexEntry
 
-	// Lazily computed for pretty-printing and CheckRowSize.
-	dirs struct {
-		primary   []encoding.Direction
-		secondary [][]encoding.Direction
-	}
+	// Computed during initialization for pretty-printing.
+	primIndexValDirs []encoding.Direction
+	secIndexValDirs  [][]encoding.Direction
 
 	// Computed and cached.
 	PrimaryIndexKeyPrefix []byte
@@ -128,50 +126,28 @@ func NewRowHelper(
 	for _, index := range uniqueWithTombstoneIndexes {
 		uniqueWithTombstoneIndexesSet.Add(index.Ordinal())
 	}
-	return RowHelper{
+	rh := RowHelper{
 		Codec:                      codec,
 		TableDesc:                  desc,
 		Indexes:                    indexes,
 		UniqueWithTombstoneIndexes: uniqueWithTombstoneIndexesSet,
 		sd:                         sd,
 		metrics:                    metrics,
-		maxRowSizeLog:              uint32(maxRowSizeLog.Get(sv)),
-		maxRowSizeErr:              uint32(maxRowSizeErr.Get(sv)),
 	}
-}
 
-// lazyIndexDirs represents encoding directions of an index. Those directions
-// may not have been, and may never be computed. The value of -2 represents
-// empty encoding directions. The value of -1 represents the encoding directions
-// of the primary index, otherwise a value i represents the encoding directions
-// of the i-th secondary index.
-type lazyIndexDirs int
+	// Pre-compute the encoding directions of the index key values for
+	// pretty-printing in traces.
+	rh.primIndexValDirs = catalogkeys.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex())
 
-const (
-	emptyIndexDirs   lazyIndexDirs = -2
-	primaryIndexDirs lazyIndexDirs = -1
-)
-
-func secondaryIndexDirs(i int) lazyIndexDirs { return lazyIndexDirs(i) }
-
-func (d lazyIndexDirs) compute(rh *RowHelper) []encoding.Direction {
-	switch d {
-	case emptyIndexDirs:
-		return nil
-	case primaryIndexDirs:
-		if rh.dirs.primary == nil {
-			rh.dirs.primary = catalogkeys.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex())
-		}
-		return rh.dirs.primary
-	default:
-		if rh.dirs.secondary == nil {
-			rh.dirs.secondary = make([][]encoding.Direction, len(rh.Indexes))
-			for i := range rh.Indexes {
-				rh.dirs.secondary[i] = catalogkeys.IndexKeyValDirs(rh.Indexes[i])
-			}
-		}
-		return rh.dirs.secondary[d]
+	rh.secIndexValDirs = make([][]encoding.Direction, len(rh.Indexes))
+	for i := range rh.Indexes {
+		rh.secIndexValDirs[i] = catalogkeys.IndexKeyValDirs(rh.Indexes[i])
 	}
+
+	rh.maxRowSizeLog = uint32(maxRowSizeLog.Get(sv))
+	rh.maxRowSizeErr = uint32(maxRowSizeErr.Get(sv))
+
+	return rh
 }
 
 // encodeIndexes encodes the primary and secondary index keys. The
@@ -456,7 +432,7 @@ func (rh *RowHelper) CheckRowSize(
 		RowSize:    size,
 		TableID:    uint32(rh.TableDesc.GetID()),
 		FamilyID:   uint32(family),
-		PrimaryKey: keys.PrettyPrint(primaryIndexDirs.compute(rh), *key),
+		PrimaryKey: keys.PrettyPrint(rh.primIndexValDirs, *key),
 	}
 	if rh.sd.Internal && shouldErr {
 		// Internal work should never err and always log if violating either limit.
@@ -495,12 +471,11 @@ func delFn(
 	key *roachpb.Key,
 	needsLock bool,
 	traceKV bool,
-	rh *RowHelper,
-	dirs lazyIndexDirs,
+	keyEncodingDirs []encoding.Direction,
 ) {
 	if needsLock {
 		if traceKV {
-			if keyEncodingDirs := dirs.compute(rh); keyEncodingDirs != nil {
+			if keyEncodingDirs != nil {
 				log.VEventf(ctx, 2, "Del (locking) %s", keys.PrettyPrint(keyEncodingDirs, *key))
 			} else {
 				log.VEventf(ctx, 2, "Del (locking) %s", *key)
@@ -509,7 +484,7 @@ func delFn(
 		b.DelMustAcquireExclusiveLock(key)
 	} else {
 		if traceKV {
-			if keyEncodingDirs := dirs.compute(rh); keyEncodingDirs != nil {
+			if keyEncodingDirs != nil {
 				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(keyEncodingDirs, *key))
 			} else {
 				log.VEventf(ctx, 2, "Del %s", *key)
@@ -525,11 +500,10 @@ func delWithCPutFn(
 	key *roachpb.Key,
 	expVal []byte,
 	traceKV bool,
-	rh *RowHelper,
-	dirs lazyIndexDirs,
+	keyEncodingDirs []encoding.Direction,
 ) {
 	if traceKV {
-		if keyEncodingDirs := dirs.compute(rh); keyEncodingDirs != nil {
+		if keyEncodingDirs != nil {
 			log.VEventf(ctx, 2, "CPut %s -> nil (delete)", keys.PrettyPrint(keyEncodingDirs, *key))
 		} else {
 			log.VEventf(ctx, 2, "CPut %s -> nil (delete)", *key)
@@ -546,7 +520,7 @@ func (rh *RowHelper) deleteIndexEntry(
 	alreadyLocked bool,
 	lockNonUnique bool,
 	traceKV bool,
-	dirs lazyIndexDirs,
+	valDirs []encoding.Direction,
 ) error {
 	needsLock := !alreadyLocked && (index.IsUnique() || lockNonUnique)
 	if index.UseDeletePreservingEncoding() {
@@ -563,7 +537,7 @@ func (rh *RowHelper) deleteIndexEntry(
 			b.Put(key, deleteEncoding)
 		}
 	} else {
-		delFn(ctx, b, key, needsLock, traceKV, rh, dirs)
+		delFn(ctx, b, key, needsLock, traceKV, valDirs)
 	}
 	return nil
 }

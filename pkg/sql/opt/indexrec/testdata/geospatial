@@ -31,11 +31,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 1058.09
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── cost: 945.837778
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -75,7 +73,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:4)
  │         ├── cost: 254.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (11)
  │         └── scan t2@_hyp_1,inverted
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -112,8 +109,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 253.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 253.575556
  └── filters
       └── st_covers(geom1:4, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -133,11 +129,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
  ├── cost: 1058.09
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── cost: 945.837778
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -177,7 +171,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_covers('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom2:8)
  │         ├── cost: 254.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (11)
  │         └── scan t2@_hyp_1,inverted
  │              ├── columns: rowid:11!null geom2_inverted_key:14!null
@@ -214,8 +207,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 253.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 253.575556
  └── filters
       └── st_covers('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom2:8) [outer=(8), immutable, constraints=(/8: (/NULL - ])]
 
@@ -250,11 +242,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
  ├── cost: 2250.15
- ├── cost-flags: unbounded-cardinality
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 1240.12
- │    └── cost-flags: unbounded-cardinality
+ │    └── cost: 1240.12
  └── filters
       └── st_coveredby(geom1:4, geom2:8) [outer=(4,8), immutable, constraints=(/4: (/NULL - ]; /8: (/NULL - ])]
 
@@ -281,11 +271,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
  ├── cost: 12058.09
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── cost: 945.837778
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -325,7 +313,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom2:8)
  │         ├── cost: 254.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (11)
  │         └── scan t2@_hyp_1,inverted
  │              ├── columns: rowid:11!null geom2_inverted_key:14!null
@@ -362,8 +349,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 253.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 253.575556
  └── filters
       └── st_contains(geom2:8, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(8), immutable, constraints=(/8: (/NULL - ])]
 
@@ -384,11 +370,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
  ├── cost: 101250.15
- ├── cost-flags: unbounded-cardinality
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 1240.12
- │    └── cost-flags: unbounded-cardinality
+ │    └── cost: 1240.12
  └── filters
       └── st_containsproperly(geom1:4, geom2:8) [outer=(4,8), immutable, constraints=(/4: (/NULL - ]; /8: (/NULL - ])]
 
@@ -409,11 +393,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
  ├── cost: 101250.15
- ├── cost-flags: unbounded-cardinality
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 1240.12
- │    └── cost-flags: unbounded-cardinality
+ │    └── cost: 1240.12
  └── filters
       └── st_crosses(geom1:4, geom2:8) [outer=(4,8), immutable, constraints=(/4: (/NULL - ]; /8: (/NULL - ])]
 
@@ -447,11 +429,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 12058.09
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── cost: 945.837778
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -491,7 +471,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_intersects('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom1:4)
  │         ├── cost: 254.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (11)
  │         └── scan t2@_hyp_1,inverted
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -528,8 +507,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 253.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 253.575556
  └── filters
       └── st_equals(geom1:4, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -549,11 +527,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 1062.09
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── cost: 949.837778
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -594,7 +570,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_intersects('01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040', geom1:4)
  │         ├── cost: 258.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (11)
  │         └── scan t2@_hyp_1,inverted
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -632,8 +607,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 257.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 257.575556
  └── filters
       └── st_intersects(geom1:4, '01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -654,11 +628,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
  ├── cost: 101250.15
- ├── cost-flags: unbounded-cardinality
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 1240.12
- │    └── cost-flags: unbounded-cardinality
+ │    └── cost: 1240.12
  └── filters
       └── st_overlaps(geom1:4, geom2:8) [outer=(4,8), immutable, constraints=(/4: (/NULL - ]; /8: (/NULL - ])]
 
@@ -698,11 +670,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9!null inet1:10
  ├── immutable
  ├── cost: 930.978889
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── cost: 929.837778
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -738,7 +708,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_dwithinexclusive('0101000020E6100000A6272CF1807245C0A6B73F170DFC5240', geog2:9, 10.0, true)
  │         ├── cost: 238.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (11)
  │         └── scan t2@_hyp_1,inverted
  │              ├── columns: rowid:11!null geog2_inverted_key:14!null
@@ -771,8 +740,7 @@ select
  │              │         ├── ["B\xfdO\xb0\x00\x00\x00\x00\x00\x00", "B\xfdO\xb0\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfdO\xc0\x00\x00\x00\x00\x00\x00", "B\xfdO\xc0\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 237.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 237.575556
  └── filters
       └── st_dwithinexclusive('0101000020E6100000A6272CF1807245C0A6B73F170DFC5240', geog2:9, 10.0, true) [outer=(9), immutable, constraints=(/9: (/NULL - ])]
 
@@ -793,11 +761,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5!null bbox1:6 bbox2:7 geom2:8 geog2:9!null inet1:10
  ├── immutable
  ├── cost: 1250.15
- ├── cost-flags: unbounded-cardinality
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 1240.12
- │    └── cost-flags: unbounded-cardinality
+ │    └── cost: 1240.12
  └── filters
       └── st_dwithinexclusive(geog1:5, geog2:9, 10.0) [outer=(5,9), immutable, constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
 
@@ -831,12 +797,10 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6!null bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 1225.85
- ├── cost-flags: unbounded-cardinality
  ├── scan t2@_hyp_1
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6!null bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── constraint: /6/11: (/NULL - ]
- │    ├── cost: 1215.92
- │    └── cost-flags: unbounded-cardinality
+ │    └── cost: 1215.92
  └── filters
       └── bbox1:6 ~ geom1:4 [outer=(4,6), immutable, constraints=(/4: (/NULL - ]; /6: (/NULL - ])]
 
@@ -862,11 +826,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6!null bbox2:7!null geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 950.988889
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── cost: 949.837778
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -907,7 +869,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_covers('01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040', geom1:4)
  │         ├── cost: 258.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (11)
  │         └── scan t2@_hyp_3,inverted
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -945,8 +906,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 257.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 257.575556
  └── filters
       ├── bbox1:6 && bbox2:7 [outer=(6,7), immutable, constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
       └── 'BOX(1 2,3 4)' ~ geom1:4 [outer=(4), immutable]
@@ -967,11 +927,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 1250.15
- ├── cost-flags: unbounded-cardinality
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 1240.12
- │    └── cost-flags: unbounded-cardinality
+ │    └── cost: 1240.12
  └── filters
       └── inet1:10 && inet1:10 [outer=(10), immutable]
 
@@ -991,11 +949,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 2250.15
- ├── cost-flags: unbounded-cardinality
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 1240.12
- │    └── cost-flags: unbounded-cardinality
+ │    └── cost: 1240.12
  └── filters
       └── st_hasarc(geom1:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -1034,11 +990,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 1250.15
- ├── cost-flags: unbounded-cardinality
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 1240.12
- │    └── cost-flags: unbounded-cardinality
+ │    └── cost: 1240.12
  └── filters
       └── family(inet1:10) = 6 [outer=(10), immutable]
 
@@ -1068,11 +1022,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
  ├── cost: 23169.2111
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── cost: 945.837778
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -1112,7 +1064,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_intersects('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:4)
  │         ├── cost: 254.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (11)
  │         └── scan t2@_hyp_1,inverted
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -1149,8 +1100,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 253.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 253.575556
  └── filters
       ├── st_overlaps(geom1:4, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
       └── st_overlaps('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom2:8) [outer=(8), immutable, constraints=(/8: (/NULL - ])]
@@ -1174,12 +1124,10 @@ select
  ├── columns: k:1!null i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 137.301112
- ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1)
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── cost: 26.148889
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /15
@@ -1219,7 +1167,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_intersects('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:4)
  │         ├── cost: 19.2177778
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (11)
  │         └── scan t2@_hyp_3,inverted
  │              ├── columns: rowid:11!null geom1_inverted_key:15!null
@@ -1257,8 +1204,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 19.1866667
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 19.1866667
  └── filters
       └── st_overlaps(geom1:4, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -1280,11 +1226,9 @@ select
  ├── columns: k:1!null i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 12058.1
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── cost: 945.837778
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -1324,7 +1268,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_intersects('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:4)
  │         ├── cost: 254.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (11)
  │         └── scan t2@_hyp_2,inverted
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -1361,8 +1304,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 253.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 253.575556
  └── filters
       ├── st_overlaps(geom1:4, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
       └── k:1 > 2 [outer=(1), constraints=(/1: [/3 - ]; tight)]
@@ -1384,23 +1326,22 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_overlaps(geom1, 'POINT(0 0 0 0)') AND k = 2 AND i = 3
 ----
-creation: CREATE INDEX ON t.public.t2 (k, i) STORING (s, geom1, geog1, bbox1, bbox2, geom2, geog2, inet1);
+creation: CREATE INDEX ON t.public.t2 (k) STORING (i, s, geom1, geog1, bbox1, bbox2, geom2, geog2, inet1);
+creation: CREATE INDEX ON t.public.t2 (i) STORING (k, s, geom1, geog1, bbox1, bbox2, geom2, geog2, inet1);
 --
 optimal plan:
-select
+inner-join (zigzag t2@_hyp_1 t2@_hyp_2)
  ├── columns: k:1!null i:2!null s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
+ ├── eq columns: [11] = [11]
+ ├── left fixed columns: [1] = [2]
+ ├── right fixed columns: [2] = [3]
  ├── immutable
- ├── cost: 119.28
- ├── cost-flags: unbounded-cardinality
+ ├── cost: 28.3042149
  ├── fd: ()-->(1,2)
- ├── scan t2@_hyp_4
- │    ├── columns: k:1!null i:2!null s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── constraint: /1/2/11: [/2/3 - /2/3]
- │    ├── cost: 19.24
- │    ├── cost-flags: unbounded-cardinality
- │    └── fd: ()-->(1,2)
  └── filters
-      └── st_overlaps(geom1:4, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+      ├── st_overlaps(geom1:4, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+      ├── k:1 = 2 [outer=(1), constraints=(/1: [/2 - /2]; tight), fd=()-->(1)]
+      └── i:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
 
 # 5. Geospatial inverted + R + R: combined index (inverted + equal, inverted +
 # equal group, equal group candidates)
@@ -1422,11 +1363,9 @@ select
  ├── columns: k:1!null i:2!null s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 12058.11
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── cost: 945.837778
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -1466,7 +1405,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_intersects('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:4)
  │         ├── cost: 254.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (11)
  │         └── scan t2@_hyp_3,inverted
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -1503,8 +1441,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 253.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 253.575556
  └── filters
       ├── st_overlaps(geom1:4, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
       ├── k:1 > 2 [outer=(1), constraints=(/1: [/3 - ]; tight)]
@@ -1627,12 +1564,10 @@ select
  ├── columns: k:1!null i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 26.1900001
- ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1)
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── cost: 26.148889
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /15
@@ -1673,7 +1608,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_intersects('01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040', geom1:4)
  │         ├── cost: 19.2177778
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (11)
  │         └── scan t2@_hyp_3,inverted
  │              ├── columns: rowid:11!null geom1_inverted_key:15!null
@@ -1712,8 +1646,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 19.1866667
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 19.1866667
  └── filters
       └── geom1:4 && 'BOX(1 2,3 4)' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -1737,12 +1670,10 @@ select
  ├── columns: k:1!null i:2 s:3 geom1:4 geog1:5 bbox1:6!null bbox2:7!null geom2:8 geog2:9 inet1:10
  ├── immutable
  ├── cost: 424.726667
- ├── cost-flags: unbounded-cardinality
  ├── scan t2@_hyp_3
  │    ├── columns: k:1!null i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── constraint: /1/11: [/3 - ]
- │    ├── cost: 421.353333
- │    └── cost-flags: unbounded-cardinality
+ │    └── cost: 421.353333
  └── filters
       ├── bbox1:6 ~ bbox2:7 [outer=(6,7), immutable, constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
       └── 'BOX(1 2,3 4)' && geom2:8 [outer=(8), immutable]
@@ -1766,11 +1697,9 @@ select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
  ├── cost: 2250.16
- ├── cost-flags: unbounded-cardinality
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 1240.12
- │    └── cost-flags: unbounded-cardinality
+ │    └── cost: 1240.12
  └── filters
       ├── st_covers(geom1:4, geom2:8) [outer=(4,8), immutable, constraints=(/4: (/NULL - ]; /8: (/NULL - ])]
       └── (~k:1) = 1 [outer=(1), immutable]
@@ -1798,21 +1727,17 @@ inner-join (cross)
  ├── columns: k:1!null i:2 f:3 s:4!null k:8 i:9 s:10!null geom1:11 geog1:12 bbox1:13 bbox2:14 geom2:15 geog2:16 inet1:17
  ├── immutable
  ├── cost: 5665.48872
- ├── cost-flags: unbounded-cardinality
  ├── scan t2
  │    ├── columns: t2.k:8 t2.i:9 t2.s:10 geom1:11 geog1:12 bbox1:13 bbox2:14 geom2:15 geog2:16 inet1:17
- │    ├── cost: 1240.12
- │    └── cost-flags: unbounded-cardinality
+ │    └── cost: 1240.12
  ├── select
  │    ├── columns: t1.k:1!null t1.i:2 f:3 t1.s:4
  │    ├── immutable
  │    ├── cost: 1107.05
- │    ├── cost-flags: unbounded-cardinality
  │    ├── scan t1@_hyp_1
  │    │    ├── columns: t1.k:1!null t1.i:2 f:3 t1.s:4
  │    │    ├── constraint: /1/5: (/NULL - ]
- │    │    ├── cost: 1097.12
- │    │    └── cost-flags: unbounded-cardinality
+ │    │    └── cost: 1097.12
  │    └── filters
  │         └── t1.k:1 = (~t1.k:1) [outer=(1), immutable, constraints=(/1: (/NULL - ])]
  └── filters
@@ -1851,11 +1776,9 @@ select
  ├── columns: k:1 geom1:2!null
  ├── immutable
  ├── cost: 928.312222
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 geom1:2
  │    ├── cost: 816.06
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:3!null
  │         ├── inverted expression: /6
@@ -1867,7 +1790,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:2)
  │         ├── cost: 142.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (3)
  │         └── scan t2@inverted_idx,inverted
  │              ├── columns: rowid:3!null geom1_inverted_key:6!null
@@ -1876,8 +1798,7 @@ select
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 141.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 141.575556
  └── filters
       └── st_covers(geom1:2, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
@@ -1901,11 +1822,9 @@ select
  ├── columns: k:1 geom1:2!null
  ├── immutable
  ├── cost: 1040.31222
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 geom1:2
  │    ├── cost: 928.06
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:3!null
  │         ├── inverted expression: /8
@@ -1945,7 +1864,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:2)
  │         ├── cost: 254.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (3)
  │         └── scan t2@_hyp_2,inverted
  │              ├── columns: rowid:3!null geom1_inverted_key:8!null
@@ -1982,8 +1900,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 253.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 253.575556
  └── filters
       └── st_covers(geom1:2, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
@@ -2002,11 +1919,9 @@ select
  ├── columns: k:1 geom1:2!null
  ├── immutable
  ├── cost: 928.312222
- ├── cost-flags: unbounded-cardinality
  ├── index-join t2
  │    ├── columns: k:1 geom1:2
  │    ├── cost: 816.06
- │    ├── cost-flags: unbounded-cardinality
  │    └── inverted-filter
  │         ├── columns: rowid:3!null
  │         ├── inverted expression: /8
@@ -2018,7 +1933,6 @@ select
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:2)
  │         ├── cost: 142.706667
- │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (3)
  │         └── scan t2@inverted_idx_visible,inverted
  │              ├── columns: rowid:3!null geom1_inverted_key:8!null
@@ -2027,8 +1941,7 @@ select
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 141.575556
- │              └── cost-flags: unbounded-cardinality
+ │              └── cost: 141.575556
  └── filters
       └── st_covers(geom1:2, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 

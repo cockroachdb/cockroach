@@ -21,7 +21,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 10 MutationType ops
+## StatementPhase stage 1 of 1 with 9 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -66,6 +66,31 @@ upsert descriptor #104
   +  indexes: []
      modificationTime: {}
   +  mutations:
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 4
+  +      - 3
+  +      keyColumnNames:
+  +      - crdb_internal_column_4_name_placeholder
+  +      - k
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: t_expr_k_idx
+  +      partitioning: {}
+  +      sharded: {}
+  +      vecConfig: {}
+  +      version: 3
+  +    mutationId: 1
+  +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 2
@@ -121,31 +146,6 @@ upsert descriptor #104
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
-  +  - direction: DROP
-  +    index:
-  +      createdAtNanos: "1640995200000000000"
-  +      foreignKey: {}
-  +      geoConfig: {}
-  +      id: 2
-  +      interleave: {}
-  +      keyColumnDirections:
-  +      - ASC
-  +      - ASC
-  +      keyColumnIds:
-  +      - 4
-  +      - 3
-  +      keyColumnNames:
-  +      - crdb_internal_column_4_name_placeholder
-  +      - k
-  +      keySuffixColumnIds:
-  +      - 1
-  +      name: t_expr_k_idx
-  +      partitioning: {}
-  +      sharded: {}
-  +      vecConfig: {}
-  +      version: 3
-  +    mutationId: 1
-  +    state: WRITE_ONLY
   +  - column:
   +      computeExpr: j + 1:::INT8
   +      id: 4
@@ -170,9 +170,7 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -193,7 +191,7 @@ write *eventpb.CreateIndex to event log:
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 14 MutationType ops
+## PreCommitPhase stage 2 of 2 with 13 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -275,6 +273,31 @@ upsert descriptor #104
   +  indexes: []
      modificationTime: {}
   +  mutations:
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 4
+  +      - 3
+  +      keyColumnNames:
+  +      - crdb_internal_column_4_name_placeholder
+  +      - k
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: t_expr_k_idx
+  +      partitioning: {}
+  +      sharded: {}
+  +      vecConfig: {}
+  +      version: 3
+  +    mutationId: 1
+  +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 2
@@ -330,31 +353,6 @@ upsert descriptor #104
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
-  +  - direction: DROP
-  +    index:
-  +      createdAtNanos: "1640995200000000000"
-  +      foreignKey: {}
-  +      geoConfig: {}
-  +      id: 2
-  +      interleave: {}
-  +      keyColumnDirections:
-  +      - ASC
-  +      - ASC
-  +      keyColumnIds:
-  +      - 4
-  +      - 3
-  +      keyColumnNames:
-  +      - crdb_internal_column_4_name_placeholder
-  +      - k
-  +      keySuffixColumnIds:
-  +      - 1
-  +      name: t_expr_k_idx
-  +      partitioning: {}
-  +      sharded: {}
-  +      vecConfig: {}
-  +      version: 3
-  +    mutationId: 1
-  +    state: WRITE_ONLY
   +  - column:
   +      computeExpr: j + 1:::INT8
   +      id: 4
@@ -379,9 +377,7 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -402,15 +398,15 @@ upsert descriptor #104
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
-     - direction: DROP
-       index:
+     - column:
+         computeExpr: j + 1:::INT8
   ...
        time: {}
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Backfilling index (1 operation) — PostCommit phase (stage 2 of 15)."
+update progress of schema change job #1: "PostCommitPhase stage 2 of 15 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 15 with 1 BackfillType op
@@ -432,7 +428,7 @@ upsert descriptor #104
   -  version: "3"
   +  version: "4"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 4 of 15)."
+update progress of schema change job #1: "PostCommitPhase stage 4 of 15 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 15 with 3 MutationType ops
@@ -450,7 +446,7 @@ upsert descriptor #104
   -  version: "4"
   +  version: "5"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Merging index (1 operation) — PostCommit phase (stage 5 of 15)."
+update progress of schema change job #1: "PostCommitPhase stage 5 of 15 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 15 with 1 BackfillType op
@@ -473,15 +469,15 @@ upsert descriptor #104
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
-     - direction: DROP
-       index:
+     - column:
+         computeExpr: j + 1:::INT8
   ...
        time: {}
      unexposedParentSchemaId: 101
   -  version: "5"
   +  version: "6"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Validating index (1 operation) — PostCommit phase (stage 7 of 15)."
+update progress of schema change job #1: "PostCommitPhase stage 7 of 15 with 1 ValidationType op pending"
 commit transaction #8
 begin transaction #9
 ## PostCommitPhase stage 7 of 15 with 1 ValidationType op
@@ -560,7 +556,7 @@ upsert descriptor #104
   -  version: "6"
   +  version: "7"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 9 of 15)."
+update progress of schema change job #1: "PostCommitPhase stage 9 of 15 with 1 MutationType op pending"
 commit transaction #10
 begin transaction #11
 ## PostCommitPhase stage 9 of 15 with 3 MutationType ops
@@ -578,7 +574,7 @@ upsert descriptor #104
   -  version: "7"
   +  version: "8"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Backfilling index (1 operation) — PostCommit phase (stage 10 of 15)."
+update progress of schema change job #1: "PostCommitPhase stage 10 of 15 with 1 BackfillType op pending"
 commit transaction #11
 begin transaction #12
 ## PostCommitPhase stage 10 of 15 with 1 BackfillType op
@@ -600,7 +596,7 @@ upsert descriptor #104
   -  version: "8"
   +  version: "9"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 12 of 15)."
+update progress of schema change job #1: "PostCommitPhase stage 12 of 15 with 1 MutationType op pending"
 commit transaction #13
 begin transaction #14
 ## PostCommitPhase stage 12 of 15 with 3 MutationType ops
@@ -618,7 +614,7 @@ upsert descriptor #104
   -  version: "9"
   +  version: "10"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Merging index (1 operation) — PostCommit phase (stage 13 of 15)."
+update progress of schema change job #1: "PostCommitPhase stage 13 of 15 with 1 BackfillType op pending"
 commit transaction #14
 begin transaction #15
 ## PostCommitPhase stage 13 of 15 with 1 BackfillType op
@@ -649,14 +645,14 @@ upsert descriptor #104
   -  version: "10"
   +  version: "11"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Validating index (1 operation) — PostCommit phase (stage 15 of 15)."
+update progress of schema change job #1: "PostCommitPhase stage 15 of 15 with 1 ValidationType op pending"
 commit transaction #16
 begin transaction #17
 ## PostCommitPhase stage 15 of 15 with 1 ValidationType op
 validate forward indexes [5] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 5 with 16 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 16 MutationType ops
 upsert descriptor #104
   ...
            statementTag: CREATE INDEX
@@ -694,8 +690,24 @@ upsert descriptor #104
      modificationTime: {}
      mutations:
   ...
-     - direction: DROP
+         keySuffixColumnIds:
+         - 1
+  -      name: t_expr_k_idx
+  +      name: crdb_internal_index_2_name_placeholder
+         partitioning: {}
+         sharded: {}
+  ...
+         version: 3
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: ADD
        index:
+  ...
+       mutationId: 1
+       state: WRITE_ONLY
+  -  - direction: DROP
+  -    index:
   -      constraintId: 3
   -      createdExplicitly: true
   -      encodingType: 1
@@ -722,22 +734,6 @@ upsert descriptor #104
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
-  -  - direction: DROP
-  -    index:
-         createdAtNanos: "1640995200000000000"
-         foreignKey: {}
-  ...
-         keySuffixColumnIds:
-         - 1
-  -      name: t_expr_k_idx
-  +      name: crdb_internal_index_2_name_placeholder
-         partitioning: {}
-         sharded: {}
-  ...
-         version: 3
-       mutationId: 1
-  -    state: WRITE_ONLY
-  +    state: DELETE_ONLY
      - column:
          computeExpr: j + 1:::INT8
   ...
@@ -804,11 +800,11 @@ upsert descriptor #104
   +  version: "12"
 persist all catalog changes to storage
 adding table for stats refresh: 104
-update progress of schema change job #1: "Pending: Updating schema metadata (9 operations) — PostCommitNonRevertible phase (stage 2 of 5)."
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 9 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #18
 begin transaction #19
-## PostCommitNonRevertiblePhase stage 2 of 5 with 11 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 4 with 11 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -830,42 +826,10 @@ upsert descriptor #104
        - k
        name: primary
   ...
-     modificationTime: {}
-     mutations:
-  -  - direction: ADD
-  +  - direction: DROP
+     - direction: DROP
        index:
-  -      constraintId: 2
-  -      createdExplicitly: true
   +      constraintId: 1
-  +      createdAtNanos: "1640995200000000000"
-         encodingType: 1
-         foreignKey: {}
-         geoConfig: {}
-  -      id: 3
-  +      id: 1
-         interleave: {}
-         keyColumnDirections:
-  ...
-         keyColumnNames:
-         - i
-  -      name: crdb_internal_index_3_name_placeholder
-  +      name: crdb_internal_index_1_name_placeholder
-         partitioning: {}
-         sharded: {}
-         storeColumnIds:
-  +      - 2
-         - 3
-         storeColumnNames:
-  +      - crdb_internal_column_2_name_placeholder
-         - k
-         unique: true
-  ...
-       mutationId: 1
-       state: WRITE_ONLY
-  -  - direction: DROP
-  -    index:
-  -      createdAtNanos: "1640995200000000000"
+         createdAtNanos: "1640995200000000000"
   -      foreignKey: {}
   -      geoConfig: {}
   -      id: 2
@@ -888,6 +852,33 @@ upsert descriptor #104
   -      version: 3
   -    mutationId: 1
   -    state: DELETE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      constraintId: 2
+  -      createdExplicitly: true
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 3
+  +      id: 1
+         interleave: {}
+         keyColumnDirections:
+  ...
+         keyColumnNames:
+         - i
+  -      name: crdb_internal_index_3_name_placeholder
+  +      name: crdb_internal_index_1_name_placeholder
+         partitioning: {}
+         sharded: {}
+         storeColumnIds:
+  +      - 2
+         - 3
+         storeColumnNames:
+  +      - crdb_internal_column_2_name_placeholder
+         - k
+         unique: true
+  ...
+       state: WRITE_ONLY
      - column:
   -      computeExpr: j + 1:::INT8
   -      id: 4
@@ -936,10 +927,10 @@ upsert descriptor #104
   -  version: "12"
   +  version: "13"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (5 operations) — PostCommitNonRevertible phase (stage 3 of 5)."
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 4 with 5 MutationType ops pending"
 commit transaction #19
 begin transaction #20
-## PostCommitNonRevertiblePhase stage 3 of 5 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 4 with 7 MutationType ops
 upsert descriptor #104
   ...
          version: 4
@@ -961,12 +952,49 @@ upsert descriptor #104
   -  version: "13"
   +  version: "14"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (6 operations) — PostCommitNonRevertible phase (stage 4 of 5)."
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 4 of 4 with 6 MutationType ops pending"
 commit transaction #20
 begin transaction #21
-## PostCommitNonRevertiblePhase stage 4 of 5 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 4 of 4 with 8 MutationType ops
 upsert descriptor #104
   ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "3": k
+  -        "4": crdb_internal_column_4_name_placeholder
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "3": t_pkey
+  -        "4": crdb_internal_index_4_name_placeholder
+  -        "5": idx
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
+  -        statement: ALTER TABLE t DROP COLUMN j CASCADE
+  -        statementTag: ALTER TABLE
+  -    - statement:
+  -        redactedStatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹k›)
+  -        statement: CREATE UNIQUE INDEX idx ON t (k)
+  -        statementTag: CREATE INDEX
+  -      statementRank: 1
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
      - columnIds:
        - 1
   -    - 2
@@ -1031,64 +1059,12 @@ upsert descriptor #104
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE; CREATE UNIQUE INDEX idx ON defaultdb.public.t (k)"
   descriptor IDs: [104]
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 5 of 5)."
-commit transaction #21
-notified job registry to adopt jobs: [2]
-begin transaction #22
-## PostCommitNonRevertiblePhase stage 5 of 5 with 3 MutationType ops
-upsert descriptor #104
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": i
-  -        "3": k
-  -        "4": crdb_internal_column_4_name_placeholder
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      families:
-  -        "0": primary
-  -      id: 104
-  -      indexes:
-  -        "3": t_pkey
-  -        "4": crdb_internal_index_4_name_placeholder
-  -        "5": idx
-  -      name: t
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-  -        statement: ALTER TABLE t DROP COLUMN j CASCADE
-  -        statementTag: ALTER TABLE
-  -    - statement:
-  -        redactedStatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹k›)
-  -        statement: CREATE UNIQUE INDEX idx ON t (k)
-  -        statementTag: CREATE INDEX
-  -      statementRank: 1
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
-  ...
-     replacementOf:
-       time: {}
-  +  schemaLocked: true
-     unexposedParentSchemaId: 101
-  -  version: "15"
-  +  version: "16"
-persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #22
+commit transaction #21
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase

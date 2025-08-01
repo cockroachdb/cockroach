@@ -107,12 +107,7 @@ var numNodes = []int{5, 12, 30}
 var numVCPUs = []int{4, 8, 16, 32}
 var numDisks = []int{1, 2}
 var memOptions = []spec.MemPerCPU{spec.Low, spec.Standard, spec.High}
-var cloudSets = []registry.CloudSet{
-	registry.OnlyAWS,
-	registry.OnlyGCE,
-	registry.OnlyAzure,
-	registry.OnlyIBM,
-}
+var cloudSets = []registry.CloudSet{registry.OnlyAWS, registry.OnlyGCE, registry.OnlyAzure}
 var admissionControlOptions = []admissionControlMode{elasticOnlyBoth, fullNormalElasticRepl, fullBoth}
 var diskBandwidthLimitOptions = []string{"0", "350MiB"}
 
@@ -243,7 +238,7 @@ func (v variations) randomize(rng *rand.Rand) variations {
 func setup(p perturbation, acceptableChange float64) variations {
 	v := variations{}
 	v.workload = kvWorkload{}
-	v.leaseType = registry.LeaderLeases
+	v.leaseType = registry.EpochLeases
 	v.blockSize = 4096
 	v.splits = 10000
 	v.numNodes = 12
@@ -272,39 +267,31 @@ func setup(p perturbation, acceptableChange float64) variations {
 	return v
 }
 
-func register(r registry.Registry, p perturbation, skipReason string) {
-	// All metamorphic perturbation tests are currently disabled. See
+func register(r registry.Registry, p perturbation) {
+	// Metamorphic perturbation tests are currently disabled. See
 	// https://github.com/cockroachdb/cockroach/issues/142148.
-	addMetamorphic(r, p, "#142148")
-	addFull(r, p, skipReason)
+	// addMetamorphic(r, p)
+	addFull(r, p)
 	addDev(r, p)
 }
 
 func RegisterTests(r registry.Registry) {
-	const notSkipped = ""
-	const skippedByBankruptcy = "#149662"
-
-	register(r, restart{}, notSkipped)
-	register(r, backup{}, notSkipped)
-
-	// TODO(ssd): We skipped the majority of these tests so that we can focus on
-	// one at a time. These are vaguely ordered by their previous pass rate
-	// (highest first).
-	register(r, intents{}, skippedByBankruptcy)
-	register(r, decommission{}, skippedByBankruptcy)
-	register(r, elasticWorkload{}, skippedByBankruptcy)
-	register(r, partition{}, skippedByBankruptcy)
-	register(r, backfill{}, notSkipped)
-	register(r, &slowDisk{}, skippedByBankruptcy)
-	register(r, addNode{}, skippedByBankruptcy)
+	// NB: If these tests fail because they are flaky, increase the numbers
+	// until they pass. Additionally add the seed (from the log) that caused
+	// them to fail as a comment in the test.
+	register(r, restart{})
+	register(r, partition{})
+	register(r, addNode{})
+	register(r, decommission{})
+	register(r, backfill{})
+	register(r, &slowDisk{})
+	register(r, elasticWorkload{})
+	register(r, intents{})
+	register(r, backup{})
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
 	opts := append(v.specOptions, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(v.mem), spec.TerminateOnMigration())
-	// Disable cluster reuse to avoid potential cgroup side effects.
-	if v.perturbationName() == "slowDisk" {
-		opts = append(opts, spec.ReuseNone())
-	}
 	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, opts...)
 }
 
@@ -397,61 +384,36 @@ func (v *variations) applyEnvOverride(key string, val string) (err error) {
 	return err
 }
 
-var perturbationDefaultProcessFunction = func(test string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
-	meanMetrics := make(map[string]roachtestutil.MetricPoint)
-
-	for _, summary := range histograms.Summaries {
-		meanMetrics[summary.Name] = summary.Values[0].Mean
-	}
-
-	var aggregatedMeanMetrics roachtestutil.AggregatedPerfMetrics
-	for key, value := range meanMetrics {
-		aggregatedMeanMetrics = append(aggregatedMeanMetrics, &roachtestutil.AggregatedMetric{
-			Name:             fmt.Sprintf("%s_%s_mean", test, key),
-			Value:            value / 1e6,
-			Unit:             "score(ms)",
-			IsHigherBetter:   false,
-			AdditionalLabels: nil,
-		})
-	}
-
-	return aggregatedMeanMetrics, nil
-}
-
 //lint:ignore U1000 unused
-func addMetamorphic(r registry.Registry, p perturbation, skipReason string) {
+func addMetamorphic(r registry.Registry, p perturbation) {
 	rng, seed := randutil.NewPseudoRand()
 	v := p.setupMetamorphic(rng)
 	v.seed = seed
 	v = v.finishSetup()
 	r.Add(registry.TestSpec{
-		Name:                   fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
-		Skip:                   skipReason,
-		CompatibleClouds:       v.cloud,
-		Suites:                 registry.Suites(registry.Perturbation),
-		Owner:                  registry.OwnerKV,
-		Cluster:                v.makeClusterSpec(),
-		Leases:                 v.leaseType,
-		Randomized:             true,
-		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
-		Run:                    v.runTest,
+		Name:             fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
+		CompatibleClouds: v.cloud,
+		Suites:           registry.Suites(registry.Perturbation),
+		Owner:            registry.OwnerKV,
+		Cluster:          v.makeClusterSpec(),
+		Leases:           v.leaseType,
+		Randomized:       true,
+		Run:              v.runTest,
 	})
 }
 
-func addFull(r registry.Registry, p perturbation, skipReason string) {
+func addFull(r registry.Registry, p perturbation) {
 	v := p.setup()
 	v = v.finishSetup()
 	r.Add(registry.TestSpec{
-		Name:                   fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
-		Skip:                   skipReason,
-		CompatibleClouds:       v.cloud,
-		Suites:                 registry.Suites(registry.Nightly),
-		Owner:                  registry.OwnerKV,
-		Cluster:                v.makeClusterSpec(),
-		Leases:                 v.leaseType,
-		Benchmark:              true,
-		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
-		Run:                    v.runTest,
+		Name:             fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
+		CompatibleClouds: v.cloud,
+		Suites:           registry.Suites(registry.Nightly),
+		Owner:            registry.OwnerKV,
+		Cluster:          v.makeClusterSpec(),
+		Leases:           v.leaseType,
+		Benchmark:        true,
+		Run:              v.runTest,
 	})
 }
 
@@ -482,14 +444,13 @@ func addDev(r registry.Registry, p perturbation) {
 	v.cloud = registry.AllClouds
 	v = v.finishSetup()
 	r.Add(registry.TestSpec{
-		Name:                   fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
-		CompatibleClouds:       v.cloud,
-		Suites:                 registry.ManualOnly,
-		Owner:                  registry.OwnerKV,
-		Cluster:                v.makeClusterSpec(),
-		Leases:                 v.leaseType,
-		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
-		Run:                    v.runTest,
+		Name:             fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
+		CompatibleClouds: v.cloud,
+		Suites:           registry.ManualOnly,
+		Owner:            registry.OwnerKV,
+		Cluster:          v.makeClusterSpec(),
+		Leases:           v.leaseType,
+		Run:              v.runTest,
 	})
 }
 
@@ -629,7 +590,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.Status("T0: starting nodes")
 
 	// Track the three operations that we are sending in this test.
-	m := c.NewDeprecatedMonitor(ctx, v.stableNodes())
+	m := c.NewMonitor(ctx, v.stableNodes())
 
 	// Start the stable nodes and let the perturbation start the target node(s).
 	v.startNoBackup(ctx, t, v.stableNodes())

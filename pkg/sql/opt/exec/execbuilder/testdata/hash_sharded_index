@@ -15,7 +15,7 @@ ALTER TABLE sharded_primary INJECT STATISTICS '[
 ]'
 
 query T
-EXPLAIN (VERBOSE, TYPES) INSERT INTO sharded_primary (a) VALUES (1), (2)
+EXPLAIN (VERBOSE) INSERT INTO sharded_primary (a) VALUES (1), (2)
 ----
 distribution: local
 vectorized: true
@@ -27,21 +27,21 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (crdb_internal_a_shard_11_comp int, column1 int, check1 bool)
-    │ render check1: ((crdb_internal_a_shard_11_comp)[int] IN (((0)[int], (1)[int], __more1_10__, (10)[int]))[tuple{int, int, __more1_10__, int}])[bool]
-    │ render column1: (column1)[int]
-    │ render crdb_internal_a_shard_11_comp: (crdb_internal_a_shard_11_comp)[int]
+    │ columns: (crdb_internal_a_shard_11_comp, column1, check1)
+    │ render check1: crdb_internal_a_shard_11_comp IN (0, 1, __more1_10__, 10)
+    │ render column1: column1
+    │ render crdb_internal_a_shard_11_comp: crdb_internal_a_shard_11_comp
     │
     └── • render
-        │ columns: (crdb_internal_a_shard_11_comp int, column1 int)
-        │ render crdb_internal_a_shard_11_comp: (mod((fnv32((md5((crdb_internal.datums_to_bytes((column1)[int]))[bytes]))[string]))[int], (11)[int]))[int]
-        │ render column1: (column1)[int]
+        │ columns: (crdb_internal_a_shard_11_comp, column1)
+        │ render crdb_internal_a_shard_11_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 11)
+        │ render column1: column1
         │
         └── • values
-              columns: (column1 int)
+              columns: (column1)
               size: 1 column, 2 rows
-              row 0, expr 0: (1)[int]
-              row 1, expr 0: (2)[int]
+              row 0, expr 0: 1
+              row 1, expr 0: 2
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM sharded_primary WHERE (a % 2) = 0 ORDER BY a LIMIT 10;
@@ -294,7 +294,7 @@ statement ok
 CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH (bucket_count=12))
 
 query T
-EXPLAIN (VERBOSE, TYPES) INSERT INTO sharded_secondary (a) VALUES (1), (2)
+EXPLAIN (VERBOSE) INSERT INTO sharded_secondary (a) VALUES (1), (2)
 ----
 distribution: local
 vectorized: true
@@ -306,23 +306,23 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (column1 int, crdb_internal_a_shard_12_comp int, rowid_default int, check1 bool)
-    │ render check1: ((crdb_internal_a_shard_12_comp)[int] IN (((0)[int], (1)[int], __more1_10__, (11)[int]))[tuple{int, int, __more1_10__, int}])[bool]
-    │ render column1: (column1)[int]
-    │ render rowid_default: (rowid_default)[int]
-    │ render crdb_internal_a_shard_12_comp: (crdb_internal_a_shard_12_comp)[int]
+    │ columns: (column1, crdb_internal_a_shard_12_comp, rowid_default, check1)
+    │ render check1: crdb_internal_a_shard_12_comp IN (0, 1, __more1_10__, 11)
+    │ render column1: column1
+    │ render rowid_default: rowid_default
+    │ render crdb_internal_a_shard_12_comp: crdb_internal_a_shard_12_comp
     │
     └── • render
-        │ columns: (crdb_internal_a_shard_12_comp int, rowid_default int, column1 int)
-        │ render crdb_internal_a_shard_12_comp: (mod((fnv32((md5((crdb_internal.datums_to_bytes((column1)[int]))[bytes]))[string]))[int], (12)[int]))[int]
-        │ render rowid_default: (unique_rowid())[int]
-        │ render column1: (column1)[int]
+        │ columns: (crdb_internal_a_shard_12_comp, rowid_default, column1)
+        │ render crdb_internal_a_shard_12_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 12)
+        │ render rowid_default: unique_rowid()
+        │ render column1: column1
         │
         └── • values
-              columns: (column1 int)
+              columns: (column1)
               size: 1 column, 2 rows
-              row 0, expr 0: (1)[int]
-              row 1, expr 0: (2)[int]
+              row 0, expr 0: 1
+              row 1, expr 0: 2
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM sharded_secondary WHERE a > 100 ORDER BY a LIMIT 10;
@@ -581,7 +581,7 @@ CREATE TABLE public.t (
   crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
   CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8)
-) WITH (schema_locked = true);
+)
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -1098,7 +1098,6 @@ vectorized: true
                     │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8, b)
                     │ equality cols are key
                     │ locking strength: for update
-                    │ parallel
                     │
                     └── • render
                         │ columns: (crdb_internal_b_shard_8_eq, crdb_internal_b_shard_8_comp, column1, column2)
@@ -1145,7 +1144,6 @@ vectorized: true
             │ table: t_hash_indexed@idx_t_hash_indexed
             │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8, b)
             │ equality cols are key
-            │ parallel
             │
             └── • render
                 │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_comp)
@@ -1204,7 +1202,6 @@ vectorized: true
             │ table: t_hash_indexed@idx_t_hash_indexed
             │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8, b)
             │ equality cols are key
-            │ parallel
             │
             └── • render
                 │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_comp)
@@ -1219,7 +1216,6 @@ vectorized: true
                     │ table: t_hash_indexed@t_hash_indexed_pkey
                     │ equality: (column1) = (a)
                     │ equality cols are key
-                    │ parallel
                     │
                     └── • render
                         │ columns: (crdb_internal_b_shard_8_comp, column1, column2)
@@ -1304,7 +1300,6 @@ vectorized: true
             │ table: t_hash_indexed@idx_t_hash_indexed
             │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8, b)
             │ equality cols are key
-            │ parallel
             │
             └── • render
                 │ columns: (crdb_internal_b_shard_8_eq, crdb_internal_b_shard_8_comp, column1, column2)
@@ -1373,7 +1368,6 @@ vectorized: true
                 │ table: t_parent_pk@t_parent_pk_pkey
                 │ equality: (crdb_internal_id_shard_16_eq, pid) = (crdb_internal_id_shard_16, id)
                 │ equality cols are key
-                │ parallel
                 │
                 └── • render
                     │ columns: (crdb_internal_id_shard_16_eq, pid)
@@ -1443,7 +1437,6 @@ vectorized: true
                 │ table: t_parent_sec@idx_t_parent_sec_real_id
                 │ equality: (crdb_internal_real_id_shard_16_eq, pid) = (crdb_internal_real_id_shard_16, real_id)
                 │ equality cols are key
-                │ parallel
                 │
                 └── • render
                     │ columns: (crdb_internal_real_id_shard_16_eq, pid)
@@ -1534,7 +1527,6 @@ vectorized: true
                 │ equality: (rowid_default) = (rowid)
                 │ equality cols are key
                 │ locking strength: for update
-                │ parallel
                 │
                 └── • values
                       columns: (column1, rowid_default, crdb_internal_a_shard_16_comp)

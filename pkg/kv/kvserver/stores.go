@@ -335,18 +335,3 @@ func (ls *Stores) GetStoreMetricRegistry(storeID roachpb.StoreID) *metric.Regist
 	}
 	return nil
 }
-
-// GetAggregatedStoreStats returns the aggregated cpu usage across all stores and
-// the count of stores.
-func (ls *Stores) GetAggregatedStoreStats(useCached bool) (storesCPURate int64, numStores int32) {
-	_ = ls.VisitStores(func(s *Store) error {
-		c, err := s.Capacity(context.Background(), useCached)
-		if err != nil {
-			panic(err)
-		}
-		storesCPURate += int64(c.CPUPerSecond)
-		numStores++
-		return nil
-	})
-	return storesCPURate, numStores
-}

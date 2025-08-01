@@ -14,7 +14,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db)}
  │         │    ├── ABSENT → PUBLIC        SchemaChild:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 105 (public)}
  │         │    ├── ABSENT → PUBLIC        TableData:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 104 (db)}
- │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "PER SESSION CACHE"}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "CACHE"}
  │         │    ├── ABSENT → PUBLIC        Column:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 107 (tbl_serial_id_seq+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnNotNull:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+), IndexID: 0}
@@ -38,15 +38,12 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), IndexID: 3}
- │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
- │         │    └── PUBLIC → ABSENT        TableSchemaLocked:{DescID: 106 (tbl)}
- │         └── 38 Mutation operations
- │              ├── SetTableSchemaLocked {"TableID":106}
+ │         └── 37 Mutation operations
  │              ├── CreateSequenceDescriptor {"SequenceID":107}
  │              ├── SetNameInDescriptor {"DescriptorID":107,"Name":"tbl_serial_id_se..."}
  │              ├── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"tbl_serial_id_se...","SchemaID":105}}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":107,"SchemaID":105}}
- │              ├── SetSequenceOptions {"Key":"PER SESSION CACH...","SequenceID":107,"Value":"256"}
+ │              ├── SetSequenceOptions {"Key":"CACHE","SequenceID":107,"Value":"256"}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":107}}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":107}}
  │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":107}
@@ -86,7 +83,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db)}
  │    │    │    ├── PUBLIC        → ABSENT SchemaChild:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 105 (public)}
  │    │    │    ├── PUBLIC        → ABSENT TableData:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 104 (db)}
- │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "PER SESSION CACHE"}
+ │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "CACHE"}
  │    │    │    ├── PUBLIC        → ABSENT Column:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 107 (tbl_serial_id_seq+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
  │    │    │    ├── PUBLIC        → ABSENT ColumnNotNull:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+), IndexID: 0}
@@ -110,8 +107,6 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │    │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
  │    │    │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), IndexID: 3}
- │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
- │    │    │    └── ABSENT        → PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -120,7 +115,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db)}
  │         │    ├── ABSENT → PUBLIC        SchemaChild:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 105 (public)}
  │         │    ├── ABSENT → PUBLIC        TableData:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 104 (db)}
- │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "PER SESSION CACHE"}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "CACHE"}
  │         │    ├── ABSENT → PUBLIC        Column:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 107 (tbl_serial_id_seq+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnNotNull:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+), IndexID: 0}
@@ -144,15 +139,12 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), IndexID: 3}
- │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
- │         │    └── PUBLIC → ABSENT        TableSchemaLocked:{DescID: 106 (tbl)}
- │         └── 43 Mutation operations
- │              ├── SetTableSchemaLocked {"TableID":106}
+ │         └── 42 Mutation operations
  │              ├── CreateSequenceDescriptor {"SequenceID":107}
  │              ├── SetNameInDescriptor {"DescriptorID":107,"Name":"tbl_serial_id_se..."}
  │              ├── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"tbl_serial_id_se...","SchemaID":105}}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":107,"SchemaID":105}}
- │              ├── SetSequenceOptions {"Key":"PER SESSION CACH...","SequenceID":107,"Value":"256"}
+ │              ├── SetSequenceOptions {"Key":"CACHE","SequenceID":107,"Value":"256"}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":107}}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":107}}
  │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":107}
@@ -189,7 +181,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── MarkDescriptorAsPublic {"DescriptorID":107}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  ├── PostCommitPhase
  │    ├── Stage 1 of 7 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward PUBLIC
@@ -204,7 +196,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │         ├── MakeAbsentColumnNotNullWriteOnly {"ColumnID":2,"TableID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Backfil..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 2 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── BACKFILL_ONLY → BACKFILLED PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
@@ -217,7 +209,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":2,"TableID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 4 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── DELETE_ONLY → MERGE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
@@ -225,7 +217,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":2,"TableID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Merging..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 5 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── MERGE_ONLY → MERGED PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
@@ -241,7 +233,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │         ├── MakeMergedIndexWriteOnly {"IndexID":2,"TableID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Validat..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    └── Stage 7 of 7 in PostCommitPhase
  │         ├── 2 elements transitioning toward PUBLIC
  │         │    ├── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
@@ -250,7 +242,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── ValidateIndex {"IndexID":2,"TableID":106}
  │              └── ValidateColumnNotNull {"ColumnID":2,"IndexIDForValidation":2,"TableID":106}
  └── PostCommitNonRevertiblePhase
-      ├── Stage 1 of 4 in PostCommitNonRevertiblePhase
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 4 elements transitioning toward PUBLIC
       │    │    ├── WRITE_ONLY            → PUBLIC           Column:{DescID: 106 (tbl), ColumnID: 2 (serial_id+)}
       │    │    ├── VALIDATED             → PUBLIC           PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
@@ -276,8 +268,8 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
       │         ├── RefreshStats {"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
-      ├── Stage 2 of 4 in PostCommitNonRevertiblePhase
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward ABSENT
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 1 (tbl_pkey-)}
       │    │    └── VALIDATED → DELETE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey-), ConstraintID: 1}
@@ -286,25 +278,17 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
-      ├── Stage 3 of 4 in PostCommitNonRevertiblePhase
-      │    ├── 1 element transitioning toward TRANSIENT_ABSENT
-      │    │    └── PUBLIC      → TRANSIENT_ABSENT IndexData:{DescID: 106 (tbl), IndexID: 3}
-      │    ├── 2 elements transitioning toward ABSENT
-      │    │    ├── DELETE_ONLY → ABSENT           PrimaryIndex:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey-), ConstraintID: 1}
-      │    │    └── PUBLIC      → ABSENT           IndexData:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey-)}
-      │    └── 6 Mutation operations
-      │         ├── MakeIndexAbsent {"IndexID":1,"TableID":106}
-      │         ├── CreateGCJobForIndex {"IndexID":1,"TableID":106}
-      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":106}
-      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
-      │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
-      └── Stage 4 of 4 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward TRANSIENT_PUBLIC
-           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}
-           └── 4 Mutation operations
-                ├── SetTableSchemaLocked {"Locked":true,"TableID":106}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_ABSENT
+           │    └── PUBLIC      → TRANSIENT_ABSENT IndexData:{DescID: 106 (tbl), IndexID: 3}
+           ├── 2 elements transitioning toward ABSENT
+           │    ├── DELETE_ONLY → ABSENT           PrimaryIndex:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey-), ConstraintID: 1}
+           │    └── PUBLIC      → ABSENT           IndexData:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey-)}
+           └── 6 Mutation operations
+                ├── MakeIndexAbsent {"IndexID":1,"TableID":106}
+                ├── CreateGCJobForIndex {"IndexID":1,"TableID":106}
+                ├── CreateGCJobForIndex {"IndexID":3,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

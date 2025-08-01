@@ -795,7 +795,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatCol(col.Alias, col.ID, opt.ColSet{} /* notNullCols */)
 		}
 		tp.Child(f.Buffer.String())
-		f.formatDependencies(tp, t.Deps, t.TypeDeps, t.FuncDeps)
+		f.formatDependencies(tp, t.Deps, t.TypeDeps)
 
 	case *CreateFunctionExpr:
 		fmtFlags := tree.FmtSimple
@@ -803,11 +803,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			fmtFlags = tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
 		}
 		tp.Child(tree.AsStringWithFlags(t.Syntax, fmtFlags))
-		f.formatDependencies(tp, t.Deps, t.TypeDeps, t.FuncDeps)
+		f.formatDependencies(tp, t.Deps, t.TypeDeps)
 
 	case *CreateTriggerExpr:
 		tp.Child(t.Syntax.String())
-		f.formatDependencies(tp, t.Deps, t.TypeDeps, t.FuncDeps)
+		f.formatDependencies(tp, t.Deps, t.TypeDeps)
 
 	case *CreateStatisticsExpr:
 		tp.Child(t.Syntax.String())
@@ -1836,12 +1836,9 @@ func (f *ExprFmtCtx) formatLockingWithPrefix(
 
 // formatDependencies adds a new treeprinter child for schema dependencies.
 func (f *ExprFmtCtx) formatDependencies(
-	tp treeprinter.Node,
-	deps opt.SchemaDeps,
-	typeDeps opt.SchemaTypeDeps,
-	funcDeps opt.SchemaFunctionDeps,
+	tp treeprinter.Node, deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
 ) {
-	if len(deps) == 0 && typeDeps.Empty() && funcDeps.Empty() {
+	if len(deps) == 0 && typeDeps.Empty() {
 		tp.Child("no dependencies")
 		return
 	}
@@ -1871,11 +1868,6 @@ func (f *ExprFmtCtx) formatDependencies(
 			n.Child(typ.Name())
 		}
 	}
-	funcDeps.ForEach(func(routineID int) {
-		// TODO(drewk): format using the routine name.
-		ref := tree.FunctionOID{OID: catid.FuncIDToOID(catid.DescID(routineID))}
-		n.Child(ref.String())
-	})
 }
 
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to

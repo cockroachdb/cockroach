@@ -105,7 +105,7 @@ func executeNodeShutdown(
 		return err
 	}
 
-	m := c.NewDeprecatedMonitor(ctx, cfg.crdbNodes)
+	m := c.NewMonitor(ctx, cfg.crdbNodes)
 	m.ExpectDeath()
 	m.Go(func(ctx context.Context) error {
 		ticker := time.NewTicker(1 * time.Second)
@@ -198,7 +198,7 @@ func WaitForState(
 				return nil
 			}
 			if timeutil.Since(startTime) > maxWait {
-				return errors.Newf("job %d still in state %s after %s", jobID, state, maxWait)
+				return errors.Newf("job %d did not reach state %s after %s", jobID, state, maxWait)
 			}
 			ticker.Reset(5 * time.Second)
 		case <-ctx.Done():
@@ -223,8 +223,6 @@ func WaitForRunning(
 		}, maxWait)
 }
 
-// WaitForSucceeded waits for a job to reach the succeeded state from a running
-// state.
 func WaitForSucceeded(
 	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
 ) error {
@@ -234,61 +232,6 @@ func WaitForSucceeded(
 			case jobs.StateSucceeded:
 				return true, false
 			case jobs.StateRunning:
-				return false, false
-			default:
-				return false, true
-			}
-		}, maxWait)
-}
-
-// WaitForPaused waits for a job to reach the paused state from a running state.
-func WaitForPaused(
-	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
-) error {
-	return WaitForState(ctx, db, jobID,
-		func(status jobs.State) (success bool, unexpected bool) {
-			switch status {
-			case jobs.StatePaused:
-				return true, false
-			case jobs.StateRunning:
-				return false, false
-			case jobs.StatePauseRequested:
-				return false, false
-			default:
-				return false, true
-			}
-		}, maxWait)
-}
-
-// WaitForResume waits for a job to reach the resumed state from a paused state.
-func WaitForResume(
-	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
-) error {
-	return WaitForState(ctx, db, jobID,
-		func(status jobs.State) (success bool, unexpected bool) {
-			switch status {
-			case jobs.StateRunning:
-				return true, false
-			case jobs.StatePaused:
-				return false, false
-			default:
-				return false, true
-			}
-		}, maxWait)
-}
-
-// WaitForFailed waits for a job to reach the failed state from a running state.
-func WaitForFailed(
-	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
-) error {
-	return WaitForState(ctx, db, jobID,
-		func(state jobs.State) (success bool, unexpected bool) {
-			switch state {
-			case jobs.StateFailed:
-				return true, false
-			case jobs.StateRunning:
-				return false, false
-			case jobs.StateReverting:
 				return false, false
 			default:
 				return false, true

@@ -66,7 +66,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 			jobstest.UseSystemTables, timeutil.Now(), tree.ScheduledChangefeedExecutor),
 	}
 
-	s, db, stopServer := startTestFullServer(t, makeOptions(t, withSchedulerHelper(sh)))
+	s, db, stopServer := startTestFullServer(t, makeOptions(withSchedulerHelper(sh)))
 	sh.db = db
 	sh.sqlDB = sqlutils.MakeSQLRunner(db)
 	sh.server = s
@@ -870,7 +870,7 @@ func TestFullyQualifyTables(t *testing.T) {
 	defer cleanupPlanHook()
 
 	tablePatterns := make([]tree.TablePattern, 0)
-	for _, target := range createChangeFeedStmt.TableTargets {
+	for _, target := range createChangeFeedStmt.Targets {
 		tablePatterns = append(tablePatterns, target.TableName)
 	}
 

@@ -44,7 +44,6 @@ func PrepareTransactionForRetry(
 
 	txn := *pErr.GetTxn()
 	aborted := false
-	errorAlwaysRequireRestart := false
 	switch tErr := pErr.GetDetail().(type) {
 	case *TransactionAbortedError:
 		// The txn coming with a TransactionAbortedError is not supposed to be used
@@ -111,10 +110,6 @@ func PrepareTransactionForRetry(
 		// TransactionRetryErrors(RETRY_ASYNC_WRITE_FAILURE) error.
 		return roachpb.Transaction{}, errors.AssertionFailedf(
 			"unexpected intent missing error (%T); should be transformed into retry error", pErr.GetDetail())
-	case *ExclusionViolationError:
-		// An exclusion violation error always requires a restart.
-		txn.WriteTimestamp.Forward(tErr.RetryTimestamp())
-		errorAlwaysRequireRestart = true
 	default:
 		return roachpb.Transaction{}, errors.AssertionFailedf(
 			"invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
@@ -143,7 +138,7 @@ func PrepareTransactionForRetry(
 		// prior writes. The user of the transaction (e.g. the SQL layer) is
 		// responsible for employing savepoints to selectively discard the writes
 		// from the current statement when it retries that statement.
-		if !txn.IsoLevel.PerStatementReadSnapshot() || errorAlwaysRequireRestart {
+		if !txn.IsoLevel.PerStatementReadSnapshot() {
 			txn.Restart(pri, txn.Priority, txn.WriteTimestamp)
 		} else {
 			txn.BumpReadTimestamp(txn.WriteTimestamp)

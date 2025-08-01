@@ -16,13 +16,11 @@ option (gogoproto.goproto_getters_all) = false;
 
 // StoreProto serializes the fields of the in-memory store.
 message StoreProto {
-  int64 dims = 1 [(gogoproto.casttype) = "int"];
-  int64 seed = 2;
-  vecpb.DistanceMetric distance_metric = 3;
-  repeated PartitionProto partitions = 4 [(gogoproto.nullable) = false];
-  uint64 next_key = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.PartitionKey"];
-  repeated VectorProto vectors = 6 [(gogoproto.nullable) = false];
-  cspann.IndexStats stats = 7 [(gogoproto.nullable) = false];
+  vecpb.Config config = 1 [(gogoproto.nullable) = false];
+  repeated PartitionProto partitions = 2 [(gogoproto.nullable) = false];
+  uint64 next_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.PartitionKey"];
+  repeated VectorProto vectors = 4 [(gogoproto.nullable) = false];
+  cspann.IndexStats stats = 5 [(gogoproto.nullable) = false];
 }
 
 // PartitionProto serializes the fields of a partition.

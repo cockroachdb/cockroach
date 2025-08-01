@@ -52,9 +52,48 @@ func registerNodeJSPostgres(r registry.Registry) {
 		err = alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0])
 		require.NoError(t, err)
 
-		// Install NodeJS 18.x, update NPM to the latest
-		// and install Yarn and Lerna.
-		err = installNode18(ctx, t, c, node, nodeOpts{withYarn: true, withLerna: true})
+		// In case we are running into a state where machines are being reused, we first check to see if we
+		// can use npm to reduce the potential of trying to add another nodesource key
+		// (preventing gpg: dearmoring failed: File exists) errors.
+		err = c.RunE(
+			ctx, option.WithNodes(node), `sudo npm i -g npm`,
+		)
+
+		if err != nil {
+			err = repeatRunE(
+				ctx,
+				t,
+				c,
+				node,
+				"add nodesource key and deb repository",
+				`
+sudo apt-get update && \
+sudo apt-get install -y ca-certificates curl gnupg && \
+sudo mkdir -p /etc/apt/keyrings && \
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list`,
+			)
+			require.NoError(t, err)
+
+			err = repeatRunE(
+				ctx, t, c, node, "install nodejs and npm", `sudo apt-get update && sudo apt-get -qq install nodejs`,
+			)
+			require.NoError(t, err)
+
+			err = repeatRunE(
+				ctx, t, c, node, "update npm", `sudo npm i -g npm`,
+			)
+			require.NoError(t, err)
+		}
+
+		err = repeatRunE(
+			ctx, t, c, node, "install yarn", `sudo npm i -g yarn`,
+		)
+		require.NoError(t, err)
+
+		err = repeatRunE(
+			ctx, t, c, node, "install lerna", `sudo npm i --g lerna`,
+		)
 		require.NoError(t, err)
 
 		err = repeatRunE(
@@ -139,7 +178,7 @@ PGSSLCERT=$HOME/certs/client.%[1]s.crt PGSSLKEY=$HOME/certs/client.%[1]s.key PGS
 		Owner:            registry.OwnerSQLFoundations,
 		Cluster:          r.MakeClusterSpec(1),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly, registry.Driver),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNodeJSPostgres(ctx, t, c)

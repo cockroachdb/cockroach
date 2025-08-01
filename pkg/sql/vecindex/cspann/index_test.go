@@ -7,17 +7,18 @@ package cspann_test
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"math"
 	"math/rand"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
@@ -26,16 +27,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 )
 
 func TestIndex(t *testing.T) {
@@ -110,9 +110,6 @@ func TestIndex(t *testing.T) {
 			case "recall":
 				result = state.Recall(d)
 
-			case "best-centroids":
-				result = state.BestCentroids(d)
-
 			case "validate-tree":
 				result = state.ValidateTree(d)
 
@@ -140,7 +137,7 @@ type testState struct {
 	MemStore  *memstore.Store
 	Index     *cspann.Index
 	Options   cspann.IndexOptions
-	Dataset   vector.Set
+	Features  vector.Set
 
 	// Parse args.
 	TreeKey       cspann.TreeKey
@@ -163,30 +160,7 @@ func (s *testState) LoadIndex(d *datadriven.TestData) string {
 	s.makeNewIndex(d)
 
 	lines := strings.Split(d.Input, "\n")
-
-	// Determine the root level by determining max indent.
-	maxIndent := 0
-	for _, line := range lines {
-		// Lines ending with the "│" rune don't increase the level
-		if strings.HasSuffix(line, "│") {
-			continue
-		}
-
-		// Leaf vector lines don't increase the level.
-		idx := strings.Index(line, "• ")
-		if idx != -1 {
-			// Note that the '•' rune is 3 UTF-8 bytes.
-			firstChar := line[idx+4]
-			if firstChar < '0' || firstChar > '9' {
-				// This is a leaf vector.
-				continue
-			}
-		}
-
-		maxIndent = max(maxIndent, getIndexFormatIndent(line))
-	}
-
-	s.loadIndexFromFormat(s.TreeKey, lines, cspann.Level(maxIndent+1))
+	s.loadIndexFromFormat(s.TreeKey, lines, 0)
 
 	return fmt.Sprintf("Loaded %d vectors.\n", len(s.MemStore.GetAllVectors()))
 }
@@ -220,12 +194,11 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	var vec vector.T
 	searchSet := cspann.SearchSet{MaxResults: 1}
 	options := cspann.SearchOptions{}
-	rerankMultiplier := -1
 
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
-		case "use-dataset":
-			vec = s.parseUseDataset(arg)
+		case "use-feature":
+			vec = s.parseUseFeature(arg)
 
 		case "max-results":
 			searchSet.MaxResults = s.parseInt(arg)
@@ -235,21 +208,13 @@ func (s *testState) Search(d *datadriven.TestData) string {
 
 		case "skip-rerank":
 			options.SkipRerank = s.parseFlag(arg)
-
-		case "rerank-multiplier":
-			rerankMultiplier = s.parseInt(arg)
 		}
 	}
 
 	// If re-ranking results, make sure there are enough extra results to do that
 	// effectively.
 	if !options.SkipRerank {
-		if rerankMultiplier >= 0 {
-			searchSet.MaxResults, searchSet.MaxExtraResults =
-				cspann.IncreaseRerankResults(options.BaseBeamSize, searchSet.MaxResults, rerankMultiplier)
-		} else {
-			searchSet.MaxExtraResults = searchSet.MaxResults * 10
-		}
+		searchSet.MaxExtraResults = searchSet.MaxResults * cspann.RerankMultiplier
 	}
 
 	if vec == nil {
@@ -271,10 +236,11 @@ func (s *testState) Search(d *datadriven.TestData) string {
 		result := &results[i]
 		var errorBound string
 		if result.ErrorBound != 0 {
-			errorBound = fmt.Sprintf(" ± %s", utils.FormatFloat(result.ErrorBound, 2))
+			errorBound = fmt.Sprintf("±%s ", utils.FormatFloat(result.ErrorBound, 2))
 		}
-		fmt.Fprintf(&buf, "%s: %s%s\n",
-			string(result.ChildKey.KeyBytes), utils.FormatFloat(result.QueryDistance, 4), errorBound)
+		fmt.Fprintf(&buf, "%s: %s %s(centroid=%s)\n",
+			string(result.ChildKey.KeyBytes), utils.FormatFloat(result.QuerySquaredDistance, 4),
+			errorBound, utils.FormatFloat(result.CentroidDistance, 2))
 	}
 
 	buf.WriteString(fmt.Sprintf("%d leaf vectors, ", searchSet.Stats.QuantizedLeafVectorCount))
@@ -290,8 +256,8 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
-		case "use-dataset":
-			vec = s.parseUseDataset(arg)
+		case "use-feature":
+			vec = s.parseUseFeature(arg)
 		}
 	}
 
@@ -318,7 +284,7 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 	s.Index.UnRandomizeVector(result.Vector, original)
 	utils.WriteVector(&buf, original, 4)
 
-	fmt.Fprintf(&buf, ", dist=%s", utils.FormatFloat(result.QueryDistance, 4))
+	fmt.Fprintf(&buf, ", sqdist=%s", utils.FormatFloat(result.QuerySquaredDistance, 4))
 	if result.ErrorBound != 0 {
 		fmt.Fprintf(&buf, "±%s", utils.FormatFloat(result.ErrorBound, 2))
 	}
@@ -361,7 +327,7 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	count := 0
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
-		case "dataset-count":
+		case "load-features":
 			count = s.parseInt(arg)
 
 		case "hide-tree":
@@ -372,7 +338,10 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	vectors := vector.MakeSet(s.Quantizer.GetDims())
 	childKeys := make([]cspann.ChildKey, 0, count)
 	if count != 0 {
-		vectors = s.Dataset.Slice(0, count)
+		// Load features.
+		s.Features = testutils.LoadFeatures(s.T, 10000)
+		vectors = s.Features
+		vectors.SplitAt(count)
 		for i := range count {
 			key := cspann.KeyBytes(fmt.Sprintf("vec%d", i))
 			childKeys = append(childKeys, cspann.ChildKey{KeyBytes: key})
@@ -479,8 +448,6 @@ func (s *testState) ForceSplitOrMerge(d *datadriven.TestData) string {
 
 		case "steps":
 			steps = s.parseInt(arg)
-			// Always discard any fixups triggered by the split or merge fixup.
-			s.DiscardFixups = true
 		}
 	}
 
@@ -505,11 +472,10 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	numSamples := 50
 	var samples []int
 	seed := 42
-	rerankMultiplier := -1
 	var err error
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
-		case "use-dataset":
+		case "use-feature":
 			// Use single designated sample.
 			offset := s.parseInt(arg)
 			numSamples = 1
@@ -526,34 +492,18 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 
 		case "beam-size":
 			options.BaseBeamSize = s.parseInt(arg)
-
-		case "rerank-multiplier":
-			rerankMultiplier = s.parseInt(arg)
 		}
 	}
 
-	if rerankMultiplier >= 0 {
-		searchSet.MaxResults, searchSet.MaxExtraResults =
-			cspann.IncreaseRerankResults(options.BaseBeamSize, searchSet.MaxResults, rerankMultiplier)
-	} else {
-		searchSet.MaxExtraResults = searchSet.MaxResults * 10
-	}
-
 	data := s.MemStore.GetAllVectors()
-	dataVectors := vector.MakeSet(s.Dataset.Dims)
-	dataKeys := make([]string, len(data))
-	for i := range len(data) {
-		dataVectors.Add(data[i].Vector)
-		dataKeys[i] = string(data[i].Key.KeyBytes)
-	}
 
-	// Construct list of offsets into the dataset.
+	// Construct list of feature offsets.
 	if samples == nil {
-		// Shuffle the remaining dataset vectors.
+		// Shuffle the remaining features.
 		rng := rand.New(rand.NewSource(int64(seed)))
-		remaining := make([]int, s.Dataset.Count-len(data))
+		remaining := make([]int, s.Features.Count-len(data))
 		for i := range remaining {
-			remaining[i] = len(data) + i
+			remaining[i] = i
 		}
 		rng.Shuffle(len(remaining), func(i, j int) {
 			remaining[i], remaining[j] = remaining[j], remaining[i]
@@ -564,33 +514,54 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		copy(samples, remaining[:numSamples])
 	}
 
-	// Search for sampled dataset vectors within a transaction.
-	var sumRecall float64
+	// calcTruth calculates the true nearest neighbors for the query vector.
+	calcTruth := func(queryVector vector.T, data []cspann.VectorWithKey) []cspann.KeyBytes {
+		distances := make([]float32, len(data))
+		offsets := make([]int, len(data))
+		for i := range len(data) {
+			distances[i] = num32.L2SquaredDistance(queryVector, data[i].Vector)
+			offsets[i] = i
+		}
+		sort.SliceStable(offsets, func(i int, j int) bool {
+			res := cmp.Compare(distances[offsets[i]], distances[offsets[j]])
+			if res != 0 {
+				return res < 0
+			}
+			return data[offsets[i]].Key.Compare(data[offsets[j]].Key) < 0
+		})
+
+		truth := make([]cspann.KeyBytes, searchSet.MaxResults)
+		for i := range len(truth) {
+			truth[i] = data[offsets[i]].Key.KeyBytes
+		}
+		return truth
+	}
+
+	// Search for sampled features within a transaction.
+	var sumMAP float64
 	commontest.RunTransaction(s.Ctx, s.T, s.MemStore, func(txn cspann.Txn) {
 		var idxCtx cspann.Context
 		idxCtx.Init(txn)
 		for i := range samples {
 			// Calculate truth set for the vector.
-			queryVector := s.Dataset.At(samples[i])
-
-			truth := testutils.CalculateTruth(searchSet.MaxResults,
-				s.Quantizer.GetDistanceMetric(), queryVector, dataVectors, dataKeys)
+			queryVector := s.Features.At(samples[i])
+			truth := calcTruth(queryVector, data)
 
 			// Calculate prediction set for the vector.
 			err = s.Index.Search(s.Ctx, &idxCtx, s.TreeKey, queryVector, &searchSet, options)
 			require.NoError(s.T, err)
 			results := searchSet.PopResults()
 
-			prediction := make([]string, searchSet.MaxResults)
-			for res := range len(results) {
-				prediction[res] = string(results[res].ChildKey.KeyBytes)
+			prediction := make([]cspann.KeyBytes, searchSet.MaxResults)
+			for res := 0; res < len(results); res++ {
+				prediction[res] = results[res].ChildKey.KeyBytes
 			}
 
-			sumRecall += testutils.CalculateRecall(prediction, truth)
+			sumMAP += findMAP(prediction, truth)
 		}
 	})
 
-	recall := sumRecall / float64(numSamples) * 100
+	recall := sumMAP / float64(numSamples) * 100
 	quantizedLeafVectors := float64(searchSet.Stats.QuantizedLeafVectorCount) / float64(numSamples)
 	quantizedVectors := float64(searchSet.Stats.QuantizedVectorCount) / float64(numSamples)
 	fullVectors := float64(searchSet.Stats.FullVectorCount) / float64(numSamples)
@@ -598,94 +569,10 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("%.2f%% recall@%d\n", recall, searchSet.MaxResults))
-	buf.WriteString(fmt.Sprintf("%.0f leaf vectors, ", quantizedLeafVectors))
-	buf.WriteString(fmt.Sprintf("%.0f vectors, ", quantizedVectors))
-	buf.WriteString(fmt.Sprintf("%.0f full vectors, ", fullVectors))
-	buf.WriteString(fmt.Sprintf("%.0f partitions", partitions))
-	return buf.String()
-}
-
-func (s *testState) BestCentroids(d *datadriven.TestData) string {
-	randomized := make(vector.T, s.Dataset.Dims)
-	topk := 10
-	for _, arg := range d.CmdArgs {
-		switch arg.Key {
-		case "use-dataset":
-			original := s.parseUseDataset(arg)
-			s.Index.TransformVector(original, randomized)
-
-		case "topk":
-			topk = s.parseInt(arg)
-		}
-	}
-
-	var w workspace.T
-	var distances, errorBounds []float32
-	var partitionKeys []cspann.PartitionKey
-
-	var findCentroids func(partitionKey cspann.PartitionKey)
-	findCentroids = func(partitionKey cspann.PartitionKey) {
-		partition, err := s.MemStore.TryGetPartition(s.Ctx, s.TreeKey, partitionKey)
-		require.NoError(s.T, err)
-		count := partition.Count()
-
-		switch partition.Level() {
-		case cspann.LeafLevel:
-			// Nothing to do.
-
-		case cspann.SecondLevel:
-			distances = slices.Grow(distances, count)
-			distances = distances[:len(distances)+count]
-			errorBounds = slices.Grow(errorBounds, count)
-			errorBounds = errorBounds[:len(errorBounds)+count]
-
-			partition.Quantizer().EstimateDistances(&w, partition.QuantizedSet(), randomized,
-				distances[len(distances)-count:],
-				errorBounds[len(errorBounds)-count:])
-
-			for _, key := range partition.ChildKeys() {
-				partitionKeys = append(partitionKeys, key.PartitionKey)
-			}
-
-		default:
-			// Descend to next level.
-			for _, key := range partition.ChildKeys() {
-				findCentroids(key.PartitionKey)
-			}
-		}
-	}
-
-	findCentroids(cspann.RootKey)
-
-	// Create offsets for argsort.
-	offsets := make([]int, len(partitionKeys))
-	for i := range offsets {
-		offsets[i] = i
-	}
-
-	// Sort indices by distance (argsort).
-	slices.SortFunc(offsets, func(a, b int) int {
-		if distances[a] < distances[b] {
-			return -1
-		} else if distances[a] > distances[b] {
-			return 1
-		}
-		return 0
-	})
-
-	// Print top results.
-	var buf strings.Builder
-	for i := range min(topk, len(offsets)) {
-		offset := offsets[i]
-
-		partition, err := s.MemStore.TryGetPartition(s.Ctx, s.TreeKey, partitionKeys[offset])
-		require.NoError(s.T, err)
-		exact := vecpb.MeasureDistance(vecpb.L2SquaredDistance, randomized, partition.Centroid())
-
-		fmt.Fprintf(&buf, "%d: %.4f ± %.4f (exact=%.4f)\n",
-			partitionKeys[offset], distances[offset], errorBounds[offset], exact)
-	}
-
+	buf.WriteString(fmt.Sprintf("%.2f leaf vectors, ", quantizedLeafVectors))
+	buf.WriteString(fmt.Sprintf("%.2f vectors, ", quantizedVectors))
+	buf.WriteString(fmt.Sprintf("%.2f full vectors, ", fullVectors))
+	buf.WriteString(fmt.Sprintf("%.2f partitions", partitions))
 	return buf.String()
 }
 
@@ -744,47 +631,14 @@ func (s *testState) ShowMetrics(d *datadriven.TestData) string {
 
 func (s *testState) makeNewIndex(d *datadriven.TestData) {
 	var err error
-	dims := 0
-	datasetName := ""
-	distanceMetric := vecpb.L2SquaredDistance
+	dims := 2
 	s.Options = cspann.IndexOptions{
-		RotAlgorithm:    vecpb.RotGivens,
 		IsDeterministic: true,
 		// Disable stalled op timeout, since it can interfere with stepping tests.
 		StalledOpTimeout: func() time.Duration { return 0 },
-		// Disable adaptive search for now, until it's fully supported for stores
-		// other than the in-memory store.
-		DisableAdaptiveSearch: true,
 	}
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
-		case "dataset":
-			require.Len(s.T, arg.Vals, 1)
-			datasetName = arg.Vals[0]
-
-		case "distance-metric":
-			require.Len(s.T, arg.Vals, 1)
-			switch strings.ToLower(arg.Vals[0]) {
-			case "innerproduct":
-				distanceMetric = vecpb.InnerProductDistance
-			case "cosine":
-				distanceMetric = vecpb.CosineDistance
-			}
-			require.NoError(s.T, err)
-
-		case "rot-algorithm":
-			require.Len(s.T, arg.Vals, 1)
-			switch strings.ToLower(arg.Vals[0]) {
-			case "matrix":
-				s.Options.RotAlgorithm = vecpb.RotMatrix
-			case "givens":
-				s.Options.RotAlgorithm = vecpb.RotGivens
-			case "none":
-				s.Options.RotAlgorithm = vecpb.RotNone
-			default:
-				require.Failf(s.T, "unrecognized rot algorithm %s", arg.Vals[0])
-			}
-
 		case "min-partition-size":
 			s.Options.MinPartitionSize = s.parseInt(arg)
 
@@ -805,23 +659,18 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 		}
 	}
 
-	require.False(s.T, dims != 0 && datasetName != "", "dims and dataset options cannot both be set")
-	if datasetName != "" {
-		s.Dataset = testutils.LoadDataset(s.T, datasetName)
-		dims = s.Dataset.Dims
-	} else if dims == 0 {
-		// Default to 2 dimensions if not specified.
-		dims = 2
-	}
-
 	const seed = 42
-	s.Quantizer = quantize.NewRaBitQuantizer(dims, seed, distanceMetric)
+	s.Quantizer = quantize.NewRaBitQuantizer(dims, seed)
 	s.MemStore = memstore.New(s.Quantizer, seed)
 	s.Index, err = cspann.NewIndex(s.Ctx, s.MemStore, s.Quantizer, seed, &s.Options, s.Stopper)
 	require.NoError(s.T, err)
 
 	s.Index.Fixups().OnSuccessfulSplit(func() { s.SuccessfulSplits++ })
 	s.Index.Fixups().OnPendingSplitsMerges(func(count int) { s.PendingSplitsMerges = count })
+
+	// Suspend background fixups until ProcessFixups is explicitly called, so
+	// that vector index operations can be deterministic.
+	s.Index.SuspendFixups()
 }
 
 func (s *testState) processFixups() {
@@ -850,8 +699,8 @@ func (s *testState) parseTreeID(arg datadriven.CmdArg) cspann.TreeKey {
 	return memstore.ToTreeKey(memstore.TreeID(s.parseInt(arg)))
 }
 
-func (s *testState) parseUseDataset(arg datadriven.CmdArg) vector.T {
-	return s.Dataset.At(s.parseInt(arg))
+func (s *testState) parseUseFeature(arg datadriven.CmdArg) vector.T {
+	return s.Features.At(s.parseInt(arg))
 }
 
 // parseVector parses a vector string in this form: (1.5, 6, -4).
@@ -892,8 +741,8 @@ func (s *testState) parseKeyAndVector(line string) (cspann.KeyBytes, vector.T) {
 }
 
 func (s *testState) loadIndexFromFormat(
-	treeKey cspann.TreeKey, lines []string, level cspann.Level,
-) (remaining []string, centroid vector.T, childKey cspann.ChildKey) {
+	treeKey cspann.TreeKey, lines []string, indent int,
+) (remaining []string, level cspann.Level, centroid vector.T, childKey cspann.ChildKey) {
 	// Ensure line contains "• ", note that the '•' rune is 3 UTF-8 bytes.
 	idx := strings.Index(lines[0], "• ")
 	require.NotEqual(s.T, -1, idx)
@@ -906,8 +755,8 @@ func (s *testState) loadIndexFromFormat(
 		line = strings.TrimSpace(line[idx:])
 		vec := s.parseVector(line)
 		s.MemStore.InsertVector(keyBytes, vec)
-		randomized := s.Index.TransformVector(vec, make(vector.T, len(vec)))
-		return lines[1:], randomized, cspann.ChildKey{KeyBytes: keyBytes}
+		randomized := s.Index.RandomizeVector(vec, make(vector.T, len(vec)))
+		return lines[1:], cspann.LeafLevel, randomized, cspann.ChildKey{KeyBytes: keyBytes}
 	}
 
 	// This is an interior partition.
@@ -927,38 +776,34 @@ func (s *testState) loadIndexFromFormat(
 		line = line[:idx-1]
 	}
 	centroid = s.parseVector(line)
-	centroid = s.Index.TransformVector(centroid, make(vector.T, len(centroid)))
+	centroid = s.Index.RandomizeVector(centroid, make(vector.T, len(centroid)))
 
-	// Parse any children.
-	parentIndent := getIndexFormatIndent(lines[0])
 	lines = lines[1:]
 
+	childLevel := cspann.LeafLevel
 	childVectors := vector.MakeSet(len(centroid))
 	childKeys := []cspann.ChildKey(nil)
+	childIndent := 0
 
-	for len(lines) > 0 {
-		childIndent := getIndexFormatIndent(lines[0])
-		if childIndent <= parentIndent {
-			break
-		}
+	// Loop over children.
+	for len(lines) > 0 && len(lines[0]) > indent {
 		if strings.HasSuffix(lines[0], "│") {
-			// Skip line.
+			childIndent = len(lines[0])
 			lines = lines[1:]
-			continue
-		} else {
-			var childVector vector.T
-			lines, childVector, childKey = s.loadIndexFromFormat(treeKey, lines, level-1)
-			childVectors.Add(childVector)
-			childKeys = append(childKeys, childKey)
 		}
+		require.Greater(s.T, childIndent, 0)
+
+		var childVector vector.T
+		lines, childLevel, childVector, childKey = s.loadIndexFromFormat(treeKey, lines, childIndent)
+		childVectors.Add(childVector)
+		childKeys = append(childKeys, childKey)
 	}
 
-	// Always create partition in Ready state so that adds are allowed.
 	metadata := cspann.PartitionMetadata{
-		Level:    level,
-		Centroid: centroid,
+		Level:        childLevel,
+		Centroid:     centroid,
+		StateDetails: details,
 	}
-	metadata.StateDetails.MakeReady()
 	err = s.MemStore.TryCreateEmptyPartition(s.Ctx, treeKey, partitionKey, metadata)
 	require.NoError(s.T, err)
 
@@ -970,15 +815,7 @@ func (s *testState) loadIndexFromFormat(
 		require.True(s.T, added)
 	}
 
-	if details.State != cspann.ReadyState {
-		// Update the partition's state
-		expected := metadata
-		metadata.StateDetails = details
-		err = s.MemStore.TryUpdatePartitionMetadata(s.Ctx, treeKey, partitionKey, metadata, expected)
-		require.NoError(s.T, err)
-	}
-
-	return lines, centroid, cspann.ChildKey{PartitionKey: partitionKey}
+	return lines, childLevel + 1, centroid, cspann.ChildKey{PartitionKey: partitionKey}
 }
 
 // parsePartitionStateDetails parses a partition state details string in this
@@ -1020,7 +857,31 @@ func parsePartitionStateDetails(s string) cspann.PartitionStateDetails {
 	return details
 }
 
-func TestTransformVector(t *testing.T) {
+// findMAP returns mean average precision, which compares a set of predicted
+// results with the true set of results. Both sets are expected to be of equal
+// length. It returns the percentage overlap of the predicted set with the truth
+// set.
+func findMAP(prediction, truth []cspann.KeyBytes) float64 {
+	if len(prediction) != len(truth) {
+		panic(errors.AssertionFailedf("prediction and truth sets are not same length"))
+	}
+
+	predictionMap := make(map[string]bool, len(prediction))
+	for _, p := range prediction {
+		predictionMap[string(p)] = true
+	}
+
+	var intersect float64
+	for _, t := range truth {
+		_, ok := predictionMap[string(t)]
+		if ok {
+			intersect++
+		}
+	}
+	return intersect / float64(len(truth))
+}
+
+func TestRandomizeVector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1030,11 +891,9 @@ func TestTransformVector(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	// Use the rotMatrix algorithm for this test; other algorithms are tested by
-	// TestRandomOrthoTransformer.
 	const dims = 97
 	const count = 5
-	quantizer := quantize.NewRaBitQuantizer(dims, 46, vecpb.L2SquaredDistance)
+	quantizer := quantize.NewRaBitQuantizer(dims, 46)
 	inMemStore := memstore.New(quantizer, 42)
 	index, err := cspann.NewIndex(ctx, inMemStore, quantizer, 42, &cspann.IndexOptions{}, stopper)
 	require.NoError(t, err)
@@ -1052,10 +911,9 @@ func TestTransformVector(t *testing.T) {
 	randomized := vector.MakeSet(dims)
 	randomized.AddUndefined(count)
 	for i := range original.Count {
-		index.TransformVector(original.At(i), randomized.At(i))
+		index.RandomizeVector(original.At(i), randomized.At(i))
 
-		// Ensure that calling UnRandomizeVector recovers the normalized vector
-		// (or original vector if not using Cosine distance).
+		// Ensure that calling unRandomizeVector recovers original vector.
 		randomizedInv := make([]float32, dims)
 		index.UnRandomizeVector(randomized.At(i), randomizedInv)
 		for j, val := range original.At(i) {
@@ -1070,11 +928,11 @@ func TestTransformVector(t *testing.T) {
 
 	distances := make([]float32, count)
 	errorBounds := make([]float32, count)
-	quantizer.EstimateDistances(&workspace, originalSet, original.At(0), distances, errorBounds)
+	quantizer.EstimateSquaredDistances(&workspace, originalSet, original.At(0), distances, errorBounds)
 	require.Equal(t, []float32{0, 272.75, 550.86, 950.93, 2421.41}, testutils.RoundFloats(distances, 2))
-	require.Equal(t, []float32{27.87, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
+	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
 
-	quantizer.EstimateDistances(&workspace, randomizedSet, randomized.At(0), distances, errorBounds)
+	quantizer.EstimateSquaredDistances(&workspace, randomizedSet, randomized.At(0), distances, errorBounds)
 	require.Equal(t, []float32{5.1, 292.72, 454.95, 1011.85, 2475.87}, testutils.RoundFloats(distances, 2))
 	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
 }
@@ -1090,20 +948,19 @@ func TestIndexConcurrency(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	// Load dataset.
-	dataset := testutils.LoadDataset(t, testutils.ImagesDataset)
+	// Load features.
+	const featureCount = 128
+	features := testutils.LoadFeatures(t, featureCount)
 
-	// Trim dataset count from 10k to 128 and dataset dimensions from 512 to 64,
-	// in order to make the test run faster and hit more interesting concurrency
-	// combinations.
-	const vectorCount = 128
-	const dims = 64
+	// Trim feature dimensions from 512 to 4, in order to make the test run
+	// faster and hit more interesting concurrency combinations.
+	const dims = 4
 	vectors := vector.MakeSet(dims)
 
-	primaryKeys := make([]cspann.KeyBytes, vectorCount)
-	for i := range vectorCount {
+	primaryKeys := make([]cspann.KeyBytes, features.Count)
+	for i := range features.Count {
 		primaryKeys[i] = cspann.KeyBytes(fmt.Sprintf("vec%d", i))
-		vectors.Add(dataset.At(i)[:dims])
+		vectors.Add(features.At(i)[:dims])
 	}
 
 	for i := range 10 {
@@ -1112,7 +969,7 @@ func TestIndexConcurrency(t *testing.T) {
 		// Construct store. Multiple index instances running on different goroutines
 		// will use this store.
 		const seed = 42
-		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed, vecpb.L2SquaredDistance)
+		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed)
 		store := memstore.New(quantizer, seed)
 
 		// Create 8 instances of the index, all using the same shared Store.
@@ -1120,7 +977,6 @@ func TestIndexConcurrency(t *testing.T) {
 		var expectedKeys syncutil.Set[string]
 
 		options := cspann.IndexOptions{
-			RotAlgorithm:     vecpb.RotGivens,
 			MinPartitionSize: 2,
 			MaxPartitionSize: 4,
 			BaseBeamSize:     2,
@@ -1310,23 +1166,4 @@ func validateIndex(
 		return true
 	})
 	require.Empty(t, missingKeys)
-}
-
-// getIndexFormatIndent returns the number of indentation levels in the given
-// formatted line. For example, for this snippet:
-//
-// • 1 (0, 0)
-// │
-// ├───• 2 (-9, 18)
-//
-// Line 1 would have indent of 0 and lines 2 and 3 would have indent of 1.
-func getIndexFormatIndent(line string) int {
-	// Compute level for line containing the "•" rune.
-	idx := strings.Index(line, "• ")
-	if idx != -1 {
-		return utf8.RuneCountInString(line[:idx]) / 4
-	}
-
-	// Otherwise, this must be a line ending with the "│" rune.
-	return utf8.RuneCountInString(line)/4 + 1
 }

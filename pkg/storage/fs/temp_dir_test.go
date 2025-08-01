@@ -7,6 +7,7 @@ package fs
 
 import (
 	"bytes"
+	"context"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors/oserror"
 )
 
@@ -21,14 +23,15 @@ func TestCreateTempDir(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
 	// Temporary parent directory to test this.
 	dir := t.TempDir()
 
-	tempDir, unlockDirFn, err := CreateTempDir(dir, "test-create-temp")
+	tempDir, err := CreateTempDir(dir, "test-create-temp", stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer unlockDirFn()
 
 	if dir != filepath.Dir(tempDir) {
 		t.Fatalf("unexpected parent directory of temp subdirectory.\nexpected: %s\nactual: %s", dir, filepath.Dir(tempDir))

@@ -187,6 +187,7 @@ var periodicSnapshotInterval = settings.RegisterDurationSetting(
 	"trace.snapshot.rate",
 	"if non-zero, interval at which background trace snapshots are captured",
 	0,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // panicOnUseAfterFinish, if set, causes use of a span after Finish() to panic

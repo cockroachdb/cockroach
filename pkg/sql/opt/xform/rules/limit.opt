@@ -310,8 +310,7 @@
             $projections:[
                 ...
                 (ProjectionsItem
-                    $distOp:(VectorDistance | VectorCosDistance
-                            | VectorNegInnerProduct
+                    (VectorDistance
                         (Variable $vectorCol:*) &
                             (IsFixedWidthVectorCol $vectorCol)
                         $queryVector:(Const | Placeholder)
@@ -332,7 +331,6 @@
     $filters
     $passthrough
     $vectorCol
-    (OpName $distOp)
     $queryVector
     $projections
     $limit

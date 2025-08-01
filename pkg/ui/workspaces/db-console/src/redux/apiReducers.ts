@@ -468,6 +468,20 @@ const schemaInsightsReducerObj = new CachedDataReducer(
 );
 export const refreshSchemaInsights = schemaInsightsReducerObj.refresh;
 
+export const schedulesKey = (req: { status: string; limit: number }) =>
+  `${encodeURIComponent(req.status)}/${encodeURIComponent(
+    req.limit?.toString(),
+  )}`;
+
+const schedulesReducerObj = new KeyedCachedDataReducer(
+  clusterUiApi.getSchedules,
+  "schedules",
+  schedulesKey,
+  moment.duration(10, "s"),
+  moment.duration(1, "minute"),
+);
+export const refreshSchedules = schedulesReducerObj.refresh;
+
 export const scheduleKey = (scheduleID: Long): string => scheduleID.toString();
 
 const scheduleReducerObj = new KeyedCachedDataReducer(
@@ -580,6 +594,7 @@ export interface APIReducersState {
   statementFingerprintInsights: KeyedCachedDataReducerState<
     clusterUiApi.SqlApiResponse<StmtInsightEvent[]>
   >;
+  schedules: KeyedCachedDataReducerState<clusterUiApi.Schedules>;
   schedule: KeyedCachedDataReducerState<clusterUiApi.Schedule>;
   snapshots: KeyedCachedDataReducerState<clusterUiApi.ListTracingSnapshotsResponse>;
   snapshot: KeyedCachedDataReducerState<clusterUiApi.GetTracingSnapshotResponse>;
@@ -631,6 +646,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
     txnInsightDetailsReducerObj.reducer,
   [stmtInsightsReducerObj.actionNamespace]: stmtInsightsReducerObj.reducer,
   [schemaInsightsReducerObj.actionNamespace]: schemaInsightsReducerObj.reducer,
+  [schedulesReducerObj.actionNamespace]: schedulesReducerObj.reducer,
   [scheduleReducerObj.actionNamespace]: scheduleReducerObj.reducer,
   [snapshotsReducerObj.actionNamespace]: snapshotsReducerObj.reducer,
   [snapshotReducerObj.actionNamespace]: snapshotReducerObj.reducer,

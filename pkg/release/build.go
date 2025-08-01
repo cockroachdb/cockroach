@@ -61,8 +61,6 @@ func SuffixFromPlatform(platform Platform) string {
 		return ".linux-2.6.32-gnu-amd64-fips"
 	case PlatformLinuxArm:
 		return ".linux-3.7.10-gnu-arm64"
-	case PlatformLinuxS390x:
-		return ".linux-3.7.10-gnu-s390x"
 	case PlatformMacOS:
 		// TODO(#release): The architecture is at least 10.10 until v20.2 and 10.15 for
 		// v21.1 and after. Check whether this can be changed.
@@ -86,8 +84,6 @@ func CrossConfigFromPlatform(platform Platform) string {
 		return "crosslinuxfipsbase"
 	case PlatformLinuxArm:
 		return "crosslinuxarmbase"
-	case PlatformLinuxS390x:
-		return "crosslinuxs390xbase"
 	case PlatformMacOS:
 		return "crossmacosbase"
 	case PlatformMacOSArm:
@@ -107,8 +103,6 @@ func TargetTripleFromPlatform(platform Platform) string {
 		return "x86_64-pc-linux-gnu"
 	case PlatformLinuxArm:
 		return "aarch64-unknown-linux-gnu"
-	case PlatformLinuxS390x:
-		return "s390x-unknown-linux-gnu"
 	case PlatformMacOS:
 		return "x86_64-apple-darwin19"
 	case PlatformMacOSArm:
@@ -123,7 +117,7 @@ func TargetTripleFromPlatform(platform Platform) string {
 // SharedLibraryExtensionFromPlatform returns the shared library extensions for a given Platform.
 func SharedLibraryExtensionFromPlatform(platform Platform) string {
 	switch platform {
-	case PlatformLinux, PlatformLinuxFIPS, PlatformLinuxArm, PlatformLinuxS390x:
+	case PlatformLinux, PlatformLinuxFIPS, PlatformLinuxArm:
 		return ".so"
 	case PlatformWindows:
 		return ".dll"
@@ -155,7 +149,7 @@ func MakeWorkload(platform Platform, opts BuildOptions, pkgDir string) error {
 	if err != nil {
 		return err
 	}
-	return stageBinary("//pkg/cmd/workload", platform, bazelBin, filepath.Join(pkgDir, "bin"), platform == PlatformLinuxArm || platform == PlatformLinuxS390x)
+	return stageBinary("//pkg/cmd/workload", platform, bazelBin, filepath.Join(pkgDir, "bin"), platform == PlatformLinuxArm)
 }
 
 // MakeRelease makes the release binary and associated files.
@@ -297,8 +291,6 @@ const (
 	PlatformLinuxFIPS Platform = "linux-amd64-fips"
 	// PlatformLinuxArm is the Linux aarch64 target.
 	PlatformLinuxArm Platform = "linux-arm64"
-	// PlatformLinuxS390x is the Linux s390x target.
-	PlatformLinuxS390x Platform = "linux-s390x"
 	// PlatformMacOS is the Darwin x86_64 target.
 	PlatformMacOS Platform = "darwin-amd64"
 	// PlatformMacOSArm is the Darwin aarch6 target.
@@ -327,7 +319,7 @@ func (p Platforms) String() string {
 // Set implements flag.Value interface
 func (p *Platforms) Set(v string) error {
 	switch Platform(v) {
-	case PlatformLinux, PlatformLinuxArm, PlatformLinuxFIPS, PlatformLinuxS390x, PlatformMacOS, PlatformMacOSArm, PlatformWindows:
+	case PlatformLinux, PlatformLinuxArm, PlatformLinuxFIPS, PlatformMacOS, PlatformMacOSArm, PlatformWindows:
 		*p = append(*p, Platform(v))
 		return nil
 	default:
@@ -341,7 +333,6 @@ func DefaultPlatforms() Platforms {
 		PlatformLinux,
 		PlatformLinuxFIPS,
 		PlatformLinuxArm,
-		PlatformLinuxS390x,
 		PlatformMacOS,
 		PlatformMacOSArm,
 		PlatformWindows,

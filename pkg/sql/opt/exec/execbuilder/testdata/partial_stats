@@ -282,7 +282,6 @@ scan g
  │   histogram(1)=  0  2   0  1   0  1   0  1   0  1   0  1
  │                <--- 11 --- 12 --- 13 --- 14 --- 15 --- 17
  ├── cost: 25.09
- ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -754,7 +753,6 @@ scan i
  │   histogram(1)=  0  1   0  1   0  1   0  0
  │                <--- -3 --- -2 --- -1 --- 5
  ├── cost: 25.05
- ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -1415,7 +1413,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 1 (10% of the table; stats collected <hidden> ago)
+  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
   table: ka@ka_a_idx
   spans: [/10 - /10]
 
@@ -1448,7 +1446,7 @@ subtest regression_148316
 
 # Ensure we can run DELETE statement on system.table_statistics.
 statement ok
-INSERT INTO system.users (username, "hashedPassword", "isRole", user_id) VALUES ('node', NULL, true, 3);
+INSERT INTO system.users VALUES ('node', NULL, true, 3);
 
 statement ok
 GRANT node TO root;

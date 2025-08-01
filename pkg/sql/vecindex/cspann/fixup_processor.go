@@ -216,12 +216,6 @@ func (fp *FixupProcessor) Init(
 
 	fp.mu.pendingFixups = make(map[fixupKey]bool, maxFixups)
 	fp.mu.waitForFixups.L = &fp.mu
-
-	if index.options.IsDeterministic {
-		// A deterministic index should be suspended until an explicit call to
-		// Process is called.
-		fp.Suspend()
-	}
 }
 
 // OnSuccessfulSplit sets a callback function that's invoked when a partition is
@@ -486,8 +480,7 @@ func (fp *FixupProcessor) nextFixup(ctx context.Context) (next fixup, ok bool) {
 				}()
 			}
 
-			// Always process fixup if it's single-stepping.
-			if discard && !next.SingleStep {
+			if discard {
 				fp.removeFixup(next)
 				continue
 			}

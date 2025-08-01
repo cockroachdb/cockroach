@@ -46,8 +46,8 @@ func NewFunctionalGauge(
 		values := make([]int64, 0)
 		g.childSet.mu.Lock()
 		defer g.childSet.mu.Unlock()
-		g.childSet.mu.children.ForEach(func(metric ChildMetric) {
-			cg := metric.(*Gauge)
+		g.childSet.mu.children.Do(func(e interface{}) {
+			cg := g.childSet.mu.children.GetChildMetric(e).(*Gauge)
 			values = append(values, cg.Value())
 		})
 		return f(values)
@@ -137,7 +137,7 @@ func (g *AggGauge) Dec(i int64, labelVals ...string) {
 	child.Dec(i)
 }
 
-// Update updates the Gauge value by val for the given label values. If a
+// Update updates the Gauge value to val for the given label values. If a
 // Gauge with the given label values doesn't exist yet, it creates a new
 // Gauge and updates it. Panics if the number of label values doesn't
 // match the number of labels defined for this Gauge.
@@ -153,17 +153,6 @@ func (g *AggGauge) Update(val int64, labelVals ...string) {
 func (g *AggGauge) UpdateFn(f func() int64, labelVals ...string) {
 	child := g.getOrCreateChild(labelVals...)
 	child.UpdateFn(f)
-}
-
-// GetChild returns the gauge for a set of given label values
-// if it exists. If the labels specified are incorrect, or if
-// the child doesn't exist, it returns a nil value.
-func (g *AggGauge) GetChild(labelVals ...string) *Gauge {
-	child, ok := g.get(labelVals...)
-	if !ok {
-		return nil
-	}
-	return child.(*Gauge)
 }
 
 func (g *AggGauge) getOrCreateChild(labelVals ...string) *Gauge {
@@ -432,7 +421,7 @@ func (sg *SQLGauge) Value() int64 {
 	return sg.g.Value()
 }
 
-// Update updates the Gauge value by i for the given label values. If a
+// Update sets the Gauge value to val for the given label values. If a
 // Gauge with the given label values doesn't exist yet, it creates a new
 // Gauge and updates it. Update increments parent metrics
 // irrespective of labelConfig.
@@ -446,6 +435,10 @@ func (sg *SQLGauge) Update(val int64, db, app string) {
 		return
 	}
 
+	// parent gauge value represents the sum of all child gauges. When we update
+	// the child metric, we need to update the parent metric with the difference
+	// between the new value and the old value. This guarantees that the
+	// consistency is maintained between parent and child metrics.
 	delta := val - childMetric.(*SQLChildGauge).Value()
 	sg.g.Inc(delta)
 	childMetric.(*SQLChildGauge).Update(val)

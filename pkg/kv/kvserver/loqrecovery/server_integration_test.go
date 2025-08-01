@@ -790,7 +790,7 @@ func createRecoveryForRange(
 }
 
 func makeTestRecoveryPlan(
-	ctx context.Context, t *testing.T, ac serverpb.RPCAdminClient,
+	ctx context.Context, t *testing.T, ac serverpb.AdminClient,
 ) loqrecoverypb.ReplicaUpdatePlan {
 	t.Helper()
 	cr, err := ac.Cluster(ctx, &serverpb.ClusterRequest{})

@@ -47,9 +47,9 @@ var (
 	listJSON              bool
 	listMine              bool
 	listPattern           string
-	isSecure              bool // Set based on the values passed to --secure and --insecure
-	secure                = false
-	insecure              = envutil.EnvOrDefaultBool("COCKROACH_ROACHPROD_INSECURE", true)
+	isSecure              bool   // Set based on the values passed to --secure and --insecure
+	secure                = true // DEPRECATED
+	insecure              = envutil.EnvOrDefaultBool("COCKROACH_ROACHPROD_INSECURE", false)
 	virtualClusterName    string
 	sqlInstance           int
 	extraSSHOptions       = ""
@@ -106,13 +106,6 @@ var (
 
 	fetchLogsTimeout time.Duration
 )
-
-// Intended to be called once from drtprod main package to update defaults which differ from roachprod.
-func UpdateFlagDefaults() {
-	// N.B. unlike roachprod, which defaults to "insecure mode", drtprod defaults to "secure mode".
-	secure = true
-	insecure = envutil.EnvOrDefaultBool("COCKROACH_ROACHPROD_INSECURE", false)
-}
 
 func initRootCmdFlags(rootCmd *cobra.Command) {
 	rootCmd.PersistentFlags().BoolVarP(&config.Quiet, "quiet", "q",
@@ -473,8 +466,10 @@ func initFlagBinaryForCmd(cmd *cobra.Command) {
 }
 
 func initFlagInsecureForCmd(cmd *cobra.Command) {
+	// TODO(renato): remove --secure once the default of secure
+	// clusters has existed in roachprod long enough.
 	cmd.Flags().BoolVar(&secure,
-		"secure", secure, "use a secure cluster")
+		"secure", secure, "use a secure cluster (DEPRECATED: clusters are secure by default; use --insecure to create insecure clusters.)")
 	cmd.Flags().BoolVar(&insecure,
 		"insecure", insecure, "use an insecure cluster")
 }

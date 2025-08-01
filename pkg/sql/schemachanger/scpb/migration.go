@@ -16,7 +16,7 @@ import (
 // HasDeprecatedElements returns if the target contains any element or fields
 // marked for deprecation.
 func HasDeprecatedElements(version clusterversion.ClusterVersion, target Target) bool {
-	return false
+	return target.GetSecondaryIndexPartial() != nil
 }
 
 // migrateDeprecatedFields will check if any of the deprecated fields are being
@@ -43,21 +43,6 @@ func migrateDeprecatedFields(
 		migrated = true
 	}
 
-	// In TriggerDeps, map the deprecated UsesRelationIDs to a
-	// TriggerDeps_RelationReference.
-	if deps := target.GetTriggerDeps(); deps != nil {
-		if len(deps.UsesRelationIDs) > 0 {
-			deps.UsesRelations = make([]TriggerDeps_RelationReference, len(deps.UsesRelationIDs))
-			for i := range deps.UsesRelationIDs {
-				deps.UsesRelations[i] = TriggerDeps_RelationReference{
-					ID: deps.UsesRelationIDs[i],
-				}
-			}
-			deps.UsesRelationIDs = nil
-			migrated = true
-		}
-	}
-
 	// Migrate ComputeExpr field  to separate ColumnComputeExpression target.
 	if columnType := target.GetColumnType(); columnType != nil {
 		if columnType.ComputeExpr != nil {
@@ -82,9 +67,16 @@ func migrateDeprecatedFields(
 func migrateTargetElement(targets []Target, idx int) {
 	targetToMigrate := targets[idx]
 	switch t := targetToMigrate.Element().(type) {
-	default:
-		// No-op case to defeat unused linter when there are no elements to migrate.
-		_ = t.element
+	case *SecondaryIndexPartial:
+		for _, target := range targets {
+			if secondaryIndex := target.GetSecondaryIndex(); secondaryIndex != nil &&
+				secondaryIndex.TableID == t.TableID &&
+				secondaryIndex.IndexID == t.IndexID &&
+				target.TargetStatus == targetToMigrate.TargetStatus {
+				secondaryIndex.EmbeddedExpr = &t.Expression
+				break
+			}
+		}
 	}
 }
 

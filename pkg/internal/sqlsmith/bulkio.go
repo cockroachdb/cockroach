@@ -258,6 +258,7 @@ func makeImport(s *Smither) (tree.Statement, bool) {
 
 	return &tree.Import{
 		Table:      tree.NewUnqualifiedTableName(tab),
+		Into:       true,
 		FileFormat: "CSV",
 		Files:      files,
 		Options: tree.KVOptions{

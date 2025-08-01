@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
-	"storj.io/drpc"
 )
 
 // Sender represents the sending-side of the closed timestamps "side-transport".
@@ -258,6 +257,7 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 				}
 				select {
 				case <-timer.C:
+					timer.Read = true
 					s.publish(ctx)
 				case <-confCh:
 					// Loop around to use the updated timer.
@@ -705,8 +705,7 @@ func (f *rpcConnFactory) new(s *Sender, nodeID roachpb.NodeID) conn {
 
 // nodeDialer abstracts *nodedialer.Dialer.
 type nodeDialer interface {
-	Dial(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (_ *grpc.ClientConn, err error)
-	DRPCDial(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (_ drpc.Conn, err error)
+	Dial(ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass) (_ *grpc.ClientConn, err error)
 }
 
 // On sending errors, we sleep a bit as to not spin on a tripped
@@ -725,7 +724,7 @@ type rpcConn struct {
 	nodeID       roachpb.NodeID
 	testingKnobs connTestingKnobs
 
-	stream   ctpb.RPCSideTransport_PushUpdatesClient
+	stream   ctpb.SideTransport_PushUpdatesClient
 	lastSent ctpb.SeqNum
 	// cancelStreamCtx cleans up the resources (goroutine) associated with stream.
 	// It needs to be called whenever stream is discarded.
@@ -785,18 +784,18 @@ func (r *rpcConn) close() {
 	atomic.StoreInt32(&r.closed, 1)
 }
 
-func (r *rpcConn) maybeConnect(ctx context.Context, _ *stop.Stopper) error {
+func (r *rpcConn) maybeConnect(ctx context.Context, stopper *stop.Stopper) error {
 	if r.stream != nil {
 		// Already connected.
 		return nil
 	}
 
-	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass)
+	conn, err := r.dialer.Dial(ctx, r.nodeID, rpc.SystemClass)
 	if err != nil {
 		return err
 	}
 	streamCtx, cancel := context.WithCancel(ctx)
-	stream, err := client.PushUpdates(streamCtx)
+	stream, err := ctpb.NewSideTransportClient(conn).PushUpdates(streamCtx)
 	if err != nil {
 		cancel()
 		return err

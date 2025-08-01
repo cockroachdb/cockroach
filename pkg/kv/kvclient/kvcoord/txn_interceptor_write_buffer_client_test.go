@@ -59,8 +59,6 @@ func TestTxnCoordSenderWriteBufferingDisablesPipelining(t *testing.T) {
 	// buffered.
 	require.NoError(t, db.Put(ctx, "test-key-a", "hello"))
 
-	bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, false)
-
 	// Without write buffering
 	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txn.SetBufferedWritesEnabled(false)

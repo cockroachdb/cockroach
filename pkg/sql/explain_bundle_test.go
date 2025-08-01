@@ -178,9 +178,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 
 	t.Run("basic when tracing already enabled", func(t *testing.T) {
 		r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='100ms';")
-		r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.sample_rate='1.0';")
 		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='0ms';")
-		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.sample_rate='0.0';")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
 			t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
@@ -1335,9 +1333,6 @@ func TestExplainBundleEnv(t *testing.T) {
 	require.NoError(t, c.PrintClusterSettings(&sb, true /* all */))
 	vars = strings.Split(sb.String(), "\n")
 	for _, line := range vars {
-		if strings.Contains(line, "unsafe") {
-			continue
-		}
 		_, err := sqlDB.ExecContext(ctx, line)
 		if err != nil {
 			t.Fatalf("unexpectedly couldn't execute %s: %v", line, err)

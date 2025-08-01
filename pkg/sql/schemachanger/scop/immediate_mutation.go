@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
-	"github.com/cockroachdb/redact"
 )
 
 //go:generate go run ./generate_visitor.go scop ImmediateMutation immediate_mutation.go immediate_mutation_visitor_generated.go
@@ -25,10 +24,6 @@ type immediateMutationOp struct{ baseOp }
 var _ = immediateMutationOp{baseOp: baseOp{}}
 
 func (immediateMutationOp) Type() Type { return MutationType }
-
-func (immediateMutationOp) Description() redact.RedactableString {
-	return "Updating schema metadata"
-}
 
 // NotImplemented is a placeholder for operations which haven't been defined yet.
 // TODO(postamar): remove all of these
@@ -43,7 +38,6 @@ type NotImplementedForPublicObjects struct {
 	immediateMutationOp
 	ElementType string
 	DescID      catid.DescID
-	TriggerID   catid.TriggerID
 }
 
 // UndoAllInTxnImmediateMutationOpSideEffects undoes the side effects of all
@@ -737,24 +731,6 @@ type RemoveTableColumnBackReferencesInFunctions struct {
 	FunctionIDs            []descpb.ID
 }
 
-// AddTableIndexBackReferencesInFunctions adds back-references to indexes
-// from referenced functions.
-type AddTableIndexBackReferencesInFunctions struct {
-	immediateMutationOp
-	BackReferencedTableID descpb.ID
-	BackReferencedIndexID descpb.IndexID
-	FunctionIDs           []descpb.ID
-}
-
-// RemoveTableIndexBackReferencesInFunctions removes back-references to indexes
-// from referenced functions.
-type RemoveTableIndexBackReferencesInFunctions struct {
-	immediateMutationOp
-	BackReferencedTableID descpb.ID
-	BackReferencedIndexID descpb.IndexID
-	FunctionIDs           []descpb.ID
-}
-
 // AddTriggerBackReferencesInRoutines adds back references to a trigger from
 // referenced functions.
 type AddTriggerBackReferencesInRoutines struct {
@@ -1036,14 +1012,10 @@ type UpdateFunctionRelationReferences struct {
 	FunctionReferences []descpb.ID
 }
 
-// UpdateTableBackReferencesInRelations updates the DependedOnBy metadata in
-// relation descriptors (e.g., tableDesc) for triggers. It handles both adding
-// and removing dependencies. The function relies on forward references being
-// set beforehand to determine whether a back-reference should be added or removed.
 type UpdateTableBackReferencesInRelations struct {
 	immediateMutationOp
-	TableID            descpb.ID
-	RelationReferences []scpb.TriggerDeps_RelationReference
+	TableID     descpb.ID
+	RelationIDs []descpb.ID
 }
 
 type SetObjectParentID struct {

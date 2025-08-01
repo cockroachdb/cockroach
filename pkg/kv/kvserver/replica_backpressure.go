@@ -153,16 +153,13 @@ func (r *Replica) signallerForBatch(ba *kvpb.BatchRequest) signaller {
 // range's size is already larger than the absolute maximum we'll allow.
 func (r *Replica) shouldBackpressureWrites() bool {
 	r.mu.RLock()
-	size := r.shMu.state.Stats.Total()
-	rangeMaxBytes := r.mu.conf.RangeMaxBytes
-	largestPreviousMaxRangeSize := r.mu.largestPreviousMaxRangeSizeBytes
-	r.mu.RUnlock()
+	defer r.mu.RUnlock()
 
 	// Check if the current range's size is already over the absolute maximum
 	// we'll allow. Don't bother with any multipliers/byte tolerance calculations
 	// if it is.
 	rangeSizeHardCap := backpressureRangeHardCap.Get(&r.store.cfg.Settings.SV)
-
+	size := r.shMu.state.Stats.Total()
 	if size >= rangeSizeHardCap {
 		return true
 	}
@@ -173,8 +170,7 @@ func (r *Replica) shouldBackpressureWrites() bool {
 		return false
 	}
 
-	exceeded, bytesOver := exceedsMultipleOfSplitSize(mult, rangeMaxBytes,
-		largestPreviousMaxRangeSize, size)
+	exceeded, bytesOver := r.exceedsMultipleOfSplitSizeRLocked(mult)
 	if !exceeded {
 		return false
 	}

@@ -10,10 +10,7 @@ import (
 	"math/bits"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -45,8 +42,6 @@ type RaBitQuantizer struct {
 	// unbias is a precomputed slice of "dims" random values in the [0, 1)
 	// interval that's used to remove bias when quantizing query vectors.
 	unbias []float32
-	// distanceMetric determines which distance function to use.
-	distanceMetric vecpb.DistanceMetric
 }
 
 // raBitQuantizedVector adds extra storage space for the special case where the
@@ -54,10 +49,9 @@ type RaBitQuantizer struct {
 // to the statically-allocated arrays in this struct.
 type raBitQuantizedVector struct {
 	RaBitQuantizedVectorSet
-	codeCountStorage           [1]uint32
-	centroidDistanceStorage    [1]float32
-	quantizedDotProductStorage [1]float32
-	centroidDotProductStorage  [1]float32
+	codeCountStorage        [1]uint32
+	centroidDistanceStorage [1]float32
+	dotProductStorage       [1]float32
 }
 
 var _ Quantizer = (*RaBitQuantizer)(nil)
@@ -67,7 +61,7 @@ var _ Quantizer = (*RaBitQuantizer)(nil)
 // pseudo-random values used by the algorithm. It's important that the quantizer
 // is created with the same seed that was previously used to create any
 // quantized sets that need to be searched or updated.
-func NewRaBitQuantizer(dims int, seed int64, distanceMetric vecpb.DistanceMetric) Quantizer {
+func NewRaBitQuantizer(dims int, seed int64) Quantizer {
 	if dims <= 0 {
 		panic(errors.AssertionFailedf("dimensions are not positive: %d", dims))
 	}
@@ -77,28 +71,22 @@ func NewRaBitQuantizer(dims int, seed int64, distanceMetric vecpb.DistanceMetric
 	// Create random offsets in range [0, 1) to remove bias when quantizing
 	// query vectors.
 	unbias := make([]float32, dims)
-	for i := range len(unbias) {
+	for i := 0; i < len(unbias); i++ {
 		unbias[i] = rng.Float32()
 	}
 
 	sqrtDims := num32.Sqrt(float32(dims))
 	return &RaBitQuantizer{
-		dims:           dims,
-		sqrtDims:       sqrtDims,
-		sqrtDimsInv:    1.0 / sqrtDims,
-		unbias:         unbias,
-		distanceMetric: distanceMetric,
+		dims:        dims,
+		sqrtDims:    sqrtDims,
+		sqrtDimsInv: 1.0 / sqrtDims,
+		unbias:      unbias,
 	}
 }
 
 // GetDims implements the Quantizer interface.
 func (q *RaBitQuantizer) GetDims() int {
 	return q.dims
-}
-
-// GetDistanceMetric implements the Quantizer interface.
-func (q *RaBitQuantizer) GetDistanceMetric() vecpb.DistanceMetric {
-	return q.distanceMetric
 }
 
 // Quantize implements the Quantizer interface.
@@ -112,7 +100,7 @@ func (q *RaBitQuantizer) Quantize(w *workspace.T, vectors vector.Set) QuantizedV
 		centroid = vectors.Centroid(make(vector.T, vectors.Dims))
 	}
 
-	quantizedSet := q.NewSet(vectors.Count, centroid)
+	quantizedSet := q.NewQuantizedVectorSet(vectors.Count, centroid)
 	q.quantizeHelper(w, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
 	return quantizedSet
 }
@@ -124,58 +112,38 @@ func (q *RaBitQuantizer) QuantizeInSet(
 	q.quantizeHelper(w, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
 }
 
-// NewSet implements the Quantizer interface
-func (q *RaBitQuantizer) NewSet(capacity int, centroid vector.T) QuantizedVectorSet {
-	var vs *RaBitQuantizedVectorSet
-
-	if capacity <= 1 {
-		// Special case capacity of zero or one by using in-line storage.
-		quantized := &raBitQuantizedVector{}
-		quantized.CodeCounts = quantized.codeCountStorage[:0]
-		quantized.CentroidDistances = quantized.centroidDistanceStorage[:0]
-		quantized.QuantizedDotProducts = quantized.quantizedDotProductStorage[:0]
-
-		// L2Squared doesn't use this.
-		if q.distanceMetric != vecpb.L2SquaredDistance {
-			quantized.CentroidDotProducts = quantized.centroidDotProductStorage[:0]
-		}
-		vs = &quantized.RaBitQuantizedVectorSet
-	} else {
-		vs = &RaBitQuantizedVectorSet{
-			CodeCounts:           make([]uint32, 0, capacity),
-			CentroidDistances:    make([]float32, 0, capacity),
-			QuantizedDotProducts: make([]float32, 0, capacity),
-		}
-		// L2Squared doesn't use these, so don't make extra allocation or calculation.
-		if q.distanceMetric != vecpb.L2SquaredDistance {
-			vs.CentroidDotProducts = make([]float32, 0, capacity)
-		}
-	}
-
-	vs.Metric = q.distanceMetric
-	vs.Centroid = centroid
+// NewQuantizedVectorSet implements the Quantizer interface
+func (q *RaBitQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
 	codeWidth := RaBitQCodeSetWidth(q.GetDims())
 	dataBuffer := make([]uint64, 0, capacity*codeWidth)
-	vs.Codes = MakeRaBitQCodeSetFromRawData(dataBuffer, codeWidth)
-	if q.distanceMetric != vecpb.L2SquaredDistance {
-		vs.CentroidNorm = num32.Norm(centroid)
+	if capacity <= 1 {
+		// Special case capacity of zero or one by using in-line storage.
+		var quantized raBitQuantizedVector
+		quantized.Centroid = centroid
+		quantized.Codes = MakeRaBitQCodeSetFromRawData(dataBuffer, codeWidth)
+		quantized.CodeCounts = quantized.codeCountStorage[:0]
+		quantized.CentroidDistances = quantized.centroidDistanceStorage[:0]
+		quantized.DotProducts = quantized.dotProductStorage[:0]
+		return &quantized.RaBitQuantizedVectorSet
 	}
 
-	return vs
+	return &RaBitQuantizedVectorSet{
+		Centroid:          centroid,
+		Codes:             MakeRaBitQCodeSetFromRawData(dataBuffer, codeWidth),
+		CodeCounts:        make([]uint32, 0, capacity),
+		CentroidDistances: make([]float32, 0, capacity),
+		DotProducts:       make([]float32, 0, capacity),
+	}
 }
 
-// EstimateDistances implements the Quantizer interface.
-func (q *RaBitQuantizer) EstimateDistances(
+// EstimateSquaredDistances implements the Quantizer interface.
+func (q *RaBitQuantizer) EstimateSquaredDistances(
 	w *workspace.T,
 	quantizedSet QuantizedVectorSet,
 	queryVector vector.T,
-	distances []float32,
+	squaredDistances []float32,
 	errorBounds []float32,
 ) {
-	if buildutil.CrdbTestBuild && q.distanceMetric == vecpb.CosineDistance {
-		utils.ValidateUnitVector(queryVector)
-	}
-
 	raBitSet := quantizedSet.(*RaBitQuantizedVectorSet)
 
 	// Allocate temp space for calculations.
@@ -184,24 +152,20 @@ func (q *RaBitQuantizer) EstimateDistances(
 	tempVectors := w.AllocVectorSet(1, q.dims)
 	defer w.FreeVectorSet(tempVectors)
 
-	// Normalize the query vector to a unit vector, with respect to the centroid.
+	// Normalize the query vector to a unit vector.
 	// Paper: q = (q_raw - c) / ||q_raw - c||
 	tempQueryDiff := tempVectors.At(0)
-	num32.SubTo(tempQueryDiff, queryVector, raBitSet.Centroid)
+	num32.SubTo(tempQueryDiff, queryVector, quantizedSet.GetCentroid())
 	queryCentroidDistance := num32.Norm(tempQueryDiff)
 
 	if queryCentroidDistance == 0 {
-		// The query vector is the centroid.
-		q.GetCentroidDistances(quantizedSet, distances, false /* spherical */)
+		// The query vector is the centroid. This means the squared distances from
+		// the query to the quantized vectors are just the centroid distances that
+		// have already been calculated, but just need to be squared.
+		centroidDistances := quantizedSet.GetCentroidDistances()
+		num32.MulTo(squaredDistances, centroidDistances, centroidDistances)
 		num32.Zero(errorBounds)
 		return
-	}
-
-	// L2Squared doesn't use these values, so don't compute them in its case.
-	var squaredCentroidNorm, queryCentroidDotProduct float32
-	if q.distanceMetric != vecpb.L2SquaredDistance {
-		queryCentroidDotProduct = num32.Dot(queryVector, raBitSet.Centroid)
-		squaredCentroidNorm = raBitSet.CentroidNorm * raBitSet.CentroidNorm
 	}
 
 	tempQueryUnitVector := tempQueryDiff
@@ -229,7 +193,7 @@ func (q *RaBitQuantizer) EstimateDistances(
 	tempQueryQuantized2 := tempCodes.At(1)
 	tempQueryQuantized3 := tempCodes.At(2)
 	tempQueryQuantized4 := tempCodes.At(3)
-	for i := range len(tempQueryUnitVector) {
+	for i := 0; i < len(tempQueryUnitVector); {
 		// If delta == 0, then quantized sub-codes will be set to zero. This
 		// only happens when every dimension in the query has the same value.
 		if delta != 0 {
@@ -262,11 +226,11 @@ func (q *RaBitQuantizer) EstimateDistances(
 	}
 
 	count := raBitSet.GetCount()
-	for i := range count {
+	for i := 0; i < count; i++ {
 		code := raBitSet.Codes.At(i)
 
 		var bitProduct int
-		for j := range len(code) {
+		for j := 0; j < len(code); j++ {
 			// Paper: <x¯bits,q¯u> = ∑ j in [0,B_q-1] (2^j * <x¯bits,q¯u¯j>)
 			bitProduct += 1 * bits.OnesCount64(code[j]&tempQueryQuantized1[j])
 			bitProduct += 2 * bits.OnesCount64(code[j]&tempQueryQuantized2[j])
@@ -290,117 +254,25 @@ func (q *RaBitQuantizer) EstimateDistances(
 		term2 := 2 * minVal * q.sqrtDimsInv * float32(raBitSet.CodeCounts[i])
 		term3 := delta * q.sqrtDimsInv * float32(quantizedSum)
 		term4 := q.sqrtDims * minVal
-		estimator := (term1 + term2 - term3 - term4) * raBitSet.QuantizedDotProducts[i]
-		dataCentroidDistance := raBitSet.CentroidDistances[i]
+		estimator := (term1 + term2 - term3 - term4) * raBitSet.DotProducts[i]
 
 		// Compute estimated distances between the query and the quantized data
-		// vector.
-		switch q.distanceMetric {
-		case vecpb.L2SquaredDistance:
-			// Paper: ||o_raw - q_raw||^2 = ||o_raw - c||^2 +
-			//        ||q_raw - c||^2 - 2 * ||o_raw - c|| * ||q_raw - c|| * <q,o>
-			// The formula comes from equation 2 in the paper.
-			distance := dataCentroidDistance * dataCentroidDistance
-			distance += queryCentroidDistance * queryCentroidDistance
-			multiplier := 2 * dataCentroidDistance * queryCentroidDistance
-			distance -= multiplier * estimator
-
-			// Error bounds for the estimator are +- 1/√dims. For the entire distance,
-			// that must be scaled by the amount the estimator is scaled by. Ensure
-			// the distance is >= 0, adjusting the error bound accordingly.
-			errorBound := multiplier / q.sqrtDims
-			if distance < 0 {
-				errorBound = max(errorBound+distance, 0)
-				distance = 0
-			}
-
-			distances[i] = distance
-			errorBounds[i] = errorBound
-
-		case vecpb.InnerProductDistance, vecpb.CosineDistance:
-			// Note that the cosine similarity of two vectors is equal to their
-			// inner product when they are unit vectors (which the caller must
-			// guarantee).
-			//
-			// Paper: <o_raw, q_raw> = ||o_raw - c|| * ||q_raw - c|| * <q,o> +
-			//        <o_raw,c> + <q_raw,c> - ||c||^2
-			// The formula comes from footnote 8 in the paper.
-			multiplier := dataCentroidDistance * queryCentroidDistance
-			innerProduct := multiplier*estimator +
-				raBitSet.CentroidDotProducts[i] + queryCentroidDotProduct - squaredCentroidNorm
-
-			// Error bounds for the estimator are +- 1/√dims. For the entire distance,
-			// that must be scaled by the amount the estimator is scaled by.
-			errorBound := multiplier / q.sqrtDims
-
-			var distance float32
-			if q.distanceMetric == vecpb.InnerProductDistance {
-				// Negate the inner product so that the more similar the vectors,
-				// the lower the distance.
-				distance = -innerProduct
-			} else {
-				// Cosine distance is 1 - cosine similarity (which is the inner
-				// product for unit vectors). Cap the distance between 0 and 2,
-				// adjusting the error bound accordingly.
-				distance = 1 - innerProduct
-				if distance < 0 {
-					errorBound = max(errorBound+distance, 0)
-					distance = 0
-				} else if distance > 2 {
-					errorBound = max(min(errorBound-(distance-2), 2), 0)
-					distance = 2
-				}
-			}
-
-			distances[i] = distance
-			errorBounds[i] = errorBound
-
-		default:
-			panic(errors.AssertionFailedf(
-				"RaBitQuantizer does not support distance metric %s", q.distanceMetric))
+		// vectors.
+		// Paper: ||o_raw - q_raw||^2 = ||o_raw - c||^2 +
+		//        ||q_raw - c||^2 - 2 * ||o_raw - c|| * ||q_raw - c|| * <q,o>
+		dataCentroidDistance := raBitSet.CentroidDistances[i]
+		squaredDistance := dataCentroidDistance * dataCentroidDistance
+		squaredDistance += queryCentroidDistance * queryCentroidDistance
+		multiplier := 2 * dataCentroidDistance * queryCentroidDistance
+		squaredDistance -= multiplier * estimator
+		if squaredDistance < 0 {
+			squaredDistance = 0
 		}
-	}
-}
+		squaredDistances[i] = squaredDistance
 
-// GetCentroidDistances implements the Quantizer interface.
-func (q *RaBitQuantizer) GetCentroidDistances(
-	quantizedSet QuantizedVectorSet, distances []float32, spherical bool,
-) {
-	raBitSet := quantizedSet.(*RaBitQuantizedVectorSet)
-
-	switch q.distanceMetric {
-	case vecpb.L2SquaredDistance:
-		// The distance from the query to the data vectors are just the centroid
-		// distances that have already been calculated, but just need to be
-		// squared.
-		num32.MulTo(distances, raBitSet.CentroidDistances, raBitSet.CentroidDistances)
-
-	case vecpb.InnerProductDistance:
-		// Need to negate precomputed centroid dot products to compute inner
-		// product distance.
-		multiplier := float32(-1)
-		if spherical && raBitSet.CentroidNorm != 0 {
-			// Convert the mean centroid dot product into a spherical centroid
-			// dot product by dividing by the centroid's norm.
-			multiplier /= raBitSet.CentroidNorm
-		}
-		num32.ScaleTo(distances, multiplier, raBitSet.CentroidDotProducts)
-
-	case vecpb.CosineDistance:
-		// Cosine distance = 1 - dot product when vectors are normalized. The
-		// precomputed centroid dot products were computed with normalized data
-		// vectors, but the centroid was not normalized. Do that now by dividing
-		// the dot products by the centroid's norm. Also negate the result.
-		multiplier := float32(-1)
-		if raBitSet.CentroidNorm != 0 {
-			multiplier /= raBitSet.CentroidNorm
-		}
-		num32.ScaleTo(distances, multiplier, raBitSet.CentroidDotProducts)
-		num32.AddConst(1, distances)
-
-	default:
-		panic(errors.AssertionFailedf(
-			"RaBitQuantizer does not support distance metric %s", q.distanceMetric))
+		// Error bounds for the estimator are +- 1/√dims. For the entire distance,
+		// that must be scaled by the distance terms.
+		errorBounds[i] = multiplier / q.sqrtDims
 	}
 }
 
@@ -409,22 +281,10 @@ func (q *RaBitQuantizer) GetCentroidDistances(
 func (q *RaBitQuantizer) quantizeHelper(
 	w *workspace.T, qs *RaBitQuantizedVectorSet, vectors vector.Set,
 ) {
-	if buildutil.CrdbTestBuild && q.distanceMetric == vecpb.CosineDistance {
-		utils.ValidateUnitVectors(vectors)
-	}
-
 	// Extend any existing slices in the vector set.
 	count := vectors.Count
 	oldCount := qs.GetCount()
 	qs.AddUndefined(count)
-
-	// L2Squared doesn't use this, so don't store it.
-	if q.distanceMetric != vecpb.L2SquaredDistance {
-		centroidDotProducts := qs.CentroidDotProducts[oldCount:]
-		for i := range count {
-			centroidDotProducts[i] = num32.Dot(vectors.At(i), qs.Centroid)
-		}
-	}
 
 	// Allocate temp space for vector calculations.
 	tempVectors := w.AllocVectorSet(qs.GetCount(), q.dims)
@@ -433,21 +293,21 @@ func (q *RaBitQuantizer) quantizeHelper(
 	// Calculate the difference between input vector(s) and the centroid.
 	// Paper: o_raw - c
 	tempDiffs := tempVectors
-	for i := range count {
+	for i := 0; i < count; i++ {
 		num32.SubTo(tempDiffs.At(i), vectors.At(i), qs.Centroid)
 	}
 
-	// Calculate Euclidean distance from each input vector to the centroid.
+	// Calculate distance from each input vector to the centroid.
 	// Paper: ||o_raw - c||
 	centroidDistances := qs.CentroidDistances[oldCount:]
-	for i := range len(centroidDistances) {
+	for i := 0; i < len(centroidDistances); i++ {
 		centroidDistances[i] = num32.Norm(tempDiffs.At(i))
 	}
 
 	// Normalize the input vectors into unit vectors relative to the centroid.
 	// Paper (equation 1): o = (o_raw - c) / ||o_raw - c||
 	tempUnitVectors := tempDiffs
-	for i := range len(centroidDistances) {
+	for i := 0; i < len(centroidDistances); i++ {
 		// If distance to the centroid is zero, then the diff is zero. The unit
 		// vector should be zero as well, so no need to do anything in that case.
 		centroidDistance := centroidDistances[i]
@@ -464,10 +324,10 @@ func (q *RaBitQuantizer) quantizeHelper(
 	// Note a difference from the paper: we assume that the caller applies the
 	// random orthogonal transformation, so no need to do it here. This
 	// simplifies any formulas from the paper which include P.
-	dotProducts := qs.QuantizedDotProducts[oldCount:]
+	dotProducts := qs.DotProducts[oldCount:]
 	codeCounts := qs.CodeCounts[oldCount:]
 	alignedDims := q.dims / 8 * 8
-	for i := range count {
+	for i := 0; i < count; i++ {
 		// Define two functions that will be used to unroll the loop over the
 		// dimensions of the unit vector. Doing this gives ~20% boost on Intel
 		// and ARM.
@@ -555,13 +415,13 @@ func (q *RaBitQuantizer) quantizeHelper(
 		codeCounts[i] = uint32(codeCount)
 
 		// Store the inverted dot product, which will be used to make distance
-		// estimates. The dot product is only zero in the case where the data vector
-		// is equal to the centroid vector. That case is handled separately in
-		// EstimateDistances.
+		// estimates. If the dot product is zero, then the vector must be equal
+		// to the centroid. By mapping the inverted dot product to zero here, the
+		// <o,q> estimator will also map to zero, and the distance estimate will
+		// collapse to the squared distance between the query vector and the
+		// centroid, which is what we want.
 		if dotProduct != 0 {
 			dotProducts[i] = 1.0 / dotProduct
-		} else {
-			dotProducts[i] = 0
 		}
 	}
 }

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -127,8 +127,8 @@ func BlockSize(size int) ConfigOption {
 // primarily for testing purposes.
 func TargetFileSize(size int64) ConfigOption {
 	return func(cfg *engineConfig) error {
-		for i := range cfg.opts.TargetFileSizes {
-			cfg.opts.TargetFileSizes[i] = size
+		for i := range cfg.opts.Levels {
+			cfg.opts.Levels[i].TargetFileSize = size
 		}
 		return nil
 	}
@@ -268,7 +268,7 @@ func errConfigOption(err error) func(*engineConfig) error {
 
 func makeExternalWALDir(
 	engineCfg *engineConfig,
-	externalDir storageconfig.ExternalPath,
+	externalDir storagepb.ExternalPath,
 	defaultFS vfs.FS,
 	diskWriteStats disk.WriteStatsManager,
 ) (wal.Dir, error) {
@@ -292,7 +292,6 @@ func makeExternalWALDir(
 	}
 	engineCfg.afterClose = append(engineCfg.afterClose, env.Close)
 	return wal.Dir{
-		Lock:    env.DirectoryLock,
 		FS:      env,
 		Dirname: externalDir.Path,
 	}, nil
@@ -302,7 +301,7 @@ func makeExternalWALDir(
 // another volume in the event the WAL becomes blocked on a write that does not
 // complete within a reasonable duration.
 func WALFailover(
-	walCfg storageconfig.WALFailover,
+	walCfg storagepb.WALFailover,
 	storeEnvs fs.Envs,
 	defaultFS vfs.FS,
 	diskWriteStats disk.WriteStatsManager,
@@ -314,9 +313,9 @@ func WALFailover(
 	// stores. Note that the store ID is not known when a store is first opened.
 	if len(storeEnvs) == 1 {
 		switch walCfg.Mode {
-		case storageconfig.WALFailoverDefaultMode, storageconfig.WALFailoverAmongStores:
+		case storagepb.WALFailoverMode_DEFAULT, storagepb.WALFailoverMode_AMONG_STORES:
 			return noopConfigOption
-		case storageconfig.WALFailoverDisabled:
+		case storagepb.WALFailoverMode_DISABLED:
 			// Check if the user provided an explicit previous path. If they did, they
 			// were previously using WALFailoverExplicitPath and are now disabling it.
 			// We need to add the explicilt path to WALRecoveryDirs.
@@ -336,7 +335,7 @@ func WALFailover(
 			// notices the OPTIONS file encodes a WAL failover secondary that was not
 			// provided to Options.WALRecoveryDirs.
 			return noopConfigOption
-		case storageconfig.WALFailoverToExplicitPath:
+		case storagepb.WALFailoverMode_EXPLICIT_PATH:
 			// The user has provided an explicit path to which we should fail over WALs.
 			return func(cfg *engineConfig) error {
 				walDir, err := makeExternalWALDir(cfg, walCfg.Path, defaultFS, diskWriteStats)
@@ -354,19 +353,19 @@ func WALFailover(
 				return nil
 			}
 		default:
-			panic(errors.AssertionFailedf("unreachable"))
+			panic("unreachable")
 		}
 	}
 
 	switch walCfg.Mode {
-	case storageconfig.WALFailoverDefaultMode:
+	case storagepb.WALFailoverMode_DEFAULT:
 		// If the user specified no WAL failover setting, we default to disabling WAL
 		// failover and assume that the previous process did not have WAL failover
 		// enabled (so there's no need to populate Options.WALRecoveryDirs). If an
 		// operator had WAL failover enabled and now wants to disable it, they must
 		// explicitly set --wal-failover=disabled for the next process.
 		return noopConfigOption
-	case storageconfig.WALFailoverDisabled:
+	case storagepb.WALFailoverMode_DISABLED:
 		// Check if the user provided an explicit previous path; that's unsupported
 		// in multi-store configurations.
 		if walCfg.PrevPath.IsSet() {
@@ -376,13 +375,13 @@ func WALFailover(
 		// WALFailoverAmongStores.
 
 		// Fallthrough
-	case storageconfig.WALFailoverToExplicitPath:
+	case storagepb.WALFailoverMode_EXPLICIT_PATH:
 		// Not supported for multi-store configurations.
 		return errConfigOption(errors.Newf("storage: cannot use explicit path --wal-failover option with multiple stores"))
-	case storageconfig.WALFailoverAmongStores:
+	case storagepb.WALFailoverMode_AMONG_STORES:
 		// Fallthrough
 	default:
-		panic(errors.AssertionFailedf("unreachable"))
+		panic("unreachable")
 	}
 
 	// Either
@@ -447,7 +446,7 @@ func WALFailover(
 			// Use auxiliary/wals-among-stores within the other stores directory.
 			Dirname: secondaryEnv.PathJoin(secondaryEnv.Dir, base.AuxiliaryDir, "wals-among-stores"),
 		}
-		if walCfg.Mode == storageconfig.WALFailoverAmongStores {
+		if walCfg.Mode == storagepb.WALFailoverMode_AMONG_STORES {
 			cfg.opts.WALFailover = makePebbleWALFailoverOptsForDir(cfg.settings, secondary)
 			return nil
 		}

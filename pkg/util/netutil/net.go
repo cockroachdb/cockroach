@@ -34,13 +34,7 @@ func ListenAndServeGRPC(
 	if err != nil {
 		return ln, err
 	}
-	if err := ServeGRPC(stopper, server, ln); err != nil {
-		return nil, err
-	}
-	return ln, nil
-}
 
-func ServeGRPC(stopper *stop.Stopper, server *grpc.Server, ln net.Listener) error {
 	ctx := context.TODO()
 
 	stopper.AddCloser(stop.CloserFn(server.Stop))
@@ -50,12 +44,15 @@ func ServeGRPC(stopper *stop.Stopper, server *grpc.Server, ln net.Listener) erro
 	}
 	if err := stopper.RunAsyncTask(ctx, "listen-quiesce", waitQuiesce); err != nil {
 		waitQuiesce(ctx)
-		return err
+		return nil, err
 	}
 
-	return stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
+	if err := stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		FatalIfUnexpected(server.Serve(ln))
-	})
+	}); err != nil {
+		return nil, err
+	}
+	return ln, nil
 }
 
 var httpLogger = log.NewStdLogger(severity.ERROR, "net/http")
@@ -180,22 +177,18 @@ func (s *TCPServer) ServeWith(
 			return e
 		}
 		tempDelay = 0
-		taskCtx, hdl, err := s.stopper.GetHandle(ctx, stop.TaskOpts{
-			TaskName: "tcp-serve",
-		})
-		if err != nil {
-			err = errors.CombineErrors(err, rw.Close())
-			return err
-		}
-		go func(ctx context.Context) {
-			defer hdl.Activate(ctx).Release(ctx)
+		err := s.stopper.RunAsyncTask(ctx, "tcp-serve", func(ctx context.Context) {
 			defer func() {
 				_ = rw.Close()
 			}()
 			s.addConn(rw)
 			defer s.rmConn(rw)
 			serveConn(ctx, rw)
-		}(taskCtx)
+		})
+		if err != nil {
+			err = errors.CombineErrors(err, rw.Close())
+			return err
+		}
 	}
 }
 

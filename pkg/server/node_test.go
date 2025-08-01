@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -1143,13 +1142,13 @@ func TestDiskStatsMap(t *testing.T) {
 
 	specs := []base.StoreSpec{
 		{
-			ProvisionedRate: storageconfig.ProvisionedRate{
+			ProvisionedRateSpec: base.ProvisionedRateSpec{
 				ProvisionedBandwidth: 0,
 			},
 			Path: "foo",
 		},
 		{
-			ProvisionedRate: storageconfig.ProvisionedRate{
+			ProvisionedRateSpec: base.ProvisionedRateSpec{
 				ProvisionedBandwidth: 200,
 			},
 			Path: "bar",

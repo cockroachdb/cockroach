@@ -40,7 +40,7 @@ CREATE INDEX geo_table_geom_idx ON geo_table USING GIST(geom)
 statement ok
 CREATE INDEX geo_table_geog_idx ON geo_table USING GIST(geog)
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE geom_table_negative_values(
   a geometry(geometry, -1)
 )
@@ -71,7 +71,6 @@ CREATE TABLE geometry (a geometry)
 statement error type .*geography.* already exists
 CREATE TABLE geography (a geography)
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geom_table_negative_values]
 ----
@@ -79,24 +78,13 @@ CREATE TABLE public.geom_table_negative_values (
   a GEOMETRY(GEOMETRY) NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT geom_table_negative_values_pkey PRIMARY KEY (rowid ASC)
-);
+)
 
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE geom_table_negative_values]
-----
-CREATE TABLE public.geom_table_negative_values (
-  a GEOMETRY(GEOMETRY) NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT geom_table_negative_values_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true);
-
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE geog_table_negative_values(
   a geography(geometry, -1)
 )
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE geog_table_negative_values]
 ----
@@ -104,17 +92,7 @@ CREATE TABLE public.geog_table_negative_values (
   a GEOGRAPHY(GEOMETRY) NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT geog_table_negative_values_pkey PRIMARY KEY (rowid ASC)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE geog_table_negative_values]
-----
-CREATE TABLE public.geog_table_negative_values (
-  a GEOGRAPHY(GEOMETRY) NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT geog_table_negative_values_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true);
+)
 
 statement error SRID 3857 cannot be used for geography as it is not in a lon/lat coordinate system
 SELECT 'SRID=3857;POINT(1.0 2.0)'::geography
@@ -139,16 +117,16 @@ geog    GEOGRAPHY(GEOMETRY,4326)  true   NULL  ·  {geo_table_geog_idx,geo_table
 geom    GEOMETRY(POINT)           true   NULL  ·  {geo_table_geom_idx,geo_table_pkey}                     false
 orphan  GEOGRAPHY                 true   NULL  ·  {geo_table_pkey}                                        false
 
-statement error column bad_pk has type geography, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+statement error column bad_pk has type geography, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.2/inverted-indexes.html
 CREATE TABLE bad_geog_table(bad_pk geography primary key)
 
-statement error column bad_pk has type geometry, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+statement error column bad_pk has type geometry, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.2/inverted-indexes.html
 CREATE TABLE bad_geom_table(bad_pk geometry primary key)
 
-statement error column geog has type geography, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+statement error column geog has type geography, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.2/inverted-indexes.html
 CREATE INDEX geog_idx ON geo_table(geog)
 
-statement error column geom has type geometry, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+statement error column geom has type geometry, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.2/inverted-indexes.html
 CREATE INDEX geom_idx ON geo_table(geom)
 
 statement ok
@@ -922,10 +900,10 @@ POLYGON ((20.012344998976914 -20.012345000286587, 20.012344998976914 -20.0123449
 POLYGON ((90 0, 90 0.000000000163709, 90.000000000327418 0.000000000163709, 90.000000000327418 0, 90 0))
 POLYGON ((90 0, 90 0.0439453125, 90.0439453125 0.0439453125, 90.0439453125 0, 90 0))
 
-statement error pq: invalid GeoHash: geohash decode '----': invalid character at index 0
+statement error pq: st_pointfromgeohash\(\): invalid GeoHash: geohash decode '----': invalid character at index 0
 SELECT ST_AsText(ST_PointFromGeoHash('----'))
 
-statement error pq: length of GeoHash must be greater than 0
+statement error pq: st_pointfromgeohash\(\): length of GeoHash must be greater than 0
 SELECT ST_AsText(ST_PointFromGeoHash(''))
 
 query TTTTTTTT
@@ -1028,9 +1006,9 @@ FROM ( VALUES
   ('self-intersecting polygon', 'POLYGON ((14 20, 8 45, 20 35, 14 20, 16 30, 12 30, 14 20))'::geometry)
 ) t(dsc, geom)
 ----
-valid geom                 true   true   true   Valid Geometry                 Valid Geometry          Valid Geometry     POINT (1 2)
-invalid polygon            false  false  false  Self-intersection[2 2]         Self-intersection       Self-intersection  GEOMETRYCOLLECTION (POLYGON ((1.5 1.5, 1.5 -1.5, 1 1, 1.5 1.5)), LINESTRING (1.5 1.5, 2 2))
-self-intersecting polygon  false  false  true   Ring Self-intersection[14 20]  Ring Self-intersection  Valid Geometry     POLYGON ((8 45, 20 35, 14 20, 8 45), (16 30, 12 30, 14 20, 16 30))
+valid geom                 true   true   true   Valid Geometry                   Valid Geometry          Valid Geometry     POINT (1 2)
+invalid polygon            false  false  false  Ring Self-intersection[1.5 1.5]  Ring Self-intersection  Self-intersection  GEOMETRYCOLLECTION (POLYGON ((1.5 1.5, 1.5 -1.5, 1 1, 1.5 1.5)), LINESTRING (1.5 1.5, 2 2))
+self-intersecting polygon  false  false  true   Ring Self-intersection[14 20]    Ring Self-intersection  Valid Geometry     POLYGON ((8 45, 20 35, 14 20, 8 45), (16 30, 12 30, 14 20, 16 30))
 
 query TB
 SELECT
@@ -1111,7 +1089,7 @@ false  false  true
 false  true   false
 true   true   true
 
-statement error should only be called on a linear feature: geom: unsupported type \*geom.Point
+statement error st_isring\(\): should only be called on a linear feature: geom: unsupported type \*geom.Point
 SELECT ST_IsRing('POINT(0 0)')
 
 # Topology operators
@@ -1320,7 +1298,7 @@ FROM geom_operators_test a
 ORDER BY a.dsc
 ----
 Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY
-Empty LineString                          LINESTRING Z EMPTY                                     LINESTRING EMPTY
+Empty LineString                          LINESTRING EMPTY                                       LINESTRING EMPTY
 Empty Point                               POINT EMPTY                                            POINT EMPTY
 Faraway point                             POINT (5 5)                                            POINT (5 5)
 Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)                         LINESTRING (-0.5 0.5, 0.5 0.5)
@@ -1379,43 +1357,43 @@ POINT EMPTY                                                                     
 POINT (5 5)                                                                                                   POINT (5 5)
 LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
 NULL                                                                                                          NULL
-POINT (0 0)                                                                                                   POINT (0 0)
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
 POINT (-0.5 0.5)                                                                                              POINT (-0.5 0.5)
 POINT (0.5 0.5)                                                                                               POINT (0.5 0.5)
-POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))                                                                        POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
-POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                                                           POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
-POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))                                                                  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                        POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                           POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 LINESTRING EMPTY                                                                                              LINESTRING EMPTY
 LINESTRING EMPTY                                                                                              LINESTRING EMPTY
 LINESTRING EMPTY                                                                                              LINESTRING EMPTY
 POINT (5 5)                                                                                                   POINT (5 5)
 LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
 NULL                                                                                                          NULL
-POINT (0 0)                                                                                                   POINT (0 0)
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
 POINT (-0.5 0.5)                                                                                              POINT (-0.5 0.5)
 POINT (0.5 0.5)                                                                                               POINT (0.5 0.5)
-POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))                                                                        POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
-POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                                                           POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
-POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))                                                                  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                        POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                           POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 POINT EMPTY                                                                                                   POINT EMPTY
 LINESTRING EMPTY                                                                                              LINESTRING EMPTY
 POINT EMPTY                                                                                                   POINT EMPTY
 POINT (5 5)                                                                                                   POINT (5 5)
 LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
 NULL                                                                                                          NULL
-POINT (0 0)                                                                                                   POINT (0 0)
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
 POINT (-0.5 0.5)                                                                                              POINT (-0.5 0.5)
 POINT (0.5 0.5)                                                                                               POINT (0.5 0.5)
-POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))                                                                        POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
-POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                                                           POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
-POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))                                                                  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                        POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                           POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 POINT (5 5)                                                                                                   POINT (5 5)
 POINT (5 5)                                                                                                   POINT (5 5)
 POINT (5 5)                                                                                                   POINT (5 5)
 POINT EMPTY                                                                                                   POINT EMPTY
 GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (-0.5 0.5, 0.5 0.5))                                              GEOMETRYCOLLECTION (POINT (5 5), LINESTRING (-0.5 0.5, 0.5 0.5))
 NULL                                                                                                          NULL
-MULTIPOINT (5 5, 0 0)                                                                                         MULTIPOINT (5 5, 0 0)
+GEOMETRYCOLLECTION (POINT (5 5), GEOMETRYCOLLECTION (POINT (0 0)))                                            GEOMETRYCOLLECTION (POINT (5 5), GEOMETRYCOLLECTION (POINT (0 0)))
 MULTIPOINT (5 5, -0.5 0.5)                                                                                    MULTIPOINT (5 5, -0.5 0.5)
 MULTIPOINT (5 5, 0.5 0.5)                                                                                     MULTIPOINT (5 5, 0.5 0.5)
 GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))                                      GEOMETRYCOLLECTION (POINT (5 5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))
@@ -1427,7 +1405,7 @@ LINESTRING (-0.5 0.5, 0.5 0.5)                                                  
 GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), POINT (5 5))                                              GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), POINT (5 5))
 LINESTRING EMPTY                                                                                              LINESTRING EMPTY
 NULL                                                                                                          NULL
-GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), POINT (0 0))                                              GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), POINT (0 0))
+GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))                         GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))
 LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
 LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
 GEOMETRYCOLLECTION (POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0.5, 0 0)), LINESTRING (0 0.5, 0.5 0.5))                GEOMETRYCOLLECTION (POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0.5, 0 0)), LINESTRING (0 0.5, 0.5 0.5))
@@ -1445,15 +1423,15 @@ NULL                                                                            
 NULL                                                                                                          NULL
 NULL                                                                                                          NULL
 NULL                                                                                                          NULL
-POINT (0 0)                                                                                                   POINT (0 0)
-POINT (0 0)                                                                                                   POINT (0 0)
-POINT (0 0)                                                                                                   POINT (0 0)
-MULTIPOINT (0 0, 5 5)                                                                                         MULTIPOINT (0 0, 5 5)
-GEOMETRYCOLLECTION (POINT (0 0), LINESTRING (-0.5 0.5, 0.5 0.5))                                              GEOMETRYCOLLECTION (POINT (0 0), LINESTRING (-0.5 0.5, 0.5 0.5))
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (5 5))                                            GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (5 5))
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), LINESTRING (-0.5 0.5, 0.5 0.5))                         GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), LINESTRING (-0.5 0.5, 0.5 0.5))
 NULL                                                                                                          NULL
 POINT EMPTY                                                                                                   POINT EMPTY
-MULTIPOINT (0 0, -0.5 0.5)                                                                                    MULTIPOINT (0 0, -0.5 0.5)
-MULTIPOINT (0 0, 0.5 0.5)                                                                                     MULTIPOINT (0 0, 0.5 0.5)
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (-0.5 0.5))                                       GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (-0.5 0.5))
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (0.5 0.5))                                        GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)), POINT (0.5 0.5))
 POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))                                                                        POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
 POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                                                           POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
 POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))                                                                  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
@@ -1463,7 +1441,7 @@ POINT (-0.5 0.5)                                                                
 MULTIPOINT (-0.5 0.5, 5 5)                                                                                    MULTIPOINT (-0.5 0.5, 5 5)
 LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
 NULL                                                                                                          NULL
-MULTIPOINT (-0.5 0.5, 0 0)                                                                                    MULTIPOINT (-0.5 0.5, 0 0)
+GEOMETRYCOLLECTION (POINT (-0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))                                       GEOMETRYCOLLECTION (POINT (-0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))
 POINT EMPTY                                                                                                   POINT EMPTY
 MULTIPOINT (-0.5 0.5, 0.5 0.5)                                                                                MULTIPOINT (-0.5 0.5, 0.5 0.5)
 POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))                                                                        POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
@@ -1475,15 +1453,15 @@ POINT (0.5 0.5)                                                                 
 MULTIPOINT (0.5 0.5, 5 5)                                                                                     MULTIPOINT (0.5 0.5, 5 5)
 LINESTRING (-0.5 0.5, 0.5 0.5)                                                                                LINESTRING (-0.5 0.5, 0.5 0.5)
 NULL                                                                                                          NULL
-MULTIPOINT (0.5 0.5, 0 0)                                                                                     MULTIPOINT (0.5 0.5, 0 0)
+GEOMETRYCOLLECTION (POINT (0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))                                        GEOMETRYCOLLECTION (POINT (0.5 0.5), GEOMETRYCOLLECTION (POINT (0 0)))
 MULTIPOINT (0.5 0.5, -0.5 0.5)                                                                                MULTIPOINT (0.5 0.5, -0.5 0.5)
 POINT EMPTY                                                                                                   POINT EMPTY
 GEOMETRYCOLLECTION (POINT (0.5 0.5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))                                  GEOMETRYCOLLECTION (POINT (0.5 0.5), POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))
 POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                                                           POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
 POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))                                                                  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
-POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))                                                                        POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
-POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))                                                                        POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
-POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))                                                                        POLYGON ((-1 1, 0 1, 0 0, -1 0, -1 1))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                        POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                        POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                                                                        POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
 GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (5 5))                                      GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (5 5))
 GEOMETRYCOLLECTION (POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0.5, 0 0)), LINESTRING (0 0.5, 0.5 0.5))                GEOMETRYCOLLECTION (POLYGON ((0 0, -1 0, -1 1, 0 1, 0 0.5, 0 0)), LINESTRING (0 0.5, 0.5 0.5))
 NULL                                                                                                          NULL
@@ -1493,9 +1471,9 @@ GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)), POINT (0.5 0.5))    
 POLYGON EMPTY                                                                                                 POLYGON EMPTY
 POLYGON ((-1 0, -1 1, 0 1, 1 1, 1 0, 0 0, -1 0))                                                              POLYGON ((-1 0, -1 1, 0 1, 1 1, 1 0, 0 0, -1 0))
 MULTIPOLYGON (((-1 0, -1 1, -0.1 1, -0.1 0, -1 0)), ((0 1, 1 1, 1 0, 0 0, 0 1)))                              MULTIPOLYGON (((-1 0, -1 1, -0.1 1, -0.1 0, -1 0)), ((0 1, 1 1, 1 0, 0 0, 0 1)))
-POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                                                           POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
-POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                                                           POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
-POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                                                           POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                           POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                           POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                                                           POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
 GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (5 5))                                         GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), POINT (5 5))
 GEOMETRYCOLLECTION (POLYGON ((0 1, 1 1, 1 0, 0 0, 0 0.5, 0 1)), LINESTRING (-0.5 0.5, 0 0.5))                 GEOMETRYCOLLECTION (POLYGON ((0 1, 1 1, 1 0, 0 0, 0 0.5, 0 1)), LINESTRING (-0.5 0.5, 0 0.5))
 NULL                                                                                                          NULL
@@ -1505,9 +1483,9 @@ POLYGON ((0 1, 1 1, 1 0, 0 0, 0 1))                                             
 POLYGON ((1 1, 1 0, 0 0, -1 0, -1 1, 0 1, 1 1))                                                               POLYGON ((1 1, 1 0, 0 0, -1 0, -1 1, 0 1, 1 1))
 POLYGON EMPTY                                                                                                 POLYGON EMPTY
 POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))                                                                     POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))
-POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))                                                                  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
-POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))                                                                  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
-POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))                                                                  POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 1))
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))                                                                  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (5 5))                                GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)), POINT (5 5))
 GEOMETRYCOLLECTION (POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5, -0.1 1)), LINESTRING (-0.5 0.5, -0.1 0.5))  GEOMETRYCOLLECTION (POLYGON ((-0.1 1, 1 1, 1 0, -0.1 0, -0.1 0.5, -0.1 1)), LINESTRING (-0.5 0.5, -0.1 0.5))
 NULL                                                                                                          NULL
@@ -3773,23 +3751,9 @@ CREATE TABLE geom_linear (
   geom GEOMETRY
 )
 
-# TODO(yuzefovich): when we used GEOS 3.11.2 as well as on PostGIS 3.5.3 (which
-# uses GEOS 3.13.1) this isn't an error.
-statement error layout mismatch, got XYZ, want XY
-WITH t(geom) AS (SELECT 'LINESTRING EMPTY'::GEOMETRY)
-SELECT
-  b.fraction,
-  c.repeat,
-  ST_AsEWKT(ST_LineInterpolatePoint(a.geom, b.fraction::float)),
-  ST_AsEWKT(ST_LineInterpolatePoints(a.geom, b.fraction::float)),
-  ST_AsEWKT(ST_LineInterPolatePoints(a.geom, b.fraction::float, c.repeat))
-FROM t a
-JOIN (VALUES (0.0), (0.2), (0.5), (0.51), (1.0)) b(fraction) ON (1=1)
-JOIN (VALUES (true), (false)) c(repeat) ON (1=1)
-ORDER BY b.fraction, c.repeat;
-
 statement ok
 INSERT INTO geom_linear VALUES
+  ('Empty LineString', 'LINESTRING EMPTY'),
   ('LineString anticlockwise covering all the quadrants', 'LINESTRING(1 -1, 2 2, -2 2, -1 -1)'),
   ('LineString clockwise covering all the quadrants with SRID 4004', 'SRID=4004;LINESTRING(1 -1, -1 -1, -2 2, 2 2)')
 
@@ -3807,6 +3771,16 @@ JOIN (VALUES (0.0), (0.2), (0.5), (0.51), (1.0)) b(fraction) ON (1=1)
 JOIN (VALUES (true), (false)) c(repeat) ON (1=1)
 ORDER BY a.dsc, b.fraction, c.repeat
 ----
+Empty LineString                                                0.0   false  POINT EMPTY                                             POINT EMPTY                                                                                                                             POINT EMPTY
+Empty LineString                                                0.0   true   POINT EMPTY                                             POINT EMPTY                                                                                                                             POINT EMPTY
+Empty LineString                                                0.2   false  POINT EMPTY                                             MULTIPOINT (EMPTY, EMPTY, EMPTY, EMPTY, EMPTY)                                                                                          POINT EMPTY
+Empty LineString                                                0.2   true   POINT EMPTY                                             MULTIPOINT (EMPTY, EMPTY, EMPTY, EMPTY, EMPTY)                                                                                          MULTIPOINT (EMPTY, EMPTY, EMPTY, EMPTY, EMPTY)
+Empty LineString                                                0.5   false  POINT EMPTY                                             MULTIPOINT (EMPTY, EMPTY)                                                                                                               POINT EMPTY
+Empty LineString                                                0.5   true   POINT EMPTY                                             MULTIPOINT (EMPTY, EMPTY)                                                                                                               MULTIPOINT (EMPTY, EMPTY)
+Empty LineString                                                0.51  false  POINT EMPTY                                             POINT EMPTY                                                                                                                             POINT EMPTY
+Empty LineString                                                0.51  true   POINT EMPTY                                             POINT EMPTY                                                                                                                             POINT EMPTY
+Empty LineString                                                1.0   false  POINT EMPTY                                             POINT EMPTY                                                                                                                             POINT EMPTY
+Empty LineString                                                1.0   true   POINT EMPTY                                             POINT EMPTY                                                                                                                             POINT EMPTY
 LineString anticlockwise covering all the quadrants             0.0   false  POINT (1 -1)                                            POINT (1 -1)                                                                                                                            POINT (1 -1)
 LineString anticlockwise covering all the quadrants             0.0   true   POINT (1 -1)                                            POINT (1 -1)                                                                                                                            POINT (1 -1)
 LineString anticlockwise covering all the quadrants             0.2   false  POINT (1.652982212813471 0.958946638440411)             MULTIPOINT (1.652982212813471 0.958946638440411, 1.032455532033675 2, -1.032455532033678 2, -1.65298221281347 0.95894663844041, -1 -1)  POINT (1.652982212813471 0.958946638440411)
@@ -3828,28 +3802,28 @@ LineString clockwise covering all the quadrants with SRID 4004  0.51  true   SRI
 LineString clockwise covering all the quadrants with SRID 4004  1.0   false  SRID=4004;POINT (2 2)                                   SRID=4004;POINT (2 2)                                                                                                                   SRID=4004;POINT (2 2)
 LineString clockwise covering all the quadrants with SRID 4004  1.0   true   SRID=4004;POINT (2 2)                                   SRID=4004;POINT (2 2)                                                                                                                   SRID=4004;POINT (2 2)
 
-statement error fraction -1.000000 should be within \[0 1\] range
+statement error st_lineinterpolatepoint\(\): fraction -1.000000 should be within \[0 1\] range
 SELECT ST_LineInterpolatePoint('LINESTRING (0 0, 1 1)'::geometry, -1)
 
-statement error fraction -1.000000 should be within \[0 1\] range
+statement error st_lineinterpolatepoints\(\): fraction -1.000000 should be within \[0 1\] range
 SELECT ST_LineInterpolatePoints('LINESTRING (0 0, 1 1)'::geometry, -1, false)
 
-statement error geometry MultiLineString should be LineString
+statement error st_lineinterpolatepoint\(\): geometry MultiLineString should be LineString
 SELECT ST_LineInterpolatePoint('MULTILINESTRING ((0 0, 1 1), (1 1, 0 0))'::geometry, 0.2)
 
-statement error geometry MultiLineString should be LineString
+statement error st_lineinterpolatepoints\(\): geometry MultiLineString should be LineString
 SELECT ST_LineInterpolatePoints('MULTILINESTRING ((0 0, 1 1), (1 1, 0 0))'::geometry, 0.2, false)
 
-statement error geometry Point should be LineString
+statement error st_lineinterpolatepoint\(\): geometry Point should be LineString
 SELECT ST_LineInterpolatePoint('POINT (0 0)'::geometry, 0.2)
 
-statement error geometry Point should be LineString
+statement error st_lineinterpolatepoints\(\): geometry Point should be LineString
 SELECT ST_LineInterpolatePoints('POINT (0 0)'::geometry, 0.2, false)
 
-statement error geometry Polygon should be LineString
+statement error st_lineinterpolatepoint\(\): geometry Polygon should be LineString
 SELECT ST_LineInterpolatePoint('POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))'::geometry, 0.2)
 
-statement error geometry Polygon should be LineString
+statement error st_lineinterpolatepoints\(\): geometry Polygon should be LineString
 SELECT ST_LineInterpolatePoints('POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))'::geometry, 0.2, false)
 
 subtest geog_operators
@@ -4706,15 +4680,11 @@ Square overlapping left and right square  Square (right)                        
 Square overlapping left and right square  Square overlapping left and right square  true   true   true
 
 # ST_Segmentize
-#
-# ST_Segmentize uses some trigonometric functions implicitly (via s2 library),
-# which have architecture suppport on some systems like s390x, which can produce
-# slightly different results, so we perform "rounding" via regexp replacement.
 query TTT
 SELECT
   dsc,
   ST_AsText(ST_Segmentize(geog, 100000)),
-  regexp_replace(ST_AsText(ST_Segmentize(geog, 50000)), '1.000028552944326', '1.000028552944327', 'g')
+  ST_AsText(ST_Segmentize(geog, 50000))
 FROM geog_operators_test
 ORDER BY dsc
 ----
@@ -4727,7 +4697,7 @@ NULL                                      NULL                                  
 Nested Geometry Collection                GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                          GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
 Point middle of Left Square               POINT (-0.5 0.5)                                                                               POINT (-0.5 0.5)
 Point middle of Right Square              POINT (0.5 0.5)                                                                                POINT (0.5 0.5)
-Square (left)                             POLYGON ((-1 0, -0.5 0, 0 0, 0 0.5, 0 1, -0.5 1.000038070652873, -1 1, -1 0.5, -1 0))          POLYGON ((-1 0, -0.75 0, -0.5 0, -0.25 0, 0 0, 0 0.25, 0 0.5, 0 0.75, 0 1, -0.249999998550193 1.000028552944327, -0.5 1.000038070652873, -0.750000001449807 1.000028552944327, -1 1, -1 0.75, -1 0.5, -1 0.25, -1 0))
+Square (left)                             POLYGON ((-1 0, -0.5 0, 0 0, 0 0.5, 0 1, -0.5 1.000038070652873, -1 1, -1 0.5, -1 0))          POLYGON ((-1 0, -0.75 0, -0.5 0, -0.25 0, 0 0, 0 0.25, 0 0.5, 0 0.75, 0 1, -0.249999998550193 1.000028552944327, -0.5 1.000038070652873, -0.750000001449807 1.000028552944326, -1 1, -1 0.75, -1 0.5, -1 0.25, -1 0))
 Square (right)                            POLYGON ((0 0, 0.5 0, 1 0, 1 0.5, 1 1, 0.5 1.000038070652873, 0 1, 0 0.5, 0 0))                POLYGON ((0 0, 0.25 0, 0.5 0, 0.75 0, 1 0, 1 0.25, 1 0.5, 1 0.75, 1 1, 0.750000001449807 1.000028552944327, 0.5 1.000038070652873, 0.249999998550193 1.000028552944327, 0 1, 0 0.75, 0 0.5, 0 0.25, 0 0))
 Square overlapping left and right square  POLYGON ((-0.1 0, 0.45 0, 1 0, 1 0.5, 1 1, 0.45 1.000046065796834, -0.1 1, -0.1 0.5, -0.1 0))  POLYGON ((-0.1 0, 0.175 0, 0.45 0, 0.725 0, 1 0, 1 0.25, 1 0.5, 1 0.75, 1 1, 0.725000001929716 1.000034549281259, 0.45 1.000046065796834, 0.174999998070284 1.000034549281259, -0.1 1, -0.1 0.75, -0.1 0.5, -0.1 0.25, -0.1 0))
 
@@ -4791,7 +4761,7 @@ Square (left)                             SRID=4326;POINT (-0.5 0.500006)     SR
 Square (right)                            SRID=4326;POINT (0.5 0.500006)      SRID=4326;POINT (0.5 0.500006)
 Square overlapping left and right square  SRID=4326;POINT (0.45 0.50001)      SRID=4326;POINT (0.45 0.50001)
 
-statement error unhandled geography type GeometryCollection
+statement error st_centroid\(\): unhandled geography type GeometryCollection
 SELECT ST_Centroid('GEOMETRYCOLLECTION(POINT(0 0), LINESTRING EMPTY)'::geography, true)
 
 query T
@@ -4799,7 +4769,7 @@ SELECT ST_AsText(ST_Segmentize('MULTIPOINT (0 0, 1 1)'::geography, -1))
 ----
 MULTIPOINT (0 0, 1 1)
 
-statement error maximum segment length must be positive
+statement error st_segmentize\(\): maximum segment length must be positive
 SELECT ST_Segmentize('POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))'::geography, 0)
 
 query TTT
@@ -4828,7 +4798,7 @@ SELECT ST_AsText(ST_Segmentize('MULTIPOINT (0 0, 1 1)'::geometry, -1))
 ----
 MULTIPOINT (0 0, 1 1)
 
-statement error maximum segment length must be positive
+statement error st_segmentize\(\): maximum segment length must be positive
 SELECT ST_Segmentize('POLYGON ((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))'::geometry, -1)
 
 # ST_Force*
@@ -5175,10 +5145,10 @@ false  false  97  false  false
 
 # Test for 2+ string arguments for Geometry where one side of the arguments
 # raises an error.
-statement error pq: error parsing EWKT: syntax error: invalid keyword at line 1, pos 0
+statement error pq: st_intersects\(\): error parsing EWKT: syntax error: invalid keyword at line 1, pos 0
 SELECT ST_Intersects('abc'::string, 'POINT(1 0)'::string)
 
-statement error pq: error parsing EWKT: syntax error: invalid keyword at line 1, pos 0
+statement error pq: st_intersects\(\): error parsing EWKT: syntax error: invalid keyword at line 1, pos 0
 SELECT ST_Intersects('POINT(1 0)'::string, 'abc'::string)
 
 query T
@@ -5444,7 +5414,7 @@ LINESTRING (1 2, 3 4, 5 6)
 MULTILINESTRING ((1 2, 3 4), (5 6, 7 8))
 GEOMETRYCOLLECTION EMPTY
 
-statement error value out of range: overflow
+statement error st_linemerge\(\): value out of range: overflow
 select st_linemerge('01020000C003000000000000000000F0FF000000000000F8FF60DB272315DEBAC13CDE36003499DEC1000000000000F0FF000000000000F8FF9CDB5D9AA401E1C1D0C80253A5F1C4C1000000000000F0FF000000000000F8FF003E39CD6CDDD2C1A6909F31D737F4C1'::geometry);
 
 subtest public_schema_resolution
@@ -5477,14 +5447,11 @@ POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((0 -0.1, 0 1, 1 
 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((0 -1, 0 0, 1 0, 1 -1, 0 -1))
 POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
 
-# ST_Rotate uses some trigonometric functions internally, which have
-# architecture suppport on some systems like s390x, which can produce slightly
-# different results, so we perform "rounding" via regexp replacement.
 query TTT
 SELECT
   ST_AsText(a.geom) d,
   ST_AsText(ST_Rotate(a.geom, pi())),
-  regexp_replace(ST_AsText(ST_Rotate(a.geom, pi()/4)), 'POINT \(0.000000000000001 7.071067811865476\)', 'POINT (0 7.071067811865476)', 'g')
+  ST_AsText(ST_Rotate(a.geom, pi()/4))
 FROM geom_operators_test a
 ORDER BY d ASC
 ----
@@ -5674,10 +5641,10 @@ true
 false
 true
 
-statement error pq: radius of the circle has to be positive
+statement error pq: st_pointinsidecircle\(\): radius of the circle has to be positive
 SELECT ST_PointInsideCircle(ST_Point(1,2), 0.5, 2, -3);
 
-statement error pq: first parameter has to be of type Point
+statement error pq: st_pointinsidecircle\(\): first parameter has to be of type Point
 SELECT ST_PointInsideCircle(ST_GeomFromText('LINESTRING (-0.5 0.5, 0.5 0.5)'), 0.5, 2, -3);
 
 subtest st_linelocatepoint
@@ -5705,7 +5672,7 @@ SELECT round(ST_LineLocatePoint(line, point)::float, 2) FROM ( VALUES
 0.15
 0.53
 
-statement error pq: first parameter has to be of type LineString
+statement error pq: st_linelocatepoint\(\): first parameter has to be of type LineString
 SELECT ST_LineLocatePoint(ST_GeomFromText('GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))'), ST_Point(0, 0));
 
 
@@ -5776,7 +5743,7 @@ SELECT ST_AsText(ST_SnapToGrid(ST_MinimumBoundingCircle(ST_GeomFromText('POINT(0
 ----
 POINT (0 0)
 
-statement error value out of range: overflow
+statement error st_minimumboundingcircle\(\): value out of range: overflow
 SELECT st_astext(st_minimumboundingcircle(
   st_makepoint(
     (-0.23349138300862382)::FLOAT8,
@@ -5794,10 +5761,10 @@ SELECT ST_MinimumBoundingCircle(NULL::geometry) IS NULL;
 ----
 true
 
-statement error value out of range: overflow
+statement error st_minimumboundingcircle\(\): value out of range: overflow
 select st_minimumboundingcircle(st_makepoint(((-0.27013513189303495):::FLOAT8::FLOAT8 // 5e-324:::FLOAT8::FLOAT8)::FLOAT8::FLOAT8, (-0.4968052087960828):::FLOAT8::FLOAT8)::GEOMETRY::GEOMETRY)::GEOMETRY
 
-statement error value out of range: overflow
+statement error st_minimumboundingcircle\(\): value out of range: overflow
 select st_minimumboundingcircle(st_makepoint(((-0.27013513189303495):::FLOAT8::FLOAT8 // 5e-324:::FLOAT8::FLOAT8)::FLOAT8::FLOAT8, (-0.4968052087960828):::FLOAT8::FLOAT8)::GEOMETRY::GEOMETRY, 10)::GEOMETRY
 
 subtest st_unaryunion
@@ -5887,10 +5854,10 @@ SELECT ST_AsText(ST_GeneratePoints('POLYGON((0 0,2 5,2.5 4,3 5,3 1,0 0))'::geome
 ----
 MULTIPOINT (0.69466 0.92001, 2.44176 3.71642, 2.79788 3.8425, 1.05776 1.77173, 1.79696 2.42853)
 
-statement error pq: zero area input Polygon
+statement error pq: st_generatepoints\(\): zero area input Polygon
 SELECT ST_AsText(ST_GeneratePoints('POLYGON((0 0, 1 1, 1 1, 0 0))'::geometry, 4, 1))
 
-statement error pq: seed must be greater than zero
+statement error pq: st_generatepoints\(\): seed must be greater than zero
 SELECT ST_AsText(ST_GeneratePoints('POLYGON((0 0,2 5,2.5 4,3 5,3 1,0 0))'::geometry, 5, 0))
 
 query T nosort
@@ -5911,16 +5878,16 @@ subtest st_orientedenvelope
 query T
 SELECT ST_AsText(ST_OrientedEnvelope(ST_GeomFromText('MULTIPOINT ((0 0), (-1 -1), (3 2))')));
 ----
-POLYGON ((3 2, -1 -1, -1.12 -0.84, 2.88 2.16, 3 2))
+POLYGON ((3 2, 2.88 2.16, -1.12 -0.84, -1 -1, 3 2))
 
 
-statement error pq: end must be greater or equal to the start
+statement error pq: st_linesubstring\(\): end must be greater or equal to the start
 select st_astext(st_linesubstring('LINESTRING(0 0, 0 5, 5 5,10 3)'::geometry,0.5,0.4))
 
-statement error pq: start and and must be within 0 and 1
+statement error pq: st_linesubstring\(\): start and and must be within 0 and 1
 select st_astext(st_linesubstring('LINESTRING(0 0, 0 5, 5 5,10 3)'::geometry,0,1.4));
 
-statement error pq: end must be greater or equal to the start
+statement error pq: st_linesubstring\(\): end must be greater or equal to the start
 select st_astext(st_linesubstring('POINT(0 0)'::geometry,0.5,0.4));
 
 query T nosort
@@ -6048,13 +6015,13 @@ SELECT
 ----
 NULL NULL
 
-statement error pq: argument must be MULTILINESTRING geometry
+statement error pq: st_bdpolyfromtext\(\): argument must be MULTILINESTRING geometry
 SELECT ST_AsText(ST_BdPolyFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))', 4326))
 
-statement error pq: argument must be MULTILINESTRING geometry
+statement error pq: st_bdpolyfromtext\(\): argument must be MULTILINESTRING geometry
 SELECT ST_AsText(ST_BdPolyFromText('LINESTRING(0 0, 1 0, 1 1, 0 1, 0 0)', 4326))
 
-statement error pq: argument must be MULTILINESTRING geometry
+statement error pq: st_bdpolyfromtext\(\): argument must be MULTILINESTRING geometry
 SELECT ST_AsText(ST_BdPolyFromText('POINT(0 0)', 4326))
 
 subtest st_asmvtgeom
@@ -6354,7 +6321,7 @@ SELECT ST_AsText(ST_TileEnvelope(3, 1, 1, ST_MakeEnvelope(-180, -90, 180, 90, 43
 ----
 POLYGON ((-140.625 42.1875, -140.625 70.3125, -84.375 70.3125, -84.375 42.1875, -140.625 42.1875))
 
-statement error pgcode 22023 pq: Unable to compute bbox
+statement error pgcode 22023 pq: st_tileenvelope\(\): Unable to compute bbox
 SELECT st_tileenvelope(0, 0, 0, '010500000000000000');
 
 subtest end

@@ -80,9 +80,6 @@ type instrumentationHelper struct {
 	// Transaction information.
 	implicitTxn bool
 	txnPriority roachpb.UserPriority
-	// txnBufferedWritesEnabled tracks whether the write buffering was
-	// enabled on the transaction before executing the stmt.
-	txnBufferedWritesEnabled bool
 
 	codec keys.SQLCodec
 
@@ -206,9 +203,6 @@ type instrumentationHelper struct {
 
 	// retryCount is the number of times the transaction was retried.
 	retryCount uint64
-
-	// retryStmtCount is the number of times the statement was retried.
-	retryStmtCount uint64
 
 	// joinTypeCounts records the number of times each type of logical join was
 	// used in the query, up to 255.
@@ -334,6 +328,7 @@ var inFlightTraceCollectorPollInterval = settings.RegisterDurationSetting(
 	"determines the interval between polling done by the in-flight trace "+
 		"collector for the statement bundle, set to zero to disable",
 	0,
+	settings.NonNegativeDuration,
 )
 
 var timeoutTraceCollectionEnabled = settings.RegisterBoolSetting(
@@ -423,7 +418,6 @@ func (ih *instrumentationHelper) Setup(
 	ih.fingerprint = stmt.StmtNoConstants
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
-	ih.txnBufferedWritesEnabled = p.txn.BufferedWritesEnabled()
 	ih.retryCount = uint64(retryCount)
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
@@ -634,8 +628,6 @@ func (ih *instrumentationHelper) Finish(
 		}
 	}
 
-	ih.retryStmtCount = uint64(p.autoRetryStmtCounter)
-
 	// Record the statement information that we've collected.
 	// Note that in case of implicit transactions, the trace contains the auto-commit too.
 	traceID := ih.sp.TraceID()
@@ -826,10 +818,8 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
 	ob.AddPlanType(ih.generic, ih.optimized)
-	ob.AddRetryCount("transaction", ih.retryCount)
-	ob.AddRetryTime("transaction", phaseTimes.GetTransactionRetryLatency())
-	ob.AddRetryCount("statement", ih.retryStmtCount)
-	ob.AddRetryTime("statement", phaseTimes.GetStatementRetryLatency())
+	ob.AddRetryCount(ih.retryCount)
+	ob.AddRetryTime(phaseTimes.GetTransactionRetryLatency())
 
 	if queryStats != nil {
 		if queryStats.KVRowsRead != 0 {
@@ -887,18 +877,6 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		asOfSystemTime = ih.evalCtx.AsOfSystemTime
 	}
 	ob.AddTxnInfo(iso, ih.txnPriority, qos, asOfSystemTime)
-	// Highlight that write buffering was enabled on the current txn, unless
-	// we're in "deterministic explain" mode.
-	if ih.txnBufferedWritesEnabled && !flags.Deflake.HasAny(explain.DeflakeAll) {
-		// In order to not pollute the output, we don't include the write
-		// buffering info for read-only implicit txns. However, if we're in an
-		// explicit txn, even if the stmt is read-only, it might still be
-		// helpful to highlight the write buffering being enabled.
-		readOnlyImplicit := !ih.containsMutation && ih.implicitTxn
-		if !readOnlyImplicit {
-			ob.AddTopLevelField("buffered writes enabled", "")
-		}
-	}
 
 	// When building EXPLAIN ANALYZE output we do **not** want to create
 	// post-query plans if they are missing. The fact that they are missing
@@ -942,19 +920,12 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 			} else {
 				buf.WriteString("Diagram: ")
 			}
-			if d.diagram != nil {
-				d.diagram.AddSpans(trace)
-				_, url, err := d.diagram.ToURL()
-				if err != nil {
-					buf.WriteString(err.Error())
-				} else {
-					buf.WriteString(url.String())
-				}
+			d.diagram.AddSpans(trace)
+			_, url, err := d.diagram.ToURL()
+			if err != nil {
+				buf.WriteString(err.Error())
 			} else {
-				if buildutil.CrdbTestBuild {
-					panic(errors.AssertionFailedf("diagram shouldn't be nil in EXPLAIN ANALYZE (DISTSQL)"))
-				}
-				buf.WriteString("<missing>")
+				buf.WriteString(url.String())
 			}
 			rows = append(rows, buf.String())
 		}

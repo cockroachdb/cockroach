@@ -7,14 +7,17 @@ package rowexec
 
 import (
 	"context"
+	"encoding/binary"
 	"math/rand"
 	"time"
 
-	"github.com/axiomhq/hyperloglog"
+	hllNew "github.com/axiomhq/hyperloglog"
+	hllOld "github.com/axiomhq/hyperloglog/000"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -33,11 +36,14 @@ import (
 
 // sketchInfo contains the specification and run-time state for each sketch.
 type sketchInfo struct {
-	spec     execinfrapb.SketchSpec
-	sketch   *hyperloglog.Sketch
-	numNulls int64
-	numRows  int64
-	size     int64
+	spec execinfrapb.SketchSpec
+	// Exactly one of sketchOld and sketchNew will be set.
+	sketchOld            *hllOld.Sketch
+	sketchNew            *hllNew.Sketch
+	numNulls             int64
+	numRows              int64
+	size                 int64
+	legacyFingerprinting bool
 }
 
 // A sampler processor returns a random sample of rows, as well as "global"
@@ -97,6 +103,9 @@ func newSamplerProcessor(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 ) (*samplerProcessor, error) {
+	useNewHLL := execversion.FromContext(ctx) >= execversion.V25_1
+	legacyFingerprinting := execversion.FromContext(ctx) < execversion.V25_2
+
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will disable histogram collection if this limit is not
 	// enough.
@@ -123,10 +132,15 @@ func newSamplerProcessor(
 	var sampleCols intsets.Fast
 	for i := range spec.Sketches {
 		s.sketches[i] = sketchInfo{
-			spec:     spec.Sketches[i],
-			sketch:   hyperloglog.New14(),
-			numNulls: 0,
-			numRows:  0,
+			spec:                 spec.Sketches[i],
+			numNulls:             0,
+			numRows:              0,
+			legacyFingerprinting: legacyFingerprinting,
+		}
+		if useNewHLL {
+			s.sketches[i].sketchNew = hllNew.New14()
+		} else {
+			s.sketches[i].sketchOld = hllOld.New14()
 		}
 		if spec.Sketches[i].GenerateHistogram {
 			sampleCols.Add(int(spec.Sketches[i].Columns[0]))
@@ -146,9 +160,13 @@ func newSamplerProcessor(
 		sketchSpec.Columns = []uint32{0}
 		s.invSketch[col] = &sketchInfo{
 			spec:     sketchSpec,
-			sketch:   hyperloglog.New14(),
 			numNulls: 0,
 			numRows:  0,
+		}
+		if useNewHLL {
+			s.invSketch[col].sketchNew = hllNew.New14()
+		} else {
+			s.invSketch[col].sketchOld = hllOld.New14()
 		}
 	}
 
@@ -294,6 +312,7 @@ func (s *samplerProcessor) mainLoop(
 					timer.Reset(wait)
 					select {
 					case <-timer.C:
+						timer.Read = true
 						break
 					case <-s.FlowCtx.Stopper().ShouldQuiesce():
 						break
@@ -419,7 +438,12 @@ func (s *samplerProcessor) emitSketchRow(
 	outRow[s.numRowsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.numRows))}
 	outRow[s.numNullsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.numNulls))}
 	outRow[s.sizeCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(si.size))}
-	data, err := si.sketch.MarshalBinary()
+	var data []byte
+	if si.sketchNew != nil {
+		data, err = si.sketchNew.MarshalBinary()
+	} else {
+		data, err = si.sketchOld.MarshalBinary()
+	}
 	if err != nil {
 		return false, err
 	}
@@ -493,6 +517,10 @@ func (s *samplerProcessor) DoesNotUseTxn() bool {
 func (s *sketchInfo) addRow(
 	ctx context.Context, row rowenc.EncDatumRow, typs []*types.T, buf *[]byte,
 ) (err error) {
+	if s.legacyFingerprinting {
+		return s.addRowLegacy(ctx, row, typs, buf)
+	}
+
 	s.numRows++
 	allNulls := true
 	*buf = (*buf)[:0]
@@ -576,7 +604,11 @@ func (s *sketchInfo) addRow(
 	if allNulls {
 		s.numNulls++
 	}
-	s.sketch.Insert(*buf)
+	if s.sketchNew != nil {
+		s.sketchNew.Insert(*buf)
+	} else {
+		s.sketchOld.Insert(*buf)
+	}
 	return nil
 }
 
@@ -597,4 +629,97 @@ func containsCollatedString(t *types.T) bool {
 		}
 	}
 	return false
+}
+
+// addRowLegacy adds a row to the sketch and updates row counts. This is the
+// legacy implementation from versions prior to 25.2.
+//
+// TODO(mgartner): Remove this once compatibility with 25.1 is no longer needed.
+func (s *sketchInfo) addRowLegacy(
+	ctx context.Context, row rowenc.EncDatumRow, typs []*types.T, buf *[]byte,
+) error {
+	var err error
+	s.numRows++
+
+	var col uint32
+	var useFastPath bool
+	if len(s.spec.Columns) == 1 {
+		col = s.spec.Columns[0]
+		if row[col].IsUnset() {
+			return errors.AssertionFailedf("unset datum: col=%d row=%s", col, row.String(typs))
+		}
+		isNull := row[col].IsNull()
+		useFastPath = typs[col].Family() == types.IntFamily && !isNull
+	}
+
+	if useFastPath {
+		// Fast path for integers.
+		// TODO(radu): make this more general.
+		val, err := row[col].GetInt()
+		if err != nil {
+			return err
+		}
+
+		if cap(*buf) < 8 {
+			*buf = make([]byte, 8)
+		} else {
+			*buf = (*buf)[:8]
+		}
+
+		s.size += int64(row[col].DiskSize())
+
+		// Note: this encoding is not identical with the one in the general path
+		// below, but it achieves the same thing (we want equal integers to
+		// encode to equal []bytes). The only caveat is that all samplers must
+		// use the same encodings, so changes will require a new SketchType to
+		// avoid problems during upgrade.
+		//
+		// We could use a more efficient hash function and use InsertHash, but
+		// it must be a very good hash function (HLL expects the hash values to
+		// be uniformly distributed in the 2^64 range). Experiments (on tpcc
+		// order_line) with simplistic functions yielded bad results.
+		binary.LittleEndian.PutUint64(*buf, uint64(val))
+		if s.sketchNew != nil {
+			s.sketchNew.Insert(*buf)
+		} else {
+			s.sketchOld.Insert(*buf)
+		}
+		return nil
+	}
+	isNull := true
+	*buf = (*buf)[:0]
+	for _, col := range s.spec.Columns {
+		// We pass nil DatumAlloc so that each datum allocation was independent
+		// (to prevent bounded memory leaks like we've seen in #136394).
+		// TODO(yuzefovich): the problem in that issue was that the same backing
+		// slice of datums was shared across rows, so if a single row was kept
+		// as a sample, it could keep many garbage alive. To go around that we
+		// simply disabled the batching. We could improve that behavior by using
+		// a DatumAlloc in which we set typeAllocSizes in such a way that all
+		// columns of the same type in a single row would be backed by a single
+		// slice allocation.
+		//
+		// We choose to not perform the memory accounting for possibly decoded
+		// tree.Datum because we will lose the references to row very soon.
+		*buf, err = row[col].Fingerprint(ctx, typs[col], nil /* da */, *buf, nil /* acc */)
+		if err != nil {
+			return err
+		}
+		if isNull {
+			if row[col].IsUnset() {
+				return errors.AssertionFailedf("unset datum: col=%d row=%s", col, row.String(typs))
+			}
+			isNull = row[col].IsNull()
+		}
+		s.size += int64(row[col].DiskSize())
+	}
+	if isNull {
+		s.numNulls++
+	}
+	if s.sketchNew != nil {
+		s.sketchNew.Insert(*buf)
+	} else {
+		s.sketchOld.Insert(*buf)
+	}
+	return nil
 }

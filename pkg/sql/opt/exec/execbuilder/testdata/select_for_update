@@ -786,7 +786,6 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ locking strength: for update
-    │ parallel
     │
     └── • distinct
         │ columns: (b)
@@ -814,7 +813,6 @@ vectorized: true
     │ table: t@t_pkey
     │ equality: (b) = (a)
     │ equality cols are key
-    │ parallel
     │
     └── • distinct
         │ columns: (b)
@@ -844,7 +842,6 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ locking strength: for update
-    │ parallel
     │
     └── • distinct
         │ columns: (b)
@@ -872,7 +869,6 @@ vectorized: true
     │ table: t@t_pkey
     │ equality: (b) = (a)
     │ equality cols are key
-    │ parallel
     │
     └── • distinct
         │ columns: (b)
@@ -1696,7 +1692,6 @@ vectorized: true
 │ table: indexed@indexed_pkey
 │ key columns: a
 │ locking strength: for update
-│ parallel
 │
 └── • scan
       columns: (a, b)
@@ -1717,7 +1712,6 @@ vectorized: true
 │ table: indexed@indexed_pkey
 │ key columns: a
 │ locking strength: for update
-│ parallel
 │
 └── • scan
       columns: (a, b)
@@ -1746,7 +1740,6 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ locking strength: for update
-    │ parallel
     │
     └── • scan
           columns: (a, b)
@@ -1771,7 +1764,6 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ locking strength: for update
-    │ parallel
     │
     └── • scan
           columns: (a, b)
@@ -1794,7 +1786,6 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, b)
@@ -1838,7 +1829,6 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1872,7 +1862,6 @@ vectorized: true
     │ table: inverted@inverted_pkey
     │ key columns: a
     │ locking strength: for update
-    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1907,7 +1896,6 @@ vectorized: true
     │ equality cols are key
     │ pred: b @> b
     │ locking strength: for update
-    │ parallel
     │
     └── • project
         │ columns: (a, b, c, a)
@@ -1976,7 +1964,6 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ parallel
 │
 └── • project
     │ columns: (a)
@@ -2565,7 +2552,6 @@ vectorized: true
 │ key columns: a
 │ locking strength: for update
 │ locking wait policy: skip locked
-│ parallel
 │
 └── • scan
       columns: (a, b)
@@ -2592,7 +2578,6 @@ vectorized: true
     │ key columns: a
     │ locking strength: for update
     │ locking wait policy: skip locked
-    │ parallel
     │
     └── • scan
           columns: (a, b)
@@ -2735,7 +2720,6 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ parallel
 │
 └── • filter
     │ columns: (a, b)
@@ -2763,7 +2747,6 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ parallel
 │
 └── • scan
       columns: (a, b)
@@ -2784,7 +2767,6 @@ vectorized: true
 │ table: u@u_pkey
 │ key columns: a
 │ locking strength: for update
-│ parallel
 │
 └── • scan
       columns: (a, b)
@@ -2806,7 +2788,6 @@ vectorized: true
 │ equality: (b) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ parallel
 │
 └── • scan
       columns: (a, b)
@@ -2829,7 +2810,6 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, b, c)
@@ -2838,7 +2818,6 @@ vectorized: true
     │ equality: (b) = (a)
     │ equality cols are key
     │ pred: c < a
-    │ parallel
     │
     └── • scan
           columns: (a, b)
@@ -2860,7 +2839,6 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, b)
@@ -2888,7 +2866,6 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, b, c)
@@ -2896,7 +2873,6 @@ vectorized: true
     │ table: u@u_pkey
     │ equality: (b) = (a)
     │ equality cols are key
-    │ parallel
     │
     └── • scan
           columns: (a, b)
@@ -2918,7 +2894,6 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ parallel
 │
 └── • lookup join (inner)
     │ columns: (a, b, a, b)
@@ -2926,7 +2901,6 @@ vectorized: true
     │ table: t@t_pkey
     │ equality: (b) = (a)
     │ equality cols are key
-    │ parallel
     │
     └── • scan
           columns: (a, b)
@@ -2948,7 +2922,6 @@ vectorized: true
 │ equality: (b) = (a)
 │ equality cols are key
 │ locking strength: for update
-│ parallel
 │
 └── • scan
       columns: (a, b)
@@ -2956,8 +2929,7 @@ vectorized: true
       table: t@t_pkey
       spans: /5/0
 
-# Table with multiple column families. Test that we can push down locking in
-# some cases.
+# Table with multiple column families. Cannot push down locking.
 statement ok
 CREATE TABLE xyz (
   x INT PRIMARY KEY,
@@ -2968,7 +2940,6 @@ CREATE TABLE xyz (
   FAMILY (z)
 )
 
-# We can't push down locking if the scan doesn't fetch all families.
 query T
 EXPLAIN (VERBOSE) SELECT y FROM xyz WHERE x = 1 FOR UPDATE
 ----
@@ -2985,7 +2956,6 @@ vectorized: true
     │ equality: (x) = (x)
     │ equality cols are key
     │ locking strength: for update
-    │ parallel
     │
     └── • scan
           columns: (x, y)
@@ -2993,130 +2963,58 @@ vectorized: true
           table: xyz@xyz_pkey
           spans: /1/0
 
-# We can push down locking if the scan fetches all families.
-query T
-EXPLAIN (VERBOSE) SELECT y, z FROM xyz WHERE x = 1 FOR UPDATE
-----
-distribution: local
-vectorized: true
-·
-• project
-│ columns: (y, z)
-│
-└── • scan
-      columns: (x, y, z)
-      estimated row count: 1 (missing stats)
-      table: xyz@xyz_pkey
-      spans: /1-/2
-      locking strength: for update
-
-# We can't push down locking if the index join doesn't fetch all families.
-query T
-EXPLAIN (VERBOSE) SELECT y FROM xyz WHERE z = 2 FOR SHARE
-----
-distribution: local
-vectorized: true
-·
-• project
-│ columns: (y)
-│
-└── • lookup join (semi)
-    │ columns: (x, y)
-    │ estimated row count: 10 (missing stats)
-    │ table: xyz@xyz_pkey
-    │ equality: (x) = (x)
-    │ equality cols are key
-    │ locking strength: for share
-    │ parallel
-    │
-    └── • project
-        │ columns: (x, y)
-        │
-        └── • index join
-            │ columns: (x, y, z)
-            │ estimated row count: 10 (missing stats)
-            │ table: xyz@xyz_pkey
-            │ key columns: x
-            │ parallel
-            │
-            └── • scan
-                  columns: (x, z)
-                  estimated row count: 10 (missing stats)
-                  table: xyz@xyz_z_idx
-                  spans: /2-/3
-
-# We can push down locking if the index join fetches all families.
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z = 2 FOR SHARE
 ----
 distribution: local
 vectorized: true
 ·
-• index join
+• lookup join (semi)
 │ columns: (x, y, z)
 │ estimated row count: 10 (missing stats)
 │ table: xyz@xyz_pkey
-│ key columns: x
-│ locking strength: for share
-│ parallel
-│
-└── • scan
-      columns: (x, z)
-      estimated row count: 10 (missing stats)
-      table: xyz@xyz_z_idx
-      spans: /2-/3
-
-# We can't push down locking if the lookup join doesn't fetch all families.
-query T
-EXPLAIN (VERBOSE) SELECT t.*, x FROM t INNER LOOKUP JOIN xyz ON x = b WHERE a = 5 FOR UPDATE OF xyz
-----
-distribution: local
-vectorized: true
-·
-• lookup join (semi)
-│ columns: (a, b, x)
-│ estimated row count: 1 (missing stats)
-│ table: xyz@xyz_pkey
 │ equality: (x) = (x)
 │ equality cols are key
-│ locking strength: for update
-│ parallel
+│ locking strength: for share
 │
-└── • lookup join (inner)
-    │ columns: (a, b, x)
-    │ estimated row count: 1 (missing stats)
+└── • index join
+    │ columns: (x, y, z)
+    │ estimated row count: 10 (missing stats)
     │ table: xyz@xyz_pkey
-    │ equality: (b) = (x)
-    │ equality cols are key
-    │ parallel
+    │ key columns: x
     │
     └── • scan
-          columns: (a, b)
-          estimated row count: 1 (missing stats)
-          table: t@t_pkey
-          spans: /5/0
+          columns: (x, z)
+          estimated row count: 10 (missing stats)
+          table: xyz@xyz_z_idx
+          spans: /2-/3
 
-# We can push down locking if the lookup join fetches all families.
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t INNER LOOKUP JOIN xyz ON x = b WHERE a = 5 FOR UPDATE OF xyz
 ----
 distribution: local
 vectorized: true
 ·
-• lookup join (inner)
+• lookup join (semi)
 │ columns: (a, b, x, y, z)
 │ estimated row count: 1 (missing stats)
 │ table: xyz@xyz_pkey
-│ equality: (b) = (x)
+│ equality: (x) = (x)
 │ equality cols are key
 │ locking strength: for update
-│ parallel
 │
-└── • scan
-      columns: (a, b)
-      estimated row count: 1 (missing stats)
-      table: t@t_pkey
-      spans: /5/0
+└── • lookup join (inner)
+    │ columns: (a, b, x, y, z)
+    │ estimated row count: 1 (missing stats)
+    │ table: xyz@xyz_pkey
+    │ equality: (b) = (x)
+    │ equality cols are key
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
 
 statement ok
 RESET optimizer_use_lock_op_for_serializable

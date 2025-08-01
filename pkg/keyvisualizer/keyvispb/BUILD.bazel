@@ -16,10 +16,7 @@ proto_library(
 
 go_proto_library(
     name = "keyvispb_go_proto",
-    compilers = [
-        "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
-        "//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler",
-    ],
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
     importpath = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb",
     proto = ":keyvispb_proto",
     visibility = ["//visibility:public"],
@@ -31,12 +28,7 @@ go_proto_library(
 
 go_library(
     name = "keyvispb",
-    srcs = ["rpc_clients.go"],
     embed = [":keyvispb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/roachpb",
-        "//pkg/rpc/rpcbase",
-    ],
 )

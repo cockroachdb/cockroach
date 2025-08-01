@@ -167,11 +167,9 @@ func TestAggMetric(t *testing.T) {
 
 	t.Run("basic", func(t *testing.T) {
 		c2.Inc(2)
-		c3.UpdateIfHigher(3)
-		c3.Inc(1)
+		c3.Inc(4)
 		d2.Inc(123456.5)
-		d3.UpdateIfHigher(9.5)
-		d3.Inc(789080.0)
+		d3.Inc(789089.5)
 		g2.Inc(2)
 		g3.Inc(3)
 		g3.Dec(1)
@@ -360,7 +358,9 @@ func TestAggMetricClear(t *testing.T) {
 	})
 
 	c.clear()
+	d.mu.Lock()
 	d.mu.children.Clear()
+	d.mu.Unlock()
 
 	t.Run("post clear", func(t *testing.T) {
 		testFile := "aggMetric_post_clear.txt"

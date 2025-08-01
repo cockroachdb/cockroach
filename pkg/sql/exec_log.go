@@ -55,6 +55,7 @@ var slowQueryLogThreshold = settings.RegisterDurationSettingWithExplicitUnit(
 	"when set to non-zero, log statements whose service latency exceeds "+
 		"the threshold to a secondary logger on each node",
 	0,
+	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 

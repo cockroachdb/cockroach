@@ -36,14 +36,11 @@ func registerSqlStatsMixedVersion(r registry.Registry) {
 	// sql-tats/mixed-version tests that requesting sql stats from admin-ui works across
 	// mixed version clusters.
 	r.Add(registry.TestSpec{
-		Name:    "sql-stats/mixed-version",
-		Owner:   registry.OwnerObservability,
-		Cluster: r.MakeClusterSpec(5, spec.WorkloadNode()),
-		// Disabled on IBM because s390x is only built on master and mixed-version
-		// is impossible to test as of 05/2025.
-		CompatibleClouds: registry.AllClouds.NoIBM(),
+		Name:             "sql-stats/mixed-version",
+		Owner:            registry.OwnerObservability,
+		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
+		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
 		Randomized:       true,
 		Run:              runSQLStatsMixedVersion,
 		Timeout:          1 * time.Hour,
@@ -124,18 +121,8 @@ func runGetRequests(
 	// We can ensure we request from in-memory tables by requesting stats from
 	// a time range for which no data is available, as the in-memory table
 	// is only used when no data is available from system tables.
-	reqEmpty := func() error {
-		if err := s.requestSQLStatsFromEmptyInterval(ctx, roachNodes, statsType, addToTableSources); err != nil {
-			return errors.Wrap(err, "failed to request stats for empty interval")
-		}
-		return nil
-	}
-	if err := withRetries(ctx, retry.Options{
-		InitialBackoff: 10 * time.Second,
-		MaxBackoff:     30 * time.Second,
-		MaxRetries:     6, // 6 * 30s = 3m, which is well past the flush interval.
-	}, reqEmpty); err != nil {
-		return err
+	if err := s.requestSQLStatsFromEmptyInterval(ctx, roachNodes, statsType, addToTableSources); err != nil {
+		return errors.Wrap(err, "failed to request stats for empty interval")
 	}
 	inMemTable := crdbInternalStmtStatsCombined
 	if statsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
@@ -145,24 +132,29 @@ func runGetRequests(
 		return errors.Newf("expected to find in-memory tables in response, found %v", maps.Keys(foundTableSources))
 	}
 
-	reqTwoHours := func() error {
+	// Now we'll wait for the flush to occur and request stats from the persisted tables.
+	r := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		MaxRetries:     6, // 6 * 30s = 3m, which is well past the flush interval.
+	})
+	foundFlushedStats := false
+	for r.Next() {
 		// Requesting data from the last two hours should return data from the persisted tables eventually.
 		if err := s.requestSQLStatsFromLastTwoHours(ctx, roachNodes, statsType, addToTableSources); err != nil {
 			return errors.Wrap(err, "failed to request stats for last two hours")
 		}
-		if len(foundTableSources) < expectedTableCount {
-			l.Printf("waiting for flushed stats...")
-			return errors.Newf("failed to find flushed stats, found: %v", maps.Keys(foundTableSources))
+		if len(foundTableSources) >= expectedTableCount {
+			foundFlushedStats = true
+			break
 		}
-		return nil
+		l.Printf("waiting for flushed stats...")
+	}
+	if !foundFlushedStats {
+		return errors.Newf("failed to find flushed stats, found: %v", maps.Keys(foundTableSources))
 	}
 
-	// Now we'll wait for the flush to occur and request stats from the persisted tables.
-	return withRetries(ctx, retry.Options{
-		InitialBackoff: 10 * time.Second,
-		MaxBackoff:     30 * time.Second,
-		MaxRetries:     6, // 6 * 30s = 3m, which is well past the flush interval.
-	}, reqTwoHours)
+	return nil
 }
 
 func getCombinedStatementStatsURL(

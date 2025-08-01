@@ -14,7 +14,6 @@ import (
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -23,8 +22,7 @@ import (
 // store additional information from the original caller.
 type RemoteCommand struct {
 	Args     []string
-	GroupID  string // GroupID identifies commands that are part of the same logical group
-	Metadata any
+	Metadata interface{}
 }
 
 // RemoteResponse is the response to a RemoteCommand.
@@ -47,10 +45,6 @@ const (
 	Terminated
 )
 
-type CancelledGroups struct {
-	*syncutil.Map[string, chan struct{}]
-}
-
 var ErrAllNodesTerminated = errors.New("all nodes terminated")
 
 type RemoteExecutionFunc func(
@@ -62,62 +56,6 @@ type RemoteExecutionFunc func(
 	options install.RunOptions,
 ) ([]install.RunResultDetails, error)
 
-func NewCancelledGroups() *CancelledGroups {
-	return &CancelledGroups{Map: &syncutil.Map[string, chan struct{}]{}}
-}
-
-// getChannel lazily creates a channel for a groupID.
-func (c *CancelledGroups) getChannel(groupID string) chan struct{} {
-	ch := make(chan struct{})
-	val, _ := c.LoadOrStore(groupID, &ch)
-	return *val
-}
-
-// withGroupCancellation returns a new context that is cancelled when either:
-// 1. The parent context is cancelled
-// 2. The group's channel is closed
-// If groupID is empty, returns the parent context unchanged.
-func (c *CancelledGroups) withGroupCancellation(
-	ctx context.Context, groupID string,
-) context.Context {
-	if groupID == "" {
-		return ctx
-	}
-	groupCh := c.getChannel(groupID)
-	cmdCtx, cancel := context.WithCancel(ctx)
-	go func() {
-		select {
-		case <-groupCh:
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-	return cmdCtx
-}
-
-// cancelGroup closes the channel for a groupID if it is not already closed.
-func (c *CancelledGroups) cancelGroup(groupID string) {
-	ch := c.getChannel(groupID)
-	select {
-	case <-ch:
-		// Channel already closed
-	default:
-		close(ch)
-	}
-}
-
-// isCancelled checks if the channel for a groupID is closed.
-func (c *CancelledGroups) isCancelled(groupID string) bool {
-	ch := c.getChannel(groupID)
-	select {
-	case <-ch:
-		return true
-	default:
-		return false
-	}
-}
-
-// remoteWorker is a worker that executes commands on a remote node.
 func remoteWorker(
 	ctx context.Context,
 	log *logger.Logger,
@@ -126,7 +64,6 @@ func remoteWorker(
 	runOptions install.RunOptions,
 	workChan chan []RemoteCommand,
 	responseChan chan RemoteResponse,
-	cancelledGroups *CancelledGroups,
 ) {
 	for {
 		commands := <-workChan
@@ -140,31 +77,12 @@ func remoteWorker(
 				}
 				break
 			}
-
-			// Check if the command's group has already been cancelled
-			if command.GroupID != "" {
-				if cancelledGroups.isCancelled(command.GroupID) {
-					responseChan <- RemoteResponse{RemoteCommand: command, commandStatus: Cancelled}
-					continue
-				}
-			}
-
 			start := timeutil.Now()
-
-			// Create a context that's cancelled either by parent ctx or group cancellation
-			cmdCtx := cancelledGroups.withGroupCancellation(ctx, command.GroupID)
-
 			runResult, err := execFunc(
-				cmdCtx, log, clusterNode, "" /* SSHOptions */, "", /* processTag */
+				context.Background(), log, clusterNode, "" /* SSHOptions */, "", /* processTag */
 				false /* secure */, command.Args, runOptions,
 			)
 			duration := timeutil.Since(start)
-
-			// Check for context cancellation after execution
-			if errors.Is(cmdCtx.Err(), context.Canceled) {
-				responseChan <- RemoteResponse{RemoteCommand: command, commandStatus: Cancelled}
-				continue
-			}
 
 			// Reschedule on another worker when a `roachprod` or SSH error occurs. A
 			// `roachprod` error is when `result.Err == nil`.
@@ -190,8 +108,7 @@ func remoteWorker(
 				stderr = runResult[0].Stderr
 				exitStatus = runResult[0].RemoteExitStatus
 			}
-
-			response := RemoteResponse{
+			responseChan <- RemoteResponse{
 				command,
 				stdout,
 				stderr,
@@ -200,8 +117,6 @@ func remoteWorker(
 				duration,
 				Completed,
 			}
-
-			responseChan <- response
 		}
 	}
 }
@@ -223,13 +138,12 @@ func ExecuteRemoteCommands(
 ) error {
 	workChannel := make(chan []RemoteCommand, numNodes)
 	responseChannel := make(chan RemoteResponse, numNodes)
-	cancelledGroups := NewCancelledGroups()
 
 	ctx, cancelCtx := context.WithCancelCause(context.Background())
 
 	for idx := 1; idx <= numNodes; idx++ {
 		go remoteWorker(ctx, log, execFunc, fmt.Sprintf("%s:%d", cluster, idx),
-			runOptions, workChannel, responseChannel, cancelledGroups)
+			runOptions, workChannel, responseChannel)
 	}
 
 	var wg sync.WaitGroup
@@ -245,15 +159,8 @@ func ExecuteRemoteCommands(
 			switch response.commandStatus {
 			case Completed:
 				callback(response)
-				if response.Err != nil {
-					if failFast {
-						cancelCtx(errors.Wrap(response.Err, "failed to execute command, cancelling execution"))
-					}
-					// If the command has a GroupID and the error is not transient,
-					// mark all commands in this group as cancelled
-					if response.GroupID != "" && !rperrors.IsTransient(response.Err) {
-						cancelledGroups.cancelGroup(response.GroupID)
-					}
+				if response.Err != nil && failFast {
+					cancelCtx(errors.Wrap(response.Err, "failed to execute command, cancelling execution"))
 				}
 				wg.Done()
 			case Cancelled:
@@ -281,6 +188,7 @@ func ExecuteRemoteCommands(
 
 	// Send commands to workers.
 done:
+
 	for _, commands := range commandGroups {
 		wg.Add(len(commands))
 	outer:

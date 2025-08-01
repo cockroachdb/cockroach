@@ -173,13 +173,14 @@ func TestRaftSSTableSideloading(t *testing.T) {
 	tc.repl.mu.Lock()
 	defer tc.repl.mu.Unlock()
 
-	comp := tc.repl.asLogStorage().shMu.trunc.Index
-	last := tc.repl.asLogStorage().shMu.last.Index
+	rsl := logstore.NewStateLoader(tc.repl.RangeID)
+	comp := tc.repl.shMu.raftTruncState.Index
+	last := tc.repl.shMu.lastIndexNotDurable
 
 	tc.store.raftEntryCache.Clear(tc.repl.RangeID, last)
 	ents, cachedBytes, _, err := logstore.LoadEntries(
-		ctx, tc.store.TODOEngine(), tc.repl.RangeID, tc.store.raftEntryCache,
-		tc.repl.logStorage.ls.Sideload, comp+1, last+1, math.MaxUint64, nil /* account */)
+		ctx, rsl, tc.store.TODOEngine(), tc.repl.RangeID, tc.store.raftEntryCache,
+		tc.repl.raftMu.sideloaded, comp+1, last+1, math.MaxUint64, nil /* account */)
 	require.NoError(t, err)
 	require.Len(t, ents, int(last-comp))
 	require.Zero(t, cachedBytes)
@@ -197,10 +198,9 @@ func TestRaftSSTableSideloading(t *testing.T) {
 		if typ, _, _ := raftlog.EncodingOf(ents[idx]); !typ.IsSideloaded() {
 			continue
 		}
-		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx],
-			tc.repl.logStorage.ls.Sideload, tc.store.raftEntryCache)
+		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx], tc.repl.raftMu.sideloaded, tc.store.raftEntryCache)
 		require.NoError(t, err)
-		sst, err := tc.repl.logStorage.ls.Sideload.Get(ctx, kvpb.RaftIndex(ent.Index), kvpb.RaftTerm(ent.Term))
+		sst, err := tc.repl.raftMu.sideloaded.Get(ctx, kvpb.RaftIndex(ent.Index), kvpb.RaftTerm(ent.Term))
 		require.NoError(t, err)
 		require.Equal(t, origSSTData, sst)
 		break
@@ -245,7 +245,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 		fmtSideloaded := func() []string {
 			tc.repl.raftMu.Lock()
 			defer tc.repl.raftMu.Unlock()
-			fs, _ := tc.repl.store.TODOEngine().Env().List(tc.repl.logStorage.ls.Sideload.Dir())
+			fs, _ := tc.repl.store.TODOEngine().Env().List(tc.repl.raftMu.sideloaded.Dir())
 			sort.Strings(fs)
 			return fs
 		}

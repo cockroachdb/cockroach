@@ -1043,7 +1043,10 @@ func (sc *SchemaChanger) distIndexBackfill(
 		)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
-		spec := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes, 0)
+		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes, 0)
+		if err != nil {
+			return err
+		}
 		p, err = sc.distSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, todoSpans)
 		return err
 	}); err != nil {
@@ -1348,7 +1351,10 @@ func (sc *SchemaChanger) distColumnBackfill(
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(
 				ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
 			)
-			spec := initColumnBackfillerSpec(tableDesc, duration, chunkSize, backfillUpdateChunkSizeThresholdBytes, readAsOf)
+			spec, err := initColumnBackfillerSpec(tableDesc, duration, chunkSize, backfillUpdateChunkSizeThresholdBytes, readAsOf)
+			if err != nil {
+				return err
+			}
 			plan, err := sc.distSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, todoSpans)
 			if err != nil {
 				return err
@@ -2139,7 +2145,7 @@ func countIndexRowsAndMaybeCheckUniqueness(
 					idx.GetName(),
 					idx.IndexDesc().KeyColumnIDs[idx.ImplicitPartitioningColumnCount():],
 					idx.GetPredicate(),
-					desc.GetPrimaryIndexID(), /* indexIDForValidation */
+					0, /* indexIDForValidation */
 					txn,
 					username.NodeUserName(),
 					false, /* preExisting */
@@ -2911,18 +2917,15 @@ func indexBackfillInTxn(
 	tableDesc catalog.TableDescriptor,
 	traceKV bool,
 ) error {
-	indexBackfillerMon := execinfra.NewMonitor(
-		ctx, evalCtx.Planner.Mon(), mon.MakeName("local-index-backfill-mon"),
-	)
+	var indexBackfillerMon *mon.BytesMonitor
+	if evalCtx.Planner.Mon() != nil {
+		indexBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Planner.Mon(),
+			mon.MakeName("local-index-backfill-mon"))
+	}
 
 	var backfiller backfill.IndexBackfiller
 	if err := backfiller.InitForLocalUse(
-		ctx,
-		evalCtx,
-		semaCtx,
-		tableDesc,
-		indexBackfillerMon,
-		evalCtx.Planner.ExecutorConfig().(*ExecutorConfig).VecIndexManager,
+		ctx, evalCtx, semaCtx, tableDesc, indexBackfillerMon,
 	); err != nil {
 		return err
 	}

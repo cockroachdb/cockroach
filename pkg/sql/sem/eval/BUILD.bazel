@@ -84,7 +84,6 @@ go_library(
         "//pkg/util/cidr",
         "//pkg/util/duration",
         "//pkg/util/encoding",
-        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/json",
         "//pkg/util/mon",
@@ -105,7 +104,6 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
-        "@org_golang_x_text//unicode/norm",
     ],
 )
 

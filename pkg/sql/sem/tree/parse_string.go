@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -86,12 +85,7 @@ func ParseAndRequireString(
 			d, err = ParseDOidAsInt(s)
 		}
 	case types.CollatedStringFamily:
-		switch t.Oid() {
-		case oidext.T_citext:
-			d, err = NewDCIText(s, ctx.GetCollationEnv())
-		default:
-			d, err = NewDCollatedString(s, t.Locale(), ctx.GetCollationEnv())
-		}
+		d, err = NewDCollatedString(s, t.Locale(), ctx.GetCollationEnv())
 	case types.StringFamily:
 		s = truncateString(s, t)
 		return NewDString(s), false, nil

@@ -479,7 +479,7 @@ UPDATE derived SET y = 'abcd'
 subtest regression_29494
 
 statement ok
-CREATE TABLE t29494(x INT PRIMARY KEY) WITH (schema_locked = false); INSERT INTO t29494 VALUES (12)
+CREATE TABLE t29494(x INT PRIMARY KEY); INSERT INTO t29494 VALUES (12)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -493,7 +493,7 @@ SELECT create_statement FROM [SHOW CREATE t29494]
 CREATE TABLE public.t29494 (
   x INT8 NOT NULL,
   CONSTRAINT t29494_pkey PRIMARY KEY (x ASC)
-);
+)
 
 # Check that the new column is not usable in RETURNING
 statement error column "y" does not exist
@@ -532,7 +532,7 @@ COMMIT
 
 # Use delete-only mutation columns with default and computed expressions.
 statement ok
-CREATE TABLE mutation (m INT PRIMARY KEY, n INT) WITH (schema_locked = false)
+CREATE TABLE mutation (m INT PRIMARY KEY, n INT)
 
 statement ok
 INSERT INTO mutation VALUES (1, 1)

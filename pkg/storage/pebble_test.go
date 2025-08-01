@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"slices"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -628,10 +627,6 @@ type nonFatalLogger struct {
 
 func (l *nonFatalLogger) Fatalf(format string, args ...interface{}) {
 	l.caught.Store(true)
-	l.t.Logf(format, args...)
-}
-
-func (l *nonFatalLogger) Infof(format string, args ...interface{}) {
 	l.t.Logf(format, args...)
 }
 
@@ -1305,7 +1300,7 @@ func TestIncompatibleVersion(t *testing.T) {
 	version := roachpb.Version{Major: 21, Minor: 1}
 	b, err := protoutil.Marshal(&version)
 	require.NoError(t, err)
-	require.NoError(t, safeWriteToUnencryptedFile(memFS, "", MinVersionFilename, b, fs.UnspecifiedWriteCategory))
+	require.NoError(t, fs.SafeWriteToFile(memFS, "", MinVersionFilename, b, fs.UnspecifiedWriteCategory))
 
 	env = mustInitTestEnv(t, memFS, "")
 	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())
@@ -1704,124 +1699,4 @@ func TestPebbleSetCompactionConcurrency(t *testing.T) {
 
 	p.SetCompactionConcurrency(0)
 	require.Equal(t, "1 4", fmt.Sprint(p.cfg.opts.CompactionConcurrencyRange()))
-}
-
-func TestPebbleCompactCancellation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	mem := vfs.NewMem()
-	bfs := &fs.BlockingWriteFSForTesting{FS: mem}
-	e, err := fs.InitEnv(ctx, bfs, "" /* dir */, fs.EnvConfig{}, nil /* statsCollector */)
-	require.NoError(t, err)
-	db, err := Open(
-		ctx, e, cluster.MakeClusterSettings(), CacheSize(1024), MaxConcurrentCompactions(1),
-		func(cfg *engineConfig) error {
-			cfg.opts.DisableAutomaticCompactions = true
-			return nil
-		})
-	require.NoError(t, err)
-	defer db.Close()
-	// Flush 2 sstables to L0.
-	require.NoError(t, db.PutEngineKey(EngineKey{Key: []byte("a")}, []byte("a")))
-	require.NoError(t, db.Flush())
-	require.NoError(t, db.PutEngineKey(EngineKey{Key: []byte("a")}, []byte("a")))
-	require.NoError(t, db.Flush())
-	// Block writes to the engine.
-	bfs.Block()
-	var wg sync.WaitGroup
-	wg.Add(1)
-	// Start a manual compaction that will start and block.
-	go func() {
-		require.NoError(t, db.Compact(ctx))
-		wg.Done()
-	}()
-	// Start 2 manual compactions with cancellable contexts, that will not start
-	// since only 1 concurrent compaction is allowed.
-	var cancelWG sync.WaitGroup
-	cancelWG.Add(1)
-	cctx, cancel := context.WithCancel(ctx)
-	go func() {
-		require.Error(t, db.Compact(cctx))
-		cancelWG.Done()
-	}()
-	cancelWG.Add(1)
-	go func() {
-		require.Error(t, db.CompactRange(cctx, []byte("a"), []byte("b")))
-		cancelWG.Done()
-	}()
-	// Cancel the compactions and wait for the cancellation to be observed.
-	cancel()
-	waitedTooLongTimer := time.AfterFunc(30*time.Second, func() {
-		t.Fatal("timed out waiting for cancellation to be observed")
-	})
-	cancelWG.Wait()
-	waitedTooLongTimer.Stop()
-	// Unblock the first compaction and wait for it to complete.
-	bfs.WaitForBlockAndUnblock()
-	wg.Wait()
-}
-
-func TestPebbleSpanPolicyFunc(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	type testCase struct {
-		startKey   roachpb.Key
-		wantPolicy pebble.SpanPolicy
-		wantEndKey []byte
-	}
-	cases := []testCase{
-		{
-			startKey: keys.RaftHardStateKey(1),
-			wantPolicy: pebble.SpanPolicy{
-				PreferFastCompression: true,
-				ValueStoragePolicy:    pebble.ValueStorageLatencyTolerant,
-			},
-			wantEndKey: spanPolicyLocalRangeIDEndKey,
-		},
-		{
-			startKey: keys.RaftLogKey(9, 2),
-			wantPolicy: pebble.SpanPolicy{
-				PreferFastCompression: true,
-				ValueStoragePolicy:    pebble.ValueStorageLatencyTolerant,
-			},
-			wantEndKey: spanPolicyLocalRangeIDEndKey,
-		},
-		{
-			startKey: keys.RangeDescriptorKey(roachpb.RKey("a")),
-			wantPolicy: pebble.SpanPolicy{
-				PreferFastCompression: true,
-			},
-			wantEndKey: spanPolicyLockTableStartKey,
-		},
-		{
-			startKey: func() roachpb.Key {
-				k, _ := keys.LockTableSingleKey(roachpb.Key("a"), nil)
-				return k
-			}(),
-			wantPolicy: pebble.SpanPolicy{
-				PreferFastCompression:          true,
-				DisableValueSeparationBySuffix: true,
-				ValueStoragePolicy:             pebble.ValueStorageLowReadLatency,
-			},
-			wantEndKey: spanPolicyLockTableEndKey,
-		},
-		{
-			startKey:   keys.SystemSQLCodec.IndexPrefix(1, 2),
-			wantPolicy: pebble.SpanPolicy{},
-			wantEndKey: nil,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(fmt.Sprintf("%x", tc.startKey), func(t *testing.T) {
-			ek := EngineKey{Key: tc.startKey}.Encode()
-			policy, endKey, err := spanPolicyFunc(ek)
-			require.NoError(t, err)
-			require.Equal(t, tc.wantPolicy, policy)
-			require.Equal(t, tc.wantEndKey, endKey)
-		})
-	}
 }

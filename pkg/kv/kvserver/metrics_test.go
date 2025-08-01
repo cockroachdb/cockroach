@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,14 +27,15 @@ import (
 func TestTenantsStorageMetricsRelease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	m := newTenantsStorageMetrics()
-	var refs []*tenantStorageMetrics
+	var refs []*tenantMetricsRef
 	const tenants = 7
 	for i := 0; i < tenants; i++ {
 		id := roachpb.MustMakeTenantID(roachpb.MinTenantID.InternalValue + uint64(i))
-		tm := m.acquireTenant(id)
+		ref := m.acquireTenant(id)
+		tm := m.getTenant(context.Background(), ref)
 		tm.SysBytes.Update(1023)
 		tm.KeyCount.Inc(123)
-		refs = append(refs, tm)
+		refs = append(refs, ref)
 	}
 	for i, ref := range refs {
 		require.Equal(t, int64(1023*(tenants-i)), m.SysBytes.Value(), i)
@@ -105,7 +106,7 @@ func TestPebbleDiskWriteMetrics(t *testing.T) {
 	ts, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		StoreSpecs: []base.StoreSpec{
-			{Size: storageconfig.Size{Bytes: base.MinimumStoreSize}, Path: tmpDir},
+			{Size: storagepb.SizeSpec{Capacity: base.MinimumStoreSize}, Path: tmpDir},
 		},
 	})
 	defer ts.Stopper().Stop(ctx)

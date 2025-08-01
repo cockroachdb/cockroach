@@ -55,6 +55,7 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 	"the interval at which closed-timestamp updates"+
 		"are delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval",
 	3*time.Second,
+	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 
@@ -68,6 +69,7 @@ var RangeFeedSmearInterval = settings.RegisterDurationSetting(
 		"set to 0 to use kv.rangefeed.closed_timestamp_refresh_interval"+
 		"capped at kv.rangefeed.closed_timestamp_refresh_interval",
 	1*time.Millisecond,
+	settings.NonNegativeDuration,
 )
 
 // RangeFeedUseScheduler controls type of rangefeed processor is used to process
@@ -90,7 +92,7 @@ var RangefeedUseBufferedSender = settings.RegisterBoolSetting(
 	"kv.rangefeed.buffered_sender.enabled",
 	"use buffered sender for all range feeds instead of buffering events "+
 		"separately per client per range",
-	metamorphic.ConstantWithTestBool("kv.rangefeed.buffered_sender.enabled", true),
+	metamorphic.ConstantWithTestBool("kv.rangefeed.buffered_sender.enabled", false),
 )
 
 func init() {
@@ -221,13 +223,6 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 	return nil
 }
 
-var rangeFeedBulkDeliverySize = settings.RegisterIntSetting(
-	settings.SystemOnly,
-	"kv.rangefeed.bulk_delivery.size",
-	"approx size up to which rangefeeds may buffer events to be delivered in bulk during scans (0=disabled)",
-	int64(metamorphic.ConstantWithTestRange("rangefeed-bulk_delivery", 2<<20, 0, 4<<20)),
-)
-
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
 // the provided stream and returns with a future error when the rangefeed is
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
@@ -340,12 +335,8 @@ func (r *Replica) RangeFeed(
 		}
 	}
 
-	bulkDeliverySize := 0
-	if args.WithBulkDelivery {
-		bulkDeliverySize = int(rangeFeedBulkDeliverySize.Get(&r.store.ClusterSettings().SV))
-	}
 	p, disconnector, err := r.registerWithRangefeedRaftMuLocked(
-		streamCtx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, bulkDeliverySize, stream,
+		streamCtx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, stream,
 	)
 	r.raftMu.Unlock()
 
@@ -453,7 +444,6 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
-	bulkDeliverySize int,
 	stream rangefeed.Stream,
 ) (rangefeed.Processor, rangefeed.Disconnector, error) {
 	defer logSlowRangefeedRegistration(streamCtx)()
@@ -474,7 +464,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p := r.rangefeedMu.proc
 
 	if p != nil {
-		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
+		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			stream)
 		if reg {
 			// Registered successfully with an existing processor.
@@ -556,7 +546,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
 	reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff,
-		withFiltering, withOmitRemote, bulkDeliverySize, stream)
+		withFiltering, withOmitRemote, stream)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():

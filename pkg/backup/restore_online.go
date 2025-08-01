@@ -64,7 +64,6 @@ var onlineRestoreLayerLimit = settings.RegisterIntSetting(
 )
 
 const linkCompleteKey = "link_complete"
-const maxDownloadAttempts = 5
 
 // splitAndScatter runs through all entries produced by genSpans splitting and
 // scattering the key-space designated by the passed rewriter such that if all
@@ -310,7 +309,7 @@ func sendAddRemoteSSTWorker(
 				}
 				currentLayer = file.Layer
 				if file.HasRangeKeys {
-					return errors.Wrapf(permanentRestoreError, "online restore of range keys not supported")
+					return errors.Newf("online restore of range keys not supported")
 				}
 				if err := assertCommonPrefix(file.BackupFileEntrySpan, entry.ElidedPrefix); err != nil {
 					return err
@@ -557,16 +556,11 @@ func (r *restoreResumer) sendDownloadWorker(
 		ctx, tsp := tracing.ChildSpan(ctx, "backup.sendDownloadWorker")
 		defer tsp.Finish()
 
-		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
-		for {
+		for rt := retry.StartWithCtx(
+			ctx, retry.Options{InitialBackoff: time.Millisecond * 100, MaxBackoff: time.Second * 10},
+		); ; rt.Next() {
 			if err := ctx.Err(); err != nil {
 				return err
-			}
-
-			if testingKnobs != nil && testingKnobs.RunBeforeSendingDownloadSpan != nil {
-				if err := testingKnobs.RunBeforeSendingDownloadSpan(); err != nil {
-					return err
-				}
 			}
 
 			if err := sendDownloadSpan(ctx, execCtx, spans); err != nil {
@@ -582,11 +576,6 @@ func (r *restoreResumer) sendDownloadWorker(
 			case <-ctx.Done():
 				return ctx.Err()
 			}
-
-			// Sleep a bit before sending download requests again to avoid a hot loop.
-			// This will only be hit if after a successful download request, there are
-			// still spans to download (e.g. because of a rabalancing).
-			time.Sleep(10 * time.Second)
 		}
 	}
 }
@@ -705,7 +694,6 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	// Download is already complete or there is nothing to be downloaded, in
 	// either case we can mark the job as done.
 	if total == 0 {
-		r.downloadJobProg = 1.0
 		return r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 			return 1.0
 		})
@@ -714,7 +702,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	var lastProgressUpdate time.Time
 	for rt := retry.StartWithCtx(
 		ctx, retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second * 10},
-	); rt.Next(); {
+	); ; rt.Next() {
 		remaining, err := getExternalBytesOverSpans(ctx, execCtx.ExecCfg(), details.DownloadSpans)
 		if err != nil {
 			return errors.Wrap(err, "failed to get remaining external file bytes")
@@ -732,7 +720,6 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		log.VInfof(ctx, 1, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
 			sz(total-remaining), sz(remaining), sz(total), fractionComplete,
 		)
-		r.downloadJobProg = fractionComplete
 
 		if remaining == 0 {
 			r.notifyStatsRefresherOfNewTables()
@@ -754,7 +741,6 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		default:
 		}
 	}
-	return ctx.Err()
 }
 
 func unstickRestoreSpans(
@@ -807,30 +793,6 @@ func getRemainingExternalFileBytes(
 	return remaining, nil
 }
 
-func (r *restoreResumer) doDownloadFilesWithRetry(
-	ctx context.Context, execCtx sql.JobExecContext,
-) error {
-	var err error
-	var lastProgress float32
-	for rt := retry.StartWithCtx(ctx, retry.Options{
-		InitialBackoff: time.Millisecond * 100,
-		MaxBackoff:     time.Second,
-		MaxRetries:     maxDownloadAttempts - 1,
-	}); rt.Next(); {
-		err = r.doDownloadFiles(ctx, execCtx)
-		if err == nil {
-			return nil
-		}
-		log.Warningf(ctx, "failed attempt to download files: %v", err)
-		if lastProgress != r.downloadJobProg {
-			lastProgress = r.downloadJobProg
-			rt.Reset()
-			log.Infof(ctx, "download progress has advanced since last retry, resetting retry counter")
-		}
-	}
-	return errors.Wrapf(err, "retries exhausted for downloading files")
-}
-
 func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
@@ -851,13 +813,6 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
 		return errors.Wrap(err, "failed to generate and send download spans")
-	}
-
-	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
-	if testingKnobs != nil && testingKnobs.RunBeforeDownloadCleanup != nil {
-		if err := testingKnobs.RunBeforeDownloadCleanup(); err != nil {
-			return errors.Wrap(err, "testing knob RunBeforeDownloadCleanup failed")
-		}
 	}
 	return r.cleanupAfterDownload(ctx, details)
 }
@@ -997,7 +952,7 @@ func (r *restoreResumer) maybeCleanupFailedOnlineRestore(
 	ctx context.Context, p sql.JobExecContext, details jobspb.RestoreDetails,
 ) error {
 	if len(details.DownloadSpans) == 0 {
-		// If this job is completely unrelated to OR, exit early.
+		// If this job is completly unrelated OR, exit early.
 		return nil
 	}
 

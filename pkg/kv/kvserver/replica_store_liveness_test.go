@@ -161,9 +161,9 @@ func TestRaftFortificationDisabledForExpirationBasedLeases(t *testing.T) {
 		for _, test := range testCases {
 			repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(test.key))
 			if useExpirationBasedLeases {
-				require.False(t, repl.SupportFromEnabled(repl.Desc()))
+				require.False(t, repl.SupportFromEnabled())
 			} else {
-				require.Equal(t, test.exp, repl.SupportFromEnabled(repl.Desc()))
+				require.Equal(t, test.exp, repl.SupportFromEnabled())
 			}
 		}
 	})

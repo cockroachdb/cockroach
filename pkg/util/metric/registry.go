@@ -278,8 +278,8 @@ var (
 	prometheusLabelReplaceRE = regexp.MustCompile("^[^a-zA-Z_]|[^a-zA-Z0-9_]")
 )
 
-// ExportedName takes a metric name and generates a valid prometheus name.
-func ExportedName(name string) string {
+// exportedName takes a metric name and generates a valid prometheus name.
+func exportedName(name string) string {
 	return prometheusNameReplaceRE.ReplaceAllString(name, "_")
 }
 

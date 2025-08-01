@@ -8,31 +8,12 @@ package geomfn
 import (
 	"fmt"
 	"math"
-	"runtime"
-	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/stretchr/testify/require"
 )
-
-func assertFloatsMatch(t *testing.T, expected, actual float64) {
-	if runtime.GOARCH != "s390x" {
-		require.Equal(t, expected, actual)
-		return
-	}
-	// s390x system has architecture support for 'atan' function (which is used
-	// in 'angleFromCoords') and produces slightly different result than math
-	// operations we do to get the expected number. To go around this, we use
-	// the custom float comparison that checks 15 significant decimal digits.
-	exp := strconv.FormatFloat(expected, 'f', -1, 64)
-	act := strconv.FormatFloat(actual, 'f', -1, 64)
-	matched, err := floatcmp.FloatsMatch(exp, act)
-	require.NoError(t, err)
-	require.True(t, matched)
-}
 
 func TestAngle(t *testing.T) {
 	pf := func(f float64) *float64 {
@@ -77,7 +58,7 @@ func TestAngle(t *testing.T) {
 			angle, err := Angle(g1, g2, g3, g4)
 			require.NoError(t, err)
 			if tc.expected != nil && angle != nil {
-				assertFloatsMatch(t, *tc.expected, *angle)
+				require.Equal(t, *tc.expected, *angle)
 			} else {
 				require.Equal(t, tc.expected, angle)
 			}
@@ -153,7 +134,7 @@ func TestAngleLineString(t *testing.T) {
 			angle, err := AngleLineString(g1, g2)
 			require.NoError(t, err)
 			if tc.expected != nil && angle != nil {
-				assertFloatsMatch(t, *tc.expected, *angle)
+				require.Equal(t, *tc.expected, *angle)
 			} else {
 				require.Equal(t, tc.expected, angle)
 			}

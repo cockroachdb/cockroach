@@ -10,10 +10,50 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDeprecatedSecondaryIndexPartialMigration(t *testing.T) {
+	state := DescriptorState{
+		Targets: []Target{
+			MakeTarget(ToPublic,
+				&SecondaryIndexPartial{
+					TableID: 100,
+					IndexID: 100,
+					Expression: Expression{
+						Expr: catpb.Expression("C1 > 10"),
+					},
+				},
+				nil,
+			),
+			MakeTarget(ToPublic,
+				&SecondaryIndex{
+					Index: Index{
+						TableID: 100,
+						IndexID: 100,
+					},
+				},
+				nil),
+		},
+		CurrentStatuses: []Status{Status_PUBLIC, Status_PUBLIC},
+		TargetRanks:     []uint32{1, 2},
+	}
+	migrationOccurred := MigrateDescriptorState(
+		clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()},
+		1,
+		&state,
+	)
+	require.True(t, migrationOccurred)
+	// Verify the SecondaryIndex was removed. We should still have 2 targets
+	// though as we would also have injected a TableData element.
+	require.Len(t, state.CurrentStatuses, 2)
+	require.Len(t, state.Targets, 2)
+	require.NotNil(t, state.Targets[0].GetSecondaryIndex())
+	require.NotNil(t, state.Targets[0].GetSecondaryIndex().EmbeddedExpr)
+	require.Equal(t, state.Targets[0].GetSecondaryIndex().EmbeddedExpr.Expr, catpb.Expression("C1 > 10"))
+	require.NotNil(t, state.Targets[1].GetTableData()) // Will be injected because we are adding an index
+}
 
 // TestDeprecatedColumnComputeFieldMigration will ensure that ComputeExpr in
 // ColumnType is nulled out and a new ColumnComputeExpression is added.
@@ -105,35 +145,4 @@ func TestDeprecatedIsInvertedMigration(t *testing.T) {
 	temp := state.Targets[2].GetTemporaryIndex()
 	require.True(t, temp.IsInverted)
 	require.Equal(t, idxtype.INVERTED, temp.Type)
-}
-
-// TestDeprecatedTriggerDeps tests that the relation IDs in TriggerDeps are
-// migrated to RelationReferences.
-func TestDeprecatedTriggerDeps(t *testing.T) {
-	state := DescriptorState{
-		Targets: []Target{
-			MakeTarget(ToPublic,
-				&TriggerDeps{
-					UsesRelationIDs: []catid.DescID{112, 113},
-				},
-				nil,
-			),
-		},
-		CurrentStatuses: []Status{Status_PUBLIC},
-		TargetRanks:     []uint32{1},
-	}
-	migrationOccurred := MigrateDescriptorState(
-		clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()},
-		1,
-		&state,
-	)
-	require.True(t, migrationOccurred)
-	require.Len(t, state.Targets, 1)
-
-	triggerDeps := state.Targets[0].GetTriggerDeps()
-	require.Nil(t, triggerDeps.UsesRelationIDs)
-	require.NotNil(t, triggerDeps.UsesRelations)
-	require.Len(t, triggerDeps.UsesRelations, 2)
-	require.Equal(t, catid.DescID(112), triggerDeps.UsesRelations[0].ID)
-	require.Equal(t, catid.DescID(113), triggerDeps.UsesRelations[1].ID)
 }

@@ -105,13 +105,6 @@
 		"Binary": [0]
 	},
 	{
-		"SQL": "'☃'::\"char\"",
-		"Oid": 18,
-		"Text": "☃",
-		"TextAsBinary": [226, 152, 131],
-		"Binary": [226, 152, 131]
-	},
-	{
 		"SQL": "''::text",
 		"Oid": 25,
 		"Text": "",

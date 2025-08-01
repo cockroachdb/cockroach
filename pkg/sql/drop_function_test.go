@@ -188,8 +188,6 @@ func TestDropFailOnDependentFunction(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
-	// This test also validates the legacy schema changer so disable schema locked.
-	tDB.Exec(t, "SET create_table_with_schema_locked=false")
 	tDB.Exec(t, `
 CREATE TABLE t(
   a INT PRIMARY KEY,
@@ -313,7 +311,6 @@ func TestDropCascadeRemoveFunction(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	setupQuery := `
-SET create_table_with_schema_locked=false;
 CREATE DATABASE test_db;
 USE test_db;
 CREATE TABLE t(

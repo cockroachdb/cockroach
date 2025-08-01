@@ -98,7 +98,6 @@ message ElementProto {
     TableLocalityPrimaryRegion table_locality_primary_region = 111 [(gogoproto.moretags) = "parent:\"Table\""];
     TableLocalitySecondaryRegion table_locality_secondary_region = 112 [(gogoproto.moretags) = "parent:\"Table\""];
     TableLocalityRegionalByRow table_locality_regional_by_row = 113 [(gogoproto.moretags) = "parent:\"Table\""];
-    TableLocalityRegionalByRowUsingConstraint table_locality_regional_by_row_using_constraint = 114 [(gogoproto.moretags) = "parent:\"Table\""];
 
     // Column elements.
     ColumnName column_name = 30 [(gogoproto.moretags) = "parent:\"Column\""];
@@ -116,6 +115,7 @@ message ElementProto {
     // Index elements.
     IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
     IndexPartitioning index_partitioning = 41 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
+    SecondaryIndexPartial secondary_index_partial = 42 [(gogoproto.moretags) = "parent:\"SecondaryIndex\""];
     IndexComment index_comment = 43 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
     IndexColumn index_column = 44 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, TemporaryIndex, Column\""];
     IndexData index_data = 45 [(gogoproto.customname) = "IndexData", (gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, TemporaryIndex\""];
@@ -180,9 +180,6 @@ message ElementProto {
 
     // Next element group start id: 250
   }
-
-  // Reserved for the now-removed SecondaryIndexPartial element.
-  reserved 42;
 }
 
 // TypeT is a wrapper for a types.T which contains its user-defined type ID
@@ -361,6 +358,13 @@ message TemporaryIndex {
   Expression expr = 3 [(gogoproto.nullable) = true];
 }
 
+message SecondaryIndexPartial {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  reserved 10;
+}
+
 // SchemaParent models the schema to parent database relationship.
 // Every schema has a parent, so there is a 1:1 relationship between
 // the Schema and the SchemaParent relationship. This is modeled as a separate
@@ -476,7 +480,6 @@ message View {
   uint32 view_id = 1 [(gogoproto.customname) = "ViewID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_type_ids = 2 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_relation_ids = 3 [(gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  repeated uint32 uses_routine_ids = 12 [(gogoproto.customname) = "UsesRoutineIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 
   // a reference from this view to another relation, tracked down to index/column level.
   message Reference {
@@ -625,26 +628,11 @@ message TriggerFunctionCall {
 }
 
 message TriggerDeps {
-  message RelationReference {
-    uint32 id = 1 [(gogoproto.customname) = "ID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-    repeated uint32 column_ids = 2 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-    uint32 index_id = 3 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
-  }
-
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
-  // UsesRelationIDs is a deprecated field that tracks the IDs of relations
-  // used by this trigger. It remains for backward compatibility with older
-  // versions and is superseded by UsesRelations.
-  repeated uint32 uses_relation_ids = 3 [deprecated = true, (gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  // UsesRelations specifies the relations that this trigger depends on.
-  // In addition to the relation itself, it may include optional ColumnIDs
-  // or IndexIDs to capture fine-grained dependencies.
-  repeated RelationReference uses_relations = 6 [(gogoproto.nullable) = false];
+  repeated uint32 uses_relation_ids = 3 [(gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_type_ids = 4 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_routine_ids = 5 [(gogoproto.customname) = "UsesRoutineIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-
-  // NEXT VALUE: 7
 }
 
 message EnumType {
@@ -722,11 +710,6 @@ message TableLocalitySecondaryRegion {
 message TableLocalityRegionalByRow {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string as = 2;
-}
-
-message TableLocalityRegionalByRowUsingConstraint {
-  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
 }
 
 message IndexPartitioning {

@@ -724,10 +724,6 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	// Add assignment casts for insert columns.
 	mb.addAssignmentCasts(mb.insertColIDs)
 	mb.inputForInsertExpr = mb.outScope.expr
-
-	// Track whether the value for the region column is explicitly specified. This
-	// is a no-op if the table isn't regional-by-row.
-	mb.setRegionColExplicitlyMutated(mb.insertColIDs)
 }
 
 // addSynthesizedColsForInsert wraps an Insert input expression with a Project
@@ -760,8 +756,6 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 func (mb *mutationBuilder) buildInsert(
 	returning *tree.ReturningExprs, vectorInsert bool, hasOnConflict bool,
 ) {
-	mb.maybeAddRegionColLookup(opt.InsertOp)
-
 	// Disambiguate names so that references in any expressions, such as a
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
@@ -779,27 +773,20 @@ func (mb *mutationBuilder) buildInsert(
 	//   due to the conflict scan accessing existing data.
 	// - The RETURNING clause references any columns, which also necessitates
 	//   SELECT policies.
-	//
-	// These checks only matter if the target table has RLS enabled, so we gate
-	// the logic behind that for performance reasons.
 	var returningInScope, returningOutScope *scope
-	includeSelectPolicies := false
-	if mb.tab.IsRowLevelSecurityEnabled() {
-		includeSelectPolicies = hasOnConflict
-		if !includeSelectPolicies {
-			// Only track column references if RLS is enabled and there is no
-			// ON CONFLICT clause that automatically requires SELECT policies.
-			var colRefs opt.ColSet
-			returningInScope, returningOutScope = mb.buildReturningScopes(returning, &colRefs)
-			for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-				if colRefs.Contains(mb.tabID.ColumnID(i)) {
-					includeSelectPolicies = true
-					break
-				}
+	includeSelectPolicies := hasOnConflict
+	if mb.tab.IsRowLevelSecurityEnabled() && !includeSelectPolicies {
+		// Only track column references if RLS is enabled and there is no
+		// ON CONFLICT clause that automatically requires SELECT policies.
+		var colRefs opt.ColSet
+		returningInScope, returningOutScope = mb.buildReturningScopes(returning, &colRefs)
+		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+			if colRefs.Contains(mb.tabID.ColumnID(i)) {
+				includeSelectPolicies = true
+				break
 			}
 		}
-	}
-	if returningOutScope == nil {
+	} else {
 		returningInScope, returningOutScope = mb.buildReturningScopes(returning, nil /* colRefs */)
 	}
 
@@ -1001,8 +988,6 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 // buildUpsert constructs an Upsert operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildUpsert(returning *tree.ReturningExprs) {
-	mb.maybeAddRegionColLookup(opt.UpsertOp)
-
 	// Merge input insert and update columns using CASE expressions.
 	mb.projectUpsertColumns()
 

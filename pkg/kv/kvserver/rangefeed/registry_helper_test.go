@@ -183,34 +183,19 @@ func (s *testStream) SetSendErr(err error) {
 	s.mu.sendErr = err
 }
 
-func unwrapBulkEvents(in []*kvpb.RangeFeedEvent) []*kvpb.RangeFeedEvent {
-	if in == nil {
-		return nil
-	}
-	out := make([]*kvpb.RangeFeedEvent, 0, len(in))
-	for _, e := range in {
-		if e.BulkEvents != nil {
-			out = append(out, e.BulkEvents.Events...)
-		} else {
-			out = append(out, e)
-		}
-	}
-	return out
-}
-
 func (s *testStream) GetAndClearEvents() []*kvpb.RangeFeedEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	es := s.mu.events
 	s.mu.events = nil
-	return unwrapBulkEvents(es)
+	return es
 }
 
 func (s *testStream) GetEvents() []*kvpb.RangeFeedEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	es := s.mu.events
-	return unwrapBulkEvents(es)
+	return es
 }
 
 func (s *testStream) BlockSend() func() {
@@ -353,7 +338,6 @@ type testRegistrationConfig struct {
 	withDiff                  bool
 	withFiltering             bool
 	withOmitRemote            bool
-	withBulkDelivery          int
 	withRegistrationTestTypes registrationType
 	metrics                   *Metrics
 }
@@ -377,7 +361,6 @@ func newTestRegistration(s *testStream, opts ...registrationOption) testRegistra
 			cfg.withDiff,
 			cfg.withFiltering,
 			cfg.withOmitRemote,
-			cfg.withBulkDelivery,
 			5,
 			false, /* blockWhenFull */
 			cfg.metrics,
@@ -393,7 +376,6 @@ func newTestRegistration(s *testStream, opts ...registrationOption) testRegistra
 			cfg.withDiff,
 			cfg.withFiltering,
 			cfg.withOmitRemote,
-			cfg.withBulkDelivery,
 			5,
 			cfg.metrics,
 			&testBufferedStream{Stream: s},

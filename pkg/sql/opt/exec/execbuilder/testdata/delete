@@ -340,7 +340,6 @@ vectorized: true
         │ table: xyz@xyz_pkey
         │ key columns: x
         │ locking strength: for update
-        │ parallel
         │
         └── • scan
               columns: (x, y)
@@ -371,7 +370,6 @@ vectorized: true
         │ table: xyz@xyz_pkey
         │ key columns: x
         │ locking strength: for update
-        │ parallel
         │
         └── • scan
               columns: (x, y)
@@ -406,7 +404,6 @@ vectorized: true
         │ table: xyz@xyz_pkey
         │ key columns: x
         │ locking strength: for update
-        │ parallel
         │
         └── • scan
               columns: (x, y)
@@ -500,20 +497,28 @@ quality of service: regular
 │ from: t137352
 │ auto commit
 │
-└── • scan
-      sql nodes: <hidden>
-      kv nodes: <hidden>
-      regions: <hidden>
-      actual row count: 0
-      KV time: 0µs
-      KV rows decoded: 0
-      KV bytes read: 0 B
-      KV gRPC calls: 0
-      estimated max memory allocated: 0 B
-      missing stats
-      table: t137352@t137352_pkey
-      spans: [/1 - /1]
-      locking strength: for update
+└── • lookup join
+    │ sql nodes: <hidden>
+    │ kv nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ execution time: 0µs
+    │ estimated max memory allocated: 0 B
+    │ table: t137352@t137352_pkey
+    │ equality: ($1) = (k)
+    │ equality cols are key
+    │ locking strength: for update
+    │
+    └── • values
+          sql nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          execution time: 0µs
+          size: 1 column, 1 row
 
 statement ok
 INSERT INTO t137352 VALUES (1, 10, 100);
@@ -522,9 +527,9 @@ query T kvtrace
 EXECUTE p(1)
 ----
 Scan /Table/114/1/1/0 lock Exclusive (Block, Unreplicated)
-Del /Table/114/1/1/0
 Del /Table/114/2/10/1/0
 Del /Table/114/3/100/1/0
+Del /Table/114/1/1/0
 
 statement ok
 DEALLOCATE p
@@ -600,9 +605,9 @@ EXECUTE p(10)
 ----
 Scan /Table/114/2/1{0-1} lock Exclusive (Block, Unreplicated)
 Scan /Table/114/1/1/0 lock Exclusive (Block, Unreplicated)
-Del /Table/114/1/1/0
 Del /Table/114/2/10/1/0
 Del /Table/114/3/100/1/0
+Del /Table/114/1/1/0
 
 subtest locking_behavior
 
@@ -641,9 +646,9 @@ query T kvtrace
 DELETE FROM t139160 WHERE k = 1
 ----
 Scan /Table/115/1/1/0 lock Exclusive (Block, Unreplicated)
-Del /Table/115/1/1/0
 Del /Table/115/2/2/1/0
 Del (locking) /Table/115/3/3/0
+Del /Table/115/1/1/0
 
 # Only non-unique secondary index is scanned and locked.
 statement ok
@@ -669,9 +674,9 @@ query T kvtrace
 DELETE FROM t139160 WHERE i = 2
 ----
 Scan /Table/115/2/{2-3} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/115/1/1/0
 Del /Table/115/2/2/1/0
 Del (locking) /Table/115/3/3/0
+Del (locking) /Table/115/1/1/0
 
 statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4);
@@ -702,9 +707,9 @@ DELETE FROM t139160 WHERE i = 2 RETURNING v
 ----
 Scan /Table/115/2/{2-3} lock Exclusive (Block, Unreplicated)
 Scan /Table/115/1/1/0 lock Exclusive (Block, Unreplicated)
-Del /Table/115/1/1/0
 Del /Table/115/2/2/1/0
 Del (locking) /Table/115/3/3/0
+Del /Table/115/1/1/0
 
 # Only unique secondary index is scanned and locked.
 statement ok
@@ -730,9 +735,9 @@ query T kvtrace
 DELETE FROM t139160 WHERE u = 3
 ----
 Scan /Table/115/3/3/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/115/1/1/0
 Del /Table/115/2/2/1/0
 Del /Table/115/3/3/0
+Del (locking) /Table/115/1/1/0
 
 statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4);
@@ -763,9 +768,9 @@ DELETE FROM t139160 WHERE u = 3 RETURNING v
 ----
 Scan /Table/115/3/3/0 lock Exclusive (Block, Unreplicated)
 Scan /Table/115/1/1/0 lock Exclusive (Block, Unreplicated)
-Del /Table/115/1/1/0
 Del /Table/115/2/2/1/0
 Del /Table/115/3/3/0
+Del /Table/115/1/1/0
 
 statement ok
 INSERT INTO t139160 VALUES (1, 2, 3, 4);
@@ -793,9 +798,9 @@ query T kvtrace
 DELETE FROM t139160 WHERE v = 4
 ----
 Scan /Table/115/{1-2}
-Del (locking) /Table/115/1/1/0
 Del /Table/115/2/2/1/0
 Del (locking) /Table/115/3/3/0
+Del (locking) /Table/115/1/1/0
 
 statement ok
 CREATE TABLE t139105 (k INT PRIMARY KEY, v INT, FAMILY (k, v));
@@ -845,14 +850,14 @@ query T kvtrace
 DELETE FROM t139160_families WHERE k = 1
 ----
 Scan /Table/117/1/1/{0-2/2} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/117/1/1/0
-Del (locking) /Table/117/1/1/1/1
-Del (locking) /Table/117/1/1/2/1
-Del (locking) /Table/117/1/1/3/1
 Del /Table/117/2/2/1/0
 Del /Table/117/2/2/1/2/1
 Del (locking) /Table/117/3/3/0
 Del (locking) /Table/117/3/3/1/1
+Del (locking) /Table/117/1/1/0
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
+Del (locking) /Table/117/1/1/3/1
 
 statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4);
@@ -861,14 +866,14 @@ query T kvtrace
 DELETE FROM t139160_families WHERE i = 2
 ----
 Scan /Table/117/2/{2-3} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/117/1/1/0
-Del (locking) /Table/117/1/1/1/1
-Del (locking) /Table/117/1/1/2/1
-Del (locking) /Table/117/1/1/3/1
 Del /Table/117/2/2/1/0
 Del /Table/117/2/2/1/2/1
 Del (locking) /Table/117/3/3/0
 Del (locking) /Table/117/3/3/1/1
+Del (locking) /Table/117/1/1/0
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
+Del (locking) /Table/117/1/1/3/1
 
 statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4);
@@ -878,14 +883,14 @@ DELETE FROM t139160_families WHERE i = 2 RETURNING v
 ----
 Scan /Table/117/2/{2-3} lock Exclusive (Block, Unreplicated)
 Scan /Table/117/1/{1-2} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/117/1/1/0
-Del (locking) /Table/117/1/1/1/1
-Del (locking) /Table/117/1/1/2/1
-Del (locking) /Table/117/1/1/3/1
 Del /Table/117/2/2/1/0
 Del /Table/117/2/2/1/2/1
 Del (locking) /Table/117/3/3/0
 Del (locking) /Table/117/3/3/1/1
+Del (locking) /Table/117/1/1/0
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
+Del (locking) /Table/117/1/1/3/1
 
 statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4);
@@ -894,14 +899,14 @@ query T kvtrace
 DELETE FROM t139160_families WHERE u = 3
 ----
 Scan /Table/117/3/3/{0-1/2} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/117/1/1/0
-Del (locking) /Table/117/1/1/1/1
-Del (locking) /Table/117/1/1/2/1
-Del (locking) /Table/117/1/1/3/1
 Del /Table/117/2/2/1/0
 Del /Table/117/2/2/1/2/1
 Del (locking) /Table/117/3/3/0
 Del (locking) /Table/117/3/3/1/1
+Del (locking) /Table/117/1/1/0
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
+Del (locking) /Table/117/1/1/3/1
 
 statement ok
 INSERT INTO t139160_families VALUES (1, 2, 3, 4);
@@ -911,14 +916,14 @@ DELETE FROM t139160_families WHERE u = 3 RETURNING v
 ----
 Scan /Table/117/3/3/{0-1/2} lock Exclusive (Block, Unreplicated)
 Scan /Table/117/1/{1-2} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/117/1/1/0
-Del (locking) /Table/117/1/1/1/1
-Del (locking) /Table/117/1/1/2/1
-Del (locking) /Table/117/1/1/3/1
 Del /Table/117/2/2/1/0
 Del /Table/117/2/2/1/2/1
 Del (locking) /Table/117/3/3/0
 Del (locking) /Table/117/3/3/1/1
+Del (locking) /Table/117/1/1/0
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
+Del (locking) /Table/117/1/1/3/1
 
 # Sanity check a couple of session variables.
 statement ok
@@ -932,14 +937,14 @@ query T kvtrace
 DELETE FROM t139160_families WHERE k = 1
 ----
 Scan /Table/117/1/1/{0-2/2} lock Exclusive (Block, Unreplicated)
-Del /Table/117/1/1/0
-Del /Table/117/1/1/1/1
-Del /Table/117/1/1/2/1
-Del /Table/117/1/1/3/1
 Del (locking) /Table/117/2/2/1/0
 Del (locking) /Table/117/2/2/1/2/1
 Del (locking) /Table/117/3/3/0
 Del (locking) /Table/117/3/3/1/1
+Del /Table/117/1/1/0
+Del /Table/117/1/1/1/1
+Del /Table/117/1/1/2/1
+Del /Table/117/1/1/3/1
 
 statement ok
 SET optimizer_enable_lock_elision = false;
@@ -951,14 +956,14 @@ query T kvtrace
 DELETE FROM t139160_families WHERE k = 1
 ----
 Scan /Table/117/1/1/{0-2/2} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/117/1/1/0
-Del (locking) /Table/117/1/1/1/1
-Del (locking) /Table/117/1/1/2/1
-Del (locking) /Table/117/1/1/3/1
 Del (locking) /Table/117/2/2/1/0
 Del (locking) /Table/117/2/2/1/2/1
 Del (locking) /Table/117/3/3/0
 Del (locking) /Table/117/3/3/1/1
+Del (locking) /Table/117/1/1/0
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
+Del (locking) /Table/117/1/1/3/1
 
 statement ok
 RESET optimizer_enable_lock_elision;
@@ -1053,7 +1058,7 @@ DELETE FROM entity_address WHERE id IN (
 Scan /Table/120/2/"foo"{-/PrefixEnd}
 Del (locking) /Table/119/1/"bar"/0
 Scan /Table/120/{1-2}
-Del (locking) /Table/120/1/1/0
 Del (locking) /Table/120/2/"foo"/"bar"/0
+Del (locking) /Table/120/1/1/0
 
 subtest end

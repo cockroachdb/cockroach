@@ -90,9 +90,6 @@ type TestingKnobs struct {
 	// its PTS record to include all required targets.
 	PreservePTSTargets func() bool
 
-	// ManagePTSError is used to return an error when managing protected timestamps.
-	ManagePTSError func() error
-
 	// PulsarClientSkipCreation skips creating the sink client when
 	// dialing.
 	PulsarClientSkipCreation bool

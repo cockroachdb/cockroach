@@ -284,9 +284,7 @@ func (r *Replica) replicaUnavailableErrorRLocked(err error) error {
 	replDesc, _ := desc.GetReplicaDescriptor(r.store.StoreID())
 
 	isLiveMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
-	ct := r.getCurrentClosedTimestamp(context.Background(), hlc.Timestamp{}, /* sufficient */
-		r.shMu.state.LeaseAppliedIndex, r.shMu.state.Lease.Replica.NodeID,
-		r.shMu.state.RaftClosedTimestamp)
+	ct := r.getCurrentClosedTimestampLocked(context.Background(), hlc.Timestamp{} /* sufficient */)
 
 	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.raftStatusRLocked(), ct)
 }

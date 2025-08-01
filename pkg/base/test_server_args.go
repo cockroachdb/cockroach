@@ -12,7 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -159,11 +159,6 @@ type TestServerArgs struct {
 	// below for alternative options that suits your test case.
 	DefaultTestTenant DefaultTestTenantOptions
 
-	// DefaultDRPCOption specifies the DRPC enablement mode for a test
-	// server. This controls whether inter-node connectivity uses DRPC, just
-	// gRPC, or is chosen randomly.
-	DefaultDRPCOption DefaultTestDRPCOption
-
 	// DefaultTenantName is the name of the tenant created implicitly according
 	// to DefaultTestTenant. It is typically `test-tenant` for unit tests and
 	// always `demoapp` for the cockroach demo.
@@ -228,25 +223,6 @@ func (a *TestServerArgs) SlimServerConfig(opts ...SlimServerOption) {
 type SlimTestServerConfig struct {
 	Options slimOptions
 }
-
-// DefaultTestDRPCOption specifies the DRPC enablement mode for a test
-// server. This controls whether inter-node connectivity uses DRPC, just gRPC,
-// or is chosen randomly.
-type DefaultTestDRPCOption uint8
-
-const (
-	// TestDRPCDisabled disables DRPC; all inter-node connectivity will use gRPC
-	// only.
-	TestDRPCDisabled DefaultTestDRPCOption = iota
-
-	// TestDRPCEnabled enables DRPC. Some services may still use gRPC if they
-	// have not yet migrated to DRPC.
-	TestDRPCEnabled
-
-	// TestDRPCEnabledRandomly randomly chooses between the behavior of
-	// TestDRPCDisabled or TestDRPCEnabled.
-	TestDRPCEnabledRandomly
-)
 
 // TestClusterArgs contains the parameters one can set when creating a test
 // cluster. It contains a TestServerArgs instance which will be copied over to
@@ -591,14 +567,16 @@ func InternalNonDefaultDecision(
 	return baseArg
 }
 
-// DefaultTestStoreSpec is just a single in memory store of 512 MiB
-// with no special attributes.
-var DefaultTestStoreSpec = storageconfig.Store{
-	InMemory: true,
-	Size: storageconfig.Size{
-		Bytes: 512 << 20,
-	},
-}
+var (
+	// DefaultTestStoreSpec is just a single in memory store of 512 MiB
+	// with no special attributes.
+	DefaultTestStoreSpec = StoreSpec{
+		InMemory: true,
+		Size: storagepb.SizeSpec{
+			Capacity: 512 << 20,
+		},
+	}
+)
 
 // DefaultTestTempStorageConfig is the associated temp storage for
 // DefaultTestStoreSpec that is in-memory.
@@ -635,10 +613,6 @@ type TestSharedProcessTenantArgs struct {
 	// TenantID is the ID of the tenant to be created. If not set, an ID is
 	// assigned automatically.
 	TenantID roachpb.TenantID
-	// TenantReadOnly indicates if this tenant should be created as read-only
-	// (for testing PCR reader tenants). This field is used for testing purposes
-	// and overrides the tenant record check.
-	TenantReadOnly bool
 
 	Knobs TestingKnobs
 

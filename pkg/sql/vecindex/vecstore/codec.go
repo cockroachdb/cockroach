@@ -33,7 +33,7 @@ func makeStoreCodec(quantizer quantize.Quantizer) storeCodec {
 // possible.
 func (sc *storeCodec) Init(centroid vector.T, minCapacity int) {
 	if sc.tmpVectorSet == nil {
-		sc.tmpVectorSet = sc.quantizer.NewSet(minCapacity, centroid)
+		sc.tmpVectorSet = sc.quantizer.NewQuantizedVectorSet(minCapacity, centroid)
 	} else {
 		sc.tmpVectorSet.Clear(centroid)
 	}
@@ -55,8 +55,7 @@ func (sc *storeCodec) DecodeVector(encodedVector []byte) ([]byte, error) {
 			encodedVector, sc.tmpVectorSet.(*quantize.UnQuantizedVectorSet))
 	case *quantize.RaBitQuantizer:
 		return vecencoding.DecodeRaBitQVectorToSet(
-			encodedVector, sc.tmpVectorSet.(*quantize.RaBitQuantizedVectorSet),
-		)
+			encodedVector, sc.tmpVectorSet.(*quantize.RaBitQuantizedVectorSet))
 	}
 	return nil, errors.Errorf("unknown quantizer type %T", sc.quantizer)
 }
@@ -67,15 +66,7 @@ func (sc *storeCodec) EncodeVector(w *workspace.T, v vector.T, centroid vector.T
 	sc.Init(centroid, 1)
 	input := v.AsSet()
 	sc.quantizer.QuantizeInSet(w, sc.tmpVectorSet, input)
-
-	switch t := sc.tmpVectorSet.(type) {
-	case *quantize.UnQuantizedVectorSet:
-		return vecencoding.EncodeUnquantizerVector([]byte{}, t.Vectors.At(0))
-	case *quantize.RaBitQuantizedVectorSet:
-		return vecencoding.EncodeRaBitQVectorFromSet([]byte{}, t, 0), nil
-	default:
-		return nil, errors.Errorf("unknown quantizer type %T", t)
-	}
+	return encodeVectorFromSet(sc.tmpVectorSet, 0 /* idx */)
 }
 
 // partitionCodec abstracts the encoding and decoding of partition data,
@@ -189,4 +180,19 @@ func (pc *partitionCodec) setStoreCodec(partitionKey cspann.PartitionKey) {
 	} else {
 		pc.codec = &pc.nonRootCodec
 	}
+}
+
+// encodeVectorFromSet encodes the vector indicated by 'idx' from an external
+// vector set.
+func encodeVectorFromSet(vs quantize.QuantizedVectorSet, idx int) ([]byte, error) {
+	switch t := vs.(type) {
+	case *quantize.UnQuantizedVectorSet:
+		return vecencoding.EncodeUnquantizerVector(
+			[]byte{}, t.CentroidDistances[idx], t.Vectors.At(idx))
+	case *quantize.RaBitQuantizedVectorSet:
+		return vecencoding.EncodeRaBitQVector(
+			[]byte{}, t.CodeCounts[idx], t.CentroidDistances[idx], t.DotProducts[idx], t.Codes.At(idx),
+		), nil
+	}
+	return nil, errors.Errorf("unknown quantizer type %T", vs)
 }

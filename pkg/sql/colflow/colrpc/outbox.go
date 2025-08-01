@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -151,7 +150,7 @@ func (o *Outbox) close(ctx context.Context) {
 //     Outbox goes through the same steps as 1).
 func (o *Outbox) Run(
 	ctx context.Context,
-	dialer rpcbase.NodeDialerNoBreaker,
+	dialer execinfra.Dialer,
 	sqlInstanceID base.SQLInstanceID,
 	streamID execinfrapb.StreamID,
 	flowCtxCancel context.CancelFunc,
@@ -178,14 +177,15 @@ func (o *Outbox) Run(
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
 	log.VEventf(ctx, 2, "Outbox Dialing %s", sqlInstanceID)
 
-	var stream execinfrapb.RPCDistSQL_FlowStreamClient
+	var stream execinfrapb.DistSQL_FlowStreamClient
 	if err := func() error {
-		client, err := execinfra.GetDistSQLClientForOutbox(ctx, dialer, sqlInstanceID, connectionTimeout)
+		conn, err := execinfra.GetConnForOutbox(ctx, dialer, sqlInstanceID, connectionTimeout)
 		if err != nil {
 			log.VWarningf(ctx, 1, "Outbox Dial connection error, distributed query will fail: %+v", err)
 			return err
 		}
 
+		client := execinfrapb.NewDistSQLClient(conn)
 		// We use the flow context for the RPC so that when outbox context is
 		// canceled in case of a graceful shutdown, the gRPC stream keeps on
 		// running. If, however, the flow context is canceled, then the

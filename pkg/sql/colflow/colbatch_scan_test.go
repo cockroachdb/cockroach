@@ -61,7 +61,7 @@ func TestColBatchScanMeta(t *testing.T) {
 	defer closerRegistry.Close(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,7 +1,5 @@
-statement disable-cf-mutator ok
-CREATE TABLE t (x INT NOT VISIBLE);
-
 statement ok
+CREATE TABLE t (x INT NOT VISIBLE);
 CREATE TABLE kv (
     k INT PRIMARY KEY NOT VISIBLE,
     v INT NOT VISIBLE
@@ -25,7 +23,6 @@ INSERT INTO kv VALUES (111, 222)
 
 # Verify the right columns are hidden.
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
@@ -33,17 +30,7 @@ t  CREATE TABLE public.t (
      x INT8 NOT VISIBLE NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-   );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t
-----
-t  CREATE TABLE public.t (
-     x INT8 NOT VISIBLE NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-   ) WITH (schema_locked = true);
+   )
 
 # Check that stars expand to no columns.
 

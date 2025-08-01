@@ -45,7 +45,7 @@ type Registry struct {
 	// <uri>/metadata/<kind>/<timestamp> contains metadata for a fixture instance
 	// <uri>/<kind>/<timestamp> contains the actual fixture data
 	//
-	// The uri is passed to the registry at construction time. The baseURI is
+	// The uri ispassed to the registry at construction time. The baseURI is
 	// expected to be of the form "scheme://<bucket>/roachprod/<version>". So a
 	// full metadata path looks like:
 	// gs://cockroach-fixtures/roachprod/v25.1/metadata/backup-tpcc-30k/20220101-1504
@@ -57,7 +57,7 @@ type Registry struct {
 // for all fixture data and metadata. See the comment on the uri field for the
 // structure of a fixture directory.
 func NewRegistry(ctx context.Context, uri url.URL) (*Registry, error) {
-	supportedSchemes := map[string]bool{"gs": true, "s3": true, "azure-blob": true}
+	supportedSchemes := map[string]bool{"gs": true, "s3": true, "azure": true}
 	if !supportedSchemes[uri.Scheme] {
 		return nil, errors.Errorf("unsupported scheme %q", uri.Scheme)
 	}
@@ -329,15 +329,5 @@ func (s *ScratchHandle) SetReadyAt(ctx context.Context) error {
 		return err
 	}
 	s.logger.Printf("fixture '%s' ready at '%s'", s.metadata.DataPath, s.metadata.ReadyAt)
-	return nil
-}
-
-// SetFingerprint sets the fingerprint for the fixture.
-func (s *ScratchHandle) SetFingerprint(ctx context.Context, fingerprint map[string]string) error {
-	s.metadata.Fingerprint = fingerprint
-	if err := s.registry.upsertMetadata(s.metadata); err != nil {
-		return err
-	}
-	s.logger.Printf("fixture '%s' fingerprint set to '%s'", s.metadata.DataPath, s.metadata.Fingerprint)
 	return nil
 }

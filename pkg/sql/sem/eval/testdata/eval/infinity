@@ -239,8 +239,3 @@ eval
 'Inf'::float::decimal
 ----
 Infinity
-
-eval
-log('Inf'::decimal, 1)
-----
-0

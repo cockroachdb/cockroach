@@ -519,7 +519,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 	require.NoError(t, tc.RestartServerWithInspect(1, func(s serverutils.TestServerInterface) {
 		livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
 		s.GossipI().(*gossip.Gossip).
-			RegisterCallback(livenessRegex, func(key string, _ roachpb.Value, _ int64) {
+			RegisterCallback(livenessRegex, func(key string, _ roachpb.Value) {
 				keysMu.Lock()
 				defer keysMu.Unlock()
 				for _, k := range keysMu.keys {
@@ -579,7 +579,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	// the node's own node ID returns the "correct" value.
 	key := gossip.MakeNodeLivenessKey(g.NodeID.Get())
 	var count int32
-	g.RegisterCallback(key, func(_ string, val roachpb.Value, _ int64) {
+	g.RegisterCallback(key, func(_ string, val roachpb.Value) {
 		atomic.AddInt32(&count, 1)
 	})
 	testutils.SucceedsSoon(t, func() error {
@@ -1376,7 +1376,7 @@ func BenchmarkNodeLivenessScanStorage(b *testing.B) {
 			}
 			if l == 0 {
 				// Since did many flushes, compact everything down.
-				require.NoError(b, eng.Compact(ctx))
+				require.NoError(b, eng.Compact())
 			} else {
 				// Flush the next level. This will become a L0 sub-level.
 				require.NoError(b, eng.Flush())
@@ -1435,7 +1435,7 @@ func BenchmarkNodeLivenessScanStorage(b *testing.B) {
 							eng := setupEng(b, numLiveVersions, haveDeadKeys)
 							defer eng.Close()
 							if compacted {
-								require.NoError(b, eng.Compact(ctx))
+								require.NoError(b, eng.Compact())
 							}
 							b.ResetTimer()
 							blockBytes := uint64(0)

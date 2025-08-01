@@ -171,6 +171,7 @@ func clearSpanData(
 			timer.Reset(waitTime)
 			select {
 			case <-timer.C:
+				timer.Read = true
 			case <-ctx.Done():
 				return ctx.Err()
 			}

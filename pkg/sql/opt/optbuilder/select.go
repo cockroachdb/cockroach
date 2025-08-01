@@ -828,7 +828,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 
 	// Create a scope that can be used for building the scalar expressions.
 	tableScope := b.allocScope()
-	b.appendOrdinaryColumnsFromTable(tableScope, tabMeta, &tabMeta.Alias)
+	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 	// Synthesized CHECK expressions, e.g., for columns of ENUM types, may
 	// reference inaccessible columns. This can happen when the type of an
 	// indexed expression is an ENUM. We make these columns visible so that they
@@ -925,7 +925,7 @@ func (b *Builder) addComputedColsForTable(
 
 		if tableScope == nil {
 			tableScope = b.allocScope()
-			b.appendOrdinaryColumnsFromTable(tableScope, tabMeta, &tabMeta.Alias)
+			tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 		}
 
 		colType := tabCol.DatumType()

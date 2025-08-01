@@ -7,8 +7,6 @@ package cdctest
 
 import (
 	"fmt"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -41,10 +39,7 @@ func (h Headers) String() string {
 		return ""
 	}
 	s := "("
-	sorted := slices.SortedFunc(slices.Values(h), func(a, b Header) int {
-		return strings.Compare(a.K, b.K)
-	})
-	for _, v := range sorted {
+	for _, v := range h {
 		s += fmt.Sprintf("%s: %s, ", v.K, v.V)
 	}
 	return s[:len(s)-2] + ")"
@@ -114,11 +109,4 @@ type EnterpriseTestFeed interface {
 	HighWaterMark() (hlc.Timestamp, error)
 	// WaitForHighWaterMark waits until job highwatermark progresses beyond specified threshold.
 	WaitForHighWaterMark(minHWM hlc.Timestamp) error
-
-	// ForcedEnriched returns true if the feed was metamorphically forced to use
-	// the enriched envelopes.
-	ForcedEnriched() bool
-
-	// SetForcedEnriched sets the forced enriched flag.
-	SetForcedEnriched(forced bool)
 }

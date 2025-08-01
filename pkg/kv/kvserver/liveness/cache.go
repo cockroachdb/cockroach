@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -106,7 +107,7 @@ func (c *Cache) selfID() roachpb.NodeID {
 
 // livenessGossipUpdate is the gossip callback used to keep the
 // in-memory liveness info up to date.
-func (c *Cache) livenessGossipUpdate(_ string, content roachpb.Value, _ int64) {
+func (c *Cache) livenessGossipUpdate(_ string, content roachpb.Value) {
 	ctx := context.TODO()
 	var liveness livenesspb.Liveness
 	if err := content.GetProto(&liveness); err != nil {
@@ -118,7 +119,7 @@ func (c *Cache) livenessGossipUpdate(_ string, content roachpb.Value, _ int64) {
 }
 
 // storeGossipUpdate is the Gossip callback used to keep the nodeDescMap up to date.
-func (c *Cache) storeGossipUpdate(_ string, content roachpb.Value, _ int64) {
+func (c *Cache) storeGossipUpdate(_ string, content roachpb.Value) {
 	ctx := context.TODO()
 	var storeDesc roachpb.StoreDescriptor
 	if err := content.GetProto(&storeDesc); err != nil {
@@ -243,13 +244,14 @@ func (c *Cache) convertToNodeVitality(l livenesspb.Liveness) livenesspb.NodeVita
 	// even before the first gossip arrives for a store.
 
 	// NB: nodeDialer is nil in some tests.
+	connected := c.nodeDialer == nil || c.nodeDialer.ConnHealth(l.NodeID, rpc.SystemClass) == nil
 	lastDescUpdate := c.lastDescriptorUpdate(l.NodeID)
 
 	return l.CreateNodeVitality(
 		c.clock.Now(),
 		lastDescUpdate.lastUpdateTime,
 		lastDescUpdate.lastUnavailableTime,
-		livenesspb.NewNodeConnectionStatus(l.NodeID, c.nodeDialer),
+		connected,
 		TimeUntilNodeDead.Get(&c.st.SV),
 		TimeAfterNodeSuspect.Get(&c.st.SV),
 	)

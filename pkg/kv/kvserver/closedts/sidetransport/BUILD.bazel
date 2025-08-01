@@ -19,8 +19,8 @@ go_library(
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/closedts/policyrefresher",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/rpc/nodedialer",
-        "//pkg/rpc/rpcbase",
         "//pkg/settings/cluster",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
@@ -30,7 +30,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
     ],
 )
@@ -50,7 +49,6 @@ go_test(
         "//pkg/kv/kvserver/closedts/policyrefresher",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/rpc/rpcbase",
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/util/hlc",
@@ -60,7 +58,6 @@ go_test(
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
-        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
     ],
 )

@@ -90,9 +90,6 @@ type TestClusterConfig struct {
 	// restart/upgrade nodes. This always bootstraps with the predecessor version
 	// of the current commit, and upgrades to the current commit.
 	UseCockroachGoTestserver bool
-	// DisableSchemaLockedByDefault prevents tables from being created
-	// with schema_locked by default.
-	DisableSchemaLockedByDefault bool
 }
 
 // TenantMode is the type of the UseSecondaryTenant field in TestClusterConfig.
@@ -293,7 +290,6 @@ var LogicTestConfigs = []TestClusterConfig{
 		NumNodes:                        1,
 		OverrideDistSQLMode:             "off",
 		DisableDeclarativeSchemaChanger: true,
-		DisableSchemaLockedByDefault:    true,
 	},
 	{
 		Name:                "local-vec-off",
@@ -488,26 +484,39 @@ var LogicTestConfigs = []TestClusterConfig{
 		Localities: multiregion15node5region3azsLocalities,
 	},
 	{
-		// This config runs tests using 25.2 cluster version, simulating a node that
+		// This config runs tests using 24.3 cluster version, simulating a node that
 		// is operating in a mixed-version cluster.
-		Name:                        "local-mixed-25.2",
+		Name:                        "local-mixed-24.3",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V25_2,
+		BootstrapVersion:            clusterversion.V24_3,
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
-		// Mixed version clusters do not support disabling schema_locked
-		// automatically, since we added more statements in 25.3.
-		// Note: This can be removed once the mixed version level is 25.3,
-		// since the entire test suite should be compatible.
-		DisableSchemaLockedByDefault: true,
+	},
+	{
+		// This config runs tests using 25.1 cluster version, simulating a node that
+		// is operating in a mixed-version cluster.
+		Name:                        "local-mixed-25.1",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		BootstrapVersion:            clusterversion.V25_1,
+		DisableUpgrade:              true,
+		DeclarativeCorpusCollection: true,
 	},
 	{
 		// This config runs a cluster with 3 nodes, with a separate process per
-		// node. The nodes initially start on v25.2.
-		Name:                     "cockroach-go-testserver-25.2",
+		// node. The nodes initially start on v24.3.
+		Name:                     "cockroach-go-testserver-24.3",
 		UseCockroachGoTestserver: true,
-		BootstrapVersion:         clusterversion.V25_2,
+		BootstrapVersion:         clusterversion.V24_3,
+		NumNodes:                 3,
+	},
+	{
+		// This config runs a cluster with 3 nodes, with a separate process per
+		// node. The nodes initially start on v25.1.
+		Name:                     "cockroach-go-testserver-25.1",
+		UseCockroachGoTestserver: true,
+		BootstrapVersion:         clusterversion.V25_1,
 		NumNodes:                 3,
 	},
 }
@@ -596,7 +605,8 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
-		"local-mixed-25.2",
+		"local-mixed-24.3",
+		"local-mixed-25.1",
 	),
 
 	// Special alias for all 5 node configs.
@@ -628,13 +638,8 @@ var DefaultConfigSets = map[string]ConfigSet{
 
 	// Special alias for all testserver configs (for mixed-version testing).
 	"cockroach-go-testserver-configs": makeConfigSet(
-		"cockroach-go-testserver-25.2",
-	),
-
-	// Special alias for configs where schema locked is disabled.
-	"schema-locked-disabled": makeConfigSet(
-		"local-legacy-schema-changer",
-		"local-mixed-25.2",
+		"cockroach-go-testserver-24.3",
+		"cockroach-go-testserver-25.1",
 	),
 }
 

@@ -223,15 +223,6 @@ message GetRequest {
   // LockNonExisting indicates whether the Get request should acquire a lock
   // on keys that don't exist.
   bool lock_non_existing = 5;
-
-  // ExpectExclusionSince, if set, indicates that the request should return an
-  // error if this key has been written to at a timestamp at or after the given
-  // timestamp. This allows the request to verify that a previously acquired
-  // unreplicated lock has provided the required protection. Note that it does
-  // not check for the existence of the lock. It checks for a write that the
-  // lock should have prevented. If such a write is found an
-  // ExclusionViolationError is returned.
-  util.hlc.Timestamp expect_exclusion_since = 6 [(gogoproto.nullable) = false];
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -301,13 +292,6 @@ message PutRequest {
   // no lower than "exclusive" needs to be acquired on the key, even if it
   // doesn't exist.
   bool must_acquire_exclusive_lock = 5;
-
-  // ExpectExclusionSince, if set, indicates that the request should return an
-  // error if this key has been written to at a timestamp at or after the given
-  // timestamp. This is different from the ReadTimestamp of the transaction in
-  // that it allows a writer to verify an unreplicated lock acquired at an
-  // earlier timestamp has provided the required protection.
-  util.hlc.Timestamp expect_exclusion_since = 6 [(gogoproto.nullable) = false];
 }
 
 // A PutResponse is the return value from the Put() method.
@@ -397,6 +381,30 @@ message ConditionalPutResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An InitPutRequest is the argument to the InitPut() method.
+//
+// - If key doesn't exist, sets value.
+// - If key exists, returns a ConditionFailedError if value != existing value
+//   If failOnTombstones is set to true, tombstone values count as mismatched
+//   values and will cause a ConditionFailedError.
+// TODO(yuzefovich): this can be removed once the compatibility with 24.3 is no
+// longer needed.
+message InitPutRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Value value = 2 [(gogoproto.nullable) = false];
+  // NOTE: For internal use only! Set to indicate that the put is
+  // writing to virgin keyspace and no reads are necessary to
+  // rationalize MVCC.
+  bool blind = 3;
+  // If true, tombstones cause ConditionFailedErrors.
+  bool failOnTombstones = 4;
+}
+
+// A InitPutResponse is the return value from the InitPut() method.
+message InitPutResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // An IncrementRequest is the argument to the Increment() method. It
 // increments the value for key, and returns the new value. If no
 // value exists for a key, incrementing by 0 is not a noop, but will
@@ -427,13 +435,6 @@ message DeleteRequest {
   //
   // TODO(ssd): Separate the behaviour of FoundKey to not depend on this flag.
   bool must_acquire_exclusive_lock = 2;
-
-  // ExpectExclusionSince, if set, indicates that the request should return an
-  // error if this key has been written to at a timestamp at or after the given
-  // timestamp. This is different from the ReadTimestamp of the transaction in
-  // that it allows a writer to verify an unreplicated lock acquired at an
-  // earlier timestamp has provided the require protection.
-  util.hlc.Timestamp expect_exclusion_since = 3 [(gogoproto.nullable) = false];
 }
 
 // A DeleteResponse is the return value from the Delete() method.
@@ -1971,7 +1972,8 @@ message ExportResponse {
 
 // AdminScatterRequest is the argument to the AdminScatter() method, which moves
 // replicas and leaseholders for a selection of ranges. Scatter is best-effort;
-// ranges that cannot be moved won't fail the request.
+// ranges that cannot be moved will include an error detail in the response and
+// won't fail the request.
 message AdminScatterRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool randomize_leases = 2;
@@ -2001,6 +2003,49 @@ message AdminScatterResponse {
   int64 replicas_scattered_bytes = 5;
 
   // NB: if you add a field here, don't forget to update combine().
+}
+
+// AdminVerifyProtectedTimestampRequest is the argument to the
+// AdminVerifyProtectedTimestamp method which ensures that the specified record
+// will be seen before data can be garbage collected at the timestamp.
+message AdminVerifyProtectedTimestampRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // RecordID is the ID of the protected timestamp Record being verified.
+  bytes record_id = 4 [
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+      (gogoproto.nullable) = false,
+      (gogoproto.customname) = "RecordID"
+  ];
+
+  // Protected is the timestamp at which the record with RecordID protects.
+  util.hlc.Timestamp protected = 2 [(gogoproto.nullable) = false];
+
+  // RecordAliveAt is a an hlc timestamp at which the record being verified is
+  // known to exist. A value for RecordAliveAt is generally determined by
+  // reading a Record from the database and using the timestamp at which that
+  // read occurred.
+  util.hlc.Timestamp record_alive_at = 3 [(gogoproto.nullable) = false];
+}
+
+
+// AdminVerifyProtectedTimestampResponse is the argument to the
+// AdminVerifyProtectedTimestamp method which ensures that the specified record
+// will be seen before data can be garbage collected at the timestamp.
+message AdminVerifyProtectedTimestampResponse {
+
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  bool verified = 2;
+
+  // TODO(adityamaru): Remove in 21.2.
+  repeated RangeDescriptor deprecated_failed_ranges = 3 [(gogoproto.nullable) = false];
+  message FailedRange {
+    int64 range_id = 1 [(gogoproto.customname) = "RangeID"];
+    bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+    bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+    string reason = 4;
+  }
+  repeated FailedRange verification_failed_ranges = 4 [(gogoproto.nullable) = false];
 }
 
 // AddSSTableRequest contains arguments to the AddSSTable method, which links an
@@ -2127,26 +2172,6 @@ message AddSSTableRequest {
   //
   // TODO(dt,msbutler,bilal): This is unsupported.
   util.hlc.Timestamp ignore_keys_above_timestamp = 12 [(gogoproto.nullable) = false];
-  
-  // ComputeStatsDiff causes the server to compute the effect this
-  // SST will have on the range's MVCC stats, even in the presence of
-  // overlapping keys. This flag cannot be passed with the MVCCStats,
-  // DisallowShadowingBelow, or DisallowShadowing fields. 
-  //
-  // This flag assumes that any key in the sst that is shadowed by a key in the
-  // engine is also a duplicate. As an example, accurate stats will be computed
-  // here: 
-  // - sst: a@3,a@2 and eng: a@2,a@1
-  //
-  // but not for, as a@1 is not a duplicate: 
-  // - sst: a@1 and eng: a@2
-  //
-  // In the ladder case, we silently create inaccurate stats currently. A TODO
-  // in storage.ComputeSSTStatsDiff is to detect this case and increment
-  // ContainsEstimates. At least for PCR, the first client of this flag, we
-  // expect the edge case to be quite rare, and would only occur if we're
-  // ingesting data older than the ingesting range's GC TTL.
-  bool compute_stats_diff = 13 [(gogoproto.customname) = "ComputeStatsDiff"];
 
   reserved 10, 11;
 }
@@ -2501,22 +2526,6 @@ message BarrierResponse {
   RangeDescriptor range_desc = 4 [(gogoproto.nullable) = false];
 }
 
-// FlushLockTableRequest instructs the replica, if it is the leaseholder, to
-// flush any in-memory unreplicated locks to the replicated lock table contained
-// in the request header's span.
-message FlushLockTableRequest {
-  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// FlushLockTableResponse is the response for a FlushLockTable operation.
-message FlushLockTableResponse {
-  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-
-  // LocksWritten is the number of locks written to the replicated lock table as
-  // a result of this request.
-  uint64 locks_written = 2;
-}
-
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -2552,6 +2561,7 @@ message RequestUnion {
     ReverseScanRequest reverse_scan = 21;
     ComputeChecksumRequest compute_checksum = 22;
     CheckConsistencyRequest check_consistency = 24;
+    InitPutRequest init_put = 26;
     TransferLeaseRequest transfer_lease = 28;
     LeaseInfoRequest lease_info = 30;
     ExportRequest export = 32;
@@ -2565,6 +2575,7 @@ message RequestUnion {
     RefreshRangeRequest refresh_range = 41;
     SubsumeRequest subsume = 43;
     RangeStatsRequest range_stats = 44;
+    AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
     MigrateRequest migrate = 50;
     QueryResolvedTimestampRequest query_resolved_timestamp = 51;
     BarrierRequest barrier = 53;
@@ -2572,9 +2583,8 @@ message RequestUnion {
     IsSpanEmptyRequest is_span_empty = 56;
     LinkExternalSSTableRequest link_external_sstable = 57;
     ExciseRequest excise = 58;
-    FlushLockTableRequest flush_lock_table = 59;
   }
-  reserved 8, 15, 23, 25, 26, 27, 31, 34, 49, 52;
+  reserved 8, 15, 23, 25, 27, 31, 34, 52;
 }
 
 // A ResponseUnion contains exactly one of the responses.
@@ -2609,6 +2619,7 @@ message ResponseUnion {
     ReverseScanResponse reverse_scan = 21;
     ComputeChecksumResponse compute_checksum = 22;
     CheckConsistencyResponse check_consistency = 24;
+    InitPutResponse init_put = 26;
     LeaseInfoResponse lease_info = 30;
     ExportResponse export = 32;
     QueryTxnResponse query_txn = 33;
@@ -2621,6 +2632,7 @@ message ResponseUnion {
     RefreshRangeResponse refresh_range = 41;
     SubsumeResponse subsume = 43;
     RangeStatsResponse range_stats = 44;
+    AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
     MigrateResponse migrate = 50;
     QueryResolvedTimestampResponse query_resolved_timestamp = 51;
     BarrierResponse barrier = 53;
@@ -2628,9 +2640,8 @@ message ResponseUnion {
     IsSpanEmptyResponse is_span_empty = 56;
     LinkExternalSSTableResponse link_external_sstable = 57;
     ExciseResponse excise = 58;
-    FlushLockTableResponse flush_lock_table = 59;
   }
-  reserved 8, 15, 23, 25, 26, 27, 28, 31, 34, 49, 52;
+  reserved 8, 15, 23, 25, 27, 28, 31, 34, 52;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
@@ -2995,6 +3006,8 @@ message Header {
   // * A destination node older than 24.1 will not see this field.
   RangeInfo proxy_range_info = 34;
 
+  reserved 7, 10, 12, 14, 20;
+
   WriteOptions write_options = 35;
 
   // DeadlockTimeout specifies the amount of time that a request will wait on a
@@ -3010,27 +3023,7 @@ message Header {
   google.protobuf.Duration deadlock_timeout = 36 [(gogoproto.nullable) = false,
     (gogoproto.stdduration) = true];
 
-  // HasBufferedAllPrecedingWrites, if set, indicates that the batch belongs to
-  // a transaction that has buffered all of its writes (from preceding batches)
-  // on the client.
-  //
-  // The server may use this field to omit checking the AbortSpan. Transactions
-  // use the AbortSpan to check whether they've been aborted or not. If they
-  // have, any intents they may have previously written could be removed by
-  // concurrent transactions, which means a transaction may not have a guarantee
-  // to read its own writes. So, transactions eagerly check the AbortSpan to
-  // identify this case and eagerly return a TransactionAbortedError to the
-  // client, instead of breaking read-your-own-writes. However, transactions
-  // that have buffered all writes on the client uphold read-your-own-writes
-  // semantics by joining results from the KVServer against the write buffer;
-  // simply put, they do not rely on the AbortSpan to uphold
-  // read-your-own-writes. As such, they can eschew checking the AbortSpan on
-  // the server.
-  bool has_buffered_all_preceding_writes = 37;
-
-  reserved 7, 10, 12, 14, 20;
-
-  // Next ID: 38
+  // Next ID: 37
 }
 
 message WriteOptions {
@@ -3280,11 +3273,7 @@ message RangeFeedRequest {
   // ConsumerID is set by the caller to identify itself.
   int64 consumer_id = 9 [(gogoproto.customname) = "ConsumerID"];
 
-  // WithBulkDelivery requests the stream include "bulk" events which wrap many
-  // events in a single event to reduce overhead, e.g. during scans.
-  bool with_bulk_delivery = 10;
-
-  // NextID = 11;
+  // NextID = 10;
 }
 
 // RangeFeedValue is a variant of RangeFeedEvent that represents an update to
@@ -3298,14 +3287,6 @@ message RangeFeedValue {
   //    this event.
   // The timestamp on the previous value is empty.
   Value prev_value = 3 [(gogoproto.nullable) = false];
-}
-
-// RangeFeedBulkEvents is a variant of RangeFeedEvent that represetns a
-// collection of many RangeFeedEvent delivered as a single event rather than 
-// individually for reduced delivery overhead when many events are available, 
-// such as during catch-up scans.
-message RangeFeedBulkEvents {
-  repeated RangeFeedEvent events = 1;
 }
 
 // RangeFeedCheckpoint is a variant of RangeFeedEvent that represents the
@@ -3377,7 +3358,6 @@ message RangeFeedEvent {
   RangeFeedSSTable     sst          = 4 [(gogoproto.customname) = "SST"];
   RangeFeedDeleteRange delete_range = 5;
   RangeFeedMetadata    metadata     = 6;
-  RangeFeedBulkEvents  bulk_events  = 7;
 }
 
 // MuxRangeFeedEvent is a response generated by MuxRangeFeed RPC.  It tags
@@ -3714,87 +3694,6 @@ message JoinNodeResponse {
   int32 node_id = 2 [(gogoproto.customname) = "NodeID"];
   int32 store_id = 3 [(gogoproto.customname) = "StoreID"];
   roachpb.Version active_version = 4;
-}
-
-// TODO(server): Remove the methods of these serivces from the 'Internal'
-// service once the migration to DRPC complete, making these service the sole
-// definition. Also, update the comments here.
-
-// TODO(server,kv): Improve the code comment documentation of these methods.
-// Many of these methods are simply undocumented.
-
-// KVBatch defines Batch RPCs of Internal service (see below) for DRPC use only.
-//
-// During the gRPC to DRPC migration:
-// - gRPC clients will continue to use the full 'Internal' service client.
-// - DRPC clients targeting Batch* RPCs will use clients generated from this.
-service KVBatch {
-  rpc Batch(BatchRequest) returns (BatchResponse) {}
-  rpc BatchStream(stream BatchRequest) returns (stream BatchResponse) {}
-}
-
-// TenantService provides RPCs for secondary tenants to access data that is
-// exclusively available in the system tenant. This service is used by the
-// tenant connector.
-service TenantService {
-  // TenantSettings is used by tenants to obtain and stay up to date with tenant
-  // setting overrides.
-  rpc TenantSettings(TenantSettingsRequest) returns (stream TenantSettingsEvent) {}
-
-  rpc GossipSubscription(GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
-
-  rpc RangeLookup(RangeLookupRequest) returns (RangeLookupResponse) {}
-
-  // GetRangeDescriptors is used by tenants to get range descriptors for their
-  // own ranges.
-  rpc GetRangeDescriptors(GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) {}
-}
-
-// TenantUsage provides RPCs for secondary tenants to report resource
-// consumption and get Request Units available.
-service TenantUsage {
-  // TokenBucket is used by tenants to obtain Request Units and report
-  // consumption.
-  rpc TokenBucket (TokenBucketRequest) returns (TokenBucketResponse) {}
-}
-
-// TenantSpanConfig provides RPCs for secondary tenants to operate on span
-// configs, such as reading and updating them.
-service TenantSpanConfig {
-  // GetSpanConfigs is used to fetch the span configurations over a given
-  // keyspan.
-  rpc GetSpanConfigs(GetSpanConfigsRequest) returns (GetSpanConfigsResponse) {}
-
-  // GetAllSystemSpanConfigsThatApply is used to fetch all system span
-  // configurations that apply over a tenant's ranges.
-  rpc GetAllSystemSpanConfigsThatApply(GetAllSystemSpanConfigsThatApplyRequest) returns (GetAllSystemSpanConfigsThatApplyResponse) {}
-
-  // UpdateSpanConfigs is used to update the span configurations over given
-  // keyspans.
-  rpc UpdateSpanConfigs(UpdateSpanConfigsRequest) returns (UpdateSpanConfigsResponse) {}
-
-  // SpanConfigConformance is used to determine whether ranges backing the given
-  // keyspans conform to span configs that apply over them.
-  rpc SpanConfigConformance(SpanConfigConformanceRequest) returns (SpanConfigConformanceResponse) {}
-}
-
-// Node service offers RPCs for inter-node communication essential for
-// cluster bootstrapping and operation.
-service Node {
-  // Join a bootstrapped cluster. If the target node is itself not part of a
-  // bootstrapped cluster, an appropriate error is returned.
-  rpc Join (JoinNodeRequest) returns (JoinNodeResponse) {}
-}
-
-// RangeFeed service implemented by nodes for KV API requests.
-service RangeFeed {
-  rpc MuxRangeFeed (stream RangeFeedRequest) returns (stream MuxRangeFeedEvent) {}
-}
-
-// QuorumRecovery offers RPC to reset the quorum for the given range on the target
-// node.
-service QuorumRecovery {
-  rpc ResetQuorum (ResetQuorumRequest) returns (ResetQuorumResponse) {}
 }
 
 // Batch and RangeFeed service implemented by nodes for KV API requests.

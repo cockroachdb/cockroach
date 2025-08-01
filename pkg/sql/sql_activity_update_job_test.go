@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -104,23 +103,20 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	db.Exec(t, "SET SESSION application_name=$1", appName)
 	db.Exec(t, "SELECT 1;")
 
-	obsConn := sqlutils.MakeSQLRunner(ts.SQLConn(t))
-	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, obsConn, 1,
-		sqlstatstestutil.StatementFilter{App: appName})
-
 	ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, srv.AppStopper())
+
+	db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
 	// Run the updater to add rows to the activity tables.
 	// This will use the transfer all scenarios with there only
 	// being a few rows.
 	require.NoError(t, updater.TransferStatsToActivity(ctx))
 
-	verifyActivityTableContentHelper(t, obsConn, appName)
+	verifyActivityTableContentHelper(t, db, appName)
 }
 
 // TestMergeFunctionLogic verifies the merge functions used in the
 // SQL statements to verify the data.
-// Note(xinhaoz): This test should really be a sql data driven test.
 func TestMergeFunctionLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -148,28 +144,14 @@ func TestMergeFunctionLogic(t *testing.T) {
 	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 
 	appName := "TestMergeFunctionLogic"
-
-	ie := srv.InternalExecutor().(*InternalExecutor)
-	// Mock some entries in the activity table.
-	for i := 0; i < 3; i++ {
-		id := i + 1
-		stmt := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
-		stmt.ID = appstatspb.StmtFingerprintID(id)
-		stmt.AggregatedTs = stubTime
-		stmt.Key.App = appName
-		stmt.Key.TransactionFingerprintID = appstatspb.TransactionFingerprintID(id)
-		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtStats(ctx, ie,
-			[]appstatspb.CollectedStatementStatistics{stmt}, 0))
-
-		txn := sqlstatstestutil.GetRandomizedCollectedTransactionStatisticsForTest(t)
-		txn.AggregatedTs = stubTime
-		txn.App = appName
-		txn.TransactionFingerprintID = appstatspb.TransactionFingerprintID(id)
-		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnStats(ctx, ie,
-			[]appstatspb.CollectedTransactionStatistics{txn}, 0))
-	}
+	db.Exec(t, "SET SESSION application_name=$1", appName)
+	db.Exec(t, "SELECT * FROM system.statement_statistics")
+	db.Exec(t, "SELECT * FROM system.statement_statistics")
+	db.Exec(t, "SELECT count_rows() FROM system.transaction_statistics")
 
 	srv.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, srv.AppStopper())
+
+	db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
 	var localAggTxnStats appstatspb.TransactionStatistics
 	rows := db.Query(t, "SELECT statistics FROM system.public.transaction_statistics WHERE app_name = $1", appName)
@@ -235,7 +217,7 @@ func TestMergeFunctionLogic(t *testing.T) {
 		localAggStmtMeta.Add(&tempStats)
 	}
 
-	require.Equal(t, int64(3), localAggStmtMeta.TotalCount)
+	require.Equal(t, int64(2), localAggStmtMeta.TotalCount)
 
 	row = db.QueryRow(t, `SELECT merge_stats_metadata(metadata) AS metadata FROM system.public.statement_statistics WHERE app_name = $1 GROUP BY app_name`, appName)
 	var aggSqlStmtMeta appstatspb.AggregatedStatementMetadata
@@ -276,7 +258,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 
 	// Give permission to write to sys tables.
-	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)")
+	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
 	db.Exec(t, "GRANT node TO root")
 
 	// Make sure all the tables are empty initially.
@@ -329,11 +311,8 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		err = tx.Commit()
 		require.NoError(t, err)
 
-		obsConn := sqlutils.MakeSQLRunner(ts.SQLConn(t))
-		sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, obsConn, 1,
-			sqlstatstestutil.TransactionFilter{App: "topTransaction"})
+		db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
-		db.Exec(t, "SET SESSION application_name=''")
 		db.Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled  = true;")
 		ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, srv.AppStopper())
 		db.Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled  = false;")
@@ -344,7 +323,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		err = updater.TransferStatsToActivity(ctx)
 		require.NoError(t, err)
 
-		verifyTopActivityTableContentHelper(t, obsConn, 500)
+		verifyTopActivityTableContentHelper(t, db, 500)
 
 		// The max number of queries is number of top columns * max number of
 		// queries per a column (6*3=18 for this test, 6*500=3000 default). Most of
@@ -440,6 +419,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		rows := db.Query(t, `SELECT json_array_elements_text(metadata->'stmtFingerprintIDs') FROM system.public.transaction_activity where app_name = 'topTransaction' AND json_array_length(metadata->'stmtFingerprintIDs') = 2`)
 		stmtIdCnt := 0
 		for rows.Next() {
+			require.Less(t, stmtIdCnt, 2)
 			require.NoError(t, rows.Scan(&stmtIDs[stmtIdCnt]))
 			stmtIdCnt++
 		}
@@ -592,9 +572,6 @@ func TestTransactionActivityMetadata(t *testing.T) {
 	// Generate some sql stats data.
 	db.Exec(t, "SELECT 1;")
 
-	obsConn := sqlutils.MakeSQLRunner(ts.SQLConn(t))
-	sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, obsConn, 1)
-
 	// Flush and transfer stats.
 	var metadataJSON string
 	ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
@@ -612,8 +589,6 @@ func TestTransactionActivityMetadata(t *testing.T) {
 	// Do the same but testing transferTopStats.
 	db.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
 	db.Exec(t, "SELECT 1")
-
-	sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, obsConn, 1)
 
 	// Flush and transfer top stats.
 	ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
@@ -652,30 +627,37 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 	defer sqlDB.Close()
+	ts := s.ApplicationLayer()
+
+	execCfg := ts.ExecutorConfig().(ExecutorConfig)
+	st := cluster.MakeTestingClusterSettings()
+	updater := newSqlActivityUpdater(st, execCfg.InternalDB, sqlStatsKnobs)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 	// Generate a random app name each time to avoid conflicts
 	appName := "test_status_api" + uuid.MakeV4().String()
+	db.Exec(t, "SET SESSION application_name = $1", appName)
 
-	// Mock some entries in the activity table.
-	stmt := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
-	stmt.ID = 1
-	stmt.AggregatedTs = stubTime
-	stmt.Key.App = appName
-	stmt.Key.TransactionFingerprintID = 1
-	ie := s.InternalExecutor().(*InternalExecutor)
-	require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtActivity(ctx, ie, &stmt, nil))
-	require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtStats(ctx, ie,
-		[]appstatspb.CollectedStatementStatistics{stmt}, 0))
+	// Generate some sql stats data.
+	db.Exec(t, "SELECT 1;")
 
-	txn := sqlstatstestutil.GetRandomizedCollectedTransactionStatisticsForTest(t)
-	txn.AggregatedTs = stubTime
-	txn.App = appName
-	txn.TransactionFingerprintID = 1
-	require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnActivity(ctx, ie, &txn, nil))
-	require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnStats(ctx, ie,
-		[]appstatspb.CollectedTransactionStatistics{txn}, 0))
+	// Switch the app name back so any queries ran after do not get included
+	db.Exec(t, "SET SESSION application_name = '$ internal-test'")
+
+	// Flush and transfer stats.
+	var metadataJSON string
+	ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
+
+	// Ensure that the metadata column contains the populated 'stmtFingerprintIDs' field.
+	var metadata struct {
+		StmtFingerprintIDs []string `json:"stmtFingerprintIDs,"`
+	}
+
+	require.NoError(t, updater.TransferStatsToActivity(ctx))
+	db.QueryRow(t, "SELECT metadata FROM system.public.transaction_activity LIMIT 1").Scan(&metadataJSON)
+	require.NoError(t, json.Unmarshal([]byte(metadataJSON), &metadata))
+	require.NotEmpty(t, metadata.StmtFingerprintIDs)
 
 	// Hit query endpoint.
 	start := stubTime
@@ -684,7 +666,7 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 	if err := getStatusJSONProto(s, "combinedstmts", &resp, start, end); err != nil {
 		t.Fatal(err)
 	}
-	//require.NotEmpty(t, resp.Transactions)
+	require.NotEmpty(t, resp.Transactions)
 	require.NotEmpty(t, resp.Statements)
 
 	stmtAppNameCnt := getStmtAppNameCount(resp, appName)
@@ -694,7 +676,7 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 	require.Greater(t, txnAppNameCnt, 0)
 
 	// Grant permission and change the activity table info
-	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)")
+	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
 	db.Exec(t, "GRANT node TO root")
 	db.Exec(t, "UPDATE system.public.statement_activity SET app_name = 'randomapp' where app_name = $1;", appName)
 	db.Exec(t, "UPDATE system.public.transaction_activity SET app_name = 'randomapp' where app_name = $1;", appName)
@@ -807,7 +789,7 @@ func TestSqlActivityUpdaterDataDriven(t *testing.T) {
 
 		db := sqlutils.MakeSQLRunner(sqlDB)
 		// Give create privileges to root user.
-		db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)")
+		db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
 		db.Exec(t, "GRANT node TO root")
 		db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
 
@@ -838,7 +820,7 @@ func TestSqlActivityUpdaterDataDriven(t *testing.T) {
 						useIgnoreApp, err := strconv.ParseBool(arg.Vals[0])
 						require.NoError(t, err)
 						if useIgnoreApp {
-							db.Exec(t, "SET SESSION application_name=''")
+							db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 						} else {
 							db.Exec(t, "SET SESSION application_name=$1", appName)
 						}
@@ -1034,7 +1016,7 @@ func verifyTopActivityTableContentHelper(t *testing.T, db *sqlutils.SQLRunner, l
 		                        max(metadata) AS max_metadata,
 		                        merge_transaction_stats(statistics) as statistics
 					from system.public.transaction_statistics 
-						where app_name not like '$ internal%%' and app_name != ''
+						where app_name not like '$ internal%%' and app_name != 'randomIgnore'
 						group by aggregated_ts, fingerprint_id, app_name)
 				order by %s limit %d) ts
 		LEFT JOIN	(SELECT * FROM %s ) ta using (aggregated_ts, fingerprint_id, app_name)
@@ -1075,7 +1057,7 @@ func verifyTopActivityTableContentHelper(t *testing.T, db *sqlutils.SQLRunner, l
 		                        merge_stats_metadata(metadata)    AS merged_metadata,
 		                        merge_statement_stats(statistics) as statistics
 					from system.public.statement_statistics 
-						where app_name not like '$ internal%%' and app_name != ''
+						where app_name not like '$ internal%%' and app_name != 'randomIgnore'
 						group by aggregated_ts, fingerprint_id, app_name)
 				order by %s limit %d) ts
 		LEFT JOIN	(SELECT * FROM %s ) ta using (aggregated_ts, fingerprint_id, app_name)

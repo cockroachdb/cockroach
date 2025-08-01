@@ -142,7 +142,7 @@ export const Loading = (props: React.PropsWithChildren<LoadingProps>) => {
   }
   if (props.loading) {
     return (
-      <div data-testid={"loading-spinner"}>
+      <div>
         <Spinner className={cx("loading-indicator", props.loadingClassName)} />
         {props.loadingText && (
           <h2 className={cx("loading-text")}>{props.loadingText}</h2>

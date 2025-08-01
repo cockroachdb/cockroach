@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -33,7 +32,7 @@ type projectSetProcessor struct {
 	// eh contains the type-checked expression specified in the ROWS FROM
 	// syntax. It can contain many kinds of expressions (anything that is
 	// "function-like" including COALESCE, NULLIF), not just SRFs.
-	eh execexpr.MultiHelper
+	eh execinfrapb.MultiExprHelper
 
 	// funcs contains a valid pointer to a SRF FuncExpr for every entry
 	// in `exprHelpers` that is actually a SRF function application.

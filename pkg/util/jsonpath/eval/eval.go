@@ -234,6 +234,8 @@ func (ctx *jsonpathCtx) executeAnyItem(
 		agg = append(agg, evalResults...)
 		return nil
 	}
+	// TODO(normanchenn): Consider creating some kind of unified iterator interface
+	// for json arrays and objects.
 	switch jsonValue.Type() {
 	case json.ArrayJSONType:
 		for i := 0; i < jsonValue.Len(); i++ {

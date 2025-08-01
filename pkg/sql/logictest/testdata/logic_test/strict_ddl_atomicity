@@ -4,9 +4,9 @@ statement ok
 SET autocommit_before_ddl=off;
 
 statement ok
-CREATE TABLE testing (k int, v string) WITH (schema_locked=false);
+CREATE TABLE testing (k int, v string);
   INSERT INTO testing (k,v) VALUES (1, 'a'), (2, 'b'), (3, 'a'), (4, 'b');
-  CREATE TABLE unrelated(x INT) WITH (schema_locked=false);
+  CREATE TABLE unrelated(x INT)
 
 
 statement ok

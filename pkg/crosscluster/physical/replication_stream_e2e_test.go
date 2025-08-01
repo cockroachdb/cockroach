@@ -17,19 +17,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -45,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1576,227 +1572,4 @@ FROM [SHOW VIRTUAL CLUSTER '%s' WITH REPLICATION STATUS]
 
 	require.Equal(t, expectedReaderTenantName, name)
 	require.Equal(t, "ready", status)
-}
-
-// TestReaderTenantUpgrade ensures the reader tenant cannot upgrade itself or
-// via the system tenant, rather the user needs to upgrade the host cluster, and
-// then recreate the reader tenant.
-func TestReaderTenantUpgrade(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderDeadlock(t, "too slow")
-	skip.UnderRace(t, "too slow")
-
-	ctx := context.Background()
-	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.EnableReaderTenant = true
-	args.ServerKnobs = &server.TestingKnobs{
-		ClusterVersionOverride:         clusterversion.PreviousRelease.Version(),
-		DisableAutomaticVersionUpgrade: make(chan struct{}),
-	}
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
-	defer cleanup()
-
-	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-
-	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
-
-	stats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
-	readerTenantID := stats.IngestionDetails.ReadTenantID
-
-	readerTenantName := fmt.Sprintf("%s-readonly", args.DestTenantName)
-	c.ConnectToReaderTenant(ctx, readerTenantID, readerTenantName)
-
-	latestVersion := clusterversion.Latest.Version().String()
-
-	// Ensure the reader tenant is on the old version
-	c.ReaderTenantSQL.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
-		[][]string{{clusterversion.PreviousRelease.Version().String()}})
-
-	// Upgrade the host cluster and source app tenant to latest version.
-	c.DestSysSQL.Exec(t, fmt.Sprintf("SET CLUSTER SETTING version = '%s'", latestVersion))
-	c.SrcSysSQL.Exec(t, fmt.Sprintf("SET CLUSTER SETTING version = '%s'", latestVersion))
-	c.SrcTenantSQL.Exec(t, fmt.Sprintf("SET CLUSTER SETTING version = '%s'", latestVersion))
-
-	// Wait for replicating tenant to implicitly upgrade via replication.
-	c.WaitUntilReplicatedTime(c.SrcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
-
-	c.ReaderTenantSQL.ExpectErr(t, "cannot execute SET CLUSTER SETTING in a read-only transaction", fmt.Sprintf("SET CLUSTER SETTING version = '%s'", latestVersion))
-
-	// Ensure the reader tenant cannot upgrade itself even if we allow it to write.
-	c.ReaderTenantSQL.Exec(t, "SET SESSION bypass_pcr_reader_catalog_aost ='true'")
-	c.ReaderTenantSQL.ExpectErr(t, "reader virtual clusters cannot be upgraded", fmt.Sprintf("SET CLUSTER SETTING version = '%s'", latestVersion))
-
-	c.DestSysSQL.ExpectErr(t, "cannot set 'version' for tenants", fmt.Sprintf("ALTER TENANT '%s' SET CLUSTER SETTING version = '%s'", readerTenantName, latestVersion))
-
-	// Ensure we can restart the tenant and connect to it.
-	c.DestSysSQL.Exec(t, fmt.Sprintf("ALTER VIRTUAL CLUSTER '%s' STOP SERVICE", readerTenantName))
-	c.DestSysSQL.Exec(t, fmt.Sprintf("DROP VIRTUAL CLUSTER '%s'", readerTenantName))
-	c.DestSysSQL.Exec(t, fmt.Sprintf("ALTER VIRTUAL CLUSTER %s SET REPLICATION READ VIRTUAL CLUSTER", args.DestTenantName))
-	c.DestSysSQL.CheckQueryResults(t, "SELECT name, data_state FROM [SHOW TENANTS] ORDER BY name",
-		[][]string{{"destination", "replicating"}, {"destination-readonly", "ready"}, {"system", "ready"}})
-
-	newStats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
-	newReaderTenantID := newStats.IngestionDetails.ReadTenantID
-	require.NotEqual(t, readerTenantID, newReaderTenantID)
-
-	c.ConnectToReaderTenant(ctx, newReaderTenantID, readerTenantName)
-	waitForPollerJobToStart(t, c.ReaderTenantSQL)
-
-	// Ensure the reader tenant is on the new version
-	c.ReaderTenantSQL.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
-		[][]string{{latestVersion}})
-}
-
-// TestComputeStatsDiff is an end to end test that ensures that mvcc stats are
-// computed correctly on existing keyspace.
-func TestComputeStatsDiff(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
-	defer cleanup()
-
-	c.DestSysSQL.Exec(t, "SET CLUSTER SETTING bulkio.ingest.compute_stats_diff_in_stream_batcher.enabled = true")
-
-	c.DestSysSQL.Exec(t, "SET CLUSTER SETTING server.consistency_check.interval = '0s'")
-
-	c.SrcTenantSQL.Exec(t, "CREATE DATABASE test")
-	c.SrcTenantSQL.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
-	c.SrcTenantSQL.Exec(t, "INSERT INTO test.x VALUES (1, 1)")
-	c.SrcTenantSQL.Exec(t, "INSERT INTO test.x VALUES (3, 3)")
-
-	var tableID int
-	c.SrcTenantSQL.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'x'").Scan(&tableID)
-	tenantID := c.Args.DestTenantID
-	liveCountOverPKQuery := makeLiveCountOverPKQuery(tenantID, tableID)
-
-	var liveCount int64
-	c.DestSysSQL.QueryRow(t, liveCountOverPKQuery).Scan(&liveCount)
-	require.Equal(t, int64(0), liveCount)
-
-	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-
-	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
-
-	// Split out the index span we will gather stats so that
-	// crdb_internal.tenant_span_stats() uses the stats that hang off of the
-	// descriptor, instead of computing the stats manually.
-	splitPrimaryKeyIndexSpan(ctx, t, c.DestSysServer.DB(), tenantID, tableID)
-
-	c.DestSysSQL.QueryRow(t, liveCountOverPKQuery).Scan(&liveCount)
-	require.Equal(t, int64(2), liveCount)
-
-	// Update the row in the source table.
-	c.SrcTenantSQL.Exec(t, "UPDATE test.x SET n = '2' WHERE id = 1")
-	c.SrcTenantSQL.Exec(t, "UPDATE test.x SET n = '3' WHERE id = 1")
-
-	// Wait for the updated data to be replicated
-	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
-
-	c.DestSysSQL.QueryRow(t, liveCountOverPKQuery).Scan(&liveCount)
-	require.Equal(t, int64(2), liveCount)
-}
-
-// TestDelRangeStatsUpdates is an end to end test that ensures that mvcc stats are
-// computed correctly after replicating range key deletes.
-func TestDelRangeStatsUpdates(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
-	defer cleanup()
-
-	c.DestSysSQL.Exec(t, "SET CLUSTER SETTING server.debug.default_vmodule = 'stream_ingestion_processor=2'; ")
-
-	c.SrcTenantSQL.Exec(t, "CREATE DATABASE test")
-	c.SrcTenantSQL.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
-
-	var tableID int
-	c.SrcTenantSQL.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'x'").Scan(&tableID)
-	tenantID := c.Args.DestTenantID
-	liveCountOverPKQuery := makeLiveCountOverPKQuery(tenantID, tableID)
-
-	var liveCount int64
-	c.DestSysSQL.QueryRow(t, liveCountOverPKQuery).Scan(&liveCount)
-	require.Equal(t, int64(0), liveCount)
-
-	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-
-	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
-
-	// Split out the index span we will gather stats so that
-	// crdb_internal.tenant_span_stats() uses the stats that hang off of the
-	// descriptor, instead of computing the stats manually.
-	splitPrimaryKeyIndexSpan(ctx, t, c.DestSysServer.DB(), tenantID, tableID)
-
-	for i := 1; i <= 50; i++ {
-		c.SrcTenantSQL.Exec(t, fmt.Sprintf("INSERT INTO test.x VALUES (%d, %d)", i, i))
-	}
-
-	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
-
-	c.DestSysSQL.QueryRow(t, liveCountOverPKQuery).Scan(&liveCount)
-	require.Equal(t, int64(50), liveCount)
-
-	// Add 5 split points to the replicated table on destination cluster, to test
-	// that the recompute stats logic works on multiple ranges.
-	destCodec := keys.MakeSQLCodec(c.Args.DestTenantID)
-	for i := 1; i <= 5; i++ {
-		splitValue := i * 5
-		splitKey := destCodec.IndexPrefix(uint32(tableID), 1)
-		splitKey = encoding.EncodeVarintAscending(splitKey, int64(splitValue))
-		require.NoError(t, c.DestSysServer.DB().AdminSplit(ctx, splitKey, hlc.MaxTimestamp))
-	}
-
-	// Write a range key over table test.x's key span instead of dropping the
-	// table to guarantee that the srcTime below is after the range key write.
-	srcCodec := keys.MakeSQLCodec(c.Args.SrcTenantID)
-	tableSpan := roachpb.Span{
-		Key:    srcCodec.TablePrefix(uint32(tableID)),
-		EndKey: srcCodec.TablePrefix(uint32(tableID)).PrefixEnd(),
-	}
-	require.NoError(t, c.SrcSysServer.DB().DelRangeUsingTombstone(ctx, tableSpan.Key, tableSpan.EndKey))
-
-	srcTime = c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
-	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
-
-	c.DestSysSQL.QueryRow(t, liveCountOverPKQuery).Scan(&liveCount)
-	require.Equal(t, int64(0), liveCount)
-}
-
-// makeLiveCountOverPKQuery constructs a query to get live count stats for a table's primary key.
-func makeLiveCountOverPKQuery(tenantID roachpb.TenantID, tableID int) string {
-	return fmt.Sprintf(`SELECT stats->'approximate_total_stats'->'live_count' FROM crdb_internal.tenant_span_stats(ARRAY(SELECT(crdb_internal.index_span(%d,%d,1)[1],crdb_internal.index_span(%d,%d,1)[2])))`,
-		tenantID.ToUint64(), tableID, tenantID.ToUint64(), tableID)
-}
-
-// splitPrimaryKeyIndexSpan splits the primary key index span for a table to ensure
-// crdb_internal.tenant_span_stats() uses the stats that hang off of the descriptor.
-func splitPrimaryKeyIndexSpan(
-	ctx context.Context, t *testing.T, db *kv.DB, tenantID roachpb.TenantID, tableID int,
-) {
-	codec := keys.MakeSQLCodec(tenantID)
-	pkStartKey := codec.IndexPrefix(uint32(tableID), 1)
-	pkEndKey := pkStartKey.PrefixEnd()
-	require.NoError(t, db.AdminSplit(ctx, pkStartKey, hlc.MaxTimestamp))
-	require.NoError(t, db.AdminSplit(ctx, pkEndKey, hlc.MaxTimestamp))
 }

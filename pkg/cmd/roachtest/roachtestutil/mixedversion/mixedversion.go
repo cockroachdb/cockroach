@@ -295,11 +295,6 @@ type (
 		// Run implements the actual functionality of the step. This
 		// signature should remain in sync with `stepFunc`.
 		Run(context.Context, *logger.Logger, *rand.Rand, *Helper) error
-		// ConcurrencyDisabled returns true if the step should not be run
-		// concurrently with other steps. This is the case for any steps
-		// that involve restarting a node, as they may attempt to connect
-		// to an unavailable node.
-		ConcurrencyDisabled() bool
 	}
 
 	// singleStep represents steps that implement the pieces on top of
@@ -526,39 +521,6 @@ func DisableMutators(names ...string) CustomOption {
 	}
 }
 
-// DisableAllMutators will disable all available mutators.
-func DisableAllMutators() CustomOption {
-	return func(opts *testOptions) {
-		names := []string{}
-		for _, m := range planMutators {
-			names = append(names, m.Name())
-		}
-		DisableMutators(names...)(opts)
-	}
-}
-
-// DisableAllClusterSettingMutators will disable all available cluster setting mutators.
-func DisableAllClusterSettingMutators() CustomOption {
-	return func(opts *testOptions) {
-		names := []string{}
-		for _, m := range clusterSettingMutators {
-			names = append(names, m.Name())
-		}
-		DisableMutators(names...)(opts)
-	}
-}
-
-// DisableAllFailureInjectionMutators will disable all available failure injection mutators.
-func DisableAllFailureInjectionMutators() CustomOption {
-	return func(opts *testOptions) {
-		names := []string{}
-		for _, m := range failureInjectionMutators {
-			names = append(names, m.Name())
-		}
-		DisableMutators(names...)(opts)
-	}
-}
-
 // WithTag allows callers give the mixedversion test instance a
 // `tag`. The tag is used as prefix in the log messages emitted by
 // this upgrade test. This is only useful when running multiple
@@ -653,10 +615,6 @@ func NewTest(
 	crdbNodes option.NodeListOption,
 	options ...CustomOption,
 ) *Test {
-	if !t.Spec().(*registry.TestSpec).Monitor {
-		t.Fatal("mixedversion tests require enabling the global test monitor in the test spec")
-	}
-
 	opts := defaultTestOptions()
 	for _, fn := range options {
 		fn(&opts)
@@ -883,7 +841,7 @@ func (t *Test) RunE() (*TestPlan, error) {
 }
 
 func (t *Test) run(plan *TestPlan) error {
-	return newTestRunner(t.ctx, t.cancel, plan, t.rt, t.options.tag, t.logger, t.cluster).run()
+	return newTestRunner(t.ctx, t.cancel, plan, t.options.tag, t.logger, t.cluster).run()
 }
 
 func (t *Test) plan() (plan *TestPlan, retErr error) {

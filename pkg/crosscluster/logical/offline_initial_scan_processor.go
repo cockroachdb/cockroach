@@ -141,9 +141,7 @@ func (o *offlineInitialScanProcessor) setup(ctx context.Context) error {
 		true,            /* writeAtBatchTs */
 		true,            /* splitAndScatterRanges */
 		o.FlowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
-		o.FlowCtx.Cfg.BulkSenderLimiter,
-		nil,
-	)
+		o.FlowCtx.Cfg.BulkSenderLimiter)
 	if err != nil {
 		return err
 	}
@@ -379,9 +377,7 @@ func (o *offlineInitialScanProcessor) checkpoint(
 	if err := o.flushBatch(ctx); err != nil {
 		return errors.Wrap(err, "flushing batcher on checkpoint")
 	}
-	if err := o.batcher.Reset(ctx); err != nil {
-		return errors.Wrap(err, "resetting batcher on checkpoint")
-	}
+	o.batcher.Reset(ctx)
 
 	select {
 	case o.checkpointCh <- offlineCheckpoint{
@@ -413,9 +409,7 @@ func (o *offlineInitialScanProcessor) flushBatch(ctx context.Context) error {
 	if err := o.batcher.Flush(ctx); err != nil {
 		return err
 	}
-	if err := o.batcher.Reset(ctx); err != nil {
-		return errors.Wrap(err, "resetting batcher after flush")
-	}
+	o.batcher.Reset(ctx)
 	o.lastKeyAdded = roachpb.Key{}
 	return nil
 }

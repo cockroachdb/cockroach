@@ -149,6 +149,21 @@ func (a *testAuthAccessor) User() username.SQLUsername {
 	return a.user
 }
 
+func makeChangefeedPayload(owner string, tableIDs []descpb.ID) *jobspb.Payload {
+	specs := make([]jobspb.ChangefeedTargetSpecification, len(tableIDs))
+	for i, tableID := range tableIDs {
+		specs[i] = jobspb.ChangefeedTargetSpecification{
+			TableID: tableID,
+		}
+	}
+	return &jobspb.Payload{
+		Details: jobspb.WrapPayloadDetails(jobspb.ChangefeedDetails{
+			TargetSpecifications: specs,
+		}),
+		UsernameProto: username.MakeSQLUsernameFromPreNormalizedString(owner).EncodeProto(),
+	}
+}
+
 func makeBackupPayload(owner string) *jobspb.Payload {
 	return &jobspb.Payload{
 		Details:       jobspb.WrapPayloadDetails(jobspb.BackupDetails{}),
@@ -232,6 +247,38 @@ func TestAuthorization(t *testing.T) {
 			accessLevel: jobsauth.ControlAccess,
 		},
 		{
+			name:                 "changefeed-privilege-on-all-tables",
+			user:                 username.MakeSQLUsernameFromPreNormalizedString("user1"),
+			roleOptions:          map[roleoption.Option]struct{}{},
+			admins:               map[string]struct{}{},
+			changeFeedPrivileges: map[descpb.ID]struct{}{0: {}, 1: {}, 2: {}},
+
+			payload:     makeChangefeedPayload("user2", []descpb.ID{0, 1, 2}),
+			accessLevel: jobsauth.ControlAccess,
+		},
+		{
+			name:                 "changefeed-privilege-on-some-tables",
+			user:                 username.MakeSQLUsernameFromPreNormalizedString("user1"),
+			roleOptions:          map[roleoption.Option]struct{}{},
+			admins:               map[string]struct{}{},
+			changeFeedPrivileges: map[descpb.ID]struct{}{0: {}, 1: {}},
+
+			payload:     makeChangefeedPayload("user2", []descpb.ID{0, 1, 2}),
+			accessLevel: jobsauth.ControlAccess,
+			userErr:     pgerror.New(pgcode.InsufficientPrivilege, "foo"),
+		},
+		{
+			name:                 "changefeed-priv-on-some-tables-with-dropped",
+			user:                 username.MakeSQLUsernameFromPreNormalizedString("user1"),
+			roleOptions:          map[roleoption.Option]struct{}{},
+			admins:               map[string]struct{}{},
+			changeFeedPrivileges: map[descpb.ID]struct{}{0: {}, 1: {}},
+			droppedDescriptors:   map[descpb.ID]struct{}{2: {}},
+
+			payload:     makeChangefeedPayload("user2", []descpb.ID{0, 1, 2}),
+			accessLevel: jobsauth.ControlAccess,
+		},
+		{
 			name:   "viewjob-required-for-read-access",
 			user:   username.MakeSQLUsernameFromPreNormalizedString("user1"),
 			admins: map[string]struct{}{},
@@ -307,9 +354,10 @@ func TestAuthorization(t *testing.T) {
 			ctx := context.Background()
 			globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(ctx, testAuth)
 			assert.NoError(t, err)
-			err = jobsauth.Authorize(
+			err = jobsauth.AuthorizeAllowLegacyAuth(
 				ctx, testAuth, 0,
-				tc.payload.UsernameProto.Decode(), tc.accessLevel, globalPrivileges,
+				func(ctx context.Context) (*jobspb.Payload, error) { return tc.payload, nil },
+				tc.payload.UsernameProto.Decode(), tc.payload.Type(), tc.accessLevel, globalPrivileges,
 			)
 			assert.Equal(t, pgerror.GetPGCode(tc.userErr), pgerror.GetPGCode(err))
 		})

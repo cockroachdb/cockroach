@@ -374,7 +374,17 @@ func ImportFixture(
 		defer enableFn()
 	}
 
-	// Prepare the tables for ingestion via IMPORT INTO.
+	pathPrefix := csvServer
+	if pathPrefix == `` {
+		pathPrefix = `workload://`
+	}
+
+	// Pre-create tables. It's required that we pre-create the tables before we
+	// parallelize the IMPORT because for multi-region setups, the create table
+	// will end up modifying the crdb_internal_region type (to install back
+	// references). If create table is done in parallel with IMPORT, some IMPORT
+	// jobs may fail because the type is being modified concurrently with the
+	// IMPORT. Removing the need to pre-create is being tracked with #70987.
 	const maxTableBatchSize = 5000
 	currentTable := 0
 	for currentTable < len(tables) {
@@ -392,11 +402,6 @@ func ImportFixture(
 			return 0, err
 		}
 		currentTable += maxTableBatchSize
-	}
-
-	pathPrefix := csvServer
-	if pathPrefix == `` {
-		pathPrefix = `workload://`
 	}
 
 	// Default to unbounded unless a flag exists for it.

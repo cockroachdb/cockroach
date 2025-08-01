@@ -87,7 +87,7 @@ var errorOnConcurrentCreateStats = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.stats.error_on_concurrent_create_stats.enabled",
 	"set to true to error on concurrent CREATE STATISTICS jobs, instead of skipping them",
-	false,
+	true,
 	settings.WithPublic)
 
 const nonIndexColHistogramBuckets = 2
@@ -229,12 +229,6 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 // makeJobRecord creates a CreateStats job record which can be used to plan and
 // execute statistics creation.
 func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, error) {
-	// Check tenant-level read-only status first (applies to all tables in tenant).
-	if n.p.ExecCfg().TenantReadOnly {
-		return nil, pgerror.Newf(
-			pgcode.WrongObjectType, "cannot create statistics in read-only tenant")
-	}
-
 	var tableDesc catalog.TableDescriptor
 	var fqTableName string
 	var err error

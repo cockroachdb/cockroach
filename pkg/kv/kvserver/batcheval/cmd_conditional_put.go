@@ -54,7 +54,7 @@ func ConditionalPut(
 		ts = h.Timestamp
 	}
 
-	if err := args.Validate(h); err != nil {
+	if err := args.Validate(); err != nil {
 		return result.Result{}, err
 	}
 

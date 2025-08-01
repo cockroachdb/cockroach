@@ -36,7 +36,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
-        "//pkg/sql/vecindex/vecpb",
         "//pkg/util",
         "//pkg/util/base64",
         "//pkg/util/errorutil",
@@ -66,7 +65,6 @@ go_test(
     embed = [":explain"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

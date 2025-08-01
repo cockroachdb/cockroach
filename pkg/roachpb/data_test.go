@@ -514,10 +514,12 @@ func TestTransactionBumpReadTimestamp(t *testing.T) {
 			var txn Transaction
 			txn.ReadTimestamp = origReadTs
 			txn.WriteTimestamp = origWriteTs
+			txn.WriteTooOld = true
 
 			txn.BumpReadTimestamp(c.bumpTs)
 			require.Equal(t, c.expReadTs, txn.ReadTimestamp)
 			require.Equal(t, c.expWriteTs, txn.WriteTimestamp)
+			require.False(t, txn.WriteTooOld)
 		})
 	}
 }
@@ -602,6 +604,7 @@ var nonZeroTxn = Transaction{
 			Logical:  2,
 		},
 	}},
+	WriteTooOld:        true,
 	LockSpans:          []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:     []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
 	ReadTimestampFixed: true,
@@ -653,6 +656,30 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn4.Sequence = txn.Sequence + 10
 	require.Equal(t, expTxn4, txn4)
 
+	// Test the updates to the WriteTooOld field. The WriteTooOld field is
+	// supposed to be dictated by the transaction with the higher ReadTimestamp,
+	// or it's cumulative when the ReadTimestamps are equal.
+	{
+		txn2 := txn
+		txn2.ReadTimestamp = txn2.ReadTimestamp.Add(-1, 0)
+		txn2.WriteTooOld = false
+		txn2.Update(&txn)
+		require.True(t, txn2.WriteTooOld)
+	}
+	{
+		txn2 := txn
+		txn2.WriteTooOld = false
+		txn2.Update(&txn)
+		require.True(t, txn2.WriteTooOld)
+	}
+	{
+		txn2 := txn
+		txn2.ReadTimestamp = txn2.ReadTimestamp.Add(1, 0)
+		txn2.WriteTooOld = false
+		txn2.Update(&txn)
+		require.False(t, txn2.WriteTooOld)
+	}
+
 	// Updating a Transaction at a future epoch ignores all epoch-scoped fields.
 	var txn5 Transaction
 	txn5.ID = txn.ID
@@ -672,6 +699,7 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn5.LockSpans = nil
 	expTxn5.InFlightWrites = nil
 	expTxn5.IgnoredSeqNums = nil
+	expTxn5.WriteTooOld = false
 	expTxn5.ReadTimestampFixed = false
 	require.Equal(t, expTxn5, txn5)
 
@@ -853,6 +881,7 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.Sequence = 0
 	expTxn.WriteTimestamp = makeTS(25, 1)
 	expTxn.ReadTimestamp = makeTS(25, 1)
+	expTxn.WriteTooOld = false
 	expTxn.ReadTimestampFixed = false
 	expTxn.LockSpans = nil
 	expTxn.InFlightWrites = nil
@@ -867,6 +896,7 @@ func TestTransactionRefresh(t *testing.T) {
 	expTxn := nonZeroTxn
 	expTxn.WriteTimestamp = makeTS(25, 1)
 	expTxn.ReadTimestamp = makeTS(25, 1)
+	expTxn.WriteTooOld = false
 	require.Equal(t, expTxn, txn)
 }
 

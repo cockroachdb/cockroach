@@ -10,25 +10,26 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/errors"
+	"google.golang.org/grpc"
 )
 
 type unaryDRPCBatchServiceToInternalAdapter struct {
-	kvBatchClient      kvpb.RPCKVBatchClient
-	muxRangeFeedClient kvpb.RPCRangeFeedClient
-	drpcStreamPool     *rpc.DRPCBatchStreamPool
+	useStreamPoolClient bool
+	rpc.RestrictedInternalClient
+	drpcClient     kvpb.DRPCBatchClient
+	drpcStreamPool *rpc.DRPCBatchStreamPool
 }
 
 func (a *unaryDRPCBatchServiceToInternalAdapter) Batch(
-	ctx context.Context, in *kvpb.BatchRequest,
+	ctx context.Context, in *kvpb.BatchRequest, opts ...grpc.CallOption,
 ) (*kvpb.BatchResponse, error) {
-	if a.drpcStreamPool != nil {
+	if len(opts) > 0 {
+		return nil, errors.New("CallOptions unsupported")
+	}
+	if a.useStreamPoolClient && a.drpcStreamPool != nil {
 		return a.drpcStreamPool.Send(ctx, in)
 	}
-	return a.kvBatchClient.Batch(ctx, in)
-}
 
-func (a *unaryDRPCBatchServiceToInternalAdapter) MuxRangeFeed(
-	ctx context.Context,
-) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
-	return a.muxRangeFeedClient.MuxRangeFeed(ctx)
+	return a.drpcClient.Batch(ctx, in)
 }

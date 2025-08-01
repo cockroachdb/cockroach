@@ -110,7 +110,12 @@ func registerRebalanceLoad(r registry.Registry) {
 				),
 				// Only use the latest version of each release to work around #127029.
 				mixedversion.AlwaysUseLatestPredecessors,
-				mixedversion.MinimumSupportedVersion("v23.2.0"),
+				// There have been many performance improvements in versions 25.1.0+.
+				// In particular, the CPU utilization attributed to SQL can vary
+				// significantly between versions, which can lead to flakiness in these
+				// tests since the StoreRebalancer, which operates at the store level,
+				// is unaware of such CPU use (e.g. #150603).
+				mixedversion.MinimumSupportedVersion("v25.1.0"),
 			)
 			mvt.OnStartup("maybe enable split/scatter on tenant",
 				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
@@ -118,17 +123,15 @@ func registerRebalanceLoad(r registry.Registry) {
 				})
 			mvt.InMixedVersion("rebalance load run",
 				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-					binary := uploadCockroach(ctx, t, c, appNode, h.System.FromVersion)
 					return rebalanceByLoad(
-						ctx, t, l, c, maxDuration, concurrency, appNode,
-						fmt.Sprintf("%s workload", binary), numStores, numNodes)
+						ctx, t, l, c, rebalanceMode, maxDuration, concurrency, appNode, numStores, numNodes)
 				})
 			mvt.Run()
 		} else {
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 			require.NoError(t, rebalanceByLoad(
-				ctx, t, t.L(), c, maxDuration,
-				concurrency, appNode, "./cockroach workload", numStores, numNodes,
+				ctx, t, t.L(), c, rebalanceMode, maxDuration,
+				concurrency, appNode, numStores, numNodes,
 			))
 		}
 
@@ -153,14 +156,11 @@ func registerRebalanceLoad(r registry.Registry) {
 	)
 	r.Add(
 		registry.TestSpec{
-			Name:    `rebalance/by-load/leases/mixed-version`,
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
-			// Disabled on IBM because s390x is only built on master and mixed-version
-			// is impossible to test as of 05/2025.
-			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+			Name:             `rebalance/by-load/leases/mixed-version`,
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(4), // the last node is just used to generate load
+			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-			Monitor:          true,
 			Randomized:       true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
@@ -192,14 +192,11 @@ func registerRebalanceLoad(r registry.Registry) {
 	)
 	r.Add(
 		registry.TestSpec{
-			Name:    `rebalance/by-load/replicas/mixed-version`,
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
-			// Disabled on IBM because s390x is only built on master and mixed-version
-			// is impossible to test as of 05/2025.
-			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+			Name:             `rebalance/by-load/replicas/mixed-version`,
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(7), // the last node is just used to generate load
+			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-			Monitor:          true,
 			Randomized:       true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
@@ -244,20 +241,19 @@ func rebalanceByLoad(
 	t test.Test,
 	l *logger.Logger,
 	c cluster.Cluster,
+	rebalanceMode string,
 	maxDuration time.Duration,
 	concurrency int,
 	appNode option.NodeListOption,
-	workloadPath string,
 	numStores, numNodes int,
 ) error {
-
 	// We want each store to end up with approximately storeToRangeFactor
 	// (factor) leases such that the CPU load is evenly spread, e.g.
 	//   (n * factor) -1 splits = factor * n ranges = factor leases per store
 	// Note that we only assert on the CPU of each store w.r.t the mean, not
 	// the lease count.
 	splits := (numStores * storeToRangeFactor) - 1
-	c.Run(ctx, option.WithNodes(appNode), fmt.Sprintf("%s init kv --drop --splits=%d {pgurl:1}", workloadPath, splits))
+	c.Run(ctx, option.WithNodes(appNode), fmt.Sprintf("./cockroach workload init kv --drop --splits=%d {pgurl:1}", splits))
 
 	db := c.Conn(ctx, l, 1)
 	defer db.Close()
@@ -273,9 +269,9 @@ func rebalanceByLoad(
 	m.Go(func(ctx context.Context, l *logger.Logger) error {
 		l.Printf("starting load generator")
 		err := c.RunE(ctx, option.WithNodes(appNode), fmt.Sprintf(
-			"%s run kv --read-percent=95 --tolerate-errors --concurrency=%d "+
+			"./cockroach workload run kv --read-percent=95 --tolerate-errors --concurrency=%d "+
 				"--duration=%v {pgurl:1-%d}",
-			workloadPath, concurrency, maxDuration, numNodes))
+			concurrency, maxDuration, numNodes))
 		if errors.Is(ctx.Err(), context.Canceled) {
 			// We got canceled either because CPU balance was achieved or the
 			// other worker hit an error. In either case, it's not this worker's

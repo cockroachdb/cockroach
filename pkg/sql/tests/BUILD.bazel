@@ -134,7 +134,6 @@ go_test(
         "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//pkg/util/log/eventlog",
         "//pkg/util/randutil",
         "//pkg/util/ring",
         "//pkg/util/stop",

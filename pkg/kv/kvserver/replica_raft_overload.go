@@ -373,4 +373,5 @@ func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMa
 		// with more wasted work.
 		r.mu.internalRaftGroup.ReportUnreachable(raftpb.PeerID(replicaID))
 	}
+	r.mu.replicaFlowControlIntegration.onFollowersPaused(ctx)
 }

@@ -67,7 +67,6 @@ func (ts *tenantState) update(now time.Time) {
 			FirstInstance: 0,
 			Bucket: tenanttokenbucket.State{
 				TokenRefillRate: defaultRefillRate,
-				TokenCurrent:    10 * defaultRefillRate,
 			},
 		}
 		return

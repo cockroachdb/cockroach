@@ -54,7 +54,7 @@ func registerRoachmart(r registry.Registry) {
 		duration := " --duration=" + roachtestutil.IfLocal(c, "10s", "10m")
 
 		t.Status("running workload")
-		m := c.NewDeprecatedMonitor(ctx)
+		m := c.NewMonitor(ctx)
 		for i := range nodes {
 			i := i
 			m.Go(func(ctx context.Context) error {

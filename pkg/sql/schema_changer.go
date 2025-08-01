@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -34,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -309,106 +307,6 @@ func (sc *SchemaChanger) refreshMaterializedView(
 
 const schemaChangerBackfillTxnDebugName = "schemaChangerBackfill"
 
-// validateBackfillQueryIntoTable validates that source query matches the contents of
-// a backfilled table, when executing the query at queryTS.
-func (sc *SchemaChanger) validateBackfillQueryIntoTable(
-	ctx context.Context,
-	table catalog.TableDescriptor,
-	entryCountWrittenToPrimaryIdx int64,
-	queryTS hlc.Timestamp,
-	query string,
-	skipAOSTValidation bool,
-) error {
-	var aostEntryCount int64
-	sd := NewInternalSessionData(ctx, sc.execCfg.Settings, "validateBackfillQueryIntoTable")
-	sd.SessionData = *sc.sessionData
-	// First get the expected row count for the source query at the target timestamp.
-	if err := sc.execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		if skipAOSTValidation {
-			return nil
-		}
-		parsedQuery, err := parser.ParseOne(query)
-		if err != nil {
-			return err
-		}
-		// If the query has an AOST clause, then we will remove it here.
-		selectTop, ok := parsedQuery.AST.(*tree.Select)
-		if ok {
-			selectStmt := selectTop.Select
-			var parenSel *tree.ParenSelect
-			var ok bool
-			for parenSel, ok = selectStmt.(*tree.ParenSelect); ok; parenSel, ok = selectStmt.(*tree.ParenSelect) {
-				selectStmt = parenSel.Select.Select
-			}
-			sc, ok := selectStmt.(*tree.SelectClause)
-			if ok && sc.From.AsOf.Expr != nil {
-				sc.From.AsOf.Expr = nil
-				query = parsedQuery.AST.String()
-			}
-		}
-		// Inject the query and the time we should scan at.
-		err = txn.KV().SetFixedTimestamp(ctx, queryTS)
-		if err != nil {
-			return err
-		}
-		countQuery := fmt.Sprintf("SELECT count(*) FROM (%s)", query)
-		row, err := txn.QueryRow(ctx, "backfill-query-src-count", txn.KV(), countQuery)
-		if err != nil {
-			return err
-		}
-		aostEntryCount = int64(tree.MustBeDInt(row[0]))
-		return nil
-	}, isql.WithSessionData(sd),
-		isql.WithPriority(admissionpb.BulkNormalPri),
-	); err != nil {
-		return err
-	}
-	// Next run validation on table that was populated using count queries.
-	// Get rid of the table ID prefix.
-	index := table.GetPrimaryIndex()
-	now := sc.db.KV().Clock().Now()
-	builder := table.NewBuilder()
-	// Make the table public so that we can validate our expected
-	// counts match.
-	mut := builder.BuildExistingMutable().(*tabledesc.Mutable)
-	mut.SetPublic()
-	newTblEntryCount, err := countIndexRowsAndMaybeCheckUniqueness(ctx, mut, index, false,
-		descs.NewHistoricalInternalExecTxnRunner(now, func(ctx context.Context, fn descs.InternalExecFn) error {
-			return sc.execCfg.InternalDB.DescsTxn(ctx, func(
-				ctx context.Context, txn descs.Txn,
-			) error {
-				if err := txn.KV().SetFixedTimestamp(ctx, now); err != nil {
-					return err
-				}
-				return fn(ctx, txn)
-			}, isql.WithPriority(admissionpb.BulkNormalPri))
-		}),
-		sessiondata.NodeUserWithBulkLowPriSessionDataOverride)
-	if err != nil {
-		return err
-	}
-	// Testing knob that allows us to manipulate counts to fail
-	// the validation.
-	if sc.testingKnobs.RunDuringQueryBackfillValidation != nil {
-		newTblEntryCount, err = sc.testingKnobs.RunDuringQueryBackfillValidation(aostEntryCount, newTblEntryCount)
-		if err != nil {
-			return err
-		}
-	}
-	if entryCountWrittenToPrimaryIdx > 0 {
-		if newTblEntryCount != entryCountWrittenToPrimaryIdx {
-			return errors.AssertionFailedf(
-				"backfill query did not populate index %q with expected number of rows (expected: %d, got: %d)",
-				index.GetName(), entryCountWrittenToPrimaryIdx, newTblEntryCount,
-			)
-		}
-	}
-	if !skipAOSTValidation && newTblEntryCount != aostEntryCount {
-		return errors.AssertionFailedf("backfill query did not populate index %q with expected number of rows (expected: %d, got: %d)", index.GetName(), aostEntryCount, newTblEntryCount)
-	}
-	return nil
-}
-
 func (sc *SchemaChanger) backfillQueryIntoTable(
 	ctx context.Context,
 	table catalog.TableDescriptor,
@@ -435,13 +333,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			}
 		}
 	}()
-	validationTime := ts
-	var skipAOSTValidation bool
-	bulkSummary := kvpb.BulkOpSummary{}
-
 	err = sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		// Clear out the previous summary if the transaction gets retried.
-		bulkSummary = kvpb.BulkOpSummary{}
 		defer func() {
 			isTxnRetry = true
 		}()
@@ -537,12 +429,16 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 				return err
 			}
 		}
+
+		res := kvpb.BulkOpSummary{}
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+			// TODO(adityamaru): Use the BulkOpSummary for either telemetry or to
+			// return to user.
 			var counts kvpb.BulkOpSummary
 			if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
 				return err
 			}
-			bulkSummary.Add(counts)
+			res.Add(counts)
 			return nil
 		})
 		recv := MakeDistSQLReceiver(
@@ -580,6 +476,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 					}
 				}
 			}
+
 			planDistribution, _ := getPlanDistribution(
 				ctx, localPlanner.Descriptors().HasUncommittedTypes(),
 				localPlanner.extendedEvalCtx.SessionData(),
@@ -597,22 +494,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			}
 		})
 
-		if planAndRunErr != nil {
-			return planAndRunErr
-		}
-		// Otherwise, the select statement had no fixed timestamp. For
-		// validating counts we will start with the read timestamp.
-		if ts.IsEmpty() {
-			validationTime = txn.KV().ReadTimestamp()
-		}
-		// If a virtual table was used then we can't conduct any kind of validation,
-		// since our AOST query might be reading data not in KV.
-		for _, tbl := range localPlanner.curPlan.mem.Metadata().AllTables() {
-			if tbl.Table.IsVirtualTable() {
-				skipAOSTValidation = true
-			}
-		}
-		return nil
+		return planAndRunErr
 	})
 
 	// BatchTimestampBeforeGCError is retryable for the schema changer, but we
@@ -623,25 +505,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			errors.Wrap(err, "unable to retry backfill since fixed timestamp is before the GC timestamp"),
 		)
 	}
-	if err != nil {
-		return err
-	}
-
-	// Count how many keys were written to the primary index, as reported by the
-	// BulkAdder. We need a version gate since pre-25.4 clusters did not count
-	// correctly.
-	entriesWrittenToPrimaryIdx := int64(0)
-	if sc.execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_4) {
-		key := kvpb.BulkOpSummaryID(uint64(table.GetID()), uint64(table.GetPrimaryIndex().GetID()))
-		entriesWrittenToPrimaryIdx = bulkSummary.EntryCounts[key]
-	}
-
-	// Validation will be skipped if the query is not AOST safe.
-	// (i.e. reading non-KV data via CRDB internal)
-	if err := sc.validateBackfillQueryIntoTable(ctx, table, entriesWrittenToPrimaryIdx, validationTime, query, skipAOSTValidation); err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // maybe backfill a created table by executing the AS query. Return nil if
@@ -1682,9 +1546,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return catalog.MakeDescriptorIDSet(ids...), err
 		}
 		referencedTypeIDs, err := collectReferencedTypeIDs()
-		if err != nil {
-			return err
-		}
 
 		collectReferencedSequenceIDs := func() map[descpb.ID]descpb.ColumnIDs {
 			m := make(map[descpb.ID]descpb.ColumnIDs)
@@ -1698,34 +1559,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		}
 		referencedSequenceIDs := collectReferencedSequenceIDs()
 
-		collectReferencedFunctionIDs := func() (colRefs map[descpb.ID]descpb.ColumnIDs, idxRefs map[descpb.ID][]descpb.IndexID, err error) {
-			colRefs = make(map[descpb.ID]descpb.ColumnIDs)
-			idxRefs = make(map[descpb.ID][]descpb.IndexID)
-
-			// Collect function references from columns.
-			for _, col := range scTable.AllColumns() {
-				for i := 0; i < col.NumUsesFunctions(); i++ {
-					id := col.GetUsesFunctionID(i)
-					colRefs[id] = append(colRefs[id], col.GetID())
-				}
-			}
-
-			// Collect function references from partial index predicates.
-			for _, idx := range scTable.AllIndexes() {
-				if idx.IsPartial() {
-					fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(idx.GetPredicate())
-					if err != nil {
-						return nil, nil, err
-					}
-					fnIDs.ForEach(func(id descpb.ID) {
-						idxRefs[id] = append(idxRefs[id], idx.GetID())
-					})
-				}
-			}
-
-			return colRefs, idxRefs, nil
-		}
-		referencedFunctionIDsFromCols, referencedFunctionIDsFromIndexes, err := collectReferencedFunctionIDs()
 		if err != nil {
 			return err
 		}
@@ -2092,113 +1925,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 				tbl.UpdateColumnsDependedOnBy(scTable.ID, colIDSet)
 				if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, tbl, b); err != nil {
-					return err
-				}
-			}
-		}
-
-		// Now do the same as the above but for referenced functions.
-		if !scTable.Dropped() {
-			newReferencedFunctionIDsFromCols, newReferencedFunctionIDsFromIndexes, err := collectReferencedFunctionIDs()
-			if err != nil {
-				return err
-			}
-			update := make(map[descpb.ID]catalog.TableColSet, len(newReferencedFunctionIDsFromCols)+len(referencedFunctionIDsFromCols))
-			for id := range referencedFunctionIDsFromCols {
-				if _, found := newReferencedFunctionIDsFromCols[id]; !found {
-					// Mark id as requiring update, empty col set means deletion.
-					update[id] = catalog.TableColSet{}
-				}
-			}
-			for id, newColIDs := range newReferencedFunctionIDsFromCols {
-				newColIDSet := catalog.MakeTableColSet(newColIDs...)
-				var oldColIDSet catalog.TableColSet
-				if oldColIDs, found := referencedFunctionIDsFromCols[id]; found {
-					oldColIDSet = catalog.MakeTableColSet(oldColIDs...)
-				}
-				union := catalog.MakeTableColSet(newColIDs...)
-				union.UnionWith(oldColIDSet)
-				if union.Len() != oldColIDSet.Len() || union.Len() != newColIDSet.Len() {
-					// Mark id as requiring update with new col set.
-					update[id] = newColIDSet
-				}
-			}
-
-			// Update the set of back references.
-			for id, colIDSet := range update {
-				fnDesc, err := txn.Descriptors().MutableByID(txn.KV()).Function(ctx, id)
-				if err != nil {
-					return err
-				}
-				// Remove all column references from this table first.
-				for _, ref := range fnDesc.GetDependedOnBy() {
-					if ref.ID == scTable.ID {
-						for _, colID := range ref.ColumnIDs {
-							fnDesc.RemoveColumnReference(scTable.ID, colID)
-						}
-					}
-				}
-				// Now add the new column references.
-				colIDSet.ForEach(func(colID descpb.ColumnID) {
-					if err == nil {
-						err = fnDesc.AddColumnReference(scTable.ID, colID)
-					}
-				})
-				if err != nil {
-					return err
-				}
-				if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, fnDesc, b); err != nil {
-					return err
-				}
-			}
-
-			// Handle index references separately.
-			// We need to track which functions are referenced by indexes and update
-			// their back-references accordingly.
-			allFunctionIDs := make(map[descpb.ID]struct{})
-			for id := range referencedFunctionIDsFromCols {
-				allFunctionIDs[id] = struct{}{}
-			}
-			for id := range referencedFunctionIDsFromIndexes {
-				allFunctionIDs[id] = struct{}{}
-			}
-			for id := range newReferencedFunctionIDsFromCols {
-				allFunctionIDs[id] = struct{}{}
-			}
-			for id := range newReferencedFunctionIDsFromIndexes {
-				allFunctionIDs[id] = struct{}{}
-			}
-
-			// Update index references for all functions that have any relationship with this table.
-			for id := range allFunctionIDs {
-				fnDesc, err := txn.Descriptors().MutableByID(txn.KV()).Function(ctx, id)
-				if err != nil {
-					return err
-				}
-
-				// Determine which indexes currently reference this function.
-				var newIndexIDs []descpb.IndexID
-				if idxIDs, found := newReferencedFunctionIDsFromIndexes[id]; found {
-					newIndexIDs = idxIDs
-				}
-
-				// Remove all existing index references from this table.
-				for _, ref := range fnDesc.GetDependedOnBy() {
-					if ref.ID == scTable.ID {
-						for _, idxID := range ref.IndexIDs {
-							fnDesc.RemoveIndexReference(scTable.ID, idxID)
-						}
-					}
-				}
-
-				// Add the new index references.
-				for _, idxID := range newIndexIDs {
-					if err := fnDesc.AddIndexReference(scTable.ID, idxID); err != nil {
-						return err
-					}
-				}
-
-				if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, fnDesc, b); err != nil {
 					return err
 				}
 			}
@@ -2908,10 +2634,6 @@ type SchemaChangerTestingKnobs struct {
 
 	// RunBeforeModifyRowLevelTTL is called just before the modify row level TTL is committed.
 	RunBeforeModifyRowLevelTTL func() error
-
-	// RunAfterQueryBackfillValidation is called right after validation is executed
-	// for a query backfill.
-	RunDuringQueryBackfillValidation func(expectedCount int64, currentCount int64) (newCurrentCount int64, err error)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -3031,7 +2753,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 		}
 
 		// The schema change may have to be retried if it is not first in line or
-		// for other retryable reasons so we run it in an exponential backoff retry
+		// for other retriable reasons so we run it in an exponential backoff retry
 		// loop. The loop terminates only if the context is canceled.
 		var scErr error
 		for r := retry.StartWithCtx(ctx, opts); r.Next(); {

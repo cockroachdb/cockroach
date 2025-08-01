@@ -45,15 +45,6 @@ func init() {
 						TypeIDs:                    this.UsesTypeIDs,
 					}
 				}),
-				emit(func(this *scpb.View) *scop.RemoveBackReferenceInFunctions {
-					if len(this.UsesRoutineIDs) == 0 {
-						return nil
-					}
-					return &scop.RemoveBackReferenceInFunctions{
-						BackReferencedDescriptorID: this.ViewID,
-						FunctionIDs:                this.UsesRoutineIDs,
-					}
-				}),
 				emit(func(this *scpb.View) *scop.RemoveBackReferencesInRelations {
 					if len(this.UsesRelationIDs) == 0 {
 						return nil

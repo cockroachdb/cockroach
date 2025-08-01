@@ -263,7 +263,6 @@ vectorized: true
         │ table: xyz@xyz_pkey
         │ key columns: x
         │ locking strength: for update
-        │ parallel
         │
         └── • scan
               columns: (x, y)
@@ -299,7 +298,6 @@ vectorized: true
         │ table: xyz@xyz_pkey
         │ key columns: x
         │ locking strength: for update
-        │ parallel
         │
         └── • scan
               columns: (x, y)
@@ -339,7 +337,6 @@ vectorized: true
         │ table: xyz@xyz_pkey
         │ key columns: x
         │ locking strength: for update
-        │ parallel
         │
         └── • scan
               columns: (x, y)
@@ -545,7 +542,6 @@ vectorized: true
             │ estimated row count: 1,000 (missing stats)
             │ table: t38799@t38799_pkey
             │ key columns: a
-            │ parallel
             │
             └── • scan
                   columns: (a, b)
@@ -1025,20 +1021,28 @@ quality of service: regular
 │
 └── • render
     │
-    └── • scan
-          sql nodes: <hidden>
-          kv nodes: <hidden>
-          regions: <hidden>
-          actual row count: 0
-          KV time: 0µs
-          KV rows decoded: 0
-          KV bytes read: 0 B
-          KV gRPC calls: 0
-          estimated max memory allocated: 0 B
-          missing stats
-          table: t137352@t137352_pkey
-          spans: [/1 - /1]
-          locking strength: for update
+    └── • lookup join
+        │ sql nodes: <hidden>
+        │ kv nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 0
+        │ KV time: 0µs
+        │ KV rows decoded: 0
+        │ KV bytes read: 0 B
+        │ KV gRPC calls: 0
+        │ execution time: 0µs
+        │ estimated max memory allocated: 0 B
+        │ table: t137352@t137352_pkey
+        │ equality: ($1) = (k)
+        │ equality cols are key
+        │ locking strength: for update
+        │
+        └── • values
+              sql nodes: <hidden>
+              regions: <hidden>
+              actual row count: 1
+              execution time: 0µs
+              size: 1 column, 1 row
 
 statement ok
 INSERT INTO t137352 VALUES (1, 2, 3);
@@ -1289,20 +1293,29 @@ quality of service: regular
                 │ equality: (k) = (a)
                 │ pred: a = 1
                 │
-                └── • scan
-                      sql nodes: <hidden>
-                      kv nodes: <hidden>
-                      regions: <hidden>
-                      actual row count: 1
-                      KV time: 0µs
-                      KV rows decoded: 1
-                      KV pairs read: 2
-                      KV bytes read: 8 B
-                      KV gRPC calls: 1
-                      estimated max memory allocated: 0 B
-                      estimated row count: 1
-                      table: t137352@t137352_pkey
-                      spans: [/1 - /1]
+                └── • lookup join
+                    │ sql nodes: <hidden>
+                    │ kv nodes: <hidden>
+                    │ regions: <hidden>
+                    │ actual row count: 1
+                    │ KV time: 0µs
+                    │ KV rows decoded: 1
+                    │ KV pairs read: 2
+                    │ KV bytes read: 8 B
+                    │ KV gRPC calls: 1
+                    │ execution time: 0µs
+                    │ estimated max memory allocated: 0 B
+                    │ estimated row count: 1
+                    │ table: t137352@t137352_pkey
+                    │ equality: ($1) = (k)
+                    │ equality cols are key
+                    │
+                    └── • values
+                          sql nodes: <hidden>
+                          regions: <hidden>
+                          actual row count: 1
+                          execution time: 0µs
+                          size: 1 column, 1 row
 
 statement ok
 DELETE FROM t137352 WHERE true;

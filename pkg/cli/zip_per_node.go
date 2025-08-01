@@ -132,7 +132,7 @@ func (zc *debugZipContext) collectPerNodeData(
 // makePerNodeZipRequests defines the zipRequests (API requests) that are to be
 // performed once per node.
 func makePerNodeZipRequests(
-	zr *zipReporter, prefix, id string, status serverpb.RPCStatusClient,
+	zr *zipReporter, prefix, id string, status serverpb.StatusClient,
 ) []zipRequest {
 	var zipRequests []zipRequest
 
@@ -271,9 +271,6 @@ func (zc *debugZipContext) collectFileList(
 	case serverpb.FileType_CPU:
 		fileKind = "cpu profile"
 		prefix = prefix + "/cpuprof"
-	case serverpb.FileType_EXECUTIONTRACE:
-		fileKind = "execution trace"
-		prefix = prefix + "/executiontraces"
 	default:
 		return errors.AssertionFailedf("unknown file type: %v", fileType)
 	}
@@ -517,12 +514,6 @@ func (zc *debugZipContext) getProfiles(
 	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_CPU); err != nil {
 		return err
 	}
-
-	// Collect all relevant execution traces.
-	if err := zc.collectFileList(ctx, nodePrinter, id, prefix, serverpb.FileType_EXECUTIONTRACE); err != nil {
-		return err
-	}
-
 	return nil
 }
 

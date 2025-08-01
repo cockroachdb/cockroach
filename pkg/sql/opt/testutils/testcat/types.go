@@ -97,12 +97,7 @@ func (tc *Catalog) ResolveType(
 
 // ResolveTypeByOID is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveTypeByOID(ctx context.Context, typID oid.Oid) (*types.T, error) {
-	// Look for a builtin type first.
-	if typ, ok := types.OidToType[typID]; ok {
-		return typ, nil
-	}
-
-	// Look for a matching user-defined enum type.
+	// First look for a matching user-defined enum type.
 	for _, typ := range tc.enumTypes {
 		if typ.Oid() == typID {
 			return typ, nil

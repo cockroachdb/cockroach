@@ -6,7 +6,7 @@ environment:
   ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
   ROACHPROD_GCE_DNS_ZONE: drt
   ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
-  CLUSTER: drt-scale-300:211-300
+  CLUSTER: drt-scale-300:151-300
 
 targets:
   - target_name: $CLUSTER
@@ -15,12 +15,7 @@ targets:
         args:
           - $CLUSTER
           - release
-          - v25.2.0-rc.1 # for libgeos
-      - command: stage
-        args:
-          - $CLUSTER
-          - cockroach
-          - release-25.2.1-rc
+          - v25.1.1
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
       - command: start
         args:
@@ -30,7 +25,7 @@ targets:
         flags:
           # add flag to set provisioned throughput on each store according to their cloud provider limits
           enable-fluent-sink: true
-          store-count: 2
+          store-count: 4
           args: --wal-failover=among-stores
           restart: false
           sql-port: 26257

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -153,6 +153,33 @@ func (i *initState) validate() error {
 		return errors.New("missing node ID")
 	}
 	return nil
+}
+
+// initialStoreIDs returns the initial set of store IDs a node starts off with.
+// If it's a restarting node, restarted with no additional stores, this is just
+// all the local store IDs. If there's an additional store post-restart that's
+// yet to be initialized, it's not found in this list. For nodes newly added to
+// the cluster, it's just the first initialized store. For the remaining stores
+// in all these cases, they're accessible through
+// (*initState).additionalStoreIDs once they're initialized.
+func (i *initState) initialStoreIDs() ([]roachpb.StoreID, error) {
+	return getStoreIDsInner(i.initializedEngines)
+}
+
+func (i *initState) additionalStoreIDs() ([]roachpb.StoreID, error) {
+	return getStoreIDsInner(i.uninitializedEngines)
+}
+
+func getStoreIDsInner(engines []storage.Engine) ([]roachpb.StoreID, error) {
+	storeIDs := make([]roachpb.StoreID, 0, len(engines))
+	for _, eng := range engines {
+		storeID, err := eng.GetStoreID()
+		if err != nil {
+			return nil, err
+		}
+		storeIDs = append(storeIDs, roachpb.StoreID(storeID))
+	}
+	return storeIDs, nil
 }
 
 // joinResult is used to represent the result of a node attempting to join
@@ -448,7 +475,7 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 func (s *initServer) attemptJoinTo(
 	ctx context.Context, addr string,
 ) (*kvpb.JoinNodeResponse, error) {
-	dialOpts, err := s.config.getDialOpts(ctx, addr, rpcbase.SystemClass)
+	dialOpts, err := s.config.getDialOpts(ctx, addr, rpc.SystemClass)
 	if err != nil {
 		return nil, err
 	}
@@ -466,10 +493,7 @@ func (s *initServer) attemptJoinTo(
 		BinaryVersion: &latestVersion,
 	}
 
-	var initClient kvpb.RPCNodeClient
-	if !rpcbase.TODODRPC {
-		initClient = kvpb.NewGRPCInternalClientAdapter(conn)
-	}
+	initClient := kvpb.NewInternalClient(conn)
 	resp, err := initClient.Join(ctx, req)
 	if err != nil {
 		status, ok := grpcstatus.FromError(errors.UnwrapAll(err))
@@ -587,7 +611,7 @@ type initServerCfg struct {
 	defaultZoneConfig       zonepb.ZoneConfig
 
 	// getDialOpts retrieves the gRPC dial options to use to issue Join RPCs.
-	getDialOpts func(ctx context.Context, target string, class rpcbase.ConnectionClass) ([]grpc.DialOption, error)
+	getDialOpts func(ctx context.Context, target string, class rpc.ConnectionClass) ([]grpc.DialOption, error)
 
 	// bootstrapAddresses is a list of node addresses (populated using --join
 	// addresses) that is used to form a connected graph/network of CRDB servers.
@@ -608,7 +632,7 @@ type initServerCfg struct {
 func newInitServerConfig(
 	ctx context.Context,
 	cfg Config,
-	getDialOpts func(context.Context, string, rpcbase.ConnectionClass) ([]grpc.DialOption, error),
+	getDialOpts func(context.Context, string, rpc.ConnectionClass) ([]grpc.DialOption, error),
 ) initServerCfg {
 	latestVersion := cfg.Settings.Version.LatestVersion()
 	minSupportedVersion := cfg.Settings.Version.MinSupportedVersion()

@@ -6,29 +6,13 @@
 
 # This script sets up the tpcc multiregion run configuration on the workload node.
 
-env_vars=(
-  "CLUSTER"
-  "WORKLOAD_CLUSTER"
-  "NUM_REGIONS"
-  "NODES_PER_REGION"
-  "REGIONS"
-  "TPCC_WAREHOUSES"
-  "DB_NAME"
-  "RUN_DURATION"
-  "NUM_CONNECTIONS"
-  "NUM_WORKERS"
-  "MAX_RATE"
-  "MAX_CONN_LIFETIME"
-  "TPCC_ACTIVE_WAREHOUSES"
-)
+env_vars=("CLUSTER" "WORKLOAD_CLUSTER" "NUM_REGIONS" "NODES_PER_REGION" "REGIONS" "TPCC_WAREHOUSES" "DB_NAME" "RUN_DURATION" "NUM_CONNECTIONS" "NUM_WORKERS" "MAX_RATE")
 for var in "${env_vars[@]}"; do
   if [ -z "${!var}" ]; then
     echo "$var is not set"
     exit
   fi
 done
-
-export ROACHPROD_DISABLED_PROVIDERS=IBM
 
 for NODE in $(seq 1 $NUM_REGIONS)
 do
@@ -47,35 +31,33 @@ do
   cat <<EOF >/tmp/tpcc_run.sh
 #!/usr/bin/env bash
 
-export ROACHPROD_DISABLED_PROVIDERS=IBM
 export ROACHPROD_GCE_DEFAULT_PROJECT=$ROACHPROD_GCE_DEFAULT_PROJECT
 ./roachprod sync
-PGURLS=\$(./roachprod load-balancer pgurl $CLUSTER | sed s/\'//g)
-if [ -z "\$PGURLS" ]; then
-    echo ">> No load-balancer configured; falling back to direct pgurl"
-    PGURLS=\$(./roachprod pgurl $CLUSTER | sed s/\'//g)
-fi
+PGURLS=\$(./roachprod pgurl $CLUSTER:$NODE_OFFSET-$LAST_NODE_IN_REGION | sed s/\'//g)
 read -r -a PGURLS_REGION <<< "\$PGURLS"
 
-echo ">> Starting tpcc workload"
-./cockroach workload run tpcc \
-    --db=$DB_NAME \
-    --warehouses=$TPCC_WAREHOUSES \
-    --active-warehouses=$TPCC_ACTIVE_WAREHOUSES \
-    --ramp=5m \
-    --duration=$RUN_DURATION \
-    --wait=true \
-    --partitions=$NUM_REGIONS \
-    --partition-affinity=$(($NODE-1)) \
-    --tolerate-errors \
-    --survival-goal region \
-    --regions=$REGIONS \
-    --max-conn-lifetime=$MAX_CONN_LIFETIME \
-    --conns=$NUM_CONNECTIONS \
-    --local-warehouses=true \
-    \${PGURLS_REGION[@]}
+j=0
+while true; do
+  echo ">> Starting tpcc workload"
+  ((j++))
+  ./workload run tpcc \
+      --db=$DB_NAME \
+      --ramp=10m \
+      --conns=$NUM_CONNECTIONS \
+      --workers=$EFFECTIVE_NUM_WORKERS \
+      --warehouses=$TPCC_WAREHOUSES \
+      --max-rate=$MAX_RATE \
+      --duration=$RUN_DURATION \
+      --wait=false \
+      --partitions=$NUM_REGIONS \
+      --partition-affinity=$(($NODE-1)) \
+      --tolerate-errors \
+      \${PGURLS_REGION[@]} \
+      --survival-goal region \
+      --regions=$REGIONS
+done
 EOF
 
-  drtprod put $WORKLOAD_CLUSTER:$NODE /tmp/tpcc_run.sh
-  drtprod ssh $WORKLOAD_CLUSTER:$NODE -- "chmod +x tpcc_run.sh"
+  ./bin/drtprod put $WORKLOAD_CLUSTER:$NODE /tmp/tpcc_run.sh
+  ./bin/drtprod ssh $WORKLOAD_CLUSTER:$NODE -- "chmod +x tpcc_run.sh"
 done

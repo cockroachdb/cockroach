@@ -7,8 +7,6 @@ package ttljob
 
 import (
 	"context"
-	"math/rand"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -33,11 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	pbtypes "github.com/gogo/protobuf/types"
 )
 
 var replanThreshold = settings.RegisterFloatSetting(
@@ -56,45 +50,19 @@ var replanFrequency = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
-var replanStabilityWindow = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"sql.ttl.replan_stability_window",
-	"number of consecutive replan evaluations required before triggering a replan; set to 1 to disable stability window",
-	2,
-	settings.PositiveInt,
-)
-
 // rowLevelTTLResumer implements the TTL job. The job can run on any node, but
 // the job node distributes SELECT/DELETE work via DistSQL to ttlProcessor
 // nodes. DistSQL divides work into spans that each ttlProcessor scans in a
 // SELECT/DELETE loop.
 type rowLevelTTLResumer struct {
-	job          *jobs.Job
-	st           *cluster.Settings
-	physicalPlan *sql.PhysicalPlan
-	planCtx      *sql.PlanningCtx
-
-	// consecutiveReplanDecisions tracks how many consecutive times replan was deemed necessary.
-	consecutiveReplanDecisions *atomic.Int64
-
-	mu struct {
-		syncutil.Mutex
-		// lastUpdateTime is the wall time of the last job progress update.
-		// Used to gate how often we persist job progress in refreshProgress.
-		lastUpdateTime time.Time
-		// lastSpanCount is the number of spans processed as of the last persisted update.
-		lastSpanCount int64
-		// updateEvery determines how many spans must be processed before we persist a new update.
-		updateEvery int64
-		// updateEveryDuration is the minimum time that must pass before allowing another progress update.
-		updateEveryDuration time.Duration
-	}
+	job *jobs.Job
+	st  *cluster.Settings
 }
 
 var _ jobs.Resumer = (*rowLevelTTLResumer)(nil)
 
 // Resume implements the jobs.Resumer interface.
-func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (retErr error) {
+func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (retErr error) {
 	defer func() {
 		if retErr == nil {
 			return
@@ -286,32 +254,36 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		return physicalPlan, planCtx, nil
 	}
 
-	var err error
-	t.physicalPlan, t.planCtx, err = makePlan(ctx, distSQLPlanner)
+	metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter()
+
+	physicalPlan, planCtx, err := makePlan(ctx, distSQLPlanner)
 	if err != nil {
 		return err
 	}
 
-	if err := t.initProgressInJob(ctx, int64(jobSpanCount)); err != nil {
+	if err := t.job.NoTxn().Update(ctx,
+		func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			progress := md.Progress
+			rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
+			rowLevelTTL.JobTotalSpanCount = int64(jobSpanCount)
+			rowLevelTTL.JobProcessedSpanCount = 0
+			progress.Progress = &jobspb.Progress_FractionCompleted{
+				FractionCompleted: 0,
+			}
+			ju.UpdateProgress(progress)
+			return nil
+		},
+	); err != nil {
 		return err
 	}
-
-	metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter(
-		func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
-			return t.refreshProgressInJob(ctx, meta)
-		},
-	)
 
 	// Get a function to be used in a goroutine to monitor whether a replan is
 	// needed due to changes in node membership. This is important because if
 	// there are idle nodes that become available, it's more efficient to restart
 	// the TTL job to utilize those nodes for parallel work.
 	replanChecker, cancelReplanner := sql.PhysicalPlanChangeChecker(
-		ctx, t.physicalPlan, makePlan, jobExecCtx,
-		replanDecider(t.consecutiveReplanDecisions,
-			func() int64 { return replanStabilityWindow.Get(&execCfg.Settings.SV) },
-			func() float64 { return replanThreshold.Get(&execCfg.Settings.SV) },
-		),
+		ctx, physicalPlan, makePlan, jobExecCtx,
+		sql.ReplanOnChangedFraction(func() float64 { return replanThreshold.Get(&execCfg.Settings.SV) }),
 		func() time.Duration { return replanFrequency.Get(&execCfg.Settings.SV) },
 	)
 
@@ -339,9 +311,9 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		evalCtxCopy := jobExecCtx.ExtendedEvalContext().Context.Copy()
 		distSQLPlanner.Run(
 			ctx,
-			t.planCtx,
+			planCtx,
 			nil, /* txn */
-			t.physicalPlan,
+			physicalPlan,
 			distSQLReceiver,
 			evalCtxCopy,
 			nil, /* finishedSetupFn */
@@ -368,245 +340,22 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
-func (t *rowLevelTTLResumer) OnFailOrCancel(
+func (t rowLevelTTLResumer) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, _ error,
 ) error {
 	return nil
 }
 
 // CollectProfile implements the jobs.Resumer interface.
-func (t *rowLevelTTLResumer) CollectProfile(_ context.Context, _ interface{}) error {
+func (t rowLevelTTLResumer) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
-}
-
-// initProgressInJob initializes and persists the initial RowLevelTTL job progress state.
-// It computes throttling thresholds and writes an empty progress object to the job record.
-// This should be called once before job execution starts.
-func (t *rowLevelTTLResumer) initProgressInJob(ctx context.Context, jobSpanCount int64) error {
-	return t.job.NoTxn().Update(ctx, func(_ isql.Txn, _ jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		newProgress, err := t.initProgress(jobSpanCount)
-		if err != nil {
-			return err
-		}
-		ju.UpdateProgress(newProgress)
-		return nil
-	})
-}
-
-// refreshProgressInJob updates the job progress metadata based on input
-// from the last producer metadata received.
-//
-// In mixed-version clusters (25.3 and earlier), TTL processors fall back to
-// direct job table updates if any node in the cluster does not support
-// coordinator-based progress reporting. In that case, no processors will emit
-// progress metadata, so this callback will never be invoked.
-func (t *rowLevelTTLResumer) refreshProgressInJob(
-	ctx context.Context, meta *execinfrapb.ProducerMetadata,
-) error {
-	return t.job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		progress, err := t.refreshProgress(ctx, &md, meta)
-		if err != nil {
-			return err
-		}
-		if progress != nil {
-			ju.UpdateProgress(progress)
-		}
-		return nil
-	})
-}
-
-// initProgress initializes the RowLevelTTL job progress metadata, including
-// total span count and per-processor progress entries, based on the physical plan.
-// This should be called before the job starts execution.
-func (t *rowLevelTTLResumer) initProgress(jobSpanCount int64) (*jobspb.Progress, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	// To avoid too many progress updates, especially if a lot of the spans don't
-	// have expired rows, we will gate the updates to approximately every 1% of
-	// spans processed, and at least 60 seconds apart with jitter. This gating is
-	// done in refreshProgress.
-	t.mu.updateEvery = max(1, jobSpanCount/100)
-	t.mu.updateEveryDuration = 60*time.Second + time.Duration(rand.Int63n(10*1000))*time.Millisecond
-	t.mu.lastUpdateTime = timeutil.Now()
-	t.mu.lastSpanCount = 0
-
-	rowLevelTTL := &jobspb.RowLevelTTLProgress{
-		JobTotalSpanCount:     jobSpanCount,
-		JobProcessedSpanCount: 0,
-	}
-
-	progress := &jobspb.Progress{
-		Details: &jobspb.Progress_RowLevelTTL{RowLevelTTL: rowLevelTTL},
-		Progress: &jobspb.Progress_FractionCompleted{
-			FractionCompleted: 0,
-		},
-	}
-	return progress, nil
-}
-
-// refreshProgress ingests per-processor metadata pushed from TTL processors
-// and updates the job level progress. It recomputes total spans processed
-// and rows deleted, and sets the job level fraction completed.
-func (t *rowLevelTTLResumer) refreshProgress(
-	ctx context.Context, md *jobs.JobMetadata, meta *execinfrapb.ProducerMetadata,
-) (*jobspb.Progress, error) {
-	if meta.BulkProcessorProgress == nil {
-		return nil, nil
-	}
-	var incomingProcProgress jobspb.RowLevelTTLProcessorProgress
-	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &incomingProcProgress); err != nil {
-		return nil, errors.Wrapf(err, "unable to unmarshal ttl progress details")
-	}
-
-	orig := md.Progress.GetRowLevelTTL()
-	if orig == nil {
-		return nil, errors.New("job progress does not contain RowLevelTTL details")
-	}
-	rowLevelTTL := protoutil.Clone(orig).(*jobspb.RowLevelTTLProgress)
-
-	// Update or insert the incoming processor progress.
-	foundMatchingProcessor := false
-	for i := range rowLevelTTL.ProcessorProgresses {
-		if rowLevelTTL.ProcessorProgresses[i].ProcessorID == incomingProcProgress.ProcessorID {
-			rowLevelTTL.ProcessorProgresses[i] = incomingProcProgress
-			foundMatchingProcessor = true
-			break
-		}
-	}
-	if !foundMatchingProcessor {
-		rowLevelTTL.ProcessorProgresses = append(rowLevelTTL.ProcessorProgresses, incomingProcProgress)
-	}
-
-	// Recompute job level counters from scratch.
-	rowLevelTTL.JobDeletedRowCount = 0
-	rowLevelTTL.JobProcessedSpanCount = 0
-	totalSpanCount := int64(0)
-	for i := range rowLevelTTL.ProcessorProgresses {
-		pp := &rowLevelTTL.ProcessorProgresses[i]
-		rowLevelTTL.JobDeletedRowCount += pp.DeletedRowCount
-		rowLevelTTL.JobProcessedSpanCount += pp.ProcessedSpanCount
-		totalSpanCount += pp.TotalSpanCount
-	}
-
-	if totalSpanCount > rowLevelTTL.JobTotalSpanCount {
-		return nil, errors.Errorf(
-			"computed span total cannot exceed job total: computed=%d jobRecorded=%d",
-			totalSpanCount, rowLevelTTL.JobTotalSpanCount)
-	}
-
-	// Avoid the update if doing this too frequently.
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	processedDelta := rowLevelTTL.JobProcessedSpanCount - t.mu.lastSpanCount
-	processorComplete := incomingProcProgress.ProcessedSpanCount == incomingProcProgress.TotalSpanCount
-	firstProgressForProcessor := !foundMatchingProcessor
-
-	if !(processedDelta >= t.mu.updateEvery ||
-		timeutil.Since(t.mu.lastUpdateTime) >= t.mu.updateEveryDuration ||
-		processorComplete ||
-		firstProgressForProcessor) {
-		return nil, nil // Skip the update
-	}
-	t.mu.lastSpanCount = rowLevelTTL.JobProcessedSpanCount
-	t.mu.lastUpdateTime = timeutil.Now()
-
-	newProgress := &jobspb.Progress{
-		Details: &jobspb.Progress_RowLevelTTL{
-			RowLevelTTL: rowLevelTTL,
-		},
-		Progress: &jobspb.Progress_FractionCompleted{
-			FractionCompleted: float32(rowLevelTTL.JobProcessedSpanCount) /
-				float32(rowLevelTTL.JobTotalSpanCount),
-		},
-	}
-	return newProgress, nil
-}
-
-// replanDecider returns a function that determines whether a TTL job should be
-// replanned based on changes in the physical execution plan. It compares the
-// old and new plans to detect node availability changes and decides if the
-// benefit of replanning (better parallelization) outweighs the cost of
-// restarting the job. It implements a stability window to avoid replanning
-// due to transient changes.
-func replanDecider(
-	consecutiveReplanDecisions *atomic.Int64,
-	stabilityWindowFn func() int64,
-	thresholdFn func() float64,
-) sql.PlanChangeDecision {
-	return func(ctx context.Context, oldPlan, newPlan *sql.PhysicalPlan) bool {
-		changed, growth := detectNodeAvailabilityChanges(oldPlan, newPlan)
-		threshold := thresholdFn()
-		shouldReplan := threshold != 0.0 && growth > threshold
-
-		stabilityWindow := stabilityWindowFn()
-
-		var currentDecisions int64
-		if shouldReplan {
-			currentDecisions = consecutiveReplanDecisions.Add(1)
-		} else {
-			consecutiveReplanDecisions.Store(0)
-			currentDecisions = 0
-		}
-
-		// If stability window is 1, replan immediately. Otherwise, require
-		// consecutive decisions to meet the window threshold.
-		replan := currentDecisions >= stabilityWindow
-
-		// Reset the counter when we decide to replan, since the job will restart
-		if replan {
-			consecutiveReplanDecisions.Store(0)
-		}
-
-		if shouldReplan || growth > 0.1 || log.V(1) {
-			log.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, consecutive decisions %d/%d, replan %v",
-				changed, growth, threshold, currentDecisions, stabilityWindow, replan)
-		}
-
-		return replan
-	}
-}
-
-// detectNodeAvailabilityChanges analyzes differences between two physical plans
-// to determine if nodes have become unavailable. It returns the number of nodes
-// that are no longer available and the fraction of the original plan affected.
-//
-// The function focuses on detecting when nodes from the original plan are missing
-// from the new plan, which typically indicates node failures. When nodes fail,
-// their work gets redistributed to remaining nodes, making a job restart
-// beneficial for better parallelization. We ignore newly added nodes since
-// continuing the current job on existing nodes is usually more efficient than
-// restarting to incorporate new capacity.
-func detectNodeAvailabilityChanges(before, after *sql.PhysicalPlan) (int, float64) {
-	var changed int
-	beforeSpecs, beforeCleanup := before.GenerateFlowSpecs()
-	defer beforeCleanup(beforeSpecs)
-	afterSpecs, afterCleanup := after.GenerateFlowSpecs()
-	defer afterCleanup(afterSpecs)
-
-	// Count nodes from the original plan that are no longer present in the new plan.
-	// We only check nodes in beforeSpecs because we specifically want to detect
-	// when nodes that were doing work are no longer available, which typically
-	// indicates beneficial restart scenarios (node failures where work can be
-	// redistributed more efficiently).
-	for n := range beforeSpecs {
-		if _, ok := afterSpecs[n]; !ok {
-			changed++
-		}
-	}
-
-	var frac float64
-	if changed > 0 {
-		frac = float64(changed) / float64(len(beforeSpecs))
-	}
-	return changed, frac
 }
 
 func init() {
 	jobs.RegisterConstructor(jobspb.TypeRowLevelTTL, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &rowLevelTTLResumer{
-			job:                        job,
-			st:                         settings,
-			consecutiveReplanDecisions: &atomic.Int64{},
+			job: job,
+			st:  settings,
 		}
 	}, jobs.UsesTenantCostControl)
 }

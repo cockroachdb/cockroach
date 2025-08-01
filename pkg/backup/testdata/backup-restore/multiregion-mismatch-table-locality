@@ -22,13 +22,6 @@ defaultdb root <nil> <nil> {} <nil>
 postgres root <nil> <nil> {} <nil>
 system node <nil> <nil> {} <nil>
 
-# We need to currently unset and set schema_locked when
-# modifying table locality, since this functionality is not
-# supported in the declarative schema changer.
-exec-sql
-ALTER TABLE d.t SET (schema_locked=false);
-----
-
 # make our table regional by row
 exec-sql
 ALTER TABLE d.t SET LOCALITY REGIONAL BY ROW;
@@ -87,7 +80,7 @@ SELECT count(*) FROM d.t;
 exec-sql
 INSERT INTO d.t VALUES (4)
 ----
-pq: current database defaultdb is not multi-region enabled
+pq: default_to_database_primary_region(): current database defaultdb is not multi-region enabled
 
 exec-sql
 USE d;

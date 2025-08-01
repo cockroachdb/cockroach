@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -453,14 +452,14 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	if err != nil {
 		return err
 	}
-	c.scratch, keyCopy = c.scratch.Copy(encodedKey)
+	c.scratch, keyCopy = c.scratch.Copy(encodedKey, 0 /* extraCap */)
 	// TODO(yevgeniy): Some refactoring is needed in the encoder: namely, prevRow
 	// might not be available at all when working with changefeed expressions.
 	encodedValue, err := c.encoder.EncodeValue(ctx, evCtx, updatedRow, prevRow)
 	if err != nil {
 		return err
 	}
-	c.scratch, valueCopy = c.scratch.Copy(encodedValue)
+	c.scratch, valueCopy = c.scratch.Copy(encodedValue, 0 /* extraCap */)
 
 	// Since we're done processing/converting this event, and will not use much more
 	// than len(key)+len(bytes) worth of resources, adjust allocation to match.
@@ -686,9 +685,6 @@ func (c *parallelEventConsumer) startWorkers() error {
 		id := i
 		consumer := consumers[i]
 		workerClosure := func(ctx2 context.Context) error {
-			ctx2, sp := tracing.ChildSpan(ctx2, "changefeed.parallel_event_consumer.worker")
-			defer sp.Finish()
-
 			return c.workerLoop(ctx2, consumer, id)
 		}
 		c.g.GoCtx(workerClosure)

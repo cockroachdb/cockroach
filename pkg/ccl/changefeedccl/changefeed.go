@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/jsonpb"
 )
 
@@ -54,13 +53,13 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets changefeedbase.Targets) {
 	// TODO: Use a version gate for this once we have CDC version gates
 	if len(cd.TargetSpecifications) > 0 {
 		for _, ts := range cd.TargetSpecifications {
-			if ts.DescID > 0 {
+			if ts.TableID > 0 {
 				if ts.StatementTimeName == "" {
-					ts.StatementTimeName = cd.Tables[ts.DescID].StatementTimeName
+					ts.StatementTimeName = cd.Tables[ts.TableID].StatementTimeName
 				}
 				targets.Add(changefeedbase.Target{
 					Type:              ts.Type,
-					DescID:            ts.DescID,
+					TableID:           ts.TableID,
 					FamilyName:        ts.FamilyName,
 					StatementTimeName: changefeedbase.StatementTimeName(ts.StatementTimeName),
 				})
@@ -70,7 +69,7 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets changefeedbase.Targets) {
 		for id, t := range cd.Tables {
 			targets.Add(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-				DescID:            id,
+				TableID:           id,
 				StatementTimeName: changefeedbase.StatementTimeName(t.StatementTimeName),
 			})
 		}
@@ -89,9 +88,6 @@ const (
 func emitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, sink ResolvedTimestampSink, resolved hlc.Timestamp,
 ) error {
-	ctx, sp := tracing.ChildSpan(ctx, "changefeed.emit_resolved_timestamp")
-	defer sp.Finish()
-
 	// TODO(dan): Emit more fine-grained (table level) resolved
 	// timestamps.
 	if err := sink.EmitResolvedTimestamp(ctx, encoder, resolved); err != nil {

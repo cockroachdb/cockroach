@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -419,7 +418,7 @@ func TestInitIndexesAllowList(t *testing.T) {
 		ib := &IndexBackfiller{}
 		err := ib.initIndexes(
 			context.Background(),
-			&eval.Context{Codec: keys.SystemSQLCodec},
+			keys.SystemSQLCodec,
 			desc,
 			nil, /* allowList */
 			0,   /* sourceIndexID */
@@ -435,7 +434,7 @@ func TestInitIndexesAllowList(t *testing.T) {
 		ib := &IndexBackfiller{}
 		err := ib.initIndexes(
 			context.Background(),
-			&eval.Context{Codec: keys.SystemSQLCodec},
+			keys.SystemSQLCodec,
 			desc,
 			[]catid.IndexID{3}, /* allowList */
 			0,                  /* sourceIndexID */

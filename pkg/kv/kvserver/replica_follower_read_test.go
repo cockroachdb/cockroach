@@ -94,9 +94,7 @@ func TestCanServeFollowerRead(t *testing.T) {
 			r := tc.repl
 			r.mu.RLock()
 			defer r.mu.RUnlock()
-			require.Equal(t, test.expCanServeFollowerRead, r.canServeFollowerRead(ctx, ba,
-				r.shMu.state.Desc, r.shMu.state.LeaseAppliedIndex, r.shMu.state.Lease.Replica.NodeID,
-				r.shMu.state.RaftClosedTimestamp))
+			require.Equal(t, test.expCanServeFollowerRead, r.canServeFollowerReadRLocked(ctx, ba))
 		})
 	}
 }

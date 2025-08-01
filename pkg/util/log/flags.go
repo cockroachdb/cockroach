@@ -119,18 +119,6 @@ func ApplyConfig(
 	fd2CaptureCleanupFn := func() {}
 
 	closer := newBufferedSinkCloser()
-
-	// closes the underlying gRPC connection of OTLP sinks.
-	closeOTLPSinks := func() {
-		for _, fc := range sinkInfos {
-			if sink, ok := fc.sink.(*otlpSink); ok {
-				if err := sink.client.Close(); err != nil {
-					fmt.Fprintf(OrigStderr, "# OTLP Sink Cleanup Warning: %s\n", err.Error())
-				}
-			}
-		}
-	}
-
 	// logShutdownFn is the returned cleanup function, whose purpose
 	// is to tear down the work we are doing here.
 	logShutdownFn = func() {
@@ -139,7 +127,6 @@ func ApplyConfig(
 		logging.setChannelLoggers(make(map[Channel]*loggerT), &si)
 		fd2CaptureCleanupFn()
 		secLoggersCancel()
-		closeOTLPSinks()
 		if err := closer.Close(defaultCloserTimeout); err != nil {
 			fmt.Printf("# WARNING: %s\n", err.Error())
 		}
@@ -379,19 +366,6 @@ func ApplyConfig(
 		attachSinkInfo(httpSinkInfo, &fc.Channels)
 	}
 
-	// Create the OpenTelemetry sinks.
-	for _, fc := range config.Sinks.OTLPServers {
-		if fc.Filter == severity.NONE {
-			continue
-		}
-		otplSinkInfo, err := newOTLPSinkInfo(*fc)
-		if err != nil {
-			return nil, err
-		}
-		attachBufferWrapper(otplSinkInfo, fc.CommonSinkConfig.Buffering, closer)
-		attachSinkInfo(otplSinkInfo, &fc.Channels)
-	}
-
 	// Prepend the interceptor sink to all channels.
 	// We prepend it because we want the interceptors
 	// to see every event before they make their way to disk/network.
@@ -456,22 +430,6 @@ func newHTTPSinkInfo(c logconfig.HTTPSinkConfig) (*sinkInfo, error) {
 		return nil, err
 	}
 	info.sink = httpSink
-	return info, nil
-}
-
-func newOTLPSinkInfo(c logconfig.OTLPSinkConfig) (*sinkInfo, error) {
-	info := &sinkInfo{}
-
-	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
-		return nil, err
-	}
-	info.applyFilters(c.Channels)
-
-	otlpSink, err := newOTLPSink(c)
-	if err != nil {
-		return nil, err
-	}
-	info.sink = otlpSink
 	return info, nil
 }
 

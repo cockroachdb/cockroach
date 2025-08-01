@@ -1184,11 +1184,11 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1
 
 skipif config local-read-committed
-query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\).*\nHINT:.*transaction-retry-error-reference.html
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\).*\nHINT:.*transaction-retry-error-reference.html
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 onlyif config local-read-committed
-query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=100: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 query T
@@ -1326,11 +1326,11 @@ BEGIN TRANSACTION;
   SELECT 1;
 
 skipif config local-read-committed
-query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 onlyif config local-read-committed
-query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=100: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
@@ -1502,33 +1502,8 @@ COMMIT
 statement error cannot execute CREATE TABLE in a read-only transaction
 CREATE TABLE tab (a int)
 
-# EXPLAIN of a DDL is disallowed out of caution.
-statement error cannot execute CREATE TABLE in a read-only transaction
-EXPLAIN CREATE TABLE tab (a int)
-
 statement error cannot execute INSERT in a read-only transaction
 INSERT INTO kv VALUES('foo')
-
-# EXPLAIN of a mutation is allowed even in read-only mode.
-statement ok
-EXPLAIN INSERT INTO kv VALUES('foo')
-
-statement ok
-EXPLAIN (OPT) INSERT INTO kv VALUES('foo')
-
-statement ok
-EXPLAIN (DISTSQL) INSERT INTO kv VALUES('foo')
-
-skipif config local-vec-off fakedist-vec-off
-statement ok
-EXPLAIN (VEC) INSERT INTO kv VALUES('foo')
-
-statement ok
-EXPLAIN (GIST) INSERT INTO kv VALUES('foo')
-
-# EXPLAIN ANALYZE is still disallowed.
-statement error cannot execute INSERT in a read-only transaction
-EXPLAIN ANALYZE INSERT INTO kv VALUES('foo')
 
 statement error cannot execute UPDATE in a read-only transaction
 UPDATE kv SET v = 'foo'
@@ -1548,13 +1523,6 @@ SELECT * FROM kv FOR SHARE
 statement error cannot execute nextval\(\) in a read-only transaction
 SELECT nextval('a')
 
-# This is just a Values with an expression that hasn't been evaluated.
-statement ok
-EXPLAIN SELECT nextval('a')
-
-statement error pgcode 55000 pq: currval of sequence "test.public.a" is not yet defined in this session
-SELECT currval('a')
-
 statement error cannot execute setval\(\) in a read-only transaction
 SELECT setval('a', 2)
 
@@ -1563,10 +1531,6 @@ CREATE ROLE my_user
 
 statement error cannot execute ALTER ROLE in a read-only transaction
 ALTER ROLE testuser SET default_int_size = 4
-
-# EXPLAIN of an ALTER is disallowed out of caution.
-statement error cannot execute ALTER ROLE in a read-only transaction
-EXPLAIN ALTER ROLE testuser SET default_int_size = 4
 
 statement error cannot execute DROP ROLE in a read-only transaction
 DROP ROLE testuser
@@ -1634,11 +1598,11 @@ statement ok
 BEGIN; SELECT 1
 
 skipif config local-read-committed
-query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 onlyif config local-read-committed
-query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=100: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
@@ -1845,7 +1809,7 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
 onlyif config enterprise-configs
-statement error pq: unsupported in READ COMMITTED isolation
+statement error pq: cluster_logical_timestamp\(\): unsupported in READ COMMITTED isolation
 SELECT cluster_logical_timestamp();
 
 statement ok

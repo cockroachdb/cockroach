@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -1179,7 +1178,6 @@ func newOptTable(
 			originColumns:     fk.ForeignKeyDesc().OriginColumnIDs,
 			referencedTable:   cat.StableID(fk.GetReferencedTableID()),
 			referencedColumns: fk.ForeignKeyDesc().ReferencedColumnIDs,
-			constraintID:      fk.GetConstraintID(),
 			validity:          fk.GetConstraintValidity(),
 			match:             tree.CompositeKeyMatchMethodType[fk.Match()],
 			deleteAction:      tree.ForeignKeyReferenceActionType[fk.OnDelete()],
@@ -1193,7 +1191,6 @@ func newOptTable(
 			originColumns:     fk.ForeignKeyDesc().OriginColumnIDs,
 			referencedTable:   ot.ID(),
 			referencedColumns: fk.ForeignKeyDesc().ReferencedColumnIDs,
-			constraintID:      fk.GetConstraintID(),
 			validity:          fk.GetConstraintValidity(),
 			match:             tree.CompositeKeyMatchMethodType[fk.Match()],
 			deleteAction:      tree.ForeignKeyReferenceActionType[fk.OnDelete()],
@@ -1572,21 +1569,6 @@ func (ot *optTable) HomeRegionColName() (colName string, ok bool) {
 	return *regionalByRowConfig.As, true
 }
 
-// RegionalByRowUsingConstraint is part of the cat.Table interface.
-func (ot *optTable) RegionalByRowUsingConstraint() cat.ForeignKeyConstraint {
-	if !ot.desc.IsLocalityRegionalByRow() {
-		return nil
-	}
-	if id := ot.desc.GetRegionalByRowUsingConstraint(); id != catid.ConstraintID(0) {
-		for i := range ot.outboundFKs {
-			if ot.outboundFKs[i].constraintID == id {
-				return &ot.outboundFKs[i]
-			}
-		}
-	}
-	return nil
-}
-
 // GetDatabaseID is part of the cat.Table interface.
 func (ot *optTable) GetDatabaseID() descpb.ID {
 	return ot.desc.GetParentID()
@@ -1946,11 +1928,6 @@ func (oi *optIndex) GeoConfig() geopb.Config {
 	return oi.idx.IndexDesc().GeoConfig
 }
 
-// VecConfig is part of the cat.Index interface.
-func (oi *optIndex) VecConfig() *vecpb.Config {
-	return &oi.idx.IndexDesc().VecConfig
-}
-
 // Version is part of the cat.Index interface.
 func (oi *optIndex) Version() descpb.IndexDescriptorVersion {
 	return oi.idx.GetVersion()
@@ -2300,7 +2277,6 @@ type optForeignKeyConstraint struct {
 	referencedTable   cat.StableID
 	referencedColumns []descpb.ColumnID
 
-	constraintID catid.ConstraintID
 	validity     descpb.ConstraintValidity
 	match        tree.CompositeKeyMatchMethod
 	deleteAction tree.ReferenceAction
@@ -2718,11 +2694,6 @@ func (ot *optVirtualTable) HomeRegionColName() (colName string, ok bool) {
 	return "", false
 }
 
-// RegionalByRowUsingConstraint is part of the cat.Table interface.
-func (ot *optVirtualTable) RegionalByRowUsingConstraint() cat.ForeignKeyConstraint {
-	return nil
-}
-
 // GetDatabaseID is part of the cat.Table interface.
 func (ot *optVirtualTable) GetDatabaseID() descpb.ID {
 	return 0
@@ -2939,11 +2910,6 @@ func (oi *optVirtualIndex) ImplicitPartitioningColumnCount() int {
 // GeoConfig is part of the cat.Index interface.
 func (oi *optVirtualIndex) GeoConfig() geopb.Config {
 	return geopb.Config{}
-}
-
-// VecConfig is part of the cat.Index interface.
-func (oi *optVirtualIndex) VecConfig() *vecpb.Config {
-	return nil
 }
 
 // Version is part of the cat.Index interface.

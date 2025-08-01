@@ -5,7 +5,7 @@ CREATE TABLE legacy();
 
 # Since all the below statements use a common method for the hint and detail part
 # of the error message, we only test this first one with the entire error message.
-statement error pq: CREATE POLICY is only implemented in the declarative schema changer\nHINT: This error may be happening due to running it in a multi-statement transaction. Try sending each schema change statement in its own implicit transaction.\nDETAIL:  See the documentation for additional details:https://www.cockroachlabs.com/docs/dev/online-schema-changes#declarative-schema-changer
+statement error pq: CREATE POLICY is only implemented in the declarative schema changer\nHINT: This error may be happening due to running it in a multi-statement transaction. Try sending each schema change statement in its own implicit transaction.\nDETAIL:  See the documentation for additional details:https://www.cockroachlabs.com/docs/v25.2/online-schema-changes#declarative-schema-changer
 CREATE POLICY p1 on legacy;
 
 subtest policy_statements

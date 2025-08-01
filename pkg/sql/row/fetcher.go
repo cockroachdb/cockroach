@@ -1221,13 +1221,13 @@ func (rf *Fetcher) NextRowInto(
 // NextRowDecoded calls NextRow and decodes the EncDatumRow into a Datums.
 // The Datums should not be modified and is only valid until the next call.
 // When there are no more rows, the Datums is nil.
-func (rf *Fetcher) NextRowDecoded(ctx context.Context) (datums tree.Datums, spanID int, err error) {
-	row, spanID, err := rf.NextRow(ctx)
+func (rf *Fetcher) NextRowDecoded(ctx context.Context) (datums tree.Datums, err error) {
+	row, _, err := rf.NextRow(ctx)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if row == nil {
-		return nil, 0, nil
+		return nil, nil
 	}
 
 	for i, encDatum := range row {
@@ -1236,12 +1236,12 @@ func (rf *Fetcher) NextRowDecoded(ctx context.Context) (datums tree.Datums, span
 			continue
 		}
 		if err := encDatum.EnsureDecoded(rf.table.spec.FetchedColumns[i].Type, rf.args.Alloc); err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		rf.table.decodedRow[i] = encDatum.Datum
 	}
 
-	return rf.table.decodedRow, spanID, nil
+	return rf.table.decodedRow, nil
 }
 
 // NextRowDecodedInto calls NextRow and decodes the EncDatumRow into Datums,
@@ -1284,6 +1284,12 @@ func (rf *Fetcher) NextRowDecodedInto(
 	return true, spanID, nil
 }
 
+// RowLastModified may only be called after NextRow has returned a non-nil row
+// and returns the timestamp of the last modification to that row.
+func (rf *Fetcher) RowLastModified() hlc.Timestamp {
+	return rf.table.rowLastModified
+}
+
 // RowIsDeleted may only be called after NextRow has returned a non-nil row and
 // returns true if that row was most recently deleted. This method is only
 // meaningful when the configured KVBatchFetcher returns deletion tombstones, which
@@ -1300,7 +1306,7 @@ func (rf *Fetcher) finalizeRow() error {
 		// TODO (rohany): Datums are immutable, so we can't store a DDecimal on the
 		//  fetcher and change its contents with each row. If that assumption gets
 		//  lifted, then we can avoid an allocation of a new decimal datum here.
-		dec := rf.args.Alloc.NewDDecimal(tree.DDecimal{Decimal: eval.TimestampToDecimal(rf.table.rowLastModified)})
+		dec := rf.args.Alloc.NewDDecimal(tree.DDecimal{Decimal: eval.TimestampToDecimal(rf.RowLastModified())})
 		table.row[table.timestampOutputIdx] = rowenc.EncDatum{Datum: dec}
 	}
 	if table.oidOutputIdx != noOutputColumn {

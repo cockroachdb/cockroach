@@ -20,10 +20,19 @@ import (
 )
 
 type cleanupNodeKill struct {
-	nodes option.NodeListOption
+	nodes    option.NodeListOption
+	downtime time.Duration
 }
 
 func (cl *cleanupNodeKill) Cleanup(ctx context.Context, o operation.Operation, c cluster.Cluster) {
+	o.Status(fmt.Sprintf("waiting for %s before restarting node %s", cl.downtime, cl.nodes))
+	select {
+	case <-time.After(cl.downtime):
+	case <-ctx.Done():
+		o.Status("cleanup context cancelled during wait")
+		return
+	}
+
 	db, err := c.ConnE(ctx, o.L(), cl.nodes[0])
 	if err != nil {
 		err = c.RunE(ctx, option.WithNodes(cl.nodes), "./cockroach.sh")
@@ -47,15 +56,20 @@ func (cl *cleanupNodeKill) Cleanup(ctx context.Context, o operation.Operation, c
 }
 
 func nodeKillRunner(
-	signal int, drain bool,
+	signal int, drain bool, downtime time.Duration,
 ) func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
 	return func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
-		return runNodeKill(ctx, o, c, signal, drain)
+		return runNodeKill(ctx, o, c, signal, drain, downtime)
 	}
 }
 
 func runNodeKill(
-	ctx context.Context, o operation.Operation, c cluster.Cluster, signal int, drain bool,
+	ctx context.Context,
+	o operation.Operation,
+	c cluster.Cluster,
+	signal int,
+	drain bool,
+	downtime time.Duration,
 ) registry.OperationCleanup {
 	rng, _ := randutil.NewPseudoRand()
 	node := c.All().SeededRandNode(rng)
@@ -87,7 +101,17 @@ func runNodeKill(
 		time.Sleep(1 * time.Second)
 	}
 
-	return &cleanupNodeKill{nodes: node}
+	// Schedule the cleanup instead of returning it
+	go func() {
+		cleanup := cleanupNodeKill{
+			nodes:    node,
+			downtime: downtime,
+		}
+		cleanup.Cleanup(ctx, o, c)
+	}()
+
+	// return nil to avoid the hardcoded 5s + random [0s, 24h] wait
+	return nil
 }
 
 func registerNodeKill(r registry.Registry) {
@@ -125,8 +149,7 @@ func registerNodeKill(r registry.Registry) {
 			CompatibleClouds:   registry.AllClouds,
 			CanRunConcurrently: registry.OperationCannotRunConcurrently,
 			Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-			WaitBeforeCleanup:  spec.downtime,
-			Run:                nodeKillRunner(spec.signal, spec.drain),
+			Run:                nodeKillRunner(spec.signal, spec.drain, spec.downtime),
 		})
 	}
 }

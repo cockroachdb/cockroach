@@ -60,7 +60,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: multiregion_db.public.table_regional_by_row
-## StatementPhase stage 1 of 1 with 35 MutationType ops
+## StatementPhase stage 1 of 1 with 34 MutationType ops
 upsert descriptor #108
   ...
          oid: 20
@@ -315,9 +315,7 @@ upsert descriptor #108
        unique: true
        vecConfig: {}
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -326,7 +324,7 @@ upsert descriptor #108
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 40 MutationType ops
+## PreCommitPhase stage 2 of 2 with 39 MutationType ops
 upsert descriptor #108
   ...
          oid: 20
@@ -617,9 +615,7 @@ upsert descriptor #108
        unique: true
        vecConfig: {}
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -662,7 +658,7 @@ upsert descriptor #108
   -  version: "2"
   +  version: "3"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Backfilling index (1 operation) — PostCommit phase (stage 2 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 2 of 23 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 23 with 1 BackfillType op
@@ -684,7 +680,7 @@ upsert descriptor #108
   -  version: "3"
   +  version: "4"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 4 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 4 of 23 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 23 with 3 MutationType ops
@@ -702,7 +698,7 @@ upsert descriptor #108
   -  version: "4"
   +  version: "5"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Merging index (1 operation) — PostCommit phase (stage 5 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 5 of 23 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 23 with 1 BackfillType op
@@ -733,7 +729,7 @@ upsert descriptor #108
   -  version: "5"
   +  version: "6"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Validating index (1 operation) — PostCommit phase (stage 7 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 7 of 23 with 1 ValidationType op pending"
 commit transaction #8
 begin transaction #9
 ## PostCommitPhase stage 7 of 23 with 1 ValidationType op
@@ -967,7 +963,7 @@ upsert descriptor #108
   -  version: "6"
   +  version: "7"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 9 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 9 of 23 with 1 MutationType op pending"
 commit transaction #10
 begin transaction #11
 ## PostCommitPhase stage 9 of 23 with 3 MutationType ops
@@ -985,7 +981,7 @@ upsert descriptor #108
   -  version: "7"
   +  version: "8"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Backfilling index (1 operation) — PostCommit phase (stage 10 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 10 of 23 with 1 BackfillType op pending"
 commit transaction #11
 begin transaction #12
 ## PostCommitPhase stage 10 of 23 with 1 BackfillType op
@@ -1007,7 +1003,7 @@ upsert descriptor #108
   -  version: "8"
   +  version: "9"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 12 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 12 of 23 with 1 MutationType op pending"
 commit transaction #13
 begin transaction #14
 ## PostCommitPhase stage 12 of 23 with 3 MutationType ops
@@ -1025,7 +1021,7 @@ upsert descriptor #108
   -  version: "9"
   +  version: "10"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Merging index (1 operation) — PostCommit phase (stage 13 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 13 of 23 with 1 BackfillType op pending"
 commit transaction #14
 begin transaction #15
 ## PostCommitPhase stage 13 of 23 with 1 BackfillType op
@@ -1061,7 +1057,7 @@ upsert descriptor #108
   -  version: "10"
   +  version: "11"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Validating index (1 operation) — PostCommit phase (stage 15 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 15 of 23 with 1 ValidationType op pending"
 commit transaction #16
 begin transaction #17
 ## PostCommitPhase stage 15 of 23 with 1 ValidationType op
@@ -1257,7 +1253,7 @@ upsert descriptor #108
   -  version: "11"
   +  version: "12"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (2 operations) — PostCommit phase (stage 17 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 17 of 23 with 2 MutationType ops pending"
 commit transaction #18
 begin transaction #19
 ## PostCommitPhase stage 17 of 23 with 4 MutationType ops
@@ -1282,7 +1278,7 @@ upsert descriptor #108
   -  version: "12"
   +  version: "13"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Backfilling index (2 operations) — PostCommit phase (stage 18 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 18 of 23 with 2 BackfillType ops pending"
 commit transaction #19
 begin transaction #20
 ## PostCommitPhase stage 18 of 23 with 2 BackfillType ops
@@ -1311,7 +1307,7 @@ upsert descriptor #108
   -  version: "13"
   +  version: "14"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (2 operations) — PostCommit phase (stage 20 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 20 of 23 with 2 MutationType ops pending"
 commit transaction #21
 begin transaction #22
 ## PostCommitPhase stage 20 of 23 with 4 MutationType ops
@@ -1336,7 +1332,7 @@ upsert descriptor #108
   -  version: "14"
   +  version: "15"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Merging index (2 operations) — PostCommit phase (stage 21 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 21 of 23 with 2 BackfillType ops pending"
 commit transaction #22
 begin transaction #23
 ## PostCommitPhase stage 21 of 23 with 2 BackfillType ops
@@ -1383,7 +1379,7 @@ upsert descriptor #108
   -  version: "15"
   +  version: "16"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Validating index (2 operations) — PostCommit phase (stage 23 of 23)."
+update progress of schema change job #1: "PostCommitPhase stage 23 of 23 with 2 ValidationType ops pending"
 commit transaction #24
 begin transaction #25
 ## PostCommitPhase stage 23 of 23 with 2 ValidationType ops
@@ -1391,7 +1387,7 @@ validate forward indexes [2] in table #108
 validate forward indexes [4] in table #108
 commit transaction #25
 begin transaction #26
-## PostCommitNonRevertiblePhase stage 1 of 5 with 33 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 33 MutationType ops
 upsert descriptor #108
   ...
            statement: ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v, ADD COLUMN j INT8 UNIQUE DEFAULT unique_rowid(), DROP COLUMN m, ADD COLUMN l INT8 UNIQUE DEFAULT unique_rowid()
@@ -1793,11 +1789,11 @@ upsert descriptor #108
   +  version: "17"
 persist all catalog changes to storage
 adding table for stats refresh: 108
-update progress of schema change job #1: "Pending: Updating schema metadata (9 operations) — PostCommitNonRevertible phase (stage 2 of 5)."
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 9 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #26
 begin transaction #27
-## PostCommitNonRevertiblePhase stage 2 of 5 with 11 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 4 with 11 MutationType ops
 upsert descriptor #108
   ...
          udtMetadata:
@@ -1967,10 +1963,10 @@ upsert descriptor #108
   +  version: "18"
 persist all catalog changes to storage
 adding table for stats refresh: 108
-update progress of schema change job #1: "Pending: Updating schema metadata (7 operations) — PostCommitNonRevertible phase (stage 3 of 5)."
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 4 with 7 MutationType ops pending"
 commit transaction #27
 begin transaction #28
-## PostCommitNonRevertiblePhase stage 3 of 5 with 9 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 4 with 9 MutationType ops
 upsert descriptor #108
   ...
          version: 4
@@ -1985,12 +1981,45 @@ upsert descriptor #108
   -  version: "18"
   +  version: "19"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (9 operations) — PostCommitNonRevertible phase (stage 4 of 5)."
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 4 of 4 with 9 MutationType ops pending"
 commit transaction #28
 begin transaction #29
-## PostCommitNonRevertiblePhase stage 4 of 5 with 11 MutationType ops
+## PostCommitNonRevertiblePhase stage 4 of 4 with 11 MutationType ops
 upsert descriptor #108
   ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": k
+  -        "4": crdb_region
+  -        "5": j
+  -        "6": l
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 108
+  -      indexes:
+  -        "2": table_regional_by_row_j_key
+  -        "4": table_regional_by_row_l_key
+  -        "8": table_regional_by_row_pkey
+  -      name: table_regional_by_row
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› DROP COLUMN ‹v›, ADD COLUMN ‹j› INT8 UNIQUE DEFAULT unique_rowid(), DROP COLUMN ‹m›, ADD COLUMN ‹l› INT8 UNIQUE DEFAULT unique_rowid()
+  -        statement: ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v, ADD COLUMN j INT8 UNIQUE DEFAULT unique_rowid(), DROP COLUMN m, ADD COLUMN l INT8 UNIQUE DEFAULT unique_rowid()
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
      - columnIds:
        - 1
   -    - 2
@@ -2091,60 +2120,12 @@ upsert descriptor #108
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v, ADD COLUMN j INT8 UNIQUE DEFAULT unique_rowid(), DROP COLUMN m, ADD COLUMN l INT8 UNIQUE DEFAULT unique_rowid()"
   descriptor IDs: [108]
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 5 of 5)."
-commit transaction #29
-notified job registry to adopt jobs: [2]
-begin transaction #30
-## PostCommitNonRevertiblePhase stage 5 of 5 with 3 MutationType ops
-upsert descriptor #108
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": k
-  -        "4": crdb_region
-  -        "5": j
-  -        "6": l
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      families:
-  -        "0": primary
-  -      id: 108
-  -      indexes:
-  -        "2": table_regional_by_row_j_key
-  -        "4": table_regional_by_row_l_key
-  -        "8": table_regional_by_row_pkey
-  -      name: table_regional_by_row
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› DROP COLUMN ‹v›, ADD COLUMN ‹j› INT8 UNIQUE DEFAULT unique_rowid(), DROP COLUMN ‹m›, ADD COLUMN ‹l› INT8 UNIQUE DEFAULT unique_rowid()
-  -        statement: ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v, ADD COLUMN j INT8 UNIQUE DEFAULT unique_rowid(), DROP COLUMN m, ADD COLUMN l INT8 UNIQUE DEFAULT unique_rowid()
-  -        statementTag: ALTER TABLE
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
-  ...
-     replacementOf:
-       time: {}
-  +  schemaLocked: true
-     unexposedParentSchemaId: 105
-  -  version: "20"
-  +  version: "21"
-persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 108
-commit transaction #30
+commit transaction #29
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase

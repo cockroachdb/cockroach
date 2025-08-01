@@ -11,7 +11,6 @@ import "github.com/cockroachdb/redact"
 // Op represents an action to be taken on a single descriptor.
 type Op interface {
 	Type() Type
-	Description() redact.RedactableString
 }
 
 // Type represents the type of operation for an Op. Ops can be grouped into the

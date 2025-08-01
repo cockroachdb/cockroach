@@ -520,22 +520,22 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 			sideloaded := newTestingSideloadStorage(eng)
-			postEnts, stats, err := MaybeSideloadEntries(ctx, test.preEnts, sideloaded)
+			postEnts, numSideloaded, size, nonSideloadedSize, err := MaybeSideloadEntries(ctx, test.preEnts, sideloaded)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if len(addSST.Data) == 0 {
 				t.Fatal("invocation mutated original AddSSTable struct in memory")
 			}
-			require.Equal(t, test.nonSideloadedSize, stats.RegularBytes)
+			require.Equal(t, test.nonSideloadedSize, nonSideloadedSize)
 			var expNumSideloaded int
 			if test.size > 0 {
 				expNumSideloaded = 1
 			}
-			require.Equal(t, expNumSideloaded, stats.SideloadedEntries)
+			require.Equal(t, expNumSideloaded, numSideloaded)
 			require.Equal(t, test.postEnts, postEnts)
-			if test.size != stats.SideloadedBytes {
-				t.Fatalf("expected %d sideloadedSize, but found %d", test.size, stats.SideloadedBytes)
+			if test.size != size {
+				t.Fatalf("expected %d sideloadedSize, but found %d", test.size, size)
 			}
 			actKeys, err := sideloaded.eng.Env().List(sideloaded.Dir())
 			if oserror.IsNotExist(err) {

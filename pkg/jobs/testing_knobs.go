@@ -72,9 +72,8 @@ type TestingKnobs struct {
 	// validates that these knobs are used in tandem.
 	DisableAdoptions bool
 
-	// DisableRegistryLifecycleManagement disables all periodic job-system
-	// management tasks such as adoption and cancellation loops.
-	DisableRegistryLifecycleManagement bool
+	// DisableRegistryLifecycleManagement
+	DisableRegistryLifecycleManagent bool
 
 	// BeforeWaitForJobsQuery is called once per invocation of the
 	// poll-show-jobs query in WaitForJobs.

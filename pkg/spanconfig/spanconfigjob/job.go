@@ -35,6 +35,7 @@ var ReconciliationJobCheckpointInterval = settings.RegisterDurationSetting(
 	"spanconfig.reconciliation_job.checkpoint_interval",
 	"the frequency at which the span config reconciliation job checkpoints itself",
 	5*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // Resume implements the jobs.Resumer interface.

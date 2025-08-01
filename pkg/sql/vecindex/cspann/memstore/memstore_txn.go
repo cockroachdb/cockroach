@@ -79,7 +79,16 @@ func (tx *memTxn) GetPartitionMetadata(
 		defer memPart.lock.ReleaseShared()
 	}
 
-	return *memPart.lock.partition.Metadata(), nil
+	// Do not allow updates to the partition if the state doesn't allow it.
+	metadata := memPart.lock.partition.Metadata()
+	if forUpdate && !metadata.StateDetails.State.AllowAddOrRemove() {
+		err = cspann.NewConditionFailedError(*metadata)
+		return cspann.PartitionMetadata{}, errors.Wrapf(err,
+			"getting metadata for partition %d (state=%s)",
+			partitionKey, metadata.StateDetails.State.String())
+	}
+
+	return *metadata, nil
 }
 
 // AddToPartition implements the Txn interface.
@@ -108,7 +117,7 @@ func (tx *memTxn) AddToPartition(
 	// allow it.
 	partition := memPart.lock.partition
 	state := partition.Metadata().StateDetails.State
-	if !state.AllowAdd() {
+	if !state.AllowAddOrRemove() {
 		return errors.Wrapf(cspann.NewConditionFailedError(*partition.Metadata()),
 			"adding to partition %d (state=%s)", partitionKey, state.String())
 	}
@@ -149,8 +158,16 @@ func (tx *memTxn) RemoveFromPartition(
 	}
 	defer memPart.lock.Release()
 
-	// Remove vector from the partition.
+	// Do not allow vectors to be removed from the partition if the state doesn't
+	// allow it.
 	partition := memPart.lock.partition
+	state := partition.Metadata().StateDetails.State
+	if !state.AllowAddOrRemove() {
+		return errors.Wrapf(cspann.NewConditionFailedError(*partition.Metadata()),
+			"removing from partition %d (state=%s)", partitionKey, state.String())
+	}
+
+	// Remove vector from the partition.
 	if level != partition.Level() {
 		return errors.Wrapf(cspann.ErrRestartOperation,
 			"removing from partition %d (expected: %d, actual: %d)",
@@ -225,7 +242,7 @@ func (tx *memTxn) GetFullVectors(
 			func(vectorWithKey *cspann.VectorWithKey) {
 				// Lock the partition to read its data.
 				memPart := tx.store.lockPartition(
-					treeKey, vectorWithKey.Key.PartitionKey, tx.id, false /* isExclusive */)
+					treeKey, vectorWithKey.Key.PartitionKey, uniqueOwner, false /* isExclusive */)
 				if memPart != nil {
 					defer memPart.lock.ReleaseShared()
 					vectorWithKey.Vector = memPart.lock.partition.Centroid()

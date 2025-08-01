@@ -214,7 +214,7 @@ func topic(name string) *tableDescriptorTopic {
 	tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()
 	spec := changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		DescID:            tableDesc.GetID(),
+		TableID:           tableDesc.GetID(),
 		StatementTimeName: changefeedbase.StatementTimeName(name),
 	}
 	return &tableDescriptorTopic{Metadata: makeMetadata(tableDesc), spec: spec}
@@ -278,7 +278,6 @@ func makeTestKafkaSink(
 				client := &fakeKafkaClient{config}
 				return client, nil
 			},
-			BypassConnectionCheck: true,
 		},
 	}
 	err = s.Dial()
@@ -293,7 +292,7 @@ func makeChangefeedTargets(targetNames ...string) changefeedbase.Targets {
 	targets := changefeedbase.Targets{}
 	for i, name := range targetNames {
 		targets.Add(changefeedbase.Target{
-			DescID:            descpb.ID(i),
+			TableID:           descpb.ID(i),
 			StatementTimeName: changefeedbase.StatementTimeName(name),
 		})
 	}
@@ -469,7 +468,7 @@ func TestSQLSink(t *testing.T) {
 		td := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()
 		spec := changefeedbase.Target{
 			Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-			DescID:            td.GetID(),
+			TableID:           td.GetID(),
 			StatementTimeName: changefeedbase.StatementTimeName(name),
 		}
 		return &tableDescriptorTopic{Metadata: makeMetadata(td), spec: spec}

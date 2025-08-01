@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -134,7 +133,7 @@ func (s *substringInt64Int16Operator) Next() coldata.Batch {
 				startCharIdx := int(startCol[rowIdx]) - 1
 				length := int(lengthCol[rowIdx])
 				if length < 0 {
-					colexecerror.ExpectedError(builtins.NegativeSubstringLengthErr)
+					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				endCharIdx := startCharIdx + length
@@ -235,7 +234,7 @@ func (s *substringInt64Int32Operator) Next() coldata.Batch {
 				startCharIdx := int(startCol[rowIdx]) - 1
 				length := int(lengthCol[rowIdx])
 				if length < 0 {
-					colexecerror.ExpectedError(builtins.NegativeSubstringLengthErr)
+					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				endCharIdx := startCharIdx + length
@@ -336,7 +335,7 @@ func (s *substringInt64Int64Operator) Next() coldata.Batch {
 				startCharIdx := int(startCol[rowIdx]) - 1
 				length := int(lengthCol[rowIdx])
 				if length < 0 {
-					colexecerror.ExpectedError(builtins.NegativeSubstringLengthErr)
+					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				endCharIdx := startCharIdx + length
@@ -437,7 +436,7 @@ func (s *substringInt16Int16Operator) Next() coldata.Batch {
 				startCharIdx := int(startCol[rowIdx]) - 1
 				length := int(lengthCol[rowIdx])
 				if length < 0 {
-					colexecerror.ExpectedError(builtins.NegativeSubstringLengthErr)
+					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				endCharIdx := startCharIdx + length
@@ -538,7 +537,7 @@ func (s *substringInt16Int32Operator) Next() coldata.Batch {
 				startCharIdx := int(startCol[rowIdx]) - 1
 				length := int(lengthCol[rowIdx])
 				if length < 0 {
-					colexecerror.ExpectedError(builtins.NegativeSubstringLengthErr)
+					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				endCharIdx := startCharIdx + length
@@ -639,7 +638,7 @@ func (s *substringInt16Int64Operator) Next() coldata.Batch {
 				startCharIdx := int(startCol[rowIdx]) - 1
 				length := int(lengthCol[rowIdx])
 				if length < 0 {
-					colexecerror.ExpectedError(builtins.NegativeSubstringLengthErr)
+					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				endCharIdx := startCharIdx + length
@@ -740,7 +739,7 @@ func (s *substringInt32Int16Operator) Next() coldata.Batch {
 				startCharIdx := int(startCol[rowIdx]) - 1
 				length := int(lengthCol[rowIdx])
 				if length < 0 {
-					colexecerror.ExpectedError(builtins.NegativeSubstringLengthErr)
+					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				endCharIdx := startCharIdx + length
@@ -841,7 +840,7 @@ func (s *substringInt32Int32Operator) Next() coldata.Batch {
 				startCharIdx := int(startCol[rowIdx]) - 1
 				length := int(lengthCol[rowIdx])
 				if length < 0 {
-					colexecerror.ExpectedError(builtins.NegativeSubstringLengthErr)
+					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				endCharIdx := startCharIdx + length
@@ -942,7 +941,7 @@ func (s *substringInt32Int64Operator) Next() coldata.Batch {
 				startCharIdx := int(startCol[rowIdx]) - 1
 				length := int(lengthCol[rowIdx])
 				if length < 0 {
-					colexecerror.ExpectedError(builtins.NegativeSubstringLengthErr)
+					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				endCharIdx := startCharIdx + length

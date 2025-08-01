@@ -95,10 +95,6 @@ func TestVersionForURLs(t *testing.T) {
 		},
 		{
 			versionTxt: "v25.2.0-alpha.1",
-			want:       "dev",
-		},
-		{
-			versionTxt: "v25.2.0-alpha.2",
 			want:       "v25.2",
 		},
 		{

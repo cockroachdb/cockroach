@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -159,7 +158,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	runTest := func(t *testing.T, accurate bool) {
+	runTest := func(t *testing.T, accurate, v25dot1 bool) {
 		tc := testContext{}
 		ctx := context.Background()
 		stopper := stop.NewStopper()
@@ -179,13 +178,12 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		defer b.Close()
 
 		r.mu.Lock()
-		ls := r.asLogStorage()
 		raftAppliedIndex := r.shMu.state.RaftAppliedIndex
-		truncatedIndex := ls.shMu.trunc.Index
-		raftLogSize := ls.shMu.size
+		truncatedIndex := r.shMu.raftTruncState.Index
+		raftLogSize := r.shMu.raftLogSize
 		// Overwrite to be trusted, since we want to check if transitions to false
 		// or not.
-		ls.shMu.sizeTrusted = true
+		r.shMu.raftLogSizeTrusted = true
 		r.mu.Unlock()
 
 		expectedFirstIndex := truncatedIndex + 1
@@ -201,7 +199,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		}
 		evalResult.SetRaftTruncatedState(&kvserverpb.RaftTruncatedState{
 			Index: truncatedIndex + 1,
-		})
+		}, v25dot1)
 
 		ent := &raftlog.Entry{
 			Entry: raftpb.Entry{
@@ -241,24 +239,25 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 			r.mu.destroyStatus.Set(errors.New("test done"), destroyReasonRemoved)
 
 			require.Equal(t, raftAppliedIndex+1, r.shMu.state.RaftAppliedIndex)
-			require.Equal(t, truncatedIndex+1, ls.shMu.trunc.Index)
+			require.Equal(t, truncatedIndex+1, r.shMu.raftTruncState.Index)
 			expectedSize := raftLogSize - 1
 			// We typically have a raftLogSize > 0 (based on inspecting some test
 			// runs), but we can't be sure.
 			if expectedSize < 0 {
 				expectedSize = 0
 			}
-			require.Equal(t, expectedSize, ls.shMu.size)
-			require.Equal(t, accurate, ls.shMu.sizeTrusted)
-			truncState, err := logstore.NewStateLoader(r.RangeID).LoadRaftTruncatedState(
-				context.Background(), tc.engine)
+			require.Equal(t, expectedSize, r.shMu.raftLogSize)
+			require.Equal(t, accurate, r.shMu.raftLogSizeTrusted)
+			truncState, err := r.mu.stateLoader.LoadRaftTruncatedState(context.Background(), tc.engine)
 			require.NoError(t, err)
-			require.Equal(t, ls.shMu.trunc.Index, truncState.Index)
+			require.Equal(t, r.shMu.raftTruncState.Index, truncState.Index)
 		}()
 	}
 
 	testutils.RunTrueAndFalse(t, "accurate first index", func(t *testing.T, accurate bool) {
-		runTest(t, accurate)
+		testutils.RunTrueAndFalse(t, "v25.1", func(t *testing.T, v25dot1 bool) {
+			runTest(t, accurate, v25dot1)
+		})
 	})
 }
 
@@ -266,7 +265,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	runTest := func(t *testing.T, accurate bool) {
+	runTest := func(t *testing.T, accurate, v25dot1 bool) {
 		tc := testContext{}
 		ctx := context.Background()
 		stopper := stop.NewStopper()
@@ -290,7 +289,6 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 		}
 
 		raftLogSize, truncatedIndex := func() (_rls int64, truncIdx kvpb.RaftIndex) {
-			ls := r.asLogStorage()
 			// Lock the replica. We do this early to avoid interference from any other
 			// moving parts on the Replica, whatever they may be. For example, we don't
 			// want a skewed lease applied index because commands are applying concurrently
@@ -301,11 +299,11 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			defer r.raftMu.Unlock()
 			r.mu.Lock()
 			raftAppliedIndex := r.shMu.state.RaftAppliedIndex
-			truncatedIndex := ls.shMu.trunc.Index
-			raftLogSize := ls.shMu.size
+			truncatedIndex := r.shMu.raftTruncState.Index
+			raftLogSize := r.shMu.raftLogSize
 			// Overwrite to be trusted, since we want to check if transitions to false
 			// or not.
-			ls.shMu.sizeTrusted = true
+			r.shMu.raftLogSizeTrusted = true
 			r.mu.Unlock()
 			expectedFirstIndex := truncatedIndex + 1
 			if !accurate {
@@ -327,7 +325,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			}
 			evalResult.SetRaftTruncatedState(&kvserverpb.RaftTruncatedState{
 				Index: truncatedIndex + 1,
-			})
+			}, v25dot1)
 			ent := &raftlog.Entry{
 				Entry: raftpb.Entry{
 					Index: uint64(raftAppliedIndex + 1),
@@ -360,8 +358,8 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 				defer r.mu.Unlock()
 				require.Equal(t, raftAppliedIndex+1, r.shMu.state.RaftAppliedIndex)
 				// No truncation.
-				require.Equal(t, truncatedIndex, ls.shMu.trunc.Index)
-				require.True(t, ls.shMu.sizeTrusted)
+				require.Equal(t, truncatedIndex, r.shMu.raftTruncState.Index)
+				require.True(t, r.shMu.raftLogSizeTrusted)
 			}()
 			require.False(t, r.pendingLogTruncations.isEmptyLocked())
 			trunc := r.pendingLogTruncations.frontLocked()
@@ -382,16 +380,15 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 		}
 		// Wait until async truncation is done.
 		testutils.SucceedsSoon(t, func() error {
-			ls := r.asLogStorage()
 			r.mu.Lock()
 			defer r.mu.Unlock()
-			if ls.shMu.trunc.Index != truncatedIndex+1 {
+			if r.shMu.raftTruncState.Index != truncatedIndex+1 {
 				return errors.Errorf("not truncated")
 			}
-			if ls.shMu.size != expectedSize {
+			if r.shMu.raftLogSize != expectedSize {
 				return errors.Errorf("not truncated")
 			}
-			if accurate != ls.shMu.sizeTrusted {
+			if accurate != r.shMu.raftLogSizeTrusted {
 				return errors.Errorf("not truncated")
 			}
 			r.pendingLogTruncations.mu.Lock()
@@ -404,7 +401,9 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "accurate first index", func(t *testing.T, accurate bool) {
-		runTest(t, accurate)
+		testutils.RunTrueAndFalse(t, "v25.1", func(t *testing.T, v25dot1 bool) {
+			runTest(t, accurate, v25dot1)
+		})
 	})
 }
 

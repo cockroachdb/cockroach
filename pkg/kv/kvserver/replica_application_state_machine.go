@@ -42,7 +42,7 @@ type applyCommittedEntriesStats struct {
 	appBatchStats
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
 	numBatchesProcessed     int // TODO(sep-raft-log): numBatches
-	assertionsRequested     int
+	stateAssertions         int
 	numConfChangeEntries    int
 }
 
@@ -143,13 +143,10 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	// make it safer.
 	b.r = r
 	b.applyStats = &sm.applyStats
-	// TODO(#144627): most commands do not need to read. Use NewWriteBatch because
-	// it is more efficient. If there are exceptions, sparingly use NewReader or
-	// NewBatch (if it needs to read its own writes, which is unlikely).
 	b.batch = r.store.TODOEngine().NewBatch()
 	r.mu.RLock()
 	b.state = r.shMu.state
-	b.truncState = r.asLogStorage().shMu.trunc
+	b.truncState = r.shMu.raftTruncState
 	b.state.Stats = &sm.stats
 	*b.state.Stats = *r.shMu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
@@ -206,9 +203,14 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		// Some tests (TestRangeStatsInit) assumes that once the store has started
 		// and the first range has a lease that there will not be a later hard-state.
 		if shouldAssert {
-			// Queue a check that the on-disk state doesn't diverge from the in-memory
+			// Assert that the on-disk state doesn't diverge from the in-memory
 			// state as a result of the side effects.
-			sm.applyStats.assertionsRequested++
+			sm.r.mu.RLock()
+			// TODO(sep-raft-log): either check only statemachine invariants or
+			// pass both engines in.
+			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
+			sm.r.mu.RUnlock()
+			sm.applyStats.stateAssertions++
 		}
 	} else if res := cmd.ReplicatedResult(); !res.IsZero() {
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)

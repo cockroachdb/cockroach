@@ -82,8 +82,6 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 		`CREATE TABLE table_b (id int, type type_a)`,
 		`CREATE TABLE table_c (id int, type type_a)`,
 		`CREATE USER feedCreator`,
-		`CREATE ROLE feedowner`,
-		`GRANT feedowner TO feedCreator`,
 		`GRANT SELECT ON table_a TO feedCreator`,
 		`GRANT CHANGEFEED ON table_a TO feedCreator`,
 		`CREATE EXTERNAL CONNECTION "first" AS 'kafka://nope'`,
@@ -125,24 +123,22 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 			row.Scan(&jobID)
 			userDB.Exec(t, `PAUSE JOB $1`, jobID)
 			waitForJobState(userDB, t, catpb.JobID(jobID), `paused`)
-			userDB.Exec(t, `ALTER JOB $1 OWNER TO feedowner`, jobID)
 		})
 
 		// user1 is missing the CHANGEFEED privilege on table_b and table_c.
 		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t,
-				"user user1 does not have privileges for job",
+				"user user1 requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed",
 				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
 			)
 		})
 		rootDB.Exec(t, `GRANT CHANGEFEED ON table_b TO user1`)
 		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t,
-				"user user1 does not have privileges for job",
+				"user user1 requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed",
 				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
 			)
 		})
-		rootDB.Exec(t, `GRANT feedowner TO user1`)
 		rootDB.Exec(t, `GRANT CHANGEFEED ON table_c TO user1`)
 		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t,
@@ -179,27 +175,19 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 			row.Scan(&jobID)
 			userDB.Exec(t, `PAUSE JOB $1`, jobID)
 			waitForJobState(userDB, t, catpb.JobID(jobID), `paused`)
-			userDB.Exec(t, `ALTER JOB $1 OWNER TO feedowner`, jobID)
 		})
 
 		// user2 is missing the SELECT privilege on table_b and table_c.
 		withUser(t, "user2", func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t,
-				"pq: user user2 does not have privileges for job",
+				"pq: user user2 with CONTROLCHANGEFEED role option requires the SELECT privilege on all target tables to be able to run an enterprise changefeed",
 				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='kafka://bar'", jobID),
 			)
 		})
 		rootDB.Exec(t, `GRANT SELECT ON table_b TO user2`)
 		withUser(t, "user2", func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t,
-				"pq: user user2 does not have privileges for job",
-				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='kafka://bar'", jobID),
-			)
-		})
-		rootDB.Exec(t, `GRANT feedowner TO user2`)
-		withUser(t, "user2", func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t,
-				"requires the SELECT privilege on all target tables",
+				"pq: user user2 with CONTROLCHANGEFEED role option requires the SELECT privilege on all target tables to be able to run an enterprise changefeed",
 				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='kafka://bar'", jobID),
 			)
 		})
@@ -514,7 +502,7 @@ func TestAlterChangefeedDropTargetAfterTableDrop(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection, withAllowChangefeedErr("error is expected when dropping"))
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedDropTargetFamily(t *testing.T) {
@@ -525,11 +513,7 @@ func TestAlterChangefeedDropTargetFamily(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY onlya (a), FAMILY onlyb (b))`)
 
-		var args []any
-		if _, ok := f.(*webhookFeedFactory); ok {
-			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
-		}
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya, foo FAMILY onlyb`, args...)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya, foo FAMILY onlyb`)
 		defer closeFeed(t, testFeed)
 
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
@@ -1207,11 +1191,7 @@ func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
 			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
 		)
 
-		var args []any
-		if _, ok := f.(*webhookFeedFactory); ok {
-			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
-		}
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers WITH diff, split_column_families`, args...)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers WITH diff, split_column_families`)
 		defer closeFeed(t, testFeed)
 
 		assertPayloads(t, testFeed, []string{
@@ -1254,17 +1234,7 @@ func TestAlterChangefeedAlterTableName(t *testing.T) {
 		sqlDB.Exec(t,
 			`INSERT INTO movr.users VALUES (1, 'Alice')`,
 		)
-
-		// TODO(#145927): currently the metamorphic enriched envelope system for
-		// webhook uses source.table_name as the topic. This test expects the
-		// topic name to be durable across table renames, which is not expected
-		// to be true for source.table_name.
-		var args []any
-		if _, ok := f.(*webhookFeedFactory); ok {
-			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "see comment"})
-		}
-
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.users WITH diff, resolved = '100ms'`, args...)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.users WITH diff, resolved = '100ms'`)
 		defer closeFeed(t, testFeed)
 
 		assertPayloads(t, testFeed, []string{
@@ -1871,7 +1841,6 @@ func TestAlterChangefeedAccessControl(t *testing.T) {
 		})
 		rootDB.Exec(t, "PAUSE job $1", currentFeed.JobID())
 		waitForJobState(rootDB, t, currentFeed.JobID(), `paused`)
-		rootDB.Exec(t, "ALTER JOB $1 OWNER TO feedowner", currentFeed.JobID())
 
 		// Verify who can modify the existing changefeed.
 		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {
@@ -1885,10 +1854,10 @@ func TestAlterChangefeedAccessControl(t *testing.T) {
 			userDB.ExpectErr(t, "pq: user jobcontroller requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed", fmt.Sprintf(`ALTER CHANGEFEED %d DROP table_b`, currentFeed.JobID()))
 		})
 		asUser(t, f, `userWithSomeGrants`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "does not have privileges for job", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
+			userDB.ExpectErr(t, "pq: user userwithsomegrants does not have CHANGEFEED privilege on relation table_b", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
 		})
 		asUser(t, f, `regularUser`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "does not have privileges for job", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
+			userDB.ExpectErr(t, "pq: user regularuser does not have CHANGEFEED privilege on relation (table_a|table_b)", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
 		})
 		closeCf()
 

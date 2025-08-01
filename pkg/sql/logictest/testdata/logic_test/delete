@@ -228,7 +228,7 @@ SELECT count(*) FROM [DELETE FROM unindexed LIMIT 5 RETURNING v]
 subtest regression_29494
 
 statement ok
-CREATE TABLE t29494(x INT PRIMARY KEY) WITH (schema_locked=false); INSERT INTO t29494 VALUES (12)
+CREATE TABLE t29494(x INT PRIMARY KEY); INSERT INTO t29494 VALUES (12)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -242,7 +242,7 @@ SELECT create_statement FROM [SHOW CREATE t29494]
 CREATE TABLE public.t29494 (
   x INT8 NOT NULL,
   CONSTRAINT t29494_pkey PRIMARY KEY (x ASC)
-);
+)
 
 # Check that the new column is not usable in RETURNING
 statement error column "y" does not exist
@@ -267,7 +267,7 @@ COMMIT
 subtest regression_33361
 
 statement ok
-CREATE TABLE t33361(x INT PRIMARY KEY, y INT UNIQUE, z INT) WITH (schema_locked=false); INSERT INTO t33361 VALUES (1, 2, 3)
+CREATE TABLE t33361(x INT PRIMARY KEY, y INT UNIQUE, z INT); INSERT INTO t33361 VALUES (1, 2, 3)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;

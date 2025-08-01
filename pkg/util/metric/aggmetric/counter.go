@@ -96,7 +96,7 @@ func (g *AggCounter) RemoveChild(labelVals ...string) {
 type Counter struct {
 	parent *AggCounter
 	labelValuesSlice
-	value atomic.Int64
+	value int64
 }
 
 // ToPrometheusMetric constructs a prometheus metric for this Counter.
@@ -120,33 +120,13 @@ func (g *Counter) Unlink() {
 
 // Value returns the AggCounter's current value.
 func (g *Counter) Value() int64 {
-	return g.value.Load()
+	return atomic.LoadInt64(&g.value)
 }
 
 // Inc increments the AggCounter's value.
 func (g *Counter) Inc(i int64) {
 	g.parent.g.Inc(i)
-	g.value.Add(i)
-}
-
-// UpdateIfHigher updates the AggCounter's value.
-//
-// This method may not perform well under high concurrency,
-// so it should only be used if the Counter is not expected
-// to be frequently Update'd or Inc'd.
-func (g *Counter) UpdateIfHigher(newValue int64) {
-	var delta int64
-	for {
-		delta = newValue - g.value.Load()
-		if delta <= 0 {
-			return
-		}
-		if g.value.CompareAndSwap(newValue-delta, newValue) {
-			break
-		}
-		// Raced with concurrent update, try again.
-	}
-	g.parent.g.Inc(delta) // delta > 0
+	atomic.AddInt64(&g.value, i)
 }
 
 // AggCounterFloat64 maintains a value as the sum of its children. The counter will
@@ -259,13 +239,9 @@ func (g *CounterFloat64) Inc(i float64) {
 }
 
 // UpdateIfHigher sets the counter's value only if it's higher
-// than the currently set one.
-func (g *CounterFloat64) UpdateIfHigher(newValue float64) {
-	old, updated := g.value.UpdateIfHigher(newValue)
-	if !updated {
-		return
-	}
-	g.parent.g.Inc(newValue - old)
+// than the currently set one. It's assumed the caller holds
+func (g *CounterFloat64) UpdateIfHigher(i float64) {
+	g.value.UpdateIfHigher(i)
 }
 
 // SQLCounter maintains a value as the sum of its children. The counter will

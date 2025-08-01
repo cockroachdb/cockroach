@@ -224,7 +224,7 @@ func runDemoInternal(
 			serverCfg.Stores.Specs = nil
 			return setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 		},
-		func(ctx context.Context, ac serverpb.RPCAdminClient) error {
+		func(ctx context.Context, ac serverpb.AdminClient) error {
 			return drainAndShutdown(ctx, ac, "local" /* targetNode */)
 		},
 	)

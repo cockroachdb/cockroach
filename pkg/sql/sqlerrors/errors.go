@@ -44,21 +44,11 @@ const EnforceHomeRegionFurtherInfo = "For more information, see https://www.cock
 // NewSchemaChangeOnLockedTableErr creates an error signaling schema
 // change statement is attempted on a table with locked schema.
 func NewSchemaChangeOnLockedTableErr(tableName string) error {
-	return errors.WithHintf(
-		errors.WithDetailf(
-			pgerror.Newf(
-				pgcode.OperatorIntervention,
-				`this schema change is disallowed because table %q is locked and this operation cannot automatically unlock the table`,
-				tableName,
-			),
-			"To unlock the table, execute `ALTER TABLE %v SET (schema_locked = false);`"+
-				"\nAfter the schema change completes, we recommend setting it back to true with "+
-				"`ALTER TABLE %v SET (schema_locked = true);`.",
-			tableName, tableName,
-		),
-		"Locking the table improves changefeed performance; see %s",
-		docs.URL("changefeed-best-practices.html#lock-the-schema-on-changefeed-watched-tables"),
-	)
+	return errors.WithHintf(pgerror.Newf(pgcode.OperatorIntervention,
+		`schema changes are disallowed on table %q because it is locked`, tableName),
+		"To unlock the table, try \"ALTER TABLE %v SET (schema_locked = false);\" "+
+			"\nAfter schema change completes, we recommend setting it back to true with "+
+			"\"ALTER TABLE %v SET (schema_locked = true);\"", tableName, tableName)
 }
 
 // NewDisallowedSchemaChangeOnLDRTableErr creates an error that indicates that
@@ -324,7 +314,7 @@ func NewDependentObjectErrorf(format string, args ...interface{}) error {
 func NewDependentBlocksOpError(op, objType, objName, dependentType, dependentName string) error {
 	return errors.WithHintf(
 		NewDependentObjectErrorf("cannot %s %s %q because %s %q depends on it",
-			redact.SafeString(op), redact.SafeString(objType), objName, redact.SafeString(dependentType), dependentName),
+			op, objType, objName, dependentType, dependentName),
 		"consider dropping %q first.", dependentName)
 }
 
@@ -557,18 +547,6 @@ func NewColumnOnlyIndexableError(colDesc string, colType string, indexType idxty
 			"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"))
 	}
 	return err
-}
-
-// NewComputedColReferencesRegionColError returns an error for a computed column
-// that references the region column in a REGIONAL BY ROW table that is using a
-// foreign key to populate the region column.
-func NewComputedColReferencesRegionColError(computedColName, regionColName tree.Name) error {
-	return pgerror.Newf(
-		pgcode.InvalidTableDefinition,
-		`computed column %q cannot reference the region column %q in a REGIONAL BY ROW table`+
-			` with "%s" specified`,
-		computedColName, regionColName, catpb.RBRUsingConstraintTableSettingName,
-	)
 }
 
 // QueryTimeoutError is an error representing a query timeout.

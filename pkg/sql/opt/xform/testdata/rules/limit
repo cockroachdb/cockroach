@@ -61,9 +61,7 @@ CREATE TABLE index_tab
     VECTOR INDEX (data1, data2, vec1),
     VECTOR INDEX (vec1) WHERE latitude > 0,
     VECTOR INDEX (data2, vec2) WHERE data2 > 0,
-    VECTOR INDEX (longitude, vec3) WHERE longitude IN (1, 2),
-    VECTOR INDEX cosine_idx (vec1 vector_cosine_ops),
-    VECTOR INDEX ip_idx (vec2 vector_ip_ops)
+    VECTOR INDEX (longitude, vec3) WHERE longitude IN (1, 2)
 )
 ----
 
@@ -1069,37 +1067,19 @@ index-join kuv
       ├── key: (4)
       ├── fd: (4)-->(1,2)
       ├── ordering: +2
-      ├── limit
+      ├── top-k
       │    ├── columns: k:1!null u:2 rowid:4!null
       │    ├── internal-ordering: +2
+      │    ├── k: 15
       │    ├── cardinality: [0 - 15]
       │    ├── key: (4)
       │    ├── fd: (4)-->(1,2)
       │    ├── ordering: +2
-      │    ├── union-all
-      │    │    ├── columns: k:1!null u:2 rowid:4!null
-      │    │    ├── left columns: k:7 u:8 rowid:10
-      │    │    ├── right columns: k:13 u:14 rowid:16
-      │    │    ├── cardinality: [0 - 30]
-      │    │    ├── ordering: +2
-      │    │    ├── limit hint: 15.00
-      │    │    ├── scan kuv@kuv_k_u_idx
-      │    │    │    ├── columns: k:7!null u:8 rowid:10!null
-      │    │    │    ├── constraint: /7/8/10: [/1 - /1]
-      │    │    │    ├── limit: 15
-      │    │    │    ├── key: (10)
-      │    │    │    ├── fd: ()-->(7), (10)-->(8)
-      │    │    │    ├── ordering: +8 opt(7) [actual: +8]
-      │    │    │    └── limit hint: 15.00
-      │    │    └── scan kuv@kuv_k_u_idx
-      │    │         ├── columns: k:13!null u:14 rowid:16!null
-      │    │         ├── constraint: /13/14/16: [/2 - /2]
-      │    │         ├── limit: 15
-      │    │         ├── key: (16)
-      │    │         ├── fd: ()-->(13), (16)-->(14)
-      │    │         ├── ordering: +14 opt(13) [actual: +14]
-      │    │         └── limit hint: 15.00
-      │    └── 15
+      │    └── scan kuv@kuv_k_u_idx
+      │         ├── columns: k:1!null u:2 rowid:4!null
+      │         ├── constraint: /1/2/4: [/1 - /2]
+      │         ├── key: (4)
+      │         └── fd: (4)-->(1,2)
       └── 5
 
 # The offset is not pushed into the index join if
@@ -3752,70 +3732,6 @@ top-k
       │    └── filters (true)
       └── projections
            └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# Case with Cosine distance operator.
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec1 <=> '[3,1,2]' LIMIT 1;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 1
- ├── cardinality: [0 - 1]
- ├── immutable
- ├── key: ()
- ├── fd: ()-->(1-11,15)
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@cosine_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 1
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec1:9 <=> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# Case with InnerProduct distance operator.
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec2 <#> '[3,1,2]' LIMIT 1;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 1
- ├── cardinality: [0 - 1]
- ├── immutable
- ├── key: ()
- ├── fd: ()-->(1-11,15)
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (10)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@ip_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 1
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec2:10 <#> '[3,1,2]' [as=column15:15, outer=(10), immutable]
 
 # Case with prefix columns constrained by a check constraint. Inapplicable check
 # constraints should not prevent the search.

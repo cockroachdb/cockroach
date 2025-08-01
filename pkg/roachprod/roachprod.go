@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit"
@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/ibm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/replay"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -68,13 +67,6 @@ type MalformedClusterNameError struct {
 func (e *MalformedClusterNameError) Error() string {
 	return fmt.Sprintf("Malformed cluster name %s, %s. Did you mean one of %s", e.name, e.reason, e.suggestions)
 }
-
-// DefaultCockroachPath is the path where the binary passed to the
-// `--cockroach` flag will be made available in every node in the
-// cluster.
-// N.B. This constant is duplicated from roachtest to break build dependency.
-// Thus, any update should be reflected in both places.
-const DefaultCockroachPath = "./cockroach"
 
 // findActiveAccounts is a hook for tests to inject their own FindActiveAccounts
 // implementation. i.e. unit tests that don't want to actually access a provider.
@@ -433,7 +425,7 @@ func Run(
 	}
 	// If no nodes were specified, run on nodes derived from the clusterName.
 	if len(options.Nodes) == 0 {
-		options.Nodes = c.Nodes
+		options.Nodes = c.TargetNodes()
 	}
 
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
@@ -461,7 +453,7 @@ func RunWithDetails(
 	}
 	// If no nodes were specified, run on nodes derived from the clusterName.
 	if len(options.Nodes) == 0 {
-		options.Nodes = c.Nodes
+		options.Nodes = c.TargetNodes()
 	}
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
 	return c.RunWithDetails(ctx, l, options, TruncateString(cmd, 30), cmd)
@@ -557,7 +549,7 @@ func IP(l *logger.Logger, clusterName string, external bool) ([]string, error) {
 		return nil, err
 	}
 
-	nodes := c.Nodes
+	nodes := c.TargetNodes()
 	ips := make([]string, len(nodes))
 
 	for i := 0; i < len(nodes); i++ {
@@ -626,14 +618,24 @@ func Stage(
 	return install.StageApplication(ctx, l, c, applicationName, version, os, vm.CPUArch(arch), dir)
 }
 
-// Reset resets VMs in a cluster.
+// Reset resets all VMs in a cluster.
 func Reset(l *logger.Logger, clusterName string) error {
-	c, err := GetClusterFromCache(l, clusterName)
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	if config.IsLocalClusterName(clusterName) {
+		return nil
+	}
+
+	c, err := getClusterFromCloud(l, clusterName)
 	if err != nil {
 		return err
 	}
 
-	return c.Reset(l)
+	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+		return p.Reset(l, vms)
+	})
 }
 
 // SetupSSH sets up the keys and host keys for the vms in the cluster.
@@ -814,7 +816,7 @@ func updatePrometheusTargets(
 	}
 
 	cl := promhelperclient.NewPromClient()
-	nodeIPPorts := promhelperclient.NodeTargets{}
+	nodeIPPorts := make(map[int][]*promhelperclient.NodeInfo)
 	nodeIPPortsMutex := syncutil.RWMutex{}
 	var wg sync.WaitGroup
 	for _, node := range c.Nodes {
@@ -831,56 +833,38 @@ func updatePrometheusTargets(
 		wg.Add(1)
 		go func(nodeID int, v vm.VM) {
 			defer wg.Done()
-			desc, err := c.ServiceDescriptor(ctx, install.Node(nodeID), "", install.ServiceTypeUI, 0)
+			desc, err := c.DiscoverService(ctx, install.Node(nodeID), "", install.ServiceTypeUI, 0)
 			if err != nil {
 				l.Errorf("error getting the port for node %d: %v", nodeID, err)
 				return
 			}
-
 			nodeIP := v.PrivateIP
 			if reachability == promhelperclient.Public {
 				nodeIP = v.PublicIP
 			}
-
-			// ensure atomicity in map update
+			nodeInfo := fmt.Sprintf("%s:%d", nodeIP, desc.Port)
 			nodeIPPortsMutex.Lock()
-			defer nodeIPPortsMutex.Unlock()
-
-			// Hardware metrics
+			// ensure atomicity in map update
 			if _, ok := nodeIPPorts[nodeID]; !ok {
 				nodeIPPorts[nodeID] = []*promhelperclient.NodeInfo{
 					{
 						Target:       fmt.Sprintf("%s:%d", nodeIP, vm.NodeExporterPort),
-						CustomLabels: createLabels(nodeID, v, "node_exporter", true),
+						CustomLabels: createLabels(nodeID, v, "node_exporter", !c.Secure),
 					},
 					{
 						Target:       fmt.Sprintf("%s:%d", nodeIP, vm.EbpfExporterPort),
-						CustomLabels: createLabels(nodeID, v, "ebpf_exporter", true),
+						CustomLabels: createLabels(nodeID, v, "ebpf_exporter", !c.Secure),
 					},
 				}
 			}
-
-			// CRDB metrics
 			nodeIPPorts[nodeID] = append(
 				nodeIPPorts[nodeID],
 				&promhelperclient.NodeInfo{
-					Target:       fmt.Sprintf("%s:%d", nodeIP, desc.Port),
+					Target:       nodeInfo,
 					CustomLabels: createLabels(nodeID, v, "cockroachdb", !c.Secure),
 				},
 			)
-
-			// Workload metrics
-			// TODO (golgeek): find a way to figure out if workload will be running
-			// on the node and only scrape its actual metrics port?
-			for port := vm.WorkloadMetricsPortMin; port <= vm.WorkloadMetricsPortMax; port++ {
-				nodeIPPorts[nodeID] = append(
-					nodeIPPorts[nodeID],
-					&promhelperclient.NodeInfo{
-						Target:       fmt.Sprintf("%s:%d", nodeIP, port),
-						CustomLabels: createLabels(nodeID, v, "workload", true),
-					},
-				)
-			}
+			nodeIPPortsMutex.Unlock()
 		}(int(node), c.VMs[node-1])
 
 	}
@@ -920,26 +904,26 @@ func createLabels(nodeID int, v vm.VM, job string, insecure bool) map[string]str
 	if t, ok := v.Labels["test_run_id"]; ok {
 		labels["test_run_id"] = t
 	}
-
-	// Default configuration for promhelperservice is HTTPS but insecure exporters
-	// are scraped over HTTP.
-	if insecure {
-		labels["__scheme__"] = "http"
-	}
-
 	switch job {
 	case "cockroachdb":
 		labels["__metrics_path__"] = "/_status/vars"
+		if insecure {
+			labels["__scheme__"] = "http"
+		}
 	case "node_exporter":
 		labels["__metrics_path__"] = vm.NodeExporterMetricsPath
+		// node_exporter is always scraped over http
+		labels["__scheme__"] = "http"
+
+		// Node ID is exposed by cockroachdb metrics, we add it to node_exporter
+		labels["node_id"] = strconv.Itoa(nodeID)
+
 	case "ebpf_exporter":
 		labels["__metrics_path__"] = vm.EbpfExporterMetricsPath
-	case "workload":
-		labels["__metrics_path__"] = vm.WorkloadMetricsPath
-	}
+		// ebpf_exporter is always scraped over http
+		labels["__scheme__"] = "http"
 
-	// Node ID is exposed by cockroachdb metrics, let's add it to other exporters.
-	if job != "cockroachdb" {
+		// Node ID is exposed by cockroachdb metrics, we add it to ebpf_exporter
 		labels["node_id"] = strconv.Itoa(nodeID)
 	}
 
@@ -1144,7 +1128,7 @@ func PgURL(
 	if err != nil {
 		return nil, err
 	}
-	nodes := c.Nodes
+	nodes := c.TargetNodes()
 	ips := make([]string, len(nodes))
 	if opts.External {
 		for i := 0; i < len(nodes); i++ {
@@ -1161,7 +1145,7 @@ func PgURL(
 
 	var urls []string
 	for i, ip := range ips {
-		desc, err := c.ServiceDescriptor(ctx, nodes[i], opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
+		desc, err := c.DiscoverService(ctx, nodes[i], opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -1172,12 +1156,6 @@ func PgURL(
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
-	}
-	// We should never return an empty list of URLs as roachprod clusters always have at least
-	// one node. However, many callers of this function directly index into the slice returned,
-	// so check just in case.
-	if len(urls) == 0 {
-		return nil, errors.Newf("have nodes %v, but no urls were found", nodes)
 	}
 	return urls, nil
 }
@@ -1221,7 +1199,7 @@ func urlGenerator(
 		}
 		port := uConfig.port
 		if port == 0 {
-			desc, err := c.ServiceDescriptor(
+			desc, err := c.DiscoverService(
 				ctx, node, uConfig.virtualClusterName, install.ServiceTypeUI, uConfig.sqlInstance,
 			)
 			if err != nil {
@@ -1286,7 +1264,7 @@ func AdminURL(
 		virtualClusterName: virtualClusterName,
 		sqlInstance:        sqlInstance,
 	}
-	return urlGenerator(ctx, c, l, c.Nodes, uConfig)
+	return urlGenerator(ctx, c, l, c.TargetNodes(), uConfig)
 }
 
 // SQLPorts finds the SQL ports for a cluster.
@@ -1374,7 +1352,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
-	err = c.Parallel(ctx, l, install.WithNodes(c.Nodes).WithDisplay(description),
+	err = c.Parallel(ctx, l, install.WithNodes(c.TargetNodes()).WithDisplay(description),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 			host := c.Host(node)
@@ -1744,7 +1722,7 @@ func Create(
 			for _, provider := range o.CreateOpts.VMProviders {
 				// TODO(DarrylWong): support zfs on other providers, see: #123775.
 				// Once done, revisit all tests that set zfs to see if they can run on non GCE.
-				if !(provider == gce.ProviderName || provider == aws.ProviderName || provider == ibm.ProviderName) {
+				if !(provider == gce.ProviderName || provider == aws.ProviderName) {
 					return fmt.Errorf(
 						"creating a node with --filesystem=zfs is currently not supported in %q", provider,
 					)
@@ -1771,14 +1749,6 @@ func Create(
 	}
 	l.Printf("Created cluster %s; setting up SSH...", clusterName)
 	return SetupSSH(ctx, l, clusterName, false /* sync */)
-}
-
-func PopulateEtcHosts(ctx context.Context, l *logger.Logger, clusterName string) error {
-	c, err := GetClusterFromCache(l, clusterName)
-	if err != nil {
-		return err
-	}
-	return c.PopulateEtcHosts(ctx, l)
 }
 
 func Grow(
@@ -1881,10 +1851,6 @@ func GC(l *logger.Logger, dryrun bool) error {
 		return cloud.GCAzure(l, dryrun)
 	})
 
-	addOpFn(func() error {
-		return cloud.GCIBM(l, dryrun)
-	})
-
 	// ListCloud may fail for a provider, but we can still attempt GC on
 	// the clusters we do have.
 	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{gce.ProviderName}})
@@ -1978,11 +1944,6 @@ func InitProviders() map[string]string {
 			name:  azure.ProviderName,
 			init:  azure.Init,
 			empty: &azure.Provider{},
-		},
-		{
-			name:  ibm.ProviderName,
-			init:  ibm.Init,
-			empty: &ibm.Provider{},
 		},
 		{
 			name: local.ProviderName,
@@ -2155,7 +2116,7 @@ func CreateSnapshot(
 		return nil, err
 	}
 
-	nodes := c.Nodes
+	nodes := c.TargetNodes()
 	nodesStatus, err := c.Status(ctx, l)
 
 	if err != nil {
@@ -2287,13 +2248,13 @@ func ApplySnapshots(
 		return err
 	}
 
-	if n := len(c.Nodes); n != len(snapshots) {
+	if n := len(c.TargetNodes()); n != len(snapshots) {
 		return fmt.Errorf("mismatched number of snapshots (%d) to node count (%d)", len(snapshots), n)
 		// TODO(irfansharif): Validate labels (version, instance types).
 	}
 
 	// Detach and delete existing volumes. This is destructive.
-	if err := c.Parallel(ctx, l, install.WithNodes(c.Nodes),
+	if err := c.Parallel(ctx, l, install.WithNodes(c.TargetNodes()),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 
@@ -2318,7 +2279,7 @@ func ApplySnapshots(
 		return err
 	}
 
-	return c.Parallel(ctx, l, install.WithNodes(c.Nodes),
+	return c.Parallel(ctx, l, install.WithNodes(c.TargetNodes()),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 
@@ -2430,7 +2391,7 @@ func StartJaeger(
 	// install from source or get linux binaries and start them
 	// with systemd. For now this just matches what we've been
 	// copy and pasting.
-	jaegerNode := c.Nodes[len(c.Nodes)-1:]
+	jaegerNode := c.TargetNodes()[len(c.TargetNodes())-1:]
 	err = install.InstallTool(ctx, l, c, jaegerNode, "docker", l.Stdout, l.Stderr)
 	if err != nil {
 		return err
@@ -2482,7 +2443,7 @@ func StopJaeger(ctx context.Context, l *logger.Logger, clusterName string) error
 	if err != nil {
 		return err
 	}
-	jaegerNode := c.Nodes[len(c.Nodes)-1:]
+	jaegerNode := c.TargetNodes()[len(c.TargetNodes())-1:]
 	stopCmd := fmt.Sprintf("docker stop %s", jaegerContainerName)
 	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(jaegerNode), stopCmd, stopCmd)
 	if err != nil {
@@ -2501,7 +2462,7 @@ func JaegerURL(
 	if err != nil {
 		return "", err
 	}
-	jaegerNode := c.Nodes[len(c.Nodes)-1:]
+	jaegerNode := c.TargetNodes()[len(c.TargetNodes())-1:]
 	urls, err := urlGenerator(ctx, c, l, jaegerNode, urlConfig{
 		usePublicIP:   true,
 		openInBrowser: openInBrowser,
@@ -2643,7 +2604,7 @@ func StorageCollectionPerformAction(
 }
 
 func printNodeToVolumeMapping(c *install.SyncedCluster) {
-	nodes := c.Nodes
+	nodes := c.TargetNodes()
 	for _, n := range nodes {
 		cVM := c.VMs[n-1]
 		for _, volume := range cVM.NonBootAttachedVolumes {
@@ -2657,7 +2618,7 @@ func printNodeToVolumeMapping(c *install.SyncedCluster) {
 func sendCaptureCommand(
 	ctx context.Context, l *logger.Logger, c *install.SyncedCluster, action string, captureDir string,
 ) error {
-	nodes := c.Nodes
+	nodes := c.TargetNodes()
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
 	_, _, err := c.ParallelE(ctx, l, install.WithNodes(nodes).WithDisplay(fmt.Sprintf("Performing workload capture %s", action)),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
@@ -2737,7 +2698,7 @@ func createAttachMountVolumes(
 	opts vm.VolumeCreateOpts,
 	mountDir string,
 ) error {
-	nodes := c.Nodes
+	nodes := c.TargetNodes()
 	for idx, n := range nodes {
 		curNode := nodes[idx : idx+1]
 
@@ -2802,8 +2763,9 @@ func CreateLoadBalancer(
 	}
 
 	// Find the SQL ports for the service on all nodes.
-	services, err := c.ServiceDescriptors(
-		ctx, c.Nodes, virtualClusterName, install.ServiceTypeSQL, sqlInstance,
+	services, err := c.DiscoverServices(
+		ctx, virtualClusterName, install.ServiceTypeSQL,
+		install.ServiceNodePredicate(c.TargetNodes()...), install.ServiceInstancePredicate(sqlInstance),
 	)
 	if err != nil {
 		return err
@@ -2864,7 +2826,8 @@ func LoadBalancerPgURL(
 		return "", err
 	}
 
-	services, err := c.ServiceDescriptors(ctx, c.Nodes, opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
+	services, err := c.DiscoverServices(ctx, opts.VirtualClusterName, install.ServiceTypeSQL,
+		install.ServiceInstancePredicate(opts.SQLInstance))
 	if err != nil {
 		return "", err
 	}
@@ -2890,7 +2853,8 @@ func LoadBalancerIP(
 	if err != nil {
 		return "", err
 	}
-	services, err := c.ServiceDescriptors(ctx, c.Nodes, virtualClusterName, install.ServiceTypeSQL, sqlInstance)
+	services, err := c.DiscoverServices(ctx, virtualClusterName, install.ServiceTypeSQL,
+		install.ServiceInstancePredicate(sqlInstance))
 	if err != nil {
 		return "", err
 	}
@@ -2930,7 +2894,7 @@ func Deploy(
 	}
 
 	stageDir := "stage-cockroach"
-	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(c.Nodes), "creating staging dir",
+	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(c.TargetNodes()), "creating staging dir",
 		fmt.Sprintf("rm -rf %[1]s && mkdir -p %[1]s", stageDir))
 	if err != nil {
 		return err
@@ -2940,7 +2904,7 @@ func Deploy(
 		if pathToBinary == "" {
 			return errors.Errorf("%s application requires a path to the binary", applicationName)
 		}
-		err = c.Put(ctx, l, c.Nodes, pathToBinary, filepath.Join(stageDir, "cockroach"))
+		err = c.Put(ctx, l, c.TargetNodes(), pathToBinary, filepath.Join(stageDir, "cockroach"))
 	} else {
 		err = Stage(ctx, l, clusterName, "", "", stageDir, applicationName, version)
 	}
@@ -2950,7 +2914,7 @@ func Deploy(
 	}
 
 	l.Printf("Performing rolling restart of %d nodes on %s", len(c.VMs), clusterName)
-	for _, node := range c.Nodes {
+	for _, node := range c.TargetNodes() {
 		curNode := []install.Node{node}
 
 		err = c.WithNodes(curNode).Stop(ctx, l, sig, wait, gracePeriod, "")
@@ -3043,73 +3007,39 @@ func FetchLogs(
 			if err != nil {
 				return err
 			}
-			// Found logs and corresponding nodes, which contain at least one log directory.
-			logDirs := make(map[string]struct{})
-			nodes := install.Nodes{}
 
+			logDirs := make(map[string]struct{})
 			for _, r := range results {
 				if r.Err != nil {
 					l.Printf("will not fetch logs for n%d due to error: %v", r.Node, r.Err)
-					continue
 				}
-				nodes = append(nodes, r.Node)
+
 				for _, logDir := range strings.Fields(r.Stdout) {
 					logDirs[logDir] = struct{}{}
 				}
 			}
-			if len(logDirs) == 0 {
-				l.Printf("no log directories found")
-				return nil
-			}
-			// For each found log directory, recursively scp its contents under the destination, prefixed by node id.
-			// E.g., n1's contents will show up under 1.unredacted, etc.
+
 			for logDir := range logDirs {
 				dirPath := filepath.Join(destination, logDir, "unredacted")
 				if err := os.MkdirAll(filepath.Dir(dirPath), 0755); err != nil {
 					return err
 				}
-				// Runs a recursive scp in parallel.
-				if err := c.Get(ctx, l, nodes, logDir /* src */, dirPath /* dest */); err != nil {
+
+				if err := c.Get(ctx, l, c.Nodes, logDir /* src */, dirPath /* dest */); err != nil {
 					l.Printf("failed to fetch log directory %s: %v", logDir, err)
 					if ctx.Err() != nil {
 						return errors.Wrap(err, "cluster.FetchLogs")
 					}
 				}
 			}
-			// Create a single redacted log.
-			if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(nodes), "", fmt.Sprintf("mkdir -p logs/redacted && %s debug merge-logs --redact logs/*.log > logs/redacted/combined.log", DefaultCockroachPath)); err != nil {
+
+			if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(c.Nodes), "", fmt.Sprintf("mkdir -p logs/redacted && %s debug merge-logs --redact logs/*.log > logs/redacted/combined.log", test.DefaultCockroachPath)); err != nil {
 				l.Printf("failed to redact logs: %v", err)
 				if ctx.Err() != nil {
 					return err
 				}
 			}
 			dest := filepath.Join(destination, "logs/cockroach.log")
-			return errors.Wrap(c.Get(ctx, l, nodes, "logs/redacted/combined.log" /* src */, dest), "cluster.FetchLogs")
+			return errors.Wrap(c.Get(ctx, l, c.Nodes, "logs/redacted/combined.log" /* src */, dest), "cluster.FetchLogs")
 		})
-}
-
-// FetchCertsDir downloads the certs directory from the cluster using `roachprod get`
-// and ensures the files are not world readable.
-func FetchCertsDir(
-	ctx context.Context, l *logger.Logger, clusterName, certsDir, destinationDir string,
-) error {
-	c, err := GetClusterFromCache(l, clusterName)
-	if err != nil {
-		return err
-	}
-
-	if err = c.Get(ctx, l, c.Nodes, certsDir, destinationDir); err != nil {
-		return err
-	}
-
-	// Need to prevent world readable files or lib/pq will complain.
-	return filepath.WalkDir(destinationDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return errors.Wrap(err, "walking localCertsDir failed")
-		}
-		if d.IsDir() {
-			return nil
-		}
-		return os.Chmod(path, 0600)
-	})
 }

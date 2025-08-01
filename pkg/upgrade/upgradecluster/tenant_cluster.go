@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"google.golang.org/grpc"
 )
 
 // TenantCluster represents the set of sql nodes running in a secondary tenant.
@@ -129,7 +129,7 @@ import (
 //     again in the next release.
 type TenantCluster struct {
 	// Dialer allows for the construction of connections to other SQL pods.
-	Dialer          rpcbase.NodeDialer
+	Dialer          NodeDialer
 	InstanceReader  *instancestorage.Reader
 	instancesAtBump []sqlinstance.InstanceInfo
 	DB              *kv.DB
@@ -138,7 +138,7 @@ type TenantCluster struct {
 // TenantClusterConfig configures a TenantCluster.
 type TenantClusterConfig struct {
 	// Dialer allows for the construction of connections to other SQL pods.
-	Dialer rpcbase.NodeDialer
+	Dialer NodeDialer
 
 	// InstanceReader is used to retrieve all SQL pods for a given tenant.
 	InstanceReader *instancestorage.Reader
@@ -188,7 +188,7 @@ const BumpClusterVersionOpName = "bump-cluster-version"
 // ForEveryNodeOrServer is part of the upgrade.Cluster interface.
 // TODO(ajstorm): Make the op here more structured.
 func (t *TenantCluster) ForEveryNodeOrServer(
-	ctx context.Context, op string, fn func(context.Context, serverpb.RPCMigrationClient) error,
+	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
 ) error {
 	// Get the list of all SQL instances running. We must do this using the
 	// "NoCache" method, as the upgrade interlock requires a consistent view of
@@ -224,7 +224,7 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			var client serverpb.RPCMigrationClient
+			var conn *grpc.ClientConn
 			retryOpts := retry.Options{
 				InitialBackoff: 1 * time.Millisecond,
 				MaxRetries:     20,
@@ -234,11 +234,12 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 			// test flakes due to network issues.
 			if err := retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
 				var err error
-				client, err = serverpb.DialMigrationClient(t.Dialer, ctx, roachpb.NodeID(instance.InstanceID), rpcbase.DefaultClass)
+				conn, err = t.Dialer.Dial(ctx, roachpb.NodeID(instance.InstanceID), rpc.DefaultClass)
 				return err
 			}); err != nil {
 				return annotateDialError(err)
 			}
+			client := serverpb.NewMigrationClient(conn)
 			return fn(ctx, client)
 		})
 	}

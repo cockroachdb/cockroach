@@ -21,11 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -44,13 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-)
-
-var importElasticCPUControlEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"bulkio.import.elastic_control.enabled",
-	"determines whether import operations integrate with elastic CPU control",
-	false, // TODO(dt): enable this by default after more benchmarking.
 )
 
 func runImport(
@@ -82,11 +73,14 @@ func runImport(
 		return nil, err
 	}
 
-	// This group holds the go routines that are responsible for producing KV
-	// batches and ingesting produced KVs.
+	// This group holds the go routines that are responsible for producing KV batches.
+	// and ingesting produced KVs.
+	// Depending on the import implementation both conv.start and conv.readFiles can
+	// produce KVs so we should close the channel only after *both* are finished.
 	group := ctxgroup.WithContext(ctx)
+	conv.start(group)
 
-	// Read input files into kvs.
+	// Read input files into kvs
 	group.GoCtx(func(ctx context.Context) error {
 		defer close(kvCh)
 		ctx, span := tracing.ChildSpan(ctx, "import-files-to-kvs")
@@ -135,7 +129,9 @@ func runImport(
 	}
 }
 
-// readInputFiles reads each of the passed dataFiles using the passed func. The
+type readFileFunc func(context.Context, *fileReader, int32, int64, chan string) error
+
+// readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
 // the IMPORT. progressFn, if not nil, is periodically invoked with a percentage
 // of the total progress of reading through all of the files. This percentage
@@ -148,7 +144,7 @@ func readInputFiles(
 	dataFiles map[int32]string,
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
-	fileFunc func(context.Context, *fileReader, int32, int64, chan string) error,
+	fileFunc readFileFunc,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	user username.SQLUsername,
 ) error {
@@ -377,6 +373,7 @@ func (f fileReader) ReadFraction() float32 {
 }
 
 type inputConverter interface {
+	start(group ctxgroup.Group)
 	readFiles(ctx context.Context, dataFiles map[int32]string, resumePos map[int32]int64,
 		format roachpb.IOFileFormat, makeExternalStorage cloud.ExternalStorageFactory, user username.SQLUsername) error
 }
@@ -385,10 +382,38 @@ type inputConverter interface {
 // mapped specifically to a particular data column.
 func formatHasNamedColumns(format roachpb.IOFileFormat_FileFormat) bool {
 	switch format {
-	case roachpb.IOFileFormat_Avro:
+	case roachpb.IOFileFormat_Avro,
+		roachpb.IOFileFormat_Mysqldump,
+		roachpb.IOFileFormat_PgDump:
 		return true
 	}
 	return false
+}
+
+func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
+	switch format {
+	case roachpb.IOFileFormat_Mysqldump,
+		roachpb.IOFileFormat_PgDump:
+		return true
+	}
+	return false
+}
+
+func makeRowErr(row int64, code pgcode.Code, format string, args ...interface{}) error {
+	err := pgerror.NewWithDepthf(1, code, format, args...)
+	err = errors.WrapWithDepthf(1, err, "row %d", row)
+	return err
+}
+
+func wrapRowErr(err error, row int64, code pgcode.Code, format string, args ...interface{}) error {
+	if format != "" || len(args) > 0 {
+		err = errors.WrapWithDepthf(1, err, format, args...)
+	}
+	err = errors.WrapWithDepthf(1, err, "row %d", row)
+	if code != pgcode.Uncategorized {
+		err = pgerror.WithCandidateCode(err, code)
+	}
+	return err
 }
 
 // importRowError is an error type describing malformed import data.
@@ -576,15 +601,9 @@ func runParallelImport(
 		var span *tracing.Span
 		ctx, span = tracing.ChildSpan(ctx, "import-file-to-rows")
 		defer span.Finish()
-
-		// Create a pacer for admission control for the producer.
-		pacer := bulk.NewCPUPacer(ctx, importCtx.db, importElasticCPUControlEnabled)
-		defer pacer.Close()
-
 		var numSkipped int64
 		var count int64
 		for producer.Scan() {
-			pacer.Pace(ctx)
 			// Skip rows if needed.
 			count++
 			if count <= fileCtx.skip {
@@ -675,10 +694,6 @@ func (p *parallelImporter) importWorker(
 	fileCtx *importFileContext,
 	minEmitted []int64,
 ) error {
-	// Create a pacer for admission control for this worker.
-	pacer := bulk.NewCPUPacer(ctx, importCtx.db, importElasticCPUControlEnabled)
-	defer pacer.Close()
-
 	conv, err := makeDatumConverter(ctx, importCtx, fileCtx, importCtx.db)
 	if err != nil {
 		return err
@@ -699,8 +714,6 @@ func (p *parallelImporter) importWorker(
 		conv.KvBatch.Progress = batch.progress
 		for batchIdx, record := range batch.data {
 			rowNum = batch.startPos + int64(batchIdx)
-			// Pace the admission control before processing each row.
-			pacer.Pace(ctx)
 			if err := consumer.FillDatums(ctx, record, rowNum, conv); err != nil {
 				if err = handleCorruptRow(ctx, fileCtx, err); err != nil {
 					return err

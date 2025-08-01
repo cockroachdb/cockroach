@@ -167,13 +167,17 @@ func (sl StateLoader) SetHardState(
 // SynthesizeHardState synthesizes an on-disk HardState from the given input,
 // taking care that a HardState compatible with the existing data is written.
 func (sl StateLoader) SynthesizeHardState(
-	ctx context.Context, writer storage.Writer, oldHS raftpb.HardState, applied EntryID,
+	ctx context.Context,
+	writer storage.Writer,
+	oldHS raftpb.HardState,
+	truncState kvserverpb.RaftTruncatedState,
+	raftAppliedIndex kvpb.RaftIndex,
 ) error {
 	newHS := raftpb.HardState{
-		Term: uint64(applied.Term),
-		// NB: when applying a Raft snapshot, the applied index is equal to the
-		// Commit index represented by the snapshot.
-		Commit: uint64(applied.Index),
+		Term: uint64(truncState.Term),
+		// Note that when applying a Raft snapshot, the applied index is
+		// equal to the Commit index represented by the snapshot.
+		Commit: uint64(raftAppliedIndex),
 	}
 
 	if oldHS.Commit > newHS.Commit {
@@ -201,4 +205,36 @@ func (sl StateLoader) SynthesizeHardState(
 	}
 	err := sl.SetHardState(ctx, writer, newHS)
 	return errors.Wrapf(err, "writing HardState %+v", &newHS)
+}
+
+// SetRaftReplicaID overwrites the RaftReplicaID.
+func (sl StateLoader) SetRaftReplicaID(
+	ctx context.Context, writer storage.Writer, replicaID roachpb.ReplicaID,
+) error {
+	rid := kvserverpb.RaftReplicaID{ReplicaID: replicaID}
+	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
+	return storage.MVCCBlindPutProto(
+		ctx,
+		writer,
+		sl.RaftReplicaIDKey(),
+		hlc.Timestamp{}, /* timestamp */
+		&rid,
+		storage.MVCCWriteOptions{}, /* opts */
+	)
+}
+
+// LoadRaftReplicaID loads the RaftReplicaID.
+func (sl StateLoader) LoadRaftReplicaID(
+	ctx context.Context, reader storage.Reader,
+) (*kvserverpb.RaftReplicaID, error) {
+	var replicaID kvserverpb.RaftReplicaID
+	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftReplicaIDKey(),
+		hlc.Timestamp{}, &replicaID, storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory})
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errors.AssertionFailedf("no replicaID persisted")
+	}
+	return &replicaID, nil
 }

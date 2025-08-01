@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -103,7 +102,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 	rf, err := rangefeed.NewFactory(stopper, kvDB, execCfg.Settings, nil /* knobs */)
 	require.NoError(t, err)
 	leaseMgr := lease.NewLeaseManager(
-		ctx,
 		s.AmbientCtx(),
 		execCfg.NodeInfo.NodeID,
 		s.InternalDB().(isql.DB),
@@ -115,7 +113,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 		lease.ManagerTestingKnobs{},
 		stopper,
 		rf,
-		execCfg.RootMemoryMonitor,
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.Background())
@@ -226,7 +223,6 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
@@ -541,9 +537,7 @@ func TestUniqueViolationsAreCaught(t *testing.T) {
 	server, sqlDB, _ := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
-	_, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
-SET use_declarative_schema_changer='off';
+	_, err := sqlDB.Exec(`SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (pk INT PRIMARY KEY, v INT);
 INSERT INTO t.test VALUES (1,1), (2,2), (3,3)
@@ -832,11 +826,6 @@ func TestDropWhileBackfill(t *testing.T) {
 	}
 	if _, err := sqlDB.Exec(`
 	ALTER ROLE ALL SET autocommit_before_ddl = 'false';
-`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`
-	SET create_table_with_schema_locked=false;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -1325,7 +1314,6 @@ func TestDropColumn(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test (
   k INT PRIMARY KEY,
@@ -1446,7 +1434,6 @@ func TestSchemaChangeRetry(t *testing.T) {
 	codec := s.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 SET use_declarative_schema_changer = off;
@@ -1551,7 +1538,6 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	codec := s.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -1667,7 +1653,6 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 	codec := server.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -1874,7 +1859,6 @@ func TestAddColumnDuringColumnDrop(t *testing.T) {
 	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test (
     k INT PRIMARY KEY NOT NULL,
@@ -1977,7 +1961,6 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 	codec := server.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3);
 `); err != nil {
@@ -2040,7 +2023,6 @@ func TestDropIndexNoRevert(t *testing.T) {
 	defer server.Stopper().Stop(context.Background())
 
 	_, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE TABLE t (pk INT PRIMARY KEY, b int, c int);
 CREATE INDEX index_to_drop ON t (b);
 INSERT INTO t VALUES (1, 1, 1), (2, 2, 1);
@@ -2111,9 +2093,6 @@ func TestOldRevertedDropIndexesAreIgnored(t *testing.T) {
 	_, err := sqlDB.Exec("SET use_declarative_schema_changer='off'")
 	require.NoError(t, err)
 
-	_, err = sqlDB.Exec("SET create_table_with_schema_locked=false")
-	require.NoError(t, err)
-
 	_, err = sqlDB.Exec("CREATE DATABASE test; CREATE TABLE test.t (pk INT PRIMARY KEY, b int)")
 	require.NoError(t, err)
 
@@ -2155,7 +2134,6 @@ func TestVisibilityDuringPrimaryKeyChange(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT PRIMARY KEY, y INT NOT NULL, z INT, INDEX i (z));
@@ -2186,7 +2164,7 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	z INT8 NULL,
 	CONSTRAINT test_pkey PRIMARY KEY (x ASC),
 	INDEX i (z ASC)
-);`
+)`
 	if create != expected {
 		t.Fatalf("expected %s, found %s", expected, create)
 	}
@@ -2207,7 +2185,7 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	CONSTRAINT test_pkey PRIMARY KEY (y ASC),
 	INDEX i (z ASC),
 	UNIQUE INDEX test_x_key (x ASC)
-);`
+)`
 	if create != expected {
 		t.Fatalf("expected %s, found %s", expected, create)
 	}
@@ -2286,7 +2264,6 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 	t.Run("pk-change-before", func(t *testing.T) {
 		var wg sync.WaitGroup
 		if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 DROP TABLE IF EXISTS t.test;
 CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 			t.Fatal(err)
@@ -2304,8 +2281,6 @@ CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 		// Alter the primary key of the table.
 		go func() {
 			if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
-
 SET use_declarative_schema_changer = off;
 ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v2);
 SET use_declarative_schema_changer = on;`); err != nil {
@@ -2318,7 +2293,6 @@ SET use_declarative_schema_changer = on;`); err != nil {
 
 		// This must be rejected, because there is a primary key change already in progress.
 		_, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer = off;
 ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k);
 SET use_declarative_schema_changer = on;`)
@@ -2372,7 +2346,6 @@ func TestSchemaChangeWhileExecutingPrimaryKeyChange(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT NOT NULL, v INT);
 `); err != nil {
@@ -3040,7 +3013,6 @@ func TestPrimaryKeyDropIndexNotCancelable(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	_, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT NOT NULL, v INT);
 `)
@@ -3156,7 +3128,6 @@ func TestGrantRevokeWhileIndexBackfill(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE USER foo;
 CREATE DATABASE t;
@@ -3253,7 +3224,6 @@ func TestCRUDWhileColumnBackfill(t *testing.T) {
 	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test (
     k INT8 NOT NULL,
@@ -3391,7 +3361,7 @@ ALTER TABLE t.test ADD z INT8 AS (k + id) STORED;`); err != nil {
 	length INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (k ASC),
 	INDEX v_idx (v ASC)
-);`
+)`
 	if create != expect {
 		t.Fatalf("got: %s\nexpected: %s", create, expect)
 	}
@@ -3494,11 +3464,6 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 	codec := tc.Server(0).ApplicationLayer().Codec()
-	// Avoid schema locked tables if declarative schema changer is
-	// disabled.
-	if _, err := sqlDB.Exec("SET create_table_with_schema_locked=false"); err != nil {
-		t.Fatal(err)
-	}
 	// Declarative schema changer does not use then new MVCC backfiller, so
 	// fall back for now.
 	if _, err := sqlDB.Exec("SET use_declarative_schema_changer='off'"); err != nil {
@@ -3566,7 +3531,6 @@ func TestSchemaChangeInTxn(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 INSERT INTO t.kv VALUES ('a', 'b');
@@ -4095,7 +4059,6 @@ func TestSchemaChangeErrorOnCommit(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
-	sqlRunner.Exec(t, `SET create_table_with_schema_locked=false`)
 	sqlRunner.Exec(t, `CREATE DATABASE t;`)
 	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT);`)
 	sqlRunner.Exec(t, `INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);`)
@@ -4160,9 +4123,6 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		UpgradeManager: &upgradebase.TestingKnobs{
-			SkipHotRangesLoggerJobBootstrap: true,
-		},
 	}
 
 	tc = serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
@@ -4177,13 +4137,11 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "useDeclarative", func(t *testing.T, useDeclarative bool) {
 		writeTSFromJob := "p->'schemaChange'->'writeTimestamp'->>'wallTime'"
 		indexName := "index_created_in_test_legacy"
-		sqlDB.Exec(t, "SET create_table_with_schema_locked=false")
 		sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
 		if useDeclarative {
 			writeTSFromJob = "p->'newSchemaChange'->'backfillProgress'->0->'writeTimestamp'->>'wallTime'"
 			indexName = "index_created_in_test_declarative"
 			sqlDB.Exec(t, "SET use_declarative_schema_changer='on'")
-			sqlDB.Exec(t, "SET create_table_with_schema_locked=true")
 		}
 		sqlDB.Exec(t, "DROP TABLE IF EXISTS t.test")
 		sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
@@ -4465,7 +4423,6 @@ func TestCancelSchemaChange(t *testing.T) {
 	defer sqltestutils.DisableGCTTLStrictEnforcement(t, db)()
 
 	sqlDB.Exec(t, `
-		SET create_table_with_schema_locked=false;
     SET use_declarative_schema_changer = 'off';
 		CREATE DATABASE t;
 		CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
@@ -4634,7 +4591,6 @@ func TestCancelSchemaChangeContext(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `
-  SET create_table_with_schema_locked=false;
 	SET use_declarative_schema_changer='off';
 		CREATE DATABASE t;
 		CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -4767,7 +4723,6 @@ func TestBlockedSchemaChange(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `
-	  SET create_table_with_schema_locked=false;
 	  SET use_declarative_schema_changer='off';
 		CREATE DATABASE t;
 		CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -4850,7 +4805,6 @@ func TestIndexBackfillValidation(t *testing.T) {
 	db = kvDB
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -4921,7 +4875,6 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 	codec = server.Codec()
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v JSON);
@@ -4972,7 +4925,6 @@ func TestMultipleIndexBackfills(t *testing.T) {
 	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test (a INT, b INT, c JSON, d JSON);
 `); err != nil {
@@ -5114,7 +5066,6 @@ func TestTableValidityWhileAddingFK(t *testing.T) {
 	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.child (a INT PRIMARY KEY, b INT, INDEX (b));
 CREATE TABLE t.parent (a INT PRIMARY KEY);
@@ -5199,7 +5150,6 @@ func TestTableValidityWhileAddingUniqueConstraint(t *testing.T) {
 	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.tab (a INT PRIMARY KEY, b INT, c INT);
 SET use_declarative_schema_changer = off;
@@ -5282,7 +5232,6 @@ func TestWritesWithChecksBeforeDefaultColumnBackfill(t *testing.T) {
 	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test (
     k INT PRIMARY KEY NOT NULL,
@@ -5379,7 +5328,6 @@ func TestWritesWithChecksBeforeComputedColumnBackfill(t *testing.T) {
 	defer server.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test (
     k INT PRIMARY KEY NOT NULL,
@@ -5488,7 +5436,6 @@ func TestIntentRaceWithIndexBackfill(t *testing.T) {
 	backfillProgressing = make(chan struct{})
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -5747,7 +5694,6 @@ func TestMultipleRevert(t *testing.T) {
 
 	// Create a k-v table and kick off a schema change that should get rolled
 	// back.
-	runner.Exec(t, "SET create_table_with_schema_locked=false")
 	runner.Exec(t, `CREATE DATABASE t;`)
 	runner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);`)
 	runner.Exec(t, `INSERT INTO t.test VALUES (1, 2);`)
@@ -5762,9 +5708,9 @@ ALTER TABLE t.public.test DROP COLUMN v;`)
 	}, rows)
 }
 
-// TestRetryableErrorDuringRollback tests that a retryable error while rolling
+// TestRetriableErrorDuringRollback tests that a retriable error while rolling
 // back a schema change causes the rollback to retry and succeed.
-func TestRetryableErrorDuringRollback(t *testing.T) {
+func TestRetriableErrorDuringRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -5779,7 +5725,6 @@ func TestRetryableErrorDuringRollback(t *testing.T) {
 		defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 		_, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
@@ -5828,7 +5773,7 @@ SELECT usage_count
 				},
 				RunBeforeBackfill: func() error {
 					// The first time through the backfiller in OnFailOrCancel, return a
-					// retryable error.
+					// retriable error.
 					if !onFailOrCancelStarted || injectedError {
 						return nil
 					}
@@ -5854,7 +5799,7 @@ SELECT usage_count
 					return nil
 				},
 				RunBeforeMutationReversal: func(_ jobspb.JobID) error {
-					// The first time through reversing mutations, return a retryable
+					// The first time through reversing mutations, return a retriable
 					// error.
 					if !onFailOrCancelStarted || injectedError {
 						return nil
@@ -5903,7 +5848,6 @@ func TestDropTableWhileSchemaChangeReverting(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	_, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 INSERT INTO t.test VALUES (1, 2), (2, 2);
@@ -5952,7 +5896,6 @@ func TestRetryOnAllErrorsWhenReverting(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		_, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
@@ -5999,7 +5942,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 						return nil
 					}
 					injectedError = true
-					// Any error not on the allowlist of retryable errors is considered permanent.
+					// Any error not on the allowlist of retriable errors is considered permanent.
 					return errors.New("permanent error")
 				},
 			},
@@ -6028,7 +5971,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 						return nil
 					}
 					injectedError = true
-					// Any error not on the allowlist of retryable errors is considered permanent.
+					// Any error not on the allowlist of retriable errors is considered permanent.
 					return errors.New("permanent error")
 				},
 			},
@@ -6155,9 +6098,7 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 	}
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	_, err := sqlDB.Exec(`SET create_table_with_schema_locked=false;`)
-	require.NoError(t, err)
-	_, err = sqlDB.Exec(`SET use_declarative_schema_changer='off';`)
+	_, err := sqlDB.Exec(`SET use_declarative_schema_changer='off';`)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off';`)
 	require.NoError(t, err)
@@ -6233,9 +6174,7 @@ func TestCancelMultipleQueued(t *testing.T) {
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	_, err := sqlDB.Exec(`SET create_table_with_schema_locked=false`)
-	require.NoError(t, err)
-	_, err = sqlDB.Exec(`SET use_declarative_schema_changer='off'`)
+	_, err := sqlDB.Exec(`SET use_declarative_schema_changer='off'`)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'`)
 	require.NoError(t, err)
@@ -6350,7 +6289,6 @@ func TestRollbackForeignKeyAddition(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, `SET create_table_with_schema_locked=false`)
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
 	tdb.Exec(t, `CREATE TABLE db.t2 (a INT)`)
@@ -6624,7 +6562,6 @@ func TestCheckConstraintDropAndColumn(t *testing.T) {
 	conn2 := sqlutils.MakeSQLRunner(sqlDB)
 
 	conn1.Exec(t, `
-SET create_table_with_schema_locked=false;
 CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
 INSERT INTO t VALUES (1, 1);
 SET use_declarative_schema_changer = off;
@@ -6770,7 +6707,6 @@ func TestShardColumnConstraintSkipValidation(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	tdb.Exec(t, `
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test(a INT PRIMARY KEY, b INT NOT NULL);
 INSERT INTO t.test VALUES (1, 2);
@@ -6897,7 +6833,7 @@ func TestTTLAutomaticColumnSchemaChangeFailures(t *testing.T) {
 	id STRING NOT NULL,
 	expire_at TIMESTAMPTZ NULL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
-);`
+)`
 
 		createTTLExpireAfterTable = `CREATE DATABASE t;
 CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expire_after = '10 hours');`
@@ -6906,7 +6842,7 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 	expire_at TIMESTAMPTZ NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL);`
+) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL)`
 
 		createTTLExpirationExpressionTable = `CREATE DATABASE t;
 CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at');`
@@ -6914,7 +6850,7 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 	id STRING NOT NULL,
 	expire_at TIMESTAMPTZ NULL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at');`
+) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at')`
 
 		createTTLExpireAfterTTLExpirationExpressionTable = `CREATE DATABASE t;
 CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expire_after = '10 hours', ttl_expiration_expression = 'crdb_internal_expiration');`
@@ -6923,7 +6859,7 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 	expire_at TIMESTAMPTZ NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL, ttl_expiration_expression = 'crdb_internal_expiration');`
+) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL, ttl_expiration_expression = 'crdb_internal_expiration')`
 	)
 
 	testCases := []struct {
@@ -7066,9 +7002,7 @@ ALTER TABLE t.test SET (ttl_expire_after = '10 hours');
 			s, sqlDB, kvDB := serverutils.StartServer(t, params)
 			defer s.Stopper().Stop(ctx)
 
-			_, err := sqlDB.Exec("SET create_table_with_schema_locked=false")
-			require.NoError(t, err)
-			_, err = sqlDB.Exec(tc.setup)
+			_, err := sqlDB.Exec(tc.setup)
 			require.NoError(t, err)
 
 			// Set test knobs before schema change
@@ -7206,7 +7140,6 @@ CREATE TABLE t.test (x INT) WITH (ttl_expire_after = '10 minutes');`,
 			ctx := context.Background()
 			defer s.Stopper().Stop(ctx)
 
-			sqlDB.Exec(t, "SET create_table_with_schema_locked=false")
 			sqlDB.Exec(t, tc.setup)
 
 			tableID := sqlutils.QueryTableID(t, db, "t", "public", "test")
@@ -7325,7 +7258,6 @@ func TestPauseBeforeRandomDescTxn(t *testing.T) {
 		{
 			name: "create index",
 			setupSQL: `
-SET create_table_with_schema_locked = false;
 SET use_declarative_schema_changer='off';
 CREATE TABLE t (pk INT PRIMARY KEY, b INT);
 INSERT INTO t VALUES (1, 1), (2, 2), (3, 3);
@@ -7437,9 +7369,7 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 	for _, tc := range []testCase{
 		{
 			name: "update during alter table with multiple column families",
-			setupSQL: `
-SET create_table_with_schema_locked=false;
-SET use_declarative_schema_changer = off;
+			setupSQL: `SET use_declarative_schema_changer = off;
 CREATE DATABASE t;
 CREATE TABLE t.test (pk INT PRIMARY KEY, a INT NOT NULL, b INT, FAMILY (pk, a), FAMILY (b));
 INSERT INTO t.test (pk, a, b) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
@@ -7460,9 +7390,7 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (a)`,
 		},
 		{
 			name: "update during add index with multiple column families",
-			setupSQL: `
-SET create_table_with_schema_locked=false;
-SET use_declarative_schema_changer = off;
+			setupSQL: `SET use_declarative_schema_changer = off;
 CREATE DATABASE t;
 CREATE TABLE t.test (
     pk INT PRIMARY KEY,
@@ -7490,7 +7418,6 @@ INSERT INTO t.test (pk, a, b, c) VALUES (1, 1, 1, 1), (2, 2, 2, 2);
 		{
 			name: "truncate",
 			setupSQL: `
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer = off;
 CREATE DATABASE t;
 CREATE TABLE t.test (pk INT PRIMARY KEY, v INT);
@@ -7658,7 +7585,6 @@ func TestColumnBackfillProcessingDoesNotHoldLockOnJobsTable(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, "SET create_table_with_schema_locked=false;")
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
 	tdb.Exec(t, "INSERT INTO foo SELECT * FROM generate_series(1, 10)")
 	tdb.Exec(t, "ALTER TABLE foo SPLIT AT SELECT * FROM generate_series(1, 9)")
@@ -7706,7 +7632,6 @@ func TestLegacySchemaChangerWaitsForOtherSchemaChanges(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
-	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `SET use_declarative_schema_changer = off`)
 	tdb.Exec(t, `CREATE TABLE t (i INT PRIMARY KEY);`)
 	tdb.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';`)
@@ -7733,7 +7658,7 @@ func TestLegacySchemaChangerWaitsForOtherSchemaChanges(t *testing.T) {
 }
 
 // TestMemoryMonitorErrorsDuringBackfillAreRetried tests that we properly classify memory
-// monitor errors as retryable. It's a regression test to ensure that we don't end up
+// monitor errors as retriable. It's a regression test to ensure that we don't end up
 // trying to revert schema changes which encounter such errors. Prior to the commit which
 // added this test, these errors would result in failures which looked like:
 //
@@ -7957,32 +7882,4 @@ func TestLeaseGenerationBumpWithSchemaChange(t *testing.T) {
 	descIDToDelay = tableDesc.GetID()
 	runner.Exec(t, "ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS(n, j)")
 	require.NoError(t, grp.Wait())
-}
-
-// TestCreateTableAsValidationFailure simulates a synthetic validation
-// failure for CREATE TABLE AS.
-func TestCreateTableAsValidationFailure(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-				RunDuringQueryBackfillValidation: func(expectedCount int64, currentCount int64) (newCurrentCount int64, err error) {
-					return 0, nil
-				},
-			},
-		},
-	})
-
-	defer s.Stopper().Stop(context.Background())
-	runner := sqlutils.MakeSQLRunner(sqlDB)
-	// Create table table and populate it.
-	runner.Exec(t, "CREATE TABLE t1(n int PRIMARY KEY)")
-	runner.Exec(t, "INSERT INTO t1 VALUES (1)")
-	runner.Exec(t, "INSERT INTO t1 VALUES (2)")
-	runner.Exec(t, "INSERT INTO t1 VALUES (3)")
-	// Execute a CTAS and CREATE MATERIALIZED VIEW statements that should fail.
-	runner.ExpectErr(t, "backfill query did not populate index \"t2_pkey\" with expected number of rows", "CREATE TABLE t2 AS (SELECT * FROM t1)")
-	runner.ExpectErr(t, "backfill query did not populate index \"t2_pkey\" with expected number of rows", "CREATE MATERIALIZED VIEW t2 AS (SELECT n FROM t1)")
 }

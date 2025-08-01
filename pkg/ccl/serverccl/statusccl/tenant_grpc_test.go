@@ -12,10 +12,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -55,15 +54,6 @@ func TestTenantGRPCServices(t *testing.T) {
 	})
 	defer connTenant.Close()
 
-	// Wait for some statements to appear.
-	pgUrl, cleanup := tenant.PGUrl(t)
-	defer cleanup()
-	obsConn, cleanupConn := sqlstatstestutil.MakeObserverConnection(t, pgUrl)
-	defer cleanupConn()
-	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, obsConn, 1, sqlstatstestutil.StatementFilter{
-		AllowInternal: true,
-	})
-
 	t.Logf("subtests starting")
 
 	t.Run("gRPC is running", func(t *testing.T) {
@@ -89,7 +79,6 @@ func TestTenantGRPCServices(t *testing.T) {
 	sqlRunner := sqlutils.MakeSQLRunner(connTenant)
 	sqlRunner.Exec(t, "CREATE TABLE test (id int)")
 	sqlRunner.Exec(t, "INSERT INTO test VALUES (1)")
-	sqlstatstestutil.WaitForStatementEntriesEqual(t, obsConn, 2)
 
 	tenant2, connTenant2 := serverutils.StartTenant(t, server, base.TestTenantArgs{
 		TenantID:     tenantID,
@@ -132,10 +121,10 @@ func TestTenantGRPCServices(t *testing.T) {
 		rpcCtx := tenant2.RPCContext()
 
 		nodeID := roachpb.NodeID(tenant.SQLInstanceID())
-		conn, err := rpcCtx.GRPCDialNode(grpcAddr, nodeID, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
+		conn, err := rpcCtx.GRPCDialNode(grpcAddr, nodeID, roachpb.Locality{}, rpc.DefaultClass).Connect(ctx)
 		require.NoError(t, err)
 
-		client := serverpb.NewGRPCStatusClientAdapter(conn)
+		client := serverpb.NewStatusClient(conn)
 
 		resp, err := client.Statements(ctx, &serverpb.StatementsRequest{NodeID: "local"})
 		require.NoError(t, err)
@@ -146,10 +135,10 @@ func TestTenantGRPCServices(t *testing.T) {
 		grpcAddr := server.RPCAddr()
 		rpcCtx := tenant.RPCContext()
 
-		conn, err := rpcCtx.GRPCDialNode(grpcAddr, server.NodeID(), roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
+		conn, err := rpcCtx.GRPCDialNode(grpcAddr, server.NodeID(), roachpb.Locality{}, rpc.DefaultClass).Connect(ctx)
 		require.NoError(t, err)
 
-		client := serverpb.NewGRPCStatusClientAdapter(conn)
+		client := serverpb.NewStatusClient(conn)
 
 		_, err = client.Statements(ctx, &serverpb.StatementsRequest{NodeID: "local"})
 		require.Errorf(t, err, "statements endpoint should not be accessed on KV node by tenant")

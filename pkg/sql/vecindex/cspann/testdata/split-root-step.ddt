@@ -158,12 +158,19 @@ force-split partition-key=1 root=3 steps=5
     ├───• vec1 (1, 2)
     └───• vec2 (4, 3)
 
-# Partition #4 should be left empty.
+# Next steps should duplicate the last remaining vector in partition #1 and also
+# add it to partition #4. This will prevent partition #4 from being empty, which
+# would be a violation of the constraint that the K-means tree must be balanced.
 force-split partition-key=1 root=4 steps=1
 ----
 • 4 (2.5, 2.5) [Updating:1]
+│
+└───• 2 (2.5, 2.5)
+    │
+    ├───• vec1 (1, 2)
+    └───• vec2 (4, 3)
 
-# Finish the split.
+# Finish the split, with partition #2 a child of both sub-partitions.
 force-split partition-key=1
 ----
 • 1 (6.8, 4.2)
@@ -176,6 +183,11 @@ force-split partition-key=1
 │       └───• vec2 (4, 3)
 │
 └───• 4 (2.5, 2.5)
+    │
+    └───• 2 (2.5, 2.5)
+        │
+        ├───• vec1 (1, 2)
+        └───• vec2 (4, 3)
 
 # ----------------------------------------------------------------------
 # Search the tree when the root is in splitting states.
@@ -189,21 +201,21 @@ load-index min-partition-size=1 max-partition-size=3 beam-size=4
 │   ├───• vec6 (14, 1)
 │   └───• vec5 (8, 11)
 │
-├───• 3 (4, 3)
+├───• 3 (4.3333, 4)
 │   │
 │   ├───• vec3 (4, 3)
 │   └───• vec4 (4, 3)
 │
 ├───• 4 (-1, 6)
 │   │
-│   ├───• vec9 (-2, 7)
+│   ├───• vec9 (-2, 8)
 │   └───• vec8 (0, 4)
 │
-└───• 5 (-2, -1)
+└───• 5 (-1.3333, -1)
     │
     ├───• vec7 (0, 0)
     ├───• vec1 (1, 2)
-    └───• vec2 (-7, -5)
+    └───• vec2 (-5, -5)
 ----
 Loaded 9 vectors.
 
@@ -217,34 +229,33 @@ force-split partition-key=1 steps=1
 │   ├───• vec6 (14, 1)
 │   └───• vec5 (8, 11)
 │
-├───• 3 (4, 3)
+├───• 3 (4.3333, 4)
 │   │
 │   ├───• vec3 (4, 3)
 │   └───• vec4 (4, 3)
 │
 ├───• 4 (-1, 6)
 │   │
-│   ├───• vec9 (-2, 7)
+│   ├───• vec9 (-2, 8)
 │   └───• vec8 (0, 4)
 │
-└───• 5 (-2, -1)
+└───• 5 (-1.3333, -1)
     │
     ├───• vec7 (0, 0)
     ├───• vec1 (1, 2)
-    └───• vec2 (-7, -5)
+    └───• vec2 (-5, -5)
 
 # Search the tree without triggering fixups.
-# NOTE: vec4 and vec9 are extra results (within error bound of zero).
+# NOTE: vec4 is an extra duplicate zero (within error bound of zero).
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4
-vec7: 5
-vec8: 5
-vec3: 26
-vec4: 26
-vec9: 26
-9 leaf vectors, 13 vectors, 6 full vectors, 5 partitions
+vec1: 4 (centroid=3.8)
+vec7: 5 (centroid=1.67)
+vec8: 5 (centroid=2.24)
+vec3: 26 (centroid=1.05)
+vec4: 26 (centroid=1.05)
+9 leaf vectors, 13 vectors, 9 full vectors, 5 partitions
 
 # Move to the DrainingForSplit state, where sub-partition #6 has vectors.
 force-split partition-key=1 steps=4
@@ -256,49 +267,48 @@ force-split partition-key=1 steps=4
 │   ├───• vec6 (14, 1)
 │   └───• vec5 (8, 11)
 │
-├───• 3 (4, 3)
+├───• 3 (4.3333, 4)
 │   │
 │   ├───• vec3 (4, 3)
 │   └───• vec4 (4, 3)
 │
 ├───• 4 (-1, 6)
 │   │
-│   ├───• vec9 (-2, 7)
+│   ├───• vec9 (-2, 8)
 │   └───• vec8 (0, 4)
 │
-└───• 5 (-2, -1)
+└───• 5 (-1.3333, -1)
     │
     ├───• vec7 (0, 0)
     ├───• vec1 (1, 2)
-    └───• vec2 (-7, -5)
+    └───• vec2 (-5, -5)
 
 format-tree root=6
 ----
-• 6 (-1.5, 2.5) [Updating:1]
+• 6 (-1.1667, 2.5) [Updating:1]
 │
-├───• 5 (-2, -1)
+├───• 4 (-1, 6)
 │   │
-│   ├───• vec7 (0, 0)
-│   ├───• vec1 (1, 2)
-│   └───• vec2 (-7, -5)
+│   ├───• vec9 (-2, 8)
+│   └───• vec8 (0, 4)
 │
-└───• 4 (-1, 6)
+└───• 5 (-1.3333, -1)
     │
-    ├───• vec9 (-2, 7)
-    └───• vec8 (0, 4)
+    ├───• vec7 (0, 0)
+    ├───• vec1 (1, 2)
+    └───• vec2 (-5, -5)
 
 # Search the tree, ensure that duplicates are not returned.
-# NOTE: vec4 and vec9 are extra results (within error bound of zero).
+# NOTE: vec4 is an extra duplicate zero (within error bound of zero).
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4
-vec7: 5
-vec8: 5
-vec3: 26
-vec4: 26
-vec9: 26
-9 leaf vectors, 15 vectors, 6 full vectors, 7 partitions
+vec1: 4 (centroid=3.8)
+vec7: 5 (centroid=1.67)
+vec8: 5 (centroid=2.24)
+vec3: 26 (centroid=1.05)
+vec4: 26 (centroid=1.05)
+9 leaf vectors, 15 vectors, 9 full vectors, 7 partitions
 
 # Move to the point where partition #1 children have been cleared.
 force-split partition-key=1 steps=2
@@ -309,13 +319,12 @@ force-split partition-key=1 steps=2
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4
-vec7: 5
-vec8: 5
-vec3: 26
-vec4: 26
-vec9: 26
-9 leaf vectors, 13 vectors, 6 full vectors, 7 partitions
+vec1: 4 (centroid=3.8)
+vec7: 5 (centroid=1.67)
+vec8: 5 (centroid=2.24)
+vec3: 26 (centroid=1.05)
+vec4: 26 (centroid=1.05)
+9 leaf vectors, 13 vectors, 9 full vectors, 7 partitions
 
 # Move to the AddingLevel state, where root partition's level has increased.
 force-split partition-key=1 steps=1
@@ -326,97 +335,94 @@ force-split partition-key=1 steps=1
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4
-vec7: 5
-vec8: 5
-vec3: 26
-vec4: 26
-vec9: 26
-9 leaf vectors, 13 vectors, 6 full vectors, 7 partitions
+vec1: 4 (centroid=3.8)
+vec7: 5 (centroid=1.67)
+vec8: 5 (centroid=2.24)
+vec3: 26 (centroid=1.05)
+vec4: 26 (centroid=1.05)
+9 leaf vectors, 13 vectors, 9 full vectors, 7 partitions
 
 # Move to point where sub-partitions #6 and #7 have been added to the root.
 force-split partition-key=1 steps=4
 ----
 • 1 (7.25, 4.75) [AddingLevel:6,7]
 │
-├───• 6 (-1.5, 2.5)
+├───• 6 (-1.1667, 2.5)
 │   │
-│   ├───• 5 (-2, -1)
+│   ├───• 4 (-1, 6)
 │   │   │
-│   │   ├───• vec7 (0, 0)
-│   │   ├───• vec1 (1, 2)
-│   │   └───• vec2 (-7, -5)
+│   │   ├───• vec9 (-2, 8)
+│   │   └───• vec8 (0, 4)
 │   │
-│   └───• 4 (-1, 6)
+│   └───• 5 (-1.3333, -1)
 │       │
-│       ├───• vec9 (-2, 7)
-│       └───• vec8 (0, 4)
+│       ├───• vec7 (0, 0)
+│       ├───• vec1 (1, 2)
+│       └───• vec2 (-5, -5)
 │
-└───• 7 (7.5, 4.5)
+└───• 7 (7.6666, 5)
     │
-    ├───• 3 (4, 3)
+    ├───• 2 (11, 6)
     │   │
-    │   ├───• vec3 (4, 3)
-    │   └───• vec4 (4, 3)
+    │   ├───• vec6 (14, 1)
+    │   └───• vec5 (8, 11)
     │
-    └───• 2 (11, 6)
+    └───• 3 (4.3333, 4)
         │
-        ├───• vec6 (14, 1)
-        └───• vec5 (8, 11)
+        ├───• vec3 (4, 3)
+        └───• vec4 (4, 3)
 
 # Search the tree.
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4
-vec7: 5
-vec8: 5
-vec3: 26
-vec4: 26
-vec9: 26
-9 leaf vectors, 15 vectors, 6 full vectors, 7 partitions
+vec1: 4 (centroid=3.8)
+vec7: 5 (centroid=1.67)
+vec8: 5 (centroid=2.24)
+vec3: 26 (centroid=1.05)
+vec4: 26 (centroid=1.05)
+9 leaf vectors, 15 vectors, 9 full vectors, 7 partitions
 
 # Finish the split.
 force-split partition-key=1 steps=1
 ----
 • 1 (7.25, 4.75)
 │
-├───• 6 (-1.5, 2.5)
+├───• 6 (-1.1667, 2.5)
 │   │
-│   ├───• 5 (-2, -1)
+│   ├───• 4 (-1, 6)
 │   │   │
-│   │   ├───• vec7 (0, 0)
-│   │   ├───• vec1 (1, 2)
-│   │   └───• vec2 (-7, -5)
+│   │   ├───• vec9 (-2, 8)
+│   │   └───• vec8 (0, 4)
 │   │
-│   └───• 4 (-1, 6)
+│   └───• 5 (-1.3333, -1)
 │       │
-│       ├───• vec9 (-2, 7)
-│       └───• vec8 (0, 4)
+│       ├───• vec7 (0, 0)
+│       ├───• vec1 (1, 2)
+│       └───• vec2 (-5, -5)
 │
-└───• 7 (7.5, 4.5)
+└───• 7 (7.6666, 5)
     │
-    ├───• 3 (4, 3)
+    ├───• 2 (11, 6)
     │   │
-    │   ├───• vec3 (4, 3)
-    │   └───• vec4 (4, 3)
+    │   ├───• vec6 (14, 1)
+    │   └───• vec5 (8, 11)
     │
-    └───• 2 (11, 6)
+    └───• 3 (4.3333, 4)
         │
-        ├───• vec6 (14, 1)
-        └───• vec5 (8, 11)
+        ├───• vec3 (4, 3)
+        └───• vec4 (4, 3)
 
 # Search the tree.
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4
-vec7: 5
-vec8: 5
-vec3: 26
-vec4: 26
-vec9: 26
-9 leaf vectors, 15 vectors, 6 full vectors, 7 partitions
+vec1: 4 (centroid=3.8)
+vec7: 5 (centroid=1.67)
+vec8: 5 (centroid=2.24)
+vec3: 26 (centroid=1.05)
+vec4: 26 (centroid=1.05)
+9 leaf vectors, 15 vectors, 9 full vectors, 7 partitions
 
 # ----------------------------------------------------------------------
 # Insert into the tree when the root is in splitting states.
@@ -444,7 +450,7 @@ force-split partition-key=1 steps=1
 search-for-insert discard-fixups
 (-3, 6)
 ----
-partition 1, centroid=(6.8, 4.2), dist=0
+partition 1, centroid=(6.8, 4.2), sqdist=0
 
 insert discard-fixups
 vec4: (-3, 6)
@@ -470,7 +476,7 @@ force-split partition-key=1 steps=3
 search-for-insert discard-fixups
 (10, 5)
 ----
-partition 2, centroid=(10.5, 2.5), dist=6.5
+partition 2, centroid=(10.5, 2.5), sqdist=6.5
 
 insert discard-fixups
 vec5: (10, 5)
@@ -501,7 +507,7 @@ force-split partition-key=1 steps=2 root=2
 search-for-insert discard-fixups
 (0, 0)
 ----
-partition 3, centroid=(-1, 4), dist=17
+partition 3, centroid=(-1, 4), sqdist=17
 
 insert discard-fixups root=3
 vec6: (0, 0)
@@ -521,7 +527,7 @@ force-split partition-key=1 steps=1
 search-for-insert discard-fixups
 (8, 8)
 ----
-partition 2, centroid=(10.5, 2.5), dist=36.5
+partition 2, centroid=(10.5, 2.5), sqdist=36.5
 
 insert discard-fixups root=2
 vec7: (8, 8)
@@ -568,7 +574,7 @@ force-split partition-key=2 parent-partition-key=1 steps=10 root=2
 search-for-insert discard-fixups
 (15, 5)
 ----
-partition 2, centroid=(10.5, 2.5), dist=0
+partition 2, centroid=(10.5, 2.5), sqdist=0
 
 insert discard-fixups root=2
 vec8: (15, 5)
@@ -727,10 +733,10 @@ format-tree root=2
 • 2 (5.3333, 6.6667) [Updating:1]
 │
 ├───• vec10 (5, 8)
-├───• vec8 (6, 8)
+├───• vec7 (3, 5)
 ├───• vec3 (4, 3)
 ├───• vec4 (8, 11)
-└───• vec7 (3, 5)
+└───• vec8 (6, 8)
 
 delete discard-fixups
 vec3
@@ -752,8 +758,8 @@ format-tree root=2
 • 2 (5.3333, 6.6667) [Updating:1]
 │
 ├───• vec10 (5, 8)
-├───• vec8 (6, 8)
 ├───• vec7 (3, 5)
+├───• vec8 (6, 8)
 └───• vec4 (8, 11)
 
 # Delete vector after vectors have been cleared in the root. This should remove
@@ -768,8 +774,8 @@ vec4
 • 3 (9.6667, 3.6667) [Updating:1]
 │
 ├───• vec6 (8, 6)
-├───• vec5 (14, 1)
-└───• vec9 (6, 5)
+├───• vec9 (6, 5)
+└───• vec5 (14, 1)
 
 # Delete vector in AddingLevel state. This should remove the vector from
 # sub-partition #3.
@@ -793,8 +799,8 @@ force-split partition-key=1
 ├───• 2 (5.3333, 6.6667)
 │   │
 │   ├───• vec10 (5, 8)
-│   ├───• vec8 (6, 8)
-│   └───• vec7 (3, 5)
+│   ├───• vec7 (3, 5)
+│   └───• vec8 (6, 8)
 │
 └───• 3 (9.6667, 3.6667)
     │

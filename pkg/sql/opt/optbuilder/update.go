@@ -295,10 +295,6 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs, colRefs *opt.Co
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
 
-	// Track whether the region column is being explicitly updated. This is a
-	// no-op if the table isn't regional-by-row.
-	mb.setRegionColExplicitlyMutated(mb.updateColIDs)
-
 	// Add assignment casts for update columns.
 	mb.addAssignmentCasts(mb.updateColIDs)
 
@@ -352,8 +348,6 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 func (mb *mutationBuilder) buildUpdate(
 	returning *tree.ReturningExprs, policyScopeCmd cat.PolicyCommandScope, colRefs *opt.ColSet,
 ) {
-	mb.maybeAddRegionColLookup(opt.UpdateOp)
-
 	// Disambiguate names so that references in any expressions, such as a
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
@@ -371,9 +365,6 @@ func (mb *mutationBuilder) buildUpdate(
 	// This includes:
 	// - Columns needed for the initial fetch (SET/WHERE).
 	// - Columns read post-mutation (e.g., for RETURNING).
-	//
-	// These checks only matter if the target table has RLS enabled, so we gate
-	// the logic behind that for performance reasons.
 	includeSelectPolicies := false
 	if mb.tab.IsRowLevelSecurityEnabled() && colRefs != nil {
 		for _, colID := range mb.fetchColIDs {

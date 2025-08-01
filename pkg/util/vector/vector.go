@@ -21,8 +21,6 @@ import (
 // MaxDim is the maximum number of dimensions a vector can have.
 const MaxDim = 16000
 
-var MaxDimExceededErr = pgerror.Newf(pgcode.ProgramLimitExceeded, "vector cannot have more than %d dimensions", MaxDim)
-
 // T is the type of a PGVector-like vector.
 type T []float32
 
@@ -40,7 +38,7 @@ func ParseVector(input string) (T, error) {
 	parts := strings.Split(input, ",")
 
 	if len(parts) > MaxDim {
-		return T{}, MaxDimExceededErr
+		return T{}, pgerror.Newf(pgcode.ProgramLimitExceeded, "vector cannot have more than %d dimensions", MaxDim)
 	}
 
 	vector := make([]float32, len(parts))
@@ -281,7 +279,7 @@ func Random(rng *rand.Rand, maxDim int) T {
 	v := make(T, n)
 	for i := range v {
 		for {
-			v[i] = float32(rng.NormFloat64())
+			v[i] = math.Float32frombits(rng.Uint32())
 			if math.IsNaN(float64(v[i])) || math.IsInf(float64(v[i]), 0) {
 				continue
 			}

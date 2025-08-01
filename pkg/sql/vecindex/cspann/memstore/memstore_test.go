@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -67,7 +66,7 @@ func TestMemStore(t *testing.T) {
 
 	suite.Run(t, commontest.NewStoreTestSuite(ctx, makeStore))
 
-	quantizer := quantize.NewRaBitQuantizer(2, 42, vecpb.L2SquaredDistance)
+	quantizer := quantize.NewRaBitQuantizer(2, 42)
 	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 	testPKs := []cspann.KeyBytes{{11}, {12}}
@@ -110,7 +109,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	valueBytes1 := cspann.ValueBytes{1, 2}
 	valueBytes2 := cspann.ValueBytes{3, 4}
 
-	quantizer := quantize.NewRaBitQuantizer(2, 42, vecpb.L2SquaredDistance)
+	quantizer := quantize.NewRaBitQuantizer(2, 42)
 	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 
@@ -140,7 +139,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 				err := txn2.SearchPartitions(ctx, treeKey, toSearch, vector.T{0, 0}, &searchSet)
 				require.NoError(t, err)
 				result1 := cspann.SearchResult{
-					QueryDistance: 25, ErrorBound: 0,
+					QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5,
 					ParentPartitionKey: cspann.RootKey, ChildKey: childKey2, ValueBytes: valueBytes2}
 				require.Equal(t, cspann.SearchResults{result1}, searchSet.PopResults())
 				require.Equal(t, 2, toSearch[0].Count)
@@ -166,7 +165,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	quantizer := quantize.NewUnQuantizer(2, vecpb.L2SquaredDistance)
+	quantizer := quantize.NewUnQuantizer(2)
 	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 
@@ -197,11 +196,10 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 		require.Equal(t, []cspann.CVStats{}, stats.CVStats)
 
 		// Increase root partition level and check stats.
-		toGet := []cspann.PartitionMetadataToGet{{Key: cspann.RootKey}}
-		err = store.TryGetPartitionMetadata(ctx, treeKey, toGet)
+		metadata, err := store.TryGetPartitionMetadata(ctx, treeKey, cspann.RootKey)
 		require.NoError(t, err)
 
-		expected := toGet[0].Metadata
+		expected := metadata
 		metadata.Level = 3
 		err = store.TryUpdatePartitionMetadata(ctx, treeKey, cspann.RootKey, metadata, expected)
 		require.NoError(t, err)
@@ -243,8 +241,8 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	raBitQuantizer := quantize.NewRaBitQuantizer(2, 42, vecpb.CosineDistance)
-	unquantizer := quantize.NewUnQuantizer(2, vecpb.L2SquaredDistance)
+	raBitQuantizer := quantize.NewRaBitQuantizer(2, 42)
+	unquantizer := quantize.NewUnQuantizer(2)
 	store := New(raBitQuantizer, 42)
 	store.mu.partitions = make(map[qualifiedPartitionKey]*memPartition)
 	centroid := []float32{4, 3}
@@ -254,6 +252,8 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 		cspann.MakeReadyPartitionMetadata(1, centroid),
 		unquantizer,
 		&quantize.UnQuantizedVectorSet{
+			Centroid:          centroid,
+			CentroidDistances: []float32{1, 2, 3},
 			Vectors: vector.Set{
 				Dims:  2,
 				Count: 3,
@@ -270,6 +270,8 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 		cspann.MakeReadyPartitionMetadata(2, centroid),
 		raBitQuantizer,
 		&quantize.UnQuantizedVectorSet{
+			Centroid:          centroid,
+			CentroidDistances: []float32{1, 2, 3, 4},
 			Vectors: vector.Set{
 				Dims:  2,
 				Count: 3,
@@ -298,10 +300,6 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	store2, err := Load(data)
 	require.NoError(t, err)
 
-	require.NotNil(t, store2.rootQuantizer)
-	require.Equal(t, vecpb.CosineDistance, store2.rootQuantizer.GetDistanceMetric())
-	require.NotNil(t, store2.quantizer)
-	require.Equal(t, vecpb.CosineDistance, store2.quantizer.GetDistanceMetric())
 	require.Len(t, store2.mu.partitions, 2)
 	require.Equal(t, qkey10, store2.mu.partitions[qkey10].key)
 	require.Equal(t, uint64(1), store2.mu.partitions[qkey10].lock.created)

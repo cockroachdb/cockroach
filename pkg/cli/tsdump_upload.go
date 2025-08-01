@@ -8,28 +8,27 @@ package cli
 import (
 	"archive/zip"
 	"bytes"
-	"context"
+	"compress/gzip"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
-	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -41,7 +40,6 @@ const (
 const (
 	UploadStatusSuccess = "Success"
 	UploadStatusFailure = "Failed"
-	nodeKey             = "node_id"
 )
 
 var (
@@ -56,20 +54,48 @@ var (
 		"us1-fed": "ddog-gov.com",
 	}
 
+	targetURLFormat           = "https://api.%s/api/v2/series"
 	datadogDashboardURLFormat = "https://us5.datadoghq.com/dashboard/bif-kwe-gx2/self-hosted-db-console-tsdump?" +
 		"tpl_var_cluster=%s&tpl_var_upload_id=%s&tpl_var_upload_day=%d&tpl_var_upload_month=%d&tpl_var_upload_year=%d&from_ts=%d&to_ts=%d"
 	zipFileSignature            = []byte{0x50, 0x4B, 0x03, 0x04}
 	logMessageFormat            = "tsdump upload to datadog is partially failed for metric: %s"
 	partialFailureMessageFormat = "The Tsdump upload to Datadog succeeded but %d metrics partially failed to upload." +
-		" These failures can be due to transient network errors. If any of these metrics are critical for your investigation," +
+		" These failures can be due to transietnt network errors. If any of these metrics are critical for your investigation," +
 		" please re-upload the Tsdump:\n%s\n"
 	datadogLogsURLFormat = "https://us5.datadoghq.com/logs?query=cluster_label:%s+upload_id:%s"
-
-	translateMetricType = map[string]*datadogV2.MetricIntakeType{
-		"GAUGE":   datadogV2.METRICINTAKETYPE_GAUGE.Ptr(),
-		"COUNTER": datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
-	}
 )
+
+// DatadogPoint is a single metric point in Datadog format
+type DatadogPoint struct {
+	// Timestamp must be in seconds since Unix epoch.
+	Timestamp int64   `json:"timestamp"`
+	Value     float64 `json:"value"`
+}
+
+// DatadogSeries contains a JSON encoding of a single series object
+// that can be send to Datadog.
+type DatadogSeries struct {
+	Metric    string         `json:"metric"`
+	Type      int            `json:"type"`
+	Points    []DatadogPoint `json:"points"`
+	Resources []struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	} `json:"resources"`
+	// In order to encode arbitrary key-value pairs, use a `:` delimited
+	// tag string like `cluster:dedicated`.
+	Tags []string `json:"tags"`
+}
+
+// DatadogSubmitMetrics is the top level JSON object that must be sent to Datadog.
+// See: https://docs.datadoghq.com/api/latest/metrics/#submit-metrics
+type DatadogSubmitMetrics struct {
+	Series []DatadogSeries `json:"series"`
+}
+
+type DatadogResp struct {
+	Errors []string `json:"errors"`
+}
 
 var newTsdumpUploadID = func(uploadTime time.Time) string {
 	clusterTagValue := "cluster-debug"
@@ -84,106 +110,70 @@ var newTsdumpUploadID = func(uploadTime time.Time) string {
 // in the CLI flags.
 type datadogWriter struct {
 	sync.Once
-	uploadID       string
-	init           bool
-	apiClient      *datadog.APIClient
-	apiKey         string
-	datadogContext context.Context
+	targetURL string
+	uploadID  string
+	init      bool
+	apiKey    string
 	// namePrefix sets the string to prepend to all metric names. The
 	// names are kept with `.` delimiters.
-	namePrefix        string
-	threshold         int
-	uploadTime        time.Time
-	storeToNodeMap    map[string]string
-	metricTypeMap     map[string]string
-	noOfUploadWorkers int
+	namePrefix string
+	doRequest  func(req *http.Request) error
+	threshold  int
+	uploadTime time.Time
 }
 
 func makeDatadogWriter(
-	ddSite string,
+	targetURL string,
 	init bool,
 	apiKey string,
 	threshold int,
-	hostNameOverride string,
-	noOfUploadWorkers int,
-) (*datadogWriter, error) {
+	doRequest func(req *http.Request) error,
+) *datadogWriter {
+
 	currentTime := getCurrentTime()
 
-	var metricTypeMap map[string]string
-	if init {
-		// we only need to load the metric types map when the command is
-		// datadogInit. It's ok to keep it nil otherwise.
-		var err error
-		metricTypeMap, err = loadMetricTypesMap(context.Background())
-		if err != nil {
-			fmt.Printf(
-				"error loading metric types map: %v\nThis may lead to some metrics not behaving correctly on Datadog.\n", err)
-		}
-	}
-	ctx := context.WithValue(
-		context.Background(),
-		datadog.ContextAPIKeys,
-		map[string]datadog.APIKey{
-			"apiKeyAuth": {
-				Key: apiKey,
-			},
-		},
-	)
-	host, ok := ddSiteToHostMap[ddSite]
-	if !ok {
-		return nil, fmt.Errorf("unsupported datadog site '%s'", ddSite)
-	}
-	ctx = context.WithValue(ctx, datadog.ContextServerVariables, map[string]string{
-		"site": host,
-	})
-
-	// The Datadog retry configuration is used when we receive error codes
-	// 429 and >= 500 from the Datadog.
-	configuration := datadog.NewConfiguration()
-	configuration.RetryConfiguration.EnableRetry = true
-	configuration.RetryConfiguration.BackOffMultiplier = 1
-	configuration.RetryConfiguration.BackOffBase = 0.2 // 200ms
-	configuration.RetryConfiguration.MaxRetries = 100
-	apiClient := datadog.NewAPIClient(configuration)
-	if hostNameOverride != "" {
-		apiClient.Cfg.Host = hostNameOverride
-		apiClient.Cfg.Scheme = "http"
-	}
-
 	return &datadogWriter{
-		datadogContext:    ctx,
-		apiClient:         apiClient,
-		apiKey:            apiKey,
-		uploadID:          newTsdumpUploadID(currentTime),
-		init:              init,
-		namePrefix:        "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
-		threshold:         threshold,
-		uploadTime:        currentTime,
-		storeToNodeMap:    make(map[string]string),
-		metricTypeMap:     metricTypeMap,
-		noOfUploadWorkers: noOfUploadWorkers,
-	}, nil
+		targetURL:  targetURL,
+		uploadID:   newTsdumpUploadID(currentTime),
+		init:       init,
+		apiKey:     apiKey,
+		namePrefix: "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
+		doRequest:  doRequest,
+		threshold:  threshold,
+		uploadTime: currentTime,
+	}
 }
 
 var getCurrentTime = func() time.Time {
 	return timeutil.Now()
 }
 
-var getHostname = func() string {
-	hostname, err := os.Hostname()
+func doDDRequest(req *http.Request) error {
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "unknown"
+		return err
 	}
-	return hostname
+	defer resp.Body.Close()
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	ddResp := DatadogResp{}
+	err = json.Unmarshal(respBytes, &ddResp)
+	if err != nil {
+		return err
+	}
+	if len(ddResp.Errors) > 0 {
+		return errors.Newf("tsdump: error response from datadog (%d): %+v; request: %+v", resp.StatusCode, ddResp.Errors, req)
+	}
+	if resp.StatusCode > 299 {
+		return errors.Newf("tsdump: bad response status code: %+v", resp)
+	}
+	return nil
 }
 
-// appendTag appends a formatted tag to the series tags.
-func appendTag(series *datadogV2.MetricSeries, tagKey, tagValue string) {
-	series.Tags = append(series.Tags, fmt.Sprintf("%s:%s", tagKey, tagValue))
-}
-
-func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, error) {
-	name, source, res, _, err := ts.DecodeDataKey(kv.Key)
+func dump(kv *roachpb.KeyValue) (*DatadogSeries, error) {
+	name, source, _, _, err := ts.DecodeDataKey(kv.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -192,90 +182,41 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 		return nil, err
 	}
 
-	series := &datadogV2.MetricSeries{
-		Metric:   name,
-		Tags:     []string{},
-		Type:     d.resolveMetricType(name),
-		Points:   make([]datadogV2.MetricPoint, idata.SampleCount()),
-		Interval: datadog.PtrInt64(int64(res.Duration().Seconds())), // convert from time.Duration to number of seconds.
+	series := &DatadogSeries{
+		Metric: name,
+		Tags:   []string{},
+		Type:   DatadogSeriesTypeUnknown,
+		Points: make([]DatadogPoint, idata.SampleCount()),
 	}
 
 	sl := reCrStoreNode.FindStringSubmatch(name)
-	if len(sl) >= 3 {
-		// extract the node/store and metric name from the regex match.
-		key := sl[1]
-		series.Metric = sl[2]
-
-		switch key {
-		case "node":
-			appendTag(series, nodeKey, source)
-		case "store":
-			appendTag(series, key, source)
-			// We check the node associated with store if store to node mapping
-			// is provided as part of --store-to-node-map-file flag. If exists then
-			// emit node as tag.
-			if nodeID, ok := d.storeToNodeMap[source]; ok {
-				appendTag(series, nodeKey, nodeID)
-			}
-		default:
-			appendTag(series, key, source)
+	if len(sl) != 0 {
+		storeNodeKey := sl[1]
+		if storeNodeKey == "node" {
+			storeNodeKey += "_id"
 		}
+		series.Tags = append(series.Tags, fmt.Sprintf("%s:%s", storeNodeKey, source))
+		series.Metric = sl[2]
 	} else {
-		// add default node_id as 0 as there is no metric match for the regex.
-		appendTag(series, nodeKey, "0")
+		series.Tags = append(series.Tags, "node_id:0")
 	}
 
 	for i := 0; i < idata.SampleCount(); i++ {
 		if idata.IsColumnar() {
-			series.Points[i].Timestamp = datadog.PtrInt64(idata.TimestampForOffset(idata.Offset[i]) / 1_000_000_000)
-			series.Points[i].Value = datadog.PtrFloat64(idata.Last[i])
+			series.Points[i].Timestamp = idata.TimestampForOffset(idata.Offset[i]) / 1_000_000_000
+			series.Points[i].Value = idata.Last[i]
 		} else {
-			series.Points[i].Timestamp = datadog.PtrInt64(idata.TimestampForOffset(idata.Samples[i].Offset) / 1_000_000_000)
-			series.Points[i].Value = datadog.PtrFloat64(idata.Samples[i].Sum)
+			series.Points[i].Timestamp = idata.TimestampForOffset(idata.Samples[i].Offset) / 1_000_000_000
+			series.Points[i].Value = idata.Samples[i].Sum
 		}
 
 	}
 	return series, nil
 }
 
-func (d *datadogWriter) resolveMetricType(metricName string) *datadogV2.MetricIntakeType {
-	if !d.init {
-		// in this is not datadogInit command, we don't need to resolve the metric
-		// type. We can just return DatadogSeriesTypeUnknown. Datadog only expects
-		// us to send the type information only once.
-		return datadogV2.METRICINTAKETYPE_UNSPECIFIED.Ptr()
-	}
-
-	typeLookupKey := strings.TrimPrefix(metricName, "cr.store.")
-	typeLookupKey = strings.TrimPrefix(typeLookupKey, "cr.node.")
-	metricType := d.metricTypeMap[typeLookupKey]
-	if t, ok := translateMetricType[metricType]; ok {
-		return t
-	}
-
-	if strings.HasSuffix(metricName, "-count") {
-		return datadogV2.METRICINTAKETYPE_COUNT.Ptr()
-	}
-
-	if strings.HasSuffix(metricName, "-avg") ||
-		strings.HasSuffix(metricName, "-max") ||
-		strings.HasSuffix(metricName, "-sum") ||
-		strings.HasSuffix(metricName, "-p50") ||
-		strings.HasSuffix(metricName, "-p75") ||
-		strings.HasSuffix(metricName, "-p90") ||
-		strings.HasSuffix(metricName, "-p99") ||
-		strings.HasSuffix(metricName, "-p99.9") ||
-		strings.HasSuffix(metricName, "-p99.99") ||
-		strings.HasSuffix(metricName, "-p99.999") {
-		return datadogV2.METRICINTAKETYPE_GAUGE.Ptr()
-	}
-
-	return datadogV2.METRICINTAKETYPE_UNSPECIFIED.Ptr()
-}
-
 var printLock syncutil.Mutex
 
-func (d *datadogWriter) emitDataDogMetrics(data []datadogV2.MetricSeries) ([]string, error) {
+func (d *datadogWriter) emitDataDogMetrics(data []DatadogSeries) ([]string, error) {
 	tags := getUploadTags(d)
 
 	emittedMetrics := make([]string, len(data))
@@ -291,9 +232,9 @@ func (d *datadogWriter) emitDataDogMetrics(data []datadogV2.MetricSeries) ([]str
 	// full dataset. This should only be necessary once globally.
 	if d.init {
 		for i := 0; i < len(data); i++ {
-			data[i].Points = []datadogV2.MetricPoint{{
-				Value:     datadog.PtrFloat64(0),
-				Timestamp: datadog.PtrInt64(getCurrentTime().Unix()),
+			data[i].Points = []DatadogPoint{{
+				Value:     0,
+				Timestamp: timeutil.Now().Unix(),
 			}}
 		}
 	}
@@ -352,35 +293,43 @@ func getUploadTags(d *datadogWriter) []string {
 	return tags
 }
 
-func (d *datadogWriter) flush(data []datadogV2.MetricSeries) error {
-	if debugTimeSeriesDumpOpts.dryRun {
-		return nil
+func (d *datadogWriter) flush(data []DatadogSeries) error {
+	var buf bytes.Buffer
+	err := json.NewEncoder(&buf).Encode(&DatadogSubmitMetrics{Series: data})
+	if err != nil {
+		return err
+	}
+	var zipBuf bytes.Buffer
+	g := gzip.NewWriter(&zipBuf)
+	_, err = io.Copy(g, &buf)
+	if err != nil {
+		return err
+	}
+	err = g.Close()
+	if err != nil {
+		return err
 	}
 
-	api := datadogV2.NewMetricsApi(d.apiClient)
-	// The retry configuration is used when we receive any error code from upload.
-	// We have seen 408 error codes from Datadog when the upload is too large which
-	// is not handled by the default retry configuration that Datadog API client provides.
 	retryOpts := base.DefaultRetryOptions()
-	retryOpts.MaxBackoff = 20 * time.Millisecond
+	retryOpts.MaxBackoff = 2 * time.Second
 	retryOpts.MaxRetries = 100
-	err := error(nil)
+	var req *http.Request
+	for retry := retry.Start(retryOpts); retry.Next(); {
+		req, err = http.NewRequest("POST", d.targetURL, &zipBuf)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("DD-API-KEY", d.apiKey)
+		req.Header.Set(server.ContentTypeHeader, "application/json")
+		req.Header.Set(httputil.ContentEncodingHeader, "gzip")
 
-	for retryAttempts := retry.Start(retryOpts); retryAttempts.Next(); {
-		_, _, err = api.SubmitMetrics(d.datadogContext, datadogV2.MetricPayload{
-			Series: data,
-		}, datadogV2.SubmitMetricsOptionalParameters{
-			ContentEncoding: datadogV2.METRICCONTENTENCODING_GZIP.Ptr(),
-		})
-
+		err = d.doRequest(req)
 		if err == nil {
 			return nil
 		}
 	}
-	if err != nil {
-		fmt.Printf("error submitting metrics to datadog: %v\n", err)
-	}
 	return err
+
 }
 
 func (d *datadogWriter) upload(fileName string) error {
@@ -389,19 +338,9 @@ func (d *datadogWriter) upload(fileName string) error {
 		return err
 	}
 
-	if debugTimeSeriesDumpOpts.dryRun {
-		fmt.Println("Dry-run mode enabled. Not actually uploading data to Datadog.")
-	}
-
-	storeToNodeYamlFile := debugTimeSeriesDumpOpts.storeToNodeMapYAMLFile
-	if storeToNodeYamlFile != "" {
-		d.populateNodeAndStoreMap(storeToNodeYamlFile)
-	}
-
 	dec := gob.NewDecoder(f)
-	allMetrics := make(map[string]struct{})
-	decodeOne := func() ([]datadogV2.MetricSeries, error) {
-		var ddSeries []datadogV2.MetricSeries
+	decodeOne := func() ([]DatadogSeries, error) {
+		var ddSeries []DatadogSeries
 
 		for i := 0; i < d.threshold; i++ {
 			var v roachpb.KeyValue
@@ -410,23 +349,18 @@ func (d *datadogWriter) upload(fileName string) error {
 				return ddSeries, err
 			}
 
-			datadogSeries, err := d.dump(&v)
+			datadogSeries, err := dump(&v)
 			if err != nil {
 				return nil, err
 			}
 			ddSeries = append(ddSeries, *datadogSeries)
-			tags := datadogSeries.Tags
-			sort.Strings(tags)
-			tagsStr := strings.Join(tags, ",")
-			metricCtx := datadogSeries.Metric + "|" + tagsStr
-			allMetrics[metricCtx] = struct{}{}
 		}
 
 		return ddSeries, nil
 	}
 
 	var wg sync.WaitGroup
-	ch := make(chan []datadogV2.MetricSeries, 4000)
+	ch := make(chan []DatadogSeries, 4000)
 
 	// metricsUploadState wraps the failed metrics collection in a mutex since
 	// they're collected concurrently.
@@ -443,7 +377,11 @@ func (d *datadogWriter) upload(fileName string) error {
 		metricsUploadState.isSingleUploadSucceeded = true
 	})
 
-	for i := 0; i < d.noOfUploadWorkers; i++ {
+	// Note(davidh): This was previously set at 1000 and we'd get regular
+	// 400s from Datadog with the cryptic `Unable to decompress payload`
+	// error. I reduced this to 10 and was able to upload a 1.65GB tsdump
+	// in 3m10s without any errors (compared to 1m43s with 700 errors).
+	for i := 0; i < 10; i++ {
 		go func() {
 			for data := range ch {
 				emittedMetrics, err := d.emitDataDogMetrics(data)
@@ -465,20 +403,14 @@ func (d *datadogWriter) upload(fileName string) error {
 		}()
 	}
 
-	seriesUploaded := 0
 	for {
 		data, err := decodeOne()
-		seriesUploaded += len(data)
 		if err == io.EOF {
 			if len(data) != 0 {
 				wg.Add(1)
 				ch <- data
 			}
 			break
-		}
-		if err != nil {
-			fmt.Println("failed to decode time series data", err)
-			continue
 		}
 		wg.Add(1)
 		ch <- data
@@ -498,28 +430,13 @@ func (d *datadogWriter) upload(fileName string) error {
 		uploadStatus = UploadStatusFailure
 	}
 	fmt.Printf("\nUpload status: %s!\n", uploadStatus)
-	fmt.Printf("Uploaded %d series overall\n", seriesUploaded)
-	fmt.Printf("Uploaded %d unique series overall\n", len(allMetrics))
 
-	// Estimate cost. The cost of historical metrics ingest is based on how many
-	// metrics were active during the upload window. Assuming the entire upload
-	// happens during a given hour, that means the cost will be equal to the count
-	// of uploaded series times $4.55/100 custom metrics (our rate) divided by
-	// 730 hours per month.
-	// For a single node upload that has 6500 unique series, that's about $.40
-	// per upload.
-	estimatedCost := float64(len(allMetrics)) * 4.55 / 100 / 730
-	fmt.Printf("Estimated cost of this upload: $%.2f\n", estimatedCost)
-
-	tags := getUploadTags(d)
-	success := metricsUploadState.isSingleUploadSucceeded
 	if metricsUploadState.isSingleUploadSucceeded {
 		var isDatadogUploadFailed = false
 		markDatadogUploadFailedOnce := sync.OnceFunc(func() {
 			isDatadogUploadFailed = true
 		})
 		if len(metricsUploadState.uploadFailedMetrics) != 0 {
-			success = false
 			fmt.Printf(partialFailureMessageFormat, len(metricsUploadState.uploadFailedMetrics), strings.Join(func() []string {
 				var failedMetricsList []string
 				index := 1
@@ -531,7 +448,7 @@ func (d *datadogWriter) upload(fileName string) error {
 				return failedMetricsList
 			}(), "\n"))
 
-			tags := strings.Join(tags, ",")
+			tags := strings.Join(getUploadTags(d), ",")
 			fmt.Println("\nPushing logs of metric upload failures to datadog...")
 			for metric := range metricsUploadState.uploadFailedMetrics {
 				wg.Add(1)
@@ -570,63 +487,8 @@ func (d *datadogWriter) upload(fileName string) error {
 		fmt.Println("All metric upload is failed. Please re-upload the Tsdump.")
 	}
 
-	eventTags := append(tags, makeDDTag("series_uploaded", strconv.Itoa(seriesUploaded)))
-
-	api := datadogV2.NewLogsApi(d.apiClient)
-	hostName := getHostname()
-	msgJson, _ := json.Marshal(struct {
-		Message        string  `json:"message"`
-		SeriesUploaded int     `json:"series_uploaded"`
-		EstimatedCost  float64 `json:"estimated_cost"`
-		Duration       int     `json:"duration"`
-		DryRun         bool    `json:"dry_run"`
-		Success        bool    `json:"success"`
-	}{
-		Message:        fmt.Sprintf("tsdump upload completed: uploaded %d series overall", seriesUploaded),
-		SeriesUploaded: seriesUploaded,
-		Duration:       int(getCurrentTime().Sub(d.uploadTime).Nanoseconds()),
-		DryRun:         debugTimeSeriesDumpOpts.dryRun,
-		EstimatedCost:  estimatedCost,
-		Success:        success,
-	})
-	_, _, err = api.SubmitLog(d.datadogContext, []datadogV2.HTTPLogItem{
-		{
-			Ddsource: datadog.PtrString("tsdump_upload"),
-			Ddtags:   datadog.PtrString(strings.Join(eventTags, ",")),
-			Message:  string(msgJson),
-			Service:  datadog.PtrString("tsdump_upload"),
-			Hostname: datadog.PtrString(hostName),
-		},
-	}, datadogV2.SubmitLogOptionalParameters{
-		ContentEncoding: datadogV2.CONTENTENCODING_GZIP.Ptr(),
-	})
-	if err != nil {
-		fmt.Printf("error submitting log to datadog: %v\n", err)
-	}
-
 	close(ch)
 	return nil
-}
-
-func (d *datadogWriter) populateNodeAndStoreMap(fileName string) {
-	file, err := os.Open(fileName)
-	if err != nil {
-		fmt.Printf("error in opening store to node mapping YAML file: %v\n", err)
-		return
-	}
-
-	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
-			fmt.Printf("error in clsoing store to node mapping YAML: %v\n", err)
-		}
-	}(file)
-
-	decoder := yaml.NewDecoder(file)
-	if err := decoder.Decode(&d.storeToNodeMap); err != nil {
-		fmt.Printf("error decoding store to node mapping file YAML: %v\n", err)
-		return
-	}
 }
 
 // getFileReader returns an io.Reader based on the file type.
@@ -677,22 +539,4 @@ func fileSize(file *os.File) int64 {
 		return 0
 	}
 	return info.Size()
-}
-
-func loadMetricTypesMap(ctx context.Context) (map[string]string, error) {
-	metricLayers, err := generateMetricList(ctx, true /* skipFiltering */)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to generate metric list")
-	}
-
-	metricTypeMap := make(map[string]string)
-	for _, metric := range metricLayers {
-		for _, catagory := range metric.Categories {
-			for _, m := range catagory.Metrics {
-				metricTypeMap[m.Name] = m.Type
-			}
-		}
-	}
-
-	return metricTypeMap, nil
 }

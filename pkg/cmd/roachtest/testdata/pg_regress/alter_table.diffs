@@ -3816,10 +3816,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  create temp view v2 as select * from v1;
  create or replace temp view v1 with (security_barrier = true)
    as select * from t1;
-+ERROR:  at or near "security_barrier": syntax error
++ERROR:  at or near "with": syntax error
 +DETAIL:  source SQL:
 +create or replace temp view v1 with (security_barrier = true)
-+                                     ^
++                               ^
 +HINT:  try \h CREATE
  create temp table log (q1 int8, q2 int8);
  create rule v1_upd_rule as on update to v1
@@ -4212,10 +4212,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 +ERROR:  relation "my_locks" does not exist
  alter view my_locks set (autovacuum_enabled = false);
 -ERROR:  unrecognized parameter "autovacuum_enabled"
-+ERROR:  at or near "autovacuum_enabled": syntax error
++ERROR:  at or near "(": syntax error
 +DETAIL:  source SQL:
 +alter view my_locks set (autovacuum_enabled = false)
-+                         ^
++                        ^
 +HINT:  try \h ALTER VIEW
  alter table my_locks reset (autovacuum_enabled);
 +ERROR:  relation "my_locks" does not exist
@@ -4227,10 +4227,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 +HINT:  try \h ALTER VIEW
  begin;
  alter view my_locks set (security_barrier=off);
-+ERROR:  at or near "security_barrier": syntax error
++ERROR:  at or near "(": syntax error
 +DETAIL:  source SQL:
 +alter view my_locks set (security_barrier=off)
-+                         ^
++                        ^
 +HINT:  try \h ALTER VIEW
  select * from my_locks order by 1;
 - relname  |    max_lockmode     
@@ -5216,13 +5216,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 +ERROR:  index with name "tt9_c_key" already exists
  ALTER TABLE tt9 ADD CONSTRAINT foo UNIQUE(c);  -- fail, dup name
 -ERROR:  constraint "foo" for relation "tt9" already exists
-+ERROR:  error executing StatementPhase stage 1 of 1 with 7 MutationType ops: relation "tt9": duplicate constraint name: "foo"
++ERROR:  error executing StatementPhase stage 1 of 1 with 7 MutationType ops: relation "tt9" (2079): duplicate constraint name: "foo"
  ALTER TABLE tt9 ADD CONSTRAINT tt9_c_key CHECK(c > 5);  -- fail, dup name
 -ERROR:  constraint "tt9_c_key" for relation "tt9" already exists
-+ERROR:  error executing StatementPhase stage 1 of 1 with 2 MutationType ops: relation "tt9": duplicate constraint name: "tt9_c_key"
++ERROR:  error executing StatementPhase stage 1 of 1 with 2 MutationType ops: relation "tt9" (2079): duplicate constraint name: "tt9_c_key"
  ALTER TABLE tt9 ADD CONSTRAINT tt9_c_key2 CHECK(c > 6);
  ALTER TABLE tt9 ADD UNIQUE(c);  -- picks nonconflicting name
-+ERROR:  error executing StatementPhase stage 1 of 1 with 7 MutationType ops: relation "tt9": duplicate constraint name: "tt9_c_key2"
++ERROR:  error executing StatementPhase stage 1 of 1 with 7 MutationType ops: relation "tt9" (2079): duplicate constraint name: "tt9_c_key2"
  \d tt9
 -                Table "public.tt9"
 - Column |  Type   | Collation | Nullable | Default 
@@ -5417,7 +5417,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- check relpersistence of an unlogged table
  SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^unlogged1'
  UNION ALL
-@@ -3511,21 +4295,24 @@
+@@ -3511,21 +4295,36 @@
  UNION ALL
  SELECT r.relname || ' toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^unlogged1'
  ORDER BY relname;
@@ -5442,16 +5442,28 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 +NOTICE:  using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/_version_/serial.html
 +NOTICE:  UNLOGGED TABLE will behave as a regular table in CockroachDB
  ALTER TABLE unlogged3 SET LOGGED; -- skip self-referencing foreign key
-+NOTICE:  SET LOGGED is not supported and has no effect
++ERROR:  at or near "logged": syntax error
++DETAIL:  source SQL:
++ALTER TABLE unlogged3 SET LOGGED
++                          ^
++HINT:  try \h ALTER TABLE
  ALTER TABLE unlogged2 SET LOGGED; -- fails because a foreign key to an unlogged table exists
 -ERROR:  could not change table "unlogged2" to logged because it references unlogged table "unlogged1"
-+NOTICE:  SET LOGGED is not supported and has no effect
++ERROR:  at or near "logged": syntax error
++DETAIL:  source SQL:
++ALTER TABLE unlogged2 SET LOGGED
++                          ^
++HINT:  try \h ALTER TABLE
  ALTER TABLE unlogged1 SET LOGGED;
-+NOTICE:  SET LOGGED is not supported and has no effect
++ERROR:  at or near "logged": syntax error
++DETAIL:  source SQL:
++ALTER TABLE unlogged1 SET LOGGED
++                          ^
++HINT:  try \h ALTER TABLE
  -- check relpersistence of an unlogged table after changing to permanent
  SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^unlogged1'
  UNION ALL
-@@ -3533,21 +4320,20 @@
+@@ -3533,21 +4332,24 @@
  UNION ALL
  SELECT r.relname || ' toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^unlogged1'
  ORDER BY relname;
@@ -5470,7 +5482,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 +(2 rows)
  
  ALTER TABLE unlogged1 SET LOGGED; -- silently do nothing
-+NOTICE:  SET LOGGED is not supported and has no effect
++ERROR:  at or near "logged": syntax error
++DETAIL:  source SQL:
++ALTER TABLE unlogged1 SET LOGGED
++                          ^
++HINT:  try \h ALTER TABLE
  DROP TABLE unlogged3;
  DROP TABLE unlogged2;
  DROP TABLE unlogged1;
@@ -5480,7 +5496,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- check relpersistence of a permanent table
  SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^logged1'
  UNION ALL
-@@ -3555,22 +4341,24 @@
+@@ -3555,22 +4357,40 @@
  UNION ALL
  SELECT r.relname ||' toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^logged1'
  ORDER BY relname;
@@ -5504,17 +5520,33 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 +NOTICE:  using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/_version_/serial.html
  ALTER TABLE logged1 SET UNLOGGED; -- fails because a foreign key from a permanent table exists
 -ERROR:  could not change table "logged1" to unlogged because it references logged table "logged2"
-+NOTICE:  SET UNLOGGED is not supported and has no effect
++ERROR:  at or near "unlogged": syntax error
++DETAIL:  source SQL:
++ALTER TABLE logged1 SET UNLOGGED
++                        ^
++HINT:  try \h ALTER TABLE
  ALTER TABLE logged3 SET UNLOGGED; -- skip self-referencing foreign key
-+NOTICE:  SET UNLOGGED is not supported and has no effect
++ERROR:  at or near "unlogged": syntax error
++DETAIL:  source SQL:
++ALTER TABLE logged3 SET UNLOGGED
++                        ^
++HINT:  try \h ALTER TABLE
  ALTER TABLE logged2 SET UNLOGGED;
-+NOTICE:  SET UNLOGGED is not supported and has no effect
++ERROR:  at or near "unlogged": syntax error
++DETAIL:  source SQL:
++ALTER TABLE logged2 SET UNLOGGED
++                        ^
++HINT:  try \h ALTER TABLE
  ALTER TABLE logged1 SET UNLOGGED;
-+NOTICE:  SET UNLOGGED is not supported and has no effect
++ERROR:  at or near "unlogged": syntax error
++DETAIL:  source SQL:
++ALTER TABLE logged1 SET UNLOGGED
++                        ^
++HINT:  try \h ALTER TABLE
  -- check relpersistence of a permanent table after changing to unlogged
  SELECT relname, relkind, relpersistence FROM pg_class WHERE relname ~ '^logged1'
  UNION ALL
-@@ -3578,36 +4366,41 @@
+@@ -3578,36 +4398,45 @@
  UNION ALL
  SELECT r.relname || ' toast index', ri.relkind, ri.relpersistence FROM pg_class r join pg_class t ON t.oid = r.reltoastrelid JOIN pg_index i ON i.indrelid = t.oid JOIN pg_class ri ON ri.oid = i.indexrelid WHERE r.relname ~ '^logged1'
  ORDER BY relname;
@@ -5533,7 +5565,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 +(2 rows)
  
  ALTER TABLE logged1 SET UNLOGGED; -- silently do nothing
-+NOTICE:  SET UNLOGGED is not supported and has no effect
++ERROR:  at or near "unlogged": syntax error
++DETAIL:  source SQL:
++ALTER TABLE logged1 SET UNLOGGED
++                        ^
++HINT:  try \h ALTER TABLE
  DROP TABLE logged3;
  DROP TABLE logged2;
  DROP TABLE logged1;
@@ -5575,7 +5611,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  ALTER TABLE test_add_column
  	ADD COLUMN c2 integer; -- fail because c2 already exists
  ERROR:  column "c2" of relation "test_add_column" already exists
-@@ -3615,159 +4408,132 @@
+@@ -3615,159 +4444,132 @@
  	ADD COLUMN c2 integer; -- fail because c2 already exists
  ERROR:  column "c2" of relation "test_add_column" already exists
  \d test_add_column
@@ -5827,7 +5863,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- assorted cases with multiple ALTER TABLE steps
  CREATE TABLE ataddindex(f1 INT);
  INSERT INTO ataddindex VALUES (42), (43);
-@@ -3775,100 +4541,134 @@
+@@ -3775,100 +4577,134 @@
  ALTER TABLE ataddindex
    ADD PRIMARY KEY USING INDEX ataddindexi0,
    ALTER f1 TYPE BIGINT;
@@ -6012,7 +6048,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  --
  -- ATTACH PARTITION
  --
-@@ -3878,7 +4678,11 @@
+@@ -3878,7 +4714,11 @@
  );
  CREATE TABLE fail_part (like unparted);
  ALTER TABLE unparted ATTACH PARTITION fail_part FOR VALUES IN ('a');
@@ -6025,7 +6061,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  DROP TABLE unparted, fail_part;
  -- check that partition bound is compatible
  CREATE TABLE list_parted (
-@@ -3886,62 +4690,146 @@
+@@ -3886,62 +4726,146 @@
  	b char(2) COLLATE "C",
  	CONSTRAINT check_a CHECK (a > 0)
  ) PARTITION BY LIST (a);
@@ -6186,7 +6222,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  DROP TABLE fail_part;
  -- check that columns match in type, collation and NOT NULL status
  CREATE TABLE fail_part (
-@@ -3949,158 +4837,335 @@
+@@ -3949,158 +4873,335 @@
  	a int NOT NULL
  );
  ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
@@ -6197,7 +6233,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 +                        ^
 +HINT:  try \h ALTER TABLE
  ALTER TABLE fail_part ALTER b TYPE char (2) COLLATE "POSIX";
-+ERROR:  invalid locale POSIX
++ERROR:  invalid locale posix
  ALTER TABLE list_parted ATTACH PARTITION fail_part FOR VALUES IN (1);
 -ERROR:  child table "fail_part" has different collation for column "b"
 +ERROR:  at or near "attach": syntax error
@@ -6551,7 +6587,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- Check the case where attnos of the partitioning columns in the table being
  -- attached differs from the parent.  It should not affect the constraint-
  -- checking logic that allows to skip the scan.
-@@ -4109,8 +5174,15 @@
+@@ -4109,8 +5210,15 @@
  	LIKE list_parted2,
  	CONSTRAINT check_a CHECK (a IS NOT NULL AND a = 6)
  );
@@ -6567,7 +6603,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- Similar to above, but the table being attached is a partitioned table
  -- whose partition has still different attnos for the root partitioning
  -- columns.
-@@ -4118,6 +5190,14 @@
+@@ -4118,6 +5226,14 @@
  	LIKE list_parted2,
  	CONSTRAINT check_a CHECK (a IS NOT NULL AND a = 7)
  ) PARTITION BY LIST (b);
@@ -6582,7 +6618,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  CREATE TABLE part_7_a_null (
  	c int,
  	d int,
-@@ -4126,63 +5206,150 @@
+@@ -4126,63 +5242,150 @@
  	CONSTRAINT check_b CHECK (b IS NULL OR b = 'a'),
  	CONSTRAINT check_a CHECK (a IS NOT NULL AND a = 7)
  );
@@ -6746,7 +6782,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- check validation when attaching hash partitions
  -- Use hand-rolled hash functions and operator class to get predictable result
  -- on different machines. part_test_int4_ops is defined in insert.sql.
-@@ -4191,233 +5358,430 @@
+@@ -4191,233 +5394,430 @@
  	a int,
  	b int
  ) PARTITION BY HASH (a part_test_int4_ops);
@@ -7261,7 +7297,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- attnum for key attribute 'a' is different in p, p1, and p11
  select attrelid::regclass, attname, attnum
  from pg_attribute
-@@ -4426,73 +5790,156 @@
+@@ -4426,73 +5826,156 @@
     or attrelid = 'p1'::regclass
     or attrelid = 'p11'::regclass)
  order by attrelid::regclass::text;
@@ -7430,7 +7466,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  create or replace function func_part_attach() returns trigger
    language plpgsql as $$
    begin
-@@ -4500,14 +5947,28 @@
+@@ -4500,14 +5983,28 @@
      execute 'alter table tab_part_attach attach partition tab_part_attach_1 for values in (1)';
      return null;
    end $$;
@@ -7462,7 +7498,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- test case where the partitioning operator is a SQL function whose
  -- evaluation results in the table's relcache being rebuilt partway through
  -- the execution of an ATTACH PARTITION command
-@@ -4517,11 +5978,43 @@
+@@ -4517,11 +6014,43 @@
      operator 1 < (int4, int4), operator 2 <= (int4, int4),
      operator 3 = (int4, int4), operator 4 >= (int4, int4),
      operator 5 > (int4, int4), function 1 at_test_sql_partop(int4, int4);
@@ -7506,7 +7542,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  drop function at_test_sql_partop;
  /* Test case for bug #16242 */
  -- We create a parent and child where the child has missing
-@@ -4529,18 +6022,25 @@
+@@ -4529,18 +6058,25 @@
  -- tuple conversion from the child to the parent tupdesc
  create table bar1 (a integer, b integer not null default 1)
    partition by range (a);
@@ -7537,7 +7573,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  -- this exercises tuple conversion:
  create function xtrig()
    returns trigger language plpgsql
-@@ -4554,22 +6054,50 @@
+@@ -4554,22 +6090,50 @@
      return NULL;
    end;
  $$;
@@ -7589,7 +7625,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  create table atref (c1 int references attbl(p1));
  alter table attbl alter column p1 set data type bigint;
  alter table atref alter column c1 set data type bigint;
-@@ -4579,15 +6107,21 @@
+@@ -4579,15 +6143,21 @@
  -- for normal indexes and indexes on constraints.
  create table alttype_cluster (a int);
  alter table alttype_cluster add primary key (a);
@@ -7612,7 +7648,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
   alttype_cluster_pkey | f
  (2 rows)
  
-@@ -4597,19 +6131,24 @@
+@@ -4597,19 +6167,24 @@
    order by indexrelid::regclass::text;
        indexrelid      | indisclustered 
  ----------------------+----------------
@@ -7639,7 +7675,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  (2 rows)
  
  alter table alttype_cluster alter a type int;
-@@ -4619,7 +6158,7 @@
+@@ -4619,7 +6194,7 @@
        indexrelid      | indisclustered 
  ----------------------+----------------
   alttype_cluster_ind  | f
@@ -7648,7 +7684,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  (2 rows)
  
  drop table alttype_cluster;
-@@ -4628,38 +6167,97 @@
+@@ -4628,38 +6203,97 @@
  -- to its partitions' constraint being updated to reflect the parent's
  -- newly added/removed constraint
  create table target_parted (a int, b int) partition by list (a);

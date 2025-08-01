@@ -15,9 +15,6 @@ function arch_to_config() {
     amd64-fips)
       echo "crosslinuxfips"
       ;;
-    s390x)
-      echo "crosslinuxs390x"
-      ;;
     *)
       echo "Error: invalid arch '$1'" >&2
       exit 1

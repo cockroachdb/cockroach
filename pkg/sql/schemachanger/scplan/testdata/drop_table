@@ -42,7 +42,7 @@ CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON shipments FOR EACH ROW EXECUTE FUN
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 142 MutationType ops
+StatementPhase stage 1 of 1 with 141 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -432,29 +432,18 @@ StatementPhase stage 1 of 1 with 142 MutationType ops
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerName
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerEnabled
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerTiming
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerEvents
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerFunctionCall
-      TriggerID: 1
-    *scop.UpdateTableBackReferencesInRelations
-      RelationReferences:
-      - id: 109
-        columnids: []
-        indexid: 0
-      TableID: 109
     *scop.UpdateTableBackReferencesInTypes
       BackReferencedTableID: 109
       TypeIDs:
@@ -560,6 +549,14 @@ StatementPhase stage 1 of 1 with 142 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 109
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 109
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 109
+      TypeIDs:
+      - 107
+      - 108
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -617,14 +614,6 @@ StatementPhase stage 1 of 1 with 142 MutationType ops
       IndexID: 2
       Kind: 1
       TableID: 109
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 109
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 109
-      TypeIDs:
-      - 107
-      - 108
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 109
@@ -757,7 +746,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 153 MutationType ops
+PreCommitPhase stage 2 of 2 with 152 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -1147,29 +1136,18 @@ PreCommitPhase stage 2 of 2 with 153 MutationType ops
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerName
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerEnabled
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerTiming
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerEvents
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerFunctionCall
-      TriggerID: 1
-    *scop.UpdateTableBackReferencesInRelations
-      RelationReferences:
-      - id: 109
-        columnids: []
-        indexid: 0
-      TableID: 109
     *scop.UpdateTableBackReferencesInTypes
       BackReferencedTableID: 109
       TypeIDs:
@@ -1275,6 +1253,14 @@ PreCommitPhase stage 2 of 2 with 153 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 109
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 109
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 109
+      TypeIDs:
+      - 107
+      - 108
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -1332,14 +1318,6 @@ PreCommitPhase stage 2 of 2 with 153 MutationType ops
       IndexID: 2
       Kind: 1
       TableID: 109
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 109
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 109
-      TypeIDs:
-      - 107
-      - 108
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 109
@@ -1410,7 +1388,7 @@ PreCommitPhase stage 2 of 2 with 153 MutationType ops
       - 113
       JobID: 1
       NonCancelable: true
-      RunningStatus: 'Pending: Updating schema metadata (5 operations) — PostCommitNonRevertible phase (stage 1 of 1).'
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.shipments CASCADE
         redactedstatement: DROP TABLE defaultdb.public.shipments CASCADE
@@ -2980,7 +2958,7 @@ PreCommitPhase stage 2 of 2 with 7 MutationType ops
       - 109
       JobID: 1
       NonCancelable: true
-      RunningStatus: 'Pending: Updating schema metadata (51 operations) — PostCommitNonRevertible phase (stage 1 of 2).'
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 51 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.customers CASCADE
         redactedstatement: DROP TABLE defaultdb.public.customers CASCADE
@@ -4005,6 +3983,14 @@ StatementPhase stage 1 of 1 with 63 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 116
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 116
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 116
+      TypeIDs:
+      - 114
+      - 115
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -4042,14 +4028,6 @@ StatementPhase stage 1 of 1 with 63 MutationType ops
       IndexID: 2
       Kind: 1
       TableID: 116
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 116
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 116
-      TypeIDs:
-      - 114
-      - 115
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 116
@@ -4316,6 +4294,14 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 116
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 116
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 116
+      TypeIDs:
+      - 114
+      - 115
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -4353,14 +4339,6 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
       IndexID: 2
       Kind: 1
       TableID: 116
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 116
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 116
-      TypeIDs:
-      - 114
-      - 115
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 116
@@ -4394,7 +4372,7 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
       - 116
       JobID: 1
       NonCancelable: true
-      RunningStatus: 'Pending: Updating schema metadata (3 operations) — PostCommitNonRevertible phase (stage 1 of 1).'
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.greeter
         redactedstatement: DROP TABLE defaultdb.public.greeter

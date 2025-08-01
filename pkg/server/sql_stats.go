@@ -89,13 +89,12 @@ func (s *statusServer) ResetSQLStats(
 	}
 
 	response := &serverpb.ResetSQLStatsResponse{}
-	localSQLStats := s.sqlServer.pgServer.SQLServer.GetLocalSQLStatsProvider()
-	persistedSQLStats := s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider()
+	controller := s.sqlServer.pgServer.SQLServer.GetSQLStatsController()
 
-	// If we need to reset persisted stats, we delegate to persisted sql stats,
+	// If we need to reset persisted stats, we delegate to SQLStatsController,
 	// which will trigger a system table truncation and RPC fanout under the hood.
 	if req.ResetPersistedStats {
-		if err := persistedSQLStats.ResetClusterSQLStats(ctx); err != nil {
+		if err := controller.ResetClusterSQLStats(ctx); err != nil {
 			return nil, err
 		}
 
@@ -114,8 +113,8 @@ func (s *statusServer) ResetSQLStats(
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			err := localSQLStats.Reset(ctx)
-			return response, err
+			controller.ResetLocalSQLStats(ctx)
+			return response, nil
 		}
 		status, err := s.dialNode(ctx, requestedNodeID)
 		if err != nil {
@@ -124,7 +123,7 @@ func (s *statusServer) ResetSQLStats(
 		return status.ResetSQLStats(ctx, localReq)
 	}
 
-	resetSQLStats := func(ctx context.Context, status serverpb.RPCStatusClient, _ roachpb.NodeID) (interface{}, error) {
+	resetSQLStats := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return status.ResetSQLStats(ctx, localReq)
 	}
 
@@ -186,7 +185,7 @@ func (s *statusServer) DrainSqlStats(
 		return statusCli.DrainSqlStats(ctx, localReq)
 	}
 
-	drainStats := func(ctx context.Context, status serverpb.RPCStatusClient, _ roachpb.NodeID) (*serverpb.DrainStatsResponse, error) {
+	drainStats := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.DrainStatsResponse, error) {
 		return status.DrainSqlStats(ctx, localReq)
 	}
 

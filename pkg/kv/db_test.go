@@ -1144,39 +1144,25 @@ func TestGetResult(t *testing.T) {
 	b.PutBytes(&byteSliceBulkSource[[]byte]{kys2, vals})
 	keyToDel := roachpb.Key("b")
 	b.Del(keyToDel)
-	keyToCPut := roachpb.Key("c")
-	var expVal roachpb.Value
-	expVal.SetBytes(vals[2])
-	b.CPut(keyToCPut, []byte("who"), expVal.TagAndDataBytes())
 	err := txn.CommitInBatch(ctx, b)
 	require.NoError(t, err)
 	for i := 0; i < len(kys1)+len(kys2); i++ {
-		res, exp, row, err := b.GetResult(i)
-		require.Equal(t, &b.Results[i/3], res)
-		require.Nil(t, exp)
-		require.Equal(t, b.Results[i/3].Rows[i%3], row)
+		res, row, err := b.GetResult(i)
+		require.Equal(t, res, &b.Results[i/3])
+		require.Equal(t, row, b.Results[i/3].Rows[i%3])
 		require.NoError(t, err)
 	}
 	// test Del request (it uses Result.Keys rather than Result.Rows)
-	_, exp, kv, err := b.GetResult(len(kys1) + len(kys2))
+	_, kv, err := b.GetResult(len(kys1) + len(kys2))
 	require.NoError(t, err)
-	require.Nil(t, exp)
-	require.Equal(t, kv.Key, keyToDel)
+	require.Equal(t, keyToDel, kv.Key)
 	require.Nil(t, kv.Value)
-
-	// test CPut request (it fills in expBytes)
-	res, exp, row, err := b.GetResult(len(kys1) + len(kys2) + 1)
-	require.Equal(t, &b.Results[3], res)
-	require.Equal(t, expVal.TagAndDataBytes(), exp)
-	require.Equal(t, b.Results[3].Rows[0], row)
-	require.NoError(t, err)
-
 	// test EndTxn result
-	_, _, _, err = b.GetResult(len(kys1) + len(kys2) + 2)
+	_, _, err = b.GetResult(len(kys1) + len(kys2) + 1)
 	require.NoError(t, err)
 
 	// test out of bounds
-	_, _, _, err = b.GetResult(len(kys1) + len(kys2) + 3)
+	_, _, err = b.GetResult(len(kys1) + len(kys2) + 2)
 	require.Error(t, err)
 }
 

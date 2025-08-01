@@ -28,28 +28,6 @@ Events in this category pertain to changefeed usage and metrics.
 Events in this category are logged to the `TELEMETRY` channel.
 
 
-### `alter_changefeed`
-
-An event of type `alter_changefeed` is an event for any ALTER CHANGEFEED statements that are run.
-
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `PreviousDescription` | The description of the changefeed job before the ALTER CHANGEFEED. | yes |
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Description` | The description of that would show up in the job's description field, redacted | yes |
-| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
-| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
-| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
-| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
-| `Format` | The data format being emitted (ex: JSON, Avro). | no |
-| `JobId` | The job id for enterprise changefeeds. | no |
-
 ### `changefeed_canceled`
 
 An event of type `changefeed_canceled` is an event for any changefeed cancellations.
@@ -648,7 +626,6 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `set_tenant_cluster_setting`
 
@@ -676,7 +653,6 @@ is changed, either for another tenant or for all tenants.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ## SQL Access Audit Events
 
@@ -710,7 +686,6 @@ is directly or indirectly a member of the admin role) executes a query.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
@@ -747,7 +722,6 @@ cluster setting.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
@@ -784,7 +758,6 @@ a table marked as audited.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
@@ -828,7 +801,6 @@ and the cluster setting `sql.log.all_statements.enabled` is set.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
@@ -877,7 +849,6 @@ An event of type `alter_database_add_region` is recorded when a region is added 
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_database_drop_region`
 
@@ -902,7 +873,6 @@ AlterDatabaseAddRegion is recorded when a region is added to a database.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_database_placement`
 
@@ -927,7 +897,6 @@ An event of type `alter_database_placement` is recorded when the database placem
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_database_primary_region`
 
@@ -952,7 +921,6 @@ An event of type `alter_database_primary_region` is recorded when a primary regi
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_database_set_zone_config_extension`
 
@@ -973,7 +941,6 @@ An event of type `alter_database_set_zone_config_extension` is recorded when a z
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `Target` | The target object of the zone config change. | yes |
 | `Config` | The applied zone config in YAML format. | yes |
 | `Options` | The SQL representation of the applied zone config options. | yes |
@@ -1001,7 +968,6 @@ An event of type `alter_database_survival_goal` is recorded when the survival go
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_function_options`
 
@@ -1026,7 +992,6 @@ altered.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_index`
 
@@ -1052,7 +1017,6 @@ An event of type `alter_index` is recorded when an index is altered.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_index_visible`
 
@@ -1079,7 +1043,6 @@ AlterIndex is recorded when an index visibility is altered.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_sequence`
 
@@ -1103,7 +1066,6 @@ An event of type `alter_sequence` is recorded when a sequence is altered.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_table`
 
@@ -1129,7 +1091,6 @@ An event of type `alter_table` is recorded when a table is altered.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_type`
 
@@ -1153,7 +1114,6 @@ EventAlterType is recorded when a user-defined type is altered.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `comment_on_column`
 
@@ -1180,7 +1140,6 @@ An event of type `comment_on_column` is recorded when a column is commented.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `comment_on_constraint`
 
@@ -1207,7 +1166,6 @@ An event of type `comment_on_constraint` is recorded when an constraint is comme
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `comment_on_database`
 
@@ -1233,7 +1191,6 @@ CommentOnTable is recorded when a database is commented.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `comment_on_index`
 
@@ -1260,7 +1217,6 @@ An event of type `comment_on_index` is recorded when an index is commented.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `comment_on_schema`
 
@@ -1285,7 +1241,6 @@ An event of type `comment_on_index` is recorded when an index is commented.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `comment_on_table`
 
@@ -1311,7 +1266,6 @@ An event of type `comment_on_table` is recorded when a table is commented.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `comment_on_type`
 
@@ -1337,7 +1291,6 @@ An event of type `comment_on_type` is recorded when a type is commented.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `create_database`
 
@@ -1361,7 +1314,6 @@ An event of type `create_database` is recorded when a database is created.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `create_function`
 
@@ -1386,7 +1338,6 @@ An event of type `create_function` is recorded when a user-defined function is c
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `create_index`
 
@@ -1412,7 +1363,6 @@ An event of type `create_index` is recorded when an index is created.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `create_policy`
 
@@ -1437,7 +1387,6 @@ An event of type `create_policy` is recorded when a policy is created.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `create_schema`
 
@@ -1462,7 +1411,6 @@ An event of type `create_schema` is recorded when a schema is created.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `create_sequence`
 
@@ -1487,7 +1435,6 @@ An event of type `create_sequence` is recorded when a sequence is created.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `create_statistics`
 
@@ -1515,7 +1462,6 @@ Events of this type are only collected when the cluster setting
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `create_table`
 
@@ -1540,7 +1486,6 @@ An event of type `create_table` is recorded when a table is created.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `create_trigger`
 
@@ -1565,7 +1510,6 @@ An event of type `create_trigger` is recorded when a trigger is created.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `create_type`
 
@@ -1590,7 +1534,6 @@ An event of type `create_type` is recorded when a user-defined type is created.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `create_view`
 
@@ -1616,7 +1559,6 @@ An event of type `create_view` is recorded when a view is created.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `drop_database`
 
@@ -1641,7 +1583,6 @@ An event of type `drop_database` is recorded when a database is dropped.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `drop_function`
 
@@ -1665,7 +1606,6 @@ An event of type `drop_function` is recorded when a user-defined function is dro
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `drop_index`
 
@@ -1692,7 +1632,6 @@ An event of type `drop_index` is recorded when an index is dropped.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `drop_policy`
 
@@ -1717,7 +1656,6 @@ An event of type `drop_policy` is recorded when a policy is dropped.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `drop_schema`
 
@@ -1741,7 +1679,6 @@ An event of type `drop_schema` is recorded when a schema is dropped.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `drop_sequence`
 
@@ -1765,7 +1702,6 @@ An event of type `drop_sequence` is recorded when a sequence is dropped.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `drop_table`
 
@@ -1790,7 +1726,6 @@ An event of type `drop_table` is recorded when a table is dropped.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `drop_trigger`
 
@@ -1815,7 +1750,6 @@ An event of type `drop_trigger` is recorded when a trigger is dropped.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `drop_type`
 
@@ -1839,7 +1773,6 @@ An event of type `drop_type` is recorded when a user-defined type is dropped.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `drop_view`
 
@@ -1864,7 +1797,6 @@ An event of type `drop_view` is recorded when a view is dropped.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `finish_schema_change`
 
@@ -1929,31 +1861,6 @@ initiated schema change rollback has completed.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
-
-### `refresh_materialized_view`
-
-An event of type `refresh_materialized_view` is recorded when a materialized view is refreshed.
-
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `ViewName` | The name of the materialized view being refreshed. | no |
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
-| `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
-| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
-| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
-| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `rename_database`
 
@@ -1978,7 +1885,6 @@ An event of type `rename_database` is recorded when a database is renamed.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `rename_function`
 
@@ -2003,7 +1909,6 @@ An event of type `rename_function` is recorded when a user-defined function is r
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `rename_schema`
 
@@ -2028,7 +1933,6 @@ An event of type `rename_schema` is recorded when a schema is renamed.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `rename_table`
 
@@ -2053,7 +1957,6 @@ An event of type `rename_table` is recorded when a table, sequence or view is re
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `rename_type`
 
@@ -2078,7 +1981,6 @@ An event of type `rename_type` is recorded when a user-defined type is renamed.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `reverse_schema_change`
 
@@ -2127,7 +2029,6 @@ An event of type `set_schema` is recorded when a table, view, sequence or type's
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `truncate_table`
 
@@ -2151,7 +2052,6 @@ An event of type `truncate_table` is recorded when a table is truncated.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `unsafe_delete_descriptor`
 
@@ -2183,7 +2083,6 @@ patch releases without advance notice.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `unsafe_delete_namespace_entry`
 
@@ -2215,7 +2114,6 @@ patch releases without advance notice.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `unsafe_upsert_descriptor`
 
@@ -2243,7 +2141,6 @@ using crdb_internal.unsafe_upsert_descriptor().
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `unsafe_upsert_namespace_entry`
 
@@ -2277,7 +2174,6 @@ patch releases without advance notice.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ## SQL Privilege changes
 
@@ -2315,7 +2211,6 @@ An event of type `alter_database_owner` is recorded when a database's owner is c
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_default_privileges`
 
@@ -2342,7 +2237,6 @@ An event of type `alter_default_privileges` is recorded when default privileges 
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
 | `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
@@ -2370,7 +2264,6 @@ AlterTableOwner is recorded when the owner of a user-defined function is changed
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_schema_owner`
 
@@ -2395,7 +2288,6 @@ An event of type `alter_schema_owner` is recorded when a schema's owner is chang
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_table_owner`
 
@@ -2420,7 +2312,6 @@ An event of type `alter_table_owner` is recorded when the owner of a table, view
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `alter_type_owner`
 
@@ -2445,7 +2336,6 @@ An event of type `alter_type_owner` is recorded when the owner of a user-defiend
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `change_database_privilege`
 
@@ -2470,7 +2360,6 @@ added to / removed from a user for a database object.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
 | `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
@@ -2496,7 +2385,6 @@ added to / removed from a user for a database object.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
 | `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
@@ -2524,7 +2412,6 @@ removed from a user for a schema object.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
 | `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
@@ -2552,7 +2439,6 @@ from a user for a table, sequence or view object.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
 | `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
@@ -2580,7 +2466,6 @@ removed from a user for a type object.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
 | `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
@@ -2821,7 +2706,6 @@ set to a non-zero value, AND
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
@@ -2856,7 +2740,6 @@ are more statement within the transaction that haven't been executed yet.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
 | `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
 | `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
@@ -2884,7 +2767,6 @@ been executed yet.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
 | `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
 | `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
@@ -2945,7 +2827,6 @@ the "slow query" condition.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
@@ -2981,7 +2862,6 @@ mutation statements within the transaction that haven't been executed yet.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
 | `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
 | `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
@@ -3010,7 +2890,6 @@ mutation statements within the transaction that haven't been executed yet.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
 | `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
 | `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
@@ -3051,7 +2930,6 @@ An event of type `alter_role` is recorded when a role is altered.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `create_role`
 
@@ -3075,7 +2953,6 @@ An event of type `create_role` is recorded when a role is created.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `drop_role`
 
@@ -3099,7 +2976,6 @@ An event of type `drop_role` is recorded when a role is dropped.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `grant_role`
 
@@ -3124,7 +3000,6 @@ An event of type `grant_role` is recorded when a role is granted.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
 ### `password_hash_converted`
 
@@ -3453,7 +3328,6 @@ contains common SQL event/execution details.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
@@ -3594,7 +3468,6 @@ An event of type `remove_zone_config` is recorded when a zone config is removed.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `Target` | The target object of the zone config change. | yes |
 | `Config` | The applied zone config in YAML format. | yes |
 | `Options` | The SQL representation of the applied zone config options. | yes |
@@ -3621,7 +3494,6 @@ An event of type `set_zone_config` is recorded when a zone config is changed.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 | `Target` | The target object of the zone config change. | yes |
 | `Config` | The applied zone config in YAML format. | yes |
 | `Options` | The SQL representation of the applied zone config options. | yes |
@@ -3649,7 +3521,6 @@ authentication failure.
 | 7 | CREDENTIALS_EXPIRED | occur when the credentials provided by the client are expired. |
 | 8 | NO_REPLICATION_ROLEOPTION | occurs when the connection requires a replication role option, but the user does not have it. |
 | 9 | AUTHORIZATION_ERROR | is used for errors during the authorization phase. For example, this would include issues with mapping LDAP groups to SQL roles and granting those roles to the user. |
-| 10 | PROVISIONING_ERROR | is used for errors during the user provisioning phase. This would include errors when the transaction to provision the authenticating user failed to execute. |
 
 
 

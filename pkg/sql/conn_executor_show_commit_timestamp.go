@@ -82,19 +82,19 @@ func (ex *connExecutor) execShowCommitTimestampInOpenState(
 	}
 
 	// Committing the transaction failed. We'll go to state RestartWait if
-	// it's a retryable error, or to state RollbackWait otherwise.
-	if errIsRetryable(err) {
+	// it's a retriable error, or to state RollbackWait otherwise.
+	if errIsRetriable(err) {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
-		ev := eventRetryableErr{
+		ev := eventRetriableErr{
 			IsCommit:     fsm.FromBool(false /* isCommit */),
 			CanAutoRetry: fsm.FromBool(canAutoRetry),
 		}
-		payload := eventRetryableErrPayload{err: err, rewCap: rc}
+		payload := eventRetriableErrPayload{err: err, rewCap: rc}
 		return ev, payload
 	}
 
-	ev := eventNonRetryableErr{IsCommit: fsm.FromBool(false)}
-	payload := eventNonRetryableErrPayload{err: err}
+	ev := eventNonRetriableErr{IsCommit: fsm.FromBool(false)}
+	payload := eventNonRetriableErrPayload{err: err}
 	return ev, payload
 }
 

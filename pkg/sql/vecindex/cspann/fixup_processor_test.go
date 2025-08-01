@@ -27,8 +27,7 @@ func TestDelayInsertOrDelete(t *testing.T) {
 	// Set up the fixup processor with a minimum delay and allowed ops/sec = 1.
 	var fp FixupProcessor
 	fp.minDelay = time.Hour
-	var index Index
-	fp.Init(ctx, stopper, &index, 42 /* seed */)
+	fp.Init(ctx, stopper, nil /* index */, 42 /* seed */)
 	fp.mu.pacer.Init(1, 0, fp.mu.pacer.monoNow)
 
 	// Cancel the context and verify that DelayInsertOrDelete immediately

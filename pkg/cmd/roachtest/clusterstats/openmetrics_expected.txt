@@ -1,7 +1,7 @@
 # TYPE t1 gauge
-t1{cloud="gce",owner="roachtest_mock",test="mock_name",test_run_id="mock_id",unit="count",is_higher_better="true"} 203.000000 1727690493
+t1{cloud="gce",owner="roachtest_mock",test="mock_name",test_run_id="mock_id"} 203.000000 1727690493
 # TYPE t3 gauge
-t3{cloud="gce",owner="roachtest_mock",test="mock_name",test_run_id="mock_id",unit="count",is_higher_better="true"} 404.000000 1727690493
+t3{cloud="gce",owner="roachtest_mock",test="mock_name",test_run_id="mock_id"} 404.000000 1727690493
 # TYPE foo_count gauge
 foo_count{cloud="gce",owner="roachtest_mock",test="mock_name",test_run_id="mock_id",agg_tag="sum(foo)"} 123.000000 1608854400
 foo_count{cloud="gce",owner="roachtest_mock",test="mock_name",test_run_id="mock_id",agg_tag="sum(foo)"} 246.000000 1608854410

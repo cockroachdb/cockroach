@@ -4,8 +4,8 @@ gomock(
     name = "mock_kvpb",
     out = "mocks_generated.go",
     interfaces = [
-        "RPCInternalClient",
-        "RPCInternal_MuxRangeFeedClient",
+        "InternalClient",
+        "Internal_MuxRangeFeedClient",
     ],
     library = "//pkg/kv/kvpb",
     package = "kvpbmock",

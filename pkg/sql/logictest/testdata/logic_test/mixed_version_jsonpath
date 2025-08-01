@@ -1,0 +1,29 @@
+# LogicTest: cockroach-go-testserver-configs
+
+statement error unimplemented
+SELECT '$'::JSONPATH
+
+upgrade 0
+
+query T nodeidx=0
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
+----
+25.2
+
+statement error pq: jsonpath not supported until version 25.2
+SELECT '$'::JSONPATH
+
+upgrade 1
+
+upgrade 2
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version();
+
+query B retry
+SELECT crdb_internal.is_at_least_version('25.1-02')
+----
+true
+
+statement ok
+SELECT '$'::JSONPATH

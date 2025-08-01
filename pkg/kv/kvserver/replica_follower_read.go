@@ -86,26 +86,19 @@ func BatchCanBeEvaluatedOnFollower(ctx context.Context, ba *kvpb.BatchRequest) b
 	return true
 }
 
-// canServeFollowerRead tests, when a range lease could not be acquired,
+// canServeFollowerReadRLocked tests, when a range lease could not be acquired,
 // whether the batch can be served as a follower read despite the error. Only
 // non-locking, read-only requests can be served as follower reads. The batch
 // must be transactional and composed exclusively of this kind of request to be
 // accepted as a follower read.
-func (r *Replica) canServeFollowerRead(
-	ctx context.Context,
-	ba *kvpb.BatchRequest,
-	desc *roachpb.RangeDescriptor,
-	appliedLAI kvpb.LeaseAppliedIndex,
-	leaseholderNodeId roachpb.NodeID,
-	raftClosed hlc.Timestamp,
-) bool {
+func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *kvpb.BatchRequest) bool {
 	eligible := BatchCanBeEvaluatedOnFollower(ctx, ba) && FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV)
 	if !eligible {
 		// We couldn't do anything with the error, propagate it.
 		return false
 	}
 
-	repDesc, err := getReplicaDescriptor(desc, r.RangeID, r.StoreID())
+	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
 		return false
 	}
@@ -118,8 +111,7 @@ func (r *Replica) canServeFollowerRead(
 	}
 
 	requiredFrontier := ba.RequiredFrontier()
-	maxClosed := r.getCurrentClosedTimestamp(ctx, requiredFrontier /* sufficient */, appliedLAI,
-		leaseholderNodeId, raftClosed)
+	maxClosed := r.getCurrentClosedTimestampLocked(ctx, requiredFrontier /* sufficient */)
 	canServeFollowerRead := requiredFrontier.LessEq(maxClosed)
 	tsDiff := requiredFrontier.GoTime().Sub(maxClosed.GoTime())
 	if !canServeFollowerRead {
@@ -153,15 +145,14 @@ func (r *Replica) canServeFollowerRead(
 // that's lower than the maximum closed timestamp that we know about, as long as
 // the returned timestamp is still >= sufficient. This is a performance
 // optimization because we can avoid consulting the ClosedTimestampReceiver.
-func (r *Replica) getCurrentClosedTimestamp(
-	ctx context.Context,
-	sufficient hlc.Timestamp,
-	appliedLAI kvpb.LeaseAppliedIndex,
-	leaseholderNodeId roachpb.NodeID,
-	raftClosed hlc.Timestamp,
+func (r *Replica) getCurrentClosedTimestampLocked(
+	ctx context.Context, sufficient hlc.Timestamp,
 ) hlc.Timestamp {
-	sideTransportClosed := r.sideTransportClosedTimestamp.get(ctx, leaseholderNodeId,
-		appliedLAI, sufficient)
+	appliedLAI := r.shMu.state.LeaseAppliedIndex
+	leaseholder := r.shMu.state.Lease.Replica.NodeID
+	raftClosed := r.shMu.state.RaftClosedTimestamp
+	sideTransportClosed := r.sideTransportClosedTimestamp.get(ctx, leaseholder, appliedLAI, sufficient)
+
 	var maxClosed hlc.Timestamp
 	maxClosed.Forward(raftClosed)
 	maxClosed.Forward(sideTransportClosed)
@@ -173,7 +164,5 @@ func (r *Replica) getCurrentClosedTimestamp(
 func (r *Replica) GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.getCurrentClosedTimestamp(ctx, hlc.Timestamp{}, /* sufficient */
-		r.shMu.state.LeaseAppliedIndex, r.shMu.state.Lease.Replica.NodeID,
-		r.shMu.state.RaftClosedTimestamp)
+	return r.getCurrentClosedTimestampLocked(ctx, hlc.Timestamp{} /* sufficient */)
 }

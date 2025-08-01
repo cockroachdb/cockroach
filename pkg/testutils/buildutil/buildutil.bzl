@@ -49,8 +49,6 @@ _deps_aspect = aspect(
 )
 
 def _find_deps_with_disallowed_prefixes(current_pkg, dep_pkgs, prefixes):
-    if prefixes == None:
-        return []
     return [dp for dp_list in [
         [(d, p) for p in prefixes if d.startswith(p) and d != current_pkg]
         for d in dep_pkgs
@@ -63,13 +61,11 @@ def _deps_rule_impl(ctx):
         prefixes = ctx.attr.disallowed_prefixes,
     )
     deps = {k: None for k in ctx.attr.src[_DepsInfo].deps.to_list()}
-    if ctx.attr.has_allowlist:
+    if ctx.attr.allowlist:
         failed = [p for p in deps if p not in ctx.attr.allowlist and
                                      p.label != ctx.attr.src.label]
-    elif ctx.attr.has_disallowed_list:
-        failed = [p for p in ctx.attr.disallowed_list if p in deps]
     else:
-        failed = []
+        failed = [p for p in ctx.attr.disallowed_list if p in deps]
     failures = []
     if failed_prefixes:
         failures.extend([
@@ -112,14 +108,10 @@ _deps_rule = rule(
         "disallow_cdeps": attr.bool(mandatory = False, default = False),
         "disallowed_list": attr.label_list(providers = [GoInfo]),
         "disallowed_prefixes": attr.string_list(mandatory = False, allow_empty = True),
-        "has_allowlist": attr.bool(default = False),
-        "has_disallowed_list": attr.bool(default = False),
     },
 )
 
 def _validate_disallowed_prefixes(prefixes):
-    if prefixes == None:
-        return []
     validated = []
     repo_prefix = "github.com/cockroachdb/cockroach/"
     short_prefix = "pkg/"
@@ -138,15 +130,11 @@ def _validate_disallowed_prefixes(prefixes):
 
 def disallowed_imports_test(
         src,
-        disallowed_list = None,
-        disallowed_prefixes = None,
+        disallowed_list = [],
+        disallowed_prefixes = [],
         disallow_cdeps = False,
-        allowlist = None):
-
-    if allowlist == None and disallowed_list == None and disallowed_prefixes == None:
-        fail("Either allowlist, disallowed_list or disallowed_prefixes should be passed, to block " +
-           "all imports you must explicitly pass allowlist = []")
-    if (allowlist != None and disallowed_list != None) or (allowlist != None and disallowed_prefixes != None):
+        allowlist = []):
+    if (disallowed_list and allowlist) or (disallowed_prefixes and allowlist):
         fail("allowlist or (disallowed_list or disallowed_prefixes) can be " +
              "provided, but not both")
     disallowed_prefixes = _validate_disallowed_prefixes(disallowed_prefixes)
@@ -159,8 +147,6 @@ def disallowed_imports_test(
         disallowed_list = disallowed_list,
         disallowed_prefixes = disallowed_prefixes,
         disallow_cdeps = disallow_cdeps,
-        has_allowlist = allowlist != None,
-        has_disallowed_list = disallowed_list != None,
     )
     native.sh_test(
         name = src.strip(":") + "_disallowed_imports_test",

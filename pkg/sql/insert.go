@@ -93,8 +93,6 @@ type insertRun struct {
 	// regionLocalInfo handles erroring out the INSERT when the
 	// enforce_home_region setting is on.
 	regionLocalInfo regionLocalInfoType
-
-	originTimestampCPutHelper row.OriginTimestampCPutHelper
 }
 
 // regionLocalInfoType contains common items needed for determining the home region
@@ -160,10 +158,7 @@ func (r *regionLocalInfoType) checkHomeRegion(row tree.Datums) error {
 	return nil
 }
 
-func (r *insertRun) init(params runParams, columns colinfo.ResultColumns) {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
-		r.originTimestampCPutHelper.OriginTimestamp = ots
-	}
+func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultColumns) {
 	if !r.rowsNeeded {
 		return
 	}
@@ -248,7 +243,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	}
 
 	// Queue the insert in the KV batch.
-	if err := r.ti.row(params.ctx, insertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV); err != nil {
+	if err := r.ti.row(params.ctx, insertVals, pm, vh, r.traceKV); err != nil {
 		return err
 	}
 
@@ -277,7 +272,7 @@ func (n *insertNode) startExec(params runParams) error {
 	// Cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	n.run.init(params, n.columns)
+	n.run.initRowContainer(params, n.columns)
 
 	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext())
 }
@@ -360,9 +355,10 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 		}
 		// Remember we're done for the next call to BatchedNext().
 		n.run.done = true
-		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc(), int(n.run.ti.rowsWritten))
 	}
+
+	// Possibly initiate a run of CREATE STATISTICS.
+	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc(), n.run.ti.lastBatchSize)
 
 	return n.run.ti.lastBatchSize > 0, nil
 }

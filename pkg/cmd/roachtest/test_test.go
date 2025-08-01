@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -73,23 +72,6 @@ func defaultClusterOpt() clustersOpt {
 	}
 }
 
-// clusterOptWithProvisioningError returns a clusterOpt with
-// preAllocateClusterFn set to a function that always returns nil to mock a
-// cluster provisioning error.
-func clusterOptWithProvisioningError() clustersOpt {
-	return clustersOpt{
-		typ:       roachprodCluster,
-		user:      "test_user",
-		cpuQuota:  1000,
-		debugMode: NoDebug,
-		preAllocateClusterFn: func(ctx context.Context,
-			t registry.TestSpec,
-			arch vm.CPUArch) error {
-			return errors.New("Provision error")
-		},
-	}
-}
-
 func defaultLoggingOpt(buf *syncedBuffer) loggingOpt {
 	return loggingOpt{
 		l:            nilLogger(),
@@ -98,37 +80,6 @@ func defaultLoggingOpt(buf *syncedBuffer) loggingOpt {
 		stderr:       buf,
 		artifactsDir: "",
 	}
-}
-
-func defaultGithub(disable bool) GithubPoster {
-	return &githubIssues{
-		disable: disable,
-		// issuePoster isn't mocked because an env var check exits MaybePost when
-		// the GitHub API isn't present, so technically setting it here doesn't
-		// matter
-		issuePoster: func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest,
-			*issues.Options) (*issues.TestFailureIssue, error) {
-			return nil, errors.New("unit test should never post to github")
-		},
-	}
-}
-
-// mockGithubIssues is a mock implementation of GithubPoster to test GitHub
-// failure scenarios
-type mockGithubIssues struct{}
-
-func (m *mockGithubIssues) MaybePost(
-	t *testImpl,
-	issueInfo *githubIssueInfo,
-	l *logger.Logger,
-	message string,
-	params map[string]string,
-) (*issues.TestFailureIssue, error) {
-	return nil, errors.New("mocked MaybePost error")
-}
-
-func brokenGithub(disable bool) GithubPoster {
-	return &mockGithubIssues{}
 }
 
 func TestRunnerRun(t *testing.T) {
@@ -230,10 +181,9 @@ func TestRunnerRun(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			rt := setupRunnerTest(t, r, c.filters)
-			github := defaultGithub(rt.runner.config.disableIssue)
 
 			const count = 1
-			err := rt.runner.Run(ctx, rt.tests, count, defaultParallelism, rt.copt, testOpts{}, rt.lopt, github)
+			err := rt.runner.Run(ctx, rt.tests, count, defaultParallelism, rt.copt, testOpts{}, rt.lopt)
 			assertTestCompletion(t, rt.tests, c.filters, rt.runner.getCompletedTests(), err, c.expErr)
 			// Write test reports & verify their contents.
 			testSummaryPath := filepath.Join(rt.lopt.artifactsDir, "test_summary.tsv")
@@ -252,8 +202,7 @@ func TestRunnerRun(t *testing.T) {
 				copt.preAllocateClusterFn = func(ctx context.Context, t registry.TestSpec, arch vm.CPUArch) error {
 					return errors.New("cluster creation failed")
 				}
-				err = rt.runner.Run(ctx, rt.tests, count, defaultParallelism, copt, testOpts{}, rt.lopt,
-					github)
+				err = rt.runner.Run(ctx, rt.tests, count, defaultParallelism, copt, testOpts{}, rt.lopt)
 
 				assertTestCompletion(t,
 					rt.tests, c.filters, rt.runner.getCompletedTests(),
@@ -298,12 +247,11 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 	})
 
 	rt := setupRunnerTest(t, r, nil)
-	github := defaultGithub(rt.runner.config.disableIssue)
 
 	for i := 0; i < 10000; i++ {
 		require.NoError(t, rt.runner.Run(
 			context.Background(), rt.tests, 1 /* count */, 1, /* parallelism */
-			rt.copt, testOpts{}, rt.lopt, github,
+			rt.copt, testOpts{}, rt.lopt,
 		))
 		if atomic.LoadInt32(&sawEncrypted) == 0 {
 			// NB: since it's a 50% chance, the probability of *not* hitting
@@ -526,9 +474,8 @@ func TestRunnerTestTimeout(t *testing.T) {
 			<-ctx.Done()
 		},
 	}
-	github := defaultGithub(runner.config.disableIssue)
 	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
-		defaultParallelism, copt, testOpts{}, lopt, github)
+		defaultParallelism, copt, testOpts{}, lopt)
 	if !testutils.IsError(err, "some tests failed") {
 		t.Fatalf("expected error \"some tests failed\", got: %v", err)
 	}
@@ -624,8 +571,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	tests, _ := testsToRun(r, tf, false, 1.0, true)
 	var buf syncedBuffer
 	lopt := defaultLoggingOpt(&buf)
-	github := defaultGithub(runner.config.disableIssue)
-	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt, github)
+	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt)
 }
 
 func TestExitCode(t *testing.T) {
@@ -739,7 +685,6 @@ func TestTransientErrorFallback(t *testing.T) {
 	var buf syncedBuffer
 	copt := defaultClusterOpt()
 	lopt := defaultLoggingOpt(&buf)
-	github := defaultGithub(runner.config.disableIssue)
 
 	// Test that if a test fails with a transient error handled by the `require` package,
 	// the test runner will correctly still identify it as a flake and the run will have
@@ -757,7 +702,7 @@ func TestTransientErrorFallback(t *testing.T) {
 			},
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt, github)
+			defaultParallelism, copt, testOpts{}, lopt)
 		require.NoError(t, err)
 	})
 
@@ -778,7 +723,7 @@ func TestTransientErrorFallback(t *testing.T) {
 			},
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt, github)
+			defaultParallelism, copt, testOpts{}, lopt)
 		if !testutils.IsError(err, "some tests failed") {
 			t.Fatalf("expected error \"some tests failed\", got: %v", err)
 		}
@@ -795,7 +740,6 @@ func TestRunnerTasks(t *testing.T) {
 	var buf syncedBuffer
 	copt := defaultClusterOpt()
 	lopt := defaultLoggingOpt(&buf)
-	github := defaultGithub(runner.config.disableIssue)
 
 	mockTest := registry.TestSpec{
 		Name:             `mock test`,
@@ -821,7 +765,7 @@ func TestRunnerTasks(t *testing.T) {
 			<-ctx.Done()
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt, github)
+			defaultParallelism, copt, testOpts{}, lopt)
 		if !testutils.IsError(err, "some tests failed") {
 			t.Fatalf("expected error \"some tests failed\", got: %v", err)
 		}
@@ -836,7 +780,7 @@ func TestRunnerTasks(t *testing.T) {
 			<-ctx.Done()
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt, github)
+			defaultParallelism, copt, testOpts{}, lopt)
 		if !testutils.IsError(err, "some tests failed") {
 			t.Fatalf("expected error \"some tests failed\", got: %v", err)
 		}
@@ -856,7 +800,7 @@ func TestRunnerTasks(t *testing.T) {
 			t.Fatalf("test failed")
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt, github)
+			defaultParallelism, copt, testOpts{}, lopt)
 		if !testutils.IsError(err, "some tests failed") {
 			t.Fatalf("expected error \"some tests failed\", got: %v", err)
 		}
@@ -876,7 +820,7 @@ func TestRunnerTasks(t *testing.T) {
 			}, task.Name("task"))
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt, github)
+			defaultParallelism, copt, testOpts{}, lopt)
 		require.NoError(t, err)
 		require.Equal(t, uint32(1), tasksDone.Load())
 	})
@@ -892,7 +836,6 @@ func TestVMPreemptionPolling(t *testing.T) {
 	var buf syncedBuffer
 	copt := defaultClusterOpt()
 	lopt := defaultLoggingOpt(&buf)
-	github := defaultGithub(runner.config.disableIssue)
 
 	mockTest := registry.TestSpec{
 		Name:             `preemption`,
@@ -934,7 +877,7 @@ func TestVMPreemptionPolling(t *testing.T) {
 		setPollPreemptionInterval(50 * time.Millisecond)
 
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt, github)
+			defaultParallelism, copt, testOpts{}, lopt)
 		// The preemption monitor should mark a VM as preempted and the test should
 		// be treated as a flake instead of a failed test.
 		require.NoError(t, err)
@@ -950,7 +893,7 @@ func TestVMPreemptionPolling(t *testing.T) {
 			t.Error("Should be ignored")
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt, github)
+			defaultParallelism, copt, testOpts{}, lopt)
 		// The post test failure check should mark a VM as preempted and the test should
 		// be treated as a flake instead of a failed test.
 		require.NoError(t, err)
@@ -984,7 +927,7 @@ func TestVMPreemptionPolling(t *testing.T) {
 		}
 
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt, github)
+			defaultParallelism, copt, testOpts{}, lopt)
 
 		require.NoError(t, err)
 	})
@@ -1014,7 +957,7 @@ func TestVMPreemptionPolling(t *testing.T) {
 		}
 
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt, github)
+			defaultParallelism, copt, testOpts{}, lopt)
 
 		require.NoError(t, err)
 	})
@@ -1032,7 +975,6 @@ func TestRunnerFailureAfterTimeout(t *testing.T) {
 	defer stopper.Stop(ctx)
 	cr := newClusterRegistry()
 	runner := newUnitTestRunner(cr, stopper)
-	github := defaultGithub(runner.config.disableIssue)
 
 	var buf syncedBuffer
 	copt := defaultClusterOpt()
@@ -1052,54 +994,6 @@ func TestRunnerFailureAfterTimeout(t *testing.T) {
 		},
 	}
 	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
-		defaultParallelism, copt, testOpts{}, lopt, github)
+		defaultParallelism, copt, testOpts{}, lopt)
 	require.Error(t, err)
-}
-
-// TestRunnerProvisionErrorGithubError
-//  1. Test runner worker experiences provisioning error
-//  2. After provisioning error, the worker will get a GitHub POST error
-//     (mocked)
-//  3. Worker will return because it has nothing else to do
-//  4. Runner should return a joined error for failing to provision, and a
-//     GitHub error and relevant error counters in [testRunner] should be
-//     incremented
-func TestRunnerProvisionErrorGithubError(t *testing.T) {
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	cr := newClusterRegistry()
-	runner := newUnitTestRunner(cr, stopper)
-	github := brokenGithub(runner.config.disableIssue)
-
-	var buf syncedBuffer
-	copt := clusterOptWithProvisioningError()
-	lopt := defaultLoggingOpt(&buf)
-	test := registry.TestSpec{
-		Name:             `TestThatShouldNotRun`,
-		Owner:            OwnerUnitTest,
-		Timeout:          10 * time.Second,
-		Cluster:          spec.MakeClusterSpec(0),
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		CockroachBinary:  registry.StandardCockroach,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			// If for some reason this test is executed, the test runner worker will
-			// recover from this panic as a test failure
-			panic("this test should never run")
-		},
-	}
-
-	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
-		defaultParallelism, copt, testOpts{}, lopt, github)
-
-	// Assert test runner worker did not execute the test because infra shouldn't
-	// be provisioned
-	require.NotErrorIs(t, err, errTestsFailed)
-	// Assert error is of type errGithubPostFailed && errSomeClusterProvisioningFailed
-	require.ErrorIs(t, err, errGithubPostFailed)
-	require.ErrorIs(t, err, errSomeClusterProvisioningFailed)
-	// Assert test runner workers' error counts are as expected
-	require.Equal(t, runner.numGithubPostErrs, int32(1), "expected exactly 1 github post errors")
-	require.Equal(t, runner.numClusterErrs, int32(1), "expected exactly 1 cluster errors")
 }

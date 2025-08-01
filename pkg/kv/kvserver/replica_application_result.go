@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -501,109 +500,39 @@ func (r *Replica) handleLeaseResult(
 
 // stagePendingTruncationRaftMuLocked installs the new RaftTruncatedState,
 // updates the log size, and truncates the raft log cache.
-// TODO(pav-kv): move the truncation functions to replicaLogStorage files.
 func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
-	r.asLogStorage().stagePendingTruncationRaftMuLocked(pt)
-}
-
-func (r *replicaLogStorage) stageApplySnapshotRaftMuLocked(
-	truncState kvserverpb.RaftTruncatedState,
-) {
-	r.raftMu.AssertHeld()
-
-	// A snapshot application implies a log truncation to the snapshot's index,
-	// and we apply the resulting memory state here (before the snapshot takes
-	// effect, i.e. the log entries disappear from storage). This avoids
-	// situations in which entries were already removed, but the in-mem state
-	// indicates that they ought to still exist.
-	//
-	// The truncation finalized below, after the snapshot is visible.
-
-	// Clear the raft entry cache at the end of this method (after mu has been
-	// released). Any reader that obtains their log bounds after the critical
-	// section but before the clear will see an empty log anyway, since the
-	// in-memory state is already updated to reflect the truncation, even if
-	// entries are still present in the cache.
-	defer r.cache.Drop(r.ls.RangeID)
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// On snapshots, the entire log is cleared. This is safe:
-	// - log entries preceding the entry represented by the snapshot are durable
-	//   via the snapshot itself, and
-	// - committed log entries ahead of the snapshot index were not acked by this
-	//   replica, or raft would not have accepted this snapshot.
-	//
-	// Here, we update the in-memory state to reflect this before making the
-	// corresponding change to on-disk state. This makes sure that concurrent
-	// readers don't try to access entries no longer present in the log.
-	r.updateStateRaftMuLockedMuLocked(logstore.RaftState{
-		LastIndex: truncState.Index,
-		LastTerm:  truncState.Term,
-		ByteSize:  0,
-	})
-	r.shMu.trunc = truncState
-	r.shMu.lastCheckSize = 0
-	r.shMu.sizeTrusted = true
-}
-
-func (r *replicaLogStorage) finalizeApplySnapshotRaftMuLocked(ctx context.Context) {
-	r.raftMu.AssertHeld()
-	// This mirrors finalizeTruncationRaftMuLocked, but a snapshot may regress the last
-	// index (to discard a divergent log). For example:
-	//
-	// Raft log (before snapshot):
-	// - entry 100-150: term 1 [committed]
-	// - entry 151-200: term 2
-	// Committed raft log (on leader):
-	// - entry 100-150: term 1
-	// - entry 151:     term 3
-	//
-	// The replica may receive a snapshot at index 151. If we don't clear the
-	// sideloaded storage all the way up to the *old* last index, we may leak
-	// sideloaded entries. Rather than remember the old last index, we instead
-	// clear the sideloaded storage entirely. This is equivalent.
-	if err := r.ls.Sideload.Clear(ctx); err != nil {
-		log.Errorf(ctx, "while clearing sideloaded storage after snapshot: %+v", err)
-	}
-}
-
-func (r *replicaLogStorage) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	r.raftMu.AssertHeld()
 	// NB: The expected first index can be zero if this proposal is from before
 	// v22.1 that added it, when all truncations were strongly coupled. It is not
 	// safe to consider the log size delta trusted in this case. Conveniently,
 	// this doesn't need any special casing.
-	pt.isDeltaTrusted = pt.isDeltaTrusted && r.shMu.trunc.Index+1 == pt.expectedFirstIndex
+	pt.isDeltaTrusted = pt.isDeltaTrusted && r.shMu.raftTruncState.Index+1 == pt.expectedFirstIndex
 
-	func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.shMu.trunc = pt.RaftTruncatedState
-		// Ensure the raft log size is not negative since it isn't persisted between
-		// server restarts.
-		// TODO(pav-kv): should we distrust the log size if it goes negative?
-		r.shMu.size = max(r.shMu.size+pt.logDeltaBytes, 0)
-		r.shMu.lastCheckSize = max(r.shMu.lastCheckSize+pt.logDeltaBytes, 0)
-		if !pt.isDeltaTrusted {
-			r.shMu.sizeTrusted = false
-		}
-	}()
+	r.mu.Lock()
+	r.shMu.raftTruncState = pt.RaftTruncatedState
+	// Ensure the raft log size is not negative since it isn't persisted between
+	// server restarts.
+	// TODO(pav-kv): should we distrust the log size if it goes negative?
+	r.shMu.raftLogSize = max(r.shMu.raftLogSize+pt.logDeltaBytes, 0)
+	r.shMu.raftLogLastCheckSize = max(r.shMu.raftLogLastCheckSize+pt.logDeltaBytes, 0)
+	if !pt.isDeltaTrusted {
+		r.shMu.raftLogSizeTrusted = false
+	}
+	r.mu.Unlock()
 
 	// Clear entries in the raft log entry cache for this range up to and
 	// including the truncated index. Ordering this after updating the truncated
 	// state matters here. At this point, there can not be a concurrent reader of
 	// the raft log holding only Replica.mu that tries to read the entries below
 	// the new truncated index.
-	r.cache.Clear(r.ls.RangeID, pt.Index)
+	r.store.raftEntryCache.Clear(r.RangeID, pt.Index)
 }
 
 // finalizeTruncationRaftMuLocked is a post-apply handler for the raft log
 // truncation. It removes the obsolete sideloaded entries if any.
 func (r *Replica) finalizeTruncationRaftMuLocked(ctx context.Context) {
 	r.raftMu.AssertHeld()
-	index := r.asLogStorage().shMu.trunc.Index
+	index := r.shMu.raftTruncState.Index
 	// Truncate the sideloaded storage. This is safe because the new truncated
 	// state is already synced. If it wasn't, a crash right after removing the
 	// sideloaded entries could result in missing entries in the log.
@@ -612,7 +541,7 @@ func (r *Replica) finalizeTruncationRaftMuLocked(ctx context.Context) {
 	// caller has this information available. Or better delegate deletions to an
 	// asynchronous job, that also makes sure to clean up dangling files.
 	log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", index)
-	if err := r.logStorage.ls.Sideload.TruncateTo(ctx, index); err != nil {
+	if err := r.raftMu.sideloaded.TruncateTo(ctx, index); err != nil {
 		// We don't *have* to remove these entries for correctness. Log a loud
 		// error, but keep humming along.
 		log.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
@@ -686,19 +615,17 @@ func (r *Replica) handleChangeReplicasResult(
 		r.store.metrics.RangeRaftLeaderRemovals.Inc(1)
 	}
 
-	if _, err := r.store.removeInitializedReplicaRaftMuLocked(
-		ctx, r, chng.NextReplicaID(), "applied self-removal",
-		RemoveOptions{
-			// We destroyed the data when the batch committed so don't destroy it again.
-			DestroyData: false,
-		}); err != nil {
+	if _, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{
+		// We destroyed the data when the batch committed so don't destroy it again.
+		DestroyData: false,
+	}); err != nil {
 		log.Fatalf(ctx, "failed to remove replica: %v", err)
 	}
 
 	// NB: postDestroyRaftMuLocked requires that the batch which removed the data
 	// be durably synced to disk, which we have.
 	// See replicaAppBatch.ApplyToStateMachine().
-	if err := r.postDestroyRaftMuLocked(ctx); err != nil {
+	if err := r.postDestroyRaftMuLocked(ctx, r.GetMVCCStats()); err != nil {
 		log.Fatalf(ctx, "failed to run Replica postDestroy: %v", err)
 	}
 

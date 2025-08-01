@@ -17,11 +17,11 @@ with t=t k=k
   txn_step seq=1
   put v=v1 batched
 ----
-put: lock acquisition = {span=k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2 durability=Replicated strength=Intent ignored=[]}
-put: lock acquisition = {span=k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2 Replicated Intent []}
+put: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3 Replicated Intent []}
 put: batch after write is empty
 >> at end:
-txn: "t" meta={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=1.000000000,0 gul=0,0
+txn: "t" meta={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} ts=1.000000000,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/1.000000000,0 -> /BYTES/v2
 error: (*issuelink.withIssueLink:) transaction 00000001-0000-0000-0000-000000000000 with sequence 3 missing an intent with lower sequence 1
@@ -45,11 +45,11 @@ with t=t k=k
   txn_step seq=2
   put v=v1 batched
 ----
-put: lock acquisition = {span=k id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2 durability=Replicated strength=Intent ignored=[]}
-put: lock acquisition = {span=k id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {k id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2 Replicated Intent []}
+put: lock acquisition = {k id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3 Replicated Intent []}
 put: batch after write is empty
 >> at end:
-txn: "t" meta={id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=1.000000000,0 gul=0,0
+txn: "t" meta={id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} ts=1.000000000,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/1.000000000,0 -> /BYTES/v2
 
@@ -72,11 +72,11 @@ with t=t k=k
   txn_step seq=2
   put v=v2 batched
 ----
-put: lock acquisition = {span=k id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2 durability=Replicated strength=Intent ignored=[]}
-put: lock acquisition = {span=k id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {k id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2 Replicated Intent []}
+put: lock acquisition = {k id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3 Replicated Intent []}
 put: batch after write is empty
 >> at end:
-txn: "t" meta={id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=1.000000000,0 gul=0,0
+txn: "t" meta={id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} ts=1.000000000,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/1.000000000,0 -> /BYTES/v2
 error: (*assert.withAssertionFailure:) transaction 00000003-0000-0000-0000-000000000000 with sequence 2 has a different value [0 0 0 0 3 118 50] after recomputing from what was written: [0 0 0 0 3 118 49]
@@ -100,11 +100,11 @@ with t=t k=k
   put v=v2
   put v=v2 batched
 ----
-put: lock acquisition = {span=k id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2 durability=Replicated strength=Intent ignored=[]}
-put: lock acquisition = {span=k id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {k id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2 Replicated Intent []}
+put: lock acquisition = {k id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3 Replicated Intent []}
 put: batch after write is empty
 >> at end:
-txn: "t" meta={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=1.000000000,0 gul=0,0
+txn: "t" meta={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} ts=1.000000000,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/1.000000000,0 -> /BYTES/v2
 
@@ -127,11 +127,11 @@ with t=t k=k
   put v=v2
   put v=v3 batched
 ----
-put: lock acquisition = {span=k id=00000005 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2 durability=Replicated strength=Intent ignored=[]}
-put: lock acquisition = {span=k id=00000005 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {k id=00000005 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2 Replicated Intent []}
+put: lock acquisition = {k id=00000005 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3 Replicated Intent []}
 put: batch after write is empty
 >> at end:
-txn: "t" meta={id=00000005 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=1.000000000,0 gul=0,0
+txn: "t" meta={id=00000005 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000005 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3} ts=1.000000000,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/1.000000000,0 -> /BYTES/v2
 error: (*assert.withAssertionFailure:) transaction 00000005-0000-0000-0000-000000000000 with sequence 3 has a different value [0 0 0 0 3 118 51] after recomputing from what was written: [0 0 0 0 3 118 50]
@@ -157,12 +157,12 @@ with t=t k=k
   txn_step
   put v=v4 batched
 ----
-put: lock acquisition = {span=k id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2 durability=Replicated strength=Intent ignored=[]}
-put: lock acquisition = {span=k id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3 durability=Replicated strength=Intent ignored=[]}
-put: lock acquisition = {span=k id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=4 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {k id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=2 Replicated Intent []}
+put: lock acquisition = {k id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=3 Replicated Intent []}
+put: lock acquisition = {k id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=4 Replicated Intent []}
 put: batch after write is non-empty
 >> at end:
-txn: "t" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=1.000000000,0 gul=0,0
+txn: "t" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=4} ts=1.000000000,0 del=false klen=12 vlen=7 ih={{2 /BYTES/v1}{3 /BYTES/v2}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/1.000000000,0 -> /BYTES/v4
 

@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/export"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -279,9 +278,9 @@ func NewProcessor(
 		}
 
 		if core.Exporter.Format.Format == roachpb.IOFileFormat_Parquet {
-			return export.NewParquetWriterProcessor(ctx, flowCtx, processorID, *core.Exporter, post, inputs[0])
+			return NewParquetWriterProcessor(ctx, flowCtx, processorID, *core.Exporter, post, inputs[0])
 		}
-		return export.NewCSVWriterProcessor(ctx, flowCtx, processorID, *core.Exporter, post, inputs[0])
+		return NewCSVWriterProcessor(ctx, flowCtx, processorID, *core.Exporter, post, inputs[0])
 	}
 
 	if core.BulkRowWriter != nil {
@@ -379,12 +378,6 @@ func NewProcessor(
 		}
 		return NewTTLProcessor(ctx, flowCtx, processorID, *core.Ttl)
 	}
-	if core.Inspect != nil {
-		if err := checkNumIn(inputs, 0); err != nil {
-			return nil, err
-		}
-		return NewInspectProcessor(ctx, flowCtx, processorID, *core.Inspect)
-	}
 	if core.LogicalReplicationWriter != nil {
 		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
@@ -442,6 +435,12 @@ var NewRestoreDataProcessor func(context.Context, *execinfra.FlowCtx, int32, exe
 // NewStreamIngestionDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewStreamIngestionDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.StreamIngestionDataSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
+// NewCSVWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewCSVWriterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ExportSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource) (execinfra.Processor, error)
+
+// NewParquetWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewParquetWriterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ExportSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource) (execinfra.Processor, error)
+
 // NewChangeAggregatorProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewChangeAggregatorProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
@@ -453,8 +452,6 @@ var NewStreamIngestionFrontierProcessor func(context.Context, *execinfra.FlowCtx
 
 // NewTTLProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewTTLProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.TTLSpec) (execinfra.Processor, error)
-
-var NewInspectProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.InspectSpec) (execinfra.Processor, error)
 
 // NewGenerativeSplitAndScatterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewGenerativeSplitAndScatterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.GenerativeSplitAndScatterSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)

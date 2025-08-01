@@ -53,6 +53,7 @@ func DecimalPow(ctx *apd.Context, d, x, y *apd.Decimal) error {
 		d.Set(e)
 		return nil
 	}
+	// TODO(normanchenn): do something with the condition.
 	_, err = ctx.Pow(d, x, y)
 	if err != nil {
 		return err

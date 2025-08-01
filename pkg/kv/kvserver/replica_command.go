@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -138,6 +138,11 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) redac
 	var s redact.RedactableString
 	if status != nil && status.RaftState == raftpb.StateLeader {
 		for replicaID, pr := range status.Progress {
+			if replicaID == status.Lead {
+				// TODO(tschottdorf): remove this line once we have picked up
+				// https://github.com/etcd-io/etcd/pull/10279
+				continue
+			}
 			if pr.State == tracker.StateReplicate {
 				// This follower is in good working order.
 				continue
@@ -1018,11 +1023,11 @@ func waitForApplication(
 	for _, repl := range replicas {
 		repl := repl // copy for goroutine
 		g.GoCtx(func(ctx context.Context) error {
-			client, err := DialPerReplicaClient(dialer, ctx, repl.NodeID, rpcbase.DefaultClass)
+			conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
 			if err != nil {
 				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
 			}
-			_, err = client.WaitForApplication(ctx, &WaitForApplicationRequest{
+			_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
 				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
 				RangeID:            rangeID,
 				LeaseIndex:         leaseIndex,
@@ -1048,11 +1053,11 @@ func waitForReplicasInit(
 		for _, repl := range replicas {
 			repl := repl // copy for goroutine
 			g.GoCtx(func(ctx context.Context) error {
-				client, err := DialPerReplicaClient(dialer, ctx, repl.NodeID, rpcbase.DefaultClass)
+				conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
 				if err != nil {
 					return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
 				}
-				_, err = client.WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
+				_, err = NewPerReplicaClient(conn).WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
 					StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
 					RangeID:            rangeID,
 				})
@@ -3229,8 +3234,7 @@ var traceSnapshotThreshold = settings.RegisterDurationSetting(
 	"kv.trace.snapshot.enable_threshold",
 	"enables tracing and gathers timing information on all snapshots;"+
 		"snapshots with a duration longer than this threshold will have their "+
-		"trace logged (set to 0 to disable);",
-	0,
+		"trace logged (set to 0 to disable);", 0,
 )
 
 var externalFileSnapshotting = settings.RegisterBoolSetting(
@@ -4303,4 +4307,24 @@ func (r *Replica) adminScatter(
 		// adequate.
 		ReplicasScatteredBytes: stats.Total() * int64(numReplicasMoved),
 	}, nil
+}
+
+// TODO(arul): AdminVerifyProtectedTimestampRequest can entirely go away in
+// 22.2.
+func (r *Replica) adminVerifyProtectedTimestamp(
+	ctx context.Context, _ kvpb.AdminVerifyProtectedTimestampRequest,
+) (resp kvpb.AdminVerifyProtectedTimestampResponse, err error) {
+	// AdminVerifyProtectedTimestampRequest is not supported starting from the
+	// 22.1 release. We expect nodes running a 22.1 binary to still service this
+	// request in a {21.2, 22.1} mixed version cluster. This can happen if the
+	// request is initiated on a 21.2 node and the leaseholder of the range it is
+	// trying to verify is on a 22.1 node.
+	//
+	// We simply return true without attempting to verify in such a case. This
+	// ensures upstream jobs (backups) don't fail as a result. It is okay to
+	// return true regardless even if the PTS record being verified does not apply
+	// as the failure mode is non-destructive. Infact, this is the reason we're
+	// no longer supporting Verification past 22.1.
+	resp.Verified = true
+	return resp, nil
 }

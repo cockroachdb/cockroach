@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -79,11 +80,10 @@ func insertCPutFn(
 	key *roachpb.Key,
 	value *roachpb.Value,
 	traceKV bool,
-	rh *RowHelper,
-	dirs lazyIndexDirs,
+	keyEncodingDirs []encoding.Direction,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", keys.PrettyPrint(dirs.compute(rh), *key), value.PrettyPrint())
+		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", keys.PrettyPrint(keyEncodingDirs, *key), value.PrettyPrint())
 	}
 	b.CPut(key, value, nil /* expValue */)
 }
@@ -95,11 +95,10 @@ func insertPutFn(
 	key *roachpb.Key,
 	value *roachpb.Value,
 	traceKV bool,
-	rh *RowHelper,
-	dirs lazyIndexDirs,
+	keyEncodingDirs []encoding.Direction,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "Put %s -> %s", keys.PrettyPrint(dirs.compute(rh), *key), value.PrettyPrint())
+		log.VEventfDepth(ctx, 1, 2, "Put %s -> %s", keys.PrettyPrint(keyEncodingDirs, *key), value.PrettyPrint())
 	}
 	b.Put(key, value)
 }
@@ -113,11 +112,10 @@ func insertPutMustAcquireExclusiveLockFn(
 	key *roachpb.Key,
 	value *roachpb.Value,
 	traceKV bool,
-	rh *RowHelper,
-	dirs lazyIndexDirs,
+	keyEncodingDirs []encoding.Direction,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "Put (locking) %s -> %s", keys.PrettyPrint(dirs.compute(rh), *key), value.PrettyPrint())
+		log.VEventfDepth(ctx, 1, 2, "Put (locking) %s -> %s", keys.PrettyPrint(keyEncodingDirs, *key), value.PrettyPrint())
 	}
 	b.PutMustAcquireExclusiveLock(key, value)
 }
@@ -170,7 +168,7 @@ func (ri *Inserter) InsertRow(
 	values []tree.Datum,
 	pm PartialIndexUpdateHelper,
 	vh VectorIndexUpdateHelper,
-	oth OriginTimestampCPutHelper,
+	oth *OriginTimestampCPutHelper,
 	kvOp KVInsertOp,
 	traceKV bool,
 ) error {
@@ -216,7 +214,7 @@ func (ri *Inserter) InsertRow(
 	for idx, index := range ri.Helper.Indexes {
 		entries, ok := secondaryIndexEntries[index]
 		if ok {
-			var putFn func(context.Context, Putter, *roachpb.Key, *roachpb.Value, bool, *RowHelper, lazyIndexDirs)
+			var putFn func(context.Context, Putter, *roachpb.Key, *roachpb.Value, bool, []encoding.Direction)
 			if index.ForcePut() {
 				// See the comment on (catalog.Index).ForcePut() for more
 				// details.
@@ -247,7 +245,7 @@ func (ri *Inserter) InsertRow(
 			}
 			for i := range entries {
 				e := &entries[i]
-				putFn(ctx, b, &e.Key, &e.Value, traceKV, &ri.Helper, secondaryIndexDirs(idx))
+				putFn(ctx, b, &e.Key, &e.Value, traceKV, ri.Helper.secIndexValDirs[idx])
 			}
 
 			// If a row does not satisfy a partial index predicate, it will have no

@@ -36,7 +36,6 @@ export const insightsColumnLabels = {
   tableName: "Table Name",
   indexName: "Index Name",
   cpu: "SQL CPU Time",
-  queryTags: "Query Tags",
 };
 
 export type InsightsTableColumnKeys = keyof typeof insightsColumnLabels;
@@ -239,16 +238,6 @@ export const insightsTableTitles: InsightsTableTitleType = {
       <p>{`SQL CPU Time spent executing within the specified time interval. It
       does not include SQL planning time nor KV execution time.`}</p>,
       "cpu",
-    );
-  },
-  queryTags: (execType: InsightExecEnum) => {
-    return makeToolTip(
-      <p>
-        The query tags extracted from comments in the {execType} query. These
-        tags provide application context and can be used to correlate query
-        performance with client-side application state.
-      </p>,
-      "queryTags",
     );
   },
 };

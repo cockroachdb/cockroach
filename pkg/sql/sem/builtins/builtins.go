@@ -4439,8 +4439,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"oidvectortypes": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryCompatibility,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategoryCompatibility,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -4631,29 +4630,8 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Volatile,
 		}),
 
-	"crdb_internal.can_view_job": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "owner", Typ: types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ownerStr := string(tree.MustBeDString(args[0]))
-				owner := username.MakeSQLUsernameFromPreNormalizedString(ownerStr)
-				ok := evalCtx.SessionAccessor.HasViewAccessToJob(ctx, owner)
-				return tree.MakeDBool(tree.DBool(ok)), nil
-			},
-			Info:       "Returns true if the current user can view a job owned by the specified owner.",
-			Volatility: volatility.Stable,
-		},
-	),
-
 	"crdb_internal.read_file": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "uri", Typ: types.String},
@@ -4669,10 +4647,7 @@ value if you rely on the HLC for accuracy.`,
 		}),
 
 	"crdb_internal.write_file": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "data", Typ: types.Bytes},
@@ -5997,33 +5972,12 @@ SELECT
 					msg += strconv.Itoa(len(msg) / len(foo))
 				case "contextCanceled":
 					panic(context.Canceled)
-				case "stackOverflow":
-					// Cause a stack overflow with infinite recursion.
-					var recurse func(int) int
-					recurse = func(i int) int {
-						if i < 0 {
-							return i
-						}
-						return recurse(i+1) + recurse(i+2) // avoid TCO
-					}
-					return tree.NewDInt(tree.DInt(recurse(0))), nil
-				case "oom":
-					var mem [][]byte
-					// Try to allocate 128 TiB of memory.
-					for range 1024 * 1024 {
-						block := make([]byte, 128*1024*1024) // 128 MiB
-						for j := range 32 * 1024 {
-							block[j*4*1024] = 0xaa // touch each 4 KiB page
-						}
-						mem = append(mem, block)
-					}
-					return tree.NewDInt(tree.DInt(len(mem))), nil
 				default:
 					return nil, errors.Newf(
-						"expected mode to be one of: internalAssertion, indexOutOfRange, divideByZero, " +
-							"contextCanceled, stackOverflow, oom",
+						"expected mode to be one of: internalAssertion, indexOutOfRange, divideByZero, contextCanceled",
 					)
 				}
+				// This code is unreachable.
 				panic(msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
@@ -6086,15 +6040,15 @@ SELECT
 		},
 	),
 
+	// If force_retry is called during the specified interval from the beginning
+	// of the transaction it returns a retryable error. If not, 0 is returned
+	// instead of an error.
+	// The second version allows one to create an error intended for a transaction
+	// different than the current statement's transaction.
 	"crdb_internal.force_retry": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,
 		},
-		// This overload takes an interval parameter. If force_retry is called
-		// within this interval from the beginning of the transaction, it returns a
-		// retryable error. If force_retry is called after this interval, it returns
-		// 0. This allows the transaction to eventually succeed after the interval
-		// has passed, assuming it is being retried.
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "val", Typ: types.Interval}},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -6109,29 +6063,6 @@ SELECT
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Volatile,
-		},
-		// This overload takes an integer parameter. If the statement or transaction
-		// has already been retried < the parameter number of times, force_retry
-		// will return a retryable error. If the statement or transaction has
-		// already been retried >= the parameter number of times, force_retry will
-		// return 0. This allows precise control of the number of times the
-		// statement or transaction is retied.
-		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.Int}},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				retries := int64(evalCtx.Planner.RetryCounter())
-				maxRetries := int64(tree.MustBeDInt(args[0]))
-				if retries < maxRetries {
-					return nil, evalCtx.Txn.GenerateForcedRetryableErr(
-						ctx, "forced by crdb_internal.force_retry()",
-					)
-				}
-				return tree.DZero, nil
-			},
-			Info:             "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility:       volatility.Volatile,
-			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 	),
 
@@ -7571,10 +7502,6 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		},
 		stringOverload1(
 			func(ctx context.Context, evalCtx *eval.Context, s string) (tree.Datum, error) {
-				// Check for nil evalCtx.Regions, which can happen in tests.
-				if evalCtx.Regions == nil {
-					return nil, nilRegionsError
-				}
 				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(ctx)
 				if err != nil {
 					return nil, err
@@ -7608,10 +7535,6 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, arg tree.Datums) (tree.Datum, error) {
-				// Check for nil evalCtx.Regions, which can happen in tests.
-				if evalCtx.Regions == nil {
-					return nil, nilRegionsError
-				}
 				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(ctx)
 				if err != nil {
 					return nil, err
@@ -7651,10 +7574,6 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// Check for nil evalCtx.Regions, which can happen in tests.
-				if evalCtx.Regions == nil {
-					return nil, nilRegionsError
-				}
 				if err := evalCtx.Regions.ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 					ctx,
 				); err != nil {
@@ -7680,10 +7599,6 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
 
-				// Check for nil evalCtx.Regions, which can happen in tests.
-				if evalCtx.Regions == nil {
-					return nil, nilRegionsError
-				}
 				if err := evalCtx.Regions.ResetMultiRegionZoneConfigsForTable(
 					ctx,
 					id,
@@ -7710,10 +7625,6 @@ table.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
 
-				// Check for nil evalCtx.Regions, which can happen in tests.
-				if evalCtx.Regions == nil {
-					return nil, nilRegionsError
-				}
 				if err := evalCtx.Regions.ResetMultiRegionZoneConfigsForDatabase(
 					ctx,
 					id,
@@ -7844,14 +7755,39 @@ table's zone configuration this will return NULL.`,
 			Volatility: volatility.Volatile,
 		},
 	),
+	"crdb_internal.reset_insights_tables": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
+					return nil, err
+				}
+				if evalCtx.SQLStatsController == nil {
+					return nil, errors.AssertionFailedf("sql stats controller not set")
+				}
+				if err := evalCtx.SQLStatsController.ResetInsightsTables(ctx); err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(true), nil
+			},
+			Info:       `This function is used to clear the statement and transaction insights statistics.`,
+			Volatility: volatility.Volatile,
+		},
+	),
 	// Deletes the underlying spans backing a table, only
 	// if the user provides explicit acknowledgement of the
 	// form "I acknowledge this will irrevocably delete all revisions
 	// for table %d"
 	"crdb_internal.force_delete_table_data": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemRepair,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemRepair,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "id", Typ: types.Int}},
@@ -7872,8 +7808,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.serialize_session": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -7888,8 +7823,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.deserialize_session": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "session", Typ: types.Bytes}},
@@ -7905,8 +7839,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.create_session_revival_token": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -7920,8 +7853,7 @@ table's zone configuration this will return NULL.`,
 	),
 	"crdb_internal.validate_session_revival_token": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "token", Typ: types.Bytes}},
@@ -7937,8 +7869,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.validate_ttl_scheduled_jobs": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -7958,8 +7889,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.repair_ttl_table_scheduled_job": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
@@ -8059,8 +7989,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.revalidate_unique_constraints_in_all_tables": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -8482,8 +8411,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.fingerprint": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			// If the second arg is set to true, this overload allows the caller to
@@ -9069,9 +8997,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		},
 	),
 	"crdb_internal.plpgsql_gen_cursor_name": makeBuiltin(tree.FunctionProperties{
-		Category:         builtinconstants.CategoryIDGeneration,
-		Undocumented:     true,
-		DistsqlBlocklist: true, // applicable only on the gateway
+		Category:     builtinconstants.CategoryIDGeneration,
+		Undocumented: true,
 	},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -9091,9 +9018,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		},
 	),
 	"crdb_internal.plpgsql_close": makeBuiltin(tree.FunctionProperties{
-		Category:         builtinconstants.CategoryString,
-		Undocumented:     true,
-		DistsqlBlocklist: true, // applicable only on the gateway
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
 	},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "name", Typ: types.RefCursor}},
@@ -9112,9 +9038,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		},
 	),
 	"crdb_internal.plpgsql_fetch": makeBuiltin(tree.FunctionProperties{
-		Category:         builtinconstants.CategoryString,
-		Undocumented:     true,
-		DistsqlBlocklist: true, // applicable only on the gateway
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
 	},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -9169,9 +9094,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.protect_mvcc_history": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryClusterReplication,
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category:     builtinconstants.CategoryClusterReplication,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -9208,9 +9132,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.extend_mvcc_history_protection": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryClusterReplication,
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category:     builtinconstants.CategoryClusterReplication,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -9233,9 +9156,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.clear_query_plan_cache": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemRepair,
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category:     builtinconstants.CategorySystemRepair,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -9250,9 +9172,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.clear_table_stats_cache": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemRepair,
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category:     builtinconstants.CategorySystemRepair,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -9282,11 +9203,7 @@ WHERE object_id = table_descriptor_id
 			Language:   tree.RoutineLangSQL,
 		},
 	),
-	"crdb_internal.type_is_indexable": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
+	"crdb_internal.type_is_indexable": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -9309,9 +9226,8 @@ WHERE object_id = table_descriptor_id
 	),
 	"crdb_internal.backup_compaction": makeBuiltin(
 		tree.FunctionProperties{
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
-			ReturnLabels:     []string{"job_id"},
+			Undocumented: true,
+			ReturnLabels: []string{"job_id"},
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -9420,7 +9336,7 @@ func makeSubStringImpls() builtinDefinition {
 				start := int(tree.MustBeDInt(args[1]))
 				length := int(tree.MustBeDInt(args[2]))
 
-				substring, err := getSubstringFromIndexOfLength(str, start, length)
+				substring, err := getSubstringFromIndexOfLength(str, "substring", start, length)
 				if err != nil {
 					return nil, err
 				}
@@ -9488,7 +9404,7 @@ func makeSubStringImpls() builtinDefinition {
 				start := int(tree.MustBeDInt(args[1]))
 				length := int(tree.MustBeDInt(args[2]))
 
-				substring, err := getSubstringFromIndexOfLength(bitString.BitArray.String(), start, length)
+				substring, err := getSubstringFromIndexOfLength(bitString.BitArray.String(), "bit subarray", start, length)
 				if err != nil {
 					return nil, err
 				}
@@ -9525,7 +9441,7 @@ func makeSubStringImpls() builtinDefinition {
 				start := int(tree.MustBeDInt(args[1]))
 				length := int(tree.MustBeDInt(args[2]))
 
-				substring, err := getSubstringFromIndexOfLengthBytes(byteString, start, length)
+				substring, err := getSubstringFromIndexOfLengthBytes(byteString, "byte subarray", start, length)
 				if err != nil {
 					return nil, err
 				}
@@ -9573,21 +9489,16 @@ func getSubstringFromIndex(str string, start int) string {
 	return string(runes[start:])
 }
 
-// NegativeSubstringLengthErr should be thrown when the substring builtin
-// is given a value of 'length' less than zero.
-var NegativeSubstringLengthErr = pgerror.New(
-	pgcode.InvalidParameterValue, "negative substring length not allowed",
-)
-
 // Returns a substring of given string starting at given position and
 // include up to a certain length.
-func getSubstringFromIndexOfLength(str string, start, length int) (string, error) {
+func getSubstringFromIndexOfLength(str, errMsg string, start, length int) (string, error) {
 	runes := []rune(str)
 	// SQL strings are 1-indexed.
 	start--
 
 	if length < 0 {
-		return "", NegativeSubstringLengthErr
+		return "", pgerror.Newf(
+			pgcode.InvalidParameterValue, "negative %s length %d not allowed", errMsg, length)
 	}
 
 	end := start + length
@@ -9625,13 +9536,14 @@ func getSubstringFromIndexBytes(str string, start int) string {
 
 // Returns a substring of given string starting at given position and include up
 // to a certain length by interpreting the string as raw bytes.
-func getSubstringFromIndexOfLengthBytes(str string, start, length int) (string, error) {
+func getSubstringFromIndexOfLengthBytes(str, errMsg string, start, length int) (string, error) {
 	bytes := []byte(str)
 	// SQL strings are 1-indexed.
 	start--
 
 	if length < 0 {
-		return "", NegativeSubstringLengthErr
+		return "", pgerror.Newf(
+			pgcode.InvalidParameterValue, "negative %s length %d not allowed", errMsg, length)
 	}
 
 	end := start + length
@@ -12446,5 +12358,3 @@ func exprSliceToStrSlice(exprs []tree.Expr) []string {
 		return tree.AsStringWithFlags(expr, tree.FmtBareStrings)
 	})
 }
-
-var nilRegionsError = errors.AssertionFailedf("evalCtx.Regions is nil")

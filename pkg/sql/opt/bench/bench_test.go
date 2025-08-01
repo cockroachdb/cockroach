@@ -122,15 +122,6 @@ type benchQuery struct {
 var schemas = []string{
 	`CREATE TABLE kv (k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`,
 	`
-	CREATE TABLE sbtest (
-		id INT8 PRIMARY KEY,
-		k INT8 NOT NULL DEFAULT 0,
-		c CHAR(120) NOT NULL DEFAULT '',
-		pad CHAR(60) NOT NULL DEFAULT '',
-		INDEX (k)
-	)
-	`,
-	`
 	CREATE TABLE customer
 	(
 		c_id           integer        not null,
@@ -398,18 +389,6 @@ var queries = [...]benchQuery{
 		args:  []interface{}{},
 	},
 
-	{
-		name:  "sysbench-update-index",
-		query: `UPDATE sbtest SET k=k+1 WHERE id=$1`,
-		args:  []interface{}{10},
-	},
-
-	{
-		name:  "sysbench-update-non-index",
-		query: `UPDATE sbtest SET c=$2 WHERE id=$1`,
-		args:  []interface{}{10, "'foo'"},
-	},
-
 	// 1. Table with many columns.
 	// 2. Multi-column primary key.
 	// 3. Mutiple indexes to consider.
@@ -522,17 +501,6 @@ var queries = [...]benchQuery{
 		`,
 		args: []interface{}{1, 2},
 	},
-
-	// Similar to many-columns-and-indexes-a, but fetches all columns.
-	{
-		name: "many-columns-and-indexes-e",
-		query: `
-			SELECT * FROM k
-			WHERE x = $1
-		`,
-		args: []interface{}{1},
-	},
-
 	{
 		name:  "comp-pk",
 		query: "SELECT * FROM comp WHERE a = $1 AND b = $2 AND c = $3 AND d = $4 AND e = $5",
@@ -807,7 +775,7 @@ func init() {
 // to run. See the comments for the Phase enumeration for more details
 // on what each phase includes.
 func BenchmarkPhases(b *testing.B) {
-	for _, query := range queriesToTest() {
+	for _, query := range queriesToTest(b) {
 		h := newHarness(b, query, schemas)
 		b.Run(query.name, func(b *testing.B) {
 			b.Run("Simple", func(b *testing.B) {
@@ -1118,7 +1086,7 @@ func makeParameterizedQueryWithORs(size int) benchQuery {
 // in the testSizes array and test name suffix. The test names produced are:
 // ored-preds-100
 // ored-preds-using-params-100
-func makeOredPredsTests() []benchQuery {
+func makeOredPredsTests(b *testing.B) []benchQuery {
 	// Add more entries to this array to test with different numbers of ORed
 	// predicates.
 	testSizes := [...]int{100}
@@ -1132,8 +1100,8 @@ func makeOredPredsTests() []benchQuery {
 	return benchQueries
 }
 
-func queriesToTest() []benchQuery {
-	allQueries := append(queries[:], makeOredPredsTests()...)
+func queriesToTest(b *testing.B) []benchQuery {
+	allQueries := append(queries[:], makeOredPredsTests(b)...)
 	return allQueries
 }
 
@@ -1180,7 +1148,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 		sr.Exec(b, schema)
 	}
 
-	for _, query := range queriesToTest() {
+	for _, query := range queriesToTest(b) {
 		args := trimSingleQuotes(query.args)
 		b.Run(query.name, func(b *testing.B) {
 			for _, vectorize := range []string{"on", "off"} {
@@ -1777,7 +1745,7 @@ func BenchmarkExecBuild(b *testing.B) {
 	var testCases []testCase
 
 	// Add the basic queries.
-	for _, query := range queriesToTest() {
+	for _, query := range queriesToTest(b) {
 		testCases = append(testCases, testCase{query, schemas})
 	}
 

@@ -63,7 +63,6 @@ func TestMultiRegionAfterEnterpriseDisabled(t *testing.T) {
 	defer cleanup()
 
 	for _, setupQuery := range []string{
-		`SET create_table_with_schema_locked=false;`,
 		`CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2"`,
 		`USE test`,
 		`CREATE TABLE t1 () LOCALITY GLOBAL`,

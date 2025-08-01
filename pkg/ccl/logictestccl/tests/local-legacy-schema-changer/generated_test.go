@@ -75,13 +75,6 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
-func TestCCLLogic_buffered_writes_lock_loss(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "buffered_writes_lock_loss")
-}
-
 func TestCCLLogic_fips_ready(
 	t *testing.T,
 ) {
@@ -215,18 +208,18 @@ func TestCCLLogic_procedure_plpgsql(
 	runCCLLogicTest(t, "procedure_plpgsql")
 }
 
-func TestCCLLogic_provisioning(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "provisioning")
-}
-
 func TestCCLLogic_read_committed(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "read_committed")
+}
+
+func TestCCLLogic_redact_descriptor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "redact_descriptor")
 }
 
 func TestCCLLogic_refcursor(
@@ -262,13 +255,6 @@ func TestCCLLogic_subject(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "subject")
-}
-
-func TestCCLLogic_txn_retry(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "txn_retry")
 }
 
 func TestCCLLogic_udf_params(

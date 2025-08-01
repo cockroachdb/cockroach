@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -37,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -79,32 +79,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
-)
-
-var (
-	restoreRetryMaxDuration = settings.RegisterDurationSetting(
-		settings.ApplicationLevel,
-		"restore.retry_max_duration",
-		"maximum duration a restore job will retry before terminating",
-		72*time.Hour,
-		settings.WithVisibility(settings.Reserved),
-		settings.PositiveDuration,
-	)
 )
 
 // restoreStatsInsertBatchSize is an arbitrarily chosen value of the number of
 // tables we process in a single txn when restoring their table statistics.
 const restoreStatsInsertBatchSize = 10
-
-// maxRestoreRetryFastFail is the maximum number of times we will retry without
-// seeing any progress before fast-failing the restore job.
-const maxRestoreRetryFastFail = 5
-
-// restoreRetryProgressThreshold is the fraction of the job that must
-// be _exceeded_ before we no longer fast fail the restore job after hitting the
-// maxRestoreRetryFastFail threshold.
-const restoreRetryProgressThreshold = 0
 
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
@@ -175,37 +154,42 @@ func rewriteBackupSpanKey(
 	return newKey, nil
 }
 
-var permanentRestoreError = errors.New("permanent restore error")
-
-func shouldFastFailRestore(err error) bool {
-	return errors.Is(err, permanentRestoreError) ||
-		pebble.IsCorruptionError(err) && errors.Is(err, backupFileReadError)
-}
-
-// restoreWithRetry attempts to run restore with retry logic and logs retries
-// accordingly.
 func restoreWithRetry(
-	ctx context.Context,
+	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
-	resumer *restoreResumer,
 	backupManifests []backuppb.BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	dataToRestore restorationData,
+	resumer *restoreResumer,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (roachpb.RowCount, error) {
+
+	// We retry on pretty generic failures -- any rpc error. If a worker node were
+	// to restart, it would produce this kind of error, but there may be other
+	// errors that are also rpc errors. Don't retry to aggressively.
+	retryOpts := retry.Options{
+		MaxBackoff: 1 * time.Second,
+		MaxRetries: 5,
+	}
+	if execCtx.ExecCfg().BackupRestoreTestingKnobs != nil &&
+		execCtx.ExecCfg().BackupRestoreTestingKnobs.RestoreDistSQLRetryPolicy != nil {
+		retryOpts = *execCtx.ExecCfg().BackupRestoreTestingKnobs.RestoreDistSQLRetryPolicy
+	}
+
 	// We want to retry a restore if there are transient failures (i.e. worker nodes
-	// dying), so if we receive a retryable error, re-plan and retry the restore.
-	retryOpts, progThreshold := getRetryOptionsAndProgressThreshold(execCtx)
+	// dying), so if we receive a retryable error, re-plan and retry the backup.
 	var (
-		res                                    roachpb.RowCount
-		err                                    error
-		currPersistedSpans, prevPersistedSpans jobspb.RestoreFrontierEntries
+		res                    roachpb.RowCount
+		err                    error
+		previousPersistedSpans jobspb.RestoreFrontierEntries
+		currentPersistedSpans  jobspb.RestoreFrontierEntries
 	)
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+
+	for r := retry.StartWithCtx(restoreCtx, retryOpts); r.Next(); {
 		res, err = restore(
-			ctx,
+			restoreCtx,
 			execCtx,
 			backupManifests,
 			backupLocalityInfo,
@@ -220,12 +204,12 @@ func restoreWithRetry(
 			break
 		}
 
-		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
+		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) || errors.Is(err, restoreProcError) {
 			return roachpb.RowCount{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
 
-		if shouldFastFailRestore(err) {
-			return roachpb.RowCount{}, jobs.MarkAsPermanentJobError(err)
+		if joberror.IsPermanentBulkJobError(err) && !errors.Is(err, retryableRestoreProcError) {
+			return roachpb.RowCount{}, err
 		}
 
 		// If we are draining, it is unlikely we can start a
@@ -235,24 +219,15 @@ func restoreWithRetry(
 			return roachpb.RowCount{}, jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
 		}
 
-		log.Warningf(ctx, "encountered retryable error: %+v", err)
-
-		// Check if retry counter should be reset if progress was made.
-		currPersistedSpans = resumer.job.
-			Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
-		if !currPersistedSpans.Equal(prevPersistedSpans) {
+		log.Warningf(restoreCtx, "encountered retryable error: %+v", err)
+		currentPersistedSpans = resumer.job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
+		if !currentPersistedSpans.Equal(previousPersistedSpans) {
 			// If the previous persisted spans are different than the current, it
 			// implies that further progress has been persisted.
 			r.Reset()
-			log.Infof(ctx, "restored frontier has advanced since last retry, resetting retry counter")
+			log.Infof(restoreCtx, "restored frontier has advanced since last retry, resetting retry counter")
 		}
-		prevPersistedSpans = currPersistedSpans
-
-		// Fail fast if no progress has been made after a certain number of retries.
-		if r.CurrentAttempt() >= maxRestoreRetryFastFail &&
-			resumer.job.FractionCompleted() <= progThreshold {
-			return roachpb.RowCount{}, errors.Wrap(err, "restore job exhausted max retries without making progress")
-		}
+		previousPersistedSpans = currentPersistedSpans
 
 		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
 		if testingKnobs != nil && testingKnobs.RunAfterRetryIteration != nil {
@@ -262,39 +237,16 @@ func restoreWithRetry(
 		}
 	}
 
-	// Since the restore was able to make some progress before exhausting the
-	// retry counter, we will pause the job and allow the user to determine
-	// whether or not to resume the job or disccard all progress and cancel.
+	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
+	// it is possible that this is a transient error that is taking longer than
+	// our configured retry to go away.
+	//
+	// Let's pause the job instead of failing it so that the user can decide
+	// whether to resume it or cancel it.
 	if err != nil {
 		return res, jobs.MarkPauseRequestError(errors.Wrap(err, "exhausted retries"))
 	}
 	return res, nil
-}
-
-// getRetryOptionsAndProgressThreshold returns the restore retry options and
-// progress threshold for fast failure, taking into consideration any testing
-// knobs and cluster settings.
-func getRetryOptionsAndProgressThreshold(execCtx sql.JobExecContext) (retry.Options, float32) {
-	// In the event that the job is failing early without any progress, we will
-	// manually quit out of the retry loop prematurely. As such, we set a long max
-	// duration and backoff to allow for the job to retry for a long time in the
-	// event that some progress has been made.
-	maxDuration := restoreRetryMaxDuration.Get(&execCtx.ExecCfg().Settings.SV)
-	retryOpts := retry.Options{
-		MaxBackoff:  5 * time.Minute,
-		MaxDuration: maxDuration,
-	}
-	var progThreshold float32 = restoreRetryProgressThreshold
-	if knobs := execCtx.ExecCfg().BackupRestoreTestingKnobs; knobs != nil {
-		if knobs.RestoreDistSQLRetryPolicy != nil {
-			retryOpts = *knobs.RestoreDistSQLRetryPolicy
-		}
-		if knobs.RestoreRetryProgressThreshold > 0 {
-			progThreshold = knobs.RestoreRetryProgressThreshold
-		}
-	}
-
-	return retryOpts, progThreshold
 }
 
 type storeByLocalityKV map[string]cloudpb.ExternalStorage
@@ -536,9 +488,10 @@ func restore(
 				}
 				timer.Reset(replanFrequency.Get(&execCtx.ExecCfg().Settings.SV))
 			case <-timer.C:
+				timer.Read = true
 				// Replan the restore job if it has been 10 minutes since the last
 				// processor completed working.
-				return laggingRestoreProcErr
+				return errors.Mark(laggingRestoreProcErr, retryableRestoreProcError)
 			}
 		}
 	}
@@ -720,11 +673,10 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job *jobs.Job
 
-	settings        *cluster.Settings
-	execCfg         *sql.ExecutorConfig
-	restoreStats    roachpb.RowCount
-	downloadJobID   jobspb.JobID
-	downloadJobProg float32
+	settings      *cluster.Settings
+	execCfg       *sql.ExecutorConfig
+	restoreStats  roachpb.RowCount
+	downloadJobID jobspb.JobID
 
 	mu struct {
 		syncutil.Mutex
@@ -1036,8 +988,9 @@ func createImportingDescriptors(
 	for _, desc := range sqlDescs {
 		// Decide which offline tables to include in the restore:
 		//
-		// - An offline table created by RESTORE is fully discarded. The table
-		//   will not exist in the restoring cluster.
+		// - An offline table created by RESTORE or IMPORT PGDUMP is
+		//   fully discarded.  The table will not exist in the restoring
+		//   cluster.
 		//
 		// - An offline table undergoing an IMPORT INTO in traditional
 		//   restore has all importing data elided in the restore
@@ -1162,10 +1115,9 @@ func createImportingDescriptors(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	typeBackrefsToRemove, err := rewrite.TableDescs(
+	if err := rewrite.TableDescs(
 		mutableTables, details.DescriptorRewrites, details.OverrideDB,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, nil, nil, err
 	}
 	tableDescs := make([]*descpb.TableDescriptor, len(mutableTables))
@@ -1203,19 +1155,18 @@ func createImportingDescriptors(
 	// the ID the descriptor had when it was backed up. Changes to existing type
 	// descriptors will not be written to disk, and is only for accurate,
 	// in-memory resolution hereon out.
-	if err := rewrite.TypeDescs(types, details.DescriptorRewrites, typeBackrefsToRemove); err != nil {
+	if err := rewrite.TypeDescs(types, details.DescriptorRewrites); err != nil {
 		return nil, nil, nil, err
 	}
 
-	// Functions are only restored as part of full database restores and are not
-	// yet referenced by other object types in ways that would require remapping.
-	// This avoids the need for collision resolution between restored functions
-	// and existing ones in the target database.
-	//
-	// For table-level restores, function dependencies are handled by existing
-	// safeguards: if the target DB already has the function, the dependent table
-	// must be dropped before restore; if the function is missing, restore fails
-	// unless skip_missing_udfs is set, in which case the function is omitted.
+	// TODO(chengxiong): for now, we know that functions are not referenced by any
+	// other objects, so that function descriptors are only restored when
+	// restoring databases. This means that all function descriptors are not
+	// remaps. Which means that we don't need resolve collisions between functions
+	// being restored and existing functions in target DB However, this won't be
+	// true when we start supporting udf references from other objects. For
+	// example, we need extra logic to handle remaps for udfs used by a table when
+	// backup/restore is on table level.
 	functionsToWrite := make([]*funcdesc.Mutable, len(functions))
 	writtenFunctions := make([]catalog.FunctionDescriptor, len(functions))
 	for i, fn := range functions {
@@ -1842,7 +1793,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_do_download_files"); err != nil {
 			return err
 		}
-		return r.doDownloadFilesWithRetry(ctx, p)
+		return r.doDownloadFiles(ctx, p)
 	}
 
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_load_descriptors_from_backup"); err != nil {
@@ -1978,11 +1929,11 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		res, err := restoreWithRetry(
 			ctx,
 			p,
-			r,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
 			preData,
+			r,
 			details.Encryption,
 			&kmsEnv,
 		)
@@ -2018,11 +1969,11 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		res, err := restoreWithRetry(
 			ctx,
 			p,
-			r,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
 			preValidateData,
+			r,
 			details.Encryption,
 			&kmsEnv,
 		)
@@ -2039,11 +1990,11 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		res, err := restoreWithRetry(
 			ctx,
 			p,
-			r,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
 			mainData,
+			r,
 			details.Encryption,
 			&kmsEnv,
 		)
@@ -2075,7 +2026,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// TODO(msbutler): ideally doDownloadFiles would not depend on job details
 		// and is instead passed an execCfg and the download spans and anything else
 		// it needs. If that occured, we would not need to update details above.
-		if err := r.doDownloadFilesWithRetry(ctx, p); err != nil {
+		if err := r.doDownloadFiles(ctx, p); err != nil {
 			return err
 		}
 	}
@@ -2858,10 +2809,6 @@ func (r *restoreResumer) dropDescriptors(
 		tablesToGC = append(tablesToGC, tableToDrop.ID)
 		tableToDrop.SetDropped()
 
-		if err := descsCol.DeleteTableComments(ctx, kvTrace, b, tableToDrop.ID); err != nil {
-			return err
-		}
-
 		// Drop any schedules we may have implicitly created.
 		if tableToDrop.HasRowLevelTTL() {
 			scheduleID := tableToDrop.RowLevelTTL.ScheduleID
@@ -2916,14 +2863,6 @@ func (r *restoreResumer) dropDescriptors(
 			return err
 		}
 		mutType.SetDropped()
-
-		if err := descsCol.DeleteCommentInBatch(
-			ctx,
-			kvTrace,
-			b,
-			catalogkeys.MakeCommentKey(uint32(typDesc.ID), 0, catalogkeys.TypeCommentType)); err != nil {
-			return err
-		}
 
 		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, typDesc, b); err != nil {
 			return err
@@ -3020,14 +2959,6 @@ func (r *restoreResumer) dropDescriptors(
 			entry.db = mutParent.(*dbdesc.Mutable)
 		}
 
-		if err := descsCol.DeleteCommentInBatch(
-			ctx,
-			kvTrace,
-			b,
-			catalogkeys.MakeCommentKey(uint32(schemaDesc.GetID()), 0, catalogkeys.SchemaCommentType)); err != nil {
-			return err
-		}
-
 		// Delete schema entries in descriptor and namespace system tables.
 		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, mutSchema, b); err != nil {
 			return err
@@ -3111,14 +3042,6 @@ func (r *restoreResumer) dropDescriptors(
 				return err
 			}
 		}
-		if err := descsCol.DeleteCommentInBatch(
-			ctx,
-			kvTrace,
-			b,
-			catalogkeys.MakeCommentKey(uint32(dbDesc.GetID()), 0, catalogkeys.DatabaseCommentType)); err != nil {
-			return err
-		}
-
 		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, db, b); err != nil {
 			return err
 		}

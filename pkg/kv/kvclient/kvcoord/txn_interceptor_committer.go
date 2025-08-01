@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -504,26 +503,17 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 	if multitenant.HasTenantCostControlExemption(ctx) {
 		asyncCtx = multitenant.WithTenantCostControlExemption(asyncCtx)
 	}
-
-	work := func(ctx context.Context) {
-		tc.mu.Lock()
-		defer tc.mu.Unlock()
-		if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans); err != nil {
-			log.Errorf(ctx, "making txn commit explicit failed for %s: %v", txn, err)
-		}
-	}
-
-	asyncCtx, hdl, err := tc.stopper.GetHandle(asyncCtx, stop.TaskOpts{
-		TaskName: "txnCommitter: making txn commit explicit",
-	})
-	if err != nil {
+	if err := tc.stopper.RunAsyncTask(
+		asyncCtx, "txnCommitter: making txn commit explicit", func(ctx context.Context) {
+			tc.mu.Lock()
+			defer tc.mu.Unlock()
+			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans); err != nil {
+				log.Errorf(ctx, "making txn commit explicit failed for %s: %v", txn, err)
+			}
+		},
+	); err != nil {
 		log.VErrEventf(ctx, 1, "failed to make txn commit explicit: %v", err)
-		return
 	}
-	go func(ctx context.Context) {
-		defer hdl.Activate(ctx).Release(ctx)
-		work(ctx)
-	}(asyncCtx)
 }
 
 func makeTxnCommitExplicitLocked(
@@ -612,7 +602,7 @@ func (tc *txnCommitter) maybeDisable1PC(ba *kvpb.BatchRequest) {
 func (tc *txnCommitter) setWrapped(wrapped lockedSender) { tc.wrapped = wrapped }
 
 // populateLeafInputState is part of the txnInterceptor interface.
-func (*txnCommitter) populateLeafInputState(*roachpb.LeafTxnInputState, interval.Tree) {}
+func (*txnCommitter) populateLeafInputState(*roachpb.LeafTxnInputState) {}
 
 // initializeLeaf is part of the txnInterceptor interface.
 func (*txnCommitter) initializeLeaf(tis *roachpb.LeafTxnInputState) {}
@@ -630,9 +620,6 @@ func (tc *txnCommitter) epochBumpedLocked() {}
 
 // createSavepointLocked is part of the txnInterceptor interface.
 func (*txnCommitter) createSavepointLocked(context.Context, *savepoint) {}
-
-// releaseSavepointLocked is part of the txnInterceptor interface.
-func (*txnCommitter) releaseSavepointLocked(context.Context, *savepoint) {}
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (*txnCommitter) rollbackToSavepointLocked(context.Context, savepoint) {}

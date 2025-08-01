@@ -29,7 +29,7 @@ type streamClient[Req, Resp any] interface {
 
 // streamConstructor creates a new gRPC stream client over the provided client
 // connection, using the provided call options.
-type streamConstructor[Req, Resp any, Conn rpcConn] func(
+type streamConstructor[Req, Resp, Conn any] func(
 	context.Context, Conn,
 ) (streamClient[Req, Resp], error)
 
@@ -42,10 +42,6 @@ type result[Resp any] struct {
 // stream is considered idle and is closed. The idle timeout is used to ensure
 // that stream pools eventually shrink when the load decreases.
 const defaultPooledStreamIdleTimeout = 10 * time.Second
-
-// equalsFunc is a generic function type used to compare two RPC connections
-// for equivalence.
-type equalsFunc[Conn rpcConn] func(a, b Conn) bool
 
 // pooledStream is a wrapper around a grpc.ClientStream that is managed by a
 // streamPool. It is responsible for sending a single request and receiving a
@@ -71,7 +67,7 @@ type equalsFunc[Conn rpcConn] func(a, b Conn) bool
 //
 // A pooledStream must only be returned to the pool for reuse after a successful
 // Send call. If the Send call fails, the pooledStream must not be reused.
-type pooledStream[Req, Resp any, Conn rpcConn] struct {
+type pooledStream[Req, Resp any, Conn comparable] struct {
 	pool         *streamPool[Req, Resp, Conn]
 	stream       streamClient[Req, Resp]
 	streamCtx    context.Context
@@ -81,7 +77,7 @@ type pooledStream[Req, Resp any, Conn rpcConn] struct {
 	respC chan result[Resp]
 }
 
-func newPooledStream[Req, Resp any, Conn rpcConn](
+func newPooledStream[Req, Resp any, Conn comparable](
 	pool *streamPool[Req, Resp, Conn],
 	stream streamClient[Req, Resp],
 	streamCtx context.Context,
@@ -194,11 +190,10 @@ func (s *pooledStream[Req, Resp, Conn]) Send(ctx context.Context, req Req) (Resp
 // manner that mimics unary RPC invocation. Pooling these streams allows for
 // reuse of gRPC resources across calls, as opposed to native unary RPCs, which
 // create a new stream and throw it away for each request (see grpc.invoke).
-type streamPool[Req, Resp any, Conn rpcConn] struct {
+type streamPool[Req, Resp any, Conn comparable] struct {
 	stopper     *stop.Stopper
 	idleTimeout time.Duration
 	newStream   streamConstructor[Req, Resp, Conn]
-	connEquals  equalsFunc[Conn]
 
 	// cc and ccCtx are set on bind, when the gRPC connection is established.
 	cc Conn
@@ -211,14 +206,13 @@ type streamPool[Req, Resp any, Conn rpcConn] struct {
 	}
 }
 
-func makeStreamPool[Req, Resp any, Conn rpcConn](
-	stopper *stop.Stopper, newStream streamConstructor[Req, Resp, Conn], connEquals equalsFunc[Conn],
+func makeStreamPool[Req, Resp any, Conn comparable](
+	stopper *stop.Stopper, newStream streamConstructor[Req, Resp, Conn],
 ) streamPool[Req, Resp, Conn] {
 	return streamPool[Req, Resp, Conn]{
 		stopper:     stopper,
 		idleTimeout: defaultPooledStreamIdleTimeout,
 		newStream:   newStream,
-		connEquals:  connEquals,
 	}
 }
 
@@ -286,7 +280,7 @@ func (p *streamPool[Req, Resp, Conn]) remove(s *pooledStream[Req, Resp, Conn]) b
 
 func (p *streamPool[Req, Resp, Conn]) newPooledStream() (*pooledStream[Req, Resp, Conn], error) {
 	var zero Conn
-	if p.connEquals(p.cc, zero) {
+	if p.cc == zero {
 		return nil, errors.AssertionFailedf("streamPool not bound to a client conn")
 	}
 
@@ -303,16 +297,9 @@ func (p *streamPool[Req, Resp, Conn]) newPooledStream() (*pooledStream[Req, Resp
 	}
 
 	s := newPooledStream(p, stream, ctx, cancel)
-	ctx, hdl, err := p.stopper.GetHandle(ctx, stop.TaskOpts{
-		TaskName: "pooled gRPC stream",
-	})
-	if err != nil {
+	if err := p.stopper.RunAsyncTask(ctx, "pooled gRPC stream", s.run); err != nil {
 		return nil, err
 	}
-	go func(ctx context.Context) {
-		defer hdl.Activate(ctx).Release(ctx)
-		s.run(ctx)
-	}(ctx)
 	cancel = nil
 	return s, nil
 }
@@ -341,6 +328,16 @@ type BatchStreamPool = streamPool[*kvpb.BatchRequest, *kvpb.BatchResponse, *grpc
 //go:generate mockgen -destination=mocks_generated_test.go --package=. BatchStreamClient
 type BatchStreamClient = streamClient[*kvpb.BatchRequest, *kvpb.BatchResponse]
 
+// newBatchStream constructs a BatchStreamClient from a grpc.ClientConn.
+func newBatchStream(ctx context.Context, cc *grpc.ClientConn) (BatchStreamClient, error) {
+	return kvpb.NewInternalClient(cc).BatchStream(ctx)
+}
+
 type DRPCBatchStreamPool = streamPool[*kvpb.BatchRequest, *kvpb.BatchResponse, drpc.Conn]
 
 type DRPCBatchStreamClient = streamClient[*kvpb.BatchRequest, *kvpb.BatchResponse]
+
+// newDRPCBatchStream constructs a BatchStreamClient from a drpc.Conn.
+func newDRPCBatchStream(ctx context.Context, dc drpc.Conn) (DRPCBatchStreamClient, error) {
+	return kvpb.NewDRPCBatchClient(dc).BatchStream(ctx)
+}

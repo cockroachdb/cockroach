@@ -1,5 +1,4 @@
-# LogicTest: !local-mixed-25.2 !local-schema-locked
-# TODO(andyk): Remove this once 25.3 is our minimum supported version.
+# LogicTest: !local-mixed-25.1 !local-mixed-24.3
 
 # ------------------------------------------------------------------------------
 # CREATE TABLE/INDEX tests.
@@ -39,13 +38,12 @@ ALTER TABLE simple ALTER PRIMARY KEY USING COLUMNS (b)
 
 # Alternate syntax.
 statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
-CREATE INDEX ON simple USING cspann (vec1);
+CREATE INDEX ON simple USING cspann (vec1 ASC);
 
 # We allow hnsw as an alias for cspann.
 statement ok
 CREATE INDEX ON simple USING hnsw (vec1);
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE simple
 ----
@@ -60,24 +58,7 @@ simple  CREATE TABLE public.simple (
           VECTOR INDEX simple_vec1_idx2 (vec1 vector_l2_ops),
           VECTOR INDEX simple_vec1_idx3 (vec1 vector_l2_ops),
           FAMILY fam_0_a_vec1_b (a, vec1, b)
-        );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE simple
-----
-simple  CREATE TABLE public.simple (
-          a INT8 NOT NULL,
-          b INT8 NOT NULL,
-          vec1 VECTOR(3) NULL,
-          CONSTRAINT simple_pkey PRIMARY KEY (b ASC),
-          VECTOR INDEX simple_vec1_idx (vec1 vector_l2_ops),
-          VECTOR INDEX simple_vec1_idx1 (vec1 vector_l2_ops),
-          UNIQUE INDEX simple_a_key (a ASC),
-          VECTOR INDEX simple_vec1_idx2 (vec1 vector_l2_ops),
-          VECTOR INDEX simple_vec1_idx3 (vec1 vector_l2_ops),
-          FAMILY fam_0_a_vec1_b (a, vec1, b)
-        ) WITH (schema_locked = true);
+        )
 
 statement ok
 SHOW INDEX FROM simple
@@ -96,14 +77,13 @@ statement ok
 CREATE TABLE alt_syntax (
   a INT PRIMARY KEY,
   vec1 VECTOR(3),
-  VECTOR INDEX vec_idx (vec1),
+  VECTOR INDEX vec_idx (vec1 ASC),
   FAMILY (a, vec1)
 )
 
 statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
 CREATE VECTOR INDEX another_index ON alt_syntax (vec1)
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alt_syntax
 ----
@@ -114,21 +94,7 @@ alt_syntax  CREATE TABLE public.alt_syntax (
               VECTOR INDEX vec_idx (vec1 vector_l2_ops),
               VECTOR INDEX another_index (vec1 vector_l2_ops),
               FAMILY fam_0_a_vec1 (a, vec1)
-            );
-
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE alt_syntax
-----
-alt_syntax  CREATE TABLE public.alt_syntax (
-              a INT8 NOT NULL,
-              vec1 VECTOR(3) NULL,
-              CONSTRAINT alt_syntax_pkey PRIMARY KEY (a ASC),
-              VECTOR INDEX vec_idx (vec1 vector_l2_ops),
-              VECTOR INDEX another_index (vec1 vector_l2_ops),
-              FAMILY fam_0_a_vec1 (a, vec1)
-            ) WITH (schema_locked = true);
+            )
 
 statement ok
 DROP TABLE alt_syntax
@@ -144,7 +110,6 @@ CREATE TABLE multiple_indexes (
   FAMILY (a, vec1, vec2)
 )
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE multiple_indexes
 ----
@@ -156,21 +121,7 @@ multiple_indexes  CREATE TABLE public.multiple_indexes (
                     VECTOR INDEX multiple_indexes_vec1_idx (vec1 vector_l2_ops),
                     VECTOR INDEX multiple_indexes_vec2_idx (vec2 vector_l2_ops),
                     FAMILY fam_0_a_vec1_vec2 (a, vec1, vec2)
-                  );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE multiple_indexes
-----
-multiple_indexes  CREATE TABLE public.multiple_indexes (
-                    a INT8 NOT NULL,
-                    vec1 VECTOR(3) NULL,
-                    vec2 VECTOR(1000) NULL,
-                    CONSTRAINT multiple_indexes_pkey PRIMARY KEY (a ASC),
-                    VECTOR INDEX multiple_indexes_vec1_idx (vec1 vector_l2_ops),
-                    VECTOR INDEX multiple_indexes_vec2_idx (vec2 vector_l2_ops),
-                    FAMILY fam_0_a_vec1_vec2 (a, vec1, vec2)
-                  ) WITH (schema_locked = true);
+                  )
 
 statement ok
 DROP INDEX multiple_indexes_vec1_idx;
@@ -188,14 +139,13 @@ CREATE TABLE prefix_cols (
   b INT,
   c INT,
   vec1 VECTOR(3),
-  VECTOR INDEX (c, b, vec1),
+  VECTOR INDEX (c DESC, b, vec1),
   FAMILY (a, b, c, vec1)
 )
 
 statement ok
-CREATE VECTOR INDEX another_index ON prefix_cols (b, c, vec1)
+CREATE VECTOR INDEX another_index ON prefix_cols (b, c DESC, vec1)
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE prefix_cols
 ----
@@ -205,25 +155,10 @@ prefix_cols  CREATE TABLE public.prefix_cols (
                c INT8 NULL,
                vec1 VECTOR(3) NULL,
                CONSTRAINT prefix_cols_pkey PRIMARY KEY (a ASC),
-               VECTOR INDEX prefix_cols_c_b_vec1_idx (c, b, vec1 vector_l2_ops),
-               VECTOR INDEX another_index (b, c, vec1 vector_l2_ops),
+               VECTOR INDEX prefix_cols_c_b_vec1_idx (c DESC, b ASC, vec1 vector_l2_ops),
+               VECTOR INDEX another_index (b ASC, c DESC, vec1 vector_l2_ops),
                FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
-             );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE prefix_cols
-----
-prefix_cols  CREATE TABLE public.prefix_cols (
-               a INT8 NOT NULL,
-               b INT8 NULL,
-               c INT8 NULL,
-               vec1 VECTOR(3) NULL,
-               CONSTRAINT prefix_cols_pkey PRIMARY KEY (a ASC),
-               VECTOR INDEX prefix_cols_c_b_vec1_idx (c, b, vec1 vector_l2_ops),
-               VECTOR INDEX another_index (b, c, vec1 vector_l2_ops),
-               FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
-             ) WITH (schema_locked = true);
+             )
 
 statement ok
 DROP TABLE prefix_cols
@@ -254,7 +189,6 @@ CREATE TABLE storage_params (
 statement ok
 CREATE VECTOR INDEX ON storage_params (v) WITH (min_partition_size = 8, max_partition_size = 64)
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE storage_params
 ----
@@ -265,80 +199,26 @@ storage_params  CREATE TABLE public.storage_params (
                   VECTOR INDEX storage_params_v_idx (v vector_l2_ops) WITH (build_beam_size=16),
                   VECTOR INDEX storage_params_v_idx1 (v vector_l2_ops) WITH (min_partition_size=8, max_partition_size=64),
                   FAMILY fam_0_a_v (a, v)
-                );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE storage_params
-----
-storage_params  CREATE TABLE public.storage_params (
-                  a INT8 NOT NULL,
-                  v VECTOR(3) NULL,
-                  CONSTRAINT storage_params_pkey PRIMARY KEY (a ASC),
-                  VECTOR INDEX storage_params_v_idx (v vector_l2_ops) WITH (build_beam_size=16),
-                  VECTOR INDEX storage_params_v_idx1 (v vector_l2_ops) WITH (min_partition_size=8, max_partition_size=64),
-                  FAMILY fam_0_a_v (a, v)
-                ) WITH (schema_locked = true);
+                )
 
 statement ok
 DROP TABLE storage_params
 
-# It is possible to specify different operator classes.
+# It is possible to specify the default vector_l2_ops operator class.
 statement ok
 CREATE TABLE operator_class (
   a INT PRIMARY KEY,
   b INT,
   vec1 VECTOR(3),
   VECTOR INDEX (vec1 vector_l2_ops),
-  VECTOR INDEX (b, vec1 vector_cosine_ops),
-  VECTOR INDEX (vec1 vector_ip_ops),
-  FAMILY (a, b, vec1)
+  VECTOR INDEX (b, vec1 vector_l2_ops)
 )
 
 statement ok
+CREATE INDEX ON operator_class USING cspann (vec1 vector_l2_ops)
+
+statement ok
 CREATE INDEX ON operator_class USING cspann (b, vec1 vector_l2_ops)
-
-statement ok
-CREATE INDEX ON operator_class USING cspann (vec1 vector_cosine_ops)
-
-statement ok
-CREATE INDEX ON operator_class USING cspann (b, vec1 vector_ip_ops)
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE operator_class
-----
-operator_class  CREATE TABLE public.operator_class (
-                  a INT8 NOT NULL,
-                  b INT8 NULL,
-                  vec1 VECTOR(3) NULL,
-                  CONSTRAINT operator_class_pkey PRIMARY KEY (a ASC),
-                  VECTOR INDEX operator_class_vec1_idx (vec1 vector_l2_ops),
-                  VECTOR INDEX operator_class_b_vec1_idx (b, vec1 vector_cosine_ops),
-                  VECTOR INDEX operator_class_vec1_idx1 (vec1 vector_ip_ops),
-                  VECTOR INDEX operator_class_b_vec1_idx1 (b, vec1 vector_l2_ops),
-                  VECTOR INDEX operator_class_vec1_idx2 (vec1 vector_cosine_ops),
-                  VECTOR INDEX operator_class_b_vec1_idx2 (b, vec1 vector_ip_ops),
-                  FAMILY fam_0_a_b_vec1 (a, b, vec1)
-                ) WITH (schema_locked = true);
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE operator_class
-----
-operator_class  CREATE TABLE public.operator_class (
-                  a INT8 NOT NULL,
-                  b INT8 NULL,
-                  vec1 VECTOR(3) NULL,
-                  CONSTRAINT operator_class_pkey PRIMARY KEY (a ASC),
-                  VECTOR INDEX operator_class_vec1_idx (vec1 vector_l2_ops),
-                  VECTOR INDEX operator_class_b_vec1_idx (b, vec1 vector_cosine_ops),
-                  VECTOR INDEX operator_class_vec1_idx1 (vec1 vector_ip_ops),
-                  VECTOR INDEX operator_class_b_vec1_idx1 (b, vec1 vector_l2_ops),
-                  VECTOR INDEX operator_class_vec1_idx2 (vec1 vector_cosine_ops),
-                  VECTOR INDEX operator_class_b_vec1_idx2 (b, vec1 vector_ip_ops),
-                  FAMILY fam_0_a_b_vec1 (a, b, vec1)
-                );
 
 statement ok
 DROP TABLE operator_class
@@ -359,16 +239,13 @@ statement error column c has type vector, which is only allowed as the last colu
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (c, b))
 
 # Try to use inverted indexable type in vector index.
-statement error column b has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+statement error column b has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.2/inverted-indexes.html
 CREATE TABLE t (a INT PRIMARY KEY, b TSVECTOR, c VECTOR(3), VECTOR INDEX (b, c))
 
-statement error pq: a vector index does not support the ASC option
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b ASC, c))
+statement error the last column in a vector index cannot have the DESC option
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC))
 
-statement error pq: a vector index does not support the DESC option
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b DESC, c))
-
-statement error vector column b does not have a fixed number of dimensions, so it cannot be indexed
+statement error vector column b does not have a fixed number of dimensions, so it cannot be indexed\nDETAIL: specify the number of dimensions in the type, like VECTOR\(128\) for 128 dimensions
 CREATE TABLE t (a INT PRIMARY KEY, b VECTOR, VECTOR INDEX (b))
 
 # Try to use vector type in forward index.
@@ -377,25 +254,25 @@ CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), INDEX (b, c))
 
 # Storage param errors.
 statement error pgcode 22023 "build_beam_size" value must be between 1 and 512 inclusive
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (build_beam_size = 0))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (build_beam_size = 0))
 
 statement error pgcode 22023 "build_beam_size" value must be between 1 and 512 inclusive
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (build_beam_size = 513))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (build_beam_size = 513))
 
 statement error pgcode 22023 "min_partition_size" value must be between 1 and 1024 inclusive
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (min_partition_size = 0))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (min_partition_size = 0))
 
 statement error pgcode 22023 "min_partition_size" value must be between 1 and 1024 inclusive
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (min_partition_size = 1025))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (min_partition_size = 1025))
 
 statement error pgcode 22023 "max_partition_size" value must be between 4 and 4096 inclusive
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (max_partition_size = 3))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (max_partition_size = 3))
 
 statement error pgcode 22023 "max_partition_size" value must be between 4 and 4096 inclusive
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (max_partition_size = 4097))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (max_partition_size = 4097))
 
 statement error pgcode 22023 max_partition_size \(7\) must be at least four times the value of min_partition_size \(2\)
-CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c) WITH (min_partition_size = 2, max_partition_size = 7))
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (min_partition_size = 2, max_partition_size = 7))
 
 subtest end
 
@@ -419,10 +296,10 @@ statement error column vec1 has type vector, which is only allowed as the last c
 CREATE VECTOR INDEX ON vec_errors (vec1, b)
 
 # Try to use inverted indexable type in vector index.
-statement error column c has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+statement error column c has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.2/inverted-indexes.html
 CREATE VECTOR INDEX ON vec_errors (c, vec1)
 
-statement error pq: a vector index does not support the DESC option
+statement error the last column in a vector index cannot have the DESC option
 CREATE VECTOR INDEX ON vec_errors (b, vec1 DESC)
 
 statement error vector column d does not have a fixed number of dimensions, so it cannot be indexed\nDETAIL: specify the number of dimensions in the type, like VECTOR\(128\) for 128 dimensions
@@ -432,22 +309,25 @@ CREATE VECTOR INDEX ON vec_errors (d)
 statement error pq: column vec1 has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
 CREATE INDEX ON vec_errors (b, vec1)
 
-statement error vector indexes can.t be unique
+statement error vector indexes can't be unique
 CREATE UNIQUE VECTOR INDEX ON vec_errors (vec1)
 
-statement error vector indexes don.t support stored columns
+statement error vector indexes don't support stored columns
 CREATE INDEX on vec_errors USING cspann (vec1) STORING (b);
 
-statement error vector indexes don.t support stored columns
+statement error vector indexes don't support stored columns
 CREATE VECTOR INDEX on vec_errors (vec1) STORING (b);
 
 # Try to use unsupported vector index type.
 statement error at or near "ivfflat": syntax error: unrecognized access method: ivfflat
 CREATE INDEX ON vec_errors USING ivfflat (vec1)
 
-# Try to use unsupported operator class.
+# Operator classes other than vector_l2_ops are not (yet) supported.
 statement error pgcode 0A000 pq: unimplemented: operator class vector_l1_ops is not supported
 CREATE INDEX ON vec_errors USING cspann (vec1 vector_l1_ops)
+
+statement error pgcode 0A000 pq: unimplemented: operator class vector_cosine_ops is not supported
+CREATE INDEX ON vec_errors USING cspann (vec1 vector_cosine_ops)
 
 statement error pgcode 42704 pq: operator class "nonexistent_op_type" does not exist
 CREATE INDEX ON vec_errors USING cspann (vec1 nonexistent_op_type)
@@ -480,7 +360,6 @@ CREATE TABLE alter_test (
 statement ok
 ALTER TABLE alter_test ALTER PRIMARY KEY USING COLUMNS (b)
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alter_test
 ----
@@ -492,21 +371,7 @@ alter_test  CREATE TABLE public.alter_test (
               VECTOR INDEX alter_test_vec1_idx (vec1 vector_l2_ops),
               UNIQUE INDEX alter_test_a_key (a ASC),
               FAMILY fam_0_a_b_vec1 (a, b, vec1)
-            );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE alter_test
-----
-alter_test  CREATE TABLE public.alter_test (
-              a INT8 NOT NULL,
-              b INT8 NOT NULL,
-              vec1 VECTOR(3) NULL,
-              CONSTRAINT alter_test_pkey PRIMARY KEY (b ASC),
-              VECTOR INDEX alter_test_vec1_idx (vec1 vector_l2_ops),
-              UNIQUE INDEX alter_test_a_key (a ASC),
-              FAMILY fam_0_a_b_vec1 (a, b, vec1)
-            ) WITH (schema_locked = true);
+            )
 
 statement ok
 DROP TABLE alter_test
@@ -516,7 +381,6 @@ subtest end
 # ------------------------------------------------------------------------------
 # Execution tests.
 # ------------------------------------------------------------------------------
-
 subtest execution
 
 # Use small partition size so that index has more than one level.
@@ -525,9 +389,8 @@ CREATE TABLE exec_test (
   a INT PRIMARY KEY,
   b INT,
   vec1 VECTOR(3),
-  VECTOR INDEX idx1 (vec1) WITH (min_partition_size=1, max_partition_size=4),
-  VECTOR INDEX idx2 (b, vec1) WITH (min_partition_size=1, max_partition_size=4),
-  FAMILY (a, b, vec1)
+  VECTOR INDEX idx1 (vec1),
+  VECTOR INDEX idx2 (b, vec1)
 )
 
 query error pgcode 22000 different vector dimensions 1 and 3
@@ -541,9 +404,7 @@ INSERT INTO exec_test (a, b, vec1) VALUES
   (4, 2, '[10, 11, 12]'),
   (5, 2, '[13, 14, 15]'),
   (6, NULL, '[16, 17, 18]'),
-  (7, NULL, '[1, 1, 1]'),
-  (8, NULL, NULL),
-  (9, 3, NULL);
+  (7, NULL, '[1, 1, 1]');
 
 statement error pgcode 22000 pq: expected 3 dimensions, not 1
 INSERT INTO exec_test (a, b, vec1) VALUES (10, 1, '[1]');
@@ -551,45 +412,37 @@ INSERT INTO exec_test (a, b, vec1) VALUES (10, 1, '[1]');
 query error pgcode 22000 different vector dimensions 1 and 3
 SELECT a FROM exec_test ORDER BY vec1 <-> '[1]' LIMIT 1;
 
-# Get all rows that do not have NULL vector values.
-query IT rowsort
-SELECT a, vec1 FROM exec_test@idx1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 10;
+# TODO(143209): write a full set of tests once we can make them deterministic.
+# For now, we can write tests that return every vector with a given prefix.
+query I rowsort
+SELECT a FROM exec_test@idx1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 7;
 ----
-7  [1,1,1]
-1  [1,2,3]
-2  [4,5,6]
-3  [7,8,9]
-4  [10,11,12]
-5  [13,14,15]
-6  [16,17,18]
+7
+1
+2
+3
+4
+5
+6
 
-# Search index with no prefix.
-query IT rowsort
-SELECT a, vec1 FROM exec_test@idx1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
+query I rowsort
+SELECT a FROM exec_test@idx2 WHERE b = 1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 2;
 ----
-7  [1,1,1]
-1  [1,2,3]
-2  [4,5,6]
+1
+2
 
-# Search index with prefix.
-query IT rowsort
-SELECT a, vec1 FROM exec_test@idx2 WHERE b = 1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 1;
+query I rowsort
+SELECT a FROM exec_test@idx2 WHERE b = 2 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
 ----
-1  [1,2,3]
+3
+4
+5
 
-# Multiple results.
-query IT rowsort
-SELECT a, vec1 FROM exec_test@idx2 WHERE b = 2 ORDER BY vec1 <-> '[15, 15, 15]' LIMIT 2;
+query I rowsort
+SELECT a FROM exec_test WHERE b IS NULL ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
 ----
-5  [13,14,15]
-4  [10,11,12]
-
-# NULL prefix value.
-query IT rowsort
-SELECT a, vec1 FROM exec_test WHERE b IS NULL ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
-----
-7  [1,1,1]
-6  [16,17,18]
+7
+6
 
 # Multiple prefix values.
 query IIT rowsort
@@ -599,26 +452,6 @@ SELECT a, b, vec1 FROM exec_test WHERE b IN (1, 2) ORDER BY vec1 <-> '[1, 1, 2]'
 2  1  [4,5,6]
 3  2  [7,8,9]
 4  2  [10,11,12]
-
-# Get all rows that do not have NULL vector values.
-query IT rowsort
-SELECT a, vec1 FROM exec_test@idx1 ORDER BY vec1 <-> '[5, 5, 5]' LIMIT 10;
-----
-2  [4,5,6]
-3  [7,8,9]
-1  [1,2,3]
-7  [1,1,1]
-4  [10,11,12]
-5  [13,14,15]
-6  [16,17,18]
-
-# Search again, but with smaller limit.
-query IT rowsort
-SELECT a, vec1 FROM exec_test@idx1 ORDER BY vec1 <-> '[5, 5, 5]' LIMIT 3;
-----
-2  [4,5,6]
-3  [7,8,9]
-1  [1,2,3]
 
 statement ok
 DROP TABLE exec_test
@@ -630,7 +463,7 @@ subtest end
 #
 # The SELECT statements for these tests retrieve all the rows in the table
 # because the point is to test that backfill is happening correctly and that
-# we are still able to insert into and modify the index after the backfill is
+# we're still able to insert into and modify the index after the backfill is
 # done.
 
 subtest backfill
@@ -747,61 +580,6 @@ SELECT * FROM backfill_test@backfill_test_username_prefix_enc_idx WHERE username
 statement ok
 DROP TABLE backfill_test
 
-# Test other distance metrics.
-statement ok
-CREATE TABLE distance_metrics (
-  a INT PRIMARY KEY,
-  v VECTOR(2),
-  VECTOR INDEX idx1 (v vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
-  VECTOR INDEX idx2 (v vector_cosine_ops) WITH (min_partition_size=1, max_partition_size=4),
-  FAMILY (a, v)
-)
-
-statement ok
-CREATE VECTOR INDEX idx3 ON distance_metrics (v vector_ip_ops) WITH (min_partition_size=1, max_partition_size=4)
-
-statement ok
-INSERT INTO distance_metrics (a, v) VALUES
-  (1, '[0, 0]'),
-  (2, '[-2, -2]'),
-  (3, '[2, 2]'),
-  (4, '[4, 4]'),
-  (5, '[-2, 2]');
-
-# Results using L2 distance.
-query ITF rowsort
-SELECT a, v, round(v <-> '[2, 2]', 2) dist FROM distance_metrics ORDER BY v <-> '[2, 2]' LIMIT 5;
-----
-3  [2,2]    0
-1  [0,0]    2.83
-4  [4,4]    2.83
-5  [-2,2]   4
-2  [-2,-2]  5.66
-
-# Results using Cosine distance.
-query ITF rowsort
-SELECT a, v, round(v <=> '[2, 2]', 2) dist FROM distance_metrics ORDER BY v <=> '[2, 2]' LIMIT 5;
-----
-1  [0,0]    NaN
-3  [2,2]    0
-4  [4,4]    0
-5  [-2,2]   1
-2  [-2,-2]  2
-
-# Results using InnerProduct distance.
-query ITF rowsort
-SELECT a, v, round(v <#> '[2, 2]', 2) dist FROM distance_metrics@idx3 ORDER BY v <#> '[2, 2]' LIMIT 5;
-----
-4  [4,4]    -16
-3  [2,2]    -8
-1  [0,0]    -0
-5  [-2,2]   -0
-2  [-2,-2]  8
-
-# Attempt to use index that doesn.t match the distance operator.
-statement error index "idx1" cannot be used for this query
-SELECT a, v, round(v <=> '[2, 2]', 2) dist FROM distance_metrics@idx1 ORDER BY v <=> '[2, 2]' LIMIT 5;
-
 subtest end
 
 #
@@ -843,31 +621,11 @@ SHOW vector_search_beam_size;
 ----
 8
 
-statement error vector_search_beam_size cannot be less than 1 or greater than 2048
+statement error vector_search_beam_size cannot be less than 1 or greater than 512
 SET vector_search_beam_size=0
 
-statement error vector_search_beam_size cannot be less than 1 or greater than 2048
-SET vector_search_beam_size=2049
-
-# Ensure that the vector_search_rerank_multiplier session setting is settable.
-query T
-SHOW vector_search_rerank_multiplier;
-----
-50
-
-statement ok
-SET vector_search_rerank_multiplier=100
-
-query T
-SHOW vector_search_rerank_multiplier;
-----
-100
-
-statement error vector_search_rerank_multiplier cannot be less than 0 or greater than 100
-SET vector_search_rerank_multiplier=-1
-
-statement error vector_search_rerank_multiplier cannot be less than 0 or greater than 100
-SET vector_search_rerank_multiplier=101
+statement error vector_search_beam_size cannot be less than 1 or greater than 512
+SET vector_search_beam_size=513
 
 subtest end
 
@@ -928,238 +686,5 @@ INSERT INTO test_145973 VALUES (1)
 
 statement ok
 CREATE VECTOR INDEX vec_idx ON test_145973 (v)
-
-subtest end
-
-subtest test_146046
-
-statement ok
-CREATE TABLE test_146046 (
-  a INT PRIMARY KEY,
-  b INT,
-  vec1 VECTOR(3),
-  VECTOR INDEX idx1 (vec1) WITH (min_partition_size=1, max_partition_size=4),
-  VECTOR INDEX idx2 (b, vec1) WITH (min_partition_size=1, max_partition_size=4),
-  FAMILY (a), FAMILY (b), FAMILY (vec1)
-)
-
-statement ok
-INSERT INTO test_146046 (a, b, vec1) VALUES
-  (1, 1, '[1, 2, 3]'),
-  (2, 1, '[4, 5, 6]'),
-  (3, 2, '[7, 8, 9]'),
-  (4, 2, '[10, 11, 12]'),
-  (5, 2, '[13, 14, 15]'),
-  (6, NULL, '[16, 17, 18]'),
-  (7, NULL, '[1, 1, 1]'),
-  (8, NULL, NULL),
-  (9, 3, NULL);
-
-query IT rowsort
-SELECT a, vec1 FROM test_146046@idx1 ORDER BY vec1 <-> '[5, 5, 5]' LIMIT 1;
-----
-2  [4,5,6]
-
-query IT rowsort
-SELECT a, vec1 FROM test_146046@idx1 ORDER BY vec1 <-> '[5, 5, 5]' LIMIT 10;
-----
-2  [4,5,6]
-3  [7,8,9]
-1  [1,2,3]
-7  [1,1,1]
-4  [10,11,12]
-5  [13,14,15]
-6  [16,17,18]
-
-query IT rowsort
-SELECT a, vec1 FROM test_146046@idx1 ORDER BY vec1 <-> '[5, 5, 5]' LIMIT 3;
-----
-2  [4,5,6]
-3  [7,8,9]
-1  [1,2,3]
-
-statement ok
-DROP TABLE test_146046
-
-subtest end
-
-subtest compound_pk
-
-statement ok
-CREATE TABLE compound_pk (
-  cust_id INT NOT NULL,
-  dept_id INT NOT NULL,
-  embedding VECTOR(3),
-  PRIMARY KEY (cust_id, dept_id)
-)
-
-statement ok
-CREATE VECTOR INDEX idx ON compound_pk (cust_id, embedding) WITH (min_partition_size=1, max_partition_size=4)
-
-statement ok
-INSERT INTO compound_pk VALUES (1, 1, '[1, 2, 3]')
-
-statement ok
-INSERT INTO compound_pk VALUES (1, 2, '[4, 5, 6]')
-
-statement ok
-INSERT INTO compound_pk VALUES (2, 1, '[7, 8, 9]')
-
-statement ok
-INSERT INTO compound_pk VALUES (2, 2, '[10, 11, 12]')
-
-statement ok
-INSERT INTO compound_pk VALUES (3, 1, '[13, 14, 15]')
-
-statement ok
-INSERT INTO compound_pk VALUES (3, 2, '[16, 17, 18]')
-
-statement ok
-INSERT INTO compound_pk VALUES (4, 1, '[19, 20, 21]')
-
-statement ok
-INSERT INTO compound_pk VALUES (4, 2, '[22, 23, 24]')
-
-query IIT rowsort
-SELECT * FROM compound_pk@idx WHERE cust_id = 1 ORDER BY embedding <-> '[1, 2, 3]' LIMIT 2;
-----
-1 1  [1,2,3]
-1 2  [4,5,6]
-
-statement ok
-DROP TABLE compound_pk
-
-subtest end
-
-subtest composite_pk
-
-statement ok
-CREATE TABLE composite_pk (
-  cust_name VARCHAR(10) COLLATE de NOT NULL,
-  cust_id INT NOT NULL,
-  embedding VECTOR(3),
-  PRIMARY KEY (cust_name DESC, cust_id),
-  FAMILY fam_0_cust_name_cust_id_embedding (cust_name, cust_id, embedding)
-)
-
-statement ok
-CREATE VECTOR INDEX idx ON composite_pk (embedding) WITH (min_partition_size=1, max_partition_size=4)
-
-statement ok
-INSERT INTO composite_pk VALUES ('Bär', 1, '[1, 2, 3]')
-
-statement ok
-INSERT INTO composite_pk VALUES ('Bär', 2, '[4, 5, 6]')
-
-statement ok
-INSERT INTO composite_pk VALUES ('Bäz', 3, '[7, 8, 9]')
-
-statement ok
-INSERT INTO composite_pk VALUES ('Bäz', 4, '[10, 11, 12]')
-
-statement ok
-INSERT INTO composite_pk VALUES ('Bäaz', 5, '[13, 14, 15]')
-
-statement ok
-INSERT INTO composite_pk VALUES ('Bäaz', 6, '[19, 20, 21]')
-
-statement ok
-INSERT INTO composite_pk VALUES ('aBäz', 7, '[22, 23, 24]')
-
-statement ok
-INSERT INTO composite_pk VALUES ('aBäz', 8, '[22, 23, 24]')
-
-query TIT rowsort
-SELECT * FROM composite_pk@idx ORDER BY embedding <-> '[1, 2, 3]' LIMIT 2;
-----
-Bär 1  [1,2,3]
-Bär 2  [4,5,6]
-
-statement ok
-CREATE VECTOR INDEX idx2 ON composite_pk (cust_name, embedding) WITH (min_partition_size=1, max_partition_size=4)
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE composite_pk;
-----
-composite_pk  CREATE TABLE public.composite_pk (
-                cust_name VARCHAR(10) COLLATE de NOT NULL,
-                cust_id INT8 NOT NULL,
-                embedding VECTOR(3) NULL,
-                CONSTRAINT composite_pk_pkey PRIMARY KEY (cust_name DESC, cust_id ASC),
-                VECTOR INDEX idx (embedding vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
-                VECTOR INDEX idx2 (cust_name, embedding vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
-                FAMILY fam_0_cust_name_cust_id_embedding (cust_name, cust_id, embedding)
-              );
-
-query TIT rowsort
-SELECT * FROM composite_pk@idx2 WHERE cust_name = 'Bäz' ORDER BY embedding <-> '[10, 11, 12]' LIMIT 2;
-----
-Bäz 4  [10,11,12]
-Bäz 3  [7,8,9]
-
-statement ok
-ALTER TABLE composite_pk ALTER PRIMARY KEY USING COLUMNS (cust_id)
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE composite_pk;
-----
-composite_pk  CREATE TABLE public.composite_pk (
-                cust_name VARCHAR(10) COLLATE de NOT NULL,
-                cust_id INT8 NOT NULL,
-                embedding VECTOR(3) NULL,
-                CONSTRAINT composite_pk_pkey PRIMARY KEY (cust_id ASC),
-                VECTOR INDEX idx (embedding vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
-                VECTOR INDEX idx2 (cust_name, embedding vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
-                UNIQUE INDEX composite_pk_cust_name_cust_id_key (cust_name DESC, cust_id ASC),
-                FAMILY fam_0_cust_name_cust_id_embedding (cust_name, cust_id, embedding)
-              );
-
-query TIT rowsort
-SELECT * FROM composite_pk@idx2 WHERE cust_name = 'Bäz' ORDER BY embedding <-> '[10, 11, 12]' LIMIT 2;
-----
-Bäz  4  [10,11,12]
-Bäz  3  [7,8,9]
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE composite_pk;
-----
-composite_pk  CREATE TABLE public.composite_pk (
-                cust_name VARCHAR(10) COLLATE de NOT NULL,
-                cust_id INT8 NOT NULL,
-                embedding VECTOR(3) NULL,
-                CONSTRAINT composite_pk_pkey PRIMARY KEY (cust_id ASC),
-                VECTOR INDEX idx (embedding vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
-                VECTOR INDEX idx2 (cust_name, embedding vector_l2_ops) WITH (min_partition_size=1, max_partition_size=4),
-                UNIQUE INDEX composite_pk_cust_name_cust_id_key (cust_name DESC, cust_id ASC),
-                FAMILY fam_0_cust_name_cust_id_embedding (cust_name, cust_id, embedding)
-              );
-
-statement ok
-DROP TABLE composite_pk
-
-subtest end
-
-subtest test_backfill_149236
-
-statement ok
-set autocommit_before_ddl=off;
-
-statement ok
-BEGIN;
-
-statement ok
-CREATE TABLE test_backfill_149236 (a INT PRIMARY KEY, b INT, vec1 VECTOR(3));
-
-statement error pgcode 0A000 vector index build not supported with the legacy schema changer
-CREATE VECTOR INDEX idx ON test_backfill_149236 (vec1);
-
-statement ok
-COMMIT;
-
-statement ok
-SET autocommit_before_ddl=on;
 
 subtest end

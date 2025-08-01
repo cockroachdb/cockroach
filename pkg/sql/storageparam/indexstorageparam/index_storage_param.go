@@ -223,9 +223,3 @@ func (po *Setter) RunPostChecks() error {
 
 	return nil
 }
-
-// IsNewTableObject implements the Setter interface.
-func (po *Setter) IsNewTableObject() bool {
-	//Not applicable to indexes.
-	panic(errors.AssertionFailedf("not-implemented for indexes"))
-}

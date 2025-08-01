@@ -120,10 +120,6 @@ type Provider struct {
 	vm.DNSProvider
 }
 
-func (p *Provider) DefaultZones(_ string, _ bool) []string {
-	return []string{}
-}
-
 func (p *Provider) ConfigureProviderFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
 }
 
@@ -138,12 +134,6 @@ func (p *Provider) GetPreemptedSpotVMs(
 }
 
 func (p *Provider) GetHostErrorVMs(
-	l *logger.Logger, vms vm.List, since time.Time,
-) ([]string, error) {
-	return nil, nil
-}
-
-func (p *Provider) GetLiveMigrationVMs(
 	l *logger.Logger, vms vm.List, since time.Time,
 ) ([]string, error) {
 	return nil, nil

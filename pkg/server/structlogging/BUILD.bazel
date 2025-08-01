@@ -11,10 +11,10 @@ go_library(
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
@@ -28,7 +28,6 @@ go_library(
 go_test(
     name = "structlogging_test",
     srcs = [
-        "hot_ranges_log_job_test.go",
         "hot_ranges_log_test.go",
         "main_test.go",
     ],
@@ -38,8 +37,6 @@ go_test(
     }),
     deps = [
         ":structlogging",
-        "//pkg/base",
-        "//pkg/jobs",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

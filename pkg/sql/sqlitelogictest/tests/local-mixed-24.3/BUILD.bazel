@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "local-mixed-24_3_test",
+    size = "enormous",
+    srcs = ["generated_test.go"],
+    data = [
+        "//c-deps:libgeos",  # keep
+        "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep
+    ],
+    exec_properties = {"test.Pool": "default"},
+    shard_count = 48,
+    tags = ["cpu:1"],
+    deps = [
+        "//pkg/base",
+        "//pkg/build/bazel",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/logictest",
+        "//pkg/sql/sqlitelogictest",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+    ],
+)

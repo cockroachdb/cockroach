@@ -248,7 +248,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 		{
 			desc: "alter column type general compute",
 			setup: []string{
-				"ALTER TABLE tbl SET (schema_locked=false)", // The statement below falls back.
 				"ALTER TABLE tbl ADD COLUMN new_col DATE NOT NULL DEFAULT '2013-05-06', " +
 					"ADD COLUMN new_comp DATE AS (new_col) STORED",
 			},
@@ -259,7 +258,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			desc:         "add column default udf",
 			setup:        []string{"CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$"},
 			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col INT NOT NULL DEFAULT f()",
-			skipIssue:    147472,
+			skipIssue:    87699,
 		},
 		{
 			desc: "drop column default udf",
@@ -268,7 +267,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				"ALTER TABLE tbl ADD COLUMN new_col INT NOT NULL DEFAULT f()",
 			},
 			schemaChange: "ALTER TABLE tbl DROP COLUMN new_col",
-			skipIssue:    147472,
+			skipIssue:    87699,
 		},
 		{
 			desc:         "add column unique not null",
@@ -410,20 +409,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			},
 			schemaChange: "ALTER TABLE tbl DROP COLUMN i",
 			query:        "select * from pg_catalog.pg_constraint",
-		},
-		{
-			desc: "drop a column with a check constraint while querying crdb_internal.create_statements",
-			setup: []string{
-				"ALTER TABLE tbl ADD COLUMN i INT CHECK (i is NOT NULL) DEFAULT 10",
-			},
-			schemaChange: "ALTER TABLE tbl DROP COLUMN i",
-			// Run a query against crdb_internal.create_statements. We don't
-			// care about the result — only that it doesn't fail. This is
-			// valuable when dropping constraints because create_statements performs
-			// descriptor introspection, including rendering expressions for
-			// check constraints. If a column in the check constraint is in the
-			// process of being dropped it will have a placeholder name.
-			query: `SELECT * FROM "".crdb_internal.create_statements`,
 		},
 		{
 			desc:         "create index",

@@ -320,7 +320,7 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 					sqlRunner, tc := cluster.create()
 					defer tc.Stopper().Stop(ctx)
 					sqlRunner.Exec(b, `INSERT INTO system.users VALUES ('node', NULL, 
-							true, 3, NULL)`)
+							true, 3)`)
 					sqlRunner.Exec(b, `GRANT node TO root`)
 					sqlRunner.Exec(b, `CREATE DATABASE IF NOT EXISTS bench`)
 					for _, query := range dropQueries {
@@ -385,6 +385,7 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 
 	sqlStats := s.SQLServer().(*sql.Server).GetLocalSQLStatsProvider()
 	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
+	controller := s.SQLServer().(*sql.Server).GetSQLStatsController()
 	stmtFingerprintLimit := sqlstats.MaxMemSQLStatsStmtFingerprints.Get(&s.ClusterSettings().SV)
 	txnFingerprintLimit := sqlstats.MaxMemSQLStatsTxnFingerprints.Get(&s.ClusterSettings().SV)
 
@@ -434,7 +435,7 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 	b.Run(fmt.Sprintf("single-application/writes=insert/%d-fingerprints", totalFingerprints), func(b *testing.B) {
 		b.StopTimer()
 		for i := 0; i < b.N; i++ {
-			require.NoError(b, pss.ResetClusterSQLStats(ctx))
+			require.NoError(b, controller.ResetClusterSQLStats(ctx))
 			fillBenchAppMemStats()
 			b.StartTimer()
 			require.True(b, pss.MaybeFlush(ctx, s.AppStopper()))

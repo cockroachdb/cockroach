@@ -105,12 +105,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
@@ -121,7 +123,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -141,7 +142,6 @@ import (
 	"github.com/marusama/semaphore"
 	"github.com/nightlyone/lockfile"
 	"google.golang.org/grpc"
-	"storj.io/drpc"
 )
 
 // SQLServer encapsulates the part of a CRDB server that is dedicated to SQL
@@ -234,7 +234,6 @@ type sqlServerOptionalKVArgs struct {
 	gossip gossip.OptionalGossip
 	// To register blob and DistSQL servers.
 	grpcServer *grpc.Server
-	drpcMux    drpc.Mux
 	// For the temporaryObjectCleaner.
 	isMeta1Leaseholder func(context.Context, hlc.ClockTimestamp) (bool, error)
 	// DistSQL, lease management, and others want to know the node they're on.
@@ -399,8 +398,6 @@ type sqlServerArgs struct {
 	// grpc is the RPC service.
 	grpc *grpcServer
 
-	drpc *drpcServer
-
 	// externalStorageBuilder is the constructor for accesses to external
 	// storage.
 	externalStorageBuilder *externalStorageBuilder
@@ -558,9 +555,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// Create trace service for inter-node sharing of inflight trace spans.
 	tracingService := service.New(cfg.Tracer)
 	tracingservicepb.RegisterTracingServer(cfg.grpcServer, tracingService)
-	if err := tracingservicepb.DRPCRegisterTracing(cfg.drpcMux, tracingService); err != nil {
-		return nil, err
-	}
 
 	// If the node id is already populated, we only need to create a placeholder
 	// instance provider without initializing the instance, since this is not a
@@ -667,7 +661,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	leaseMgr := lease.NewLeaseManager(
-		ctx,
 		cfg.AmbientCtx,
 		cfg.nodeIDContainer,
 		cfg.internalDB,
@@ -679,7 +672,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		lmKnobs,
 		cfg.stopper,
 		cfg.rangeFeedFactory,
-		cfg.monitorAndMetrics.rootSQLMemoryMonitor,
 	)
 	cfg.registry.AddMetricStruct(leaseMgr.MetricsStruct())
 
@@ -730,6 +722,26 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		return nil, errors.Wrap(err, "creating temp storage")
 	}
 	cfg.stopper.AddCloser(tempEngine)
+	// Remove temporary directory linked to tempEngine after closing
+	// tempEngine.
+	cfg.stopper.AddCloser(stop.CloserFn(func() {
+		useStore := cfg.TempStorageConfig.Spec
+		var err error
+		if useStore.InMemory {
+			// Used store is in-memory so we remove the temp
+			// directory directly since there is no record file.
+			err = os.RemoveAll(cfg.TempStorageConfig.Path)
+		} else {
+			// If record file exists, we invoke CleanupTempDirs to
+			// also remove the record after the temp directory is
+			// removed.
+			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
+			err = fs.CleanupTempDirs(recordPath)
+		}
+		if err != nil {
+			log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
+		}
+	}))
 
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(distSQLMetrics)
@@ -881,9 +893,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	distSQLServer := distsql.NewServer(ctx, distSQLCfg, cfg.remoteFlowRunner)
 	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, distSQLServer)
-	if err := execinfrapb.DRPCRegisterDistSQL(cfg.drpcMux, distSQLServer.AsDRPCServer()); err != nil {
-		return nil, err
-	}
 
 	// Set up Executor
 
@@ -946,12 +955,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "initializing certificate manager")
 		}
-		err = certMgr.RegisterExpirationCache(
-			ctx, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
+		certMgr.RegisterExpirationCache(
+			ctx, cfg.Settings, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
 		)
-		if err != nil {
-			return nil, errors.Wrap(err, "adding clientcert cache")
-		}
 	}
 
 	storageEngineClient := kvserver.NewStorageEngineClient(cfg.kvNodeDialer)
@@ -1055,7 +1061,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeStatsFetcher:          rangeStatsFetcher,
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
-		TenantReadOnly:             cfg.SQLConfig.TenantReadOnly,
 		CidrLookup:                 cfg.BaseConfig.CidrLookup,
 		LicenseEnforcer:            cfg.SQLConfig.LicenseEnforcer,
 	}
@@ -1113,9 +1118,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if ttlKnobs := cfg.TestingKnobs.TTL; ttlKnobs != nil {
 		execCfg.TTLTestingKnobs = ttlKnobs.(*sql.TTLTestingKnobs)
 	}
-	if inspectKnobs := cfg.TestingKnobs.Inspect; inspectKnobs != nil {
-		execCfg.InspectTestingKnobs = inspectKnobs.(*sql.InspectTestingKnobs)
-	}
 	if schemaTelemetryKnobs := cfg.TestingKnobs.SchemaTelemetry; schemaTelemetryKnobs != nil {
 		execCfg.SchemaTelemetryTestingKnobs = schemaTelemetryKnobs.(*sql.SchemaTelemetryTestingKnobs)
 	}
@@ -1123,7 +1125,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.SQLStatsTestingKnobs = sqlStatsKnobs.(*sqlstats.TestingKnobs)
 	}
 	if eventlogKnobs := cfg.TestingKnobs.EventLog; eventlogKnobs != nil {
-		execCfg.EventLogTestingKnobs = eventlogKnobs.(*eventlog.EventLogTestingKnobs)
+		execCfg.EventLogTestingKnobs = eventlogKnobs.(*sql.EventLogTestingKnobs)
 	}
 	if telemetryLoggingKnobs := cfg.TestingKnobs.TelemetryLoggingKnobs; telemetryLoggingKnobs != nil {
 		execCfg.TelemetryLoggingTestingKnobs = telemetryLoggingKnobs.(*sql.TelemetryLoggingTestingKnobs)
@@ -1142,6 +1144,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.ExternalConnectionTestingKnobs = externalConnKnobs.(*externalconn.TestingKnobs)
 	}
 
+	if insightsKnobs := cfg.TestingKnobs.Insights; insightsKnobs != nil {
+		execCfg.InsightsTestingKnobs = insightsKnobs.(*insights.TestingKnobs)
+
+	}
 	var tableStatsTestingKnobs *stats.TableStatsTestingKnobs
 	if tableStatsKnobs := cfg.TestingKnobs.TableStatsKnobs; tableStatsKnobs != nil {
 		tableStatsTestingKnobs = tableStatsKnobs.(*stats.TableStatsTestingKnobs)
@@ -1166,7 +1172,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg,
 	)
 
-	distSQLServer.ServerConfig.SQLStatsController = pgServer.SQLServer.GetSQLStatsProvider()
+	distSQLServer.ServerConfig.SQLStatsController = pgServer.SQLServer.GetSQLStatsController()
 	distSQLServer.ServerConfig.SchemaTelemetryController = pgServer.SQLServer.GetSchemaTelemetryController()
 	distSQLServer.ServerConfig.IndexUsageStatsController = pgServer.SQLServer.GetIndexUsageStatsController()
 
@@ -1204,7 +1210,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.TableStatsCache,
 		stats.DefaultAsOfTime,
 		tableStatsTestingKnobs,
-		execCfg.TenantReadOnly,
 	)
 	execCfg.StatsRefresher = statsRefresher
 	distSQLServer.ServerConfig.StatsRefresher = statsRefresher

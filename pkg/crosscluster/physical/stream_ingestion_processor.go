@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -89,6 +88,7 @@ var cutoverSignalPollInterval = settings.RegisterDurationSetting(
 	"bulkio.stream_ingestion.failover_signal_poll_interval",
 	"the interval at which the stream ingestion job checks if it has been signaled to cutover",
 	10*time.Second,
+	settings.NonNegativeDuration,
 	settings.WithName("physical_replication.consumer.failover_signal_poll_interval"),
 )
 
@@ -200,9 +200,8 @@ func releaseBuffer(b *streamIngestionBuffer) {
 
 // Specialized SST batcher that is responsible for ingesting range tombstones.
 type rangeKeyBatcher struct {
-	db                   *kv.DB
-	settings             *cluster.Settings
-	rangeDescIterFactory rangedesc.IteratorFactory
+	db       *kv.DB
+	settings *cluster.Settings
 
 	// onFlush is the callback called after the current batch has been
 	// successfully ingested.
@@ -210,17 +209,12 @@ type rangeKeyBatcher struct {
 }
 
 func newRangeKeyBatcher(
-	ctx context.Context,
-	cs *cluster.Settings,
-	db *kv.DB,
-	ranges rangedesc.IteratorFactory,
-	onFlush func(summary kvpb.BulkOpSummary),
+	ctx context.Context, cs *cluster.Settings, db *kv.DB, onFlush func(summary kvpb.BulkOpSummary),
 ) *rangeKeyBatcher {
 	batcher := &rangeKeyBatcher{
-		db:                   db,
-		rangeDescIterFactory: ranges,
-		settings:             cs,
-		onFlush:              onFlush,
+		db:       db,
+		settings: cs,
+		onFlush:  onFlush,
 	}
 	return batcher
 }
@@ -421,8 +415,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		return
 	}
 
-	execCfg := sip.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
-	sip.rangeBatcher = newRangeKeyBatcher(ctx, st, db.KV(), execCfg.RangeDescIteratorFactory, sip.onFlushUpdateMetricUpdate)
+	sip.rangeBatcher = newRangeKeyBatcher(ctx, st, db.KV(), sip.onFlushUpdateMetricUpdate)
 
 	var subscriptionCtx context.Context
 	subscriptionCtx, sip.subscriptionCancel = context.WithCancel(sip.Ctx())
@@ -531,6 +524,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 			return row, nil
 		}
 	case <-sip.aggTimer.C:
+		sip.aggTimer.Read = true
 		sip.aggTimer.Reset(15 * time.Second)
 		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(sip.Ctx(),
 			sip.FlowCtx.NodeID.SQLInstanceID(), sip.FlowCtx.ID, sip.agg)
@@ -707,6 +701,7 @@ func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 			// This timer is used to periodically flush a
 			// buffer that may have been previously
 			// skipped.
+			sip.maxFlushRateTimer.Read = true
 			if err := sip.flush(); err != nil {
 				return err
 			}
@@ -987,7 +982,6 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 
 	batchSummary := kvpb.BulkOpSummary{}
 	start, end := keys.MaxKey, keys.MinKey
-	var spanGroup roachpb.SpanGroup
 	for _, rangeKeyVal := range toFlush {
 		if err := sstWriter.PutRawMVCCRangeKey(rangeKeyVal.RangeKey, rangeKeyVal.Value); err != nil {
 			return err
@@ -1000,7 +994,6 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 			end = rangeKeyVal.RangeKey.EndKey
 		}
 		batchSummary.DataSize += int64(rangeKeyVal.RangeKey.EncodedSize() + len(rangeKeyVal.Value))
-		spanGroup.Add(roachpb.Span{Key: rangeKeyVal.RangeKey.StartKey, EndKey: rangeKeyVal.RangeKey.EndKey})
 	}
 
 	// Finish the current batch.
@@ -1066,59 +1059,12 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 			batchSummary.SSTDataSize += int64(len(data))
 		}
 	}
-	r.recomputeStats(ctx, spanGroup.Slice())
 
 	if r.onFlush != nil {
 		r.onFlush(batchSummary)
 	}
 
 	return nil
-}
-
-func (r *rangeKeyBatcher) recomputeStats(ctx context.Context, rangekeySpans roachpb.Spans) {
-
-	rangeStartKeys := getRangeStartkeys(ctx, r.rangeDescIterFactory, rangekeySpans)
-	var b kv.Batch
-	// Sending RecomputeStatsRequests in one batch, allowing DistSender to
-	// parallelize the requests across ranges.
-	//
-	// TODO(msbutler): send this request asynchronously to prevent checkpoint
-	// delay.
-	for i := range rangeStartKeys {
-		b.AddRawRequest(&kvpb.RecomputeStatsRequest{
-			RequestHeader: kvpb.RequestHeader{Key: roachpb.Key(rangeStartKeys[i])},
-		})
-	}
-	if err := r.db.Run(ctx, &b); err != nil {
-		log.Warningf(ctx, "recomputes stats bath failed with error: %v", err)
-	}
-}
-
-func getRangeStartkeys(
-	ctx context.Context, rangeDescIterFactory rangedesc.IteratorFactory, rangeKeySpans roachpb.Spans,
-) []roachpb.RKey {
-	rangeStartKeysFound := make(map[string]struct{})
-	rangeStartKeys := make([]roachpb.RKey, 0)
-
-	for i := range rangeKeySpans {
-		iter, err := rangeDescIterFactory.NewLazyIterator(ctx, rangeKeySpans[i], 100)
-		if err != nil {
-			log.Warningf(ctx, "could not create range descriptor iterator for %s: %v", rangeKeySpans[i], err)
-			continue
-		}
-		for ; iter.Valid(); iter.Next() {
-			desc := iter.CurRangeDescriptor()
-			startKeyStr := desc.StartKey.String()
-			if _, ok := rangeStartKeysFound[startKeyStr]; !ok {
-				rangeStartKeysFound[startKeyStr] = struct{}{}
-				rangeStartKeys = append(rangeStartKeys, desc.StartKey)
-			}
-		}
-		if err := iter.Error(); err != nil {
-			log.Warningf(ctx, "error iterating range descriptors for %s: %v", rangeKeySpans[i], err)
-		}
-	}
-	return rangeStartKeys
 }
 
 // splitRangeKeySSTAtKey splits the given SST (passed as bytes) at the
@@ -1171,8 +1117,8 @@ func splitRangeKeySSTAtKey(
 		// reachedSplit tracks if we've already reached our split key.
 		reachedSplit = false
 
-		// We start writing into the left side. Eventually we'll swap in the RHS
-		// writer.
+		// We start writting into the left side. Eventualy
+		// we'll swap in the RHS writer.
 		leftWriter  = storage.MakeIngestionSSTWriter(ctx, st, left)
 		rightWriter = storage.MakeIngestionSSTWriter(ctx, st, right)
 		writer      = &leftWriter
@@ -1185,7 +1131,7 @@ func splitRangeKeySSTAtKey(
 			return err
 		}
 		if first == nil || last == nil {
-			return errors.AssertionFailedf("likely programming error: invalid SST bounds on RHS [%v, %v)", first, last)
+			return errors.AssertionFailedf("likely prorgramming error: invalid SST bounds on RHS [%v, %v)", first, last)
 		}
 
 		leftRet = &rangeKeySST{start: first, end: last, data: left.Data()}
@@ -1330,15 +1276,11 @@ type flushableBuffer struct {
 
 // flushBuffer flushes the given streamIngestionBuffer via the SST
 // batchers and returns the underlying streamIngestionBuffer to the pool.
-func (sip *streamIngestionProcessor) flushBuffer(
-	b flushableBuffer,
-) (_ *jobspb.ResolvedSpans, err error) {
+func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.ResolvedSpans, error) {
 	ctx, sp := tracing.ChildSpan(sip.Ctx(), "stream-ingestion-flush")
 	defer sp.Finish()
-	defer func() {
-		// Ensure the batcher is always reset, even on early error returns.
-		err = errors.CombineErrors(err, sip.batcher.Reset(ctx))
-	}()
+	// Ensure the batcher is always reset, even on early error returns.
+	defer sip.batcher.Reset(ctx)
 
 	// First process the point KVs.
 	//

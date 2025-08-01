@@ -29,7 +29,7 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-var openmetricsLineRegex = regexp.MustCompile(`^([\w:]+){([^}]*)} ([\d.e+-]+) ([\d.e+-]+)$`)
+var openmetricsLineRegex = regexp.MustCompile(`^(\w+){([^}]*)} ([\d.e+-]+) ([\d.e+-]+)$`)
 
 // AggregatedPerfMetrics is the output of PostProcessPerfMetrics function in individual test
 type AggregatedPerfMetrics []*AggregatedMetric
@@ -102,11 +102,9 @@ type HistogramMetric struct {
 	Elapsed MetricPoint
 }
 
-// GetWorkloadHistogramString creates a histogram flag string based on the roachtest to pass to workload binary
+// GetWorkloadHistogramArgs creates a histogram flag string based on the roachtest to pass to workload binary
 // This is used to make use of t.ExportOpenmetrics() method and create appropriate exporter
-func GetWorkloadHistogramString(
-	t test.Test, c cluster.Cluster, labels map[string]string, disableTempFile bool,
-) string {
+func GetWorkloadHistogramArgs(t test.Test, c cluster.Cluster, labels map[string]string) string {
 	var histogramArgs string
 	if t.ExportOpenmetrics() {
 		// Add openmetrics related labels and arguments
@@ -117,16 +115,7 @@ func GetWorkloadHistogramString(
 		histogramArgs = fmt.Sprintf(" --histograms=%s/%s", t.PerfArtifactsDir(), GetBenchmarkMetricsFileName(t))
 	}
 
-	if disableTempFile {
-		histogramArgs += " --disable-temp-hist-file"
-	}
-
 	return histogramArgs
-}
-
-// GetWorkloadHistogramArgs makes disableTempFile false
-func GetWorkloadHistogramArgs(t test.Test, c cluster.Cluster, labels map[string]string) string {
-	return GetWorkloadHistogramString(t, c, labels, false)
 }
 
 // GetBenchmarkMetricsFileName returns the file name to store the benchmark output

@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --label=/mnt/data1/postgres/src/test/regress/results/rangefuncs.out /mnt/data1/postgres/src/test/regress/expected/rangefuncs.out /mnt/data1/postgres/src/test/regress/results/rangefuncs.out
 --- /mnt/data1/postgres/src/test/regress/expected/rangefuncs.out
 +++ /mnt/data1/postgres/src/test/regress/results/rangefuncs.out
-@@ -52,12 +52,12 @@
+@@ -52,34 +52,27 @@
  (1 row)
  
  select row_to_json(s.*) from generate_series(11,14) with ordinality s;
@@ -20,9 +20,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  (4 rows)
  
  -- ordinality vs. views
-@@ -69,14 +69,9 @@
- (1 row)
- 
+ create temporary view vw_ord as select * from (values (1)) v(n) join rngfunct(1) with ordinality as z(a,b,ord) on (n=ord);
++ERROR:  unknown function: rngfunct()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ select * from vw_ord;
+- n | a | b  | ord 
+----+---+----+-----
+- 1 | 1 | 11 |   1
+-(1 row)
+-
++ERROR:  relation "vw_ord" does not exist
  select definition from pg_views where viewname='vw_ord';
 -                               definition                                
 --------------------------------------------------------------------------
@@ -32,15 +39,29 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 -     z.ord                                                              +
 -    FROM (( VALUES (1)) v(n)                                            +
 -      JOIN rngfunct(1) WITH ORDINALITY z(a, b, ord) ON ((v.n = z.ord)));
-+                                                                   definition                                                                    
-+-------------------------------------------------------------------------------------------------------------------------------------------------
-+ SELECT v.n, z.a, z.b, z.ord FROM (VALUES (1)) AS v (n) JOIN ROWS FROM (public.rngfunct(1:::INT8)) WITH ORDINALITY AS z (a, b, ord) ON (n = ord)
- (1 row)
+-(1 row)
++ definition 
++------------
++(0 rows)
  
  drop view vw_ord;
-@@ -96,16 +91,9 @@
- (1 row)
++ERROR:  relation "vw_ord" does not exist
+ -- multiple functions
+ select * from rows from(rngfunct(1),rngfunct(2)) with ordinality as z(a,b,c,d,ord);
+  a |  b  | c | d  | ord 
+@@ -89,26 +82,17 @@
+ (2 rows)
  
+ create temporary view vw_ord as select * from (values (1)) v(n) join rows from(rngfunct(1),rngfunct(2)) with ordinality as z(a,b,c,d,ord) on (n=ord);
++ERROR:  unknown function: rngfunct()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ select * from vw_ord;
+- n | a | b  | c | d  | ord 
+----+---+----+---+----+-----
+- 1 | 1 | 11 | 2 | 22 |   1
+-(1 row)
+-
++ERROR:  relation "vw_ord" does not exist
  select definition from pg_views where viewname='vw_ord';
 -                                              definition                                               
 --------------------------------------------------------------------------------------------------------
@@ -52,13 +73,17 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 -     z.ord                                                                                            +
 -    FROM (( VALUES (1)) v(n)                                                                          +
 -      JOIN ROWS FROM(rngfunct(1), rngfunct(2)) WITH ORDINALITY z(a, b, c, d, ord) ON ((v.n = z.ord)));
-+                                                                                         definition                                                                                         
-+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-+ SELECT v.n, z.a, z.b, z.c, z.d, z.ord FROM (VALUES (1)) AS v (n) JOIN ROWS FROM (public.rngfunct(1:::INT8), public.rngfunct(2:::INT8)) WITH ORDINALITY AS z (a, b, c, d, ord) ON (n = ord)
- (1 row)
+-(1 row)
++ definition 
++------------
++(0 rows)
  
  drop view vw_ord;
-@@ -147,12 +135,9 @@
++ERROR:  relation "vw_ord" does not exist
+ -- expansions of unnest()
+ select * from unnest(array[10,20],array['foo','bar'],array[1.0]);
+  unnest | unnest | unnest 
+@@ -147,12 +131,9 @@
  (2 rows)
  
  select definition from pg_views where viewname='vw_ord';
@@ -74,7 +99,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  (1 row)
  
  drop view vw_ord;
-@@ -165,12 +150,9 @@
+@@ -165,12 +146,9 @@
  (2 rows)
  
  select definition from pg_views where viewname='vw_ord';
@@ -90,7 +115,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  (1 row)
  
  drop view vw_ord;
-@@ -183,106 +165,44 @@
+@@ -183,106 +161,44 @@
  (2 rows)
  
  select definition from pg_views where viewname='vw_ord';
@@ -216,7 +241,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  commit;
  -- function with implicit LATERAL
  select * from rngfunc2, rngfunct(rngfunc2.rngfuncid) z where rngfunc2.f2 = z.f2;
-@@ -329,12 +249,7 @@
+@@ -329,12 +245,7 @@
  
  -- nested functions
  select rngfunct.rngfuncid, rngfunct.f2 from rngfunct(sin(pi()/2)::int) ORDER BY 1,2;
@@ -230,7 +255,163 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  CREATE TABLE rngfunc (rngfuncid int, rngfuncsubid int, rngfuncname text, primary key(rngfuncid,rngfuncsubid));
  INSERT INTO rngfunc VALUES(1,1,'Joe');
  INSERT INTO rngfunc VALUES(1,2,'Ed');
-@@ -510,30 +425,22 @@
+@@ -354,21 +265,19 @@
+ (1 row)
+ 
+ CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc1(1);
++ERROR:  unknown function: getrngfunc1()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ SELECT * FROM vw_getrngfunc;
+- getrngfunc1 
+--------------
+-           1
+-(1 row)
+-
++ERROR:  relation "vw_getrngfunc" does not exist
+ DROP VIEW vw_getrngfunc;
++ERROR:  relation "vw_getrngfunc" does not exist
+ CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc1(1) WITH ORDINALITY as t1(v,o);
++ERROR:  unknown function: getrngfunc1()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ SELECT * FROM vw_getrngfunc;
+- v | o 
+----+---
+- 1 | 1
+-(1 row)
+-
++ERROR:  relation "vw_getrngfunc" does not exist
+ DROP VIEW vw_getrngfunc;
++ERROR:  relation "vw_getrngfunc" does not exist
+ -- sql, proretset = t, prorettype = b
+ CREATE FUNCTION getrngfunc2(int) RETURNS setof int AS 'SELECT rngfuncid FROM rngfunc WHERE rngfuncid = $1;' LANGUAGE SQL;
+ SELECT * FROM getrngfunc2(1) AS t1;
+@@ -386,23 +295,19 @@
+ (2 rows)
+ 
+ CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc2(1);
++ERROR:  unknown function: getrngfunc2()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ SELECT * FROM vw_getrngfunc;
+- getrngfunc2 
+--------------
+-           1
+-           1
+-(2 rows)
+-
++ERROR:  relation "vw_getrngfunc" does not exist
+ DROP VIEW vw_getrngfunc;
++ERROR:  relation "vw_getrngfunc" does not exist
+ CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc2(1) WITH ORDINALITY AS t1(v,o);
++ERROR:  unknown function: getrngfunc2()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ SELECT * FROM vw_getrngfunc;
+- v | o 
+----+---
+- 1 | 1
+- 1 | 2
+-(2 rows)
+-
++ERROR:  relation "vw_getrngfunc" does not exist
+ DROP VIEW vw_getrngfunc;
++ERROR:  relation "vw_getrngfunc" does not exist
+ -- sql, proretset = t, prorettype = b
+ CREATE FUNCTION getrngfunc3(int) RETURNS setof text AS 'SELECT rngfuncname FROM rngfunc WHERE rngfuncid = $1;' LANGUAGE SQL;
+ SELECT * FROM getrngfunc3(1) AS t1;
+@@ -420,23 +325,19 @@
+ (2 rows)
+ 
+ CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc3(1);
++ERROR:  unknown function: getrngfunc3()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ SELECT * FROM vw_getrngfunc;
+- getrngfunc3 
+--------------
+- Joe
+- Ed
+-(2 rows)
+-
++ERROR:  relation "vw_getrngfunc" does not exist
+ DROP VIEW vw_getrngfunc;
++ERROR:  relation "vw_getrngfunc" does not exist
+ CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc3(1) WITH ORDINALITY AS t1(v,o);
++ERROR:  unknown function: getrngfunc3()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ SELECT * FROM vw_getrngfunc;
+-  v  | o 
+------+---
+- Joe | 1
+- Ed  | 2
+-(2 rows)
+-
++ERROR:  relation "vw_getrngfunc" does not exist
+ DROP VIEW vw_getrngfunc;
++ERROR:  relation "vw_getrngfunc" does not exist
+ -- sql, proretset = f, prorettype = c
+ CREATE FUNCTION getrngfunc4(int) RETURNS rngfunc AS 'SELECT * FROM rngfunc WHERE rngfuncid = $1;' LANGUAGE SQL;
+ SELECT * FROM getrngfunc4(1) AS t1;
+@@ -452,21 +353,19 @@
+ (1 row)
+ 
+ CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc4(1);
++ERROR:  unknown function: getrngfunc4()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ SELECT * FROM vw_getrngfunc;
+- rngfuncid | rngfuncsubid | rngfuncname 
+------------+--------------+-------------
+-         1 |            1 | Joe
+-(1 row)
+-
++ERROR:  relation "vw_getrngfunc" does not exist
+ DROP VIEW vw_getrngfunc;
++ERROR:  relation "vw_getrngfunc" does not exist
+ CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc4(1) WITH ORDINALITY AS t1(a,b,c,o);
++ERROR:  unknown function: getrngfunc4()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ SELECT * FROM vw_getrngfunc;
+- a | b |  c  | o 
+----+---+-----+---
+- 1 | 1 | Joe | 1
+-(1 row)
+-
++ERROR:  relation "vw_getrngfunc" does not exist
+ DROP VIEW vw_getrngfunc;
++ERROR:  relation "vw_getrngfunc" does not exist
+ -- sql, proretset = t, prorettype = c
+ CREATE FUNCTION getrngfunc5(int) RETURNS setof rngfunc AS 'SELECT * FROM rngfunc WHERE rngfuncid = $1;' LANGUAGE SQL;
+ SELECT * FROM getrngfunc5(1) AS t1;
+@@ -484,23 +383,19 @@
+ (2 rows)
+ 
+ CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc5(1);
++ERROR:  unknown function: getrngfunc5()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ SELECT * FROM vw_getrngfunc;
+- rngfuncid | rngfuncsubid | rngfuncname 
+------------+--------------+-------------
+-         1 |            1 | Joe
+-         1 |            2 | Ed
+-(2 rows)
+-
++ERROR:  relation "vw_getrngfunc" does not exist
+ DROP VIEW vw_getrngfunc;
++ERROR:  relation "vw_getrngfunc" does not exist
+ CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc5(1) WITH ORDINALITY AS t1(a,b,c,o);
++ERROR:  unknown function: getrngfunc5()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ SELECT * FROM vw_getrngfunc;
+- a | b |  c  | o 
+----+---+-----+---
+- 1 | 1 | Joe | 1
+- 1 | 2 | Ed  | 2
+-(2 rows)
+-
++ERROR:  relation "vw_getrngfunc" does not exist
+ DROP VIEW vw_getrngfunc;
++ERROR:  relation "vw_getrngfunc" does not exist
+ -- sql, proretset = f, prorettype = record
+ CREATE FUNCTION getrngfunc6(int) RETURNS RECORD AS 'SELECT * FROM rngfunc WHERE rngfuncid = $1;' LANGUAGE SQL;
+ SELECT * FROM getrngfunc6(1) AS t1(rngfuncid int, rngfuncsubid int, rngfuncname text);
+@@ -510,30 +405,36 @@
  (1 row)
  
  SELECT * FROM ROWS FROM( getrngfunc6(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text) ) WITH ORDINALITY;
@@ -239,10 +420,19 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 -         1 |            1 | Joe         |          1
 -(1 row)
 -
-+ERROR:  a column definition list is required for functions returning "record"
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++SELECT * FROM ROWS FROM( getrngfunc6(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text) ) WITH ORDINALITY
++                                           ^
++HINT:  try \h <SOURCE>
  CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc6(1) AS
  (rngfuncid int, rngfuncsubid int, rngfuncname text);
-+ERROR:  a column definition list is required for functions returning "record"
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc6(1) AS
++(rngfuncid int, rngfuncsubid int, rngfuncname text)
++^
++HINT:  try \h <SOURCE>
  SELECT * FROM vw_getrngfunc;
 - rngfuncid | rngfuncsubid | rngfuncname 
 ------------+--------------+-------------
@@ -255,7 +445,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  CREATE VIEW vw_getrngfunc AS
    SELECT * FROM ROWS FROM( getrngfunc6(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text) )
                  WITH ORDINALITY;
-+ERROR:  a column definition list is required for functions returning "record"
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE VIEW vw_getrngfunc AS
++  SELECT * FROM ROWS FROM( getrngfunc6(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text) )
++                                             ^
++HINT:  try \h <SOURCE>
  SELECT * FROM vw_getrngfunc;
 - rngfuncid | rngfuncsubid | rngfuncname | ordinality 
 ------------+--------------+-------------+------------
@@ -268,7 +463,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  -- sql, proretset = t, prorettype = record
  CREATE FUNCTION getrngfunc7(int) RETURNS setof record AS 'SELECT * FROM rngfunc WHERE rngfuncid = $1;' LANGUAGE SQL;
  SELECT * FROM getrngfunc7(1) AS t1(rngfuncid int, rngfuncsubid int, rngfuncname text);
-@@ -544,143 +451,90 @@
+@@ -544,143 +445,126 @@
  (2 rows)
  
  SELECT * FROM ROWS FROM( getrngfunc7(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text) ) WITH ORDINALITY;
@@ -278,10 +473,19 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 -         1 |            2 | Ed          |          2
 -(2 rows)
 -
-+ERROR:  a column definition list is required for functions returning "record"
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++SELECT * FROM ROWS FROM( getrngfunc7(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text) ) WITH ORDINALITY
++                                           ^
++HINT:  try \h <SOURCE>
  CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc7(1) AS
  (rngfuncid int, rngfuncsubid int, rngfuncname text);
-+ERROR:  a column definition list is required for functions returning "record"
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc7(1) AS
++(rngfuncid int, rngfuncsubid int, rngfuncname text)
++^
++HINT:  try \h <SOURCE>
  SELECT * FROM vw_getrngfunc;
 - rngfuncid | rngfuncsubid | rngfuncname 
 ------------+--------------+-------------
@@ -295,7 +499,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  CREATE VIEW vw_getrngfunc AS
    SELECT * FROM ROWS FROM( getrngfunc7(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text) )
                  WITH ORDINALITY;
-+ERROR:  a column definition list is required for functions returning "record"
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE VIEW vw_getrngfunc AS
++  SELECT * FROM ROWS FROM( getrngfunc7(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text) )
++                                             ^
++HINT:  try \h <SOURCE>
  SELECT * FROM vw_getrngfunc;
 - rngfuncid | rngfuncsubid | rngfuncname | ordinality 
 ------------+--------------+-------------+------------
@@ -308,21 +517,20 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 +ERROR:  relation "vw_getrngfunc" does not exist
  -- plpgsql, proretset = f, prorettype = b
  CREATE FUNCTION getrngfunc8(int) RETURNS int AS 'DECLARE rngfuncint int; BEGIN SELECT rngfuncid into rngfuncint FROM rngfunc WHERE rngfuncid = $1; RETURN rngfuncint; END;' LANGUAGE plpgsql;
-+ERROR:  no value provided for placeholder: $1
  SELECT * FROM getrngfunc8(1) AS t1;
-- t1 
------
+  t1 
+ ----
 -  1
--(1 row)
--
-+ERROR:  unknown function: getrngfunc8()
++   
+ (1 row)
+ 
  SELECT * FROM getrngfunc8(1) WITH ORDINALITY AS t1(v,o);
-- v | o 
-----+---
+  v | o 
+ ---+---
 - 1 | 1
--(1 row)
--
-+ERROR:  unknown function: getrngfunc8()
++   | 1
+ (1 row)
+ 
  CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc8(1);
 +ERROR:  unknown function: getrngfunc8()
 +HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
@@ -400,7 +608,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 -   | 1 | Ed  |   |   |     | 1 | 2 | Ed  |   |   |     | 1 | 2 | Ed  |   |   |   |     | 2
 -(2 rows)
 -
-+ERROR:  a column definition list is required for functions returning "record"
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select * from rows from(getrngfunc1(1),getrngfunc2(1),getrngfunc3(1),getrngfunc4(1),getrngfunc5(1),
++                    getrngfunc6(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text),
++                                      ^
++HINT:  try \h <SOURCE>
  select * from rows from(getrngfunc9(1),getrngfunc8(1),
                      getrngfunc7(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text),
                      getrngfunc6(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text),
@@ -412,14 +625,24 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 -   |   |     |   | 1 | 2 | Ed  |   |   |     | 1 | 2 | Ed  |   |   |     | Ed  | 1 |   | 2
 -(2 rows)
 -
-+ERROR:  unknown function: getrngfunc9()
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select * from rows from(getrngfunc9(1),getrngfunc8(1),
++                    getrngfunc7(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text),
++                                      ^
++HINT:  try \h <SOURCE>
  create temporary view vw_rngfunc as
    select * from rows from(getrngfunc9(1),
                        getrngfunc7(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text),
                        getrngfunc1(1))
                  with ordinality as t1(a,b,c,d,e,f,g,n);
-+ERROR:  unknown function: getrngfunc9()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++create temporary view vw_rngfunc as
++  select * from rows from(getrngfunc9(1),
++                      getrngfunc7(1) AS (rngfuncid int, rngfuncsubid int, rngfuncname text),
++                                        ^
++HINT:  try \h <SOURCE>
  select * from vw_rngfunc;
 - a | b |  c  | d | e |  f  | g | n 
 ----+---+-----+---+---+-----+---+---
@@ -449,28 +672,28 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  DROP FUNCTION getrngfunc1(int);
  DROP FUNCTION getrngfunc2(int);
  DROP FUNCTION getrngfunc3(int);
-@@ -689,7 +543,9 @@
- DROP FUNCTION getrngfunc6(int);
+@@ -690,6 +574,7 @@
  DROP FUNCTION getrngfunc7(int);
  DROP FUNCTION getrngfunc8(int);
-+ERROR:  unknown function: getrngfunc8()
  DROP FUNCTION getrngfunc9(int);
 +ERROR:  unknown function: getrngfunc9()
  DROP FUNCTION rngfunct(int);
  DROP TABLE rngfunc2;
  DROP TABLE rngfunc;
-@@ -698,8 +554,10 @@
+@@ -698,8 +583,12 @@
  CREATE TEMPORARY SEQUENCE rngfunc_rescan_seq2;
  CREATE TYPE rngfunc_rescan_t AS (i integer, s bigint);
  CREATE FUNCTION rngfunc_sql(int,int) RETURNS setof rngfunc_rescan_t AS 'SELECT i, nextval(''rngfunc_rescan_seq1'') FROM generate_series($1,$2) i;' LANGUAGE SQL;
 +ERROR:  cannot create function using temp tables
  -- plpgsql functions use materialize mode
  CREATE FUNCTION rngfunc_mat(int,int) RETURNS setof rngfunc_rescan_t AS 'begin for i in $1..$2 loop return next (i, nextval(''rngfunc_rescan_seq2'')); end loop; end;' LANGUAGE plpgsql;
-+ERROR:  no value provided for placeholder: $1
++ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105240/_version_
  --invokes ExecReScanFunctionScan - all these cases should materialize the function only once
  -- LEFT JOIN on a condition that the planner can't prove to be true is used to ensure the function
  -- is on the inner path of a nestloop join
-@@ -710,19 +568,7 @@
+@@ -710,19 +599,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r) LEFT JOIN rngfunc_sql(11,13) ON (r+i)<100;
@@ -491,7 +714,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -730,19 +576,7 @@
+@@ -730,19 +607,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r) LEFT JOIN rngfunc_sql(11,13) WITH ORDINALITY AS f(i,s,o) ON (r+i)<100;
@@ -512,7 +735,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -750,19 +584,7 @@
+@@ -750,19 +615,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r) LEFT JOIN rngfunc_mat(11,13) ON (r+i)<100;
@@ -533,7 +756,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -770,19 +592,7 @@
+@@ -770,19 +623,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r) LEFT JOIN rngfunc_mat(11,13) WITH ORDINALITY AS f(i,s,o) ON (r+i)<100;
@@ -554,7 +777,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -790,30 +600,18 @@
+@@ -790,30 +631,18 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r) LEFT JOIN ROWS FROM( rngfunc_sql(11,13), rngfunc_mat(11,13) ) WITH ORDINALITY AS f(i1,s1,i2,s2,o) ON (r+i1+i2)<100;
@@ -590,7 +813,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
   3 | 13
  (9 rows)
  
-@@ -821,13 +619,13 @@
+@@ -821,13 +650,13 @@
   r | i  | o 
  ---+----+---
   1 | 11 | 1
@@ -608,7 +831,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
   3 | 13 | 3
  (9 rows)
  
-@@ -867,16 +665,7 @@
+@@ -867,16 +696,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r), rngfunc_sql(10+r,13);
@@ -626,7 +849,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -884,16 +673,7 @@
+@@ -884,16 +704,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r), rngfunc_sql(10+r,13) WITH ORDINALITY AS f(i,s,o);
@@ -644,7 +867,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -901,16 +681,7 @@
+@@ -901,16 +712,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r), rngfunc_sql(11,10+r);
@@ -662,7 +885,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -918,16 +689,7 @@
+@@ -918,16 +720,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r), rngfunc_sql(11,10+r) WITH ORDINALITY AS f(i,s,o);
@@ -680,7 +903,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -935,20 +697,7 @@
+@@ -935,20 +728,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (11,12),(13,15),(16,20)) v(r1,r2), rngfunc_sql(r1,r2);
@@ -702,7 +925,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -956,20 +705,7 @@
+@@ -956,20 +736,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (11,12),(13,15),(16,20)) v(r1,r2), rngfunc_sql(r1,r2) WITH ORDINALITY AS f(i,s,o);
@@ -724,7 +947,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -977,16 +713,7 @@
+@@ -977,16 +744,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r), rngfunc_mat(10+r,13);
@@ -742,7 +965,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -994,16 +721,7 @@
+@@ -994,16 +752,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r), rngfunc_mat(10+r,13) WITH ORDINALITY AS f(i,s,o);
@@ -760,7 +983,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -1011,16 +729,7 @@
+@@ -1011,16 +760,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r), rngfunc_mat(11,10+r);
@@ -778,7 +1001,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -1028,16 +737,7 @@
+@@ -1028,16 +768,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r), rngfunc_mat(11,10+r) WITH ORDINALITY AS f(i,s,o);
@@ -796,7 +1019,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -1045,20 +745,7 @@
+@@ -1045,20 +776,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (11,12),(13,15),(16,20)) v(r1,r2), rngfunc_mat(r1,r2);
@@ -818,7 +1041,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -1066,20 +753,7 @@
+@@ -1066,20 +784,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (11,12),(13,15),(16,20)) v(r1,r2), rngfunc_mat(r1,r2) WITH ORDINALITY AS f(i,s,o);
@@ -840,7 +1063,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  -- selective rescan of multiple functions:
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
-@@ -1088,16 +762,7 @@
+@@ -1088,16 +793,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r), ROWS FROM( rngfunc_sql(11,11), rngfunc_mat(10+r,13) );
@@ -858,7 +1081,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -1105,16 +770,7 @@
+@@ -1105,16 +801,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r), ROWS FROM( rngfunc_sql(10+r,13), rngfunc_mat(11,11) );
@@ -876,7 +1099,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -1122,16 +778,7 @@
+@@ -1122,16 +809,7 @@
  (1 row)
  
  SELECT * FROM (VALUES (1),(2),(3)) v(r), ROWS FROM( rngfunc_sql(10+r,13), rngfunc_mat(10+r,13) );
@@ -894,7 +1117,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT setval('rngfunc_rescan_seq1',1,false),setval('rngfunc_rescan_seq2',1,false);
   setval | setval 
  --------+--------
-@@ -1139,23 +786,7 @@
+@@ -1139,23 +817,7 @@
  (1 row)
  
  SELECT * FROM generate_series(1,2) r1, generate_series(r1,3) r2, ROWS FROM( rngfunc_sql(10+r1,13), rngfunc_mat(10+r2,13) );
@@ -919,7 +1142,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT * FROM (VALUES (1),(2),(3)) v(r), generate_series(10+r,20-r) f(i);
   r | i  
  ---+----
-@@ -1243,31 +874,31 @@
+@@ -1243,31 +905,31 @@
   r1 | r1 | r2 | i  
  ----+----+----+----
    1 |  1 | 10 | 21
@@ -969,7 +1192,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
    3 |  3 | 30 | 23
  (27 rows)
  
-@@ -1302,95 +933,47 @@
+@@ -1302,95 +964,47 @@
   r1 | r1 | r2 | i  
  ----+----+----+----
    1 |  1 | 10 | 10
@@ -1088,7 +1311,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  -- check handling of FULL JOIN with multiple lateral references (bug #15741)
  SELECT *
  FROM (VALUES (1),(2)) v1(r1)
-@@ -1404,20 +987,11 @@
+@@ -1404,20 +1018,11 @@
          ) AS ss1 ON TRUE
          FULL JOIN generate_series(1, v1.r1) AS gs4 ON FALSE
      ) AS ss0 ON TRUE;
@@ -1112,7 +1335,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  DROP SEQUENCE rngfunc_rescan_seq1;
  DROP SEQUENCE rngfunc_rescan_seq2;
  --
-@@ -1449,7 +1023,7 @@
+@@ -1449,7 +1054,7 @@
  -- error, wrong result type
  CREATE OR REPLACE FUNCTION rngfunc(in f1 int, out f2 int) RETURNS float
  AS 'select $1+1' LANGUAGE sql;
@@ -1121,7 +1344,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  -- with multiple OUT params you must get a RECORD result
  CREATE OR REPLACE FUNCTION rngfunc(in f1 int, out f2 int, out f3 text) RETURNS int
  AS 'select $1+1' LANGUAGE sql;
-@@ -1457,8 +1031,8 @@
+@@ -1457,8 +1062,8 @@
  CREATE OR REPLACE FUNCTION rngfunc(in f1 int, out f2 int, out f3 text)
  RETURNS record
  AS 'select $1+1' LANGUAGE sql;
@@ -1132,7 +1355,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  CREATE OR REPLACE FUNCTION rngfuncr(in f1 int, out f2 int, out text)
  AS $$select $1-1, $1::text || 'z'$$ LANGUAGE sql;
  SELECT f1, rngfuncr(f1) FROM int4_tbl;
-@@ -1486,15 +1060,7 @@
+@@ -1486,15 +1091,7 @@
  CREATE OR REPLACE FUNCTION rngfuncb(in f1 int, inout f2 int, out text)
  AS $$select $2-1, $1::text || 'z'$$ LANGUAGE sql;
  SELECT f1, rngfuncb(f1, f1/2) FROM int4_tbl;
@@ -1149,7 +1372,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT * FROM rngfuncb(42, 99);
   f2 | column2 
  ----+---------
-@@ -1523,7 +1089,11 @@
+@@ -1523,7 +1120,11 @@
  (1 row)
  
  SELECT dup('xyz');	-- fails
@@ -1162,7 +1385,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  SELECT dup('xyz'::text);
          dup        
  -------------------
-@@ -1540,7 +1110,6 @@
+@@ -1540,7 +1141,6 @@
  CREATE OR REPLACE FUNCTION dup (inout f2 anyelement, out f3 anyarray)
  AS 'select $1, array[$1,$1]' LANGUAGE sql;
  ERROR:  cannot change name of input parameter "f1"
@@ -1170,7 +1393,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  DROP FUNCTION dup(anyelement);
  -- equivalent behavior, though different name exposed for input arg
  CREATE OR REPLACE FUNCTION dup (inout f2 anyelement, out f3 anyarray)
-@@ -1559,57 +1128,32 @@
+@@ -1559,57 +1159,32 @@
  DETAIL:  A result of type anyelement requires at least one input of type anyelement, anyarray, anynonarray, anyenum, anyrange, or anymultirange.
  CREATE FUNCTION dup (f1 anycompatible, f2 anycompatiblearray, f3 out anycompatible, f4 out anycompatiblearray)
  AS 'select $1, $2' LANGUAGE sql;
@@ -1240,7 +1463,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  --
  -- table functions
  --
-@@ -1661,100 +1205,77 @@
+@@ -1661,100 +1236,77 @@
  --
  -- some tests on SQL functions with RETURNING
  --
@@ -1372,7 +1595,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  
  -- triggers will fire, too
  create function noticetrigger() returns trigger as $$
-@@ -1764,70 +1285,55 @@
+@@ -1764,70 +1316,55 @@
  end $$ language plpgsql;
  create trigger tnoticetrigger after insert on tt for each row
  execute procedure noticetrigger();
@@ -1432,10 +1655,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
- 
++
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
+ 
 +We appreciate your feedback.
 +
 +select insert_tt2('foollog','barlog') limit 1;
@@ -1479,7 +1702,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  
  -- test case for a whole-row-variable bug
  create function rngfunc1(n integer, out a text, out b text)
-@@ -1835,6 +1341,18 @@
+@@ -1835,6 +1372,18 @@
    language sql
    as $$ select 'foo ' || i, 'bar ' || i from generate_series(1,$1) i $$;
  set work_mem='64kB';
@@ -1498,7 +1721,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select t.a, t, t.a from rngfunc1(10000) t limit 1;
     a   |         t         |   a   
  -------+-------------------+-------
-@@ -1842,6 +1360,18 @@
+@@ -1842,6 +1391,18 @@
  (1 row)
  
  reset work_mem;
@@ -1517,17 +1740,21 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select t.a, t, t.a from rngfunc1(10000) t limit 1;
     a   |         t         |   a   
  -------+-------------------+-------
-@@ -1871,8 +1401,6 @@
+@@ -1871,31 +1432,24 @@
  
  select * from array_to_set(array['one', 'two']); -- fail
  ERROR:  a column definition list is required for functions returning "record"
 -LINE 1: select * from array_to_set(array['one', 'two']);
 -                      ^
  -- after-the-fact coercion of the columns is now possible, too
- select * from array_to_set(array['one', 'two']) as t(f1 numeric(4,2),f2 text);
-   f1  | f2  
-@@ -1883,19 +1411,20 @@
- 
+-select * from array_to_set(array['one', 'two']) as t(f1 numeric(4,2),f2 text);
+-  f1  | f2  
+-------+-----
+- 1.00 | one
+- 2.00 | two
+-(2 rows)
+-
++-- select * from array_to_set(array['one', 'two']) as t(f1 numeric(4,2),f2 text);
  -- and if it doesn't work, you get a compile-time not run-time error
  select * from array_to_set(array['one', 'two']) as t(f1 point,f2 text);
 -ERROR:  return type mismatch in function declared to return record
@@ -1557,9 +1784,18 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  -- but without, it can be:
  create or replace function array_to_set(anyarray) returns setof record as $$
    select i AS "index", $1[i] AS "value" from generate_subscripts($1, 1) i
-@@ -1922,18 +1451,19 @@
+@@ -1914,26 +1468,21 @@
+   2 | two
  (2 rows)
  
+-select * from array_to_set(array['one', 'two']) as t(f1 numeric(4,2),f2 text);
+-  f1  | f2  
+-------+-----
+- 1.00 | one
+- 2.00 | two
+-(2 rows)
+-
++-- select * from array_to_set(array['one', 'two']) as t(f1 numeric(4,2),f2 text);
  select * from array_to_set(array['one', 'two']) as t(f1 point,f2 text);
 -ERROR:  return type mismatch in function declared to return record
 -DETAIL:  Final statement returns integer instead of point at column 1.
@@ -1587,7 +1823,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  create temp table rngfunc(f1 int8, f2 int8);
  create function testrngfunc() returns record as $$
    insert into rngfunc values (1,2) returning *;
-@@ -1952,8 +1482,6 @@
+@@ -1952,8 +1501,6 @@
  
  select * from testrngfunc(); -- fail
  ERROR:  a column definition list is required for functions returning "record"
@@ -1596,7 +1832,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  drop function testrngfunc();
  create function testrngfunc() returns setof record as $$
    insert into rngfunc values (1,2), (3,4) returning *;
-@@ -1974,8 +1502,6 @@
+@@ -1974,8 +1521,6 @@
  
  select * from testrngfunc(); -- fail
  ERROR:  a column definition list is required for functions returning "record"
@@ -1605,7 +1841,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  drop function testrngfunc();
  -- Check that typmod imposed by a composite type is honored
  create type rngfunc_type as (f1 numeric(35,6), f2 numeric(35,2));
-@@ -1984,12 +1510,11 @@
+@@ -1984,12 +1529,11 @@
  $$ language sql immutable;
  explain (verbose, costs off)
  select testrngfunc();
@@ -1623,7 +1859,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select testrngfunc();
     testrngfunc   
  -----------------
-@@ -1998,13 +1523,11 @@
+@@ -1998,13 +1542,11 @@
  
  explain (verbose, costs off)
  select * from testrngfunc();
@@ -1642,7 +1878,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select * from testrngfunc();
      f1    |  f2  
  ----------+------
-@@ -2016,12 +1539,11 @@
+@@ -2016,12 +1558,11 @@
  $$ language sql volatile;
  explain (verbose, costs off)
  select testrngfunc();
@@ -1660,7 +1896,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select testrngfunc();
     testrngfunc   
  -----------------
-@@ -2030,13 +1552,11 @@
+@@ -2030,13 +1571,11 @@
  
  explain (verbose, costs off)
  select * from testrngfunc();
@@ -1679,7 +1915,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select * from testrngfunc();
      f1    |  f2  
  ----------+------
-@@ -2049,13 +1569,11 @@
+@@ -2049,13 +1588,11 @@
  $$ language sql immutable;
  explain (verbose, costs off)
  select testrngfunc();
@@ -1698,7 +1934,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select testrngfunc();
     testrngfunc   
  -----------------
-@@ -2064,12 +1582,11 @@
+@@ -2064,12 +1601,11 @@
  
  explain (verbose, costs off)
  select * from testrngfunc();
@@ -1716,7 +1952,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select * from testrngfunc();
      f1    |  f2  
  ----------+------
-@@ -2081,13 +1598,11 @@
+@@ -2081,13 +1617,11 @@
  $$ language sql volatile;
  explain (verbose, costs off)
  select testrngfunc();
@@ -1735,7 +1971,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select testrngfunc();
     testrngfunc   
  -----------------
-@@ -2096,13 +1611,11 @@
+@@ -2096,13 +1630,11 @@
  
  explain (verbose, costs off)
  select * from testrngfunc();
@@ -1754,7 +1990,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select * from testrngfunc();
      f1    |  f2  
  ----------+------
-@@ -2112,62 +1625,45 @@
+@@ -2112,62 +1644,45 @@
  create or replace function testrngfunc() returns setof rngfunc_type as $$
    select 1, 2 union select 3, 4 order by 1;
  $$ language sql immutable;
@@ -1838,7 +2074,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  --
  -- Check some cases involving added/dropped columns in a rowtype result
  --
-@@ -2178,79 +1674,37 @@
+@@ -2178,79 +1693,37 @@
  create or replace function get_first_user() returns users as
  $$ SELECT * FROM users ORDER BY userid LIMIT 1; $$
  language sql stable;
@@ -1931,7 +2167,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  -- We used to have a bug that would allow the above to succeed, posing
  -- hazards for later execution of the view.  Check that the internal
  -- defenses for those hazards haven't bit-rotted, in case some other
-@@ -2264,18 +1718,14 @@
+@@ -2264,18 +1737,14 @@
  returning pg_describe_object(classid, objid, objsubid) as obj,
            pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
            deptype;
@@ -1954,7 +2190,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  -- likewise, check we don't crash if the dependency goes wrong
  begin;
  -- destroy the dependency entry that prevents the ALTER:
-@@ -2286,19 +1736,18 @@
+@@ -2286,19 +1755,18 @@
  returning pg_describe_object(classid, objid, objsubid) as obj,
            pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
            deptype;
@@ -1980,7 +2216,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  drop table users;
  -- check behavior with type coercion required for a set-op
  create or replace function rngfuncbar() returns setof text as
-@@ -2320,17 +1769,11 @@
+@@ -2320,17 +1788,11 @@
  
  -- this function is now inlinable, too:
  explain (verbose, costs off) select * from rngfuncbar();
@@ -2003,7 +2239,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  drop function rngfuncbar();
  -- check handling of a SQL function with multiple OUT params (bug #5777)
  create or replace function rngfuncbar(out integer, out numeric) as
-@@ -2344,115 +1787,93 @@
+@@ -2344,115 +1806,93 @@
  create or replace function rngfuncbar(out integer, out numeric) as
  $$ select (1, 2) $$ language sql;
  select * from rngfuncbar();  -- fail
@@ -2170,7 +2406,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  (0 rows)
  
  drop type rngfunc2;
-@@ -2463,18 +1884,11 @@
+@@ -2463,25 +1903,16 @@
     from unnest(array['{"lectures": [{"id": "1"}]}'::jsonb])
          as unnested_modules(module)) as ss,
    jsonb_to_recordset(ss.lecture) as j (id text);
@@ -2194,3 +2430,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  select * from
    (select jsonb_path_query_array(module->'lectures', '$[*]') as lecture
     from unnest(array['{"lectures": [{"id": "1"}]}'::jsonb])
+         as unnested_modules(module)) as ss,
+   jsonb_to_recordset(ss.lecture) as j (id text);
+-    lecture    | id 
+----------------+----
+- [{"id": "1"}] | 1
+-(1 row)
+-
++ERROR:  jsonb_path_query_array(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_

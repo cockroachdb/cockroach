@@ -58,14 +58,12 @@ SHOW GRANTS ON DATABASE a
 a  admin      ALL         true
 a  public     CONNECT     false
 a  readwrite  BACKUP      true
-a  readwrite  CHANGEFEED  true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
 a  readwrite  RESTORE     true
 a  readwrite  ZONECONFIG  true
 a  root       ALL         true
 a  test-user  BACKUP      true
-a  test-user  CHANGEFEED  true
 a  test-user  CREATE      true
 a  test-user  DROP        true
 a  test-user  RESTORE     true
@@ -76,13 +74,11 @@ SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 a  public     CONNECT     false
 a  readwrite  BACKUP      true
-a  readwrite  CHANGEFEED  true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
 a  readwrite  RESTORE     true
 a  readwrite  ZONECONFIG  true
 a  test-user  BACKUP      true
-a  test-user  CHANGEFEED  true
 a  test-user  CREATE      true
 a  test-user  DROP        true
 a  test-user  RESTORE     true
@@ -97,14 +93,12 @@ SHOW GRANTS ON DATABASE a
 a  admin      ALL         true
 a  public     CONNECT     false
 a  readwrite  BACKUP      true
-a  readwrite  CHANGEFEED  true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
 a  readwrite  RESTORE     true
 a  readwrite  ZONECONFIG  true
 a  root       ALL         true
 a  test-user  BACKUP      true
-a  test-user  CHANGEFEED  true
 a  test-user  DROP        true
 a  test-user  RESTORE     true
 a  test-user  ZONECONFIG  true
@@ -117,7 +111,6 @@ SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 a  public     CONNECT     false
 a  readwrite  BACKUP      true
-a  readwrite  CHANGEFEED  true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
 a  readwrite  RESTORE     true

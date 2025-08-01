@@ -2,19 +2,6 @@
 # they're pushed while we can still auto-retry them.
 subtest autoretry-on-push-first-batch
 
-# TODO(#146732): This test is testing a specific retry path that is
-# only used when a statement has resulted in a WriteTimestamp push,
-# can't be refreshed by the span refresher interceptor, and also
-# hasn't produced an error. In buffered writes, we don't detect this
-# WriteTimestamp push until the COMMIT and are no longer eligible for
-# the retry path tested here.
-#
-# It may seem like we could change the read-write conflict to a
-# write-write conflict. But the write-write conflict generates an
-# error which means it wouldn't test the same retry path.
-statement ok
-SET kv_transaction_buffered_writes_enabled = false;
-
 statement ok
 CREATE TABLE test_retry (
   k INT PRIMARY KEY
@@ -45,42 +32,3 @@ SELECT cluster_logical_timestamp(); INSERT INTO test_retry VALUES (1);
 
 statement ok
 COMMIT
-
-statement ok
-RESET kv_transaction_buffered_writes_enabled
-
-# Test the overload of crdb_internal.force_retry that counts retries.
-subtest force_retry
-
-statement ok
-SET tracing = on
-
-query I
-SELECT crdb_internal.force_retry(0)
-----
-0
-
-statement ok
-SET tracing = off
-
-query T nosort
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%executing after % retries%'
-----
-
-statement ok
-SET tracing = on
-
-query I
-SELECT crdb_internal.force_retry(3)
-----
-0
-
-statement ok
-SET tracing = off
-
-query T nosort
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%executing after % retries%'
-----
-executing after 1 transaction retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
-executing after 2 transaction retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
-executing after 3 transaction retries, last retry reason: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()

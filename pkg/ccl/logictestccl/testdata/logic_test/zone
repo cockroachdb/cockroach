@@ -679,11 +679,11 @@ show_test  CREATE TABLE public.show_test (
 ) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN ((1)),
   PARTITION p2 VALUES IN ((2))
-) WITH (schema_locked = true);
+);
 ALTER PARTITION p1 OF INDEX "my database".public.show_test@show_test_pkey CONFIGURE ZONE USING
   constraints = '[+dc=dc1]';
 ALTER PARTITION p2 OF INDEX "my database".public.show_test@show_test_pkey CONFIGURE ZONE USING
-  constraints = '[+dc=dc2]';
+  constraints = '[+dc=dc2]'
 
 # test warnings on table creation
 statement ok
@@ -700,9 +700,8 @@ warning  CREATE TABLE public.warning (
          CONSTRAINT warning_pkey PRIMARY KEY (x ASC)
 ) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN ((1))
-) WITH (schema_locked = true)
+)
 -- Warning: Partitioned table with no zone configurations.
-;
 
 subtest alter_partition_across_all_indexes
 
@@ -779,9 +778,9 @@ t40417  CREATE TABLE public.t40417 (
         CONSTRAINT t40417_pkey PRIMARY KEY (x ASC)
 ) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN ((1))
-) WITH (schema_locked = true);
+);
 ALTER PARTITION p1 OF INDEX "my database".public.t40417@t40417_pkey CONFIGURE ZONE USING
-  num_replicas = 1;
+  num_replicas = 1
 
 subtest authorization
 
@@ -1172,7 +1171,7 @@ t  CREATE TABLE public.t (
    ),
    UNIQUE INDEX t_x_key (x ASC),
    FAMILY fam_0_x_y_z_w (x, y, z, w)
-) WITH (schema_locked = true);
+);
 ALTER PARTITION p1 OF INDEX test.public.t@i1 CONFIGURE ZONE USING
   gc.ttlseconds = 15210;
 ALTER PARTITION p2 OF INDEX test.public.t@i1 CONFIGURE ZONE USING
@@ -1180,7 +1179,7 @@ ALTER PARTITION p2 OF INDEX test.public.t@i1 CONFIGURE ZONE USING
 ALTER PARTITION p3 OF INDEX test.public.t@i2 CONFIGURE ZONE USING
   gc.ttlseconds = 15411;
 ALTER PARTITION p4 OF INDEX test.public.t@i2 CONFIGURE ZONE USING
-  gc.ttlseconds = 15418;
+  gc.ttlseconds = 15418
 
 # Test that the global_reads attribute can be set with an enterprise license.
 # This same test fails in pkg/sql/logictest/testdata/logic_test/zone_config.
@@ -1355,7 +1354,7 @@ CREATE TABLE person (
                     )
         );
 
-skipif config local-legacy-schema-changer
+skipif config local-mixed-24.3 local-legacy-schema-changer
 statement ok
 SET use_declarative_schema_changer = unsafe_always;
 

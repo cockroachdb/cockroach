@@ -69,7 +69,6 @@ func TestProcessorBasic(t *testing.T) {
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(r1Stream),
 		)
 		require.True(t, r1OK)
@@ -204,7 +203,6 @@ func TestProcessorBasic(t *testing.T) {
 			true,  /* withDiff */
 			true,  /* withFiltering */
 			false, /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(r2Stream),
 		)
 		require.True(t, r2OK)
@@ -317,7 +315,6 @@ func TestProcessorBasic(t *testing.T) {
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(r3Stream),
 		)
 		require.True(t, r30K)
@@ -339,7 +336,6 @@ func TestProcessorBasic(t *testing.T) {
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(r4Stream),
 		)
 		require.False(t, r4OK)
@@ -365,7 +361,6 @@ func TestProcessorOmitRemote(t *testing.T) {
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(r1Stream),
 		)
 		require.True(t, r1OK)
@@ -391,7 +386,6 @@ func TestProcessorOmitRemote(t *testing.T) {
 			false, /* withDiff */
 			false, /* withFiltering */
 			true,  /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(r2Stream),
 		)
 		require.True(t, r2OK)
@@ -449,7 +443,6 @@ func TestProcessorSlowConsumer(t *testing.T) {
 				false, /* withDiff */
 				false, /* withFiltering */
 				false, /* withOmitRemote */
-				noBulkDelivery,
 				h.toBufferedStreamIfNeeded(r1Stream),
 			)
 			r2Stream := newTestStream()
@@ -461,7 +454,6 @@ func TestProcessorSlowConsumer(t *testing.T) {
 				false, /* withDiff */
 				false, /* withFiltering */
 				false, /* withOmitRemote */
-				noBulkDelivery,
 				h.toBufferedStreamIfNeeded(r2Stream),
 			)
 			h.syncEventAndRegistrations()
@@ -557,7 +549,6 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(r1Stream),
 		)
 		h.syncEventAndRegistrations()
@@ -613,7 +604,6 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(r1Stream),
 		)
 		h.syncEventAndRegistrations()
@@ -695,7 +685,6 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(r1Stream),
 		)
 		h.syncEventAndRegistrations()
@@ -1004,7 +993,6 @@ func TestProcessorConcurrentStop(t *testing.T) {
 				s := newTestStream()
 				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-					noBulkDelivery,
 					h.toBufferedStreamIfNeeded(s))
 			}()
 			go func() {
@@ -1078,7 +1066,6 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 				regs[s] = firstIdx
 				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-					noBulkDelivery,
 					h.toBufferedStreamIfNeeded(s))
 				regDone <- struct{}{}
 			}
@@ -1139,7 +1126,6 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(rStream),
 		)
 		h.syncEventAndRegistrations()
@@ -1220,7 +1206,6 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(rStream),
 		)
 		h.syncEventAndRegistrations()
@@ -1291,7 +1276,6 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(r1Stream),
 		)
 
@@ -1304,7 +1288,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
-			false /* withOmitRemote */, noBulkDelivery,
+			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(r2Stream),
 		)
 		h.syncEventAndRegistrations()
@@ -1474,7 +1458,6 @@ func TestProcessorBackpressure(t *testing.T) {
 		stream := newTestStream()
 		ok, _, _ := p.Register(stream.ctx, span, hlc.MinTimestamp, nil, /* catchUpIter */
 			false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(stream))
 		require.True(t, ok)
 

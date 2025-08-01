@@ -138,12 +138,12 @@ func TestPrivilege(t *testing.T) {
 			},
 			privilege.Table,
 		},
-		// Ensure revoking BACKUP, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG, RESTORE, CHANGEFEED
+		// Ensure revoking BACKUP, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG, RESTORE
 		// from a user with ALL privilege on a database leaves the user with no privileges.
 		{testUser,
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.BACKUP, privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.SELECT,
-				privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG, privilege.RESTORE, privilege.CHANGEFEED},
+				privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG, privilege.RESTORE},
 			[]catpb.UserPrivilege{
 				{User: username.AdminRoleName(), Privileges: []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
@@ -555,16 +555,6 @@ func TestGrantWithGrantOption(t *testing.T) {
 			privilege.List{privilege.ALL, privilege.CREATE},
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.ALL}},
-		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{}, privilege.List{}, username.AdminRoleName()),
-			testUser, privilege.Schema,
-			privilege.List{privilege.CHANGEFEED},
-			privilege.List{privilege.CHANGEFEED},
-			privilege.List{privilege.CHANGEFEED}},
-		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{}, privilege.List{}, username.AdminRoleName()),
-			testUser, privilege.Database,
-			privilege.List{privilege.CHANGEFEED},
-			privilege.List{privilege.CHANGEFEED},
-			privilege.List{privilege.CHANGEFEED}},
 	}
 
 	for tcNum, tc := range testCases {
@@ -658,20 +648,6 @@ func TestRevokeWithGrantOption(t *testing.T) {
 			testUser, privilege.Table,
 			false,
 			privilege.List{privilege.ALL},
-			privilege.List{},
-			privilege.List{},
-			true},
-		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CHANGEFEED}, privilege.List{privilege.CHANGEFEED}, username.AdminRoleName()),
-			testUser, privilege.Database,
-			false,
-			privilege.List{privilege.CHANGEFEED},
-			privilege.List{},
-			privilege.List{},
-			true},
-		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CHANGEFEED}, privilege.List{privilege.CHANGEFEED}, username.AdminRoleName()),
-			testUser, privilege.Schema,
-			false,
-			privilege.List{privilege.CHANGEFEED},
 			privilege.List{},
 			privilege.List{},
 			true},

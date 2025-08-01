@@ -225,6 +225,12 @@ func (b *Batch) fillResults(ctx context.Context) {
 				if result.Err == nil {
 					row.Value = &req.Value
 				}
+			case *kvpb.InitPutRequest:
+				row := &result.Rows[k]
+				row.Key = []byte(req.Key)
+				if result.Err == nil {
+					row.Value = &req.Value
+				}
 			case *kvpb.IncrementRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
@@ -294,7 +300,6 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *kvpb.MigrateRequest:
 			case *kvpb.QueryResolvedTimestampRequest:
 			case *kvpb.BarrierRequest:
-			case *kvpb.FlushLockTableRequest:
 			case *kvpb.LinkExternalSSTableRequest:
 			case *kvpb.ExciseRequest:
 			default:
@@ -1142,27 +1147,6 @@ func (b *Batch) barrier(s, e interface{}, withLAI bool) {
 	b.initResult(1, 0, notRaw, nil)
 }
 
-func (b *Batch) flushLockTable(s, e interface{}) {
-	begin, err := marshalKey(s)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	end, err := marshalKey(e)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	req := &kvpb.FlushLockTableRequest{
-		RequestHeader: kvpb.RequestHeader{
-			Key:    begin,
-			EndKey: end,
-		},
-	}
-	b.appendReqs(req)
-	b.initResult(1, 0, notRaw, nil)
-}
-
 func (b *Batch) bulkRequest(
 	numKeys int, requestFactory func() (req kvpb.RequestUnion, kvSize int),
 ) {
@@ -1177,35 +1161,25 @@ func (b *Batch) bulkRequest(
 	b.initResult(numKeys, numKeys, notRaw, nil)
 }
 
-// GetResult retrieves the Result, expected value bytes, and Result row KeyValue
-// for a particular index.
+// GetResult retrieves the Result and Result row KeyValue for a particular index.
 //
 // WARNING: introduce new usages of this function with care. See discussion in
 // https://github.com/cockroachdb/cockroach/pull/112937.
 // TODO(yuzefovich): look into removing this confusing function.
-func (b *Batch) GetResult(idx int) (*Result, []byte, KeyValue, error) {
+func (b *Batch) GetResult(idx int) (*Result, KeyValue, error) {
 	origIdx := idx
 	for i := range b.Results {
 		r := &b.Results[i]
 		if idx < r.calls {
-			var expBytes []byte
-			if origIdx < len(b.reqs) {
-				req := &b.reqs[origIdx]
-				switch t := req.Value.(type) {
-				case *kvpb.RequestUnion_ConditionalPut:
-					expBytes = t.ConditionalPut.ExpBytes
-				}
-			}
 			if idx < len(r.Rows) {
-				return r, expBytes, r.Rows[idx], nil
+				return r, r.Rows[idx], nil
 			} else if idx < len(r.Keys) {
-				return r, expBytes, KeyValue{Key: r.Keys[idx]}, nil
+				return r, KeyValue{Key: r.Keys[idx]}, nil
 			} else {
-				return r, expBytes, KeyValue{}, nil
+				return r, KeyValue{}, nil
 			}
 		}
 		idx -= r.calls
 	}
-	return nil, nil, KeyValue{},
-		errors.AssertionFailedf("index %d outside of results: %+v", origIdx, b.Results)
+	return nil, KeyValue{}, errors.AssertionFailedf("index %d outside of results: %+v", origIdx, b.Results)
 }

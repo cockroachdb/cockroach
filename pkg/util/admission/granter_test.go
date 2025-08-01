@@ -100,7 +100,7 @@ func TestGranterBasic(t *testing.T) {
 			delayForGrantChainTermination = 0
 			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
 			defer coords.Close()
-			coord = coords.RegularCPU
+			coord = coords.Regular
 			return flushAndReset()
 
 		case "init-store-grant-coordinator":

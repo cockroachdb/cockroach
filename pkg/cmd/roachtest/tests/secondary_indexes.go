@@ -138,14 +138,11 @@ func verifyTableData(
 
 func registerSecondaryIndexesMultiVersionCluster(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "schemachange/secondary-index-multi-version",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(3),
-		// Disabled on IBM because s390x is only built on master and mixed-version
-		// is impossible to test as of 05/2025.
-		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+		Name:             "schemachange/secondary-index-multi-version",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
 		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runIndexUpgrade(ctx, t, c)

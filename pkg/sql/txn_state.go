@@ -7,7 +7,6 @@ package sql
 
 import (
 	"context"
-	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -70,9 +69,11 @@ type txnState struct {
 		// bundles, and also is surfaced in the DB Console.
 		autoRetryReason error
 
-		// autoRetryCounter keeps track of the number of automatic transaction
-		// retries that have occurred. It's 0 whenever the transaction state is not
-		// stateOpen.
+		// autoRetryCounter keeps track of the number of automatic retries that have
+		// occurred. It includes per-statement retries performed under READ
+		// COMMITTED as well as transaction retries for serialization failures under
+		// REPEATABLE READ and SERIALIZABLE. It's 0 whenever the transaction state
+		// is not stateOpen.
 		autoRetryCounter int32
 
 		hasSavepoints bool
@@ -92,11 +93,6 @@ type txnState struct {
 	// txnCancelFn is a function that can be used to cancel the current
 	// txn context.
 	txnCancelFn context.CancelFunc
-
-	// shouldRecord is used to indicate whether this transaction should record a
-	// trace. This is set to true if we have a positive sample rate and a
-	// positive duration trigger for logging.
-	shouldRecord bool
 
 	// recordingThreshold, is not zero, indicates that sp is recording and that
 	// the recording should be dumped to the log if execution of the transaction
@@ -197,7 +193,6 @@ func (ts *txnState) resetForNewSQLTxn(
 	isoLevel isolation.Level,
 	omitInRangefeeds bool,
 	bufferedWritesEnabled bool,
-	rng *rand.Rand,
 ) (txnID uuid.UUID) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
@@ -211,12 +206,8 @@ func (ts *txnState) resetForNewSQLTxn(
 	alreadyRecording := tranCtx.sessionTracing.Enabled()
 	ctx, cancelFn := context.WithCancel(connCtx)
 	var sp *tracing.Span
-	duration := TraceTxnThreshold.Get(&tranCtx.settings.SV)
-
-	sampleRate := TraceTxnSampleRate.Get(&tranCtx.settings.SV)
-	ts.shouldRecord = sampleRate > 0 && duration > 0 && rng.Float64() < sampleRate
-
-	if alreadyRecording || ts.shouldRecord {
+	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
+	if alreadyRecording || duration > 0 {
 		ts.Ctx, sp = tracing.EnsureChildSpan(ctx, tranCtx.tracer, opName,
 			tracing.WithRecording(tracingpb.RecordingVerbose))
 	} else if ts.testingForceRealTracingSpans {
@@ -229,7 +220,7 @@ func (ts *txnState) resetForNewSQLTxn(
 		sp.SetTag("implicit", attribute.StringValue("true"))
 	}
 
-	if !alreadyRecording && ts.shouldRecord {
+	if !alreadyRecording && (duration > 0) {
 		ts.recordingThreshold = duration
 		ts.recordingStart = timeutil.Now()
 	}
@@ -252,7 +243,9 @@ func (ts *txnState) resetForNewSQLTxn(
 			if err := ts.setIsolationLevelLocked(isoLevel); err != nil {
 				panic(err)
 			}
-			if !bufferedWritesIsAllowedForIsolationLevel(connCtx, tranCtx.settings, isoLevel) {
+			if isoLevel != isolation.Serializable {
+				// TODO(#143497): we currently only support buffered writes
+				// under serializable isolation.
 				bufferedWritesEnabled = false
 			}
 			if bufferedWritesEnabled {
@@ -292,7 +285,7 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 	ts.mon.Stop(ts.Ctx)
 	sp := tracing.SpanFromContext(ts.Ctx)
 
-	if ts.shouldRecord {
+	if ts.recordingThreshold > 0 {
 		if elapsed := timeutil.Since(ts.recordingStart); elapsed >= ts.recordingThreshold {
 			logTraceAboveThreshold(ts.Ctx,
 				sp.GetRecording(sp.RecordingType()), /* recording */
@@ -309,7 +302,6 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 		ts.txnCancelFn()
 	}
 	ts.Ctx = nil
-	ts.shouldRecord = false
 	ts.recordingThreshold = 0
 	return func() (txnID uuid.UUID, timestamp hlc.Timestamp) {
 		ts.mu.Lock()

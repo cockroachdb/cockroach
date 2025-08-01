@@ -6,6 +6,7 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -30,13 +31,7 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 // doCreateSequence creates a sequence and returns the sequence element that
 // has been created.
 func doCreateSequence(b BuildCtx, n *tree.CreateSequence) *scpb.Sequence {
-	var dbElts, scElts ElementResultSet
-	if resolveTemporaryStatus(n.Name.ObjectNamePrefix, n.Persistence) {
-		n.Persistence = tree.PersistenceTemporary
-		dbElts, scElts = MaybeCreateOrResolveTemporarySchema(b)
-	} else {
-		dbElts, scElts = b.ResolveTargetObject(n.Name.ToUnresolvedObjectName(), privilege.CREATE)
-	}
+	dbElts, scElts := b.ResolveTargetObject(n.Name.ToUnresolvedObjectName(), privilege.CREATE)
 	_, _, schemaElem := scpb.FindSchema(scElts)
 	_, _, dbElem := scpb.FindDatabase(dbElts)
 	_, _, scName := scpb.FindNamespace(scElts)
@@ -60,6 +55,27 @@ func doCreateSequence(b BuildCtx, n *tree.CreateSequence) *scpb.Sequence {
 			return nil
 		}
 		panic(sqlerrors.NewRelationAlreadyExistsError(n.Name.FQString()))
+	}
+
+	if n.Persistence.IsTemporary() {
+		if !b.SessionData().TempTablesEnabled {
+			panic(errors.WithTelemetry(
+				pgerror.WithCandidateCode(
+					errors.WithHint(
+						errors.WithIssueLink(
+							errors.Newf("temporary tables are only supported experimentally"),
+							errors.IssueLink{IssueURL: build.MakeIssueURL(46260)},
+						),
+						"You can enable temporary tables by running `SET experimental_enable_temp_tables = 'on'`.",
+					),
+					pgcode.ExperimentalFeature,
+				),
+				"sql.schema.temp_tables_disabled",
+			))
+		}
+		// Resolve the temporary schema element.
+		scElts = MaybeCreateOrResolveTemporarySchema(b)
+		schemaElem = scElts.FilterSchema().MustGetOneElement()
 	}
 
 	// Sanity check for duplication options on the sequence.

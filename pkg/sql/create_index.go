@@ -103,7 +103,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 	}
 
 	// Disallow schema changes if this table's schema is locked.
-	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
+	if err := checkSchemaChangeIsAllowed(tableDesc, n, p.ExecCfg().Settings); err != nil {
 		return nil, err
 	}
 
@@ -258,17 +258,22 @@ func makeIndexDescriptor(
 		}
 
 		vecCol := columns[len(columns)-1]
+		switch vecCol.OpClass {
+		case "vector_l2_ops", "":
+			// vector_l2_ops is the default operator class. This allows users to omit
+			// the operator class in index definitions.
+		case "vector_l1_ops", "vector_ip_ops", "vector_cosine_ops",
+			"bit_hamming_ops", "bit_jaccard_ops":
+			return nil, unimplemented.NewWithIssuef(144016,
+				"operator class %v is not supported", vecCol.OpClass)
+		default:
+			return nil, newUndefinedOpclassError(vecCol.OpClass)
+		}
 		column, err := catalog.MustFindColumnByTreeName(tableDesc, vecCol.Column)
 		if err != nil {
 			return nil, err
 		}
-		indexDesc.VecConfig, err = vecindex.MakeVecConfig(
-			params.ctx, params.EvalContext(), column.GetType(), vecCol.OpClass)
-		if err != nil {
-			return nil, err
-		}
-
-		tabledesc.UpdateVectorIndexPrefixColDirections(&indexDesc, tableDesc.GetPrimaryIndex().IndexDesc())
+		indexDesc.VecConfig = vecindex.MakeVecConfig(params.EvalContext(), column.GetType())
 	}
 
 	if n.Sharded != nil {
@@ -609,11 +614,6 @@ func replaceExpressionElemsWithVirtualCols(
 				Virtual:      true,
 				Nullable:     true,
 			}
-			if fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(expr); err != nil {
-				return err
-			} else {
-				col.UsesFunctionIds = fnIDs.Ordered()
-			}
 
 			// Add the column to the table descriptor. If the table already
 			// exists, add it as a mutation column.
@@ -840,25 +840,6 @@ func (n *createIndexNode) startExec(params runParams) error {
 	// Add all newly created type back references.
 	if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, n.tableDesc); err != nil {
 		return err
-	}
-
-	// Update function back-references for any column that was added as an index
-	// expression and for any index with a partial predicate.
-	for _, m := range n.tableDesc.GetMutations() {
-		if col := m.GetColumn(); col != nil && m.Direction == descpb.DescriptorMutation_ADD {
-			if err := params.p.maybeUpdateFunctionReferencesForColumn(
-				params.ctx, n.tableDesc, col,
-			); err != nil {
-				return err
-			}
-		}
-		if idx := m.GetIndex(); idx != nil && m.Direction == descpb.DescriptorMutation_ADD {
-			if err := params.p.maybeAddFunctionReferencesForIndex(
-				params.ctx, n.tableDesc, idx,
-			); err != nil {
-				return err
-			}
-		}
 	}
 
 	// Record index creation in the event log. This is an auditable log

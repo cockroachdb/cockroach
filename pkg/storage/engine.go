@@ -927,7 +927,7 @@ type Engine interface {
 	// Properties returns the low-level properties for the engine's underlying storage.
 	Properties() roachpb.StoreProperties
 	// Compact forces compaction over the entire database.
-	Compact(ctx context.Context) error
+	Compact() error
 	// Env returns the filesystem environment used by the Engine.
 	Env() *fs.Env
 	// Excise removes all data for the given span from the engine.
@@ -1043,6 +1043,7 @@ type Engine interface {
 		shared []pebble.SharedSSTMeta,
 		external []pebble.ExternalFile,
 		exciseSpan roachpb.Span,
+		sstsContainExciseTombstone bool,
 	) (pebble.IngestOperationStats, error)
 	// IngestExternalFiles is a variant of IngestLocalFiles that takes external
 	// files. These files can be referred to by multiple stores, but are not
@@ -1074,7 +1075,7 @@ type Engine interface {
 	) error
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
-	CompactRange(ctx context.Context, start, end roachpb.Key) error
+	CompactRange(start, end roachpb.Key) error
 	// ScanStorageInternalKeys returns key level statistics for each level of a pebble store (that overlap start and end).
 	ScanStorageInternalKeys(start, end roachpb.Key, megabytesPerSecond int64) ([]enginepb.StorageInternalKeysMetrics, error)
 	// GetTableMetrics returns information about sstables that overlap start and end.
@@ -1329,7 +1330,7 @@ type MetricsForInterval struct {
 func (m *Metrics) NumSSTables() int64 {
 	var num int64
 	for _, lm := range m.Metrics.Levels {
-		num += lm.TablesCount
+		num += lm.NumFiles
 	}
 	return num
 }
@@ -1339,7 +1340,7 @@ func (m *Metrics) NumSSTables() int64 {
 func (m *Metrics) IngestedBytes() uint64 {
 	var ingestedBytes uint64
 	for _, lm := range m.Metrics.Levels {
-		ingestedBytes += lm.TableBytesIngested
+		ingestedBytes += lm.BytesIngested
 	}
 	return ingestedBytes
 }
@@ -1348,8 +1349,8 @@ func (m *Metrics) IngestedBytes() uint64 {
 // compactions across all levels of the LSM.
 func (m *Metrics) CompactedBytes() (read, written uint64) {
 	for _, lm := range m.Metrics.Levels {
-		read += lm.TableBytesRead + lm.BlobBytesRead
-		written += lm.TableBytesCompacted + lm.BlobBytesCompacted
+		read += lm.BytesRead
+		written += lm.BytesCompacted
 	}
 	return read, written
 }
@@ -1393,20 +1394,20 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 		RangeKeySetsCount:          m.Keys.RangeKeySetsCount,
 	}
 	for i, l := range m.Levels {
-		if l.TablesCount == 0 {
+		if l.NumFiles == 0 {
 			continue
 		}
 		e.Levels = append(e.Levels, eventpb.LevelStats{
 			Level:           uint32(i),
-			NumFiles:        l.TablesCount,
-			SizeBytes:       l.TablesSize,
+			NumFiles:        l.NumFiles,
+			SizeBytes:       l.Size,
 			Score:           float32(l.Score),
-			BytesIn:         l.TableBytesIn,
-			BytesIngested:   l.TableBytesIngested,
-			BytesMoved:      l.TableBytesMoved,
-			BytesRead:       l.TableBytesRead + l.BlobBytesRead,
-			BytesCompacted:  l.TableBytesCompacted + l.BlobBytesCompacted,
-			BytesFlushed:    l.TableBytesFlushed + l.BlobBytesFlushed,
+			BytesIn:         l.BytesIn,
+			BytesIngested:   l.BytesIngested,
+			BytesMoved:      l.BytesMoved,
+			BytesRead:       l.BytesRead,
+			BytesCompacted:  l.BytesCompacted,
+			BytesFlushed:    l.BytesFlushed,
 			TablesCompacted: l.TablesCompacted,
 			TablesFlushed:   l.TablesFlushed,
 			TablesIngested:  l.TablesIngested,
@@ -1589,22 +1590,24 @@ func WriteSyncNoop(eng Engine) error {
 // either write a Pebble range tombstone or clear individual keys. If it uses
 // a range tombstone, it will tighten the span to the first encountered key.
 //
-// The pointKeyThreshold parameter specifies the number of point keys where it
-// will switch from clearing individual keys using point tombstones to clearing
-// the entire range using Pebble range tombstones (RANGEDELs). The
-// pointKeyThreshold value must be at least 1. NB: An initial scan will be done
-// to determine the type of clear, so a large threshold will potentially involve
-// scanning a large number of keys.
+// pointKeyThreshold and rangeKeyThreshold specify the number of point/range
+// keys respectively where it will switch from clearing individual keys to
+// Pebble range tombstones (RANGEDEL or RANGEKEYDEL respectively). A threshold
+// of 0 disables checking for and clearing that key type.
 //
-// ClearRangeWithHeuristic will also check for the existence of range keys, and
-// if any exist, it will write a RANGEKEYDEL clearing all range keys in the span.
+// NB: An initial scan will be done to determine the type of clear, so a large
+// threshold will potentially involve scanning a large number of keys twice.
+//
+// TODO(erikgrinaker): Consider tightening the end of the range tombstone span
+// too, by doing a SeekLT when we reach the threshold. It's unclear whether it's
+// really worth it.
 func ClearRangeWithHeuristic(
-	ctx context.Context, r Reader, w Writer, start, end roachpb.Key, pointKeyThreshold int,
+	ctx context.Context,
+	r Reader,
+	w Writer,
+	start, end roachpb.Key,
+	pointKeyThreshold, rangeKeyThreshold int,
 ) error {
-	if pointKeyThreshold < 1 {
-		return errors.AssertionFailedf("pointKeyThreshold must be at least 1")
-	}
-
 	clearPointKeys := func(r Reader, w Writer, start, end roachpb.Key, threshold int) error {
 		iter, err := r.NewEngineIterator(ctx, IterOptions{
 			KeyTypes:   IterKeyTypePointsOnly,
@@ -1653,7 +1656,7 @@ func ClearRangeWithHeuristic(
 		return err
 	}
 
-	clearRangeKeys := func(r Reader, w Writer, start, end roachpb.Key) error {
+	clearRangeKeys := func(r Reader, w Writer, start, end roachpb.Key, threshold int) error {
 		iter, err := r.NewEngineIterator(ctx, IterOptions{
 			KeyTypes:   IterKeyTypeRangesOnly,
 			LowerBound: start,
@@ -1664,29 +1667,51 @@ func ClearRangeWithHeuristic(
 		}
 		defer iter.Close()
 
-		ok, err := iter.SeekEngineKeyGE(EngineKey{Key: start})
-		if err != nil {
+		// Scan, and drop a RANGEKEYDEL if we reach the threshold.
+		var ok bool
+		var count int
+		var firstKey roachpb.Key
+		for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: start}); ok; ok, err = iter.NextEngineKey() {
+			count += len(iter.EngineRangeKeys())
+			if len(firstKey) == 0 {
+				bounds, err := iter.EngineRangeBounds()
+				if err != nil {
+					return err
+				}
+				firstKey = bounds.Key.Clone()
+			}
+			if count >= threshold {
+				return w.ClearRawRange(firstKey, end, false /* pointKeys */, true /* rangeKeys */)
+			}
+		}
+		if err != nil || count == 0 {
 			return err
 		}
-		if !ok {
-			// No range keys in the span.
-			return nil
+		// Clear individual range keys.
+		for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: start}); ok; ok, err = iter.NextEngineKey() {
+			bounds, err := iter.EngineRangeBounds()
+			if err != nil {
+				return err
+			}
+			for _, v := range iter.EngineRangeKeys() {
+				if err := w.ClearEngineRangeKey(bounds.Key, bounds.EndKey, v.Version); err != nil {
+					return err
+				}
+			}
 		}
-		bounds, err := iter.EngineRangeBounds()
-		if err != nil {
-			return err
-		}
-		// TODO(erikgrinaker): Consider tightening the end of the range
-		// tombstone span too, by doing a SeekLT when we reach the threshold.
-		// It's unclear whether it's really worth it.
-		return w.ClearRawRange(bounds.Key, end, false /* pointKeys */, true /* rangeKeys */)
+		return err
 	}
 
-	if err := clearPointKeys(r, w, start, end, pointKeyThreshold); err != nil {
-		return err
+	if pointKeyThreshold > 0 {
+		if err := clearPointKeys(r, w, start, end, pointKeyThreshold); err != nil {
+			return err
+		}
 	}
-	if err := clearRangeKeys(r, w, start, end); err != nil {
-		return err
+
+	if rangeKeyThreshold > 0 {
+		if err := clearRangeKeys(r, w, start, end, rangeKeyThreshold); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -1736,7 +1761,7 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 		return
 	}
 	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels",
-		targetDelay, metrics.Levels[0].TablesCount, metrics.Levels[0].Sublevels)
+		targetDelay, metrics.Levels[0].NumFiles, metrics.Levels[0].Sublevels)
 
 	select {
 	case <-time.After(targetDelay):
@@ -1749,7 +1774,7 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *pebble.Metrics
 	l0ReadAmpLimit := ingestDelayL0Threshold.Get(&settings.SV)
 
 	const ramp = 10
-	l0ReadAmp := metrics.Levels[0].TablesCount
+	l0ReadAmp := metrics.Levels[0].NumFiles
 	if metrics.Levels[0].Sublevels >= 0 {
 		l0ReadAmp = int64(metrics.Levels[0].Sublevels)
 	}
