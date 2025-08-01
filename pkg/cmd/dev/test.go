@@ -96,6 +96,8 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 
     dev test pkg/server -- --test_env=COCKROACH_RANDOM_SEED=1234
         Run a test with a specified seed by passing the --test_env flag directly to bazel
+
+eyyyy
 `,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
