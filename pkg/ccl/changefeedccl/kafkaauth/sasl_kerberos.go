@@ -14,10 +14,14 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jcmturner/gokrb5/v8/client"
 	"github.com/jcmturner/gokrb5/v8/config"
+	"github.com/jcmturner/gokrb5/v8/credentials"
 	"github.com/jcmturner/gokrb5/v8/keytab"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl/kerberos"
 )
+
+// Required parameters for Kerberos SASL authentication
+var requiredParamsSASLKerberos = []string{changefeedbase.SinkParamSASLKerberosServiceName}
 
 type saslKerberosBuilder struct{}
 
@@ -28,10 +32,7 @@ func (s saslKerberosBuilder) name() string {
 
 // validateParams implements saslMechanismBuilder.
 func (s saslKerberosBuilder) validateParams(u *changefeedbase.SinkURL) error {
-	// Service name is required for Kerberos authentication
-	requiredParams := []string{changefeedbase.SinkParamSASLKerberosServiceName}
-
-	if err := peekAndRequireParams(s.name(), u, requiredParams); err != nil {
+	if err := peekAndRequireParams(s.name(), u, requiredParamsSASLKerberos); err != nil {
 		return err
 	}
 
@@ -67,24 +68,95 @@ func (s saslKerberosBuilder) build(u *changefeedbase.SinkURL) (SASLMechanism, er
 	}
 
 	return &saslKerberos{
-		serviceName: u.ConsumeParam(changefeedbase.SinkParamSASLKerberosServiceName),
-		realm:       u.ConsumeParam(changefeedbase.SinkParamSASLKerberosRealm),
-		principal:   u.ConsumeParam(changefeedbase.SinkParamSASLKerberosPrincipal),
-		keytabPath:  u.ConsumeParam(changefeedbase.SinkParamSASLKerberosKeytabPath),
-		configPath:  u.ConsumeParam(changefeedbase.SinkParamSASLKerberosConfig),
-		handshake:   handshake,
+		serviceName:   u.ConsumeParam(changefeedbase.SinkParamSASLKerberosServiceName),
+		realm:         u.ConsumeParam(changefeedbase.SinkParamSASLKerberosRealm),
+		principal:     u.ConsumeParam(changefeedbase.SinkParamSASLKerberosPrincipal),
+		keytabPath:    u.ConsumeParam(changefeedbase.SinkParamSASLKerberosKeytabPath),
+		configPath:    u.ConsumeParam(changefeedbase.SinkParamSASLKerberosConfig),
+		handshake:     handshake,
+		clientFactory: defaultKerberosClientFactory{},
 	}, nil
 }
 
 var _ saslMechanismBuilder = saslKerberosBuilder{}
 
+// kerberosClientFactory creates Kerberos clients for different authentication methods
+type kerberosClientFactory interface {
+	createWithKeytab(ctx context.Context, principal, realm, keytabPath, configPath string) (*client.Client, error)
+	createWithCache(ctx context.Context, realm, configPath string) (*client.Client, error)
+}
+
+// defaultKerberosClientFactory implements kerberosClientFactory using real gokrb5 clients
+type defaultKerberosClientFactory struct{}
+
+func (f defaultKerberosClientFactory) createWithKeytab(ctx context.Context, principal, realm, keytabPath, configPath string) (*client.Client, error) {
+	// Create configuration
+	cfg := config.New()
+	if realm != "" {
+		cfg.LibDefaults.DefaultRealm = realm
+	}
+	if configPath != "" {
+		var err error
+		cfg, err = config.Load(configPath)
+		if err != nil {
+			// Fall back to default config if loading fails
+			cfg = config.New()
+		}
+	}
+
+	// Load keytab
+	kt, err := keytab.Load(keytabPath)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load keytab")
+	}
+
+	// Create client with keytab
+	cl := client.NewWithKeytab(principal, realm, kt, cfg)
+	return cl, nil
+}
+
+func (f defaultKerberosClientFactory) createWithCache(ctx context.Context, realm, configPath string) (*client.Client, error) {
+	// Create configuration
+	cfg := config.New()
+	if realm != "" {
+		cfg.LibDefaults.DefaultRealm = realm
+	}
+	if configPath != "" {
+		var err error
+		cfg, err = config.Load(configPath)
+		if err != nil {
+			// Fall back to default config if loading fails
+			cfg = config.New()
+		}
+	}
+
+	// Load credential cache from default location or KRB5CCNAME
+	ccachePath := os.Getenv("KRB5CCNAME")
+	if ccachePath == "" {
+		// Default to system default credential cache location
+		ccachePath = ""
+	}
+	cc, err := credentials.LoadCCache(ccachePath)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load credential cache")
+	}
+
+	// Create client with credential cache
+	cl, err := client.NewFromCCache(cc, cfg)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create client from credential cache")
+	}
+	return cl, nil
+}
+
 type saslKerberos struct {
-	serviceName string
-	realm       string
-	principal   string
-	keytabPath  string
-	configPath  string
-	handshake   bool
+	serviceName   string
+	realm         string
+	principal     string
+	keytabPath    string
+	configPath    string
+	handshake     bool
+	clientFactory kerberosClientFactory // for testing
 }
 
 // ApplySarama implements SASLMechanism.
@@ -117,83 +189,32 @@ func (s *saslKerberos) ApplySarama(ctx context.Context, cfg *sarama.Config) erro
 
 // KgoOpts implements SASLMechanism.
 func (s *saslKerberos) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
-	// Create kerberos authentication mechanism using franz-go's kerberos package
-	authFn := func(authCtx context.Context) (kerberos.Auth, error) {
-		auth := kerberos.Auth{
-			Service: s.serviceName,
-		}
+	// Create kerberos client upfront so we can return errors properly
+	var client *client.Client
+	var err error
 
-		// Configure based on available parameters
-		if s.principal != "" && s.keytabPath != "" {
-			// Use keytab-based authentication
-			auth.ClientFn = func(clientCtx context.Context) *client.Client {
-				return s.createKerberosClientWithKeytab(clientCtx)
-			}
-		} else {
-			// Use default credential cache authentication
-			auth.ClientFn = func(clientCtx context.Context) *client.Client {
-				return s.createKerberosClientWithCache(clientCtx)
-			}
-		}
-
-		// Enable persistence for reuse across connections
-		auth.PersistAfterAuth = true
-
-		return auth, nil
-	}
-
-	// Create the SASL mechanism
-	mechanism := kerberos.Kerberos(authFn)
-
-	return []kgo.Opt{kgo.SASL(mechanism)}, nil
-}
-
-// createKerberosClientWithKeytab creates a Kerberos client using keytab authentication
-func (s *saslKerberos) createKerberosClientWithKeytab(ctx context.Context) *client.Client {
-	// Create configuration
-	cfg := config.New()
-	if s.realm != "" {
-		cfg.LibDefaults.DefaultRealm = s.realm
-	}
-	if s.configPath != "" {
-		var err error
-		cfg, err = config.Load(s.configPath)
+	// Configure based on available parameters
+	if s.principal != "" && s.keytabPath != "" {
+		// Use keytab-based authentication
+		client, err = s.clientFactory.createWithKeytab(ctx, s.principal, s.realm, s.keytabPath, s.configPath)
 		if err != nil {
-			// Fall back to default config if loading fails
-			cfg = config.New()
+			return nil, err
 		}
-	}
-
-	// Load keytab
-	kt, err := keytab.Load(s.keytabPath)
-	if err != nil {
-		return nil
-	}
-
-	// Create client with keytab
-	cl := client.NewWithKeytab(s.principal, s.realm, kt, cfg)
-	return cl
-}
-
-// createKerberosClientWithCache creates a Kerberos client using credential cache
-func (s *saslKerberos) createKerberosClientWithCache(ctx context.Context) *client.Client {
-	// Create configuration
-	cfg := config.New()
-	if s.realm != "" {
-		cfg.LibDefaults.DefaultRealm = s.realm
-	}
-	if s.configPath != "" {
-		var err error
-		cfg, err = config.Load(s.configPath)
+	} else {
+		// Use default credential cache authentication
+		client, err = s.clientFactory.createWithCache(ctx, s.realm, s.configPath)
 		if err != nil {
-			// Fall back to default config if loading fails
-			cfg = config.New()
+			return nil, err
 		}
 	}
 
-	// Create client with credential cache (default)
-	cl := client.NewWithPassword("", s.realm, "", cfg)
-	return cl
+	auth := kerberos.Auth{
+		Service:          s.serviceName,
+		Client:           client,
+		PersistAfterAuth: true,
+	}
+
+	return []kgo.Opt{kgo.SASL(auth.AsMechanismWithClose())}, nil
 }
 
 var _ SASLMechanism = (*saslKerberos)(nil)

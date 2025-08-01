@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/jcmturner/gokrb5/v8/client"
+	"github.com/jcmturner/gokrb5/v8/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -199,33 +201,56 @@ func TestKerberosSaramaConfig(t *testing.T) {
 	}
 }
 
+// mockKerberosClientFactory provides mock Kerberos clients for testing
+type mockKerberosClientFactory struct{}
+
+func (f mockKerberosClientFactory) createWithKeytab(ctx context.Context, principal, realm, keytabPath, configPath string) (*client.Client, error) {
+	// Create a mock client using password authentication for testing
+	// This avoids needing real keytab files while still testing the flow
+	cfg := config.New()
+	if realm != "" {
+		cfg.LibDefaults.DefaultRealm = realm
+	}
+	return client.NewWithPassword("testuser", "TEST.COM", "testpass", cfg), nil
+}
+
+func (f mockKerberosClientFactory) createWithCache(ctx context.Context, realm, configPath string) (*client.Client, error) {
+	// Create a mock client using password authentication for testing
+	// This avoids needing real credential cache files while still testing the flow
+	cfg := config.New()
+	if realm != "" {
+		cfg.LibDefaults.DefaultRealm = realm
+	}
+	return client.NewWithPassword("testuser", "TEST.COM", "testpass", cfg), nil
+}
+
 func TestKerberosKgoSupported(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	kerberos := &saslKerberos{
-		serviceName: "kafka",
+	ctx := context.Background()
+
+	// Test 1: Keytab authentication with mock factory
+	kerberosWithKeytab := &saslKerberos{
+		serviceName:   "kafka",
+		principal:     "testuser@TEST.COM",
+		keytabPath:    "/path/to/test.keytab",
+		clientFactory: mockKerberosClientFactory{},
 	}
 
-	ctx := context.Background()
-	opts, err := kerberos.KgoOpts(ctx)
+	opts, err := kerberosWithKeytab.KgoOpts(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, opts)
 	require.Len(t, opts, 1) // Should contain one SASL option
 
-	// Test with keytab configuration
-	tmpDir := t.TempDir()
-	keytabPath := filepath.Join(tmpDir, "test.keytab")
-	err = os.WriteFile(keytabPath, []byte("fake keytab content"), 0600)
-	require.NoError(t, err)
-
-	kerberosWithKeytab := &saslKerberos{
-		serviceName: "kafka",
-		principal:   "user@EXAMPLE.COM",
-		keytabPath:  keytabPath,
+	// Test 2: Credential cache authentication with mock factory
+	kerberosWithCCache := &saslKerberos{
+		serviceName:   "kafka",
+		clientFactory: mockKerberosClientFactory{},
+		// No principal/keytab means it uses credential cache
 	}
 
-	opts, err = kerberosWithKeytab.KgoOpts(ctx)
+	opts, err = kerberosWithCCache.KgoOpts(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, opts)
 	require.Len(t, opts, 1) // Should contain one SASL option
