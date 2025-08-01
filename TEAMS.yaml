@@ -28,6 +28,7 @@ cockroachdb/kv:
     # into slice form for just this.
     'cockroachdb/kv-triage ': unittest
     cockroachdb/kv-prs: other
+    cockroachdb/kv-distribution: other
   label: T-kv
 cockroachdb/admission-control:
   label: T-kv,A-admission-control
