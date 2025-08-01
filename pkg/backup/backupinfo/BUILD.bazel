@@ -58,11 +58,12 @@ go_library(
 go_test(
     name = "backupinfo_test",
     srcs = [
+        "desc_sst_test.go",
         "main_test.go",
         "manifest_handling_test.go",
     ],
+    embed = [":backupinfo"],
     deps = [
-        ":backupinfo",
         "//pkg/backup/backuppb",
         "//pkg/base",
         "//pkg/blobs",
@@ -86,6 +87,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
