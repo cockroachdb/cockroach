@@ -335,6 +335,11 @@ func (p *Platforms) Set(v string) error {
 	}
 }
 
+// Type implements pflag.Value interface
+func (p *Platforms) Type() string {
+	return "platform"
+}
+
 // DefaultPlatforms returns a list of platforms supported by default.
 func DefaultPlatforms() Platforms {
 	return Platforms{
@@ -345,6 +350,14 @@ func DefaultPlatforms() Platforms {
 		PlatformMacOS,
 		PlatformMacOSArm,
 		PlatformWindows,
+	}
+}
+
+func WorkloadPlatforms() Platforms {
+	return Platforms{
+		PlatformLinux,
+		PlatformLinuxArm,
+		PlatformLinuxS390x,
 	}
 }
 
