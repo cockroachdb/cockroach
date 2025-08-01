@@ -199,16 +199,16 @@ const (
 
 	V25_3_AddHotRangeLoggerJob
 
-	// V25_3_WriteInitialTruncStateBeforeSplitApplication is the version above
-	// which we write the initial truncated state before applying a split. By
-	// extension, we no longer need to replicate the truncated state when
-	// constructing the split write batch.
-	V25_3_WriteInitialTruncStateBeforeSplitApplication
-
 	// V25_3 is CockroachDB v25.3. It's used for all v25.3.x patch releases.
 	V25_3
 
 	V25_4_Start
+
+	// V25_4_WriteInitialTruncStateBeforeSplitApplication is the version above
+	// which we write the initial truncated state before applying a split. By
+	// extension, we no longer need to replicate the truncated state when
+	// constructing the split write batch.
+	V25_4_WriteInitialTruncStateBeforeSplitApplication
 
 	// *************************************************
 	// Step (1) Add new versions above this comment.
@@ -257,12 +257,13 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V25_3_AddHotRangeLoggerJob: {Major: 25, Minor: 2, Internal: 8},
 
-	V25_3_WriteInitialTruncStateBeforeSplitApplication: {Major: 25, Minor: 2, Internal: 10},
-
 	V25_3: {Major: 25, Minor: 3, Internal: 0},
 
 	// v25.4 versions. Internal versions must be even.
 	V25_4_Start: {Major: 25, Minor: 3, Internal: 2},
+
+	V25_4_WriteInitialTruncStateBeforeSplitApplication: {Major: 25, Minor: 3, Internal: 4},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
