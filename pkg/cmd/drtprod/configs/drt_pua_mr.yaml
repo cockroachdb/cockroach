@@ -229,7 +229,7 @@ targets:
           regions: $REGIONS
       - script: "pkg/cmd/drtprod/scripts/tpcc_run_multiregion.sh"
       - script: "pkg/cmd/drtprod/scripts/pua_operations.sh"
-        wait: 10
+        wait_after: 10
   - target_name: "Data Import"
     dependent_targets:
       - "Setup Certs & SSH Keys"
@@ -239,7 +239,7 @@ targets:
           - $WORKLOAD_CLUSTER:1
           - --
           - "sudo systemd-run --unit tpcc_init --same-dir --uid $(id -u) --gid $(id -g) bash ./tpcc_init_cct_tpcc.sh"
-        wait: 3600
+        wait_after: 3600
   - target_name: "Phase-1: Baseline Performance"
     dependent_targets:
       - "Data Import"
@@ -249,7 +249,7 @@ targets:
           - $WORKLOAD_CLUSTER
           - --
           - "sudo systemd-run --unit tpcc_run --same-dir --uid $(id -u) --gid $(id -g) bash ./tpcc_run.sh"
-        wait: 3600
+        wait_after: 3600
   - target_name: "Phase-2: Internal Operational Stress"
     dependent_targets:
       - "Phase-1: Baseline Performance"
@@ -264,21 +264,21 @@ targets:
                             'gs://$BUCKET_US_EAST_5/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east5',
                             'gs://$BUCKET_US_EAST_1/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east1')
             WITH OPTIONS (revision_history = true, detached)
-        wait: 1500
+        wait_after: 1500
       - command: sql # create changefeed without initial scan
         args:
           - $CLUSTER:1
           - --
           - -e
           - "CREATE CHANGEFEED FOR TABLE cct_tpcc.public.order_line INTO 'null://' WITH initial_scan = 'no'"
-        wait: 900
+        wait_after: 900
       - command: sql # create index on order table
         args:
           - $CLUSTER:1
           - --
           - -e
           - "CREATE INDEX add_index_o_w_id ON cct_tpcc.public.order (o_w_id)"
-        wait: 700
+        wait_after: 700
       - command: deploy # rolling upgrade
         args:
           - $CLUSTER
@@ -287,7 +287,7 @@ targets:
         flags:
           pause: 5m
           grace-period: 500
-        wait: 300
+        wait_after: 300
   - target_name: "Phase-3: Disk Stalls"
     dependent_targets:
       - "Phase-2: Internal Operational Stress"
@@ -297,7 +297,7 @@ targets:
           - $WORKLOAD_CLUSTER:1
           - --
           - "./run_ops_disk-stall.sh"
-        wait: 1200
+        wait_after: 1200
   - target_name: "Phase-4: Network Failures"
     dependent_targets:
       - "Phase-3: Disk Stalls"
@@ -307,13 +307,13 @@ targets:
           - $WORKLOAD_CLUSTER:1
           - --
           - "./run_ops_network-partition-partial.sh"
-        wait: 1500
+        wait_after: 1500
       - command: run
         args:
           - $WORKLOAD_CLUSTER:1
           - --
           - "./run_ops_network-partition-full.sh"
-        wait: 1500
+        wait_after: 1500
   - target_name: "Phase-5: Node Restarts"
     dependent_targets:
       - "Phase-4: Network Failures"
@@ -321,33 +321,33 @@ targets:
       - command: stop # ungraceful shutdown of node 4
         args:
           - $CLUSTER:4
-        wait: 30
+        wait_after: 30
       - command: start # restart node 4
         args:
           - $CLUSTER:4
         flags:
           restart: true
-        wait: 600
+        wait_after: 600
       - command: stop # ungraceful shutdown of node 6
         args:
           - $CLUSTER:6
-        wait: 30
+        wait_after: 30
       - command: start # restart node 6
         args:
           - $CLUSTER:6
         flags:
           restart: true
-        wait: 1500
+        wait_after: 1500
       - command: stop # ungraceful shutdown of node 15
         args:
           - $CLUSTER:15
-        wait: 30
+        wait_after: 30
       - command: start # restart node 15
         args:
           - $CLUSTER:15
         flags:
           restart: true
-        wait: 1500
+        wait_after: 1500
   - target_name: "Phase-6: Zone Outages"
     dependent_targets:
       - "Phase-5: Node Restarts"
@@ -355,13 +355,13 @@ targets:
       - command: stop # ungraceful shutdown of nodes 3, 4 to simulate zone outage
         args:
           - $CLUSTER:3-4
-        wait: 300
+        wait_after: 300
       - command: start # restart nodes 3, 4
         args:
           - $CLUSTER:3-4
         flags:
           restart: true
-        wait: 3300
+        wait_after: 3300
   - target_name: "Phase-7: Region Outages"
     dependent_targets:
       - "Phase-6: Zone Outages"
@@ -369,7 +369,7 @@ targets:
       - command: stop # ungraceful shutdown of nodes 11-15 to simulate region outage
         args:
           - $CLUSTER:11-15
-        wait: 300
+        wait_after: 300
       - command: start # restart nodes 11-15
         args:
           - $CLUSTER:11-15
