@@ -358,7 +358,7 @@ func runGossipPeerings(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 func runGossipRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	opts := option.DefaultStartOpts()
-	opts.RoachprodOpts.ExtraArgs = []string{"--vmodule=settings_watcher=1,watcher=1"}
+	opts.RoachprodOpts.ExtraArgs = []string{"--vmodule=*=1"}
 	c.Start(ctx, t.L(), opts, install.MakeClusterSettings())
 
 	// Repeatedly stop and restart a cluster and verify that we can perform basic
