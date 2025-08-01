@@ -88,7 +88,7 @@ func NewMMAStoreRebalancer(
 // Tick is called periodically to check for and apply rebalancing operations
 // using mmaprototype.Allocator.
 func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state.State) {
-	ctx = msr.ResetAndAnnotateCtx(ctx)
+	ctx = msr.AnnotateCtx(ctx)
 	ctx = logtags.AddTag(ctx, "t", tick.Sub(msr.settings.StartTime))
 
 	if !msr.currentlyRebalancing &&

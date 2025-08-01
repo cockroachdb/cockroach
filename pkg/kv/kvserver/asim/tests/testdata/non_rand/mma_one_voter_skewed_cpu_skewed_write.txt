@@ -5,6 +5,7 @@ skip_under_ci
 
 gen_cluster nodes=2 node_cpu_rate_capacity=100000
 ----
+WARNING: node CPU capacity of ≈0.00 cores is likely accidental
 
 gen_ranges ranges=100 repl_factor=1 min_key=1 max_key=10000 placement_type=replica_placement bytes=26843545
 {s1}:1
@@ -17,7 +18,7 @@ gen_ranges ranges=100 repl_factor=1 min_key=10001 max_key=20000 placement_type=r
 {s2:*}:1
 
 # read cpu load of 1000x100=10k, all hitting s1, which is then at 100% cpu.
-gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
+gen_load rate=1000 rw_ratio=1.0 request_cpu_per_access=500000 min_key=1 max_key=10000
 ----
 
 # Write only workload, which generates 20% cpu and 5mb of writes per second.
@@ -25,78 +26,15 @@ gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
 gen_load rate=5000 rw_ratio=0 min_block=1000 max_block=1000 raft_cpu_per_write=1 min_key=10001 max_key=20000
 ----
 
-setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+setting split_queue_enabled=false
 ----
 
-eval duration=90m samples=1 seed=42
+eval duration=90m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
-OK
-
-print
-----
-sample 1:
-cluster state:
-stores(2)=[s1n1=(r2:1,r3:1,r4:1,r5:1,r6:1,r7:1,r8:1,r9:1,r10:1,r11:1,r12:1,r13:1,r14:1,r15:1,r16:1,r17:1,r18:1,r19:1,r20:1,r21:1,r22:1,r23:1,r24:1,r25:1,r26:1,r27:1,r28:1,r29:1,r30:1,r31:1,r32:1,r33:1,r34:1,r35:1,r36:1,r37:1,r38:1,r39:1,r40:1,r41:1,r42:1,r43:1,r44:1,r45:1,r46:1,r47:1,r48:1,r49:1,r50:1,r51:1,r52:1,r53:1,r54:1,r55:1,r56:1,r57:1,r58:1,r59:1,r60:1,r61:1,r62:1,r63:1,r64:1,r65:1,r66:1,r67:1,r68:1,r69:1,r70:1,r71:1,r72:1,r73:1,r74:1,r75:1,r76:1,r77:1,r78:1,r79:1,r80:1,r81:1,r82:1,r83:1,r84:1,r85:1,r86:1,r87:1,r88:1,r89:1,r90:1,r91:1,r92:1,r93:1,r94:1,r95:1,r96:1,r97:1,r98:1,r99:1,r100:1,r101:1),s2n2=(r102:1,r103:1,r104:1,r105:1,r106:1,r107:1,r108:1,r109:1,r110:1,r111:1,r112:1,r113:1,r114:1,r115:1,r116:1,r117:1,r118:1,r119:1,r120:1,r121:1,r122:1,r123:1,r124:1,r125:1,r126:1,r127:1,r128:1,r129:1,r130:1,r131:1,r132:1,r133:1,r134:1,r135:1,r136:1,r137:1,r138:1,r139:1,r140:1,r141:1,r142:1,r143:1,r144:1,r145:1,r146:1,r147:1,r148:1,r149:1,r150:1,r151:1,r152:1,r153:1,r154:1,r155:1,r156:1,r157:1,r158:1,r159:1,r160:1,r161:1,r162:1,r163:1,r164:1,r165:1,r166:1,r167:1,r168:1,r169:1,r170:1,r171:1,r172:1,r173:1,r174:1,r175:1,r176:1,r177:1,r178:1,r179:1,r180:1,r181:1,r182:1,r183:1,r184:1,r185:1,r186:1,r187:1,r188:1,r189:1,r190:1,r191:1,r192:1,r193:1,r194:1,r195:1,r196:1,r197:1,r198:1,r199:1,r200:1,r201:1)] 
-ranges(201)=[r1(0)=(),r2(1)=(s1:r1(VOTER_FULL)*),r3(101)=(s1:r1(VOTER_FULL)*),r4(201)=(s1:r1(VOTER_FULL)*),r5(301)=(s1:r1(VOTER_FULL)*),
-r6(401)=(s1:r1(VOTER_FULL)*),r7(501)=(s1:r1(VOTER_FULL)*),r8(601)=(s1:r1(VOTER_FULL)*),r9(701)=(s1:r1(VOTER_FULL)*),r10(801)=(s1:r1(VOTER_FULL)*),
-r11(901)=(s1:r1(VOTER_FULL)*),r12(1001)=(s1:r1(VOTER_FULL)*),r13(1101)=(s1:r1(VOTER_FULL)*),r14(1201)=(s1:r1(VOTER_FULL)*),r15(1301)=(s1:r1(VOTER_FULL)*),
-r16(1401)=(s1:r1(VOTER_FULL)*),r17(1501)=(s1:r1(VOTER_FULL)*),r18(1601)=(s1:r1(VOTER_FULL)*),r19(1701)=(s1:r1(VOTER_FULL)*),r20(1801)=(s1:r1(VOTER_FULL)*),
-r21(1901)=(s1:r1(VOTER_FULL)*),r22(2001)=(s1:r1(VOTER_FULL)*),r23(2101)=(s1:r1(VOTER_FULL)*),r24(2201)=(s1:r1(VOTER_FULL)*),r25(2301)=(s1:r1(VOTER_FULL)*),
-r26(2401)=(s1:r1(VOTER_FULL)*),r27(2501)=(s1:r1(VOTER_FULL)*),r28(2601)=(s1:r1(VOTER_FULL)*),r29(2701)=(s1:r1(VOTER_FULL)*),r30(2801)=(s1:r1(VOTER_FULL)*),
-r31(2901)=(s1:r1(VOTER_FULL)*),r32(3001)=(s1:r1(VOTER_FULL)*),r33(3101)=(s1:r1(VOTER_FULL)*),r34(3201)=(s1:r1(VOTER_FULL)*),r35(3301)=(s1:r1(VOTER_FULL)*),
-r36(3401)=(s1:r1(VOTER_FULL)*),r37(3501)=(s1:r1(VOTER_FULL)*),r38(3601)=(s1:r1(VOTER_FULL)*),r39(3701)=(s1:r1(VOTER_FULL)*),r40(3801)=(s1:r1(VOTER_FULL)*),
-r41(3901)=(s1:r1(VOTER_FULL)*),r42(4001)=(s1:r1(VOTER_FULL)*),r43(4101)=(s1:r1(VOTER_FULL)*),r44(4201)=(s1:r1(VOTER_FULL)*),r45(4301)=(s1:r1(VOTER_FULL)*),
-r46(4401)=(s1:r1(VOTER_FULL)*),r47(4501)=(s1:r1(VOTER_FULL)*),r48(4601)=(s1:r1(VOTER_FULL)*),r49(4701)=(s1:r1(VOTER_FULL)*),r50(4801)=(s1:r1(VOTER_FULL)*),
-r51(4901)=(s1:r1(VOTER_FULL)*),r52(5001)=(s1:r1(VOTER_FULL)*),r53(5101)=(s1:r1(VOTER_FULL)*),r54(5201)=(s1:r1(VOTER_FULL)*),r55(5301)=(s1:r1(VOTER_FULL)*),
-r56(5401)=(s1:r1(VOTER_FULL)*),r57(5501)=(s1:r1(VOTER_FULL)*),r58(5601)=(s1:r1(VOTER_FULL)*),r59(5701)=(s1:r1(VOTER_FULL)*),r60(5801)=(s1:r1(VOTER_FULL)*),
-r61(5901)=(s1:r1(VOTER_FULL)*),r62(6001)=(s1:r1(VOTER_FULL)*),r63(6101)=(s1:r1(VOTER_FULL)*),r64(6201)=(s1:r1(VOTER_FULL)*),r65(6301)=(s1:r1(VOTER_FULL)*),
-r66(6401)=(s1:r1(VOTER_FULL)*),r67(6501)=(s1:r1(VOTER_FULL)*),r68(6601)=(s1:r1(VOTER_FULL)*),r69(6701)=(s1:r1(VOTER_FULL)*),r70(6801)=(s1:r1(VOTER_FULL)*),
-r71(6901)=(s1:r1(VOTER_FULL)*),r72(7001)=(s1:r1(VOTER_FULL)*),r73(7101)=(s1:r1(VOTER_FULL)*),r74(7201)=(s1:r1(VOTER_FULL)*),r75(7301)=(s1:r1(VOTER_FULL)*),
-r76(7401)=(s1:r1(VOTER_FULL)*),r77(7501)=(s1:r1(VOTER_FULL)*),r78(7601)=(s1:r1(VOTER_FULL)*),r79(7701)=(s1:r1(VOTER_FULL)*),r80(7801)=(s1:r1(VOTER_FULL)*),
-r81(7901)=(s1:r1(VOTER_FULL)*),r82(8001)=(s1:r1(VOTER_FULL)*),r83(8101)=(s1:r1(VOTER_FULL)*),r84(8201)=(s1:r1(VOTER_FULL)*),r85(8301)=(s1:r1(VOTER_FULL)*),
-r86(8401)=(s1:r1(VOTER_FULL)*),r87(8501)=(s1:r1(VOTER_FULL)*),r88(8601)=(s1:r1(VOTER_FULL)*),r89(8701)=(s1:r1(VOTER_FULL)*),r90(8801)=(s1:r1(VOTER_FULL)*),
-r91(8901)=(s1:r1(VOTER_FULL)*),r92(9001)=(s1:r1(VOTER_FULL)*),r93(9101)=(s1:r1(VOTER_FULL)*),r94(9201)=(s1:r1(VOTER_FULL)*),r95(9301)=(s1:r1(VOTER_FULL)*),
-r96(9401)=(s1:r1(VOTER_FULL)*),r97(9501)=(s1:r1(VOTER_FULL)*),r98(9601)=(s1:r1(VOTER_FULL)*),r99(9701)=(s1:r1(VOTER_FULL)*),r100(9801)=(s1:r1(VOTER_FULL)*),
-r101(9901)=(s1:r1(VOTER_FULL)*),r102(10001)=(s2:r1(VOTER_FULL)*),r103(10101)=(s2:r1(VOTER_FULL)*),r104(10201)=(s2:r1(VOTER_FULL)*),r105(10301)=(s2:r1(VOTER_FULL)*),
-r106(10401)=(s2:r1(VOTER_FULL)*),r107(10501)=(s2:r1(VOTER_FULL)*),r108(10601)=(s2:r1(VOTER_FULL)*),r109(10701)=(s2:r1(VOTER_FULL)*),r110(10801)=(s2:r1(VOTER_FULL)*),
-r111(10901)=(s2:r1(VOTER_FULL)*),r112(11001)=(s2:r1(VOTER_FULL)*),r113(11101)=(s2:r1(VOTER_FULL)*),r114(11201)=(s2:r1(VOTER_FULL)*),r115(11301)=(s2:r1(VOTER_FULL)*),
-r116(11401)=(s2:r1(VOTER_FULL)*),r117(11501)=(s2:r1(VOTER_FULL)*),r118(11601)=(s2:r1(VOTER_FULL)*),r119(11701)=(s2:r1(VOTER_FULL)*),r120(11801)=(s2:r1(VOTER_FULL)*),
-r121(11901)=(s2:r1(VOTER_FULL)*),r122(12001)=(s2:r1(VOTER_FULL)*),r123(12101)=(s2:r1(VOTER_FULL)*),r124(12201)=(s2:r1(VOTER_FULL)*),r125(12301)=(s2:r1(VOTER_FULL)*),
-r126(12401)=(s2:r1(VOTER_FULL)*),r127(12501)=(s2:r1(VOTER_FULL)*),r128(12601)=(s2:r1(VOTER_FULL)*),r129(12701)=(s2:r1(VOTER_FULL)*),r130(12801)=(s2:r1(VOTER_FULL)*),
-r131(12901)=(s2:r1(VOTER_FULL)*),r132(13001)=(s2:r1(VOTER_FULL)*),r133(13101)=(s2:r1(VOTER_FULL)*),r134(13201)=(s2:r1(VOTER_FULL)*),r135(13301)=(s2:r1(VOTER_FULL)*),
-r136(13401)=(s2:r1(VOTER_FULL)*),r137(13501)=(s2:r1(VOTER_FULL)*),r138(13601)=(s2:r1(VOTER_FULL)*),r139(13701)=(s2:r1(VOTER_FULL)*),r140(13801)=(s2:r1(VOTER_FULL)*),
-r141(13901)=(s2:r1(VOTER_FULL)*),r142(14001)=(s2:r1(VOTER_FULL)*),r143(14101)=(s2:r1(VOTER_FULL)*),r144(14201)=(s2:r1(VOTER_FULL)*),r145(14301)=(s2:r1(VOTER_FULL)*),
-r146(14401)=(s2:r1(VOTER_FULL)*),r147(14501)=(s2:r1(VOTER_FULL)*),r148(14601)=(s2:r1(VOTER_FULL)*),r149(14701)=(s2:r1(VOTER_FULL)*),r150(14801)=(s2:r1(VOTER_FULL)*),
-r151(14901)=(s2:r1(VOTER_FULL)*),r152(15001)=(s2:r1(VOTER_FULL)*),r153(15101)=(s2:r1(VOTER_FULL)*),r154(15201)=(s2:r1(VOTER_FULL)*),r155(15301)=(s2:r1(VOTER_FULL)*),
-r156(15401)=(s2:r1(VOTER_FULL)*),r157(15501)=(s2:r1(VOTER_FULL)*),r158(15601)=(s2:r1(VOTER_FULL)*),r159(15701)=(s2:r1(VOTER_FULL)*),r160(15801)=(s2:r1(VOTER_FULL)*),
-r161(15901)=(s2:r1(VOTER_FULL)*),r162(16001)=(s2:r1(VOTER_FULL)*),r163(16101)=(s2:r1(VOTER_FULL)*),r164(16201)=(s2:r1(VOTER_FULL)*),r165(16301)=(s2:r1(VOTER_FULL)*),
-r166(16401)=(s2:r1(VOTER_FULL)*),r167(16501)=(s2:r1(VOTER_FULL)*),r168(16601)=(s2:r1(VOTER_FULL)*),r169(16701)=(s2:r1(VOTER_FULL)*),r170(16801)=(s2:r1(VOTER_FULL)*),
-r171(16901)=(s2:r1(VOTER_FULL)*),r172(17001)=(s2:r1(VOTER_FULL)*),r173(17101)=(s2:r1(VOTER_FULL)*),r174(17201)=(s2:r1(VOTER_FULL)*),r175(17301)=(s2:r1(VOTER_FULL)*),
-r176(17401)=(s2:r1(VOTER_FULL)*),r177(17501)=(s2:r1(VOTER_FULL)*),r178(17601)=(s2:r1(VOTER_FULL)*),r179(17701)=(s2:r1(VOTER_FULL)*),r180(17801)=(s2:r1(VOTER_FULL)*),
-r181(17901)=(s2:r1(VOTER_FULL)*),r182(18001)=(s2:r1(VOTER_FULL)*),r183(18101)=(s2:r1(VOTER_FULL)*),r184(18201)=(s2:r1(VOTER_FULL)*),r185(18301)=(s2:r1(VOTER_FULL)*),
-r186(18401)=(s2:r1(VOTER_FULL)*),r187(18501)=(s2:r1(VOTER_FULL)*),r188(18601)=(s2:r1(VOTER_FULL)*),r189(18701)=(s2:r1(VOTER_FULL)*),r190(18801)=(s2:r1(VOTER_FULL)*),
-r191(18901)=(s2:r1(VOTER_FULL)*),r192(19001)=(s2:r1(VOTER_FULL)*),r193(19101)=(s2:r1(VOTER_FULL)*),r194(19201)=(s2:r1(VOTER_FULL)*),r195(19301)=(s2:r1(VOTER_FULL)*),
-r196(19401)=(s2:r1(VOTER_FULL)*),r197(19501)=(s2:r1(VOTER_FULL)*),r198(19601)=(s2:r1(VOTER_FULL)*),r199(19701)=(s2:r1(VOTER_FULL)*),r200(19801)=(s2:r1(VOTER_FULL)*),
-r201(19901)=(s2:r1(VOTER_FULL)*)]
-
-plot stat=cpu sample=1
-----
-last store values: [s1=57234, s2=47789] (stddev=4722.50, mean=52511.50, sum=105023)
-mma_one_voter_skewed_cpu_skewed_write_1_cpu.png (342c81024d96006c)
-
-plot stat=write_bytes_per_second
-----
-last store values: [s1=2251402, s2=2748662] (stddev=248630.00, mean=2500032.00, sum=5000064)
-mma_one_voter_skewed_cpu_skewed_write_1_write_bytes_per_second.png (1201dfb1dcd2f875)
-
-plot stat=replicas  
-----
-initial store values: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
-last store values: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
-mma_one_voter_skewed_cpu_skewed_write_1_replicas.png (bb2c40ba8add7792)
-
-plot stat=leases sample=1  
-----
-initial store values: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
-last store values: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
-mma_one_voter_skewed_cpu_skewed_write_1_leases.png (bb2c40ba8add7792)
+cpu#1: last:  [s1=269771651, s2=230297516] (stddev=19737067.50, mean=250034583.50, sum=500069167)
+leases#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
+leases#1: last:  [s1=87, s2=113] (stddev=13.00, mean=100.00, sum=200)
+replicas#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
+replicas#1: last:  [s1=87, s2=113] (stddev=13.00, mean=100.00, sum=200)
+write_bytes_per_second#1: last:  [s1=1651264, s2=3346471] (stddev=847603.50, mean=2498867.50, sum=4997735)
+artifacts[mma-only]: ad693ef62650aec7

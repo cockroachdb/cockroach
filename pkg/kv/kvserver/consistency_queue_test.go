@@ -8,7 +8,7 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
-	io "io"
+	"io"
 	"math/rand"
 	"path/filepath"
 	"strconv"
@@ -40,7 +40,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/vfsutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -236,7 +238,8 @@ func TestCheckConsistencyReplay(t *testing.T) {
 
 func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	scope := log.Scope(t)
+	defer scope.Close(t)
 
 	// Test expects simple MVCC value encoding.
 	storage.DisableMetamorphicSimpleValueEncoding(t)
@@ -261,7 +264,10 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 
 	serverArgsPerNode := make(map[int]base.TestServerArgs, numStores)
+	var vfsIDs []string
 	for i := 0; i < numStores; i++ {
+		id := strconv.FormatInt(int64(i), 10)
+		vfsIDs = append(vfsIDs, id)
 		serverArgsPerNode[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store:  &testKnobs,
@@ -269,10 +275,26 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			},
 			StoreSpecs: []base.StoreSpec{{
 				InMemory:    true,
-				StickyVFSID: strconv.FormatInt(int64(i), 10),
+				StickyVFSID: id,
 			}},
 		}
 	}
+
+	// If the test fails, preserve the in-memory VFSes so that we can poke at them.
+	defer func() {
+		if !t.Failed() {
+			return
+		}
+
+		// NB: scope has a directory even under -show-logs.
+		outDir := filepath.Join(scope.GetDirectory(), "stores")
+		t.Logf("dumping sticky VFS to %s", outDir)
+		for i := 0; i < numStores; i++ {
+			fs := stickyVFSRegistry.Get(vfsIDs[i])
+			dest := filepath.Join(outDir, fmt.Sprintf("s%d", i+1))
+			assert.NoError(t, vfsutil.CopyRecursive(fs, vfs.Default, "/", dest))
+		}
+	}()
 
 	tc = testcluster.StartTestCluster(t, numStores, base.TestClusterArgs{
 		ReplicationMode:   base.ReplicationAuto,
@@ -302,7 +324,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 
 	onDiskCheckpointPaths := func(nodeIdx int) []string {
-		fs := stickyVFSRegistry.Get(strconv.FormatInt(int64(nodeIdx), 10))
+		fs := stickyVFSRegistry.Get(vfsIDs[nodeIdx])
 		store := tc.GetFirstStoreFromServer(t, nodeIdx)
 		checkpointPath := filepath.Join(store.TODOEngine().GetAuxiliaryDir(), "checkpoints")
 		checkpoints, _ := fs.List(checkpointPath)
@@ -384,7 +406,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		// Create a new store on top of checkpoint location inside existing in-mem
 		// VFS to verify its contents.
 		ctx := context.Background()
-		memFS := stickyVFSRegistry.Get(strconv.FormatInt(int64(i), 10))
+		memFS := stickyVFSRegistry.Get(vfsIDs[i])
 		env, err := fs.InitEnv(ctx, memFS, cps[0], fs.EnvConfig{RW: fs.ReadOnly}, nil /* statsCollector */)
 		require.NoError(t, err)
 		cpEng, err := storage.Open(ctx, env, cluster.MakeClusterSettings(),
@@ -417,8 +439,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// A death rattle should have been written on s2. Note that the VFSes are
 	// zero-indexed whereas store IDs are one-indexed.
-	fs := stickyVFSRegistry.Get("1")
-	f, err := fs.Open(base.PreventedStartupFile(s2AuxDir))
+	f, err := stickyVFSRegistry.Get(vfsIDs[1]).Open(base.PreventedStartupFile(s2AuxDir))
 	require.NoError(t, err)
 	b, err := io.ReadAll(f)
 	require.NoError(t, err)

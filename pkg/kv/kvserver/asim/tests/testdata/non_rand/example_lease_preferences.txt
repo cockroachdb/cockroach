@@ -3,6 +3,11 @@
 gen_cluster nodes=5 region=(a,b) nodes_per_region=(2,3)
 ----
 
+# Set up a single range.
+# TODO(tbg): this may be more interesting with a larger number of ranges.
+gen_ranges ranges=1 placement_type=even
+----
+
 # Setup three span configs, the first span config should produce no violations
 # as all the voters are required to be in the same region as the preference.
 # The second span config lease preferences will be only satisfiable by a less
@@ -25,15 +30,4 @@ assertion type=conformance lease-violating=1 lease-less-preferred=1
 
 eval duration=10m
 ----
-OK
-
-topology
-----
-a
-  a_1
-  │ └── [1 2]
-b
-  b_1
-    └── [3 4 5]
-
-# vim:ft=sh
+artifacts[default]: aff3a3eeb0838864

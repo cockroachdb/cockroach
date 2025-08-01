@@ -26,6 +26,9 @@ assertion stat=qps type=balance ticks=6 upper_bound=1.15
 # that during the last 6 ticks (60 seconds), the value of QPS per-store doesn't
 # increase or decrease by more than 5% of the mean. This type of assertion is
 # useful when a stat is balanced but not necessarily stable.
+#
+# TODO(tbg): at this point, six ticks is 3s, not 60s. Update assertion API
+# to take a duration, not ticks.
 assertion stat=qps type=steady ticks=6 upper_bound=0.05
 ----
 
@@ -34,24 +37,13 @@ assertion stat=qps type=steady ticks=6 upper_bound=0.05
 # Following the evaluation, the samples are checked individually against the
 # existing assertions, added above. If any assertion fails, the reason is
 # printed. If no assertions fail, then OK is printed.
-eval duration=3m samples=2 seed=42
+eval duration=3m samples=2 seed=42 metrics=(qps,replica_moves)
 ----
-OK
-
-# It is possible to plot the output of a stat, of a selected sample run. Below
-# the last sample run is selected and the QPS is plotted per store. This is
-# useful to determine the QPS matches out expectations - it should be balanced
-# and stable. This should only be done for tests where the seed is given, so
-# the output is identical..
-plot stat=qps sample=2
-----
-last store values: [s1=996, s2=998, s3=996, s4=1000, s5=1000, s6=1012, s7=1001] (stddev=5.07, mean=1000.43, sum=7003)
-example_rebalancing_2_qps.png (0394d4d46da3002b)
-
-plot stat=replica_moves sample=2
-----
-last store values: [s1=5, s2=0, s3=1, s4=0, s5=0, s6=0, s7=0] (stddev=1.73, mean=0.86, sum=6)
-example_rebalancing_2_replica_moves.png (55c915bf8e280233)
+qps#1: last:  [s1=998, s2=1003, s3=995, s4=1003, s5=998, s6=1000, s7=1001] (stddev=2.71, mean=999.71, sum=6998)
+replica_moves#1: last:  [s1=6, s2=0, s3=0, s4=0, s5=1, s6=0, s7=0] (stddev=2.07, mean=1.00, sum=7)
+qps#2: last:  [s1=996, s2=998, s3=996, s4=1000, s5=1000, s6=1012, s7=1001] (stddev=5.07, mean=1000.43, sum=7003)
+replica_moves#2: last:  [s1=5, s2=0, s3=1, s4=0, s5=0, s6=0, s7=0] (stddev=1.73, mean=0.86, sum=6)
+artifacts[default]: 75f9317fc538f3c0
 
 # The cluster settings and simulation variables can be modified to examine how
 # allocation behaves during uncommon scenarios. Update the gossip delay to be
@@ -66,8 +58,13 @@ setting gossip_delay=20s
 #
 # TODO: Adding StoreGossip.RecordNewPerSecondStats() to asim gossip causes
 # thrashing on the fourth sample here.
-eval duration=5m samples=2 seed=42
+eval duration=5m samples=2 seed=42 metrics=(qps,replica_moves)
 ----
+qps#1: last:  [s1=1002, s2=994, s3=997, s4=1000, s5=998, s6=1002, s7=1003] (stddev=3.02, mean=999.43, sum=6996)
+replica_moves#1: last:  [s1=11, s2=1, s3=3, s4=6, s5=0, s6=0, s7=1] (stddev=3.76, mean=3.14, sum=22)
+qps#2: last:  [s1=999, s2=0, s3=2002, s4=1998, s5=0, s6=1003, s7=999] (stddev=755.93, mean=1000.14, sum=7001)
+replica_moves#2: last:  [s1=24, s2=11, s3=16, s4=11, s5=5, s6=10, s7=6] (stddev=5.99, mean=11.86, sum=83)
+artifacts[default]: af52292b18de6eac
 failed assertion sample 2
   balance stat=qps threshold=(<1.15) ticks=6
 	max/mean=2.00 tick=0
@@ -76,21 +73,3 @@ failed assertion sample 2
 	max/mean=2.00 tick=3
 	max/mean=2.00 tick=4
 	max/mean=2.00 tick=5
-
-# To investigate further, plot the QPS output again. The plotted output
-# exhibits thrashing as rebalancing occurs frequently with eventual
-# convergence.
-plot stat=qps sample=4
-----
-last store values: [s1=999, s2=0, s3=2002, s4=1998, s5=0, s6=1003, s7=999] (stddev=755.93, mean=1000.14, sum=7001)
-example_rebalancing_4_qps.png (37b70bbbe75bfc15)
-
-# Plot the replica movements for the same sample, we should see a steadily
-# increasing counter for each store; indicating that rebalancing activity is
-# persistent, until convergence.
-plot stat=replica_moves sample=4
-----
-last store values: [s1=24, s2=11, s3=16, s4=11, s5=5, s6=10, s7=6] (stddev=5.99, mean=11.86, sum=83)
-example_rebalancing_4_replica_moves.png (42661c51f43e0d0f)
-
-# vim:ft=sh

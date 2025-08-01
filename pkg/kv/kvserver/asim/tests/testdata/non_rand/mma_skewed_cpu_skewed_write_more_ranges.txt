@@ -10,6 +10,7 @@ skip_under_ci
 
 gen_cluster nodes=6 node_cpu_rate_capacity=50000
 ----
+WARNING: node CPU capacity of ≈0.00 cores is likely accidental
 
 # The placement will be skewed, s.t. n1/s1, n2/s2 and n3/s3 will have all the
 # replicas initially and n1/s1 will have every lease. Each range is initially
@@ -19,7 +20,7 @@ gen_ranges ranges=300 min_key=1 max_key=10000 placement_type=replica_placement b
 ----
 {s1:*,s2,s3}:1
 
-gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
+gen_load rate=1000 rw_ratio=1.0 request_cpu_per_access=500000 min_key=1 max_key=10000
 ----
 
 # Write only workload, which generates little CPU and 100_000 (x replication
@@ -32,31 +33,15 @@ gen_ranges ranges=300 min_key=10001 max_key=20000 placement_type=replica_placeme
 gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 raft_cpu_per_write=1 min_key=10001 max_key=20000
 ----
 
-setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+setting split_queue_enabled=false
 ----
 
-eval duration=90m samples=1 seed=42
+eval duration=90m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
-OK
-
-plot stat=cpu sample=1  
-----
-last store values: [s1=29173, s2=28998, s3=29062, s4=24188, s5=24477, s6=24141] (stddev=2407.34, mean=26673.17, sum=160039)
-mma_skewed_cpu_skewed_write_more_ranges_1_cpu.png (0f3c3cd8a365efd9)
-
-plot stat=write_bytes_per_second
-----
-last store values: [s1=6402377, s2=10495410, s3=10232194, s4=10960822, s5=10961517, s6=10961163] (stddev=1633693.88, mean=10002247.17, sum=60013483)
-mma_skewed_cpu_skewed_write_more_ranges_1_write_bytes_per_second.png (cab871d70898a3da)
-
-plot stat=replicas  
-----
-initial store values: [s1=300, s2=300, s3=300, s4=300, s5=300, s6=300] (stddev=0.00, mean=300.00, sum=1800)
-last store values: [s1=289, s2=450, s3=445, s4=206, s5=204, s6=206] (stddev=108.42, mean=300.00, sum=1800)
-mma_skewed_cpu_skewed_write_more_ranges_1_replicas.png (47ab7fb75c95cd51)
-
-plot stat=leases sample=1  
-----
-initial store values: [s1=300, s2=0, s3=0, s4=300, s5=0, s6=0] (stddev=141.42, mean=100.00, sum=600)
-last store values: [s1=116, s2=61, s3=57, s4=202, s5=43, s6=121] (stddev=54.34, mean=100.00, sum=600)
-mma_skewed_cpu_skewed_write_more_ranges_1_leases.png (f46191372428f343)
+cpu#1: last:  [s1=90629232, s2=90891770, s3=90720435, s4=76036553, s5=76098830, s6=75795916] (stddev=7386001.42, mean=83362122.67, sum=500172736)
+leases#1: first: [s1=300, s2=0, s3=0, s4=300, s5=0, s6=0] (stddev=141.42, mean=100.00, sum=600)
+leases#1: last:  [s1=55, s2=129, s3=115, s4=209, s5=46, s6=46] (stddev=58.88, mean=100.00, sum=600)
+replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300, s6=300] (stddev=0.00, mean=300.00, sum=1800)
+replicas#1: last:  [s1=283, s2=430, s3=430, s4=209, s5=211, s6=237] (stddev=95.10, mean=300.00, sum=1800)
+write_bytes_per_second#1: last:  [s1=4565462, s2=10497859, s3=10497096, s4=10961474, s5=10895186, s6=12602252] (stddev=2533989.43, mean=10003221.50, sum=60019329)
+artifacts[mma-only]: 7e2ef8861fdf2e81

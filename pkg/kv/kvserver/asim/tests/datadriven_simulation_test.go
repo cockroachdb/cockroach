@@ -8,6 +8,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"hash"
 	"hash/fnv"
 	"math/rand"
 	"os"
@@ -23,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sniffarg"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -163,23 +165,6 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     random number generator that creates the seed used to generate each
 //     simulation sample. The default values are: duration=30m (30 minutes)
 //     samples=1 seed=random.
-//
-//   - "plot" stat=<string> [sample=<int>] [height=<int>] [width=<int>]
-//     Visually renders the stat (e.g. stat=qps) as a series where the x axis
-//     is the simulated time and the y axis is the stat value. A series is
-//     rendered per-store, so if there are 10 stores, 10 series will be
-//     rendered.
-//
-//   - "topology" [sample=<int>]
-//     Print the cluster locality topology of the sample given (default=last).
-//     e.g. for the load_cluster config=single_region
-//     US
-//     ..US_1
-//     ....└── [1 2 3 4 5]
-//     ..US_2
-//     ....└── [6 7 8 9 10]
-//     ..US_3
-//     ....└── [11 12 13 14 15]
 func TestDataDriven(t *testing.T) {
 	skip.UnderDuressWithIssue(t, 149875)
 	leakTestAfter := leaktest.AfterTest(t)
@@ -195,7 +180,6 @@ func TestDataDriven(t *testing.T) {
 		leakTestAfter()
 	})
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
-		ctx := logtags.AddTag(context.Background(), "name", filepath.Base(path))
 		// The inline comment below is required for TestLint/TestTParallel.
 		// We use t.Cleanup to work around the issue this lint is trying to prevent.
 		t.Parallel() // SAFE FOR TESTING
@@ -204,13 +188,19 @@ func TestDataDriven(t *testing.T) {
 		var clusterGen gen.ClusterGen
 		var rangeGen gen.MultiRanges
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
-		eventGen := gen.NewStaticEventsWithNoEvents()
+		var events []scheduled.ScheduledEvent
 		assertions := []assertion.SimulationAssertion{}
-		var stateStrAcrossSamples []string
-		var runs []history.History
+		// TODO(tbg): make it unnecessary to hold on to a per-file
+		// history of runs by removing commands that reference a specific
+		// runs. Instead, all run-specific data should become a generated
+		// artifact, and testdata output should be independent of the run
+		// (i.e. act like a spec instead of a test output).
+		var runs []modeHistory
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			defer func() {
-				require.Empty(t, d.CmdArgs, "leftover arguments for %s", d.Cmd)
+				if !t.Failed() {
+					require.Empty(t, d.CmdArgs, "leftover arguments for %s", d.Cmd)
+				}
 			}()
 			switch d.Cmd {
 			case "skip_under_ci":
@@ -237,6 +227,34 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "request_cpu_per_access", &requestCPUPerAccess)
 				scanIfExists(t, d, "raft_cpu_per_write", &raftCPUPerAccess)
 
+				var buf strings.Builder
+
+				// Catch tests that set unrealistically small or unrealistically large
+				// CPU consumptions. This isn't exact because it doesn't account for
+				// replication, but it's close enough.
+				// NB: writes also consume requestCPUPerAccess.
+				approxVCPUs := (rate * (float64(requestCPUPerAccess) + float64(raftCPUPerAccess)*(1.0-rwRatio))) / 1e9
+				// Ditto for writes. Here too we don't account for replication. Note
+				// that at least under uniform writes, real clusters can have a write
+				// amp that easily surpasses 20, so writing at 40mb/s to a small set
+				// of stores would often constitute an issue in production.
+				approxWriteBytes := float64(maxBlock+minBlock) * rate * (1.0 - rwRatio) / 2
+
+				const tenkb = 10 * 1024
+				neitherWriteNorCPUHeavy := approxWriteBytes < tenkb && approxVCPUs < .5
+
+				// We tolerate abnormally low CPU if there's a sensible amount of
+				// write load. Otherwise, it's likely a mistake.
+				if neitherWriteNorCPUHeavy && approxVCPUs > 0 {
+					_, _ = fmt.Fprintf(&buf, "WARNING: CPU load of ≈%.2f cores is likely accidental\n", approxVCPUs)
+				}
+				// Similarly, tolerate abnormally low write load when there's
+				// significant CPU. Independently, call out high write load.
+				if (neitherWriteNorCPUHeavy && approxWriteBytes > 0) || approxWriteBytes > 40*(1<<20) {
+					_, _ = fmt.Fprintf(&buf, "WARNING: write load of %s is likely accidental\n",
+						humanizeutil.IBytes(int64(approxWriteBytes)))
+				}
+
 				var nextLoadGen gen.BasicLoad
 				nextLoadGen.SkewedAccess = accessSkew
 				nextLoadGen.MinKey = minKey
@@ -252,7 +270,7 @@ func TestDataDriven(t *testing.T) {
 				} else {
 					loadGen = append(loadGen, nextLoadGen)
 				}
-				return ""
+				return buf.String()
 			case "gen_ranges":
 				var ranges, replFactor = 1, 3
 				var minKey, maxKey = int64(0), int64(defaultKeyspace)
@@ -292,16 +310,11 @@ func TestDataDriven(t *testing.T) {
 					rangeGen = append(rangeGen, nextRangeGen)
 				}
 				return buf.String()
-			case "topology":
-				var sample = len(runs)
-				scanIfExists(t, d, "sample", &sample)
-				top := runs[sample-1].S.Topology()
-				return (&top).String()
 			case "gen_cluster":
 				var nodes = 3
 				var storesPerNode = 1
 				var storeByteCapacity int64 = 256 << 30 /* 256 GiB  */
-				var nodeCPURateCapacity int64
+				var nodeCPURateCapacity int64 = 8 * 1e9 // 8 vcpus
 				var region []string
 				var nodesPerRegion []int
 				scanIfExists(t, d, "nodes", &nodes)
@@ -318,11 +331,20 @@ func TestDataDriven(t *testing.T) {
 					NodesPerRegion:      nodesPerRegion,
 					NodeCPURateCapacity: nodeCPURateCapacity,
 				}
-				return ""
+				var buf strings.Builder
+				if c := float64(nodeCPURateCapacity) / 1e9; c < 1 {
+					// The load is very small, which is likely an accident.
+					// TODO(mma): fix up the tests that trigger this warning.
+					// TODO(mma): print a warning whenever the measured CPU utilization
+					// on a node exceeds this capacity, as that's likely not what the test
+					// intended.
+					_, _ = fmt.Fprintf(&buf, "WARNING: node CPU capacity of ≈%.2f cores is likely accidental\n", c)
+				}
+				return buf.String()
 			case "load_cluster":
-				var config string
-				scanMustExist(t, d, "config", &config)
-				clusterGen = loadClusterInfo(config)
+				var cfg string
+				scanMustExist(t, d, "config", &cfg)
+				clusterGen = loadClusterInfo(cfg)
 				return ""
 			case "add_node":
 				var delay time.Duration
@@ -331,10 +353,14 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "delay", &delay)
 				scanIfExists(t, d, "stores", &numStores)
 				scanIfExists(t, d, "locality", &localityString)
-				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.AddNodeEvent{
-					NumStores:      numStores,
-					LocalityString: localityString,
-				})
+				events = append(events,
+					scheduled.ScheduledEvent{
+						At: settingsGen.Settings.StartTime.Add(delay),
+						TargetEvent: event.AddNodeEvent{
+							NumStores:      numStores,
+							LocalityString: localityString,
+						}},
+				)
 				return ""
 			case "set_span_config":
 				var delay time.Duration
@@ -349,9 +375,12 @@ func TestDataDriven(t *testing.T) {
 					tag, data = strings.TrimSpace(tag), strings.TrimSpace(data)
 					span := spanconfigtestutils.ParseSpan(t, tag)
 					conf := spanconfigtestutils.ParseZoneConfig(t, data).AsSpanConfig()
-					eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetSpanConfigEvent{
-						Span:   span,
-						Config: conf,
+					events = append(events, scheduled.ScheduledEvent{
+						At: settingsGen.Settings.StartTime.Add(delay),
+						TargetEvent: event.SetSpanConfigEvent{
+							Span:   span,
+							Config: conf,
+						},
 					})
 				}
 				return ""
@@ -362,9 +391,12 @@ func TestDataDriven(t *testing.T) {
 				scanMustExist(t, d, "node", &nodeID)
 				scanMustExist(t, d, "liveness", &livenessStatus)
 				scanIfExists(t, d, "delay", &delay)
-				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLivenessEvent{
-					NodeId:         state.NodeID(nodeID),
-					LivenessStatus: livenessStatus,
+				events = append(events, scheduled.ScheduledEvent{
+					At: settingsGen.Settings.StartTime.Add(delay),
+					TargetEvent: event.SetNodeLivenessEvent{
+						NodeId:         state.NodeID(nodeID),
+						LivenessStatus: livenessStatus,
+					},
 				})
 				return ""
 			case "set_locality":
@@ -375,9 +407,12 @@ func TestDataDriven(t *testing.T) {
 				scanMustExist(t, d, "locality", &localityString)
 				scanIfExists(t, d, "delay", &delay)
 
-				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLocalityEvent{
-					NodeID:         state.NodeID(nodeID),
-					LocalityString: localityString,
+				events = append(events, scheduled.ScheduledEvent{
+					At: settingsGen.Settings.StartTime.Add(delay),
+					TargetEvent: event.SetNodeLocalityEvent{
+						NodeID:         state.NodeID(nodeID),
+						LocalityString: localityString,
+					},
 				})
 				return ""
 			case "set_capacity":
@@ -398,74 +433,152 @@ func TestDataDriven(t *testing.T) {
 				if ioThreshold != -1 {
 					capacityOverride.IOThresholdMax = allocatorimpl.TestingIOThresholdWithScore(ioThreshold)
 				}
-				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetCapacityOverrideEvent{
-					StoreID:          state.StoreID(store),
-					CapacityOverride: capacityOverride,
+				events = append(events, scheduled.ScheduledEvent{
+					At: settingsGen.Settings.StartTime.Add(delay),
+					TargetEvent: event.SetCapacityOverrideEvent{
+						StoreID:          state.StoreID(store),
+						CapacityOverride: capacityOverride,
+					},
 				})
 
 				return ""
 			case "eval":
-				t.Logf("running eval for %s", filepath.Base(path))
 				samples := 1
-				seed := rand.Int63()
+				// We use a fixed seed to ensure determinism in the simulated data.
+				// Multiple samples can be used for more coverage.
+				seed := int64(42)
 				duration := 30 * time.Minute
-				failureExists := false
+				name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+				var cfgs []string    // configurations to run the simulation with
+				var metrics []string // metrics to summarize
 
 				scanIfExists(t, d, "duration", &duration)
 				scanIfExists(t, d, "samples", &samples)
 				scanIfExists(t, d, "seed", &seed)
+				scanIfExists(t, d, "cfgs", &cfgs)
+				scanIfExists(t, d, "metrics", &metrics)
+
+				t.Logf("running eval for %s", name)
+
+				if len(cfgs) == 0 {
+					// TODO(tbg): force each test to specify the configs it wants to run
+					// under.
+					cfgs = []string{"default"}
+				}
+
+				metricsMap := map[string]struct{}{}
+				for _, s := range metrics {
+					metricsMap[s] = struct{}{}
+				}
 
 				seedGen := rand.New(rand.NewSource(seed))
-				sampleAssertFailures := make([]string, samples)
-				// TODO(kvoli): Samples are evaluated sequentially (no
-				// concurrency). Add a evaluator component which concurrently
-				// evaluates samples with the option to stop evaluation early
-				// if an assertion fails.
-				rangeGen := rangeGen
-				if len(rangeGen) == 0 {
-					// TODO(tbg): is this useful/used at all? Should we insist that ranges
-					// are set up explicitly in each test?
-					rangeGen = append(rangeGen, gen.BasicRanges{
-						BaseRanges: gen.BaseRanges{
-							Ranges: 1,
-							MinKey: 0, MaxKey: 1,
-							ReplicationFactor: 1,
-						},
-					})
+				require.NotZero(t, rangeGen)
+
+				knownConfigurations := map[string]func(eg *gen.StaticEvents){
+					// In default mode, the test manages its rebalancer-related settings
+					// manually.
+					"default": func(*gen.StaticEvents) {},
+					// 'mma-only' runs with the multi-metric allocator and turns off the
+					// replicate and lease queues.
+					"sma-only": func(eg *gen.StaticEvents) {
+						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
+							event.SetSimulationSettingsEvent{
+								IsClusterSetting: true,
+								Key:              "LBRebalancingMode",
+								Value:            int64(kvserver.LBRebalancingLeasesAndReplicas),
+							})
+					},
+					"mma-only": func(eg *gen.StaticEvents) {
+						settingsGen.Settings.ReplicateQueueEnabled = false
+						settingsGen.Settings.LeaseQueueEnabled = false
+						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
+							event.SetSimulationSettingsEvent{
+								IsClusterSetting: true,
+								Key:              "LBRebalancingMode",
+								Value:            int64(kvserver.LBRebalancingMultiMetric),
+							})
+					},
+					// Both the replicate/lease queues and the MMA are enabled.
+					"both": func(eg *gen.StaticEvents) {
+						settingsGen.Settings.ReplicateQueueEnabled = true
+						settingsGen.Settings.LeaseQueueEnabled = true
+						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
+							event.SetSimulationSettingsEvent{
+								IsClusterSetting: true,
+								Key:              "LBRebalancingMode",
+								Value:            int64(kvserver.LBRebalancingMultiMetric),
+							})
+					},
 				}
-				for sample := 0; sample < samples; sample++ {
-					assertionFailures := []string{}
-					simulator := gen.GenerateSimulation(
-						duration, clusterGen, rangeGen, loadGen,
-						settingsGen, eventGen, seedGen.Int63(),
-					)
-					stateStrAcrossSamples = append(stateStrAcrossSamples, simulator.State().String())
-					simulator.RunSim(ctx)
-					history := simulator.History()
-					runs = append(runs, history)
-					for _, assertion := range assertions {
-						if holds, reason := assertion.Assert(ctx, history); !holds {
-							failureExists = true
-							assertionFailures = append(assertionFailures, reason)
+				var buf strings.Builder
+				for _, mv := range cfgs {
+					t.Run(mv, func(t *testing.T) {
+						ctx := logtags.AddTag(context.Background(), "name", name+"/"+mv)
+						sampleAssertFailures := make([]string, samples)
+						run := modeHistory{
+							mode: mv,
 						}
-					}
-					sampleAssertFailures[sample] = strings.Join(assertionFailures, "")
-				}
 
-				// Every sample passed every assertion.
-				if !failureExists {
-					return "OK"
-				}
+						eventGen := gen.NewStaticEventsWithNoEvents()
+						for _, ev := range events {
+							eventGen.ScheduleEvent(ev.At, 0, ev.TargetEvent)
+						}
 
-				// There exists a sample where some assertion didn't hold. For
-				// each sample that had at least one failing assertion, report
-				// the sample and every failing assertion.
-				buf := strings.Builder{}
-				for sample, failString := range sampleAssertFailures {
-					if failString != "" {
-						fmt.Fprintf(&buf, "failed assertion sample %d\n%s",
-							sample+1, failString)
-					}
+						set := knownConfigurations[mv]
+						require.NotNil(t, set, "unknown mode value: %s", mv)
+						set(&eventGen)
+
+						for sample := 0; sample < samples; sample++ {
+							assertionFailures := []string{}
+							simulator := gen.GenerateSimulation(
+								duration, clusterGen, rangeGen, loadGen,
+								settingsGen, eventGen, seedGen.Int63(),
+							)
+							run.stateStrAcrossSamples = append(run.stateStrAcrossSamples, simulator.State().String())
+							simulator.RunSim(ctx)
+							h := simulator.History()
+							run.hs = append(run.hs, h)
+
+							for _, stmt := range assertions {
+								if holds, reason := stmt.Assert(ctx, h); !holds {
+									assertionFailures = append(assertionFailures, reason)
+								}
+							}
+							sampleAssertFailures[sample] = strings.Join(assertionFailures, "")
+						}
+
+						runs = append(runs, run)
+
+						// Generate artifacts. Hash artifact input data to ensure they are
+						// up to date.
+						var rewrite bool
+						require.NoError(t, sniffarg.DoEnv("rewrite", &rewrite))
+						plotDir := datapathutils.TestDataPath(t, "generated", name)
+						hasher := fnv.New64a()
+						// TODO(tbg): need to decide whether multiple evals in a single file
+						// is a feature or an anti-pattern. If it's a feature, we should let
+						// the `name` part below be adjustable (but not the plotDir) via a
+						// parameter to the `eval` command.
+						testName := name + "_" + mv
+						for sample, h := range run.hs {
+							generateAllPlots(t, &buf, h, testName, sample+1, plotDir, hasher, rewrite,
+								settingsGen.Settings.TickInterval, metricsMap)
+							generateTopology(t, h,
+								filepath.Join(plotDir, fmt.Sprintf("%s_%d_topology.txt", testName, sample+1)),
+								hasher, rewrite)
+						}
+						artifactsHash := hasher.Sum64()
+
+						// For each sample that had at least one failing assertion,
+						// report the sample and every failing assertion.
+						_, _ = fmt.Fprintf(&buf, "artifacts[%s]: %x\n", mv, artifactsHash)
+						for sample, failString := range sampleAssertFailures {
+							if failString != "" {
+								_, _ = fmt.Fprintf(&buf, "failed assertion sample %d\n%s",
+									sample+1, failString)
+							}
+						}
+					})
 				}
 				return buf.String()
 			case "assertion":
@@ -529,88 +642,60 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 			case "setting":
-				scanIfExists(t, d, "replicate_queue_enabled", &settingsGen.Settings.ReplicateQueueEnabled)
-				scanIfExists(t, d, "lease_queue_enabled", &settingsGen.Settings.LeaseQueueEnabled)
-				scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled)
-				scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
-				scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
-				scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
-				scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
-				scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
-				scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective)
+				// NB: delay could be supported for the below settings,
+				// but it hasn't been needed yet.
+				var dns bool // "delay not supported"
+				dns = scanIfExists(t, d, "replicate_queue_enabled", &settingsGen.Settings.ReplicateQueueEnabled) || dns
+				dns = scanIfExists(t, d, "lease_queue_enabled", &settingsGen.Settings.LeaseQueueEnabled) || dns
+				dns = scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled) || dns
+				dns = scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval) || dns
+				dns = scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold) || dns
+				dns = scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold) || dns
+				dns = scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay) || dns
+				dns = scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold) || dns
+				dns = scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective) || dns
+
 				var delay time.Duration
-				if isDelayed := scanIfExists(t, d, "delay", &delay); isDelayed {
-					var rebalanceMode int64
-					scanIfExists(t, d, "rebalance_mode", &rebalanceMode)
-					eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetSimulationSettingsEvent{
-						IsClusterSetting: true,
-						Key:              "LBRebalancingMode",
-						Value:            rebalanceMode,
-					})
-				} else {
-					var rebalanceMode int64
-					if exists := scanIfExists(t, d, "rebalance_mode", &rebalanceMode); exists {
-						kvserver.LoadBasedRebalancingMode.Override(ctx, &settingsGen.Settings.ST.SV, kvserver.LBRebalancingMode(rebalanceMode))
-					}
+				if scanIfExists(t, d, "delay", &delay) {
+					require.False(t, dns, "delay not supported for at least one setting")
+				}
+
+				var rebalanceMode int64
+				if scanIfExists(t, d, "rebalance_mode", &rebalanceMode) {
+					events = append(events, scheduled.ScheduledEvent{
+						At: settingsGen.Settings.StartTime.Add(delay),
+						TargetEvent: event.SetSimulationSettingsEvent{
+							IsClusterSetting: true,
+							Key:              "LBRebalancingMode",
+							Value:            rebalanceMode,
+						}})
 				}
 				return ""
-			case "print":
-				var buf strings.Builder
-				var sample = len(runs)
-				for i := 0; i < sample; i++ {
-					fmt.Fprintf(&buf, "sample %d:\ncluster state:\n%s\n", i+1, stateStrAcrossSamples[i])
-				}
-				return buf.String()
-			case "plot":
-				var stat string
-				var height, width, sample = 15, 80, 1
-				var buf strings.Builder
-
-				scanMustExist(t, d, "stat", &stat)
-				scanIfExists(t, d, "sample", &sample)
-				scanIfExists(t, d, "height", &height)
-				scanIfExists(t, d, "width", &width)
-
-				require.GreaterOrEqual(t, len(runs), sample)
-
-				h := runs[sample-1]
-				ts := metrics.MakeTS(h.Recorded)
-				at0, ok0 := h.ShowRecordedValueAt(0, stat)
-				if ok0 {
-					buf.WriteString("initial store values: ")
-					buf.WriteString(at0)
-					buf.WriteString("\n")
-				}
-				s, _ := h.ShowRecordedValueAt(len(h.Recorded)-1, stat)
-				buf.WriteString("last store values: ")
-				buf.WriteString(s)
-				buf.WriteString("\n")
-
-				testFileName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-				plotDir := datapathutils.TestDataPath(t, "generated", testFileName)
-
-				// To ensure the plots are up to date, the datapoints are hashed and
-				// printed in the output.
-				hasher := fnv.New64a()
-				_, err := hasher.Write([]byte(fmt.Sprint(ts[stat])))
-				require.NoError(t, err)
-
-				plotFileName := fmt.Sprintf("%s_%d_%s.png", testFileName, sample, stat)
-
-				var rewrite bool
-				require.NoError(t, sniffarg.DoEnv("rewrite", &rewrite))
-				if rewrite {
-					_ = os.MkdirAll(plotDir, 0755)
-					plotPath := filepath.Join(plotDir, plotFileName)
-					b := generatePlot(t, stat, ts[stat])
-					require.NoError(t, os.WriteFile(plotPath, b, 0644))
-				}
-
-				buf.WriteString(fmt.Sprintf("%s (%x)", plotFileName, hasher.Sum(nil)))
-				return buf.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
 		})
 	})
+}
+
+type modeHistory struct {
+	mode                  string
+	hs                    []history.History
+	stateStrAcrossSamples []string
+}
+
+func generateTopology(
+	t *testing.T, h history.History, topFile string, hasher hash.Hash, rewrite bool,
+) {
+	// TODO(tbg): this can in principle be printed without even
+	// evaluating the test, and in particular it's independent of
+	// settings. It seems like an artifact of the implementation
+	// that we can only access the structured topology after the
+	// simulation has run.
+	top := h.S.Topology()
+	s := top.String()
+	_, _ = fmt.Fprint(hasher, s)
+	if rewrite {
+		require.NoError(t, os.WriteFile(topFile, []byte(s), 0644))
+	}
 }

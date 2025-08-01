@@ -28,15 +28,4 @@ assertion type=conformance under=0 over=0 unavailable=0 violating=0
 
 eval duration=10m
 ----
-OK
-
-topology
-----
-a
-  a_1
-  │ └── [1 2]
-b
-  b_1
-    └── [3 4 5]
-
-# vim:ft=sh
+artifacts[default]: ca2c6e7399a9dc9c

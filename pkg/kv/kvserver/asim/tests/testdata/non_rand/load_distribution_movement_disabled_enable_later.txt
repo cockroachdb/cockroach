@@ -1,104 +1,53 @@
-# Disable all lease and replica movement.
-setting rebalance_mode=0 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+# 16vCPU machines.
+gen_cluster nodes=10 node_cpu_rate_capacity=16000000000
 ----
 
-# This testfile provides examples generating imbalanced CPU usage and write
-# load. All the examples will use the same cluster, which has 10 nodes with
-# 20_000 CPU capacity each.
-gen_cluster nodes=10 node_cpu_rate_capacity=20000
+# 30 ranges on first fives nodes, 30 ranges on the last five nodes.
+
+gen_ranges ranges=30 min_key=1 max_key=10000 placement_type=replica_placement
+{s1,s2,s3}:1
+{s2,s3,s4}:1
+{s3,s4,s5}:1
+{s4,s5,s1}:1
+{s5,s1,s2}:1
+----
+{s1:*,s2,s3}:1
+{s2:*,s3,s4}:1
+{s3:*,s4,s5}:1
+{s4:*,s5,s1}:1
+{s5:*,s1,s2}:1
+
+gen_ranges ranges=30 min_key=10001 max_key=20000 placement_type=replica_placement
+{s6,s7,s8}:1
+{s7,s8,s9}:1
+{s8,s9,s10}:1
+{s9,s10,s6}:1
+{s10,s6,s7}:1
+----
+{s6:*,s7,s8}:1
+{s7:*,s8,s9}:1
+{s8:*,s9,s10}:1
+{s9:*,s10,s6}:1
+{s10:*,s6,s7}:1
+
+# Read-only workload on first 30 ranges. 5 cores.
+gen_load rate=1000000 rw_ratio=1 request_cpu_per_access=5000 min_key=1 max_key=10000
 ----
 
-# Read only workload, which generates 100_000 request cpu nanos/s evenly over
-# the first half of the keyspace, which will be on all stores initially.
-gen_ranges ranges=30 min_key=1 max_key=10000 placement_type=even
-----
-
-gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
-----
-
-# Write only workload, which generates no CPU and 100_000 (x replication
-# factor) write bytes per second over the second half of the keyspace, which
-# are all on s1-s3 initially.
-gen_ranges ranges=30 min_key=10001 max_key=20000 placement_type=skewed
-----
-
+# Write only workload on second 30 ranges. 10mb/s before 3x replication.
 gen_load rate=10000 rw_ratio=0 min_block=1000 max_block=1000 min_key=10001 max_key=20000
 ----
 
+# Two minutes into the test, we'll enable the MMA.
 setting rebalance_mode=3 delay=2m
 ----
 
-eval duration=5m samples=1 seed=42
+eval duration=7m samples=1 seed=42 cfgs=(sma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
-OK
-
-plot stat=cpu
-----
-last store values: [s1=10020, s2=9921, s3=9998, s4=9923, s5=9990, s6=10006, s7=9970, s8=10202, s9=9970, s10=9995] (stddev=74.39, mean=9999.50, sum=99995)
-load_distribution_movement_disabled_enable_later_1_cpu.png (278ae26598ec0eae)
-
-plot stat=write_bytes_per_second
-----
-last store values: [s1=6983100, s2=5989048, s3=6986495, s4=2013966, s5=1347561, s6=998044, s7=1339248, s8=2006398, s9=997054, s10=1330659] (stddev=2427881.97, mean=2999157.30, sum=29991573)
-load_distribution_movement_disabled_enable_later_1_write_bytes_per_second.png (ddef37295fe48a93)
-
-plot stat=replicas
-----
-initial store values: [s1=39, s2=39, s3=39, s4=9, s5=9, s6=9, s7=9, s8=9, s9=9, s10=9] (stddev=13.75, mean=18.00, sum=180)
-last store values: [s1=30, s2=27, s3=30, s4=15, s5=13, s6=12, s7=13, s8=15, s9=12, s10=13] (stddev=7.31, mean=18.00, sum=180)
-load_distribution_movement_disabled_enable_later_1_replicas.png (bf2bdcf5e9e8f6dd)
-
-plot stat=leases
-----
-initial store values: [s1=33, s2=3, s3=3, s4=3, s5=3, s6=3, s7=3, s8=3, s9=3, s10=3] (stddev=9.00, mean=6.00, sum=60)
-last store values: [s1=24, s2=3, s3=3, s4=5, s5=4, s6=4, s7=5, s8=4, s9=3, s10=5] (stddev=6.05, mean=6.00, sum=60)
-load_distribution_movement_disabled_enable_later_1_leases.png (f3e615046e8b73ae)
-
-# Next setup a cluster such that there will be imbalanced CPU usage but
-# balanced write load.
-#
-# Write only workload, which generates:
-# - 0 request cpu nanos/s 
-# - 100_000 write bytes per second
-# over the first half of the keyspace, evenly distributed over the cluster
-# initially.
-gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=1 max_key=10000 replace=true
-----
-
-# Read only workload, which generates:
-# - 100_000 request cpu nanos/s
-# - 10_000  raft cpu nanos/s
-# - 1000    write bytes per second
-# over the second half of the keyspace, which is on s1-s3, with all the leases
-# on s1 (all request CPU).
-gen_load rate=1000 rw_ratio=0 request_cpu_per_access=90 raft_cpu_per_write=10 min_key=10001 max_key=20000
-----
-
-setting rebalance_mode=0
-----
-
-eval duration=5m samples=1 seed=42
-----
-OK
-
-plot stat=cpu sample=2
-----
-last store values: [s1=99999, s2=10000, s3=10000, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=29597.00, mean=11999.90, sum=119999)
-load_distribution_movement_disabled_enable_later_2_cpu.png (e56097b054e55354)
-
-plot stat=write_bytes_per_second sample=2
-----
-last store values: [s1=30987, s2=31001, s3=31001, s4=30068, s5=29841, s6=29948, s7=30102, s8=30102, s9=30039, s10=29905] (stddev=463.22, mean=30299.40, sum=302994)
-load_distribution_movement_disabled_enable_later_2_write_bytes_per_second.png (8300ee5159613f12)
-
-plot stat=replicas sample=2
-----
-initial store values: [s1=39, s2=39, s3=39, s4=9, s5=9, s6=9, s7=9, s8=9, s9=9, s10=9] (stddev=13.75, mean=18.00, sum=180)
-last store values: [s1=39, s2=39, s3=39, s4=9, s5=9, s6=9, s7=9, s8=9, s9=9, s10=9] (stddev=13.75, mean=18.00, sum=180)
-load_distribution_movement_disabled_enable_later_2_replicas.png (b1800db02fb9adb9)
-
-plot stat=leases sample=2
-----
-initial store values: [s1=33, s2=3, s3=3, s4=3, s5=3, s6=3, s7=3, s8=3, s9=3, s10=3] (stddev=9.00, mean=6.00, sum=60)
-last store values: [s1=33, s2=3, s3=3, s4=3, s5=3, s6=3, s7=3, s8=3, s9=3, s10=3] (stddev=9.00, mean=6.00, sum=60)
-load_distribution_movement_disabled_enable_later_2_leases.png (8a660c1312cb8b89)
+cpu#1: last:  [s1=451007155, s2=424066775, s3=481923720, s4=487552810, s5=432089126, s6=536127090, s7=582915883, s8=497226435, s9=545078443, s10=559276708] (stddev=51954473.68, mean=499726414.50, sum=4997264145)
+leases#1: first: [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=6, s8=6, s9=6, s10=6] (stddev=0.00, mean=6.00, sum=60)
+leases#1: last:  [s1=54, s2=56, s3=55, s4=53, s5=57, s6=58, s7=60, s8=57, s9=60, s10=61] (stddev=2.55, mean=57.10, sum=571)
+replicas#1: first: [s1=18, s2=18, s3=18, s4=18, s5=18, s6=18, s7=18, s8=18, s9=18, s10=18] (stddev=0.00, mean=18.00, sum=180)
+replicas#1: last:  [s1=175, s2=172, s3=179, s4=173, s5=173, s6=174, s7=167, s8=169, s9=169, s10=162] (stddev=4.50, mean=171.30, sum=1713)
+write_bytes_per_second#1: last:  [s1=2994621, s2=2991747, s3=3008247, s4=2988902, s5=3006699, s6=2993336, s7=2993993, s8=3002728, s9=2996629, s10=2997216] (stddev=6108.70, mean=2997411.80, sum=29974118)
+artifacts[sma-only]: 70a15957c8cfc487

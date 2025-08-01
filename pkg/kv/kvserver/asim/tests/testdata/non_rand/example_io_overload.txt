@@ -10,23 +10,14 @@ gen_ranges ranges=500 placement_type=skewed
 set_capacity store=5 io_threshold=1
 ----
 
+# Expect s5 to get no replicas due to IO overload.
 assertion type=stat stat=replicas stores=(5) exact_bound=0 ticks=5
 ----
 
-eval duration=10m seed=42
+eval duration=10m seed=42 metrics=(replicas,leases)
 ----
-OK
-
-# Expect s5 to get no replicas due to IO overload. The plot below should show a
-# solid line at 0, which will be s5's replica count.
-plot stat=replicas
-----
-initial store values: [s1=500, s2=500, s3=500, s4=0, s5=0] (stddev=244.95, mean=300.00, sum=1500)
-last store values: [s1=375, s2=375, s3=375, s4=375, s5=0] (stddev=150.00, mean=300.00, sum=1500)
-example_io_overload_1_replicas.png (45a4f26185bf5665)
-
-plot stat=leases
-----
-initial store values: [s1=500, s2=0, s3=0, s4=0, s5=0] (stddev=200.00, mean=100.00, sum=500)
-last store values: [s1=200, s2=100, s3=100, s4=100, s5=0] (stddev=63.25, mean=100.00, sum=500)
-example_io_overload_1_leases.png (49463f9a88d3bb6f)
+leases#1: first: [s1=500, s2=0, s3=0, s4=0, s5=0] (stddev=200.00, mean=100.00, sum=500)
+leases#1: last:  [s1=200, s2=100, s3=100, s4=100, s5=0] (stddev=63.25, mean=100.00, sum=500)
+replicas#1: first: [s1=500, s2=500, s3=500, s4=0, s5=0] (stddev=244.95, mean=300.00, sum=1500)
+replicas#1: last:  [s1=375, s2=375, s3=375, s4=375, s5=0] (stddev=150.00, mean=300.00, sum=1500)
+artifacts[default]: 2b673d91fce24d00

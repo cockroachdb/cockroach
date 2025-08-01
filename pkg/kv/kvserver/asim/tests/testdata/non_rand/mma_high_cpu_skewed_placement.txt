@@ -1,5 +1,6 @@
 gen_cluster nodes=7 node_cpu_rate_capacity=50000
 ----
+WARNING: node CPU capacity of ≈0.00 cores is likely accidental
 
 # The placement will be skewed, s.t. n1/s1, n2/s2 and n3/s3 will have all the
 # replicas initially and n1/s1 will have every lease. Each range is initially
@@ -10,39 +11,23 @@ gen_ranges ranges=21 placement_type=skewed bytes=268435456
 # Set the rebalance mode to use the mma store rebalancer and disable the lease
 # and replicate queues so that only the mma store rebalancer is moving replicas
 # or leases.
-setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+setting split_queue_enabled=false
 ----
 
 # node_cpu_rate_capacity
 # utilization: set request_cpu_per_access high to avoid utilization rebalancing
 
-gen_load rate=1000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_access=100 raft_cpu_per_write=10
+gen_load rate=15000 rw_ratio=0.95 min_block=1 max_block=1 request_cpu_per_access=100000 raft_cpu_per_write=20000 min_key=10001 max_key=20000
 ----
 
 # TODO(kvoli): Reduce this back to 30m once replica thrashing in later half is
 # resolved.
-eval duration=25m samples=1 seed=42
+eval duration=25m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
-OK
-
-plot stat=cpu sample=1
-----
-last store values: [s1=14651, s2=14697, s3=14628, s4=14416, s5=14339, s6=14392, s7=14345] (stddev=144.67, mean=14495.43, sum=101468)
-mma_high_cpu_skewed_placement_1_cpu.png (08f44053415029d9)
-
-plot stat=write_bytes_per_second
-----
-last store values: [s1=4272, s2=4049, s3=3795, s4=713, s5=702, s6=709, s7=718] (stddev=1651.95, mean=2136.86, sum=14958)
-mma_high_cpu_skewed_placement_1_write_bytes_per_second.png (a0c8d5abbdb5e016)
-
-plot stat=replicas sample=1
-----
-initial store values: [s1=21, s2=21, s3=21, s4=0, s5=0, s6=0, s7=0] (stddev=10.39, mean=9.00, sum=63)
-last store values: [s1=18, s2=17, s3=16, s4=3, s5=3, s6=3, s7=3] (stddev=6.95, mean=9.00, sum=63)
-mma_high_cpu_skewed_placement_1_replicas.png (6d4fbd7c6ee2fa3c)
-
-plot stat=leases sample=1
-----
-initial store values: [s1=21, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=7.35, mean=3.00, sum=21)
-last store values: [s1=3, s2=3, s3=3, s4=3, s5=3, s6=3, s7=3] (stddev=0.00, mean=3.00, sum=21)
-mma_high_cpu_skewed_placement_1_leases.png (d7f3c2bff8526c4d)
+cpu#1: last:  [s1=1515000000, s2=15000000, s3=15000000, s4=0, s5=0, s6=0, s7=0] (stddev=528430483.14, mean=220714285.71, sum=1545000000)
+leases#1: first: [s1=21, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=7.35, mean=3.00, sum=21)
+leases#1: last:  [s1=21, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=7.35, mean=3.00, sum=21)
+replicas#1: first: [s1=21, s2=21, s3=21, s4=0, s5=0, s6=0, s7=0] (stddev=10.39, mean=9.00, sum=63)
+replicas#1: last:  [s1=21, s2=21, s3=21, s4=0, s5=0, s6=0, s7=0] (stddev=10.39, mean=9.00, sum=63)
+write_bytes_per_second#1: last:  [s1=750, s2=750, s3=750, s4=0, s5=0, s6=0, s7=0] (stddev=371.15, mean=321.43, sum=2250)
+artifacts[mma-only]: a06bc8941050905e

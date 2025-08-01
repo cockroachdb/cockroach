@@ -35,11 +35,6 @@ const (
 )
 
 const (
-	defaultStat                 = "replicas"
-	defaultHeight, defaultWidth = 15, 80
-)
-
-const (
 	defaultRequestCPUPerAccess, defaultRaftCPUPerWrite = int64(0), int64(0)
 )
 
@@ -58,9 +53,6 @@ type staticOptionSettings struct {
 	placementType       gen.PlacementType
 	replicationFactor   int
 	bytes               int64
-	stat                string
-	height              int
-	width               int
 	requestCPUPerAccess int64
 	raftCPUPerWrite     int64
 }
@@ -81,9 +73,6 @@ func getDefaultStaticOptionSettings() staticOptionSettings {
 		placementType:       defaultPlacementType,
 		replicationFactor:   defaultReplicationFactor,
 		bytes:               defaultBytes,
-		stat:                defaultStat,
-		height:              defaultHeight,
-		width:               defaultWidth,
 		requestCPUPerAccess: defaultRequestCPUPerAccess,
 		raftCPUPerWrite:     defaultRaftCPUPerWrite,
 	}

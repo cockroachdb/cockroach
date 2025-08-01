@@ -12,7 +12,7 @@ gen_ranges ranges=1 repl_factor=1
 # Create a load generator, where there is higher ops/s than the qps split
 # threshold set above. Also set to use only reads, to avoid size based splits
 # (we could also disable this via setting the range max size).
-gen_load rate=10000 rw_ratio=1
+gen_load rate=10000 rw_ratio=1.0
 ----
 
 setting split_qps_threshold=2500
@@ -23,35 +23,30 @@ setting split_qps_threshold=2500
 assertion stat=replicas type=steady ticks=6 upper_bound=0.00
 ----
 
-eval duration=5m samples=2 seed=42
-----
-OK
 
 # Examine the number of replicas. Here there were 5 load based splits. This
 # roughly lines up with expectations, given a rate of 10,000 QPS and 2,500 QPS
 # split threshold.
-plot stat=replicas sample=2
+eval duration=5m samples=2 seed=42 metrics=(replicas)
 ----
-initial store values: [s1=1] (stddev=0.00, mean=1.00, sum=1)
-last store values: [s1=6] (stddev=0.00, mean=6.00, sum=6)
-example_splitting_2_replicas.png (80bdca15cdb13c4c)
+replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
+replicas#1: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
+replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
+replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
+artifacts[default]: e827ff169690da40
 
 # Update the load generator to use a zipfian distribution instead of a uniform.
 # Now the load based splitter must find a split key from a skewed distribution
 # repeatedly - if the load split algorithm is good, we should expect the same
 # number of splits as the uniform workload. However, that is not the case as we
 # require more splits with a zipfian distribution.
-gen_load rate=10000 rw_ratio=1 access_skew=true replace=true
+gen_load rate=10000 rw_ratio=1.0 access_skew=true replace=true
 ----
 
-eval duration=5m samples=2 seed=42
+eval duration=5m samples=2 seed=42 metrics=(replicas)
 ----
-OK
-
-plot stat=replicas sample=4
-----
-initial store values: [s1=1] (stddev=0.00, mean=1.00, sum=1)
-last store values: [s1=9] (stddev=0.00, mean=9.00, sum=9)
-example_splitting_4_replicas.png (a3d336567e9274f7)
-
-# vim:ft=sh
+replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
+replicas#1: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
+replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
+replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
+artifacts[default]: c87fad367527e848

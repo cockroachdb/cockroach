@@ -26,8 +26,14 @@ set_span_config
 [0,10000): num_replicas=3 num_voters=3
 ----
 
-eval duration=20m samples=1 seed=42
+
+# Since there are 300 replicas on s1 and the default RF=3, we expect the other
+# stores to be up-replicated to 300 replicas as well.
+eval duration=20m samples=1 seed=42 metrics=(replicas)
 ----
+replicas#1: first: [s1=301, s2=0, s3=0] (stddev=141.89, mean=100.33, sum=301)
+replicas#1: last:  [s1=301, s2=271, s3=267] (stddev=15.17, mean=279.67, sum=839)
+artifacts[default]: 866426beb5ad043b
 failed assertion sample 1
   balance stat=replicas threshold=(<1.05) ticks=6
 	max/mean=1.08 tick=0
@@ -36,14 +42,3 @@ failed assertion sample 1
 	max/mean=1.08 tick=3
 	max/mean=1.08 tick=4
 	max/mean=1.08 tick=5
-
-# Plot the replica count from the evaluation. Since there are 300 replicas on
-# s1 and the default RF=3, we expect the other stores to be up-replicated to
-# 300 replicas as well.
-plot stat=replicas sample=1
-----
-initial store values: [s1=301, s2=0, s3=0] (stddev=141.89, mean=100.33, sum=301)
-last store values: [s1=301, s2=271, s3=267] (stddev=15.17, mean=279.67, sum=839)
-example_add_node_1_replicas.png (d20bbdc823ecf9f9)
-
-# vim:ft=sh

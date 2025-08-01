@@ -9,7 +9,7 @@ gen_cluster nodes=5 store_byte_capacity=549755813888
 gen_ranges ranges=500 bytes=300000000
 ----
 
-gen_load rate=500 max_block=128000 min_block=128000
+gen_load rate=500 max_block=60000 min_block=60000
 ----
 
 # Set the disk storage capacity of s5 to 100 GiB. This will necessitate
@@ -17,23 +17,13 @@ gen_load rate=500 max_block=128000 min_block=128000
 set_capacity store=5 capacity=107374182400
 ----
 
-eval duration=30m seed=42
+# We will repeatedly hit the disk fullness threshold which causes shedding
+# replicas on store 5. We should see s5 hovering right around 92.5-95%
+# (the storage capacity threshold value).
+eval duration=30m seed=42 metrics=(replicas,disk_fraction_used)
 ----
-OK
-
-# Plot the replicas over time per store. With a steady state of writes, we will
-# repeatedly hit the disk fullness threshold which causes shedding replicas on
-# store 5. This is shown below as it sheds replicas.
-plot stat=replicas
-----
-initial store values: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
-last store values: [s1=339, s2=340, s3=338, s4=338, s5=157] (stddev=72.70, mean=302.40, sum=1512)
-example_fulldisk_1_replicas.png (a53cbe0503465b12)
-
-# Plot the % of disk storage capacity used. We should see s5 hovering right
-# around 92.5-95% (the storage capacity threshold value).
-plot stat=disk_fraction_used
-----
-initial store values: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.05] (stddev=0.34, mean=0.37, sum=2)
-last store values: [s1=0.41, s2=0.41, s3=0.41, s4=0.41, s5=0.96] (stddev=0.22, mean=0.52, sum=3)
-example_fulldisk_1_disk_fraction_used.png (e54ec35feb50caa6)
+disk_fraction_used#1: first: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.05] (stddev=0.34, mean=0.37, sum=2)
+disk_fraction_used#1: last:  [s1=0.30, s2=0.30, s3=0.30, s4=0.30, s5=0.95] (stddev=0.26, mean=0.43, sum=2)
+replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
+replicas#1: last:  [s1=322, s2=328, s3=327, s4=323, s5=200] (stddev=50.05, mean=300.00, sum=1500)
+artifacts[default]: 686ff7227dd03ade

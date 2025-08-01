@@ -113,7 +113,7 @@ func (lq *leaseQueue) MaybeAdd(ctx context.Context, replica state.Replica, s sta
 // order on ties.
 func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 	lq.AddLogTag("tick", tick)
-	ctx = lq.ResetAndAnnotateCtx(ctx)
+	ctx = lq.AnnotateCtx(ctx)
 	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
 	// here (see #149904 for more details).
 	if lq.lastTick.After(lq.next) {

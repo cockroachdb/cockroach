@@ -2,7 +2,7 @@ skip_under_ci
 ----
 
 # This example sets n7 to dead initially and n5 to decommissioning after 2
-# minutes. The output of replicas per store is then plotted.
+# minutes.
 #
 # Create 7 stores, with 700 ranges (RF=3). Each store should have approx 300
 # replicas and 100 leases.
@@ -27,25 +27,15 @@ set_liveness node=6 liveness=decommissioning delay=3m
 assertion type=stat stat=replicas ticks=6 exact_bound=0 stores=(6,7)
 ----
 
-eval duration=12m seed=42
-----
-OK
-
 # We expect one node(store) (n7) to immediately start losing replicas, whilst
 # other stores gain replicas evenly. After 3 minutes, we expect another
 # node(store) (n6) to begin losing replicas in a similar manner.
-plot stat=replicas
-----
-initial store values: [s1=300, s2=300, s3=300, s4=300, s5=300, s6=300, s7=300] (stddev=0.00, mean=300.00, sum=2100)
-last store values: [s1=432, s2=415, s3=420, s4=418, s5=415, s6=0, s7=0] (stddev=189.81, mean=300.00, sum=2100)
-example_liveness_1_replicas.png (bc19963d5dfe92d7)
-
 # Both nodes should begin losing leases immediately after their liveness status
 # is changed to dead or decommissioning (5 minutes later).
-plot stat=leases
+eval duration=12m seed=42 metrics=(replicas,leases)
 ----
-initial store values: [s1=100, s2=100, s3=100, s4=100, s5=100, s6=100, s7=100] (stddev=0.00, mean=100.00, sum=700)
-last store values: [s1=134, s2=142, s3=143, s4=139, s5=142, s6=0, s7=0] (stddev=63.31, mean=100.00, sum=700)
-example_liveness_1_leases.png (22b3c3fbc9ed7889)
-
-# vim:ft=sh
+leases#1: first: [s1=100, s2=100, s3=100, s4=100, s5=100, s6=100, s7=100] (stddev=0.00, mean=100.00, sum=700)
+leases#1: last:  [s1=134, s2=142, s3=143, s4=139, s5=142, s6=0, s7=0] (stddev=63.31, mean=100.00, sum=700)
+replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300, s6=300, s7=300] (stddev=0.00, mean=300.00, sum=2100)
+replicas#1: last:  [s1=432, s2=415, s3=420, s4=418, s5=415, s6=0, s7=0] (stddev=189.81, mean=300.00, sum=2100)
+artifacts[default]: f89c455c9a1b50c9

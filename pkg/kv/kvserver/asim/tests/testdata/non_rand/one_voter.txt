@@ -6,20 +6,10 @@ gen_cluster nodes=2
 gen_ranges ranges=100 repl_factor=1 placement_type=skewed
 ----
 
-eval duration=20m seed=42
+eval duration=20m seed=42 metrics=(replicas,leases)
 ----
-OK
-
-plot stat=replicas
-----
-initial store values: [s1=100, s2=0] (stddev=50.00, mean=50.00, sum=100)
-last store values: [s1=51, s2=49] (stddev=1.00, mean=50.00, sum=100)
-one_voter_1_replicas.png (8f501d87108a1bab)
-
-plot stat=leases
-----
-initial store values: [s1=100, s2=0] (stddev=50.00, mean=50.00, sum=100)
-last store values: [s1=51, s2=49] (stddev=1.00, mean=50.00, sum=100)
-one_voter_1_leases.png (8f501d87108a1bab)
-
-# vim:ft=sh
+leases#1: first: [s1=100, s2=0] (stddev=50.00, mean=50.00, sum=100)
+leases#1: last:  [s1=51, s2=49] (stddev=1.00, mean=50.00, sum=100)
+replicas#1: first: [s1=100, s2=0] (stddev=50.00, mean=50.00, sum=100)
+replicas#1: last:  [s1=51, s2=49] (stddev=1.00, mean=50.00, sum=100)
+artifacts[default]: be70ae1e11cbfaa0

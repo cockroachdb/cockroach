@@ -299,7 +299,7 @@ func IterateRangeDescriptorsFromDisk(
 				// This case shouldn't happen in practice: we have a key that isn't
 				// associated with any range descriptor.
 				if buildutil.CrdbTestBuild {
-					panic(errors.AssertionFailedf("range local key %s outside of a known range", key.Key))
+					return errors.AssertionFailedf("range local key %s outside of a known range", key.Key)
 				}
 				iter.NextKey()
 			}

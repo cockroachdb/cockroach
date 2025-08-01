@@ -300,6 +300,19 @@ config_setting(
 )
 
 bool_flag(
+    name = "crdb_bench_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "crdb_bench",
+    flag_values = {
+        ":crdb_bench_flag": "true",
+    },
+)
+
+bool_flag(
     name = "dev_flag",
     build_setting_default = False,
     visibility = ["//visibility:public"],

@@ -3,11 +3,12 @@ skip_under_ci
 
 gen_cluster nodes=10 node_cpu_rate_capacity=800000
 ----
+WARNING: node CPU capacity of ≈0.00 cores is likely accidental
 
 # Set the rebalance mode to use the mma store rebalancer and disable the lease
 # and replicate queues so that only the mma store rebalancer is moving replicas
 # or leases.
-setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+setting split_queue_enabled=false
 ----
 
 # This workload will be initially evenly distributed over the cluster.
@@ -22,31 +23,15 @@ gen_load rate=5000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_acc
 gen_ranges ranges=50 min_key=10001 max_key=20000 placement_type=skewed
 ----
 
-gen_load rate=5000 rw_ratio=0.95 min_block=1 max_block=1 request_cpu_per_access=100 raft_cpu_per_write=20 min_key=10001 max_key=20000
+gen_load rate=5000 rw_ratio=0.95 min_block=128 max_block=128 request_cpu_per_access=100000 raft_cpu_per_write=20000 min_key=10001 max_key=20000
 ----
 
-eval duration=15m samples=1 seed=42
+eval duration=15m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
-OK
-
-plot stat=cpu sample=1
-----
-last store values: [s1=109582, s2=110956, s3=110618, s4=112028, s5=96927, s6=111873, s7=92069, s8=102171, s9=106899, s10=76400] (stddev=10975.81, mean=102952.30, sum=1029523)
-mma_high_cpu_1_cpu.png (18011d7a909e2bd2)
-
-plot stat=write_bytes_per_second
-----
-last store values: [s1=7691, s2=7471, s3=7705, s4=7800, s5=7458, s6=7517, s7=7541, s8=7546, s9=7564, s10=7526] (stddev=106.25, mean=7581.90, sum=75819)
-mma_high_cpu_1_write_bytes_per_second.png (0a387b918219e27d)
-
-plot stat=replicas sample=1 
-----
-initial store values: [s1=80, s2=80, s3=80, s4=30, s5=30, s6=30, s7=30, s8=30, s9=30, s10=30] (stddev=22.91, mean=45.00, sum=450)
-last store values: [s1=65, s2=75, s3=73, s4=36, s5=34, s6=33, s7=34, s8=35, s9=35, s10=30] (stddev=17.25, mean=45.00, sum=450)
-mma_high_cpu_1_replicas.png (123ecb1502a3b083)
-
-plot stat=leases sample=1 
-----
-initial store values: [s1=60, s2=10, s3=10, s4=11, s5=10, s6=10, s7=10, s8=10, s9=9, s10=10] (stddev=15.01, mean=15.00, sum=150)
-last store values: [s1=12, s2=14, s3=13, s4=17, s5=15, s6=19, s7=14, s8=15, s9=16, s10=15] (stddev=1.90, mean=15.00, sum=150)
-mma_high_cpu_1_leases.png (e49491ae454ccafc)
+cpu#1: last:  [s1=83160123, s2=54234356, s3=64634324, s4=50492283, s5=70836431, s6=50695265, s7=50523948, s8=50682288, s9=20295537, s10=20169633] (stddev=18747774.55, mean=51572418.80, sum=515724188)
+leases#1: first: [s1=60, s2=10, s3=10, s4=11, s5=10, s6=10, s7=10, s8=10, s9=9, s10=10] (stddev=15.01, mean=15.00, sum=150)
+leases#1: last:  [s1=18, s2=15, s3=16, s4=16, s5=17, s6=15, s7=15, s8=15, s9=11, s10=12] (stddev=2.00, mean=15.00, sum=150)
+replicas#1: first: [s1=80, s2=80, s3=80, s4=30, s5=30, s6=30, s7=30, s8=30, s9=30, s10=30] (stddev=22.91, mean=45.00, sum=450)
+replicas#1: last:  [s1=65, s2=72, s3=72, s4=35, s5=37, s6=35, s7=35, s8=35, s9=32, s10=32] (stddev=16.31, mean=45.00, sum=450)
+write_bytes_per_second#1: last:  [s1=29937, s2=34442, s3=34344, s4=10720, s5=11916, s6=10641, s7=10760, s8=10737, s9=8851, s10=8776] (stddev=10441.28, mean=17112.40, sum=171124)
+artifacts[mma-only]: 7bf705441b034270
