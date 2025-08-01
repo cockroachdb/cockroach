@@ -40,17 +40,15 @@ func (s saslKerberosBuilder) validateParams(u *changefeedbase.SinkURL) error {
 	principal := u.PeekParam(changefeedbase.SinkParamSASLKerberosPrincipal)
 	keytabPath := u.PeekParam(changefeedbase.SinkParamSASLKerberosKeytabPath)
 
-	// If principal is provided, keytab must also be provided
+	// If principal is provided, keytab must also be provided, and vice versa.
 	if principal != "" && keytabPath == "" {
 		return errors.Newf("sasl_kerberos_keytab_path must be provided when sasl_kerberos_principal is specified")
 	}
-
-	// If keytab is provided, principal must also be provided
 	if keytabPath != "" && principal == "" {
 		return errors.Newf("sasl_kerberos_principal must be provided when sasl_kerberos_keytab_path is specified")
 	}
 
-	// If keytab path is provided, verify the file exists
+	// If keytab path is provided, verify the file exists.
 	if keytabPath != "" {
 		if _, err := os.Stat(keytabPath); os.IsNotExist(err) {
 			return errors.Newf("keytab file not found at path %s", keytabPath)
@@ -99,8 +97,7 @@ func (f defaultKerberosClientFactory) createWithKeytab(ctx context.Context, prin
 		var err error
 		cfg, err = config.Load(configPath)
 		if err != nil {
-			// Fall back to default config if loading fails
-			cfg = config.New()
+			return nil, errors.Wrap(err, "loading config")
 		}
 	}
 
@@ -125,8 +122,7 @@ func (f defaultKerberosClientFactory) createWithCache(ctx context.Context, realm
 		var err error
 		cfg, err = config.Load(configPath)
 		if err != nil {
-			// Fall back to default config if loading fails
-			cfg = config.New()
+			return nil, errors.Wrap(err, "loading config")
 		}
 	}
 
