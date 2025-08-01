@@ -64,6 +64,8 @@ const (
 	VolumeTypeBoot VolumeType = "boot"
 	// VolumeTypeStandard represents an attached persistent disk.
 	VolumeTypePersistent VolumeType = "persistent"
+
+	DefaultProjectID = "cockroach-ephemeral"
 )
 
 var (
@@ -74,7 +76,7 @@ var (
 
 func initGCEProjectDefaults() {
 	defaultDefaultProject = config.EnvOrDefaultString(
-		"ROACHPROD_GCE_DEFAULT_PROJECT", "cockroach-ephemeral",
+		"ROACHPROD_GCE_DEFAULT_PROJECT", DefaultProjectID,
 	)
 	defaultMetadataProject = config.EnvOrDefaultString(
 		"ROACHPROD_GCE_METADATA_PROJECT",

@@ -784,7 +784,7 @@ func makeRestoreDriver(
 
 func (rd *restoreDriver) defaultClusterSettings() []install.ClusterSettingOption {
 	return []install.ClusterSettingOption{
-		install.SecureOption(false),
+		install.SimpleSecureOption(false),
 	}
 }
 

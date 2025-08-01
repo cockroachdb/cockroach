@@ -2696,7 +2696,7 @@ func (u *CommonTestUtils) resetCluster(
 	}
 
 	cockroachPath := clusterupgrade.CockroachPathForVersion(u.t, version)
-	settings = append(settings, install.BinaryOption(cockroachPath), install.SecureOption(true))
+	settings = append(settings, install.BinaryOption(cockroachPath), install.SimpleSecureOption(true))
 	return clusterupgrade.StartWithSettings(
 		ctx, l, u.cluster, u.roachNodes, option.NewStartOpts(opts...), settings...,
 	)
