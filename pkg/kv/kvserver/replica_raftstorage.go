@@ -417,23 +417,19 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 // cross-engine writes.
 //
 //  1. Log engine write (durable):
-//     1.1. For this replica, remove log entries at > RaftAppliedIndex.
-//     1.2. For subsumed, remove log entries at > RaftAppliedIndex.
-//     1.3. Update RaftTruncatedState and HardState.
-//     1.4. WAG: apply to RaftAppliedIndex.
-//     1.5. WAG: apply subsumed to RaftAppliedIndex.
-//     1.6. WAG: apply snapshot, with the state machine mutation (2).
+//     1.1. HardState, RaftTruncatedState for new LogID. Log is empty.
+//     1.2. WAG node with the state machine mutation (2).
 //
 //  2. State machine mutation:
 //     2.1. For subsumed, clear RangeID-local un-/replicated state.
-//     2.2. For subsumed, write RangeTombstone with max NextReplicaID.
-//     2.3. Clear MVCC keyspace for (this + subsumed + diff).
-//     2.4. Clear unreplicated RangeID-local state, retain RaftReplicaID.
-//     2.5. Ingest snapshot SSTs (replicated range/RangeID-local state).
+//     2.2. For subsumed, write RangeTombstone with max NextReplicaID / LogID.
+//     2.3. Clear MVCC keyspace for (this + subsumed).
+//     2.4. Ingest snapshot SSTs.
+//     2.5. Update RaftReplicaID with the new LogID.
 //
 //  3. Log engine GC (after state machine mutation 2 is durably applied):
-//     3.1. Remove log entries <= durable RaftAppliedIndex.
-//     3.2. For subsumed, remove the raft state.
+//     3.1. Remove previous LogID.
+//     3.2. For each subsumed, remove the last LogID.
 //
 // TODO(sep-raft-log): support the status quo in which 1+2+3 is written
 // atomically, and 1.2 is not written.
@@ -565,6 +561,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		Index: kvpb.RaftIndex(nonemptySnap.Metadata.Index),
 		Term:  kvpb.RaftTerm(nonemptySnap.Metadata.Term),
 	}
+	clearedSpans := inSnap.clearedSpans
 
 	subsumedDescs := make([]*roachpb.RangeDescriptor, 0, len(subsumedRepls))
 	for _, sr := range subsumedRepls {
@@ -586,9 +583,11 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		subsumedDescs = append(subsumedDescs, sr.Desc())
 	}
 
-	sb := snapWriteBuilder{
+	st := r.ClusterSettings()
+	prepInput := prepareSnapApplyInput{
 		id: r.ID(),
 
+		st:       st,
 		todoEng:  r.store.TODOEngine(),
 		sl:       r.raftMu.stateLoader,
 		writeSST: inSnap.SSTStorageScratch.WriteSST,
@@ -597,13 +596,15 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		hardState:     hs,
 		desc:          desc,
 		subsumedDescs: subsumedDescs,
-
-		cleared: inSnap.clearedSpans,
 	}
-	_ = applySnapshotTODO // 2.3 (this) + 2.5 is written, the rest is handled below
-	if err := sb.prepareSnapApply(ctx); err != nil {
+
+	_ = applySnapshotTODO
+	clearedUnreplicatedSpan, clearedSubsumedSpans, err := prepareSnapApply(ctx, prepInput)
+	if err != nil {
 		return err
 	}
+	clearedSpans = append(clearedSpans, clearedUnreplicatedSpan)
+	clearedSpans = append(clearedSpans, clearedSubsumedSpans...)
 
 	ls := r.asLogStorage()
 
@@ -621,7 +622,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	}
 
 	if len(inSnap.externalSSTs)+len(inSnap.sharedSSTs) == 0 && /* simple */
-		inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) /* small */ {
+		inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&st.SV) /* small */ {
 		applyAsIngest = false
 	}
 
@@ -637,7 +638,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	} else {
 		_ = applySnapshotTODO // all atomic
 		err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
-			ctx, inSnap.SSTStorageScratch.SSTs(), sb.cleared)
+			ctx, inSnap.SSTStorageScratch.SSTs(), clearedSpans)
 		if err != nil {
 			return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
 		}
@@ -695,7 +696,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// The necessary on-disk state is read. Update the in-memory Replica and Store
 	// state now.
 
-	subPHs, err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls)
+	subPHs, err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls, mergedTombstoneReplicaID)
 	if err != nil {
 		log.Fatalf(ctx, "failed to clear in-memory data of subsumed replicas while applying snapshot: %+v", err)
 	}
@@ -795,7 +796,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 // replicas. This method requires that each of the subsumed replicas raftMu is
 // held.
 func (r *Replica) clearSubsumedReplicaInMemoryData(
-	ctx context.Context, subsumedRepls []*Replica,
+	ctx context.Context, subsumedRepls []*Replica, subsumedNextReplicaID roachpb.ReplicaID,
 ) ([]*ReplicaPlaceholder, error) {
 	//
 	var phs []*ReplicaPlaceholder
@@ -807,7 +808,7 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		// allowed in (perhaps not involving any of the RangeIDs known to the merge
 		// but still touching its keyspace) and causing corruption.
 		ph, err := r.store.removeInitializedReplicaRaftMuLocked(
-			ctx, sr, mergedTombstoneReplicaID, "subsumed by snapshot",
+			ctx, sr, subsumedNextReplicaID, "subsumed by snapshot",
 			RemoveOptions{
 				// The data was already destroyed by clearSubsumedReplicaDiskData.
 				DestroyData:       false,
@@ -819,7 +820,7 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		phs = append(phs, ph)
 		// We removed sr's data when we committed the batch. Finish subsumption by
 		// updating the in-memory bookkeping.
-		if err := sr.postDestroyRaftMuLocked(ctx); err != nil {
+		if err := sr.postDestroyRaftMuLocked(ctx, sr.GetMVCCStats()); err != nil {
 			return nil, err
 		}
 	}

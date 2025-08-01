@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
-	"github.com/cockroachdb/redact"
 )
 
 //go:generate go run ./generate_visitor.go scop ImmediateMutation immediate_mutation.go immediate_mutation_visitor_generated.go
@@ -25,10 +24,6 @@ type immediateMutationOp struct{ baseOp }
 var _ = immediateMutationOp{baseOp: baseOp{}}
 
 func (immediateMutationOp) Type() Type { return MutationType }
-
-func (immediateMutationOp) Description() redact.RedactableString {
-	return "Updating schema metadata"
-}
 
 // NotImplemented is a placeholder for operations which haven't been defined yet.
 // TODO(postamar): remove all of these

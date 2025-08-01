@@ -185,8 +185,29 @@ const (
 	// V24_3 is CockroachDB v24.3. It's used for all v24.3.x patch releases.
 	V24_3
 
+	TODO_Delete_V25_1_Start
+
+	// TODO_Delete_V25_1_AddRangeForceFlushKey adds the RangeForceFlushKey, a replicated
+	// range-ID local key, which is written below raft.
+	TODO_Delete_V25_1_AddRangeForceFlushKey
+
+	// TODO_Delete_V25_1_BatchStreamRPC adds the BatchStream RPC, which allows for more
+	// efficient Batch unary RPCs.
+	TODO_Delete_V25_1_BatchStreamRPC
+
+	// TODO_Delete_V25_1_PreparedTransactionsTable adds the system.prepared_transactions
+	// table. The table is used to store information about prepared transaction
+	// that are part of the XA two-phase commit protocol.
+	TODO_Delete_V25_1_PreparedTransactionsTable
+
 	// V25_1 is CockroachDB v25.1. It's used for all v25.1.x patch releases.
 	V25_1
+
+	TODO_Delete_V25_2_Start
+
+	TODO_Delete_V25_2_AddSqlActivityFlushJob
+
+	TODO_Delete_V25_2_SetUiDefaultTimezoneSetting
 
 	// V25_2 is CockroachDB v25.2. It's used for all v25.2.x patch releases.
 	V25_2
@@ -199,16 +220,8 @@ const (
 
 	V25_3_AddHotRangeLoggerJob
 
-	// V25_3_WriteInitialTruncStateBeforeSplitApplication is the version above
-	// which we write the initial truncated state before applying a split. By
-	// extension, we no longer need to replicate the truncated state when
-	// constructing the split write batch.
-	V25_3_WriteInitialTruncStateBeforeSplitApplication
-
 	// V25_3 is CockroachDB v25.3. It's used for all v25.3.x patch releases.
 	V25_3
-
-	V25_4_Start
 
 	// *************************************************
 	// Step (1) Add new versions above this comment.
@@ -245,10 +258,23 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1: {Major: 24, Minor: 1, Internal: 0},
 	V24_2: {Major: 24, Minor: 2, Internal: 0},
 	V24_3: {Major: 24, Minor: 3, Internal: 0},
+
+	// v25.1 versions. Internal versions must be even.
+	TODO_Delete_V25_1_Start: {Major: 24, Minor: 3, Internal: 2},
+
+	TODO_Delete_V25_1_AddRangeForceFlushKey:     {Major: 24, Minor: 3, Internal: 8},
+	TODO_Delete_V25_1_BatchStreamRPC:            {Major: 24, Minor: 3, Internal: 10},
+	TODO_Delete_V25_1_PreparedTransactionsTable: {Major: 24, Minor: 3, Internal: 12},
+
 	V25_1: {Major: 25, Minor: 1, Internal: 0},
+
+	// v25.2 versions. Internal versions must be even.
+	TODO_Delete_V25_2_Start:                       {Major: 25, Minor: 1, Internal: 2},
+	TODO_Delete_V25_2_AddSqlActivityFlushJob:      {Major: 25, Minor: 1, Internal: 4},
+	TODO_Delete_V25_2_SetUiDefaultTimezoneSetting: {Major: 25, Minor: 1, Internal: 6},
+
 	V25_2: {Major: 25, Minor: 2, Internal: 0},
 
-	// v25.3 versions. Internal versions must be even.
 	V25_3_Start: {Major: 25, Minor: 2, Internal: 2},
 
 	V25_3_AddEventLogColumnAndIndex: {Major: 25, Minor: 2, Internal: 4},
@@ -257,12 +283,8 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V25_3_AddHotRangeLoggerJob: {Major: 25, Minor: 2, Internal: 8},
 
-	V25_3_WriteInitialTruncStateBeforeSplitApplication: {Major: 25, Minor: 2, Internal: 10},
-
 	V25_3: {Major: 25, Minor: 3, Internal: 0},
 
-	// v25.4 versions. Internal versions must be even.
-	V25_4_Start: {Major: 25, Minor: 3, Internal: 2},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -280,14 +302,6 @@ const MinSupported Key = V25_2
 // have at least an RC build published).
 const PreviousRelease Key = V25_2
 
-// V25_4 is a placeholder that will eventually be replaced by the actual 25.4
-// version Key, but in the meantime it points to the latest Key. The placeholder
-// is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 25.4 and has completed all associated migrations; most
-// version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 25.4.
-const V25_4 = Latest
-
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
 // and associated upgrade implementations are frozen.
@@ -299,13 +313,13 @@ const V25_4 = Latest
 //     binary in a dev cluster.
 //
 // See devOffsetKeyStart for more details.
-const DevelopmentBranch = true
+const DevelopmentBranch = false
 
 // finalVersion should be set on a release branch to the minted final cluster
 // version key, e.g. to V23_2 on the release-23.2 branch once it is minted.
 // Setting it has the effect of ensuring no versions are subsequently added (see
 // TestFinalVersion).
-const finalVersion Key = -1
+const finalVersion Key = V25_3
 
 // TestingExtraVersions may be set to true by packages of tests which will
 // intentionally use Keys greater than Latest, which otherwise would crash

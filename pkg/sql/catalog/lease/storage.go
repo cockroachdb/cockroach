@@ -72,8 +72,6 @@ type leasingMetrics struct {
 	longWaitForNoVersionsActive                *metric.Gauge
 	longTwoVersionInvariantViolationWaitActive *metric.Gauge
 	longWaitForInitialVersionActive            *metric.Gauge
-	leaseMaxBytesHist                          metric.IHistogram
-	leaseCurBytesCount                         *metric.Gauge
 }
 
 type leaseFields struct {

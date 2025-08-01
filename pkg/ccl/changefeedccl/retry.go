@@ -18,11 +18,11 @@ var useFastRetry = envutil.EnvOrDefaultBool(
 	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY", false)
 
 // getRetry returns retry object for changefeed.
-func getRetry(ctx context.Context, maxBackoff, backoffReset time.Duration) Retry {
+func getRetry(ctx context.Context) Retry {
 	opts := retry.Options{
 		InitialBackoff: 1 * time.Second,
 		Multiplier:     2,
-		MaxBackoff:     maxBackoff,
+		MaxBackoff:     1 * time.Minute,
 	}
 
 	if useFastRetry {
@@ -33,8 +33,7 @@ func getRetry(ctx context.Context, maxBackoff, backoffReset time.Duration) Retry
 		}
 	}
 
-	return Retry{Retry: retry.StartWithCtx(ctx, opts),
-		resetRetryAfter: backoffReset}
+	return Retry{Retry: retry.StartWithCtx(ctx, opts)}
 }
 
 func testingUseFastRetry() func() {
@@ -44,15 +43,16 @@ func testingUseFastRetry() func() {
 	}
 }
 
+// reset retry state after changefeed ran for that much time
+// without errors.
+const resetRetryAfter = 10 * time.Minute
+
 // Retry is a thin wrapper around retry.Retry which
 // resets retry state if changefeed been running for sufficiently
 // long time.
 type Retry struct {
 	retry.Retry
 	lastRetry time.Time
-	// reset retry state after changefeed ran for that much time
-	// without errors.
-	resetRetryAfter time.Duration
 }
 
 // Next returns whether the retry loop should continue, and blocks for the
@@ -63,7 +63,7 @@ func (r *Retry) Next() bool {
 	defer func() {
 		r.lastRetry = timeutil.Now()
 	}()
-	if timeutil.Since(r.lastRetry) > r.resetRetryAfter {
+	if timeutil.Since(r.lastRetry) > resetRetryAfter {
 		r.Reset()
 	}
 	return r.Retry.Next()

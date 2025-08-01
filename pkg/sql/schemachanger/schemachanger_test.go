@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
@@ -91,11 +90,9 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 	tdb.Exec(t, `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
 
 	require.NotNil(t, runningStatus0.Load())
-	require.Regexp(t, "Pending.*PostCommit", runningStatus0.Load().(string))
-	require.NotRegexp(t, "(‹×›)", runningStatus0.Load())
+	require.Regexp(t, "PostCommit.* pending", runningStatus0.Load().(string))
 	require.NotNil(t, runningStatus1.Load())
-	require.Regexp(t, "Pending.*PostCommit", runningStatus1.Load().(string))
-	require.NotRegexp(t, "(‹×›)", runningStatus1.Load())
+	require.Regexp(t, "PostCommit.* pending", runningStatus1.Load().(string))
 }
 
 func TestSchemaChangerJobErrorDetails(t *testing.T) {
@@ -118,7 +115,7 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 				return nil
 			},
 		},
-		EventLog:         &eventlog.EventLogTestingKnobs{SyncWrites: true},
+		EventLog:         &sql.EventLogTestingKnobs{SyncWrites: true},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 

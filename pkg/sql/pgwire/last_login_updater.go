@@ -27,15 +27,15 @@ type lastLoginUpdater struct {
 	group *singleflight.Group
 	// execCfg is the executor configuration used for running update operations.
 	execCfg *sql.ExecutorConfig
-	// lastUpdateCache tracks the last time each user's login time was updated
-	// to avoid redundant database updates.
-	lastUpdateCache *cache.UnorderedCache
 
 	mu struct {
 		syncutil.Mutex
 		// pendingUsers tracks users that need their last login time updated
 		// in the next singleflight operation.
 		pendingUsers map[username.SQLUsername]struct{}
+		// lastUpdateCache tracks the last time each user's login time was updated
+		// to avoid redundant database updates.
+		lastUpdateCache *cache.UnorderedCache
 	}
 }
 
@@ -69,11 +69,11 @@ func newLastLoginUpdater(execCfg *sql.ExecutorConfig) *lastLoginUpdater {
 	}
 
 	u := &lastLoginUpdater{
-		group:           singleflight.NewGroup("update last login time", ""),
-		execCfg:         execCfg,
-		lastUpdateCache: cache.NewUnorderedCache(cacheConfig),
+		group:   singleflight.NewGroup("update last login time", singleflight.NoTags),
+		execCfg: execCfg,
 	}
 	u.mu.pendingUsers = make(map[username.SQLUsername]struct{})
+	u.mu.lastUpdateCache = cache.NewUnorderedCache(cacheConfig)
 	return u
 }
 
@@ -87,13 +87,21 @@ func (u *lastLoginUpdater) updateLastLoginTime(ctx context.Context, dbUser usern
 	}
 
 	// Check if we recently updated this user's login time.
-	if lastUpdate, ok := u.lastUpdateCache.Get(dbUser); ok {
-		if lastUpdateTime, ok := lastUpdate.(time.Time); ok {
-			// Only update if it's been more than lastLoginEvictionTime since the last update.
-			if timeutil.Since(lastUpdateTime) < lastLoginEvictionTime {
-				return
+	var recentlyUpdated bool
+	func() {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		if lastUpdate, ok := u.mu.lastUpdateCache.Get(dbUser); ok {
+			if lastUpdateTime, ok := lastUpdate.(time.Time); ok {
+				// Only update if it's been more than lastLoginEvictionTime since the last update.
+				if timeutil.Since(lastUpdateTime) < lastLoginEvictionTime {
+					recentlyUpdated = true
+				}
 			}
 		}
+	}()
+	if recentlyUpdated {
+		return
 	}
 
 	// Use singleflight to ensure at most one last login time update batch
@@ -162,9 +170,13 @@ func (u *lastLoginUpdater) processPendingUpdates(ctx context.Context) error {
 
 	// Update the cache with the current time for all successfully updated users.
 	now := timeutil.Now()
-	for _, user := range users {
-		u.lastUpdateCache.Add(user, now)
-	}
+	func() {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		for _, user := range users {
+			u.mu.lastUpdateCache.Add(user, now)
+		}
+	}()
 
 	return nil
 }

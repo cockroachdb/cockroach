@@ -12,7 +12,6 @@ import "time"
 type TimeSource interface {
 	Now() time.Time
 	Since(t time.Time) time.Duration
-	Until(t time.Time) time.Duration
 	NewTimer() TimerI
 	NewTicker(duration time.Duration) TickerI
 }
@@ -59,11 +58,6 @@ func (DefaultTimeSource) Now() time.Time {
 // Since implements TimeSource interface
 func (DefaultTimeSource) Since(t time.Time) time.Duration {
 	return Since(t)
-}
-
-// Until implements TimeSource interface
-func (DefaultTimeSource) Until(t time.Time) time.Duration {
-	return Until(t)
 }
 
 // NewTimer returns a TimerI wrapping *Timer.

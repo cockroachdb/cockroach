@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
@@ -49,7 +48,7 @@ func TestTelemetryLogging(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			EventLog: &eventlog.EventLogTestingKnobs{
+			EventLog: &EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic
 				// number of statements run by internal executor.
 				SyncWrites: true,
@@ -716,7 +715,7 @@ func TestTelemetryLoggingInternalEnabled(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			EventLog: &eventlog.EventLogTestingKnobs{
+			EventLog: &EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic
 				// number of statements run by internal executor.
 				SyncWrites: true,
@@ -805,7 +804,7 @@ func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			EventLog: &eventlog.EventLogTestingKnobs{
+			EventLog: &EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic
 				// number of statements run by internal executor.
 				SyncWrites: true,
@@ -1582,7 +1581,7 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			EventLog: &eventlog.EventLogTestingKnobs{
+			EventLog: &EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic
 				// number of statements run by internal executor.
 				SyncWrites: true,

@@ -1,6 +1,6 @@
 # tenant-capability-override-opt: can_check_consistency=true
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE foo (a int)
 
 statement ok

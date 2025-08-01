@@ -32,7 +32,6 @@ type TestingKnobs struct {
 	JobsTestingKnobs               ModuleTestingKnobs
 	BackupRestore                  ModuleTestingKnobs
 	TTL                            ModuleTestingKnobs
-	Inspect                        ModuleTestingKnobs
 	SchemaTelemetry                ModuleTestingKnobs
 	Streaming                      ModuleTestingKnobs
 	UpgradeManager                 ModuleTestingKnobs
@@ -59,5 +58,4 @@ type TestingKnobs struct {
 	LicenseTestingKnobs            ModuleTestingKnobs
 	VecIndexTestingKnobs           ModuleTestingKnobs
 	PolicyRefresherTestingKnobs    ModuleTestingKnobs
-	NodeCapacityProviderKnobs      ModuleTestingKnobs
 }

@@ -269,14 +269,14 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	}
 }
 
-// Test two things about non-retryable errors happening when the Executor does
+// Test two things about non-retriable errors happening when the Executor does
 // an "autoCommit" (i.e. commits the KV txn after running an implicit
 // transaction):
 // 1) The error is reported to the client.
 // 2) The error doesn't leave the session in the Aborted state. After running
 // implicit transactions, the state should always be NoTxn, regardless of any
 // errors.
-func TestNonRetryableErrorOnAutoCommit(t *testing.T) {
+func TestNonRetriableErrorOnAutoCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -761,10 +761,10 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 	}
 }
 
-// TestRetryableErrorDuringPrepare ensures that when preparing and using a new
-// transaction, retryable errors are handled properly and do not propagate to
+// TestRetriableErrorDuringPrepare ensures that when preparing and using a new
+// transaction, retriable errors are handled properly and do not propagate to
 // the user's transaction.
-func TestRetryableErrorDuringPrepare(t *testing.T) {
+func TestRetriableErrorDuringPrepare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const uniqueString = "'a very unique string'"
@@ -877,11 +877,11 @@ func TestStatementCancelRollback(t *testing.T) {
 	}
 }
 
-// TestRetryableErrorDuringUpgradedTransaction ensures that a retryable error
+// TestRetriableErrorDuringUpgradedTransaction ensures that a retriable error
 // that happens during a transaction that was upgraded from an implicit
 // transaction into an explicit transaction does not cause the BEGIN to be
 // re-executed.
-func TestRetryableErrorDuringUpgradedTransaction(t *testing.T) {
+func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -941,11 +941,11 @@ func TestRetryableErrorDuringUpgradedTransaction(t *testing.T) {
 	require.Equal(t, 2, x)
 }
 
-// TestRetryableErrorAutoCommitBeforeDDL injects a retryable error while
+// TestRetriableErrorAutoCommitBeforeDDL injects a retriable error while
 // executing a schema change after that schema change caused the transaction to
 // autocommit. In this scenario, the schema change should automatically be
 // retried.
-func TestRetryableErrorAutoCommitBeforeDDL(t *testing.T) {
+func TestRetriableErrorAutoCommitBeforeDDL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -2016,13 +2016,13 @@ func TestAbortedTxnLocks(t *testing.T) {
 	})
 }
 
-// TestRetryableErrorDuringUpgradedTransaction ensures that a retryable error
+// TestRetriableErrorDuringUpgradedTransaction ensures that a retriable error
 // that happens during a transaction does not cause the transaction to release
 // the locks it previously held.
 // NOTE: There have been discussions around changing this behavior in the KV
 // layer, but for now this is the expected behavior.
 // See https://github.com/cockroachdb/cockroach/issues/117020.
-func TestRetryableErrorDuringTransactionHoldsLocks(t *testing.T) {
+func TestRetriableErrorDuringTransactionHoldsLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()

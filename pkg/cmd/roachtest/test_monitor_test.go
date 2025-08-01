@@ -31,9 +31,6 @@ func (s *stubTestMonitorError) ExpectProcessAlive(
 	nodes option.NodeListOption, opts ...option.OptionFunc,
 ) {
 }
-func (s *stubTestMonitorError) AvailableNodes(virtualClusterName string) option.NodeListOption {
-	return option.NodeListOption{}
-}
 
 func (s *stubTestMonitorError) WaitForNodeDeath() error {
 	return errors.New("test error")
@@ -52,7 +49,6 @@ func TestGlobalMonitorError(t *testing.T) {
 	defer stopper.Stop(ctx)
 	cr := newClusterRegistry()
 	runner := newUnitTestRunner(cr, stopper)
-	github := defaultGithub(runner.config.disableIssue)
 
 	var buf syncedBuffer
 	copt := defaultClusterOpt()
@@ -76,6 +72,6 @@ func TestGlobalMonitorError(t *testing.T) {
 		},
 	}
 	err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-		defaultParallelism, copt, testOpts{}, lopt, github)
+		defaultParallelism, copt, testOpts{}, lopt)
 	require.Error(t, err)
 }

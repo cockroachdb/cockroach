@@ -89,7 +89,7 @@ type StoreTestingKnobs struct {
 	//
 	// TODO(pavelkalinnikov): have a more stable and less nuanced way of blocking
 	// the commands application flow for the entire store.
-	TestingAfterRaftLogSync func(roachpb.FullReplicaID)
+	TestingAfterRaftLogSync func(storage.FullReplicaID)
 
 	// TestingApplyCalledTwiceFilter is called before applying the results of a command on
 	// each replica assuming the command was cleared for application (i.e. no

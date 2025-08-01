@@ -59,7 +59,7 @@ func GetTableSchemaInfo(
 	schemaInfo := make(map[descpb.ID]tableSchemaInfo)
 	execCfg := cfg.ExecutorConfig.(*sql.ExecutorConfig)
 	err := targets.EachTarget(func(target changefeedbase.Target) error {
-		id := target.DescID
+		id := target.TableID
 		td, dbd, sd, err := getDescriptors(ctx, execCfg, id)
 		if err != nil {
 			return err

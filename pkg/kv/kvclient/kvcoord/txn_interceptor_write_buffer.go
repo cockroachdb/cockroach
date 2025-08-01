@@ -40,7 +40,7 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.enabled",
 	"if enabled, transactional writes are buffered on the client",
-	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.enabled", true /* defaultValue */),
+	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.enabled", false /* defaultValue */),
 	settings.WithPublic,
 )
 
@@ -48,14 +48,7 @@ var bufferedWritesScanTransformEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.transformations.scans.enabled",
 	"if enabled, locking scans and reverse scans with replicated durability are transformed to unreplicated durability",
-	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.scans.enabled", true /* defaultValue */),
-)
-
-var bufferedWritesGetTransformEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"kv.transaction.write_buffering.transformations.get.enabled",
-	"if enabled, locking get requests with replicated durability are transformed to unreplicated durability",
-	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.get.enabled", true /* defaultValue */),
+	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.scans.enabled", false /* defaultValue */),
 )
 
 const defaultBufferSize = 1 << 22 // 4MB
@@ -195,8 +188,6 @@ type txnWriteBuffer struct {
 	// `flushed` tracks whether the buffer has been previously flushed.
 	flushed bool
 
-	pipelineEnabler pipelineEnabler
-
 	// flushOnNextBatch, if set, indicates that write buffering has just been
 	// disabled, and the interceptor should flush any buffered writes when it
 	// sees the next BatchRequest.
@@ -227,19 +218,6 @@ type txnWriteBuffer struct {
 	// testingOverrideCPutEvalFn is used to mock the evaluation function for
 	// conditional puts. Intended only for tests.
 	testingOverrideCPutEvalFn func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError
-}
-
-type transformConfig struct {
-	transformScans bool
-	transformGets  bool
-}
-
-type pipelineEnabler interface {
-	enableImplicitPipelining()
-}
-
-func (twb *txnWriteBuffer) init(pe pipelineEnabler) {
-	twb.pipelineEnabler = pe
 }
 
 func (twb *txnWriteBuffer) setEnabled(enabled bool) {
@@ -286,12 +264,9 @@ func (twb *txnWriteBuffer) SendLocked(
 
 	// We check if scan transforms are enabled once and use that answer until the
 	// end of SendLocked.
-	cfg := transformConfig{
-		transformScans: bufferedWritesScanTransformEnabled.Get(&twb.st.SV),
-		transformGets:  bufferedWritesGetTransformEnabled.Get(&twb.st.SV),
-	}
+	transformScans := bufferedWritesScanTransformEnabled.Get(&twb.st.SV)
 
-	if twb.batchRequiresFlush(ctx, ba, cfg) {
+	if twb.batchRequiresFlush(ctx, ba, transformScans) {
 		return twb.flushBufferAndSendBatch(ctx, ba)
 	}
 
@@ -299,7 +274,7 @@ func (twb *txnWriteBuffer) SendLocked(
 	// budget. If it will, we shouldn't buffer writes from the current batch,
 	// and flush the buffer.
 	maxSize := bufferedWritesMaxBufferSize.Get(&twb.st.SV)
-	bufSize := twb.estimateSize(ba, cfg) + twb.bufferSize
+	bufSize := twb.estimateSize(ba, transformScans) + twb.bufferSize
 
 	// NB: if bufferedWritesMaxBufferSize is set to 0 then we effectively disable
 	// any buffer limiting.
@@ -317,7 +292,7 @@ func (twb *txnWriteBuffer) SendLocked(
 		return nil, kvpb.NewError(err)
 	}
 
-	transformedBa, rr, pErr := twb.applyTransformations(ctx, ba, cfg)
+	transformedBa, rr, pErr := twb.applyTransformations(ctx, ba, transformScans)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -353,7 +328,7 @@ func (twb *txnWriteBuffer) SendLocked(
 }
 
 func (twb *txnWriteBuffer) batchRequiresFlush(
-	ctx context.Context, ba *kvpb.BatchRequest, _ transformConfig,
+	ctx context.Context, ba *kvpb.BatchRequest, transformScans bool,
 ) bool {
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
@@ -480,10 +455,10 @@ func unsupportedOptionError(m kvpb.Method, option string) error {
 
 // estimateSize returns a conservative estimate by which the buffer will grow in
 // size if the writes from the supplied batch request are buffered.
-func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest, cfg transformConfig) int64 {
+func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest, transformScans bool) int64 {
 	var scratch bufferedWrite
-	scratch.vals = scratch.valsScratch[:1]
 	estimate := int64(0)
+	scratch.vals = make([]bufferedValue, 1)
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
 		switch t := req.(type) {
@@ -500,7 +475,7 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest, cfg transformConf
 			estimate += scratch.size()
 			estimate += lockKeyInfoSize
 		case *kvpb.GetRequest:
-			if IsReplicatedLockingRequest(t) && cfg.transformGets {
+			if IsReplicatedLockingRequest(t) {
 				scratch.key = t.Key
 				estimate += scratch.size()
 				estimate += lockKeyInfoSize
@@ -537,7 +512,7 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest, cfg transformConf
 			// the buffer. Here, we assume at least 1 key will be returned that is
 			// about the size of the scan start boundary. We try to protect from large
 			// buffer overflows by transforming the batch's MaxSpanRequestKeys later.
-			if IsReplicatedLockingRequest(t) && cfg.transformScans {
+			if IsReplicatedLockingRequest(t) && transformScans {
 				scratch.key = t.Key
 				scratch.vals[0] = bufferedValue{
 					seq: t.Sequence,
@@ -546,7 +521,7 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest, cfg transformConf
 			}
 		case *kvpb.ReverseScanRequest:
 			// See the comment on the ScanRequest case for more details.
-			if IsReplicatedLockingRequest(t) && cfg.transformScans {
+			if IsReplicatedLockingRequest(t) && transformScans {
 				scratch.key = t.Key
 				scratch.vals[0] = bufferedValue{
 					seq: t.Sequence,
@@ -658,6 +633,7 @@ func (twb *txnWriteBuffer) populateLeafInputState(
 				continue
 			}
 		}
+		// TODO(yuzefovich): optimize allocation of vals slices.
 		vals := make([]roachpb.BufferedWrite_Val, 0, len(bw.vals))
 		for _, v := range bw.vals {
 			vals = append(vals, roachpb.BufferedWrite_Val{
@@ -685,6 +661,7 @@ func (twb *txnWriteBuffer) initializeLeaf(tis *roachpb.LeafTxnInputState) {
 	// We have some buffered writes, so they must be enabled on the root.
 	twb.enabled = true
 	for _, bw := range tis.BufferedWrites {
+		// TODO(yuzefovich): optimize allocation of vals slices.
 		vals := make([]bufferedValue, 0, len(bw.Vals))
 		for _, bv := range bw.Vals {
 			vals = append(vals, bufferedValue{
@@ -781,11 +758,6 @@ func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s save
 		}
 		// Rollback writes by truncating the buffered values.
 		it.Cur().vals = bufferedVals[:idx]
-		if idx == 0 {
-			// Since we lost references to all values, ensure that the scratch
-			// space is also reset.
-			it.Cur().valsScratch[0] = bufferedValue{}
-		}
 		if it.Cur().empty() {
 			// All writes have been rolled back and we hold no locks; we should remove
 			// this key from the buffer entirely.
@@ -845,7 +817,7 @@ func (twb *txnWriteBuffer) closeLocked() {}
 // locking Get request if it can be served from the buffer (i.e if a lock of
 // sufficient strength has been acquired and a value has been buffered).
 func (twb *txnWriteBuffer) applyTransformations(
-	ctx context.Context, ba *kvpb.BatchRequest, cfg transformConfig,
+	ctx context.Context, ba *kvpb.BatchRequest, transformScans bool,
 ) (*kvpb.BatchRequest, requestRecords, *kvpb.Error) {
 	baRemote := ba.ShallowCopy()
 	// TODO(arul): We could improve performance here by pre-allocating
@@ -954,7 +926,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 			requiresLockTransform := IsReplicatedLockingRequest(t)
 			requestRequired := requiresAdditionalLocking || !served
 
-			if requestRequired && requiresLockTransform && cfg.transformGets {
+			if requestRequired && requiresLockTransform {
 				var getReqU kvpb.RequestUnion
 				getReq := t.ShallowCopy().(*kvpb.GetRequest)
 				getReq.KeyLockingDurability = lock.Unreplicated
@@ -972,7 +944,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 			// Regardless of whether the scan overlaps with any writes in the buffer
 			// or not, we must send the request to the KV layer. We can't know for
 			// sure that there's nothing else to read.
-			if IsReplicatedLockingRequest(t) && cfg.transformScans {
+			if IsReplicatedLockingRequest(t) && transformScans {
 				var scanReqU kvpb.RequestUnion
 				scanReq := t.ShallowCopy().(*kvpb.ScanRequest)
 				scanReq.KeyLockingDurability = lock.Unreplicated
@@ -990,7 +962,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 			// Regardless of whether the reverse scan overlaps with any writes in the
 			// buffer or not, we must send the request to the KV layer. We can't know
 			// for sure that there's nothing else to read.
-			if IsReplicatedLockingRequest(t) && cfg.transformScans {
+			if IsReplicatedLockingRequest(t) && transformScans {
 				var rScanReqU kvpb.RequestUnion
 				rScanReq := t.ShallowCopy().(*kvpb.ReverseScanRequest)
 				rScanReq.KeyLockingDurability = lock.Unreplicated
@@ -1637,11 +1609,10 @@ func (twb *txnWriteBuffer) addToBuffer(
 	} else {
 		twb.bufferIDAlloc++
 		bw := &bufferedWrite{
-			id:          twb.bufferIDAlloc,
-			key:         key,
-			valsScratch: [1]bufferedValue{{val: val, seq: seq, kvNemesisSeq: kvNemSeq}},
+			id:   twb.bufferIDAlloc,
+			key:  key,
+			vals: []bufferedValue{{val: val, seq: seq, kvNemesisSeq: kvNemSeq}},
 		}
-		bw.vals = bw.valsScratch[:1]
 		if lockInfo != nil {
 			bw.acquireLock(lockInfo)
 		}
@@ -1716,14 +1687,7 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	// Once we've flushed the buffer, we disable write buffering going forward. We
 	// do this even if the buffer is empty since once we've called this function,
 	// our buffer no longer represents all of the writes in the transaction.
-	log.VEventf(ctx, 2, "disabling write buffering")
-	if twb.pipelineEnabler != nil {
-		// We enable pipelining, but only after this request returns.
-		//
-		// TODO(ssd): Consider enabling pipelining for this batch as well once we
-		// have more discipline around the invariants of the batches we are sending.
-		defer twb.pipelineEnabler.enableImplicitPipelining()
-	}
+	log.VEventf(ctx, 2, "disabling write buffering for this epoch")
 	twb.flushed = true
 
 	numKeysBuffered := twb.buffer.Len()
@@ -1807,10 +1771,9 @@ func (twb *txnWriteBuffer) testingBufferedWritesAsSlice() []bufferedWrite {
 	it := twb.buffer.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
 		bw := *it.Cur()
-		// Scrub the id/endKey/valsScratch for the benefit of tests.
+		// Scrub the id/endKey for the benefit of tests.
 		bw.id = 0
 		bw.endKey = nil
-		bw.valsScratch[0] = bufferedValue{}
 		writes = append(writes, bw)
 	}
 	return writes
@@ -1835,9 +1798,10 @@ type bufferedWrite struct {
 
 	// lki stores information about locks that have been acquired for this key.
 	// NB: In the future it may also cache previously read values of this key.
-	lki         *lockedKeyInfo
-	vals        []bufferedValue  // sorted in increasing sequence number order
-	valsScratch [1]bufferedValue // used as initial space for vals
+	lki *lockedKeyInfo
+	// TODO(arul): instead of this slice, consider adding a small (fixed size,
+	// maybe 1) array instead.
+	vals []bufferedValue // sorted in increasing sequence number order
 }
 
 func (bw *bufferedWrite) size() int64 {

@@ -174,9 +174,6 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/server/license": {
 						"LicType": {},
 					},
-					"github.com/cockroachdb/cockroach/pkg/sql/catalog": {
-						"DescriptorType": {},
-					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb": {
 						"JobID":         {},
 						"PolicyCommand": {},

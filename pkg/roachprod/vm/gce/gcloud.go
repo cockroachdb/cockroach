@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/marusama/semaphore"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
@@ -45,12 +44,7 @@ const (
 	defaultImageProject = "ubuntu-os-cloud"
 	FIPSImageProject    = "ubuntu-os-pro-cloud"
 	ManagedLabel        = "managed"
-
-	// These values limit concurrent `gcloud` CLI operations, and command
-	// length, to avoid overwhelming the API when managing large clusters. The
-	// limits were determined through empirical testing.
-	MaxConcurrentCommands = 100
-	MaxConcurrentHosts    = 100
+	MaxConcurrentVMOps  = 16
 )
 
 type VolumeType string
@@ -121,7 +115,7 @@ func Init() error {
 	providerInstance.Projects = []string{defaultDefaultProject}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
-		fmt.Printf("WARN: `GCE_PROJECT` is deprecated; please, use `ROACHPROD_GCE_DEFAULT_PROJECT` instead\n")
+		fmt.Printf("WARNING: `GCE_PROJECT` is deprecated; please, use `ROACHPROD_GCE_DEFAULT_PROJECT` instead")
 		providerInstance.Projects = []string{projectFromEnv}
 	}
 	if _, err := exec.LookPath("gcloud"); err != nil {
@@ -1219,14 +1213,6 @@ func (p *Provider) ConfigureProviderFlags(flags *pflag.FlagSet, opt vm.MultipleP
 	)
 }
 
-// newLimitedErrorGroup creates an `errgroup.Group` with the cloud provider's
-// default limit on the number of concurrent operations.
-func newLimitedErrorGroup() *errgroup.Group {
-	g := &errgroup.Group{}
-	g.SetLimit(MaxConcurrentCommands)
-	return g
-}
-
 // useArmAMI returns true if the machine type is an arm64 machine type.
 func (o *ProviderOpts) useArmAMI() bool {
 	return strings.HasPrefix(strings.ToLower(o.MachineType), "t2a-")
@@ -1279,7 +1265,8 @@ func (p *Provider) editLabels(
 	tagArgsString := strings.Join(tagArgs, ",")
 	commonArgs := []string{"--project", p.GetProject(), fmt.Sprintf("--labels=%s", tagArgsString)}
 
-	g := newLimitedErrorGroup()
+	var g errgroup.Group
+	g.SetLimit(MaxConcurrentVMOps)
 	for _, v := range vms {
 		vmArgs := make([]string, len(cmdArgs))
 		copy(vmArgs, cmdArgs)
@@ -1783,41 +1770,30 @@ func (p *Provider) Create(
 		}
 
 	default:
-		g := newLimitedErrorGroup()
+		var g errgroup.Group
 		createArgs := []string{"compute", "instances", "create", "--subnet", "default", "--format", "json"}
 		createArgs = append(createArgs, "--labels", labels)
 		createArgs = append(createArgs, instanceArgs...)
 
-		sem := semaphore.New(MaxConcurrentHosts)
 		l.Printf("Creating %d instances, distributed across [%s]", len(names), strings.Join(usedZones, ", "))
 		for zone, zoneHosts := range zoneToHostNames {
-			groupSize := MaxConcurrentHosts / 4
-			for i := 0; i < len(zoneHosts); i += groupSize {
-				hostGroup := zoneHosts[i:min(i+groupSize, len(zoneHosts))]
-				argsWithZone := append(createArgs, "--zone", zone)
-				argsWithZone = append(argsWithZone, hostGroup...)
+			argsWithZone := append(createArgs, "--zone", zone)
+			argsWithZone = append(argsWithZone, zoneHosts...)
+			g.Go(func() error {
+				var instances []jsonVM
+				err := runJSONCommand(argsWithZone, &instances)
+				if err != nil {
+					return errors.Wrapf(err, "Command: gcloud %s", argsWithZone)
+				}
+				vmListMutex.Lock()
+				defer vmListMutex.Unlock()
+				for _, i := range instances {
+					v := i.toVM(project, p.publicDomain)
+					vmList = append(vmList, *v)
+				}
+				return nil
+			})
 
-				g.Go(func() error {
-					err := sem.Acquire(context.Background(), len(hostGroup))
-					if err != nil {
-						return errors.Wrapf(err, "Failed to acquire semaphore")
-					}
-					defer sem.Release(len(hostGroup))
-
-					var instances []jsonVM
-					err = runJSONCommand(argsWithZone, &instances)
-					if err != nil {
-						return errors.Wrapf(err, "Command: gcloud %s", argsWithZone)
-					}
-					vmListMutex.Lock()
-					defer vmListMutex.Unlock()
-					for _, i := range instances {
-						v := i.toVM(project, p.publicDomain)
-						vmList = append(vmList, *v)
-					}
-					return nil
-				})
-			}
 		}
 		err = g.Wait()
 		if err != nil {
@@ -1891,7 +1867,7 @@ func (p *Provider) Shrink(l *logger.Logger, vmsToDelete vm.List, clusterName str
 		vmZones[cVM.Zone] = append(vmZones[cVM.Zone], cVM)
 	}
 
-	g := newLimitedErrorGroup()
+	g := errgroup.Group{}
 	for zone, vms := range vmZones {
 		instances := vms.Names()
 		args := []string{"compute", "instance-groups", "managed", "delete-instances",
@@ -1935,7 +1911,7 @@ func (p *Provider) Grow(
 	zoneToHostNames := computeHostNamesPerZone(groups, names, newNodeCount)
 
 	addedVms := make(map[string]bool)
-	g := newLimitedErrorGroup()
+	var g errgroup.Group
 	for _, group := range groups {
 		createArgs := []string{"compute", "instance-groups", "managed", "create-instance", "--zone", group.Zone, groupName,
 			"--project", project}
@@ -2075,7 +2051,7 @@ func listHealthChecks(project string) ([]jsonHealthCheck, error) {
 // all of them. Health checks associated with the cluster are also deleted.
 func deleteLoadBalancerResources(project, clusterName, portFilter string) error {
 	// List all the components of the load balancer resources tied to the project.
-	g := newLimitedErrorGroup()
+	var g errgroup.Group
 	var services []jsonBackendService
 	var proxies []jsonTargetTCPProxy
 	var rules []jsonForwardingRule
@@ -2144,7 +2120,7 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 
 	// Delete all the components of the load balancer. Resources must be deleted
 	// in the correct order to avoid dependency errors.
-	g = newLimitedErrorGroup()
+	g = errgroup.Group{}
 	for _, rule := range filteredForwardingRules {
 		args := []string{"compute", "forwarding-rules", "delete",
 			rule.Name,
@@ -2164,7 +2140,7 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	g = newLimitedErrorGroup()
+	g = errgroup.Group{}
 	for _, proxy := range filteredProxies {
 		args := []string{"compute", "target-tcp-proxies", "delete",
 			proxy.Name,
@@ -2183,7 +2159,7 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	g = newLimitedErrorGroup()
+	g = errgroup.Group{}
 	for _, service := range filteredServices {
 		args := []string{"compute", "backend-services", "delete",
 			service.Name,
@@ -2203,7 +2179,7 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	g = newLimitedErrorGroup()
+	g = errgroup.Group{}
 	for _, healthCheck := range filteredHealthChecks {
 		args := []string{"compute", "health-checks", "delete",
 			healthCheck.Name,
@@ -2486,7 +2462,7 @@ func propagateDiskLabels(
 	useLocalSSD bool,
 	pdVolumeCount int,
 ) error {
-	g := newLimitedErrorGroup()
+	var g errgroup.Group
 
 	l.Printf("Propagating labels across all disks")
 	argsPrefix := []string{"compute", "disks", "update"}
@@ -2873,7 +2849,7 @@ func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 		clusterProjectMap[clusterName] = v.Project
 	}
 
-	g := newLimitedErrorGroup()
+	var g errgroup.Group
 	for cluster, project := range clusterProjectMap {
 		// Delete any load balancer resources associated with the cluster. Trying to
 		// delete the instance group before the load balancer resources will result
@@ -2909,7 +2885,7 @@ func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 
 	// All instance groups have to be deleted before the instance templates can be
 	// deleted.
-	g = newLimitedErrorGroup()
+	g = errgroup.Group{}
 	for cluster, project := range clusterProjectMap {
 		templates, err := listInstanceTemplates(project, cluster)
 		if err != nil {
@@ -2936,42 +2912,29 @@ func (p *Provider) deleteUnmanaged(l *logger.Logger, vms vm.List) error {
 		projectZoneMap[v.Project][v.Zone] = append(projectZoneMap[v.Project][v.Zone], v.Name)
 	}
 
-	g := newLimitedErrorGroup()
+	var g errgroup.Group
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-
-	sem := semaphore.New(MaxConcurrentHosts)
 	for project, zoneMap := range projectZoneMap {
 		for zone, names := range zoneMap {
-			groupSize := MaxConcurrentHosts / 4
-			for i := 0; i < len(names); i += groupSize {
-				nameGroup := names[i:min(i+groupSize, len(names))]
-
-				args := []string{
-					"compute", "instances", "delete",
-					"--delete-disks", "all",
-				}
-
-				args = append(args, "--project", project)
-				args = append(args, "--zone", zone)
-				args = append(args, nameGroup...)
-
-				g.Go(func() error {
-					err := sem.Acquire(ctx, len(nameGroup))
-					if err != nil {
-						return errors.Wrapf(err, "Failed to acquire semaphore")
-					}
-					defer sem.Release(len(nameGroup))
-
-					cmd := exec.CommandContext(ctx, "gcloud", args...)
-
-					output, err := cmd.CombinedOutput()
-					if err != nil {
-						return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
-					}
-					return nil
-				})
+			args := []string{
+				"compute", "instances", "delete",
+				"--delete-disks", "all",
 			}
+
+			args = append(args, "--project", project)
+			args = append(args, "--zone", zone)
+			args = append(args, names...)
+
+			g.Go(func() error {
+				cmd := exec.CommandContext(ctx, "gcloud", args...)
+
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+				}
+				return nil
+			})
 		}
 	}
 
@@ -2993,7 +2956,7 @@ func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 		projectZoneMap[v.Project][v.Zone] = append(projectZoneMap[v.Project][v.Zone], v.Name)
 	}
 
-	g := newLimitedErrorGroup()
+	var g errgroup.Group
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	for project, zoneMap := range projectZoneMap {

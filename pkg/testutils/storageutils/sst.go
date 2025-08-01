@@ -11,17 +11,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
-	"github.com/cockroachdb/pebble/sstable/blockiter"
+	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
@@ -152,9 +150,9 @@ func ReportSSTEntries(buf *redact.StringBuilder, name string, sst []byte) error 
 		if err := iter.Error(); err != nil {
 			return err
 		}
-		key, ok := storage.DecodeEngineKey(kv.K.UserKey)
-		if !ok {
-			return errors.Errorf("invalid engine key: %x", kv.K.UserKey)
+		key, err := storage.DecodeMVCCKey(kv.K.UserKey)
+		if err != nil {
+			return err
 		}
 		v, _, err := kv.Value(nil)
 		if err != nil {
@@ -164,36 +162,23 @@ func ReportSSTEntries(buf *redact.StringBuilder, name string, sst []byte) error 
 		if err != nil {
 			return err
 		}
-		if !key.IsMVCCKey() {
-			buf.Printf("%s: %s -> %s\n", strings.ToLower(kv.Kind().String()), key, value)
-			continue
-		}
-		mk, err := key.ToMVCCKey()
-		if err != nil {
-			return err
-		}
-		if mk.IsValue() {
-			buf.Printf("%s: %s -> %s\n", strings.ToLower(kv.Kind().String()), mk, value)
-		} else {
-			buf.Printf("%s: %s -> %s\n", strings.ToLower(kv.Kind().String()), mk,
-				print.SprintMVCCKeyValue(storage.MVCCKeyValue{Key: mk, Value: v}, false /* printKey */))
-		}
+		buf.Printf("%s: %s -> %s\n", strings.ToLower(kv.Kind().String()), key, value)
 	}
 
 	// Dump rangedels.
-	if rdIter, err := r.NewRawRangeDelIter(context.Background(), blockiter.NoFragmentTransforms, sstable.NoReadEnv); err != nil {
+	if rdIter, err := r.NewRawRangeDelIter(context.Background(), block.NoFragmentTransforms, sstable.NoReadEnv); err != nil {
 		return err
 	} else if rdIter != nil {
 		defer rdIter.Close()
 		s, err := rdIter.First()
 		for ; s != nil; s, err = rdIter.Next() {
-			start, ok := storage.DecodeEngineKey(s.Start)
-			if !ok {
-				return errors.Errorf("invalid engine key: %x", s.Start)
+			start, err := storage.DecodeMVCCKey(s.Start)
+			if err != nil {
+				return err
 			}
-			end, ok := storage.DecodeEngineKey(s.End)
-			if !ok {
-				return errors.Errorf("invalid engine key: %x", s.End)
+			end, err := storage.DecodeMVCCKey(s.End)
+			if err != nil {
+				return err
 			}
 			for _, k := range s.Keys {
 				buf.Printf("%s: %s\n", strings.ToLower(k.Kind().String()),
@@ -206,19 +191,19 @@ func ReportSSTEntries(buf *redact.StringBuilder, name string, sst []byte) error 
 	}
 
 	// Dump range keys.
-	if rkIter, err := r.NewRawRangeKeyIter(context.Background(), blockiter.NoFragmentTransforms, sstable.NoReadEnv); err != nil {
+	if rkIter, err := r.NewRawRangeKeyIter(context.Background(), block.NoFragmentTransforms, sstable.NoReadEnv); err != nil {
 		return err
 	} else if rkIter != nil {
 		defer rkIter.Close()
 		s, err := rkIter.First()
 		for ; s != nil; s, err = rkIter.Next() {
-			start, ok := storage.DecodeEngineKey(s.Start)
-			if !ok {
-				return errors.Errorf("invalid engine key: %x", s.Start)
+			start, err := storage.DecodeMVCCKey(s.Start)
+			if err != nil {
+				return err
 			}
-			end, ok := storage.DecodeEngineKey(s.End)
-			if !ok {
-				return errors.Errorf("invalid engine key: %x", s.End)
+			end, err := storage.DecodeMVCCKey(s.End)
+			if err != nil {
+				return err
 			}
 			for _, k := range s.Keys {
 				buf.Printf("%s: %s", strings.ToLower(k.Kind().String()),

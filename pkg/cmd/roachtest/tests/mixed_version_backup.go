@@ -622,9 +622,8 @@ func newFingerprintContents(db *gosql.DB, table string) *fingerprintContents {
 	return &fingerprintContents{db: db, table: table}
 }
 
-// Load computes the fingerprints for the underlying table and stores the
-// contents in the `fingeprints` field. If timestamp is not set, computes
-// the fingerprint for the current time.
+// Load computes the fingerprints for the underlying table and stores
+// the contents in the `fingeprints` field.
 func (fc *fingerprintContents) Load(
 	ctx context.Context, l *logger.Logger, timestamp string, _ tableContents,
 ) error {

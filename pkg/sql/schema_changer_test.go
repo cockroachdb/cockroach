@@ -103,7 +103,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 	rf, err := rangefeed.NewFactory(stopper, kvDB, execCfg.Settings, nil /* knobs */)
 	require.NoError(t, err)
 	leaseMgr := lease.NewLeaseManager(
-		ctx,
 		s.AmbientCtx(),
 		execCfg.NodeInfo.NodeID,
 		s.InternalDB().(isql.DB),
@@ -115,7 +114,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 		lease.ManagerTestingKnobs{},
 		stopper,
 		rf,
-		execCfg.RootMemoryMonitor,
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.Background())
@@ -5762,9 +5760,9 @@ ALTER TABLE t.public.test DROP COLUMN v;`)
 	}, rows)
 }
 
-// TestRetryableErrorDuringRollback tests that a retryable error while rolling
+// TestRetriableErrorDuringRollback tests that a retriable error while rolling
 // back a schema change causes the rollback to retry and succeed.
-func TestRetryableErrorDuringRollback(t *testing.T) {
+func TestRetriableErrorDuringRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -5828,7 +5826,7 @@ SELECT usage_count
 				},
 				RunBeforeBackfill: func() error {
 					// The first time through the backfiller in OnFailOrCancel, return a
-					// retryable error.
+					// retriable error.
 					if !onFailOrCancelStarted || injectedError {
 						return nil
 					}
@@ -5854,7 +5852,7 @@ SELECT usage_count
 					return nil
 				},
 				RunBeforeMutationReversal: func(_ jobspb.JobID) error {
-					// The first time through reversing mutations, return a retryable
+					// The first time through reversing mutations, return a retriable
 					// error.
 					if !onFailOrCancelStarted || injectedError {
 						return nil
@@ -5999,7 +5997,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 						return nil
 					}
 					injectedError = true
-					// Any error not on the allowlist of retryable errors is considered permanent.
+					// Any error not on the allowlist of retriable errors is considered permanent.
 					return errors.New("permanent error")
 				},
 			},
@@ -6028,7 +6026,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 						return nil
 					}
 					injectedError = true
-					// Any error not on the allowlist of retryable errors is considered permanent.
+					// Any error not on the allowlist of retriable errors is considered permanent.
 					return errors.New("permanent error")
 				},
 			},
@@ -7733,7 +7731,7 @@ func TestLegacySchemaChangerWaitsForOtherSchemaChanges(t *testing.T) {
 }
 
 // TestMemoryMonitorErrorsDuringBackfillAreRetried tests that we properly classify memory
-// monitor errors as retryable. It's a regression test to ensure that we don't end up
+// monitor errors as retriable. It's a regression test to ensure that we don't end up
 // trying to revert schema changes which encounter such errors. Prior to the commit which
 // added this test, these errors would result in failures which looked like:
 //
@@ -7957,32 +7955,4 @@ func TestLeaseGenerationBumpWithSchemaChange(t *testing.T) {
 	descIDToDelay = tableDesc.GetID()
 	runner.Exec(t, "ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS(n, j)")
 	require.NoError(t, grp.Wait())
-}
-
-// TestCreateTableAsValidationFailure simulates a synthetic validation
-// failure for CREATE TABLE AS.
-func TestCreateTableAsValidationFailure(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-				RunDuringQueryBackfillValidation: func(expectedCount int64, currentCount int64) (newCurrentCount int64, err error) {
-					return 0, nil
-				},
-			},
-		},
-	})
-
-	defer s.Stopper().Stop(context.Background())
-	runner := sqlutils.MakeSQLRunner(sqlDB)
-	// Create table table and populate it.
-	runner.Exec(t, "CREATE TABLE t1(n int PRIMARY KEY)")
-	runner.Exec(t, "INSERT INTO t1 VALUES (1)")
-	runner.Exec(t, "INSERT INTO t1 VALUES (2)")
-	runner.Exec(t, "INSERT INTO t1 VALUES (3)")
-	// Execute a CTAS and CREATE MATERIALIZED VIEW statements that should fail.
-	runner.ExpectErr(t, "backfill query did not populate index \"t2_pkey\" with expected number of rows", "CREATE TABLE t2 AS (SELECT * FROM t1)")
-	runner.ExpectErr(t, "backfill query did not populate index \"t2_pkey\" with expected number of rows", "CREATE MATERIALIZED VIEW t2 AS (SELECT n FROM t1)")
 }

@@ -304,7 +304,7 @@ distinct-on
 
 # Verify basic stats for JSON are used.
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE tj (j JSON)
 
 statement ok

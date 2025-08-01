@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -36,13 +37,16 @@ func registerProcessKillFailure(r *FailureRegistry) {
 func MakeProcessKillFailure(
 	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	genericFailure, err := makeGenericFailure(clusterName, l, clusterOpts, ProcessKillFailureName)
+	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
 	if err != nil {
 		return nil, err
 	}
 
 	return &ProcessKillFailure{
-		GenericFailure: *genericFailure,
+		GenericFailure: GenericFailure{
+			c:        c,
+			runTitle: ProcessKillFailureName,
+		},
 	}, nil
 }
 
@@ -83,7 +87,7 @@ func (f *ProcessKillFailure) Inject(ctx context.Context, l *logger.Logger, args 
 	// WaitForFailureToPropagate. We run Stop in a goroutine to achieve this, although it
 	// does mean we will ignore all errors unless the user also calls WaitForFailureToPropagate.
 	// We make this tradeoff in order to avoid maintaining two different Stop implementations.
-	f.waitCh, _ = runAsync(ctx, l, func(ctx context.Context) error {
+	f.waitCh = runAsync(ctx, l, func(ctx context.Context) error {
 		return f.c.WithNodes(nodes).Stop(ctx, l, int(signal), true, gracePeriod, label)
 	})
 	return nil
@@ -123,5 +127,7 @@ func (f *ProcessKillFailure) WaitForFailureToRecover(
 	nodes := args.(ProcessKillArgs).Nodes
 	l.Printf("Waiting for cockroach process to recover on nodes: %v", nodes)
 
-	return f.WaitForRestartedNodesToStabilize(ctx, l, nodes, 20*time.Minute)
+	return forEachNode(nodes, func(n install.Nodes) error {
+		return f.WaitForSQLReady(ctx, l, n, time.Minute)
+	})
 }

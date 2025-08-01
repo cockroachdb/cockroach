@@ -281,10 +281,6 @@ func newRootTxnCoordSender(
 		timeSource: timeutil.DefaultTimeSource{},
 		txn:        &tcs.mu.txn,
 	}
-	tcs.interceptorAlloc.txnWriteBuffer.init(
-		&tcs.interceptorAlloc.txnPipeliner,
-	)
-
 	tcs.initCommonInterceptors(tcf, txn, kv.RootTxn)
 
 	// Once the interceptors are initialized, piece them all together in the
@@ -450,7 +446,6 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 	if tc.mu.active {
 		return errors.Errorf("cannot disable pipelining on a running transaction")
 	}
-	tc.interceptorAlloc.txnPipeliner.disabledExplicitly = true
 	tc.interceptorAlloc.txnPipeliner.disabled = true
 	return nil
 }

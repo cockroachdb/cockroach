@@ -219,9 +219,7 @@ func (r *Replica) SendWithWriteBytes(
 	// Record summary throughput information about the batch request for
 	// accounting.
 	r.recordBatchRequestLoad(ctx, ba)
-	if writeBytes != nil {
-		r.recordRequestWriteBytes(writeBytes.WriteBytes + writeBytes.IngestedBytes)
-	}
+	r.recordRequestWriteBytes(writeBytes)
 	r.recordImpactOnRateLimiter(ctx, br, isReadOnly)
 	return br, writeBytes, pErr
 }
@@ -1069,10 +1067,13 @@ func (r *Replica) getBatchRequestQPS(ctx context.Context, ba *kvpb.BatchRequest)
 
 // recordRequestWriteBytes records the write bytes from a replica batch
 // request.
-func (r *Replica) recordRequestWriteBytes(writeBytes int64) {
+func (r *Replica) recordRequestWriteBytes(writeBytes *kvadmission.StoreWriteBytes) {
+	if writeBytes == nil {
+		return
+	}
 	// TODO(kvoli): Consider recording the ingested bytes (AddSST) separately
 	// to the write bytes.
-	r.loadStats.RecordWriteBytes(float64(writeBytes))
+	r.loadStats.RecordWriteBytes(float64(writeBytes.WriteBytes + writeBytes.IngestedBytes))
 }
 
 // checkBatchRequest verifies BatchRequest validity requirements. In particular,

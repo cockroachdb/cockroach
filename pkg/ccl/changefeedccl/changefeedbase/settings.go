@@ -350,26 +350,6 @@ var Quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.DurationWithMinimum(0),
 )
 
-// MaxRetryBackoff is the maximum time a changefeed will backoff when in
-// a top-level retry loop, for example during rolling restarts.
-var MaxRetryBackoff = settings.RegisterDurationSettingWithExplicitUnit(
-	settings.ApplicationLevel,
-	"changefeed.max_retry_backoff",
-	"the maximum time a changefeed will backoff when retrying after a restart and how long between retries before backoff resets",
-	10*time.Minute, /* defaultValue */
-	settings.DurationInRange(1*time.Second, 1*time.Hour),
-)
-
-// RetryBackoffReset is the time between changefeed retries before the
-// backoff timer resets.
-var RetryBackoffReset = settings.RegisterDurationSettingWithExplicitUnit(
-	settings.ApplicationLevel,
-	"changefeed.retry_backoff_reset",
-	"the time between changefeed retries before the backoff timer resets",
-	10*time.Minute, /* defaultValue */
-	settings.DurationInRange(1*time.Second, 1*time.Hour),
-)
-
 // KafkaV2IncludeErrorDetails enables detailed error messages for Kafka v2 sinks
 // when message_too_large errors occur. This includes the message key, size,
 // and MVCC timestamp in the error.
@@ -380,11 +360,3 @@ var KafkaV2ErrorDetailsEnabled = settings.RegisterBoolSetting(
 	true,
 	settings.WithPublic,
 )
-
-// UseBareTableNames is used to enable and disable the use of bare table names
-// in changefeed topics.
-var UseBareTableNames = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"changefeed.bare_table_names.enabled",
-	"set to true to use bare table names in changefeed topics, false to use quoted table names; default is true",
-	true)

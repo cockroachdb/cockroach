@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
@@ -48,8 +47,6 @@ type (
 		connFunc        func(int) *gosql.DB
 		stepLogger      *logger.Logger
 		clusterVersions *atomic.Value
-		monitor         test.Monitor
-		nodes           option.NodeListOption
 	}
 
 	// Helper is the struct passed to `stepFunc`s (user-provided or
@@ -70,17 +67,6 @@ type (
 	}
 )
 
-func (s *Service) randomAvailableNode(rng *rand.Rand) int {
-	nodes := s.AvailableNodes()
-	return nodes.SeededRandNode(rng)[0]
-}
-
-// AvailableNodes uses the monitor implementation to return the
-// set of available nodes as determined by their expected health.
-func (s *Service) AvailableNodes() option.NodeListOption {
-	return s.monitor.AvailableNodes(s.Descriptor.Name).Intersect(s.nodes)
-}
-
 // Connect returns a connection pool to the given node. Note that
 // these connection pools are managed by the framework and therefore
 // *must not* be closed. They are closed automatically when the test
@@ -93,7 +79,7 @@ func (s *Service) Connect(node int) *gosql.DB {
 // cluster. Do *not* call `Close` on the pool returned (see comment on
 // `Connect` function).
 func (s *Service) RandomDB(rng *rand.Rand) (int, *gosql.DB) {
-	node := s.randomAvailableNode(rng)
+	node := s.Descriptor.Nodes.SeededRandNode(rng)[0]
 	return node, s.Connect(node)
 }
 
@@ -103,8 +89,7 @@ func (s *Service) RandomDB(rng *rand.Rand) (int, *gosql.DB) {
 func (s *Service) prepareQuery(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...any,
 ) (*gosql.DB, error) {
-	availableNodes := s.AvailableNodes().Intersect(nodes)
-	node := availableNodes.SeededRandNode(rng)[0]
+	node := nodes.SeededRandNode(rng)[0]
 	db := s.Connect(node)
 
 	v, err := s.NodeVersion(node)
@@ -137,8 +122,7 @@ func (s *Service) Exec(rng *rand.Rand, query string, args ...interface{}) error 
 func (s *Service) ExecWithGateway(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...interface{},
 ) error {
-	availableNodes := s.AvailableNodes().Intersect(nodes)
-	db, err := s.prepareQuery(rng, availableNodes, query, args...)
+	db, err := s.prepareQuery(rng, nodes, query, args...)
 	if err != nil {
 		return err
 	}
@@ -190,10 +174,6 @@ func (h *Helper) DefaultService() *Service {
 	}
 
 	return h.System
-}
-
-func (h *Helper) AvailableNodes() option.NodeListOption {
-	return h.DefaultService().AvailableNodes()
 }
 
 func (h *Helper) Context() *ServiceContext {

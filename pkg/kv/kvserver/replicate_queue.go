@@ -590,7 +590,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 	// Register gossip and node liveness callbacks to signal that
 	// replicas in purgatory might be retried.
 	if g := store.cfg.Gossip; g != nil { // gossip is nil for some unittests
-		g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix), func(key string, _ roachpb.Value, _ int64) {
+		g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix), func(key string, _ roachpb.Value) {
 			if !rq.store.IsStarted() {
 				return
 			}
@@ -949,7 +949,7 @@ func (rq *replicateQueue) shedLease(
 	rangeUsageInfo := repl.RangeUsageInfo()
 	// Learner replicas aren't allowed to become the leaseholder or raft leader,
 	// so only consider the `VoterDescriptors` replicas.
-	targetDesc := rq.allocator.TransferLeaseTarget(
+	target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		rq.storePool,
 		desc,
@@ -960,18 +960,11 @@ func (rq *replicateQueue) shedLease(
 		false, /* forceDecisionWithoutStats */
 		opts,
 	)
-	if targetDesc == (roachpb.ReplicaDescriptor{}) {
+	if target == (roachpb.ReplicaDescriptor{}) {
 		return allocator.NoSuitableTarget, nil
 	}
-	source := roachpb.ReplicationTarget{
-		NodeID:  repl.NodeID(),
-		StoreID: repl.StoreID(),
-	}
-	target := roachpb.ReplicationTarget{
-		NodeID:  targetDesc.NodeID,
-		StoreID: targetDesc.StoreID,
-	}
-	if err := rq.TransferLease(ctx, repl, source, target, rangeUsageInfo); err != nil {
+
+	if err := rq.TransferLease(ctx, repl, repl.store.StoreID(), target.StoreID, rangeUsageInfo); err != nil {
 		return allocator.TransferErr, err
 	}
 	return allocator.TransferOK, nil
@@ -997,7 +990,7 @@ type RangeRebalancer interface {
 	TransferLease(
 		ctx context.Context,
 		rlm ReplicaLeaseMover,
-		source, target roachpb.ReplicationTarget,
+		source, target roachpb.StoreID,
 		rangeUsageInfo allocator.RangeUsageInfo,
 	) error
 
@@ -1026,16 +1019,16 @@ func (rq *replicateQueue) finalizeAtomicReplication(ctx context.Context, repl *R
 func (rq *replicateQueue) TransferLease(
 	ctx context.Context,
 	rlm ReplicaLeaseMover,
-	source, target roachpb.ReplicationTarget,
+	source, target roachpb.StoreID,
 	rangeUsageInfo allocator.RangeUsageInfo,
 ) error {
 	rq.metrics.TransferLeaseCount.Inc(1)
 	log.KvDistribution.Infof(ctx, "transferring lease to s%d", target)
-	if err := rlm.AdminTransferLease(ctx, target.StoreID, false /* bypassSafetyChecks */); err != nil {
+	if err := rlm.AdminTransferLease(ctx, target, false /* bypassSafetyChecks */); err != nil {
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
 	}
 
-	rq.storePool.UpdateLocalStoresAfterLeaseTransfer(source.StoreID, target.StoreID, rangeUsageInfo)
+	rq.storePool.UpdateLocalStoresAfterLeaseTransfer(source, target, rangeUsageInfo)
 	return nil
 }
 

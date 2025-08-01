@@ -49,7 +49,6 @@ go_library(
         "//pkg/sql/vecindex/vecstore/vecstorepb",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/ctxgroup",
-        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/log",

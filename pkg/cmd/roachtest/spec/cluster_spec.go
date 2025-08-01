@@ -142,9 +142,7 @@ type ClusterSpec struct {
 		MachineType string
 		// VolumeThroughput is the min provisioned EBS volume throughput.
 		VolumeThroughput int
-		// VolumeIOPS is the provisioned EBS volume IOPS.
-		VolumeIOPS int
-		Zones      string
+		Zones            string
 	} `cloud:"aws"`
 
 	// Azure-specific arguments. These values apply only on clusters instantiated on Azure.
@@ -226,17 +224,17 @@ func awsMachineSupportsSSD(machineType string) bool {
 }
 
 func getAWSOpts(
-	machineType string, volumeSize, ebsThroughput int, ebsIOPS int, localSSD bool, useSpotVMs bool,
+	machineType string, volumeSize, ebsThroughput int, localSSD bool, useSpotVMs bool,
 ) vm.ProviderOpts {
 	opts := aws.DefaultProviderOpts()
 	if volumeSize != 0 {
 		opts.DefaultEBSVolume.Disk.VolumeSize = volumeSize
 	}
-	if ebsIOPS != 0 {
-		opts.DefaultEBSVolume.Disk.IOPs = ebsIOPS
-	}
 	if ebsThroughput != 0 {
 		opts.DefaultEBSVolume.Disk.Throughput = ebsThroughput
+		if opts.DefaultEBSVolume.Disk.IOPs < opts.DefaultEBSVolume.Disk.Throughput*4 {
+			opts.DefaultEBSVolume.Disk.IOPs = opts.DefaultEBSVolume.Disk.Throughput * 6
+		}
 	}
 	if localSSD {
 		opts.SSDMachineType = machineType
@@ -531,10 +529,10 @@ func (s *ClusterSpec) RoachprodOpts(
 	var workloadProviderOpts vm.ProviderOpts
 	switch cloud {
 	case AWS:
-		providerOpts = getAWSOpts(machineType, s.VolumeSize, s.AWS.VolumeThroughput, s.AWS.VolumeIOPS,
+		providerOpts = getAWSOpts(machineType, s.VolumeSize, s.AWS.VolumeThroughput,
 			createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs)
 		workloadProviderOpts = getAWSOpts(workloadMachineType, s.VolumeSize, s.AWS.VolumeThroughput,
-			s.AWS.VolumeIOPS, createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs)
+			createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,

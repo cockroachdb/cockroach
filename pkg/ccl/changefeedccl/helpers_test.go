@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // allow locality-related mutations
@@ -59,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -365,14 +363,6 @@ func assertPayloadsBaseErr(
 	if err != nil {
 		return err
 	}
-	// Detect if this is a protobuf feed and format accordingly.
-	useProtobuf := false
-	if ef, ok := f.(cdctest.EnterpriseTestFeed); ok {
-		details, _ := ef.Details()
-		if details.Opts[changefeedbase.OptFormat] == string(changefeedbase.OptFormatProtobuf) {
-			useProtobuf = true
-		}
-	}
 
 	if didForceEnriched {
 		for i, m := range actual {
@@ -386,38 +376,7 @@ func assertPayloadsBaseErr(
 
 	var actualFormatted []string
 	for _, m := range actual {
-		if useProtobuf {
-			var msg changefeedpb.Message
-			if err := protoutil.Unmarshal(m.Value, &msg); err != nil {
-				return err
-			}
-
-			switch env := msg.GetData().(type) {
-			case *changefeedpb.Message_Bare:
-				m.Value, err = gojson.Marshal(env.Bare)
-				if err != nil {
-					return err
-				}
-			case *changefeedpb.Message_Wrapped:
-				m.Value, err = gojson.Marshal(env.Wrapped)
-				if err != nil {
-					return err
-				}
-
-			default:
-				return errors.Newf("unexpected message type: %T", env)
-			}
-			var key changefeedpb.Key
-			if err := protoutil.Unmarshal(m.Key, &key); err != nil {
-				return err
-			}
-			m.Key, err = gojson.Marshal(key.Key)
-			if err != nil {
-				return err
-			}
-		}
 		actualFormatted = append(actualFormatted, m.String())
-
 	}
 
 	if perKeyOrdered {
@@ -817,8 +776,6 @@ type feedTestOptions struct {
 	debugUseAfterFinish          bool
 	clusterName                  string
 	locality                     roachpb.Locality
-	forceKafkaV1ConnectionCheck  bool
-	allowChangefeedErr           bool
 }
 
 type feedTestOption func(opts *feedTestOptions)
@@ -837,12 +794,6 @@ var feedTestNoExternalConnection = func(opts *feedTestOptions) { opts.forceNoExt
 // tests randomly choose between the root user connection or a test user connection where the test user
 // has privileges to create changefeeds on tables in the default database `d` only.
 var feedTestUseRootUserConnection = func(opts *feedTestOptions) { opts.forceRootUserConnection = true }
-
-// feedTestForceKafkaV1ConnectionCheck is a feedTestOption that will force the connection check
-// inside Dial() when using a Kafka v1 sink.
-var feedTestForceKafkaV1ConnectionCheck = func(opts *feedTestOptions) {
-	opts.forceKafkaV1ConnectionCheck = true
-}
 
 var feedTestForceSink = func(sinkType string) feedTestOption {
 	return feedTestRestrictSinks(sinkType)
@@ -884,14 +835,6 @@ func (opts feedTestOptions) omitSinks(sinks ...string) feedTestOptions {
 	return res
 }
 
-// feedTestwithSettings is a feedTestOption that allows the caller to set
-// the cluster settings used by the test server.
-func feedTestwithSettings(s *cluster.Settings) feedTestOption {
-	return func(opts *feedTestOptions) {
-		opts.settings = s
-	}
-}
-
 // withArgsFn is a feedTestOption that allow the caller to modify the
 // TestServerArgs before they are used to create the test server. Note
 // that in multi-tenant tests, these will only apply to the kvServer
@@ -905,72 +848,6 @@ func withArgsFn(fn updateArgsFn) feedTestOption {
 // testing, these knobs are applied to both the kv and sql nodes.
 func withKnobsFn(fn updateKnobsFn) feedTestOption {
 	return func(opts *feedTestOptions) { opts.knobsFn = fn }
-}
-
-// withAllowChangefeedErr is a feedTestOption that will allow changefeed errors
-// to occur without causing the test to fail.
-func withAllowChangefeedErr(
-	reason string, /*for documentation only*/
-) feedTestOption {
-	return func(opts *feedTestOptions) {
-		opts.allowChangefeedErr = true
-	}
-}
-
-func requireNoFeedsFail(t *testing.T) (fn updateKnobsFn) {
-	t.Helper()
-	ignoreErrs := []string{
-		`schema change occurred`,
-		`cannot update progress on cancel-requested job`,
-		`cannot update progress on pause-requested job`,
-		`result is ambiguous`,
-		`query execution canceled`,
-		`node unavailable; try another peer`,
-		`was truncated`,
-		`connection refused`,
-		`connection reset by peer`,
-		`knobs.RaiseRetryableError`,
-		`test error`,
-	}
-	shouldIgnoreErr := func(err error) bool {
-		if err == nil || errors.Is(err, context.Canceled) {
-			return true
-		}
-		for _, ignoreErr := range ignoreErrs {
-			if testutils.IsError(err, ignoreErr) {
-				return true
-			}
-		}
-		return false
-	}
-
-	fn = func(knobs *base.TestingKnobs) {
-		if knobs.DistSQL == nil {
-			knobs.DistSQL = &execinfra.TestingKnobs{}
-		}
-		if knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed == nil {
-			knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed = &TestingKnobs{}
-		}
-		handleErr := func(err error) error {
-			t.Helper()
-
-			if shouldIgnoreErr(err) {
-				return err
-			}
-			t.Errorf("requireNoFeedsFail: unexpected error: %v", err)
-			return err
-		}
-		cfKnobs := knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
-		if cfKnobs.HandleDistChangefeedError != nil {
-			originalHandler := cfKnobs.HandleDistChangefeedError
-			cfKnobs.HandleDistChangefeedError = func(err error) error {
-				return originalHandler(handleErr(err))
-			}
-		} else {
-			cfKnobs.HandleDistChangefeedError = handleErr
-		}
-	}
-	return fn
 }
 
 // Silence the linter.
@@ -990,25 +867,11 @@ func newTestOptions() feedTestOptions {
 	}
 }
 
-func makeOptions(t *testing.T, opts ...feedTestOption) feedTestOptions {
+func makeOptions(opts ...feedTestOption) feedTestOptions {
 	options := newTestOptions()
 	for _, o := range opts {
 		o(&options)
 	}
-
-	if !options.allowChangefeedErr {
-		knobsFn := requireNoFeedsFail(t)
-		if options.knobsFn == nil {
-			options.knobsFn = knobsFn
-		} else {
-			orig := options.knobsFn
-			options.knobsFn = func(knobs *base.TestingKnobs) {
-				orig(knobs)
-				knobsFn(knobs)
-			}
-		}
-	}
-
 	return options
 }
 
@@ -1212,14 +1075,6 @@ func maybeForceEnrichedEnvelope(
 				return create, args, false, nil
 			}
 		}
-		if strings.EqualFold(opt.Key.String(), "full_table_name") {
-			// TODO(#145927): full_table_name is not supported in enriched envelopes.
-			switch f.(type) {
-			case *webhookFeedFactory:
-				t.Logf("did not force enriched envelope for %s because full_table_name was specified for webhook sink", create)
-				return create, args, false, nil
-			}
-		}
 		if strings.EqualFold(opt.Key.String(), "envelope") {
 			envelopeKV = &opt
 		}
@@ -1318,7 +1173,7 @@ type TestServerWithSystem struct {
 func makeSystemServer(
 	t *testing.T, opts ...feedTestOption,
 ) (testServer TestServerWithSystem, cleanup func()) {
-	options := makeOptions(t, opts...)
+	options := makeOptions(opts...)
 	return makeSystemServerWithOptions(t, options)
 }
 
@@ -1345,7 +1200,7 @@ func makeSystemServerWithOptions(
 func makeTenantServer(
 	t *testing.T, opts ...feedTestOption,
 ) (testServer TestServerWithSystem, cleanup func()) {
-	options := makeOptions(t, opts...)
+	options := makeOptions(opts...)
 	return makeTenantServerWithOptions(t, options)
 }
 func makeTenantServerWithOptions(
@@ -1372,7 +1227,7 @@ func makeTenantServerWithOptions(
 func makeServer(
 	t *testing.T, opts ...feedTestOption,
 ) (testServer TestServerWithSystem, cleanup func()) {
-	options := makeOptions(t, opts...)
+	options := makeOptions(opts...)
 	return makeServerWithOptions(t, options)
 }
 
@@ -1387,8 +1242,8 @@ func makeServerWithOptions(
 	return makeSystemServerWithOptions(t, options)
 }
 
-func randomSinkType(t *testing.T, opts ...feedTestOption) string {
-	options := makeOptions(t, opts...)
+func randomSinkType(opts ...feedTestOption) string {
+	options := makeOptions(opts...)
 	return randomSinkTypeWithOptions(options)
 }
 
@@ -1452,7 +1307,7 @@ func makeFeedFactory(
 	db *gosql.DB,
 	testOpts ...feedTestOption,
 ) (factory cdctest.TestFeedFactory, sinkCleanup func()) {
-	options := makeOptions(t, testOpts...)
+	options := makeOptions(testOpts...)
 	return makeFeedFactoryWithOptions(t, sinkType, s, db, options)
 }
 
@@ -1484,12 +1339,10 @@ func makeFeedFactoryWithOptions(
 	}
 	switch sinkType {
 	case "kafka":
-		f := makeKafkaFeedFactoryWithConnectionCheck(t, srvOrCluster, db, options.forceKafkaV1ConnectionCheck)
+		f := makeKafkaFeedFactory(t, srvOrCluster, db)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*kafkaFeedFactory).configureUserDB(userDB)
-		return f, func() {
-			cleanup()
-		}
+		return f, func() { cleanup() }
 	case "cloudstorage":
 		if options.externalIODir == "" {
 			t.Fatalf("expected externalIODir option to be set")
@@ -1513,23 +1366,17 @@ func makeFeedFactoryWithOptions(
 		f := makeWebhookFeedFactory(srvOrCluster, db)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*webhookFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
-		return f, func() {
-			cleanup()
-		}
+		return f, func() { cleanup() }
 	case "pubsub":
 		f := makePubsubFeedFactory(srvOrCluster, db)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*pubsubFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
-		return f, func() {
-			cleanup()
-		}
+		return f, func() { cleanup() }
 	case "pulsar":
 		f := makePulsarFeedFactory(srvOrCluster, db)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*pulsarFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
-		return f, func() {
-			cleanup()
-		}
+		return f, func() { cleanup() }
 	case "sinkless":
 		pgURLForUserSinkless := func(u string, pass ...string) (url.URL, func()) {
 			t.Logf("pgURL %s %s", sinkType, u)
@@ -1652,9 +1499,8 @@ func cdcTestNamedWithSystem(
 	t *testing.T, name string, testFn cdcTestWithSystemFn, testOpts ...feedTestOption,
 ) {
 	t.Helper()
-	options := makeOptions(t, testOpts...)
+	options := makeOptions(testOpts...)
 	cleanupCloudStorage := addCloudStorageOptions(t, &options)
-	defer cleanupCloudStorage()
 	TestingClearSchemaRegistrySingleton()
 
 	sinkType := randomSinkTypeWithOptions(options)

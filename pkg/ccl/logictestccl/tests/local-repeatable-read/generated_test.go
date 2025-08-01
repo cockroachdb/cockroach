@@ -1070,13 +1070,6 @@ func TestRepeatableReadLogic_insert(
 	runLogicTest(t, "insert")
 }
 
-func TestRepeatableReadLogic_inspect(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "inspect")
-}
-
 func TestRepeatableReadLogic_int_size(
 	t *testing.T,
 ) {

@@ -10,6 +10,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -244,7 +245,9 @@ func Subsume(
 	// Set DoTimelyApplicationToAllReplicas so that merges are applied on all
 	// replicas. This is needed since Replica.AdminMerge calls
 	// waitForApplication when sending a kvpb.SubsumeRequest.
-	pd.Replicated.DoTimelyApplicationToAllReplicas = true
+	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V25_1_AddRangeForceFlushKey) {
+		pd.Replicated.DoTimelyApplicationToAllReplicas = true
+	}
 	pd.Local.RepopulateSubsumeResponseLAI = args.PreserveUnreplicatedLocks
 	return pd, nil
 }

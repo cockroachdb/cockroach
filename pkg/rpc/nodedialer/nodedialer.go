@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -350,14 +351,14 @@ func (c *baseInternalClient) asConn() *grpc.ClientConn {
 func (c *baseInternalClient) Batch(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error) {
-	return kvpb.NewGRPCInternalClientAdapter(c.asConn()).Batch(ctx, ba)
+	return kvpb.NewInternalClient(c.asConn()).Batch(ctx, ba)
 }
 
 // MuxRangeFeed implements the RestrictedInternalClient interface.
 func (c *baseInternalClient) MuxRangeFeed(
 	ctx context.Context,
 ) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
-	return kvpb.NewGRPCInternalClientAdapter(c.asConn()).MuxRangeFeed(ctx)
+	return kvpb.NewInternalClient(c.asConn()).MuxRangeFeed(ctx)
 }
 
 var batchStreamPoolingEnabled = settings.RegisterBoolSetting(
@@ -368,7 +369,16 @@ var batchStreamPoolingEnabled = settings.RegisterBoolSetting(
 )
 
 func shouldUseBatchStreamPoolClient(ctx context.Context, st *cluster.Settings) bool {
-	return batchStreamPoolingEnabled.Get(&st.SV)
+	// NOTE: we use ActiveVersionOrEmpty(ctx).IsActive(...) instead of the more
+	// common IsActive(ctx, ...) to avoid a fatal error if an RPC is made before
+	// the cluster version is initialized.
+	if !st.Version.ActiveVersionOrEmpty(ctx).IsActive(clusterversion.TODO_Delete_V25_1_BatchStreamRPC) {
+		return false
+	}
+	if !batchStreamPoolingEnabled.Get(&st.SV) {
+		return false
+	}
+	return true
 }
 
 // batchStreamPoolClient is a client that sends Batch RPCs using a pooled
@@ -397,7 +407,7 @@ func (c *batchStreamPoolClient) Batch(
 func (c *batchStreamPoolClient) MuxRangeFeed(
 	ctx context.Context,
 ) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
-	return kvpb.NewGRPCInternalClientAdapter(c.asPool().Conn()).MuxRangeFeed(ctx)
+	return kvpb.NewInternalClient(c.asPool().Conn()).MuxRangeFeed(ctx)
 }
 
 // tracingInternalClient wraps a RestrictedInternalClient and fills in trace

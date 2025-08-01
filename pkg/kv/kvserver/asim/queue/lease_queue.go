@@ -8,11 +8,9 @@ package queue
 import (
 	"container/heap"
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -25,22 +23,18 @@ import (
 type leaseQueue struct {
 	baseQueue
 	plan.ReplicaPlanner
-	storePool        storepool.AllocatorStorePool
-	planner          plan.ReplicationPlanner
-	clock            *hlc.Clock
-	settings         *config.SimulationSettings
-	as               *mmaprototypehelpers.AllocatorSync
-	lastSyncChangeID mmaprototypehelpers.SyncChangeID
+	storePool storepool.AllocatorStorePool
+	planner   plan.ReplicationPlanner
+	clock     *hlc.Clock
+	settings  *config.SimulationSettings
 }
 
 // NewLeaseQueue returns a new lease queue.
 func NewLeaseQueue(
 	storeID state.StoreID,
-	nodeID state.NodeID,
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
-	allocatorSync *mmaprototypehelpers.AllocatorSync,
 	storePool storepool.AllocatorStorePool,
 	start time.Time,
 ) RangeQueue {
@@ -56,10 +50,8 @@ func NewLeaseQueue(
 		planner:   plan.NewLeasePlanner(allocator, storePool),
 		storePool: storePool,
 		clock:     storePool.Clock(),
-		as:        allocatorSync,
 	}
 	lq.AddLogTag("lease", nil)
-	lq.AddLogTag(fmt.Sprintf("n%ds%d", nodeID, storeID), "")
 	return &lq
 }
 
@@ -67,11 +59,6 @@ func NewLeaseQueue(
 // meets the criteria it is enqueued. The criteria is currently if the
 // allocator returns a lease transfer.
 func (lq *leaseQueue) MaybeAdd(ctx context.Context, replica state.Replica, s state.State) bool {
-	if !lq.settings.LeaseQueueEnabled {
-		// Nothing to do, disabled.
-		return false
-	}
-
 	repl := NewSimulatorReplica(replica, s)
 	lq.AddLogTag("r", repl.repl.Descriptor())
 	lq.AnnotateCtx(ctx)
@@ -114,15 +101,8 @@ func (lq *leaseQueue) MaybeAdd(ctx context.Context, replica state.Replica, s sta
 func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 	lq.AddLogTag("tick", tick)
 	ctx = lq.ResetAndAnnotateCtx(ctx)
-	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
-	// here (see #149904 for more details).
 	if lq.lastTick.After(lq.next) {
 		lq.next = lq.lastTick
-	}
-
-	if !tick.Before(lq.next) && lq.lastSyncChangeID.IsValid() {
-		lq.as.PostApply(ctx, lq.lastSyncChangeID, true /* success */)
-		lq.lastSyncChangeID = mmaprototypehelpers.InvalidSyncChangeID
 	}
 
 	for !tick.Before(lq.next) && lq.priorityQueue.Len() != 0 {
@@ -164,8 +144,8 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 			continue
 		}
 
-		lq.next, lq.lastSyncChangeID = pushReplicateChange(
-			ctx, change, repl, tick, lq.settings.ReplicaChangeDelayFn(), lq.baseQueue.stateChanger, lq.as, "lease queue")
+		pushReplicateChange(
+			ctx, change, rng, tick, lq.settings.ReplicaChangeDelayFn(), lq.baseQueue)
 	}
 
 	lq.lastTick = tick

@@ -359,7 +359,7 @@ statement error column c has type vector, which is only allowed as the last colu
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (c, b))
 
 # Try to use inverted indexable type in vector index.
-statement error column b has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+statement error column b has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.3/inverted-indexes.html
 CREATE TABLE t (a INT PRIMARY KEY, b TSVECTOR, c VECTOR(3), VECTOR INDEX (b, c))
 
 statement error pq: a vector index does not support the ASC option
@@ -419,7 +419,7 @@ statement error column vec1 has type vector, which is only allowed as the last c
 CREATE VECTOR INDEX ON vec_errors (vec1, b)
 
 # Try to use inverted indexable type in vector index.
-statement error column c has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+statement error column c has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.3/inverted-indexes.html
 CREATE VECTOR INDEX ON vec_errors (c, vec1)
 
 statement error pq: a vector index does not support the DESC option
@@ -1139,27 +1139,5 @@ composite_pk  CREATE TABLE public.composite_pk (
 
 statement ok
 DROP TABLE composite_pk
-
-subtest end
-
-subtest test_backfill_149236
-
-statement ok
-set autocommit_before_ddl=off;
-
-statement ok
-BEGIN;
-
-statement ok
-CREATE TABLE test_backfill_149236 (a INT PRIMARY KEY, b INT, vec1 VECTOR(3));
-
-statement error pgcode 0A000 vector index build not supported with the legacy schema changer
-CREATE VECTOR INDEX idx ON test_backfill_149236 (vec1);
-
-statement ok
-COMMIT;
-
-statement ok
-SET autocommit_before_ddl=on;
 
 subtest end

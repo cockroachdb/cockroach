@@ -482,7 +482,7 @@ func (sp *StorePool) statusString(nl NodeLivenessFunc) redact.RedactableString {
 }
 
 // storeGossipUpdate is the Gossip callback used to keep the StorePool up to date.
-func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value, _ int64) {
+func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	var storeDesc roachpb.StoreDescriptor
 
 	if err := content.GetProto(&storeDesc); err != nil {
@@ -547,7 +547,6 @@ func (sp *StorePool) UpdateLocalStoreAfterRebalance(
 		detail.Desc.Capacity.RangeCount++
 		detail.Desc.Capacity.LogicalBytes += rangeUsageInfo.LogicalBytes
 		detail.Desc.Capacity.WritesPerSecond += rangeUsageInfo.WritesPerSecond
-		detail.Desc.Capacity.WriteBytesPerSecond += rangeUsageInfo.WriteBytesPerSecond
 		if detail.Desc.Capacity.CPUPerSecond >= 0 {
 			detail.Desc.Capacity.CPUPerSecond += rangeUsageInfo.RaftCPUNanosPerSecond
 		}
@@ -562,11 +561,6 @@ func (sp *StorePool) UpdateLocalStoreAfterRebalance(
 			detail.Desc.Capacity.WritesPerSecond = 0
 		} else {
 			detail.Desc.Capacity.WritesPerSecond -= rangeUsageInfo.WritesPerSecond
-		}
-		if detail.Desc.Capacity.WriteBytesPerSecond <= rangeUsageInfo.WriteBytesPerSecond {
-			detail.Desc.Capacity.WriteBytesPerSecond = 0
-		} else {
-			detail.Desc.Capacity.WriteBytesPerSecond -= rangeUsageInfo.WriteBytesPerSecond
 		}
 		// When CPU attribution is unsupported, the store will set the
 		// CPUPerSecond of its store capacity to be -1.

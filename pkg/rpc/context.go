@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -546,9 +545,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		}
 	}
 
-	// The RPC context has the same lifetime as the stopper (which often matches
-	// the lifetime of the server), so we can ignore the cancellation function.
-	masterCtx, _ := opts.Stopper.WithCancelOnQuiesce(ctx) // nolint:quiesce
+	masterCtx, _ := opts.Stopper.WithCancelOnQuiesce(ctx)
 
 	secCtx := NewSecurityContext(
 		SecurityContextOptions{
@@ -731,7 +728,7 @@ func makeInternalClientAdapter(
 	batchServerHandler := chainUnaryServerInterceptors(
 		&grpc.UnaryServerInfo{
 			Server:     server,
-			FullMethod: tracingutil.BatchMethodName,
+			FullMethod: grpcinterceptor.BatchMethodName,
 		},
 		serverUnaryInterceptors,
 		func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -815,7 +812,7 @@ func makeInternalClientAdapter(
 				ctx = tracing.ContextWithSpan(ctx, nil)
 			}
 
-			err := batchClientHandler(ctx, tracingutil.BatchMethodName, ba, reply, nil /* ClientConn */)
+			err := batchClientHandler(ctx, grpcinterceptor.BatchMethodName, ba, reply, nil /* ClientConn */)
 			return reply, err
 		},
 	}

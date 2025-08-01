@@ -213,8 +213,7 @@ func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 		return gen.BasicRanges{
 			BaseRanges: gen.BaseRanges{
 				Ranges:            convertInt64ToInt(f.rangeGenerator.key()),
-				MinKey:            defaultMinKey,
-				MaxKey:            f.keySpaceGenerator.key(),
+				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.key()),
 				ReplicationFactor: f.s.rangeGen.replicationFactor,
 				Bytes:             defaultBytes,
 			},
@@ -227,8 +226,7 @@ func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 		return RandomizedBasicRanges{
 			BaseRanges: gen.BaseRanges{
 				Ranges:            convertInt64ToInt(f.rangeGenerator.key()),
-				MinKey:            defaultMinKey,
-				MaxKey:            f.keySpaceGenerator.key(),
+				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.key()),
 				ReplicationFactor: f.s.rangeGen.replicationFactor,
 				Bytes:             defaultBytes,
 			},
@@ -249,8 +247,7 @@ func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 		return WeightedRandomizedBasicRanges{
 			BaseRanges: gen.BaseRanges{
 				Ranges:            convertInt64ToInt(f.rangeGenerator.key()),
-				MinKey:            defaultMinKey,
-				MaxKey:            f.keySpaceGenerator.key(),
+				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.key()),
 				ReplicationFactor: f.s.rangeGen.replicationFactor,
 				Bytes:             defaultBytes,
 			},

@@ -27,19 +27,13 @@ import (
 )
 
 func makeMockTxnWriteBuffer(
-	ctx context.Context, optionalMetrics ...TxnMetrics,
+	ctx context.Context,
 ) (txnWriteBuffer, *mockLockedSender, *cluster.Settings) {
+	metrics := MakeTxnMetrics(time.Hour)
 	st := cluster.MakeClusterSettings()
 	bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
-	bufferedWritesGetTransformEnabled.Override(ctx, &st.SV, true)
 	bufferedWritesMaxBufferSize.Override(ctx, &st.SV, defaultBufferSize)
 
-	var metrics TxnMetrics
-	if len(optionalMetrics) > 0 {
-		metrics = optionalMetrics[0]
-	} else {
-		metrics = MakeTxnMetrics(time.Hour)
-	}
 	mockSender := &mockLockedSender{}
 	return txnWriteBuffer{
 		enabled:    true,
@@ -1407,12 +1401,6 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	txn.Sequence = 10
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
-	cfg := transformConfig{
-		transformScans: true,
-		transformGets:  true,
-	}
-	noScanCfg := cfg
-	noScanCfg.transformScans = false
 
 	valAStr := "valA"
 	valA := roachpb.MakeValueFromString(valAStr)
@@ -1426,7 +1414,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	ba.Add(putA)
 
 	expectedUnlockedPutSize := int64(len(keyA)+len(valA.RawBytes)) + bufferedWriteStructOverhead + bufferedValueStructOverhead
-	require.Equal(t, expectedUnlockedPutSize, twb.estimateSize(ba, cfg))
+	require.Equal(t, expectedUnlockedPutSize, twb.estimateSize(ba, true))
 
 	ba = &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
@@ -1434,7 +1422,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	putA.MustAcquireExclusiveLock = true
 	ba.Add(putA)
 
-	require.Equal(t, expectedUnlockedPutSize+lockKeyInfoSize, twb.estimateSize(ba, cfg))
+	require.Equal(t, expectedUnlockedPutSize+lockKeyInfoSize, twb.estimateSize(ba, true))
 
 	ba = &kvpb.BatchRequest{}
 	cputLarge := cputArgs(keyLarge, valLargeStr, "", txn.Sequence)
@@ -1442,7 +1430,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 
 	require.Equal(t,
 		int64(len(keyLarge)+len(valLarge.RawBytes))+bufferedWriteStructOverhead+bufferedValueStructOverhead+lockKeyInfoSize,
-		twb.estimateSize(ba, cfg),
+		twb.estimateSize(ba, true),
 	)
 
 	ba = &kvpb.BatchRequest{}
@@ -1452,14 +1440,14 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	// NB: note that we're overcounting here, as we're deleting a key that's
 	// already present in the buffer. But that's what estimating is about.
 	expectedUnlockedDelSize := int64(len(keyA)) + bufferedWriteStructOverhead + bufferedValueStructOverhead
-	require.Equal(t, expectedUnlockedDelSize, twb.estimateSize(ba, cfg))
+	require.Equal(t, expectedUnlockedDelSize, twb.estimateSize(ba, true))
 
 	ba = &kvpb.BatchRequest{}
 	delA = delArgs(keyA, txn.Sequence)
 	delA.MustAcquireExclusiveLock = true
 	ba.Add(delA)
 
-	require.Equal(t, expectedUnlockedDelSize+lockKeyInfoSize, twb.estimateSize(ba, cfg))
+	require.Equal(t, expectedUnlockedDelSize+lockKeyInfoSize, twb.estimateSize(ba, true))
 
 	ba = &kvpb.BatchRequest{}
 	ba.Add(&kvpb.ScanRequest{
@@ -1469,8 +1457,8 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	})
 
 	expectedLockedScanSize := int64(len(keyA)) + bufferedWriteStructOverhead + bufferedValueStructOverhead + lockKeyInfoSize
-	require.Equal(t, expectedLockedScanSize, twb.estimateSize(ba, cfg))
-	require.Equal(t, int64(0), twb.estimateSize(ba, noScanCfg))
+	require.Equal(t, expectedLockedScanSize, twb.estimateSize(ba, true))
+	require.Equal(t, int64(0), twb.estimateSize(ba, false))
 
 	ba = &kvpb.BatchRequest{}
 	ba.Add(&kvpb.ReverseScanRequest{
@@ -1480,8 +1468,8 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	})
 
 	expectedLockedRScanSize := int64(len(keyA)) + bufferedWriteStructOverhead + bufferedValueStructOverhead + lockKeyInfoSize
-	require.Equal(t, expectedLockedRScanSize, twb.estimateSize(ba, cfg))
-	require.Equal(t, int64(0), twb.estimateSize(ba, noScanCfg))
+	require.Equal(t, expectedLockedRScanSize, twb.estimateSize(ba, true))
+	require.Equal(t, int64(0), twb.estimateSize(ba, false))
 
 	ba = &kvpb.BatchRequest{}
 	ba.Add(&kvpb.ScanRequest{
@@ -1489,7 +1477,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 		KeyLockingDurability: lock.Unreplicated,
 		RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyB, Sequence: txn.Sequence},
 	})
-	require.Equal(t, int64(0), twb.estimateSize(ba, cfg))
+	require.Equal(t, int64(0), twb.estimateSize(ba, true))
 
 	ba = &kvpb.BatchRequest{}
 	ba.Add(&kvpb.ReverseScanRequest{
@@ -1497,7 +1485,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 		KeyLockingDurability: lock.Unreplicated,
 		RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyB, Sequence: txn.Sequence},
 	})
-	require.Equal(t, int64(0), twb.estimateSize(ba, cfg))
+	require.Equal(t, int64(0), twb.estimateSize(ba, true))
 }
 
 // TestTxnWriteBufferFlushesWhenOverBudget verifies that the txnWriteBuffer
@@ -2514,46 +2502,20 @@ func TestTxnWriteBufferHasBufferedAllPrecedingWrites(t *testing.T) {
 func BenchmarkTxnWriteBuffer(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	ctx := context.Background()
-	metrics := MakeTxnMetrics(time.Hour)
 
-	// Map from kvSize to a slice of keys where the i-th element corresponds to
-	// the key for the 'i' parameter. The function assumes that for a given
-	// kvSize it'll be called with consecutive values of 'i' ("going back" is
-	// allowed but "jumping forward with gaps" is not).
-	cachedKeys := make(map[int][]roachpb.Key)
 	makeKey := func(i int, kvSize int) roachpb.Key {
-		if _, ok := cachedKeys[kvSize]; !ok {
-			cachedKeys[kvSize] = make([]roachpb.Key, 0, 8)
-		}
-		cached := cachedKeys[kvSize]
-		if len(cached) > i {
-			return cached[i]
-		}
-		if len(cached) < i {
-			b.Fatal("a gap in values of i")
-		}
 		// The keys are kvSize bytes.
 		keyPrefix := strings.Repeat("a", kvSize-1)
-		cached = append(cached, roachpb.Key(fmt.Sprintf("%s%d", keyPrefix, i)))
-		cachedKeys[kvSize] = cached
-		return cached[i]
+		return roachpb.Key(fmt.Sprintf("%s%d", keyPrefix, i))
 	}
-	cachedValues := make(map[int]roachpb.Value)
-	makeValue := func(kvSize int) roachpb.Value {
-		if _, ok := cachedValues[kvSize]; !ok {
-			// The values are kvSize KiB.
-			cachedValues[kvSize] = roachpb.MakeValueFromString(strings.Repeat("a", kvSize*1024))
-		}
-		return cachedValues[kvSize]
-	}
-	putArgs := func(key roachpb.Key, valueSize int, seq enginepb.TxnSeq) *kvpb.PutRequest {
-		return &kvpb.PutRequest{
-			RequestHeader: kvpb.RequestHeader{Key: key, Sequence: seq},
-			Value:         makeValue(valueSize),
-		}
+	makeValue := func(kvSize int) string {
+		// The values are kvSize KiB.
+		return strings.Repeat("a", kvSize*1024)
 	}
 	makeBuffer := func(kvSize int, txn *roachpb.Transaction, numWrites int) txnWriteBuffer {
-		twb, mockSender, _ := makeMockTxnWriteBuffer(ctx, metrics)
+		twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
+		twb.setEnabled(true)
+
 		sendFunc := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			br := ba.CreateReply()
 			br.Txn = ba.Txn
@@ -2563,10 +2525,9 @@ func BenchmarkTxnWriteBuffer(b *testing.B) {
 			for _, req := range ba.Requests {
 				switch req.GetInner().(type) {
 				case *kvpb.GetRequest:
-					v := makeValue(kvSize)
 					resp.Value = &kvpb.ResponseUnion_Get{
 						Get: &kvpb.GetResponse{
-							Value: &v,
+							Value: &roachpb.Value{RawBytes: []byte(makeValue(kvSize))},
 						},
 					}
 				}
@@ -2582,7 +2543,7 @@ func BenchmarkTxnWriteBuffer(b *testing.B) {
 		// Write to the keys that will later be served from the buffer but
 		// not from the benchmarked batch.
 		for i := 0; i < numWrites; i++ {
-			ba.Add(putArgs(makeKey(i, kvSize), kvSize, enginepb.TxnSeq(i)))
+			ba.Add(putArgs(makeKey(i, kvSize), makeValue(kvSize), enginepb.TxnSeq(i)))
 		}
 		_, pErr := twb.SendLocked(ctx, ba)
 		if pErr != nil {
@@ -2640,7 +2601,7 @@ func BenchmarkTxnWriteBuffer(b *testing.B) {
 							// and are in the benchmarked batch.
 							for i := readsFromPrevBatch; i < readsFromPrevBatch+readsFromBufferSameBatch; i++ {
 								// Half of these puts acquire exclusive locks.
-								args := putArgs(makeKey(i, kvSize), kvSize, enginepb.TxnSeq(i))
+								args := putArgs(makeKey(i, kvSize), makeValue(kvSize), enginepb.TxnSeq(i))
 								if i%2 == 0 {
 									args.MustAcquireExclusiveLock = true
 								}
@@ -2654,7 +2615,7 @@ func BenchmarkTxnWriteBuffer(b *testing.B) {
 							// Add any remaining writes, not observed by any reads.
 							for i := readsFromPrevBatch + readsFromBufferSameBatch; i < numWrites; i++ {
 								// Half of these puts acquire exclusive locks.
-								args := putArgs(makeKey(i, kvSize), kvSize, enginepb.TxnSeq(i))
+								args := putArgs(makeKey(i, kvSize), makeValue(kvSize), enginepb.TxnSeq(i))
 								if i%2 == 0 {
 									args.MustAcquireExclusiveLock = true
 								}

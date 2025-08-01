@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -63,20 +62,6 @@ var (
 		"maximum number of concurrent bulk ingest requests sent by any one sender, such as a processor in an IMPORT, index creation or RESTORE, etc (0 = no limit)",
 		0,
 		settings.NonNegativeInt,
-	)
-
-	computeStatsDiffInStreamBatcher = settings.RegisterBoolSetting(
-		settings.ApplicationLevel,
-		"bulkio.ingest.compute_stats_diff_in_stream_batcher.enabled",
-		"if set, kvserver will compute an accurate stats diff for every addsstable request",
-		metamorphic.ConstantWithTestBool("computeStatsDiffInStreamBatcher", true),
-	)
-
-	sstBatcherElasticCPUControlEnabled = settings.RegisterBoolSetting(
-		settings.ApplicationLevel,
-		"bulkio.ingest.sst_batcher_elastic_control.enabled",
-		"determines whether the sst batcher integrates with elastic CPU control",
-		false, // TODO(dt): enable this by default.
 	)
 )
 
@@ -219,9 +204,6 @@ type SSTBatcher struct {
 	// disallowShadowingBelow is described on kvpb.AddSSTableRequest.
 	disallowShadowingBelow hlc.Timestamp
 
-	// pacer for admission control during SST ingestion
-	pacer CPUPacer
-
 	// skips duplicate keys (iff they are buffered together). This is true when
 	// used to backfill an inverted index. An array in JSONB with multiple values
 	// which are the same, will all correspond to the same kv in the inverted
@@ -315,7 +297,7 @@ func MakeSSTBatcher(
 	b := &SSTBatcher{
 		name:                   name,
 		db:                     db,
-		adder:                  newSSTAdder(db, settings, writeAtBatchTs, disallowShadowingBelow, admissionpb.BulkNormalPri, false),
+		adder:                  newSSTAdder(db, settings, writeAtBatchTs, disallowShadowingBelow, admissionpb.BulkNormalPri),
 		settings:               settings,
 		disallowShadowingBelow: disallowShadowingBelow,
 		writeAtBatchTS:         writeAtBatchTs,
@@ -323,7 +305,6 @@ func MakeSSTBatcher(
 		mem:                    mem,
 		limiter:                sendLimiter,
 		rc:                     rc,
-		pacer:                  NewCPUPacer(ctx, db, sstBatcherElasticCPUControlEnabled),
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
@@ -349,7 +330,7 @@ func MakeStreamSSTBatcher(
 		// be able to handle reduced throughput. We are OK with his for now since
 		// the consuming cluster of a replication stream does not have a latency
 		// sensitive workload running against it.
-		adder:     newSSTAdder(db, settings, false /*writeAtBatchTS*/, hlc.Timestamp{}, admissionpb.BulkNormalPri, computeStatsDiffInStreamBatcher.Get(&settings.SV)),
+		adder:     newSSTAdder(db, settings, false /*writeAtBatchTS*/, hlc.Timestamp{}, admissionpb.BulkNormalPri),
 		settings:  settings,
 		ingestAll: true,
 		mem:       mem,
@@ -363,7 +344,6 @@ func MakeStreamSSTBatcher(
 		// does not however make sense to scatter that range as the RHS maybe
 		// non-empty.
 		disableScatters: true,
-		pacer:           NewCPUPacer(ctx, db, sstBatcherElasticCPUControlEnabled),
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
@@ -385,13 +365,12 @@ func MakeTestingSSTBatcher(
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
 		db:             db,
-		adder:          newSSTAdder(db, settings, false, hlc.Timestamp{}, admissionpb.BulkNormalPri, false),
+		adder:          newSSTAdder(db, settings, false, hlc.Timestamp{}, admissionpb.BulkNormalPri),
 		settings:       settings,
 		skipDuplicates: skipDuplicates,
 		ingestAll:      ingestAll,
 		mem:            mem,
 		limiter:        sendLimiter,
-		pacer:          NewCPUPacer(ctx, db, sstBatcherElasticCPUControlEnabled),
 	}
 	b.init(ctx)
 	return b, nil
@@ -407,6 +386,7 @@ func (b *SSTBatcher) SetOnFlush(onFlush func(summary kvpb.BulkOpSummary)) {
 func (b *SSTBatcher) AddMVCCKeyWithImportEpoch(
 	ctx context.Context, key storage.MVCCKey, value []byte, importEpoch uint32,
 ) error {
+
 	mvccVal, err := storage.DecodeMVCCValue(value)
 	if err != nil {
 		return err
@@ -423,6 +403,7 @@ func (b *SSTBatcher) AddMVCCKeyWithImportEpoch(
 }
 
 func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, value []byte) error {
+
 	mvccVal, err := storage.DecodeMVCCValue(value)
 	if err != nil {
 		return err
@@ -443,9 +424,6 @@ func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, val
 // keys -- like RESTORE where we want the restored data to look like the backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
-	// Pace based on admission control before adding the key.
-	b.pacer.Pace(ctx)
-
 	if len(b.batch.endKey) > 0 && bytes.Equal(b.batch.endKey, key.Key) {
 		if b.ingestAll && key.Timestamp.Equal(b.batch.endTimestamp) {
 			if bytes.Equal(b.batch.endValue, value) {
@@ -650,14 +628,6 @@ func (b *SSTBatcher) syncFlush() error {
 	return flushErr
 }
 
-var debugDropSSTOnFlush = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"bulkio.ingest.unsafe_debug.drop_sst_on_flush.enabled",
-	"if set, the SSTBatcher will simply discard data instead of flushing it (destroys data; for performance debugging experiments only)",
-	false,
-	settings.WithUnsafe,
-)
-
 // startFlush starts a flush of the current batch. If it encounters any errors
 // the errors are reported by the call to `syncFlush`.
 //
@@ -847,13 +817,9 @@ func (b *SSTBatcher) startFlush(ctx context.Context, reason int) {
 	b.asyncAddSSTs.GoCtx(func(ctx context.Context) error {
 		defer res.Release()
 		defer b.mem.Shrink(ctx, reserved)
-
-		var results []addSSTResult
-		if !debugDropSSTOnFlush.Get(&b.settings.SV) {
-			results, err = b.adder.AddSSTable(ctx, batchTS, start, end, data, mvccStats, performanceStats)
-			if err != nil {
-				return err
-			}
+		results, err := b.adder.AddSSTable(ctx, batchTS, start, end, data, mvccStats, performanceStats)
+		if err != nil {
+			return err
 		}
 
 		// Now that we have completed ingesting the SSTables we take a lock and
@@ -938,7 +904,6 @@ func (b *SSTBatcher) Close(ctx context.Context) {
 	if err := b.syncFlush(); err != nil {
 		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
 	}
-	b.pacer.Close()
 	b.mem.Close(ctx)
 }
 

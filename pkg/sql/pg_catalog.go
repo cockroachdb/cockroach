@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -2458,6 +2459,11 @@ var pgCatalogPreparedXactsTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html`,
 	schema: vtable.PGCatalogPreparedXacts,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if !p.IsActive(ctx, clusterversion.TODO_Delete_V25_1_PreparedTransactionsTable) {
+			// TODO(nvanbenschoten): Remove this logic when mixed-version support
+			// with v24.3 is no longer necessary.
+			return nil
+		}
 		rows, err := p.InternalSQLTxn().QueryBufferedEx(
 			ctx,
 			"select-prepared-transactions",
@@ -3581,12 +3587,10 @@ func addPGTypeRow(
 	case types.VoidFamily:
 		// void does not have an array type.
 	case types.TriggerFamily:
-		builtinPrefix = "trigger_"
-		// trigger does not have an array type.
+	// trigger does not have an array type.
 	case types.AnyFamily:
+		// Any does not have an array type. You may be thinking of AnyElement.
 		if typ.Oid() == oid.T_any {
-			builtinPrefix = "any_"
-			// Any does not have an array type.
 			break
 		}
 		fallthrough

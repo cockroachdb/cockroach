@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "buffering_adder.go",
         "bulk_metrics.go",
-        "cpu_pacer.go",
         "kv_buf.go",
         "setting.go",
         "sst_adder.go",
@@ -25,7 +24,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/ctxgroup",
@@ -33,7 +31,6 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/limit",
         "//pkg/util/log",
-        "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/retry",

@@ -70,11 +70,10 @@ func newReaderCatalogTest(
 	})
 	require.NoError(t, err)
 	destTenant, _, err := ts.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
-		TenantID:       serverutils.TestTenantID2(),
-		TenantName:     "dest",
-		Knobs:          destTestingKnobs,
-		Settings:       destSettings,
-		TenantReadOnly: true, // Mark the dest tenant as read-only for testing
+		TenantID:   serverutils.TestTenantID2(),
+		TenantName: "dest",
+		Knobs:      destTestingKnobs,
+		Settings:   destSettings,
 	})
 	require.NoError(t, err)
 	srcRunner := sqlutils.MakeSQLRunner(srcTenant.SQLConn(t))
@@ -186,7 +185,6 @@ func TestReaderCatalog(t *testing.T) {
 	r.srcRunner.Exec(t, `
 CREATE USER roacher WITH CREATEROLE;
 GRANT ADMIN TO roacher;
-GRANT SYSTEM VIEWACTIVITY TO roacher;
 ALTER USER roacher SET timezone='America/New_York';
 CREATE DATABASE db1;
 CREATE SCHEMA db1.sc1;
@@ -228,7 +226,6 @@ INSERT INTO t3(n) VALUES (3);
 		"INSERT INTO t1(val) VALUES('inactive');",
 		"CREATE USER roacher2 WITH CREATEROLE;",
 		"GRANT ADMIN TO roacher2;",
-		"GRANT SYSTEM VIEWACTIVITY TO roacher2;",
 		"ALTER USER roacher2 SET timezone='America/New_York';",
 		"CREATE TABLE t4(n int)",
 		"INSERT INTO t4 VALUES (32)",
@@ -242,7 +239,6 @@ INSERT INTO t3(n) VALUES (3);
 	r.compareEqual(t, "SELECT * FROM t1 ORDER BY n")
 	r.compareEqual(t, "SELECT * FROM v1 ORDER BY 1")
 	r.compareEqual(t, "SELECT * FROM system.users")
-	r.compareEqual(t, "SHOW SYSTEM GRANTS FOR roacher")
 	r.compareEqual(t, "SELECT * FROM system.table_statistics")
 	r.compareEqual(t, "SELECT * FROM system.role_options")
 	r.compareEqual(t, "SELECT * FROM system.database_role_settings")
@@ -270,8 +266,6 @@ INSERT INTO t3(n) VALUES (3);
 	r.compareEqual(t, "SELECT * FROM system.table_statistics")
 	r.compareEqual(t, "SELECT * FROM system.role_options")
 	r.compareEqual(t, "SELECT * FROM system.database_role_settings")
-	r.compareEqual(t, "SHOW SYSTEM GRANTS FOR roacher")
-	r.compareEqual(t, "SHOW SYSTEM GRANTS FOR roacher2")
 	r.compareEqual(t, "SELECT * FROM t4 ORDER BY n")
 	r.compareEqual(t, "SELECT * FROM t5 ORDER BY n")
 	r.compareEqual(t, "SELECT name FROM system.namespace ORDER BY name")
@@ -549,34 +543,6 @@ func TestReaderCatalogTSAdvanceWithLongTxn(t *testing.T) {
 	_, err = tx.Exec("SELECT * FROM sq1")
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
-}
-
-func TestReaderCatalogAutoStatsDisabled(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	skip.UnderDuress(t)
-
-	ctx := context.Background()
-	r, cleanup := newReaderCatalogTest(t, ctx, base.TestingKnobs{}, nil)
-	defer cleanup()
-
-	// Create a table and insert some data in the source tenant.
-	r.srcRunner.Exec(t, `
-		CREATE TABLE t1(n int);
-		INSERT INTO t1 VALUES (1), (2), (3);
-	`)
-
-	// Enable auto stats collection in the source tenant.
-	r.srcRunner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true`)
-
-	// Advance the reader catalog timestamp to replicate the table.
-	require.NoError(t, r.advanceTS(ctx, r.ts.Clock().Now(), true))
-
-	// Verify the table exists in the reader catalog.
-	r.compareEqual(t, "SELECT * FROM t1 ORDER BY n")
-
-	// Now verify that stats collection is disabled for the read-only tenant.
-	// Manual CREATE STATISTICS should fail with our tenant-level read-only error.
-	r.destRunner.ExpectErr(t, "cannot create statistics in read-only tenant", "CREATE STATISTICS test_stats FROM t1")
 }
 
 func TestMain(m *testing.M) {

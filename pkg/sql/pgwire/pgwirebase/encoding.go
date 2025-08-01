@@ -922,20 +922,14 @@ func DecodeDatum(
 		sv := strings.TrimRight(bs, " ")
 		return da.NewDString(tree.DString(sv)), nil
 	case oid.T_char:
-		var sv string
-		if len(b) == 1 {
-			// Take a single byte as-is, even if it is not a valid UTF-8
-			// character. The null byte represents an empty string.
-			if b[0] != 0 {
+		sv := bs
+		// Always truncate to 1 byte, and handle the null byte specially.
+		if len(b) >= 1 {
+			if b[0] == 0 {
+				sv = ""
+			} else {
 				sv = string(b[:1])
 			}
-		} else if len(b) > 1 {
-			// If there is more than one byte, decode the first UTF-8 character.
-			r, _ := utf8.DecodeRune(b)
-			if r == utf8.RuneError {
-				return nil, invalidUTF8Error
-			}
-			sv = string(r)
 		}
 		return da.NewDString(tree.DString(sv)), nil
 	case oid.T_name:

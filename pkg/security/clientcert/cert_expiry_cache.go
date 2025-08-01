@@ -105,13 +105,10 @@ func (c *Cache) Upsert(ctx context.Context, user string, serial string, newExpir
 		c.cache[user] = map[string]certInfo{}
 	}
 
-	// if the serial hasn't been seen, report it in the memory accounting.
-	if _, ok := c.cache[user][serial]; !ok {
-		err := c.account.Grow(ctx, CertInfoSize)
-		if err != nil {
-			log.Warningf(ctx, "no memory available to cache cert expiry: %v", err)
-			return
-		}
+	err := c.account.Grow(ctx, CertInfoSize)
+	if err != nil {
+		log.Warningf(ctx, "no memory available to cache cert expiry: %v", err)
+		c.evictLocked(ctx, user, serial)
 	}
 
 	// insert / update the certificate expiration time.

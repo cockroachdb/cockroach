@@ -62,12 +62,10 @@ user root
 statement ok
 SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '1MiB';
 
-# Disable CF mutator since we would exceed the raft command size with multiple
-# column families.
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE src (s STRING);
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE dest (s STRING);
 
 statement ok

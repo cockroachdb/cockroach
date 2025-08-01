@@ -231,7 +231,6 @@ CREATE TABLE t.test (k INT);
 		kvDB, s.Codec(), "t", "test")
 	for i := range tableDesc.Columns {
 		if tableDesc.Columns[i].Name == "k" {
-			tableDesc.Columns[i].Type.InternalType.Oid = 0         // Pre-2.1 types don't have an OID.
 			tableDesc.Columns[i].Type.InternalType.VisibleType = 4 // Pre-2.1 BIT.
 			tableDesc.Columns[i].Type.InternalType.Width = 12      // Arbitrary non-std INT size.
 			break
@@ -1327,7 +1326,7 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 	assert.NoError(t, err)
 
 	tdb.Exec(t,
-		"INSERT INTO system.jobs (id, status, created, owner) values ($1, $2, $3, 'root')",
+		"INSERT INTO system.jobs (id, status, created) values ($1, $2, $3)",
 		1, jobs.StateRunning, timeutil.Now(),
 	)
 	tdb.Exec(t,
@@ -1336,9 +1335,9 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 	)
 
 	tdb.Exec(t,
-		`INSERT INTO system.jobs (id, status, created, owner, created_by_type, created_by_id,
-                         claim_session_id, claim_instance_id, num_runs, last_run, job_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		2, jobs.StateRunning, timeutil.Now(), "root", "created by", 2, []byte("claim session id"),
+		`INSERT INTO system.jobs (id, status, created, created_by_type, created_by_id, 
+                         claim_session_id, claim_instance_id, num_runs, last_run, job_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		2, jobs.StateRunning, timeutil.Now(), "created by", 2, []byte("claim session id"),
 		2, 2, timeutil.Now(), jobspb.TypeImport.String(),
 	)
 	tdb.Exec(t,

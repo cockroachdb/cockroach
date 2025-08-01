@@ -52,7 +52,6 @@ var debugTimeSeriesDumpOpts = struct {
 	userName               string
 	storeToNodeMapYAMLFile string
 	dryRun                 bool
-	noOfUploadWorkers      int
 }{
 	format:       tsDumpText,
 	from:         timestampValue{},
@@ -122,7 +121,6 @@ will then convert it to the --format requested in the current invocation.
 				debugTimeSeriesDumpOpts.ddApiKey,
 				100,
 				hostNameOverride,
-				debugTimeSeriesDumpOpts.noOfUploadWorkers,
 			)
 			if err != nil {
 				return err

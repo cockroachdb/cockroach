@@ -10,7 +10,6 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -19,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
@@ -40,19 +38,10 @@ func TestStringifyWriteBatch(t *testing.T) {
 		Key:       roachpb.Key("/db1"),
 		Timestamp: hlc.Timestamp{WallTime: math.MaxInt64},
 	}), []byte("test value"), nil /* WriteOptions */))
-
-	ltKey, _ := storage.LockTableKey{
-		Key: roachpb.Key("/key"), Strength: lock.Intent, TxnUUID: uuid.UUID{},
-	}.ToEngineKey(nil)
-	require.NoError(t, batch.Set(ltKey.Encode(), []byte("intent"), nil))
-
 	wb.Data = batch.Repr()
 	s, err = DecodeWriteBatch(wb.Data)
 	require.NoError(t, err)
-	require.Equal(t,
-		`Put: 9223372036.854775807,0 "/db1" (0x2f646231007fffffffffffffff09): "test value"
-Put: "/key"/Intent/00000000-0000-0000-0000-000000000000: 696e74656e74
-`, s)
+	require.Equal(t, "Put: 9223372036.854775807,0 \"/db1\" (0x2f646231007fffffffffffffff09): \"test value\"\n", s)
 
 	batch = pebble.Batch{}
 	encodedKey, err := hex.DecodeString("017a6b12c089f704918df70bee8800010003623a9318c0384d07a6f22b858594df6012")

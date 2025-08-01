@@ -100,7 +100,6 @@ type AllocatorReplica interface {
 	GetCompactedIndex() kvpb.RaftIndex
 	LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 	StoreID() roachpb.StoreID
-	NodeID() roachpb.NodeID
 	GetRangeID() roachpb.RangeID
 	SendStreamStats(*rac2.RangeSendStreamStats)
 }
@@ -909,14 +908,8 @@ func (rp ReplicaPlanner) maybeTransferLeaseAwayTarget(
 	log.KvDistribution.Infof(ctx, "transferring away lease to s%d", target.StoreID)
 
 	op = AllocationTransferLeaseOp{
-		Source: roachpb.ReplicationTarget{
-			NodeID:  repl.NodeID(),
-			StoreID: repl.StoreID(),
-		},
-		Target: roachpb.ReplicationTarget{
-			NodeID:  target.NodeID,
-			StoreID: target.StoreID,
-		},
+		Source:             repl.StoreID(),
+		Target:             target.StoreID,
 		Usage:              usageInfo,
 		bypassSafetyChecks: false,
 	}

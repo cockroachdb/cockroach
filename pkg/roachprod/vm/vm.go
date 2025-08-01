@@ -43,8 +43,6 @@ const (
 	ArchFIPS    = CPUArch("fips")
 	ArchS390x   = CPUArch("s390x")
 	ArchUnknown = CPUArch("unknown")
-
-	DefaultLifetime = 12 * time.Hour
 )
 
 // UnimplementedError is returned when a method is not implemented by a
@@ -310,7 +308,7 @@ type CreateOpts struct {
 func DefaultCreateOpts() CreateOpts {
 	defaultCreateOpts := CreateOpts{
 		ClusterName:    "",
-		Lifetime:       DefaultLifetime,
+		Lifetime:       12 * time.Hour,
 		GeoDistributed: false,
 		VMProviders:    []string{},
 		OsVolumeSize:   10,

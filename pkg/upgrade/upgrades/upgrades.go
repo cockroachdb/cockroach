@@ -59,6 +59,34 @@ var upgrades = []upgradebase.Upgrade{
 		bootstrapCluster,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
+	newFirstUpgrade(clusterversion.TODO_Delete_V25_1_Start.Version()),
+
+	upgrade.NewTenantUpgrade(
+		"create prepared_transactions table",
+		clusterversion.TODO_Delete_V25_1_PreparedTransactionsTable.Version(),
+		upgrade.NoPrecondition,
+		createPreparedTransactionsTable,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
+
+	newFirstUpgrade(clusterversion.TODO_Delete_V25_2_Start.Version()),
+
+	upgrade.NewTenantUpgrade(
+		"add new sql activity flush job",
+		clusterversion.TODO_Delete_V25_2_AddSqlActivityFlushJob.Version(),
+		upgrade.NoPrecondition,
+		addSqlActivityFlushJob,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this job"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"set new ui.default_timezone setting to ui.display_timezone value",
+		clusterversion.TODO_Delete_V25_2_SetUiDefaultTimezoneSetting.Version(),
+		upgrade.NoPrecondition,
+		setUiDefaultTimezone,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this setting"),
+	),
+
 	newFirstUpgrade(clusterversion.V25_3_Start.Version()),
 
 	upgrade.NewTenantUpgrade(
@@ -84,8 +112,6 @@ var upgrades = []upgradebase.Upgrade{
 		addHotRangeLoggerJob,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this job"),
 	),
-
-	newFirstUpgrade(clusterversion.V25_4_Start.Version()),
 
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.

@@ -291,6 +291,12 @@ func NewBufferedSenderMetrics() *BufferedSenderMetrics {
 }
 
 var (
+	metaRangeFeedMuxStreamSendLatencyNanos = metric.Metadata{
+		Name:        "kv.rangefeed.mux_stream_send.latency",
+		Help:        "Latency of sending RangeFeed events to the client",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaRangeFeedMuxStreamSlowSends = metric.Metadata{
 		Name:        "kv.rangefeed.mux_stream_send.slow_events",
 		Help:        "Number of RangeFeed events that took longer than 10s to send to the client",
@@ -300,14 +306,21 @@ var (
 )
 
 type LockedMuxStreamMetrics struct {
-	SlowSends *metric.Counter
+	SendLatencyNanos metric.IHistogram
+	SlowSends        *metric.Counter
 }
 
 // MetricStruct implements metrics.Struct interface.
 func (*LockedMuxStreamMetrics) MetricStruct() {}
 
-func NewLockedMuxStreamMetrics() *LockedMuxStreamMetrics {
+func NewLockedMuxStreamMetrics(histogramWindow time.Duration) *LockedMuxStreamMetrics {
 	return &LockedMuxStreamMetrics{
+		SendLatencyNanos: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     metaRangeFeedMuxStreamSendLatencyNanos,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
 		SlowSends: metric.NewCounter(metaRangeFeedMuxStreamSlowSends),
 	}
 }

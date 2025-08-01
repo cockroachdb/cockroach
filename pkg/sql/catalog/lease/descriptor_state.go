@@ -135,12 +135,6 @@ func (t *descriptorState) upsertLeaseLocked(
 			log.Infof(ctx, "new lease: %s", desc)
 		}
 		descState := newDescriptorVersionState(t, desc, hlc.Timestamp{}, session, regionEnumPrefix, true /* isLease */)
-		if err := t.m.boundAccount.Grow(ctx, descState.getByteSize()); err != nil {
-			// If we don't have sufficient memory, then release the lease so
-			// that the system.lease table doesn't have a reference.
-			t.m.storage.release(ctx, t.m.stopper, descState.mu.lease)
-			return wrapMemoryError(err)
-		}
 		t.mu.active.insert(descState)
 		t.m.names.insert(ctx, descState)
 		return nil
@@ -202,7 +196,7 @@ func newDescriptorVersionState(
 
 // removeInactiveVersions removes inactive versions in t.mu.active.data with
 // refcount 0. t.mu must be locked. It returns leases that need to be released.
-func (t *descriptorState) removeInactiveVersions(ctx context.Context) []*storedLease {
+func (t *descriptorState) removeInactiveVersions() []*storedLease {
 	var leases []*storedLease
 	// A copy of t.mu.active.data must be made since t.mu.active.data will be changed
 	// within the loop.
@@ -212,12 +206,10 @@ func (t *descriptorState) removeInactiveVersions(ctx context.Context) []*storedL
 			func() {
 				desc.mu.Lock()
 				defer desc.mu.Unlock()
-				// Ensure we have a lock to allow us to clean up the usage
-				// by the stored lease.
-				t.m.boundAccount.Shrink(ctx, desc.getByteSize())
 				if l := desc.mu.lease; l != nil {
 					desc.mu.lease = nil
 					leases = append(leases, l)
+
 				}
 			}()
 		}
@@ -280,15 +272,14 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 			leaseReleased := true
 			// For testing, we will synchronously release leases, but that
 			// exposes us to the danger of the context getting cancelled. To
-			// eliminate this risk, we are going to first remove the lease from
-			// storage and then delete it from memory.
+			// eliminate this risk, we are going first remove the lease from
+			// storage and then delete if from mqemory.
 			if t.m.storage.testingKnobs.RemoveOnceDereferenced {
 				leaseReleased = releaseLease(ctx, l, t.m)
 				l = nil
 			}
 			if leaseReleased {
 				t.mu.active.remove(s)
-				s.t.m.boundAccount.Shrink(ctx, s.getByteSize())
 			}
 			return l
 		}

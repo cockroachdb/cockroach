@@ -71,11 +71,6 @@ func (c *CustomFuncs) IsInt(scalar opt.ScalarExpr) bool {
 	return scalar.DataType().Family() == types.IntFamily
 }
 
-// IsTuple returns true if the given scalar expression is a tuple type.
-func (c *CustomFuncs) IsTuple(scalar opt.ScalarExpr) bool {
-	return scalar.DataType().Family() == types.TupleFamily
-}
-
 // BoolType returns the boolean SQL type.
 func (c *CustomFuncs) BoolType() *types.T {
 	return types.Bool
@@ -110,12 +105,6 @@ func (c *CustomFuncs) BinaryType(op opt.Operator, left, right opt.ScalarExpr) *t
 // TypeOf returns the type of the expression.
 func (c *CustomFuncs) TypeOf(e opt.ScalarExpr) *types.T {
 	return e.DataType()
-}
-
-// IdenticalTypes returns true if the two types are identical. See
-// (*types.T).Identical.
-func (c *CustomFuncs) IdenticalTypes(left, right *types.T) bool {
-	return left.Identical(right)
 }
 
 // IsConstArray returns true if the expression is a constant array.
@@ -625,13 +614,6 @@ func (c *CustomFuncs) ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) 
 	return memo.ExprIsNeverNull(e, notNullCols)
 }
 
-// EitherExprIsNeverNull returns true if either of the two provided scalar
-// expressions is guaranteed to be non-NULL, given the set of outer columns that
-// are known to be not null.
-func (c *CustomFuncs) EitherExprIsNeverNull(a, b opt.ScalarExpr, notNullCols opt.ColSet) bool {
-	return memo.ExprIsNeverNull(a, notNullCols) || memo.ExprIsNeverNull(b, notNullCols)
-}
-
 // sharedProps returns the shared logical properties for the given expression.
 // Only relational expressions and certain scalar list items (e.g. FiltersItem,
 // ProjectionsItem, AggregationsItem) have shared properties.
@@ -651,11 +633,6 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 // FuncDeps retrieves the FuncDepSet for the given expression.
 func (c *CustomFuncs) FuncDeps(expr memo.RelExpr) *props.FuncDepSet {
 	return &expr.Relational().FuncDeps
-}
-
-// IsLeakproof returns true if the given expression is leakproof.
-func (c *CustomFuncs) IsLeakproof(expr memo.RelExpr) bool {
-	return expr.Relational().VolatilitySet.IsLeakproof()
 }
 
 // ----------------------------------------------------------------------
@@ -1540,38 +1517,9 @@ func (c *CustomFuncs) CanAddConstInts(first tree.Datum, second tree.Datum) bool 
 	return ok
 }
 
-// DInt returns a new *tree.DInt with the given integer value.
-func (c *CustomFuncs) DInt(i tree.DInt) *tree.DInt {
-	return tree.NewDInt(i)
-}
-
 // IntConst constructs a Const holding a DInt.
 func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
 	return c.f.ConstructConst(d, types.Int)
-}
-
-// StringFromConst extracts a string from a Const expression. It returns the
-// string and a boolean indicating whether the extraction was successful.
-func (c *CustomFuncs) StringFromConst(expr opt.ScalarExpr) (string, bool) {
-	if constExpr, ok := expr.(*memo.ConstExpr); ok {
-		datum := tree.UnwrapDOidWrapper(constExpr.Value)
-		switch d := datum.(type) {
-		case *tree.DString:
-			return string(*d), true
-		case *tree.DCollatedString:
-			return d.Contents, true
-		}
-	}
-	return "", false
-}
-
-// ConstStringEquals returns true if e is a constant string expression and is
-// equal to other.
-func (c *CustomFuncs) ConstStringEquals(e opt.ScalarExpr, other string) bool {
-	if eStr, ok := c.StringFromConst(e); ok {
-		return eStr == other
-	}
-	return false
 }
 
 // IsGreaterThan returns true if the first datum compares as greater than the
@@ -1656,14 +1604,4 @@ func (c *CustomFuncs) SplitLeakproofFilters(
 		}
 	}
 	return leakproofFilters, remainingFilters, true
-}
-
-// HasAllLeakProofFilters returns true if every filter given is leakproof.
-func (c *CustomFuncs) HasAllLeakProofFilters(filters memo.FiltersExpr) bool {
-	for i := range filters {
-		if !filters[i].ScalarProps().VolatilitySet.IsLeakproof() {
-			return false
-		}
-	}
-	return true
 }

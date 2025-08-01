@@ -176,7 +176,7 @@ func (ex *connExecutor) execStmt(
 			})
 		}
 		switch p := payload.(type) {
-		case eventNonRetryableErrPayload:
+		case eventNonRetriableErrPayload:
 			ex.recordFailure(p)
 		}
 
@@ -264,7 +264,7 @@ func (ex *connExecutor) startIdleInSessionTimeout() {
 	}
 }
 
-func (ex *connExecutor) recordFailure(p eventNonRetryableErrPayload) {
+func (ex *connExecutor) recordFailure(p eventNonRetriableErrPayload) {
 	ex.metrics.EngineMetrics.FailureCount.Inc(1, ex.sessionData().Database, ex.sessionData().ApplicationName)
 	switch {
 	case errors.Is(p.errorCause(), sqlerrors.QueryTimeoutError):
@@ -773,12 +773,12 @@ func (ex *connExecutor) execStmtInOpenState(
 			// Even in the cases where the error is a retryable error, we want to
 			// intercept the event and payload returned here to ensure that the query
 			// is not retried.
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
 			errToPush := cancelchecker.QueryCanceledError
 			res.SetError(errToPush)
-			retPayload = eventNonRetryableErrPayload{err: errToPush}
+			retPayload = eventNonRetriableErrPayload{err: errToPush}
 			logErr = errToPush
 			// Cancel the txn if we are inside an implicit txn too.
 			if ex.implicitTxn() && ex.state.txnCancelFn != nil {
@@ -799,18 +799,18 @@ func (ex *connExecutor) execStmtInOpenState(
 		if queryTimedOut {
 			// A timed out query should never produce retryable errors/events/payloads
 			// so we intercept and overwrite them all here.
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
 			res.SetError(sqlerrors.QueryTimeoutError)
-			retPayload = eventNonRetryableErrPayload{err: sqlerrors.QueryTimeoutError}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
 			logErr = sqlerrors.QueryTimeoutError
 		} else if txnTimedOut {
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
 			res.SetError(sqlerrors.TxnTimeoutError)
-			retPayload = eventNonRetryableErrPayload{err: sqlerrors.TxnTimeoutError}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
 			logErr = sqlerrors.TxnTimeoutError
 		}
 
@@ -1186,11 +1186,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	if !os.ImplicitTxn.Get() && txn.IsSerializablePushAndRefreshNotPossible() {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
 		if canAutoRetry {
-			ev := eventRetryableErr{
+			ev := eventRetriableErr{
 				IsCommit:     fsm.FromBool(isCommit(ast)),
 				CanAutoRetry: fsm.FromBool(canAutoRetry),
 			}
-			payload := eventRetryableErrPayload{
+			payload := eventRetriableErrPayload{
 				err:    txn.GenerateForcedRetryableErr(ctx, "serializable transaction timestamp pushed (detected by connExecutor)"),
 				rewCap: rc,
 			}
@@ -1808,7 +1808,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 				// Even in the cases where the error is a retryable error, we want to
 				// intercept the event and payload returned here to ensure that the query
 				// is not retried.
-				retEv = eventNonRetryableErr{
+				retEv = eventNonRetriableErr{
 					IsCommit: fsm.FromBool(isCommit(vars.ast)),
 				}
 				errToPush := cancelchecker.QueryCanceledError
@@ -1821,7 +1821,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 					errToPush = resToPushErr.Err()
 				}
 				resToPushErr.SetError(errToPush)
-				retPayload = eventNonRetryableErrPayload{err: errToPush}
+				retPayload = eventNonRetriableErrPayload{err: errToPush}
 				vars.logErr = errToPush
 				// Cancel the txn if we are inside an implicit txn too.
 				if ex.implicitTxn() && ex.state.txnCancelFn != nil {
@@ -1843,18 +1843,18 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		if queryTimedOut {
 			// A timed out query should never produce retryable errors/events/payloads
 			// so we intercept and overwrite them all here.
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(isCommit(vars.ast)),
 			}
 			res.SetError(sqlerrors.QueryTimeoutError)
-			retPayload = eventNonRetryableErrPayload{err: sqlerrors.QueryTimeoutError}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
 			vars.logErr = sqlerrors.QueryTimeoutError
 		} else if txnTimedOut {
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(isCommit(vars.ast)),
 			}
 			res.SetError(sqlerrors.TxnTimeoutError)
-			retPayload = eventNonRetryableErrPayload{err: sqlerrors.TxnTimeoutError}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
 			vars.logErr = sqlerrors.TxnTimeoutError
 		}
 
@@ -2244,11 +2244,11 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	if !os.ImplicitTxn.Get() && txn.IsSerializablePushAndRefreshNotPossible() {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
 		if canAutoRetry {
-			ev := eventRetryableErr{
+			ev := eventRetriableErr{
 				IsCommit:     fsm.FromBool(isCommit(vars.ast)),
 				CanAutoRetry: fsm.FromBool(canAutoRetry),
 			}
-			payload := eventRetryableErrPayload{
+			payload := eventRetriableErrPayload{
 				err:    txn.GenerateForcedRetryableErr(ctx, "serializable transaction timestamp pushed (detected by connExecutor)"),
 				rewCap: rc,
 			}
@@ -2493,7 +2493,7 @@ func (ex *connExecutor) commitSQLTransaction(
 		// For certain retryable errors, we should turn them into client visible
 		// errors, since the client needs to retry now.
 		var conversionError error
-		err, conversionError = ex.convertRetryableErrorIntoUserVisibleError(ctx, err)
+		err, conversionError = ex.convertRetriableErrorIntoUserVisibleError(ctx, err)
 		if conversionError != nil {
 			return ex.makeErrEvent(conversionError, ast)
 		}
@@ -2783,8 +2783,8 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		if err = ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 			return err
 		}
-		maybeRetryableErr := res.Err()
-		if maybeRetryableErr == nil {
+		maybeRetriableErr := res.Err()
+		if maybeRetriableErr == nil {
 			// If there was no error, then we must release the savepoint and break.
 			if err := ex.state.mu.txn.ReleaseSavepoint(ctx, readCommittedSavePointToken); err != nil {
 				return err
@@ -2794,14 +2794,14 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		// If the error does not allow for a partial retry, then stop. The error
 		// is already set on res.Err() and will be returned to the client.
 		var txnRetryErr *kvpb.TransactionRetryWithProtoRefreshError
-		if !errors.As(maybeRetryableErr, &txnRetryErr) || txnRetryErr.TxnMustRestartFromBeginning() {
+		if !errors.As(maybeRetriableErr, &txnRetryErr) || txnRetryErr.TxnMustRestartFromBeginning() {
 			break
 		}
 
 		// If we reached the maximum number of retries, then we must stop.
 		if attemptNum == maxRetries {
 			res.SetError(errors.Wrapf(
-				maybeRetryableErr,
+				maybeRetriableErr,
 				"read committed retry limit exceeded; set by max_retries_for_read_committed=%d",
 				maxRetries,
 			))
@@ -2816,7 +2816,7 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 			// flushed and sent back to the client already. In that case, we can't
 			// retry the statement.
 			res.SetError(errors.Wrapf(
-				maybeRetryableErr,
+				maybeRetriableErr,
 				"cannot automatically retry since some results were already sent to the client",
 			))
 			break
@@ -2832,7 +2832,7 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 			return err
 		}
 		p.autoRetryStmtCounter++
-		p.autoRetryStmtReason = maybeRetryableErr
+		p.autoRetryStmtReason = maybeRetriableErr
 		if ppInfo := getPausablePortalInfo(); ppInfo != nil {
 			ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtReason = p.autoRetryStmtReason
 			ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtCounter = p.autoRetryStmtCounter
@@ -3796,8 +3796,8 @@ func (ex *connExecutor) execStmtInAbortedState(
 	}()
 
 	reject := func() (fsm.Event, fsm.EventPayload) {
-		ev := eventNonRetryableErr{IsCommit: fsm.False}
-		payload := eventNonRetryableErrPayload{
+		ev := eventNonRetriableErr{IsCommit: fsm.False}
+		payload := eventNonRetriableErrPayload{
 			err: sqlerrors.NewTransactionAbortedError("" /* customMsg */),
 		}
 		return ev, payload
@@ -3871,8 +3871,8 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 			},
 		)
 	}
-	return eventNonRetryableErr{IsCommit: fsm.False},
-		eventNonRetryableErrPayload{
+	return eventNonRetriableErr{IsCommit: fsm.False},
+		eventNonRetriableErrPayload{
 			err: sqlerrors.NewTransactionCommittedError(),
 		}
 }

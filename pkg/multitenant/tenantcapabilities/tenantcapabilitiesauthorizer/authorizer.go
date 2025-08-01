@@ -244,7 +244,6 @@ var reqMethodToCap = map[kvpb.Method]methodCapability{
 	kvpb.Delete:             noCapCheckNeeded,
 	kvpb.DeleteRange:        noCapCheckNeeded,
 	kvpb.Export:             noCapCheckNeeded,
-	kvpb.FlushLockTable:     noCapCheckNeeded,
 	kvpb.Get:                noCapCheckNeeded,
 	kvpb.HeartbeatTxn:       noCapCheckNeeded,
 	kvpb.Increment:          noCapCheckNeeded,

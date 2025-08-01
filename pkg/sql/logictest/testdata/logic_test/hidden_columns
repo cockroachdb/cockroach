@@ -1,7 +1,5 @@
-statement disable-cf-mutator ok
-CREATE TABLE t (x INT NOT VISIBLE);
-
 statement ok
+CREATE TABLE t (x INT NOT VISIBLE);
 CREATE TABLE kv (
     k INT PRIMARY KEY NOT VISIBLE,
     v INT NOT VISIBLE

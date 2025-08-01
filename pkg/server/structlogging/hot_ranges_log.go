@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -79,16 +80,27 @@ type hotRangesLogger struct {
 	lastLogged  time.Time
 }
 
-// StartSystemHotRangesLogger starts the hot range log task
+// StartHotRangesLoggingScheduler starts the hot range log task
 // or job.
 //
 // For system tenants, or single tenant deployments, it runs as
 // a task on each node, logging only the ranges on the node in
-// which it runs. This function should not be run for app tenants,
-// those will be started via the hot ranges logging job.
-func StartSystemHotRangesLogger(
-	ctx context.Context, stopper *stop.Stopper, sServer HotRangeGetter, st *cluster.Settings,
+// which it runs. For app tenants in a multi-tenant deployment,
+// it does nothing, allowing the hot range logging job to be the
+// entrypoint.
+func StartHotRangesLoggingScheduler(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	sServer HotRangeGetter,
+	st *cluster.Settings,
+	ti *tenantcapabilities.Entry,
 ) error {
+	multiTenant := ti != nil && ti.TenantID.IsSet() && !ti.TenantID.IsSystem()
+
+	if multiTenant {
+		return nil
+	}
+
 	logger := hotRangesLogger{
 		sServer:     sServer,
 		st:          st,
@@ -144,7 +156,6 @@ func (s *hotRangesLogger) maybeLogHotRanges(ctx context.Context, stopper *stop.S
 //		   -- It's been greater than the log interval since we last logged.
 //		   -- One of the replicas see exceeds our cpu threshold.
 func (s *hotRangesLogger) shouldLog(ctx context.Context) bool {
-
 	enabled := TelemetryHotRangesStatsEnabled.Get(&s.st.SV)
 	if !enabled {
 		return false

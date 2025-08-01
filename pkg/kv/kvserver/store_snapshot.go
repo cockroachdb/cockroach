@@ -273,10 +273,8 @@ func (s *Store) throttleSnapshot(
 			if err := ctx.Err(); err != nil {
 				return nil, errors.Wrap(err, "acquiring snapshot reservation")
 			}
-			return nil, errors.Wrapf(
-				queueCtx.Err(),
-				"giving up during snapshot reservation due to cluster setting %q",
-				snapshotReservationQueueTimeoutFraction.Name(),
+			return nil, kvpb.NewSnapshotReservationTimeoutError(
+				queueCtx.Err(), string(snapshotReservationQueueTimeoutFraction.Name()),
 			)
 		case <-s.stopper.ShouldQuiesce():
 			return nil, errors.Errorf("stopped")
@@ -552,7 +550,7 @@ func (s *Store) receiveSnapshot(
 	}
 
 	ss := &kvBatchSnapshotStrategy{
-		scratch:      s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID, s.ClusterSettings()),
+		scratch:      s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID),
 		sstChunkSize: snapshotSSTWriteSyncRate.Get(&s.cfg.Settings.SV),
 		st:           s.ClusterSettings(),
 		clusterID:    s.ClusterID(),

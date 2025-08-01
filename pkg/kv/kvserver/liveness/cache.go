@@ -106,7 +106,7 @@ func (c *Cache) selfID() roachpb.NodeID {
 
 // livenessGossipUpdate is the gossip callback used to keep the
 // in-memory liveness info up to date.
-func (c *Cache) livenessGossipUpdate(_ string, content roachpb.Value, _ int64) {
+func (c *Cache) livenessGossipUpdate(_ string, content roachpb.Value) {
 	ctx := context.TODO()
 	var liveness livenesspb.Liveness
 	if err := content.GetProto(&liveness); err != nil {
@@ -118,7 +118,7 @@ func (c *Cache) livenessGossipUpdate(_ string, content roachpb.Value, _ int64) {
 }
 
 // storeGossipUpdate is the Gossip callback used to keep the nodeDescMap up to date.
-func (c *Cache) storeGossipUpdate(_ string, content roachpb.Value, _ int64) {
+func (c *Cache) storeGossipUpdate(_ string, content roachpb.Value) {
 	ctx := context.TODO()
 	var storeDesc roachpb.StoreDescriptor
 	if err := content.GetProto(&storeDesc); err != nil {

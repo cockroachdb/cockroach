@@ -79,11 +79,8 @@ type callbackWorkItem struct {
 	// schedulingTime is the time when the callback was scheduled.
 	schedulingTime time.Time
 	method         Callback
-	// key, content, origTimestamp are the parameters that will be passed to the
-	// callback method. They are based on the infos added to the infostore.
-	key           string
-	content       roachpb.Value
-	origTimestamp int64
+	key            string
+	content        roachpb.Value
 }
 
 type callbackWork struct {
@@ -235,27 +232,11 @@ func newInfoStore(
 	return is
 }
 
-// cleanupCallbackMetric decrements the callback metric by the number of remaining
-// items in the queue since they will never be processed. This is called when the
-// callback worker is stopped to avoid having the wrong metric value.
-// This should only be called when no new work can be added to the queue.
-func (is *infoStore) cleanupCallbackMetric(cw *callbackWork) {
-	cw.mu.Lock()
-	remainingItems := len(cw.mu.workQueue)
-	if remainingItems > 0 {
-		is.metrics.CallbacksPending.Dec(int64(remainingItems))
-	}
-	cw.mu.Unlock()
-}
-
 // launchCallbackWorker launches a worker goroutine that is responsible for
 // executing callbacks for one registered callback pattern.
 func (is *infoStore) launchCallbackWorker(ambient log.AmbientContext, cw *callbackWork) {
 	bgCtx := ambient.AnnotateCtx(context.Background())
 	_ = is.stopper.RunAsyncTask(bgCtx, "callback worker", func(ctx context.Context) {
-		// If we exit the loop, we are never going to process the work in the queues anymore, so
-		// clean up the pending callbacks metric.
-		defer is.cleanupCallbackMetric(cw)
 		for {
 			for {
 				cw.mu.Lock()
@@ -277,7 +258,7 @@ func (is *infoStore) launchCallbackWorker(ambient log.AmbientContext, cw *callba
 						is.metrics.CallbacksPendingDuration.RecordValue(queueDur.Nanoseconds())
 					}
 
-					work.method(work.key, work.content, work.origTimestamp)
+					work.method(work.key, work.content)
 
 					afterProcess := timeutil.Now()
 					processDur := afterProcess.Sub(afterQueue)
@@ -365,7 +346,7 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 	ratchetHighWaterStamp(is.highWaterStamps, i.NodeID, i.OrigStamp)
 	changed := existingInfo == nil ||
 		!bytes.Equal(existingInfo.Value.RawBytes, i.Value.RawBytes)
-	is.processCallbacks(key, i.Value, i.OrigStamp, changed)
+	is.processCallbacks(key, i.Value, changed)
 	return nil
 }
 
@@ -422,7 +403,7 @@ func (is *infoStore) registerCallback(
 
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if matcher.MatchString(key) {
-			is.runCallbacks(key, i.Value, i.OrigStamp, cb)
+			is.runCallbacks(key, i.Value, cb)
 		}
 		return nil
 	}, true /* deleteExpired */); err != nil {
@@ -449,43 +430,30 @@ func (is *infoStore) registerCallback(
 // processCallbacks processes callbacks for the specified key by
 // matching each callback's regular expression against the key and invoking
 // the corresponding callback method on a match.
-func (is *infoStore) processCallbacks(
-	key string, content roachpb.Value, origTimestamp int64, changed bool,
-) {
+func (is *infoStore) processCallbacks(key string, content roachpb.Value, changed bool) {
 	var callbacks []*callback
 	for _, cb := range is.callbacks {
 		if (changed || cb.redundant) && cb.matcher.MatchString(key) {
 			callbacks = append(callbacks, cb)
 		}
 	}
-	is.runCallbacks(key, content, origTimestamp, callbacks...)
+	is.runCallbacks(key, content, callbacks...)
 }
 
 // runCallbacks receives a list of callbacks and contents that match the key.
 // It adds work to the callback work slices, and signals the associated callback
 // workers to execute the work.
-func (is *infoStore) runCallbacks(
-	key string, content roachpb.Value, origTimestamp int64, callbacks ...*callback,
-) {
-	// Check if the stopper is quiescing. If so, do not add the callbacks to the
-	// callback work list because they won't be processed anyways.
-	select {
-	case <-is.stopper.ShouldQuiesce():
-		return
-	default:
-	}
-
+func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks ...*callback) {
 	// Add the callbacks to the callback work list.
 	beforeQueue := timeutil.Now()
+	is.metrics.CallbacksPending.Inc(int64(len(callbacks)))
 	for _, cb := range callbacks {
 		cb.cw.mu.Lock()
-		is.metrics.CallbacksPending.Inc(1)
 		cb.cw.mu.workQueue = append(cb.cw.mu.workQueue, callbackWorkItem{
 			schedulingTime: beforeQueue,
 			method:         cb.method,
 			key:            key,
 			content:        content,
-			origTimestamp:  origTimestamp,
 		})
 		cb.cw.mu.Unlock()
 

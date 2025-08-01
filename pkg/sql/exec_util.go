@@ -112,7 +112,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
@@ -761,9 +760,10 @@ var CreateTableWithSchemaLocked = settings.RegisterBoolSetting(
 	"default value for create_table_with_schema_locked; "+
 		"default value for the create_table_with_schema_locked session setting; controls "+
 		"if new created tables will have schema_locked set",
-	true)
+	buildutil.CrdbTestBuild /* only enabled on test builds */)
 
-// createTableWithSchemaLockedDefault override for the schema_locked
+// createTableWithSchemaLockedDefault override for the schema_locked default
+// override value for tests.
 var createTableWithSchemaLockedDefault = true
 
 // TestForceDisableCreateTableWithSchemaLocked disables schema_locked create table
@@ -1513,7 +1513,6 @@ type ExecutorConfig struct {
 	EvalContextTestingKnobs              eval.TestingKnobs
 	TenantTestingKnobs                   *TenantTestingKnobs
 	TTLTestingKnobs                      *TTLTestingKnobs
-	InspectTestingKnobs                  *InspectTestingKnobs
 	SchemaTelemetryTestingKnobs          *SchemaTelemetryTestingKnobs
 	BackupRestoreTestingKnobs            *BackupRestoreTestingKnobs
 	StreamingTestingKnobs                *StreamingTestingKnobs
@@ -1523,7 +1522,7 @@ type ExecutorConfig struct {
 	CaptureIndexUsageStatsKnobs          *scheduledlogging.CaptureIndexUsageStatsTestingKnobs
 	UnusedIndexRecommendationsKnobs      *idxusage.UnusedIndexRecommendationTestingKnobs
 	ExternalConnectionTestingKnobs       *externalconn.TestingKnobs
-	EventLogTestingKnobs                 *eventlog.EventLogTestingKnobs
+	EventLogTestingKnobs                 *EventLogTestingKnobs
 	TableMetadataKnobs                   *tablemetadatacache_util.TestingKnobs
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
@@ -1970,16 +1969,6 @@ type TTLTestingKnobs struct {
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*TTLTestingKnobs) ModuleTestingKnobs() {}
-
-// InspectTestingKnobs contains testing knobs for the INSPECT command.
-type InspectTestingKnobs struct {
-	// OnInspectJobStart is called just before the inspect job begins execution.
-	// If it returns an error, the job fails immediately.
-	OnInspectJobStart func() error
-}
-
-// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
-func (*InspectTestingKnobs) ModuleTestingKnobs() {}
 
 // SchemaTelemetryTestingKnobs contains testing knobs for schema telemetry.
 type SchemaTelemetryTestingKnobs struct {
@@ -3723,10 +3712,6 @@ func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
 }
 
-func (m *sessionDataMutator) SetAllowViewWithSecurityInvokerClause(val bool) {
-	m.data.AllowViewWithSecurityInvokerClause = val
-}
-
 func (m *sessionDataMutator) SetEnableSuperRegions(val bool) {
 	m.data.EnableSuperRegions = val
 }
@@ -4241,10 +4226,6 @@ func (m *sessionDataMutator) SetPropagateAdmissionHeaderToLeafTransactions(val b
 
 func (m *sessionDataMutator) SetOptimizerUseExistsFilterHoistRule(val bool) {
 	m.data.OptimizerUseExistsFilterHoistRule = val
-}
-
-func (m *sessionDataMutator) SetEnableScrubJob(val bool) {
-	m.data.EnableScrubJob = val
 }
 
 func (m *sessionDataMutator) SetInitialRetryBackoffForReadCommitted(val time.Duration) {

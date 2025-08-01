@@ -1404,6 +1404,8 @@ func TestRestoreJobRetryReset(t *testing.T) {
 	}{}
 	waitForProgress := make(chan struct{})
 
+	maxRetries := 4
+
 	params := base.TestClusterArgs{}
 	knobs := base.TestingKnobs{
 		BackupRestore: &sql.BackupRestoreTestingKnobs{
@@ -1411,20 +1413,17 @@ func TestRestoreJobRetryReset(t *testing.T) {
 				InitialBackoff: time.Microsecond,
 				Multiplier:     2,
 				MaxBackoff:     2 * time.Microsecond,
-				MaxDuration:    time.Second,
+				MaxRetries:     maxRetries,
 			},
-			// Disable switching to the secondary retry policy for this test since it
-			// is not relevant to the test. Set to an unachievable value.
-			RestoreRetryProgressThreshold: 1.1,
 			RunBeforeRestoreFlow: func() error {
 				mu.Lock()
 				defer mu.Unlock()
-				if mu.retryCount < maxRestoreRetryFastFail {
-					mu.retryCount++
-					// Send a retryable error
-					return syscall.ECONNRESET
+				if mu.retryCount >= maxRetries-1 {
+					return nil
 				}
-				return nil
+				mu.retryCount++
+				// Send a retryable error
+				return syscall.ECONNRESET
 			},
 			RunAfterRestoreFlow: func() error {
 				mu.Lock()
@@ -1455,9 +1454,9 @@ func TestRestoreJobRetryReset(t *testing.T) {
 	})
 	close(waitForProgress)
 
-	jobutils.WaitForJobToFail(t, sqlDB, restoreJobId)
+	jobutils.WaitForJobToPause(t, sqlDB, restoreJobId)
 
-	require.Greater(t, mu.retryCount, maxRestoreRetryFastFail+2)
+	require.Greater(t, mu.retryCount, maxRetries+2)
 }
 
 // TestRestoreRetryProcErr tests that the restore data processor will mark
@@ -1494,7 +1493,7 @@ func TestRestoreRetryProcErr(t *testing.T) {
 					InitialBackoff: time.Microsecond,
 					Multiplier:     2,
 					MaxBackoff:     2 * time.Microsecond,
-					MaxDuration:    time.Second,
+					MaxRetries:     4,
 				},
 				RunBeforeRestoreFlow: func() error {
 					mu.Lock()

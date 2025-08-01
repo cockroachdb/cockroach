@@ -27,7 +27,7 @@ type rpcConn interface {
 	NewAdminClient() serverpb.RPCAdminClient
 	NewInitClient() serverpb.RPCInitClient
 	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
-	NewQuorumRecoveryClient() kvpb.RPCQuorumRecoveryClient
+	NewInternalClient() kvpb.RPCInternalClient
 }
 
 // grpcConn is an implementation of rpcConn that provides methods to create
@@ -53,7 +53,7 @@ func (c *grpcConn) NewTimeSeriesClient() tspb.RPCTimeSeriesClient {
 	return tspb.NewGRPCTimeSeriesClientAdapter(c.conn)
 }
 
-func (c *grpcConn) NewQuorumRecoveryClient() kvpb.RPCQuorumRecoveryClient {
+func (c *grpcConn) NewInternalClient() kvpb.RPCInternalClient {
 	return kvpb.NewGRPCInternalClientAdapter(c.conn)
 }
 
@@ -80,8 +80,8 @@ func (c *drpcConn) NewTimeSeriesClient() tspb.RPCTimeSeriesClient {
 	return tspb.NewDRPCTimeSeriesClientAdapter(c.conn)
 }
 
-func (c *drpcConn) NewQuorumRecoveryClient() kvpb.RPCQuorumRecoveryClient {
-	return kvpb.NewDRPCQuorumRecoveryClientAdapter(c.conn)
+func (c *drpcConn) NewInternalClient() kvpb.RPCInternalClient {
+	return kvpb.NewDRPCInternalClientAdapter(c.conn)
 }
 
 func makeRPCClientConfig(cfg server.Config) rpc.ClientConnConfig {
@@ -107,12 +107,13 @@ func newClientConn(ctx context.Context, cfg server.Config) (rpcConn, func(), err
 			return nil, nil, errors.Wrap(err, "failed to connect to the node")
 		}
 		return &grpcConn{conn: cc}, finish, nil
+	} else {
+		dc, finish, err := rpc.NewDRPCClientConn(ctx, ccfg)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "failed to connect to the node")
+		}
+		return &drpcConn{conn: dc}, finish, nil
 	}
-	dc, finish, err := rpc.NewDRPCClientConn(ctx, ccfg)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to connect to the node")
-	}
-	return &drpcConn{conn: dc}, finish, nil
 }
 
 // dialAdminClient dials a client connection and returns an AdminClient and a

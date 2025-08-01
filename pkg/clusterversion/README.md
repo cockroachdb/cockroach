@@ -30,7 +30,7 @@ graph TD;
         Latest = 23.2-x 
         PreviousRelease = 23.1
         MinSupported = 23.1
-        developmentBranch = false
+        DevelopmentBranch = false
         version.txt = v24.1.0-beta.1")
   
   rel1 --> rel2
@@ -39,7 +39,7 @@ graph TD;
         Latest = 24.1
         PreviousRelease = 23.1
         MinSupported = 23.1
-        developmentBranch = false
+        DevelopmentBranch = false
         finalVersion = V24_1
         version.txt = v24.1.0")
 
@@ -92,16 +92,16 @@ first beta is special because starting with this version we allow production
 clusters from the previous version to be upgraded to the beta version; and,
 consequently, we allow and support upgrading from the beta cluster version to
 the final release cluster version. This transition is achieved by setting
-`developmentBranch` to `false`; see `developmentBranch` and `DevOffset` in the
+`DevelopmentBranch` to `false`; see `DevelopmentBranch` and `DevOffset` in the
 code for more details.
 
 **When**: When we are ready to select the first beta candidate.
 
 **Checklist**:
- - [ ] Set `developmentBranch` constant to `false`
+ - [ ] Set `DevelopmentBranch` constant to `false`
  - [ ] Update `version.txt` to the beta version, e.g. `24.1.0-beta.1`
  - [ ] Regenerate docs (`./dev gen docs`)
- - [ ] Regenerate expected test data results as needed
+ - [ ] Regenerate expected test data results as needed (`./dev test pkg/sql/catalog/bootstrap --rewrite -f TestInitialValuesToString`)
 
 **Example PR:** [#113912](https://github.com/cockroachdb/cockroach/pull/113912)
 

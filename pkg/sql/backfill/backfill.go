@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore/vecstorepb"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -596,30 +595,16 @@ func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
 // InitForLocalUse initializes an IndexBackfiller for use during local execution
 // within a transaction. In this case, the entire backfill process is occurring
 // on the gateway as part of the user's transaction.
-//
-// Non-nil memory monitor must be provided. If an error is returned, it'll be
-// stopped automatically; otherwise, the backfiller takes ownership of the
-// monitor.
 func (ib *IndexBackfiller) InitForLocalUse(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
-	vecIndexManager *vecindex.Manager,
-) (retErr error) {
-	if mon == nil {
-		return errors.AssertionFailedf("memory monitor must be provided")
-	}
-	defer func() {
-		if retErr != nil {
-			mon.Stop(ctx)
-		}
-	}()
+) error {
 
 	// Initialize ib.added.
-	// TODO(150163): Pass vecIndexManager once vector index build is supported with the legacy schema changer.
-	if err := ib.initIndexes(ctx, evalCtx, desc, nil /* allowList */, 0 /*sourceIndex*/, nil /*vecIndexManager*/); err != nil {
+	if err := ib.initIndexes(ctx, evalCtx, desc, nil /* allowList */, 0 /*sourceIndex*/, nil); err != nil {
 		return err
 	}
 
@@ -641,8 +626,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 		ib.valNeededForCol.Add(ib.colIdxMap.GetDefault(col))
 	})
 
-	ib.init(evalCtx, predicates, colExprs, mon)
-	return nil
+	return ib.init(evalCtx, predicates, colExprs, mon)
 }
 
 // constructExprs is a helper to construct the index and column expressions
@@ -753,10 +737,6 @@ func constructExprs(
 // backfill operation manages its own transactions. This separation is necessary
 // due to the different procedure for accessing user defined type metadata as
 // part of a distributed flow.
-//
-// Non-nil memory monitor must be provided. If an error is returned, it'll be
-// stopped automatically; otherwise, the backfiller takes ownership of the
-// monitor.
 func (ib *IndexBackfiller) InitForDistributedUse(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -764,16 +744,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	allowList []catid.IndexID,
 	sourceIndexID catid.IndexID,
 	mon *mon.BytesMonitor,
-) (retErr error) {
-	if mon == nil {
-		return errors.AssertionFailedf("memory monitor must be provided")
-	}
-	defer func() {
-		if retErr != nil {
-			mon.Stop(ctx)
-		}
-	}()
-
+) error {
 	// We'll be modifying the eval.Context in BuildIndexEntriesChunk, so we need
 	// to make a copy.
 	evalCtx := flowCtx.NewEvalCtx()
@@ -830,8 +801,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 		ib.valNeededForCol.Add(ib.colIdxMap.GetDefault(col))
 	})
 
-	ib.init(evalCtx, predicates, colExprs, mon)
-	return nil
+	return ib.init(evalCtx, predicates, colExprs, mon)
 }
 
 // Close releases the resources used by the IndexBackfiller. It can be called
@@ -924,13 +894,6 @@ func (ib *IndexBackfiller) initIndexes(
 			continue
 		}
 
-		if vecIndexManager == nil {
-			return unimplemented.NewWithIssue(
-				150163,
-				"vector index build not supported with the legacy schema changer",
-			)
-		}
-
 		if ib.VectorIndexes == nil {
 			ib.VectorIndexes = make(map[descpb.IndexID]VectorIndexHelper)
 		}
@@ -970,15 +933,12 @@ func (ib *IndexBackfiller) initIndexes(
 }
 
 // init completes the initialization of an IndexBackfiller.
-//
-// The IndexBackfiller takes ownership of the monitor which must be non-nil.
-// It'll be closed when the backfiller is closed.
 func (ib *IndexBackfiller) init(
 	evalCtx *eval.Context,
 	predicateExprs map[descpb.IndexID]tree.TypedExpr,
 	colExprs map[descpb.ColumnID]tree.TypedExpr,
 	mon *mon.BytesMonitor,
-) {
+) error {
 	ib.evalCtx = evalCtx
 	ib.predicates = predicateExprs
 	ib.colExprs = colExprs
@@ -999,8 +959,12 @@ func (ib *IndexBackfiller) init(
 	}
 
 	// Create a bound account associated with the index backfiller monitor.
+	if mon == nil {
+		return errors.AssertionFailedf("no memory monitor linked to IndexBackfiller during init")
+	}
 	ib.mon = mon
 	ib.muBoundAccount.boundAccount = mon.MakeBoundAccount()
+	return nil
 }
 
 // BuildIndexEntriesChunk reads a chunk of rows from a table using the span sp

@@ -172,12 +172,8 @@ func (lp LeasePlanner) PlanOneChange(
 	}
 
 	change.Op = AllocationTransferLeaseOp{
-		Source: roachpb.ReplicationTarget{
-			StoreID: repl.StoreID(), NodeID: repl.NodeID(),
-		},
-		Target: roachpb.ReplicationTarget{
-			StoreID: target.StoreID, NodeID: target.NodeID,
-		},
+		Source:             repl.StoreID(),
+		Target:             target.StoreID,
 		Usage:              usage,
 		bypassSafetyChecks: false,
 	}

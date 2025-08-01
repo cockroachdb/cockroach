@@ -119,7 +119,9 @@ func newTestTxnFactory(
 			}
 			if ba.Txn != nil && br.Txn == nil {
 				br.Txn = ba.Txn.Clone()
-				br.Txn.Status = status
+				if pErr == nil {
+					br.Txn.Status = status
+				}
 				// Update the MockTxnSender's proto.
 				*txn = *br.Txn
 			}

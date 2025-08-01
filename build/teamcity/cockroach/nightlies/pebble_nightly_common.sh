@@ -39,10 +39,10 @@ cp $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest bin
 chmod a+w bin/roachtest
 
 # Pull in the version of Pebble from upstream. If none is specified, the
-# benchmarks run against the tip of the 'master' branch. We do this by `go
+# benchmarks run against the tip of the 'crl-release-25.3' branch. We do this by `go
 # get`ting the SHA of the module, and then running `mirror` to update `DEPS.bzl`
 # accordingly.
-pebble_go_get_version="${PEBBLE_SHA:-master}"
+pebble_go_get_version="${PEBBLE_SHA:-crl-release-25.3}"
 echo "Benchmarking against: ${pebble_go_get_version}"
 
 bazel run @go_sdk//:bin/go get "github.com/cockroachdb/pebble@${pebble_go_get_version}"

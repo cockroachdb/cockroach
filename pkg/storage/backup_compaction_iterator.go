@@ -116,7 +116,7 @@ func (f *BackupCompactionIterator) ValueLen() int {
 func (f *BackupCompactionIterator) HasPointAndRange() (bool, bool) {
 	hasPoint, hasRange := f.iter.HasPointAndRange()
 	if hasRange {
-		panic(errors.AssertionFailedf("unexpected range tombstone"))
+		panic("unexpected range tombstone")
 	}
 	return hasPoint, hasRange
 }

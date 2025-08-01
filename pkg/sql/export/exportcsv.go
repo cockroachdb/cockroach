@@ -178,11 +178,6 @@ func (sp *csvWriter) Run(ctx context.Context, output execinfra.RowReceiver) {
 		alloc := &tree.DatumAlloc{}
 
 		writer := newCSVExporter(sp.spec)
-		if sp.spec.HeaderRow {
-			if err := writer.Write(sp.spec.ColNames); err != nil {
-				return err
-			}
-		}
 
 		var nullsAs string
 		if sp.spec.Format.Csv.NullEncoding != nil {

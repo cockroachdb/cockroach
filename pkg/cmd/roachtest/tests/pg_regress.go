@@ -100,8 +100,6 @@ func initPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	for _, cmd := range []string{
 		`CREATE DATABASE root;`,
 		`SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled=true`,
-		`SET create_table_with_schema_locked=false`,
-		`ALTER ROLE ALL SET create_table_with_schema_locked=false`,
 		`CREATE USER test_admin`,
 		`GRANT admin TO test_admin`,
 	} {
@@ -418,7 +416,7 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Fatal(err)
 		}
 
-		t.Status("collecting the test results for test '", testFile, "' (", testIdx+1, "/", len(tests), ")")
+		t.Status("collecting the test results for test '", testFile, "' (", testIdx, "/", len(tests), ")")
 		diffFile := testFile + ".diffs"
 		diffFilePath := filepath.Join(outputDir, diffFile)
 		tmpFile := diffFile + ".tmp"
@@ -516,8 +514,6 @@ func registerPGRegress(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPGRegress(ctx, t, c)
 		},
-		// TODO(#150543): remove this.
-		SkipPostValidations: registry.PostValidationInvalidDescriptors,
 	})
 }
 
@@ -861,6 +857,8 @@ index 1b2d434683..d371fe3f63 100644
 	// pg_catalog.pg_am vtable.
 	// TODO(#123706): remove the patch to comment out a query against
 	// pg_catalog.pg_attribute vtable.
+	// TODO(#146255): remove the patch to include ORDER BY clause for the query
+	// with "Text conversion routines must be provided." comment in pg_regress.
 	{"type_sanity.sql", `diff --git a/src/test/regress/sql/type_sanity.sql b/src/test/regress/sql/type_sanity.sql
 index 79ec410a6c..417d3dcdb2 100644
 --- a/src/test/regress/sql/type_sanity.sql
@@ -885,7 +883,17 @@ index 79ec410a6c..417d3dcdb2 100644
 
  -- Look for "toastable" types that aren'"'"'t varlena.
 
-@@ -288,7 +290,8 @@ WHERE t1.typelem = t2.oid AND NOT
+@@ -91,7 +93,8 @@ WHERE t1.typtype = 'r' AND
+
+ SELECT t1.oid, t1.typname
+ FROM pg_type as t1
+-WHERE (t1.typinput = 0 OR t1.typoutput = 0);
++WHERE (t1.typinput = 0 OR t1.typoutput = 0)
++ORDER BY t1.oid;
+
+ -- Check for bogus typinput routines
+
+@@ -288,7 +291,8 @@ WHERE t1.typelem = t2.oid AND NOT
 
  SELECT t1.oid, t1.typname, t2.oid, t2.typname
  FROM pg_type AS t1, pg_type AS t2

@@ -119,6 +119,8 @@ var defaultNumWorkers = metamorphic.ConstantWithTestRange(
 	1, /* metamorphic min */
 	8, /* metamorphic max */
 )
+var retryableRestoreProcError = errors.New("restore processor error after forward progress")
+var restoreProcError = errors.New("restore processor error without forward progress")
 
 // TODO(pbardea): It may be worthwhile to combine this setting with the one that
 // controls the number of concurrent AddSSTable requests if each restore worker
@@ -454,8 +456,6 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 	})
 }
 
-var backupFileReadError = errors.New("error reading backup file")
-
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	ctx context.Context, kr *KeyRewriter, sst mergedSST,
 ) (kvpb.BulkOpSummary, error) {
@@ -539,8 +539,9 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	for iter.SeekGE(startKeyMVCC); ; iter.NextKey() {
 		ok, err := iter.Valid()
 		if err != nil {
-			return summary, errors.Join(backupFileReadError, err)
+			return summary, err
 		}
+
 		if !ok {
 			if verbose {
 				log.Infof(ctx, "iterator exhausted")
@@ -561,12 +562,12 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 		v, err := iter.UnsafeValue()
 		if err != nil {
-			return summary, errors.Join(backupFileReadError, err)
+			return summary, err
 		}
 		valueScratch = append(valueScratch[:0], v...)
 		value, err := storage.DecodeValueFromMVCCValue(valueScratch)
 		if err != nil {
-			return summary, errors.Join(backupFileReadError, err)
+			return summary, err
 		}
 
 		key.Key, ok, err = kr.RewriteKey(key.Key, key.Timestamp.WallTime)
@@ -646,6 +647,11 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 		if !ok {
 			// Done. Check if any phase exited early with an error.
 			err := rd.phaseGroup.Wait()
+			if rd.progressMade {
+				err = errors.Mark(err, retryableRestoreProcError)
+			} else {
+				err = errors.Mark(err, restoreProcError)
+			}
 			rd.MoveToDraining(err)
 			return nil, rd.DrainHelper()
 		}

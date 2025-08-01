@@ -102,7 +102,6 @@ var ConfigureOIDC = func(
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
-	execCfg *sql.ExecutorConfig,
 ) (OIDC, error) {
 	return &noOIDCConfigured{}, nil
 }
@@ -576,7 +575,6 @@ func (s *authenticationServer) VerifyJWT(
 	inputUser, _ := username.MakeSQLUsernameFromUserInput(usernameOptional, username.PurposeValidation)
 	retrievedUser, err := jwtVerifier.j.RetrieveIdentity(
 		ctx,
-		execCfg.Settings,
 		inputUser,
 		[]byte(jwtStr),
 		identMap,

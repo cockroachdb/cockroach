@@ -2,6 +2,7 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
+
 package main
 
 import (
@@ -32,12 +33,12 @@ import (
 
 var (
 	teamsYaml = `cockroachdb/unowned:
- aliases:
-   cockroachdb/rfc-prs: other
+  aliases:
+    cockroachdb/rfc-prs: other
 cockroachdb/test-eng:
- label: T-testeng
+  label: T-testeng
 cockroachdb/dev-inf:
- label: T-dev-inf`
+  label: T-dev-inf`
 
 	validTeamsFn   = func() (team.Map, error) { return loadYamlTeams(teamsYaml) }
 	invalidTeamsFn = func() (team.Map, error) { return loadYamlTeams("invalid yaml") }
@@ -153,9 +154,10 @@ func TestCreatePostRequest(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			if d.Cmd == "post" {
 				github := &githubIssues{
-					teamLoader: teamLoadFn,
+					vmCreateOpts: vmOpts,
+					cluster:      testClusterImpl,
+					teamLoader:   teamLoadFn,
 				}
-				issueInfo := newGithubIssueInfo(testClusterImpl, vmOpts)
 
 				// See: `formatFailure` which formats failures for roachtests. Try to
 				// follow it here.
@@ -171,11 +173,10 @@ func TestCreatePostRequest(t *testing.T) {
 				}
 				message := b.String()
 
-				params := getTestParameters(ti, issueInfo.cluster, issueInfo.vmCreateOpts)
+				params := getTestParameters(ti, github.cluster, github.vmCreateOpts)
 				req, err := github.createPostRequest(
 					testName, ti.start, ti.end, testSpec, testCase.failures,
 					message, roachtestutil.UsingRuntimeAssertions(ti), ti.goCoverEnabled, params,
-					issueInfo,
 				)
 				if testCase.loadTeamsFailed {
 					// Assert that if TEAMS.yaml cannot be loaded then function errors.

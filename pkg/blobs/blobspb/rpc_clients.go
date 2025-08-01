@@ -25,9 +25,5 @@ func DialBlobClient(
 		}
 		return NewGRPCBlobClientAdapter(conn), nil
 	}
-	conn, err := nd.DRPCDial(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCBlobClientAdapter(conn), nil
+	return nil, nil
 }

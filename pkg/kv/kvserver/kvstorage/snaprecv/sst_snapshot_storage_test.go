@@ -57,7 +57,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	defer eng.Close()
 
 	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
-	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID, nil)
+	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 
 	// Check that the storage lazily creates the directories on first write.
 	_, err := eng.Env().Stat(scratch.snapDir)
@@ -139,7 +139,7 @@ func TestSSTSnapshotStorageConcurrentRange(t *testing.T) {
 	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
 
 	runForSnap := func(snapUUID uuid.UUID) error {
-		scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, snapUUID, nil)
+		scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, snapUUID)
 
 		// Check that the storage lazily creates the directories on first write.
 		_, err := eng.Env().Stat(scratch.snapDir)
@@ -242,7 +242,7 @@ func TestSSTSnapshotStorageContextCancellation(t *testing.T) {
 	defer eng.Close()
 
 	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
-	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID, nil)
+	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
@@ -283,7 +283,7 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 	defer eng.Close()
 
 	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
-	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID, nil)
+	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 	desc := roachpb.RangeDescriptor{
 		RangeID:  100,
 		StartKey: roachpb.RKey("d"),
@@ -295,6 +295,8 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 
 	st := cluster.MakeTestingClusterSettings()
 
+	// Disabling columnar blocks causes stats changes.
+	storage.ColumnarBlocksEnabled.Override(context.Background(), &st.SV, true)
 	// The tests rely on specific SST sizes; we cannot use MinLZ as the
 	// compression can depend on the architecture.
 	storage.CompressionAlgorithmStorage.Override(context.Background(), &st.SV, storage.StoreCompressionSnappy)
@@ -415,8 +417,8 @@ func TestMultiSSTWriterSize(t *testing.T) {
 	defer eng.Close()
 
 	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
-	ref := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID, nil)
-	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID, nil)
+	ref := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
+	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 	settings := cluster.MakeTestingClusterSettings()
 
 	desc := roachpb.RangeDescriptor{
@@ -533,7 +535,7 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 	defer eng.Close()
 
 	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
-	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID, nil)
+	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 	desc := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKey("d"),
 		EndKey:   roachpb.RKeyMax,

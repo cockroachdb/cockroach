@@ -20,6 +20,7 @@ import { livenessSaga } from "./liveness";
 import { localStorageSaga } from "./localStorage";
 import { nodesSaga } from "./nodes";
 import { notifificationsSaga } from "./notifications";
+import { schemaInsightsSaga } from "./schemaInsights";
 import { sessionsSaga } from "./sessions";
 import { sqlStatsSaga } from "./sqlStats";
 import { sqlDetailsStatsSaga } from "./statementDetails";
@@ -47,6 +48,7 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(sqlDetailsStatsSaga),
     fork(indexStatsSaga),
     fork(clusterLocksSaga),
+    fork(schemaInsightsSaga),
     fork(uiConfigSaga, cacheInvalidationPeriod),
     fork(statementFingerprintInsightsSaga),
     fork(txnStatsSaga),

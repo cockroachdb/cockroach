@@ -284,25 +284,10 @@ example [::1]:26257 or [fe80::f6f2:::]:26257.`,
 	}
 
 	Database = FlagInfo{
-		Name:      "database",
-		Shorthand: "d",
-		EnvVar:    "COCKROACH_DATABASE",
-		Description: `
-The name of the database and (optionally) virtual cluster to connect to:
-<PRE>
-   -d [database]
-   -d cluster:[virtual-cluster]/[database]
-
-</PRE>
-For example:
-<PRE>
-   -d mydb
-   -d cluster:mycluster/mydb
-
-</PRE>
-If empty or unspecified, the virtual cluster defaults to the
-"server.controller.default_target_cluster" cluster setting.
-`,
+		Name:        "database",
+		Shorthand:   "d",
+		EnvVar:      "COCKROACH_DATABASE",
+		Description: `The name of the database to connect to.`,
 	}
 
 	DumpMode = FlagInfo{
@@ -1244,13 +1229,9 @@ The value "disabled" will disable all local file I/O.
 Connection URL, of the form:
 <PRE>
    postgresql://[user[:passwd]@]host[:port]/[db][?parameters...]
-   postgresql://[user[:passwd]@]host[:port]/cluster:[virtual-cluster]/[db][?parameters...]
-
 </PRE>
-For example:
+For example, postgresql://myuser@localhost:26257/mydb.
 <PRE>
-   postgresql://myuser@localhost:26257/mydb
-   postgresql://myuser@localhost:26257/cluster:mycluster/mydb
 
 </PRE>
 If left empty, the discrete connection flags are used: host, port,

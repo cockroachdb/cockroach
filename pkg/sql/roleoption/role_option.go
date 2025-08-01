@@ -81,20 +81,7 @@ const (
 	PROVISIONSRC
 )
 
-// NonAdminInheritedOptions contains the role options that are not implicitly
-// applied to all admin roles.
 var NonAdminInheritedOptions = []Option{
-	NOCREATEROLE,
-	NOCONTROLJOB,
-	NOCREATEDB,
-	NOVIEWACTIVITY,
-	NOCANCELQUERY,
-	NOMODIFYCLUSTERSETTING,
-	NOVIEWACTIVITYREDACTED,
-	NOREPLICATION,
-	NOVIEWCLUSTERSETTING,
-	SUBJECT,
-	NOBYPASSRLS,
 	PROVISIONSRC,
 }
 

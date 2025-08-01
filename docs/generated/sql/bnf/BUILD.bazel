@@ -25,7 +25,6 @@ FILES = [
     "alter_database_to_schema_stmt",
     "alter_ddl_stmt",
     "alter_default_privileges_stmt",
-    "alter_external_connection_stmt",
     "alter_func_stmt",
     "alter_func_options_stmt",
     "alter_func_rename_stmt",

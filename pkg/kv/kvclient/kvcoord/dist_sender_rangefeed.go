@@ -69,7 +69,6 @@ type rangeFeedConfig struct {
 	withMatchingOriginIDs []uint32
 	rangeObserver         RangeObserver
 	consumerID            int64
-	bulkDelivery          bool
 
 	knobs struct {
 		// onRangefeedEvent invoked on each rangefeed event.
@@ -116,12 +115,6 @@ func WithDiff() RangeFeedOption {
 func WithFiltering() RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.withFiltering = true
-	})
-}
-
-func WithBulkDelivery() RangeFeedOption {
-	return optionFunc(func(c *rangeFeedConfig) {
-		c.bulkDelivery = true
 	})
 }
 
@@ -640,7 +633,6 @@ func makeRangeFeedRequest(
 	withFiltering bool,
 	withMatchingOriginIDs []uint32,
 	consumerID int64,
-	withBulkDelivery bool,
 ) kvpb.RangeFeedRequest {
 	admissionPri := admissionpb.BulkNormalPri
 	if isSystemRange {
@@ -656,7 +648,6 @@ func makeRangeFeedRequest(
 		WithDiff:              withDiff,
 		WithFiltering:         withFiltering,
 		WithMatchingOriginIDs: withMatchingOriginIDs,
-		WithBulkDelivery:      withBulkDelivery,
 		AdmissionHeader: kvpb.AdmissionHeader{
 			// NB: AdmissionHeader is used only at the start of the range feed
 			// stream since the initial catch-up scan is expensive.

@@ -129,9 +129,7 @@ func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Clust
 					ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 					defer cancel()
 					t.Status("Unstalling disk on n1")
-					if err = s.Unstall(ctx, c.Node(1)); err != nil {
-						t.Fatal(err)
-					}
+					s.Unstall(ctx, c.Node(1))
 					t.Status("Unstalled disk on n1")
 				}()
 
@@ -380,11 +378,7 @@ func runDiskStalledDetection(
 	}
 
 	// Unstall the stalled node. It should be able to be reaped.
-	// Note we only log errors since cgroup unstall is expected to fail due to
-	// nodes panicking from a detected disk stall.
-	if err = s.Unstall(ctx, c.Node(1)); err != nil {
-		t.L().Printf("failed to unstall disk: %v", err)
-	}
+	s.Unstall(ctx, c.Node(1))
 	time.Sleep(1 * time.Second)
 	exit, ok = getProcessExitMonotonic(ctx, t, c, 1)
 	if doStall {
@@ -468,11 +462,7 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 	// Use CgroupDiskStaller with readsToo=false to only stall writes.
 	s := roachtestutil.MakeCgroupDiskStaller(t, c, false /* readsToo */, false /* logsToo */)
 	s.Setup(ctx)
-	// NB: We use a background context in the defer'ed cleanup command,
-	// otherwise on test failure our c.Run calls will be ignored. Leaving
-	// the disk stalled will prevent artifact collection, making debugging
-	// difficult.
-	defer s.Cleanup(context.Background())
+	defer s.Cleanup(ctx)
 
 	t.Status("starting cluster")
 	startOpts := option.DefaultStartOpts()
@@ -622,17 +612,36 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 				case <-time.After(diskStallWaitDur):
 					t.Status("starting disk stall")
 				}
-				// Execute short 200ms stalls every 5s for 3 minutes.
-				s.StallCycle(ctx, c.Node(1), shortStallDur, stallInterval)
-				select {
-				case <-ctx.Done():
-					t.Fatalf("context done while stall induced: %s", ctx.Err())
-				case <-time.After(operationDur):
-					if err = s.Unstall(ctx, c.Node(1)); err != nil {
-						t.Fatal(err)
+				stallStart := timeutil.Now()
+				// Execute short 200ms stalls every 5s.
+				for timeutil.Since(stallStart) < operationDur {
+					select {
+					case <-ctx.Done():
+						t.Fatalf("context done while stall induced: %s", ctx.Err())
+					case <-time.After(stallInterval):
+						func() {
+							t.Status("short disk stall on n1")
+							s.Stall(ctx, c.Node(1))
+							defer func() {
+								// NB: We use a background context in the defer'ed unstall command,
+								// otherwise on test failure our Unstall calls will be ignored. Leaving
+								// the disk stalled will prevent artifact collection, making debugging
+								// difficult.
+								ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+								defer cancel()
+								s.Unstall(ctx, c.Node(1))
+								t.Status("unstalled disk on n1")
+							}()
+							select {
+							case <-ctx.Done():
+								t.Fatalf("context done while stall induced: %s", ctx.Err())
+							case <-time.After(shortStallDur):
+								return
+							}
+						}()
 					}
-					t.Status("disk stalls stopped")
 				}
+
 				return nil
 			}, task.Name("disk-stall-phase"))
 		} else {

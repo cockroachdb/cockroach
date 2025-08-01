@@ -107,10 +107,8 @@ func WriteInitialReplicaState(
 	return newMS, nil
 }
 
-// WriteInitialTruncState writes the initial truncated state.
-//
-// TODO(arul): this can be removed once no longer call this from the split
-// evaluation path.
+// WriteInitialTruncState writes the initial RaftTruncatedState.
+// TODO(arulajmani): remove this.
 func WriteInitialTruncState(ctx context.Context, w storage.Writer, rangeID roachpb.RangeID) error {
 	return logstore.NewStateLoader(rangeID).SetRaftTruncatedState(ctx, w,
 		&kvserverpb.RaftTruncatedState{

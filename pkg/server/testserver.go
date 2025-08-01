@@ -2688,11 +2688,7 @@ func (t *testTenant) RPCClientConnE(user username.SQLUsername) (serverutils.RPCC
 		}
 		return serverutils.FromGRPCConn(conn), nil
 	}
-	conn, err := rpcCtx.DRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), t.Locality(), rpcbase.DefaultClass).Connect(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return serverutils.FromDRPCConn(conn), nil
+	return nil, nil
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.

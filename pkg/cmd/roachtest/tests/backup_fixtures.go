@@ -7,10 +7,8 @@ package tests
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"net/url"
-	"os"
 	"path"
 	"time"
 
@@ -27,34 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/blobfixture"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
-
-// At the moment, Azure VMs do not have managed identities set up yet.
-// Therefore, in order to use implicit authentication, we need to put a
-// credentials file on each VM and point the
-// `COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE` environment variable at the
-// file.
-// Currently, the only set of credentials that have write access to the storage
-// buckets are the Teamcity credentials, so the Azure fixture roachtests cannot
-// be run locally until those managed identities are set up.
-// TODO (kev-cao): Once managed identities are set up, we can remove this file
-// and rely on the managed identity to authenticate with Azure Blob Storage.
-const azureCredentialsFilePath = "/home/ubuntu/azure-credentials.yaml"
-
-// Maps a fixture database name to the expected number of tables in the
-// database, useful for verifying that the fingerprint of the fixture is as
-// expected.
-var expectedNumTables = map[string]int{
-	"tpcc": 9,
-}
 
 type BackupFixture interface {
 	Kind() string
@@ -180,20 +157,13 @@ type backupDriver struct {
 }
 
 func (bd *backupDriver) prepareCluster(ctx context.Context) {
-	bd.c.Start(
-		ctx, bd.t.L(), option.NewStartOpts(option.NoBackupSchedule),
-		install.MakeClusterSettings(
-			install.ClusterSettingsOption{
-				// Large imports can run into a death spiral where splits fail because
-				// there is a snapshot backlog, which makes the snapshot backlog worse
-				// because add sst causes ranges to fall behind and need recovery snapshots
-				// to catch up.
-				"kv.snapshot_rebalance.max_rate": "256 MiB",
-			},
-			install.EnvOption{
-				fmt.Sprintf("COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE=%s", azureCredentialsFilePath),
-			},
-		))
+	bd.c.Start(ctx, bd.t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(install.ClusterSettingsOption{
+		// Large imports can run into a death spiral where splits fail because
+		// there is a snapshot backlog, which makes the snapshot backlog worse
+		// because add sst causes ranges to fall behind and need recovery snapshots
+		// to catch up.
+		"kv.snapshot_rebalance.max_rate": "256 MiB",
+	}))
 }
 
 func (bd *backupDriver) initWorkload(ctx context.Context) {
@@ -442,14 +412,40 @@ func (bd *backupDriver) queryJobStates(
 func (bd *backupDriver) fingerprintFixture(ctx context.Context) map[string]string {
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
 	defer conn.Close()
-	return fingerprintDatabase(
-		bd.t, conn, bd.sp.fixture.DatabaseName(), bd.getLatestAOST(sqlutils.MakeSQLRunner(conn)),
+	sql := sqlutils.MakeSQLRunner(conn)
+	aost := bd.getLatestAOST(ctx, sql)
+	tables := getDatabaseTables(ctx, bd.t, sql, bd.sp.fixture.DatabaseName())
+
+	m := bd.c.NewDeprecatedMonitor(ctx)
+
+	bd.t.L().Printf("fingerprinting %d tables in %s", len(tables), bd.sp.fixture.DatabaseName())
+	fingerprints := make(map[string]string)
+	var mu syncutil.Mutex
+	start := timeutil.Now()
+	for _, table := range tables {
+		m.Go(func(ctx context.Context) error {
+			fpContents := newFingerprintContents(conn, table)
+			if err := fpContents.Load(ctx, bd.t.L(), aost, nil /* tableContents */); err != nil {
+				return err
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			fingerprints[table] = fpContents.fingerprints
+			return nil
+		})
+	}
+	m.Wait()
+	bd.t.L().Printf(
+		"fingerprinted %d tables in %s in %s",
+		len(tables), bd.sp.fixture.DatabaseName(), timeutil.Since(start),
 	)
+
+	return fingerprints
 }
 
 // getLatestAOST returns the end time as seen in SHOW BACKUP of the latest
 // backup in the fixture.
-func (bd *backupDriver) getLatestAOST(sql *sqlutils.SQLRunner) string {
+func (bd *backupDriver) getLatestAOST(ctx context.Context, sql *sqlutils.SQLRunner) string {
 	uri := bd.registry.URI(bd.fixture.DataPath)
 	query := fmt.Sprintf(
 		`SELECT end_time FROM
@@ -463,56 +459,13 @@ func (bd *backupDriver) getLatestAOST(sql *sqlutils.SQLRunner) string {
 	return endTime
 }
 
-// fingerprintDatabase fingerprints all of the tables in the provided database
-// and returns a map of fully qualified table names to their fingerprints.
-// If AOST is not provided, the current time is used as the AOST.
-func fingerprintDatabase(
-	t test.Test, conn *gosql.DB, dbName string, aost string,
-) map[string]string {
-	sql := sqlutils.MakeSQLRunner(conn)
-	tables := getDatabaseTables(t, sql, dbName)
-	if len(tables) == 0 {
-		t.L().Printf("no tables found in database %s", dbName)
-		return nil
-	}
-	require.Len(t, tables, expectedNumTables[dbName], "unexpected number of tables in database %s", dbName)
-	t.L().Printf("fingerprinting %d tables in database %s", len(tables), dbName)
-
-	fingerprints := make(map[string]string)
-	var mu syncutil.Mutex
-	start := timeutil.Now()
-	group := t.NewErrorGroup()
-	for _, table := range tables {
-		group.Go(func(ctx context.Context, log *logger.Logger) error {
-			fpContents := newFingerprintContents(conn, table)
-			if err := fpContents.Load(
-				ctx, log, aost, nil, /* tableContents */
-			); err != nil {
-				return err
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			fingerprints[table] = fpContents.fingerprints
-			return nil
-		})
-	}
-	require.NoError(t, group.WaitE(), "error fingerprinting tables in database %s", dbName)
-	t.L().Printf(
-		"fingerprinted %d tables in %s in %s",
-		len(tables), dbName, timeutil.Since(start),
-	)
-	require.Len(
-		t, fingerprints, expectedNumTables[dbName],
-		"unexpected number of fingerprints for database %s", dbName,
-	)
-	return fingerprints
-}
-
 // getDatabaseTables returns the fully qualified name of every table in the
 // fixture.
 // Note: This assumes there aren't any funky characters in the identifiers, so
 // nothing is SQL-escaped.
-func getDatabaseTables(t test.Test, sql *sqlutils.SQLRunner, db string) []string {
+func getDatabaseTables(
+	ctx context.Context, t test.Test, sql *sqlutils.SQLRunner, db string,
+) []string {
 	tablesQuery := fmt.Sprintf(`SELECT schema_name, table_name FROM [SHOW TABLES FROM %s]`, db)
 	rows := sql.Query(t, tablesQuery)
 	defer rows.Close()
@@ -521,11 +474,11 @@ func getDatabaseTables(t test.Test, sql *sqlutils.SQLRunner, db string) []string
 	for rows.Next() {
 		var schemaName, tableName string
 		if err := rows.Scan(&schemaName, &tableName); err != nil {
-			require.NoError(t, err, "error scanning table name")
+			t.L().Printf("error scanning table name: %v", err)
+			continue
 		}
 		tables = append(tables, fmt.Sprintf(`%s.%s.%s`, db, schemaName, tableName))
 	}
-	require.NoError(t, rows.Err(), "error iterating over tables in database %s", db)
 	return tables
 }
 
@@ -546,12 +499,6 @@ func GetFixtureRegistry(ctx context.Context, t test.Test, cloud spec.Cloud) *blo
 			Scheme:   "s3",
 			Host:     "cockroach-fixtures-us-east-2",
 			RawQuery: "AUTH=implicit",
-		}
-	case spec.Azure:
-		uri = url.URL{
-			Scheme:   "azure-blob",
-			Host:     "cockroachdb-fixtures-eastus",
-			RawQuery: "AUTH=implicit&AZURE_ACCOUNT_NAME=roachtest",
 		}
 	case spec.GCE, spec.Local:
 		account, err := vm.Providers["gce"].FindActiveAccount(t.L())
@@ -584,7 +531,7 @@ func registerBackupFixtures(r registry.Registry) {
 			}),
 			timeout: 30 * time.Minute,
 			suites:  registry.Suites(registry.Nightly),
-			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE, spec.Local},
+			clouds:  []spec.Cloud{spec.AWS, spec.GCE, spec.Local},
 		},
 		{
 			fixture: SmallFixture,
@@ -595,7 +542,7 @@ func registerBackupFixtures(r registry.Registry) {
 			// fixture on top of the allocated 2 hours for the test.
 			timeout: 3 * time.Hour,
 			suites:  registry.Suites(registry.Nightly),
-			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE},
+			clouds:  []spec.Cloud{spec.AWS, spec.GCE},
 		},
 		{
 			fixture: MediumFixture,
@@ -606,7 +553,7 @@ func registerBackupFixtures(r registry.Registry) {
 			}),
 			timeout: 12 * time.Hour,
 			suites:  registry.Suites(registry.Weekly),
-			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE},
+			clouds:  []spec.Cloud{spec.AWS, spec.GCE},
 			// The fixture takes an estimated 3.5 hours to fingerprint, so we skip it.
 			skipFingerprint: true,
 		},
@@ -644,7 +591,6 @@ func registerBackupFixtures(r registry.Registry) {
 			Suites:            bf.suites,
 			Skip:              bf.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				require.NoError(t, maybePutAzureCredentialsFile(ctx, c, azureCredentialsFilePath))
 				registry := GetFixtureRegistry(ctx, t, c.Cloud())
 
 				handle, err := registry.Create(ctx, bf.fixture.Name, t.L())
@@ -677,44 +623,6 @@ func registerBackupFixtures(r registry.Registry) {
 			},
 		})
 	}
-}
-
-func maybePutAzureCredentialsFile(ctx context.Context, c cluster.Cluster, path string) error {
-	if c.Cloud() != spec.Azure {
-		return nil
-	}
-
-	type azureCreds struct {
-		TenantID     string `yaml:"azure_tenant_id"`
-		ClientID     string `yaml:"azure_client_id"`
-		ClientSecret string `yaml:"azure_client_secret"`
-	}
-
-	azureEnvVars := []string{AzureTenantIDEnvVar, AzureClientIDEnvVar, AzureClientSecretEnvVar}
-	azureEnvValues := make(map[string]string)
-	for _, envVar := range azureEnvVars {
-		val := os.Getenv(envVar)
-		if val == "" {
-			return errors.Newf("environment variable %s is not set", envVar)
-		}
-		azureEnvValues[envVar] = val
-	}
-
-	creds := azureCreds{
-		TenantID:     azureEnvValues[AzureTenantIDEnvVar],
-		ClientID:     azureEnvValues[AzureClientIDEnvVar],
-		ClientSecret: azureEnvValues[AzureClientSecretEnvVar],
-	}
-
-	credsYaml, err := yaml.Marshal(creds)
-	if err != nil {
-		return errors.Wrapf(err, "failed to marshal Azure credentials to YAML")
-	}
-
-	return errors.Wrap(
-		c.PutString(ctx, string(credsYaml), path, 0700),
-		"failed to put Azure credentials file in cluster",
-	)
 }
 
 func registerBlobFixtureGC(r registry.Registry) {

@@ -33,27 +33,42 @@ type RemoveOptions struct {
 // removal decision is passed in. Removal is aborted if the replica ID has
 // advanced to or beyond the NextReplicaID since the removal decision was made.
 //
+// If opts.DestroyReplica is false, replica.destroyRaftMuLocked is not called.
+//
 // The passed replica must be initialized.
 func (s *Store) RemoveReplica(
-	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, reason redact.SafeString,
+	ctx context.Context,
+	rep *Replica,
+	nextReplicaID roachpb.ReplicaID,
+	reason redact.SafeString,
+	opts RemoveOptions,
 ) error {
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
-	_, err := s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, reason, RemoveOptions{
-		DestroyData: true,
-	})
+	if opts.InsertPlaceholder {
+		return errors.Errorf("InsertPlaceholder not supported in RemoveReplica")
+	}
+	_, err := s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, reason, opts)
 	return err
 }
 
-// removeReplicaRaftMuLocked removes the passed replica.
+// removeReplicaRaftMuLocked removes the passed replica. If the replica is
+// initialized the RemoveOptions will be consulted.
 func (s *Store) removeReplicaRaftMuLocked(
-	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, reason redact.SafeString,
+	ctx context.Context,
+	rep *Replica,
+	nextReplicaID roachpb.ReplicaID,
+	reason redact.SafeString,
+	opts RemoveOptions,
 ) error {
 	rep.raftMu.AssertHeld()
 	if rep.IsInitialized() {
-		_, err := s.removeInitializedReplicaRaftMuLocked(
-			ctx, rep, nextReplicaID, reason, RemoveOptions{DestroyData: true})
-		return errors.Wrap(err, "failed to remove replica")
+		if opts.InsertPlaceholder {
+			return errors.Errorf("InsertPlaceholder unsupported in removeReplicaRaftMuLocked")
+		}
+		_, err := s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, reason, opts)
+		return errors.Wrap(err,
+			"failed to remove replica")
 	}
 	s.removeUninitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID)
 	return nil
@@ -62,8 +77,6 @@ func (s *Store) removeReplicaRaftMuLocked(
 // removeInitializedReplicaRaftMuLocked is the implementation of RemoveReplica,
 // which is sometimes called directly when the necessary lock is already held.
 // It requires that Replica.raftMu is held and that s.mu is not held.
-//
-// If opts.DestroyData is false, replica.destroyRaftMuLocked is not called.
 func (s *Store) removeInitializedReplicaRaftMuLocked(
 	ctx context.Context,
 	rep *Replica,
@@ -75,8 +88,12 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	if !rep.IsInitialized() {
 		return nil, errors.AssertionFailedf("cannot remove uninitialized replica %s", rep)
 	}
-	if opts.InsertPlaceholder && opts.DestroyData {
-		return nil, errors.AssertionFailedf("cannot specify both InsertPlaceholder and DestroyData")
+
+	if opts.InsertPlaceholder {
+		if opts.DestroyData {
+			return nil, errors.AssertionFailedf("cannot specify both InsertPlaceholder and DestroyData")
+		}
+
 	}
 
 	// Run sanity checks and on success commit to the removal by setting the

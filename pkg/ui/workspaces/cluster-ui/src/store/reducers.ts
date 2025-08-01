@@ -48,6 +48,10 @@ import { LivenessState, reducer as liveness } from "./liveness";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
 import { NodesState, reducer as nodes } from "./nodes";
 import { rootActions } from "./rootActions";
+import {
+  reducer as schemaInsights,
+  SchemaInsightsState,
+} from "./schemaInsights";
 import { reducer as sessions, SessionsState } from "./sessions";
 import { reducer as sqlStats, SQLStatsState } from "./sqlStats";
 import {
@@ -85,6 +89,7 @@ export type AdminUiState = {
   stmtInsights: StmtInsightsState;
   txnInsightDetails: TxnInsightDetailsCachedState;
   txnInsights: TxnInsightsState;
+  schemaInsights: SchemaInsightsState;
   statementFingerprintInsights: StatementFingerprintInsightsCachedState;
   clusterSettings: ClusterSettingsState;
 };
@@ -113,6 +118,7 @@ export const reducers = combineReducers<AdminUiState>({
   executionDetailFiles,
   clusterLocks,
   databasesList,
+  schemaInsights,
   statementFingerprintInsights,
   clusterSettings,
 });

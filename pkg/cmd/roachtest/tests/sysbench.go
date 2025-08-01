@@ -380,8 +380,6 @@ func registerSysbench(r registry.Registry) {
 						`set cluster setting sql.metrics.statement_details.enabled = false`,
 						`set cluster setting kv.split_queue.enabled = false`,
 						`set cluster setting kv.transaction.write_buffering.enabled = true`,
-						`set cluster setting kv.allocator.load_based_rebalancing_interval = '10s'`,
-						`set cluster setting kv.allocator.store_cpu_rebalance_threshold = 0.01`,
 					},
 					useDRPC: true,
 				}
@@ -408,7 +406,7 @@ func registerSysbench(r registry.Registry) {
 				benchname += opts.extra.nameSuffix
 			}
 
-			crdbSpec := registry.TestSpec{
+			spec := registry.TestSpec{
 				Name:                      fmt.Sprintf("%s/%s/nodes=%d/cpu=%d/conc=%d", benchname, w, d.n, d.cpus, conc),
 				Benchmark:                 true,
 				Owner:                     registry.OwnerTestEng,
@@ -420,19 +418,15 @@ func registerSysbench(r registry.Registry) {
 					runSysbench(ctx, t, c, opts)
 				},
 			}
-			r.Add(crdbSpec)
+			r.Add(spec)
 
 			// Add a variant of the single-node tests that uses PostgreSQL instead of CockroachDB.
 			if d.n == 1 {
 				pgOpts := opts
 				pgOpts.usePostgres = true
-				pgSpec := crdbSpec
+				pgSpec := spec
 				pgSpec.Name = fmt.Sprintf("%s/%s/postgres/cpu=%d/conc=%d", benchname, w, d.cpus, conc)
 				pgSpec.Suites = registry.Suites(registry.Weekly)
-				// Postgres installation creates a lot of directories not cleaned up by
-				// cluster wipe. To avoid side effects on subsequent postgres sysbench
-				// runs, don't reuse the cluster.
-				pgSpec.Cluster.ReusePolicy = spec.ReusePolicyNone{}
 				pgSpec.TestSelectionOptOutSuites = registry.Suites(registry.Weekly)
 				pgSpec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runSysbench(ctx, t, c, pgOpts)

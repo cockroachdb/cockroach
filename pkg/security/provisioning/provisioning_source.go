@@ -51,7 +51,7 @@ func ParseProvisioningSource(sourceStr string) (*Source, error) {
 }
 
 func parseAuthMethod(sourceStr string) (authMethod string, idp string, err error) {
-	supportedProvisioningMethods := []string{supportedAuthMethodLDAP, supportedAuthMethodJWT}
+	supportedProvisioningMethods := []string{supportedAuthMethodLDAP}
 	for _, method := range supportedProvisioningMethods {
 		prefix := method + ":"
 		if strings.HasPrefix(sourceStr, prefix) {

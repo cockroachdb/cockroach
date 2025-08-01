@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,10 +21,8 @@ import (
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -91,21 +88,15 @@ type datadogWriter struct {
 	datadogContext context.Context
 	// namePrefix sets the string to prepend to all metric names. The
 	// names are kept with `.` delimiters.
-	namePrefix        string
-	threshold         int
-	uploadTime        time.Time
-	storeToNodeMap    map[string]string
-	metricTypeMap     map[string]string
-	noOfUploadWorkers int
+	namePrefix     string
+	threshold      int
+	uploadTime     time.Time
+	storeToNodeMap map[string]string
+	metricTypeMap  map[string]string
 }
 
 func makeDatadogWriter(
-	ddSite string,
-	init bool,
-	apiKey string,
-	threshold int,
-	hostNameOverride string,
-	noOfUploadWorkers int,
+	ddSite string, init bool, apiKey string, threshold int, hostNameOverride string,
 ) (*datadogWriter, error) {
 	currentTime := getCurrentTime()
 
@@ -136,9 +127,6 @@ func makeDatadogWriter(
 	ctx = context.WithValue(ctx, datadog.ContextServerVariables, map[string]string{
 		"site": host,
 	})
-
-	// The Datadog retry configuration is used when we receive error codes
-	// 429 and >= 500 from the Datadog.
 	configuration := datadog.NewConfiguration()
 	configuration.RetryConfiguration.EnableRetry = true
 	configuration.RetryConfiguration.BackOffMultiplier = 1
@@ -151,17 +139,16 @@ func makeDatadogWriter(
 	}
 
 	return &datadogWriter{
-		datadogContext:    ctx,
-		apiClient:         apiClient,
-		apiKey:            apiKey,
-		uploadID:          newTsdumpUploadID(currentTime),
-		init:              init,
-		namePrefix:        "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
-		threshold:         threshold,
-		uploadTime:        currentTime,
-		storeToNodeMap:    make(map[string]string),
-		metricTypeMap:     metricTypeMap,
-		noOfUploadWorkers: noOfUploadWorkers,
+		datadogContext: ctx,
+		apiClient:      apiClient,
+		apiKey:         apiKey,
+		uploadID:       newTsdumpUploadID(currentTime),
+		init:           init,
+		namePrefix:     "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
+		threshold:      threshold,
+		uploadTime:     currentTime,
+		storeToNodeMap: make(map[string]string),
+		metricTypeMap:  metricTypeMap,
 	}, nil
 }
 
@@ -358,25 +345,11 @@ func (d *datadogWriter) flush(data []datadogV2.MetricSeries) error {
 	}
 
 	api := datadogV2.NewMetricsApi(d.apiClient)
-	// The retry configuration is used when we receive any error code from upload.
-	// We have seen 408 error codes from Datadog when the upload is too large which
-	// is not handled by the default retry configuration that Datadog API client provides.
-	retryOpts := base.DefaultRetryOptions()
-	retryOpts.MaxBackoff = 20 * time.Millisecond
-	retryOpts.MaxRetries = 100
-	err := error(nil)
-
-	for retryAttempts := retry.Start(retryOpts); retryAttempts.Next(); {
-		_, _, err = api.SubmitMetrics(d.datadogContext, datadogV2.MetricPayload{
-			Series: data,
-		}, datadogV2.SubmitMetricsOptionalParameters{
-			ContentEncoding: datadogV2.METRICCONTENTENCODING_GZIP.Ptr(),
-		})
-
-		if err == nil {
-			return nil
-		}
-	}
+	_, _, err := api.SubmitMetrics(d.datadogContext, datadogV2.MetricPayload{
+		Series: data,
+	}, datadogV2.SubmitMetricsOptionalParameters{
+		ContentEncoding: datadogV2.METRICCONTENTENCODING_GZIP.Ptr(),
+	})
 	if err != nil {
 		fmt.Printf("error submitting metrics to datadog: %v\n", err)
 	}
@@ -399,7 +372,6 @@ func (d *datadogWriter) upload(fileName string) error {
 	}
 
 	dec := gob.NewDecoder(f)
-	allMetrics := make(map[string]struct{})
 	decodeOne := func() ([]datadogV2.MetricSeries, error) {
 		var ddSeries []datadogV2.MetricSeries
 
@@ -415,11 +387,6 @@ func (d *datadogWriter) upload(fileName string) error {
 				return nil, err
 			}
 			ddSeries = append(ddSeries, *datadogSeries)
-			tags := datadogSeries.Tags
-			sort.Strings(tags)
-			tagsStr := strings.Join(tags, ",")
-			metricCtx := datadogSeries.Metric + "|" + tagsStr
-			allMetrics[metricCtx] = struct{}{}
 		}
 
 		return ddSeries, nil
@@ -443,7 +410,11 @@ func (d *datadogWriter) upload(fileName string) error {
 		metricsUploadState.isSingleUploadSucceeded = true
 	})
 
-	for i := 0; i < d.noOfUploadWorkers; i++ {
+	// Note(davidh): This was previously set at 1000 and we'd get regular
+	// 400s from Datadog with the cryptic `Unable to decompress payload`
+	// error. We reduced this to 20 and was able to upload a 3.2GB tsdump
+	// in 6m20s without any errors.
+	for i := 0; i < 20; i++ {
 		go func() {
 			for data := range ch {
 				emittedMetrics, err := d.emitDataDogMetrics(data)
@@ -499,8 +470,6 @@ func (d *datadogWriter) upload(fileName string) error {
 	}
 	fmt.Printf("\nUpload status: %s!\n", uploadStatus)
 	fmt.Printf("Uploaded %d series overall\n", seriesUploaded)
-	fmt.Printf("Uploaded %d unique series overall\n", len(allMetrics))
-
 	// Estimate cost. The cost of historical metrics ingest is based on how many
 	// metrics were active during the upload window. Assuming the entire upload
 	// happens during a given hour, that means the cost will be equal to the count
@@ -508,7 +477,7 @@ func (d *datadogWriter) upload(fileName string) error {
 	// 730 hours per month.
 	// For a single node upload that has 6500 unique series, that's about $.40
 	// per upload.
-	estimatedCost := float64(len(allMetrics)) * 4.55 / 100 / 730
+	estimatedCost := float64(seriesUploaded) * 4.55 / 100 / 730
 	fmt.Printf("Estimated cost of this upload: $%.2f\n", estimatedCost)
 
 	tags := getUploadTags(d)

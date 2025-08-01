@@ -74,8 +74,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/crlib/crtime"
@@ -284,7 +284,7 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeM
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
 		StreamManagerMetrics:          rangefeed.NewStreamManagerMetrics(),
 		BufferedSenderMetrics:         rangefeed.NewBufferedSenderMetrics(),
-		LockedMuxStreamMetrics:        rangefeed.NewLockedMuxStreamMetrics(),
+		LockedMuxStreamMetrics:        rangefeed.NewLockedMuxStreamMetrics(histogramWindow),
 	}
 
 	for i := range nm.MethodCounts {
@@ -2004,7 +2004,7 @@ func setupSpanForIncomingRPC(
 		// request that didn't specify tracing information. We make a child span
 		// if the incoming request would like to be traced.
 		ctx, newSpan = tracing.ChildSpan(ctx,
-			tracingutil.BatchMethodName, tracing.WithServerSpanKind)
+			grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
 	} else {
 		// Non-local call. Tracing information comes from the request proto.
 
@@ -2016,7 +2016,7 @@ func setupSpanForIncomingRPC(
 		}
 
 		ctx, newSpan = tr.StartSpanCtx(
-			ctx, tracingutil.BatchMethodName,
+			ctx, grpcinterceptor.BatchMethodName,
 			tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
 			tracing.WithServerSpanKind)
 	}
@@ -2124,6 +2124,7 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	start := crtime.NowMono()
 	defer func() {
 		dur := start.Elapsed()
+		s.metrics.SendLatencyNanos.RecordValue(dur.Nanoseconds())
 		if dur > slowMuxStreamSendThreshold {
 			s.metrics.SlowSends.Inc(1)
 			log.Infof(s.wrapped.Context(), "slow send on stream %d for r%d took %s", e.StreamID, e.RangeID, dur)
@@ -2439,7 +2440,7 @@ func (n *Node) gossipSubscription(
 			// This case must remain as a no-op until we entirely remove
 			// gossip.KeyDeprecatedSystemConfig.
 		default:
-			callback := func(key string, content roachpb.Value, _ int64) {
+			callback := func(key string, content roachpb.Value) {
 				callbackMu.Lock()
 				defer callbackMu.Unlock()
 				if entCClosed {

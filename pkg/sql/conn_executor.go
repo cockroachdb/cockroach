@@ -281,13 +281,13 @@ var detailedLatencyMetricLabel = "fingerprint"
 // the fact that there's two distinct categories of errors to speak of. There
 // are "query execution errors" and there are the rest. Most things fall in the
 // former category: invalid queries, queries that fail constraints at runtime,
-// data unavailability errors, retryable errors (i.e. serializability
+// data unavailability errors, retriable errors (i.e. serializability
 // violations) "internal errors" (e.g. connection problems in the cluster). This
 // category of errors doesn't represent dramatic events as far as the connExecutor
 // is concerned: they produce "results" for the query to be passed to the client
 // just like more successful queries do and they produce Events for the
 // state machine just like the successful queries (the events in question
-// are generally event{non}RetryableErr and they generally cause the
+// are generally event{non}RetriableErr and they generally cause the
 // state machine to move to the Aborted state, but the connExecutor doesn't
 // concern itself with this). The way the connExecutor reacts to these errors is
 // the same as how it reacts to a successful query completing: it moves the
@@ -336,8 +336,8 @@ type Server struct {
 
 	cfg *ExecutorConfig
 
-	// persistedSQLStats provides the mechanisms for writing sql stats to system tables.
-	persistedSQLStats *persistedsqlstats.PersistedSQLStats
+	// sqlStats provides the mechanisms for writing sql stats to system tables.
+	sqlStats *persistedsqlstats.PersistedSQLStats
 
 	// localSqlStats tracks per-application statistics for all applications on each
 	// node. Newly collected statistics flow into localSqlStats.
@@ -438,7 +438,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	metrics := makeMetrics(false /* internal */, &cfg.Settings.SV)
 	serverMetrics := makeServerMetrics(cfg)
 	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics)
-	reportedSQLStats := sslocal.NewSQLStats(
+	reportedSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
 		sqlstats.MaxMemReportedSQLStatsTxnFingerprints,
@@ -448,7 +448,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
 	)
-	localSQLStats := sslocal.NewSQLStats(
+	memSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
@@ -471,7 +471,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		InternalMetrics:   makeMetrics(true /* internal */, &cfg.Settings.SV),
 		ServerMetrics:     serverMetrics,
 		pool:              pool,
-		localSqlStats:     localSQLStats,
+		localSqlStats:     memSQLStats,
 		reportedStats:     reportedSQLStats,
 		sqlStatsIngester:  sqlStatsIngester,
 		insights:          insightsProvider,
@@ -508,9 +508,9 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		FlushedFingerprintCount: serverMetrics.StatsMetrics.SQLStatsFlushFingerprintCount,
 		FlushesFailed:           serverMetrics.StatsMetrics.SQLStatsFlushesFailed,
 		FlushLatency:            serverMetrics.StatsMetrics.SQLStatsFlushLatency,
-	}, localSQLStats)
+	}, memSQLStats)
 
-	s.persistedSQLStats = persistedSQLStats
+	s.sqlStats = persistedSQLStats
 	schemaTelemetryIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
 	schemaTelemetryIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
 	s.schemaTelemetryController = schematelemetrycontroller.NewController(
@@ -684,7 +684,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 
 	s.sqlStatsIngester.Start(ctx, stopper)
-	s.persistedSQLStats.Start(ctx, stopper)
+	s.sqlStats.Start(ctx, stopper)
 
 	s.schemaTelemetryController.Start(ctx, stopper)
 
@@ -716,7 +716,7 @@ func (s *Server) GetInsightsReader() *insights.LockingStore {
 
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.
 func (s *Server) GetSQLStatsProvider() *persistedsqlstats.PersistedSQLStats {
-	return s.persistedSQLStats
+	return s.sqlStats
 }
 
 // GetLocalSQLStatsProvider returns the in-memory provider for the sqlstats subsystem.
@@ -1374,11 +1374,11 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	var payloadErr error
 	if closeType == normalClose {
-		// We'll cleanup the SQL txn by creating a non-retryable (commit:true) event.
+		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
-		ev := eventNonRetryableErr{IsCommit: fsm.True}
+		ev := eventNonRetriableErr{IsCommit: fsm.True}
 		payloadErr = connExecutorNormalCloseErr
-		payload := eventNonRetryableErrPayload{err: payloadErr}
+		payload := eventNonRetriableErrPayload{err: payloadErr}
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
 			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 		}
@@ -1386,7 +1386,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		case stateNoTxn:
 			// No txn to finish.
 		case stateAborted:
-			// A non-retryable error with IsCommit set to true causes the transaction
+			// A non-retriable error with IsCommit set to true causes the transaction
 			// to be cleaned up.
 		case stateCommitWait:
 			ex.state.finishSQLTxn()
@@ -2397,8 +2397,8 @@ func (ex *connExecutor) execCmd() (retErr error) {
 			if !ok {
 				err := pgerror.Newf(
 					pgcode.InvalidCursorName, "unknown portal %q", portalName)
-				ev = eventNonRetryableErr{IsCommit: fsm.False}
-				payload = eventNonRetryableErrPayload{err: err}
+				ev = eventNonRetriableErr{IsCommit: fsm.False}
+				payload = eventNonRetriableErrPayload{err: err}
 				res = ex.clientComm.CreateErrorResult(pos)
 				return nil
 			}
@@ -2512,8 +2512,8 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		ev, payload = ex.execDelPrepStmt(ctx, tcmd)
 	case SendError:
 		res = ex.clientComm.CreateErrorResult(pos)
-		ev = eventNonRetryableErr{IsCommit: fsm.False}
-		payload = eventNonRetryableErrPayload{err: tcmd.Err}
+		ev = eventNonRetriableErr{IsCommit: fsm.False}
+		payload = eventNonRetriableErrPayload{err: tcmd.Err}
 	case Sync:
 		// The Postgres docs say: "At completion of each series of extended-query
 		// messages, the frontend should issue a Sync message. This parameterless
@@ -2595,7 +2595,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	// otherwise there will be leftover bytes.
 	shouldClosePausablePortalsAndCursors := func(payload fsm.EventPayload) bool {
 		switch payload.(type) {
-		case eventNonRetryableErrPayload, eventRetryableErrPayload:
+		case eventNonRetriableErrPayload, eventRetriableErrPayload:
 			return true
 		default:
 			return false
@@ -3039,10 +3039,10 @@ func (ex *connExecutor) execCopyOut(
 			// Even in the cases where the error is a retryable error, we want to
 			// intercept the event and payload returned here to ensure that the query
 			// is not retried.
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetryableErrPayload{err: cancelchecker.QueryCanceledError}
+			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
 		}
 
 		// If the query timed out, we intercept the error, payload, and event here
@@ -3058,15 +3058,15 @@ func (ex *connExecutor) execCopyOut(
 		if queryTimedOut {
 			// A timed out query should never produce retryable errors/events/payloads
 			// so we intercept and overwrite them all here.
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetryableErrPayload{err: sqlerrors.QueryTimeoutError}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
 		} else if txnTimedOut {
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetryableErrPayload{err: sqlerrors.TxnTimeoutError}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
 		}
 	}(ctx)
 
@@ -3139,8 +3139,8 @@ func (ex *connExecutor) execCopyOut(
 
 		return nil
 	}); copyErr != nil {
-		ev := eventNonRetryableErr{IsCommit: fsm.False}
-		payload := eventNonRetryableErrPayload{err: copyErr}
+		ev := eventNonRetriableErr{IsCommit: fsm.False}
+		payload := eventNonRetriableErrPayload{err: copyErr}
 		return ev, payload
 	}
 	return nil, nil
@@ -3272,8 +3272,8 @@ func (ex *connExecutor) execCopyIn(
 		)
 	}
 	if copyErr != nil {
-		ev := eventNonRetryableErr{IsCommit: fsm.False}
-		payload := eventNonRetryableErrPayload{err: copyErr}
+		ev := eventNonRetriableErr{IsCommit: fsm.False}
+		payload := eventNonRetriableErrPayload{err: copyErr}
 		return ev, payload
 	}
 
@@ -3313,10 +3313,10 @@ func (ex *connExecutor) execCopyIn(
 			// Even in the cases where the error is a retryable error, we want to
 			// intercept the event and payload returned here to ensure that the query
 			// is not retried.
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetryableErrPayload{err: cancelchecker.QueryCanceledError}
+			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
 		}
 
 		cm.Close(ctx)
@@ -3334,15 +3334,15 @@ func (ex *connExecutor) execCopyIn(
 		if queryTimedOut {
 			// A timed out query should never produce retryable errors/events/payloads
 			// so we intercept and overwrite them all here.
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetryableErrPayload{err: sqlerrors.QueryTimeoutError}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
 		} else if txnTimedOut {
-			retEv = eventNonRetryableErr{
+			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetryableErrPayload{err: sqlerrors.TxnTimeoutError}
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
 		}
 	}(ctx)
 
@@ -3406,7 +3406,7 @@ func (ex *connExecutor) execCopyIn(
 		}
 		return cm.run(ctx)
 	}); copyErr != nil {
-		// TODO(andrei): We don't have a full retryable error story for the copy machine.
+		// TODO(andrei): We don't have a full retriable error story for the copy machine.
 		// When running outside of a txn, the copyMachine should probably do retries
 		// internally - this is partially done, see `copyMachine.insertRows`.
 		// When not, it's unclear what we should do. For now, we abort
@@ -3414,8 +3414,8 @@ func (ex *connExecutor) execCopyIn(
 		// We also don't have a story for distinguishing communication errors (which
 		// should terminate the connection) from query errors. For now, we treat all
 		// errors as query errors.
-		ev := eventNonRetryableErr{IsCommit: fsm.False}
-		payload := eventNonRetryableErrPayload{err: copyErr}
+		ev := eventNonRetriableErr{IsCommit: fsm.False}
+		payload := eventNonRetriableErrPayload{err: copyErr}
 		return ev, payload
 	}
 	return nil, nil
@@ -3471,25 +3471,25 @@ func isCommit(stmt tree.Statement) bool {
 	return ok
 }
 
-var retryableMinTimestampBoundUnsatisfiableError = errors.Newf(
-	"retryable MinTimestampBoundUnsatisfiableError",
+var retriableMinTimestampBoundUnsatisfiableError = errors.Newf(
+	"retriable MinTimestampBoundUnsatisfiableError",
 )
 
-// errIsRetryable is true if the error is a client-visible retry error
+// errIsRetriable is true if the error is a client-visible retry error
 // or the error is a special error that is handled internally and retried.
-func errIsRetryable(err error) bool {
+func errIsRetriable(err error) bool {
 	return errors.HasInterface(err, (*pgerror.ClientVisibleRetryError)(nil)) ||
-		errors.Is(err, retryableMinTimestampBoundUnsatisfiableError) ||
+		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError) ||
 		descs.IsTwoVersionInvariantViolationError(err)
 }
 
-// convertRetryableErrorIntoUserVisibleError converts internal retryable
+// convertRetriableErrorIntoUserVisibleError converts internal retriable
 // errors into external, so that the client goes and retries this
 // transaction. One example of this is two version invariant errors, which
 // happens when a schema change is waiting for a schema change transition to
 // propagate. When this happens, we either need to retry externally or internally,
 // depending on if we are in an explicit transaction.
-func (ex *connExecutor) convertRetryableErrorIntoUserVisibleError(
+func (ex *connExecutor) convertRetriableErrorIntoUserVisibleError(
 	ctx context.Context, origErr error,
 ) (modifiedErr error, err error) {
 	if descs.IsTwoVersionInvariantViolationError(origErr) {
@@ -3505,8 +3505,8 @@ func (ex *connExecutor) convertRetryableErrorIntoUserVisibleError(
 	return origErr, nil
 }
 
-// makeErrEvent takes an error and returns either an eventRetryableErr or an
-// eventNonRetryableErr, depending on the error type.
+// makeErrEvent takes an error and returns either an eventRetriableErr or an
+// eventNonRetriableErr, depending on the error type.
 func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event, fsm.EventPayload) {
 	// Check for MinTimestampBoundUnsatisfiableError errors.
 	// If this is detected, it means we are potentially able to retry with a lower
@@ -3530,41 +3530,41 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 				)
 			}
 			if aost.Timestamp.Less(minTSErr.MinTimestampBound) {
-				err = errors.Mark(err, retryableMinTimestampBoundUnsatisfiableError)
+				err = errors.Mark(err, retriableMinTimestampBoundUnsatisfiableError)
 			}
 		}
 	}
 
-	retryable := errIsRetryable(err)
-	if retryable && execinfra.IsDynamicQueryHasNoHomeRegionError(err) {
+	retriable := errIsRetriable(err)
+	if retriable && execinfra.IsDynamicQueryHasNoHomeRegionError(err) {
 		// Retry only # of remote regions times if the retry is due to the
 		// enforce_home_region setting.
-		retryable = int(ex.state.mu.autoRetryCounter) < len(ex.planner.EvalContext().RemoteRegions)
-		if !retryable {
+		retriable = int(ex.state.mu.autoRetryCounter) < len(ex.planner.EvalContext().RemoteRegions)
+		if !retriable {
 			err = execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(err)
 		}
 	}
-	if retryable {
+	if retriable {
 		var rc rewindCapability
 		var canAutoRetry bool
 		if ex.implicitTxn() || !ex.sessionData().InjectRetryErrorsEnabled {
 			rc, canAutoRetry = ex.getRewindTxnCapability()
 		}
 
-		ev := eventRetryableErr{
+		ev := eventRetriableErr{
 			IsCommit:     fsm.FromBool(isCommit(stmt)),
 			CanAutoRetry: fsm.FromBool(canAutoRetry),
 		}
-		payload := eventRetryableErrPayload{
+		payload := eventRetriableErrPayload{
 			err:    err,
 			rewCap: rc,
 		}
 		return ev, payload
 	}
-	ev := eventNonRetryableErr{
+	ev := eventNonRetriableErr{
 		IsCommit: fsm.FromBool(isCommit(stmt)),
 	}
-	payload := eventNonRetryableErrPayload{err: err}
+	payload := eventNonRetriableErrPayload{err: err}
 	return ev, payload
 }
 
@@ -3817,7 +3817,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SessionDataStack:               ex.sessionDataStack,
 			ReCache:                        ex.server.reCache,
 			ToCharFormatCache:              ex.server.toCharFormatCache,
-			SQLStatsController:             ex.server.persistedSQLStats,
+			SQLStatsController:             ex.server.sqlStats,
 			SchemaTelemetryController:      ex.server.schemaTelemetryController,
 			IndexUsageStatsController:      ex.server.indexUsageStatsController,
 			ConsistencyChecker:             p.execCfg.ConsistencyChecker,
@@ -3838,8 +3838,8 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		TxnModesSetter:       ex,
 		jobs:                 ex.extraTxnState.jobs,
 		validateDbZoneConfig: &ex.extraTxnState.validateDbZoneConfig,
-		persistedSQLStats:    ex.server.persistedSQLStats,
-		localSQLStats:        ex.server.localSqlStats,
+		statsProvider:        ex.server.sqlStats,
+		localStatsProvider:   ex.server.localSqlStats,
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
 	}
@@ -3974,7 +3974,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 func (ex *connExecutor) maybeAdjustMaxTimestampBound(p *planner, txn *kv.Txn) {
 	if autoRetryReason := ex.state.mu.autoRetryReason; autoRetryReason != nil {
 		// If we are retrying due to an unsatisfiable timestamp bound which is
-		// retryable, it means we were unable to serve the previous minimum
+		// retriable, it means we were unable to serve the previous minimum
 		// timestamp as there was a schema update in between. When retrying, we
 		// want to keep the same minimum timestamp for the AOST read, but set
 		// the maximum timestamp to the point just before our failed read to

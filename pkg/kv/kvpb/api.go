@@ -985,9 +985,6 @@ func (*BarrierRequest) Method() Method { return Barrier }
 // Method implements the Request interface.
 func (*IsSpanEmptyRequest) Method() Method { return IsSpanEmpty }
 
-// Method implements the Request interface.
-func (*FlushLockTableRequest) Method() Method { return FlushLockTable }
-
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -1276,12 +1273,6 @@ func (r *IsSpanEmptyRequest) ShallowCopy() Request {
 	return &shallowCopy
 }
 
-// ShallowCopy implements the Request interface.
-func (r *FlushLockTableRequest) ShallowCopy() Request {
-	shallowCopy := *r
-	return &shallowCopy
-}
-
 // ShallowCopy implements the Response interface.
 func (gr *GetResponse) ShallowCopy() Response {
 	shallowCopy := *gr
@@ -1564,12 +1555,6 @@ func (r *BarrierResponse) ShallowCopy() Response {
 
 // ShallowCopy implements the Response interface.
 func (r *IsSpanEmptyResponse) ShallowCopy() Response {
-	shallowCopy := *r
-	return &shallowCopy
-}
-
-// ShallowCopy implements the Response interface.
-func (r *FlushLockTableResponse) ShallowCopy() Response {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -2102,9 +2087,6 @@ func (r *BarrierRequest) flags() flag {
 	return flags
 }
 func (*IsSpanEmptyRequest) flags() flag { return isRead | isRange }
-func (*FlushLockTableRequest) flags() flag {
-	return isWrite | isRange | isAlone | isUnsplittable
-}
 
 // IsParallelCommit returns whether the EndTxn request is attempting to perform
 // a parallel commit. See txn_interceptor_committer.go for a discussion about
@@ -2160,9 +2142,6 @@ func (e *RangeFeedEvent) ShallowCopy() *RangeFeedEvent {
 	case *RangeFeedError:
 		cpyErr := *t
 		cpy.MustSetValue(&cpyErr)
-	case *RangeFeedBulkEvents:
-		cpyVals := *t
-		cpy.MustSetValue(&cpyVals)
 	default:
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
 	}

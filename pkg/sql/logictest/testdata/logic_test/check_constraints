@@ -310,7 +310,7 @@ CREATE TABLE t8 (
   CHECK (different_database.t8.a > 0)
 )
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t8 (
   a INT,
   CHECK (a > 0),

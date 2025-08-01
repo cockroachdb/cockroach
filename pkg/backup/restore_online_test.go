@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -33,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
@@ -581,121 +579,6 @@ func TestOnlineRestoreErrors(t *testing.T) {
 		sqlDB.ExpectErr(t, "cannot run online restore with verify_backup_table_data",
 			fmt.Sprintf("RESTORE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, schema_only, verify_backup_table_data", fullBackup))
 	})
-}
-
-func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
-
-	rng, seed := randutil.NewPseudoRand()
-	t.Logf("random seed: %d", seed)
-
-	alwaysFail := rng.Intn(2) == 0
-	t.Logf("always fail download requests: %t", alwaysFail)
-	totalFailures := int32(rng.Intn(maxDownloadAttempts-1) + 1)
-	var currentFailures atomic.Int32
-
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-			Knobs: base.TestingKnobs{
-				BackupRestore: &sql.BackupRestoreTestingKnobs{
-					RunBeforeSendingDownloadSpan: func() error {
-						if alwaysFail {
-							return errors.Newf("always fail download request")
-						}
-						if currentFailures.Load() >= totalFailures {
-							return nil
-						}
-						currentFailures.Add(1)
-						return errors.Newf("injected download request failure")
-					},
-				},
-			},
-		},
-	}
-
-	const numAccounts = 1
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
-		t, singleNode, numAccounts, InitManualReplication, clusterArgs,
-	)
-	defer cleanupFn()
-
-	externalStorage := "nodelocal://1/backup"
-	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
-	sqlDB.Exec(
-		t,
-		fmt.Sprintf(`
-		RESTORE DATABASE data FROM LATEST IN '%s'
-		WITH EXPERIMENTAL DEFERRED COPY, new_db_name=data2
-		`, externalStorage),
-	)
-
-	var downloadJobID jobspb.JobID
-	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
-	if alwaysFail {
-		jobutils.WaitForJobToFail(t, sqlDB, downloadJobID)
-	} else {
-		jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
-	}
-}
-
-func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
-
-	var attemptCount int
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-			Knobs: base.TestingKnobs{
-				BackupRestore: &sql.BackupRestoreTestingKnobs{
-					// We want the retry loop to fail until its final attempt, and then
-					// succeed on the last attempt. This will allow the download job to
-					// make progress, in which case the retry loop _should_ reset. Then
-					// we continue allowing the retry loop to fail until its last
-					// attempt, in which case it will succeed again.
-					RunBeforeSendingDownloadSpan: func() error {
-						attemptCount++
-						if attemptCount < maxDownloadAttempts {
-							return errors.Newf("injected download request failure")
-						}
-						return nil
-					},
-					RunBeforeDownloadCleanup: func() error {
-						if attemptCount < maxDownloadAttempts*2 {
-							return errors.Newf("injected download cleanup failure")
-						}
-						return nil
-					},
-				},
-			},
-		},
-	}
-	const numAccounts = 1
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
-		t, singleNode, numAccounts, InitManualReplication, clusterArgs,
-	)
-	defer cleanupFn()
-
-	externalStorage := "nodelocal://1/backup"
-	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
-	sqlDB.Exec(
-		t,
-		fmt.Sprintf(`
-		RESTORE DATABASE data FROM LATEST IN '%s'
-		WITH EXPERIMENTAL DEFERRED COPY, new_db_name=data2
-		`, externalStorage),
-	)
-
-	var downloadJobID jobspb.JobID
-	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
-	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
-	require.Equal(t, maxDownloadAttempts*2, attemptCount)
 }
 
 func bankOnlineRestore(

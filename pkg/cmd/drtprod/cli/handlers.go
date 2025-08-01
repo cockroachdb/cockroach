@@ -45,8 +45,6 @@ func init() {
 
 // Initialize sets up the environment and initializes the command-line interface.
 func Initialize(ctx context.Context) {
-	// Apply our flag defaults.
-	cli.UpdateFlagDefaults()
 	// Disable command sorting in Cobra (command-line parser).
 	cobra.EnableCommandSorting = false
 

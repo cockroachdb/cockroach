@@ -16,14 +16,10 @@ import (
 
 // ClusterOptions represents options that can be passed to a
 // Failer to describe how it should interact with the cluster.
+// For now, this just denotes if the cluster is secure or not,
+// but will be expanded on in the future to support multitenant clusters.
 type ClusterOptions struct {
-	ConnectionInfo
-	replicationFactor int
-}
-
-type ConnectionInfo struct {
-	secure         bool
-	localCertsPath string
+	secure bool
 }
 
 type failureSpec struct {

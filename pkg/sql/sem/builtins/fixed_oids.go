@@ -2667,9 +2667,7 @@ var builtinOidsArray = []string{
 	2704: `crdb_internal.show_create_all_triggers(database_name: string) -> string`,
 	2705: `crdb_internal.session_pending_jobs() -> tuple{int AS job_id, string AS job_type, string AS description, string AS user_name}`,
 	2706: `crdb_internal.can_view_job(owner: string) -> bool`,
-	2707: `has_system_privilege(privilege: string) -> bool`,
-	2708: `has_system_privilege(user: string, privilege: string) -> bool`,
-	2709: `has_system_privilege(user: oid, privilege: string) -> bool`,
+	// 2707-2709 are used in future versions for `has_system_privilege` overloads.
 	2710: `citextsend(citext: citext) -> bytes`,
 	2711: `citextrecv(input: anyelement) -> citext`,
 	2712: `citextout(citext: citext) -> bytes`,
@@ -2749,10 +2747,6 @@ var builtinOidsArray = []string{
 	2786: `citext(jsonpath: jsonpath) -> citext`,
 	2787: `citext(box2d: box2d) -> citext`,
 	2788: `citext(vector: vector) -> citext`,
-	2789: `any_out(any: any) -> bytes`,
-	2790: `any_in(input: anyelement) -> any`,
-	2791: `trigger_out(trigger: trigger) -> bytes`,
-	2792: `trigger_in(input: anyelement) -> trigger`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

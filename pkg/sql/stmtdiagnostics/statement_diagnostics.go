@@ -150,9 +150,7 @@ func NewRegistry(db isql.DB, st *cluster.Settings) *Registry {
 
 // Start will start the polling loop for the Registry.
 func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
-	// The registry has the same lifetime as the server, so the cancellation
-	// function can be ignored and it'll be called by the stopper.
-	ctx, _ = stopper.WithCancelOnQuiesce(ctx) // nolint:quiesce
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
 	// Since background statement diagnostics collection is not under user
 	// control, exclude it from cost accounting and control.

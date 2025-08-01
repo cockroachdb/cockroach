@@ -1014,9 +1014,10 @@ func applyColumnMutation(
 					fk.OnUpdate != semenumpb.ForeignKeyAction_RESTRICT {
 					return pgerror.Newf(
 						pgcode.InvalidColumnDefinition,
-						"column cannot specify both ON UPDATE expression and a foreign"+
-							" key ON UPDATE action for column %q",
+						"column %s(%d) cannot have both an ON UPDATE expression and a foreign"+
+							" key ON UPDATE action",
 						col.GetName(),
+						col.GetID(),
 					)
 				}
 			}
@@ -2508,7 +2509,7 @@ func (p *planner) checkSchemaChangeIsAllowed(
 	ctx context.Context, desc catalog.TableDescriptor, n tree.Statement,
 ) (ret error) {
 	// Adding descriptors can be skipped.
-	if desc == nil || desc.Adding() || p.descCollection.IsNewUncommittedDescriptor(desc.GetID()) {
+	if desc == nil || desc.Adding() || p.descCollection.IsNewUncommitedDescriptor(desc.GetID()) {
 		return nil
 	}
 	// Check if this schema change is on the allowed list, which will only

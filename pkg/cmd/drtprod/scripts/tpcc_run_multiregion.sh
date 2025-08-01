@@ -71,8 +71,6 @@ echo ">> Starting tpcc workload"
     --survival-goal region \
     --regions=$REGIONS \
     --max-conn-lifetime=$MAX_CONN_LIFETIME \
-    --conns=$NUM_CONNECTIONS \
-    --local-warehouses=true \
     \${PGURLS_REGION[@]}
 EOF
 

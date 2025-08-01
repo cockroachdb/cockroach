@@ -178,19 +178,6 @@ func (m colIdxMap) Swap(i, j int) {
 	m.ords[i], m.ords[j] = m.ords[j], m.ords[i]
 }
 
-// Get returns the ordinal for the given column ID, returning -1 if the column
-// ID is not in the map.
-func (m colIdxMap) Get(id descpb.ColumnID) int {
-	// Binary search for the column id.
-	idx := sort.Search(len(m.vals), func(i int) bool {
-		return m.vals[i] >= id
-	})
-	if idx < len(m.vals) && m.vals[idx] == id {
-		return m.ords[idx]
-	}
-	return -1
-}
-
 type cFetcherArgs struct {
 	// memoryLimit determines the maximum memory footprint of the output batch.
 	memoryLimit int64
@@ -400,7 +387,7 @@ func (cf *cFetcher) Init(
 		return errors.AssertionFailedf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
 	}
 	table := newCTableInfo()
-	nCols := len(tableArgs.spec.FetchedColumns)
+	nCols := tableArgs.ColIdxMap.Len()
 	if cap(table.orderedColIdxMap.vals) < nCols {
 		table.orderedColIdxMap.vals = make(descpb.ColumnIDs, 0, nCols)
 		table.orderedColIdxMap.ords = make([]int, 0, nCols)
@@ -408,7 +395,7 @@ func (cf *cFetcher) Init(
 	for i := range tableArgs.spec.FetchedColumns {
 		id := tableArgs.spec.FetchedColumns[i].ColumnID
 		table.orderedColIdxMap.vals = append(table.orderedColIdxMap.vals, id)
-		table.orderedColIdxMap.ords = append(table.orderedColIdxMap.ords, i)
+		table.orderedColIdxMap.ords = append(table.orderedColIdxMap.ords, tableArgs.ColIdxMap.GetDefault(id))
 	}
 	sort.Sort(table.orderedColIdxMap)
 	*table = cTableInfo{
@@ -477,9 +464,10 @@ func (cf *cFetcher) Init(
 	needToDecodeDecimalKey := false
 	for i := range fullColumns {
 		col := &fullColumns[i]
-		//gcassert:bce
-		indexColOrdinals[i] = table.orderedColIdxMap.Get(col.ColumnID)
-		if colIdx := indexColOrdinals[i]; colIdx >= 0 {
+		colIdx, ok := tableArgs.ColIdxMap.Get(col.ColumnID)
+		if ok {
+			//gcassert:bce
+			indexColOrdinals[i] = colIdx
 			cf.mustDecodeIndexKey = true
 			needToDecodeDecimalKey = needToDecodeDecimalKey || tableArgs.spec.FetchedColumns[colIdx].Type.Family() == types.DecimalFamily
 			// A composite column might also have a value encoding which must be
@@ -489,6 +477,9 @@ func (cf *cFetcher) Init(
 			} else {
 				table.neededValueColsByIdx.Remove(colIdx)
 			}
+		} else {
+			//gcassert:bce
+			indexColOrdinals[i] = -1
 		}
 	}
 	if needToDecodeDecimalKey && cap(cf.scratch.decoding) < 64 {
@@ -505,7 +496,8 @@ func (cf *cFetcher) Init(
 		suffixCols := table.spec.KeySuffixColumns()
 		for i := range suffixCols {
 			id := suffixCols[i].ColumnID
-			if colIdx := table.orderedColIdxMap.Get(id); colIdx >= 0 {
+			colIdx, ok := tableArgs.ColIdxMap.Get(id)
+			if ok {
 				if suffixCols[i].IsComposite {
 					table.compositeIndexColOrdinals.Add(colIdx)
 					// Note: we account for these composite columns separately: we add
@@ -529,8 +521,14 @@ func (cf *cFetcher) Init(
 		extraValColOrdinals := table.extraValColOrdinals
 		_ = extraValColOrdinals[len(suffixCols)-1]
 		for i := range suffixCols {
-			//gcassert:bce
-			extraValColOrdinals[i] = table.orderedColIdxMap.Get(suffixCols[i].ColumnID)
+			idx, ok := tableArgs.ColIdxMap.Get(suffixCols[i].ColumnID)
+			if ok {
+				//gcassert:bce
+				extraValColOrdinals[i] = idx
+			} else {
+				//gcassert:bce
+				extraValColOrdinals[i] = -1
+			}
 		}
 	}
 
@@ -1152,23 +1150,21 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			if familyID == 0 {
 				break
 			}
-			// Find the default column for the family.
-			var defaultColumnIdx int
-			found := false
+			// Find the default column ID for the family.
+			var defaultColumnID descpb.ColumnID
 			for _, f := range table.spec.FamilyDefaultColumns {
 				if f.FamilyID == familyID {
-					defaultColumnIdx = table.orderedColIdxMap.Get(f.DefaultColumnID)
-					found = true
+					defaultColumnID = f.DefaultColumnID
 					break
 				}
 			}
-			if !found {
+			if defaultColumnID == 0 {
 				return scrub.WrapError(
 					scrub.IndexKeyDecodingError,
-					errors.AssertionFailedf("single entry value with no default column"),
+					errors.AssertionFailedf("single entry value with no default column id"),
 				)
 			}
-			prettyKey, prettyValue, err = cf.processValueSingle(table, defaultColumnIdx, prettyKey)
+			prettyKey, prettyValue, err = cf.processValueSingle(table, defaultColumnID, prettyKey)
 		}
 		if err != nil {
 			return scrub.WrapError(scrub.IndexValueDecodingError, err)
@@ -1236,35 +1232,35 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 // value in cf.machine.colvecs accordingly.
 // The key is only used for logging.
 func (cf *cFetcher) processValueSingle(
-	table *cTableInfo, idx int, prettyKeyPrefix string,
+	table *cTableInfo, colID descpb.ColumnID, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 
-	if idx < 0 {
-		// No need to unmarshal the column value. Either the column was part of
-		// the index key or it isn't needed.
+	if idx, ok := table.ColIdxMap.Get(colID); ok {
+		if cf.traceKV {
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.spec.FetchedColumns[idx].Name)
+		}
+		val := cf.machine.nextKV.Value
+		if !val.IsPresent() {
+			return prettyKey, "", nil
+		}
+		typ := cf.table.spec.FetchedColumns[idx].Type
+		err := colencoding.UnmarshalColumnValueToCol(
+			&table.da, &cf.machine.colvecs, idx, cf.machine.rowIdx, typ, val,
+		)
+		if err != nil {
+			return "", "", err
+		}
+		cf.machine.remainingValueColsByIdx.Remove(idx)
+
+		if cf.traceKV {
+			prettyValue = cf.getDatumAt(idx, cf.machine.rowIdx).String()
+		}
 		return prettyKey, prettyValue, nil
 	}
 
-	if cf.traceKV {
-		prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.spec.FetchedColumns[idx].Name)
-	}
-	val := cf.machine.nextKV.Value
-	if !val.IsPresent() {
-		return prettyKey, "", nil
-	}
-	typ := cf.table.spec.FetchedColumns[idx].Type
-	err = colencoding.UnmarshalColumnValueToCol(
-		&table.da, &cf.machine.colvecs, idx, cf.machine.rowIdx, typ, val,
-	)
-	if err != nil {
-		return "", "", err
-	}
-	cf.machine.remainingValueColsByIdx.Remove(idx)
-
-	if cf.traceKV {
-		prettyValue = cf.getDatumAt(idx, cf.machine.rowIdx).String()
-	}
+	// No need to unmarshal the column value. Either the column was part of
+	// the index key or it isn't needed.
 	return prettyKey, prettyValue, nil
 }
 
