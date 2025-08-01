@@ -33,6 +33,13 @@ var ClientCertExpirationCacheCapacity = settings.RegisterIntSetting(
 	1000,
 	settings.WithPublic)
 
+var certCacheMemLimit = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"security.client_cert.cache_memory_limit",
+	"memory limit for the client certificate expiration cache",
+	1<<29, // 512MiB
+)
+
 // certInfo holds information about a certificate, including its expiration
 // time and the last time it was seen.
 type certInfo struct {
@@ -89,8 +96,9 @@ func NewClientCertExpirationCache(
 	}
 
 	c.mu.cache = make(map[string]map[string]certInfo)
+	limit := certCacheMemLimit.Get(&st.SV)
 	c.mon = mon.NewMonitorInheritWithLimit(
-		"client-expiration-cache", 0 /* limit */, parentMon, true, /* longLiving */
+		"client-expiration-cache", limit, parentMon, true, /* longLiving */
 	)
 	c.mu.acc = c.mon.MakeBoundAccount()
 	c.mon.StartNoReserved(ctx, parentMon)
@@ -158,16 +166,19 @@ func (c *ClientCertExpirationCache) MaybeUpsert(
 	if _, ok := c.mu.cache[user]; !ok {
 		err := c.mu.acc.Grow(ctx, 2*GaugeSize)
 		if err != nil {
-			log.Ops.Warningf(ctx, "no memory available to cache cert expiry: %v", err)
+			log.Warningf(ctx, "no memory available to cache cert expiry: %v", err)
 			return
 		}
 		c.mu.cache[user] = map[string]certInfo{}
 	}
 
-	err := c.mu.acc.Grow(ctx, CertInfoSize)
-	if err != nil {
-		log.Warningf(ctx, "no memory available to cache cert expiry: %v", err)
-		c.evictLocked(ctx, user, serial)
+	// if the serial hasn't been seen, report it in the memory accounting.
+	if _, ok := c.mu.cache[user][serial]; !ok {
+		err := c.mu.acc.Grow(ctx, CertInfoSize)
+		if err != nil {
+			log.Warningf(ctx, "no memory available to cache cert expiry: %v", err)
+			return
+		}
 	}
 
 	// insert / update the certificate expiration time.
