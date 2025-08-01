@@ -111,6 +111,9 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		}
 
 		var rangeCount int
+		// We try for at least 80*9s = 12m to move replicas off of the node. The
+		// scanner interval defaults to 10 minutes, so we can't reliably expect
+		// this to go through much faster, though often it does.
 		for i := 0; i < 80; i++ {
 			err := h.QueryRow(r, `SELECT count(*) FROM `+
 				`[SHOW RANGES FROM TABLE test] WHERE $1::int = ANY(replicas)`, node).Scan(&rangeCount)
@@ -121,7 +124,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 			if rangeCount == 0 {
 				break
 			}
-			time.Sleep(3 * time.Second)
+			time.Sleep(9 * time.Second)
 		}
 		if rangeCount > 0 {
 			return errors.Errorf("n%d still has %d replicas", node, rangeCount)
