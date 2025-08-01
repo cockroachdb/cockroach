@@ -46,7 +46,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// Start the cluster in insecure mode to allow it to test both
 	// authenticated and unauthenticated code paths.
-	settings := install.MakeClusterSettings(install.SecureOption(false))
+	settings := install.MakeClusterSettings(install.SimpleSecureOption(false))
 
 	for _, initNode := range []int{2, 1} {
 		c.Wipe(ctx)

@@ -90,7 +90,11 @@ func makeGenericFailure(
 	clusterName string, l *logger.Logger, clusterOpts ClusterOptions, failureModeName string,
 ) (*GenericFailure, error) {
 	connectionInfo := clusterOpts.ConnectionInfo
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(connectionInfo.secure))
+	c, err := roachprod.GetClusterFromCache(
+		l,
+		clusterName,
+		install.SimpleSecureOption(connectionInfo.secure),
+	)
 	if err != nil {
 		return nil, err
 	}

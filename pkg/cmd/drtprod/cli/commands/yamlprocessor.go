@@ -283,7 +283,7 @@ func setupAndExecute(
 ) error {
 	logger := config.Logger
 	// Move the drtprod binary to /usr/bin to ensure it is available system-wide on the cluster.
-	err := roachprodRun(ctx, logger, monitorClusterName, "", "", true,
+	err := roachprodRun(ctx, logger, monitorClusterName, "", "", install.SimpleSecureOption(true),
 		os.Stdout, os.Stderr,
 		[]string{fmt.Sprintf("sudo cp %s /usr/bin", drtprodLocation)},
 		install.RunOptions{FailOption: install.FailSlow})
@@ -293,7 +293,7 @@ func setupAndExecute(
 
 	// Enable linger for the default user, so that the cloud subprocess is not
 	// killed when the user logs out.
-	err = roachprodRun(ctx, logger, monitorClusterName, "", "", true,
+	err = roachprodRun(ctx, logger, monitorClusterName, "", "", install.SimpleSecureOption(true),
 		os.Stdout, os.Stderr,
 		[]string{fmt.Sprintf("sudo loginctl enable-linger %s", config.SharedUser)},
 		install.RunOptions{FailOption: install.FailSlow})
@@ -318,7 +318,7 @@ func setupAndExecute(
 	}
 
 	// Run the systemd command on the remote cluster.
-	return roachprodRun(ctx, logger, monitorClusterName, "", "", true,
+	return roachprodRun(ctx, logger, monitorClusterName, "", "", install.SimpleSecureOption(true),
 		os.Stdout, os.Stderr,
 		[]string{executeArgs},
 		install.RunOptions{FailOption: install.FailSlow})
@@ -340,7 +340,7 @@ func uploadAllDependentFiles(
 			if strings.Contains(fl, "/") {
 				dirLocation := filepath.Dir(fl)
 				// Use roachprod to create the directory on the remote.
-				err := roachprodRun(ctx, logger, monitorClusterName, "", "", true,
+				err := roachprodRun(ctx, logger, monitorClusterName, "", "", install.SimpleSecureOption(true),
 					os.Stdout, os.Stderr,
 					[]string{fmt.Sprintf("mkdir -p %s", dirLocation)},
 					install.RunOptions{FailOption: install.FailSlow})
