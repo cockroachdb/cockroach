@@ -13,6 +13,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/clientcert"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -196,6 +198,13 @@ func (cm *CertificateManager) RegisterSignalHandler(
 	})
 }
 
+var certCacheMemLimit = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"security.client_cert.cache_memory_limit",
+	"memory limit for the client certificate expiration cache",
+	1<<29, // 512MiB
+)
+
 // RegisterExpirationCache registers a cache for client certificate expiration.
 // It is called during server startup.
 func (cm *CertificateManager) RegisterExpirationCache(
@@ -203,8 +212,10 @@ func (cm *CertificateManager) RegisterExpirationCache(
 	stopper *stop.Stopper,
 	timeSrc timeutil.TimeSource,
 	parentMon *mon.BytesMonitor,
+	st *cluster.Settings,
 ) error {
-	m := mon.NewMonitorInheritWithLimit(mon.MakeName("client-expiration-caches"), 0 /* limit */, parentMon, true /* longLiving */)
+	limit := certCacheMemLimit.Get(&st.SV)
+	m := mon.NewMonitorInheritWithLimit(mon.MakeName("client-expiration-caches"), limit, parentMon, true /* longLiving */)
 	acc := m.MakeConcurrentBoundAccount()
 	m.StartNoReserved(ctx, parentMon)
 
