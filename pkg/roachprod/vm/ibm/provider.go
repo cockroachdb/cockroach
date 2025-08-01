@@ -72,7 +72,7 @@ var (
 // The default region used for non-geo clusters.
 // Leave this field empty to randomize the region for non-geo clusters.
 // This could be useful in case of quota issues in the default region.
-const defaultRegionForNonGeoClusters = "ca-tor"
+const defaultRegionForNonGeoClusters = ""
 
 var (
 	// defaultZones is the list of availability zones agreed upon with IBM.
