@@ -324,6 +324,7 @@ go_test(
         "//pkg/util/intsets",
         "//pkg/util/ioctx",
         "//pkg/util/json",
+        "//pkg/util/keysutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
