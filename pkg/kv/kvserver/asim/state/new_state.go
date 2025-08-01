@@ -39,21 +39,21 @@ func evenDistribution(numOfStores int) []float64 {
 	return distribution
 }
 
-func skewedDistribution(numOfStores, k int) []float64 {
+func skewedDistribution(numOfStores int) []float64 {
 	weights := make([]float64, numOfStores)
-	var total float64
-	// Compute weights.
+	// Sum of weights. Since weights computed won't add up to 1, we normalize it
+	// by dividing the sum of weights. Sum is pre-computed here using the partial
+	// sum formula of a geometric series: sum of 2^(-i) from i = 0 to k gives
+	// 2-2^(-k).
+	// Example: given 3 stores, cur(weights before normalization) is 1, 0.5, 0.25,
+	// sum is 2.0-2^(-2) = 1.75. After normalization, weights are 0.57, 0.29,
+	// 0.14.
+	sum := 2.0 - math.Pow(2, float64(-(numOfStores-1)))
+	cur := float64(1)
 	for i := 0; i < numOfStores; i++ {
-		// weight[0] = 2^(n-1)
-		// weight[1] = 2^(n-2)
-		// ...
-		// weight[n-1] = 2^0
-		weights[i] = math.Pow(2, float64(numOfStores-i-1))
-		total += weights[i]
-	}
-	// Normalize to get ratios.
-	for i := 0; i < numOfStores; i++ {
-		weights[i] /= total
+		// cur is 1, 0.5, 0.25, ...
+		weights[i] = cur / sum
+		cur /= 2
 	}
 	return weights
 }
@@ -284,7 +284,7 @@ func makeStoreList(stores int) []StoreID {
 func RangesInfoSkewedDistribution(
 	stores int, ranges int, minKey int64, maxKey int64, replicationFactor int, rangeSize int64,
 ) RangesInfo {
-	distribution := skewedDistribution(stores, ranges)
+	distribution := skewedDistribution(stores)
 	storeList := makeStoreList(stores)
 
 	return RangesInfoWithDistribution(
