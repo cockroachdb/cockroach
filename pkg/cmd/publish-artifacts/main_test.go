@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -21,25 +22,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type mockStorage struct {
-	puts []string
+type mockGCSProvider struct {
+	bucket string
+	gets   []string
+	puts   []string
 }
 
-var _ release.ObjectPutGetter = (*mockStorage)(nil)
+var _ release.ObjectPutGetter = (*mockGCSProvider)(nil)
 
-func (s *mockStorage) Bucket() string {
-	return "edge-binaries-bucket"
+func (s *mockGCSProvider) Bucket() string {
+	return s.bucket
 }
 
-func (s mockStorage) URL(key string) string {
-	return "storage://bucket/" + key
+func (s mockGCSProvider) URL(key string) string {
+	return "unused"
 }
 
-func (s *mockStorage) GetObject(*release.GetObjectInput) (*release.GetObjectOutput, error) {
-	return &release.GetObjectOutput{}, nil
+func (s *mockGCSProvider) GetObject(i *release.GetObjectInput) (*release.GetObjectOutput, error) {
+	url := fmt.Sprintf(`gs://%s/%s`, s.Bucket(), *i.Key)
+	s.gets = append(s.gets, url)
+	o := &release.GetObjectOutput{
+		Body: io.NopCloser(bytes.NewBufferString(url)),
+	}
+	return o, nil
 }
 
-func (s *mockStorage) PutObject(i *release.PutObjectInput) error {
+func (s *mockGCSProvider) PutObject(i *release.PutObjectInput) error {
 	url := fmt.Sprintf(`gs://%s/%s`, s.Bucket(), *i.Key)
 	if i.CacheControl != nil {
 		url += `/` + *i.CacheControl
@@ -68,13 +76,17 @@ func (s *mockStorage) PutObject(i *release.PutObjectInput) error {
 type mockExecRunner struct {
 	fakeBazelBin string
 	cmds         []string
+	pkgDir       string
 }
 
 func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 	if r.fakeBazelBin == "" {
 		panic("r.fakeBazelBin not set")
 	}
-	if c.Dir == `` {
+	if r.pkgDir == "" {
+		panic("r.pkgDir not set")
+	}
+	if c.Dir == "" {
 		return nil, fmt.Errorf("`Dir` must be specified")
 	}
 	cmd := fmt.Sprintf("env=%s args=%s", c.Env, shellescape.QuoteCommand(c.Args))
@@ -123,6 +135,8 @@ func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 			}
 		}
 		paths = append(paths, path, pathSQL)
+		paths = append(paths, filepath.Join(r.pkgDir, "LICENSE"))
+		paths = append(paths, filepath.Join(r.pkgDir, "licenses", "THIRD-PARTY-NOTICES.txt"))
 		ext := release.SharedLibraryExtensionFromPlatform(platform)
 		if platform != release.PlatformMacOSArm && platform != release.PlatformWindows {
 			for _, lib := range release.CRDBSharedLibraries {
@@ -147,14 +161,14 @@ func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 func TestPublish(t *testing.T) {
 	tests := []struct {
 		name         string
-		flags        runFlags
+		flags        edgeRunFlags
 		expectedCmds []string
 		expectedPuts []string
 		platforms    release.Platforms
 	}{
 		{
 			name: `release`,
-			flags: runFlags{
+			flags: edgeRunFlags{
 				branch: "master",
 				sha:    "1234567890abcdef",
 			},
@@ -314,7 +328,7 @@ func TestPublish(t *testing.T) {
 		},
 		{
 			name: `release linux-amd64`,
-			flags: runFlags{
+			flags: edgeRunFlags{
 				branch: "master",
 				sha:    "1234567890abcdef",
 			},
@@ -356,7 +370,7 @@ func TestPublish(t *testing.T) {
 		},
 		{
 			name: `release linux only`,
-			flags: runFlags{
+			flags: edgeRunFlags{
 				branch: "master",
 				sha:    "1234567890abcdef",
 			},
@@ -453,16 +467,197 @@ func TestPublish(t *testing.T) {
 			dir, cleanup := testutils.TempDir(t)
 			defer cleanup()
 
-			var gcs mockStorage
+			gcs := mockGCSProvider{bucket: "edge-binaries-bucket"}
 			var runner mockExecRunner
 			fakeBazelBin, cleanup := testutils.TempDir(t)
 			defer cleanup()
 			runner.fakeBazelBin = fakeBazelBin
+			runner.pkgDir = dir
 			flags := test.flags
 			flags.pkgDir = dir
 			execFn := release.ExecFn{MockExecFn: runner.run}
-			run([]release.ObjectPutGetter{&gcs}, test.platforms, flags, execFn)
+			runEdgeImpl(&gcs, test.platforms, flags, execFn)
 			require.Equal(t, test.expectedCmds, runner.cmds)
+			require.Equal(t, test.expectedPuts, gcs.puts)
+		})
+	}
+}
+
+func TestRelease(t *testing.T) {
+	tests := []struct {
+		name         string
+		flags        releaseRunFlags
+		expectedCmds []string
+		expectedGets []string
+		expectedPuts []string
+		platforms    release.Platforms
+	}{
+		{
+			name: `release`,
+			flags: releaseRunFlags{
+				branch:                 `v1.1.1-alpha.1`,
+				cockroachArchivePrefix: "cockroach",
+			},
+			expectedCmds: []string{
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
+				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
+				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
+				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase",
+				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64-fips version",
+				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64-fips",
+				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64-fips",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config" +
+					"=crossmacosarmbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql --enable_runfiles " +
+					"'--workspace_status_command=." +
+					"/build/bazelutil/stamp.sh -t x86_64-w64-mingw32 -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase",
+			},
+			expectedGets: nil,
+			expectedPuts: []string{
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.linux-amd64.tgz " +
+					"CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.linux-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.linux-amd64.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.linux-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.linux-amd64-fips.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.linux-amd64-fips.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.linux-amd64-fips.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.linux-amd64-fips.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.linux-arm64.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.linux-arm64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.linux-arm64.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.linux-arm64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.linux-s390x.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.linux-s390x.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.linux-s390x.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.linux-s390x.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.darwin-10.9-amd64.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.darwin-10.9-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.darwin-10.9-amd64.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.darwin-10.9-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.darwin-11.0-arm64.unsigned.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.darwin-11.0-arm64.unsigned.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.darwin-11.0-arm64.unsigned.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.darwin-11.0-arm64.unsigned.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.windows-6.2-amd64.zip CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.windows-6.2-amd64.zip.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.windows-6.2-amd64.zip CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.windows-6.2-amd64.zip.sha256sum CONTENTS <sha256sum>",
+			},
+			platforms: release.DefaultPlatforms(),
+		},
+		{
+			name: `release no telemetry`,
+			flags: releaseRunFlags{
+				branch:                 `v1.1.1-alpha.1`,
+				cockroachArchivePrefix: "cockroach-telemetry-disabled",
+				telemetryDisabled:      true,
+			},
+			expectedCmds: []string{
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
+				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
+				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
+				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase",
+				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64-fips version",
+				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64-fips",
+				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64-fips",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config" +
+					"=crossmacosarmbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql --enable_runfiles " +
+					"'--workspace_status_command=." +
+					"/build/bazelutil/stamp.sh -t x86_64-w64-mingw32 -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase",
+			},
+			expectedGets: nil,
+			expectedPuts: []string{
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-amd64.tgz " +
+					"CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-amd64-fips.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-amd64-fips.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-arm64.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-arm64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-s390x.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.linux-s390x.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.darwin-10.9-amd64.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.darwin-10.9-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.darwin-11.0-arm64.unsigned.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.darwin-11.0-arm64.unsigned.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.windows-6.2-amd64.zip CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-telemetry-disabled-v1.1.1-alpha.1.windows-6.2-amd64.zip.sha256sum CONTENTS <sha256sum>",
+			},
+			platforms: release.DefaultPlatforms(),
+		},
+		{
+			name: `release linux-amd64`,
+			flags: releaseRunFlags{
+				branch:                 `v1.1.1-alpha.1`,
+				cockroachArchivePrefix: "cockroach",
+			},
+			expectedCmds: []string{
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
+				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
+				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
+				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64",
+			},
+			expectedGets: nil,
+			expectedPuts: []string{
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.linux-amd64.tgz " +
+					"CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-v1.1.1-alpha.1.linux-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.linux-amd64.tgz CONTENTS <binary stuff>",
+				"gs://release-binaries-bucket/cockroach-sql-v1.1.1-alpha.1.linux-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+			},
+			platforms: release.Platforms{release.PlatformLinux},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir, cleanup := testutils.TempDir(t)
+			defer cleanup()
+
+			gcs := mockGCSProvider{bucket: "release-binaries-bucket"}
+			var runner mockExecRunner
+			fakeBazelBin, cleanup := testutils.TempDir(t)
+			defer cleanup()
+			runner.fakeBazelBin = fakeBazelBin
+			runner.pkgDir = dir
+			flags := test.flags
+			flags.pkgDir = dir
+			execFn := release.ExecFn{MockExecFn: runner.run}
+			err := runReleaseImpl(&gcs, test.platforms, flags, execFn)
+			require.NoError(t, err)
+			require.Equal(t, test.expectedCmds, runner.cmds)
+			if test.expectedGets != nil {
+				require.Equal(t, test.expectedGets, gcs.gets)
+			}
 			require.Equal(t, test.expectedPuts, gcs.puts)
 		})
 	}
