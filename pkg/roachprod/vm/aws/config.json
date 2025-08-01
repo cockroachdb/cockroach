@@ -22,7 +22,7 @@
       {
         "ami_id": "ami-09a81b370b76de6a2",
         "ami_id_arm64": "ami-09b23e84684bb7149",
-        "ami_id_fips": "ami-09bfd307c31e4669c",
+        "ami_id_fips": "ami-01e3f6082e922d164",
         "region": "ap-northeast-1",
         "security_group": "sg-05ab4b547f9ab7d4d",
         "subnets": {
@@ -34,7 +34,7 @@
       {
         "ami_id": "ami-086cae3329a3f7d75",
         "ami_id_arm64": "ami-0f8536fc6ad2ba267",
-        "ami_id_fips": "ami-0dd93e9ad24d01f62",
+        "ami_id_fips": "ami-066bd0255dc90df56",
         "region": "ap-northeast-2",
         "security_group": "sg-0830cc9735e5c8ba9",
         "subnets": {
@@ -47,7 +47,7 @@
       {
         "ami_id": "ami-0287a05f0ef0e9d9a",
         "ami_id_arm64": "ami-0b6581fde9e6e7779",
-        "ami_id_fips": "ami-04ea778eedaf3a8df",
+        "ami_id_fips": "ami-05056546ceb95e702",
         "region": "ap-south-1",
         "security_group": "sg-01efad44634ab8fe4",
         "subnets": {
@@ -59,7 +59,7 @@
       {
         "ami_id": "ami-078c1149d8ad719a7",
         "ami_id_arm64": "ami-0977667a17a0fa88c",
-        "ami_id_fips": "ami-0145aa2d8188220bc",
+        "ami_id_fips": "ami-077c86e61bf5fd8f5",
         "region": "ap-southeast-1",
         "security_group": "sg-083edfd46fceb1253",
         "subnets": {
@@ -71,7 +71,7 @@
       {
         "ami_id": "ami-0df4b2961410d4cff",
         "ami_id_arm64": "ami-0c595b8bc24551ef4",
-        "ami_id_fips": "ami-066f9bd76e75011be",
+        "ami_id_fips": "ami-0a8c476bd2b7c065c",
         "region": "ap-southeast-2",
         "security_group": "sg-095d6c8fccf08e948",
         "subnets": {
@@ -83,7 +83,7 @@
       {
         "ami_id": "ami-06873c81b882339ac",
         "ami_id_arm64": "ami-01a786eb497a27d2a",
-        "ami_id_fips": "ami-0713fd833b63915e3",
+        "ami_id_fips": "ami-093d3c0f96dc03b2b",
         "region": "ca-central-1",
         "security_group": "sg-0dcf7eede3017b0aa",
         "subnets": {
@@ -95,7 +95,7 @@
       {
         "ami_id": "ami-06dd92ecc74fdfb36",
         "ami_id_arm64": "ami-0479653c00e0a5e59",
-        "ami_id_fips": "ami-02cc4114e1c012f9c",
+        "ami_id_fips": "ami-07631fa2c26d7f427",
         "region": "eu-central-1",
         "security_group": "sg-0276f961a8324e3eb",
         "subnets": {
@@ -107,7 +107,7 @@
       {
         "ami_id": "ami-0694d931cee176e7d",
         "ami_id_arm64": "ami-0d3407241b2b6ec62",
-        "ami_id_fips": "ami-014603057f9da7d50",
+        "ami_id_fips": "ami-00e7276a37d7da8b8",
         "region": "eu-west-1",
         "security_group": "sg-0a087a28f17cfcbd8",
         "subnets": {
@@ -119,7 +119,7 @@
       {
         "ami_id": "ami-0505148b3591e4c07",
         "ami_id_arm64": "ami-025db40ba9581d621",
-        "ami_id_fips": "ami-0fcf0f89559d79e80",
+        "ami_id_fips": "ami-0db38e69725355104",
         "region": "eu-west-2",
         "security_group": "sg-00d75d0d2b71ac876",
         "subnets": {
@@ -131,7 +131,7 @@
       {
         "ami_id": "ami-00983e8a26e4c9bd9",
         "ami_id_arm64": "ami-07461eab9cc80a86e",
-        "ami_id_fips": "ami-03ecf0588cc1bd0f4",
+        "ami_id_fips": "ami-071c8f15c0ed1852e",
         "region": "eu-west-3",
         "security_group": "sg-0c763f12b1308c24d",
         "subnets": {
@@ -143,7 +143,7 @@
       {
         "ami_id": "ami-0b6c2d49148000cd5",
         "ami_id_arm64": "ami-04c2ca7ffc29a0b58",
-        "ami_id_fips": "ami-0977da93caf83799e",
+        "ami_id_fips": "ami-050196d0201d5f1d7",
         "region": "sa-east-1",
         "security_group": "sg-030f43c863595e7b0",
         "subnets": {
@@ -155,7 +155,7 @@
       {
         "ami_id": "ami-0fc5d935ebf8bc3bc",
         "ami_id_arm64": "ami-016485166ec7fa705",
-        "ami_id_fips": "ami-03cf7ddd346310b5f",
+        "ami_id_fips": "ami-0502e7023bd6f89b0",
         "region": "us-east-1",
         "security_group": "sg-0dd4865c73fd585c2",
         "subnets": {
@@ -170,7 +170,7 @@
       {
         "ami_id": "ami-0e83be366243f524a",
         "ami_id_arm64": "ami-05983a09f7dc1c18f",
-        "ami_id_fips": "ami-08692707dfc6f8b64",
+        "ami_id_fips": "ami-0881e97f9a4ed1e22",
         "region": "us-east-2",
         "security_group": "sg-04d72b57e29d671f1",
         "subnets": {
@@ -182,7 +182,7 @@
       {
         "ami_id": "ami-0cbd40f694b804622",
         "ami_id_arm64": "ami-0728ec0041b1d38ac",
-        "ami_id_fips": "ami-026c3cf51388880d6",
+        "ami_id_fips": "ami-06cf9fa84fc96e296",
         "region": "us-west-1",
         "security_group": "sg-04d73ccef8fff27f2",
         "subnets": {
@@ -193,7 +193,7 @@
       {
         "ami_id": "ami-0efcece6bed30fd98",
         "ami_id_arm64": "ami-03fd0aa14bd102718",
-        "ami_id_fips": "ami-0dc12dcaaa9dcf99d",
+        "ami_id_fips": "ami-0048e3b137d0c8372",
         "region": "us-west-2",
         "security_group": "sg-091c4d21907a35150",
         "subnets": {

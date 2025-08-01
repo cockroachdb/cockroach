@@ -292,10 +292,9 @@ sudo sh -c 'echo "MaxStartups 64:30:128" >> /etc/ssh/sshd_config'
 # https://github.com/cockroachdb/cockroach/issues/36929
 sudo sed -i'' 's/LogLevel.*$/LogLevel DEBUG3/' /etc/ssh/sshd_config
 
-# FIPS is still on Ubuntu 20.04 however, so don't enable if using FIPS.
-{{ if not .EnableFIPS }}
+# RSA SHA1 is no longer supported in the latest versions of OpenSSH. Existing tooling, e.g.,
+# jepsen still relies on it for authentication, so we need to enable it.
 sudo sh -c 'echo "PubkeyAcceptedAlgorithms +ssh-rsa" >> /etc/ssh/sshd_config'
-{{ end }}
 
 sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
 sudo sed -i 's/TCPKeepAlive no/TCPKeepAlive yes/g' /etc/ssh/sshd_config
@@ -307,10 +306,7 @@ const startupScriptTcpdump = `
 # N.B. Ubuntu 22.04 changed the location of tcpdump to /usr/bin. Since existing tooling, e.g.,
 # jepsen uses /usr/sbin, we create a symlink.
 # See https://ubuntu.pkgs.org/22.04/ubuntu-main-amd64/tcpdump_4.99.1-3build2_amd64.deb.html
-# FIPS is still on Ubuntu 20.04 however, so don't create if using FIPS.
-{{ if not .EnableFIPS }}
-sudo ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
-{{ end }}`
+sudo ln -s /usr/bin/tcpdump /usr/sbin/tcpdump`
 
 const startupScriptTimersAndServices = `
 for timer in apt-daily-upgrade.timer apt-daily.timer e2scrub_all.timer fstrim.timer man-db.timer e2scrub_all.timer ; do
