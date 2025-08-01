@@ -7370,6 +7370,13 @@ CREATE TABLE crdb_internal.active_range_feeds (
   last_err STRING
 );`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		privileged, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA, p.User())
+		if err != nil {
+			return err
+		}
+		if !privileged {
+			return nil
+		}
 		return p.execCfg.DistSender.ForEachActiveRangeFeed(
 			func(rfCtx kvcoord.RangeFeedContext, rf kvcoord.PartialRangeFeed) error {
 				var lastEvent tree.Datum
@@ -9517,7 +9524,7 @@ CREATE TABLE crdb_internal.logical_replication_node_processors (
 	state STRING,
 	recv_time INTERVAL,
 	last_recv_time INTERVAL,
-	ingest_time INTERVAL, 
+	ingest_time INTERVAL,
 	flush_time INTERVAL,
 	flush_count INT,
 	flush_kvs INT,
