@@ -140,12 +140,6 @@ func (lq *leaseQueue) process(
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, transferOp.Target)
 		}
 
-		// TODO(wenyihu6): Initially, change.Op.ApplyImpact was used here. This was
-		// a problem since AllocationTransferLeaseOp.ApplyImpact was left
-		// unimplemented. We should either implement
-		// AllocationTransferLeaseOp.ApplyImpact correctly or remove the use of
-		// ApplyImpact entirely. The replicate queue does not have this issue since
-		// it uses rq.TransferLease, which updates the local store pool directly.
 		lq.storePool.UpdateLocalStoresAfterLeaseTransfer(
 			transferOp.Source.StoreID, transferOp.Target.StoreID, transferOp.Usage)
 	}
