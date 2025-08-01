@@ -1107,6 +1107,9 @@ type Manager struct {
 
 		// rangeFeed current range feed on system.descriptors.
 		rangeFeed *rangefeed.RangeFeed
+
+		// rangeFeedRestartInProgress tracks if a range feed restart is in progress.
+		rangeFeedRestartInProgress bool
 	}
 
 	// closeTimeStamp for the range feed, which is the timestamp
@@ -1786,6 +1789,19 @@ func (m *Manager) GetSafeReplicationTS() hlc.Timestamp {
 	return m.closeTimestamp.Load().(hlc.Timestamp)
 }
 
+// closeRangeFeed closes the currently open range feed, which will involve
+// temporarily releasing the lease manager mutex.
+func (m *Manager) closeRangeFeedLocked() {
+	// We cannot terminate the range feed while holding the lease manager
+	// lock, since there may be event handlers that need the lock that need to
+	// drain.
+	oldRangeFeed := m.mu.rangeFeed
+	m.mu.rangeFeed = nil
+	m.mu.Unlock() // nolint:deferunlockcheck
+	oldRangeFeed.Close()
+	m.mu.Lock() // nolint:deferunlockcheck
+}
+
 // watchForUpdates will watch a rangefeed on the system.descriptor table for
 // updates.
 func (m *Manager) watchForUpdates(ctx context.Context) {
@@ -1847,14 +1863,12 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		m.closeTimestamp.Store(checkpoint.ResolvedTS)
 	}
 
-	// If we already started a range feed terminate it first
+	// Assert that the range feed is already terminated.
 	if m.mu.rangeFeed != nil {
-		m.mu.rangeFeed.Close()
-		m.mu.rangeFeed = nil
-		if m.testingKnobs.RangeFeedResetChannel != nil {
-			close(m.testingKnobs.RangeFeedResetChannel)
-			m.testingKnobs.RangeFeedResetChannel = nil
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("range feed was not closed before a restart attempt"))
 		}
+		log.Warningf(ctx, "range feed was not closed before a restart attempt")
 	}
 	// Ignore errors here because they indicate that the server is shutting down.
 	// Also note that the range feed automatically shuts down when the server
@@ -2011,12 +2025,28 @@ func (m *Manager) handleRangeFeedError(ctx context.Context) {
 }
 
 func (m *Manager) restartLeasingRangeFeedLocked(ctx context.Context) {
+	// If someone else is already starting a range feed then exit early.
+	if m.mu.rangeFeedRestartInProgress {
+		return
+	}
 	log.Warning(ctx, "attempting restart of leasing range feed")
+	// We will temporarily release the lock closing the range feed,
+	// in case things need to drain before termination. It is possible for
+	// another restart to enter once we release the lock.
+	m.mu.rangeFeedRestartInProgress = true
+	if m.mu.rangeFeed != nil {
+		m.closeRangeFeedLocked()
+		if m.testingKnobs.RangeFeedResetChannel != nil {
+			close(m.testingKnobs.RangeFeedResetChannel)
+			m.testingKnobs.RangeFeedResetChannel = nil
+		}
+	}
 	// Attempt a range feed restart if it has been down too long.
 	m.watchForUpdates(ctx)
 	// Track when the last restart occurred.
 	m.mu.rangeFeedIsUnavailableAt = timeutil.Now()
 	m.mu.rangeFeedCheckpoints = 0
+	m.mu.rangeFeedRestartInProgress = false
 }
 
 // cleanupExpiredSessionLeases expires session based leases marked for removal,

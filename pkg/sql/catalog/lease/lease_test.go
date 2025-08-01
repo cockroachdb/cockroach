@@ -3189,7 +3189,8 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuress(t)
+	// Too slow for execution under race.
+	skip.UnderRace(t)
 
 	settings := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
