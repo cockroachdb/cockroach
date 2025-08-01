@@ -634,6 +634,7 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 |--|--|--|
 | `SettingName` | The name of the affected cluster setting. | no |
 | `Value` | The new value of the cluster setting. | yes |
+| `DefaultValue` | The current default value of the cluster setting. | yes |
 
 
 #### Common fields
