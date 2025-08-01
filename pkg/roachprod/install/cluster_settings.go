@@ -9,6 +9,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/errors"
 )
 
 // ClusterSettings contains various knobs that affect operations on a cluster.
@@ -25,6 +27,15 @@ type ClusterSettings struct {
 	// ClusterSettings are, eh, actual cluster settings, i.e.
 	// SET CLUSTER SETTING foo = 'bar'. The name clash is unfortunate.
 	ClusterSettings map[string]string
+
+	// This is used to pass the CLI flag
+	secureFlagsOpt SecureOption
+}
+
+type secureFlagsOpt struct {
+	ForcedSecure   bool
+	ForcedInsecure bool
+	DefaultSecure  bool
 }
 
 // ClusterSettingOption is the interface satisfied by options to MakeClusterSettings.
@@ -62,11 +73,80 @@ func (o PGUrlCertsDirOption) apply(settings *ClusterSettings) {
 	settings.PGUrlCertsDir = string(o)
 }
 
-// SecureOption is passed to create a secure cluster.
-type SecureOption bool
+// ComplexSecureOption is a complex type for secure options that keeps track of
+// the user's intent regarding security.
+type ComplexSecureOption secureFlagsOpt
 
-func (o SecureOption) apply(settings *ClusterSettings) {
-	settings.Secure = bool(o)
+func (o ComplexSecureOption) apply(settings *ClusterSettings) {
+	settings.secureFlagsOpt = o
+
+	// We precompute the Secure field with the default value or with forced flags.
+	// NewSyncedCluster will call ComputeSecure() to compute the Secure value
+	// based on the cluster settings and might override it based on the cluster
+	// settings (if forced flags were passed).
+	settings.Secure = o.DefaultSecure
+	if o.ForcedSecure {
+		settings.Secure = true
+	} else if o.ForcedInsecure {
+		settings.Secure = false
+	}
+}
+
+// overrideBasedOnClusterSettings sets the ClusterSetting's Secure flag based
+// on the ComplexSecureOption value on the SyncedCluster struct and the cluster
+// settings.
+func (o ComplexSecureOption) overrideBasedOnClusterSettings(c *SyncedCluster) error {
+
+	switch {
+	case o.ForcedSecure && o.ForcedInsecure:
+		return errors.New("cannot set both secure and insecure to true")
+	case o.ForcedSecure:
+		c.Secure = true
+	case o.ForcedInsecure:
+		c.Secure = false
+	default:
+		// In case the cluster is a GCE cluster in the cockroach-ephemeral project,
+		// we make it insecure by default. This is to avoid dealing with certificates
+		// for ephemeral engineering test clusters.
+		if len(c.Clouds()) == 1 && c.Clouds()[0] == fmt.Sprintf("%s:%s", gce.ProviderName, gce.DefaultProjectID) {
+			fmt.Printf("WARN: cluster %s defaults to insecure, because it is in project %s\n",
+				c.Name,
+				gce.DefaultProjectID,
+			)
+			c.Secure = false
+			return nil
+		}
+
+		// In every other case, we use the CLI flag default value.
+		c.Secure = o.DefaultSecure
+	}
+
+	return nil
+}
+
+// SimpleSecureOption is a simple type that simplifies setting the secure flags
+// in the cluster settings without keeping track of --secure or --insecure options.
+type SimpleSecureOption bool
+
+func (o SimpleSecureOption) apply(settings *ClusterSettings) {
+	if bool(o) {
+		settings.Secure = true
+	} else {
+		settings.Secure = false
+
+	}
+}
+
+// overrideBasedOnClusterSettings satisfies the SecureOption interface and sets
+// the Secure flag based on the SimpleSecureOption value.
+func (o SimpleSecureOption) overrideBasedOnClusterSettings(c *SyncedCluster) error {
+	c.Secure = bool(o)
+	return nil
+}
+
+type SecureOption interface {
+	ClusterSettingOption
+	overrideBasedOnClusterSettings(c *SyncedCluster) error
 }
 
 // UseTreeDistOption is passed to use treedist copy algorithm.

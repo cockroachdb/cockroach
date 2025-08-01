@@ -26,7 +26,7 @@ func InitRoachprod() {
 func RoachprodRun(clusterName string, l *logger.Logger, cmdArray []string) error {
 	// Execute the roachprod command with the provided context, logger, cluster name, and options.
 	return roachprod.Run(
-		context.Background(), l, clusterName, "", "", false,
+		context.Background(), l, clusterName, "", "", install.SimpleSecureOption(false),
 		os.Stdout, os.Stderr, cmdArray, install.DefaultRunOptions(),
 	)
 }

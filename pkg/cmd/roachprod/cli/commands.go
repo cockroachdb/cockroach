@@ -716,7 +716,7 @@ cluster setting will be set to its value.
 			clusterSettingsOpts := []install.ClusterSettingOption{
 				install.TagOption(tag),
 				install.PGUrlCertsDirOption(pgurlCertsDir),
-				install.SecureOption(isSecure),
+				isSecure,
 				install.UseTreeDistOption(useTreeDist),
 				install.EnvOption(nodeEnv),
 				install.NumRacksOption(numRacks),
@@ -753,7 +753,7 @@ Note that if the cluster is started in insecure mode, set the insecure mode here
 		Args: cobra.ExactArgs(1),
 		Run: wrap(func(cmd *cobra.Command, args []string) error {
 			clusterSettingsOpts := []install.ClusterSettingOption{
-				install.SecureOption(isSecure),
+				isSecure,
 			}
 			return roachprod.UpdateTargets(context.Background(), config.Logger, args[0], clusterSettingsOpts...)
 		}),
@@ -837,7 +837,7 @@ environment variables to the cockroach process.
 			clusterSettingsOpts := []install.ClusterSettingOption{
 				install.TagOption(tag),
 				install.PGUrlCertsDirOption(pgurlCertsDir),
-				install.SecureOption(isSecure),
+				isSecure,
 				install.UseTreeDistOption(useTreeDist),
 				install.EnvOption(nodeEnv),
 				install.NumRacksOption(numRacks),
@@ -931,7 +931,7 @@ Currently available application options are:
 				versionArg = args[2]
 			}
 			return roachprod.Deploy(context.Background(), config.Logger, args[0], args[1],
-				versionArg, pathToBinary, pause, deploySig, deployWaitFlag, deployGracePeriod, secure)
+				versionArg, pathToBinary, pause, deploySig, deployWaitFlag, deployGracePeriod, isSecure)
 		}),
 	}
 	deployCmd.Flags().DurationVar(&pause, "pause", pause, "duration to pause between node restarts")
@@ -1703,7 +1703,7 @@ roachprod grafana-annotation grafana.testeng.crdb.io example-annotation-event --
 				return errors.Newf("Too many arguments for --time-range, expected 1 or 2, got: %d", len(grafanaTimeRange))
 			}
 
-			return roachprod.AddGrafanaAnnotation(context.Background(), args[0] /* host */, isSecure, req)
+			return roachprod.AddGrafanaAnnotation(context.Background(), args[0] /* host */, isSecure.DefaultSecure, req)
 		}),
 	}
 	initGrafanaAnnotationCmdFlags(grafanaAnnotationCmd)

@@ -1363,7 +1363,8 @@ func (c *clusterImpl) FetchDebugZip(
 		for _, node := range nodes {
 			pgURLOpts := roachprod.PGURLOptions{
 				// `cockroach debug zip` does not support non root authentication.
-				Auth: install.AuthRootCert,
+				Auth:   install.AuthRootCert,
+				Secure: install.SimpleSecureOption(c.IsSecure()),
 				// request the system tenant specifically in case the test
 				// changed the default virtual cluster.
 				VirtualClusterName: install.SystemInterfaceName,
@@ -2082,7 +2083,7 @@ func (c *clusterImpl) configureClusterSettingOptions(
 	return []install.ClusterSettingOption{
 		install.TagOption(settings.Tag),
 		install.PGUrlCertsDirOption(settings.PGUrlCertsDir),
-		install.SecureOption(settings.Secure),
+		install.SimpleSecureOption(settings.Secure),
 		install.UseTreeDistOption(settings.UseTreeDist),
 		install.EnvOption(settings.Env),
 		install.NumRacksOption(settings.NumRacks),
@@ -2256,7 +2257,7 @@ func (c *clusterImpl) StopServiceForVirtualClusterE(
 	}
 
 	return roachprod.StopServiceForVirtualCluster(
-		ctx, l, c.MakeNodes(nodes), c.IsSecure(), stopOpts.RoachprodOpts,
+		ctx, l, c.MakeNodes(nodes), install.SimpleSecureOption(c.IsSecure()), stopOpts.RoachprodOpts,
 	)
 }
 
@@ -2477,7 +2478,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 		DefaultVirtualCluster: c.defaultVirtualCluster,
 	}
 	if err := roachprod.Run(
-		ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(),
+		ctx, l, c.MakeNodes(nodes), "", "", install.SimpleSecureOption(c.IsSecure()),
 		l.Stdout, l.Stderr, args, options.WithExpanderConfig(expanderCfg).WithLogExpandedCommand(),
 	); err != nil {
 		if err := ctx.Err(); err != nil {
@@ -2548,7 +2549,9 @@ func (c *clusterImpl) RunWithDetails(
 	}
 	results, err := roachprod.RunWithDetails(
 		ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "", /* processTag */
-		c.IsSecure(), args, options.WithExpanderConfig(expanderCfg).WithLogExpandedCommand(),
+		install.SimpleSecureOption(c.IsSecure()),
+		args,
+		options.WithExpanderConfig(expanderCfg).WithLogExpandedCommand(),
 	)
 
 	var logFileFull string
@@ -2621,7 +2624,7 @@ func (c *clusterImpl) Install(
 func (c *clusterImpl) pgURLErr(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts roachprod.PGURLOptions,
 ) ([]string, error) {
-	opts.Secure = c.IsSecure()
+	opts.Secure = install.SimpleSecureOption(c.IsSecure())
 
 	// Use CockroachNodeCertsDir if it's an internal url with access to the node.
 	certsDir := install.CockroachNodeCertsDir
@@ -2731,7 +2734,8 @@ func (c *clusterImpl) SQLPorts(
 	sqlInstance int,
 ) ([]int, error) {
 	return roachprod.SQLPorts(
-		ctx, l, c.MakeNodes(nodes), c.IsSecure(), c.virtualCluster(tenant), sqlInstance,
+		ctx, l, c.MakeNodes(nodes), install.SimpleSecureOption(c.IsSecure()),
+		c.virtualCluster(tenant), sqlInstance,
 	)
 }
 
@@ -2743,7 +2747,8 @@ func (c *clusterImpl) AdminUIPorts(
 	sqlInstance int,
 ) ([]int, error) {
 	return roachprod.AdminPorts(
-		ctx, l, c.MakeNodes(nodes), c.IsSecure(), c.virtualCluster(tenant), sqlInstance,
+		ctx, l, c.MakeNodes(nodes), install.SimpleSecureOption(c.IsSecure()),
+		c.virtualCluster(tenant), sqlInstance,
 	)
 }
 
@@ -2777,7 +2782,7 @@ func (c *clusterImpl) adminUIAddr(
 		"", /* path */
 		external,
 		false,
-		false,
+		install.SimpleSecureOption(false),
 	)
 	if err != nil {
 		return nil, err

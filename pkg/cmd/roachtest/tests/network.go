@@ -338,7 +338,7 @@ func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c clust
 	grp.Go(func(ctx context.Context, l *logger.Logger) error {
 		urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(c.Node(1)), certsDir, roachprod.PGURLOptions{
 			External: true,
-			Secure:   true,
+			Secure:   install.SimpleSecureOption(true),
 		})
 		if err != nil {
 			return err

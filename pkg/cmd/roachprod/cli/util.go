@@ -13,6 +13,7 @@ import (
 	"time"
 
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/errors"
@@ -127,26 +128,23 @@ func wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Comma
 	}
 }
 
-func isSecureCluster(cmd *cobra.Command) (bool, error) {
+func isSecureCluster(cmd *cobra.Command) (install.ComplexSecureOption, error) {
 	hasSecureFlag := cmd.Flags().Changed("secure")
 	hasInsecureFlag := cmd.Flags().Changed("insecure")
 
 	switch {
 	case hasSecureFlag && hasInsecureFlag:
 		// Disallow passing both flags, even if they are consistent.
-		return false, fmt.Errorf("cannot pass both --secure and --insecure flags")
+		return install.ComplexSecureOption{}, fmt.Errorf("cannot pass both --secure and --insecure flags")
 
 	case hasSecureFlag:
-		desc := "Clusters are secure by default"
-		if !secure {
-			desc = "Use the --insecure flag to create insecure clusters"
-		}
+		return install.ComplexSecureOption{ForcedSecure: true}, nil
 
-		fmt.Printf("WARNING: --secure flag is deprecated. %s.\n", desc)
-		return secure, nil
+	case hasInsecureFlag:
+		return install.ComplexSecureOption{ForcedInsecure: true}, nil
 
 	default:
-		return !insecure, nil
+		return install.ComplexSecureOption{DefaultSecure: !insecure}, nil
 	}
 }
 

@@ -34,7 +34,7 @@ func registerLiquibase(r registry.Registry) {
 		// The liquibase-test-harness expects CockroachDB to be on port 26263.
 		startOpts.RoachprodOpts.SQLPort = 26263
 		// TODO(darrylwong): if https://github.com/liquibase/liquibase-test-harness/pull/724 is merged, enable secure mode
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.All())
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SimpleSecureOption(false)), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {

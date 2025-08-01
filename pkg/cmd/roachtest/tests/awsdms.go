@@ -560,7 +560,7 @@ func setupCockroachDBCluster(
 ) func(context.Context, *logger.Logger) error {
 	return func(_ context.Context, l *logger.Logger) error {
 		l.Printf("setting up cockroach")
-		settings := install.MakeClusterSettings(install.SecureOption(false))
+		settings := install.MakeClusterSettings(install.SimpleSecureOption(false))
 		c.Start(ctx, l, option.DefaultStartOpts(), settings, c.All())
 
 		db := c.Conn(ctx, l, 1)

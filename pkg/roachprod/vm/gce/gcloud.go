@@ -83,7 +83,7 @@ var (
 
 func initGCEProjectDefaults() {
 	defaultDefaultProject = config.EnvOrDefaultString(
-		"ROACHPROD_GCE_DEFAULT_PROJECT", "cockroach-ephemeral",
+		"ROACHPROD_GCE_DEFAULT_PROJECT", DefaultProjectID,
 	)
 	defaultMetadataProject = config.EnvOrDefaultString(
 		"ROACHPROD_GCE_METADATA_PROJECT",
