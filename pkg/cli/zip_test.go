@@ -807,6 +807,45 @@ func TestPartialZip(t *testing.T) {
 		})
 }
 
+// TestZipDisallowFullScans tests that we still can dump full SQL tables for
+// debug.zips when the cluster has disallow_full_table_scans enabled.
+func TestZipDisallowFullScans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderRace(t)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	defer c.Cleanup()
+
+	c.RunWithArgs([]string{"sql", "-e", `
+SET CLUSTER SETTING sql.defaults.disallow_full_table_scans.enabled = on;
+SET CLUSTER SETTING sql.defaults.large_full_scan_rows = 1;
+`})
+
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 " + os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Strip any non-deterministic messages.
+	out = eraseNonDeterministicZipOutput(out)
+
+	// We use datadriven simply to read the golden output file; we don't actually
+	// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", "testzip_disallow_full_scans"), func(t *testing.T, td *datadriven.TestData) string {
+		return out
+	})
+}
+
 // This checks that SQL retry errors are properly handled.
 func TestZipRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()

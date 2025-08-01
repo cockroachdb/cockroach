@@ -1,0 +1,45 @@
+zip
+----
+debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
+[cluster] discovering virtual clusters... done
+[cluster] creating output file /dev/null... done
+[cluster] establishing RPC connection to ...
+[cluster] using SQL address: ...
+[cluster] requesting data for debug/events... received response... writing JSON output: debug/events.json... done
+[cluster] requesting data for debug/rangelog... received response... writing JSON output: debug/rangelog.json... done
+[cluster] requesting data for debug/settings... received response... writing JSON output: debug/settings.json... done
+[cluster] requesting data for debug/reports/problemranges... received response... writing JSON output: debug/reports/problemranges.json... done
+<dumping SQL tables>
+[cluster] requesting nodes... received response... writing JSON output: debug/nodes.json... done
+[cluster] requesting liveness... received response... writing JSON output: debug/liveness.json... done
+[cluster] requesting tenant ranges... received response...
+[cluster] requesting tenant ranges: last request failed: rpc error: ...
+[cluster] requesting tenant ranges: creating error output: debug/tenant_ranges.err.txt... done
+[cluster] collecting the inflight traces for jobs... received response... done
+[node 1] node status... writing JSON output: debug/nodes/1/status.json... done
+[node 1] using SQL connection URL: postgresql://...
+<dumping SQL tables>
+[node 1] requesting data for debug/nodes/1/details... received response... writing JSON output: debug/nodes/1/details.json... done
+[node 1] requesting data for debug/nodes/1/gossip... received response... writing JSON output: debug/nodes/1/gossip.json... done
+[node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
+[node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
+[node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
+[node 1] requesting engine stats... received response... writing binary output: debug/nodes/1/lsm.txt... done
+[node 1] requesting heap profile list... received response... done
+[node ?] ? heap profiles found
+[node 1] requesting goroutine dump list... received response... done
+[node ?] ? goroutine dumps found
+[node 1] requesting cpu profile list... received response... done
+[node ?] ? cpu profiles found
+[node 1] requesting execution trace list... received response... done
+[node ?] ? execution traces found
+[node 1] requesting log files list... received response... done
+[node ?] ? log files found
+[node 1] requesting ranges... received response... done
+[node 1] writing ranges... writing JSON output: debug/nodes/1/ranges.json... done
+[cluster] pprof summary script... writing binary output: debug/pprof-summary.sh... done
+[cluster] hot range summary script... writing binary output: debug/hot-ranges.sh... done
+[cluster] tenant hot range summary script... writing binary output: debug/hot-ranges-tenant.sh... done
+[cluster] capture debug zip flags... writing binary output: debug/debug_zip_command_flags.txt... done
+[cluster] The generated file /dev/null is corrupt. Please retry debug zip generation. error: zip: not a valid zip file
+ERROR: zip: not a valid zip file
