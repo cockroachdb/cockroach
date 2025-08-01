@@ -107,7 +107,7 @@ func (f defaultKerberosClientFactory) createWithKeytab(ctx context.Context, prin
 	// Load keytab
 	kt, err := keytab.Load(keytabPath)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to load keytab")
+		return nil, errors.Wrap(err, "loading keytab")
 	}
 
 	// Create client with keytab
@@ -138,13 +138,13 @@ func (f defaultKerberosClientFactory) createWithCache(ctx context.Context, realm
 	}
 	cc, err := credentials.LoadCCache(ccachePath)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to load credential cache")
+		return nil, errors.Wrap(err, "loading credential cache")
 	}
 
 	// Create client with credential cache
 	cl, err := client.NewFromCCache(cc, cfg)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create client from credential cache")
+		return nil, errors.Wrap(err, "creating client from credential cache")
 	}
 	return cl, nil
 }
