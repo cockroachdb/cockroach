@@ -573,7 +573,7 @@ message TransactionRetryWithProtoRefreshError {
 message TxnAlreadyEncounteredErrorError{
   // prev_error is the message from the error that the txn encountered
   // previously.
-  optional string prev_error = 1 [(gogoproto.nullable) = false];
+  optional string prev_error = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
 }
 
 // An IntegerOverflowError indicates that an operation was aborted because
