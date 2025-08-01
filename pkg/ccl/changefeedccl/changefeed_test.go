@@ -823,24 +823,24 @@ func TestChangefeedQuotedIdentifiersTopicName(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
 		sqlDB.Exec(t, `CREATE TABLE mytable (
-			id INT PRIMARY KEY, 
+			id INT PRIMARY KEY,
 			"SomeField" JSONB,
 			"AnotherField" JSONB
 		)`)
 
 		sqlDB.Exec(t, `INSERT INTO mytable VALUES (
-			1, 
+			1,
 			'{"PropA": "value1", "prop_b": "value2"}'::jsonb,
 			'{"PropC": "value3", "prop_d": "value4"}'::jsonb
 		)`)
 
 		sqlDB.Exec(t, `INSERT INTO mytable VALUES (
-			2, 
+			2,
 			'{"PropA": "value5", "prop_b": "value6"}'::jsonb,
 			'{"PropC": "value7", "prop_d": "value8"}'::jsonb
 		)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED WITH diff, full_table_name, on_error=pause, envelope=wrapped AS SELECT 
+		foo := feed(t, f, `CREATE CHANGEFEED WITH diff, full_table_name, on_error=pause, envelope=wrapped AS SELECT
 			id,
 			"SomeField"->>'PropA' AS "PropA",
 			"SomeField"->>'prop_b' AS "PropB",
@@ -7025,8 +7025,30 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_mechanism=SCRAM-SHA-256`,
 	)
 	sqlDB.ExpectErrWithTimeout(
-		t, `param sasl_mechanism must be one of AWS_MSK_IAM, OAUTHBEARER, PLAIN, SCRAM-SHA-256, or SCRAM-SHA-512`,
+		t, `param sasl_mechanism must be one of AWS_MSK_IAM, GSSAPI, OAUTHBEARER, PLAIN, SCRAM-SHA-256, or SCRAM-SHA-512`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported`,
+	)
+
+	// Kerberos (GSSAPI) SASL parameter validation tests.
+	sqlDB.ExpectErrWithTimeout(
+		t, `sasl_kerberos_service_name must be provided when SASL is enabled using mechanism GSSAPI`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=GSSAPI`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `sasl parameter sasl_kerberos_keytab_path requires sasl_kerberos_principal because keytab authentication requires a principal`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=GSSAPI&sasl_kerberos_service_name=kafka&sasl_kerberos_keytab_path=/tmp/test.keytab`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `sasl parameter sasl_kerberos_principal requires sasl_kerberos_keytab_path because principal-based authentication requires a keytab file`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=GSSAPI&sasl_kerberos_service_name=kafka&sasl_kerberos_principal=user@REALM.COM`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `keytab file not found at path /nonexistent/keytab`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=GSSAPI&sasl_kerberos_service_name=kafka&sasl_kerberos_principal=user@REALM.COM&sasl_kerberos_keytab_path=/nonexistent/keytab`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `sasl_kerberos_service_name is only a valid parameter for sasl_mechanism=GSSAPI`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=PLAIN&sasl_kerberos_service_name=kafka&sasl_user=user&sasl_password=pass`,
 	)
 	sqlDB.ExpectErrWithTimeout(
 		t, badHostErrRE,
@@ -12218,7 +12240,7 @@ func TestChangefeedProtobuf(t *testing.T) {
 					)`)
 				sqlDB.Exec(t, `
 					INSERT INTO pricing VALUES
-						(1, 'Chair', 15.75, 2.500, ARRAY['Brown', 'Black']), 
+						(1, 'Chair', 15.75, 2.500, ARRAY['Brown', 'Black']),
 						(2, 'Table', 20.00, 1.23456789, ARRAY['Brown', 'Black'])`)
 
 				var opts []string

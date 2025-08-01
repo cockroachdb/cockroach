@@ -82,6 +82,11 @@ func (r saslMechanismRegistry) pick(u *changefeedbase.SinkURL) (_ SASLMechanism,
 			return nil, false, err
 		}
 	}
+	if b.name() != sarama.SASLTypeGSSAPI {
+		if err := validateNoKerberosOnlyParams(u); err != nil {
+			return nil, false, err
+		}
+	}
 	if err := b.validateParams(u); err != nil {
 		return nil, false, err
 	}
@@ -159,6 +164,11 @@ func maybeHelpfulErrorMessage(saslEnabled bool, u *changefeedbase.SinkURL) error
 			changefeedbase.SinkParamSASLAwsIAMRoleArn,
 			changefeedbase.SinkParamSASLAwsRegion,
 			changefeedbase.SinkParamSASLAwsIAMSessionName,
+			changefeedbase.SinkParamSASLKerberosServiceName,
+			changefeedbase.SinkParamSASLKerberosRealm,
+			changefeedbase.SinkParamSASLKerberosKeytabPath,
+			changefeedbase.SinkParamSASLKerberosPrincipal,
+			changefeedbase.SinkParamSASLKerberosConfig,
 		}
 		for _, p := range saslOnlyParams {
 			if u.PeekParam(p) != "" {
@@ -184,6 +194,26 @@ func validateNoOAuthOnlyParams(u *changefeedbase.SinkURL) error {
 	for _, p := range oauthOnlyParams {
 		if u.PeekParam(p) != "" {
 			return errors.Newf("%s is only a valid parameter for sasl_mechanism=OAUTHBEARER", p)
+		}
+	}
+	return nil
+}
+
+// validateNoKerberosOnlyParams returns an error if the user has provided
+// Kerberos parameters without setting sasl_mechanism=GSSAPI, for the
+// sake of slightly nicer errors.
+func validateNoKerberosOnlyParams(u *changefeedbase.SinkURL) error {
+	kerberosOnlyParams := []string{
+		changefeedbase.SinkParamSASLKerberosServiceName,
+		changefeedbase.SinkParamSASLKerberosRealm,
+		changefeedbase.SinkParamSASLKerberosKeytabPath,
+		changefeedbase.SinkParamSASLKerberosPrincipal,
+		changefeedbase.SinkParamSASLKerberosConfig,
+	}
+
+	for _, p := range kerberosOnlyParams {
+		if u.PeekParam(p) != "" {
+			return errors.Newf("%s is only a valid parameter for sasl_mechanism=GSSAPI", p)
 		}
 	}
 	return nil

@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "doc.go",
         "kafkaauth.go",
+        "sasl_kerberos.go",
         "sasl_msk.go",
         "sasl_oauth.go",
         "sasl_plain.go",
@@ -20,11 +21,15 @@ go_library(
         "@com_github_aws_aws_msk_iam_sasl_signer_go//signer",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_ibm_sarama//:sarama",
+        "@com_github_jcmturner_gokrb5_v8//client",
+        "@com_github_jcmturner_gokrb5_v8//config",
+        "@com_github_jcmturner_gokrb5_v8//keytab",
         "@com_github_twmb_franz_go//pkg/kgo",
         "@com_github_twmb_franz_go//pkg/sasl",
         "@com_github_twmb_franz_go//pkg/sasl/oauth",
         "@com_github_twmb_franz_go//pkg/sasl/plain",
         "@com_github_twmb_franz_go//pkg/sasl/scram",
+        "@com_github_twmb_franz_go_pkg_sasl_kerberos//:kerberos",
         "@com_github_xdg_go_scram//:scram",
         "@org_golang_x_oauth2//:oauth2",
         "@org_golang_x_oauth2//clientcredentials",
@@ -33,12 +38,16 @@ go_library(
 
 go_test(
     name = "kafkaauth_test",
-    srcs = ["sasl_proprietary_oauth_test.go"],
+    srcs = [
+        "sasl_kerberos_test.go",
+        "sasl_proprietary_oauth_test.go",
+    ],
     embed = [":kafkaauth"],
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_ibm_sarama//:sarama",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
