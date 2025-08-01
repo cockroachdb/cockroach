@@ -30,41 +30,41 @@ func (s requestCounts) Less(i, j int) bool {
 }
 func (s requestCounts) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
-func evenDistribution(n int) []float64 {
+func evenDistribution(numOfStores int) []float64 {
 	distribution := []float64{}
-	frac := 1.0 / float64(n)
-	for i := 0; i < n; i++ {
+	frac := 1.0 / float64(numOfStores)
+	for i := 0; i < numOfStores; i++ {
 		distribution = append(distribution, frac)
 	}
 	return distribution
 }
 
-func skewedDistribution(n, k int) []float64 {
-	weights := make([]float64, n)
+func skewedDistribution(numOfStores, k int) []float64 {
+	weights := make([]float64, numOfStores)
 	var total float64
 	// Compute weights.
-	for i := 0; i < n; i++ {
+	for i := 0; i < numOfStores; i++ {
 		// weight[0] = 2^(n-1)
 		// weight[1] = 2^(n-2)
 		// ...
 		// weight[n-1] = 2^0
-		weights[i] = math.Pow(2, float64(n-i-1))
+		weights[i] = math.Pow(2, float64(numOfStores-i-1))
 		total += weights[i]
 	}
 	// Normalize to get ratios.
-	for i := 0; i < n; i++ {
+	for i := 0; i < numOfStores; i++ {
 		weights[i] /= total
 	}
 	return weights
 }
 
-func exactDistribution(counts []int) []float64 {
-	distribution := make([]float64, len(counts))
+func exactDistribution(storeReplicaCount []int) []float64 {
+	distribution := make([]float64, len(storeReplicaCount))
 	total := 0
-	for _, count := range counts {
+	for _, count := range storeReplicaCount {
 		total += count
 	}
-	for i, count := range counts {
+	for i, count := range storeReplicaCount {
 		distribution[i] = float64(count) / float64(total)
 	}
 	return distribution
@@ -135,16 +135,16 @@ func weightedRandDistribution(randSource *rand.Rand, weightedStores []float64) [
 // randDistribution generates a random distribution across stores. It achieves
 // this by creating an array of size n, selecting random numbers from [0, 10)
 // for each index, and returning the exact distribution of this result.
-func randDistribution(randSource *rand.Rand, n int) []float64 {
+func randDistribution(randSource *rand.Rand, numOfStores int) []float64 {
 	total := float64(0)
-	distribution := make([]float64, n)
-	for i := 0; i < n; i++ {
+	distribution := make([]float64, numOfStores)
+	for i := 0; i < numOfStores; i++ {
 		num := float64(randSource.Intn(10))
 		distribution[i] = num
 		total += num
 	}
 
-	for i := 0; i < n; i++ {
+	for i := 0; i < numOfStores; i++ {
 		distribution[i] = distribution[i] / total
 	}
 	return distribution
