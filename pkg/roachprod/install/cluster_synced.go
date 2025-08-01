@@ -119,6 +119,14 @@ func NewSyncedCluster(
 		return nil, err
 	}
 	c.Nodes = nodes
+
+	if c.ClusterSettings.secureFlagsOpt != nil {
+		err = c.ClusterSettings.secureFlagsOpt.compute(c)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return c, nil
 }
 

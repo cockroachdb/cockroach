@@ -254,7 +254,7 @@ environment:
 			return nil
 		}
 		roachprodRun = func(ctx context.Context, l *logger.Logger, clusterName,
-			SSHOptions, processTag string, secure bool, stdout, stderr io.Writer,
+			SSHOptions, processTag string, secure install.SecureOption, stdout, stderr io.Writer,
 			cmdArray []string, options install.RunOptions) error {
 			require.Equal(t, "test-monitor", clusterName)
 			if strings.HasPrefix(cmdArray[0], "mkdir -p") {
@@ -284,7 +284,7 @@ environment:
 			return nil
 		}
 		roachprodRun = func(ctx context.Context, l *logger.Logger, clusterName,
-			SSHOptions, processTag string, secure bool, stdout, stderr io.Writer,
+			SSHOptions, processTag string, secure install.SecureOption, stdout, stderr io.Writer,
 			cmdArray []string, options install.RunOptions) error {
 			require.Equal(t, "test-monitor", clusterName)
 			return nil
@@ -311,7 +311,7 @@ environment:
 			return nil
 		}
 		roachprodRun = func(ctx context.Context, l *logger.Logger, clusterName,
-			SSHOptions, processTag string, secure bool, stdout, stderr io.Writer,
+			SSHOptions, processTag string, secure install.SecureOption, stdout, stderr io.Writer,
 			cmdArray []string, options install.RunOptions) error {
 			if strings.HasPrefix(cmdArray[0], "sudo cp") {
 				return fmt.Errorf("move command failed")
@@ -342,7 +342,7 @@ environment:
 			return nil
 		}
 		roachprodRun = func(ctx context.Context, l *logger.Logger, clusterName,
-			SSHOptions, processTag string, secure bool, stdout, stderr io.Writer,
+			SSHOptions, processTag string, secure install.SecureOption, stdout, stderr io.Writer,
 			cmdArray []string, options install.RunOptions) error {
 			runCmdsLock.Lock()
 			defer runCmdsLock.Unlock()
@@ -375,7 +375,7 @@ environment:
 			return nil
 		}
 		roachprodRun = func(ctx context.Context, l *logger.Logger, clusterName,
-			SSHOptions, processTag string, secure bool, stdout, stderr io.Writer,
+			SSHOptions, processTag string, secure install.SecureOption, stdout, stderr io.Writer,
 			cmdArray []string, options install.RunOptions) error {
 			require.Equal(t, "test-monitor", clusterName)
 			if strings.HasPrefix(cmdArray[0], "sudo systemd-run") {
@@ -409,7 +409,7 @@ environment:
 			return nil
 		}
 		roachprodRun = func(ctx context.Context, l *logger.Logger, clusterName,
-			SSHOptions, processTag string, secure bool, stdout, stderr io.Writer,
+			SSHOptions, processTag string, secure install.SecureOption, stdout, stderr io.Writer,
 			cmdArray []string, options install.RunOptions) error {
 			require.Equal(t, "test-monitor", clusterName)
 			runCmdsLock.Lock()
@@ -483,7 +483,7 @@ environment:
 			return nil
 		}
 		roachprodRun = func(ctx context.Context, l *logger.Logger, clusterName,
-			SSHOptions, processTag string, secure bool, stdout, stderr io.Writer,
+			SSHOptions, processTag string, secure install.SecureOption, stdout, stderr io.Writer,
 			cmdArray []string, options install.RunOptions) error {
 			require.Equal(t, "test-monitor", clusterName)
 			runCmdsLock.Lock()
@@ -553,7 +553,7 @@ environment:
 			return nil
 		}
 		roachprodRun = func(ctx context.Context, l *logger.Logger, clusterName,
-			SSHOptions, processTag string, secure bool, stdout, stderr io.Writer,
+			SSHOptions, processTag string, secure install.SecureOption, stdout, stderr io.Writer,
 			cmdArray []string, options install.RunOptions) error {
 			require.Equal(t, "test-monitor", clusterName)
 			runCmdsLock.Lock()

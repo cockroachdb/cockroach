@@ -69,7 +69,7 @@ func TestExecutionScheduling(t *testing.T) {
 				ctx context.Context,
 				l *logger.Logger,
 				clusterName, SSHOptions, processTag string,
-				secure bool,
+				secure install.SecureOption,
 				cmdArray []string,
 				options install.RunOptions,
 			) ([]install.RunResultDetails, error) {
@@ -168,7 +168,7 @@ func TestCancelGroupsBeforeExecution(t *testing.T) {
 		ctx context.Context,
 		l *logger.Logger,
 		clusterName, SSHOptions, processTag string,
-		secure bool,
+		secure install.SecureOption,
 		cmdArray []string,
 		options install.RunOptions,
 	) ([]install.RunResultDetails, error) {
@@ -226,7 +226,7 @@ func TestCancelGroupsInFlight(t *testing.T) {
 		ctx context.Context,
 		l *logger.Logger,
 		clusterName, SSHOptions, processTag string,
-		secure bool,
+		secure install.SecureOption,
 		cmdArray []string,
 		options install.RunOptions,
 	) ([]install.RunResultDetails, error) {
