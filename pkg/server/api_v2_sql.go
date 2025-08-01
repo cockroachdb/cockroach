@@ -472,12 +472,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 						}
 					}()
 
-					if returnType == tree.Ack || stmt.stmt.AST.StatementType() == tree.TypeTCL {
-						// We want to disallow statements that modify txn state (like
-						// BEGIN and COMMIT) because the internal executor does not
-						// expect such statements. We'll lean on the safe side and
-						// prohibit all statements with an ACK return type, similar
-						// to the builtin `crdb_internal.execute_internally(...)`.
+					if !tree.UserStmtAllowedForInternalExecutor(stmt.stmt.AST) {
 						return errors.New("disallowed statement type")
 					}
 
