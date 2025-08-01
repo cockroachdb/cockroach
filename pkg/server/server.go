@@ -425,7 +425,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		dialerKnobs = dk.(nodedialer.DialerTestingKnobs)
 	}
 
-	kvNodeDialer := nodedialer.NewWithOpt(rpcContext, gossip.AddressResolver(g),
+	gossipAddressResolver := gossip.AddressResolver(g)
+	kvNodeDialer := nodedialer.NewWithOpt(rpcContext, gossipAddressResolver,
 		nodedialer.DialerOpt{TestingKnobs: dialerKnobs})
 
 	livenessCache := liveness.NewCache(g, clock, cfg.Settings, kvNodeDialer)
@@ -752,7 +753,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	})
 	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		mon.MakeName("kv-mem"), 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor,
-		true, /* longLiving */
+		true,                     /* longLiving */
 	)
 	kvMemoryMonitor.StartNoReserved(ctx, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
 	rangeFeedBudgetFactory := serverrangefeed.NewBudgetFactory(
@@ -1221,6 +1222,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		spanConfigAccessor:       spanConfig.kvAccessor,
 		keyVisServerAccessor:     keyVisServerAccessor,
 		kvNodeDialer:             kvNodeDialer,
+		gossipAddressResolver:    gossipAddressResolver,
 		distSender:               distSender,
 		db:                       db,
 		registry:                 appRegistry,
