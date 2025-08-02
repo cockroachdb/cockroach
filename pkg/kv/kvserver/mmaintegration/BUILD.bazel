@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mmaintegration",
+    srcs = [
+        "allocator_op.go",
+        "allocator_sync.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/allocator/storepool",
+        "//pkg/roachpb",
+        "//pkg/util/syncutil",
+    ],
+)
