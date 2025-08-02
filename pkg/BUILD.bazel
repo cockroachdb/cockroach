@@ -1557,6 +1557,7 @@ GO_TARGETS = [
     "//pkg/kv/kvserver/loqrecovery/loqrecoverypb:loqrecoverypb_test",
     "//pkg/kv/kvserver/loqrecovery:loqrecovery",
     "//pkg/kv/kvserver/loqrecovery:loqrecovery_test",
+    "//pkg/kv/kvserver/mmaintegration:mmaintegration",
     "//pkg/kv/kvserver/multiqueue:multiqueue",
     "//pkg/kv/kvserver/multiqueue:multiqueue_test",
     "//pkg/kv/kvserver/print:print",
