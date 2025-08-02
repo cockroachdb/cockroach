@@ -190,7 +190,7 @@ func TestStoreGranterBasic(t *testing.T) {
 
 	var ambientCtx log.AmbientContext
 	var requesters [admissionpb.NumStoreWorkTypes]*testRequester
-	var coord *GrantCoordinator
+	var coord *storeGrantCoordinator
 	clearRequesterAndCoord := func() {
 		coord = nil
 		for i := range requesters {
@@ -206,6 +206,9 @@ func TestStoreGranterBasic(t *testing.T) {
 	}
 	settings := cluster.MakeTestingClusterSettings()
 	registry := metric.NewRegistry()
+	testingTryGrant := func() {
+		coord.granter.tryGrant()
+	}
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "store_granter"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init-store-grant-coordinator":
@@ -252,7 +255,7 @@ func TestStoreGranterBasic(t *testing.T) {
 			var ok bool
 			coord, ok = storeCoordinators.gcMap.Load(1)
 			require.True(t, ok)
-			kvStoreGranter := coord.granters[KVWork].(*kvStoreTokenGranter)
+			kvStoreGranter := coord.granter
 			// Defensive check: `SetPebbleMetricsProvider` should initialize the SnapshotQueue.
 			require.NotNil(t, kvStoreGranter.snapshotRequester)
 			snapshotGranter := kvStoreGranter.snapshotRequester.(*SnapshotQueue).snapshotGranter
@@ -333,7 +336,7 @@ func TestStoreGranterBasic(t *testing.T) {
 				loop--
 				// We are not using a real ioLoadListener, and simply setting the
 				// tokens (the ioLoadListener has its own test).
-				coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
+				coord.granter.setAvailableTokens(
 					int64(ioTokens),
 					int64(ioTokens),
 					int64(elasticDiskWriteTokens),
@@ -344,7 +347,7 @@ func TestStoreGranterBasic(t *testing.T) {
 					false, // lastTick
 				)
 			}
-			coord.testingTryGrant()
+			testingTryGrant()
 			return flushAndReset()
 
 		case "set-tokens":
@@ -374,7 +377,7 @@ func TestStoreGranterBasic(t *testing.T) {
 
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
-			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
+			coord.granter.setAvailableTokens(
 				int64(ioTokens),
 				int64(elasticIOTokens),
 				int64(elasticDiskWriteTokens),
@@ -384,7 +387,7 @@ func TestStoreGranterBasic(t *testing.T) {
 				int64(elasticDiskWriteTokens*burstMultiplier),
 				false, // lastTick
 			)
-			coord.testingTryGrant()
+			testingTryGrant()
 			return flushAndReset()
 
 		case "store-write-done":
@@ -393,7 +396,7 @@ func TestStoreGranterBasic(t *testing.T) {
 			d.ScanArgs(t, "write-bytes", &writeBytes)
 			requesters[scanStoreWorkType(t, d)].granter.(granterWithStoreReplicatedWorkAdmitted).storeWriteDone(
 				int64(origTokens), StoreWorkDoneInfo{WriteBytes: int64(writeBytes)})
-			coord.testingTryGrant()
+			testingTryGrant()
 			return flushAndReset()
 
 		case "adjust-disk-error":
@@ -474,7 +477,7 @@ func TestStoreCoordinators(t *testing.T) {
 	// Confirm that the store IDs are as expected.
 	var actualStores []roachpb.StoreID
 
-	storeCoords.gcMap.Range(func(s roachpb.StoreID, _ *GrantCoordinator) bool {
+	storeCoords.gcMap.Range(func(s roachpb.StoreID, _ *storeGrantCoordinator) bool {
 		actualStores = append(actualStores, s)
 		// true indicates that iteration should continue after the
 		// current entry has been processed.

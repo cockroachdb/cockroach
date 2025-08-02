@@ -56,9 +56,7 @@
 //   across WorkKinds that is used to reflect their shared need for underlying
 //   resources.
 // - The top-level GrantCoordinator which coordinates grants across these
-//   WorkKinds. The WorkKinds handled by an instantiation of GrantCoordinator
-//   will differ for single-tenant clusters, and multi-tenant clusters
-//   consisting of (multi-tenant) KV nodes and (single-tenant) SQL nodes.
+//   WorkKinds, for CPU.
 //
 // The interfaces involved:
 // - requester: handles all requests for a particular WorkKind. Implemented by
@@ -75,8 +73,7 @@
 //   the lock in WorkQueue).
 // - cpuOverloadIndicator: this serves as an optional additional gate on
 //   granting, by providing an (ideally) instantaneous signal of cpu overload.
-//   The kvSlotAdjuster is the concrete implementation, except for SQL
-//   nodes, where this will be implemented by sqlNodeCPUOverloadIndicator.
+//   The kvSlotAdjuster is the concrete implementation.
 //   CPULoadListener is also implemented by these structs, to listen to
 //   the latest CPU load information from the scheduler.
 //
@@ -97,7 +94,7 @@
 // that is setup here.
 //
 
-// Partial usage example (regular cluster):
+// Partial usage example:
 //
 // var metricRegistry *metric.Registry = ...
 // coord, metrics := admission.NewGrantCoordinator(admission.Options{...})
@@ -217,16 +214,17 @@ type granter interface {
 }
 
 // granterWithLockedCalls is an encapsulation of typically one
-// granter-requester pair, and for kvStoreTokenGranter of two
-// granter-requester pairs (one for each workClass). It is used as an internal
+// granter-requester pair. It is used as an internal
 // implementation detail of the GrantCoordinator. An implementer of
 // granterWithLockedCalls responds to calls from its granter(s) by calling
 // into the GrantCoordinator, which then calls the various *Locked() methods.
 // The demuxHandle is meant to be opaque to the GrantCoordinator, and is used
 // when this interface encapsulates multiple granter-requester pairs -- it is
-// currently used only by kvStoreTokenGranter, where it is a workClass. The
+// currently unused and will be removed. The
 // *Locked() methods are where the differences in slots and various kinds of
 // tokens are handled.
+//
+// TODO(sumeer): remove the demuxHandle.
 type granterWithLockedCalls interface {
 	// tryGetLocked is the real implementation of tryGet from the granter
 	// interface. demuxHandle is an opaque handle that was passed into the
