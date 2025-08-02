@@ -121,6 +121,17 @@ func NewRowHelper(
 	for _, index := range uniqueWithTombstoneIndexes {
 		uniqueWithTombstoneIndexesSet.Add(index.Ordinal())
 	}
+	maxRowSizeLog := uint32(maxRowSizeLog.Get(sv))
+	maxRowSizeErr := uint32(maxRowSizeErr.Get(sv))
+
+	if desc.TableDesc().MaxRowSizeLog != nil {
+		maxRowSizeLog = *desc.TableDesc().MaxRowSizeLog
+	}
+
+	if desc.TableDesc().MaxRowSizeErr != nil {
+		maxRowSizeErr = *desc.TableDesc().MaxRowSizeErr
+	}
+
 	return RowHelper{
 		Codec:                      codec,
 		TableDesc:                  desc,
@@ -128,8 +139,8 @@ func NewRowHelper(
 		UniqueWithTombstoneIndexes: uniqueWithTombstoneIndexesSet,
 		sd:                         sd,
 		metrics:                    metrics,
-		maxRowSizeLog:              uint32(maxRowSizeLog.Get(sv)),
-		maxRowSizeErr:              uint32(maxRowSizeErr.Get(sv)),
+		maxRowSizeLog:              maxRowSizeLog,
+		maxRowSizeErr:              maxRowSizeErr,
 	}
 }
 
