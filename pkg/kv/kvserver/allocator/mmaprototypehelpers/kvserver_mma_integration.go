@@ -64,7 +64,7 @@ func (s Author) External() bool {
 type AllocatorSync struct {
 	// TODO(wenyihu6): sp and mmAllocator shouldn't be exported but we are
 	// exporting them for integration since they are used in the asim package.
-	Sp          *storepool.StorePool
+	sp          *storepool.StorePool
 	st          *cluster.Settings
 	mmAllocator mmaprototype.Allocator
 	mu          struct {
@@ -78,7 +78,7 @@ func NewAllocatorSync(
 	sp *storepool.StorePool, mmAllocator mmaprototype.Allocator, st *cluster.Settings,
 ) *AllocatorSync {
 	as := &AllocatorSync{
-		Sp:          sp,
+		sp:          sp,
 		mmAllocator: mmAllocator,
 		st:          st,
 	}
@@ -364,11 +364,11 @@ func (as *AllocatorSync) PostApply(ctx context.Context, syncChangeID SyncChangeI
 	}
 	switch tracked.typ {
 	case AllocatorChangeTypeLeaseTransfer:
-		as.Sp.UpdateLocalStoresAfterLeaseTransfer(tracked.transferFrom,
+		as.sp.UpdateLocalStoresAfterLeaseTransfer(tracked.transferFrom,
 			tracked.transferTo, tracked.usage)
 	case AllocatorChangeTypeChangeReplicas:
 		for _, chg := range tracked.chgs {
-			as.Sp.UpdateLocalStoreAfterRebalance(
+			as.sp.UpdateLocalStoreAfterRebalance(
 				chg.Target.StoreID, tracked.usage, chg.ChangeType)
 		}
 	case AllocatorChangeTypeRelocateRange:
