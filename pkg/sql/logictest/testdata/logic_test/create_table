@@ -1257,3 +1257,66 @@ statement ok
 RESET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled;
 
 subtest end
+
+subtest create_table_with_guardrails
+
+statement ok
+CREATE TABLE t_max_row_size_guardrails (a INT PRIMARY KEY) WITH (max_row_size_log = '1KiB', max_row_size_err = '2KiB');
+
+query TT
+SHOW CREATE TABLE t_max_row_size_guardrails;
+----
+t_max_row_size_guardrails  CREATE TABLE public.t_max_row_size_guardrails (
+  a INT8 NOT NULL,
+  CONSTRAINT t_max_row_size_guardrails_pkey PRIMARY KEY (a ASC)
+) WITH (max_row_size_log = 1.0 KiB, max_row_size_err = 2.0 KiB);
+
+subtest end
+
+
+subtest create_table_with_guardrails_null
+
+statement ok
+CREATE TABLE t_max_row_size_guardrails_null (a INT PRIMARY KEY) WITH (max_row_size_log = '1KiB', max_row_size_err = NULL);
+
+query TT
+SHOW CREATE TABLE t_max_row_size_guardrails_null;
+----
+t_max_row_size_guardrails_null  CREATE TABLE public.t_max_row_size_guardrails_null (
+  a INT8 NOT NULL,
+  CONSTRAINT t_max_row_size_guardrails_null_pkey PRIMARY KEY (a ASC)
+) WITH (max_row_size_log = 1.0 KiB);
+
+subtest end
+
+
+subtest create_table_with_guardrails_invalid_value
+
+statement error pgcode 22023 pq: invalid value for parameter "max_row_size_err", value should be a valid byte size string like '1KiB', '2MiB'
+CREATE TABLE t_max_row_size_guardrails_invalid_value (a INT PRIMARY KEY) WITH (max_row_size_log = '1KiB', max_row_size_err = 'invalid');
+
+statement error pgcode 22023 pq: invalid value for parameter "max_row_size_log", value should be a valid byte size string like '1KiB', '2MiB'
+CREATE TABLE t_max_row_size_guardrails_invalid_value (a INT PRIMARY KEY) WITH (max_row_size_log = 'invalid', max_row_size_err = '2KiB');
+
+statement error pgcode 22023 pq: parameter "max_row_size_log" value is out of range, expected value in range \[1.0 KiB, 1.0 GiB\]
+CREATE TABLE t_max_row_size_guardrails_invalid_value (a INT PRIMARY KEY) WITH (max_row_size_log = '2GiB', max_row_size_err = '2KiB');
+
+statement error pgcode 22023 pq: parameter "max_row_size_err" value is out of range, expected value in range \[1.0 KiB, 1.0 GiB\]
+CREATE TABLE t_max_row_size_guardrails_invalid_value (a INT PRIMARY KEY) WITH (max_row_size_log = '1KiB', max_row_size_err = '2GiB');
+
+subtest end
+
+subtest create_table_reloptions_display
+
+statement ok
+CREATE TABLE test_storage_params (
+  id INT PRIMARY KEY
+) WITH (max_row_size_log = '2MiB', max_row_size_err = '5MiB')
+
+query T rowsort
+SELECT unnest(reloptions) as opt FROM pg_catalog.pg_class WHERE relname = 'test_storage_params'
+----
+max_row_size_log=2.0 MiB
+max_row_size_err=5.0 MiB
+
+subtest end

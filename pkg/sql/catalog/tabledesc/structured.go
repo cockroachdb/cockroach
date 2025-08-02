@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -2592,6 +2593,16 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) 
 	if desc.IsSchemaLocked() {
 		appendStorageParam(`schema_locked`, `true`)
 	}
+
+	if desc.MaxRowSizeLog != nil {
+		value := humanizeutil.IBytes(int64(*desc.MaxRowSizeLog))
+		appendStorageParam(`max_row_size_log`, string(value))
+	}
+	if desc.MaxRowSizeErr != nil {
+		value := humanizeutil.IBytes(int64(*desc.MaxRowSizeErr))
+		appendStorageParam(`max_row_size_err`, string(value))
+	}
+
 	if usingFK := desc.GetRegionalByRowUsingConstraint(); usingFK != descpb.ConstraintID(0) {
 		// NOTE: when validating the descriptor, we check that the referenced
 		// constraint exists, so this should never fail.

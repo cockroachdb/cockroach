@@ -40,13 +40,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// maxRowSizeFloor is the lower bound for sql.guardrails.max_row_size_{log|err}.
-	maxRowSizeFloor = 1 << 10
-	// maxRowSizeCeil is the upper bound for sql.guardrails.max_row_size_{log|err}.
-	maxRowSizeCeil = 1 << 30
-)
-
 var maxRowSizeLog = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"sql.guardrails.max_row_size_log",
@@ -54,7 +47,7 @@ var maxRowSizeLog = settings.RegisterByteSizeSetting(
 		"write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF "+
 		"if the mutating statement was internal); use 0 to disable",
 	kvserverbase.MaxCommandSizeDefault,
-	settings.IntInRangeOrZeroDisable(maxRowSizeFloor, maxRowSizeCeil),
+	settings.IntInRangeOrZeroDisable(rowinfra.MaxRowSizeFloor, rowinfra.MaxRowSizeCeil),
 	settings.WithPublic,
 )
 
@@ -64,7 +57,7 @@ var maxRowSizeErr = settings.RegisterByteSizeSetting(
 	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
 		"write to the database, above which an error is returned; use 0 to disable",
 	512<<20, /* 512 MiB */
-	settings.IntInRangeOrZeroDisable(maxRowSizeFloor, maxRowSizeCeil),
+	settings.IntInRangeOrZeroDisable(rowinfra.MaxRowSizeFloor, rowinfra.MaxRowSizeCeil),
 	settings.WithPublic,
 )
 

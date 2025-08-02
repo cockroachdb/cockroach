@@ -5265,3 +5265,66 @@ statement ok
 RESET experimental_enable_unique_without_index_constraints
 
 subtest end
+
+
+subtest alter_table_with_guardrails
+
+statement ok
+SET create_table_with_schema_locked = false;
+
+statement ok
+CREATE TABLE t_alter_table_with_guardrails (a INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE t_alter_table_with_guardrails SET (max_row_size_log = '1KiB', max_row_size_err = '2KiB');
+
+query TT
+SHOW CREATE TABLE t_alter_table_with_guardrails;
+----
+t_alter_table_with_guardrails  CREATE TABLE public.t_alter_table_with_guardrails (
+  a INT8 NOT NULL,
+  CONSTRAINT t_alter_table_with_guardrails_pkey PRIMARY KEY (a ASC)
+) WITH (max_row_size_log = 1.0 KiB, max_row_size_err = 2.0 KiB);
+
+subtest end
+
+
+subtest alter_table_with_guardrails_null
+
+statement ok
+CREATE TABLE t_alter_table_with_guardrails_null (a INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE t_alter_table_with_guardrails_null SET (max_row_size_log = NULL, max_row_size_err = NULL);
+
+query TT
+SHOW CREATE TABLE t_alter_table_with_guardrails_null;
+----
+t_alter_table_with_guardrails_null  CREATE TABLE public.t_alter_table_with_guardrails_null (
+  a INT8 NOT NULL,
+  CONSTRAINT t_alter_table_with_guardrails_null_pkey PRIMARY KEY (a ASC)
+);
+
+subtest end
+
+
+subtest create_table_with_guardrails_invalid_value
+
+statement ok
+CREATE TABLE t_alter_table_with_guardrails_invalid_value (a INT PRIMARY KEY);
+
+
+statement error pgcode 22023 pq: invalid value for parameter "max_row_size_err", value should be a valid byte size string like '1KiB', '2MiB'
+ALTER TABLE t_alter_table_with_guardrails_invalid_value SET (max_row_size_log = '1KiB', max_row_size_err = 'invalid');
+
+statement error pgcode 22023 pq: invalid value for parameter "max_row_size_log", value should be a valid byte size string like '1KiB', '2MiB'
+ALTER TABLE t_alter_table_with_guardrails_invalid_value SET (max_row_size_log = 'invalid', max_row_size_err = '2KiB');
+
+statement error pgcode 22023 pq: parameter "max_row_size_log" value is out of range, expected value in range \[1.0 KiB, 1.0 GiB\]
+ALTER TABLE t_alter_table_with_guardrails_invalid_value SET (max_row_size_log = '2GiB', max_row_size_err = '2KiB');
+
+statement error pgcode 22023 pq: parameter "max_row_size_err" value is out of range, expected value in range \[1.0 KiB, 1.0 GiB\]
+ALTER TABLE t_alter_table_with_guardrails_invalid_value SET (max_row_size_log = '1KiB', max_row_size_err = '2GiB');
+
+subtest end
+

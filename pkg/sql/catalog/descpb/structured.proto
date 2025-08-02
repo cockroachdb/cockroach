@@ -1374,7 +1374,19 @@ message TableDescriptor {
   optional uint32 rbr_using_constraint = 70 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "RBRUsingConstraint", (gogoproto.casttype) = "ConstraintID"];
 
-  // Next ID: 71
+  // max_row_size_log is a guardrail for the maximum size of a row that can be written to the table.
+  // This is the maximum size of row (or column family if multiple column families are in use) that SQL can write to the database,
+  // above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use null to disable
+  optional uint32 max_row_size_log = 71 [(gogoproto.nullable) = true,
+    (gogoproto.customname) = "MaxRowSizeLog"];
+
+  // max_row_size_err is a guardrail for the maximum size of a row that can be written to the table.
+  // This is the maximum size of row (or column family if multiple column families are in use) that SQL can write to the database,
+  // above which an error is returned; use null to disable
+  optional uint32 max_row_size_err = 72 [(gogoproto.nullable) = true,
+    (gogoproto.customname) = "MaxRowSizeErr"];
+
+  // Next ID: 73
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside
