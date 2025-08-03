@@ -8,13 +8,13 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
-	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
-	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -227,7 +227,7 @@ func encodeRowToRecord(row cdcevent.Row) (*changefeedpb.Record, error) {
 	}
 	record := &changefeedpb.Record{Values: make(map[string]*changefeedpb.Value, row.NumValueColumns())}
 	if err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		val, err := datumToProtoValue(d)
+		val, err := datumToProtoValue(d, sessiondatapb.DataConversionConfig{}, time.UTC)
 		if err != nil {
 			return err
 		}
@@ -244,7 +244,7 @@ func buildKeyMessage(row cdcevent.Row) (*changefeedpb.Key, error) {
 	keyMap := make(map[string]*changefeedpb.Value, row.NumKeyColumns())
 
 	if err := row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		val, err := datumToProtoValue(d)
+		val, err := datumToProtoValue(d, sessiondatapb.DataConversionConfig{}, time.UTC)
 		if err != nil {
 			return err
 		}
@@ -259,12 +259,16 @@ func buildKeyMessage(row cdcevent.Row) (*changefeedpb.Key, error) {
 // datumToProtoValue converts a tree.Datum into a changefeedpb.Value.
 // It handles all common CockroachDB datum types and maps them to their
 // corresponding protobuf representation.
-func datumToProtoValue(d tree.Datum) (*changefeedpb.Value, error) {
+func datumToProtoValue(
+	d tree.Datum, dcc sessiondatapb.DataConversionConfig, loc *time.Location,
+) (*changefeedpb.Value, error) {
 	d = tree.UnwrapDOidWrapper(d)
+
 	if d == tree.DNull {
 		return nil, nil
 	}
 	switch v := d.(type) {
+
 	case *tree.DBool:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_BoolValue{BoolValue: bool(*v)}}, nil
 	case *tree.DInt:
@@ -285,7 +289,7 @@ func datumToProtoValue(d tree.Datum) (*changefeedpb.Value, error) {
 	case *tree.DArray:
 		elems := make([]*changefeedpb.Value, 0, v.Len())
 		for _, elt := range v.Array {
-			pv, err := datumToProtoValue(elt)
+			pv, err := datumToProtoValue(elt, sessiondatapb.DataConversionConfig{}, time.UTC)
 			if err != nil {
 				return nil, err
 			}
@@ -297,7 +301,7 @@ func datumToProtoValue(d tree.Datum) (*changefeedpb.Value, error) {
 		labels := v.ResolvedType().TupleLabels()
 		records := make(map[string]*changefeedpb.Value, len(v.D))
 		for i, elem := range v.D {
-			pv, err := datumToProtoValue(elem)
+			pv, err := datumToProtoValue(elem, sessiondatapb.DataConversionConfig{}, time.UTC)
 			if err != nil {
 				return nil, err
 			}
@@ -330,36 +334,25 @@ func datumToProtoValue(d tree.Datum) (*changefeedpb.Value, error) {
 		return &changefeedpb.Value{Value: &changefeedpb.Value_TimestampValue{TimestampValue: ts}}, nil
 	case *tree.DBytes:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_BytesValue{BytesValue: []byte(*v)}}, nil
-
 	case *tree.DGeography:
-		geostr, err := geo.SpatialObjectToWKT(v.Geography.SpatialObject(), -1)
-		if err != nil {
-			return nil, err
-		}
-		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: string(geostr)}}, nil
+		ewkb := v.EWKB()
+		return &changefeedpb.Value{Value: &changefeedpb.Value_BytesValue{BytesValue: ewkb}}, nil
 	case *tree.DGeometry:
-		geostr, err := geo.SpatialObjectToWKT(v.Geometry.SpatialObject(), -1)
-		if err != nil {
-			return nil, err
-		}
-		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: string(geostr)}}, nil
+		ewkb := v.EWKB()
+		return &changefeedpb.Value{Value: &changefeedpb.Value_BytesValue{BytesValue: ewkb}}, nil
 	case *tree.DVoid:
 		return nil, nil
-	case *tree.DDate:
-		date, err := v.ToTime()
-		if err != nil {
-			return nil, err
-		}
-		return &changefeedpb.Value{Value: &changefeedpb.Value_DateValue{DateValue: date.Format("2006-01-02")}}, nil
-	case *tree.DInterval:
-		return &changefeedpb.Value{Value: &changefeedpb.Value_IntervalValue{IntervalValue: v.Duration.String()}}, nil
-	case *tree.DUuid:
-		return &changefeedpb.Value{Value: &changefeedpb.Value_UuidValue{UuidValue: strings.Trim(v.UUID.String(), "'")}}, nil
-	case *tree.DTime, *tree.DTimeTZ:
-		return &changefeedpb.Value{Value: &changefeedpb.Value_TimeValue{TimeValue: tree.AsStringWithFlags(v, tree.FmtBareStrings)}}, nil
 	case *tree.DOid, *tree.DIPAddr, *tree.DBitArray, *tree.DBox2D,
 		*tree.DTSVector, *tree.DTSQuery, *tree.DPGLSN, *tree.DPGVector:
-		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: d.String()}}, nil
+		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: tree.AsStringWithFlags(v, tree.FmtBareStrings, tree.FmtDataConversionConfig(dcc), tree.FmtLocation(loc))}}, nil
+	case *tree.DDate:
+		return &changefeedpb.Value{Value: &changefeedpb.Value_DateValue{DateValue: tree.AsStringWithFlags(v, tree.FmtBareStrings, tree.FmtDataConversionConfig(dcc), tree.FmtLocation(loc))}}, nil
+	case *tree.DInterval:
+		return &changefeedpb.Value{Value: &changefeedpb.Value_IntervalValue{IntervalValue: tree.AsStringWithFlags(v, tree.FmtBareStrings, tree.FmtDataConversionConfig(dcc), tree.FmtLocation(loc))}}, nil
+	case *tree.DUuid:
+		return &changefeedpb.Value{Value: &changefeedpb.Value_UuidValue{UuidValue: tree.AsStringWithFlags(v, tree.FmtBareStrings, tree.FmtDataConversionConfig(dcc), tree.FmtLocation(loc))}}, nil
+	case *tree.DTime, *tree.DTimeTZ:
+		return &changefeedpb.Value{Value: &changefeedpb.Value_TimeValue{TimeValue: tree.AsStringWithFlags(v, tree.FmtBareStrings, tree.FmtDataConversionConfig(dcc), tree.FmtLocation(loc))}}, nil
 	default:
 		return nil, errors.AssertionFailedf("unexpected type %T for datumToProtoValue", d)
 	}

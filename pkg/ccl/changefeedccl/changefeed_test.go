@@ -91,6 +91,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -823,24 +824,24 @@ func TestChangefeedQuotedIdentifiersTopicName(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
 		sqlDB.Exec(t, `CREATE TABLE mytable (
-			id INT PRIMARY KEY, 
+			id INT PRIMARY KEY,
 			"SomeField" JSONB,
 			"AnotherField" JSONB
 		)`)
 
 		sqlDB.Exec(t, `INSERT INTO mytable VALUES (
-			1, 
+			1,
 			'{"PropA": "value1", "prop_b": "value2"}'::jsonb,
 			'{"PropC": "value3", "prop_d": "value4"}'::jsonb
 		)`)
 
 		sqlDB.Exec(t, `INSERT INTO mytable VALUES (
-			2, 
+			2,
 			'{"PropA": "value5", "prop_b": "value6"}'::jsonb,
 			'{"PropC": "value7", "prop_d": "value8"}'::jsonb
 		)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED WITH diff, full_table_name, on_error=pause, envelope=wrapped AS SELECT 
+		foo := feed(t, f, `CREATE CHANGEFEED WITH diff, full_table_name, on_error=pause, envelope=wrapped AS SELECT
 			id,
 			"SomeField"->>'PropA' AS "PropA",
 			"SomeField"->>'prop_b' AS "PropB",
@@ -9392,22 +9393,66 @@ func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, cleanup := makeServer(t)
-	defer cleanup()
+	scanner := keysutil.MakePrettyScanner(nil, nil)
 
-	sqlDB := sqlutils.MakeSQLRunner(s.DB)
-	sqlDB.Exec(t, `CREATE TABLE tbl (a INT, b STRING);`)
-	sqlDB.Exec(t, `INSERT INTO tbl VALUES (1, 'one'), (2, 'two'), (3, 'three');`)
-	sqlDB.Exec(t, `CREATE CHANGEFEED FOR tbl INTO 'null://';`)
+	observeTables := func(sqlDB *sqlutils.SQLRunner, codec keys.SQLCodec) []int {
+		rows := sqlDB.Query(t, "SELECT range_start FROM crdb_internal.active_range_feeds")
+		defer rows.Close()
+		var tableIDs []int
+		for rows.Next() {
+			var prettyKey string
+			require.NoError(t, rows.Scan(&prettyKey))
+			key, err := scanner.Scan(prettyKey)
+			require.NoError(t, err)
+			_, tableID, err := codec.DecodeTablePrefix(key)
+			require.NoError(t, err)
+			tableIDs = append(tableIDs, int(tableID))
+		}
+		return tableIDs
+	}
 
-	var tableID int
-	sqlDB.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name='tbl'").Scan(&tableID)
-	tableKey := s.Codec.TablePrefix(uint32(tableID))
+	cases := []struct {
+		user           string
+		shouldSeeTable bool
+	}{
+		{`feedCreator`, false},
+		{`regularUser`, false},
+		{`adminUser`, true},
+		{`viewClusterMetadataUser`, true},
+	}
 
-	numRangesQuery := fmt.Sprintf(
-		"SELECT count(*) FROM crdb_internal.active_range_feeds WHERE range_start LIKE '%s/%%'",
-		tableKey)
-	sqlDB.CheckQueryResultsRetry(t, numRangesQuery, [][]string{{"1"}})
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// Creates several different tables, users, and roles for us to use.
+		ChangefeedJobPermissionsTestSetup(t, s)
+
+		var tableID int
+		sqlDB.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name = 'table_a'").Scan(&tableID)
+
+		var cf cdctest.TestFeed
+		asUser(t, f, `feedCreator`, func(userDB *sqlutils.SQLRunner) {
+			cf = feed(t, f, `CREATE CHANGEFEED FOR table_a;`)
+		})
+		defer closeFeed(t, cf)
+
+		for _, c := range cases {
+			testutils.SucceedsSoon(t, func() error {
+				asUser(t, f, c.user, func(userDB *sqlutils.SQLRunner) {
+					tableIDs := observeTables(userDB, s.Codec)
+					if c.shouldSeeTable {
+						require.Containsf(t, tableIDs, tableID, "user %s should see table %d", c.user, tableID)
+					} else {
+						require.Emptyf(t, tableIDs, "user %s should not see any tables", c.user)
+					}
+				})
+				return nil
+			})
+		}
+
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestChangefeedCaseInsensitiveOpts(t *testing.T) {
@@ -12218,7 +12263,7 @@ func TestChangefeedProtobuf(t *testing.T) {
 					)`)
 				sqlDB.Exec(t, `
 					INSERT INTO pricing VALUES
-						(1, 'Chair', 15.75, 2.500, ARRAY['Brown', 'Black']), 
+						(1, 'Chair', 15.75, 2.500, ARRAY['Brown', 'Black']),
 						(2, 'Table', 20.00, 1.23456789, ARRAY['Brown', 'Black'])`)
 
 				var opts []string
