@@ -11,11 +11,11 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/mmaprototype",
-        "//pkg/kv/kvserver/allocator/mmaprototypehelpers",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/op",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/mmaintegration",
         "//pkg/roachpb",
         "//pkg/util/log",
         "@com_github_cockroachdb_logtags//:logtags",
