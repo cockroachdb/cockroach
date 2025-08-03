@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -45,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1981,7 +1981,6 @@ func TestShowAutomaticJobs(t *testing.T) {
 	}
 }
 
-// HERE
 func TestShowJobWhenComplete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1991,16 +1990,17 @@ func TestShowJobWhenComplete(t *testing.T) {
 	}}
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, args)
+	s, godb, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(godb)
+
 	registry := s.JobRegistry().(*jobs.Registry)
 	mockJob := jobs.Record{
 		Username: username.TestUserName(),
 		Details:  jobspb.ImportDetails{},
 		Progress: jobspb.ImportProgress{},
 	}
-	_, err := db.Exec("CREATE USER testuser")
-	require.NoError(t, err)
+	db.Exec(t, "CREATE USER testuser")
 	done := make(chan struct{})
 	defer close(done)
 	cleanup := jobs.TestingRegisterConstructor(
@@ -2022,105 +2022,81 @@ func TestShowJobWhenComplete(t *testing.T) {
 		id    jobspb.JobID
 		state string
 	}
-	var out row
 	insqlDB := s.InternalDB().(isql.DB)
-	t.Run("show job", func(t *testing.T) {
-		// Start a job and cancel it so it is in state finished and then query it with
-		// SHOW JOB WHEN COMPLETE.
-		job, err := jobs.TestingCreateAndStartJob(ctx, registry, insqlDB, mockJob)
-		if err != nil {
-			t.Fatal(err)
-		}
-		group := ctxgroup.WithContext(ctx)
-		group.GoCtx(func(ctx context.Context) error {
-			if err := db.QueryRowContext(
-				ctx,
-				`SELECT job_id, status
-				 FROM [SHOW JOB WHEN COMPLETE $1]`,
-				job.ID()).Scan(&out.id, &out.state); err != nil {
-				return err
+
+	cases := []struct {
+		name      string
+		plural    bool
+		targetOpt string
+		operation string
+		endState  string
+	}{
+		{"show job when complete", false, "COMPLETE", "cancel", "canceled"},
+		{"show jobs when complete", true, "COMPLETE", "cancel", "canceled"},
+
+		{"show job when paused", false, "PAUSED", "pause", "paused"},
+		{"show jobs when paused", true, "PAUSED", "pause", "paused"},
+
+		{"show job when running", false, "RUNNING", "", "running"},
+		{"show jobs when running", true, "RUNNING", "", "running"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			numJobs := 1
+			if tc.plural {
+				numJobs = 2
 			}
-			if out.state != "canceled" {
-				return errors.Errorf(
-					"Expected state 'canceled' but got '%s'", out.state)
+			var jobIDs []jobspb.JobID
+			for i := 0; i < numJobs; i++ {
+				job, err := jobs.TestingCreateAndStartJob(ctx, registry, insqlDB, mockJob)
+				require.NoError(t, err)
+				jobIDs = append(jobIDs, job.ID())
 			}
-			if job.ID() != out.id {
-				return errors.Errorf(
-					"Expected job id %d but got %d", job.ID(), out.id)
-			}
-			return nil
-		})
-		// Give a chance for the above group to schedule in order to test that
-		// SHOW JOBS WHEN COMPLETE does block until the job is canceled.
-		time.Sleep(2 * time.Millisecond)
-		if _, err = db.ExecContext(ctx, "CANCEL JOB $1", job.ID()); err == nil {
-			err = group.Wait()
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-	t.Run("show jobs", func(t *testing.T) {
-		// Start two jobs and cancel the first one to make sure the
-		// query still blocks until the second job is also canceled.
-		var jobsToStart [2]*jobs.StartableJob
-		for i := range jobsToStart {
-			job, err := jobs.TestingCreateAndStartJob(ctx, registry, insqlDB, mockJob)
-			if err != nil {
-				t.Fatal(err)
-			}
-			jobsToStart[i] = job
-		}
-		if _, err := db.ExecContext(ctx, "CANCEL JOB $1", jobsToStart[0].ID()); err != nil {
-			t.Fatal(err)
-		}
-		group := ctxgroup.WithContext(ctx)
-		group.GoCtx(func(ctx context.Context) error {
-			rows, err := db.QueryContext(ctx,
-				`SELECT job_id, status
-				 FROM [SHOW JOBS WHEN COMPLETE (SELECT $1 UNION SELECT $2)]`,
-				jobsToStart[0].ID(), jobsToStart[1].ID())
-			if err != nil {
-				return err
-			}
-			var cnt int
-			for rows.Next() {
-				if err := rows.Scan(&out.id, &out.state); err != nil {
-					return err
-				}
-				cnt += 1
-				switch out.id {
-				case jobsToStart[0].ID():
-				case jobsToStart[1].ID():
-					// SHOW JOBS WHEN COMPLETE finishes only after all jobs are
-					// canceled.
-					if out.state != "canceled" {
-						return errors.Errorf(
-							"Expected state 'canceled' but got '%s'",
-							out.state)
+
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				testutils.SucceedsSoon(t, func() error {
+					showJobStmt := fmt.Sprintf(`SELECT job_id, status FROM [SHOW JOB WHEN %s %s]`, tc.targetOpt, jobIDs[0])
+					if tc.plural {
+						jobIDsStrs := make([]string, len(jobIDs))
+						for i, id := range jobIDs {
+							jobIDsStrs[i] = strconv.Itoa(int(id))
+						}
+						showJobStmt = fmt.Sprintf(`SELECT job_id, status FROM [SHOW JOBS WHEN %s (SELECT job_id FROM [SHOW JOBS] WHERE job_id IN (%s))]`,
+							tc.targetOpt, strings.Join(jobIDsStrs, ","))
 					}
-				default:
-					return errors.Errorf(
-						"Expected either id:%d or id:%d but got: %d",
-						jobsToStart[0].ID(), jobsToStart[1].ID(), out.id)
+					t.Logf("running: %s", showJobStmt)
+					rows := db.Query(t, showJobStmt)
+					defer rows.Close()
+					foundJobIds := make(map[jobspb.JobID]bool, numJobs)
+					for rows.Next() {
+						var out row
+						rows.Scan(&out.id, &out.state)
+						assert.Equal(t, tc.endState, out.state)
+						foundJobIds[out.id] = true
+					}
+					if len(foundJobIds) != numJobs {
+						return fmt.Errorf("expected %d jobs, found %d", numJobs, len(foundJobIds))
+					}
+					return nil
+				})
+			}()
+
+			if tc.operation != "" {
+				for _, id := range jobIDs {
+					db.Exec(t, fmt.Sprintf("%s JOB $1", tc.operation), id)
 				}
 			}
-			if cnt != 2 {
-				return errors.Errorf("Expected 2 results but found %d", cnt)
+
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatalf("timeout")
 			}
-			return nil
 		})
-		// Give a chance for the above group to schedule in order to test that
-		// SHOW JOBS WHEN COMPLETE does block until the job is canceled.
-		time.Sleep(2 * time.Millisecond)
-		var err error
-		if _, err = db.ExecContext(ctx, "CANCEL JOB $1", jobsToStart[1].ID()); err == nil {
-			err = group.Wait()
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
+	}
 }
 
 func TestJobInTxn(t *testing.T) {
