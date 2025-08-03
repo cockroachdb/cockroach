@@ -16,6 +16,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// InvalidSyncChangeID is a sentinel value for an invalid sync change ID. It is
+// used only for asim to indicate that a change is not in progress.
+const InvalidSyncChangeID SyncChangeID = 0
+
+func (id SyncChangeID) IsValid() bool {
+	return id != 0
+}
+
 type SyncChangeID uint64
 
 // TODO(wenyihu6): make sure allocator sync can tolerate cluster setting
