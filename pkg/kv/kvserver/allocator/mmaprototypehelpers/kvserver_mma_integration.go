@@ -86,29 +86,23 @@ func NewAllocatorSync(
 	return as
 }
 
-// AllocatorChangeType is used to identify the type of change that is being
-// made.
-type AllocatorChangeType int
+type leaseTransferOp struct {
+	transferFrom, transferTo roachpb.StoreID
+	usage                    allocator.RangeUsageInfo
+}
 
-// TODO(kvoli): These overlap with the operations in the plan pkg. We could do
-// with just one set.
-const (
-	// AllocatorChangeTypeLeaseTransfer corresponds to TransferLease.
-	AllocatorChangeTypeLeaseTransfer AllocatorChangeType = iota
-	// AllocatorChangeTypeChangeReplicas corresponds to ChangeReplicas.
-	AllocatorChangeTypeChangeReplicas
-	// AllocatorChangeTypeRelocateRange corresponds to RelocateRange.
-	AllocatorChangeTypeRelocateRange
-)
+type changeReplicasOp struct {
+	chgs  kvpb.ReplicationChanges
+	usage allocator.RangeUsageInfo
+}
 
 type trackedAllocatorChange struct {
-	typ       AllocatorChangeType
 	author    Author
 	usage     allocator.RangeUsageInfo
 	changeIDs []mmaprototype.ChangeID
 
-	chgs                     kvpb.ReplicationChanges
-	transferFrom, transferTo roachpb.StoreID
+	leaseTransferOp  *leaseTransferOp
+	changeReplicasOp *changeReplicasOp
 }
 
 func (as *AllocatorSync) NonMMAPreTransferLease(
@@ -138,12 +132,13 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 		}
 	}
 	trackedChange := trackedAllocatorChange{
-		typ:          AllocatorChangeTypeLeaseTransfer,
-		usage:        usage,
-		changeIDs:    changeIDs,
-		transferFrom: transferFrom.StoreID,
-		transferTo:   transferTo.StoreID,
-		author:       author,
+		changeIDs: changeIDs,
+		author:    author,
+		leaseTransferOp: &leaseTransferOp{
+			transferFrom: transferFrom.StoreID,
+			transferTo:   transferTo.StoreID,
+			usage:        usage,
+		},
 	}
 	// We only track one of the changeIDs, since they are the same for both
 	// lease transfer.
@@ -229,11 +224,12 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 		}
 	}
 	trackedChange := trackedAllocatorChange{
-		typ:       AllocatorChangeTypeChangeReplicas,
-		usage:     usage,
 		changeIDs: changeIDs,
-		chgs:      changes,
 		author:    ReplicateQueue,
+		changeReplicasOp: &changeReplicasOp{
+			chgs:  changes,
+			usage: usage,
+		},
 	}
 	log.Infof(ctx, "registered external replica change: chgs=%v change_ids=%v",
 		changes, changeIDs)
@@ -269,16 +265,19 @@ func (as *AllocatorSync) MMAPreApply(
 ) SyncChangeID {
 	var trackedChange trackedAllocatorChange
 	trackedChange.author = MMA
-	trackedChange.usage = usage
 	trackedChange.changeIDs = pendingChange.ChangeIDs()
 	if pendingChange.IsTransferLease() {
-		trackedChange.typ = AllocatorChangeTypeLeaseTransfer
-		trackedChange.transferTo = pendingChange.LeaseTransferTarget()
-		trackedChange.transferFrom = pendingChange.LeaseTransferFrom()
+		trackedChange.leaseTransferOp = &leaseTransferOp{
+			transferFrom: pendingChange.LeaseTransferFrom(),
+			transferTo:   pendingChange.LeaseTransferTarget(),
+			usage:        usage,
+		}
 		as.mmAllocator.Metrics().MMARegisterLeaseSuccess.Inc(1)
 	} else if pendingChange.IsChangeReplicas() {
-		trackedChange.typ = AllocatorChangeTypeChangeReplicas
-		trackedChange.chgs = pendingChange.ReplicationChanges()
+		trackedChange.changeReplicasOp = &changeReplicasOp{
+			chgs:  pendingChange.ReplicationChanges(),
+			usage: usage,
+		}
 		as.mmAllocator.Metrics().MMARegisterRebalanceSuccess.Inc(1)
 	} else {
 		panic("unexpected change type")
@@ -288,47 +287,6 @@ func (as *AllocatorSync) MMAPreApply(
 	syncChangeID := as.newSyncChangeIDLocked()
 	as.mu.trackedChanges[syncChangeID] = trackedChange
 	return syncChangeID
-}
-
-func (as *AllocatorSync) updateMetrics(
-	success bool, actionType AllocatorChangeType, executorOfChange Author,
-) {
-	switch executorOfChange {
-	case LeaseQueue:
-		if success {
-			as.mmAllocator.Metrics().ExternalLeaseTransferSuccess.Inc(1)
-		} else {
-			as.mmAllocator.Metrics().ExternalLeaseTransferFailure.Inc(1)
-		}
-	case ReplicateQueue:
-		if success {
-			as.mmAllocator.Metrics().ExternalReplicaRebalanceSuccess.Inc(1)
-		} else {
-			as.mmAllocator.Metrics().ExternalReplicaRebalanceFailure.Inc(1)
-		}
-	case MMA:
-		if success {
-			switch actionType {
-			case AllocatorChangeTypeChangeReplicas:
-				as.mmAllocator.Metrics().MMAReplicaRebalanceSuccess.Inc(1)
-			case AllocatorChangeTypeLeaseTransfer:
-				as.mmAllocator.Metrics().MMALeaseTransferSuccess.Inc(1)
-			case AllocatorChangeTypeRelocateRange:
-				panic("unimplemented")
-			}
-		} else {
-			switch actionType {
-			case AllocatorChangeTypeChangeReplicas:
-				as.mmAllocator.Metrics().MMAReplicaRebalanceFailure.Inc(1)
-			case AllocatorChangeTypeLeaseTransfer:
-				as.mmAllocator.Metrics().MMALeaseTransferFailure.Inc(1)
-			case AllocatorChangeTypeRelocateRange:
-				panic("unimplemented")
-			}
-		}
-	default:
-		panic("unknown author for PostApply")
-	}
 }
 
 // PostApply is called after changes have been applied to the cluster, by both
@@ -352,26 +310,24 @@ func (as *AllocatorSync) PostApply(ctx context.Context, syncChangeID SyncChangeI
 	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserverbase.LBRebalancingMultiMetric {
 		if changeIDs := tracked.changeIDs; changeIDs != nil {
 			log.Infof(ctx, "PostApply: tracked=%v change_ids=%v success: %v", tracked, changeIDs, success)
-			as.updateMetrics(success, tracked.typ, tracked.author)
 			as.mmAllocator.AdjustPendingChangesDisposition(changeIDs, success)
 		} else {
 			log.Infof(ctx, "PostApply: tracked=%v no change_ids success: %v", tracked, success)
 		}
 	}
-	as.updateMetrics(success, tracked.typ, tracked.author)
 	if !success {
 		return
 	}
-	switch tracked.typ {
-	case AllocatorChangeTypeLeaseTransfer:
-		as.sp.UpdateLocalStoresAfterLeaseTransfer(tracked.transferFrom,
-			tracked.transferTo, tracked.usage)
-	case AllocatorChangeTypeChangeReplicas:
-		for _, chg := range tracked.chgs {
+	switch {
+	case tracked.leaseTransferOp != nil:
+		as.sp.UpdateLocalStoresAfterLeaseTransfer(tracked.leaseTransferOp.transferFrom,
+			tracked.leaseTransferOp.transferTo, tracked.usage)
+	case tracked.changeReplicasOp != nil:
+		for _, chg := range tracked.changeReplicasOp.chgs {
 			as.sp.UpdateLocalStoreAfterRebalance(
 				chg.Target.StoreID, tracked.usage, chg.ChangeType)
 		}
-	case AllocatorChangeTypeRelocateRange:
+	default:
 		// TODO(kvoli): We don't need to implement this until later, as only one
 		// store rebalancer will run at a time and only the old store rebalancer
 		// issues relocate range commands.
