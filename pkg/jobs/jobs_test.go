@@ -37,7 +37,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -2025,24 +2028,88 @@ func TestShowJobWhenComplete(t *testing.T) {
 	insqlDB := s.InternalDB().(isql.DB)
 
 	cases := []struct {
-		name      string
-		plural    bool
-		targetOpt string
-		operation string
-		endState  string
+		name          string
+		plural        bool
+		targetOpt     string
+		operation     string
+		endState      string
+		expectErr     bool
+		expectTimeout bool
 	}{
-		{"show job when complete", false, "COMPLETE", "cancel", "canceled"},
-		{"show jobs when complete", true, "COMPLETE", "cancel", "canceled"},
+		{
+			name:      "show job when complete",
+			plural:    false,
+			targetOpt: "COMPLETE",
+			operation: "cancel",
+			endState:  "canceled",
+		},
+		{
+			name:      "show jobs when complete",
+			plural:    true,
+			targetOpt: "COMPLETE",
+			operation: "cancel",
+			endState:  "canceled",
+		},
 
-		{"show job when paused", false, "PAUSED", "pause", "paused"},
-		{"show jobs when paused", true, "PAUSED", "pause", "paused"},
+		{
+			name:      "show job when paused",
+			plural:    false,
+			targetOpt: "PAUSED",
+			operation: "pause",
+			endState:  "paused",
+		},
+		{
+			name:      "show jobs when paused",
+			plural:    true,
+			targetOpt: "PAUSED",
+			operation: "pause",
+			endState:  "paused",
+		},
 
-		{"show job when running", false, "RUNNING", "", "running"},
-		{"show jobs when running", true, "RUNNING", "", "running"},
+		{
+			name:      "show job when running",
+			plural:    false,
+			targetOpt: "RUNNING",
+			endState:  "running",
+		},
+		{
+			name:      "show jobs when running",
+			plural:    true,
+			targetOpt: "RUNNING",
+			endState:  "running",
+		},
+
+		// TODO:
+		// - test timeout
+
+		{
+			name:      "show jobs when paused with canceled",
+			plural:    true,
+			targetOpt: "PAUSED",
+			operation: "cancel",
+			endState:  "canceled",
+			expectErr: true,
+		},
+
+		{
+			name:          "show jobs when paused with timeout",
+			plural:        true,
+			targetOpt:     "PAUSED",
+			endState:      "running",
+			expectTimeout: true,
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.expectTimeout {
+				originalTimeout := delegate.ShowJobsBlockTimeout
+				delegate.ShowJobsBlockTimeout = "1s"
+				defer func() {
+					delegate.ShowJobsBlockTimeout = originalTimeout
+				}()
+			}
+
 			numJobs := 1
 			if tc.plural {
 				numJobs = 2
@@ -2054,6 +2121,8 @@ func TestShowJobWhenComplete(t *testing.T) {
 				jobIDs = append(jobIDs, job.ID())
 			}
 
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
@@ -2067,16 +2136,29 @@ func TestShowJobWhenComplete(t *testing.T) {
 						showJobStmt = fmt.Sprintf(`SELECT job_id, status FROM [SHOW JOBS WHEN %s (SELECT job_id FROM [SHOW JOBS] WHERE job_id IN (%s))]`,
 							tc.targetOpt, strings.Join(jobIDsStrs, ","))
 					}
+
 					t.Logf("running: %s", showJobStmt)
-					rows := db.Query(t, showJobStmt)
+					rows, err := godb.QueryContext(ctx, showJobStmt)
+					if tc.expectTimeout {
+						require.Error(t, err)
+						require.Equal(t, pgcode.QueryCanceled, pgerror.GetPGCodeInternal(err, pgerror.ComputeDefaultCode))
+						return nil
+					}
+					if tc.expectErr {
+						require.Error(t, err)
+						return nil
+					}
+					require.NoError(t, err)
 					defer rows.Close()
+
 					foundJobIds := make(map[jobspb.JobID]bool, numJobs)
 					for rows.Next() {
 						var out row
 						rows.Scan(&out.id, &out.state)
-						assert.Equal(t, tc.endState, out.state)
+						require.Equal(t, tc.endState, out.state)
 						foundJobIds[out.id] = true
 					}
+
 					if len(foundJobIds) != numJobs {
 						return fmt.Errorf("expected %d jobs, found %d", numJobs, len(foundJobIds))
 					}
@@ -2094,6 +2176,8 @@ func TestShowJobWhenComplete(t *testing.T) {
 			case <-done:
 			case <-time.After(10 * time.Second):
 				t.Fatalf("timeout")
+				cancel()
+				<-done
 			}
 		})
 	}

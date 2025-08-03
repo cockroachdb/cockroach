@@ -82,6 +82,9 @@ func constructSelectQuery(n *tree.ShowJobs) string {
 	return fmt.Sprintf("%s %s %s", baseQuery.String(), whereClause, orderbyClause)
 }
 
+// TODO: better way, can we use knobs here?
+var ShowJobsBlockTimeout = "24h"
+
 func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 	if n.Schedules != nil {
 		// Limit the jobs displayed to the ones started by specified schedules.
@@ -120,7 +123,7 @@ WITH
 		SELECT crdb_internal.force_error('XX000', 'wrong terminal') FROM jobs WHERE %s LIMIT 1
 	),
 	sleep_and_restart_if_unsatisfied AS (
-		SELECT IF(pg_sleep(1), crdb_internal.force_retry('24h'), 1) = 0 AS timed_out
+		SELECT IF(pg_sleep(1), crdb_internal.force_retry('%s'), 1) = 0 AS timed_out
 		FROM (SELECT job_id FROM jobs WHERE %s LIMIT 1)
 	),
 	fail_if_slept_too_long AS (
@@ -131,7 +134,7 @@ WITH
 SELECT *
 	FROM jobs
 	WHERE NOT EXISTS(SELECT * FROM fail_if_slept_too_long)
-	AND NOT EXISTS(SELECT * FROM fail_if_wrong_terminal)`, stmt, wrongTerminalCond, unsatisfiedCond)
+	AND NOT EXISTS(SELECT * FROM fail_if_wrong_terminal)`, stmt, wrongTerminalCond, ShowJobsBlockTimeout, unsatisfiedCond)
 	}
 	return d.parse(stmt)
 }
