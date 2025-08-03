@@ -171,6 +171,13 @@ func (as *AllocatorSync) MMAPreApply(
 	return as.addTrackedChange(trackedChange)
 }
 
+// MarkChangesAsFailed marks the given change IDs as failed without going
+// through allocator sync. This is used when mma changes fail before even
+// registering with mma via MMAPreApply.
+func (as *AllocatorSync) MarkChangesAsFailed(changeIDs []mmaprototype.ChangeID) {
+	as.mmaAllocator.AdjustPendingChangesDisposition(changeIDs, false /* success */)
+}
+
 // PostApply is called by the lease/replicate queue to apply a change to the
 // store pool upon success. It is called with the SyncChangeID returned by
 // NonMMAPreTransferLease or NonMMAPreChangeReplicas.
