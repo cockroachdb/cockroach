@@ -12,11 +12,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
@@ -29,7 +29,7 @@ type MMAStoreRebalancer struct {
 	localStoreID state.StoreID
 	controller   op.Controller
 	allocator    mmaprototype.Allocator
-	as           *mmaprototypehelpers.AllocatorSync
+	as           *mmaintegration.AllocatorSync
 	settings     *config.SimulationSettings
 
 	// lastRebalanceTime is the last time allocator.ComputeChanges was called.
@@ -58,7 +58,7 @@ type MMAStoreRebalancer struct {
 type pendingChangeAndRangeUsageInfo struct {
 	change       mmaprototype.PendingRangeChange
 	usage        allocator.RangeUsageInfo
-	syncChangeID mmaprototypehelpers.SyncChangeID
+	syncChangeID mmaintegration.SyncChangeID
 }
 
 // NewMMAStoreRebalancer creates a new MMAStoreRebalancer.
@@ -66,7 +66,7 @@ func NewMMAStoreRebalancer(
 	localStoreID state.StoreID,
 	localNodeID state.NodeID,
 	allocator mmaprototype.Allocator,
-	as *mmaprototypehelpers.AllocatorSync,
+	as *mmaintegration.AllocatorSync,
 	controller op.Controller,
 	settings *config.SimulationSettings,
 ) *MMAStoreRebalancer {
@@ -137,7 +137,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 				} else {
 					log.VInfof(ctx, 1, "operation for pendingChange=%v completed successfully", curChange)
 				}
-				msr.as.PostApply(ctx, curChange.syncChangeID, success)
+				msr.as.PostApply(curChange.syncChangeID, success)
 				msr.pendingChangeIdx++
 			} else {
 				log.VInfof(ctx, 1, "operation for pendingChange=%v is still in progress", curChange)
@@ -204,7 +204,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		}
 		log.VInfof(ctx, 1, "dispatching operation for pendingChange=%v", curChange)
 		msr.pendingChanges[msr.pendingChangeIdx].syncChangeID =
-			msr.as.MMAPreApply(ctx, curChange.usage, curChange.change)
+			msr.as.MMAPreApply(curChange.usage, curChange.change)
 		msr.pendingTicket = msr.controller.Dispatch(ctx, tick, s, curOp)
 	}
 }

@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,8 +27,8 @@ type replicateQueue struct {
 	planner          plan.ReplicationPlanner
 	clock            *hlc.Clock
 	settings         *config.SimulationSettings
-	as               *mmaprototypehelpers.AllocatorSync
-	lastSyncChangeID mmaprototypehelpers.SyncChangeID
+	as               *mmaintegration.AllocatorSync
+	lastSyncChangeID mmaintegration.SyncChangeID
 }
 
 // NewReplicateQueue returns a new replicate queue.
@@ -38,7 +38,7 @@ func NewReplicateQueue(
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
-	allocatorSync *mmaprototypehelpers.AllocatorSync,
+	allocatorSync *mmaintegration.AllocatorSync,
 	storePool storepool.AllocatorStorePool,
 	start time.Time,
 ) RangeQueue {
@@ -120,8 +120,8 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 	}
 
 	if !tick.Before(rq.next) && rq.lastSyncChangeID.IsValid() {
-		rq.as.PostApply(ctx, rq.lastSyncChangeID, true /* success */)
-		rq.lastSyncChangeID = mmaprototypehelpers.InvalidSyncChangeID
+		rq.as.PostApply(rq.lastSyncChangeID, true /* success */)
+		rq.lastSyncChangeID = mmaintegration.InvalidSyncChangeID
 	}
 
 	for !tick.Before(rq.next) && rq.priorityQueue.Len() != 0 {
@@ -172,28 +172,26 @@ func pushReplicateChange(
 	tick time.Time,
 	delayFn func(int64, bool) time.Duration,
 	stateChanger state.Changer,
-	as *mmaprototypehelpers.AllocatorSync,
+	as *mmaintegration.AllocatorSync,
 	queueName string,
-) (time.Time, mmaprototypehelpers.SyncChangeID) {
+) (time.Time, mmaintegration.SyncChangeID) {
 	var stateChange state.Change
-	var changeID mmaprototypehelpers.SyncChangeID
+	var changeID mmaintegration.SyncChangeID
 	next := tick
 	switch op := change.Op.(type) {
 	case plan.AllocationNoop:
 		// Nothing to do.
-		return next, mmaprototypehelpers.InvalidSyncChangeID
+		return next, mmaintegration.InvalidSyncChangeID
 	case plan.AllocationFinalizeAtomicReplicationOp:
 		panic("unimplemented finalize atomic replication op")
 	case plan.AllocationTransferLeaseOp:
 		if as != nil {
 			// as may be nil in some tests.
 			changeID = as.NonMMAPreTransferLease(
-				ctx,
 				repl.Desc(),
 				repl.RangeUsageInfo(),
 				op.Source,
 				op.Target,
-				mmaprototypehelpers.ReplicateQueue,
 			)
 		}
 		stateChange = &state.LeaseTransferChange{
@@ -206,7 +204,6 @@ func pushReplicateChange(
 		if as != nil {
 			// as may be nil in some tests.
 			changeID = as.NonMMAPreChangeReplicas(
-				ctx,
 				repl.Desc(),
 				repl.RangeUsageInfo(),
 				op.Chgs,
@@ -229,8 +226,8 @@ func pushReplicateChange(
 		next = completeAt
 	} else {
 		log.VEventf(ctx, 1, "pushing state change failed")
-		as.PostApply(ctx, changeID, false /* success */)
-		changeID = mmaprototypehelpers.InvalidSyncChangeID
+		as.PostApply(changeID, false /* success */)
+		changeID = mmaintegration.InvalidSyncChangeID
 	}
 	return next, changeID
 }
