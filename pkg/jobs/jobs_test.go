@@ -1981,6 +1981,7 @@ func TestShowAutomaticJobs(t *testing.T) {
 	}
 }
 
+// HERE
 func TestShowJobWhenComplete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

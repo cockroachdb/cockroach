@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/errors"
 )
 
 const ageFilter = `(finished IS NULL OR finished > now() - '12h':::interval)`
@@ -94,22 +95,43 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 
 	stmt := constructSelectQuery(n)
 	if n.Block {
+		var unsatisfiedCond string
+		var wrongTerminalCond string
+		switch n.BlockTarget {
+		case tree.BlockTargetFinished:
+			unsatisfiedCond = `finished IS NULL`
+			wrongTerminalCond = `false` // For backwards compatibility, don't check for wrong terminals at all.
+		case tree.BlockTargetPaused:
+			unsatisfiedCond = `status != 'paused'`
+			// TODO: leverage pkg/jobs.State.IsTerminal()
+			wrongTerminalCond = `status IN ('failed', 'canceled', 'succeeded', 'revert-failed')`
+		case tree.BlockTargetRunning:
+			unsatisfiedCond = `status != 'running'`
+			wrongTerminalCond = `status IN ('failed', 'canceled', 'succeeded', 'paused', 'revert-failed')`
+		default:
+			return nil, errors.Newf("unknown block target %q", n.BlockTarget)
+		}
+
 		stmt = fmt.Sprintf(
 			`
-    WITH jobs AS (SELECT * FROM [%s]),
-       sleep_and_restart_if_unfinished AS (
-              SELECT IF(pg_sleep(1), crdb_internal.force_retry('24h'), 1)
-                     = 0 AS timed_out
-                FROM (SELECT job_id FROM jobs WHERE finished IS NULL LIMIT 1)
-             ),
-       fail_if_slept_too_long AS (
-                SELECT crdb_internal.force_error('55000', 'timed out waiting for jobs')
-                  FROM sleep_and_restart_if_unfinished
-                 WHERE timed_out
-              )
+WITH
+	jobs AS (SELECT * FROM [%s]),
+	fail_if_wrong_terminal AS ( -- TODO: error code
+		SELECT crdb_internal.force_error('XX000', 'wrong terminal') FROM jobs WHERE %s LIMIT 1
+	),
+	sleep_and_restart_if_unsatisfied AS (
+		SELECT IF(pg_sleep(1), crdb_internal.force_retry('24h'), 1) = 0 AS timed_out
+		FROM (SELECT job_id FROM jobs WHERE %s LIMIT 1)
+	),
+	fail_if_slept_too_long AS (
+		SELECT crdb_internal.force_error('55000', 'timed out waiting for jobs')
+		FROM sleep_and_restart_if_unsatisfied
+		WHERE timed_out
+	)
 SELECT *
-  FROM jobs
- WHERE NOT EXISTS(SELECT * FROM fail_if_slept_too_long)`, stmt)
+	FROM jobs
+	WHERE NOT EXISTS(SELECT * FROM fail_if_slept_too_long)
+	AND NOT EXISTS(SELECT * FROM fail_if_wrong_terminal)`, stmt, wrongTerminalCond, unsatisfiedCond)
 	}
 	return d.parse(stmt)
 }
