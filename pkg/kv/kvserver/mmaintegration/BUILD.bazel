@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "allocator_op.go",
         "allocator_sync.go",
+        "mma_conversion.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration",
     visibility = ["//visibility:public"],
@@ -13,8 +14,10 @@ go_library(
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/mmaprototype",
         "//pkg/kv/kvserver/allocator/storepool",
+        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/util/buildutil",
         "//pkg/util/syncutil",
     ],
 )

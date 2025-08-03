@@ -979,9 +979,10 @@ func (rq *replicateQueue) shedLease(
 
 // ReplicaLeaseMover handles lease transfers for a single range.
 type ReplicaLeaseMover interface {
+	// Desc returns the range descriptor of the range.
+	Desc() *roachpb.RangeDescriptor
 	// AdminTransferLease moves the lease to the requested store.
 	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
-
 	// String returns info about the replica.
 	String() string
 }
@@ -1034,6 +1035,7 @@ func (rq *replicateQueue) TransferLease(
 	// Inform allocator sync that the change has been applied which applies
 	// changes to store pool and inform mma.
 	changeID := rq.as.NonMMAPreTransferLease(
+		rlm.Desc(),
 		rangeUsageInfo,
 		source,
 		target,
@@ -1075,8 +1077,10 @@ func (rq *replicateQueue) changeReplicas(
 	// Inform allocator sync that the change has been applied which applies
 	// changes to store pool and inform mma.
 	changeID := rq.as.NonMMAPreChangeReplicas(
+		desc,
 		rangeUsageInfo,
 		chgs,
+		repl.StoreID(),
 	)
 	// NB: this calls the impl rather than ChangeReplicas because
 	// the latter traps tests that try to call it while the replication
