@@ -2079,9 +2079,6 @@ func TestShowJobWhenComplete(t *testing.T) {
 			endState:  "running",
 		},
 
-		// TODO:
-		// - test timeout
-
 		{
 			name:      "show jobs when paused with canceled",
 			plural:    true,
@@ -2140,12 +2137,15 @@ func TestShowJobWhenComplete(t *testing.T) {
 					t.Logf("running: %s", showJobStmt)
 					rows, err := godb.QueryContext(ctx, showJobStmt)
 					if tc.expectTimeout {
+						t.Logf("expected timeout, err: %v", err)
 						require.Error(t, err)
-						require.Equal(t, pgcode.QueryCanceled, pgerror.GetPGCodeInternal(err, pgerror.ComputeDefaultCode))
+						require.Equal(t, pgcode.ObjectNotInPrerequisiteState, pgerror.GetPGCodeInternal(err, pgerror.ComputeDefaultCode))
 						return nil
 					}
 					if tc.expectErr {
+						t.Logf("expected error, err: %v", err)
 						require.Error(t, err)
+						require.Equal(t, pgcode.ObjectNotInPrerequisiteState, pgerror.GetPGCodeInternal(err, pgerror.ComputeDefaultCode))
 						return nil
 					}
 					require.NoError(t, err)
@@ -2175,9 +2175,9 @@ func TestShowJobWhenComplete(t *testing.T) {
 			select {
 			case <-done:
 			case <-time.After(10 * time.Second):
-				t.Fatalf("timeout")
 				cancel()
 				<-done
+				t.Fatalf("timeout")
 			}
 		})
 	}
