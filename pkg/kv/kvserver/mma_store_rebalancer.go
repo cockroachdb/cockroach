@@ -24,6 +24,7 @@ import (
 )
 
 type replicaToApplyChanges interface {
+	RangeUsageInfo() allocator.RangeUsageInfo
 	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
 	changeReplicasImpl(
 		ctx context.Context,
@@ -153,15 +154,23 @@ func (m *mmaStoreRebalancer) applyChange(
 ) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl == nil {
+		m.as.MarkChangesAsFailed(change.ChangeIDs())
 		return errors.Errorf("replica not found for range %d", change.RangeID)
 	}
-	if change.IsTransferLease() {
-		return m.applyLeaseTransfer(ctx, repl, change)
-	} else if change.IsChangeReplicas() {
-		return m.applyReplicaChanges(ctx, repl, change)
+	changeID := m.as.MMAPreApply(repl.RangeUsageInfo(), change)
+	var err error
+	switch {
+	case change.IsTransferLease():
+		err = m.applyLeaseTransfer(ctx, repl, change)
+	case change.IsChangeReplicas():
+		err = m.applyReplicaChanges(ctx, repl, change)
+	default:
+		return errors.Errorf("unknown change type for range %d", change.RangeID)
 	}
-
-	return errors.Errorf("unknown change type for range %d", change.RangeID)
+	// Inform allocator sync that the change has been applied which applies
+	// changes to store pool and inform mma.
+	m.as.PostApply(changeID, err == nil /*success*/)
+	return err
 }
 
 // applyLeaseTransfer applies a lease transfer change.
