@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -56,6 +57,22 @@ func NewAllocatorSync(
 	return as
 }
 
+// mmaRangeLoad converts range load usage to mma range load.
+//
+// TODO(wenyihu6): This is bit redundant to mmaRangeLoad in kvserver. See if we
+// can refactor to use the same helper function.
+func mmaRangeLoad(rangeUsageInfo allocator.RangeUsageInfo) mmaprototype.RangeLoad {
+	var rl mmaprototype.RangeLoad
+	rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(
+		rangeUsageInfo.RequestCPUNanosPerSecond + rangeUsageInfo.RaftCPUNanosPerSecond)
+	rl.RaftCPU = mmaprototype.LoadValue(rangeUsageInfo.RaftCPUNanosPerSecond)
+	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(rangeUsageInfo.WriteBytesPerSecond)
+	// Note that LogicalBytes is already populated as enginepb.MVCCStats.Total()
+	// in repl.RangeUsageInfo().
+	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(rangeUsageInfo.LogicalBytes)
+	return rl
+}
+
 // addTrackedChange adds a tracked change to the allocator sync.
 func (as *AllocatorSync) addTrackedChange(change trackedAllocatorChange) SyncChangeID {
 	as.mu.Lock()
@@ -84,10 +101,17 @@ func (as *AllocatorSync) getTrackedChange(syncChangeID SyncChangeID) trackedAllo
 // identifier that can be used to call PostApply to apply the change to the
 // store pool upon success.
 func (as *AllocatorSync) NonMMAPreTransferLease(
-	usage allocator.RangeUsageInfo, transferFrom, transferTo roachpb.ReplicationTarget,
+	desc *roachpb.RangeDescriptor,
+	usage allocator.RangeUsageInfo,
+	transferFrom, transferTo roachpb.ReplicationTarget,
 ) SyncChangeID {
+	var changeIDs []mmaprototype.ChangeID
+	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserverbase.LBRebalancingMultiMetric {
+		changeIDs = as.mmaAllocator.RegisterExternalChanges(convertLeaseTransferToMMA(desc, usage, transferFrom, transferTo))
+	}
 	trackedChange := trackedAllocatorChange{
-		usage: usage,
+		changeIDs: changeIDs,
+		usage:     usage,
 		leaseTransferOp: &leaseTransferOp{
 			transferFrom: transferFrom.StoreID,
 			transferTo:   transferTo.StoreID,
@@ -101,10 +125,18 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 // identifier that can be used to call PostApply to apply the change to the
 // store pool upon success.
 func (as *AllocatorSync) NonMMAPreChangeReplicas(
-	usage allocator.RangeUsageInfo, changes kvpb.ReplicationChanges,
+	desc *roachpb.RangeDescriptor,
+	usage allocator.RangeUsageInfo,
+	changes kvpb.ReplicationChanges,
+	leaseholderStoreID roachpb.StoreID,
 ) SyncChangeID {
+	var changeIDs []mmaprototype.ChangeID
+	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserverbase.LBRebalancingMultiMetric {
+		changeIDs = as.mmaAllocator.RegisterExternalChanges(convertReplicaChangeToMMA(desc, usage, changes, leaseholderStoreID))
+	}
 	trackedChange := trackedAllocatorChange{
-		usage: usage,
+		changeIDs: changeIDs,
+		usage:     usage,
 		changeReplicasOp: &changeReplicasOp{
 			chgs: changes,
 		},
@@ -116,10 +148,14 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 // store pool upon success. It is called with the SyncChangeID returned by
 // NonMMAPreTransferLease or NonMMAPreChangeReplicas.
 func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
+	trackedChange := as.getTrackedChange(syncChangeID)
+	if changeIDs := trackedChange.changeIDs; changeIDs != nil {
+		// Call into without checking cluster setting.
+		as.mmaAllocator.AdjustPendingChangesDisposition(changeIDs, success)
+	}
 	if !success {
 		return
 	}
-	trackedChange := as.getTrackedChange(syncChangeID)
 	switch {
 	case trackedChange.leaseTransferOp != nil:
 		as.sp.UpdateLocalStoresAfterLeaseTransfer(trackedChange.leaseTransferOp.transferFrom,

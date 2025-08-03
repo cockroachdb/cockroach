@@ -8,12 +8,19 @@ package mmaintegration
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // trackedAllocatorChange represents a change registered with AllocatorSync
-// (e.g. lease transfer or change replicas). Usage is range load usage.
+// (e.g. lease transfer or change replicas).
 type trackedAllocatorChange struct {
+	// changeIDs are the change IDs that are registered with mma. Nil if mma is
+	// disabled or the change cannot be registered with mma. If changeIDs is
+	// nil, PostApply does not need to inform mma. Otherwise, PostApply should
+	// inform mma by passing changeIDs to AdjustPendingChangesDisposition.
+	changeIDs []mmaprototype.ChangeID
+	// Usage is range load usage.
 	usage allocator.RangeUsageInfo
 	// Only one of the following two fields will be set.
 	leaseTransferOp  *leaseTransferOp
