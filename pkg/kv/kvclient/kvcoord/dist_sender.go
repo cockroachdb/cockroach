@@ -1494,35 +1494,44 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	qiBatchIdx := batchIdx + 1
 	qiResponseCh := make(chan response, 1)
 
-	runTask := ds.stopper.RunAsyncTask
+	runTask := ds.stopper.RunAsyncTaskEx
 	if ds.disableParallelBatches {
-		runTask = ds.stopper.RunTask
-	}
-	if err := runTask(ctx, "kv.DistSender: sending pre-commit query intents", func(ctx context.Context) {
-		log.VEvent(ctx, 3, "sending split out pre-commit QueryIntent batch")
-		// Map response index to the original un-swapped batch index.
-		// Remember that we moved the last QueryIntent in this batch
-		// from swapIdx to the end.
-		//
-		// From the example above:
-		//  Before:    [put qi(1) put del qi(2) qi(3) qi(4) et]
-		//  Separated: [put qi(1) put del et] [qi(3) qi(4) qi(2)]
-		//
-		//  qiBa.Requests = [qi(3) qi(4) qi(2)]
-		//  swapIdx       = 4
-		//  positions     = [5 6 4]
-		//
-		positions := make([]int, len(qiBa.Requests))
-		positions[len(positions)-1] = swapIdx
-		for i := range positions[:len(positions)-1] {
-			positions[i] = swapIdx + 1 + i
+		// NB: Construct a function signature that matches Stopper.RunAsyncTaskEx to
+		// avoid some code duplication.
+		runTask = func(ctx context.Context, opts stop.TaskOpts, fn func(ctx context.Context)) error {
+			return ds.stopper.RunTask(ctx, opts.TaskName, fn)
 		}
+	}
+	if err := runTask(ctx,
+		stop.TaskOpts{
+			TaskName: "kv.DistSender: sending pre-commit query intents",
+			SpanOpt:  stop.ChildSpan,
+		},
+		func(ctx context.Context) {
+			log.VEvent(ctx, 3, "sending split out pre-commit QueryIntent batch")
+			// Map response index to the original un-swapped batch index.
+			// Remember that we moved the last QueryIntent in this batch
+			// from swapIdx to the end.
+			//
+			// From the example above:
+			//  Before:    [put qi(1) put del qi(2) qi(3) qi(4) et]
+			//  Separated: [put qi(1) put del et] [qi(3) qi(4) qi(2)]
+			//
+			//  qiBa.Requests = [qi(3) qi(4) qi(2)]
+			//  swapIdx       = 4
+			//  positions     = [5 6 4]
+			//
+			positions := make([]int, len(qiBa.Requests))
+			positions[len(positions)-1] = swapIdx
+			for i := range positions[:len(positions)-1] {
+				positions[i] = swapIdx + 1 + i
+			}
 
-		// Send the batch with withCommit=true since it will be inflight
-		// concurrently with the EndTxn batch below.
-		reply, pErr := ds.divideAndSendBatchToRanges(ctx, qiBa, qiRS, qiIsReverse, true /* withCommit */, qiBatchIdx)
-		qiResponseCh <- response{reply: reply, positions: positions, pErr: pErr}
-	}); err != nil {
+			// Send the batch with withCommit=true since it will be inflight
+			// concurrently with the EndTxn batch below.
+			reply, pErr := ds.divideAndSendBatchToRanges(ctx, qiBa, qiRS, qiIsReverse, true /* withCommit */, qiBatchIdx)
+			qiResponseCh <- response{reply: reply, positions: positions, pErr: pErr}
+		}); err != nil {
 		return nil, kvpb.NewError(err)
 	}
 
