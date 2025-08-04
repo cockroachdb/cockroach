@@ -730,7 +730,7 @@ func BenchmarkBumpSideTransportClosed(b *testing.B) {
 		// Perform the call.
 		res := r.BumpSideTransportClosed(ctx, now, targets)
 		if !res.OK {
-			b.Fatal("BumpSideTransportClosed unexpectedly failed")
+			b.Fatalf("BumpSideTransportClosed unexpectedly failed: %+v", res)
 		}
 	}
 }
