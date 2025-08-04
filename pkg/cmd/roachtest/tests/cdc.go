@@ -190,8 +190,7 @@ func (ct *cdcTester) startCRDBChaos() {
 	ct.mon.Go(ch.Runner(ct.cluster, ct.t, ct.mon))
 }
 
-func (ct *cdcTester) setupSink(args feedArgs) string {
-	var sinkURI string
+func (ct *cdcTester) setupSink(args feedArgs) (sinkURI string) {
 	switch args.sinkType {
 	case nullSink:
 		sinkURI = "null://"
@@ -529,7 +528,8 @@ type feedArgs struct {
 	tolerateErrors  bool
 	sinkURIOverride string
 	cdcFeatureFlags
-	kafkaArgs kafkaFeedArgs
+	kafkaArgs      kafkaFeedArgs
+	noAutoValidate bool
 }
 
 // kafkaFeedArgs are args that are specific to kafkaSink changefeeds.
@@ -539,6 +539,7 @@ type kafkaFeedArgs struct {
 	kafkaChaos bool
 	// If validateOrder is set to true, order validators will be created
 	// for each topic to validate the changefeed's ordering guarantees.
+	// TODO: remove this in favor of the new one
 	validateOrder bool
 }
 
@@ -566,7 +567,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	} else {
 		feedOptions["resolved"] = ""
 	}
-	if args.kafkaArgs.validateOrder {
+	if !args.noAutoValidate {
 		feedOptions["updated"] = ""
 	}
 
@@ -600,6 +601,55 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	}
 
 	ct.t.Status(fmt.Sprintf("created changefeed %s with jobID %d", cj.Label(), jobID))
+
+	// start fingerprint validator for everyone unless they opt out
+	if !args.noAutoValidate {
+		// choose a random table to fingerprint
+		table := args.targets[globalRand.Intn(len(args.targets))]
+
+		if _, err := db.Exec(`CREATE TABLE fprint LIKE ` + table); err != nil {
+			ct.t.Fatalf("failed to create fingerprint table: %s", err)
+		}
+
+		partitions := []string{""} // unless kafka..?
+		fprintV, err := cdctest.NewFingerprintValidator(db, table, `fprint`, partitions, 50)
+		if err != nil {
+			ct.t.Fatalf("failed to create fingerprint validator: %s", err)
+		}
+
+		var baV cdctest.Validator
+		if _, ok := feedOptions["diff"]; ok {
+			baV, err = cdctest.NewBeforeAfterValidator(db, table, true)
+			if err != nil {
+				ct.t.Fatalf("failed to create before after validator: %s", err)
+			}
+		}
+
+		validators := cdctest.Validators{
+			cdctest.NewOrderValidator(table),
+			fprintV,
+		}
+		if baV != nil {
+			validators = append(validators, baV)
+		}
+
+		valdtr := cdctest.NewCountValidator(validators)
+
+		// start consumer
+		var consumer cdctest.Consumer
+		switch args.sinkType {
+		case kafkaSink:
+			consumer, err = cdctest.NewKafkaConsumer(ct.ctx, sinkURI, table)
+			if err != nil {
+				ct.t.Fatalf("failed to create kafka consumer: %s", err)
+			}
+
+		}
+		// TODO(xxx): start it on another node for less test runner load
+		ct.mon.Go(func(ctx context.Context) error {
+			return cdctest.ConsumeAndValidate(ctx, consumer, valdtr)
+		})
+	}
 
 	return cj
 }
