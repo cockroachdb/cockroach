@@ -4,7 +4,11 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"iter"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +16,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"
@@ -115,9 +120,10 @@ type cloudStorageConsumer struct {
 	bucket *storage.BucketHandle
 	prefix string
 	output chan *ConsumerMessage
+	format string
 }
 
-func NewCloudStorageConsumer(ctx context.Context, uri string) (*cloudStorageConsumer, error) {
+func NewCloudStorageConsumer(ctx context.Context, uri string, format string) (*cloudStorageConsumer, error) {
 	gcs, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, err
@@ -127,7 +133,7 @@ func NewCloudStorageConsumer(ctx context.Context, uri string) (*cloudStorageCons
 		return nil, err
 	}
 	bucket := gcs.Bucket(parsedURI.Host)
-	return &cloudStorageConsumer{gcs: gcs, bucket: bucket, prefix: parsedURI.Path}, nil
+	return &cloudStorageConsumer{gcs: gcs, bucket: bucket, prefix: parsedURI.Path, format: format}, nil
 }
 
 func (c *cloudStorageConsumer) Start(ctx context.Context) error {
@@ -137,7 +143,7 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 	// TODO: better data structure for this
 	seenFiles := make(map[string]struct{})
 	pendingFiles := make(map[string]struct{})
-	getNextFile := func() (first string) {
+	popNextFile := func() (first string) {
 		for file := range pendingFiles {
 			if first == "" || file < first {
 				first = file
@@ -146,6 +152,7 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 		if first != "" {
 			delete(pendingFiles, first)
 		}
+		seenFiles[first] = struct{}{}
 		return first
 	}
 
@@ -164,7 +171,7 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 			return err
 		}
 
-		nextFile := getNextFile()
+		nextFile := popNextFile()
 		if nextFile == "" {
 			select {
 			case <-ctx.Done():
@@ -174,42 +181,57 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 			continue
 		}
 
-		// Get the topic from the file name. (`<timestamp>-<uniquer>-<topic_id>-<schema_id>.<ext>`)
-		parts := strings.Split(nextFile, "-")
-		if len(parts) < 4 {
-			return errors.Newf("invalid file name: %s", nextFile)
+		topic, resolved, err := parseCloudStorageFileName(nextFile)
+		if err != nil {
+			return err
 		}
-		topic := parts[2]
+		if resolved.IsSet() {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case c.output <- &ConsumerMessage{Resolved: resolved}:
+			}
+			continue
+		}
 
 		reader, err := c.bucket.Object(nextFile).NewReader(ctx)
 		if err != nil {
 			return err
 		}
-		// TODO: handle parquet files
-		// TODO: handle parquet files
-		scanner := bufio.NewScanner(reader)
-		for scanner.Scan() {
-			value := scanner.Bytes()
-			updated, resolved, key, err := tryGetUpdatedResolvedKeyFromJSONRow(value)
-			if err != nil {
-				return nil
+		if c.format == "parquet" {
+			for datums, err := range parquetToJSON(reader) {
+				if err != nil {
+					return err
+				}
+				val := fmt.Sprintf("%v", datums) // TODO: toJSON
+				c.output <- &ConsumerMessage{
+					Topic:   topic,
+					Updated: hlc.Timestamp{}, // TODO
+					Key:     "TODO",
+					Value:   val,
+				}
 			}
+		} else {
+			scanner := bufio.NewScanner(reader)
+			for scanner.Scan() {
+				value := scanner.Bytes()
+				updated, resolved, key, err := tryGetUpdatedResolvedKeyFromJSONRow(value)
+				if err != nil {
+					return err
+				}
 
-			c.output <- &ConsumerMessage{
-				Topic:     topic,
-				Key:       key,
-				Value:     string(value),
-				Partition: "",
-				Resolved:  resolved,
-				Updated:   updated,
+				c.output <- &ConsumerMessage{
+					Topic:    topic,
+					Key:      key,
+					Value:    string(value),
+					Resolved: resolved,
+					Updated:  updated,
+				}
+			}
+			if err := scanner.Err(); err != nil {
+				return err
 			}
 		}
-		if err := scanner.Err(); err != nil {
-			return err
-		}
-
-		// Mark the file as seen.
-		seenFiles[nextFile] = struct{}{}
 	}
 	return nil
 }
@@ -287,4 +309,53 @@ type jsonMessageVal struct {
 	Updated  string `json:"updated"`
 	Resolved string `json:"resolved"`
 	Key      string `json:"key"`
+}
+
+func parseCloudStorageFileName(name string) (topic string, resolved hlc.Timestamp, err error) {
+	// Get the topic from the file name. (`<timestamp>-<uniquer>-<topic_id>-<schema_id>.<ext>`)
+	// resolved files are like `<timestamp>.RESOLVED`
+	if strings.HasSuffix(name, ".RESOLVED") {
+		// parse the timestamp from the file name
+		resolved, err := hlc.ParseHLC(strings.TrimSuffix(name, ".RESOLVED"))
+		if err != nil {
+			return "", hlc.Timestamp{}, err
+		}
+		return "", resolved, nil
+	}
+	parts := strings.Split(name, "-")
+	if len(parts) < 4 {
+		return "", hlc.Timestamp{}, errors.Newf("invalid file name: %s", name)
+	}
+	topic = parts[2]
+
+	return topic, hlc.Timestamp{}, nil
+}
+
+func parquetToJSON(reader io.ReadCloser) iter.Seq2[string, error] {
+	return func(yield func(string, error) bool) {
+		defer reader.Close()
+		// Copy to disk.
+		tempFile, err := os.CreateTemp("", "parquet-file-")
+		if err != nil {
+			yield("", err)
+			return
+		}
+		defer os.RemoveAll(tempFile.Name())
+		if _, err := io.Copy(tempFile, reader); err != nil {
+			yield("", err)
+			return
+		}
+		meta, datumses, err := parquet.ReadFile(tempFile.Name())
+		if err != nil {
+			yield("", err)
+			return
+		}
+		_ = meta // TODO: use this
+		for _, datums := range datumses {
+			val := fmt.Sprintf("%v", datums) // TODO: toJSON
+			if !yield(val, nil) {
+				return
+			}
+		}
+	}
 }
