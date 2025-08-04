@@ -162,7 +162,7 @@ func TestVectorManager(t *testing.T) {
 
 		metrics := vectorMgr.Metrics().(*vecindex.Metrics)
 		require.Equal(t, int64(1), metrics.PendingSplitsMerges.Value())
-		idx.ProcessFixups()
+		require.NoError(t, idx.ProcessFixups(ctx))
 		require.Eventually(t, func() bool {
 			return metrics.PendingSplitsMerges.Value() == 0
 		}, 10*time.Second, 10*time.Millisecond)

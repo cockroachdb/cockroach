@@ -503,8 +503,6 @@ func (ti *testIndex) ForceSplitOrMerge(d *datadriven.TestData) string {
 
 		case "steps":
 			steps = testutils.ParseDataDrivenInt(ti.T, arg)
-			// Always discard any fixups triggered by the split or merge fixup.
-			ti.discardFixups = true
 		}
 	}
 
@@ -821,9 +819,9 @@ func (ti *testIndex) reset() {
 func (ti *testIndex) processFixups() {
 	if ti.Index != nil {
 		if ti.discardFixups {
-			ti.Index.DiscardFixups()
+			ti.Index.DiscardFixups(ti.ctx)
 		} else if !ti.skipFixups {
-			ti.Index.ProcessFixups()
+			require.NoError(ti.T, ti.Index.ProcessFixups(ti.ctx))
 		}
 	}
 }
@@ -1000,7 +998,7 @@ func TestIndexConcurrency(t *testing.T) {
 				}
 
 				// Process any remaining fixups and close the index.
-				index.ProcessFixups()
+				require.NoError(t, index.ProcessFixups(ctx))
 				index.Close()
 			}(i, min(i+vecsPerInstance, vectors.Count))
 		}
@@ -1066,7 +1064,7 @@ func buildIndex(
 			for j := start; j < end; j += blockSize {
 				insertVectors(&idxCtx, j, min(j+blockSize, end))
 				deleteVector(&idxCtx, vectors.At(j), primaryKeys[j])
-				index.ProcessFixups()
+				require.NoError(t, index.ProcessFixups(ctx))
 			}
 		}(i, end)
 	}

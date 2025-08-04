@@ -564,14 +564,14 @@ func (vi *Index) SearchForDelete(
 }
 
 // DiscardFixups drops all pending fixups. It is used for testing.
-func (vi *Index) DiscardFixups() {
-	vi.fixups.Process(true /* discard */)
+func (vi *Index) DiscardFixups(ctx context.Context) {
+	vi.fixups.Discard(ctx)
 }
 
 // ProcessFixups waits until all pending fixups have been processed by
 // background workers. It is used for testing.
-func (vi *Index) ProcessFixups() {
-	vi.fixups.Process(false /* discard */)
+func (vi *Index) ProcessFixups(ctx context.Context) error {
+	return vi.fixups.Process(ctx)
 }
 
 // ForceSplit enqueues a split fixup. It is used for testing.

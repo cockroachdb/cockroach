@@ -199,7 +199,9 @@ func (m *MemProvider) Save(ctx context.Context) error {
 	}
 
 	// Wait for any remaining background fixups to be processed.
-	m.index.ProcessFixups()
+	if err := m.index.ProcessFixups(ctx); err != nil {
+		return err
+	}
 
 	startTime := timeutil.Now()
 
