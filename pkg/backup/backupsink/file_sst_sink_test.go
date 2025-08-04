@@ -441,6 +441,25 @@ func TestFileSSTSinkWrite(t *testing.T) {
 	}
 }
 
+func TestFileSSTSink_CloseLeakRegression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This test is a regression unit test for a resource leak in
+	// FileSSTSink.Close. Previously, if Close was called with an in-complete
+	// flush, it would leak the SST writer.
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	sink, _ := fileSSTSinkTestSetup(t, st, execinfrapb.ElidePrefix_None)
+
+	// Write a span to initialize s.out and s.sst.
+	es := newExportedSpanBuilder("a", "b").withKVs([]kvAndTS{{key: "a", timestamp: 1}}).build()
+	_, err := sink.Write(ctx, es)
+	require.NoError(t, err)
+	_ = sink.Close()
+}
+
 func s2k(s string) roachpb.Key {
 	tbl := 1
 	k := []byte(s)

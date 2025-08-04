@@ -15,6 +15,19 @@ import (
 
 type PartitionType int
 
+func (p PartitionType) String() string {
+	switch p {
+	case Bidirectional:
+		return "Bidirectional"
+	case Incoming:
+		return "Incoming"
+	case Outgoing:
+		return "Outgoing"
+	default:
+		panic(fmt.Sprintf("unknown PartitionType: %d", p))
+	}
+}
+
 const (
 	// Bidirectional drops traffic in both directions.
 	Bidirectional PartitionType = iota
@@ -23,6 +36,12 @@ const (
 	// Outgoing drops outgoing traffic from the source to the destination
 	Outgoing
 )
+
+var AllPartitionTypes = []PartitionType{
+	Bidirectional,
+	Incoming,
+	Outgoing,
+}
 
 type NetworkPartition struct {
 	// Source is a list of nodes that will have the network partition created as
