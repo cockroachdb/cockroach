@@ -1717,6 +1717,9 @@ func (desc *wrapper) validateTableIndexes(
 			if col.Dropped() && idx.GetEncodingType() != catenumpb.PrimaryIndexEncoding {
 				return errors.Newf("secondary index %q contains dropped key column %q", idx.GetName(), col.ColName())
 			}
+			if !col.Public() && idx.GetEncodingType() == catenumpb.PrimaryIndexEncoding && !idx.IsMutation() {
+				return errors.Newf("primary index %q contains non-public key column %q", idx.GetName(), col.ColName())
+			}
 			if validateIndexDup.Contains(colID) {
 				if col.IsExpressionIndexColumn() {
 					return pgerror.Newf(pgcode.FeatureNotSupported,
