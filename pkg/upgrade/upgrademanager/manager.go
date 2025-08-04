@@ -838,7 +838,7 @@ func (m *Manager) listBetween(from roachpb.Version, to roachpb.Version) []roachp
 		result := m.knobs.ListBetweenOverride(from, to)
 		// Sanity check result to catch invalid overrides.
 		for _, v := range result {
-			if v.LessEq(from) || to.Less(v) {
+			if !(from.Cmp(v) < 0 && v.Cmp(to) <= 0) {
 				panic(fmt.Sprintf("ListBetweenOverride(%s, %s) returned invalid version %s", from, to, v))
 			}
 		}
