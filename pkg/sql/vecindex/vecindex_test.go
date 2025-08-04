@@ -161,7 +161,7 @@ func (ti *testIndex) InsertVectors(
 		query := fmt.Sprintf("INSERT INTO t (id, v) VALUES %s", valuesClause.String())
 		ti.runner.Exec(ti.T, query, args[:count*2]...)
 
-		ti.Index.ProcessFixups()
+		require.NoError(ti.T, ti.Index.ProcessFixups(ctx))
 	}
 }
 

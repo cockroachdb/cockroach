@@ -1086,6 +1086,5 @@ func (p *planner) ProcessVectorIndexFixups(
 	if err != nil {
 		return err
 	}
-	vi.ProcessFixups()
-	return nil
+	return vi.ProcessFixups(ctx)
 }
