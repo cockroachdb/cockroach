@@ -2348,9 +2348,39 @@ func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersi
 	// that is not newer than clusterVersion.
 	for _, k := range pebbleFormatVersionKeys {
 		// We switch to using a new format as soon as we reach the fence version.
-		// Note that at this point, the cluster might contain a node with an older
-		// binary; but this node's local Pebble format should not affect other nodes.
+		//
+		// This allows us to guarantee that all nodes in the cluster are using the
+		// new format when the cluster version is k.Version(); see
+		// minPebbleFormatVersionInCluster.
+		//
+		// Note that at this point, other nodes in the cluster might not be at the
+		// fence version yet. But this node's local Pebble format change does not
+		// affect other nodes, as long as minPebbleFormatVersionInCluster still
+		// returns the old format (which it does for the fence version).
 		if clusterVersion.Cmp(k.Version().FenceVersion()) >= 0 {
+			return pebbleFormatVersionMap[k]
+		}
+	}
+	// This should never happen in production. But we tolerate tests creating
+	// imaginary older versions; we must still use the earliest supported
+	// format.
+	return MinimumSupportedFormatVersion
+}
+
+// minPebbleFormatVersionInCluster returns the minimum pebble format version
+// supported by any node in the cluster.
+func minPebbleFormatVersionInCluster(clusterVersion roachpb.Version) pebble.FormatMajorVersion {
+	// Say clusterVersion is exactly the version for a key in
+	// pebbleFormatVersionMap. All nodes in the cluster are guaranteed to be at
+	// least at the corresponding fence version, which means they already upgraded
+	// the pebble format version (see pebbleFormatVersion()).
+	for _, k := range pebbleFormatVersionKeys {
+		// Nodes switch to using the new format as soon as we reach the fence
+		// version (k.Version().FenceVersion()). If we are at the non-fence version
+		// (k.Version()), we are guaranteed that all nodes in the cluster are at the
+		// fence version (at least), which means they have already upgraded their
+		// stores.
+		if clusterVersion.Cmp(k.Version()) >= 0 {
 			return pebbleFormatVersionMap[k]
 		}
 	}
