@@ -1077,11 +1077,17 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan  Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
-count         CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
-count         CPut /Table/120/2/3/0 -> /BYTES/0x8a
-count         fast path completed
-sql query     rows affected: 1
+kv.DistSender: sending pre-commit query intents  querying next range at /Table/11/3/"\x80"/118/1/"\x01\x01\x80\xa4}\x16\xb3\x87cL\xbd\xb9\xfc\xf1\xfb+<:\x8d"/0
+kv.DistSender: sending pre-commit query intents  key: /Table/11/3/"\x80"/118/1/"\x01\x01\x80\xa4}\x16\xb3\x87cL\xbd\xb9\xfc\xf1\xfb+<:\x8d"/0, desc: r14:/Table/1{1-2} [(n1,s1):1, next=2, gen=0]
+kv.DistSender: sending pre-commit query intents  r14: sending batch 1 QueryIntent to (n1,s1):1
+kv.DistSender: sending pre-commit query intents  querying next range at /Table/11/3/"\x80"/119/1/"\x01\x01\x80\xa4}\x16\xb3\x87cL\xbd\xb9\xfc\xf1\xfb+<:\x8d"/0
+kv.DistSender: sending pre-commit query intents  key: /Table/11/3/"\x80"/119/1/"\x01\x01\x80\xa4}\x16\xb3\x87cL\xbd\xb9\xfc\xf1\xfb+<:\x8d"/0, desc: r14:/Table/1{1-2} [(n1,s1):1, next=2, gen=0]
+kv.DistSender: sending pre-commit query intents  r14: sending batch 1 QueryIntent to (n1,s1):1
+colbatchscan                                     Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
+count                                            CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
+count                                            CPut /Table/120/2/3/0 -> /BYTES/0x8a
+count                                            fast path completed
+sql query                                        rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off

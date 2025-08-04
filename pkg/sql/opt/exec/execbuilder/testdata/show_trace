@@ -121,10 +121,16 @@ SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = 
 query TT
 $trace_query
 ----
-count      CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
-count      CPut /Table/108/2/2/0 -> /BYTES/0x89
-count      fast path completed
-sql query  rows affected: 1
+kv.DistSender: sending pre-commit query intents  querying next range at /Table/11/3/"\x80"/106/1/"\x01\x01\x80\x80\xeej*\xb5<C'\x98\xa6\x9d\xafZ\xcc\x06\xc2"/0
+kv.DistSender: sending pre-commit query intents  key: /Table/11/3/"\x80"/106/1/"\x01\x01\x80\x80\xeej*\xb5<C'\x98\xa6\x9d\xafZ\xcc\x06\xc2"/0, desc: r14:/Table/1{1-2} [(n1,s1):1, next=2, gen=0]
+kv.DistSender: sending pre-commit query intents  r14: sending batch 1 QueryIntent to (n1,s1):1
+kv.DistSender: sending pre-commit query intents  querying next range at /Table/11/3/"\x80"/107/1/"\x01\x01\x80\x80\xeej*\xb5<C'\x98\xa6\x9d\xafZ\xcc\x06\xc2"/0
+kv.DistSender: sending pre-commit query intents  key: /Table/11/3/"\x80"/107/1/"\x01\x01\x80\x80\xeej*\xb5<C'\x98\xa6\x9d\xafZ\xcc\x06\xc2"/0, desc: r14:/Table/1{1-2} [(n1,s1):1, next=2, gen=0]
+kv.DistSender: sending pre-commit query intents  r14: sending batch 1 QueryIntent to (n1,s1):1
+count                                            CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
+count                                            CPut /Table/108/2/2/0 -> /BYTES/0x89
+count                                            fast path completed
+sql query                                        rows affected: 1
 
 
 statement error duplicate key value
