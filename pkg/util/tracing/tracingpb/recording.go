@@ -515,7 +515,7 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 		// generated file doing more harm than good.
 		Comment: comment,
 	}
-	json, err := json.MarshalIndent(data, "" /* prefix */, "\t" /* indent */)
+	json, err := json.Marshal(data)
 	if err != nil {
 		return "", err
 	}

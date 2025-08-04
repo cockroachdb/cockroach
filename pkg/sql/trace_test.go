@@ -675,3 +675,44 @@ func TestTraceTxnSampleRateAndThreshold(t *testing.T) {
 		})
 	}
 }
+
+func TestTraceTxnJaegerOutput(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: settings,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	appLogsSpy := logtestutils.NewLogSpy(
+		t,
+		// This string match is constructed from the log.SqlExec.Infof format
+		// string found in conn_executor_exec.go:logTraceAboveThreshold
+		logtestutils.MatchesF("exceeding threshold of"),
+	)
+	cleanup := log.InterceptWith(ctx, appLogsSpy)
+	defer cleanup()
+
+	sql.TraceTxnOutputJaegerJSON.Override(ctx, &settings.SV, true)
+	sql.TraceTxnThreshold.Override(ctx, &settings.SV, time.Nanosecond)
+	sql.TraceTxnSampleRate.Override(ctx, &settings.SV, 1)
+	log.FlushAllSync()
+	appLogsSpy.Reset()
+	r := sqlutils.MakeSQLRunner(db)
+
+	testutils.SucceedsSoon(t, func() error {
+		r.Exec(t, "SELECT pg_sleep(0.01)")
+		log.FlushAllSync()
+		if !appLogsSpy.Has(logtestutils.MatchesF(regexp.QuoteMeta("ExecStmt: SELECT pg_sleep(0.01)"))) {
+			return errors.New("no sql txn log found (tracing did not happen)")
+		}
+		if !appLogsSpy.Has(logtestutils.MatchesF(regexp.QuoteMeta("{\"refType\":\"CHILD_OF\",\"traceID\":\""))) {
+			return errors.New("no Jaeger JSON found")
+		}
+		return nil
+	})
+}
