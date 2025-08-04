@@ -91,16 +91,16 @@ jobs:
 
     - name: Increment version
       if: |
-        steps.check-changes.outputs.modified == 'true' && \
-          steps.check-changes.outputs.same_version == 'true' && \
+        steps.check-changes.outputs.modified == 'true' &&
+          steps.check-changes.outputs.same_version == 'true' &&
           steps.check-changes.outputs.has_pr == 'false'
       working-directory: pkg/ui/workspaces/crdb-api-client
       run: npm version patch
 
     - name: Create PR to increment package version
       if: |
-        steps.check-changes.outputs.modified == 'true' && \
-          steps.check-changes.outputs.same_version == 'true' && \
+        steps.check-changes.outputs.modified == 'true' &&
+          steps.check-changes.outputs.same_version == 'true' &&
           steps.check-changes.outputs.has_pr == 'false'
       uses: peter-evans/create-pull-request@v5
       with:
