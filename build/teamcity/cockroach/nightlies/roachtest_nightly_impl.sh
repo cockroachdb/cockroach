@@ -19,13 +19,8 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-nightly-bazel $(date)" -N "" -f ~/.ssh/id_rsa
 fi
 
-arch=amd64
-if [[ ${CLOUD} == "ibm" ]]; then
-  arch=s390x
-elif [[ ${FIPS_ENABLED:-0} == 1 ]]; then
-  arch=amd64-fips
-fi
-$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
+$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh amd64
+$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh amd64-fips
 if [[ $arch != "s390x" ]]; then
   $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
 fi
@@ -86,7 +81,7 @@ fi
 
 build/teamcity-roachtest-invoke.sh \
   --metamorphic-encryption-probability=0.5 \
-  --metamorphic-arm64-probability="${ARM_PROBABILITY:-0.5}" \
+  --metamorphic-fips-probability="${ARM_PROBABILITY:-1.0}" \
   --metamorphic-cockroach-ea-probability="${COCKROACH_EA_PROBABILITY:-0.2}" \
   ${select_probability:-} \
   --always-collect-artifacts="${ALWAYS_COLLECT_ARTIFACTS:-false}" \
