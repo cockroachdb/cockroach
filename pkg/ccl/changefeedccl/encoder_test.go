@@ -1029,12 +1029,15 @@ func BenchmarkEncoders(b *testing.B) {
 				b.Logf("column types: %v, keys: %v", colTypes, colTypes[:numKeyCols])
 
 				if tc.benchEncodeKey {
-					b.Run(fmt.Sprintf("encodeKey/%dcols", numKeyCols),
-						func(b *testing.B) {
-							opts := changefeedbase.EncodingOptions{Format: tc.format}
-							bench(b, encodeKey, opts, updatedRows, prevRows)
-						},
-					)
+					testutils.RunValues(b, "envelope", tc.envelopes,
+						func(t *testing.B, envelope changefeedbase.EnvelopeType) {
+							b.Run(fmt.Sprintf("encodeKey/%dcols/envelope=%s", numKeyCols, envelope),
+								func(b *testing.B) {
+									opts := changefeedbase.EncodingOptions{Format: tc.format, Envelope: envelope}
+									bench(b, encodeKey, opts, updatedRows, prevRows)
+								},
+							)
+						})
 				}
 
 				for _, envelope := range tc.envelopes {
