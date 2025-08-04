@@ -1,0 +1,96 @@
+# LogicTest: multiregion-9node-3region-3azs
+#
+# Test for blocking ALTER TABLE LOCALITY to REGIONAL BY ROW with sql_safe_updates enabled
+# This addresses issue #150945 to prevent DML failures caused by the legacy schema
+# changer's simultaneous column addition and primary key alteration.
+
+statement ok
+CREATE DATABASE safe_updates_test_db PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2", "ca-central-1" SURVIVE REGION FAILURE
+
+statement ok
+USE safe_updates_test_db
+
+# Verify safe updates blocks REGIONAL BY ROW conversion for existing tables.
+subtest blocked_by_flag
+
+statement ok
+CREATE TABLE t1 (id UUID PRIMARY KEY, s STRING NOT NULL) WITH (schema_locked=false)
+
+statement ok
+INSERT INTO t1 SELECT gen_random_uuid(), 'test' FROM generate_series(1, 10)
+
+statement ok
+SET sql_safe_updates = true
+
+statement error pq: cannot convert table to REGIONAL BY ROW with sql_safe_updates enabled\nHINT:.*three-step workaround:\n.*1\. ALTER TABLE t1 ADD COLUMN crdb_region.*\n.*2\. ALTER TABLE t1 ALTER COLUMN crdb_region SET DEFAULT.*\n.*3\. ALTER TABLE t1 SET LOCALITY REGIONAL BY ROW;
+ALTER TABLE t1 SET LOCALITY REGIONAL BY ROW
+
+subtest end
+
+# Verify the operation works when safe updates are disabled.
+subtest works_with_flag_off
+
+statement ok
+SET sql_safe_updates = false
+
+statement ok
+ALTER TABLE t1 SET LOCALITY REGIONAL BY ROW
+
+statement ok
+SET sql_safe_updates = true
+
+# Verify DML operations work correctly after safe conversion
+query T
+SELECT DISTINCT s FROM t1
+----
+test
+
+statement ok
+UPDATE t1 SET s = 'updated' WHERE s = 'test'
+
+query T
+SELECT DISTINCT s FROM t1
+----
+updated
+
+subtest end
+
+# Verify the safe 3-step workaround works correctly.
+subtest not_blocked_if_column_exists_already
+
+statement ok
+SET sql_safe_updates = true
+
+statement ok
+CREATE TABLE t2 (id UUID PRIMARY KEY, s STRING NOT NULL) WITH (schema_locked=false)
+
+statement ok
+INSERT INTO t2 SELECT gen_random_uuid(), 'test' FROM generate_series(1, 10)
+
+# Step 1: Add the region column manually.
+statement ok
+ALTER TABLE t2 ADD COLUMN crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT 'us-east-1'::public.crdb_internal_region
+
+# Step 2: Update the default expression to use gateway_region().
+statement ok
+ALTER TABLE t2 ALTER COLUMN crdb_region SET DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region
+
+# Step 3: Convert to REGIONAL BY ROW (should work now).
+statement ok
+ALTER TABLE t2 SET LOCALITY REGIONAL BY ROW
+
+# Verify DML operations work after manual workaround
+query T
+SELECT DISTINCT s FROM t2
+----
+test
+
+statement ok
+UPDATE t2 SET s = 'updated_safe' WHERE s = 'test'
+
+query T
+SELECT DISTINCT s FROM t2
+----
+updated_safe
+
+subtest end
