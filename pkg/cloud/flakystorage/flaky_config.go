@@ -4,14 +4,13 @@ import (
 	"context"
 	"math/rand/v2"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 var enabled = settings.RegisterBoolSetting(
@@ -35,13 +34,34 @@ var minErrorInterval = settings.RegisterDurationSetting(
 	time.Minute,
 )
 
-func MaybeWrapStorage(ctx context.Context, settings *cluster.Settings, storage cloud.ExternalStorage) cloud.ExternalStorage {
+func MaybeWrapStorage(
+	ctx context.Context, settings *cluster.Settings, storage cloud.ExternalStorage,
+) cloud.ExternalStorage {
 	if !enabled.Get(&settings.SV) {
 		return storage
 	}
 	return &flakyStorage{
 		wrappedStorage: storage,
-		throttle:       defaultThrottle,
+		shouldInject: func() bool {
+			return defaultThrottle.shouldInject(settings)
+		},
+	}
+}
+
+func ConfigureEarlyBoot(settings *cluster.Settings) {
+	earlyBootSettings.Store(settings)
+}
+
+var earlyBootSettings atomic.Pointer[cluster.Settings]
+
+func WrapStorage(probability float64, storage cloud.ExternalStorage) cloud.ExternalStorage {
+	// TODO(jeffswenson): this should be an environment variable or
+	// controlled by a flag.
+	return &flakyStorage{
+		wrappedStorage: storage,
+		shouldInject: func() bool {
+			return defaultThrottle.shouldInject(earlyBootSettings.Load())
+		},
 	}
 }
 
@@ -52,24 +72,22 @@ type errorThrottle struct {
 
 var defaultThrottle = &errorThrottle{}
 
-func (t *errorThrottle) injectErr(ctx context.Context, settings *cluster.Settings, opName string, objectName string) error {
+func (t *errorThrottle) shouldInject(settings *cluster.Settings) bool {
 	t.Lock()
 	defer t.Unlock()
 
 	if !enabled.Get(&settings.SV) {
-		return nil
+		return false
 	}
 
 	if timeutil.Since(t.lastErr) < minErrorInterval.Get(&settings.SV) {
-		return nil
+		return false
 	}
 
 	if rand.Float64() < errorProbability.Get(&settings.SV) {
-		log.Infof(ctx, "injected error for %s %s", opName, objectName)
 		t.lastErr = timeutil.Now()
-		// Construct an error each time so that the error contains the stack trace.
-		return errors.Newf("%s failed: injected error for '%s'", opName, objectName)
+		return true
 	}
 
-	return nil
+	return false
 }
