@@ -74,6 +74,39 @@ func TestDebugTimeSeriesDumpCmd(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, yamlContents)
 	})
+
+	t.Run("debug tsdump --format=datadog with invalid upload workers", func(t *testing.T) {
+		// Create a temporary gob file for testing
+		tmpFile, err := os.CreateTemp("", "test_tsdump_*.gob")
+		require.NoError(t, err)
+		defer func(name string) {
+			err := os.Remove(name)
+			if err != nil {
+				t.Fatalf("failed to remove temporary file %s: %v", name, err)
+			}
+		}(tmpFile.Name())
+
+		// Test with upload workers > 100
+		out, _ := c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=datadog --dd-api-key=test-key --cluster-label=test --upload-workers=101 %s",
+			tmpFile.Name(),
+		))
+		require.Contains(t, out, "--no-of-upload-workers is set to an invalid value. please select a value which between 1 and 100.")
+
+		// Test with upload workers = 0
+		out, _ = c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=datadog --dd-api-key=test-key --cluster-label=test --upload-workers=0 %s",
+			tmpFile.Name(),
+		))
+		require.Contains(t, out, "--no-of-upload-workers is set to an invalid value. please select a value which between 1 and 100.")
+
+		// Test with negative upload workers
+		out, _ = c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=datadog --dd-api-key=test-key --cluster-label=test --upload-workers=-1 %s",
+			tmpFile.Name(),
+		))
+		require.Contains(t, out, "--no-of-upload-workers is set to an invalid value. please select a value which between 1 and 100.")
+	})
 }
 
 func TestMakeOpenMetricsWriter(t *testing.T) {
@@ -217,12 +250,13 @@ func TestTsDumpFormatsDataDriven(t *testing.T) {
 				debugTimeSeriesDumpOpts.organizationName = "test-org"
 				debugTimeSeriesDumpOpts.userName = "test-user"
 				debugTimeSeriesDumpOpts.noOfUploadWorkers = 50
+				debugTimeSeriesDumpOpts.retryFailedRequests = false
 				var series int
 				d.ScanArgs(t, "series-threshold", &series)
 				var ddwriter, err = makeDatadogWriter(
 					defaultDDSite, d.Cmd == "format-datadog-init", "api-key", series,
 					server.Listener.Addr().String(), debugTimeSeriesDumpOpts.noOfUploadWorkers,
-				)
+					debugTimeSeriesDumpOpts.retryFailedRequests)
 				require.NoError(t, err)
 
 				parseDDInput(t, d.Input, ddwriter)

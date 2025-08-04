@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,15 +34,10 @@ import (
 )
 
 const (
-	DatadogSeriesTypeUnknown = iota
-	DatadogSeriesTypeCounter
-	DatadogSeriesTypeRate
-	DatadogSeriesTypeGauge
-)
-const (
-	UploadStatusSuccess = "Success"
-	UploadStatusFailure = "Failed"
-	nodeKey             = "node_id"
+	UploadStatusSuccess        = "Success"
+	UploadStatusPartialSuccess = "Partial Success"
+	UploadStatusFailure        = "Failed"
+	nodeKey                    = "node_id"
 )
 
 var (
@@ -61,15 +57,31 @@ var (
 	zipFileSignature            = []byte{0x50, 0x4B, 0x03, 0x04}
 	logMessageFormat            = "tsdump upload to datadog is partially failed for metric: %s"
 	partialFailureMessageFormat = "The Tsdump upload to Datadog succeeded but %d metrics partially failed to upload." +
-		" These failures can be due to transient network errors. If any of these metrics are critical for your investigation," +
-		" please re-upload the Tsdump:\n%s\n"
-	datadogLogsURLFormat = "https://us5.datadoghq.com/logs?query=cluster_label:%s+upload_id:%s"
+		" These failures can be due to transient network errors.\nMetrics:\n%s\n" +
+		"If any of these metrics are critical for your investigation," +
+		" Failed requests have been saved to '%s'. You can retry uploading only the failed requests using the --retry-failed-requests flag\n"
+
+	datadogLogsURLFormat         = "https://us5.datadoghq.com/logs?query=cluster_label:%s+upload_id:%s"
+	failedRequestsFileNameFormat = "tsdump_failed_requests_%s.json"
 
 	translateMetricType = map[string]*datadogV2.MetricIntakeType{
 		"GAUGE":   datadogV2.METRICINTAKETYPE_GAUGE.Ptr(),
 		"COUNTER": datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
 	}
 )
+
+// FailedRequest represents a failed metric upload request that can be retried
+type FailedRequest struct {
+	MetricSeries []datadogV2.MetricSeries `json:"metric_series"`
+	UploadID     string                   `json:"upload_id"`
+	Timestamp    time.Time                `json:"timestamp"`
+	Error        string                   `json:"error,omitempty"`
+}
+
+// FailedRequestsFile represents the structure of the failed requests file
+type FailedRequestsFile struct {
+	Requests []FailedRequest `json:"requests"`
+}
 
 var newTsdumpUploadID = func(uploadTime time.Time) string {
 	clusterTagValue := "cluster-debug"
@@ -97,6 +109,14 @@ type datadogWriter struct {
 	storeToNodeMap    map[string]string
 	metricTypeMap     map[string]string
 	noOfUploadWorkers int
+	// isPartialUploadOfFailedRequests indicates whether are we retrying failed requests
+	isPartialUploadOfFailedRequests bool
+	// failedRequestsFileName which captures failed requests.
+	failedRequestsFileName string
+	// fileMutex protects concurrent access to file which captures failed requests.
+	fileMutex syncutil.Mutex
+	// hasFailedRequestsInUpload tracks if any failed requests were saved during upload
+	hasFailedRequestsInUpload bool
 }
 
 func makeDatadogWriter(
@@ -106,6 +126,7 @@ func makeDatadogWriter(
 	threshold int,
 	hostNameOverride string,
 	noOfUploadWorkers int,
+	isPartialUploadOfFailedRequests bool,
 ) (*datadogWriter, error) {
 	currentTime := getCurrentTime()
 
@@ -151,17 +172,18 @@ func makeDatadogWriter(
 	}
 
 	return &datadogWriter{
-		datadogContext:    ctx,
-		apiClient:         apiClient,
-		apiKey:            apiKey,
-		uploadID:          newTsdumpUploadID(currentTime),
-		init:              init,
-		namePrefix:        "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
-		threshold:         threshold,
-		uploadTime:        currentTime,
-		storeToNodeMap:    make(map[string]string),
-		metricTypeMap:     metricTypeMap,
-		noOfUploadWorkers: noOfUploadWorkers,
+		datadogContext:                  ctx,
+		apiClient:                       apiClient,
+		apiKey:                          apiKey,
+		uploadID:                        newTsdumpUploadID(currentTime),
+		init:                            init,
+		namePrefix:                      "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
+		threshold:                       threshold,
+		uploadTime:                      currentTime,
+		storeToNodeMap:                  make(map[string]string),
+		metricTypeMap:                   metricTypeMap,
+		noOfUploadWorkers:               noOfUploadWorkers,
+		isPartialUploadOfFailedRequests: isPartialUploadOfFailedRequests,
 	}, nil
 }
 
@@ -238,6 +260,161 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 	return series, nil
 }
 
+// saveFailedRequest saves a failed request to the failed requests file
+func (d *datadogWriter) saveFailedRequest(data []datadogV2.MetricSeries, err error) {
+	failedRequest := FailedRequest{
+		MetricSeries: data,
+		UploadID:     d.uploadID,
+		Timestamp:    getCurrentTime(),
+		Error:        err.Error(),
+	}
+
+	// Append to file using streaming JSON
+	if appendErr := d.appendFailedRequestToFile(failedRequest); appendErr != nil {
+		fmt.Printf("Warning: Failed to save failed request to file: %v\n", appendErr)
+		return
+	}
+
+	// mark that we have saved requests
+	d.hasFailedRequestsInUpload = true
+}
+
+// appendFailedRequestToFile appends a single failed request to the file
+func (d *datadogWriter) appendFailedRequestToFile(request FailedRequest) error {
+	d.fileMutex.Lock()
+	defer d.fileMutex.Unlock()
+
+	fileName := d.failedRequestsFileName
+	file, err := os.OpenFile(fileName, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			fmt.Printf("Warning: Failed to close failed requests file %s: %v\n", file.Name(), err)
+		}
+	}(file)
+
+	// Write each failed request as a single JSON line (JSONL format)
+	requestJSON, err := json.Marshal(request)
+	if err != nil {
+		return err
+	}
+
+	// Append newline to make it proper JSONL format
+	_, err = file.Write(append(requestJSON, '\n'))
+	return err
+}
+
+// streamFailedRequests streams failed requests from file to a channel without loading all into memory
+func streamFailedRequests(
+	filePath string, ch chan<- FailedRequest, wg *sync.WaitGroup,
+) (int, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return 0, err
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			fmt.Printf("failed to close file %s: %v\n", file.Name(), err)
+		}
+	}(file)
+	defer close(ch)
+
+	decoder := json.NewDecoder(file)
+	count := 0
+
+	for {
+		var request FailedRequest
+		err := decoder.Decode(&request)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Printf("failed to parse failed request line: %v\n", err)
+			continue
+		}
+
+		// Add to wait group as soon as we read a valid request
+		wg.Add(1)
+		// Send request to channel for processing
+		ch <- request
+		count++
+
+	}
+	return count, nil
+}
+
+func removeFile(filePath string) error {
+	return os.Remove(filePath)
+}
+
+// retryFailedRequests attempts to re-upload failed requests using streaming approach with channels
+func (d *datadogWriter) retryFailedRequests(fileName string) error {
+
+	// Create temporary file for requests which are still failing in re-upload.
+	tempFile := fileName + ".tmp"
+	d.failedRequestsFileName = tempFile
+
+	// Create channel for streaming requests
+	requestCh := make(chan FailedRequest, 100)
+	var wg sync.WaitGroup
+
+	// State to track retry results
+	var retryState struct {
+		syncutil.Mutex
+		successCount int
+		failedCount  int
+	}
+
+	// Start workers to retry failed requests
+	for i := 0; i < d.noOfUploadWorkers; i++ {
+		go func() {
+			for failedReq := range requestCh {
+				_, err := d.emitDataDogMetrics(failedReq.MetricSeries)
+				func() {
+					retryState.Lock()
+					defer retryState.Unlock()
+					if err != nil {
+						retryState.failedCount++
+					} else {
+						retryState.successCount++
+					}
+				}()
+				wg.Done()
+			}
+		}()
+	}
+
+	_, err := streamFailedRequests(fileName, requestCh, &wg)
+	if err != nil {
+		fmt.Printf("error streaming failed requests: %v\n", err)
+	}
+
+	// Wait for all requests to be processed
+	wg.Wait()
+	fmt.Printf("\nretry completed: %d succeeded, %d still failed\n", retryState.successCount, retryState.failedCount)
+
+	// Replace original file with temp file if there are still failing requests
+	if d.hasFailedRequestsInUpload {
+		if err := os.Rename(tempFile, fileName); err != nil {
+			return fmt.Errorf("failed to update failed requests file: %w", err)
+		}
+		fmt.Printf("%d requests still failed and have been saved to %s\n", retryState.failedCount, fileName)
+		return nil
+	}
+
+	// All retries succeeded, remove the original failed requests file
+	if err := removeFile(fileName); err != nil {
+		fmt.Printf("failed to remove failed requests file: %v\n", err)
+	} else {
+		fmt.Println("All retry requests succeeded. Failed requests file has been removed.")
+	}
+	return nil
+}
+
 func (d *datadogWriter) resolveMetricType(metricName string) *datadogV2.MetricIntakeType {
 	if !d.init {
 		// in this is not datadogInit command, we don't need to resolve the metric
@@ -280,8 +457,12 @@ func (d *datadogWriter) emitDataDogMetrics(data []datadogV2.MetricSeries) ([]str
 
 	emittedMetrics := make([]string, len(data))
 	for i := 0; i < len(data); i++ {
-		data[i].Tags = append(data[i].Tags, tags...)
-		data[i].Metric = d.namePrefix + data[i].Metric
+		// If we are retrying failed requests, we don't want to append prefix again to the metrics
+		// as initial upload has done that already.
+		if !d.isPartialUploadOfFailedRequests {
+			data[i].Tags = append(data[i].Tags, tags...)
+			data[i].Metric = d.namePrefix + data[i].Metric
+		}
 		emittedMetrics[i] = data[i].Metric
 	}
 
@@ -318,7 +499,13 @@ func (d *datadogWriter) emitDataDogMetrics(data []datadogV2.MetricSeries) ([]str
 		}
 	}()
 
-	return emittedMetrics, d.flush(data)
+	err := d.flush(data)
+	if err != nil {
+		// save failed request for potential retry.
+		d.saveFailedRequest(data, err)
+	}
+
+	return emittedMetrics, err
 }
 
 func getUploadTags(d *datadogWriter) []string {
@@ -388,6 +575,11 @@ func (d *datadogWriter) upload(fileName string) error {
 	if err != nil {
 		return err
 	}
+
+	// Extract directory from input fileName and attach it to failed requests filename
+	inputDir := filepath.Dir(fileName)
+	failedRequestsBaseName := fmt.Sprintf(failedRequestsFileNameFormat, d.uploadID)
+	d.failedRequestsFileName = filepath.Join(inputDir, failedRequestsBaseName)
 
 	if debugTimeSeriesDumpOpts.dryRun {
 		fmt.Println("Dry-run mode enabled. Not actually uploading data to Datadog.")
@@ -492,7 +684,9 @@ func (d *datadogWriter) upload(fileName string) error {
 	dashboardLink := fmt.Sprintf(datadogDashboardURLFormat, debugTimeSeriesDumpOpts.clusterLabel, d.uploadID, day, int(month), year, fromUnixTimestamp, toUnixTimestamp)
 
 	var uploadStatus string
-	if metricsUploadState.isSingleUploadSucceeded {
+	if metricsUploadState.isSingleUploadSucceeded && d.hasFailedRequestsInUpload {
+		uploadStatus = UploadStatusPartialSuccess
+	} else if metricsUploadState.isSingleUploadSucceeded {
 		uploadStatus = UploadStatusSuccess
 	} else {
 		uploadStatus = UploadStatusFailure
@@ -512,6 +706,8 @@ func (d *datadogWriter) upload(fileName string) error {
 	fmt.Printf("Estimated cost of this upload: $%.2f\n", estimatedCost)
 
 	tags := getUploadTags(d)
+	api := datadogV2.NewLogsApi(d.apiClient)
+
 	success := metricsUploadState.isSingleUploadSucceeded
 	if metricsUploadState.isSingleUploadSucceeded {
 		var isDatadogUploadFailed = false
@@ -520,6 +716,7 @@ func (d *datadogWriter) upload(fileName string) error {
 		})
 		if len(metricsUploadState.uploadFailedMetrics) != 0 {
 			success = false
+			// Print capture message if any failed requests were saved
 			fmt.Printf(partialFailureMessageFormat, len(metricsUploadState.uploadFailedMetrics), strings.Join(func() []string {
 				var failedMetricsList []string
 				index := 1
@@ -529,7 +726,7 @@ func (d *datadogWriter) upload(fileName string) error {
 					index++
 				}
 				return failedMetricsList
-			}(), "\n"))
+			}(), "\n"), d.failedRequestsFileName)
 
 			tags := strings.Join(tags, ",")
 			fmt.Println("\nPushing logs of metric upload failures to datadog...")
@@ -538,17 +735,18 @@ func (d *datadogWriter) upload(fileName string) error {
 				go func(metric string) {
 					logMessage := fmt.Sprintf(logMessageFormat, metric)
 
-					logEntryJSON, _ := json.Marshal(struct {
-						Message any    `json:"message,omitempty"`
-						Tags    string `json:"ddtags,omitempty"`
-						Source  string `json:"ddsource,omitempty"`
-					}{
-						Message: logMessage,
-						Tags:    tags,
-						Source:  "tsdump_upload",
+					hostName := getHostname()
+					_, _, err := api.SubmitLog(d.datadogContext, []datadogV2.HTTPLogItem{
+						{
+							Ddsource: datadog.PtrString("tsdump_upload"),
+							Ddtags:   datadog.PtrString(tags),
+							Message:  logMessage,
+							Service:  datadog.PtrString("tsdump_upload"),
+							Hostname: datadog.PtrString(hostName),
+						},
+					}, datadogV2.SubmitLogOptionalParameters{
+						ContentEncoding: datadogV2.CONTENTENCODING_GZIP.Ptr(),
 					})
-
-					_, err := uploadLogsToDatadog(logEntryJSON, d.apiKey, debugTimeSeriesDumpOpts.ddSite)
 					if err != nil {
 						markDatadogUploadFailedOnce()
 					}
@@ -571,8 +769,6 @@ func (d *datadogWriter) upload(fileName string) error {
 	}
 
 	eventTags := append(tags, makeDDTag("series_uploaded", strconv.Itoa(seriesUploaded)))
-
-	api := datadogV2.NewLogsApi(d.apiClient)
 	hostName := getHostname()
 	msgJson, _ := json.Marshal(struct {
 		Message        string  `json:"message"`
