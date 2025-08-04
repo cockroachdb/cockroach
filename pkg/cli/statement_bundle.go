@@ -179,6 +179,12 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 		initStmts := strings.Split(strings.Join(lines, "\n"), "SET CLUSTER SETTING")
 		for i := 1; i < len(initStmts); i++ {
 			initStmts[i] = "SET CLUSTER SETTING " + initStmts[i]
+			if strings.Contains(initStmts[i], "cluster.preserve_downgrade_option") {
+				// This cluster setting can prevent the bundle from being
+				// recreated on a new enough binary, so we'll skip it.
+				initStmts = append(initStmts[:i], initStmts[i+1:]...)
+				i--
+			}
 		}
 		// All stmts before the first SET CLUSTER SETTING are SET stmts. We need
 		// to handle 'SET database = ' stmt separately if found - the target
