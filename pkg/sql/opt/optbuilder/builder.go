@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -299,7 +300,12 @@ func (b *Builder) buildStmtAtRoot(stmt tree.Statement, desiredTypes []*types.T) 
 	// A "root" statement cannot refer to anything from an enclosing query, so
 	// we always start with an empty scope.
 	inScope := b.allocScope()
-	return b.buildStmtAtRootWithScope(stmt, desiredTypes, inScope)
+	outScope = b.buildStmtAtRootWithScope(stmt, desiredTypes, inScope)
+	if b, ok := outScope.expr.(*memo.BarrierExpr); ok {
+		// Eliminate a barrier that has been pulled up to the root of the tree.
+		outScope.expr = b.Input
+	}
+	return outScope
 }
 
 // buildStmtAtRootWithScope is similar to buildStmtAtRoot, but allows a scope to
