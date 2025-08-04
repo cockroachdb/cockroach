@@ -89,14 +89,13 @@ func (lt T) FormatToBuffer(buf *bytes.Buffer) {
 
 // Compare compares two LTrees lexicographically based on their labels.
 func (lt T) Compare(other T) int {
-	minLen := lt.Len()
-	if other.Len() < minLen {
-		minLen = other.Len()
-	}
-
+	minLen := min(lt.Len(), other.Len())
 	for i := 0; i < minLen; i++ {
-		if cmp := strings.Compare(string(lt.path[i]), string(other.path[i])); cmp != 0 {
-			return cmp
+		if lt.path[i] < other.path[i] {
+			return -1
+		}
+		if lt.path[i] > other.path[i] {
+			return 1
 		}
 	}
 
@@ -132,7 +131,8 @@ func (lt T) Copy() T {
 	return T{path: copiedLabels}
 }
 
-// Prev returns the lexicographically previous LTree.
+// Prev returns the lexicographically previous LTree and a bool representing
+// whether a previous LTree exists.
 func (lt T) Prev() (T, bool) {
 	if lt.Len() == 0 {
 		return Empty, false
