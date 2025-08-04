@@ -98,6 +98,10 @@ type txnState struct {
 	// positive duration trigger for logging.
 	shouldRecord bool
 
+	// oututJaegerJSON is used to indicate whether the traces in logs
+	// should be in a plaintext or Jaeger format.
+	outputJaegerJSON bool
+
 	// recordingThreshold, is not zero, indicates that sp is recording and that
 	// the recording should be dumped to the log if execution of the transaction
 	// took more than this.
@@ -215,6 +219,7 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	sampleRate := TraceTxnSampleRate.Get(&tranCtx.settings.SV)
 	ts.shouldRecord = sampleRate > 0 && duration > 0 && rng.Float64() < sampleRate
+	ts.outputJaegerJSON = TraceTxnOutputJaegerJSON.Get(&tranCtx.settings.SV)
 
 	if alreadyRecording || ts.shouldRecord {
 		ts.Ctx, sp = tracing.EnsureChildSpan(ctx, tranCtx.tracer, opName,
@@ -300,6 +305,7 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 				redact.Sprint(redact.Safe(txnID)),   /* detail */
 				ts.recordingThreshold,               /* threshold */
 				elapsed,                             /* elapsed */
+				ts.outputJaegerJSON,                 /* useJaegerJSON */
 			)
 		}
 	}
