@@ -8,6 +8,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
@@ -45,6 +46,84 @@ func (h *History) PerStoreValuesAt(idx int, stat string) []float64 {
 		values = append(values, value)
 	}
 	return values
+}
+
+// Volatility measures the thrashing of a store for a given stat over time. It
+// is a tuple of the frequency of thrashing and the magnitude of thrashing.
+// Frequency is the number of times the derivative sign changes. Magnitude is
+// the sum of the absolute differences between the values when the sign of the
+// derivative changes divided by mean value over all ticks.
+type volatility struct {
+	frequency int
+	// TODO(wenyihu6): Magnitude is not very accurate since it just capctures the
+	// absolute difference between the values when the sign of the derivative
+	// changes. But it is possible that the magnitude is small at that time but
+	// change aggressively soonly after.
+	magnitude float64
+}
+
+// ThrashingForStat computes the thrashing for the given stat. The returned
+// values are the maximum volatility, the store ID of the store with the maximum
+// volatility, and the volatility for each store. We measure thrashing as the
+// sum of the absolute differences between the values when the sign of the
+// derivative changes.
+func (h *History) ThrashingForStat(
+	stat string,
+) (maxVolatilityIdx int, storeVolatility []volatility) {
+	if len(h.Recorded) == 0 {
+		return 0, nil
+	}
+	numOfTicks := len(h.Recorded)
+	numOfStores := len(h.Recorded[0])
+	storeVolatility = make([]volatility, numOfStores)
+	for j := 0; j < numOfStores; j++ {
+		values := make([]float64, 0, numOfTicks)
+		prevDerivative := 0.0
+		numOfThrashing := 0
+		totalThrashing := 0.0
+		for i := 0; i < numOfTicks; i++ {
+			values = append(values, h.Recorded[i][j].GetMetricValue(stat))
+			if i > 0 {
+				derivative := values[i] - values[i-1]
+				if (derivative < 0) != (prevDerivative < 0) {
+					numOfThrashing++
+					totalThrashing += math.Abs(derivative - prevDerivative)
+				}
+				prevDerivative = derivative
+			}
+		}
+		mean, _ := stats.Mean(values)
+		if numOfThrashing > storeVolatility[maxVolatilityIdx].frequency {
+			maxVolatilityIdx = j
+		}
+		storeVolatility[j] = volatility{
+			frequency: numOfThrashing,
+			magnitude: totalThrashing / mean,
+		}
+	}
+	return maxVolatilityIdx, storeVolatility
+}
+
+// Thrashing returns a string representation of the thrashing for the given
+// stat. If detail is true, the string includes the volatility for each store.
+func (h *History) Thrashing(stat string) string {
+	var buf strings.Builder
+	// Compute volatility of the stat. For every store, compute the standard
+	// deviation of the values. Then compute the mean of the standard deviations.
+	// Then compute the standard deviation of the means.
+	maxVolatilityIdx, storeVolatility := h.ThrashingForStat(stat)
+	_, _ = fmt.Fprintf(&buf, "[max(s%d)=(freq=%d, mag=%.2f)",
+		maxVolatilityIdx+1, storeVolatility[maxVolatilityIdx].frequency, storeVolatility[maxVolatilityIdx].magnitude)
+	_, _ = fmt.Fprintf(&buf, " (")
+	for i, v := range storeVolatility {
+		if i > 0 {
+			_, _ = fmt.Fprintf(&buf, ", ")
+		}
+		_, _ = fmt.Fprintf(&buf, "s%v=(freq=%d, mag=%.2f)", i+1, v.frequency, v.magnitude)
+	}
+	_, _ = fmt.Fprintf(&buf, ")")
+	_, _ = fmt.Fprintf(&buf, "]")
+	return buf.String()
 }
 
 // ShowRecordedValueAt returns a string representation of the recorded values.
