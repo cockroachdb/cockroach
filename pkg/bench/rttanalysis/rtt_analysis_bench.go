@@ -200,7 +200,7 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 	if haveExp && !exp.matches(int(res)) && !*rewriteFlag {
 		reportf(`%s: got %v, expected %v`, b.Name(), res, exp)
 		dir := getDir()
-		jaegerJSON, err := r.ToJaegerJSON(tc.Stmt, "", "n0")
+		jaegerJSON, err := r.ToJaegerJSON(tc.Stmt, "", "n0", true)
 		require.NoError(b, err)
 		path := filepath.Join(dir, strings.Replace(b.Name(), "/", "_", -1)) + ".jaeger.json"
 		require.NoError(b, os.WriteFile(path, []byte(jaegerJSON), 0666))

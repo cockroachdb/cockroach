@@ -200,7 +200,7 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 			// all the sub-spans. With an empty string, the node ID of the
 			// node that processes the request is properly annotated in the
 			// Jaeger UI.
-			j, err := rec.ToJaegerJSON(ba.Summary(), "", "")
+			j, err := rec.ToJaegerJSON(ba.Summary(), "", "", true /* indent */)
 			if err != nil {
 				return err
 			}

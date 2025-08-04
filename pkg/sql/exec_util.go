@@ -287,6 +287,14 @@ var TraceTxnSampleRate = settings.RegisterFloatSetting(
 	settings.NonNegativeFloatWithMaximum(1.0),
 	settings.WithPublic)
 
+// TraceTxnOutputJaegerJSON sets the output format of transaction trace logs.
+var TraceTxnOutputJaegerJSON = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.trace.txn.jaeger_json_output.enabled",
+	"enables Jaeger JSON output for transaction traces in logs",
+	false,
+	settings.WithPublic)
+
 // TraceStmtThreshold is identical to traceTxnThreshold except it applies to
 // individual statements in a transaction. The motivation for this setting is
 // to be able to reduce the noise associated with a larger transaction (e.g.

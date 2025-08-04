@@ -1153,6 +1153,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				redactableStmt,     /* detail */
 				stmtTraceThreshold, /* threshold */
 				stmtDur,            /* elapsed */
+				false,              /* outputJaegerJSON */
 			)
 		} else {
 			stmtThresholdSpan.Finish()
@@ -3380,11 +3381,23 @@ func logTraceAboveThreshold(
 	opName redact.RedactableString,
 	detail redact.RedactableString,
 	threshold, elapsed time.Duration,
+	outputJaegerJSON bool,
 ) {
 	if r == nil {
 		log.Warning(ctx, "missing trace when threshold tracing was enabled")
 	}
-	log.SqlExec.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s\n%s", opName, elapsed, threshold, detail, r)
+	output := ""
+	var err error
+	if outputJaegerJSON {
+		output, err = r.ToJaegerJSON("unknown stmt", "no comment", "unknown node", false /* indent */)
+		if err != nil {
+			log.Warningf(ctx, "trace could not be converted to jaeger JSON: %s", err.Error())
+			output = r.String()
+		}
+	} else {
+		output = r.String()
+	}
+	log.SqlExec.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s\n%s", opName, elapsed, threshold, detail, output)
 }
 
 func (ex *connExecutor) execWithProfiling(
