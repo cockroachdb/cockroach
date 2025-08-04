@@ -244,6 +244,9 @@ func DecodeUntaggedDatum(
 		// the loss of variable length encoding.
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		return a.NewDOid(tree.MakeDOid(oid.Oid(data), t)), b, err
+	case types.LTreeFamily:
+		b, l, err := encoding.DecodeUntaggedLTreeValue(buf)
+		return tree.NewDLTree(l), b, err
 	case types.ArrayFamily:
 		// Skip the encoded data length.
 		b, _, _, err := encoding.DecodeNonsortingUvarint(buf)

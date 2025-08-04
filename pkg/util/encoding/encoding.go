@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/encodingtype"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -2841,12 +2842,18 @@ func EncodePGVectorValue(appendTo []byte, colIDDelta uint32, data []byte) []byte
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
-// EncodeLTreeValue encodes an already-byte-encoded LTree value with no
-// value tag but with a length prefix, appends it to the supplied buffer, and
-// returns the final buffer.
-func EncodeLTreeValue(appendTo []byte, colIDDelta uint32, data []byte) []byte {
+// EncodeLTreeValue encodes a ltree.T value with its value tag, appends it to
+// the supplied buffer, and returns the final buffer.
+func EncodeLTreeValue(appendTo []byte, colIDDelta uint32, l ltree.T) []byte {
 	appendTo = EncodeValueTag(appendTo, colIDDelta, LTree)
-	return EncodeUntaggedBytesValue(appendTo, data)
+	return EncodeUntaggedLTreeValue(appendTo, l)
+}
+
+// EncodeUntaggedLTreeValue encodes a ltree.T value, appends it to the supplied
+// buffer, and returns the final buffer.
+func EncodeUntaggedLTreeValue(appendTo []byte, l ltree.T) []byte {
+	appendTo = EncodeUntaggedBytesValue(appendTo, UnsafeConvertStringToBytes(l.String()))
+	return appendTo
 }
 
 // DecodeValueTag decodes a value encoded by EncodeValueTag, used as a prefix in
@@ -3196,6 +3203,26 @@ func DecodeIPAddrValue(b []byte) (remaining []byte, u ipaddr.IPAddr, err error) 
 func DecodeUntaggedIPAddrValue(b []byte) (remaining []byte, u ipaddr.IPAddr, err error) {
 	remaining, err = u.FromBuffer(b)
 	return remaining, u, err
+}
+
+func DecodeLTreeValue(b []byte) (remaining []byte, l ltree.T, err error) {
+	b, err = decodeValueTypeAssert(b, LTree)
+	if err != nil {
+		return b, l, err
+	}
+	return DecodeUntaggedLTreeValue(b)
+}
+
+func DecodeUntaggedLTreeValue(b []byte) (remaining []byte, l ltree.T, err error) {
+	remaining, data, err := DecodeUntaggedBytesValue(b)
+	if err != nil {
+		return b, l, err
+	}
+	l, err = ltree.ParseLTree(UnsafeConvertBytesToString(data))
+	if err != nil {
+		return b, l, err
+	}
+	return remaining, l, nil
 }
 
 func decodeValueTypeAssert(b []byte, expected Type) ([]byte, error) {
