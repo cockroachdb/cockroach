@@ -513,12 +513,6 @@ var MVCCMerger = &pebble.Merger{
 
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
 
-// MinimumSupportedFormatVersion is the version that provides features that the
-// Cockroach code relies on unconditionally (like range keys). New stores are by
-// default created with this version. It should correspond to the minimum
-// supported binary version.
-const MinimumSupportedFormatVersion = pebble.FormatTableFormatV6
-
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
 	opts := &pebble.Options{
@@ -2353,7 +2347,10 @@ func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersi
 	// pebbleFormatVersionKeys are sorted in descending order; find the first one
 	// that is not newer than clusterVersion.
 	for _, k := range pebbleFormatVersionKeys {
-		if k.Version().Cmp(clusterVersion) <= 0 {
+		// We switch to using a new format as soon as we reach the fence version.
+		// Note that at this point, the cluster might contain a node with an older
+		// binary; but this node's local Pebble format should not affect other nodes.
+		if clusterVersion.Cmp(k.Version().FenceVersion()) >= 0 {
 			return pebbleFormatVersionMap[k]
 		}
 	}
