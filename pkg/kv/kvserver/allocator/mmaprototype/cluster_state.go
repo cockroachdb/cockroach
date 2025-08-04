@@ -1377,8 +1377,12 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// Since this range is going away, mark all the pending changes as
 		// enacted. This will allow the load adjustments to also be garbage
 		// collected in the future.
-		for _, change := range rs.pendingChanges {
-			cs.pendingChangeEnacted(change.ChangeID, now, true)
+		changeIDs := make([]ChangeID, len(rs.pendingChanges))
+		for i, change := range rs.pendingChanges {
+			changeIDs[i] = change.ChangeID
+		}
+		for _, changeID := range changeIDs {
+			cs.pendingChangeEnacted(changeID, now, true)
 		}
 		// Remove from the storeStates.
 		for _, replica := range rs.replicas {
