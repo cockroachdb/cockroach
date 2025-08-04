@@ -368,8 +368,9 @@ func captureOutput(f func()) (out string, err error) {
 		// both specific names and total number of system and internal tables that
 		// are exported. The regex matches the rest of the line after the prefix
 		// unless the line contains an uppercase E to avoid trimming "ERROR" message
-		// lines, which are expected (and tested) for certain tables.
-		out = regexp.MustCompile(`(.*retrieving SQL data for ([^E\n])*\n)+`).
+		// lines (but not NOTICE which is informational), which are expected
+		// (and tested) for certain tables.
+		out = regexp.MustCompile(`(.*retrieving SQL data for (([^E\n])*|.*NOTICE.*)\n)+`).
 			ReplaceAllString(out, "<dumping SQL tables>\n")
 	}()
 
