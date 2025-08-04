@@ -237,3 +237,43 @@ func ResolveIncrementalsBackupLocation(
 	// Otherwise, use the new location.
 	return resolvedIncrementalsBackupLocation, nil
 }
+
+// ResolveDefaultBaseIncrementalStorageLocation returns the default incremental
+// storage location that contains all incremental backups.
+// It is passed an array of locality-aware full backup collections and an
+// optional array of explicit incremental backup locations.
+//
+// e.g. details for:
+//
+// BACKUP INTO (
+//
+//	'nodelocal://1/backup?COCKROACH_LOCALITY=default',
+//	'nodelocal://1/backup2?COCKROACH_LOCALITY=region%3Dus-west'
+//
+// )
+//
+// returns 'nodelocal://1/backup/incrementals'
+func ResolveDefaultBaseIncrementalStorageLocation(
+	fullBackupCollections []string, explicitIncrementalCollections []string,
+) (string, error) {
+	if len(explicitIncrementalCollections) > 0 {
+		defaultURI, _, err := GetURIsByLocalityKV(explicitIncrementalCollections, "")
+		if err != nil {
+			return "", errors.Wrapf(err, "get default incremental backup collection URI")
+		}
+		return defaultURI, nil
+	}
+
+	if len(fullBackupCollections) == 0 {
+		return "", errors.New(
+			"no full backup collections provided to resolve default incremental storage location",
+		)
+	}
+
+	defaultURI, _, err := GetURIsByLocalityKV(fullBackupCollections, backupbase.DefaultIncrementalsSubdir)
+	if err != nil {
+		return "", errors.Wrapf(err, "get default incremental backup collection URI")
+	}
+
+	return defaultURI, nil
+}
