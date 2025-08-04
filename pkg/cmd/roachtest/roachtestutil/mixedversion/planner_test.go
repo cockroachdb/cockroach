@@ -126,7 +126,7 @@ func TestTestPlanner(t *testing.T) {
 			case "workload":
 				initCmd := roachtestutil.NewCommand("./cockroach workload init some-workload")
 				runCmd := roachtestutil.NewCommand("./cockroach workload run some-workload")
-				mvt.Workload(d.CmdArgs[0].Vals[0], nodes, initCmd, runCmd)
+				mvt.Workload(d.CmdArgs[0].Vals[0], nodes, initCmd, runCmd, false /* overrideBinary */)
 			case "background-command":
 				cmd := roachtestutil.NewCommand("./cockroach some-command")
 				mvt.BackgroundCommand(d.CmdArgs[0].Vals[0], nodes, cmd)

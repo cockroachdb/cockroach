@@ -826,8 +826,16 @@ func (t *Test) BackgroundCommand(
 // if passed, is the command run to initialize the workload; it is run
 // synchronously as a regular startup function. `runCmd` is the
 // command to actually run the command; it is run in the background.
+//
+// If overrideBinary is true, the binary used to run the command(s) will
+// be replaced with the cockroach binary of the current version the
+// cluster is running in.
+// TODO(testeng): Replace with https://github.com/cockroachdb/cockroach/issues/147374
 func (t *Test) Workload(
-	name string, node option.NodeListOption, initCmd, runCmd *roachtestutil.Command,
+	name string,
+	node option.NodeListOption,
+	initCmd, runCmd *roachtestutil.Command,
+	overrideBinary bool,
 ) StopFunc {
 	seed := uint64(t.prng.Int63())
 	addSeed := func(cmd *roachtestutil.Command) {
@@ -838,11 +846,31 @@ func (t *Test) Workload(
 
 	if initCmd != nil {
 		addSeed(initCmd)
-		t.OnStartup(fmt.Sprintf("initialize %s workload", name), t.runCommandFunc(node, initCmd.String()))
+		t.OnStartup(fmt.Sprintf("initialize %s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
+			if overrideBinary {
+				binary, err := clusterupgrade.UploadCockroach(ctx, t.rt, t.logger, t.cluster, node, h.System.FromVersion)
+				if err != nil {
+					t.rt.Fatal(err)
+				}
+				initCmd.Binary = binary
+			}
+			l.Printf("running command `%s` on nodes %v", initCmd.String(), node)
+			return t.cluster.RunE(ctx, option.WithNodes(node), initCmd.String())
+		})
 	}
 
 	addSeed(runCmd)
-	return t.BackgroundCommand(fmt.Sprintf("%s workload", name), node, runCmd)
+	return t.BackgroundFunc(fmt.Sprintf("%s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
+		if overrideBinary {
+			binary, err := clusterupgrade.UploadCockroach(ctx, t.rt, t.logger, t.cluster, node, h.System.FromVersion)
+			if err != nil {
+				t.rt.Fatal(err)
+			}
+			runCmd.Binary = binary
+		}
+		l.Printf("running command `%s` on nodes %v", runCmd.String(), node)
+		return t.cluster.RunE(ctx, option.WithNodes(node), runCmd.String())
+	})
 }
 
 // Run is like RunE, except it fatals the test if any error occurs.
