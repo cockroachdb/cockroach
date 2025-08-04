@@ -5117,8 +5117,8 @@ func TestTenantID(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	tenant2 := roachpb.MustMakeTenantID(2)
-	tenant2Prefix := keys.MakeTenantPrefix(tenant2)
+	tenant3 := roachpb.MustMakeTenantID(3)
+	tenant3Prefix := keys.MakeTenantPrefix(tenant3)
 	t.Run("(1) initial set", func(t *testing.T) {
 		// Ensure that a normal range has the system tenant.
 		{
@@ -5128,16 +5128,16 @@ func TestTenantID(t *testing.T) {
 			require.Equal(t, roachpb.SystemTenantID, tenantId, "%v", repl)
 		}
 		// Ensure that a range with a tenant prefix has the proper tenant ID.
-		tc.SplitRangeOrFatal(t, tenant2Prefix)
+		tc.SplitRangeOrFatal(t, tenant3Prefix)
 		{
-			_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
+			_, repl := getFirstStoreReplica(t, tc.Server(0), tenant3Prefix)
 			tenantId, valid := repl.TenantID()
 			require.True(t, valid)
-			require.Equal(t, tenant2, tenantId, "%v", repl)
+			require.Equal(t, tenant3, tenantId, "%v", repl)
 		}
 	})
 	t.Run("(2) not set before snapshot", func(t *testing.T) {
-		_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
+		_, repl := getFirstStoreReplica(t, tc.Server(0), tenant3Prefix)
 		sawSnapshot := make(chan struct{}, 1)
 		blockSnapshot := make(chan struct{})
 		tc.AddAndStartServer(t, base.TestServerArgs{
@@ -5166,7 +5166,7 @@ func TestTenantID(t *testing.T) {
 		// networking handshake timeouts.
 		addReplicaErr := make(chan error)
 		addReplica := func() {
-			_, err := tc.AddVoters(tenant2Prefix, tc.Target(1))
+			_, err := tc.AddVoters(tenant3Prefix, tc.Target(1))
 			addReplicaErr <- err
 		}
 		go addReplica()
@@ -5190,14 +5190,14 @@ func TestTenantID(t *testing.T) {
 		require.NoError(t, <-addReplicaErr)
 		tenantID, valid := uninitializedRepl.TenantID() // now initialized
 		require.True(t, valid)
-		require.Equal(t, tenant2, tenantID)
+		require.Equal(t, tenant3, tenantID)
 	})
 	t.Run("(3) upon restart", func(t *testing.T) {
 		tc.StopServer(0)
 		tc.AddAndStartServer(t, stickySpecTestServerArgs)
-		_, repl := getFirstStoreReplica(t, tc.Server(2), tenant2Prefix)
+		_, repl := getFirstStoreReplica(t, tc.Server(2), tenant3Prefix)
 		tenantID, _ := repl.TenantID() // now initialized
-		require.Equal(t, tenant2, tenantID, "%v", repl)
+		require.Equal(t, tenant3, tenantID, "%v", repl)
 	})
 
 }
