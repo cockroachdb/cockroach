@@ -25,11 +25,15 @@ kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start-s
 ### Kubernetes version
 
 The minimum Kubernetes version to successfully run the examples in this
-directory without modification is `1.8`. If you want to run them on an older
-version of Kubernetes, use the files from the appropriate subdirectory (e.g. the
-`v1.7` directory for Kubernetes 1.7 or the `v1.6` directory for Kubernetes 1.6).
-Older Kubernetes versions that don't have their own directory are no longer
-supported.
+directory without modification is `1.21`. 
+
+#### ⚠️ Deprecation Notice
+
+The `v1.6` and `v1.7` directories are **deprecated** and will be removed in a future release.
+
+**Reason**: Kubernetes 1.6/1.7 reached end-of-life in 2018/2019 and are no longer secure or supported.
+
+**Migration**: Upgrade to Kubernetes 1.21+ and use the files from this root directory.
 
 For secure mode, the controller must enable `certificatesigningrequests`.
 You can check if this is enabled by looking at the controller logs:
