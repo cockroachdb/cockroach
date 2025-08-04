@@ -1,11 +1,19 @@
 package cdctest
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -76,8 +84,15 @@ func (c *kafkaConsumer) Start(ctx context.Context) error {
 		partConsumerOutputs[i] = partition.Messages()
 	}
 	return fanIn(ctx, partConsumerOutputs, c.output, func(msg *sarama.ConsumerMessage) *ConsumerMessage {
+		// TODO: support other formats (?)
+		updated, resolved, _, err := tryGetUpdatedResolvedKeyFromJSONRow(msg.Value)
+		if err != nil {
+			return nil
+		}
 		return &ConsumerMessage{
 			Topic:     c.topic,
+			Resolved:  resolved,
+			Updated:   updated,
 			Partition: strconv.Itoa(int(msg.Partition)),
 			Key:       string(msg.Key),
 			Value:     string(msg.Value),
@@ -89,6 +104,99 @@ func (c *kafkaConsumer) Output() <-chan *ConsumerMessage {
 	return c.output
 }
 
+type cloudStorageConsumer struct {
+	es     cloud.ExternalStorage
+	output chan *ConsumerMessage
+}
+
+func NewCloudStorageConsumer(ctx context.Context, uri string, createExternalStorageFromURI cloud.ExternalStorageFromURIFactory) (*cloudStorageConsumer, error) {
+	es, err := createExternalStorageFromURI(ctx, uri, username.RootUserName())
+	if err != nil {
+		return nil, err
+	}
+	return &cloudStorageConsumer{es: es}, nil
+}
+
+func (c *cloudStorageConsumer) Start(ctx context.Context) error {
+	defer close(c.output)
+
+	// TODO: better data structure for this
+	seenFiles := make(map[string]struct{})
+	pendingFiles := make(map[string]struct{})
+	getNextFile := func() (first string) {
+		for file := range pendingFiles {
+			if first == "" || file < first {
+				first = file
+			}
+		}
+		if first != "" {
+			delete(pendingFiles, first)
+		}
+		return first
+	}
+
+	for ctx.Err() == nil {
+		// Refresh files.
+		err := c.es.List(ctx, "", "", func(fileName string) error {
+			if _, ok := seenFiles[fileName]; ok {
+				return nil
+			}
+			pendingFiles[fileName] = struct{}{}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		nextFile := getNextFile()
+		if nextFile == "" {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(1 * time.Second):
+			}
+			continue
+		}
+
+		// Get the topic from the file name. (`<timestamp>-<uniquer>-<topic_id>-<schema_id>.<ext>`)
+		parts := strings.Split(nextFile, "-")
+		if len(parts) < 4 {
+			return errors.Newf("invalid file name: %s", nextFile)
+		}
+		topic := parts[2]
+
+		reader, _, err := c.es.ReadFile(ctx, nextFile, cloud.ReadOptions{NoFileSize: true})
+		if err != nil {
+			return err
+		}
+		// TODO: handle parquet files
+		scanner := bufio.NewScanner(ioctx.ReaderCtxAdapter(ctx, reader))
+		for scanner.Scan() {
+			value := scanner.Bytes()
+			updated, resolved, key, err := tryGetUpdatedResolvedKeyFromJSONRow(value)
+			if err != nil {
+				return nil
+			}
+
+			c.output <- &ConsumerMessage{
+				Topic:     topic,
+				Key:       key,
+				Value:     string(value),
+				Partition: "",
+				Resolved:  resolved,
+				Updated:   updated,
+			}
+		}
+	}
+
+	// we need to read the files in order and then emit the messages in order
+
+	return nil
+}
+
+func (c *cloudStorageConsumer) Output() <-chan *ConsumerMessage {
+	return c.output
+}
 
 // TODO: other consumers
 // - [ ] cloud storage (sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit)
@@ -134,4 +242,30 @@ func ConsumeAndValidate(ctx context.Context, consumer Consumer, validator Valida
 		return nil
 	})
 	return eg.Wait()
+}
+
+func tryGetUpdatedResolvedKeyFromJSONRow(value []byte) (updated, resolved hlc.Timestamp, key string, err error) {
+	var val jsonMessageVal
+	if err := json.Unmarshal(value, &val); err != nil {
+		return hlc.Timestamp{}, hlc.Timestamp{}, "", err
+	}
+	if val.Updated != "" {
+		updated, err = hlc.ParseTimestamp(val.Updated)
+		if err != nil {
+			return hlc.Timestamp{}, hlc.Timestamp{}, "", err
+		}
+	}
+	if val.Resolved != "" {
+		resolved, err = hlc.ParseTimestamp(val.Resolved)
+		if err != nil {
+			return hlc.Timestamp{}, hlc.Timestamp{}, "", err
+		}
+	}
+	return updated, resolved, val.Key, nil
+}
+
+type jsonMessageVal struct {
+	Updated  string `json:"updated"`
+	Resolved string `json:"resolved"`
+	Key      string `json:"key"`
 }
