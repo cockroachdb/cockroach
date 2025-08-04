@@ -15654,7 +15654,7 @@ layers:
       description: Number of disk reads per query
       y_axis_label: Disk Reads per Query
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: rocksdb.table-readers-mem-estimate
@@ -16274,6 +16274,78 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.compression.cr
+      exported_name: storage_compression_cr
+      description: Average compression ratio of sstable and blob value data.
+      y_axis_label: Ratio
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.minlz.bytes
+      exported_name: storage_compression_minlz_bytes
+      description: Total on disk size of sstable and blob value data that is compressed with the MinLZ algorithm.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.minlz.cr
+      exported_name: storage_compression_minlz_cr
+      description: Average compression ratio of sstable and blob value data that is compressed with the MinLZ algorithm.
+      y_axis_label: Ratio
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.none.bytes
+      exported_name: storage_compression_none_bytes
+      description: Total on disk size of sstable and blob value data that is not compressed.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.snappy.bytes
+      exported_name: storage_compression_snappy_bytes
+      description: Total on disk size of sstable and blob value data that is compressed with the Snappy algorithm.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.snappy.cr
+      exported_name: storage_compression_snappy_cr
+      description: Average compression ratio of sstable and blob value data that is compressed with the snappy algorithm.
+      y_axis_label: Ratio
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.unknown.bytes
+      exported_name: storage_compression_unknown_bytes
+      description: Total on disk size of sstable and blob value data that is compressed but for which we have no compression statistics.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.zstd.bytes
+      exported_name: storage_compression_zstd_bytes
+      description: Total on disk size of sstable and blob value data that is compressed with the Zstd algorithm.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.zstd.cr
+      exported_name: storage_compression_zstd_cr
+      description: Average compression ratio of sstable and blob value data that is compressed with the Zstd algorithm.
+      y_axis_label: Ratio
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
     - name: storage.disk-slow
       exported_name: storage_disk_slow
       description: Number of instances of disk operations taking longer than 10s
@@ -16885,7 +16957,7 @@ layers:
       description: Compaction score of level 0
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l0-level-size
@@ -16925,7 +16997,7 @@ layers:
       description: Compaction score of level 1
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l1-level-size
@@ -16949,7 +17021,7 @@ layers:
       description: Compaction score of level 2
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l2-level-size
@@ -16973,7 +17045,7 @@ layers:
       description: Compaction score of level 3
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l3-level-size
@@ -16997,7 +17069,7 @@ layers:
       description: Compaction score of level 4
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l4-level-size
@@ -17021,7 +17093,7 @@ layers:
       description: Compaction score of level 5
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l5-level-size
@@ -17045,7 +17117,7 @@ layers:
       description: Compaction score of level 6
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l6-level-size
@@ -17200,38 +17272,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: storage.sstable.compression.none.count
-      exported_name: storage_sstable_compression_none_count
-      description: Count of SSTables that are uncompressed.
-      y_axis_label: SSTables
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: storage.sstable.compression.snappy.count
-      exported_name: storage_sstable_compression_snappy_count
-      description: Count of SSTables that have been compressed with the snappy compression algorithm.
-      y_axis_label: SSTables
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: storage.sstable.compression.unknown.count
-      exported_name: storage_sstable_compression_unknown_count
-      description: Count of SSTables that have an unknown compression algorithm.
-      y_axis_label: SSTables
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: storage.sstable.compression.zstd.count
-      exported_name: storage_sstable_compression_zstd_count
-      description: Count of SSTables that have been compressed with the zstd compression algorithm.
-      y_axis_label: SSTables
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
     - name: storage.sstable.remote.bytes
       exported_name: storage_sstable_remote_bytes
       description: Bytes in SSTables that are stored off-disk (remotely) in object storage.

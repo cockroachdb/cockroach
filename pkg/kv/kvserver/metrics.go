@@ -680,7 +680,7 @@ var (
 		Name:        "rocksdb.read-amplification",
 		Help:        "Number of disk reads per query",
 		Measurement: "Disk Reads per Query",
-		Unit:        metric.Unit_COUNT,
+		Unit:        metric.Unit_CONST,
 	}
 	metaRdbNumSSTables = metric.Metadata{
 		Name:        "rocksdb.num-sstables",
@@ -756,7 +756,7 @@ var (
 		"level-score",
 		"Compaction score of level %d",
 		"Score",
-		metric.Unit_COUNT,
+		metric.Unit_CONST,
 	)
 
 	metaRdbWriteStalls = metric.Metadata{
@@ -1128,31 +1128,60 @@ storage.initial_stats_complete becomes true.
 		Measurement: "SSTables",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaSSTableCompressionSnappy = metric.Metadata{
-		Name: "storage.sstable.compression.snappy.count",
-		Help: "Count of SSTables that have been compressed with the snappy " +
-			"compression algorithm.",
-		Measurement: "SSTables",
-		Unit:        metric.Unit_COUNT,
+
+	metaCompressionSnappyBytes = metric.Metadata{
+		Name:        "storage.compression.snappy.bytes",
+		Help:        "Total on disk size of sstable and blob value data that is compressed with the Snappy algorithm.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
 	}
-	metaSSTableCompressionZstd = metric.Metadata{
-		Name: "storage.sstable.compression.zstd.count",
-		Help: "Count of SSTables that have been compressed with the zstd " +
-			"compression algorithm.",
-		Measurement: "SSTables",
-		Unit:        metric.Unit_COUNT,
+	metaCompressionSnappyCR = metric.Metadata{
+		Name:        "storage.compression.snappy.cr",
+		Help:        "Average compression ratio of sstable and blob value data that is compressed with the snappy algorithm.",
+		Measurement: "Ratio",
+		Unit:        metric.Unit_CONST,
 	}
-	metaSSTableCompressionUnknown = metric.Metadata{
-		Name:        "storage.sstable.compression.unknown.count",
-		Help:        "Count of SSTables that have an unknown compression algorithm.",
-		Measurement: "SSTables",
-		Unit:        metric.Unit_COUNT,
+	metaCompressionMinLZBytes = metric.Metadata{
+		Name:        "storage.compression.minlz.bytes",
+		Help:        "Total on disk size of sstable and blob value data that is compressed with the MinLZ algorithm.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_CONST,
 	}
-	metaSSTableCompressionNone = metric.Metadata{
-		Name:        "storage.sstable.compression.none.count",
-		Help:        "Count of SSTables that are uncompressed.",
-		Measurement: "SSTables",
-		Unit:        metric.Unit_COUNT,
+	metaCompressionMinLZCR = metric.Metadata{
+		Name:        "storage.compression.minlz.cr",
+		Help:        "Average compression ratio of sstable and blob value data that is compressed with the MinLZ algorithm.",
+		Measurement: "Ratio",
+		Unit:        metric.Unit_CONST,
+	}
+	metaCompressionZstdBytes = metric.Metadata{
+		Name:        "storage.compression.zstd.bytes",
+		Help:        "Total on disk size of sstable and blob value data that is compressed with the Zstd algorithm.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCompressionZstdCR = metric.Metadata{
+		Name:        "storage.compression.zstd.cr",
+		Help:        "Average compression ratio of sstable and blob value data that is compressed with the Zstd algorithm.",
+		Measurement: "Ratio",
+		Unit:        metric.Unit_CONST,
+	}
+	metaCompressionNoneBytes = metric.Metadata{
+		Name:        "storage.compression.none.bytes",
+		Help:        "Total on disk size of sstable and blob value data that is not compressed.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCompressionUnknownBytes = metric.Metadata{
+		Name:        "storage.compression.unknown.bytes",
+		Help:        "Total on disk size of sstable and blob value data that is compressed but for which we have no compression statistics.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCompressionOverallCR = metric.Metadata{
+		Name:        "storage.compression.cr",
+		Help:        "Average compression ratio of sstable and blob value data.",
+		Measurement: "Ratio",
+		Unit:        metric.Unit_CONST,
 	}
 )
 
@@ -2962,22 +2991,29 @@ type StoreMetrics struct {
 	SSTableZombieBytes                *metric.Gauge
 	SSTableRemoteBytes                *metric.Gauge
 	SSTableRemoteCount                *metric.Gauge
-	SSTableCompressionSnappy          *metric.Gauge
-	SSTableCompressionZstd            *metric.Gauge
-	SSTableCompressionUnknown         *metric.Gauge
-	SSTableCompressionNone            *metric.Gauge
-	categoryIterMetrics               pebbleCategoryIterMetricsContainer
-	categoryDiskWriteMetrics          pebbleCategoryDiskWriteMetricsContainer
-	ValueSeparationBytesReferenced    *metric.Gauge
-	ValueSeparationBytesUnreferenced  *metric.Gauge
-	ValueSeparationBlobFileCount      *metric.Gauge
-	ValueSeparationBlobFileSize       *metric.Gauge
-	WALBytesWritten                   *metric.Counter
-	WALBytesIn                        *metric.Counter
-	WALFailoverSwitchCount            *metric.Counter
-	WALFailoverPrimaryDuration        *metric.Counter
-	WALFailoverSecondaryDuration      *metric.Counter
-	WALFailoverWriteAndSyncLatency    *metric.ManualWindowHistogram
+
+	CompressionSnappyBytes  *metric.Gauge
+	CompressionSnappyCR     *metric.GaugeFloat64
+	CompressionMinLZBytes   *metric.Gauge
+	CompressionMinLZCR      *metric.GaugeFloat64
+	CompressionZstdBytes    *metric.Gauge
+	CompressionZstdCR       *metric.GaugeFloat64
+	CompressionNoneBytes    *metric.Gauge
+	CompressionUnknownBytes *metric.Gauge
+	CompressionOverallCR    *metric.GaugeFloat64
+
+	categoryIterMetrics              pebbleCategoryIterMetricsContainer
+	categoryDiskWriteMetrics         pebbleCategoryDiskWriteMetricsContainer
+	ValueSeparationBytesReferenced   *metric.Gauge
+	ValueSeparationBytesUnreferenced *metric.Gauge
+	ValueSeparationBlobFileCount     *metric.Gauge
+	ValueSeparationBlobFileSize      *metric.Gauge
+	WALBytesWritten                  *metric.Counter
+	WALBytesIn                       *metric.Counter
+	WALFailoverSwitchCount           *metric.Counter
+	WALFailoverPrimaryDuration       *metric.Counter
+	WALFailoverSecondaryDuration     *metric.Counter
+	WALFailoverWriteAndSyncLatency   *metric.ManualWindowHistogram
 
 	RdbCheckpoints *metric.Gauge
 
@@ -3690,10 +3726,17 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SSTableZombieBytes:                metric.NewGauge(metaSSTableZombieBytes),
 		SSTableRemoteBytes:                metric.NewGauge(metaSSTableRemoteBytes),
 		SSTableRemoteCount:                metric.NewGauge(metaSSTableRemoteCount),
-		SSTableCompressionSnappy:          metric.NewGauge(metaSSTableCompressionSnappy),
-		SSTableCompressionZstd:            metric.NewGauge(metaSSTableCompressionZstd),
-		SSTableCompressionUnknown:         metric.NewGauge(metaSSTableCompressionUnknown),
-		SSTableCompressionNone:            metric.NewGauge(metaSSTableCompressionNone),
+
+		CompressionSnappyBytes:  metric.NewGauge(metaCompressionSnappyBytes),
+		CompressionSnappyCR:     metric.NewGaugeFloat64(metaCompressionSnappyCR),
+		CompressionMinLZBytes:   metric.NewGauge(metaCompressionMinLZBytes),
+		CompressionMinLZCR:      metric.NewGaugeFloat64(metaCompressionMinLZCR),
+		CompressionZstdBytes:    metric.NewGauge(metaCompressionZstdBytes),
+		CompressionZstdCR:       metric.NewGaugeFloat64(metaCompressionZstdCR),
+		CompressionNoneBytes:    metric.NewGauge(metaCompressionNoneBytes),
+		CompressionUnknownBytes: metric.NewGauge(metaCompressionUnknownBytes),
+		CompressionOverallCR:    metric.NewGaugeFloat64(metaCompressionOverallCR),
+
 		categoryDiskWriteMetrics: pebbleCategoryDiskWriteMetricsContainer{
 			registry: storeRegistry,
 		},
@@ -4164,10 +4207,28 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	count, size := m.RemoteTablesTotal()
 	sm.SSTableRemoteBytes.Update(int64(size))
 	sm.SSTableRemoteCount.Update(int64(count))
-	sm.SSTableCompressionSnappy.Update(m.Table.CompressedCountSnappy)
-	sm.SSTableCompressionZstd.Update(m.Table.CompressedCountZstd)
-	sm.SSTableCompressionUnknown.Update(m.Table.CompressedCountUnknown)
-	sm.SSTableCompressionNone.Update(m.Table.CompressedCountNone)
+
+	// TODO(radu): aggregate blob file compression metrics when those are added.
+	sm.CompressionSnappyBytes.Update(int64(m.Table.Compression.Snappy.CompressedBytes))
+	sm.CompressionSnappyCR.Update(m.Table.Compression.Snappy.CompressionRatio())
+	sm.CompressionMinLZBytes.Update(int64(m.Table.Compression.MinLZ.CompressedBytes))
+	sm.CompressionMinLZCR.Update(m.Table.Compression.MinLZ.CompressionRatio())
+	sm.CompressionZstdBytes.Update(int64(m.Table.Compression.Zstd.CompressedBytes))
+	sm.CompressionZstdCR.Update(m.Table.Compression.Zstd.CompressionRatio())
+	sm.CompressionNoneBytes.Update(int64(m.Table.Compression.NoCompressionBytes))
+	sm.CompressionUnknownBytes.Update(int64(m.Table.Compression.CompressedBytesWithoutStats))
+
+	overall := pebble.CompressionStatsForSetting{
+		CompressedBytes:   m.Table.Compression.NoCompressionBytes,
+		UncompressedBytes: m.Table.Compression.NoCompressionBytes,
+	}
+	overall.Add(m.Table.Compression.Snappy)
+	overall.Add(m.Table.Compression.MinLZ)
+	overall.Add(m.Table.Compression.Zstd)
+	// We cannot use CompressedBytesWithoutStats for the overall compression
+	// ratio; we estimate it from the data we do have.
+	sm.CompressionOverallCR.Update(overall.CompressionRatio())
+
 	sm.categoryIterMetrics.update(m.CategoryStats)
 	sm.categoryDiskWriteMetrics.update(m.DiskWriteStats)
 
