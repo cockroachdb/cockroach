@@ -43,9 +43,12 @@ import (
 	msktypes "github.com/aws/aws-sdk-go-v2/service/kafka/types"
 	"github.com/aws/aws-sdk-go/aws"
 	awslog "github.com/aws/smithy-go/logging"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
@@ -59,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	roachprodaws "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -643,7 +647,12 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 			if err != nil {
 				ct.t.Fatalf("failed to create kafka consumer: %s", err)
 			}
-
+		case cloudStorageSink:
+			}
+			consumer, err = cdctest.NewCloudStorageConsumer(ct.ctx, sinkURI)
+			if err != nil {
+				ct.t.Fatalf("failed to create cloud storage consumer: %s", err)
+			}
 		}
 		// TODO(xxx): start it on another node for less test runner load
 		ct.mon.Go(func(ctx context.Context) error {

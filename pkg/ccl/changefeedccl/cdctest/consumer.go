@@ -4,17 +4,17 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/IBM/sarama"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/api/iterator"
 )
 
 type ConsumerMessage struct {
@@ -78,6 +78,12 @@ func NewKafkaConsumer(ctx context.Context, uri, topic string) (*kafkaConsumer, e
 
 func (c *kafkaConsumer) Start(ctx context.Context) error {
 	defer close(c.output)
+	defer func() { _ = c.consumer.Close() }()
+	defer func() {
+		for _, pc := range c.partitionConsumers {
+			_ = pc.Close()
+		}
+	}()
 
 	partConsumerOutputs := make([]<-chan *sarama.ConsumerMessage, len(c.partitionConsumers))
 	for i, partition := range c.partitionConsumers {
@@ -105,20 +111,28 @@ func (c *kafkaConsumer) Output() <-chan *ConsumerMessage {
 }
 
 type cloudStorageConsumer struct {
-	es     cloud.ExternalStorage
+	gcs    *storage.Client
+	bucket *storage.BucketHandle
+	prefix string
 	output chan *ConsumerMessage
 }
 
-func NewCloudStorageConsumer(ctx context.Context, uri string, createExternalStorageFromURI cloud.ExternalStorageFromURIFactory) (*cloudStorageConsumer, error) {
-	es, err := createExternalStorageFromURI(ctx, uri, username.RootUserName())
+func NewCloudStorageConsumer(ctx context.Context, uri string) (*cloudStorageConsumer, error) {
+	gcs, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &cloudStorageConsumer{es: es}, nil
+	parsedURI, err := url.Parse(uri)
+	if err != nil {
+		return nil, err
+	}
+	bucket := gcs.Bucket(parsedURI.Host)
+	return &cloudStorageConsumer{gcs: gcs, bucket: bucket, prefix: parsedURI.Path}, nil
 }
 
 func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 	defer close(c.output)
+	defer func() { _ = c.gcs.Close() }()
 
 	// TODO: better data structure for this
 	seenFiles := make(map[string]struct{})
@@ -137,14 +151,16 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 
 	for ctx.Err() == nil {
 		// Refresh files.
-		err := c.es.List(ctx, "", "", func(fileName string) error {
-			if _, ok := seenFiles[fileName]; ok {
-				return nil
+		objs := c.bucket.Objects(ctx, &storage.Query{Prefix: c.prefix})
+		var err error
+		var obj *storage.ObjectAttrs
+		for obj, err = objs.Next(); err == nil; obj, err = objs.Next() {
+			if _, ok := seenFiles[obj.Name]; ok {
+				continue
 			}
-			pendingFiles[fileName] = struct{}{}
-			return nil
-		})
-		if err != nil {
+			pendingFiles[obj.Name] = struct{}{}
+		}
+		if err != nil && !errors.Is(err, iterator.Done) {
 			return err
 		}
 
@@ -165,12 +181,13 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 		}
 		topic := parts[2]
 
-		reader, _, err := c.es.ReadFile(ctx, nextFile, cloud.ReadOptions{NoFileSize: true})
+		reader, err := c.bucket.Object(nextFile).NewReader(ctx)
 		if err != nil {
 			return err
 		}
 		// TODO: handle parquet files
-		scanner := bufio.NewScanner(ioctx.ReaderCtxAdapter(ctx, reader))
+		// TODO: handle parquet files
+		scanner := bufio.NewScanner(reader)
 		for scanner.Scan() {
 			value := scanner.Bytes()
 			updated, resolved, key, err := tryGetUpdatedResolvedKeyFromJSONRow(value)
