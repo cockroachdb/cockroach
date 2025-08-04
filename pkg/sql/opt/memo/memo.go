@@ -132,7 +132,7 @@ type Memo struct {
 	// rootExpr is the root expression of the memo expression forest. It is set
 	// via a call to SetRoot. After optimization, it is set to be the root of the
 	// lowest cost tree in the forest.
-	rootExpr opt.Expr
+	rootExpr RelExpr
 
 	// rootProps are the physical properties required of the root memo expression.
 	// It is set via a call to SetRoot.
@@ -366,7 +366,7 @@ func (m *Memo) Metadata() *opt.Metadata {
 
 // RootExpr returns the root memo expression previously set via a call to
 // SetRoot.
-func (m *Memo) RootExpr() opt.Expr {
+func (m *Memo) RootExpr() RelExpr {
 	return m.rootExpr
 }
 
@@ -395,12 +395,7 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 // HasPlaceholders returns true if the memo contains at least one placeholder
 // operator.
 func (m *Memo) HasPlaceholders() bool {
-	rel, ok := m.rootExpr.(RelExpr)
-	if !ok {
-		panic(errors.AssertionFailedf("placeholders only supported when memo root is relational"))
-	}
-
-	return rel.Relational().HasPlaceholder
+	return m.rootExpr.Relational().HasPlaceholder
 }
 
 // IsStale returns true if the memo has been invalidated by changes to any of
@@ -555,8 +550,7 @@ func (m *Memo) ResetCost(e RelExpr, cost Cost) {
 func (m *Memo) IsOptimized() bool {
 	// The memo is optimized once the root expression has its physical properties
 	// assigned.
-	rel, ok := m.rootExpr.(RelExpr)
-	return ok && rel.RequiredPhysical() != nil
+	return m.rootExpr.RequiredPhysical() != nil
 }
 
 // OptimizationCost returns a rough estimate of the cost of optimization of the
