@@ -132,7 +132,7 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 	case *memo.CreateTriggerExpr:
 		planDeps, typeDeps, funcDeps, err = toPlanDependencies(t.Deps, t.TypeDeps, t.FuncDeps)
 	default:
-		return nil, errors.AssertionFailedf("unexpected root expression: %s", t.(memo.RelExpr).Op())
+		return nil, errors.AssertionFailedf("unexpected root expression: %s", t.Op())
 	}
 	if err != nil {
 		return nil, err

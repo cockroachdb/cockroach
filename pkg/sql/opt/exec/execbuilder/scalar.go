@@ -675,7 +675,7 @@ func (b *Builder) buildExistsSubquery(
 		stmtProps := []*physical.Required{{Presentation: physical.Presentation{aliasedCol}}}
 
 		// Create an wrapRootExprFn that wraps input in a Limit and a Project.
-		wrapRootExpr := func(f *norm.Factory, e memo.RelExpr) opt.Expr {
+		wrapRootExpr := func(f *norm.Factory, e memo.RelExpr) memo.RelExpr {
 			return f.ConstructProject(
 				f.ConstructLimit(
 					e,
@@ -1115,7 +1115,7 @@ func (b *Builder) initRoutineExceptionHandler(
 	blockState.ExceptionHandler = exceptionHandler
 }
 
-type wrapRootExprFn func(f *norm.Factory, e memo.RelExpr) opt.Expr
+type wrapRootExprFn func(f *norm.Factory, e memo.RelExpr) memo.RelExpr
 
 // buildRoutinePlanGenerator returns a tree.RoutinePlanFn that can plan the
 // statements in a routine that has one or more arguments.
@@ -1249,7 +1249,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 			f.CopyAndReplace(originalMemo, stmt, props, replaceFn)
 
 			if wrapRootExpr != nil {
-				wrapped := wrapRootExpr(f, f.Memo().RootExpr().(memo.RelExpr)).(memo.RelExpr)
+				wrapped := wrapRootExpr(f, f.Memo().RootExpr())
 				f.Memo().SetRoot(wrapped, props)
 			}
 

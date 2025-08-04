@@ -590,7 +590,7 @@ func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) 
 	opc.flags.Set(planFlagOptimized)
 	mem := f.Memo()
 	if prep := opc.p.stmt.Prepared; opc.allowMemoReuse && prep != nil {
-		costWithOptimizationCost := mem.RootExpr().(memo.RelExpr).Cost()
+		costWithOptimizationCost := mem.RootExpr().Cost()
 		costWithOptimizationCost.Add(mem.OptimizationCost())
 		prep.Costs.AddCustom(costWithOptimizationCost)
 	}
@@ -772,7 +772,7 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 			prep.IdealGenericPlan = true
 		case memoTypeGeneric:
 			prep.GenericMemo = newMemo
-			prep.Costs.SetGeneric(newMemo.RootExpr().(memo.RelExpr).Cost())
+			prep.Costs.SetGeneric(newMemo.RootExpr().Cost())
 			// Now that the cost of the generic plan is known, we need to
 			// re-evaluate the decision to use a generic or custom plan.
 			if !opc.chooseGenericPlan() {
@@ -961,11 +961,11 @@ func (opc *optPlanningCtx) runExecBuilder(
 	if opc.gf.Initialized() {
 		planTop.instrumentation.planGist = opc.gf.PlanGist()
 	}
-	planTop.instrumentation.costEstimate = mem.RootExpr().(memo.RelExpr).Cost().C
-	available := mem.RootExpr().(memo.RelExpr).Relational().Statistics().Available
+	planTop.instrumentation.costEstimate = mem.RootExpr().Cost().C
+	available := mem.RootExpr().Relational().Statistics().Available
 	planTop.instrumentation.statsAvailable = available
 	if available {
-		planTop.instrumentation.outputRows = mem.RootExpr().(memo.RelExpr).Relational().Statistics().RowCount
+		planTop.instrumentation.outputRows = mem.RootExpr().Relational().Statistics().RowCount
 	}
 
 	if stmt.ExpectedTypes != nil {
@@ -1045,7 +1045,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	f.FoldingControl().AllowStableFolds()
 	f.CopyAndReplace(
 		savedMemo,
-		savedMemo.RootExpr().(memo.RelExpr),
+		savedMemo.RootExpr(),
 		savedMemo.RootProps(),
 		f.CopyWithoutAssigningPlaceholders,
 	)
@@ -1066,7 +1066,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	opc.optimizer.Init(ctx, f.EvalContext(), opc.catalog)
 	f.CopyAndReplace(
 		savedMemo,
-		savedMemo.RootExpr().(memo.RelExpr),
+		savedMemo.RootExpr(),
 		savedMemo.RootProps(),
 		f.CopyWithoutAssigningPlaceholders,
 	)
@@ -1091,7 +1091,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	savedMemo.Metadata().UpdateTableMeta(origCtx, f.EvalContext(), optTables)
 	f.CopyAndReplace(
 		savedMemo,
-		savedMemo.RootExpr().(memo.RelExpr),
+		savedMemo.RootExpr(),
 		savedMemo.RootProps(),
 		f.CopyWithoutAssigningPlaceholders,
 	)

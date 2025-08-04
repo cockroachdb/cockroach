@@ -420,7 +420,7 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 		}
 		return f.CopyAndReplaceDefault(e, replaceFn)
 	}
-	f.CopyAndReplace(from, from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
+	f.CopyAndReplace(from, from.RootExpr(), from.RootProps(), replaceFn)
 
 	return nil
 }
