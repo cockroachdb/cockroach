@@ -27,6 +27,7 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
+        "//pkg/util/ltree",
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/tsearch",
         "//pkg/util/uuid",
