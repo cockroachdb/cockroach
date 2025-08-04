@@ -187,10 +187,13 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 				Updated:   updated,
 			}
 		}
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+
+		// Mark the file as seen.
+		seenFiles[nextFile] = struct{}{}
 	}
-
-	// we need to read the files in order and then emit the messages in order
-
 	return nil
 }
 
