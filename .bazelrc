@@ -150,10 +150,12 @@ build:engflowbase --config=lintonbuild
 test:engflowbase --test_env=REMOTE_EXEC=1
 test:engflowbase --test_env=GOTRACEBACK=all
 build:engflow --config=engflowbase
-build:engflow --remote_cache=grpcs://tanzanite.cluster.engflow.com
-build:engflow --remote_executor=grpcs://tanzanite.cluster.engflow.com
-build:engflow --bes_backend=grpcs://tanzanite.cluster.engflow.com
-build:engflow --bes_results_url=https://tanzanite.cluster.engflow.com/invocation/
+build:engflow --remote_cache=grpcs://mesolite.cluster.engflow.com
+build:engflow --remote_executor=grpcs://mesolite.cluster.engflow.com
+build:engflow --bes_backend=grpcs://mesolite.cluster.engflow.com
+build:engflow --bes_results_url=https://mesolite.cluster.engflow.com/invocations/private
+build:engflow --remote_instance_name=private
+build:engflow --bes_instance_name=private
 build:engflowpublic --config=engflowbase
 build:engflowpublic --remote_cache=grpcs://mesolite.cluster.engflow.com
 build:engflowpublic --remote_executor=grpcs://mesolite.cluster.engflow.com

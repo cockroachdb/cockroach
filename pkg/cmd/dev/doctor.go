@@ -30,7 +30,7 @@ const (
 	// doctorStatusVersion is the current "version" of the status checks
 	// performed by `dev doctor``. Increasing it will force doctor to be re-run
 	// before other dev commands can be run.
-	doctorStatusVersion = 11
+	doctorStatusVersion = 12
 
 	noCacheFlag     = "no-cache"
 	interactiveFlag = "interactive"
@@ -279,6 +279,9 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 			if !d.checkLinePresenceInBazelRcUser(cfg.workspace, "build:engflow --jobs=200") {
 				return fmt.Sprintf("Make sure the following line is in %s/.bazelrc.user: build:engflow --jobs=200", cfg.workspace)
 			}
+			if !d.checkLinePresenceInBazelRcUser(cfg.workspace, "build:engflow --credential_helper=mesolite.cluster.engflow.com=engflow_auth") {
+				return fmt.Sprintf("Make sure the following line is in %s/.bazelrc.user: build:engflow --credential_helper=mesolite.cluster.engflow.com=engflow_auth", cfg.workspace)
+			}
 			return ""
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
@@ -306,6 +309,12 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 			}
 			if !d.checkLinePresenceInBazelRcUser(cfg.workspace, "build:engflow --jobs=200") {
 				err := d.addLineToBazelRcUser(cfg.workspace, "build:engflow --jobs=200")
+				if err != nil {
+					return err
+				}
+			}
+			if !d.checkLinePresenceInBazelRcUser(cfg.workspace, "build:engflow --credential_helper=mesolite.cluster.engflow.com=engflow_auth") {
+				err := d.addLineToBazelRcUser(cfg.workspace, "build:engflow --credential_helper=mesolite.cluster.engflow.com=engflow_auth")
 				if err != nil {
 					return err
 				}
@@ -359,13 +368,10 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 		},
 	},
 	{
-		name: "engflow_certificates",
+		name: "engflow_auth",
 		check: func(d *dev, ctx context.Context, cfg doctorConfig) string {
-			if !d.checkLinePresenceInBazelRcUser(cfg.workspace, "build:engflow --tls_client_certificate=") {
-				return fmt.Sprintf("Must specify the --tls_client_certificate to use for EngFlow builds in %s/.bazelrc.user. This is a line of the form: `build:engflow --tls_client_certificate=/path/to/file`.", cfg.workspace)
-			}
-			if !d.checkLinePresenceInBazelRcUser(cfg.workspace, "build:engflow --tls_client_key=") {
-				return fmt.Sprintf("Must specify the --tls_client_key to use for EngFlow builds in %s/.bazelrc.user. This is a line of the form: `build:engflow --tls_client_key=/path/to/file`.", cfg.workspace)
+			if !d.checkFileExistsUnderHomedir(".config/engflow_auth/tokens/mesolite.cluster.engflow.com") {
+				return "Make sure you've installed engflow_auth (https://github.com/EngFlow/auth), added it to your PATH, and login using `engflow_auth login -store=file https://mesolite.cluster.engflow.com`."
 			}
 			return ""
 		},
@@ -923,4 +929,19 @@ func (d *dev) removeAllPrefixesInFile(filename, prefixToRemove string) error {
 	outStr := out.String()
 	outStr = strings.TrimSpace(outStr) + "\n"
 	return d.os.WriteFile(filename, outStr)
+}
+
+// checkFileExistsUnderHomedir checks whether the given file or path is present
+// under the home directory. If it is, this function returns true. Otherwise,
+// it returns false.
+func (d *dev) checkFileExistsUnderHomedir(expectedFile string) bool {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	exists, err := d.os.Exists(filepath.Join(homeDir, expectedFile))
+	if err != nil {
+		return false
+	}
+	return exists
 }
