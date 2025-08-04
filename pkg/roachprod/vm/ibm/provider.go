@@ -551,7 +551,7 @@ func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
 	// roachprod and cluster tags, but will also fallback to searching via the
 	// instance name to ensure all instances are properly deleted.
 	query := fmt.Sprintf(
-		`(tags:"%s:true AND %s:%s") OR (NOT (tags:"%s:true") AND name:%s-*)`,
+		`(tags:"%s:true" AND tags:"%s:%s") OR (NOT (tags:"%s:true") AND name:%s-*)`,
 		vm.TagRoachprod, vm.TagCluster, name,
 		vm.TagRoachprod, name,
 	)
