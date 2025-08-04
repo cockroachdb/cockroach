@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -696,7 +697,8 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 // BumpSideTransportClosed, we should be able to reach our target latency.
 func BenchmarkBumpSideTransportClosed(b *testing.B) {
 	defer leaktest.AfterTest(b)()
-	defer log.Scope(b).Close(b)
+	scope := log.Scope(b)
+	defer scope.Close(b)
 
 	ctx := context.Background()
 	manual := hlc.NewHybridManualClock()
@@ -730,6 +732,8 @@ func BenchmarkBumpSideTransportClosed(b *testing.B) {
 		// Perform the call.
 		res := r.BumpSideTransportClosed(ctx, now, targets)
 		if !res.OK {
+			d := kvtestutils.RaftLogDumper{Dir: scope.GetDirectory()}
+			d.Dump(b, store.LogEngine(), store.StoreID(), r.RangeID)
 			b.Fatalf("BumpSideTransportClosed unexpectedly failed: %+v", res)
 		}
 	}
