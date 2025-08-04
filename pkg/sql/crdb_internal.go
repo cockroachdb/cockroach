@@ -1926,7 +1926,7 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
 		for ; iter.Valid(); iter.Next(ctx) {
 			nodeID, recording := iter.Value()
 			traceString := recording.String()
-			traceJaegerJSON, err := recording.ToJaegerJSON("", "", fmt.Sprintf("node %d", nodeID))
+			traceJaegerJSON, err := recording.ToJaegerJSON("", "", fmt.Sprintf("node %d", nodeID), true /* indent */)
 			if err != nil {
 				return false, err
 			}

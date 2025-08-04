@@ -504,7 +504,7 @@ func (b *stmtBundleBuilder) addTrace() {
 This trace can be imported into Jaeger for visualization. From the Jaeger Search screen, select the JSON File.
 Jaeger can be started using docker with: docker run -d --name jaeger -p 16686:16686 jaegertracing/all-in-one:1.17
 The UI can then be accessed at http://localhost:16686/search`, b.stmt)
-	jaegerJSON, err := b.trace.ToJaegerJSON(b.stmt, comment, "")
+	jaegerJSON, err := b.trace.ToJaegerJSON(b.stmt, comment, "", true /* indent */)
 	if err != nil {
 		b.errorStrings = append(b.errorStrings, fmt.Sprintf("error getting jaeger trace: %v", err))
 		b.z.AddFile("trace-jaeger.txt", err.Error())
