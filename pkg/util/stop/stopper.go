@@ -315,6 +315,11 @@ func (s *Stopper) RunTask(ctx context.Context, taskName string, f func(context.C
 	return nil
 }
 
+// NB: This is just here to avoid constructing on a function on every call in dist_sender.go
+func (s *Stopper) RunTaskEx(ctx context.Context, opt TaskOpts, f func(context.Context)) error {
+	return s.RunTask(ctx, opt.TaskName, f)
+}
+
 // RunTaskWithErr is like RunTask(), but takes in a callback that can return an
 // error. The error is returned to the caller.
 func (s *Stopper) RunTaskWithErr(

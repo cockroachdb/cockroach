@@ -1244,11 +1244,14 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	qiBatchIdx := batchIdx + 1
 	qiResponseCh := make(chan response, 1)
 
-	runTask := ds.rpcContext.Stopper.RunAsyncTask
+	runTask := ds.rpcContext.Stopper.RunAsyncTaskEx
 	if ds.disableParallelBatches {
-		runTask = ds.rpcContext.Stopper.RunTask
+		runTask = ds.rpcContext.Stopper.RunTaskEx
 	}
-	if err := runTask(ctx, "kv.DistSender: sending pre-commit query intents", func(ctx context.Context) {
+	if err := runTask(ctx, stop.TaskOpts{
+		TaskName: "kv.DistSender: sending pre-commit query intents",
+		SpanOpt:  stop.ChildSpan,
+	}, func(ctx context.Context) {
 		// Map response index to the original un-swapped batch index.
 		// Remember that we moved the last QueryIntent in this batch
 		// from swapIdx to the end.
