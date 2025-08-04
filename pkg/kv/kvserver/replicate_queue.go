@@ -1031,11 +1031,18 @@ func (rq *replicateQueue) TransferLease(
 ) error {
 	rq.metrics.TransferLeaseCount.Inc(1)
 	log.KvDistribution.Infof(ctx, "transferring lease to s%d", target)
+	// Inform allocator sync that the change has been applied which applies
+	// changes to store pool and inform mma.
+	changeID := rq.as.NonMMAPreTransferLease(
+		rangeUsageInfo,
+		source,
+		target,
+	)
 	if err := rlm.AdminTransferLease(ctx, target.StoreID, false /* bypassSafetyChecks */); err != nil {
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
 	}
 
-	rq.storePool.UpdateLocalStoresAfterLeaseTransfer(source.StoreID, target.StoreID, rangeUsageInfo)
+	rq.as.PostApply(changeID, true /*success*/)
 	return nil
 }
 
@@ -1065,21 +1072,22 @@ func (rq *replicateQueue) changeReplicas(
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 ) error {
+	// Inform allocator sync that the change has been applied which applies
+	// changes to store pool and inform mma.
+	changeID := rq.as.NonMMAPreChangeReplicas(
+		rangeUsageInfo,
+		chgs,
+	)
 	// NB: this calls the impl rather than ChangeReplicas because
 	// the latter traps tests that try to call it while the replication
 	// queue is active.
-	if _, err := repl.changeReplicasImpl(
+	_, err := repl.changeReplicasImpl(
 		ctx, desc, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, allocatorPriority, reason,
 		details, chgs,
-	); err != nil {
+	)
+
+	rq.as.PostApply(changeID, err == nil /*success*/)
 	return err
-}
-	// On success, update local store pool to reflect the result of applying the
-	// operations.
-	for _, chg := range chgs {
-		rq.storePool.UpdateLocalStoreAfterRebalance(chg.Target.StoreID, rangeUsageInfo, chg.ChangeType)
-	}
-	return nil
 }
 
 func (*replicateQueue) postProcessScheduled(
