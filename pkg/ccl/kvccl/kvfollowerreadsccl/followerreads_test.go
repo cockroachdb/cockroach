@@ -844,7 +844,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 
 	// Further down, we'll set up the test to pin the lease to store 1. Turn off
 	// load based rebalancing to make sure it doesn't move.
-	kvserver.LoadBasedRebalancingMode.Override(ctx, &settings.SV, kvserver.LBRebalancingOff)
+	kvserverbase.LoadBasedRebalancingMode.Override(ctx, &settings.SV, kvserverbase.LBRebalancingOff)
 
 	n1 := sqlutils.MakeSQLRunner(tc.Conns[0])
 	n1.Exec(t, `CREATE DATABASE t`)

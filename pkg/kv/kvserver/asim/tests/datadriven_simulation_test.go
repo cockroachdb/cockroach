@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -485,7 +485,7 @@ func TestDataDriven(t *testing.T) {
 							event.SetSimulationSettingsEvent{
 								IsClusterSetting: true,
 								Key:              "LBRebalancingMode",
-								Value:            int64(kvserver.LBRebalancingLeasesAndReplicas),
+								Value:            int64(kvserverbase.LBRebalancingLeasesAndReplicas),
 							})
 					},
 					"mma-only": func(eg *gen.StaticEvents) {
@@ -495,7 +495,7 @@ func TestDataDriven(t *testing.T) {
 							event.SetSimulationSettingsEvent{
 								IsClusterSetting: true,
 								Key:              "LBRebalancingMode",
-								Value:            int64(kvserver.LBRebalancingMultiMetric),
+								Value:            int64(kvserverbase.LBRebalancingMultiMetric),
 							})
 					},
 					// Both the replicate/lease queues and the MMA are enabled.
@@ -506,7 +506,7 @@ func TestDataDriven(t *testing.T) {
 							event.SetSimulationSettingsEvent{
 								IsClusterSetting: true,
 								Key:              "LBRebalancingMode",
-								Value:            int64(kvserver.LBRebalancingMultiMetric),
+								Value:            int64(kvserverbase.LBRebalancingMultiMetric),
 							})
 					},
 				}
