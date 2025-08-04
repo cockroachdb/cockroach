@@ -6,9 +6,9 @@ CREATE TABLE xy (x INT PRIMARY KEY, y INT);
 # EliminateRedundantBarrier
 # --------------------------------------------------
 
-# TODO(sql-queries): for simplicity, we should eliminate the barrier expression
-# at the root in this case. It serves no purpose because the filters were able
-# to permeate it.
+# NOTE: Barriers at the root are eliminated by optbuilder, not a normalization
+# rule. exprnorm bypasses optbuilder, so the root barrier remains in the output
+# of this test case.
 exprnorm expect=EliminateRedundantBarrier
 (Barrier
   (Barrier

@@ -2689,21 +2689,17 @@ project
 norm expect=PushLeakproofFiltersIntoPermeableBarrier
 SELECT * FROM rls WHERE y = 20;
 ----
-barrier
+select
  ├── columns: x:1!null y:2!null alice_has_access:3!null
  ├── key: (1)
  ├── fd: ()-->(2,3)
- └── select
-      ├── columns: x:1!null y:2!null alice_has_access:3!null
-      ├── key: (1)
-      ├── fd: ()-->(2,3)
-      ├── scan rls
-      │    ├── columns: x:1!null y:2 alice_has_access:3
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2,3)
-      └── filters
-           ├── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
-           └── y:2 = 20 [outer=(2), constraints=(/2: [/20 - /20]; tight), fd=()-->(2)]
+ ├── scan rls
+ │    ├── columns: x:1!null y:2 alice_has_access:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      ├── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      └── y:2 = 20 [outer=(2), constraints=(/2: [/20 - /20]; tight), fd=()-->(2)]
 
 # --------------------------------------------------
 # NormalizeLikeAny
