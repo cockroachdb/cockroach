@@ -1,0 +1,17 @@
+# The second run starts at the bottom and accrues total variation
+# as it ascends to the top.
+echo
+----
+input: [10 8 4 2 1 2 4 8 10]
+ 10.00 ┼─╮                                   ╭─
+  9.11 ┤ ╰─╮                               ╭─╯
+  8.22 ┤   ╰─╮                           ╭─╯
+  7.33 ┤     ╰╮                         ╭╯
+  6.44 ┤      ╰╮                       ╭╯
+  5.55 ┤       ╰╮                     ╭╯
+  4.66 ┤        ╰╮                   ╭╯
+  3.77 ┤         ╰─╮               ╭─╯
+  2.88 ┤           ╰──╮         ╭──╯
+  1.99 ┤              ╰──╮   ╭──╯
+  1.10 ┤                 ╰───╯
+tv=100.00% (9.0) runs=2
