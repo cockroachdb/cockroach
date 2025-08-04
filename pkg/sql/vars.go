@@ -4318,6 +4318,25 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+		// CockroachDB extension.
+	`allow_unsafe_internals`: {
+			GetStringVal: makePostgresBoolGetStringValFn(`allow_unsafe_internals`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("allow_unsafe_internals", s)
+			if err != nil {
+				return err
+			}
+			m.SetAllowUnsafeInternals(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowUnsafeInternals), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return AllowUnsafeInternals.String(sv)
+		},
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

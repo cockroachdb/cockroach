@@ -16,7 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -287,5 +291,125 @@ func TestEnsureUserOnlyBelongsToRoles(t *testing.T) {
 		err := sql.EnsureUserOnlyBelongsToRoles(ctx, &execCfg, testUser, desiredRoles)
 		require.NoError(t, err)
 		require.Empty(t, getRoles(testUser))
+	})
+}
+
+func TestCheckUnsafeInternalsAccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Get the server's ambient context for proper event logging
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	q := "SELECT * FROM system.namespace"
+	stmt := sql.Statement{Statement: statements.Statement[tree.Statement]{SQL: q}}
+
+	t.Run("with hardcoded session data", func(t *testing.T) {
+		for _, test := range []struct {
+			Internal             bool
+			AllowUnsafeInternals bool
+			Passes               bool
+		}{
+			{true, false, true},
+			{true, true, true},
+			{false, false, false},
+			{false, true, true}, // Non-internal user with AllowUnsafeInternals override should pass and log
+		} {
+			sd := &sessiondata.SessionData{
+				SessionData: sessiondatapb.SessionData{
+					Internal: test.Internal,
+				},
+				LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
+					AllowUnsafeInternals: test.AllowUnsafeInternals,
+				},
+			}
+			err := sql.CheckUnsafeInternalsAccess(context.Background(), &execCfg.AmbientCtx, sd, stmt)
+			if test.Passes {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		}
+	})
+
+	t.Run("with the cluster setting", func(t *testing.T) {
+		for _, test := range []struct {
+			AllowUnsafeInternals bool
+			Passes               bool
+		}{
+			{false, false},
+			{true, true},
+		} {
+			t.Run(fmt.Sprintf("%t", test), func(t *testing.T) {
+				sql.AllowUnsafeInternals.Override(ctx, &execCfg.Settings.SV, test.AllowUnsafeInternals)
+				_, err := s.SQLConn(t).Query(q)
+				if test.Passes {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+				}
+			})
+		}
+	})
+
+	t.Run("with the session variable", func(t *testing.T) {
+		for _, test := range []struct {
+			AllowUnsafeInternals bool
+			Passes               bool
+		}{
+			{false, false},
+			{true, true},
+		} {
+			t.Run(fmt.Sprintf("%t", test), func(t *testing.T) {
+				conn := s.SQLConn(t)
+				_, err := conn.Exec("SET allow_unsafe_internals = $1", test.AllowUnsafeInternals)
+				require.NoError(t, err)
+
+				_, err = conn.Query(q)
+				if test.Passes {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+				}
+			})
+		}
+	})
+
+	t.Run("verify event log emission", func(t *testing.T) {
+		idb := s.InternalDB().(descs.DB)
+		db := s.SQLConn(t)
+		uniqueQuery := "SELECT 'I am a query', * from system.namespace"
+		eventQuery := "SELECT * FROM system.eventlog WHERE info like '%I am a query%'"
+		iQuery := func(q string) (bool, error) {
+			var hasResults = false
+			err := idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				rows, err := txn.QueryIterator(ctx, "test", txn.KV(), q)
+				hasResults = rows.HasResults()
+				rows.Close()
+				return err
+			})
+			return hasResults, err
+		}
+
+		// Use a query which is considered unsafe with the internal executor.
+		_, err := iQuery(uniqueQuery)
+		require.NoError(t, err)
+		// check for event log records with the expected query.
+		// we query here using the internal executor to again avoid populating the event log.
+		hasResults, err := iQuery(eventQuery)
+		require.False(t, hasResults)
+		require.NoError(t, err)
+
+		// query using a normal connection
+		db.Query(uniqueQuery)
+		// check for event log records with the expected query
+		hasResults, err = iQuery(eventQuery)
+		require.True(t, hasResults)
+		require.NoError(t, err)
 	})
 }

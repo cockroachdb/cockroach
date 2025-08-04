@@ -763,6 +763,15 @@ var CreateTableWithSchemaLocked = settings.RegisterBoolSetting(
 		"if new created tables will have schema_locked set",
 	true)
 
+// This cluster setting allows access to the system and crdb_internal
+// databases to regular callers.
+var AllowUnsafeInternals = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.defaults.allow_unsafe_internals",
+	"whether non-internal apps can access the unsafe internal schemas (system, crdb_internal)",
+	true,
+)
+
 // createTableWithSchemaLockedDefault override for the schema_locked
 var createTableWithSchemaLockedDefault = true
 
@@ -4265,6 +4274,10 @@ func (m *sessionDataMutator) SetDistSQLUseReducedLeafWriteSets(val bool) {
 
 func (m *sessionDataMutator) SetUseProcTxnControlExtendedProtocolFix(val bool) {
 	m.data.UseProcTxnControlExtendedProtocolFix = val
+}
+
+func (m *sessionDataMutator) SetAllowUnsafeInternals(val bool) {
+	m.data.AllowUnsafeInternals = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
