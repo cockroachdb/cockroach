@@ -53,16 +53,26 @@ var debugTimeSeriesDumpOpts = struct {
 	storeToNodeMapYAMLFile string
 	dryRun                 bool
 	noOfUploadWorkers      int
+	retryFailedRequests    bool
 }{
-	format:       tsDumpText,
-	from:         timestampValue{},
-	to:           timestampValue(timeutil.Now().Add(24 * time.Hour)),
-	clusterLabel: "",
-	yaml:         "/tmp/tsdump.yaml",
+	format:              tsDumpText,
+	from:                timestampValue{},
+	to:                  timestampValue(timeutil.Now().Add(24 * time.Hour)),
+	clusterLabel:        "",
+	yaml:                "/tmp/tsdump.yaml",
+	retryFailedRequests: false,
 }
 
 // hostNameOverride is used to override the hostname for testing purpose.
 var hostNameOverride string
+
+// datadogSeriesThreshold holds the threshold for the number of series
+// that will be uploaded to Datadog in a single request. We have capped it to 100
+// to avoid hitting the Datadog API limits.
+var datadogSeriesThreshold = 100
+
+const uploadWorkerErrorMessage = "--upload-workers is set to an invalid value." +
+	" please select a value which between 1 and 100."
 
 var debugTimeSeriesDumpCmd = &cobra.Command{
 	Use:   "tsdump",
@@ -116,17 +126,28 @@ will then convert it to the --format requested in the current invocation.
 				return errors.New("no input file provided")
 			}
 
+			if debugTimeSeriesDumpOpts.noOfUploadWorkers <= 0 || debugTimeSeriesDumpOpts.noOfUploadWorkers > 100 {
+				return errors.New(uploadWorkerErrorMessage)
+			}
+
 			datadogWriter, err := makeDatadogWriter(
 				debugTimeSeriesDumpOpts.ddSite,
 				cmd == tsDumpDatadogInit,
 				debugTimeSeriesDumpOpts.ddApiKey,
-				100,
+				datadogSeriesThreshold,
 				hostNameOverride,
 				debugTimeSeriesDumpOpts.noOfUploadWorkers,
+				debugTimeSeriesDumpOpts.retryFailedRequests,
 			)
 			if err != nil {
 				return err
 			}
+
+			// Handle retry of failed requests if flag is set
+			if datadogWriter.isPartialUploadOfFailedRequests {
+				return datadogWriter.retryFailedRequests(args[0])
+			}
+
 			return datadogWriter.upload(args[0])
 		case tsDumpOpenMetrics:
 			if debugTimeSeriesDumpOpts.targetURL != "" {
