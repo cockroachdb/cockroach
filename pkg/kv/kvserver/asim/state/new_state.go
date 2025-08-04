@@ -102,7 +102,8 @@ func newWeighted(weightedStores []float64) weighted {
 		prefixSumWeight += item
 		cumulativeWeights[i] = prefixSumWeight
 	}
-	if cumulativeWeights[len(weightedStores)-1] != float64(1) {
+	const epsilon = 1e-10
+	if math.Abs(cumulativeWeights[len(weightedStores)-1]-float64(1)) > epsilon {
 		panic(fmt.Sprintf("total cumulative weights for all stores should sum up to 1 but got %.2f\n",
 			cumulativeWeights[len(weightedStores)-1]))
 	}
