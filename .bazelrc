@@ -144,17 +144,16 @@ build:engflowbase --remote_upload_local_results=false
 build:engflowbase --remote_download_toplevel
 build:engflowbase --test_env=GO_TEST_WRAP_TESTV=1
 build:engflowbase --config=lintonbuild
+build:engflowbase --remote_cache=grpcs://mesolite.cluster.engflow.com
+build:engflowbase --remote_executor=grpcs://mesolite.cluster.engflow.com
+build:engflowbase --bes_backend=grpcs://mesolite.cluster.engflow.com
 test:engflowbase --test_env=REMOTE_EXEC=1
 test:engflowbase --test_env=GOTRACEBACK=all
 build:engflow --config=engflowbase
-build:engflow --remote_cache=grpcs://tanzanite.cluster.engflow.com
-build:engflow --remote_executor=grpcs://tanzanite.cluster.engflow.com
-build:engflow --bes_backend=grpcs://tanzanite.cluster.engflow.com
-build:engflow --bes_results_url=https://tanzanite.cluster.engflow.com/invocation/
+build:engflow --bes_results_url=https://mesolite.cluster.engflow.com/invocations/private
+build:engflow --remote_instance_name=private
+build:engflow --bes_instance_name=private
 build:engflowpublic --config=engflowbase
-build:engflowpublic --remote_cache=grpcs://mesolite.cluster.engflow.com
-build:engflowpublic --remote_executor=grpcs://mesolite.cluster.engflow.com
-build:engflowpublic --bes_backend=grpcs://mesolite.cluster.engflow.com
 build:engflowpublic --bes_results_url=https://mesolite.cluster.engflow.com/invocation/
 
 try-import %workspace%/.bazelrc.user
