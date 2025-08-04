@@ -202,7 +202,6 @@ func (c *cloudStorageConsumer) Output() <-chan *ConsumerMessage {
 }
 
 // TODO: other consumers
-// - [ ] cloud storage (sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit)
 // - [ ] webhook (need a webhook server that buffers data to disk and can replay it back)
 // - any others are a bonus
 
