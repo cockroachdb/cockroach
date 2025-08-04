@@ -205,6 +205,104 @@ func (t *T) CopyForHydrate() *T {
 	return &newT
 }
 
+// Canonical returns the canonical type for this type. A type's canonical type
+// is the type of the datum used to represent instances of the type in the SQL
+// engine. Types with the same canonical type share an in-memory datum
+// representation. If you have a datum of a type T, then `datum.ResolvedType`
+// will be T.Canonical().
+//
+// There are a few special cases for Canonical:
+// 1. Arrays, Enums, UDT, and DOid datums have an attached type. For these
+// types the canonical type is the identity function.
+// 2. Collated strings share DCollatedString datum, but the type of the datum
+// depends on the collation order.
+// 3. There are a few unusual types that use DOIdWrapper. Which carrys type
+// information with it.
+func (t *T) Canonical() *T {
+	switch t.Family() {
+	case BoolFamily:
+		return Bool
+	case IntFamily:
+		return Int
+	case FloatFamily:
+		return Float
+	case DecimalFamily:
+		return Decimal
+	case DateFamily:
+		return Date
+	case TimestampFamily:
+		return Timestamp
+	case IntervalFamily:
+		return Interval
+	case StringFamily:
+		if t.Oid() == oid.T_name {
+			// Name uses StringFamily and DOidWrapper
+			return Name
+		}
+		return String
+	case BytesFamily:
+		return Bytes
+	case TimestampTZFamily:
+		return TimestampTZ
+	case UnknownFamily:
+		return Unknown
+	case UuidFamily:
+		return Uuid
+	case INetFamily:
+		return INet
+	case TimeFamily:
+		return Time
+	case JsonFamily:
+		return Jsonb
+	case TimeTZFamily:
+		return TimeTZ
+	case BitFamily:
+		return VarBit
+	case GeometryFamily:
+		return Geometry
+	case GeographyFamily:
+		return Geography
+	case Box2DFamily:
+		return Box2D
+	case VoidFamily:
+		return Void
+	case EncodedKeyFamily:
+		return EncodedKey
+	case TSQueryFamily:
+		return TSQuery
+	case TSVectorFamily:
+		return TSVector
+	case PGLSNFamily:
+		return PGLSN
+	case RefCursorFamily:
+		// NOTE: RefCursorFamily is a little weird in that it has its own type
+		// family and it is implemeneted as a DOidWrapper around a DString.
+		return RefCursor
+	case PGVectorFamily:
+		return PGVector
+	case TriggerFamily:
+		return Trigger
+	case JsonpathFamily:
+		return Jsonpath
+	case LTreeFamily:
+		return LTree
+	case AnyFamily:
+		return Any
+	case CollatedStringFamily:
+		if t.Oid() == oidext.T_citext {
+			// CIText uses the CollatedStringFamily and the DOIdWrapper.
+			return t
+		}
+		return MakeCollatedString(String, *t.InternalType.Locale)
+	case ArrayFamily, TupleFamily, EnumFamily, OidFamily:
+		// Datums for these types have types attached to the datum instance, so
+		// every type in the family is canonical.
+		return t
+	default:
+		return Unknown
+	}
+}
+
 // UserDefinedTypeMetadata contains metadata needed for runtime
 // operations on user defined types. The metadata must be read only.
 type UserDefinedTypeMetadata struct {
