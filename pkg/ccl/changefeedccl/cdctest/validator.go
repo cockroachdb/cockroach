@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -810,6 +811,18 @@ func (v *FingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 			if str != nil {
 				datum, _ := rowenc.ParseDatumStringAs(context.Background(), colType, *str,
 					eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), nil)
+				// handle some types that gosql can't sqlize for us
+				switch d := datum.(type) {
+				case *tree.DTimestamp:
+					datum = tree.NewDString(tree.AsStringWithFlags(d, tree.FmtBareStrings))
+				case *tree.DDecimal:
+					f, err := d.Decimal.Float64()
+					if err != nil {
+						return err
+					}
+					datum = tree.NewDFloat(tree.DFloat(f))
+					// TODO: others? generalization?
+				}
 				args = append(args, datum)
 			} else {
 				args = append(args, nil)
@@ -855,7 +868,7 @@ func (v *FingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 
 	return v.sqlDBFunc(func(db *gosql.DB) error {
 		_, err := db.Exec(stmtBuf.String(), args...)
-		return err
+		return errors.Wrapf(err, "FingerprintValidator.applyRowUpdate failed: %+v, %+v", stmtBuf.String(), args)
 	})
 }
 
