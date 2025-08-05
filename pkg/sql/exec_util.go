@@ -291,6 +291,16 @@ var TraceTxnOutputJaegerJSON = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+// TraceTxnIncludeInternal when enabled will also subject internal queries to trace capture.
+var TraceTxnIncludeInternal = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.trace.txn.include_internal.enabled",
+	"enables tracing internal transactions as well as external workload using "+
+		"sample rate and threshold settings",
+	true,
+	settings.WithPublic,
+)
+
 // TraceStmtThreshold is identical to traceTxnThreshold except it applies to
 // individual statements in a transaction. The motivation for this setting is
 // to be able to reduce the noise associated with a larger transaction (e.g.

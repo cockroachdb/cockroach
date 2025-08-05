@@ -606,6 +606,7 @@ func noTxnToOpen(args fsm.Args) error {
 		payload.omitInRangefeeds,
 		payload.bufferedWritesEnabled,
 		payload.rng,
+		true, /* internal */
 	)
 	ts.setAdvanceInfo(
 		advCode,

@@ -202,6 +202,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	omitInRangefeeds bool,
 	bufferedWritesEnabled bool,
 	rng *rand.Rand,
+	internal bool,
 ) (txnID uuid.UUID) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
@@ -218,7 +219,11 @@ func (ts *txnState) resetForNewSQLTxn(
 	duration := TraceTxnThreshold.Get(&tranCtx.settings.SV)
 
 	sampleRate := TraceTxnSampleRate.Get(&tranCtx.settings.SV)
+	includeInternal := TraceTxnIncludeInternal.Get(&tranCtx.settings.SV)
 	ts.shouldRecord = sampleRate > 0 && duration > 0 && rng.Float64() < sampleRate
+	if !includeInternal && internal {
+		ts.shouldRecord = false
+	}
 	ts.outputJaegerJSON = TraceTxnOutputJaegerJSON.Get(&tranCtx.settings.SV)
 
 	if alreadyRecording || ts.shouldRecord {
