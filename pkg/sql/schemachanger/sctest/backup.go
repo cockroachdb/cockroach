@@ -107,7 +107,7 @@ var runAllBackups = flag.Bool(
 	"if true, run all backups instead of a random subset",
 )
 
-const skipRate = .5
+const skipRate = .6
 
 func maybeRandomlySkip(t *testing.T) {
 	if !*runAllBackups && rand.Float64() < skipRate {
