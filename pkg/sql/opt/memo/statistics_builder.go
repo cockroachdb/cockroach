@@ -1038,8 +1038,11 @@ func (sb *statisticsBuilder) constrainScan(
 	// Calculate distinct counts and histograms for the partial index predicate
 	// ------------------------------------------------------------------------
 	if pred != nil {
-		predConstrainedCols, predHistCols :=
+		predConstrainedCols, predHistCols, placeholderEqCols :=
 			sb.applyFilters(pred, scan, relProps, false /* skipOrTermAccounting */, &unapplied)
+		if !placeholderEqCols.Empty() {
+			panic(errors.AssertionFailedf("unexpected placeholder equality columns in partial index predicate"))
+		}
 		constrainedCols.UnionWith(predConstrainedCols)
 		constrainedCols = sb.tryReduceCols(constrainedCols, s, MakeTableFuncDep(sb.md, scan.Table))
 		histCols.UnionWith(predHistCols)
@@ -1063,7 +1066,7 @@ func (sb *statisticsBuilder) constrainScan(
 	// Calculate row count and selectivity
 	// -----------------------------------
 	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, scan, s)
-	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, scan, s, corr))
+	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, opt.ColSet{}, scan, s, corr))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(unapplied))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, notNullCols, constrainedCols))
 }
@@ -1267,7 +1270,7 @@ func (sb *statisticsBuilder) buildInvertedFilter(
 	s.VirtualCols.UnionWith(inputStats.VirtualCols)
 
 	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, invFilter, s)
-	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, invFilter, s, corr))
+	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, opt.ColSet{}, invFilter, s, corr))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(invFilter, relProps.NotNullCols, constrainedCols))
 
 	sb.finalizeFromCardinality(relProps)
@@ -1392,7 +1395,7 @@ func (sb *statisticsBuilder) buildJoin(
 	// Calculate distinct counts for constrained columns in the ON conditions
 	// ----------------------------------------------------------------------
 	var unapplied filterCount
-	constrainedCols, histCols :=
+	constrainedCols, histCols, placeholderEqCols :=
 		sb.applyFilters(h.filters, join, relProps, true /* skipOrTermAccounting */, &unapplied)
 
 	// Try to reduce the number of columns used for selectivity
@@ -1449,7 +1452,7 @@ func (sb *statisticsBuilder) buildJoin(
 		s.ApplySelectivity(sb.selectivityFromInvertedJoinCondition(join, s))
 	}
 	corr := sb.correlationFromMultiColDistinctCountsForJoin(constrainedCols, leftCols, rightCols, join, s)
-	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, join, s, corr))
+	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, placeholderEqCols, join, s, corr))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(unapplied))
 
 	// Ignore columns that are already null in the input when calculating
@@ -1945,7 +1948,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// to iterate through FixedCols here if we are already processing the ON
 	// clause.
 	var unapplied filterCount
-	constrainedCols, histCols :=
+	constrainedCols, histCols, placeholderEqCols :=
 		sb.applyFilters(zigzag.On, zigzag, relProps, false /* skipOrTermAccounting */, &unapplied)
 
 	// Application of constraints on inverted indexes needs to be handled a
@@ -1997,7 +2000,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 		// TODO(msirek): Validate stats for inverted index zigzag join match
 		//               non-zigzag join stats.
 		corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, zigzag, s)
-		s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, zigzag, s, corr))
+		s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, placeholderEqCols, zigzag, s, corr))
 	} else {
 		multiColSelectivity, _, _ := sb.selectivityFromMultiColDistinctCounts(constrainedCols, zigzag, s)
 		s.ApplySelectivity(multiColSelectivity)
@@ -3405,7 +3408,7 @@ func (sb *statisticsBuilder) filterRelExpr(
 	// Calculate distinct counts and histograms for constrained columns
 	// ----------------------------------------------------------------
 	var unapplied filterCount
-	constrainedCols, histCols :=
+	constrainedCols, histCols, placeholderEqCols :=
 		sb.applyFilters(filters, e, relProps, false /* skipOrTermAccounting */, &unapplied)
 
 	// Try to reduce the number of columns used for selectivity
@@ -3419,7 +3422,7 @@ func (sb *statisticsBuilder) filterRelExpr(
 	// Calculate row count and selectivity
 	// -----------------------------------
 	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, e, s)
-	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, e, s, corr))
+	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, placeholderEqCols, e, s, corr))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, e, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(unapplied))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(e, notNullCols, constrainedCols))
@@ -3443,7 +3446,7 @@ func (sb *statisticsBuilder) applyFilters(
 	relProps *props.Relational,
 	skipOrTermAccounting bool,
 	unapplied *filterCount,
-) (constrainedCols, histCols opt.ColSet) {
+) (constrainedCols, histCols, placeholderEqCols opt.ColSet) {
 	// Special hack for inverted joins. Add constant filters from the equality
 	// conditions.
 	// TODO(rytaft): the correct way to do this is probably to fully implement
@@ -3456,7 +3459,7 @@ func (sb *statisticsBuilder) applyFilters(
 
 	for i := range filters {
 		var unappliedLocal filterCount
-		constrainedColsLocal, histColsLocal :=
+		constrainedColsLocal, histColsLocal, placeholderEqColsLocal :=
 			sb.applyFiltersItem(&filters[i], e, relProps, &unappliedLocal)
 		// Selectivity from OrExprs is computed elsewhere when skipOrTermAccounting
 		// is true.
@@ -3465,9 +3468,10 @@ func (sb *statisticsBuilder) applyFilters(
 		}
 		constrainedCols.UnionWith(constrainedColsLocal)
 		histCols.UnionWith(histColsLocal)
+		placeholderEqCols.UnionWith(placeholderEqColsLocal)
 	}
 
-	return constrainedCols, histCols
+	return constrainedCols, histCols, placeholderEqCols
 }
 
 // applyFiltersItem uses constraints to update the distinct counts and
@@ -3492,7 +3496,7 @@ func (sb *statisticsBuilder) applyFilters(
 // selectivityFromInvertedJoinCondition.
 func (sb *statisticsBuilder) applyFiltersItem(
 	filter *FiltersItem, e RelExpr, relProps *props.Relational, unapplied *filterCount,
-) (constrainedCols, histCols opt.ColSet) {
+) (constrainedCols, histCols, placeholderEqCols opt.ColSet) {
 	s := relProps.Statistics()
 
 	// Before checking anything, try to replace any virtual computed column
@@ -3508,29 +3512,29 @@ func (sb *statisticsBuilder) applyFiltersItem(
 		}
 	}
 
+	// Special case: a placeholder equality filter.
+	if col, ok := isPlaceholderEqualityFilter(filter.Condition, e); ok {
+		cols := opt.MakeColSet(col)
+		sb.ensureColStat(cols, 1 /* maxDistinctCount */, e, s)
+		return cols, opt.ColSet{}, cols
+	}
+
 	if isEqualityWithTwoVars(filter.Condition) {
 		// Equalities are handled by applyEquivalencies.
-		return opt.ColSet{}, opt.ColSet{}
+		return opt.ColSet{}, opt.ColSet{}, opt.ColSet{}
 	}
 
 	// Special case: a trigram similarity filter.
 	if isSimilarityFilter(filter.Condition) &&
 		sb.evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity {
 		unapplied.similarity++
-		return opt.ColSet{}, opt.ColSet{}
-	}
-
-	// Special case: a placeholder equality filter.
-	if col, ok := isPlaceholderEqualityFilter(filter.Condition); ok {
-		cols := opt.MakeColSet(col)
-		sb.ensureColStat(cols, 1 /* maxDistinctCount */, e, s)
-		return cols, opt.ColSet{}
+		return opt.ColSet{}, opt.ColSet{}, opt.ColSet{}
 	}
 
 	// Special case: The current conjunct is an inverted join condition which is
 	// handled by selectivityFromInvertedJoinCondition.
 	if isInvertedJoinCond(filter.Condition) {
-		return opt.ColSet{}, opt.ColSet{}
+		return opt.ColSet{}, opt.ColSet{}, opt.ColSet{}
 	}
 
 	// Special case: The current conjunct is a JSON or Array Contains
@@ -3557,7 +3561,7 @@ func (sb *statisticsBuilder) applyFiltersItem(
 			// constrained scans, we apply the same logic here.
 			unapplied.unknown += 2 * numPaths
 		}
-		return opt.ColSet{}, opt.ColSet{}
+		return opt.ColSet{}, opt.ColSet{}, opt.ColSet{}
 	}
 
 	// Update constrainedCols after the above check for isEqualityWithTwoVars.
@@ -3582,7 +3586,7 @@ func (sb *statisticsBuilder) applyFiltersItem(
 				unapplied.unknown++
 			}
 		}
-		return constrainedCols, histCols
+		return constrainedCols, histCols, opt.ColSet{}
 	}
 
 	if constraintUnion, numUnappliedDisjuncts := sb.buildDisjunctionConstraints(filter); len(constraintUnion) > 0 {
@@ -3639,7 +3643,7 @@ func (sb *statisticsBuilder) applyFiltersItem(
 		unapplied.unknown++
 	}
 
-	return constrainedCols, histCols
+	return constrainedCols, histCols, opt.ColSet{}
 }
 
 // buildDisjunctionConstraints returns a slice of tight constraint sets that are
@@ -3720,7 +3724,9 @@ func (sb *statisticsBuilder) constrainExpr(
 	// Calculate row count and selectivity
 	// -----------------------------------
 	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, e, s)
-	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, e, s, corr))
+	s.ApplySelectivity(sb.selectivityFromConstrainedCols(
+		constrainedCols, histCols, opt.ColSet{}, e, s, corr,
+	))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(e, notNullCols, constrainedCols))
 }
 
@@ -4566,24 +4572,73 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 	return selectivity, selectivityUpperBound
 }
 
+// selectivityFromPlaceholderEqMaxFrequencies calculates the selectivity of a
+// placeholder equality filters by using the maximum frequency of the histograms
+// of the constrained columns. This represents a worst-case selectivity estimate
+// if a placeholder is assigned the most common value during execution.
+func (sb *statisticsBuilder) selectivityFromPlaceholderEqMaxFrequencies(
+	cols opt.ColSet, e RelExpr,
+) (selectivity, selectivityUpperBound props.Selectivity, maxFreqCols opt.ColSet) {
+	selectivity = props.OneSelectivity
+	selectivityUpperBound = props.OneSelectivity
+	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
+		c := opt.MakeColSet(col)
+		inputColStat, inputStats := sb.colStatFromInput(c, e)
+		if inputColStat.Histogram == nil {
+			continue
+		}
+
+		// Equality filters preclude NULL values.
+		const ignoreNulls = true
+		sel := props.MakeSelectivityFromFraction(
+			inputColStat.Histogram.MaxFrequency(ignoreNulls), inputStats.RowCount,
+		)
+
+		// The maximum possible selectivity of the entire expression is the minimum
+		// selectivity of all individual predicates.
+		selectivityUpperBound = props.MinSelectivity(selectivityUpperBound, sel)
+		selectivity.Multiply(sel)
+		maxFreqCols.Add(col)
+	}
+
+	return selectivity, selectivityUpperBound, maxFreqCols
+}
+
 // selectivityFromConstrainedCols calculates the selectivity from the
 // constrained columns. histCols is a subset of constrainedCols, and represents
-// the columns that have histograms available. correlation represents the
-// correlation between the columns, and is a number between 0 and 1, where 0
-// means the columns are completely independent, and 1 means the columns are
-// completely correlated.
+// the columns that have histograms available. placeholderEqCols is a subset of
+// constrained Cols, and represents the columns that are held equal to
+// placeholders. correlation represents the correlation between the columns, and
+// is a number between 0 and 1, where 0 means the columns are completely
+// independent, and 1 means the columns are completely correlated.
 func (sb *statisticsBuilder) selectivityFromConstrainedCols(
-	constrainedCols, histCols opt.ColSet, e RelExpr, s *props.Statistics, correlation float64,
+	constrainedCols, histCols, placeholderEqCols opt.ColSet,
+	e RelExpr,
+	s *props.Statistics,
+	correlation float64,
 ) (selectivity props.Selectivity) {
 	if buildutil.CrdbTestBuild && (correlation < 0 || correlation > 1) {
 		panic(errors.AssertionFailedf("correlation must be between 0 and 1. Found %f", correlation))
 	}
+	// Calculate selectivity from histograms.
 	selectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, e, s)
-	selectivity2, selectivityUpperBound2 := sb.selectivityFromSingleColDistinctCounts(
-		constrainedCols.Difference(histCols), e, s,
-	)
+
+	// Calculate selectivity from max frequencies for columns held equal to
+	// placeholders.
+	selectivity2, selectivityUpperBound2, maxFreqCols :=
+		sb.selectivityFromPlaceholderEqMaxFrequencies(placeholderEqCols, e)
 	selectivity.Multiply(selectivity2)
-	selectivityUpperBound = props.MinSelectivity(selectivityUpperBound, selectivityUpperBound2)
+
+	// Calculate selectivity from distinct counts for the remaining columns.
+	selectivity3, selectivityUpperBound3 := sb.selectivityFromSingleColDistinctCounts(
+		constrainedCols.Difference(histCols).Difference(maxFreqCols), e, s,
+	)
+	selectivity.Multiply(selectivity3)
+
+	// Find the minimum upper bound selectivity.
+	selectivityUpperBound =
+		props.MinSelectivity3(selectivityUpperBound, selectivityUpperBound2, selectivityUpperBound3)
+
 	selectivity.Add(props.MakeSelectivity(
 		correlation * (selectivityUpperBound.AsFloat() - selectivity.AsFloat()),
 	))
@@ -4989,13 +5044,52 @@ func isSimilarityFilter(e opt.ScalarExpr) bool {
 }
 
 // isPlaceholderEqualityFilter returns a column ID and true if the given
-// condition is an equality between a column and a placeholder.
-func isPlaceholderEqualityFilter(e opt.ScalarExpr) (opt.ColumnID, bool) {
-	if e.Op() == opt.EqOp && e.Child(1).Op() == opt.PlaceholderOp {
-		if v, ok := e.Child(0).(*VariableExpr); ok {
-			return v.Col, true
-		}
+// condition is an equality between a column and a placeholder. There are two
+// cases.
+//
+// Case 1: A column is directly compared to a placeholder, e.g. v=$1.
+//
+// Case 2: A column is compared to another column that is produced
+// from a Values expression on the RHS of an inner-join, e.g.,
+// (InnerJoin (Values ($1)) $lhs:* [v=$1]). This case matches the form of
+// parameterized joins used in generic query plans. See the
+// GenerateParameterizedJoin exploration rule.
+func isPlaceholderEqualityFilter(filter opt.ScalarExpr, e RelExpr) (opt.ColumnID, bool) {
+	if filter.Op() != opt.EqOp {
+		return 0, false
 	}
+
+	v, ok := filter.Child(0).(*VariableExpr)
+	if !ok {
+		return 0, false
+	}
+
+	// Case 1.
+	if filter.Child(1).Op() == opt.PlaceholderOp {
+		return v.Col, true
+	}
+
+	// Case 2.
+	p, ok := filter.Child(1).(*VariableExpr)
+	if !ok {
+		return 0, false
+	}
+	j, ok := e.(*InnerJoinExpr)
+	if !ok {
+		return 0, false
+	}
+	vals, ok := j.Left.(*ValuesExpr)
+	if !ok || len(vals.Rows) != 1 {
+		return 0, false
+	}
+	i, ok := vals.Cols.Find(p.Col)
+	if !ok {
+		return 0, false
+	}
+	if t, ok := vals.Rows[0].(*TupleExpr); ok && t.Elems[i].Op() == opt.PlaceholderOp {
+		return v.Col, true
+	}
+
 	return 0, false
 }
 

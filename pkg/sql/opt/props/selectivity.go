@@ -95,6 +95,17 @@ func MinSelectivity(a, b Selectivity) Selectivity {
 	return b
 }
 
+// MinSelectivity3 returns the smallest value of three selectivities.
+func MinSelectivity3(a, b, c Selectivity) Selectivity {
+	if b.selectivity < a.selectivity {
+		a = b
+	}
+	if c.selectivity < a.selectivity {
+		a = c
+	}
+	return a
+}
+
 // MaxSelectivity returns the larger value of two selectivities.
 func MaxSelectivity(a, b Selectivity) Selectivity {
 	if a.selectivity > b.selectivity {
