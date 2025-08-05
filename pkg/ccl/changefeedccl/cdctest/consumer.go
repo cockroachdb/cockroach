@@ -134,7 +134,7 @@ func NewCloudStorageConsumer(ctx context.Context, uri string, format string) (*c
 		return nil, err
 	}
 	bucket := gcs.Bucket(parsedURI.Host)
-	return &cloudStorageConsumer{gcs: gcs, bucket: bucket, prefix: parsedURI.Path, format: format, output: make(chan *ConsumerMessage)}, nil
+	return &cloudStorageConsumer{gcs: gcs, bucket: bucket, prefix: strings.TrimPrefix(parsedURI.Path, "/"), format: format, output: make(chan *ConsumerMessage)}, nil
 }
 
 func (c *cloudStorageConsumer) Start(ctx context.Context) error {
@@ -152,14 +152,14 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 		}
 		if first != "" {
 			delete(pendingFiles, first)
+			seenFiles[first] = struct{}{}
 		}
-		seenFiles[first] = struct{}{}
 		return first
 	}
 
 	for ctx.Err() == nil {
 		// Refresh files.
-		fmt.Printf("Refreshing files\n")
+		fmt.Printf("Refreshing files (prefix=%s)\n", c.prefix)
 		objs := c.bucket.Objects(ctx, &storage.Query{Prefix: c.prefix})
 		var err error
 		var obj *storage.ObjectAttrs
@@ -172,7 +172,6 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 		if err != nil && !errors.Is(err, iterator.Done) {
 			return err
 		}
-		fmt.Printf("Refreshed files; pendingFiles=%v; seenFiles=%v\n", pendingFiles, seenFiles)
 
 		nextFile := popNextFile()
 		if nextFile == "" {
@@ -220,24 +219,29 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 				}
 			}
 		} else {
-			scanner := bufio.NewScanner(reader)
-			for scanner.Scan() {
-				value := scanner.Bytes()
-				updated, resolved, key, err := tryGetUpdatedResolvedKeyFromJSONRow(value)
+			fmt.Printf("Reading file: %s\n", nextFile)
+			for value, err := range readJSONL(reader) {
+				if err != nil {
+					return err
+				}
+				updated, resolved, key, err := tryGetUpdatedResolvedKeyFromJSONRow([]byte(value))
 				if err != nil {
 					return err
 				}
 
-				c.output <- &ConsumerMessage{
+				msg := &ConsumerMessage{
 					Topic:    topic,
 					Key:      key,
 					Value:    string(value),
 					Resolved: resolved,
 					Updated:  updated,
 				}
-			}
-			if err := scanner.Err(); err != nil {
-				return err
+
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case c.output <- msg:
+				}
 			}
 		}
 	}
@@ -277,7 +281,17 @@ func ConsumeAndValidate(ctx context.Context, consumer Consumer, validator Valida
 		return consumer.Start(ctx)
 	})
 	eg.Go(func() error {
-		for msg := range msgs {
+		for {
+			var msg *ConsumerMessage
+			var ok bool
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case msg, ok = <-msgs:
+				if !ok {
+					return nil
+				}
+			}
 			if msg.Resolved.IsSet() {
 				if err := validator.NoteResolved(msg.Partition, msg.Resolved); err != nil {
 					return err
@@ -310,13 +324,13 @@ func tryGetUpdatedResolvedKeyFromJSONRow(value []byte) (updated, resolved hlc.Ti
 			return hlc.Timestamp{}, hlc.Timestamp{}, "", err
 		}
 	}
-	return updated, resolved, val.Key, nil
+	return updated, resolved, string(val.Key), nil
 }
 
 type jsonMessageVal struct {
-	Updated  string `json:"updated"`
-	Resolved string `json:"resolved"`
-	Key      string `json:"key"`
+	Updated  string          `json:"updated"`
+	Resolved string          `json:"resolved"`
+	Key      json.RawMessage `json:"key"`
 }
 
 func parseCloudStorageFileName(name string) (topic string, resolved hlc.Timestamp, err error) {
@@ -364,6 +378,21 @@ func parquetToJSON(reader io.ReadCloser) iter.Seq2[string, error] {
 			if !yield(val, nil) {
 				return
 			}
+		}
+	}
+}
+
+func readJSONL(reader io.ReadCloser) iter.Seq2[string, error] {
+	return func(yield func(string, error) bool) {
+		defer reader.Close()
+		scanner := bufio.NewScanner(reader)
+		for scanner.Scan() {
+			if !yield(scanner.Text(), nil) {
+				return
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			yield("", err)
 		}
 	}
 }
