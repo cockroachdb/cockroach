@@ -1601,6 +1601,25 @@ func TestMinimumSupportedFormatVersion(t *testing.T) {
 		"MinimumSupportedFormatVersion must match the format version for %s", clusterversion.MinSupported)
 }
 
+func TestPebbleFormatVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	latestKey := pebbleFormatVersionKeys[0]
+	latestVersion := latestKey.Version()
+	latestFmv := pebbleFormatVersionMap[latestKey]
+
+	require.Equal(t, pebbleFormatVersion(latestVersion), latestFmv)
+
+	// We upgrade the pebble format as soon as we reach the fence version.
+	require.Equal(t, pebbleFormatVersion(latestVersion.FenceVersion()), latestFmv)
+
+	require.Less(t, pebbleFormatVersion((latestKey - 1).Version()), latestFmv)
+
+	v := latestVersion
+	v.Minor++
+	require.Equal(t, pebbleFormatVersion(latestVersion), latestFmv)
+}
+
 // delayFS injects a delay on each read.
 type delayFS struct {
 	vfs.FS
