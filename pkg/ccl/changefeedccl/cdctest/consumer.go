@@ -315,7 +315,6 @@ func ConsumeAndValidate(ctx context.Context, consumer Consumer, validator Valida
 					return errors.Newf("validator failed: %v", failures)
 				}
 			} else {
-				fmt.Printf("C+A: NoteRow: %+v\n", msg)
 				if err := validator.NoteRow(msg.Partition, msg.Key, msg.Value, msg.Updated, msg.Topic); err != nil {
 					fmt.Printf("C+A: NoteRow failed: %v\n", err)
 					return err

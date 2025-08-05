@@ -642,17 +642,19 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 			format = f
 		}
 
+		// TODO: other workloads / better
+		topic := strings.TrimPrefix(table, "tpcc.")
 		// start consumer
 		var consumer cdctest.Consumer
 		switch args.sinkType {
 		case kafkaSink:
-			consumer, err = cdctest.NewKafkaConsumer(ct.ctx, sinkURI, table)
+			consumer, err = cdctest.NewKafkaConsumer(ct.ctx, sinkURI, topic)
 			if err != nil {
 				ct.t.Fatalf("failed to create kafka consumer: %s", err)
 			}
 			ct.t.Status(fmt.Sprintf("created kafka consumer for %s", table))
 		case cloudStorageSink:
-			consumer, err = cdctest.NewCloudStorageConsumer(ct.ctx, sinkURI, table, format)
+			consumer, err = cdctest.NewCloudStorageConsumer(ct.ctx, sinkURI, topic, format)
 			if err != nil {
 				ct.t.Fatalf("failed to create cloud storage consumer: %s", err)
 			}
