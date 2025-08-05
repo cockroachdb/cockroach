@@ -220,6 +220,7 @@ project
       │    │    │    │    │    │         │    ├── key columns: [37] = [7]
       │    │    │    │    │    │         │    ├── lookup columns are key
       │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │         │    ├── parameterized columns: (37)
       │    │    │    │    │    │         │    ├── has-placeholder
       │    │    │    │    │    │         │    ├── key: ()
       │    │    │    │    │    │         │    ├── fd: ()-->(1,7,37), (7)==(37), (37)==(7)
@@ -790,6 +791,7 @@ project
       │    │    │    │    │    │         │    ├── key columns: [43 42] = [2 13]
       │    │    │    │    │    │         │    ├── lookup columns are key
       │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │         │    ├── parameterized columns: (42,43)
       │    │    │    │    │    │         │    ├── has-placeholder
       │    │    │    │    │    │         │    ├── key: ()
       │    │    │    │    │    │         │    ├── fd: ()-->(1,2,13,42,43), (2)==(43), (43)==(2), (13)==(42), (42)==(13)
@@ -926,6 +928,7 @@ project
       │    │    │    │    │    │         ├── key columns: [42] = [1]
       │    │    │    │    │    │         ├── lookup columns are key
       │    │    │    │    │    │         ├── cardinality: [0 - 1]
+      │    │    │    │    │    │         ├── parameterized columns: (42,43)
       │    │    │    │    │    │         ├── has-placeholder
       │    │    │    │    │    │         ├── key: ()
       │    │    │    │    │    │         ├── fd: ()-->(1-16,42,43), (1)==(42), (42)==(1), (13)==(43), (43)==(13)
@@ -1068,6 +1071,7 @@ project
       │    │    │    │    │    │         │    ├── key columns: [37] = [2]
       │    │    │    │    │    │         │    ├── lookup columns are key
       │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │         │    ├── parameterized columns: (37)
       │    │    │    │    │    │         │    ├── has-placeholder
       │    │    │    │    │    │         │    ├── key: ()
       │    │    │    │    │    │         │    ├── fd: ()-->(1,2,37), (2)==(37), (37)==(2)
@@ -1200,6 +1204,7 @@ project
       │    │    │    │    │    │         │    ├── key columns: [37] = [7]
       │    │    │    │    │    │         │    ├── lookup columns are key
       │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │         │    ├── parameterized columns: (37)
       │    │    │    │    │    │         │    ├── has-placeholder
       │    │    │    │    │    │         │    ├── key: ()
       │    │    │    │    │    │         │    ├── fd: ()-->(1,7,37), (7)==(37), (37)==(7)
@@ -1628,6 +1633,7 @@ project
       │    │    │    │    │    │         │    ├── key columns: [43 42] = [7 13]
       │    │    │    │    │    │         │    ├── lookup columns are key
       │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │         │    ├── parameterized columns: (42,43)
       │    │    │    │    │    │         │    ├── has-placeholder
       │    │    │    │    │    │         │    ├── key: ()
       │    │    │    │    │    │         │    ├── fd: ()-->(1,7,13,42,43), (7)==(43), (43)==(7), (13)==(42), (42)==(13)
@@ -2331,6 +2337,7 @@ project
       │    │    │    │    │    │         │    ├── key columns: [43 42] = [7 13]
       │    │    │    │    │    │         │    ├── lookup columns are key
       │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │         │    ├── parameterized columns: (42,43)
       │    │    │    │    │    │         │    ├── has-placeholder
       │    │    │    │    │    │         │    ├── key: ()
       │    │    │    │    │    │         │    ├── fd: ()-->(1,7,13,42,43), (7)==(43), (43)==(7), (13)==(42), (42)==(13)
