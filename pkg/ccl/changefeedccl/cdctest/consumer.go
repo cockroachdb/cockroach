@@ -117,15 +117,16 @@ func (c *kafkaConsumer) Output() <-chan *ConsumerMessage {
 }
 
 type cloudStorageConsumer struct {
+	prefix string
+	format string
+	topic  string
 	gcs    *storage.Client
 	bucket *storage.BucketHandle
-	prefix string
 	output chan *ConsumerMessage
-	format string
 }
 
 // TODO: take a test.Test for status updates
-func NewCloudStorageConsumer(ctx context.Context, uri string, format string) (*cloudStorageConsumer, error) {
+func NewCloudStorageConsumer(ctx context.Context, uri string, topic string, format string) (*cloudStorageConsumer, error) {
 	gcs, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, err
@@ -135,7 +136,7 @@ func NewCloudStorageConsumer(ctx context.Context, uri string, format string) (*c
 		return nil, err
 	}
 	bucket := gcs.Bucket(parsedURI.Host)
-	return &cloudStorageConsumer{gcs: gcs, bucket: bucket, prefix: strings.TrimPrefix(parsedURI.Path, "/"), format: format, output: make(chan *ConsumerMessage)}, nil
+	return &cloudStorageConsumer{gcs: gcs, bucket: bucket, prefix: strings.TrimPrefix(parsedURI.Path, "/"), format: format, topic: topic, output: make(chan *ConsumerMessage)}, nil
 }
 
 func (c *cloudStorageConsumer) Start(ctx context.Context) error {
@@ -193,6 +194,11 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 
 		fmt.Printf("Parsed filename: %s; topic=%s; resolved=%s\n", nextFile, topic, resolved)
 
+		if topic != c.topic {
+			fmt.Printf("Skipping file: %s (topic=%s != %s)\n", nextFile, topic, c.topic)
+			continue
+		}
+
 		if resolved.IsSet() {
 			select {
 			case <-ctx.Done():
@@ -221,7 +227,12 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 			}
 		} else {
 			fmt.Printf("Reading file: %s\n", nextFile)
+			i := 0
 			for value, err := range readJSONL(reader) {
+				i++
+				if i%100 == 0 {
+					fmt.Printf("C+A: read %d messages\n", i)
+				}
 				if err != nil {
 					return err
 				}
@@ -294,7 +305,9 @@ func ConsumeAndValidate(ctx context.Context, consumer Consumer, validator Valida
 				}
 			}
 			if msg.Resolved.IsSet() {
+				fmt.Printf("C+A: NoteResolved: %+v\n", msg)
 				if err := validator.NoteResolved(msg.Partition, msg.Resolved); err != nil {
+					fmt.Printf("C+A: NoteResolved failed: %v\n", err)
 					return err
 				}
 				if failures := validator.Failures(); len(failures) > 0 {
@@ -302,7 +315,9 @@ func ConsumeAndValidate(ctx context.Context, consumer Consumer, validator Valida
 					return errors.Newf("validator failed: %v", failures)
 				}
 			} else {
+				fmt.Printf("C+A: NoteRow: %+v\n", msg)
 				if err := validator.NoteRow(msg.Partition, msg.Key, msg.Value, msg.Updated, msg.Topic); err != nil {
+					fmt.Printf("C+A: NoteRow failed: %v\n", err)
 					return err
 				}
 			}
@@ -343,7 +358,7 @@ func parseCloudStorageFileName(name string) (topic string, resolved hlc.Timestam
 	// resolved files are like `<timestamp>.RESOLVED`
 	if strings.HasSuffix(name, ".RESOLVED") {
 		// parse the timestamp from the file name
-		resolved, err := hlc.ParseHLC(strings.TrimSuffix(name, ".RESOLVED"))
+		resolved, err := parseCloudStorageTS(strings.TrimSuffix(name, ".RESOLVED"))
 		if err != nil {
 			return "", hlc.Timestamp{}, err
 		}
@@ -400,4 +415,22 @@ func readJSONL(reader io.ReadCloser) iter.Seq2[string, error] {
 			yield("", err)
 		}
 	}
+}
+
+// see cloudStorageFormatTime.
+func parseCloudStorageTS(ts string) (hlc.Timestamp, error) {
+	dt, err := time.Parse("20060102150405", ts[:14])
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	ns, err := strconv.ParseInt(ts[14:23], 10, 64)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	dt = dt.Add(time.Duration(ns) * time.Nanosecond)
+	logical, err := strconv.ParseInt(ts[23:], 10, 32)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	return hlc.Timestamp{WallTime: dt.UnixNano(), Logical: int32(logical)}, nil
 }

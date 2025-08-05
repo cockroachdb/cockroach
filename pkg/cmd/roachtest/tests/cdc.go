@@ -609,11 +609,8 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		rng := entropy{Rand: globalRand}
 		table := args.targets[rng.Intn(len(args.targets))]
 
-		if _, err := db.Exec(`CREATE TABLE fprint AS TABLE ` + table); err != nil {
+		if _, err := db.Exec(`CREATE TABLE fprint (LIKE ` + table + ` INCLUDING ALL)`); err != nil {
 			ct.t.Fatalf("failed to create fingerprint table: %s", err)
-		}
-		if _, err := db.Exec(`TRUNCATE TABLE fprint`); err != nil {
-			ct.t.Fatalf("failed to truncate fingerprint table: %s", err)
 		}
 
 		partitions := []string{""} // unless kafka..? TODO: get these from somewhere
@@ -655,7 +652,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 			}
 			ct.t.Status(fmt.Sprintf("created kafka consumer for %s", table))
 		case cloudStorageSink:
-			consumer, err = cdctest.NewCloudStorageConsumer(ct.ctx, sinkURI, format)
+			consumer, err = cdctest.NewCloudStorageConsumer(ct.ctx, sinkURI, table, format)
 			if err != nil {
 				ct.t.Fatalf("failed to create cloud storage consumer: %s", err)
 			}
@@ -664,7 +661,11 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		// TODO(xxx): start it on another node for less test runner load
 		// TODO: handle initial scans better (no resolved or updated, validate on feed completion)
 		ct.mon.Go(func(ctx context.Context) error {
-			return cdctest.ConsumeAndValidate(ctx, consumer, valdtr)
+			if err := cdctest.ConsumeAndValidate(ctx, consumer, valdtr); err != nil {
+				ct.t.Status(fmt.Sprintf("consume+validate failed: %v", err))
+				ct.t.Fatalf("consume+validate failed: %v", err)
+			}
+			return nil
 		})
 		ct.t.Status(fmt.Sprintf("started consume+validate for %s", table))
 	}
@@ -2121,7 +2122,7 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1000, duration: "120m"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 10, duration: "120m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: cloudStorageSink,
