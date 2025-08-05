@@ -144,6 +144,33 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 	return as.addTrackedChange(trackedChange)
 }
 
+// MMAPreApply is called by the mma to register a change with AllocatorSync.
+// It is called before the change is applied. SyncChangeID is returned to the
+// caller. It is an identifier that can be used to call PostApply to apply the
+// change to the store pool upon success.
+func (as *AllocatorSync) MMAPreApply(
+	usage allocator.RangeUsageInfo, pendingChange mmaprototype.PendingRangeChange,
+) SyncChangeID {
+	trackedChange := trackedAllocatorChange{
+		changeIDs: pendingChange.ChangeIDs(),
+		usage:     usage,
+	}
+	switch {
+	case pendingChange.IsTransferLease():
+		trackedChange.leaseTransferOp = &leaseTransferOp{
+			transferFrom: pendingChange.LeaseTransferFrom(),
+			transferTo:   pendingChange.LeaseTransferTarget(),
+		}
+	case pendingChange.IsChangeReplicas():
+		trackedChange.changeReplicasOp = &changeReplicasOp{
+			chgs: pendingChange.ReplicationChanges(),
+		}
+	default:
+		panic("unexpected change type")
+	}
+	return as.addTrackedChange(trackedChange)
+}
+
 // PostApply is called by the lease/replicate queue to apply a change to the
 // store pool upon success. It is called with the SyncChangeID returned by
 // NonMMAPreTransferLease or NonMMAPreChangeReplicas.
