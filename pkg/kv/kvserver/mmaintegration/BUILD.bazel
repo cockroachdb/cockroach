@@ -11,8 +11,10 @@ go_library(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/allocator/mmaprototype",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/util/syncutil",
     ],
 )

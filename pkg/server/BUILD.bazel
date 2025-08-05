@@ -149,6 +149,7 @@ go_library(
         "//pkg/kv/kvserver/logstore",
         "//pkg/kv/kvserver/loqrecovery",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
+        "//pkg/kv/kvserver/mmaintegration",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptprovider",
         "//pkg/kv/kvserver/protectedts/ptreconcile",

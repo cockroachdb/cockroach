@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -525,6 +526,7 @@ type replicateQueue struct {
 	*baseQueue
 	metrics   ReplicateQueueMetrics
 	allocator allocatorimpl.Allocator
+	as        *mmaintegration.AllocatorSync
 	storePool storepool.AllocatorStorePool
 	planner   plan.ReplicationPlanner
 
@@ -558,6 +560,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 		logTracesThresholdFunc: makeRateLimitedTimeoutFuncByPermittedSlowdown(
 			permittedRangeScanSlowdown/2, rebalanceSnapshotRate,
 		),
+		as: store.cfg.AllocatorSync,
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
@@ -1069,8 +1072,8 @@ func (rq *replicateQueue) changeReplicas(
 		ctx, desc, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, allocatorPriority, reason,
 		details, chgs,
 	); err != nil {
-		return err
-	}
+	return err
+}
 	// On success, update local store pool to reflect the result of applying the
 	// operations.
 	for _, chg := range chgs {

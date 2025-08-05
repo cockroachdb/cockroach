@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	loadmonitor "github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
@@ -1184,6 +1185,7 @@ type StoreConfig struct {
 	// One MMAllocator per node which guides mma store rebalancer to make
 	// allocation changes when LBRebalancingMultiMetric is enabled.
 	MMAllocator          mmaprototype.Allocator
+	AllocatorSync        *mmaintegration.AllocatorSync
 	Transport            *RaftTransport
 	NodeDialer           *nodedialer.Dialer
 	RPCContext           *rpc.Context

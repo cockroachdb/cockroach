@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,7 +48,7 @@ type mmaStoreRebalancer struct {
 	mma   mmaprototype.Allocator
 	st    *cluster.Settings
 	sp    *storepool.StorePool
-	// TODO(wenyihu6): add allocator sync
+	as    *mmaintegration.AllocatorSync
 }
 
 func newMMAStoreRebalancer(
@@ -58,6 +59,7 @@ func newMMAStoreRebalancer(
 		mma:   mma,
 		st:    st,
 		sp:    sp,
+		as:    s.cfg.AllocatorSync,
 	}
 }
 

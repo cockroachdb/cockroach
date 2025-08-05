@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -61,6 +62,7 @@ var MinIOOverloadLeaseShedInterval = settings.RegisterDurationSetting(
 type leaseQueue struct {
 	planner           plan.ReplicationPlanner
 	allocator         allocatorimpl.Allocator
+	as                *mmaintegration.AllocatorSync
 	storePool         storepool.AllocatorStorePool
 	purgCh            <-chan time.Time
 	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
@@ -77,6 +79,7 @@ func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue 
 	lq := &leaseQueue{
 		planner:   plan.NewLeasePlanner(allocator, storePool),
 		allocator: allocator,
+		as:        store.cfg.AllocatorSync,
 		storePool: storePool,
 		purgCh:    time.NewTicker(leaseQueuePurgatoryCheckInterval).C,
 	}
