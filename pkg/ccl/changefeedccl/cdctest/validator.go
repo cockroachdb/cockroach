@@ -11,6 +11,7 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -648,10 +649,6 @@ func (v *FingerprintValidator) DBFunc(
 func (v *FingerprintValidator) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
-	defer func(start time.Time) {
-		fmt.Printf("fprintvalidator: NoteRow took %s\n", time.Since(start))
-	}(time.Now())
-
 	if v.firstRowTimestamp.IsEmpty() || updated.Less(v.firstRowTimestamp) {
 		v.firstRowTimestamp = updated
 	}
@@ -873,6 +870,9 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 	if newResolved.LessEq(v.resolved) {
 		return nil
 	}
+
+	// fprintvalidator: NoteResolved: advanced: 0,0 -> 1754425686.000000000,0; buflen: 1221; parts: map[0:1754425686.000000000,0]
+	fmt.Printf("fprintvalidator: NoteResolved: advanced: %s -> %s; buflen: %d; partsResolveds: %+v\n", v.resolved, newResolved, len(v.buffer), v.partitionResolved)
 	v.resolved = newResolved
 
 	// NB: Intentionally not stable sort because it shouldn't matter.
@@ -885,6 +885,7 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 	// resolved timestamp and this one. We process all row updates belonging to a given
 	// timestamp and then `fingerprint` to ensure the scratch table and the original table
 	// match.
+	i := 0
 	for len(v.buffer) > 0 {
 		if v.resolved.Less(v.buffer[0].updated) {
 			break
@@ -908,6 +909,10 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 			return err
 		}
 
+		if i%1000 == 0 {
+			fmt.Printf("fprintvalidator: fingerprint: applying rows... %d / %d\n", i, len(v.buffer))
+		}
+
 		// If any updates have exactly the same timestamp, we have to apply them all
 		// before fingerprinting.
 		if len(v.buffer) == 0 || v.buffer[0].updated != row.updated {
@@ -917,6 +922,8 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 			}
 		}
 		v.previousRowUpdateTs = row.updated
+		i++
+
 	}
 
 	if !v.firstRowTimestamp.IsEmpty() && v.firstRowTimestamp.LessEq(resolved) &&
@@ -927,7 +934,12 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 }
 
 func (v *FingerprintValidator) fingerprint(ts hlc.Timestamp) error {
+	defer func(start time.Time) {
+		fmt.Printf("fprintvalidator: fingerprint: ts: %s; took %s\n", ts, time.Since(start))
+	}(time.Now())
+
 	var orig string
+	// NOTE: this depends on the primary index being returned first, which does seem likely tbh
 	if err := v.sqlDBFunc(func(db *gosql.DB) error {
 		return db.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
 		SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ` + v.origTable + `
@@ -944,8 +956,98 @@ func (v *FingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 		return err
 	}
 	if orig != check {
+		// calculate diff for debugging
+		// select * from r2 EXCEPT select * from rides;
+
+		getRows := func(query string) ([]string, error) {
+			results := []string{}
+			var rows *gosql.Rows
+			var err error
+			if err := v.sqlDBFunc(func(db *gosql.DB) error {
+				rows, err = db.Query(query)
+				return err
+			}); err != nil {
+				return nil, err
+			}
+			defer rows.Close()
+			cols, err := rows.Columns()
+			if err != nil {
+				return nil, err
+			}
+
+			rawResult := make([][]byte, len(cols))
+
+			dest := make([]interface{}, len(cols)) // A temporary interface{} slice
+			for i, _ := range rawResult {
+				dest[i] = &rawResult[i] // Put pointers to each string in the interface slice
+			}
+
+			for rows.Next() {
+				if err := rows.Scan(dest...); err != nil {
+					return nil, err
+				}
+				result := make([]string, len(rawResult))
+				for i, r := range rawResult {
+					result[i] = fmt.Sprintf("%s", r)
+				}
+				results = append(results, strings.Join(result, ","))
+			}
+			if err := rows.Err(); err != nil {
+				return nil, err
+			}
+			return results, nil
+		}
+
+		if err := v.sqlDBFunc(func(db *gosql.DB) error {
+			_, err := db.Exec(fmt.Sprintf(`CREATE TABLE %s_prev AS (SELECT * FROM %s AS OF SYSTEM TIME '-1s')`, v.origTable, v.origTable))
+			return err
+		}); err != nil {
+			return err
+		}
+		defer func() {
+			if err := v.sqlDBFunc(func(db *gosql.DB) error {
+				_, err := db.Exec(fmt.Sprintf(`DROP TABLE %s_prev`, v.origTable))
+				return err
+			}); err != nil {
+				fmt.Printf("error dropping table %s_prev: %+v\n", v.origTable, err)
+			}
+		}()
+
+		extra, err := getRows(`SELECT * FROM ` + v.fprintTable + ` EXCEPT SELECT * FROM ` + v.origTable + `_prev`)
+		if err != nil {
+			return err
+		}
+		missing, err := getRows(`SELECT * FROM ` + v.origTable + `_prev EXCEPT SELECT * FROM ` + v.fprintTable)
+		if err != nil {
+			return err
+		}
+
+		fc, err := os.OpenFile("/tmp/missing.csv", os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return err
+		}
+		defer fc.Close()
+		fe, err := os.OpenFile("/tmp/extra.csv", os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return err
+		}
+		defer fe.Close()
+		for _, m := range missing {
+			fmt.Fprintf(fc, "%s\n", m)
+		}
+		for _, e := range extra {
+			fmt.Fprintf(fe, "%s\n", e)
+		}
+
+		var totalRows int
+		if err := v.sqlDBFunc(func(db *gosql.DB) error {
+			return db.QueryRow(`SELECT COUNT(*) FROM ` + v.origTable).Scan(&totalRows)
+		}); err != nil {
+			return err
+		}
+
 		v.failures = append(v.failures, fmt.Sprintf(
-			`fingerprints did not match at %s: %s vs %s`, ts.AsOfSystemTime(), orig, check))
+			`fingerprints did not match at %s: %s vs %s; missing: %s; extra: %s; total rows: %d`, ts.AsOfSystemTime(), orig, check, "/tmp/missing.csv", "/tmp/extra.csv", totalRows))
 	}
 	return nil
 }

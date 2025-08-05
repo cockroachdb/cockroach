@@ -100,7 +100,6 @@ func (c *kafkaConsumer) Start(ctx context.Context) error {
 		partConsumerOutputs[i] = partition.Messages()
 	}
 	return fanIn(ctx, partConsumerOutputs, c.output, func(msg *sarama.ConsumerMessage) *ConsumerMessage {
-		fmt.Printf("kafkaConsumer fanned in: msg: %+v\n", msg)
 		// TODO: support other formats (?)
 		updated, resolved, _, err := tryGetUpdatedResolvedKeyFromJSONRow(msg.Value)
 		if err != nil {
@@ -268,6 +267,7 @@ func (c *cloudStorageConsumer) Output() <-chan *ConsumerMessage {
 // - [ ] webhook (need a webhook server that buffers data to disk and can replay it back)
 // - any others are a bonus
 
+// TODO: this is not "fair" and that might be an issue for the fprint validator
 func fanIn[I, O any](ctx context.Context, inputs []<-chan I, output chan<- O, f func(I) O) error {
 	wg, ctx := errgroup.WithContext(ctx)
 	for _, input := range inputs {
@@ -315,7 +315,7 @@ func ConsumeAndValidate(ctx context.Context, consumer Consumer, validator Valida
 					return errors.Newf("validator failed: %v", failures)
 				}
 			} else {
-				fmt.Printf("C+A: NoteRow: %+v\n", msg)
+				// fmt.Printf("C+A: NoteRow: %+v\n", msg)
 				if err := validator.NoteRow(msg.Partition, msg.Key, msg.Value, msg.Updated, msg.Topic); err != nil {
 					fmt.Printf("C+A: NoteRow failed: %v\n", err)
 					return err

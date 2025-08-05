@@ -580,6 +580,13 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		feedOptions["updated"] = ""
 	}
 
+	// TODO: fprintval doesnt work without initial_scan cause theres already data present (?)
+	// TODO: maybe this isnt actually feasible for the poor fprintvalidator ...
+	// ---> maybe load the data in there first? as of the start time of the feed?
+	if !args.noAutoValidate {
+		feedOptions["initial_scan"] = "'yes'"
+	}
+
 	ct.t.Status(fmt.Sprintf(
 		"creating %s changefeed into targets %s with options (%+v)",
 		args.sinkType, args.targets, feedOptions,
@@ -648,7 +655,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 			ct.t.Status(fmt.Sprintf("created cloud storage consumer for %s", table))
 		}
 
-		fprintV, err := cdctest.NewFingerprintValidator(db, table, `fprint`, partitions, 50)
+		fprintV, err := cdctest.NewFingerprintValidator(db, table, `fprint`, partitions, 0) // dbg;  do not support schema changes
 		if err != nil {
 			ct.t.Fatalf("failed to create fingerprint validator: %s", err)
 		}
@@ -671,6 +678,9 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		if baV != nil {
 			validators = append(validators, baV)
 		}
+
+		// fprint has only one partition; 0; is that right? yes
+		// TODO: test with more partitions
 
 		valdtr := cdctest.NewCountValidator(validators)
 
@@ -2078,7 +2088,8 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 10, duration: "30m"})
+			// TODO: more warehouses once fprintval doesnt require initial_scan=on
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
