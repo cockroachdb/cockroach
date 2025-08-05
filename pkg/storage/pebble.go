@@ -7,13 +7,15 @@ package storage
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -2334,18 +2336,16 @@ var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
 	clusterversion.V25_2: pebble.FormatTableFormatV6,
 }
 
+// MinimumSupportedFormatVersion is the version that provides features that the
+// Cockroach code relies on unconditionally (like range keys). New stores are by
+// default created with this version. It should correspond to the minimum
+// supported binary version.
+const MinimumSupportedFormatVersion = pebble.FormatTableFormatV6
+
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
-var pebbleFormatVersionKeys []clusterversion.Key = func() []clusterversion.Key {
-	versionKeys := make([]clusterversion.Key, 0, len(pebbleFormatVersionMap))
-	for k := range pebbleFormatVersionMap {
-		versionKeys = append(versionKeys, k)
-	}
-	// Sort the keys in reverse order.
-	sort.Slice(versionKeys, func(i, j int) bool {
-		return versionKeys[i] > versionKeys[j]
-	})
-	return versionKeys
-}()
+var pebbleFormatVersionKeys = slices.SortedFunc(maps.Keys(pebbleFormatVersionMap), func(a, b clusterversion.Key) int {
+	return cmp.Compare(b, a)
+})
 
 // pebbleFormatVersion finds the most recent pebble format version supported by
 // the given cluster version.
@@ -2353,7 +2353,7 @@ func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersi
 	// pebbleFormatVersionKeys are sorted in descending order; find the first one
 	// that is not newer than clusterVersion.
 	for _, k := range pebbleFormatVersionKeys {
-		if clusterVersion.AtLeast(k.Version().FenceVersion()) {
+		if k.Version().Cmp(clusterVersion) <= 0 {
 			return pebbleFormatVersionMap[k]
 		}
 	}
