@@ -609,8 +609,11 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		rng := entropy{Rand: globalRand}
 		table := args.targets[rng.Intn(len(args.targets))]
 
-		if _, err := db.Exec(`CREATE TABLE fprint AS TABLE ` + table + ` WITH NO DATA`); err != nil {
+		if _, err := db.Exec(`CREATE TABLE fprint AS TABLE ` + table); err != nil {
 			ct.t.Fatalf("failed to create fingerprint table: %s", err)
+		}
+		if _, err := db.Exec(`TRUNCATE TABLE fprint`); err != nil {
+			ct.t.Fatalf("failed to truncate fingerprint table: %s", err)
 		}
 
 		partitions := []string{""} // unless kafka..? TODO: get these from somewhere

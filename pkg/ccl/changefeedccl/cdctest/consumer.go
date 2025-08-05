@@ -123,6 +123,7 @@ type cloudStorageConsumer struct {
 	format string
 }
 
+// TODO: take a test.Test for status updates
 func NewCloudStorageConsumer(ctx context.Context, uri string, format string) (*cloudStorageConsumer, error) {
 	gcs, err := storage.NewClient(ctx)
 	if err != nil {
@@ -158,6 +159,7 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 
 	for ctx.Err() == nil {
 		// Refresh files.
+		fmt.Printf("Refreshing files\n")
 		objs := c.bucket.Objects(ctx, &storage.Query{Prefix: c.prefix})
 		var err error
 		var obj *storage.ObjectAttrs
@@ -170,6 +172,7 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 		if err != nil && !errors.Is(err, iterator.Done) {
 			return err
 		}
+		fmt.Printf("Refreshed files; pendingFiles=%v; seenFiles=%v\n", pendingFiles, seenFiles)
 
 		nextFile := popNextFile()
 		if nextFile == "" {
@@ -181,10 +184,15 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 			continue
 		}
 
+		fmt.Printf("Processing file: %s\n", nextFile)
+
 		topic, resolved, err := parseCloudStorageFileName(nextFile)
 		if err != nil {
 			return err
 		}
+
+		fmt.Printf("Parsed filename: %s; topic=%s; resolved=%s\n", nextFile, topic, resolved)
+
 		if resolved.IsSet() {
 			select {
 			case <-ctx.Done():
