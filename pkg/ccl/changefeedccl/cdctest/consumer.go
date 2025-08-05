@@ -47,40 +47,43 @@ type kafkaConsumer struct {
 	output             chan *ConsumerMessage
 }
 
-func NewKafkaConsumer(ctx context.Context, uri, topic string) (*kafkaConsumer, error) {
+func NewKafkaConsumer(ctx context.Context, uri, topic string) (consumer *kafkaConsumer, partitions []string, err error) {
+	uri = strings.TrimPrefix(uri, "kafka://")
 	config := sarama.NewConfig()
 	config.Consumer.Fetch.Default = 1000012
-	consumer, err := sarama.NewConsumer([]string{uri}, config)
+	kconsumer, err := sarama.NewConsumer([]string{uri}, config)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	parts, err := consumer.Partitions(topic)
+	parts, err := kconsumer.Partitions(topic)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	partitions := make([]string, len(parts))
+	partitions = make([]string, len(parts))
 	for i, partition := range parts {
 		partitions[i] = strconv.Itoa(int(partition))
 	}
 
 	partitionConsumers := make(map[int32]sarama.PartitionConsumer, len(parts))
 	for _, partition := range parts {
-		pc, err := consumer.ConsumePartition(topic, partition, sarama.OffsetOldest)
+		pc, err := kconsumer.ConsumePartition(topic, partition, sarama.OffsetOldest)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		partitionConsumers[partition] = pc
 	}
+
+	fmt.Printf("kafkaConsumer: partitions: %+v; partitionConsumers: %+v\n", partitions, partitionConsumers)
 
 	return &kafkaConsumer{
 		uri:                uri,
 		topic:              topic,
 		partitions:         partitions,
-		consumer:           consumer,
+		consumer:           kconsumer,
 		partitionConsumers: partitionConsumers,
 		output:             make(chan *ConsumerMessage),
-	}, nil
+	}, partitions, nil
 }
 
 func (c *kafkaConsumer) Start(ctx context.Context) error {
@@ -97,6 +100,7 @@ func (c *kafkaConsumer) Start(ctx context.Context) error {
 		partConsumerOutputs[i] = partition.Messages()
 	}
 	return fanIn(ctx, partConsumerOutputs, c.output, func(msg *sarama.ConsumerMessage) *ConsumerMessage {
+		fmt.Printf("kafkaConsumer fanned in: msg: %+v\n", msg)
 		// TODO: support other formats (?)
 		updated, resolved, _, err := tryGetUpdatedResolvedKeyFromJSONRow(msg.Value)
 		if err != nil {
@@ -311,7 +315,7 @@ func ConsumeAndValidate(ctx context.Context, consumer Consumer, validator Valida
 					return errors.Newf("validator failed: %v", failures)
 				}
 			} else {
-				// bro so slowwwww
+				fmt.Printf("C+A: NoteRow: %+v\n", msg)
 				if err := validator.NoteRow(msg.Partition, msg.Key, msg.Value, msg.Updated, msg.Topic); err != nil {
 					fmt.Printf("C+A: NoteRow failed: %v\n", err)
 					return err

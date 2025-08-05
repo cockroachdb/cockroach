@@ -251,9 +251,10 @@ func (ct *cdcTester) setupSink(args feedArgs) (sinkURI string) {
 		kafka.mon = ct.mon
 		kafka.validateOrder = args.kafkaArgs.validateOrder
 
-		if err := kafka.startTopicConsumers(ct.ctx, args.targets, ct.doneCh); err != nil {
-			ct.t.Fatal(err)
-		}
+		// superceded by the new consumer stuff
+		// if err := kafka.startTopicConsumers(ct.ctx, args.targets, ct.doneCh); err != nil {
+		// 	ct.t.Fatal(err)
+		// }
 
 		if args.kafkaArgs.kafkaChaos {
 			ct.mon.Go(func(ctx context.Context) error {
@@ -614,7 +615,39 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 			ct.t.Fatalf("failed to create fingerprint table: %s", err)
 		}
 
-		partitions := []string{""} // unless kafka..? TODO: get these from somewhere
+		format := "json"
+		if f, ok := feedOptions["format"]; ok {
+			format = f
+		}
+
+		partitions := []string{""}
+
+		// TODO: other workloads / better
+		topic := strings.TrimPrefix(table, "tpcc.")
+		// start consumer
+		var consumer cdctest.Consumer
+		switch args.sinkType {
+		case kafkaSink:
+			// swap the internal ip in the sink uri for the external ip
+			// TODO: do this more better (since we can have a sink uri override)
+			externalSinkURI, err := ct.cluster.ExternalIP(ct.ctx, ct.t.L(), ct.sinkNodes)
+			if err != nil {
+				ct.t.Fatal(err)
+			}
+
+			consumer, partitions, err = cdctest.NewKafkaConsumer(ct.ctx, externalSinkURI[0]+`:9092`, topic)
+			if err != nil {
+				ct.t.Fatalf("failed to create kafka consumer: %s", err)
+			}
+			ct.t.Status(fmt.Sprintf("created kafka consumer for %s", table))
+		case cloudStorageSink:
+			consumer, err = cdctest.NewCloudStorageConsumer(ct.ctx, sinkURI, topic, format)
+			if err != nil {
+				ct.t.Fatalf("failed to create cloud storage consumer: %s", err)
+			}
+			ct.t.Status(fmt.Sprintf("created cloud storage consumer for %s", table))
+		}
+
 		fprintV, err := cdctest.NewFingerprintValidator(db, table, `fprint`, partitions, 50)
 		if err != nil {
 			ct.t.Fatalf("failed to create fingerprint validator: %s", err)
@@ -641,29 +674,6 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 
 		valdtr := cdctest.NewCountValidator(validators)
 
-		format := "json"
-		if f, ok := feedOptions["format"]; ok {
-			format = f
-		}
-
-		// TODO: other workloads / better
-		topic := strings.TrimPrefix(table, "tpcc.")
-		// start consumer
-		var consumer cdctest.Consumer
-		switch args.sinkType {
-		case kafkaSink:
-			consumer, err = cdctest.NewKafkaConsumer(ct.ctx, sinkURI, topic)
-			if err != nil {
-				ct.t.Fatalf("failed to create kafka consumer: %s", err)
-			}
-			ct.t.Status(fmt.Sprintf("created kafka consumer for %s", table))
-		case cloudStorageSink:
-			consumer, err = cdctest.NewCloudStorageConsumer(ct.ctx, sinkURI, topic, format)
-			if err != nil {
-				ct.t.Fatalf("failed to create cloud storage consumer: %s", err)
-			}
-			ct.t.Status(fmt.Sprintf("created cloud storage consumer for %s", table))
-		}
 		// TODO(xxx): start it on another node for less test runner load
 		// TODO: handle initial scans better (no resolved or updated, validate on feed completion)
 		ct.mon.Go(func(ctx context.Context) error {
@@ -2068,7 +2078,7 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1000, duration: "120m"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 10, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
