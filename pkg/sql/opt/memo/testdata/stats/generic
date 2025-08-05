@@ -6,6 +6,10 @@ CREATE TABLE t (
 )
 ----
 
+# ------------------------
+# Tests without Histograms
+# ------------------------
+
 exec-ddl
 ALTER TABLE t INJECT STATISTICS '[
   {
@@ -162,6 +166,234 @@ select
  ├── scan t
  │    ├── columns: k:1(int!null) i:2(int) s:3(string)
  │    ├── stats: [rows=10000, distinct(1)=10000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── (i:2 = $1) OR (s:3 = $2) [type=bool, outer=(2,3)]
+
+# ---------------------
+# Tests with Histograms
+# ---------------------
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 41,
+    "null_count": 30,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 10, "num_range": 180, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 30, "num_range": 360, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 20,
+    "avg_size": 3,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 300, "num_range": 100, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 500, "num_range": 100, "distinct_range": 9, "upper_bound": "cherry"}
+    ]
+  }
+]'
+----
+
+norm
+SELECT * FROM t WHERE k = $1
+----
+select
+ ├── columns: k:1(int!null) i:2(int) s:3(string)
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── scan t
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── k:1 = $1 [type=bool, outer=(1), constraints=(/1: (/NULL - ]), fd=()-->(1)]
+
+# The row count of the filter is the max frequency of i's histogram.
+norm
+SELECT * FROM t WHERE i = $1
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── has-placeholder
+ ├── stats: [rows=30, distinct(2)=1, null(2)=0]
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── scan t
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=41, null(2)=30]
+ │    │   histogram(2)=  0   30   0  0  90  10   180  10   270  20   360  30
+ │    │                <--- NULL --- 0 ---- 100 ----- 200 ----- 300 ----- 400
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── i:2 = $1 [type=bool, outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
+
+# The row count of the filter is the max frequency of s's histogram.
+norm
+SELECT * FROM t WHERE $1 = s
+----
+select
+ ├── columns: k:1(int!null) i:2(int) s:3(string!null)
+ ├── has-placeholder
+ ├── stats: [rows=500, distinct(3)=1, null(3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── scan t
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(3)=20, null(3)=0]
+ │    │   histogram(3)=  0     0     100    300     100    500
+ │    │                <--- 'apple' ----- 'banana' ----- 'cherry'
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── s:3 = $1 [type=bool, outer=(3), constraints=(/3: (/NULL - ]), fd=()-->(3)]
+
+# Similar case to the previous one, but with a join on a values expression to
+# mimic a parameterized join of a generic query plan.
+norm
+SELECT * FROM (VALUES ($1::STRING)) v(s) JOIN t ON t.s = v.s
+----
+inner-join (hash)
+ ├── columns: s:1(string!null) k:2(int!null) i:3(int) s:4(string!null)
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ ├── has-placeholder
+ ├── stats: [rows=500, distinct(1)=1, null(1)=0, distinct(4)=1, null(4)=0]
+ ├── key: (2)
+ ├── fd: ()-->(1,4), (2)-->(3), (1)==(4), (4)==(1)
+ ├── values
+ │    ├── columns: column1:1(string)
+ │    ├── cardinality: [1 - 1]
+ │    ├── has-placeholder
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── ($1,) [type=tuple{string}]
+ ├── scan t
+ │    ├── columns: k:2(int!null) i:3(int) s:4(string)
+ │    ├── stats: [rows=1000, distinct(4)=20, null(4)=0]
+ │    │   histogram(4)=  0     0     100    300     100    500
+ │    │                <--- 'apple' ----- 'banana' ----- 'cherry'
+ │    ├── key: (2)
+ │    └── fd: (2)-->(3,4)
+ └── filters
+      └── s:4 = column1:1 [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+
+# The row count of the filter is based on the product of selectivities from the
+# max frequencies of i's and s's histograms.
+norm
+SELECT * FROM t WHERE i = $1 AND s = $2
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── has-placeholder
+ ├── stats: [rows=15, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ ├── scan t
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=41, null(2)=30, distinct(3)=20, null(3)=0, distinct(2,3)=820, null(2,3)=0]
+ │    │   histogram(2)=  0   30   0  0  90  10   180  10   270  20   360  30
+ │    │                <--- NULL --- 0 ---- 100 ----- 200 ----- 300 ----- 400
+ │    │   histogram(3)=  0     0     100    300     100    500
+ │    │                <--- 'apple' ----- 'banana' ----- 'cherry'
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      ├── i:2 = $1 [type=bool, outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
+      └── s:3 = $2 [type=bool, outer=(3), constraints=(/3: (/NULL - ]), fd=()-->(3)]
+
+norm
+SELECT * FROM t WHERE i > $1
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── has-placeholder
+ ├── stats: [rows=323.333, distinct(2)=41, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan t
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=41, null(2)=30]
+ │    │   histogram(2)=  0   30   0  0  90  10   180  10   270  20   360  30
+ │    │                <--- NULL --- 0 ---- 100 ----- 200 ----- 300 ----- 400
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── i:2 > $1 [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+
+norm
+SELECT * FROM t WHERE i = $1 OR i = $2
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── has-placeholder
+ ├── stats: [rows=323.333, distinct(2)=41, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan t
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=41, null(2)=30]
+ │    │   histogram(2)=  0   30   0  0  90  10   180  10   270  20   360  30
+ │    │                <--- NULL --- 0 ---- 100 ----- 200 ----- 300 ----- 400
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── (i:2 = $1) OR (i:2 = $2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+
+norm
+SELECT * FROM t WHERE i IN ($1, $2, $3)
+----
+select
+ ├── columns: k:1(int!null) i:2(int) s:3(string)
+ ├── has-placeholder
+ ├── stats: [rows=333.333]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan t
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── i:2 IN ($1, $2, $3) [type=bool, outer=(2)]
+
+norm
+SELECT * FROM t WHERE i = $1 OR s = $2
+----
+select
+ ├── columns: k:1(int!null) i:2(int) s:3(string)
+ ├── has-placeholder
+ ├── stats: [rows=333.333]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan t
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── filters

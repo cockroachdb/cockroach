@@ -500,7 +500,7 @@ project
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── has-placeholder
-      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(2,3)=1, null(2,3)=0]
       ├── cost: 36.19
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
@@ -1163,7 +1163,7 @@ project
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── has-placeholder
-      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(2,3)=1, null(2,3)=0]
       ├── cost: 36.145
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
