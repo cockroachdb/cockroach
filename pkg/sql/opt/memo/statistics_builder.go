@@ -56,10 +56,6 @@ const (
 	// for nullable columns, which is used in the absence of any real statistics.
 	UnknownNullCountRatio = 0.01
 
-	// UnknownAvgRowSize is the average size of a row in bytes, which is used in
-	// the absence of any real statistics.
-	UnknownAvgRowSize = 8
-
 	// Use a small row count for generator functions; this allows use of lookup
 	// join in cases like using json_array_elements with a small constant array.
 	unknownGeneratorRowCount = 10
