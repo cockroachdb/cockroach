@@ -123,6 +123,7 @@ type eventTxnStartPayload struct {
 	omitInRangefeeds      bool
 	bufferedWritesEnabled bool
 	rng                   *rand.Rand
+	execType              executorType
 }
 
 // makeEventTxnStartPayload creates an eventTxnStartPayload.
@@ -137,6 +138,7 @@ func makeEventTxnStartPayload(
 	omitInRangefeeds bool,
 	bufferedWritesEnabled bool,
 	rng *rand.Rand,
+	execType executorType,
 ) eventTxnStartPayload {
 	return eventTxnStartPayload{
 		pri:                   pri,
@@ -149,6 +151,7 @@ func makeEventTxnStartPayload(
 		omitInRangefeeds:      omitInRangefeeds,
 		bufferedWritesEnabled: bufferedWritesEnabled,
 		rng:                   rng,
+		execType:              execType,
 	}
 }
 
@@ -606,6 +609,7 @@ func noTxnToOpen(args fsm.Args) error {
 		payload.omitInRangefeeds,
 		payload.bufferedWritesEnabled,
 		payload.rng,
+		payload.execType,
 	)
 	ts.setAdvanceInfo(
 		advCode,

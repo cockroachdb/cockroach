@@ -480,6 +480,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		// writes for internal executor.
 		false, /* bufferedWritesEnabled */
 		ex.rng.internal,
+		ex.executorType,
 	)
 
 	// Modify the Collection to match the parent executor's Collection.

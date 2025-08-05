@@ -3709,6 +3709,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.omitInRangefeeds(),
 				ex.bufferedWritesEnabled(ctx),
 				ex.rng.internal,
+				ex.executorType,
 			)
 	case *tree.ShowCommitTimestamp:
 		return ex.execShowCommitTimestampInNoTxnState(ctx, s, res)
@@ -3744,6 +3745,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.omitInRangefeeds(),
 				ex.bufferedWritesEnabled(ctx),
 				ex.rng.internal,
+				ex.executorType,
 			)
 	}
 }
@@ -3779,6 +3781,7 @@ func (ex *connExecutor) beginImplicitTxn(
 			ex.omitInRangefeeds(),
 			ex.bufferedWritesEnabled(ctx),
 			ex.rng.internal,
+			ex.executorType,
 		)
 }
 
