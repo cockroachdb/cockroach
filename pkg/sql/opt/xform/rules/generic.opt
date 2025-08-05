@@ -38,6 +38,7 @@
             (
                 $values
                 $newFilters
+                $parameterizedCols
                 $ok
             ):(GenerateParameterizedJoinValuesAndFilters
                 $filters
@@ -51,7 +52,7 @@
         $values
         $scan
         $newFilters
-        (ParameterizedJoinPrivate)
+        (ParameterizedJoinPrivate $parameterizedCols)
     )
     []
     (OutputCols (Root))
