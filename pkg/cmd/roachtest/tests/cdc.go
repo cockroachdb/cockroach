@@ -648,16 +648,19 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 			if err != nil {
 				ct.t.Fatalf("failed to create kafka consumer: %s", err)
 			}
+			ct.t.Status(fmt.Sprintf("created kafka consumer for %s", table))
 		case cloudStorageSink:
 			consumer, err = cdctest.NewCloudStorageConsumer(ct.ctx, sinkURI, format)
 			if err != nil {
 				ct.t.Fatalf("failed to create cloud storage consumer: %s", err)
 			}
+			ct.t.Status(fmt.Sprintf("created cloud storage consumer for %s", table))
 		}
 		// TODO(xxx): start it on another node for less test runner load
 		ct.mon.Go(func(ctx context.Context) error {
 			return cdctest.ConsumeAndValidate(ctx, consumer, valdtr)
 		})
+		ct.t.Status(fmt.Sprintf("started consume+validate for %s", table))
 	}
 
 	return cj
