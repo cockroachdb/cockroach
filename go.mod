@@ -128,6 +128,7 @@ require (
 	github.com/blevesearch/snowballstem v0.9.0
 	github.com/charmbracelet/bubbles v0.15.1-0.20230123181021-a6a12c4a31eb
 	github.com/cockroachdb/apd/v3 v3.2.1
+	github.com/cockroachdb/changefeedpb v0.0.0-20250806202704-6f08d0a94fa6
 	github.com/cockroachdb/cmux v0.0.0-20250514152509-914d3bf9ec58
 	github.com/cockroachdb/cockroach-go/v2 v2.4.1
 	github.com/cockroachdb/crlib v0.0.0-20250718215705-7ff5051265b9

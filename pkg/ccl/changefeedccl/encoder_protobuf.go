@@ -10,16 +10,16 @@ import (
 	"fmt"
 	"time"
 
+	changefeedpb "github.com/cockroachdb/changefeedpb/proto"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type protobufEncoder struct {
@@ -391,14 +391,14 @@ func datumToProtoValue(
 			},
 		}, nil
 	case *tree.DTimestampTZ:
-		ts, err := types.TimestampProto(v.Time)
-		if err != nil {
+		ts := timestamppb.New(v.Time)
+		if err := ts.CheckValid(); err != nil {
 			return nil, err
 		}
-		return &changefeedpb.Value{Value: &changefeedpb.Value_TimestampValue{TimestampValue: ts}}, nil
+		return &changefeedpb.Value{Value: &changefeedpb.Value_TimestampValue{TimestampValue: timestamppb.New(v.Time)}}, nil
 	case *tree.DTimestamp:
-		ts, err := types.TimestampProto(v.Time.UTC())
-		if err != nil {
+		ts := timestamppb.New(v.Time.UTC())
+		if err := ts.CheckValid(); err != nil {
 			return nil, err
 		}
 		return &changefeedpb.Value{Value: &changefeedpb.Value_TimestampValue{TimestampValue: ts}}, nil

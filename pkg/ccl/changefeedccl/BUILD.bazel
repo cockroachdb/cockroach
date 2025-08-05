@@ -162,6 +162,7 @@ go_library(
         "//pkg/util/unique",
         "//pkg/util/uuid",
         "@com_github_apache_pulsar_client_go//pulsar",
+        "@com_github_cockroachdb_changefeedpb//proto:go_default_library",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
@@ -186,6 +187,7 @@ go_library(
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//credentials/insecure",
         "@org_golang_google_grpc//status",
+        "@org_golang_google_protobuf//types/known/timestamppb",
         "@org_golang_x_oauth2//google",
     ],
 )
@@ -354,6 +356,7 @@ go_test(
         "//pkg/workload/workloadsql",
         "@com_github_apache_pulsar_client_go//pulsar",
         "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_cockroachdb_changefeedpb//proto:go_default_library",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
