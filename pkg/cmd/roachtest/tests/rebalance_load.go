@@ -110,6 +110,13 @@ func registerRebalanceLoad(r registry.Registry) {
 				),
 				// Only use the latest version of each release to work around #127029.
 				mixedversion.AlwaysUseLatestPredecessors,
+				// There is a known edge case in the mixed version framework when there
+				// is only one upgrade that can run user hooks (25.1 -> 25.2) and the
+				// fromVersion (25.1) is skippable. The framework always enforces at
+				// least one skip upgrade if enabled (24.3 -> 25.2), which would lead to
+				// zero upgrades running user hooks. Instead, disable skip upgrades.
+				// TODO(#151408): Remove when the framework handles this case.
+				mixedversion.DisableSkipVersionUpgrades,
 				// There have been many performance improvements in versions 25.1.0+.
 				// In particular, the CPU utilization attributed to SQL can vary
 				// significantly between versions, which can lead to flakiness in these
