@@ -367,6 +367,7 @@ project
            ├── lookup expression
            │    └── filters
            │         └── a:2 > "$1":7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+           ├── parameterized columns: (7,8)
            ├── has-placeholder
            ├── stats: [rows=11111.1, distinct(2)=100, null(2)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
            ├── cost: 68690.7277
@@ -500,7 +501,7 @@ project
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── has-placeholder
-      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(2,3)=1, null(2,3)=0]
       ├── cost: 36.19
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
@@ -509,8 +510,9 @@ project
       │    ├── columns: k:1!null a:2!null b:3!null "$1":7!null "$2":8!null
       │    ├── flags: disallow merge join
       │    ├── key columns: [7 8] = [2 3]
+      │    ├── parameterized columns: (7,8)
       │    ├── has-placeholder
-      │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+      │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(2,3)=1, null(2,3)=0]
       │    ├── cost: 26.11
       │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
@@ -1014,6 +1016,7 @@ project
            ├── lookup expression
            │    └── filters
            │         └── a:2 > "$1":7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+           ├── parameterized columns: (7,8)
            ├── has-placeholder
            ├── stats: [rows=11111.1, distinct(2)=100, null(2)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
            ├── cost: 67857.3943
@@ -1163,7 +1166,7 @@ project
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── has-placeholder
-      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(2,3)=1, null(2,3)=0]
       ├── cost: 36.145
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
@@ -1172,8 +1175,9 @@ project
       │    ├── columns: k:1!null a:2!null b:3!null "$1":7!null "$2":8!null
       │    ├── flags: disallow merge join
       │    ├── key columns: [7 8] = [2 3]
+      │    ├── parameterized columns: (7,8)
       │    ├── has-placeholder
-      │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+      │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(2,3)=1, null(2,3)=0]
       │    ├── cost: 26.08
       │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
