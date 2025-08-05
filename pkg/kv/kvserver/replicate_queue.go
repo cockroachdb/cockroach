@@ -816,6 +816,7 @@ func (rq *replicateQueue) applyChange(
 			replica,
 			op.Chgs,
 			replica.Desc(),
+			op.Usage,
 			op.AllocatorPriority,
 			op.Reason,
 			op.Details,
@@ -913,10 +914,6 @@ func (rq *replicateQueue) processOneChange(
 	if err != nil {
 		return false, maybeAnnotateDecommissionErr(err, change.Action)
 	}
-
-	// Update the local storepool state to reflect the successful application
-	// of the change.
-	change.Op.ApplyImpact(rq.storePool)
 
 	// Requeue the replica if it meets the criteria in ShouldRequeue.
 	return ShouldRequeue(ctx, change, conf), nil
@@ -1060,6 +1057,7 @@ func (rq *replicateQueue) changeReplicas(
 	repl *Replica,
 	chgs kvpb.ReplicationChanges,
 	desc *roachpb.RangeDescriptor,
+	rangeUsageInfo allocator.RangeUsageInfo,
 	allocatorPriority float64,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
@@ -1067,11 +1065,18 @@ func (rq *replicateQueue) changeReplicas(
 	// NB: this calls the impl rather than ChangeReplicas because
 	// the latter traps tests that try to call it while the replication
 	// queue is active.
-	_, err := repl.changeReplicasImpl(
+	if _, err := repl.changeReplicasImpl(
 		ctx, desc, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, allocatorPriority, reason,
 		details, chgs,
-	)
-	return err
+	); err != nil {
+		return err
+	}
+	// On success, update local store pool to reflect the result of applying the
+	// operations.
+	for _, chg := range chgs {
+		rq.storePool.UpdateLocalStoreAfterRebalance(chg.Target.StoreID, rangeUsageInfo, chg.ChangeType)
+	}
+	return nil
 }
 
 func (*replicateQueue) postProcessScheduled(
