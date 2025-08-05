@@ -16,6 +16,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/IBM/sarama"
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/errors"
@@ -227,12 +228,7 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 			}
 		} else {
 			fmt.Printf("Reading file: %s\n", nextFile)
-			i := 0
 			for value, err := range readJSONL(reader) {
-				i++
-				if i%100 == 0 {
-					fmt.Printf("C+A: read %d messages\n", i)
-				}
 				if err != nil {
 					return err
 				}
@@ -331,13 +327,13 @@ func tryGetUpdatedResolvedKeyFromJSONRow(value []byte) (updated, resolved hlc.Ti
 		return hlc.Timestamp{}, hlc.Timestamp{}, "", err
 	}
 	if val.Updated != "" {
-		updated, err = hlc.ParseTimestamp(val.Updated)
+		updated, err = parseTimeToHLC(val.Updated)
 		if err != nil {
 			return hlc.Timestamp{}, hlc.Timestamp{}, "", err
 		}
 	}
 	if val.Resolved != "" {
-		resolved, err = hlc.ParseTimestamp(val.Resolved)
+		resolved, err = parseTimeToHLC(val.Resolved)
 		if err != nil {
 			return hlc.Timestamp{}, hlc.Timestamp{}, "", err
 		}
@@ -359,6 +355,7 @@ func parseCloudStorageFileName(name string) (topic string, resolved hlc.Timestam
 		// parse the timestamp from the file name
 		resolved, err := parseCloudStorageTS(strings.TrimSuffix(name, ".RESOLVED"))
 		if err != nil {
+			fmt.Printf("parseCloudStorageFileName(%s): error: %s\n", name, err)
 			return "", hlc.Timestamp{}, err
 		}
 		return "", resolved, nil
@@ -432,4 +429,16 @@ func parseCloudStorageTS(ts string) (hlc.Timestamp, error) {
 		return hlc.Timestamp{}, err
 	}
 	return hlc.Timestamp{WallTime: dt.UnixNano(), Logical: int32(logical)}, nil
+}
+
+func parseTimeToHLC(s string) (hlc.Timestamp, error) {
+	d, _, err := apd.NewFromString(s)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	ts, err := hlc.DecimalToHLC(d)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	return ts
 }

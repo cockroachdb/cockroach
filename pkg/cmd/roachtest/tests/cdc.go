@@ -608,6 +608,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		// choose a random table to fingerprint
 		rng := entropy{Rand: globalRand}
 		table := args.targets[rng.Intn(len(args.targets))]
+		table = "tpcc.order_line" // DBG
 
 		if _, err := db.Exec(`CREATE TABLE fprint (LIKE ` + table + ` INCLUDING ALL)`); err != nil {
 			ct.t.Fatalf("failed to create fingerprint table: %s", err)
