@@ -88,6 +88,7 @@ project
       │    ├── columns: k:1!null i:2!null s:3!null b:4!null "$1":8!null "$2":9!null "$3":10!null
       │    ├── flags: disallow merge join
       │    ├── key columns: [8 9 10] = [2 3 4]
+      │    ├── parameterized columns: (8-10)
       │    ├── has-placeholder
       │    ├── key: (1)
       │    ├── fd: ()-->(2-4,8-10), (2)==(8), (8)==(2), (3)==(9), (9)==(3), (4)==(10), (10)==(4)
@@ -118,6 +119,7 @@ project
       ├── key columns: [8] = [1]
       ├── lookup columns are key
       ├── cardinality: [0 - 1]
+      ├── parameterized columns: (8)
       ├── has-placeholder
       ├── key: ()
       ├── fd: ()-->(1-5,8), (1)==(2,8), (2)==(1,8), (8)==(1,2)
@@ -152,6 +154,7 @@ project
       │    ├── columns: k:1!null i:2!null t:5 "$1":8!null
       │    ├── flags: disallow merge join
       │    ├── key columns: [8] = [2]
+      │    ├── parameterized columns: (8)
       │    ├── has-placeholder
       │    ├── key: (1)
       │    ├── fd: ()-->(2,8), (1)-->(5), (2)==(8), (8)==(2)
@@ -261,6 +264,7 @@ project
       │    ├── columns: k:1!null t:5!null "$1":8!null
       │    ├── flags: disallow merge join
       │    ├── key columns: [8] = [5]
+      │    ├── parameterized columns: (8)
       │    ├── has-placeholder
       │    ├── key: (1)
       │    ├── fd: ()-->(5,8), (5)==(8), (8)==(5)
@@ -301,6 +305,7 @@ project
       │    ├── columns: k:1!null i:2!null t:5!null "$1":8!null "$2":9!null
       │    ├── flags: disallow merge join
       │    ├── key columns: [8 9] = [2 5]
+      │    ├── parameterized columns: (8,9)
       │    ├── has-placeholder
       │    ├── key: (1)
       │    ├── fd: ()-->(2,5,8,9), (2)==(8), (8)==(2), (5)==(9), (9)==(5)
@@ -345,6 +350,7 @@ project
       │    ├── key columns: [8 9] = [3 1]
       │    ├── lookup columns are key
       │    ├── cardinality: [0 - 1]
+      │    ├── parameterized columns: (8,9)
       │    ├── has-placeholder
       │    ├── key: ()
       │    ├── fd: ()-->(1,3,8,9), (3)==(8), (8)==(3), (1)==(9), (9)==(1)
@@ -381,6 +387,7 @@ project
       │    ├── columns: k:1!null t:5!null column8:8!null
       │    ├── flags: disallow merge join
       │    ├── key columns: [8] = [5]
+      │    ├── parameterized columns: (8)
       │    ├── stable
       │    ├── key: (1)
       │    ├── fd: ()-->(5,8), (5)==(8), (8)==(5)
@@ -413,6 +420,7 @@ project
       │    ├── columns: k:1!null i:2!null t:5!null "$1":8!null column9:9!null
       │    ├── flags: disallow merge join
       │    ├── key columns: [8 9] = [2 5]
+      │    ├── parameterized columns: (8,9)
       │    ├── stable, has-placeholder
       │    ├── key: (1)
       │    ├── fd: ()-->(2,5,8,9), (2)==(8), (8)==(2), (5)==(9), (9)==(5)
@@ -448,6 +456,7 @@ project
       │    │    └── filters
       │    │         ├── t:5 > column9:9 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
       │    │         └── "$1":8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+      │    ├── parameterized columns: (8,9)
       │    ├── stable, has-placeholder
       │    ├── key: (1)
       │    ├── fd: ()-->(2,8,9), (1)-->(5), (2)==(8), (8)==(2)
@@ -485,6 +494,7 @@ project
            │    ├── columns: k:1!null i:2!null t:5!null "$1":8!null column9:9 "$2":10 column11:11!null
            │    ├── flags: disallow merge join
            │    ├── key columns: [8 11] = [2 5]
+           │    ├── parameterized columns: (8-10)
            │    ├── stable, has-placeholder
            │    ├── key: (1)
            │    ├── fd: ()-->(2,5,8-11), (2)==(8), (8)==(2), (5)==(11), (11)==(5)
@@ -530,6 +540,7 @@ project
            │    ├── columns: k:1!null i:2!null t:5!null "$1":8!null column9:9 column10:10!null
            │    ├── flags: disallow merge join
            │    ├── key columns: [8 10] = [2 5]
+           │    ├── parameterized columns: (8,9)
            │    ├── stable, has-placeholder
            │    ├── key: (1)
            │    ├── fd: ()-->(2,5,8-10), (2)==(8), (8)==(2), (5)==(10), (10)==(5)
@@ -590,6 +601,7 @@ project
       │    ├── columns: k:1!null i:2!null s:3!null b:4 "$1":8!null
       │    ├── flags: disallow merge join
       │    ├── key columns: [8] = [2]
+      │    ├── parameterized columns: (8)
       │    ├── stable, has-placeholder
       │    ├── key: (1)
       │    ├── fd: ()-->(2,3,8), (1)-->(4), (2)==(8), (8)==(2)
@@ -626,6 +638,7 @@ project
       │    ├── columns: k:1!null i:2!null s:3!null b:4 "$1":8!null
       │    ├── flags: disallow merge join
       │    ├── key columns: [8] = [2]
+      │    ├── parameterized columns: (8)
       │    ├── stable, has-placeholder
       │    ├── key: (1)
       │    ├── fd: ()-->(2,3,8), (1)-->(4), (2)==(8), (8)==(2)
