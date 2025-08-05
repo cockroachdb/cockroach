@@ -16,7 +16,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/IBM/sarama"
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/errors"
@@ -440,5 +440,5 @@ func parseTimeToHLC(s string) (hlc.Timestamp, error) {
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
-	return ts
+	return ts, nil
 }
