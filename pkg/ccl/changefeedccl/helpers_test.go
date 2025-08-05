@@ -1393,6 +1393,9 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 		`GRANT CHANGEFEED ON table_a TO userWithSomeGrants`,
 
 		`CREATE USER regularUser`,
+
+		`CREATE USER viewClusterMetadataUser`,
+		`GRANT SYSTEM VIEWCLUSTERMETADATA TO viewClusterMetadataUser`,
 	)
 }
 
