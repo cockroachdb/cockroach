@@ -606,13 +606,14 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	// start fingerprint validator for everyone unless they opt out
 	if !args.noAutoValidate {
 		// choose a random table to fingerprint
-		table := args.targets[globalRand.Intn(len(args.targets))]
+		rng := entropy{Rand: globalRand}
+		table := args.targets[rng.Intn(len(args.targets))]
 
-		if _, err := db.Exec(`CREATE TABLE fprint LIKE ` + table); err != nil {
+		if _, err := db.Exec(`CREATE TABLE fprint AS TABLE ` + table + ` WITH NO DATA`); err != nil {
 			ct.t.Fatalf("failed to create fingerprint table: %s", err)
 		}
 
-		partitions := []string{""} // unless kafka..?
+		partitions := []string{""} // unless kafka..? TODO: get these from somewhere
 		fprintV, err := cdctest.NewFingerprintValidator(db, table, `fprint`, partitions, 50)
 		if err != nil {
 			ct.t.Fatalf("failed to create fingerprint validator: %s", err)

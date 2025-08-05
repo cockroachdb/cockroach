@@ -133,7 +133,7 @@ func NewCloudStorageConsumer(ctx context.Context, uri string, format string) (*c
 		return nil, err
 	}
 	bucket := gcs.Bucket(parsedURI.Host)
-	return &cloudStorageConsumer{gcs: gcs, bucket: bucket, prefix: parsedURI.Path, format: format}, nil
+	return &cloudStorageConsumer{gcs: gcs, bucket: bucket, prefix: parsedURI.Path, format: format, output: make(chan *ConsumerMessage)}, nil
 }
 
 func (c *cloudStorageConsumer) Start(ctx context.Context) error {

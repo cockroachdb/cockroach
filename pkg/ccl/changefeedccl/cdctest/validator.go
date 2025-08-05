@@ -645,6 +645,8 @@ func (v *FingerprintValidator) DBFunc(
 func (v *FingerprintValidator) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
+	fmt.Printf("NoteRow: partition=%s key=%s value=%s updated=%s topic=%s\n", partition, key, value, updated, topic)
+
 	if v.firstRowTimestamp.IsEmpty() || updated.Less(v.firstRowTimestamp) {
 		v.firstRowTimestamp = updated
 	}
