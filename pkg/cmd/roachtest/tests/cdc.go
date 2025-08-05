@@ -567,15 +567,16 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	} else {
 		feedOptions["resolved"] = ""
 	}
-	if !args.noAutoValidate {
-		feedOptions["updated"] = ""
-	}
 
 	for option, value := range args.opts {
 		feedOptions[option] = value
 		if option == "initial_scan_only" || (option == "initial_scan" && value == "'only'") {
 			delete(feedOptions, "resolved")
 		}
+	}
+
+	if !args.noAutoValidate && feedOptions["initial_scan"] != "'only'" {
+		feedOptions["updated"] = ""
 	}
 
 	ct.t.Status(fmt.Sprintf(
