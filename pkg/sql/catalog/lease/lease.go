@@ -2327,11 +2327,17 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 		region = locality.Tiers[0].Value
 	}
 
+	log.Infof(ctx, "starting orphaned lease cleanup from stale sessions in region %s", region)
+
 	var distinctSessions []tree.Datums
 	aostTime := hlc.Timestamp{WallTime: initialTimestamp}
 	distinctSessionQuery := `SELECT DISTINCT(session_id) FROM system.lease AS OF SYSTEM TIME %s WHERE crdb_region=$1 AND NOT crdb_internal.sql_liveness_is_alive(session_id, true) LIMIT $2`
 	syntheticDescriptors := catalog.Descriptors{systemschema.LeaseTable()}
 	const limit = 50
+
+	totalSessionsProcessed := 0
+	totalLeasesDeleted := 0
+
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		// Get a list of distinct, dead session IDs that exist in the system.lease
 		// table.
@@ -2353,19 +2359,34 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 			}
 		}
 
+		if len(distinctSessions) > 0 {
+			log.Infof(ctx, "found %d dead sessions from which to clean up orphaned leases", len(distinctSessions))
+		}
+
 		// Delete rows in our lease table with orphaned sessions.
 		for _, sessionRow := range distinctSessions {
 			sessionID := sqlliveness.SessionID(tree.MustBeDBytes(sessionRow[0]))
-			if err = deleteLeaseWithSessionIDWithBatch(ctx, ex, retryOpts, syntheticDescriptors, sessionID, region, limit); err != nil {
-				log.Warningf(ctx, "unable to delete orphaned leases: %v", err)
+			sessionLeasesDeleted, err := deleteLeaseWithSessionIDWithBatch(ctx, ex, retryOpts, syntheticDescriptors, sessionID, region, limit)
+			if err != nil {
+				log.Warningf(ctx, "unable to delete orphaned leases for session %s: %v", sessionID, err)
 				break
 			}
+			totalLeasesDeleted += sessionLeasesDeleted
+			log.Infof(ctx, "deleted %d orphaned leases for dead session %s", sessionLeasesDeleted, sessionID)
 		}
+
+		totalSessionsProcessed += len(distinctSessions)
 
 		// No more dead sessions to clean up.
 		if len(distinctSessions) < limit {
+			log.Infof(ctx, "completed orphaned lease cleanup for region %s: %d sessions processed, %d leases deleted",
+				region, totalSessionsProcessed, totalLeasesDeleted)
 			return
 		}
+
+		// Log progress for large cleanup operations.
+		log.Infof(ctx, "orphaned lease cleanup progress for region %s: %d sessions processed, %d leases deleted so far",
+			region, totalSessionsProcessed, totalLeasesDeleted)
 
 		// Advance our aostTime timstamp so that our query to detect leases with
 		// dead sessions is aware of new deletes and does not keep selecting the
@@ -2375,7 +2396,7 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 }
 
 // deleteLeaseWithSessionIDWithBatch uses batchSize to batch deletes for leases
-// with the given sessionID in system.lease.
+// with the given sessionID in system.lease. Returns the total number of leases deleted.
 func deleteLeaseWithSessionIDWithBatch(
 	ctx context.Context,
 	ex isql.Executor,
@@ -2384,7 +2405,8 @@ func deleteLeaseWithSessionIDWithBatch(
 	sessionID sqlliveness.SessionID,
 	region string,
 	batchSize int,
-) error {
+) (int, error) {
+	totalDeleted := 0
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		var rowsDeleted int
 		deleteOrphanedQuery := `DELETE FROM system.lease WHERE session_id=$1 AND crdb_region=$2 LIMIT $3`
@@ -2399,16 +2421,17 @@ func deleteLeaseWithSessionIDWithBatch(
 			return err
 		}); err != nil {
 			if !startup.IsRetryableReplicaError(err) {
-				return err
+				return totalDeleted, err
 			}
 		}
+		totalDeleted += rowsDeleted
 
 		// No more rows to clean up.
 		if rowsDeleted < batchSize {
 			break
 		}
 	}
-	return nil
+	return totalDeleted, nil
 }
 
 func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
@@ -2444,8 +2467,15 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 		log.Warningf(ctx, "unable to read orphaned leases: %v", err)
 		return
 	}
+
+	totalLeases := len(rows)
+	log.Infof(ctx, "found %d orphaned leases to clean up for instance ID %d", totalLeases, instanceID)
+	if totalLeases == 0 {
+		return
+	}
+
 	var wg sync.WaitGroup
-	defer wg.Wait()
+	var releasedCount atomic.Int64
 	for i := range rows {
 		// Early exit?
 		row := rows[i]
@@ -2470,11 +2500,23 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 				WaitForSem: true,
 			},
 			func(ctx context.Context) {
+				defer wg.Done()
 				m.storage.release(ctx, m.stopper, lease)
+				released := releasedCount.Add(1)
 				log.Infof(ctx, "released orphaned lease: %+v", lease)
-				wg.Done()
+
+				// Log progress every 100 leases for large cleanup operations.
+				if released%100 == 0 || released == int64(totalLeases) {
+					log.Infof(ctx, "orphaned lease cleanup progress for instance ID %d: %d/%d leases released",
+						instanceID, released, totalLeases)
+				}
 			}); err != nil {
+			log.Warningf(ctx, "could not start async task for releasing orphaned lease %+v: %v", lease, err)
 			wg.Done()
 		}
 	}
+
+	wg.Wait()
+	log.Infof(ctx, "completed orphaned lease cleanup for instance ID %d: %d/%d leases released",
+		instanceID, releasedCount.Load(), totalLeases)
 }
