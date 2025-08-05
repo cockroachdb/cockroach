@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -24,16 +25,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -1565,4 +1570,51 @@ func TestLeafTransactionAdmissionHeader(t *testing.T) {
 		Source:     kvpb.AdmissionHeader_FROM_SQL,
 	}
 	require.Equal(t, expectedLeafHeader, leafHeader)
+}
+
+// TestTxnTracesSplitQueryIntents verifies that the split out QueryIntent
+// requests are captured in the verbose tracing of a transaction.
+func TestTxnTracesSplitQueryIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+		},
+	})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+	// NB: Disable buffered writes to ensure writes are pipelined, and therefore
+	// there are QueryIntent requests to split.
+	kvcoord.BufferedWritesEnabled.Override(ctx, &st.SV, false)
+
+	db := tc.Server(0).DB()
+
+	tracer := tracing.NewTracer()
+	traceCtx, sp := tracer.StartSpanCtx(context.Background(), "test-txn", tracing.WithRecording(tracingpb.RecordingVerbose))
+
+	if err := db.Txn(traceCtx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := txn.CPut(ctx, "a", "val", nil); err != nil {
+			return err
+		}
+		if err := txn.Put(ctx, "c", "d"); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	collectedSpans := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
+	dump := collectedSpans.String()
+	// dump:
+	//    0.275ms      0.171ms    sending split out pre-commit QueryIntent batch
+	found, err := regexp.MatchString(
+		// The (?s) makes "." match \n. This makes the test resilient to other log
+		// lines being interspersed.
+		`.*sending split out pre-commit QueryIntent batch`,
+		dump)
+	require.NoError(t, err)
+	require.True(t, found, "didn't match: %s", dump)
 }
