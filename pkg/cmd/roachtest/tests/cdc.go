@@ -635,6 +635,11 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 
 		valdtr := cdctest.NewCountValidator(validators)
 
+		format := "json"
+		if f, ok := feedOptions["format"]; ok {
+			format = f
+		}
+
 		// start consumer
 		var consumer cdctest.Consumer
 		switch args.sinkType {
@@ -644,7 +649,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 				ct.t.Fatalf("failed to create kafka consumer: %s", err)
 			}
 		case cloudStorageSink:
-			consumer, err = cdctest.NewCloudStorageConsumer(ct.ctx, sinkURI)
+			consumer, err = cdctest.NewCloudStorageConsumer(ct.ctx, sinkURI, format)
 			if err != nil {
 				ct.t.Fatalf("failed to create cloud storage consumer: %s", err)
 			}
