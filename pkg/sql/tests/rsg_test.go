@@ -343,6 +343,11 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.Contains(s, "EXPERIMENTAL SCRUB DATABASE SYSTEM") {
 			return errors.New("See #43693")
 		}
+		if strings.Contains(s, "CHECK EXTERNAL CONNECTION") {
+			// `CHECK EXTERNAL CONNECTION` is fixed by PR #149260 on master, but the fix does not
+			// meet the backport policy.
+			return errors.New("See #147876")
+		}
 		// Recreate the database on every run in case it was renamed in
 		// a previous run. Should always succeed.
 		if err := db.exec(t, ctx, `CREATE DATABASE IF NOT EXISTS ident`); err != nil {
