@@ -195,17 +195,17 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 
 		fmt.Printf("Parsed filename: %s; topic=%s; resolved=%s\n", nextFile, topic, resolved)
 
-		if topic != c.topic {
-			fmt.Printf("Skipping file: %s (topic=%s != %s)\n", nextFile, topic, c.topic)
-			continue
-		}
-
 		if resolved.IsSet() {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case c.output <- &ConsumerMessage{Resolved: resolved}:
 			}
+			continue
+		}
+
+		if topic != c.topic {
+			fmt.Printf("Skipping file: %s (topic=%s != %s)\n", nextFile, topic, c.topic)
 			continue
 		}
 
@@ -311,6 +311,7 @@ func ConsumeAndValidate(ctx context.Context, consumer Consumer, validator Valida
 					return errors.Newf("validator failed: %v", failures)
 				}
 			} else {
+				// bro so slowwwww
 				if err := validator.NoteRow(msg.Partition, msg.Key, msg.Value, msg.Updated, msg.Topic); err != nil {
 					fmt.Printf("C+A: NoteRow failed: %v\n", err)
 					return err

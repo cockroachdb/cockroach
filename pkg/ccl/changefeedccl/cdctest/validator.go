@@ -136,6 +136,10 @@ func (v *orderValidator) GetValuesForKeyBelowTimestamp(
 func (v *orderValidator) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
+	defer func(start time.Time) {
+		fmt.Printf("ordervalidator: NoteRow took %s\n", time.Since(start))
+	}(time.Now())
+
 	if prev, ok := v.partitionForKey[key]; ok && prev != partition {
 		v.failures = append(v.failures, fmt.Sprintf(
 			`key [%s] received on two partitions: %s and %s`, key, prev, partition,
@@ -226,6 +230,10 @@ func NewBeforeAfterValidator(sqlDB *gosql.DB, table string, diff bool) (Validato
 func (v *beforeAfterValidator) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
+	defer func(start time.Time) {
+		fmt.Printf("beforeaftervalidator: NoteRow took %s\n", time.Since(start))
+	}(time.Now())
+
 	keyJSON, err := json.ParseJSON(key)
 	if err != nil {
 		return err
@@ -316,7 +324,8 @@ func (v *beforeAfterValidator) checkRowAt(
 			colNames = append(colNames, iter.Key())
 		}
 		sort.Strings(colNames)
-		for i, col := range colNames {
+		placeholderIdx := 1
+		for _, col := range colNames {
 			if len(args) != 0 {
 				stmtBuf.WriteString(` AND `)
 			}
@@ -325,11 +334,12 @@ func (v *beforeAfterValidator) checkRowAt(
 			if jsonCol == nil || jsonCol.Type() == json.NullJSONType {
 				fmt.Fprintf(&stmtBuf, `%s IS NULL`, col)
 			} else {
-				fmt.Fprintf(&stmtBuf, `to_json(%s)::TEXT = $%d`, col, i+1)
+				fmt.Fprintf(&stmtBuf, `to_json(%s)::TEXT = $%d`, col, placeholderIdx)
 				if err != nil {
 					return err
 				}
 				args = append(args, jsonCol.String())
+				placeholderIdx++
 			}
 		}
 	}
@@ -376,6 +386,10 @@ func NewMvccTimestampValidator() Validator {
 func (v *mvccTimestampValidator) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
+	defer func(start time.Time) {
+		fmt.Printf("mvccvalidator: NoteRow took %s\n", time.Since(start))
+	}(time.Now())
+
 	valueJSON, err := json.ParseJSON(value)
 	if err != nil {
 		return err
@@ -446,6 +460,10 @@ func NewKeyInValueValidator(sqlDB *gosql.DB, table string) (Validator, error) {
 func (v *keyInValueValidator) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
+	defer func(start time.Time) {
+		fmt.Printf("keyinvaluevalidator: NoteRow took %s\n", time.Since(start))
+	}(time.Now())
+
 	keyJSON, err := json.ParseJSON(key)
 	if err != nil {
 		return err
@@ -508,6 +526,10 @@ func NewTopicValidator(table string, fullTableName bool) Validator {
 func (v *topicValidator) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
+	defer func(start time.Time) {
+		fmt.Printf("topicvalidator: NoteRow took %s\n", time.Since(start))
+	}(time.Now())
+
 	if v.fullTableName {
 		if topic != fmt.Sprintf(`d.public.%s`, v.table) {
 			v.failures = append(v.failures, fmt.Sprintf(
@@ -645,6 +667,10 @@ func (v *FingerprintValidator) DBFunc(
 func (v *FingerprintValidator) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
+	defer func(start time.Time) {
+		fmt.Printf("fprintvalidator: NoteRow took %s\n", time.Since(start))
+	}(time.Now())
+
 	if v.firstRowTimestamp.IsEmpty() || updated.Less(v.firstRowTimestamp) {
 		v.firstRowTimestamp = updated
 	}
@@ -944,6 +970,10 @@ type Validators []Validator
 func (vs Validators) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
+	defer func(start time.Time) {
+		fmt.Printf("Validators.NoteRow took %s\n", time.Since(start))
+	}(time.Now())
+
 	for _, v := range vs {
 		if err := v.NoteRow(partition, key, value, updated, topic); err != nil {
 			return err
