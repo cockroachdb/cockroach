@@ -601,7 +601,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		logger:         ct.logger,
 	}
 
-	ct.t.Status(fmt.Sprintf("created changefeed %s with jobID %d", cj.Label(), jobID))
+	ct.t.Status(fmt.Sprintf("created changefeed %s with jobID %d, opts=%+v", cj.Label(), jobID, feedOptions))
 
 	// start fingerprint validator for everyone unless they opt out
 	if !args.noAutoValidate {
@@ -662,6 +662,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 			ct.t.Status(fmt.Sprintf("created cloud storage consumer for %s", table))
 		}
 		// TODO(xxx): start it on another node for less test runner load
+		// TODO: handle initial scans better (no resolved or updated, validate on feed completion)
 		ct.mon.Go(func(ctx context.Context) error {
 			return cdctest.ConsumeAndValidate(ctx, consumer, valdtr)
 		})

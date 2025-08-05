@@ -9,6 +9,7 @@ import (
 	"iter"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -159,7 +160,7 @@ func (c *cloudStorageConsumer) Start(ctx context.Context) error {
 
 	for ctx.Err() == nil {
 		// Refresh files.
-		fmt.Printf("Refreshing files (prefix=%s)\n", c.prefix)
+		fmt.Printf("Refreshing files (prefix=%s; numPending=%d, numSeen=%d)\n", c.prefix, len(pendingFiles), len(seenFiles))
 		objs := c.bucket.Objects(ctx, &storage.Query{Prefix: c.prefix})
 		var err error
 		var obj *storage.ObjectAttrs
@@ -296,13 +297,16 @@ func ConsumeAndValidate(ctx context.Context, consumer Consumer, validator Valida
 				if err := validator.NoteResolved(msg.Partition, msg.Resolved); err != nil {
 					return err
 				}
+				if failures := validator.Failures(); len(failures) > 0 {
+					fmt.Printf("C+A: validator failed: %v\n", failures)
+					return errors.Newf("validator failed: %v", failures)
+				}
 			} else {
 				if err := validator.NoteRow(msg.Partition, msg.Key, msg.Value, msg.Updated, msg.Topic); err != nil {
 					return err
 				}
 			}
 		}
-		return nil
 	})
 	return eg.Wait()
 }
@@ -334,7 +338,8 @@ type jsonMessageVal struct {
 }
 
 func parseCloudStorageFileName(name string) (topic string, resolved hlc.Timestamp, err error) {
-	// Get the topic from the file name. (`<timestamp>-<uniquer>-<topic_id>-<schema_id>.<ext>`)
+	name = filepath.Base(name)
+	// Get the topic from the file name. (`<timestamp>-<session_id>-<node_id>-<sink_id>-<file_id>-<topic_id>-<schema_id>.<ext>`)
 	// resolved files are like `<timestamp>.RESOLVED`
 	if strings.HasSuffix(name, ".RESOLVED") {
 		// parse the timestamp from the file name
@@ -345,10 +350,10 @@ func parseCloudStorageFileName(name string) (topic string, resolved hlc.Timestam
 		return "", resolved, nil
 	}
 	parts := strings.Split(name, "-")
-	if len(parts) < 4 {
+	if len(parts) < 6 {
 		return "", hlc.Timestamp{}, errors.Newf("invalid file name: %s", name)
 	}
-	topic = parts[2]
+	topic = parts[5]
 
 	return topic, hlc.Timestamp{}, nil
 }
