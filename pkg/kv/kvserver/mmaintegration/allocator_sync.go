@@ -8,8 +8,10 @@ package mmaintegration
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -26,8 +28,10 @@ type SyncChangeID uint64
 // its sole purpose is to track and apply changes to the store pool upon
 // success.
 type AllocatorSync struct {
-	sp *storepool.StorePool
-	mu struct {
+	sp           *storepool.StorePool
+	st           *cluster.Settings
+	mmaAllocator mmaprototype.Allocator
+	mu           struct {
 		syncutil.Mutex
 		// changeSeqGen is a monotonically increasing sequence number for
 		// tracked changes.
@@ -40,9 +44,13 @@ type AllocatorSync struct {
 	}
 }
 
-func NewAllocatorSync(sp *storepool.StorePool) *AllocatorSync {
+func NewAllocatorSync(
+	sp *storepool.StorePool, mmaAllocator mmaprototype.Allocator, st *cluster.Settings,
+) *AllocatorSync {
 	as := &AllocatorSync{
-		sp: sp,
+		sp:           sp,
+		st:           st,
+		mmaAllocator: mmaAllocator,
 	}
 	as.mu.trackedChanges = make(map[SyncChangeID]trackedAllocatorChange)
 	return as
