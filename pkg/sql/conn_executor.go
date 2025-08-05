@@ -1075,6 +1075,7 @@ func (s *Server) newConnExecutor(
 			mon:                          txnMon,
 			connCtx:                      ctx,
 			testingForceRealTracingSpans: s.cfg.TestingKnobs.ForceRealTracingSpans,
+			execType:                     executorType,
 		},
 		transitionCtx: transitionCtx{
 			db:           s.cfg.DB,
