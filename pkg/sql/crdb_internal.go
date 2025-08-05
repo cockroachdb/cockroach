@@ -7561,6 +7561,13 @@ CREATE TABLE crdb_internal.active_range_feeds (
   last_err STRING
 );`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		privileged, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA, p.User())
+		if err != nil {
+			return err
+		}
+		if !privileged {
+			return nil
+		}
 		return p.execCfg.DistSender.ForEachActiveRangeFeed(
 			func(rfCtx kvcoord.RangeFeedContext, rf kvcoord.PartialRangeFeed) error {
 				now := p.EvalContext().GetStmtTimestamp()
