@@ -132,7 +132,9 @@ func (og *operationGenerator) tableHasDependencies(
 }
 
 // columnRemovalWillDropFKBackingIndexes determines if dropping this column
-// will lead to no indexes backing a foreign key.
+// will lead to no indexes backing a foreign key. CockroachDB will consider
+// alternative indexes backing a foreign key if they have the same number of
+// key columns as the FK in any order.
 func (og *operationGenerator) columnRemovalWillDropFKBackingIndexes(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columName tree.Name,
 ) (bool, error) {
@@ -210,27 +212,19 @@ WITH
 								NOT LIKE '%%_pkey' -- renames would keep the old table name
 					)
 		),
-	matching_indexes
+	fk_col_counts
 		AS (
 			SELECT
-				oid,
-				index_name,
-				count(base_ordinal) AS count_base_ordinal,
-				count(seq_in_index) AS count_seq_in_index
+				oid, count(*) AS num_cols
 			FROM
-				fk, valid_indexes
-			WHERE
-				storing = 'f'
-				AND non_unique = 'f'
-				AND base_col = column_name
+				fk
 			GROUP BY
-				(oid, index_name)
+				oid
 		),
-	valid_index_attrib_count
+	index_col_counts
 		AS (
 			SELECT
-				index_name,
-				max(seq_in_index) AS max_seq_in_index
+				index_name, count(*) AS num_cols
 			FROM
 				valid_indexes
 			WHERE
@@ -238,30 +232,31 @@ WITH
 			GROUP BY
 				index_name
 		),
-	valid_fk_count
-		AS (
-			SELECT
-				oid, max(base_ordinal) AS max_base_ordinal
-			FROM
-				fk
-			GROUP BY
-				fk
-		),
 	matching_fks
 		AS (
 			SELECT
-				DISTINCT f.oid
+				fk.oid
 			FROM
-				valid_index_attrib_count AS i,
-				valid_fk_count AS f,
-				matching_indexes AS m
+				fk
+				JOIN valid_indexes
+					ON
+						fk.base_col = valid_indexes.column_name
+				JOIN fk_col_counts
+					ON
+						fk.oid = fk_col_counts.oid
+				JOIN index_col_counts
+					ON
+						valid_indexes.index_name = index_col_counts.index_name
 			WHERE
-				f.oid = m.oid
-				AND i.index_name = m.index_name
-				AND i.max_seq_in_index
-					= m.count_seq_in_index
-				AND f.max_base_ordinal
-					= m.count_base_ordinal
+				valid_indexes.storing = 'f'
+				AND valid_indexes.non_unique = 'f'
+				AND fk_col_counts.num_cols = index_col_counts.num_cols
+			GROUP BY
+				fk.oid,
+				valid_indexes.index_name,
+				fk_col_counts.num_cols
+			HAVING
+				count(*) = fk_col_counts.num_cols
 		)
 SELECT
 	EXISTS(
@@ -270,7 +265,7 @@ SELECT
 		FROM
 			fk
 		WHERE
-			oid NOT IN (SELECT oid FROM matching_fks)
+			oid NOT IN (SELECT DISTINCT oid FROM matching_fks)
 	);
 `, tableName.String(), tableName.String()), tableName.String(), columName)
 }
