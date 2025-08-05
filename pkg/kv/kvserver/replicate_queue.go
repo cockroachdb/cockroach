@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -536,12 +537,15 @@ type replicateQueue struct {
 	// logTracesThresholdFunc returns the threshold for logging traces from
 	// processing a replica.
 	logTracesThresholdFunc queueProcessTimeoutFunc
+	as                     *mmaprototypehelpers.AllocatorSync
 }
 
 var _ queueImpl = &replicateQueue{}
 
 // newReplicateQueue returns a new instance of replicateQueue.
-func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replicateQueue {
+func newReplicateQueue(
+	store *Store, allocator allocatorimpl.Allocator, as *mmaprototypehelpers.AllocatorSync,
+) *replicateQueue {
 	var storePool storepool.AllocatorStorePool
 	if store.cfg.StorePool != nil {
 		storePool = store.cfg.StorePool
@@ -558,6 +562,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 		logTracesThresholdFunc: makeRateLimitedTimeoutFuncByPermittedSlowdown(
 			permittedRangeScanSlowdown/2, rebalanceSnapshotRate,
 		),
+		as: as,
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
@@ -823,7 +828,6 @@ func (rq *replicateQueue) applyChange(
 	default:
 		panic(fmt.Sprintf("Unknown operation %+v, unable to apply replicate queue change", op))
 	}
-
 	return err
 }
 
@@ -914,10 +918,6 @@ func (rq *replicateQueue) processOneChange(
 		return false, maybeAnnotateDecommissionErr(err, change.Action)
 	}
 
-	// Update the local storepool state to reflect the successful application
-	// of the change.
-	change.Op.ApplyImpact(rq.storePool)
-
 	// Requeue the replica if it meets the criteria in ShouldRequeue.
 	return ShouldRequeue(ctx, change, conf), nil
 }
@@ -981,7 +981,7 @@ func (rq *replicateQueue) shedLease(
 type ReplicaLeaseMover interface {
 	// AdminTransferLease moves the lease to the requested store.
 	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
-
+	Desc() *roachpb.RangeDescriptor
 	// String returns info about the replica.
 	String() string
 }
@@ -993,7 +993,7 @@ type ReplicaLeaseMover interface {
 // This synchronous method won't work easily with simulation.
 type RangeRebalancer interface {
 	// TransferLease uses a LeaseMover interface to move a lease between stores.
-	// The QPS is used to update stats for the stores.
+	// The rangeUsageInfo is used to update stats for the stores invovled.
 	TransferLease(
 		ctx context.Context,
 		rlm ReplicaLeaseMover,
@@ -1031,11 +1031,27 @@ func (rq *replicateQueue) TransferLease(
 ) error {
 	rq.metrics.TransferLeaseCount.Inc(1)
 	log.KvDistribution.Infof(ctx, "transferring lease to s%d", target)
+	var changeID mmaprototypehelpers.SyncChangeID
+	if rq.as != nil {
+		changeID = rq.as.NonMMAPreTransferLease(
+			ctx,
+			rlm.Desc(),
+			rangeUsageInfo,
+			source,
+			target,
+			mmaprototypehelpers.ReplicateQueue,
+		)
+	}
 	if err := rlm.AdminTransferLease(ctx, target.StoreID, false /* bypassSafetyChecks */); err != nil {
+		if rq.as != nil {
+			rq.as.PostApply(ctx, changeID, false)
+		}
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
 	}
 
-	rq.storePool.UpdateLocalStoresAfterLeaseTransfer(source.StoreID, target.StoreID, rangeUsageInfo)
+	if rq.as != nil {
+		rq.as.PostApply(ctx, changeID, true)
+	}
 	return nil
 }
 
@@ -1064,6 +1080,16 @@ func (rq *replicateQueue) changeReplicas(
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 ) error {
+	var changeID mmaprototypehelpers.SyncChangeID
+	if rq.as != nil {
+		changeID = rq.as.NonMMAPreChangeReplicas(
+			ctx,
+			repl.Desc(),
+			repl.RangeUsageInfo(),
+			chgs,
+			repl.StoreID(),
+		)
+	}
 	// NB: this calls the impl rather than ChangeReplicas because
 	// the latter traps tests that try to call it while the replication
 	// queue is active.
@@ -1071,6 +1097,9 @@ func (rq *replicateQueue) changeReplicas(
 		ctx, desc, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, allocatorPriority, reason,
 		details, chgs,
 	)
+	if rq.as != nil {
+		rq.as.PostApply(ctx, changeID, err == nil)
+	}
 	return err
 }
 

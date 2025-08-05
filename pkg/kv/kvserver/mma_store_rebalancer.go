@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -23,6 +24,7 @@ import (
 )
 
 type replicaToApplyChanges interface {
+	RangeUsageInfo() allocator.RangeUsageInfo
 	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
 	changeReplicasImpl(
 		ctx context.Context,
@@ -48,6 +50,10 @@ type mmaStoreRebalancer struct {
 	st    *cluster.Settings
 	sp    *storepool.StorePool
 	// TODO(wenyihu6): add allocator sync
+	// TODO(wenyihu6): As shouldn't be imported but we are exporting it for
+	// integration since it is used in the asim package.
+	As      *mmaprototypehelpers.AllocatorSync
+	metrics StoreRebalancerMetrics
 }
 
 func newMMAStoreRebalancer(
@@ -151,15 +157,34 @@ func (m *mmaStoreRebalancer) applyChange(
 ) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl == nil {
+		// TODO(sumeer): this is not clean, since we are bypassing the
+		// AllocatorSync, but we do need to tell MMA that this change is not
+		// going to be applied.
+		m.mma.AdjustPendingChangesDisposition(change.ChangeIDs(), false)
+		if change.IsChangeReplicas() {
+			m.mma.Metrics().MMAReplicaRebalanceFailure.Inc(1)
+		} else {
+			m.mma.Metrics().MMALeaseTransferFailure.Inc(1)
+		}
 		return errors.Errorf("replica not found for range %d", change.RangeID)
 	}
+	changeID := m.As.MMAPreApply(ctx, repl.RangeUsageInfo(), change)
+	var err error
 	if change.IsTransferLease() {
-		return m.applyLeaseTransfer(ctx, repl, change)
+		err = m.applyLeaseTransfer(ctx, repl, change)
+		if err == nil {
+			m.metrics.LeaseTransferCount.Inc(1)
+		}
 	} else if change.IsChangeReplicas() {
-		return m.applyReplicaChanges(ctx, repl, change)
+		err = m.applyReplicaChanges(ctx, repl, change)
+		if err == nil {
+			m.metrics.RangeRebalanceCount.Inc(1)
+		}
+	} else {
+		err = errors.Errorf("unknown change type for range %d", change.RangeID)
 	}
-
-	return errors.Errorf("unknown change type for range %d", change.RangeID)
+	m.As.PostApply(ctx, changeID, err == nil /*success*/)
+	return err
 }
 
 // applyLeaseTransfer applies a lease transfer change.

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -1184,6 +1185,7 @@ type StoreConfig struct {
 	// One MMAllocator per node which guides mma store rebalancer to make
 	// allocation changes when LBRebalancingMultiMetric is enabled.
 	MMAllocator          mmaprototype.Allocator
+    AllocatorSync          *mmaprototypehelpers.AllocatorSync
 	Transport            *RaftTransport
 	NodeDialer           *nodedialer.Dialer
 	RPCContext           *rpc.Context
@@ -1751,11 +1753,11 @@ func NewStore(
 			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
-		s.leaseQueue = newLeaseQueue(s, s.allocator)
+		s.leaseQueue = newLeaseQueue(s, s.allocator, s.cfg.AllocatorSync)
 		s.mvccGCQueue = newMVCCGCQueue(s)
 		s.mergeQueue = newMergeQueue(s, s.db)
 		s.splitQueue = newSplitQueue(s, s.db)
-		s.replicateQueue = newReplicateQueue(s, s.allocator)
+		s.replicateQueue = newReplicateQueue(s, s.allocator, s.cfg.AllocatorSync)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db)
 		s.mmaStoreRebalancer = newMMAStoreRebalancer(s, s.cfg.MMAllocator, s.cfg.Settings, s.cfg.StorePool)
 		s.raftLogQueue = newRaftLogQueue(s, s.db)
