@@ -385,7 +385,7 @@ func assertPayloadsBaseErr(
 	}
 
 	var actualFormatted []string
-	for _, m := range actual {
+	for i, m := range actual {
 		if useProtobuf {
 			var msg changefeedpb.Message
 			if err := protoutil.Unmarshal(m.Value, &msg); err != nil {
@@ -403,6 +403,11 @@ func assertPayloadsBaseErr(
 				if err != nil {
 					return err
 				}
+			case *changefeedpb.Message_Enriched:
+				m.Value, err = gojson.Marshal(env.Enriched)
+				if err != nil {
+					return err
+				}
 
 			default:
 				return errors.Newf("unexpected message type: %T", env)
@@ -415,6 +420,7 @@ func assertPayloadsBaseErr(
 			if err != nil {
 				return err
 			}
+			actual[i] = m
 		}
 		actualFormatted = append(actualFormatted, m.String())
 
