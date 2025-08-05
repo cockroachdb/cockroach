@@ -1472,7 +1472,14 @@ func TestTxnTracesSplitQueryIntents(t *testing.T) {
 
 	db := tc.Server(0).DB()
 
-	tracer := tracing.NewTracer()
+	// NB: The line below is different from `master` because the way `RunAsyncTaskEx` works is different.
+	// On `master`, the async task constructs a span from the **span's** tracer.
+	// On `release-23.2`, the async task constructs a span from the **stopper's** tracer.
+	// In the latter case, the test will fail because we'll be trying to connect spans from two different tracers,
+	// the one provided here in `db.Txn` and the one the `stopper` is using in the server.
+	// Hence, the test is amended to user the server's tracer which will match the stopper, as it would when
+	// running in production.
+	tracer := tc.Server(0).Tracer()
 	traceCtx, sp := tracer.StartSpanCtx(context.Background(), "test-txn", tracing.WithRecording(tracingpb.RecordingVerbose))
 
 	if err := db.Txn(traceCtx, func(ctx context.Context, txn *kv.Txn) error {
