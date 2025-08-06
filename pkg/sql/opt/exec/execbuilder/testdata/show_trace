@@ -275,6 +275,7 @@ SELECT operation, message
 WHERE (message LIKE 'querying next range%' OR message LIKE '%batch%')
   AND message NOT LIKE '%SystemConfigSpan%'
   AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryIntent%'
 ----
 dist sender send  querying next range at /Table/12/1
 dist sender send  r15: sending batch 1 Scan to (n1,s1):1
@@ -366,6 +367,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%QueryIntent%'
 ----
 dist sender send  r69: sending batch 6 CPut to (n1,s1):1
 dist sender send  r69: sending batch 6 CPut to (n1,s1):1

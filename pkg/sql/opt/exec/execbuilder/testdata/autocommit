@@ -168,6 +168,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 2 CPut to (n1,s1):1
@@ -308,6 +309,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 2 Put to (n1,s1):1
@@ -335,6 +337,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 2 Put to (n1,s1):1
@@ -454,6 +457,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 1 Scan to (n1,s1):1
@@ -482,6 +486,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 1 Scan to (n1,s1):1
@@ -624,6 +629,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 1 Scan to (n1,s1):1
@@ -652,6 +658,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 1 Scan to (n1,s1):1
@@ -704,6 +711,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 2 CPut to (n1,s1):1
@@ -730,6 +738,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 1 Scan to (n1,s1):1
@@ -758,6 +767,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 1 Get to (n1,s1):1
@@ -792,6 +802,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 1 Del to (n1,s1):1
@@ -825,6 +836,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 2 CPut to (n1,s1):1
@@ -853,6 +865,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND message   NOT LIKE '%ResolveIntent%'
+  AND message   NOT LIKE '%QueryIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r67: sending batch 2 CPut to (n1,s1):1
