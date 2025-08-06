@@ -574,28 +574,20 @@ func (d *datadogWriter) upload(fileName string) error {
 
 	api := datadogV2.NewLogsApi(d.apiClient)
 	hostName := getHostname()
-	msgJson, _ := json.Marshal(struct {
-		Message        string  `json:"message"`
-		SeriesUploaded int     `json:"series_uploaded"`
-		EstimatedCost  float64 `json:"estimated_cost"`
-		Duration       int     `json:"duration"`
-		DryRun         bool    `json:"dry_run"`
-		Success        bool    `json:"success"`
-	}{
-		Message:        fmt.Sprintf("tsdump upload completed: uploaded %d series overall", seriesUploaded),
-		SeriesUploaded: seriesUploaded,
-		Duration:       int(getCurrentTime().Sub(d.uploadTime).Nanoseconds()),
-		DryRun:         debugTimeSeriesDumpOpts.dryRun,
-		EstimatedCost:  estimatedCost,
-		Success:        success,
-	})
 	_, _, err = api.SubmitLog(d.datadogContext, []datadogV2.HTTPLogItem{
 		{
 			Ddsource: datadog.PtrString("tsdump_upload"),
 			Ddtags:   datadog.PtrString(strings.Join(eventTags, ",")),
-			Message:  string(msgJson),
+			Message:  fmt.Sprintf("tsdump upload completed: uploaded %d series overall", seriesUploaded),
 			Service:  datadog.PtrString("tsdump_upload"),
 			Hostname: datadog.PtrString(hostName),
+			AdditionalProperties: map[string]string{
+				"series_uploaded": strconv.Itoa(seriesUploaded),
+				"estimated_cost":  fmt.Sprintf("%g", estimatedCost),
+				"duration":        strconv.Itoa(int(getCurrentTime().Sub(d.uploadTime).Nanoseconds())),
+				"dry_run":         strconv.FormatBool(debugTimeSeriesDumpOpts.dryRun),
+				"success":         strconv.FormatBool(success),
+			},
 		},
 	}, datadogV2.SubmitLogOptionalParameters{
 		ContentEncoding: datadogV2.CONTENTENCODING_GZIP.Ptr(),
