@@ -64,6 +64,7 @@ import (
 
 var errRenewLease = errors.New("renew lease on id")
 var errReadOlderVersion = errors.New("read older descriptor version from store")
+var errLeaseManagerIsDraining = errors.New("cannot acquire lease when draining")
 
 // LeaseDuration controls the duration of sql descriptor leases.
 var LeaseDuration = settings.RegisterDurationSetting(
@@ -882,7 +883,7 @@ func acquireNodeLease(
 		},
 		func(ctx context.Context) (interface{}, error) {
 			if m.IsDraining() {
-				return nil, errors.New("cannot acquire lease when draining")
+				return nil, errLeaseManagerIsDraining
 			}
 			newest := m.findNewest(id)
 			var currentVersion descpb.DescriptorVersion
@@ -1359,6 +1360,9 @@ func (m *Manager) AcquireByName(
 	parentSchemaID descpb.ID,
 	name string,
 ) (LeasedDescriptor, error) {
+	if m.IsDraining() {
+		return nil, errLeaseManagerIsDraining
+	}
 	// When offline descriptor leases were not allowed to be cached,
 	// attempt to acquire a lease on them would generate a descriptor
 	// offline error. Recent changes allow offline descriptor leases
@@ -1531,6 +1535,9 @@ func (m *Manager) Acquire(
 	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
 ) (LeasedDescriptor, error) {
 	for {
+		if m.IsDraining() {
+			return nil, errLeaseManagerIsDraining
+		}
 		t := m.findDescriptorState(id, true /*create*/)
 		desc, _, err := t.findForTimestamp(ctx, timestamp)
 		if err == nil {
@@ -1602,8 +1609,12 @@ func (m *Manager) SetDraining(
 			t.mu.Lock()
 			defer t.mu.Unlock()
 			leasesToRelease := t.removeInactiveVersions(ctx)
-			// Ensure that all leases are released at this time.
-			if buildutil.CrdbTestBuild && assertOnLeakedDescriptor && len(t.mu.active.data) > 0 {
+			// Ensure that all leases are released at this time. Ignore any descriptors
+			// that have acquisitions in progress.
+			if buildutil.CrdbTestBuild &&
+				assertOnLeakedDescriptor &&
+				len(t.mu.active.data) > 0 &&
+				t.mu.acquisitionsInProgress == 0 {
 				// Panic that a descriptor may have leaked.
 				panic(errors.AssertionFailedf("descriptor leak was detected for: %d (%s)", t.id, t.mu.active))
 			}
