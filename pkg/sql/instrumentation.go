@@ -43,8 +43,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,6 +57,44 @@ var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
 	0.01,
 	settings.Fraction,
 )
+
+type txnInstrumentationHelper struct {
+	zip *memzipper.Zipper
+	// TODO(davidh): This will get replaced with a SQL write once the
+	// tables are in place.
+	buf         *bytes.Buffer
+	stmtCounter int
+}
+
+func (h *txnInstrumentationHelper) Init() {
+	if h.zip == nil {
+		h.zip = &memzipper.Zipper{}
+		h.zip.Init()
+	}
+}
+
+func (h *txnInstrumentationHelper) Active() bool {
+	return h.zip != nil
+}
+
+func (h *txnInstrumentationHelper) AddStatementBundle(stmt tree.Statement, data string) {
+	h.stmtCounter++
+	filename := fmt.Sprintf("%d-%s.zip", h.stmtCounter, stmt.StatementTag())
+	h.zip.AddFile(filename, data)
+}
+
+func (h *txnInstrumentationHelper) Finalize(txnID uuid.UUID, r tracingpb.Recording) {
+	js, err := r.ToJaegerJSON(txnID.String(), "transaction", "unknown node", true)
+	if err != nil {
+		panic(err)
+	}
+	h.zip.AddFile("trace-jaeger.json", js)
+	h.buf, err = h.zip.Finalize()
+	if err != nil {
+		panic(err)
+	}
+	h.zip = nil
+}
 
 // instrumentationHelper encapsulates the logic around extracting information
 // about the execution of a statement, like bundles and traces. Typical usage:
@@ -410,16 +450,19 @@ func (ih *instrumentationHelper) finalizeSetup(ctx context.Context, cfg *Executo
 // which case Finish() is a no-op).
 func (ih *instrumentationHelper) Setup(
 	ctx context.Context,
-	cfg *ExecutorConfig,
-	statsCollector *sslocal.StatsCollector,
+	ex *connExecutor,
 	p *planner,
-	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
 	stmt *Statement,
 	implicitTxn bool,
 	txnPriority roachpb.UserPriority,
-	collectTxnExecStats bool,
 	retryCount int32,
 ) (newCtx context.Context) {
+	cfg := ex.server.cfg
+	statsCollector := ex.statsCollector
+	stmtDiagnosticsRecorder := ex.stmtDiagnosticsRecorder
+	collectTxnExecStats := ex.extraTxnState.shouldCollectTxnExecutionStats
+	txnHelper := &ex.state.txnInstrumentationHelper
+
 	ih.fingerprint = stmt.StmtNoConstants
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
@@ -447,6 +490,17 @@ func (ih *instrumentationHelper) Setup(
 	default:
 		ih.collectBundle, ih.diagRequestID, ih.diagRequest =
 			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.StmtNoConstants, "" /* planGist */)
+
+		// If no regular diagnostic request matched, check if we should collect
+		// bundles for all statements in this transaction because a previous
+		// statement in the transaction triggered collection.
+		if !ih.collectBundle && txnHelper.Active() {
+			ih.collectBundle = true
+			// TODO(davidh): This should be updated to use a transaction
+			// request ID when that becomes available.
+			ih.diagRequestID = 0
+			ih.diagRequest = stmtdiagnostics.Request{}
+		}
 		// IsRedacted will be false when ih.collectBundle is false.
 		ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
 	}
@@ -612,6 +666,7 @@ func (ih *instrumentationHelper) Finish(
 	res RestrictedCommandResult,
 	retPayload fsm.EventPayload,
 	retErr error,
+	txnHelper *txnInstrumentationHelper,
 ) error {
 	ctx := ih.origCtx
 	if _, ok := ih.Tracing(); !ok {
@@ -719,6 +774,11 @@ func (ih *instrumentationHelper) Finish(
 				bundleCtx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
 			)
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
+
+			if ih.diagRequest.IncludeTxn() {
+				txnHelper.Init()
+				txnHelper.AddStatementBundle(p.stmt.AST, string(bundle.zip))
+			}
 		}
 	}
 

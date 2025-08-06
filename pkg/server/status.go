@@ -559,6 +559,7 @@ type StmtDiagnosticsRequester interface {
 		expiresAfter time.Duration,
 		redacted bool,
 		username string,
+		includeTxn bool,
 	) error
 	// CancelRequest updates an entry in system.statement_diagnostics_requests
 	// for tracing a query with the given fingerprint to be expired (thus,
