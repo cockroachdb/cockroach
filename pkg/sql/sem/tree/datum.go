@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -4151,7 +4152,7 @@ func AsJSON(
 		// This is RFC3339Nano, but without the TZ fields.
 		return json.FromString(formatTime(t.UTC(), "2006-01-02T15:04:05.999999999")), nil
 	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D,
-		*DTSVector, *DTSQuery, *DPGLSN, *DPGVector:
+		*DTSVector, *DTSQuery, *DPGLSN, *DPGVector, *DLTree:
 		return json.FromString(
 			AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc), FmtLocation(loc)),
 		), nil
@@ -4505,6 +4506,108 @@ func ParseDTSVector(s string) (Datum, error) {
 		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse tsvector")
 	}
 	return NewDTSVector(v), nil
+}
+
+// DLTree is the LTree Datum.
+type DLTree struct {
+	LTree ltree.T
+}
+
+// NewDLTree returns a DLTree from an existing ltree.T.
+func NewDLTree(l ltree.T) *DLTree {
+	return &DLTree{LTree: l}
+}
+
+// ParseDLTree parses a string representation of a ltree.
+func ParseDLTree(pathStr string) (Datum, error) {
+	l, err := ltree.ParseLTree(pathStr)
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse ltree")
+	}
+	return NewDLTree(l), nil
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DLTree) ResolvedType() *types.T {
+	return types.LTree
+}
+
+// Compare implements the Datum interface.
+func (d *DLTree) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1, nil
+	}
+	v, ok := cmpCtx.UnwrapDatum(ctx, other).(*DLTree)
+	if !ok {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	return d.LTree.Compare(v.LTree), nil
+}
+
+// Prev implements the Datum interface.
+func (d *DLTree) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	prevLTree, ok := d.LTree.Prev()
+	return NewDLTree(prevLTree), ok
+}
+
+// Next implements the Datum interface.
+func (d *DLTree) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (*DLTree) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DLTree) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
+	return d.LTree.Len() == 0
+}
+
+// Min implements the Datum interface.
+func (d *DLTree) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return NewDLTree(ltree.Empty), false
+}
+
+// Max implements the Datum interface.
+func (d *DLTree) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DLTree) AmbiguousFormat() bool { return false }
+
+// Format implements the NodeFormatter interface.
+func (d *DLTree) Format(ctx *FmtCtx) {
+	buf, f := &ctx.Buffer, ctx.flags
+
+	if f.HasFlags(fmtRawStrings) || f.HasFlags(fmtPgwireFormat) {
+		d.LTree.FormatToBuffer(buf)
+	} else {
+		pathStr := d.LTree.String()
+		lexbase.EncodeSQLStringWithFlags(buf, pathStr, f.EncodeFlags())
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DLTree) Size() uintptr {
+	return uintptr(d.LTree.ByteSize())
+}
+
+// AsDLTree attempts to retrieve a *DLTree from an Expr, returning a
+// *DLTree and a flag signifying whether the assertion was successful. The
+// function should be used instead of direct type assertions wherever a
+// *DLTree wrapped by a *DOidWrapper is possible.
+func AsDLTree(e Expr) (*DLTree, bool) {
+	switch t := e.(type) {
+	case *DLTree:
+		return t, true
+	case *DOidWrapper:
+		return AsDLTree(t.Wrapped)
+	}
+	return nil, false
 }
 
 // DTuple is the tuple Datum.
@@ -6250,6 +6353,10 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.INetFamily:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	types.OidFamily:            {unsafe.Sizeof(DOid{}.Oid), fixedSize},
 	types.EnumFamily:           {unsafe.Sizeof(DEnum{}), variableSize},
+	types.LTreeFamily:          {unsafe.Sizeof(DLTree{}), variableSize},
+	// TODO(paulniziolek): This is suspicious.
+	types.LQueryFamily:    {unsafe.Sizeof(DLTree{}), variableSize},
+	types.LTXTQueryFamily: {unsafe.Sizeof(DLTree{}), variableSize},
 
 	types.VoidFamily: {sz: unsafe.Sizeof(DVoid{}), variable: fixedSize},
 	// TODO(jordan,justin): This seems suspicious.

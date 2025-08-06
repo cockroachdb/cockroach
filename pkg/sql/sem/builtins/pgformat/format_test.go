@@ -142,8 +142,8 @@ func TestFormat(t *testing.T) {
 					case types.Float4:
 						// Arrays of float4s are tricky, see issue for details.
 						skip.WithIssue(t, 84326)
-					case types.CIText:
-						// Explicit casts should be used for CIText array literals.
+					case types.CIText, types.LTree:
+						// Explicit casts should be used for these types and their respective array literals.
 						skip.IgnoreLint(t)
 					}
 				}
