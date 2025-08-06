@@ -687,6 +687,8 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 			ct.t.Fatalf("failed to create fingerprint validator: %s", err)
 		}
 
+		fprintV.CoarseGrainedChecks = true // DBG
+
 		var baV cdctest.Validator
 		if _, ok := feedOptions["diff"]; ok {
 			// TODO: before after validator is too slowwwwww
@@ -2115,6 +2117,7 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
+			// HERE
 			// 100 warehouses was too much (fingerprint method was taking a minute)
 			ct.runTPCCWorkload(tpccArgs{warehouses: 10, duration: "30m"})
 

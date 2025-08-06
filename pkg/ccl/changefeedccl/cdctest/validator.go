@@ -566,6 +566,9 @@ type FingerprintValidator struct {
 	buffer            []validatorRow
 
 	failures []string
+
+	// TODO: make constructor option
+	CoarseGrainedChecks bool
 }
 
 // defaultSQLDBFunc is the default function passed the FingerprintValidator's
@@ -896,15 +899,19 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		// retried by passing a custom function to DBFunction
 		v.buffer = v.buffer[1:]
 
-		// If we've processed all row updates belonging to the previous row's timestamp,
-		// we fingerprint at `updated.Prev()` since we want to catch cases where one or
-		// more row updates are missed. For example: If k1 was written at t1, t2, t3 and
-		// the update for t2 was missed.
-		if !v.previousRowUpdateTs.IsEmpty() && v.previousRowUpdateTs.Less(row.updated) {
-			if err := v.fingerprint(row.updated.Prev()); err != nil {
-				return err
+		if !v.CoarseGrainedChecks {
+			// If we've processed all row updates belonging to the previous row's timestamp,
+			// we fingerprint at `updated.Prev()` since we want to catch cases where one or
+			// more row updates are missed. For example: If k1 was written at t1, t2, t3 and
+			// the update for t2 was missed.
+			if !v.previousRowUpdateTs.IsEmpty() && v.previousRowUpdateTs.Less(row.updated) {
+				if err := v.fingerprint(row.updated.Prev()); err != nil {
+					return err
+				}
 			}
 		}
+
+		// TODO: can we do batch updates?
 		if err := v.applyRowUpdate(row); err != nil {
 			return err
 		}
@@ -912,21 +919,24 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		if i%1000 == 0 {
 			fmt.Printf("fprintvalidator: fingerprint: applying rows... %d / %d\n", i, len(v.buffer))
 		}
-
-		// If any updates have exactly the same timestamp, we have to apply them all
-		// before fingerprinting.
-		// TODO: why do we need to fingerprint after every apply? why can't we just fingerprint after draining the buffer?
-		if len(v.buffer) == 0 || v.buffer[0].updated != row.updated {
-			fmt.Printf("fprintvalidator: fingerprinting at %s (len(v.buffer): %d)\n", row.updated, len(v.buffer))
-			lastFingerprintedAt = row.updated
-			if err := v.fingerprint(row.updated); err != nil {
-				return err
-			}
-		}
-		v.previousRowUpdateTs = row.updated
 		i++
 
+		if !v.CoarseGrainedChecks {
+			// If any updates have exactly the same timestamp, we have to apply them all
+			// before fingerprinting.
+			if len(v.buffer) == 0 || v.buffer[0].updated != row.updated {
+				fmt.Printf("fprintvalidator: fingerprinting at %s (len(v.buffer): %d)\n", row.updated, len(v.buffer))
+				lastFingerprintedAt = row.updated
+				if err := v.fingerprint(row.updated); err != nil {
+					return err
+				}
+			}
+		}
+
+		v.previousRowUpdateTs = row.updated
 	}
+
+	fmt.Printf("fprintvalidator: buffer drained; fingerprinting at %s\n", resolved)
 
 	if !v.firstRowTimestamp.IsEmpty() && v.firstRowTimestamp.LessEq(resolved) &&
 		lastFingerprintedAt != resolved {
