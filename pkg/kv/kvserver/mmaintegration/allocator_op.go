@@ -22,7 +22,7 @@ type trackedAllocatorChange struct {
 	changeIDs []mmaprototype.ChangeID
 	// Usage is range load usage.
 	usage allocator.RangeUsageInfo
-	// Only one of the following two fields will be set.
+	// Exactly one of the following two fields will be set.
 	leaseTransferOp  *leaseTransferOp
 	changeReplicasOp *changeReplicasOp
 }

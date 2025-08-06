@@ -23,8 +23,8 @@ func convertLeaseTransferToMMA(
 	transferFrom, transferTo roachpb.ReplicationTarget,
 ) []mmaprototype.ReplicaChange {
 	// TODO(wenyihu6): we are passing existing replicas to
-	// mma.RegisterExternalChanges just to get the add and remove replica state.
-	// See if things could be cleaned up.
+	// mmaprototype.MakeLeaseTransferChanges just to get the add and remove
+	// replica state. See if things could be cleaned up.
 	existingReplicas := make([]mmaprototype.StoreIDAndReplicaState, len(desc.InternalReplicas))
 	for i, replica := range desc.Replicas().Descriptors() {
 		existingReplicas[i] = mmaprototype.StoreIDAndReplicaState{

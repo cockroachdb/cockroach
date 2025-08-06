@@ -32,10 +32,10 @@ type SyncChangeID uint64
 // has been disabled postapply or other components call into allocator sync when
 // mma is disabled.)
 
-// AllocatorSync is a component that coordinates changes from external
-// components (e.g. replicate/lease queue) with mma. When mma is disabled,
-// its sole purpose is to track and apply changes to the store pool upon
-// success.
+// AllocatorSync is a component that coordinates changes from all components
+// (including mma/replicate/lease queue) with mma and store pool. When mma is
+// disabled, its sole purpose is to track and apply changes to the store pool
+// upon success.
 type AllocatorSync struct {
 	sp           *storepool.StorePool
 	st           *cluster.Settings
@@ -85,7 +85,7 @@ func mmaRangeLoad(rangeUsageInfo allocator.RangeUsageInfo) mmaprototype.RangeLoa
 func (as *AllocatorSync) addTrackedChange(change trackedAllocatorChange) SyncChangeID {
 	as.mu.Lock()
 	defer as.mu.Unlock()
-	as.mu.changeSeqGen += 1
+	as.mu.changeSeqGen++
 	syncChangeID := as.mu.changeSeqGen
 	as.mu.trackedChanges[syncChangeID] = change
 	return syncChangeID

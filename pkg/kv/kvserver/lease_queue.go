@@ -150,11 +150,9 @@ func (lq *leaseQueue) process(
 		// changes to store pool and inform mma.
 		lq.as.PostApply(changeID, err == nil /*success*/)
 		if err != nil {
-			// TODO(wenyihu6): we need to call post apply with false when as is more meaningful
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, transferOp.Target)
 		}
 	}
-
 	return true, nil
 }
 
