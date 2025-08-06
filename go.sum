@@ -549,8 +549,8 @@ github.com/cockroachdb/apd/v3 v3.2.1 h1:U+8j7t0axsIgvQUqthuNm82HIrYXodOV2iWLWtEa
 github.com/cockroachdb/apd/v3 v3.2.1/go.mod h1:klXJcjp+FffLTHlhIG69tezTDvdP065naDsHzKhYSqc=
 github.com/cockroachdb/bubbletea v0.23.1-bracketed-paste2 h1:OmQDBlTg1DU5OaKjIuEBt4K+40i9RqtxAwK1P/0OVjI=
 github.com/cockroachdb/bubbletea v0.23.1-bracketed-paste2/go.mod h1:JAfGK/3/pPKHTnAS8JIE2u9f61BjWTQY57RbT25aMXU=
-github.com/cockroachdb/changefeedpb v0.0.0-20250807204158-c4f634c8d95c h1:92Sd4x3IQbEiOZQ9vUo+cwWS6m/saC53tofAknPBWBA=
-github.com/cockroachdb/changefeedpb v0.0.0-20250807204158-c4f634c8d95c/go.mod h1:Czh2+FFDUUKdsxZ7aYZSW0W/E0Dx2sQXf1UUkeMkzxw=
+github.com/cockroachdb/changefeedpb v0.0.0-20250807205816-647db5c731b8 h1:HyB05dr0r7f9ex6sPwcQSE1y0gIBtDbYWqUPwcXDl30=
+github.com/cockroachdb/changefeedpb v0.0.0-20250807205816-647db5c731b8/go.mod h1:Czh2+FFDUUKdsxZ7aYZSW0W/E0Dx2sQXf1UUkeMkzxw=
 github.com/cockroachdb/client_golang v0.0.0-20250124161916-2d4b7d300341 h1:VQDZhIT4rPz6OhMeiD/2kXfE2PLHJzX2QUd1wsGdjxM=
 github.com/cockroachdb/client_golang v0.0.0-20250124161916-2d4b7d300341/go.mod h1:Zsulrv/L9oM40tJ7T815tM89lFEugiJ9HzIqaAx4LKc=
 github.com/cockroachdb/cmux v0.0.0-20250514152509-914d3bf9ec58 h1:DQM99rWou5NZoKKKgSFUtO10FmeK8jbetLIdaH2LHE8=
