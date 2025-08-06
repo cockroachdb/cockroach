@@ -61,6 +61,7 @@ import (
 	roachprodaws "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
@@ -580,11 +581,11 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		feedOptions["updated"] = ""
 	}
 
-	// TODO: fprintval doesnt work without initial_scan cause theres already data present (?)
-	// TODO: maybe this isnt actually feasible for the poor fprintvalidator ...
-	// ---> maybe load the data in there first? as of the start time of the feed?
+	// fprintval needs the data to match. so either we have initial_scan = yes, and its super slow to process the initial scan,
+	// or we have initial_scan = no, and we have to copy the data in there first.
+	// let's try the second one for now.
 	if !args.noAutoValidate {
-		feedOptions["initial_scan"] = "'yes'"
+		feedOptions["initial_scan"] = "'no'"
 	}
 
 	ct.t.Status(fmt.Sprintf(
@@ -597,6 +598,17 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	if err != nil {
 		ct.t.Fatalf("failed to create changefeed: %s", err.Error())
 	}
+
+	var stmtTimeJSON string
+	stmt := "select crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', value)->'changefeed'->'statement_time' from system.job_info where job_id = '%d' and info_key = 'legacy_payload'"
+	if err := db.QueryRow(fmt.Sprintf(stmt, jobID)).Scan(&stmtTimeJSON); err != nil {
+		ct.t.Fatalf("failed to get changefeed statement time: %s", err.Error())
+	}
+	var stmtTime hlc.Timestamp
+	if err := json.Unmarshal([]byte(stmtTimeJSON), &stmtTime); err != nil {
+		ct.t.Fatalf("failed to unmarshal changefeed statement time: %s", err.Error())
+	}
+	ct.t.Status(fmt.Sprintf("changefeed statement time: %s", stmtTime))
 
 	cj := changefeedJob{
 		ctx:            ct.ctx,
@@ -620,6 +632,21 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 
 		if _, err := db.Exec(`CREATE TABLE fprint (LIKE ` + table + ` INCLUDING ALL)`); err != nil {
 			ct.t.Fatalf("failed to create fingerprint table: %s", err)
+		}
+
+		if feedOptions["initial_scan"] == "'no'" {
+			// copy over all the data from the table to the fingerprint table as of the statement time
+			// this has to be done in two steps for reasons
+			// e.g. CREATE TABLE tmp AS SELECT .. WHERE <find some specific rows you lost> AOST 'beforeLoss' then UPSERT INTO existingtbl SELECT * FROM tmp -- no AOST here
+			if _, err := db.Exec(fmt.Sprintf(`CREATE TABLE tmp AS SELECT * FROM %s AS OF SYSTEM TIME '%s'`, table, stmtTime.AsOfSystemTime())); err != nil {
+				ct.t.Fatalf("failed to copy data to fingerprint table: %s", err)
+			}
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO fprint SELECT * FROM tmp`)); err != nil {
+				ct.t.Fatalf("failed to copy data to fingerprint table: %s", err)
+			}
+			ct.t.Status(fmt.Sprintf("copied data to fingerprint table for %s as of %s", table, stmtTime))
+		} else {
+			// no action needed but it's also slow as shit and not really viable
 		}
 
 		format := "json"
