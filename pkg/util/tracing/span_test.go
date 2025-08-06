@@ -145,10 +145,14 @@ func parseLine(s string) (traceLine, error) {
 	if match == nil {
 		return traceLine{}, errors.Newf("line doesn't match: %s", s)
 	}
+	text := match[3]
+	// Strip goroutine IDs from the text for test consistency
+	gidRe := regexp.MustCompile(` gid:\d+`)
+	text = string(gidRe.ReplaceAll([]byte(text), nil))
 	return traceLine{
 		timeSinceTraceStart: match[1],
 		timeSincePrev:       match[2],
-		text:                match[3],
+		text:                text,
 	}, nil
 }
 
