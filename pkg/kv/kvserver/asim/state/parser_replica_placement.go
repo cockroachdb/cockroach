@@ -33,9 +33,12 @@ func (pr ReplicaPlacement) findReplicaPlacementForEveryStoreSet(numRanges int) {
 	}
 	totalRangesToAllocate := numRanges
 	for i := 0; i < len(pr); i++ {
+		fmt.Printf("pr[i].Weight: %d\n", pr[i].Weight)
+		fmt.Printf("totalWeight: %f\n", float64(totalWeight))
 		pr[i].Weight = int(float64(pr[i].Weight) * float64(numRanges) / float64(totalWeight))
 		totalRangesToAllocate -= pr[i].Weight
 	}
+	fmt.Printf("pr: %v\n", pr)
 	// Distribute the remaining ranges evenly across all ratios.
 	for i := 0; i < totalRangesToAllocate; i++ {
 		pr[i%len(pr)].Weight += 1
