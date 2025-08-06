@@ -1250,7 +1250,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	}
 	if err := runTask(ctx, stop.TaskOpts{
 		TaskName: "kv.DistSender: sending pre-commit query intents",
-		SpanOpt:  stop.ChildSpan,
+		SpanOpt:  stop.ChildSpanFromSpanTracer,
 	}, func(ctx context.Context) {
 		log.VEvent(ctx, 3, "sending split out pre-commit QueryIntent batch")
 		// Map response index to the original un-swapped batch index.

@@ -386,6 +386,13 @@ const (
 	// long-running task to its parent is also problematic because of the
 	// different lifetimes.
 	SterileRootSpan
+
+	// ChildSpanFromSpanTracer is here as duct tape in the backport to
+	// force `RunAsyncTaskEx` to use the tracer attached to the context
+	// Span, instead of the one from the stopper. This behavior is the
+	// default for `ChildSpan` in `master` today but should not be
+	// applied everywhere in the backport.
+	ChildSpanFromSpanTracer
 )
 
 // TaskOpts groups the task execution options for RunAsyncTaskEx.
@@ -466,6 +473,15 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 		ctx, sp = tracing.EnsureChildSpan(ctx, s.tracer, opt.TaskName)
 	case SterileRootSpan:
 		ctx, sp = s.tracer.StartSpanCtx(ctx, opt.TaskName, tracing.WithSterile())
+	case ChildSpanFromSpanTracer:
+		ctxSpan := tracing.SpanFromContext(ctx)
+		var tracer *tracing.Tracer
+		if ctxSpan == nil {
+			tracer = s.tracer
+		} else {
+			tracer = ctxSpan.Tracer()
+		}
+		ctx, sp = tracing.EnsureChildSpan(ctx, tracer, opt.TaskName)
 	default:
 		panic(fmt.Sprintf("unsupported SpanOption: %v", opt.SpanOpt))
 	}
