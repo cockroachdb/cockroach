@@ -259,6 +259,10 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	sb.SafeString("=== operation:")
 	sb.SafeString(redact.SafeString(sp.Operation))
 
+	if sp.GoroutineID != 0 {
+		sb.Printf(" gid:%d", sp.GoroutineID)
+	}
+
 	for _, tg := range sp.TagGroups {
 		var prefix redact.RedactableString
 		if tg.Name != AnonymousTagGroupName {
