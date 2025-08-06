@@ -184,7 +184,7 @@ func BenchmarkSQLCatchVectorizedRuntimeError(b *testing.B) {
 	// crdb_test-build behavior.
 	defer colexecerror.ProductionBehaviorForTests()()
 
-	for _, parallelism := range []int{1, 20, 50} {
+	for _, parallelism := range []int{1, 8, 32} {
 		numConns := runtime.GOMAXPROCS(0) * parallelism
 		b.Run(fmt.Sprintf("conns=%d", numConns), func(b *testing.B) {
 			for _, tc := range cases {
@@ -209,6 +209,7 @@ func BenchmarkSQLCatchVectorizedRuntimeError(b *testing.B) {
 						var conn *gosql.DB
 						select {
 						case conn = <-conns:
+							defer conn.Close()
 						default:
 							b.Fatal("not enough warm connections")
 						}
