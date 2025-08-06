@@ -372,7 +372,7 @@ func SupportedPreviousReleases() []Key {
 func ListBetween(from, to roachpb.Version) []roachpb.Version {
 	var cvs []roachpb.Version
 	for k := Key(0); k < numKeys; k++ {
-		if v := k.Version(); from.Less(v) && v.LessEq(to) {
+		if v := k.Version(); from.Cmp(v) < 0 && v.Cmp(to) <= 0 {
 			cvs = append(cvs, v)
 		}
 	}

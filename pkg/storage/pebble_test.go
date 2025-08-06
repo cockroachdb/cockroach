@@ -1601,6 +1601,56 @@ func TestMinimumSupportedFormatVersion(t *testing.T) {
 		"MinimumSupportedFormatVersion must match the format version for %s", clusterversion.MinSupported)
 }
 
+func TestPebbleFormatVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	latestKey := pebbleFormatVersionKeys[0]
+	latestVersion := latestKey.Version()
+	latestFmv := pebbleFormatVersionMap[latestKey]
+
+	require.Equal(t, pebbleFormatVersion(latestVersion), latestFmv)
+	require.Equal(t, minPebbleFormatVersionInCluster(latestVersion), latestFmv)
+
+	// We upgrade the pebble format as soon as we reach the fence version.
+	require.Equal(t, pebbleFormatVersion(latestVersion.FenceVersion()), latestFmv)
+	// But at the fence version, we don't have a guarantee that all nodes have
+	// upgraded.
+	require.Less(t, minPebbleFormatVersionInCluster(latestVersion.FenceVersion()), latestFmv)
+
+	require.Less(t, pebbleFormatVersion((latestKey - 1).Version()), latestFmv)
+	require.Less(t, minPebbleFormatVersionInCluster((latestKey - 1).Version()), latestFmv)
+
+	v := latestVersion
+	v.Minor++
+	require.Equal(t, pebbleFormatVersion(latestVersion), latestFmv)
+	require.Equal(t, minPebbleFormatVersionInCluster(latestVersion), latestFmv)
+
+	require.Equal(t, pebbleFormatVersion(clusterversion.MinSupported.Version()), MinimumSupportedFormatVersion)
+	require.Equal(t, minPebbleFormatVersionInCluster(clusterversion.MinSupported.Version()), MinimumSupportedFormatVersion)
+
+	// Gather all possible versions since MinSupported.
+	var versions []roachpb.Version
+	for k := clusterversion.MinSupported + 1; k <= clusterversion.Latest; k++ {
+		versions = append(versions, k.Version().FenceVersion(), k.Version())
+	}
+
+	prevFMV := MinimumSupportedFormatVersion
+	for i, v := range versions {
+		fmv := pebbleFormatVersion(v)
+		if fmv != prevFMV {
+			require.True(t, v.IsFence())
+			// minPebbleFormatVersionInCluster() should return the previous format.
+			require.Equal(t, prevFMV, minPebbleFormatVersionInCluster(v))
+			// For the next version, minPebbleFormatVersionInCluster() should return
+			// the new format.
+			require.Equal(t, fmv, minPebbleFormatVersionInCluster(versions[i+1]))
+		} else {
+			require.Equal(t, fmv, minPebbleFormatVersionInCluster(v))
+		}
+		prevFMV = fmv
+	}
+}
+
 // delayFS injects a delay on each read.
 type delayFS struct {
 	vfs.FS

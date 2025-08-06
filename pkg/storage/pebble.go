@@ -7,13 +7,15 @@ package storage
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -510,12 +512,6 @@ var MVCCMerger = &pebble.Merger{
 }
 
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
-
-// MinimumSupportedFormatVersion is the version that provides features that the
-// Cockroach code relies on unconditionally (like range keys). New stores are by
-// default created with this version. It should correspond to the minimum
-// supported binary version.
-const MinimumSupportedFormatVersion = pebble.FormatTableFormatV6
 
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
@@ -2334,18 +2330,16 @@ var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
 	clusterversion.V25_2: pebble.FormatTableFormatV6,
 }
 
+// MinimumSupportedFormatVersion is the version that provides features that the
+// Cockroach code relies on unconditionally (like range keys). New stores are by
+// default created with this version. It should correspond to the minimum
+// supported binary version.
+const MinimumSupportedFormatVersion = pebble.FormatTableFormatV6
+
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
-var pebbleFormatVersionKeys []clusterversion.Key = func() []clusterversion.Key {
-	versionKeys := make([]clusterversion.Key, 0, len(pebbleFormatVersionMap))
-	for k := range pebbleFormatVersionMap {
-		versionKeys = append(versionKeys, k)
-	}
-	// Sort the keys in reverse order.
-	sort.Slice(versionKeys, func(i, j int) bool {
-		return versionKeys[i] > versionKeys[j]
-	})
-	return versionKeys
-}()
+var pebbleFormatVersionKeys = slices.SortedFunc(maps.Keys(pebbleFormatVersionMap), func(a, b clusterversion.Key) int {
+	return cmp.Compare(b, a)
+})
 
 // pebbleFormatVersion finds the most recent pebble format version supported by
 // the given cluster version.
@@ -2353,7 +2347,61 @@ func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersi
 	// pebbleFormatVersionKeys are sorted in descending order; find the first one
 	// that is not newer than clusterVersion.
 	for _, k := range pebbleFormatVersionKeys {
-		if clusterVersion.AtLeast(k.Version().FenceVersion()) {
+		// We switch to using a new format as soon as we reach the fence version.
+		//
+		// This allows us to guarantee that all nodes in the cluster are using the
+		// new format when the cluster version is k.Version(); see
+		// minPebbleFormatVersionInCluster.
+		//
+		// Note that at this point, other nodes in the cluster might not be at the
+		// fence version yet. But this node's local Pebble format change does not
+		// affect other nodes, as long as minPebbleFormatVersionInCluster still
+		// returns the old format (which it does for the fence version).
+		if clusterVersion.Cmp(k.Version().FenceVersion()) >= 0 {
+			return pebbleFormatVersionMap[k]
+		}
+	}
+	// This should never happen in production. But we tolerate tests creating
+	// imaginary older versions; we must still use the earliest supported
+	// format.
+	return MinimumSupportedFormatVersion
+}
+
+// minPebbleFormatVersionInCluster returns the minimum pebble format version
+// supported by any node in the cluster.
+func minPebbleFormatVersionInCluster(clusterVersion roachpb.Version) pebble.FormatMajorVersion {
+	// Say clusterVersion is exactly the version for a key in
+	// pebbleFormatVersionMap. All nodes in the cluster are guaranteed to be at
+	// least at the corresponding fence version, which means they already upgraded
+	// the pebble format version (see pebbleFormatVersion()).
+	for _, k := range pebbleFormatVersionKeys {
+		// Nodes switch to using the new format as soon as we reach the fence
+		// version (k.Version().FenceVersion()). If we are at the non-fence version
+		// (k.Version()), we are guaranteed that all nodes in the cluster are at the
+		// fence version (at least), which means they have already upgraded their
+		// stores.
+		//
+		// -- More details about how this happens --
+		//
+		// Say that pebbleFormatVersionMap defines a new Pebble format version 31 at
+		// cluster version 24.3-6. Then pebbleFormatVersion() returns 31 for the
+		// first time at cluster version 24.3-5(fence);
+		// minPebbleFormatVersionInCluster() returns 31 for the first time at
+		// cluster version 24.3-6.
+		//
+		// The upgrade manager bumps the cluster version on all nodes for each
+		// version, including the fence version 24.3-5(fence), using
+		// upgrademanager.bumpClusterVersion(). The latter issues RPCs to all nodes
+		// to upgrade their version, which includes bumping the Pebble format to 31,
+		// via server.bumpClusterVersion() which invokes
+		// kvstorage.WriteClusterVersionToEngines(). The
+		// upgrademanager.bumpClusterVersion() code also detects any node joins that
+		// raced with the operation and retries until the cluster stabilizes. This
+		// guarantees that before the upgrade process to 25.3-6 starts, all nodes in
+		// the cluster are at version 25.3-5(fence); and thus all stores have been
+		// ratcheted to Pebble format 31 and are ready to accept sstables in the new
+		// format, which can happen as soon as any node is upgraded to 25.3-6.
+		if clusterVersion.Cmp(k.Version()) >= 0 {
 			return pebbleFormatVersionMap[k]
 		}
 	}
