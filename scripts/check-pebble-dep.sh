@@ -17,8 +17,8 @@ BRANCHES=$(git branch -r --format='%(refname)' \
 
 EXIT_CODE=0
 for BRANCH in $BRANCHES; do
-  if [ "$BRANCH" = "release-24.2" ]; then
-    # Skip the release-24.2 branch, which is frozen.
+  if [ "$BRANCH" = "release-24.2" ] || [ "$BRANCH" = "release-25.1" ]; then
+    # Skip the release-{24.2,25.1} branches, which are frozen.
     continue
   fi
   PEBBLE_BRANCH="crl-$BRANCH"
