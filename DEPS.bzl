@@ -1730,10 +1730,10 @@ def go_deps():
         ],
         build_file_proto_mode = "default",
         importpath = "github.com/cockroachdb/changefeedpb",
-        sha256 = "94533028aec2a4a56b8c5e6ea0e43513dcc160075765cbc6fbe720a0fcafc6a5",
-        strip_prefix = "github.com/cockroachdb/changefeedpb@v0.0.0-20250807204158-c4f634c8d95c",
+        sha256 = "64915c79d12f6979066a3ea8208c418daa02b89a4421e888fc1b832397fa4a55",
+        strip_prefix = "github.com/cockroachdb/changefeedpb@v0.0.0-20250807205816-647db5c731b8",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/changefeedpb/com_github_cockroachdb_changefeedpb-v0.0.0-20250807204158-c4f634c8d95c.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/changefeedpb/com_github_cockroachdb_changefeedpb-v0.0.0-20250807205816-647db5c731b8.zip",
         ],
     )
     go_repository(
