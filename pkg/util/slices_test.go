@@ -203,3 +203,53 @@ func TestReduce(t *testing.T) {
 		}, 0))
 	})
 }
+
+func TestApplyPermutation(t *testing.T) {
+	testcases := []struct {
+		name        string
+		input       []any
+		permutation []int
+		expected    []any
+	}{
+		{
+			name:        "empty input",
+			input:       []any{},
+			permutation: []int{},
+			expected:    []any{},
+		},
+		{
+			name:        "single element",
+			input:       []any{"a"},
+			permutation: []int{0},
+			expected:    []any{"a"},
+		},
+		{
+			name:        "reversal",
+			input:       []any{"a", "b", "c", "d"},
+			permutation: []int{3, 2, 1, 0},
+			expected:    []any{"d", "c", "b", "a"},
+		},
+		{
+			name:        "simple swaps, no cycles",
+			input:       []any{"a", "b", "c", "d"},
+			permutation: []int{1, 0, 3, 2},
+			expected:    []any{"b", "a", "d", "c"},
+		},
+		{
+			name:        "permutation with cycles",
+			input:       []any{"a", "b", "c", "d", "e"},
+			permutation: []int{4, 0, 1, 3, 2},
+			expected:    []any{"e", "a", "b", "d", "c"},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			ApplyPermutation(tc.permutation, func(i, j int) {
+				tc.input[i], tc.input[j] = tc.input[j], tc.input[i]
+			})
+			require.Equal(t, tc.expected, tc.input)
+		})
+	}
+
+}

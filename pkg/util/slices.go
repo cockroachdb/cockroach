@@ -136,3 +136,26 @@ func Reduce[T any, U any](collection []T, fn func(acc U, el T, idx int) U, init 
 	}
 	return acc
 }
+
+// ApplyPermutation applies a permutation of indices to a slice via its swap
+// function.
+func ApplyPermutation(indices []int, swap func(i, j int)) {
+	n := len(indices)
+	visited := make([]bool, n)
+
+	for i := range n {
+		if visited[i] || indices[i] == i {
+			continue
+		}
+
+		j := i
+		for !visited[j] {
+			visited[j] = true
+			k := indices[j]
+			if k != i {
+				swap(j, k)
+			}
+			j = k
+		}
+	}
+}
