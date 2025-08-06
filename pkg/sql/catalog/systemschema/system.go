@@ -669,7 +669,7 @@ CREATE TABLE system.statement_statistics (
 			total_estimated_execution_time,
 			p99_latency
 		)
-)
+) WITH (sql_stats_automatic_collection_fraction_stale_rows = 0.9)
 `
 
 	TransactionStatisticsTableSchema = `
@@ -718,7 +718,7 @@ CREATE TABLE system.transaction_statistics (
 			total_estimated_execution_time,
 			p99_latency
 		)
-);
+) WITH (sql_stats_automatic_collection_fraction_stale_rows = 0.9);
 `
 
 	StatementActivityTableSchema = `
