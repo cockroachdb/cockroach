@@ -19,6 +19,8 @@ package tests
 var psycopgBlockList = blocklist{}
 
 var psycopgIgnoreList = blocklist{
+	`tests.test_dns_srv.test_srv[host=_pg._tcp.bar.com-host=db1.example.com,db4.example.com,db3.example.com,db2.example.com port=5432,5432,5433,5432-None]`:               "flaky; see #151379",
+	`tests.test_dns_srv.test_srv_async[asyncio-host=_pg._tcp.bar.com-host=db1.example.com,db4.example.com,db3.example.com,db2.example.com port=5432,5432,5433,5432-None]`: "flaky; see #151379",
 	`tests.pool.test_pool.test_connect_check_timeout`:                                                "requires insecure mode",
 	`tests.pool.test_pool.test_reconnect`:                                                            "requires insecure mode",
 	`tests.pool.test_pool.test_reconnect_after_grow_failed`:                                          "requires insecure mode",
