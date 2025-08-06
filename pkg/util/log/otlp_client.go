@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	grpc_gzip "google.golang.org/grpc/encoding/gzip"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -199,8 +200,9 @@ var _ stats.Handler = (*otlpStatsHandler)(nil)
 
 // client used when sink is using gRPC for exporting logs
 type otlpGRPCClient struct {
-	conn *grpc.ClientConn
-	lsc  collpb.LogsServiceClient
+	conn     *grpc.ClientConn
+	lsc      collpb.LogsServiceClient
+	metadata metadata.MD
 }
 
 func (c *otlpGRPCClient) Close() error {
@@ -216,6 +218,9 @@ func (c *otlpGRPCClient) Close() error {
 func (c *otlpGRPCClient) Export(
 	ctx context.Context, in *collpb.ExportLogsServiceRequest,
 ) (*collpb.ExportLogsServiceResponse, error) {
+	if c.metadata.Len() > 0 {
+		ctx = metadata.NewOutgoingContext(ctx, c.metadata)
+	}
 	return c.lsc.Export(ctx, in)
 }
 
@@ -240,8 +245,9 @@ func (sink *otlpSink) setGRPCClient(config *logconfig.OTLPSinkConfig) error {
 	lsc := collpb.NewLogsServiceClient(conn)
 
 	sink.client = &otlpGRPCClient{
-		conn: conn,
-		lsc:  lsc,
+		conn:     conn,
+		lsc:      lsc,
+		metadata: metadata.New(config.Headers),
 	}
 
 	return nil
@@ -267,7 +273,7 @@ func (c *otlpHTTPClient) Export(
 		return nil, err
 	}
 
-	request := c.request.Clone(context.Background())
+	request := c.request.Clone(ctx)
 	switch c.compression {
 	case logconfig.NoneCompression:
 		request.Body = io.NopCloser(bytes.NewReader(body))
@@ -303,6 +309,9 @@ func (sink *otlpSink) setHTTPClient(config *logconfig.OTLPSinkConfig) error {
 		return err
 	}
 	request.Header.Set(httputil.ContentTypeHeader, httputil.ProtoContentType)
+	for k, v := range config.Headers {
+		request.Header.Add(k, v)
+	}
 
 	compression := *config.Compression
 	if compression == logconfig.GzipCompression {
