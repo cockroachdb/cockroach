@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,6 +25,28 @@ func (id SyncChangeID) IsValid() bool {
 
 type SyncChangeID uint64
 
+// storePool is an interface that defines the methods that the allocator sync
+// needs to call on the store pool. Using an interface to simplify testing.
+type storePool interface {
+	// UpdateLocalStoresAfterLeaseTransfer is called by the allocator sync to
+	// update the store pool after a lease transfer operation.
+	UpdateLocalStoresAfterLeaseTransfer(transferFrom, transferTo roachpb.StoreID, usage allocator.RangeUsageInfo)
+	// UpdateLocalStoreAfterRebalance is called by the allocator sync to update
+	// the store pool after a rebalance operation.
+	UpdateLocalStoreAfterRebalance(storeID roachpb.StoreID, rangeUsageInfo allocator.RangeUsageInfo, changeType roachpb.ReplicaChangeType)
+}
+
+// mmaAllocator is an interface that defines the methods that the allocator sync
+// needs to call on the mma. Using an interface to simplify testing.
+type mmaAllocator interface {
+	// RegisterExternalChanges is called by the allocator sync to register
+	// external changes with the mma.
+	RegisterExternalChanges(changes []mmaprototype.ReplicaChange) []mmaprototype.ChangeID
+	// AdjustPendingChangesDisposition is called by the allocator sync to adjust
+	// the disposition of pending changes.
+	AdjustPendingChangesDisposition(changeIDs []mmaprototype.ChangeID, success bool)
+}
+
 // TODO(wenyihu6): make sure allocator sync can tolerate cluster setting
 // changes not happening consistently or atomically across components. (For
 // example, replicate queue may call into allocator sync when mma is enabled but
@@ -37,9 +58,9 @@ type SyncChangeID uint64
 // disabled, its sole purpose is to track and apply changes to the store pool
 // upon success.
 type AllocatorSync struct {
-	sp           *storepool.StorePool
+	sp           storePool
 	st           *cluster.Settings
-	mmaAllocator mmaprototype.Allocator
+	mmaAllocator mmaAllocator
 	mu           struct {
 		syncutil.Mutex
 		// changeSeqGen is a monotonically increasing sequence number for
@@ -54,7 +75,7 @@ type AllocatorSync struct {
 }
 
 func NewAllocatorSync(
-	sp *storepool.StorePool, mmaAllocator mmaprototype.Allocator, st *cluster.Settings,
+	sp storePool, mmaAllocator mmaAllocator, st *cluster.Settings,
 ) *AllocatorSync {
 	as := &AllocatorSync{
 		sp:           sp,
