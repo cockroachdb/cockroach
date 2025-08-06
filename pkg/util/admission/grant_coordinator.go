@@ -602,10 +602,12 @@ func makeRegularGrantCoordinator(
 		if !opts.testingNoCallsToCPUMetricsProvider {
 			totalCPUTimeMillis, cpuCapacity := opts.CPUMetricsProvider.GetCPUInfo()
 			timeSource := timeutil.DefaultTimeSource{}
-			coord.mu.Lock()
-			ctta.adjust(timeSource.Now(), totalCPUTimeMillis, cpuCapacity)
-			ctta.allocateTokensTick(int64(time.Second / time.Millisecond))
-			coord.mu.Unlock()
+			func() {
+				coord.mu.Lock()
+				defer coord.mu.Unlock()
+				ctta.adjust(timeSource.Now(), totalCPUTimeMillis, cpuCapacity)
+				ctta.allocateTokensTick(int64(time.Second / time.Millisecond))
+			}()
 			coord.closeCh = make(chan struct{})
 			go func() {
 				adjustTime := timeSource.Now()
