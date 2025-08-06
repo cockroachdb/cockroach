@@ -384,19 +384,19 @@ func RangesInfoWithReplicaPlacement(
 	}
 
 	ret := initializeRangesInfoWithSpanConfigs(numRanges, config, minKey, maxKey, rangeSize)
-	rp.findReplicaPlacementForEveryStoreSet(numRanges)
+	result := rp.findReplicaPlacementForEveryStoreSet(numRanges)
 
 	rf := int(config.NumReplicas)
 
 	for rngIdx := 0; rngIdx < len(ret); rngIdx++ {
 		nextStoreSet := 0
-		for i := 0; i < len(rp); i++ {
-			if rp[i].Weight > 0 {
+		for i := 0; i < len(result); i++ {
+			if result[i].Ranges > 0 {
 				nextStoreSet = i
 				break
 			}
 		}
-		ratio := rp[nextStoreSet]
+		ratio := result[nextStoreSet]
 		if len(ratio.StoreIDs) != rf {
 			panic(fmt.Sprintf("expected %d replicas, got %d", rf, len(ratio.StoreIDs)))
 		}
@@ -410,7 +410,7 @@ func RangesInfoWithReplicaPlacement(
 			}
 		}
 		ret[rngIdx].Leaseholder = StoreID(ratio.LeaseholderID)
-		rp[nextStoreSet].Weight--
+		result[nextStoreSet].Ranges--
 	}
 	return ret
 }
