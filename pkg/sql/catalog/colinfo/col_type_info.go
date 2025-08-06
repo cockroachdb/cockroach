@@ -110,8 +110,12 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
 		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily,
-		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily:
+		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily,
+		types.LTreeFamily:
 	// These types are OK.
+
+	case types.LQueryFamily, types.LTXTQueryFamily:
+		return unimplemented.NewWithIssueDetailf(44657, t.String(), "cannot use %s type as table column", t.String())
 
 	case types.JsonpathFamily:
 		return unimplemented.NewWithIssueDetailf(144910, t.String(),

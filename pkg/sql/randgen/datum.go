@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	jsonpathparser "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -314,6 +315,26 @@ func RandDatumWithNullChance(
 		return d
 	case types.OidFamily:
 		return tree.NewDOidWithType(oid.Oid(rng.Uint32()), typ)
+	case types.LTreeFamily:
+		length := rng.Intn(10)
+		if length == 1 && rng.Intn(4) == 0 {
+			return tree.NewDLTree(ltree.Empty)
+		}
+		labels := make([]string, length)
+		for i := range labels {
+			// Labels cannot be empty.
+			labelLen := rng.Intn(9) + 1
+			p := make([]byte, labelLen)
+			for j := range p {
+				p[j] = charSet[rng.Intn(len(charSet))]
+			}
+			labels[i] = string(p)
+		}
+		l, err := tree.ParseDLTree(strings.Join(labels, ltree.PathSeparator))
+		if err != nil {
+			return nil
+		}
+		return l
 	case types.UnknownFamily:
 		return tree.DNull
 	case types.ArrayFamily:
@@ -885,6 +906,24 @@ func getRandInterestingDatums(typ types.Family) ([]tree.Datum, bool) {
 					1<<63 - 1,
 				} {
 					d, err := tree.NewDBitArrayFromInt(i, 64)
+					if err != nil {
+						panic(err)
+					}
+					res = append(res, d)
+				}
+				return res
+			}(),
+			types.LTreeFamily: func() []tree.Datum {
+				var res []tree.Datum
+				for _, s := range []string{
+					"",
+					"foo",
+					"foo.bar",
+					"foo.bar.baz",
+					"foo_bar.baz",
+					"foo-bar.baz",
+				} {
+					d, err := tree.ParseDLTree(s)
 					if err != nil {
 						panic(err)
 					}
