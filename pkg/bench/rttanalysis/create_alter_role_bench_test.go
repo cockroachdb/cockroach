@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 func BenchmarkCreateRole(b *testing.B) { reg.Run(b) }
@@ -63,7 +65,10 @@ func init() {
 
 // BenchmarkUseManyRoles is useful for testing the performance of the
 // role membership cache.
-func BenchmarkUseManyRoles(b *testing.B) { reg.Run(b) }
+func BenchmarkUseManyRoles(b *testing.B) {
+	skip.UnderShort(b, "skipping long benchmark")
+	reg.Run(b)
+}
 func init() {
 
 	createFunc := `
