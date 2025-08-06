@@ -915,7 +915,9 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 
 		// If any updates have exactly the same timestamp, we have to apply them all
 		// before fingerprinting.
+		// TODO: why do we need to fingerprint after every apply? why can't we just fingerprint after draining the buffer?
 		if len(v.buffer) == 0 || v.buffer[0].updated != row.updated {
+			fmt.Printf("fprintvalidator: fingerprinting at %s (len(v.buffer): %d)\n", row.updated, len(v.buffer))
 			lastFingerprintedAt = row.updated
 			if err := v.fingerprint(row.updated); err != nil {
 				return err

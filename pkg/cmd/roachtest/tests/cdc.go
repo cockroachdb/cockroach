@@ -2115,8 +2115,8 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			// TODO: more warehouses once fprintval doesnt require initial_scan=on
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
+			// 100 warehouses was too much (fingerprint method was taking a minute)
+			ct.runTPCCWorkload(tpccArgs{warehouses: 10, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
@@ -2127,8 +2127,7 @@ func registerCDC(r registry.Registry) {
 				opts: map[string]string{"initial_scan": "'no'"},
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				initialScanLatency: 3 * time.Minute,
-				steadyLatency:      10 * time.Minute,
+				steadyLatency: 10 * time.Minute,
 			})
 			ct.waitForWorkload()
 		},
