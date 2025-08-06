@@ -24,13 +24,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const defaultDeleteRangeChunkSize = 600
+const defaultDeleteRangeChunkSize = 3
 
 var deleteRangeChunkSize = metamorphic.ConstantWithTestRange(
 	"row-delete-range-chunk-size",
 	defaultDeleteRangeChunkSize,
-	1,
-	defaultDeleteRangeChunkSize,
+	3,
+	3,
 )
 
 // DeleteRangeChunkSize returns the maximum number of keys deleted per chunk via
