@@ -1051,6 +1051,9 @@ func (q *Queue) queryTxnStatus(
 ) (*roachpb.Transaction, []uuid.UUID, *kvpb.Error) {
 	b := &kv.Batch{}
 	b.Header.Timestamp = q.cfg.Clock.Now()
+	b.AdmissionHeader = kvpb.AdmissionHeader{
+		Source: kvpb.AdmissionHeader_FROM_SQL,
+	}
 	b.AddRawRequest(&kvpb.QueryTxnRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key: txnMeta.Key,
