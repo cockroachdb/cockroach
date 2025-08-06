@@ -762,3 +762,65 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 // - Test race between grant and cancellation
 // - Add microbenchmark with high concurrency and procs for full admission
 //   system
+
+func TestP99(t *testing.T) {
+	newEstimator := func() *meanCPUTokenEstimator {
+		var e meanCPUTokenEstimator
+		e.init(0)
+		return &e
+	}
+	t.Run("Init", func(t *testing.T) {
+		e := newEstimator()
+		want := time.Millisecond.Nanoseconds() // 1 ms fallback
+		if got := e.meanCPUTokens(); got != want {
+			t.Fatalf("cold-start meanCPUTokens = %d, want %d", got, want)
+		}
+	})
+	t.Run("UniformWorkload", func(t *testing.T) {
+		e := newEstimator()
+		// 100 queries, each 50 µs (50 000 ns)
+		for i := 0; i < 100; i++ {
+			e.workDone(50_000)
+		}
+		e.updateEstimate()
+		if got, want := e.meanCPUTokens(), int64(32_000); got != want {
+			t.Fatalf("meanCPUTokens = %d ns, want %d ns", got, want)
+		}
+	})
+	t.Run("TailHeavyWorkload1", func(t *testing.T) {
+		e := newEstimator()
+		// 99 fast @100 µs, 1 slow @200 ms
+		for i := 0; i < 99; i++ {
+			e.workDone(100_000) // 100 µs
+		}
+		for i := 0; i < 1; i++ {
+			e.workDone(200_000_000) // 200 ms
+		}
+		e.updateEstimate()
+		if got, want := e.meanCPUTokens(), int64(64_000); got != want {
+			t.Fatalf("meanCPUTokens = %d ns, want %d ns", got, want)
+		}
+	})
+	t.Run("TailHeavyWorkload2", func(t *testing.T) {
+		e := newEstimator()
+		// 98 fast @100 µs, 2 slow @200 ms
+		for i := 0; i < 98; i++ {
+			e.workDone(100_000) // 100 µs
+		}
+		for i := 0; i < 2; i++ {
+			e.workDone(200_000_000) // 200 ms
+		}
+		e.updateEstimate()
+		if got, want := e.meanCPUTokens(), int64(131_072_000); got != want {
+			t.Fatalf("meanCPUTokens = %d ns, want %d ns", got, want)
+		}
+	})
+	t.Run("OverflowClamps", func(t *testing.T) {
+		e := newEstimator()
+		e.workDone(1_000_000_000) // 1 s
+		e.updateEstimate()
+		if got, want := e.meanCPUTokens(), int64(262_144_000); got != want {
+			t.Fatalf("meanCPUTokens = %d ns, want %d ns", got, want)
+		}
+	})
+}

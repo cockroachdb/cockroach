@@ -2625,33 +2625,60 @@ func (q *StoreWorkQueue) sequenceReplicatedWork(createTime int64, info Replicate
 	return seq.sequence(createTime)
 }
 
-type meanCPUTokenEstimator struct {
-	// Reset to 0 periodically,
-	intWorkDoneCount     int64
-	intWorkDoneCPUTokens int64
+const (
+	numBuckets = 19 // 2^18 = 262144 us -> ~262 ms
+)
 
-	// Smoothed estimation. Done in SetTenantCPUTokensBurstLimit.
-	meanWorkCPUTokens int64
+type meanCPUTokenEstimator struct {
+	buckets    [numBuckets]uint64
+	totalCount uint64
+	P99        int64 // in micros
 }
 
-func (e *meanCPUTokenEstimator) init(mean int64) {
-	*e = meanCPUTokenEstimator{meanWorkCPUTokens: mean}
+func (e *meanCPUTokenEstimator) init(_ int64) {
+	*e = meanCPUTokenEstimator{}
 }
 
 // Caller periodically, at the same time as SetTenantCPUTokensBurstLimit.
 func (e *meanCPUTokenEstimator) updateEstimate() {
-	const alpha = 0.5
-	if e.intWorkDoneCount > 0 {
-		intMean := e.intWorkDoneCPUTokens / e.intWorkDoneCount
-		e.meanWorkCPUTokens = int64(alpha*float64(intMean) + (1-alpha)*float64(e.meanWorkCPUTokens))
+	if e.totalCount == 0 {
+		return
 	}
+	p99 := func() int64 {
+		target := 0.99 * float64(e.totalCount)
+		running := 0.0
+		for i, cnt := range e.buckets {
+			running += float64(cnt)
+			if running >= target {
+				return int64(1) << i
+			}
+		}
+		return int64(1) << (numBuckets - 1)
+	}()
+	e.P99 = (time.Duration(p99) * time.Microsecond).Nanoseconds()
 }
 
 func (e *meanCPUTokenEstimator) meanCPUTokens() int64 {
-	return max(1, e.meanWorkCPUTokens)
+	if e.P99 == 0 {
+		return time.Millisecond.Nanoseconds()
+	}
+	return e.P99
 }
 
 func (e *meanCPUTokenEstimator) workDone(cpuTokens int64) {
-	e.intWorkDoneCount++
-	e.intWorkDoneCPUTokens += cpuTokens
+	micros := time.Duration(cpuTokens).Microseconds()
+	idx := bucketIdx(micros)
+	e.buckets[idx]++
+	e.totalCount++
+}
+
+func bucketIdx(tokens int64) int {
+	if tokens <= 0 {
+		return 0
+	}
+	idx := int(math.Log2(float64(tokens)))
+	if idx >= numBuckets {
+		idx = numBuckets - 1
+	}
+	return idx
 }
