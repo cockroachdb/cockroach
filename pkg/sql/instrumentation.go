@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -43,10 +44,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
+
+// sanitizeFilename converts a SQL string into a valid filename by replacing
+// whitespace with hyphens and converting to lowercase.
+func sanitizeFilename(sql string) string {
+	// Replace whitespace and newlines with hyphens
+	filename := strings.ReplaceAll(sql, " ", "-")
+	filename = strings.ReplaceAll(filename, "\t", "-")
+	filename = strings.ReplaceAll(filename, "\n", "-")
+	filename = strings.ReplaceAll(filename, "\r", "-")
+	// Convert to lowercase
+	return strings.ToLower(filename)
+}
 
 var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
@@ -55,6 +69,15 @@ var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
 	0.01,
 	settings.Fraction,
 )
+
+type txnInstrumentationHelper struct {
+	// collectTransactionBundles is set to true when any statement in the current
+	// explicit transaction has triggered bundle collection. All subsequent
+	// statements in the same transaction will also have bundles collected.
+	collectTransactionBundles bool
+
+	zip memzipper.Zipper
+}
 
 // instrumentationHelper encapsulates the logic around extracting information
 // about the execution of a statement, like bundles and traces. Typical usage:
@@ -419,6 +442,7 @@ func (ih *instrumentationHelper) Setup(
 	txnPriority roachpb.UserPriority,
 	collectTxnExecStats bool,
 	retryCount int32,
+	txnHelper *txnInstrumentationHelper,
 ) (newCtx context.Context) {
 	ih.fingerprint = stmt.StmtNoConstants
 	ih.implicitTxn = implicitTxn
@@ -447,6 +471,17 @@ func (ih *instrumentationHelper) Setup(
 	default:
 		ih.collectBundle, ih.diagRequestID, ih.diagRequest =
 			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.StmtNoConstants, "" /* planGist */)
+
+		// If no regular diagnostic request matched, check if we should collect
+		// bundles for all statements in this transaction because a previous
+		// statement in the transaction triggered collection.
+		if !ih.collectBundle && txnHelper.collectTransactionBundles {
+			ih.collectBundle = true
+			// For transaction-level collection, we use a zero request ID to indicate
+			// this was not triggered by a specific diagnostic request.
+			ih.diagRequestID = 0
+			ih.diagRequest = stmtdiagnostics.Request{}
+		}
 		// IsRedacted will be false when ih.collectBundle is false.
 		ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
 	}
@@ -612,6 +647,7 @@ func (ih *instrumentationHelper) Finish(
 	res RestrictedCommandResult,
 	retPayload fsm.EventPayload,
 	retErr error,
+	txnHelper *txnInstrumentationHelper,
 ) error {
 	ctx := ih.origCtx
 	if _, ok := ih.Tracing(); !ok {
@@ -719,6 +755,13 @@ func (ih *instrumentationHelper) Finish(
 				bundleCtx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
 			)
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
+
+			filename := sanitizeFilename(stmtRawSQL) + ".zip"
+			txnHelper.zip.AddFile(filename, string(bundle.zip))
+
+			// Enable transaction-level bundle collection for subsequent statements
+			// in this transaction.
+			txnHelper.collectTransactionBundles = true
 		}
 	}
 

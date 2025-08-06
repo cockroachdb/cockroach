@@ -572,6 +572,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		ex.state.mu.priority,
 		ex.extraTxnState.shouldCollectTxnExecutionStats,
 		ex.state.mu.autoRetryCounter,
+		ex.state.txnInstrumentationHelper,
 	)
 
 	// Note that here we always unconditionally defer a function that takes care
@@ -591,6 +592,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				res,
 				retPayload,
 				retErr,
+				ex.state.txnInstrumentationHelper,
 			)
 		}
 	}()
@@ -1552,6 +1554,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			ex.state.mu.priority,
 			ex.extraTxnState.shouldCollectTxnExecutionStats,
 			ex.state.mu.autoRetryCounter,
+			ex.state.txnInstrumentationHelper,
 		)
 	} else {
 		ctx = portal.pauseInfo.execStmtInOpenState.ihWrapper.ctx
@@ -1603,6 +1606,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 				curRes,
 				retPayload,
 				retErr,
+				ex.state.txnInstrumentationHelper,
 			)
 		}
 	})

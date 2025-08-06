@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"math/rand"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -145,6 +146,8 @@ type txnState struct {
 
 	// execType records the executor type for the transaction.
 	execType executorType
+
+	txnInstrumentationHelper *txnInstrumentationHelper
 }
 
 // txnType represents the type of a SQL transaction.
@@ -246,6 +249,9 @@ func (ts *txnState) resetForNewSQLTxn(
 		ts.recordingStart = timeutil.Now()
 	}
 
+	ts.txnInstrumentationHelper = &txnInstrumentationHelper{}
+	ts.txnInstrumentationHelper.zip.Init()
+
 	ts.mon.StartNoReserved(ts.Ctx, tranCtx.connMon)
 	txnID = func() (txnID uuid.UUID) {
 		ts.mu.Lock()
@@ -314,6 +320,31 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 				elapsed,                             /* elapsed */
 				ts.outputJaegerJSON,                 /* outputJaegerJSON */
 			)
+		}
+	}
+
+	if ts.txnInstrumentationHelper.collectTransactionBundles {
+		r := sp.GetRecording(tracingpb.RecordingVerbose)
+		js, err := r.ToJaegerJSON(txnID.String(), "transaction", "unknown node", true)
+		if err != nil {
+			panic(err)
+		}
+		ts.txnInstrumentationHelper.zip.AddFile("jaeger_trace.json", js)
+		buf, err := ts.txnInstrumentationHelper.zip.Finalize()
+		if err != nil {
+			panic(err)
+		}
+		f, err := os.CreateTemp("/tmp", "transaction-bundle-*.zip")
+		if err != nil {
+			panic(err)
+		}
+		_, err = f.Write(buf.Bytes())
+		if err != nil {
+			panic(err)
+		}
+		err = f.Close()
+		if err != nil {
+			panic(err)
 		}
 	}
 

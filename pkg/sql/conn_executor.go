@@ -1164,6 +1164,7 @@ func (s *Server) newConnExecutor(
 			connCtx:                      ctx,
 			testingForceRealTracingSpans: s.cfg.TestingKnobs.ForceRealTracingSpans,
 			execType:                     executorType,
+			txnInstrumentationHelper:     &txnInstrumentationHelper{},
 		},
 		transitionCtx: transitionCtx{
 			db:           s.cfg.DB,
@@ -1259,6 +1260,9 @@ func (s *Server) newConnExecutor(
 		underOuterTxn,
 		s.cfg.SQLStatsTestingKnobs,
 	)
+
+	ex.state.txnInstrumentationHelper.zip.Init()
+
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
 		ex.applicationStats = ex.server.localSqlStats.GetApplicationStats(newName)
