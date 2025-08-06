@@ -1040,11 +1040,13 @@ func (rq *replicateQueue) TransferLease(
 		source,
 		target,
 	)
-	if err := rlm.AdminTransferLease(ctx, target.StoreID, false /* bypassSafetyChecks */); err != nil {
+
+	err := rlm.AdminTransferLease(ctx, target.StoreID, false /* bypassSafetyChecks */)
+	rq.as.PostApply(changeID, err == nil /*success*/)
+
+	if err != nil {
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
 	}
-
-	rq.as.PostApply(changeID, true /*success*/)
 	return nil
 }
 
