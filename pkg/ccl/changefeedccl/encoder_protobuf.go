@@ -413,7 +413,8 @@ func datumToProtoValue(
 	case *tree.DVoid:
 		return nil, nil
 	case *tree.DOid, *tree.DIPAddr, *tree.DBitArray, *tree.DBox2D,
-		*tree.DTSVector, *tree.DTSQuery, *tree.DPGLSN, *tree.DPGVector:
+		*tree.DTSVector, *tree.DTSQuery, *tree.DPGLSN, *tree.DPGVector,
+		*tree.DLTree:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: tree.AsStringWithFlags(v, tree.FmtBareStrings, tree.FmtDataConversionConfig(dcc), tree.FmtLocation(loc))}}, nil
 	case *tree.DDate:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_DateValue{DateValue: tree.AsStringWithFlags(v, tree.FmtBareStrings, tree.FmtDataConversionConfig(dcc), tree.FmtLocation(loc))}}, nil
