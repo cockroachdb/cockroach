@@ -18,7 +18,6 @@ go_library(
         "partial_index.go",
         "putter.go",
         "row_converter.go",
-        "truncate.go",
         "updater.go",
         "vector_index.go",
         "writer.go",

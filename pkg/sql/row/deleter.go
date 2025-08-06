@@ -20,8 +20,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
+
+const defaultDeleteRangeChunkSize = 600
+
+var deleteRangeChunkSize = metamorphic.ConstantWithTestRange(
+	"row-delete-range-chunk-size",
+	defaultDeleteRangeChunkSize,
+	1,
+	defaultDeleteRangeChunkSize,
+)
+
+// DeleteRangeChunkSize returns the maximum number of keys deleted per chunk via
+// deleteRange fast-path operator.
+func DeleteRangeChunkSize(forceProductionValues bool) int {
+	if forceProductionValues {
+		return defaultDeleteRangeChunkSize
+	}
+	return deleteRangeChunkSize
+}
 
 // Deleter abstracts the key/value operations for deleting table rows.
 type Deleter struct {
