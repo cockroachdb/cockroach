@@ -89,6 +89,12 @@ func TestUpsertFastPath(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
 		sqlDB.Exec(t, `CREATE TABLE d.kv (k INT PRIMARY KEY, v INT)`)
+		if bufferedWritesEnabled {
+			// The buffer size can be changed metamoprhically, and if it happens
+			// to be too small (200B or less), then the txn will flush the
+			// buffer, resulting in different KV requests.
+			sqlDB.Exec(t, `SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '250B';`)
+		}
 
 		// This should hit the fast path.
 		atomic.StoreUint64(&gets, 0)
