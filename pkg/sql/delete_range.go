@@ -120,7 +120,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		// hits the key limit).
 		for len(spans) != 0 {
 			b := params.p.txn.NewBatch()
-			b.Header.MaxSpanRequestKeys = row.TableTruncateChunkSize
+			b.Header.MaxSpanRequestKeys = int64(row.DeleteRangeChunkSize(params.extendedEvalCtx.TestingKnobs.ForceProductionValues))
 			b.Header.LockTimeout = params.SessionData().LockTimeout
 			b.Header.DeadlockTimeout = params.SessionData().DeadlockTimeout
 			d.deleteSpans(params, b, spans)
