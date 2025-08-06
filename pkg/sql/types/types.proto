@@ -413,6 +413,12 @@ enum Family {
     //  Oid: T_jsonpath
     JsonpathFamily = 34;
 
+    // LTreeFamily is a type family for the ltree type, which is the type
+    // representing ltree expressions.
+    //  Canonical: types.LTree
+    //  Oid: T_ltree
+    LTreeFamily = 35;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an

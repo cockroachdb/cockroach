@@ -1060,6 +1060,7 @@ func TestWithoutTypeModifiers(t *testing.T) {
 		{Uuid, Uuid},
 		{RefCursor, RefCursor},
 		{CIText, CIText},
+		{LTree, LTree},
 	}
 
 	for _, tc := range testCases {

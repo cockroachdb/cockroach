@@ -567,6 +567,15 @@ var (
 		},
 	}
 
+	// LTree is the type for a variable representing a label path in a label tree.
+	LTree = &T{
+		InternalType: InternalType{
+			Family: LTreeFamily,
+			Oid:    oidext.T_ltree,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// Scalar contains all types that meet this criteria:
 	//
 	//   1. Scalar type (no ArrayFamily or TupleFamily types).
@@ -596,6 +605,7 @@ var (
 		TimeTZ,
 		Jsonb,
 		VarBit,
+		LTree,
 		// TODO(#22513): consider including jsonpath here.
 	}
 
@@ -1597,6 +1607,7 @@ var familyNames = map[Family]redact.SafeString{
 	VoidFamily:           "void",
 	EncodedKeyFamily:     "encodedkey",
 	JsonpathFamily:       "jsonpath",
+	LTreeFamily:          "ltree",
 }
 
 // Name returns a user-friendly word indicating the family type.
@@ -1702,6 +1713,9 @@ func (t *T) Name() string {
 			return "unknown_enum"
 		}
 		return t.TypeMeta.Name.Basename()
+
+	case LTreeFamily:
+		return "ltree"
 
 	default:
 		return string(fam.Name())
@@ -1960,6 +1974,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		return "void"
 	case EnumFamily:
 		return t.TypeMeta.Name.Basename()
+	case LTreeFamily:
+		return t.Name()
 	default:
 		panic(errors.AssertionFailedf("unexpected Family: %v", errors.Safe(t.Family())))
 	}

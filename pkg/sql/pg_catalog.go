@@ -5141,6 +5141,7 @@ var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.UnknownFamily:        typCategoryUnknown,
 	types.VoidFamily:           typCategoryPseudo,
 	types.TriggerFamily:        typCategoryPseudo,
+	types.LTreeFamily:          typCategoryUserDefined,
 }
 
 func typCategory(typ *types.T) tree.Datum {

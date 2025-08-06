@@ -110,7 +110,8 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
 		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily,
-		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily:
+		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily,
+		types.LTreeFamily:
 	// These types are OK.
 
 	case types.JsonpathFamily:
@@ -147,14 +148,18 @@ func ColumnTypeIsIndexable(t *types.T) bool {
 	}
 
 	switch t.Family() {
-	case types.TupleFamily, types.RefCursorFamily, types.JsonpathFamily:
+	case types.TupleFamily, types.RefCursorFamily, types.JsonpathFamily, types.LTreeFamily:
+		// TODO(paulniziolek): LTreeFamily should be supported in keyside encoding.
+		// Temporarily, we disallow it, until implemented.
 		return false
 	}
 
 	// If the type is an array, check its content type as well.
 	if unwrapped := t.ArrayContents(); unwrapped != nil {
 		switch unwrapped.Family() {
-		case types.TupleFamily, types.RefCursorFamily, types.JsonpathFamily:
+		case types.TupleFamily, types.RefCursorFamily, types.JsonpathFamily, types.LTreeFamily:
+			// TODO(paulniziolek): LTreeFamily should be supported in keyside encoding.
+			// Temporarily, we disallow it, until implemented.
 			return false
 		}
 	}
@@ -170,7 +175,9 @@ func ColumnTypeIsInvertedIndexable(t *types.T) bool {
 	switch t.Family() {
 	case types.ArrayFamily:
 		switch t.ArrayContents().Family() {
-		case types.RefCursorFamily, types.JsonpathFamily:
+		case types.RefCursorFamily, types.JsonpathFamily, types.LTreeFamily:
+			// TODO(paulniziolek): LTreeFamily should be supported in keyside encoding.
+			// Temporarily, we disallow it, until implemented.
 			return false
 		default:
 			return true
