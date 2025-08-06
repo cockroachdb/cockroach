@@ -994,6 +994,9 @@ func BenchmarkEncoders(b *testing.B) {
 	rowAndWrapped := []changefeedbase.EnvelopeType{
 		changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeWrapped,
 	}
+	WrappedBareEnriched := []changefeedbase.EnvelopeType{
+		changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare, changefeedbase.OptEnvelopeEnriched,
+	}
 
 	for _, tc := range []struct {
 		format         changefeedbase.FormatType
@@ -1012,6 +1015,12 @@ func BenchmarkEncoders(b *testing.B) {
 			benchEncodeKey: false,
 			supportsDiff:   false,
 			envelopes:      rowOnly,
+		},
+		{
+			format:         changefeedbase.OptFormatProtobuf,
+			benchEncodeKey: false,
+			supportsDiff:   true,
+			envelopes:      WrappedBareEnriched,
 		},
 	} {
 		b.Run(string(tc.format), func(b *testing.B) {
