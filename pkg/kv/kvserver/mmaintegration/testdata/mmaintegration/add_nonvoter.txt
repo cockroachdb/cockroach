@@ -1,0 +1,41 @@
+# This test registers a change replica operation which adds a non-voter
+# replica to node s3.
+init mma_enabled=true
+----
+range_id=1 [replicas:{(r1*:n1,s1,voter),(r2:n2,s2,non-voter)} usage=(cpu:150,raft-cpu:50,write-band:1024,byte-size:2048)]
+
+pre-apply-change-replicas range_id=1 type=add-nonvoter to=3 from_mma=false
+----
+sync_change_id:1
+mma_change:
+	[r1:add-replica,target=(n3,s3), prev=(replica-id=none,type=VOTER_FULL,lagging=false)->next=(replica-id=unknown,type=NON_VOTER)]
+
+print
+----
+allocator_sync:
+	tracked:[sync_id=1->(cid:[0], change_replicas:[{ADD_NON_VOTER n3,s3}], {request_cpu:100.0, raft_cpu:50.0, write_bytes:1024.0, logical_bytes:2048})]
+mma_state:
+	cid(0)=pending
+store_pool:
+	s1: (cpu=150.00, write_band=1024.00, byte_size=2048, lease_count=1, replica_count=1)
+	s2: (cpu=50.00, write_band=1024.00, byte_size=2048, lease_count=0, replica_count=1)
+	s3: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)
+	s4: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)
+
+post-apply id=1 success=true
+----
+applied change 1 with success=true
+
+# s3 has a new non-voter (cpu:0+50(raft)=50, write_band:0+1024=1024, byte_size:0+2048=2048)
+# and one more replica count. Rest remain the same.
+print
+----
+allocator_sync:
+	tracked:[]
+mma_state:
+	cid(0)=success
+store_pool:
+	s1: (cpu=150.00, write_band=1024.00, byte_size=2048, lease_count=1, replica_count=1)
+	s2: (cpu=50.00, write_band=1024.00, byte_size=2048, lease_count=0, replica_count=1)
+	s3: (cpu=50.00, write_band=1024.00, byte_size=2048, lease_count=0, replica_count=1)
+	s4: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)

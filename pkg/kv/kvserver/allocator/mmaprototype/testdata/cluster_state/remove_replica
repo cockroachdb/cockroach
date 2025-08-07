@@ -33,23 +33,23 @@ store-id=2 node-id=2 reported=[cpu:20, write-bandwidth:80, byte-size:80] adjuste
 ranges
 ----
 range-id=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
-  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
-  store-id=2 replica-id=2 type=VOTER_FULL
+  store-id=1 replica-id=1,type=VOTER_FULL,leaseholder=true
+  store-id=2 replica-id=2,type=VOTER_FULL
 
 make-pending-changes range-id=1
   remove-replica: remove-store-id=2
 ----
 pending(1)
 change-id=1 store-id=2 node-id=2 range-id=1 load-delta=[cpu:-20, write-bandwidth:-80, byte-size:-80] start=0s
-  prev=(replica-id=2 type=VOTER_FULL)
-  next=(replica-id=none type=VOTER_FULL)
+  prev=(replica-id=2,type=VOTER_FULL,lagging=false)
+  next=(replica-id=none,type=VOTER_FULL)
 
 # We should see the change applied to the range state, with only the replica on
 # store 1 remaining.
 ranges
 ----
 range-id=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
-  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+  store-id=1 replica-id=1,type=VOTER_FULL,leaseholder=true
 
 # The load info for s2 should also reflect the load delta [-20,-80,-80] being
 # applied.
@@ -76,8 +76,8 @@ get-pending-changes
 ----
 pending(1)
 change-id=1 store-id=2 node-id=2 range-id=1 load-delta=[cpu:-20, write-bandwidth:-80, byte-size:-80] start=0s enacted=0s
-  prev=(replica-id=2 type=VOTER_FULL)
-  next=(replica-id=none type=VOTER_FULL)
+  prev=(replica-id=2,type=VOTER_FULL,lagging=false)
+  next=(replica-id=none,type=VOTER_FULL)
 
 store-load-msg
   store-id=2 node-id=2 load=[0,0,0] capacity=[100,100,100] secondary-load=0 load-time=15s

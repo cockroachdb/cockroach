@@ -141,6 +141,15 @@ type RangeLoad struct {
 	RaftCPU LoadValue
 }
 
+func (rl RangeLoad) String() string {
+	return redact.StringWithoutMarkers(rl)
+}
+
+func (rl RangeLoad) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("(cpu:%d,raft-cpu:%d,write-band:%d,byte-size:%d)",
+		rl.Load[CPURate], rl.RaftCPU, rl.Load[WriteBandwidth], rl.Load[ByteSize])
+}
+
 // storeLoad is the load information for a store. Roughly, this is the
 // information we need each store to provide us periodically, i.e.,
 // StoreLoadMsg is the input used to compute this.

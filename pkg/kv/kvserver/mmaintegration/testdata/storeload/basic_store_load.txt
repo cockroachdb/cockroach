@@ -1,0 +1,29 @@
+# This test is to test the basic case for MakeStoreLoadMsg.
+# Load:
+# load[cpu] = CPUPerSecond(1000)
+# load[write] = WriteBytesPerSecond(1024)
+# load[byte] = LogicalBytes(2048)
+#
+# Capacity:
+# cpuUtil = NodeCPURateUsage(1000)/NodeCPURateCapacity(2000) (50%)
+# nodeCapacity = StoresCPURate(1500)/cpuUtil(0.5) (3000)
+# capacity[cpu] = nodeCapacity(3000)/NumStores(2) (1500)
+#
+# capacity[write] = UnknownCapacity (9223372036854775807)
+#
+# byteSizeUtil = (Capacity(1000)-Available(200))/Capacity(1000) = 0.8
+# capacity[byteSize] = LogicalBytes(2048)/byteSizeUtil(0.8) (2560)
+#
+# Secondary load:
+# lease count = 500, range count = 1000
+make-store-load-msg store_id=1 cpu_per_second=1000 write_bytes_per_second=1024 logical_bytes=2048 capacity=1000 available=200 lease_count=500 range_count=1000 node_cpu_rate_capacity=2000 node_cpu_rate_usage=1000 stores_cpu_rate=1500 num_stores=2 timestamp=1234567890
+----
+s1,n1 at 1234567890:
+load[cpu]=1000
+load[write]=1024
+load[byte]=2048
+capacity[cpu]=1500
+capacity[write]=9223372036854775807
+capacity[byte]=2560
+secondary_load[lease]=500
+secondary_load[replica]=1000

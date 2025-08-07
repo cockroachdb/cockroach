@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "mmaintegration",
+    srcs = [
+        "allocator_op.go",
+        "allocator_sync.go",
+        "mma_conversion.go",
+        "store_load_msg.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/allocator/mmaprototype",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/buildutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "mmaintegration_test",
+    srcs = [
+        "datadriven_mmaintegration_test.go",
+        "datadriven_storeload_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":mmaintegration"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/allocator/mmaprototype",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)

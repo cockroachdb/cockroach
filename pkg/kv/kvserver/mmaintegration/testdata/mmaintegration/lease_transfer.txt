@@ -1,0 +1,61 @@
+# This test registers a lease transfer operation which transfers the lease #
+# from s1 to s2.
+init mma_enabled=true
+----
+range_id=1 [replicas:{(r1*:n1,s1,voter),(r2:n2,s2,non-voter)} usage=(cpu:150,raft-cpu:50,write-band:1024,byte-size:2048)]
+
+print
+----
+allocator_sync:
+	tracked:[]
+mma_state:
+	empty
+store_pool:
+	s1: (cpu=150.00, write_band=1024.00, byte_size=2048, lease_count=1, replica_count=1)
+	s2: (cpu=50.00, write_band=1024.00, byte_size=2048, lease_count=0, replica_count=1)
+	s3: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)
+	s4: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)
+
+pre-apply-lease-transfer range_id=1 from=1 to=2 from_mma=false
+----
+sync_change_id:1
+mma_change:
+	[r1:remove-lease,target=(n1,s1), prev=(replica-id=1,type=VOTER_FULL,leaseholder=true,lagging=false)->next=(replica-id=1,type=VOTER_FULL)
+	r1:add-lease,target=(n2,s2), prev=(replica-id=2,type=NON_VOTER,lagging=false)->next=(replica-id=2,type=NON_VOTER,leaseholder=true)]
+
+get-tracked-change sync_id=1
+----
+cid:[0 1], lease_transfer_from:s1->s2, {request_cpu:100.0, raft_cpu:50.0, write_bytes:1024.0, logical_bytes:2048}
+
+# cid(0) is the remove-lease change, cid(1) is the add-lease change. They are
+# both pending.
+print
+----
+allocator_sync:
+	tracked:[sync_id=1->(cid:[0 1], lease_transfer_from:s1->s2, {request_cpu:100.0, raft_cpu:50.0, write_bytes:1024.0, logical_bytes:2048})]
+mma_state:
+	cid(0)=pending, cid(1)=pending
+store_pool:
+	s1: (cpu=150.00, write_band=1024.00, byte_size=2048, lease_count=1, replica_count=1)
+	s2: (cpu=50.00, write_band=1024.00, byte_size=2048, lease_count=0, replica_count=1)
+	s3: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)
+	s4: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)
+
+# After applying the change, s1 has one less lease and s2 has one more lease.
+# Non-raft cpu of the range is 150-50=100. s1 has 150-100=50 cpu, s2 has
+# 50+100=150 cpu. Rest remain the same.
+post-apply id=1 success=true
+----
+applied change 1 with success=true
+
+print
+----
+allocator_sync:
+	tracked:[]
+mma_state:
+	cid(0)=success, cid(1)=success
+store_pool:
+	s1: (cpu=50.00, write_band=1024.00, byte_size=2048, lease_count=0, replica_count=1)
+	s2: (cpu=150.00, write_band=1024.00, byte_size=2048, lease_count=1, replica_count=1)
+	s3: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)
+	s4: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)

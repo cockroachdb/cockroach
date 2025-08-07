@@ -168,6 +168,7 @@ go_library(
         "//pkg/kv/kvserver/load",
         "//pkg/kv/kvserver/lockspanset",
         "//pkg/kv/kvserver/logstore",
+        "//pkg/kv/kvserver/mmaintegration",
         "//pkg/kv/kvserver/multiqueue",
         "//pkg/kv/kvserver/print",
         "//pkg/kv/kvserver/raftentry",
