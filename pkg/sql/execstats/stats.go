@@ -137,6 +137,8 @@ func (l *ScanStatsListener) Notify(event tracing.Structured) tracing.EventConsum
 	l.mu.ScanStats.separatedPointCount += ss.SeparatedPointCount
 	l.mu.ScanStats.separatedPointValueBytes += ss.SeparatedPointValueBytes
 	l.mu.ScanStats.separatedPointValueBytesFetched += ss.SeparatedPointValueBytesFetched
+	l.mu.ScanStats.separatedPointValueCountFetched += ss.SeparatedPointValueCountFetched
+	l.mu.ScanStats.separatedPointValueReaderCacheMisses += ss.SeparatedPointValueReaderCacheMisses
 	l.mu.ScanStats.numGets += ss.NumGets
 	l.mu.ScanStats.numScans += ss.NumScans
 	l.mu.ScanStats.numReverseScans += ss.NumReverseScans
@@ -196,22 +198,24 @@ type ScanStats struct {
 	numInterfaceSeeks uint64
 	// numInternalSeeks is the number of times that MVCC seek was invoked
 	// internally, including to step over internal, uncompacted Pebble versions.
-	numInternalSeeks                uint64
-	blockBytes                      uint64
-	blockBytesInCache               uint64
-	keyBytes                        uint64
-	valueBytes                      uint64
-	pointCount                      uint64
-	pointsCoveredByRangeTombstones  uint64
-	rangeKeyCount                   uint64
-	rangeKeyContainedPoints         uint64
-	rangeKeySkippedPoints           uint64
-	separatedPointCount             uint64
-	separatedPointValueBytes        uint64
-	separatedPointValueBytesFetched uint64
-	numGets                         uint64
-	numScans                        uint64
-	numReverseScans                 uint64
+	numInternalSeeks                     uint64
+	blockBytes                           uint64
+	blockBytesInCache                    uint64
+	keyBytes                             uint64
+	valueBytes                           uint64
+	pointCount                           uint64
+	pointsCoveredByRangeTombstones       uint64
+	rangeKeyCount                        uint64
+	rangeKeyContainedPoints              uint64
+	rangeKeySkippedPoints                uint64
+	separatedPointCount                  uint64
+	separatedPointValueBytes             uint64
+	separatedPointValueBytesFetched      uint64
+	separatedPointValueCountFetched      uint64
+	separatedPointValueReaderCacheMisses uint64
+	numGets                              uint64
+	numScans                             uint64
+	numReverseScans                      uint64
 	// nodeIDs stores the ordered list of all KV nodes that were used to
 	// evaluate the KV requests.
 	nodeIDs []int32
