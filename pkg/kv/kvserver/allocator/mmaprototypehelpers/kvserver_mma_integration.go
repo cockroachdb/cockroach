@@ -165,7 +165,8 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 
 	var lhBeingRemoved bool
 	for _, chg := range changes {
-		if chg.ChangeType == roachpb.REMOVE_VOTER || chg.ChangeType == roachpb.REMOVE_NON_VOTER {
+		switch {
+		case chg.ChangeType == roachpb.REMOVE_VOTER || chg.ChangeType == roachpb.REMOVE_NON_VOTER:
 			filteredSet := replicaSet.Filter(func(r roachpb.ReplicaDescriptor) bool {
 				return r.StoreID == chg.Target.StoreID
 			})
@@ -188,12 +189,7 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 					},
 				},
 				chg.Target))
-		}
-	}
-
-	for _, chg := range changes {
-		if chg.ChangeType == roachpb.ADD_VOTER ||
-			chg.ChangeType == roachpb.ADD_NON_VOTER {
+		case chg.ChangeType == roachpb.ADD_VOTER || chg.ChangeType == roachpb.ADD_NON_VOTER:
 			rType := roachpb.VOTER_FULL
 			if chg.ChangeType == roachpb.ADD_NON_VOTER {
 				rType = roachpb.NON_VOTER
@@ -208,12 +204,6 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 						},
 					},
 				}, chg.Target))
-		} else if chg.ChangeType == roachpb.REMOVE_VOTER ||
-			chg.ChangeType == roachpb.REMOVE_NON_VOTER {
-			// Handled above.
-			continue
-		} else {
-			panic("unimplemented change type")
 		}
 	}
 
