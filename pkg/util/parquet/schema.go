@@ -88,16 +88,19 @@ func NewSchema(columnNames []string, columnTypes []*types.T) (*SchemaDefinition,
 		if columnTypes[i] == nil {
 			return nil, errors.AssertionFailedf("column %s missing type information", columnNames[i])
 		}
+		var column datumColumn
+		var err error
 		if columnTypes[i].Family() == types.DecimalFamily {
 			typ := columnTypes[i]
-			columnTypes[i] = types.MakeLabeledTuple([]*types.T{
+			column, err = makeColumn(columnNames[i], types.MakeLabeledTuple([]*types.T{
 				types.MakeDecimal(typ.Precision(), typ.Scale()),
 				types.String,
 			},
 				[]string{"decimal", "string"},
-			)
+			), defaultRepetitions)
+		} else {
+			column, err = makeColumn(columnNames[i], columnTypes[i], defaultRepetitions)
 		}
-		column, err := makeColumn(columnNames[i], columnTypes[i], defaultRepetitions)
 		if err != nil {
 			return nil, err
 		}
