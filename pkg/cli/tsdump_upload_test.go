@@ -27,10 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -221,6 +223,139 @@ func readFileContent(t *testing.T, fileName, uploadID string) string {
 	return trimNonDeterministicOutput(string(content), uploadID)
 }
 
+// TestTSDumpUploadWithEmbeddedMetadataDataDriven tests the store-to-node mapping functionality
+// for time series uploads. It verifies that embedded metadata takes precedence over external
+// YAML files and that node_id tags are correctly applied to store metrics.
+func TestTSDumpUploadWithEmbeddedMetadataDataDriven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
+		return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
+	})()
+	defer testutils.TestingHook(&getHostname, func() string {
+		return "hostname"
+	})()
+
+	datadriven.RunTest(t, "testdata/tsdump_upload_embedded_metadata", func(t *testing.T, d *datadriven.TestData) string {
+		var buf strings.Builder
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			reader, err := gzip.NewReader(r.Body)
+			require.NoError(t, err)
+			body, err := io.ReadAll(reader)
+			require.NoError(t, err)
+			fmt.Fprintln(&buf, string(body))
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer testutils.TestingHook(&hostNameOverride, server.Listener.Addr().String())()
+		defer server.Close()
+
+		c := NewCLITest(TestCLIParams{})
+		defer c.Cleanup()
+
+		// Reset and set common debug options to ensure clean state between test cases
+		debugTimeSeriesDumpOpts.storeToNodeMapYAMLFile = ""
+		debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
+		debugTimeSeriesDumpOpts.clusterID = "test-cluster-id"
+		debugTimeSeriesDumpOpts.zendeskTicket = "zd-test"
+		debugTimeSeriesDumpOpts.organizationName = "test-org"
+		debugTimeSeriesDumpOpts.userName = "test-user"
+
+		clusterLabel := "test-cluster"
+		apiKey := "dd-api-key"
+		if d.HasArg("cluster-label") {
+			d.ScanArgs(t, "cluster-label", &clusterLabel)
+		}
+		if d.HasArg("api-key") {
+			d.ScanArgs(t, "api-key", &apiKey)
+		}
+
+		var dumpFilePath string
+		var extraFlag string
+
+		switch d.Cmd {
+		case "upload-datadog-embedded-only":
+			// Embedded metadata only (no YAML file)
+			// This tests that store metrics get proper node_id tags based on embedded store-to-node mapping
+			dumpFilePath = generateMockTSDumpWithEmbeddedMetadata(t, d.Input)
+
+		case "upload-datadog-yaml-only":
+			// YAML file only (no embedded metadata)
+			// This tests that store metrics get proper node_id tags from external YAML when no embedded metadata is present
+			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input)
+
+			yamlContent := `1: "1"
+2: "1" 
+3: "2"`
+			yamlFilePath := createTempYAMLFile(t, yamlContent)
+			extraFlag = fmt.Sprintf("--store-to-node-map-file=%s", yamlFilePath)
+
+		case "upload-datadog-embedded-priority":
+			// Both embedded metadata and YAML file (embedded takes priority)
+			// This tests that embedded metadata is prioritized over external YAML when both are present, proving precedence
+			dumpFilePath = generateMockTSDumpWithEmbeddedMetadata(t, d.Input)
+
+			yamlContent := `1: "99"
+2: "99" 
+3: "99"`
+			yamlFilePath := createTempYAMLFile(t, yamlContent)
+			extraFlag = fmt.Sprintf("--store-to-node-map-file=%s", yamlFilePath)
+
+		case "upload-datadog-no-mapping":
+			// No metadata and no YAML file (normal upload)
+			// This tests normal upload behavior when no store-to-node mapping is available, store metrics get only store tags
+			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input)
+			// No extraFlag needed - this tests normal upload without any mapping
+
+		default:
+			t.Fatalf("unknown command: %s", d.Cmd)
+			return ""
+		}
+
+		cmdArgs := fmt.Sprintf(
+			`debug tsdump --format=datadog --dd-api-key="%s" --cluster-label="%s"`,
+			apiKey, clusterLabel,
+		)
+		if extraFlag != "" {
+			cmdArgs += " " + extraFlag
+		}
+		cmdArgs += " " + dumpFilePath
+
+		_, err := c.RunWithCapture(cmdArgs)
+		require.NoError(t, err)
+		return strings.TrimSpace(buf.String())
+	})
+}
+
+// generateMockTSDumpWithEmbeddedMetadata creates a mock tsdump GOB file that includes
+// embedded store-to-node mapping metadata along with time series data from CSV input.
+func generateMockTSDumpWithEmbeddedMetadata(t *testing.T, csvInput string) string {
+	t.Helper()
+
+	tmpFile, err := os.CreateTemp("", "mock_tsdump_with_metadata_*.gob")
+	require.NoError(t, err)
+	defer tmpFile.Close()
+
+	metadata := tsdumpmeta.Metadata{
+		Version: "v23.1.0",
+		StoreToNodeMap: map[string]string{
+			"1": "1",
+			"2": "1",
+			"3": "2",
+		},
+		CreatedAt: timeutil.Unix(1609459200, 0),
+	}
+	err = tsdumpmeta.Write(tmpFile, metadata)
+	require.NoError(t, err)
+
+	encoder := gob.NewEncoder(tmpFile)
+	writeTimeSeriesDataFromCSV(t, csvInput, encoder)
+
+	t.Cleanup(func() {
+		require.NoError(t, os.Remove(tmpFile.Name()), "failed to remove temporary file")
+	})
+	return tmpFile.Name()
+}
+
 // generateMockTSDumpFromCSV creates a mock tsdump file from CSV input string.
 // CSV format: metric_name,timestamp,source,value
 // Example: cr.node.admission.admitted.elastic-cpu,2025-05-26T08:32:00Z,1,1
@@ -229,12 +364,6 @@ func readFileContent(t *testing.T, fileName, uploadID string) string {
 func generateMockTSDumpFromCSV(t *testing.T, csvInput string) string {
 	t.Helper()
 
-	// Parse CSV data from input string
-	reader := csv.NewReader(strings.NewReader(csvInput))
-	csvData, err := reader.ReadAll()
-	require.NoError(t, err)
-	require.Greater(t, len(csvData), 0, "CSV input must have at least one data row")
-
 	// Create temporary file
 	tmpFile, err := os.CreateTemp("", "mock_tsdump_*.gob")
 	require.NoError(t, err)
@@ -242,6 +371,24 @@ func generateMockTSDumpFromCSV(t *testing.T, csvInput string) string {
 
 	// Create gob encoder
 	encoder := gob.NewEncoder(tmpFile)
+	writeTimeSeriesDataFromCSV(t, csvInput, encoder)
+
+	t.Cleanup(func() {
+		require.NoError(t, os.Remove(tmpFile.Name()), "failed to remove temporary file")
+	})
+	return tmpFile.Name()
+}
+
+// writeTimeSeriesDataFromCSV parses CSV input and encodes time series data into GOB format.
+// Each CSV row becomes a roachpb.KeyValue containing time series data.
+func writeTimeSeriesDataFromCSV(t *testing.T, csvInput string, encoder *gob.Encoder) {
+	t.Helper()
+
+	// Parse CSV data from input string
+	reader := csv.NewReader(strings.NewReader(csvInput))
+	csvData, err := reader.ReadAll()
+	require.NoError(t, err)
+	require.Greater(t, len(csvData), 0, "CSV input must have at least one data row")
 
 	// Process each row (no header expected)
 	for i, row := range csvData {
@@ -269,14 +416,29 @@ func generateMockTSDumpFromCSV(t *testing.T, csvInput string) string {
 		err = encoder.Encode(kv)
 		require.NoError(t, err)
 	}
-
-	t.Cleanup(func() {
-		require.NoError(t, os.Remove(tmpFile.Name()), "failed to remove temporary file")
-	})
-	return tmpFile.Name()
 }
 
-// createMockTimeSeriesKV creates a roachpb.KeyValue entry containing time series data
+// createTempYAMLFile creates a temporary YAML file containing store-to-node mapping configuration.
+// Used to test external mapping file functionality in tsdump uploads.
+func createTempYAMLFile(t *testing.T, yamlContent string) string {
+	t.Helper()
+
+	yamlFile, err := os.CreateTemp("", "store_to_node_*.yaml")
+	require.NoError(t, err)
+
+	_, err = yamlFile.WriteString(yamlContent)
+	require.NoError(t, err)
+	yamlFile.Close()
+
+	t.Cleanup(func() {
+		require.NoError(t, os.Remove(yamlFile.Name()), "failed to remove temporary YAML file")
+	})
+
+	return yamlFile.Name()
+}
+
+// createMockTimeSeriesKV creates a roachpb.KeyValue entry that mimics the internal
+// time series storage format used by CockroachDB's time series system.
 func createMockTimeSeriesKV(
 	name, source string, timestamp int64, value float64,
 ) (roachpb.KeyValue, error) {
