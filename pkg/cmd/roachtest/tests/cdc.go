@@ -2131,7 +2131,7 @@ func registerCDC(r registry.Registry) {
 
 			// HERE
 			// 100 warehouses was too much (fingerprint method was taking a minute)
-			ct.runTPCCWorkload(tpccArgs{warehouses: 10, duration: "30m"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
