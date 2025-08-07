@@ -603,3 +603,24 @@ statement error pgcode 42803 sum\(\): aggregate functions are not allowed in ORD
 DELETE FROM t108166 ORDER BY COALESCE(sum(a), 1) LIMIT 1;
 
 subtest end
+
+# Regression test for double-counting some rows for "rows affected" statistic in
+# deleteRange when a single SQL row is deleted via different KV batches.
+subtest regression_151505
+
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  c INT,
+  FAMILY (k),
+  FAMILY (c)
+);
+
+statement ok
+INSERT INTO t SELECT i, NULL FROM generate_series(1, 599) AS g(i);
+INSERT INTO t VALUES (600, 2);
+
+statement count 600
+DELETE FROM t WHERE k > 0 AND k < 1000;
+
+subtest end
