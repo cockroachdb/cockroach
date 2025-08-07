@@ -830,6 +830,7 @@ func (s *Server) SetupConn(
 
 	ex := s.newConnExecutor(
 		ctx,
+		executorTypeExec,
 		sdMutIterator,
 		stmtBuf,
 		clientComm,
@@ -1016,6 +1017,7 @@ func populateMinimalSessionData(sd *sessiondata.SessionData) {
 // RESET statements.
 func (s *Server) newConnExecutor(
 	ctx context.Context,
+	executorType executorType,
 	sdMutIterator *sessionDataMutatorIterator,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,

@@ -287,6 +287,7 @@ func (ie *InternalExecutor) initConnEx(
 	if txn == nil {
 		ex = ie.s.newConnExecutor(
 			ctx,
+			executorTypeInternal,
 			sdMutIterator,
 			stmtBuf,
 			clientComm,
@@ -364,6 +365,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 
 	ex = ie.s.newConnExecutor(
 		ctx,
+		executorTypeInternal,
 		sdMutIterator,
 		stmtBuf,
 		clientComm,
