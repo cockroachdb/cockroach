@@ -18,6 +18,7 @@ go_library(
         "//pkg/util/duration",
         "//pkg/util/encoding/encodingtype",
         "//pkg/util/ipaddr",
+        "//pkg/util/ltree",
         "//pkg/util/protoutil",
         "//pkg/util/timeofday",
         "//pkg/util/timetz",

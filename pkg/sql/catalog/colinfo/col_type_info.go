@@ -230,6 +230,10 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 		return true
 	case types.PGVectorFamily:
 		return true
+	case types.LTreeFamily:
+		// TODO(paulniziolek): LTreeFamily should be supported in keyside encoding.
+		// Temporarily, we disallow it, until implemented.
+		return true
 	}
 	return false
 }
