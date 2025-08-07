@@ -1080,9 +1080,8 @@ func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequ
 	}
 
 	if ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0 {
-		// Verify that the batch contains only specific range requests or the
-		// EndTxnRequest. Verify that a batch with a ReverseScan only contains
-		// ReverseScan range requests.
+		// Verify that the batch contains only specific requests. Verify that a
+		// batch with a ReverseScan only contains ReverseScan range requests.
 		var foundForward, foundReverse bool
 		for _, req := range ba.Requests {
 			inner := req.GetInner()
