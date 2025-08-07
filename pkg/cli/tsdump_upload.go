@@ -393,12 +393,29 @@ func (d *datadogWriter) upload(fileName string) error {
 		fmt.Println("Dry-run mode enabled. Not actually uploading data to Datadog.")
 	}
 
-	storeToNodeYamlFile := debugTimeSeriesDumpOpts.storeToNodeMapYAMLFile
-	if storeToNodeYamlFile != "" {
-		d.populateNodeAndStoreMap(storeToNodeYamlFile)
-	}
-
 	dec := gob.NewDecoder(f)
+
+	// Try to read embedded metadata first
+	embeddedMetadata, metadataErr := readEmbeddedMetadata(dec)
+	if metadataErr == nil && embeddedMetadata != nil {
+		d.storeToNodeMap = embeddedMetadata.StoreToNodeMap
+		fmt.Printf("Using embedded store-to-node mapping with %d entries\n", len(d.storeToNodeMap))
+	} else {
+		// Reset the decoder since we tried to read metadata
+		if closer, ok := f.(io.Closer); ok {
+			closer.Close()
+		}
+		f, err = getFileReader(fileName)
+		if err != nil {
+			return err
+		}
+		dec = gob.NewDecoder(f)
+		// Fall back to external YAML file if provided
+		storeToNodeYamlFile := debugTimeSeriesDumpOpts.storeToNodeMapYAMLFile
+		if storeToNodeYamlFile != "" {
+			d.populateNodeAndStoreMap(storeToNodeYamlFile)
+		}
+	}
 	allMetrics := make(map[string]struct{})
 	decodeOne := func() ([]datadogV2.MetricSeries, error) {
 		var ddSeries []datadogV2.MetricSeries

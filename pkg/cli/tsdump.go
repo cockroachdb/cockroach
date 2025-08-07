@@ -35,6 +35,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TSDumpMetadata contains metadata that is embedded in raw tsdump files
+type TSDumpMetadata struct {
+	Version        string            `json:"version"`        // Cluster version (e.g., "v23.1.0")
+	StoreToNodeMap map[string]string `json:"storeToNodeMap"` // Store ID to Node ID mapping
+	CreatedAt      time.Time         `json:"createdAt"`      // Timestamp when tsdump was created
+}
+
+// metadataMarker is used to wrap metadata in tsdump files for identification
+type metadataMarker struct {
+	IsMetadata bool   `json:"isMetadata"`
+	Data       []byte `json:"data"`
+}
+
 // TODO(knz): this struct belongs elsewhere.
 // See: https://github.com/cockroachdb/cockroach/issues/49509
 var debugTimeSeriesDumpOpts = struct {
@@ -171,13 +184,6 @@ will then convert it to the --format requested in the current invocation.
 					return errors.Wrapf(err, "connecting to %s", target)
 				}
 
-				// Buffer the writes to os.Stdout since we're going to
-				// be writing potentially a lot of data to it.
-				w := bufio.NewWriterSize(os.Stdout, 1024*1024)
-				if err := tsutil.DumpRawTo(stream, w); err != nil {
-					return err
-				}
-
 				// get the node details so that we can get the SQL port
 				statusClient := conn.NewStatusClient()
 				resp, err := statusClient.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
@@ -189,6 +195,38 @@ will then convert it to the --format requested in the current invocation.
 				// this port should be used to make the SQL connection
 				cliCtx.clientOpts.ServerHost, cliCtx.clientOpts.ServerPort, err = net.SplitHostPort(resp.SQLAddress.String())
 				if err != nil {
+					return err
+				}
+
+				// Get store-to-node mapping for metadata
+				storeToNodeMap, err := getStoreToNodeMapping(ctx)
+				if err != nil {
+					return err
+				}
+
+				// Get cluster version for metadata
+				clusterVersion, err := getClusterVersion(ctx)
+				if err != nil {
+					return err
+				}
+
+				// Create metadata header
+				metadata := TSDumpMetadata{
+					Version:        clusterVersion,
+					StoreToNodeMap: storeToNodeMap,
+					CreatedAt:      timeutil.Now(),
+				}
+
+				// Buffer the writes to os.Stdout since we're going to
+				// be writing potentially a lot of data to it.
+				w := bufio.NewWriterSize(os.Stdout, 1024*1024)
+
+				// Write embedded metadata first
+				if err := writeEmbeddedMetadata(w, metadata); err != nil {
+					return err
+				}
+
+				if err := tsutil.DumpRawTo(stream, w); err != nil {
 					return err
 				}
 
@@ -213,6 +251,21 @@ will then convert it to the --format requested in the current invocation.
 			}
 
 			dec := gob.NewDecoder(f)
+
+			// Try to read embedded metadata first
+			embeddedMetadata, metadataErr := readEmbeddedMetadata(dec)
+			if metadataErr != nil {
+				// No embedded metadata, restart from beginning
+				f.Close()
+				f, err = os.Open(args[0])
+				if err != nil {
+					return err
+				}
+				dec = gob.NewDecoder(f)
+			} else {
+				fmt.Printf("Found embedded store-to-node mapping with %d entries\n", len(embeddedMetadata.StoreToNodeMap))
+			}
+
 			decodeOne := func() (*tspb.TimeSeriesData, error) {
 				var v roachpb.KeyValue
 				err := dec.Decode(&v)
@@ -239,6 +292,10 @@ will then convert it to the --format requested in the current invocation.
 				for {
 					data, err := decodeOne()
 					ch <- tup{data, err}
+					// Exit the goroutine if we encounter EOF or any error
+					if err != nil {
+						break
+					}
 				}
 			}()
 
@@ -444,38 +501,124 @@ type openMetricsWriter struct {
 // createYAML generates and writes tsdump.yaml to default /tmp or to a specified path.
 // This file is used for staging the tsdump data into a local database for debugging
 func createYAML(ctx context.Context) (resErr error) {
+	// Write the YAML file for backward compatibility
 	file, err := os.OpenFile(debugTimeSeriesDumpOpts.yaml, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	sqlConn, err := makeSQLClient(ctx, "cockroach tsdump", useSystemDb)
-	if err != nil {
-		return err
-	}
-	defer func() { resErr = errors.CombineErrors(resErr, sqlConn.Close()) }()
-
-	_, rows, err := sqlExecCtx.RunQuery(
-		ctx,
-		sqlConn,
-		clisqlclient.MakeQuery(`SELECT store_id || ': ' || node_id FROM crdb_internal.kv_store_status`), false)
-
+	mapping, err := getStoreToNodeMapping(ctx)
 	if err != nil {
 		return err
 	}
 
-	var strStoreNodeID string
-	for _, row := range rows {
-		storeNodeID := row
-		strStoreNodeID = strings.Join(storeNodeID, " ")
-		strStoreNodeID += "\n"
-		_, err := file.WriteString(strStoreNodeID)
+	for storeID, nodeID := range mapping {
+		_, err := file.WriteString(fmt.Sprintf("%s: %s\n", storeID, nodeID))
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// getStoreToNodeMapping retrieves the store-to-node mapping from the database
+func getStoreToNodeMapping(ctx context.Context) (map[string]string, error) {
+	sqlConn, err := makeSQLClient(ctx, "cockroach tsdump", useSystemDb)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := sqlConn.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close SQL connection: %v\n", closeErr)
+		}
+	}()
+
+	_, rows, err := sqlExecCtx.RunQuery(
+		ctx,
+		sqlConn,
+		clisqlclient.MakeQuery(`SELECT store_id, node_id FROM crdb_internal.kv_store_status`), false)
+
+	if err != nil {
+		return nil, err
+	}
+
+	mapping := make(map[string]string)
+	for _, row := range rows {
+		if len(row) >= 2 {
+			storeID := strings.TrimSpace(row[0])
+			nodeID := strings.TrimSpace(row[1])
+			mapping[storeID] = nodeID
+		}
+	}
+	return mapping, nil
+}
+
+// getClusterVersion retrieves the cluster version from the database
+// This returns the active cluster version, which may be different from the binary version
+func getClusterVersion(ctx context.Context) (string, error) {
+	sqlConn, err := makeSQLClient(ctx, "cockroach tsdump", useSystemDb)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if closeErr := sqlConn.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close SQL connection: %v\n", closeErr)
+		}
+	}()
+
+	_, rows, err := sqlExecCtx.RunQuery(
+		ctx,
+		sqlConn,
+		clisqlclient.MakeQuery(`SELECT crdb_internal.node_executable_version()`), false)
+
+	if err != nil {
+		return "", err
+	}
+
+	if len(rows) == 0 || len(rows[0]) == 0 {
+		return "", errors.New("cluster version is not set")
+	}
+
+	// Get the version from the first row, first column
+	clusterVersion := strings.TrimSpace(rows[0][0])
+	return clusterVersion, nil
+}
+
+// writeEmbeddedMetadata writes the metadata header to the tsdump file
+func writeEmbeddedMetadata(w io.Writer, metadata TSDumpMetadata) error {
+	// Encode metadata as JSON then wrap it in a gob structure
+	jsonData, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+
+	marker := metadataMarker{
+		IsMetadata: true,
+		Data:       jsonData,
+	}
+
+	enc := gob.NewEncoder(w)
+	return enc.Encode(marker)
+}
+
+// readEmbeddedMetadata attempts to read metadata from a tsdump file
+func readEmbeddedMetadata(dec *gob.Decoder) (*TSDumpMetadata, error) {
+	var marker metadataMarker
+	if err := dec.Decode(&marker); err != nil {
+		return nil, err
+	}
+
+	if !marker.IsMetadata {
+		return nil, errors.New("first entry is not metadata")
+	}
+
+	var metadata TSDumpMetadata
+	if err := json.Unmarshal(marker.Data, &metadata); err != nil {
+		return nil, err
+	}
+
+	return &metadata, nil
 }
 
 func makeOpenMetricsWriter(out io.Writer) *openMetricsWriter {
