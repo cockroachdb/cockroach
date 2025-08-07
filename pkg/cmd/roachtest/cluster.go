@@ -1932,9 +1932,15 @@ func (c *clusterImpl) PutE(
 }
 
 // PutCockroach uploads a binary with or without runtime assertions enabled,
-// as determined by t.Cockroach(). Note that we upload to all nodes even if they
-// don't use the binary, so that the test runner can always fetch logs.
+// as determined by t.Cockroach(). If --cockroach-stage flag is set, it stages
+// the binary from cloud storage instead of uploading a local binary.
+// Note that we upload/stage to all nodes even if they don't use the binary,
+// so that the test runner can always fetch logs.
 func (c *clusterImpl) PutCockroach(ctx context.Context, l *logger.Logger, t *testImpl) error {
+	if roachtestflags.CockroachStage != "" {
+		// Use staging instead of upload when --cockroach-stage is specified
+		return c.Stage(ctx, l, "cockroach", roachtestflags.CockroachStage, ".", c.All())
+	}
 	return c.PutE(ctx, l, t.Cockroach(), test.DefaultCockroachPath, c.All())
 }
 
