@@ -8940,6 +8940,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 			hlc.Timestamp{},
 			hlc.Timestamp{},
 			s.Codec,
+			&s.Server.ClusterSettings().SV,
 			tableSpan,
 		)
 		if err != nil {

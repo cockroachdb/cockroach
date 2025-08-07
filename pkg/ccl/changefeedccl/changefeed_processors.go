@@ -616,7 +616,9 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 		return nil, err
 	}
 	ca.frontier, err = resolvedspan.NewAggregatorFrontier(
-		ca.spec.Feed.StatementTime, initialHighWater, ca.FlowCtx.Codec(), spans...)
+		ca.spec.Feed.StatementTime, initialHighWater, ca.FlowCtx.Codec(),
+		&ca.FlowCtx.Cfg.Settings.SV,
+		spans...)
 	if err != nil {
 		return nil, err
 	}
@@ -1421,7 +1423,9 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 
 	// Set up the resolved span frontier.
 	cf.frontier, err = resolvedspan.NewCoordinatorFrontier(
-		cf.spec.Feed.StatementTime, initialHighwater, cf.FlowCtx.Codec(), cf.spec.TrackedSpans...)
+		cf.spec.Feed.StatementTime, initialHighwater, cf.FlowCtx.Codec(),
+		&cf.FlowCtx.Cfg.Settings.SV,
+		cf.spec.TrackedSpans...)
 	if err != nil {
 		log.Infof(cf.Ctx(), "change frontier moving to draining due to error setting up frontier: %v", err)
 		cf.MoveToDraining(err)
