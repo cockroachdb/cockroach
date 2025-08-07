@@ -36,9 +36,9 @@ type storePool interface {
 	UpdateLocalStoreAfterRebalance(storeID roachpb.StoreID, rangeUsageInfo allocator.RangeUsageInfo, changeType roachpb.ReplicaChangeType)
 }
 
-// mmaAllocator is an interface that defines the methods that the allocator sync
+// mmaState is an interface that defines the methods that the allocator sync
 // needs to call on the mma. Using an interface to simplify testing.
-type mmaAllocator interface {
+type mmaState interface {
 	// RegisterExternalChanges is called by the allocator sync to register
 	// external changes with the mma.
 	RegisterExternalChanges(changes []mmaprototype.ReplicaChange) []mmaprototype.ChangeID
@@ -54,13 +54,13 @@ type mmaAllocator interface {
 // mma is disabled.)
 
 // AllocatorSync is a component that coordinates changes from all components
-// (including mma/replicate/lease queue) with mma and store pool. When mma is
-// disabled, its sole purpose is to track and apply changes to the store pool
-// upon success.
+// (including mma-store-rebalancer/replicate/lease queue) with mma and store
+// pool. When mma is disabled, its sole purpose is to track and apply changes
+// to the store pool upon success.
 type AllocatorSync struct {
 	sp           storePool
 	st           *cluster.Settings
-	mmaAllocator mmaAllocator
+	mmaAllocator mmaState
 	mu           struct {
 		syncutil.Mutex
 		// changeSeqGen is a monotonically increasing sequence number for
@@ -75,7 +75,7 @@ type AllocatorSync struct {
 }
 
 func NewAllocatorSync(
-	sp storePool, mmaAllocator mmaAllocator, st *cluster.Settings,
+	sp storePool, mmaAllocator mmaState, st *cluster.Settings,
 ) *AllocatorSync {
 	as := &AllocatorSync{
 		sp:           sp,
