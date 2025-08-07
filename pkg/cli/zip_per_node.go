@@ -204,7 +204,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 			continue
 		}
 		if !zipCtx.nodes.isIncluded(nodeID) {
-			zc.clusterPrinter.info(fmt.Sprintf("skipping excluded node %d", nodeID))
+			zc.clusterPrinter.info("skipping excluded node %d", nodeID)
 			continue
 		}
 		wg.Add(1)
@@ -625,7 +625,7 @@ func (zc *debugZipContext) getStackInformation(
 			nodePrinter.info("skipping %s due to file filters", stacksWithLabelFileName)
 		}
 	} else {
-		nodePrinter.info("Skipping fetching goroutine stacks. Enable via the --" + cliflags.ZipIncludeGoroutineStacks.Name + " flag.")
+		nodePrinter.info("Skipping fetching goroutine stacks. Enable via the --%s flag.", cliflags.ZipIncludeGoroutineStacks.Name)
 	}
 	return nil
 }

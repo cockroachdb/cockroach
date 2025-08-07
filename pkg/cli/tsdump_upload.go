@@ -177,7 +177,7 @@ func makeDatadogWriter(
 		apiKey:                          apiKey,
 		uploadID:                        newTsdumpUploadID(currentTime),
 		init:                            init,
-		namePrefix:                      "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
+		namePrefix:                      "cockroachdb.",
 		threshold:                       threshold,
 		uploadTime:                      currentTime,
 		storeToNodeMap:                  make(map[string]string),
