@@ -47,6 +47,11 @@ type deleteRangeNode struct {
 
 	// rowCount will be set to the count of rows deleted.
 	rowCount int
+
+	// curRowPrefix is the prefix for all KVs (i.e. for all column families) of
+	// the SQL row that increased rowCount last. It is maintained across
+	// different BatchRequests in order to not double count the same SQL row.
+	curRowPrefix []byte
 }
 
 var _ planNode = &deleteRangeNode{}
@@ -194,10 +199,12 @@ func (d *deleteRangeNode) processResults(
 	results []kv.Result, resumeSpans []roachpb.Span,
 ) (roachpb.Spans, error) {
 	for _, r := range results {
-		var prev []byte
+		// TODO(yuzefovich): when the table has 1 column family, we don't need
+		// to compare the key prefixes since each deleted key corresponds to a
+		// different deleted row.
 		for _, keyBytes := range r.Keys {
 			// If prefix is same, don't bother decoding key.
-			if len(prev) > 0 && bytes.HasPrefix(keyBytes, prev) {
+			if len(d.curRowPrefix) > 0 && bytes.HasPrefix(keyBytes, d.curRowPrefix) {
 				continue
 			}
 
@@ -206,8 +213,8 @@ func (d *deleteRangeNode) processResults(
 				return nil, err
 			}
 			k := keyBytes[:len(keyBytes)-len(after)]
-			if !bytes.Equal(k, prev) {
-				prev = k
+			if !bytes.Equal(k, d.curRowPrefix) {
+				d.curRowPrefix = k
 				d.rowCount++
 			}
 		}
