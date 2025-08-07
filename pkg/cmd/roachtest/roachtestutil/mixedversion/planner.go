@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -100,6 +101,9 @@ type (
 
 		// State variables updated as the test plan is generated.
 		usingFixtures bool
+
+		// Unit test only fields.
+		_getFailer func(name string) (*failures.Failer, error)
 	}
 
 	// UpgradeStage encodes in what part of an upgrade a test step is in
