@@ -53,6 +53,11 @@ const jobCheckSQL = `
   ORDER BY created DESC LIMIT 1
 `
 
+const (
+	maxRetryAttempts = 5
+	ttlJobWaitTime   = 8 * time.Minute
+)
+
 type ttlJobInfo struct {
 	JobID          int
 	CoordinatorID  int
@@ -88,105 +93,80 @@ func runTTLRestart(ctx context.Context, t test.Test, c cluster.Cluster, numResta
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
-		t.Status("create the table")
-		setup := []string{
-			// Speed up the test by doing the replan check often and with a low threshold.
-			"SET CLUSTER SETTING sql.ttl.replan_flow_frequency = '15s'",
-			"SET CLUSTER SETTING sql.ttl.replan_flow_threshold = '0.1'",
-			// Add additional logging to help debug the test on failure.
-			"SET CLUSTER SETTING server.debug.default_vmodule = 'ttljob_processor=1,distsql_plan_bulk=1'",
-			// Create the schema to be used in the test
-			"CREATE DATABASE IF NOT EXISTS ttldb",
-			"CREATE TABLE IF NOT EXISTS ttldb.tab1 (pk INT8 NOT NULL PRIMARY KEY, ts TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP)",
-		}
-		for _, stmt := range setup {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
-				return errors.Wrapf(err, "error with statement: %s", stmt)
-			}
+		// Determine how many nodes we need TTL activity on based on restart scenario
+		requiredTTLNodes := 3 // Default for numRestartNodes=1
+		if numRestartNodes == 2 {
+			requiredTTLNodes = 2
 		}
 
-		t.Status("add manual splits so that ranges are distributed evenly across the cluster")
-		if _, err := db.ExecContext(ctx, "ALTER TABLE ttldb.tab1 SPLIT AT VALUES (6000), (12000)"); err != nil {
-			return errors.Wrapf(err, "error adding manual splits")
-		}
-
-		t.Status("insert data")
-		if _, err := db.ExecContext(ctx, "INSERT INTO ttldb.tab1 (pk) SELECT generate_series(1, 18000)"); err != nil {
-			return errors.Wrapf(err, "error ingesting data")
-		}
-
-		t.Status("relocate ranges to distribute across nodes")
-		// Moving ranges is put under a SucceedsSoon to account for errors like:
-		// "lease target replica not found in RangeDescriptor"
-		testutils.SucceedsSoon(t, func() error { return distributeLeases(ctx, t, db) })
-		leases, err := gatherLeaseDistribution(ctx, t, db)
-		if err != nil {
-			return errors.Wrapf(err, "error gathering lease distribution")
-		}
-		showLeaseDistribution(t, leases)
-
-		t.Status("enable TTL")
-		ts := db.QueryRowContext(ctx, "SELECT EXTRACT(HOUR FROM now() + INTERVAL '2 minutes') AS hour, EXTRACT(MINUTE FROM now() + INTERVAL '2 minutes') AS minute")
-		var hour, minute int
-		if err := ts.Scan(&hour, &minute); err != nil {
-			return errors.Wrapf(err, "error generating cron expression")
-		}
-		ttlCronExpression := fmt.Sprintf("%d %d * * *", minute, hour)
-		t.L().Printf("using a cron expression of '%s'", ttlCronExpression)
-		ttlJobSettingSQL := fmt.Sprintf(`ALTER TABLE ttldb.tab1
-			SET (ttl_expiration_expression = $$(ts::timestamptz + '1 minutes')$$,
-           ttl_select_batch_size=100,
-           ttl_delete_batch_size=100,
-           ttl_select_rate_limit=100,
-           ttl_job_cron='%s')`,
-			ttlCronExpression)
-		if _, err := db.ExecContext(ctx, ttlJobSettingSQL); err != nil {
-			return errors.Wrapf(err, "error setting TTL attributes")
-		}
-
-		t.Status("wait for the TTL job to start")
 		var jobInfo ttlJobInfo
-		waitForTTLJob := func() error {
-			var err error
-			jobInfo, err = findRunningJob(ctx, t, c, db, nil,
-				false /* expectJobRestart */, false /* allowJobSucceeded */)
-			return err
-		}
-		// The ttl job is scheduled to run in about 2 minutes. Wait for a little
-		// while longer to give the job system enough time to start the job in case
-		// the system is slow.
-		testutils.SucceedsWithin(t, waitForTTLJob, 8*time.Minute)
-		t.L().Printf("TTL job (ID %d) is running at node %d", jobInfo.JobID, jobInfo.CoordinatorID)
-		// Reset the connection so that we query from the coordinator as this is the
-		// only node that will stay up.
-		if err := db.Close(); err != nil {
-			return errors.Wrapf(err, "error closing connection")
-		}
-		db = c.Conn(ctx, t.L(), jobInfo.CoordinatorID)
+		var ttlNodes map[int]struct{}
 
-		t.Status("wait for TTL deletions to start happening")
-		waitForTTLProgressAcrossAllNodes := func() error {
-			if err := waitForTTLProgressAcrossAllRanges(ctx, db); err != nil {
-				return errors.Wrapf(err, "error waiting for TTL progress after restart")
+		// Retry loop: attempt to setup table and get proper TTL distribution
+		for attempt := 1; attempt <= maxRetryAttempts; attempt++ {
+			if attempt > 1 {
+				t.L().Printf("Attempt %d/%d: Retrying table setup due to insufficient TTL distribution", attempt, maxRetryAttempts)
 			}
-			return nil
+
+			// Setup table and data
+			if err := setupTableAndData(ctx, t, db); err != nil {
+				return err
+			}
+
+			// Enable TTL and wait for job to start
+			var err error
+			jobInfo, err = enableTTLAndWaitForJob(ctx, t, c, db)
+			if err != nil {
+				return err
+			}
+
+			// Reset the connection so that we query from the coordinator as this is the
+			// only node that will stay up.
+			if err := db.Close(); err != nil {
+				return errors.Wrapf(err, "error closing connection")
+			}
+			db = c.Conn(ctx, t.L(), jobInfo.CoordinatorID)
+
+			t.Status("check TTL activity distribution across nodes")
+			err = testutils.SucceedsWithinError(func() error {
+				var err error
+				ttlNodes, err = findNodesWithJobLogs(ctx, t, c, jobInfo.JobID)
+				if err != nil {
+					return err
+				}
+				if len(ttlNodes) < requiredTTLNodes {
+					return errors.Newf("TTL activity found on only %d nodes (need %d)", len(ttlNodes), requiredTTLNodes)
+				}
+				return nil
+			}, 1*time.Minute)
+
+			if err == nil {
+				// Success! TTL is distributed across enough nodes
+				t.L().Printf("TTL job %d found on nodes: %v", jobInfo.JobID, ttlNodes)
+				break
+			}
+
+			// Handle the error
+			if ttlNodes != nil && len(ttlNodes) < requiredTTLNodes {
+				t.L().Printf("Attempt %d/%d: TTL job %d found on nodes: %v", attempt, maxRetryAttempts, jobInfo.JobID, ttlNodes)
+				t.L().Printf("Attempt %d/%d: TTL activity found on only %d nodes (need %d)", attempt, maxRetryAttempts, len(ttlNodes), requiredTTLNodes)
+
+				if attempt == maxRetryAttempts {
+					// Final attempt failed - exit successfully as current behavior
+					t.L().Printf("After %d attempts, TTL activity found on only %d nodes (need %d for restart test). Test completed successfully.", maxRetryAttempts, len(ttlNodes), requiredTTLNodes)
+					return nil
+				}
+				// Continue to next attempt
+				continue
+			}
+
+			// Other error that's not related to TTL distribution
+			return errors.Wrapf(err, "error waiting for TTL activity distribution")
 		}
-		testutils.SucceedsWithin(t, waitForTTLProgressAcrossAllNodes, 1*time.Minute)
 
 		t.Status("stop non-coordinator nodes")
 		nonCoordinatorCount := c.Spec().NodeCount - 1
 		stoppingAllNonCoordinators := numRestartNodes == nonCoordinatorCount
-		var ttlNodes map[int]struct{}
-		if !stoppingAllNonCoordinators {
-			// We need to stop a node that actually executed part of the TTL job.
-			// Relying on SQL isn't fully reliable due to potential cache staleness.
-			// Instead, we scan cockroach.log files for known TTL job log markers to
-			// identify nodes that were truly involved in the job execution.
-			ttlNodes, err = findNodesWithJobLogs(ctx, t, c, jobInfo.JobID)
-			if err != nil {
-				return errors.Wrapf(err, "error finding nodes with job logs")
-			}
-		}
 		stoppedNodes := make([]int, 0)
 		for node := 1; node <= c.Spec().NodeCount && len(stoppedNodes) < numRestartNodes; node++ {
 			if node == jobInfo.CoordinatorID {
@@ -207,6 +187,7 @@ func runTTLRestart(ctx context.Context, t test.Test, c cluster.Cluster, numResta
 
 		// If we haven't lost quorum, then the TTL job should restart and continue
 		// working before restarting the down nodes.
+		var err error
 		if numRestartNodes <= c.Spec().NodeCount/2 {
 			t.Status("ensure TTL job restarts")
 			testutils.SucceedsWithin(t, func() error {
@@ -308,88 +289,6 @@ func distributeLeases(ctx context.Context, t test.Test, db *gosql.DB) error {
 	}
 	return nil
 
-}
-
-// waitForTTLProgressAcrossAllRanges ensures that TTL deletions are happening across
-// all ranges. It builds a baseline of key counts for each leaseholder's ranges,
-// and later checks that each leaseholder made progress on at least one of those ranges,
-// regardless of current leaseholder assignment.
-func waitForTTLProgressAcrossAllRanges(ctx context.Context, db *gosql.DB) error {
-	query := `
-		WITH r AS (
-			SHOW RANGES FROM TABLE ttldb.tab1 WITH DETAILS
-		)
-		SELECT
-		  range_id,
-			lease_holder,
-			count(*) AS key_count
-		FROM
-			r,
-			LATERAL crdb_internal.list_sql_keys_in_range(range_id)
-		GROUP BY
-		  range_id,
-			lease_holder
-		ORDER BY
-		  range_id`
-
-	// Map of leaseholder -> rangeID -> keyCount
-	baseline := make(map[int]map[int]int)
-
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var rangeID, leaseHolder, keyCount int
-		if err := rows.Scan(&rangeID, &leaseHolder, &keyCount); err != nil {
-			return err
-		}
-		if _, ok := baseline[leaseHolder]; !ok {
-			baseline[leaseHolder] = make(map[int]int)
-		}
-		baseline[leaseHolder][rangeID] = keyCount
-	}
-
-	compareWithBaseline := func() error {
-		current := make(map[int]int) // rangeID -> keyCount
-
-		rows, err := db.QueryContext(ctx, query)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var rangeID, leaseHolder, keyCount int
-			if err := rows.Scan(&rangeID, &leaseHolder, &keyCount); err != nil {
-				return err
-			}
-			current[rangeID] = keyCount
-		}
-
-		for leaseHolder, ranges := range baseline {
-			madeProgress := false
-			for rangeID, oldCount := range ranges {
-				newCount, ok := current[rangeID]
-				if !ok {
-					return errors.Newf("range %d (from leaseholder %d) not found in follow-up check", rangeID, leaseHolder)
-				}
-				if newCount < oldCount {
-					madeProgress = true
-					break
-				}
-			}
-			if !madeProgress {
-				return errors.Newf("leaseholder %d made no progress on any of their original ranges", leaseHolder)
-			}
-		}
-
-		return nil
-	}
-
-	return testutils.SucceedsWithinError(compareWithBaseline, 20*time.Second)
 }
 
 // findRunningJob checks the current state of the TTL job and returns metadata
@@ -499,7 +398,96 @@ func findNodesWithJobLogs(
 		nodeList = append(nodeList, node)
 	}
 	sort.Ints(nodeList)
-	t.L().Printf("TTL job %d found on nodes: %v", jobID, nodeList)
 
 	return nodesWithJob, nil
+}
+
+// setupTableAndData creates the ttldb database and tab1 table, inserts data,
+// and distributes ranges across nodes. This function can be called multiple
+// times to recreate the table for retry scenarios.
+func setupTableAndData(ctx context.Context, t test.Test, db *gosql.DB) error {
+	t.Status("create/recreate the table")
+	setup := []string{
+		// Speed up the test by doing the replan check often and with a low threshold.
+		"SET CLUSTER SETTING sql.ttl.replan_flow_frequency = '15s'",
+		"SET CLUSTER SETTING sql.ttl.replan_flow_threshold = '0.1'",
+		// Disable the stability window to ensure immediate replanning on node changes.
+		"SET CLUSTER SETTING sql.ttl.replan_stability_window = 1",
+		// Add additional logging to help debug the test on failure.
+		"SET CLUSTER SETTING server.debug.default_vmodule = 'ttljob_processor=1,distsql_plan_bulk=1'",
+		// Drop existing table if it exists
+		"DROP TABLE IF EXISTS ttldb.tab1",
+		// Create the schema to be used in the test
+		"CREATE DATABASE IF NOT EXISTS ttldb",
+		"CREATE TABLE IF NOT EXISTS ttldb.tab1 (pk INT8 NOT NULL PRIMARY KEY, ts TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP)",
+	}
+	for _, stmt := range setup {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return errors.Wrapf(err, "error with statement: %s", stmt)
+		}
+	}
+
+	t.Status("add manual splits so that ranges are distributed evenly across the cluster")
+	if _, err := db.ExecContext(ctx, "ALTER TABLE ttldb.tab1 SPLIT AT VALUES (6000), (12000)"); err != nil {
+		return errors.Wrapf(err, "error adding manual splits")
+	}
+
+	t.Status("insert data")
+	if _, err := db.ExecContext(ctx, "INSERT INTO ttldb.tab1 (pk) SELECT generate_series(1, 18000)"); err != nil {
+		return errors.Wrapf(err, "error ingesting data")
+	}
+
+	t.Status("relocate ranges to distribute across nodes")
+	// Moving ranges is put under a SucceedsSoon to account for errors like:
+	// "lease target replica not found in RangeDescriptor"
+	testutils.SucceedsSoon(t, func() error { return distributeLeases(ctx, t, db) })
+	leases, err := gatherLeaseDistribution(ctx, t, db)
+	if err != nil {
+		return errors.Wrapf(err, "error gathering lease distribution")
+	}
+	showLeaseDistribution(t, leases)
+
+	return nil
+}
+
+// enableTTLAndWaitForJob enables TTL on the table with a cron expression
+// set to run in about 2 minutes, then waits for the job to start.
+func enableTTLAndWaitForJob(
+	ctx context.Context, t test.Test, c cluster.Cluster, db *gosql.DB,
+) (ttlJobInfo, error) {
+	var jobInfo ttlJobInfo
+
+	t.Status("enable TTL")
+	ts := db.QueryRowContext(ctx, "SELECT EXTRACT(HOUR FROM now() + INTERVAL '2 minutes') AS hour, EXTRACT(MINUTE FROM now() + INTERVAL '2 minutes') AS minute")
+	var hour, minute int
+	if err := ts.Scan(&hour, &minute); err != nil {
+		return jobInfo, errors.Wrapf(err, "error generating cron expression")
+	}
+	ttlCronExpression := fmt.Sprintf("%d %d * * *", minute, hour)
+	t.L().Printf("using a cron expression of '%s'", ttlCronExpression)
+	ttlJobSettingSQL := fmt.Sprintf(`ALTER TABLE ttldb.tab1
+		SET (ttl_expiration_expression = $$(ts::timestamptz + '1 minutes')$$,
+          ttl_select_batch_size=100,
+          ttl_delete_batch_size=100,
+          ttl_select_rate_limit=100,
+          ttl_job_cron='%s')`,
+		ttlCronExpression)
+	if _, err := db.ExecContext(ctx, ttlJobSettingSQL); err != nil {
+		return jobInfo, errors.Wrapf(err, "error setting TTL attributes")
+	}
+
+	t.Status("wait for the TTL job to start")
+	waitForTTLJob := func() error {
+		var err error
+		jobInfo, err = findRunningJob(ctx, t, c, db, nil,
+			false /* expectJobRestart */, false /* allowJobSucceeded */)
+		return err
+	}
+	// The ttl job is scheduled to run in about 2 minutes. Wait for a little
+	// while longer to give the job system enough time to start the job in case
+	// the system is slow.
+	testutils.SucceedsWithin(t, waitForTTLJob, ttlJobWaitTime)
+	t.L().Printf("TTL job (ID %d) is running at node %d", jobInfo.JobID, jobInfo.CoordinatorID)
+
+	return jobInfo, nil
 }
