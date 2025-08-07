@@ -25,7 +25,10 @@ go_library(
 
 go_test(
     name = "mmaintegration_test",
-    srcs = ["datadriven_mmaintegration_test.go"],
+    srcs = [
+        "datadriven_mmaintegration_test.go",
+        "datadriven_storeload_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":mmaintegration"],
     deps = [

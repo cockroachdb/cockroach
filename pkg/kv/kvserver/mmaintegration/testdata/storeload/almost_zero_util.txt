@@ -1,0 +1,23 @@
+# This test has the same set up as basic_store_load.txt but focuses on
+# the case when cpu utilization and byte size utilization is almost zero.
+#
+# Basic: make-store-load-msg store_id=1 cpu_per_second=1000
+# write_bytes_per_second=1024 logical_bytes=2048 capacity=1000 available=200
+# lease_count=500 range_count=1000 node_cpu_rate_capacity=2000
+# node_cpu_rate_usage=1000 stores_cpu_rate=1500 num_stores=2 timestamp=1234567890
+# If StoresCPURate is 0, store_capacity = ((NodeCPURateCapacity(200000000000)/2)/NumStores(2)) = 50000000000.
+# - desc.NodeCapacity.NodeCPURateUsage = 1
+# - desc.NodeCapacity.NodeCPURateCapacity = 200000000000
+# If capacity == available, byte size capacity is Available(200).
+# - desc.Capacity.Capacity = desc.Capacity.Available
+make-store-load-msg store_id=1 cpu_per_second=1000 write_bytes_per_second=1024 logical_bytes=2048 capacity=200 available=200 lease_count=500 range_count=1000 node_cpu_rate_capacity=200000000000 node_cpu_rate_usage=1 stores_cpu_rate=1500 num_stores=2 timestamp=1234567890
+----
+s1,n1 at 1234567890:
+load[cpu]=1000
+load[write]=1024
+load[byte]=2048
+capacity[cpu]=50000000000
+capacity[write]=9223372036854775807
+capacity[byte]=200
+secondary_load[lease]=500
+secondary_load[replica]=1000
