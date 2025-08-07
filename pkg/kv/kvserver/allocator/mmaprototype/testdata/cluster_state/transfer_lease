@@ -37,19 +37,19 @@ store-id=2 node-id=2 reported=[cpu:20, write-bandwidth:80, byte-size:80] adjuste
 ranges
 ----
 range-id=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
-  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
-  store-id=2 replica-id=2 type=VOTER_FULL
+  store-id=1 replica-id=1,type=VOTER_FULL,leaseholder=true
+  store-id=2 replica-id=2,type=VOTER_FULL
 
 make-pending-changes range-id=1
   transfer-lease: remove-store-id=1 add-store-id=2 
 ----
 pending(2)
 change-id=1 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-60, write-bandwidth:0, byte-size:0] start=0s
-  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
-  next=(replica-id=1 type=VOTER_FULL)
+  prev=(replica-id=1,type=VOTER_FULL,leaseholder=true,lagging=false)
+  next=(replica-id=1,type=VOTER_FULL)
 change-id=2 store-id=2 node-id=2 range-id=1 load-delta=[cpu:66, write-bandwidth:0, byte-size:0] start=0s
-  prev=(replica-id=2 type=VOTER_FULL)
-  next=(replica-id=2 type=VOTER_FULL leaseholder=true)
+  prev=(replica-id=2,type=VOTER_FULL,lagging=false)
+  next=(replica-id=2,type=VOTER_FULL,leaseholder=true)
 
 get-load-info
 ----
@@ -61,8 +61,8 @@ store-id=2 node-id=2 reported=[cpu:20, write-bandwidth:80, byte-size:80] adjuste
 ranges
 ----
 range-id=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
-  store-id=1 replica-id=1 type=VOTER_FULL
-  store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
+  store-id=1 replica-id=1,type=VOTER_FULL
+  store-id=2 replica-id=2,type=VOTER_FULL,leaseholder=true
 
 reject-pending-changes change-ids=(1,2)
 ----
@@ -78,8 +78,8 @@ store-id=2 node-id=2 reported=[cpu:20, write-bandwidth:80, byte-size:80] adjuste
 ranges
 ----
 range-id=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
-  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
-  store-id=2 replica-id=2 type=VOTER_FULL
+  store-id=1 replica-id=1,type=VOTER_FULL,leaseholder=true
+  store-id=2 replica-id=2,type=VOTER_FULL
 
 # Set both existing stores again, this should have no effect.
 set-store

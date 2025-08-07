@@ -25,7 +25,7 @@ store-id=1
 ranges
 ----
 range-id=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
-  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+  store-id=1 replica-id=1,type=VOTER_FULL,leaseholder=true
 
 
 get-load-info
@@ -39,16 +39,16 @@ make-pending-changes range-id=1
 ----
 pending(2)
 change-id=1 store-id=2 node-id=2 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s
-  prev=(replica-id=none type=VOTER_FULL)
-  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+  prev=(replica-id=none,type=VOTER_FULL,lagging=false)
+  next=(replica-id=unknown,type=VOTER_FULL,leaseholder=true)
 change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
-  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
-  next=(replica-id=none type=VOTER_FULL)
+  prev=(replica-id=1,type=VOTER_FULL,leaseholder=true,lagging=false)
+  next=(replica-id=none,type=VOTER_FULL)
 
 ranges
 ----
 range-id=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
-  store-id=2 replica-id=unknown type=VOTER_FULL leaseholder=true
+  store-id=2 replica-id=unknown,type=VOTER_FULL,leaseholder=true
 
 get-load-info
 ----
@@ -75,11 +75,11 @@ get-pending-changes
 ----
 pending(2)
 change-id=1 store-id=2 node-id=2 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s enacted=0s
-  prev=(replica-id=none type=VOTER_FULL)
-  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+  prev=(replica-id=none,type=VOTER_FULL,lagging=false)
+  next=(replica-id=unknown,type=VOTER_FULL,leaseholder=true)
 change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s enacted=0s
-  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
-  next=(replica-id=none type=VOTER_FULL)
+  prev=(replica-id=1,type=VOTER_FULL,leaseholder=true,lagging=false)
+  next=(replica-id=none,type=VOTER_FULL)
 
 store-load-msg
   store-id=2 node-id=2 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=15s
@@ -89,8 +89,8 @@ get-pending-changes
 ----
 pending(1)
 change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s enacted=0s
-  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
-  next=(replica-id=none type=VOTER_FULL)
+  prev=(replica-id=1,type=VOTER_FULL,leaseholder=true,lagging=false)
+  next=(replica-id=none,type=VOTER_FULL)
 
 get-load-info
 ----
