@@ -8,6 +8,7 @@ go_library(
         "batching_sink.go",
         "changefeed.go",
         "changefeed_dist.go",
+        "changefeed_job_info.go",
         "changefeed_processors.go",
         "changefeed_stmt.go",
         "compression.go",
@@ -197,6 +198,7 @@ go_test(
     srcs = [
         "alter_changefeed_test.go",
         "changefeed_dist_test.go",
+        "changefeed_job_info_test.go",
         "changefeed_stmt_test.go",
         "changefeed_test.go",
         "csv_test.go",
