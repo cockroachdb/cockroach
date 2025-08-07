@@ -22,11 +22,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -192,13 +194,6 @@ will then convert it to the --format requested in the current invocation.
 					return errors.Wrapf(err, "connecting to %s", target)
 				}
 
-				// Buffer the writes to os.Stdout since we're going to
-				// be writing potentially a lot of data to it.
-				w := bufio.NewWriterSize(os.Stdout, 1024*1024)
-				if err := tsutil.DumpRawTo(stream, w); err != nil {
-					return err
-				}
-
 				// get the node details so that we can get the SQL port
 				statusClient := conn.NewStatusClient()
 				resp, err := statusClient.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
@@ -210,6 +205,32 @@ will then convert it to the --format requested in the current invocation.
 				// this port should be used to make the SQL connection
 				cliCtx.clientOpts.ServerHost, cliCtx.clientOpts.ServerPort, err = net.SplitHostPort(resp.SQLAddress.String())
 				if err != nil {
+					return err
+				}
+
+				// Get store-to-node mapping for metadata
+				storeToNodeMap, err := getStoreToNodeMapping(ctx)
+				if err != nil {
+					return err
+				}
+
+				// Create metadata header
+				metadata := tsdumpmeta.Metadata{
+					Version:        build.BinaryVersion(),
+					StoreToNodeMap: storeToNodeMap,
+					CreatedAt:      timeutil.Now(),
+				}
+
+				// Buffer the writes to os.Stdout since we're going to
+				// be writing potentially a lot of data to it.
+				w := bufio.NewWriterSize(os.Stdout, 1024*1024)
+
+				// Write embedded metadata first
+				if err := tsdumpmeta.Write(w, metadata); err != nil {
+					return err
+				}
+
+				if err := tsutil.DumpRawTo(stream, w); err != nil {
 					return err
 				}
 
@@ -228,12 +249,26 @@ will then convert it to the --format requested in the current invocation.
 			if err != nil {
 				return err
 			}
+			defer f.Close()
 			type tup struct {
 				data *tspb.TimeSeriesData
 				err  error
 			}
 
 			dec := gob.NewDecoder(f)
+
+			// Try to read embedded metadata first
+			embeddedMetadata, metadataErr := tsdumpmeta.Read(dec)
+			if metadataErr != nil {
+				// No embedded metadata, restart from beginning
+				if _, err := f.Seek(0, io.SeekStart); err != nil {
+					return err
+				}
+				dec = gob.NewDecoder(f) // Reset decoder to read from beginning
+			} else {
+				fmt.Printf("Found embedded store-to-node mapping with %d entries\n", len(embeddedMetadata.StoreToNodeMap))
+			}
+
 			decodeOne := func() (*tspb.TimeSeriesData, error) {
 				var v roachpb.KeyValue
 				err := dec.Decode(&v)
@@ -260,6 +295,10 @@ will then convert it to the --format requested in the current invocation.
 				for {
 					data, err := decodeOne()
 					ch <- tup{data, err}
+					// Exit the goroutine if we encounter EOF or any error
+					if err != nil {
+						break
+					}
 				}
 			}()
 
@@ -465,38 +504,57 @@ type openMetricsWriter struct {
 // createYAML generates and writes tsdump.yaml to default /tmp or to a specified path.
 // This file is used for staging the tsdump data into a local database for debugging
 func createYAML(ctx context.Context) (resErr error) {
+	// Write the YAML file for backward compatibility
 	file, err := os.OpenFile(debugTimeSeriesDumpOpts.yaml, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	sqlConn, err := makeSQLClient(ctx, "cockroach tsdump", useSystemDb)
-	if err != nil {
-		return err
-	}
-	defer func() { resErr = errors.CombineErrors(resErr, sqlConn.Close()) }()
-
-	_, rows, err := sqlExecCtx.RunQuery(
-		ctx,
-		sqlConn,
-		clisqlclient.MakeQuery(`SELECT store_id || ': ' || node_id FROM crdb_internal.kv_store_status`), false)
-
+	mapping, err := getStoreToNodeMapping(ctx)
 	if err != nil {
 		return err
 	}
 
-	var strStoreNodeID string
-	for _, row := range rows {
-		storeNodeID := row
-		strStoreNodeID = strings.Join(storeNodeID, " ")
-		strStoreNodeID += "\n"
-		_, err := file.WriteString(strStoreNodeID)
+	for storeID, nodeID := range mapping {
+		_, err := fmt.Fprintf(file, "%s: %s\n", storeID, nodeID)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// getStoreToNodeMapping retrieves the store-to-node mapping from the database
+func getStoreToNodeMapping(ctx context.Context) (map[string]string, error) {
+	sqlConn, err := makeSQLClient(ctx, "cockroach tsdump", useSystemDb)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := sqlConn.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close SQL connection: %v\n", closeErr)
+		}
+	}()
+
+	_, rows, err := sqlExecCtx.RunQuery(
+		ctx,
+		sqlConn,
+		clisqlclient.MakeQuery(`SELECT store_id, node_id FROM crdb_internal.kv_store_status`), false)
+
+	if err != nil {
+		return nil, err
+	}
+
+	mapping := make(map[string]string)
+	for _, row := range rows {
+		if len(row) >= 2 {
+			storeID := strings.TrimSpace(row[0])
+			nodeID := strings.TrimSpace(row[1])
+			mapping[storeID] = nodeID
+		}
+	}
+	return mapping, nil
 }
 
 func makeOpenMetricsWriter(out io.Writer) *openMetricsWriter {

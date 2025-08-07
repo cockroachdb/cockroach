@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -584,12 +585,33 @@ func (d *datadogWriter) upload(fileName string) error {
 		fmt.Println("Dry-run mode enabled. Not actually uploading data to Datadog.")
 	}
 
-	storeToNodeYamlFile := debugTimeSeriesDumpOpts.storeToNodeMapYAMLFile
-	if storeToNodeYamlFile != "" {
-		d.populateNodeAndStoreMap(storeToNodeYamlFile)
-	}
-
 	dec := gob.NewDecoder(f)
+
+	// Try to read embedded metadata first
+	embeddedMetadata, metadataErr := tsdumpmeta.Read(dec)
+	if metadataErr == nil && embeddedMetadata != nil {
+		d.storeToNodeMap = embeddedMetadata.StoreToNodeMap
+		fmt.Printf("Using embedded store-to-node mapping with %d entries\n", len(d.storeToNodeMap))
+	} else {
+		// Reset the reader since we tried to read metadata. Close the file and
+		// reopen a fresh reader.
+		if closer, ok := f.(io.Closer); ok {
+			closer.Close()
+		} else {
+			return errors.New("failed to reset the reader")
+		}
+		f, err = getFileReader(fileName)
+		if err != nil {
+			return err
+		}
+		dec = gob.NewDecoder(f)
+		// Fall back to external YAML file if provided
+		storeToNodeYamlFile := debugTimeSeriesDumpOpts.storeToNodeMapYAMLFile
+		if storeToNodeYamlFile != "" {
+			fmt.Println("Using external store-to-node mapping from YAML file")
+			d.populateNodeAndStoreMap(storeToNodeYamlFile)
+		}
+	}
 	allMetrics := make(map[string]struct{})
 	decodeOne := func() ([]datadogV2.MetricSeries, error) {
 		var ddSeries []datadogV2.MetricSeries
