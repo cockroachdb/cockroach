@@ -716,9 +716,21 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		// TODO(xxx): start it on another node for less test runner load
 		// TODO: handle initial scans better (no resolved or updated, validate on feed completion)
 		ct.mon.Go(func(ctx context.Context) error {
+			// Stop validating on shutdown.
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			go func() {
+				select {
+				case <-ctx.Done():
+				case <-ct.doneCh:
+				}
+				cancel()
+			}()
 			if err := cdctest.ConsumeAndValidate(ctx, consumer, valdtr); err != nil {
 				ct.t.Status(fmt.Sprintf("consume+validate failed: %v", err))
-				ct.t.Fatalf("consume+validate failed: %v", err)
+				if !errors.Is(err, context.Canceled) {
+					ct.t.Fatalf("consume+validate failed: %v", err)
+				}
 			}
 			return nil
 		})
