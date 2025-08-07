@@ -7,6 +7,7 @@ package stop_test
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -21,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/petermattis/goid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -741,4 +744,34 @@ func TestHandleWithoutActivateOrRelease(t *testing.T) {
 			(<-relCh).Release(ctx)
 		}
 	})
+}
+
+func TestHandleSetsGoroutineOnSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s := stop.NewStopper()
+	defer s.Stop(ctx)
+
+	tracer := tracing.NewTracer()
+	sp := tracer.StartSpan("test span")
+	sp.SetRecordingType(tracingpb.RecordingVerbose)
+	ctx = tracing.ContextWithSpan(ctx, sp)
+
+	ctx, hdl, err := s.GetHandle(ctx, stop.TaskOpts{
+		SpanOpt:  stop.ChildSpan,
+		TaskName: "async task",
+	})
+	require.NoError(t, err)
+
+	endCh := make(chan struct{})
+	var goroutineID int64
+	go func() {
+		defer hdl.Activate(ctx).Release(ctx)
+		goroutineID = goid.Get()
+		close(endCh)
+	}()
+	<-endCh
+	rec := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
+	require.Contains(t, rec.String(), fmt.Sprintf("gid:%d", goroutineID))
 }
