@@ -46,6 +46,10 @@ type ActiveHandle interface {
 func (hdl *Handle) Activate(ctx context.Context) ActiveHandle {
 	growstack.Grow() // see https://github.com/cockroachdb/cockroach/issues/130663
 
+	// Activate is called once we're inside the new goroutine.
+	if hdl.sp != nil {
+		hdl.sp.UpdateGoroutineIDToCurrent()
+	}
 	hdl.region = hdl.s.startRegion(ctx, hdl.taskName)
 	// NB: it's tempting for ergonomics to make `release` a method on `Handle` and
 	// to return `hdl.release` here, but that allocates.
