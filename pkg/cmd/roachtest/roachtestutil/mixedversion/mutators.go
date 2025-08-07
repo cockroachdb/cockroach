@@ -557,6 +557,10 @@ func (m networkPartitionMutator) Generate(
 			// Many hook steps require communication between specific nodes, so we
 			// should recover the network partition before running them.
 			_, runHook := s.impl.(runHookStep)
+			// Waiting for stable cluster version requires communication between
+			// all nodes in the cluster, so we should recover the network partition
+			// before running it.
+			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
 
 			if idx.IsConcurrent(s) {
 				if firstStepInConcurrentBlock == nil {
@@ -574,7 +578,7 @@ func (m networkPartitionMutator) Generate(
 			} else {
 				unavailableNodes = s.context.System.hasUnavailableNodes
 			}
-			return unavailableNodes || restartTenant || restartSystem || runHook
+			return unavailableNodes || restartTenant || restartSystem || runHook || waitForStable
 		}
 
 		_, validStartStep := upgrade.CutAfter(func(s *singleStep) bool {
