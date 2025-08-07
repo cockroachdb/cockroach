@@ -488,6 +488,8 @@ func (m panicNodeMutator) Generate(
 			return s == restartStep[0]
 		})
 		failureContextSteps.MarkNodesUnavailable(true, false)
+		addPanicStep[0].hasUnavailableSystemNodes = true
+		addRestartStep[0].hasUnavailableSystemNodes = true
 
 		mutations = append(mutations, addPanicStep...)
 		mutations = append(mutations, addRestartStep...)
@@ -623,6 +625,10 @@ func (m networkPartitionMutator) Generate(
 		})
 
 		failureContextSteps.MarkNodesUnavailable(true, true)
+		addPartition[0].hasUnavailableSystemNodes = true
+		addPartition[0].hasUnavailableTenantNodes = true
+		addRecoveryStep[0].hasUnavailableSystemNodes = true
+		addRecoveryStep[0].hasUnavailableTenantNodes = true
 
 		mutations = append(mutations, addPartition...)
 		mutations = append(mutations, addRecoveryStep...)
