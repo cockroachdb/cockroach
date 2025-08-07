@@ -1331,6 +1331,75 @@ func TestTxnWriteBufferRespectsMustAcquireExclusiveLock(t *testing.T) {
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
 
+// TestTxnWriteBufferResumeSpans verifies that the txnWriteBuffer behaves
+// correctly in presence of BatchRequest's limits that result in non-nil
+// ResumeSpans.
+// TODO(yuzefovich): extend the test for Scans and ReverseScans.
+func TestTxnWriteBufferResumeSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
+
+	txn := makeTxnProto()
+	txn.Sequence = 1
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+	// Delete 3 keys while setting MaxSpanRequestKeys to 2 (only the first two
+	// Dels should be processed).
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn, MaxSpanRequestKeys: 2}
+	for _, k := range []roachpb.Key{keyA, keyB, keyC} {
+		del := delArgs(k, txn.Sequence)
+		// Set MustAcquireExclusiveLock so that Del is transformed into Get.
+		del.MustAcquireExclusiveLock = true
+		ba.Add(del)
+	}
+
+	// Simulate a scenario where each transformed Get finds something and the
+	// limit is reached after the second Get.
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Equal(t, int64(2), ba.MaxSpanRequestKeys)
+		require.Len(t, ba.Requests, 3)
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[2].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses = []kvpb.ResponseUnion{
+			{Value: &kvpb.ResponseUnion_Get{
+				Get: &kvpb.GetResponse{Value: &roachpb.Value{RawBytes: []byte("a")}},
+			}},
+			{Value: &kvpb.ResponseUnion_Get{
+				Get: &kvpb.GetResponse{Value: &roachpb.Value{RawBytes: []byte("b")}},
+			}},
+			{Value: &kvpb.ResponseUnion_Get{
+				Get: &kvpb.GetResponse{ResponseHeader: kvpb.ResponseHeader{
+					ResumeSpan: &roachpb.Span{Key: keyC},
+				}},
+			}},
+		}
+		return br, nil
+	})
+
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Even though the txnWriteBuffer did not send any Del requests to the KV
+	// layer above, the responses should still be populated.
+	require.Len(t, br.Responses, 3)
+	require.Equal(t, &kvpb.DeleteResponse{FoundKey: true}, br.Responses[0].GetInner())
+	require.Equal(t, &kvpb.DeleteResponse{FoundKey: true}, br.Responses[1].GetInner())
+	// The last Del wasn't processed, so we should see the ResumeSpan set in the
+	// header.
+	require.NotNil(t, br.Responses[2].GetInner().(*kvpb.DeleteResponse).ResumeSpan)
+
+	// Verify that only two writes are buffered.
+	require.Equal(t, 2, len(twb.testingBufferedWritesAsSlice()))
+}
+
 // TestTxnWriteBufferMustSortBatchesBySequenceNumber verifies that flushed
 // batches are sorted in sequence number order, as currently required by the txn
 // pipeliner interceptor.
