@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/encodingtype"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -1786,6 +1787,7 @@ const (
 	JsonEmptyArray     Type = 42
 	JsonEmptyArrayDesc Type = 43
 	PGVector           Type = 44
+	LTree              Type = 45
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -2840,6 +2842,22 @@ func EncodePGVectorValue(appendTo []byte, colIDDelta uint32, data []byte) []byte
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
+// EncodeLTreeValue encodes a ltree.T value with its value tag, appends it to
+// the supplied buffer, and returns the final buffer.
+func EncodeLTreeValue(appendTo []byte, colIDDelta uint32, l ltree.T) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, LTree)
+	return EncodeUntaggedLTreeValue(appendTo, l)
+}
+
+// EncodeUntaggedLTreeValue encodes a ltree.T value, appends it to the supplied
+// buffer, and returns the final buffer.
+func EncodeUntaggedLTreeValue(appendTo []byte, l ltree.T) []byte {
+	var buf bytes.Buffer
+	l.FormatToBuffer(&buf)
+	appendTo = EncodeUntaggedBytesValue(appendTo, buf.Bytes())
+	return appendTo
+}
+
 // DecodeValueTag decodes a value encoded by EncodeValueTag, used as a prefix in
 // each of the other EncodeFooValue methods.
 //
@@ -3189,6 +3207,28 @@ func DecodeUntaggedIPAddrValue(b []byte) (remaining []byte, u ipaddr.IPAddr, err
 	return remaining, u, err
 }
 
+// DecodeLTreeValue decodes a value encoded by EncodeLTreeValue.
+func DecodeLTreeValue(b []byte) (remaining []byte, l ltree.T, err error) {
+	b, err = decodeValueTypeAssert(b, LTree)
+	if err != nil {
+		return b, l, err
+	}
+	return DecodeUntaggedLTreeValue(b)
+}
+
+// DecodeUntaggedLTreeValue decodes a value encoded by EncodeUntaggedLTreeValue.
+func DecodeUntaggedLTreeValue(b []byte) (remaining []byte, l ltree.T, err error) {
+	remaining, data, err := DecodeUntaggedBytesValue(b)
+	if err != nil {
+		return b, l, err
+	}
+	l, err = ltree.ParseLTree(string(data))
+	if err != nil {
+		return b, l, err
+	}
+	return remaining, l, nil
+}
+
 func decodeValueTypeAssert(b []byte, expected Type) ([]byte, error) {
 	_, dataOffset, _, typ, err := DecodeValueTag(b)
 	if err != nil {
@@ -3243,7 +3283,7 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 		return dataOffset + n, err
 	case Float:
 		return dataOffset + floatValueEncodedLength, nil
-	case Bytes, Array, JSON, Geo, TSVector, TSQuery, PGVector:
+	case Bytes, Array, JSON, Geo, TSVector, TSQuery, PGVector, LTree:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return dataOffset + n + int(i), err
 	case Box2D:

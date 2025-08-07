@@ -218,6 +218,10 @@ func TestEncDatumCompare(t *testing.T) {
 		case types.AnyFamily, types.UnknownFamily, types.ArrayFamily, types.JsonFamily, types.TupleFamily, types.VoidFamily,
 			types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily, types.TriggerFamily, types.JsonpathFamily:
 			continue
+		case types.LTreeFamily:
+			// TODO(paulniziolek): Temporarily skip LTrees as they are
+			// currently missing keyside indexing support.
+			continue
 		case types.CollatedStringFamily:
 			typ = types.MakeCollatedString(types.String, *randgen.RandCollationLocale(rng))
 		}
