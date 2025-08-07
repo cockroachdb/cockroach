@@ -504,43 +504,6 @@ func TestDataDrivenMMAIntegration(t *testing.T) {
 				}
 				as.MarkChangesAsFailed(changeIDs)
 				return fmt.Sprintf("marked %v as failed", changeIDs)
-			case "mma-pre-apply":
-				var requestCPU, raftCPU, writeBytes, logicalBytes int
-				var changeType string
-				var changeIDsStr string
-				d.ScanArgs(t, "request_cpu", &requestCPU)
-				d.ScanArgs(t, "raft_cpu", &raftCPU)
-				d.ScanArgs(t, "write_bytes", &writeBytes)
-				d.ScanArgs(t, "logical_bytes", &logicalBytes)
-				d.ScanArgs(t, "change_type", &changeType)
-				d.ScanArgs(t, "change_ids", &changeIDsStr)
-
-				usage := allocator.RangeUsageInfo{
-					RequestCPUNanosPerSecond: float64(requestCPU),
-					RaftCPUNanosPerSecond:    float64(raftCPU),
-					WriteBytesPerSecond:      float64(writeBytes),
-					LogicalBytes:             int64(logicalBytes),
-				}
-
-				// Parse change IDs
-				changeIDStrs := strings.Split(changeIDsStr, ",")
-				var changeIDs []mmaprototype.ChangeID
-				for _, idStr := range changeIDStrs {
-					id, err := strconv.Atoi(strings.TrimSpace(idStr))
-					if err != nil {
-						d.Fatalf(t, "invalid change ID: %s", idStr)
-					}
-					changeIDs = append(changeIDs, mmaprototype.ChangeID(id))
-				}
-
-				// For now, we'll create a simple PendingRangeChange instance
-				// In a real implementation, this would be more complex
-				prc := mmaprototype.PendingRangeChange{
-					RangeID: roachpb.RangeID(1), // Use a default range ID
-				}
-				syncID := as.MMAPreApply(usage, prc)
-				return fmt.Sprintf("sync_change_id: %d", syncID)
-
 			case "get-tracked-change":
 				var id int
 				d.ScanArgs(t, "sync_id", &id)
