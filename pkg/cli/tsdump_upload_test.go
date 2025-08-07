@@ -147,7 +147,7 @@ func TestTSDumpPartialUploadE2E(t *testing.T) {
 				require.NoError(t, err)
 				body, err := io.ReadAll(reader)
 				require.NoError(t, err)
-				if strings.Contains(string(body), "crdb.tsdump.sql.query.count") {
+				if strings.Contains(string(body), "cockroachdb.sql.query.count") {
 					w.WriteHeader(http.StatusConflict)
 					return
 				}
