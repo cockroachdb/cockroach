@@ -14,6 +14,14 @@ import (
 // EquivGroups describes a set of equivalence groups of columns. It can answer
 // queries about which columns are equivalent to one another. Equivalence groups
 // are always non-empty and disjoint.
+//
+// Importantly, the equality semantics of EquivGroups allows for NULL values.
+// For example, if "a" and "b" are in the same equivalence group, then this SQL
+// expression is true:
+//
+//	a = b OR (a IS NULL AND b IS NULL)
+//
+// This differs from SQL equality semantics where two NULL values are not equal.
 type EquivGroups struct {
 	// groups contains the equiv groups in no particular order. It should never be
 	// accessed outside the EquivSet methods. Each ColSet should be considered
@@ -89,18 +97,24 @@ func (eq *EquivGroups) ContainsCol(col opt.ColumnID) bool {
 	return false
 }
 
-// AreColsEquiv indicates whether the given columns are equivalent.
-func (eq *EquivGroups) AreColsEquiv(left, right opt.ColumnID) bool {
+// AreColsEquiv indicates whether the given columns are equivalent. If "a" and
+// "b" are the same column, true is always returned. Note that this definition
+// of equivalence allows for equal NULL values, which is different from SQL
+// equality semantics. Formally, if AreColsEquiv(a, b) is true, then the
+// following SQL expression is true:
+//
+//	a = b OR (a IS NULL AND b IS NULL)
+func (eq *EquivGroups) AreColsEquiv(a, b opt.ColumnID) bool {
 	if buildutil.CrdbTestBuild {
 		defer eq.verify()
 	}
-	if left == right {
+	if a == b {
 		return true
 	}
 	for i := range eq.groups {
-		containsLeft, containsRight := eq.groups[i].Contains(left), eq.groups[i].Contains(right)
-		if containsLeft || containsRight {
-			return containsLeft && containsRight
+		containsA, containsB := eq.groups[i].Contains(a), eq.groups[i].Contains(b)
+		if containsA || containsB {
+			return containsA && containsB
 		}
 	}
 	return false
