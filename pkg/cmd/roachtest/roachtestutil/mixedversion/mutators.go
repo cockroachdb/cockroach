@@ -488,6 +488,7 @@ func (m panicNodeMutator) Generate(
 			return s == restartStep[0]
 		})
 		failureContextSteps.MarkNodesUnavailable(true, false)
+		addPanicStep[0].hasUnavailableSystemNodes = true
 
 		mutations = append(mutations, addPanicStep...)
 		mutations = append(mutations, addRestartStep...)
@@ -555,6 +556,10 @@ func (m networkPartitionMutator) Generate(
 			// Many hook steps require communication between specific nodes, so we
 			// should recover the network partition before running them.
 			_, runHook := s.impl.(runHookStep)
+			// Waiting for stable cluster version requires communication between
+			// all nodes in the cluster, so we should recover the network partition
+			// before running it.
+			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
 
 			if idx.IsConcurrent(s) {
 				if firstStepInConcurrentBlock == nil {
@@ -568,7 +573,7 @@ func (m networkPartitionMutator) Generate(
 
 			var unavailableNodes bool
 			if planner.isMultitenant() {
-				unavailableNodes = s.context.Tenant.hasUnavailableNodes || s.context.System.hasUnavailableNodes
+				unavailableNodes = s.context.Tenant.hasUnavailableNodes || s.context.System.hasUnavailableNodes || waitForStable
 			} else {
 				unavailableNodes = s.context.System.hasUnavailableNodes
 			}
@@ -617,6 +622,8 @@ func (m networkPartitionMutator) Generate(
 		})
 
 		failureContextSteps.MarkNodesUnavailable(true, true)
+		addPartition[0].hasUnavailableSystemNodes = true
+		addPartition[0].hasUnavailableTenantNodes = true
 
 		mutations = append(mutations, addPartition...)
 		mutations = append(mutations, addRecoveryStep...)

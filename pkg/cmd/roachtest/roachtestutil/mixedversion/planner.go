@@ -148,9 +148,11 @@ type (
 	// performed. If a new step is being added to the plan, `impl`
 	// includes its implementation.
 	mutation struct {
-		reference *singleStep
-		impl      singleStepProtocol
-		op        mutationOp
+		reference                 *singleStep
+		impl                      singleStepProtocol
+		op                        mutationOp
+		hasUnavailableSystemNodes bool
+		hasUnavailableTenantNodes bool
 	}
 
 	// stepSelector provides a high level API for mutator
@@ -1536,6 +1538,10 @@ func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 					context: index.ContextForInsertion(ss, mut.op),
 					impl:    mut.impl,
 					rng:     rngFromRNG(rng),
+				}
+				newSingleStep.context.System.hasUnavailableNodes = mut.hasUnavailableSystemNodes
+				if newSingleStep.context.Tenant != nil {
+					newSingleStep.context.Tenant.hasUnavailableNodes = mut.hasUnavailableTenantNodes
 				}
 			}
 
