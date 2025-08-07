@@ -151,6 +151,12 @@ type (
 		reference *singleStep
 		impl      singleStepProtocol
 		op        mutationOp
+		// unavailableNodes are marked for each step during the `Generate`
+		// method, but the mutator steps themselves are not created until
+		// `applyMutations` is called. These booleans denote whether
+		// the mutator sets any nodes to unavailable.
+		hasUnavailableSystemNodes bool
+		hasUnavailableTenantNodes bool
 	}
 
 	// stepSelector provides a high level API for mutator
@@ -1536,6 +1542,10 @@ func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 					context: index.ContextForInsertion(ss, mut.op),
 					impl:    mut.impl,
 					rng:     rngFromRNG(rng),
+				}
+				newSingleStep.context.System.hasUnavailableNodes = mut.hasUnavailableSystemNodes
+				if newSingleStep.context.Tenant != nil {
+					newSingleStep.context.Tenant.hasUnavailableNodes = mut.hasUnavailableTenantNodes
 				}
 			}
 
