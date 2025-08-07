@@ -142,6 +142,9 @@ type txnState struct {
 	// testingForceRealTracingSpans is a test-only knob that forces the use of
 	// real (i.e. not no-op) tracing spans for every statement.
 	testingForceRealTracingSpans bool
+
+	// execType records the executor type for the transaction.
+	execType executorType
 }
 
 // txnType represents the type of a SQL transaction.
@@ -218,7 +221,11 @@ func (ts *txnState) resetForNewSQLTxn(
 	duration := TraceTxnThreshold.Get(&tranCtx.settings.SV)
 
 	sampleRate := TraceTxnSampleRate.Get(&tranCtx.settings.SV)
+	includeInternal := TraceTxnIncludeInternal.Get(&tranCtx.settings.SV)
 	ts.shouldRecord = sampleRate > 0 && duration > 0 && rng.Float64() < sampleRate
+	if !includeInternal && ts.execType == executorTypeInternal {
+		ts.shouldRecord = false
+	}
 	ts.outputJaegerJSON = TraceTxnOutputJaegerJSON.Get(&tranCtx.settings.SV)
 
 	if alreadyRecording || ts.shouldRecord {
