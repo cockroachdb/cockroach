@@ -74,9 +74,7 @@ type AllocatorSync struct {
 	}
 }
 
-func NewAllocatorSync(
-	sp storePool, mmaAllocator mmaState, st *cluster.Settings,
-) *AllocatorSync {
+func NewAllocatorSync(sp storePool, mmaAllocator mmaState, st *cluster.Settings) *AllocatorSync {
 	as := &AllocatorSync{
 		sp:           sp,
 		st:           st,
