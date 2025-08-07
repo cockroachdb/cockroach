@@ -45,7 +45,7 @@ func (o *Optimizer) TryPlaceholderFastPath() (ok bool, err error) {
 		}
 	}()
 
-	root := o.mem.RootExpr().(memo.RelExpr)
+	root := o.mem.RootExpr()
 
 	rootRelProps := root.Relational()
 	// We are dealing with a memo that still contains placeholders. The statistics

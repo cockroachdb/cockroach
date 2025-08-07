@@ -261,7 +261,7 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 	o.optimizeRootWithProps()
 
 	// Now optimize the entire expression tree.
-	root := o.mem.RootExpr().(memo.RelExpr)
+	root := o.mem.RootExpr()
 	rootProps := o.mem.RootProps()
 	o.optimizeGroup(root, rootProps)
 
@@ -922,10 +922,7 @@ func (o *Optimizer) ensureOptState(grp memo.RelExpr, required *physical.Required
 // properties required of it. This may trigger the creation of a new root and
 // new properties.
 func (o *Optimizer) optimizeRootWithProps() {
-	root, ok := o.mem.RootExpr().(memo.RelExpr)
-	if !ok {
-		panic(errors.AssertionFailedf("Optimize can only be called on relational root expressions"))
-	}
+	root := o.mem.RootExpr()
 	rootProps := o.mem.RootProps()
 
 	// [SimplifyRootOrdering]
