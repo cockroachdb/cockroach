@@ -132,10 +132,27 @@ Always run `./dev generate` after modifying `.proto` files, SQL grammar, or opti
 
 - Follow the format:
   - Separate the subject from the body with a blank line.
-  - Use the body of the commit record to explain what existed before your change, what you changed, and why.
-  - Require the user to specify whether or not there should be release notes. Release notes should be specified after the body, following "Release Notes:".
-  - When writing release notes, please follow the guidance here: https://cockroachlabs.atlassian.net/wiki/spaces/CRDB/pages/186548364/Release+notes
-  - Require the user to specify an epic number (or None) which should be included at the bottom of the commit record following "Epic:".
   - Prefix the subject line with the package in which the bulk of the changes occur.
-  - For multi-commit PRs, summarize each commit in the PR record.
+  - Use the body of the commit record to explain what existed before your change, what you changed, and why.
+  - Never include co-authored by Claude lines.
   - Do not include a test plan unless explicitly asked by the user.
+  - Every commit message must end with a Release Note and Epic specification:
+    - For changes to functionality visible to users of the database, including in particular new features or bug fixes, require the user specify if a release note should be included.
+    - Changes only to tests, testdata and testing infrastructure like roachtests can be assumed not to require a release note.
+    - When writing release notes, please follow the guidance here: https://cockroachlabs.atlassian.net/wiki/spaces/CRDB/pages/186548364/Release+notes
+      - Specifically the line must be of the form "Release note (area): change description" or "Release note: none." if one is not required.
+    - For changes with a release note, require the user specify an epic and note it on the Epic line following the release note.
+      - Changes without a release note can assume an epic of none unless the user specifies otherwise. 
+  - Consult recent commits in the git log for a sense of repository style.
+  - When opening a PR, the PR body can generally just be the commit message text. 
+    - For multi-commit PRs, summarize each commit message.
+
+# Interaction Style
+
+* Be direct and honest.
+* Skip unnecessary acknowledgments.
+* Correct me when I'm wrong and explain why.
+* Suggest better alternatives if my ideas can be improved.
+* Focus on accuracy and efficiency.
+* Challenge my assumptions when needed.
+* Prioritize quality information and directness.
