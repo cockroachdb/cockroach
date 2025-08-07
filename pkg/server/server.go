@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -55,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -904,6 +904,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	mmaAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
 		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+	allocatorSync := mmaintegration.NewAllocatorSync(storePool, mmaAllocator, st)
 	g.RegisterCallback(
 		gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
 		func(_ string, content roachpb.Value, origTimestampNanos int64) {
@@ -912,7 +913,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 				log.Errorf(ctx, "%v", err)
 				return
 			}
-			storeLoadMsg := mmaprototypehelpers.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
+			storeLoadMsg := mmaintegration.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
 			mmaAllocator.SetStore(state.StoreAttrAndLocFromDesc(storeDesc))
 			mmaAllocator.ProcessStoreLoadMsg(context.TODO(), &storeLoadMsg)
 		},
@@ -930,6 +931,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		StoreLiveness:                storeLiveness,
 		StorePool:                    storePool,
 		MMAllocator:                  mmaAllocator,
+		AllocatorSync:                allocatorSync,
 		Transport:                    raftTransport,
 		NodeDialer:                   kvNodeDialer,
 		RPCContext:                   rpcContext,

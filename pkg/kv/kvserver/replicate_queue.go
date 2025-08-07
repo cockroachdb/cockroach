@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -525,6 +526,7 @@ type replicateQueue struct {
 	*baseQueue
 	metrics   ReplicateQueueMetrics
 	allocator allocatorimpl.Allocator
+	as        *mmaintegration.AllocatorSync
 	storePool storepool.AllocatorStorePool
 	planner   plan.ReplicationPlanner
 
@@ -558,6 +560,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 		logTracesThresholdFunc: makeRateLimitedTimeoutFuncByPermittedSlowdown(
 			permittedRangeScanSlowdown/2, rebalanceSnapshotRate,
 		),
+		as: store.cfg.AllocatorSync,
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
@@ -976,9 +979,10 @@ func (rq *replicateQueue) shedLease(
 
 // ReplicaLeaseMover handles lease transfers for a single range.
 type ReplicaLeaseMover interface {
+	// Desc returns the range descriptor of the range.
+	Desc() *roachpb.RangeDescriptor
 	// AdminTransferLease moves the lease to the requested store.
 	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
-
 	// String returns info about the replica.
 	String() string
 }
@@ -1028,11 +1032,21 @@ func (rq *replicateQueue) TransferLease(
 ) error {
 	rq.metrics.TransferLeaseCount.Inc(1)
 	log.KvDistribution.Infof(ctx, "transferring lease to s%d", target)
-	if err := rlm.AdminTransferLease(ctx, target.StoreID, false /* bypassSafetyChecks */); err != nil {
+	// Inform allocator sync that the change has been applied which applies
+	// changes to store pool and inform mma.
+	changeID := rq.as.NonMMAPreTransferLease(
+		rlm.Desc(),
+		rangeUsageInfo,
+		source,
+		target,
+	)
+
+	err := rlm.AdminTransferLease(ctx, target.StoreID, false /* bypassSafetyChecks */)
+	rq.as.PostApply(changeID, err == nil /*success*/)
+
+	if err != nil {
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
 	}
-
-	rq.storePool.UpdateLocalStoresAfterLeaseTransfer(source.StoreID, target.StoreID, rangeUsageInfo)
 	return nil
 }
 
@@ -1062,21 +1076,24 @@ func (rq *replicateQueue) changeReplicas(
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 ) error {
+	// Inform allocator sync that the change has been applied which applies
+	// changes to store pool and inform mma.
+	changeID := rq.as.NonMMAPreChangeReplicas(
+		desc,
+		rangeUsageInfo,
+		chgs,
+		repl.StoreID(),
+	)
 	// NB: this calls the impl rather than ChangeReplicas because
 	// the latter traps tests that try to call it while the replication
 	// queue is active.
-	if _, err := repl.changeReplicasImpl(
+	_, err := repl.changeReplicasImpl(
 		ctx, desc, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, allocatorPriority, reason,
 		details, chgs,
-	); err != nil {
-		return err
-	}
-	// On success, update local store pool to reflect the result of applying the
-	// operations.
-	for _, chg := range chgs {
-		rq.storePool.UpdateLocalStoreAfterRebalance(chg.Target.StoreID, rangeUsageInfo, chg.ChangeType)
-	}
-	return nil
+	)
+
+	rq.as.PostApply(changeID, err == nil /*success*/)
+	return err
 }
 
 func (*replicateQueue) postProcessScheduled(

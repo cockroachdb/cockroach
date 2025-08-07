@@ -57,9 +57,9 @@ func (rt ReplicaIDAndType) SafeFormat(w redact.SafePrinter, _ rune) {
 	default:
 		w.Print(rt.ReplicaID)
 	}
-	w.Printf(" type=%v", rt.ReplicaType.ReplicaType)
+	w.Printf(",type=%v", rt.ReplicaType.ReplicaType)
 	if rt.IsLeaseholder {
-		w.Print(" leaseholder=true")
+		w.Print(",leaseholder=true")
 	}
 }
 
@@ -116,6 +116,14 @@ type ReplicaState struct {
 	// beneficial.
 }
 
+func (rs ReplicaState) String() string {
+	return redact.StringWithoutMarkers(rs)
+}
+
+func (rs ReplicaState) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%s,lagging=%v", rs.ReplicaIDAndType, rs.VoterIsLagging)
+}
+
 // ChangeID is a unique ID, in the context of this data-structure and when
 // receiving updates about enactment having happened or having been rejected
 // (by the component responsible for change enactment).
@@ -133,13 +141,13 @@ const (
 func (s ReplicaChangeType) String() string {
 	switch s {
 	case AddLease:
-		return "AddLease"
+		return "add-lease"
 	case RemoveLease:
-		return "RemoveLease"
+		return "remove-lease"
 	case AddReplica:
-		return "AddReplica"
+		return "add-replica"
 	case RemoveReplica:
-		return "RemoveReplica"
+		return "remove-replica"
 	default:
 		panic("unknown ReplicaChangeType")
 	}
@@ -183,7 +191,7 @@ func (rc ReplicaChange) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (rc ReplicaChange) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("r%v type: %v target store %v (%v)->(%v)", rc.rangeID, rc.replicaChangeType, rc.target, rc.prev, rc.next)
+	w.Printf("r%v:%v,target=(%v), prev=(%v)->next=(%v)", rc.rangeID, rc.replicaChangeType, rc.target, rc.prev, rc.next)
 }
 
 // isRemoval returns true if the change is a removal of a replica.
@@ -373,6 +381,22 @@ func makeRebalanceReplicaChanges(
 type PendingRangeChange struct {
 	RangeID               roachpb.RangeID
 	pendingReplicaChanges []*pendingReplicaChange
+}
+
+func MakePendingRangeChangeForTesting(
+	rangeID roachpb.RangeID, changes []ReplicaChange, changeIDs []ChangeID,
+) PendingRangeChange {
+	prc := PendingRangeChange{
+		RangeID:               rangeID,
+		pendingReplicaChanges: make([]*pendingReplicaChange, len(changes)),
+	}
+	for i, c := range changes {
+		prc.pendingReplicaChanges[i] = &pendingReplicaChange{
+			ChangeID:      changeIDs[i],
+			ReplicaChange: c,
+		}
+	}
+	return prc
 }
 
 func (prc PendingRangeChange) String() string {

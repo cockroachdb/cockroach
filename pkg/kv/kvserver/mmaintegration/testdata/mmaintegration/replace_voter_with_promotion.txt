@@ -1,0 +1,55 @@
+# This test registers a range rebalance operation which replaces a voter by promoting a non-voter
+# to a voter. It has from_mma=false. 
+init mma_enabled=true
+----
+range_id=1 [replicas:{(r1*:n1,s1,voter),(r2:n2,s2,non-voter)} usage=(cpu:150,raft-cpu:50,write-band:1024,byte-size:2048)]
+
+# Note the leaseholder=true field in the mma_change output:
+# - When removing the voter from s1, leaseholder=true is set since s1 was the original leaseholder
+# - When adding the voter to s2, leaseholder=true is set since s2 will become the new leaseholder
+# - When removing the non-voter from s2, we don't set leaseholder since they don't involve lease transfers directly.
+pre-apply-change-replicas range_id=1 type=replace-voter-with-promotion from=1 to=2 from_mma=false
+----
+sync_change_id:1
+mma_change:
+	[r1:remove-replica,target=(n2,s2), prev=(replica-id=2,type=NON_VOTER,lagging=false)->next=(replica-id=none,type=VOTER_FULL)
+	r1:remove-replica,target=(n1,s1), prev=(replica-id=1,type=VOTER_FULL,leaseholder=true,lagging=false)->next=(replica-id=none,type=VOTER_FULL)
+	r1:add-replica,target=(n2,s2), prev=(replica-id=none,type=VOTER_FULL,lagging=false)->next=(replica-id=unknown,type=VOTER_FULL,leaseholder=true)]
+
+print
+----
+allocator_sync:
+	tracked:[sync_id=1->(cid:[0 1 2], change_replicas:[{ADD_VOTER n2,s2} {REMOVE_NON_VOTER n2,s2} {REMOVE_VOTER n1,s1}], {request_cpu:100.0, raft_cpu:50.0, write_bytes:1024.0, logical_bytes:2048})]
+mma_state:
+	cid(0)=pending, cid(1)=pending, cid(2)=pending
+store_pool:
+	s1: (cpu=150.00, write_band=1024.00, byte_size=2048, lease_count=1, replica_count=1)
+	s2: (cpu=50.00, write_band=1024.00, byte_size=2048, lease_count=0, replica_count=1)
+	s3: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)
+	s4: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)
+
+# Since s1 lost the voter, it should have one less lease and one less replica count. However,
+# it is unfortunate that UpdateLocalStoreAfterRebalance doesn't update the lease count.
+# TODO(weniyhu6): is this a bug in storepool? Should we also differentiate load
+# change delta based on whether we are adding a voter v.s. a non-voter? For
+# example, we are promoting s2 here. But no change is reflected in mock or real store pool on
+# that.
+
+# After applying the change, s1 has one less replica count. s2's replica count is unchanged.
+# s1 should have 0 across load and s2 has no load change.
+
+post-apply id=1 success=true
+----
+applied change 1 with success=true
+
+print
+----
+allocator_sync:
+	tracked:[]
+mma_state:
+	cid(0)=success, cid(1)=success, cid(2)=success
+store_pool:
+	s1: (cpu=100.00, write_band=0.00, byte_size=0, lease_count=1, replica_count=0)
+	s2: (cpu=50.00, write_band=1024.00, byte_size=2048, lease_count=0, replica_count=1)
+	s3: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)
+	s4: (cpu=0.00, write_band=0.00, byte_size=0, lease_count=0, replica_count=0)

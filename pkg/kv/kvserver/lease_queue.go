@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -61,6 +62,7 @@ var MinIOOverloadLeaseShedInterval = settings.RegisterDurationSetting(
 type leaseQueue struct {
 	planner           plan.ReplicationPlanner
 	allocator         allocatorimpl.Allocator
+	as                *mmaintegration.AllocatorSync
 	storePool         storepool.AllocatorStorePool
 	purgCh            <-chan time.Time
 	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
@@ -77,6 +79,7 @@ func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue 
 	lq := &leaseQueue{
 		planner:   plan.NewLeasePlanner(allocator, storePool),
 		allocator: allocator,
+		as:        store.cfg.AllocatorSync,
 		storePool: storePool,
 		purgCh:    time.NewTicker(leaseQueuePurgatoryCheckInterval).C,
 	}
@@ -136,14 +139,20 @@ func (lq *leaseQueue) process(
 		lease, _ := repl.GetLease()
 		log.KvDistribution.Infof(ctx, "transferring lease to s%d usage=%v, lease=[%v type=%v]", transferOp.Target, transferOp.Usage, lease, lease.Type())
 		lq.lastLeaseTransfer.Store(timeutil.Now())
-		if err := repl.AdminTransferLease(ctx, transferOp.Target.StoreID, false /* bypassSafetyChecks */); err != nil {
+		changeID := lq.as.NonMMAPreTransferLease(
+			desc,
+			transferOp.Usage,
+			transferOp.Source,
+			transferOp.Target,
+		)
+		err = repl.AdminTransferLease(ctx, transferOp.Target.StoreID, false /* bypassSafetyChecks */)
+		// Inform allocator sync that the change has been applied which applies
+		// changes to store pool and inform mma.
+		lq.as.PostApply(changeID, err == nil /*success*/)
+		if err != nil {
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, transferOp.Target)
 		}
-
-		lq.storePool.UpdateLocalStoresAfterLeaseTransfer(
-			transferOp.Source.StoreID, transferOp.Target.StoreID, transferOp.Usage)
 	}
-
 	return true, nil
 }
 
