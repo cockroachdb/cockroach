@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -134,7 +135,7 @@ func ValidateOutboundFunctionRef(depID descpb.ID, vdg ValidationDescGetter) erro
 
 // ValidateOutboundTableRef validates outbound reference to relation descriptor
 // depID from descriptor selfID.
-func ValidateOutboundTableRef(depID descpb.ID, vdg ValidationDescGetter) error {
+func ValidateOutboundTableRef(srcDID descpb.ID, depID descpb.ID, vdg ValidationDescGetter) error {
 	referencedTable, err := vdg.GetTableDescriptor(depID)
 	if err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on relation reference")
@@ -142,6 +143,20 @@ func ValidateOutboundTableRef(depID descpb.ID, vdg ValidationDescGetter) error {
 	if referencedTable.Dropped() {
 		return errors.AssertionFailedf("depends-on relation %q (%d) is dropped",
 			referencedTable.GetName(), referencedTable.GetID())
+	}
+	// On debug builds validate that a back reference exists.
+	if buildutil.CrdbTestBuild {
+		foundReference := false
+		for _, dep := range referencedTable.GetDependedOnBy() {
+			if dep.ID == srcDID {
+				foundReference = true
+				break
+			}
+		}
+		if !foundReference {
+			return errors.AssertionFailedf("depends-on relation %q (%d) has no corresponding depended-on-by back reference",
+				referencedTable.GetName(), referencedTable.GetID())
+		}
 	}
 	return nil
 }

@@ -248,7 +248,7 @@ func (desc *wrapper) ValidateForwardReferences(
 	for i := range desc.Triggers {
 		trigger := &desc.Triggers[i]
 		for _, id := range trigger.DependsOn {
-			vea.Report(catalog.ValidateOutboundTableRef(id, vdg))
+			vea.Report(catalog.ValidateOutboundTableRef(desc.GetID(), id, vdg))
 		}
 		for _, id := range trigger.DependsOnTypes {
 			vea.Report(catalog.ValidateOutboundTypeRef(id, vdg))
@@ -264,7 +264,7 @@ func (desc *wrapper) ValidateForwardReferences(
 			vea.Report(catalog.ValidateOutboundTypeRef(id, vdg))
 		}
 		for _, id := range policy.DependsOnRelations {
-			vea.Report(catalog.ValidateOutboundTableRef(id, vdg))
+			vea.Report(catalog.ValidateOutboundTableRef(desc.GetID(), id, vdg))
 		}
 		for _, id := range policy.DependsOnFunctions {
 			vea.Report(catalog.ValidateOutboundFunctionRef(id, vdg))
