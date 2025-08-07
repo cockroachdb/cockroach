@@ -63,6 +63,7 @@ go_test(
     size = "large",
     srcs = [
         "main_test.go",
+        "ttljob_internal_test.go",
         "ttljob_plans_test.go",
         "ttljob_processor_internal_test.go",
         "ttljob_processor_test.go",
@@ -100,6 +101,7 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/parser",
+        "//pkg/sql/physicalplan",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/eval",
