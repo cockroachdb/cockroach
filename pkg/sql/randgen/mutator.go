@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -43,6 +44,10 @@ var (
 	// PartialIndexMutator adds random partial index predicate expressions to
 	// indexes.
 	PartialIndexMutator MultiStatementMutation = partialIndexMutator
+
+	// DupPartialIndexMutator create a new random partial index based on an
+	// existing index that is selected.
+	DupPartialIndexMutator MultiStatementMutation = duplicatePartialIndexMutator
 
 	// PostgresMutator modifies strings such that they execute identically
 	// in both Postgres and Cockroach (however this mutator does not remove
@@ -1137,6 +1142,84 @@ func partialIndexMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 			}
 		}
 	}
+	return stmts, changed
+}
+
+// duplicatePartialIndexMutator is a mutations.MultiStatementMutator that will
+// copy a random index definition and make it a partial index. Unlike
+// partialIndexMutator, the existing definition will stay the same.
+func duplicatePartialIndexMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Statement, bool) {
+	changed := false
+	tables := getTableInfoFromDDLStatements(stmts)
+	var newStmts []tree.Statement
+	for _, stmt := range stmts {
+		switch ast := stmt.(type) {
+		case *tree.CreateIndex:
+			info, ok := tables[ast.Table.ObjectName]
+			if !ok {
+				continue
+			}
+
+			// If the index is not already a partial index, make it a partial index
+			// with a 50% chance. Do not mutate an index that was created to satisfy a
+			// FK constraint.
+			if ast.Predicate == nil &&
+				!hasReferencingConstraint(info, ast.Columns) &&
+				rng.Intn(2) == 0 {
+				astString := tree.AsStringWithFlags(ast, tree.FmtParsableNumerics)
+				astCopy, err := parser.ParseOne(astString)
+				if err != nil {
+					panic(err)
+				}
+				createIndexCopy := astCopy.AST.(*tree.CreateIndex)
+				if len(createIndexCopy.Name) > 0 {
+					createIndexCopy.Name = tree.Name(fmt.Sprintf("%s_partial", createIndexCopy.Name))
+				}
+				tn := tree.MakeUnqualifiedTableName(createIndexCopy.Table.ObjectName)
+				createIndexCopy.Predicate = randPartialIndexPredicateFromCols(rng, info.columnsTableDefs, &tn)
+				changed = true
+				newStmts = append(newStmts, createIndexCopy)
+			}
+		case *tree.CreateTable:
+			info, ok := tables[ast.Table.ObjectName]
+			if !ok {
+				panic("table info could not be found")
+			}
+			var newDefs []tree.TableDef
+			for _, def := range ast.Defs {
+				var idx *tree.IndexTableDef
+				switch defType := def.(type) {
+				case *tree.IndexTableDef:
+					idx = defType
+				case *tree.UniqueConstraintTableDef:
+					if !defType.PrimaryKey && !defType.WithoutIndex {
+						idx = &defType.IndexTableDef
+					}
+				}
+
+				if idx == nil {
+					continue
+				}
+
+				// If the index is not already a partial index, make it a partial
+				// index with a 50% chance.
+				if idx.Predicate == nil &&
+					!hasReferencingConstraint(info, idx.Columns) &&
+					rng.Intn(2) == 0 {
+					idxCopy := *idx
+					if len(idxCopy.Name) > 0 {
+						idxCopy.Name = tree.Name(fmt.Sprintf("%s_partial", idxCopy.Name))
+					}
+					tn := tree.MakeUnqualifiedTableName(ast.Table.ObjectName)
+					idxCopy.Predicate = randPartialIndexPredicateFromCols(rng, info.columnsTableDefs, &tn)
+					changed = true
+					newDefs = append(newDefs, &idxCopy)
+				}
+			}
+			ast.Defs = append(ast.Defs, newDefs...)
+		}
+	}
+	stmts = append(stmts, newStmts...)
 	return stmts, changed
 }
 
