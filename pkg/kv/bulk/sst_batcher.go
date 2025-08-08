@@ -565,7 +565,7 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		return nil
 	}
 
-	if b.batch.sstWriter.DataSize >= ingestFileSize(b.settings) {
+	if flushLimit := ingestFileSize(b.settings); b.batch.sstWriter.DataSize >= flushLimit {
 		// We're at/over size target, so we want to flush, but first check if we are
 		// at a new row boundary. Having row-aligned boundaries is not actually
 		// required by anything, but has the nice property of meaning a split will
@@ -576,13 +576,20 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		// starts, so when we split at that row, that overhang into the RHS that we
 		// just wrote will be rewritten by the subsequent scatter. By waiting for a
 		// row boundary, we ensure any split is actually between files.
-		prevRow, prevErr := keys.EnsureSafeSplitKey(b.batch.endKey)
-		nextRow, nextErr := keys.EnsureSafeSplitKey(nextKey)
-		if prevErr == nil && nextErr == nil && bytes.Equal(prevRow, nextRow) {
-			// An error decoding either key implies it is not a valid row key and thus
-			// not the same row for our purposes; we don't care what the error is.
-			return nil // keep going to row boundary.
+		//
+		// That said, only do this if we are only moderately over the flush target;
+		// if we are subtantially over the limit, just flush the partial row as we
+		// cannot buffer indefinitely.
+		if b.batch.sstWriter.DataSize < 2*flushLimit {
+			prevRow, prevErr := keys.EnsureSafeSplitKey(b.batch.endKey)
+			nextRow, nextErr := keys.EnsureSafeSplitKey(nextKey)
+			if prevErr == nil && nextErr == nil && bytes.Equal(prevRow, nextRow) {
+				// An error decoding either key implies it is not a valid row key and thus
+				// not the same row for our purposes; we don't care what the error is.
+				return nil // keep going to row boundary.
+			}
 		}
+
 		if b.mustSyncBeforeFlush {
 			err := b.syncFlush()
 			if err != nil {
