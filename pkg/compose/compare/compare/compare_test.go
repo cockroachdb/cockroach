@@ -93,7 +93,7 @@ func TestCompare(t *testing.T) {
 						randgen.ForeignKeyMutator,
 						randgen.ColumnFamilyMutator,
 						randgen.IndexStoringMutator,
-						randgen.PartialIndexMutator,
+						randgen.DupPartialIndexMutator,
 					},
 				},
 			},
