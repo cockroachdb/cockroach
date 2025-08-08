@@ -516,8 +516,6 @@ func registerPGRegress(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPGRegress(ctx, t, c)
 		},
-		// TODO(#150543): remove this.
-		SkipPostValidations: registry.PostValidationInvalidDescriptors,
 	})
 }
 
