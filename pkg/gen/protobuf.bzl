@@ -19,6 +19,7 @@ PROTOBUF_SRCS = [
     "//pkg/config/zonepb:zonepb_go_proto",
     "//pkg/config:config_go_proto",
     "//pkg/geo/geopb:geopb_go_proto",
+    "//pkg/geo/mvt:mvt_go_proto",
     "//pkg/gossip:gossip_go_proto",
     "//pkg/inspectz/inspectzpb:inspectzpb_go_proto",
     "//pkg/jobs/jobspb:jobspb_go_proto",
