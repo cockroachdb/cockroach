@@ -8,7 +8,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -54,15 +53,6 @@ func (n *alterJobOwnerNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 	newOwner := n.owner
-
-	// The top-level owner column this updates was added in 25.1.
-	v, err := p.InternalSQLTxn().GetSystemSchemaVersion(ctx)
-	if err != nil {
-		return err
-	}
-	if !v.AtLeast(clusterversion.V25_1.Version()) {
-		return pgerror.Newf(pgcode.FeatureNotSupported, "ALTER JOB OWNER requires version %s", clusterversion.V25_1)
-	}
 
 	exprEval := p.ExprEvaluator("ALTER JOB OWNER")
 	jobIDInt, err := exprEval.Int(ctx, n.jobID)
