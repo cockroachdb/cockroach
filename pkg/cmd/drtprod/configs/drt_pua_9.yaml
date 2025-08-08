@@ -8,18 +8,11 @@
 # Additionally, it configures Datadog and includes scripts for running workload and roachtest operations.
 
 environment:
-  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
-  ROACHPROD_DNS: drt.crdb.io
-  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
-  ROACHPROD_GCE_DNS_ZONE: drt
-  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
   CLUSTER: drt-pua-9
   CLUSTER_NODES: 9
   WORKLOAD_CLUSTER: workload-pua-9
   WORKLOAD_NODES: 1
   STORE_COUNT: 2
-  COCKROACH_VERSION: v25.2.0
-  COCKROACH_UPGRADE_VERSION: v25.2.1
 
   TPCC_WAREHOUSES: 5000
   TPCC_ACTIVE_WAREHOUSES: 5000
@@ -29,7 +22,7 @@ environment:
   CONNS: 1800
 
   # GCP Cloud Storage bucket for storing backups
-  BUCKET_US_EAST_1: cockroach-drt-backup-us-east1
+  BUCKET_US_EAST_1: pua-backup-us-east1
 
 dependent_file_locations:
   - artifacts/roachprod
@@ -60,7 +53,7 @@ targets:
           local-ssd: true
           gce-local-ssd-count: $STORE_COUNT
           username: drt
-          lifetime: 8760h
+          lifetime: 15h
           gce-image: "ubuntu-2204-jammy-v20240319"
         on_rollback:
           - command: destroy
@@ -73,7 +66,7 @@ targets:
         args:
           - $CLUSTER
           - release
-          - $COCKROACH_VERSION
+          - $CRDB_VERSION
       - script: "pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller"
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
       - command: start
@@ -139,7 +132,7 @@ targets:
           gce-machine-type: n2-standard-8
           os-volume-size: 100
           username: workload
-          lifetime: 8760h
+          lifetime: 15h
         on_rollback:
           - command: destroy
             args:
@@ -221,7 +214,7 @@ targets:
           active-warehouses: $TPCC_ACTIVE_WAREHOUSES
           duration: $RUN_DURATION
           ramp: 5m
-          wait_after: true
+          wait: true
           max-conn-lifetime: $MAX_CONN_LIFETIME
           conns: $CONNS
       - script: "pkg/cmd/drtprod/scripts/pua_operations.sh"
@@ -277,7 +270,7 @@ targets:
         args:
           - $CLUSTER
           - release
-          - $COCKROACH_UPGRADE_VERSION
+          - $CRDB_UPGRADE_VERSION
         flags:
           pause: 5m
           grace-period: 500
