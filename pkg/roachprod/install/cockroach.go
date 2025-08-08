@@ -751,7 +751,7 @@ const (
 	AuthRootCert
 
 	DefaultUser     = "roachprod"
-	DefaultPassword = "cockroachdb"
+	DefaultPassword = "cockroachdblongpassword"
 
 	DefaultAuthModeEnv = "ROACHPROD_DEFAULT_AUTH_MODE"
 )

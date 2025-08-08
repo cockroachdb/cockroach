@@ -7,6 +7,7 @@ package democluster
 
 import (
 	"context"
+	"crypto/rand"
 	gosql "database/sql"
 	"fmt"
 	"io"
@@ -379,7 +380,12 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 		return err
 	}
 
-	demoPassword := genDemoPassword(demoUsername)
+	st := c.firstServer.ClusterSettings()
+	minPasswordLength := security.MinPasswordLength.Get(&st.SV)
+	demoPassword, err := genDemoPassword(demoUsername, minPasswordLength)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate demo password")
+	}
 
 	// Step 8: initialize tenant servers, if enabled.
 	phaseCtx = logtags.AddTag(ctx, "phase", 8)
@@ -2121,10 +2127,21 @@ func (c *transientCluster) addDemoLoginToURL(uiURL *url.URL, includeTenantName b
 //
 // The password can be overridden via the env var
 // COCKROACH_DEMO_PASSWORD for the benefit of test automation.
-func genDemoPassword(username string) string {
+func genDemoPassword(username string, minPasswordLength int64) (string, error) {
+	if password := envutil.EnvOrDefaultString("COCKROACH_DEMO_PASSWORD", ""); password != "" {
+		if len(password) < int(minPasswordLength) {
+			return "", errors.Newf("password is too short: %s", password)
+		}
+		return password, nil
+	}
 	mypid := os.Getpid()
-	candidatePassword := fmt.Sprintf("%s%d", username, mypid)
-	return envutil.EnvOrDefaultString("COCKROACH_DEMO_PASSWORD", candidatePassword)
+	password := fmt.Sprintf("%s%d", username, mypid)
+	// If the password is too short, append random characters until it is long enough.
+	for len(password) < int(minPasswordLength) {
+		randText := strings.ToLower(rand.Text())
+		password += string(randText[0])
+	}
+	return password, nil
 }
 
 // lockDir uses a file lock to prevent concurrent writes to the
