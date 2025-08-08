@@ -1,3 +1,8 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
 package status
 
 import (
@@ -11,13 +16,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRTTLinux(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	if runtime.GOOS != "linux" {
-		t.Skip("skipping test; RTT inspection is only supported on Linux")
+		skip.IgnoreLint(t, "skipping test; RTT inspection is only supported on Linux")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
