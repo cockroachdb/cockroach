@@ -87,6 +87,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -131,12 +132,21 @@ const (
 	// cluster that can use the test fixtures in
 	// `pkg/cmd/roachtest/fixtures`.
 	numNodesInFixtures = 4
+)
 
-	// These `*Deployment` constants are used to indicate different
-	// deployment modes that a test may choose to enable/disable.
-	SystemOnlyDeployment      = DeploymentMode("system-only")
-	SharedProcessDeployment   = DeploymentMode("shared-process")
-	SeparateProcessDeployment = DeploymentMode("separate-process")
+// DeploymentMode is a type alias for roachprodutil.DeploymentMode.
+// We alias the type and re-export its constants for convenience and
+// in case the supported deployment modes diverge in the future, i.e.
+// we decide to support running multiple separate process tenants per
+// cluster.
+type DeploymentMode = roachprodutil.DeploymentMode
+
+// These `*Deployment` constants are used to indicate different
+// deployment modes that a test may choose to enable/disable.
+const (
+	SystemOnlyDeployment      = roachprodutil.SystemOnlyDeployment
+	SharedProcessDeployment   = roachprodutil.SharedProcessDeployment
+	SeparateProcessDeployment = roachprodutil.SeparateProcessDeployment
 )
 
 // These env vars are used by the planner to generate plans with
@@ -394,8 +404,6 @@ type (
 	// authors when they want to stop a background step as part of test
 	// logic itself, without causing the test to fail.
 	StopFunc func()
-
-	DeploymentMode string
 )
 
 // NeverUseFixtures is an option that can be passed to `NewTest` to
