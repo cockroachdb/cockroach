@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "commontest",
     srcs = [
+        "indextests.go",
         "storetests.go",
         "utils.go",
     ],
@@ -16,6 +17,7 @@ go_library(
         "//pkg/sql/vecindex/vecpb",
         "//pkg/util/encoding",
         "//pkg/util/vector",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
         "@com_github_stretchr_testify//suite",

@@ -155,7 +155,7 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 
 		// Delete already-processed fixup from its pending map, even if the fixup
 		// failed, in order to avoid looping over the same fixup.
-		fw.fp.removeFixup(next)
+		fw.fp.removeFixup(ctx, next)
 	}
 }
 

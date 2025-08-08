@@ -28,10 +28,10 @@ func FormatFloat(value float32, prec int) string {
 	return s
 }
 
-// WriteVector formats the given vector like "(1, 2, ..., 9, 10)" and writes it
+// WriteVector formats the given vector like "[1, 2, ..., 9, 10]" and writes it
 // to the given buffer, using the specified precision.
 func WriteVector(buf *bytes.Buffer, vec vector.T, prec int) {
-	buf.WriteString("(")
+	buf.WriteString("[")
 	if len(vec) > 4 {
 		// Show first 2 numbers, '...', and last 2 numbers.
 		buf.WriteString(FormatFloat(vec[0], prec))
@@ -50,5 +50,5 @@ func WriteVector(buf *bytes.Buffer, vec vector.T, prec int) {
 			buf.WriteString(FormatFloat(val, prec))
 		}
 	}
-	buf.WriteString(")")
+	buf.WriteString("]")
 }

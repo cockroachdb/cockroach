@@ -2,7 +2,7 @@
 # Load 1000 512-dimension OpenAI embeddings and search them. Use small
 # partition size to ensure a deeper tree.
 # ----------------------------------------------------------------------
-new-index dataset=images-512d-10k.gob dataset-count=1000 min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=images-512d-10k.gob train-count=1000 min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 1000 vectors with 512 dimensions.
 3 levels, 209 partitions.
@@ -83,13 +83,13 @@ vec706: 0.8238
 recall topk=20 use-dataset=8601 beam-size=8
 ----
 75.00% recall@20
-75 leaf vectors, 126 vectors, 31 full vectors, 13 partitions
+75 leaf vectors, 126 vectors, 32 full vectors, 13 partitions
 
 # Search for a "hard" result, where adaptive search inspects more partitions.
 recall topk=20 use-dataset=2717 beam-size=8
 ----
 35.00% recall@20
-89 leaf vectors, 145 vectors, 39 full vectors, 13 partitions
+89 leaf vectors, 145 vectors, 48 full vectors, 13 partitions
 
 # Show the nearest partitions to the "easy" vector, ordered by estimated
 # distance to their centroids. Notice that there are several partitions that are
@@ -129,33 +129,33 @@ best-centroids topk=10 use-dataset=2717
 recall topk=10 beam-size=2 samples=64
 ----
 25.78% recall@10
-22 leaf vectors, 42 vectors, 14 full vectors, 4 partitions
+22 leaf vectors, 42 vectors, 16 full vectors, 4 partitions
 
 recall topk=10 beam-size=4 samples=64
 ----
 47.81% recall@10
-43 leaf vectors, 75 vectors, 17 full vectors, 7 partitions
+43 leaf vectors, 75 vectors, 19 full vectors, 7 partitions
 
 recall topk=10 beam-size=8 samples=64
 ----
 71.09% recall@10
-83 leaf vectors, 138 vectors, 20 full vectors, 13 partitions
+83 leaf vectors, 138 vectors, 22 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=64
 ----
 86.56% recall@10
-165 leaf vectors, 261 vectors, 24 full vectors, 25 partitions
+165 leaf vectors, 261 vectors, 26 full vectors, 25 partitions
 
 recall topk=10 beam-size=32 samples=64
 ----
-95.94% recall@10
-328 leaf vectors, 435 vectors, 26 full vectors, 42 partitions
+96.09% recall@10
+328 leaf vectors, 435 vectors, 30 full vectors, 42 partitions
 
 # ----------------------------------------------------------------------
 # Compare orderings of same dataset with different distance metrics.
 # ----------------------------------------------------------------------
 # L2Squared.
-new-index dataset=fashion-784d-1k.gob dataset-count=1000 distance-metric=L2Squared min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=fashion-784d-1k.gob train-count=1000 distance-metric=L2Squared min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 1000 vectors with 784 dimensions.
 3 levels, 201 partitions.
@@ -194,7 +194,7 @@ vec420: 3781823
 80 leaf vectors, 124 vectors, 15 full vectors, 13 partitions
 
 # Cosine.
-new-index dataset=fashion-784d-1k.gob dataset-count=1000 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=fashion-784d-1k.gob train-count=1000 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 1000 vectors with 784 dimensions.
 3 levels, 211 partitions.
@@ -233,7 +233,7 @@ vec109: 0.1273
 91 leaf vectors, 134 vectors, 12 full vectors, 13 partitions
 
 # InnerProduct.
-new-index dataset=fashion-784d-1k.gob dataset-count=1000 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=fashion-784d-1k.gob train-count=1000 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 1000 vectors with 784 dimensions.
 3 levels, 245 partitions.
@@ -279,7 +279,7 @@ vec853: -12163027
 # distance.
 # ----------------------------------------------------------------------
 
-new-index dataset=dbpedia-1536d-1k.gob dataset-count=950 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=dbpedia-1536d-1k.gob train-count=950 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 950 vectors with 1536 dimensions.
 3 levels, 183 partitions.
@@ -290,29 +290,29 @@ CV stats:
 recall topk=10 beam-size=4 samples=50
 ----
 55.40% recall@10
-41 leaf vectors, 74 vectors, 17 full vectors, 7 partitions
+41 leaf vectors, 74 vectors, 20 full vectors, 7 partitions
 
 recall topk=10 beam-size=8 samples=50
 ----
 78.00% recall@10
-81 leaf vectors, 138 vectors, 18 full vectors, 13 partitions
+81 leaf vectors, 138 vectors, 21 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----
-87.60% recall@10
-162 leaf vectors, 266 vectors, 21 full vectors, 25 partitions
+87.80% recall@10
+162 leaf vectors, 266 vectors, 25 full vectors, 25 partitions
 
 recall topk=10 beam-size=32 samples=50
 ----
 96.40% recall@10
-320 leaf vectors, 424 vectors, 21 full vectors, 41 partitions
+320 leaf vectors, 424 vectors, 26 full vectors, 41 partitions
 
 # ----------------------------------------------------------------------
 # Load 950 768-dimension image embeddings and search them using
 # InnerProduct distance.
 # ----------------------------------------------------------------------
 
-new-index dataset=laion-768d-1k.gob dataset-count=950 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=laion-768d-1k.gob train-count=950 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 950 vectors with 768 dimensions.
 3 levels, 189 partitions.
@@ -323,22 +323,22 @@ CV stats:
 recall topk=10 beam-size=4 samples=50
 ----
 50.40% recall@10
-44 leaf vectors, 74 vectors, 18 full vectors, 7 partitions
+44 leaf vectors, 74 vectors, 21 full vectors, 7 partitions
 
 recall topk=10 beam-size=8 samples=50
 ----
-69.80% recall@10
-86 leaf vectors, 136 vectors, 22 full vectors, 13 partitions
+70.00% recall@10
+86 leaf vectors, 136 vectors, 25 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----
-85.20% recall@10
-175 leaf vectors, 266 vectors, 25 full vectors, 25 partitions
+85.60% recall@10
+175 leaf vectors, 266 vectors, 29 full vectors, 25 partitions
 
 recall topk=10 beam-size=32 samples=50
 ----
-96.00% recall@10
-349 leaf vectors, 450 vectors, 28 full vectors, 42 partitions
+96.40% recall@10
+349 leaf vectors, 450 vectors, 33 full vectors, 42 partitions
 
 # ----------------------------------------------------------------------
 # Load 1000 512-dimension image embeddings generated with a multi-modal
@@ -346,7 +346,7 @@ recall topk=10 beam-size=32 samples=50
 # model. This will result in low accuracy due to the modality gap.
 # ----------------------------------------------------------------------
 
-new-index dataset=clip-512d-1050.gob dataset-count=1000 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=clip-512d-1050.gob train-count=1000 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 1000 vectors with 512 dimensions.
 3 levels, 207 partitions.
@@ -361,23 +361,35 @@ recall topk=10 beam-size=4 samples=50
 
 recall topk=10 beam-size=8 samples=50
 ----
-33.80% recall@10
-78 leaf vectors, 129 vectors, 59 full vectors, 13 partitions
+34.20% recall@10
+78 leaf vectors, 129 vectors, 62 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----
-52.40% recall@10
-158 leaf vectors, 247 vectors, 91 full vectors, 25 partitions
+52.60% recall@10
+158 leaf vectors, 247 vectors, 98 full vectors, 25 partitions
 
 recall topk=10 beam-size=32 samples=50
 ----
-67.40% recall@10
-327 leaf vectors, 435 vectors, 108 full vectors, 43 partitions
+70.40% recall@10
+327 leaf vectors, 435 vectors, 151 full vectors, 43 partitions
+
+recall topk=10 beam-size=64 samples=50
+----
+91.20% recall@10
+661 leaf vectors, 769 vectors, 223 full vectors, 75 partitions
+
+# Accuracy tops out here because of quantization error due to an incomplete
+# RaBitQ error bounds implementation.
+recall topk=10 beam-size=128 samples=50
+----
+93.80% recall@10
+1000 leaf vectors, 1108 vectors, 264 full vectors, 109 partitions
 
 # Do not fetch extra results for reranking. Expect recall to drop significantly.
 recall topk=10 beam-size=32 samples=50 rerank-multiplier=0
 ----
-27.00% recall@12
+28.80% recall@10
 327 leaf vectors, 435 vectors, 12 full vectors, 43 partitions
 
 # ----------------------------------------------------------------------
@@ -385,7 +397,7 @@ recall topk=10 beam-size=32 samples=50 rerank-multiplier=0
 # This model is older; it's challenging to get good search accuracies.
 # ----------------------------------------------------------------------
 
-new-index dataset=glove-100d-1k.gob dataset-count=950 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=glove-100d-1k.gob train-count=950 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 950 vectors with 100 dimensions.
 3 levels, 183 partitions.
@@ -395,20 +407,20 @@ CV stats:
 
 recall topk=10 beam-size=4 samples=50
 ----
-20.80% recall@10
-45 leaf vectors, 74 vectors, 31 full vectors, 7 partitions
+30.00% recall@10
+45 leaf vectors, 74 vectors, 33 full vectors, 7 partitions
 
 recall topk=10 beam-size=8 samples=50
 ----
-28.40% recall@10
-88 leaf vectors, 139 vectors, 47 full vectors, 13 partitions
+43.40% recall@10
+88 leaf vectors, 139 vectors, 51 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----
-34.60% recall@10
-175 leaf vectors, 265 vectors, 66 full vectors, 25 partitions
+62.80% recall@10
+175 leaf vectors, 265 vectors, 73 full vectors, 25 partitions
 
 recall topk=10 beam-size=32 samples=50
 ----
-38.60% recall@10
-348 leaf vectors, 447 vectors, 89 full vectors, 42 partitions
+82.20% recall@10
+348 leaf vectors, 447 vectors, 102 full vectors, 42 partitions

@@ -177,6 +177,9 @@ func (m *MemProvider) Search(
 
 		// Get result keys.
 		results := searchSet.PopResults()
+		if len(results) > memState.maxResults {
+			results = results[:memState.maxResults]
+		}
 		keys = make([]cspann.KeyBytes, len(results))
 		for i, res := range results {
 			keys[i] = []byte(res.ChildKey.KeyBytes)
@@ -196,7 +199,9 @@ func (m *MemProvider) Save(ctx context.Context) error {
 	}
 
 	// Wait for any remaining background fixups to be processed.
-	m.index.ProcessFixups()
+	if err := m.index.ProcessFixups(ctx); err != nil {
+		return err
+	}
 
 	startTime := timeutil.Now()
 
