@@ -49,7 +49,9 @@ func runDiskStall(
 
 	nodes := c.All()
 	nid := nodes[rng.Intn(len(nodes))]
-	ds := roachtestutil.MakeDmsetupDiskStaller(o, c)
+	// Disable state validation since we run dmsetup Setup() during cluster creation and not part
+	// of the operation.
+	ds := roachtestutil.MakeDmsetupDiskStaller(o, c, true /* disableStateValidation */)
 
 	o.Status(fmt.Sprintf("stalling disk on node %d", nid))
 	ds.Stall(ctx, c.Node(nid))

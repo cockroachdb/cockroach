@@ -3341,11 +3341,12 @@ func (c *clusterImpl) GetFailer(
 	l *logger.Logger,
 	nodes option.NodeListOption,
 	failureModeName string,
+	disableStateValidation bool,
 	opts ...failures.ClusterOptionFunc,
 ) (*failures.Failer, error) {
 	fr := failures.GetFailureRegistry()
 	clusterOpts := append(opts, failures.Secure(c.IsSecure()), failures.LocalCertsPath(c.localCertsDir))
-	failer, err := fr.GetFailer(c.MakeNodes(nodes), failureModeName, l, clusterOpts...)
+	failer, err := fr.GetFailer(c.MakeNodes(nodes), failureModeName, l, disableStateValidation, clusterOpts...)
 	if err != nil {
 		return nil, err
 	}

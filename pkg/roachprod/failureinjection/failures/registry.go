@@ -94,7 +94,7 @@ func (r *FailureRegistry) List(regex string) []string {
 }
 
 func (r *FailureRegistry) GetFailer(
-	clusterName, failureName string, l *logger.Logger, opts ...ClusterOptionFunc,
+	clusterName, failureName string, l *logger.Logger, disableStateValidation bool, opts ...ClusterOptionFunc,
 ) (*Failer, error) {
 	r.Lock()
 	spec, ok := r.failures[failureName]
@@ -113,8 +113,9 @@ func (r *FailureRegistry) GetFailer(
 	}
 
 	failer := &Failer{
-		FailureMode: failureMode,
-		state:       uninitialized,
+		FailureMode:            failureMode,
+		disableStateValidation: disableStateValidation,
+		state:                  uninitialized,
 	}
 	return failer, nil
 }

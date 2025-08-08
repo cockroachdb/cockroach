@@ -298,7 +298,7 @@ func SimulateMultiRegionCluster(
 	regionToNodeMap failures.RegionToNodes,
 	l *logger.Logger,
 ) (func(), error) {
-	latencyFailer, err := c.GetFailer(l, c.All(), failures.NetworkLatencyName)
+	latencyFailer, err := c.GetFailer(l, c.All(), failures.NetworkLatencyName, false /* disableStateValidation */)
 	if err != nil {
 		return nil, err
 	}

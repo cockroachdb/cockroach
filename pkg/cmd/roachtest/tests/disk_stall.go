@@ -64,7 +64,7 @@ func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Clust
 		fmt.Sprintf("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT=%s", maxSyncDur))
 
 	t.Status("setting up disk staller")
-	s := roachtestutil.MakeDmsetupDiskStaller(t, c)
+	s := roachtestutil.MakeDmsetupDiskStaller(t, c, false)
 	s.Setup(ctx)
 	defer s.Cleanup(ctx)
 
@@ -189,15 +189,17 @@ func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Clust
 // appropriately.
 func registerDiskStalledDetection(r registry.Registry) {
 	stallers := map[string]func(test.Test, cluster.Cluster) diskStaller{
-		"dmsetup": func(t test.Test, c cluster.Cluster) diskStaller { return roachtestutil.MakeDmsetupDiskStaller(t, c) },
+		"dmsetup": func(t test.Test, c cluster.Cluster) diskStaller {
+			return roachtestutil.MakeDmsetupDiskStaller(t, c, false)
+		},
 		"cgroup/read-write/logs-too=false": func(t test.Test, c cluster.Cluster) diskStaller {
-			return roachtestutil.MakeCgroupDiskStaller(t, c, true, false)
+			return roachtestutil.MakeCgroupDiskStaller(t, c, true, false, false)
 		},
 		"cgroup/read-write/logs-too=true": func(t test.Test, c cluster.Cluster) diskStaller {
-			return roachtestutil.MakeCgroupDiskStaller(t, c, true, true)
+			return roachtestutil.MakeCgroupDiskStaller(t, c, true, true, false)
 		},
 		"cgroup/write-only/logs-too=true": func(t test.Test, c cluster.Cluster) diskStaller {
-			return roachtestutil.MakeCgroupDiskStaller(t, c, false, true)
+			return roachtestutil.MakeCgroupDiskStaller(t, c, false, true, false)
 		},
 	}
 
@@ -466,7 +468,7 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 
 	t.Status("setting up disk staller")
 	// Use CgroupDiskStaller with readsToo=false to only stall writes.
-	s := roachtestutil.MakeCgroupDiskStaller(t, c, false /* readsToo */, false /* logsToo */)
+	s := roachtestutil.MakeCgroupDiskStaller(t, c, false /* readsToo */, false /* logsToo */, false)
 	s.Setup(ctx)
 	// NB: We use a background context in the defer'ed cleanup command,
 	// otherwise on test failure our c.Run calls will be ignored. Leaving
