@@ -498,6 +498,14 @@ func (m panicNodeMutator) Generate(
 	return mutations, nil
 }
 
+func GetFailer(planner *testPlanner, name string) (*failures.Failer, error) {
+	if planner._getFailer != nil {
+		return planner._getFailer(name)
+	}
+
+	return planner.cluster.GetFailer(planner.logger, planner.cluster.CRDBNodes(), name)
+}
+
 type networkPartitionMutator struct{}
 
 func (m networkPartitionMutator) Name() string { return failures.IPTablesNetworkPartitionName }
@@ -516,8 +524,8 @@ func (m networkPartitionMutator) Generate(
 	idx := newStepIndex(plan)
 	nodeList := planner.currentContext.System.Descriptor.Nodes
 
-	failure := failures.GetFailureRegistry()
-	f, err := failure.GetFailer(planner.cluster.Name(), failures.IPTablesNetworkPartitionName, planner.logger)
+	f, err := GetFailer(planner, failures.IPTablesNetworkPartitionName)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get failer for %s: %w", failures.IPTablesNetworkPartitionName, err)
 	}

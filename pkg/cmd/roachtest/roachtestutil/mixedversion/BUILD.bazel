@@ -66,6 +66,7 @@ go_test(
         "//pkg/cmd/roachtest/roachtestutil/task",
         "//pkg/cmd/roachtest/spec",
         "//pkg/roachpb",
+        "//pkg/roachprod/failureinjection/failures",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
