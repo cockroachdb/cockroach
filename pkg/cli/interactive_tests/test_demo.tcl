@@ -169,11 +169,11 @@ eexpect eof
 end_test
 
 start_test "Check that the user can override the password."
-set ::env(COCKROACH_DEMO_PASSWORD) "hunter2"
+set ::env(COCKROACH_DEMO_PASSWORD) "hunter2hunter2hunter2hunter2"
 spawn $argv demo --no-line-editor --insecure=false --no-example-database --log-dir=logs
 eexpect "Connection parameters"
 eexpect "(sql)"
-eexpect "postgresql://demo:hunter2@"
+eexpect "postgresql://demo:hunter2hunter2hunter2hunter2@"
 eexpect "defaultdb>"
 send_eof
 eexpect eof
