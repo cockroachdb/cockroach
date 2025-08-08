@@ -3310,3 +3310,32 @@ func TestLoadJobProgress(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []float32{7.1}, p.GetDetails().(*jobspb.Progress_Import).Import.ReadProgress)
 }
+
+func TestParseState(t *testing.T) {
+	validStates := []struct {
+		input    string
+		expected jobs.State
+	}{
+		{"pending", jobs.StatePending},
+		{"running", jobs.StateRunning},
+		{"paused", jobs.StatePaused},
+		{"failed", jobs.StateFailed},
+		{"reverting", jobs.StateReverting},
+		{"succeeded", jobs.StateSucceeded},
+		{"canceled", jobs.StateCanceled},
+		{"cancel-requested", jobs.StateCancelRequested},
+		{"pause-requested", jobs.StatePauseRequested},
+		{"revert-failed", jobs.StateRevertFailed},
+	}
+	for _, tc := range validStates {
+		st, err := jobs.ParseState(tc.input)
+		require.NoError(t, err, "input: %q", tc.input)
+		require.Equal(t, tc.expected, st, "input: %q", tc.input)
+	}
+
+	invalidStates := []string{"foo", "", "RUNNING", "Paused", "done", "123"}
+	for _, input := range invalidStates {
+		_, err := jobs.ParseState(input)
+		require.Error(t, err, "input: %q should be invalid", input)
+	}
+}

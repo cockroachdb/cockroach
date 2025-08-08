@@ -2753,6 +2753,7 @@ var builtinOidsArray = []string{
 	2790: `any_in(input: anyelement) -> any`,
 	2791: `trigger_out(trigger: trigger) -> bytes`,
 	2792: `trigger_in(input: anyelement) -> trigger`,
+	2793: `crdb_internal.wait_for_job_status(job_id: int, status: string) -> void`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
