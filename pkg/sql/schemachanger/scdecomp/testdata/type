@@ -696,6 +696,7 @@ ElementState:
     tableId: 108
     temporaryIndexId: 0
     type: FORWARD
+    useHideForPrimaryKeyRecreated: false
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
@@ -1703,6 +1704,7 @@ ElementState:
     tableId: 111
     temporaryIndexId: 0
     type: FORWARD
+    useHideForPrimaryKeyRecreated: false
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []

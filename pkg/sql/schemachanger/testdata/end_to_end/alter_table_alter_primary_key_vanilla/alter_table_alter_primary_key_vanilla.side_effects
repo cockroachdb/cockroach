@@ -745,7 +745,7 @@ validate forward indexes [10] in table #104
 validate forward indexes [12] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitPhase stage 8 of 15 with 26 MutationType ops
+## PostCommitPhase stage 8 of 15 with 29 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -759,16 +759,13 @@ upsert descriptor #104
   -    id: 2
   +    id: 8
        interleave: {}
-  +    invisibility: 1
        keyColumnDirections:
-       - ASC
   ...
        keyColumnNames:
        - i
   +    keySuffixColumnIds:
   +    - 2
        name: t_i_idx
-  +    notVisible: true
        partitioning: {}
        predicate: i <= 0:::INT8
        sharded: {}
@@ -784,16 +781,13 @@ upsert descriptor #104
   -    id: 4
   +    id: 10
        interleave: {}
-  +    invisibility: 1
        keyColumnDirections:
-       - ASC
   ...
        keyColumnNames:
        - j
   -    keySuffixColumnIds:
   -    - 1
        name: t_j_idx
-  +    notVisible: true
        partitioning: {}
        predicate: j <= 0:::INT8
        sharded: {}
@@ -809,16 +803,13 @@ upsert descriptor #104
   -    id: 6
   +    id: 12
        interleave: {}
-  +    invisibility: 1
        keyColumnDirections:
-       - ASC
   ...
        - k
        keySuffixColumnIds:
   -    - 1
   +    - 2
        name: t_k_idx
-  +    notVisible: true
        partitioning: {}
        sharded: {}
   +    storeColumnNames: []
@@ -1158,7 +1149,7 @@ begin transaction #17
 validate forward indexes [14] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 4 with 35 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 34 MutationType ops
 upsert descriptor #104
   ...
            statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j)
@@ -1166,42 +1157,6 @@ upsert descriptor #104
   -    revertible: true
        targetRanks: <redacted>
        targets: <redacted>
-  ...
-       id: 8
-       interleave: {}
-  -    invisibility: 1
-       keyColumnDirections:
-       - ASC
-  ...
-       - 2
-       name: t_i_idx
-  -    notVisible: true
-       partitioning: {}
-       predicate: i <= 0:::INT8
-  ...
-       id: 10
-       interleave: {}
-  -    invisibility: 1
-       keyColumnDirections:
-       - ASC
-  ...
-       - j
-       name: t_j_idx
-  -    notVisible: true
-       partitioning: {}
-       predicate: j <= 0:::INT8
-  ...
-       id: 12
-       interleave: {}
-  -    invisibility: 1
-       keyColumnDirections:
-       - ASC
-  ...
-       - 2
-       name: t_k_idx
-  -    notVisible: true
-       partitioning: {}
-       sharded: {}
   ...
        vecConfig: {}
        version: 4

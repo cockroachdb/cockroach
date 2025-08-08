@@ -49,6 +49,12 @@ func (w index) IndexDescDeepCopy() descpb.IndexDescriptor {
 	return *protoutil.Clone(w.desc).(*descpb.IndexDescriptor)
 }
 
+func (w index) Adding() bool {
+	// Either the column is adding or is a recreated index that needs
+	// to be temporarily hidden.
+	return w.maybeMutation.Adding() || w.IndexDesc().HideForPrimaryKeyRecreate
+}
+
 // Ordinal returns the ordinal of the index in its parent TableDescriptor.
 // The ordinal is defined as follows:
 // - 0 is the ordinal of the primary index,
