@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -242,20 +243,19 @@ func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) st
 	return logFile
 }
 
-// CheckPortBlocked returns true if a connection from a node to a port on another node
-// can be established. Requires nmap to be installed.
+// CheckPortBlocked checks the connection from one process to another. It attempts
+// to send a TCP SYN packet using fromNode's port to toNode's port. If an ACK is received,
+// the connection is considered sent and acked. The SYN packet may not be sent at all if a
+// filter blocks outgoing traffic to that port. The SYN packet may be sent but not ACKed if
+// a filter blocks incoming traffic from our port. Requires nmap to be installed.
 func CheckPortBlocked(
-	ctx context.Context,
-	l *logger.Logger,
-	c cluster.Cluster,
-	fromNode, toNode option.NodeListOption,
-	port string,
-) (bool, error) {
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, fromNode, toNode option.NodeListOption,
+) (blocked bool, err error) {
 	// `nmap -oG` example output:
 	// Host: {IP} {HOST_NAME}	Status: Up
 	// Host: {IP} {HOST_NAME}	Ports: 26257/open/tcp//cockroach///
 	// We care about the port scan result and whether it is filtered or open.
-	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(fromNode), fmt.Sprintf("nmap -p %s {ip%s} -oG - | awk '/Ports:/{print $5}'", port, toNode))
+	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(fromNode), fmt.Sprintf("nmap -p {pgport%s} {ip%s} -oG - | awk '/Ports:/{print $5}'", toNode, toNode))
 	if err != nil {
 		return false, err
 	}
@@ -335,4 +335,47 @@ func SimulateMultiRegionCluster(
 	}
 
 	return cleanupFunc, nil
+}
+
+// StartClusterInDeploymentMode starts a cockroach cluster with the specified deployment mode.
+// In multitenant deployments, it handles starting both the system and secondary tenant.
+func StartClusterInDeploymentMode(
+	ctx context.Context,
+	c cluster.Cluster,
+	l *logger.Logger,
+	nodes option.NodeListOption,
+	deploymentMode roachprodutil.DeploymentMode,
+	startOpts option.StartOpts,
+	settings install.ClusterSettings,
+) (string, error) {
+	var virtualClusterName string
+	var virtualStartOpts option.StartOpts
+	switch deploymentMode {
+	case roachprodutil.SystemOnlyDeployment:
+		virtualClusterName = install.SystemInterfaceName
+	case roachprodutil.SharedProcessDeployment:
+		virtualClusterName = "shared-process-tenant"
+		virtualStartOpts = option.StartSharedVirtualClusterOpts(virtualClusterName, option.WithInitTarget(nodes.RandNode()[0]))
+	case roachprodutil.SeparateProcessDeployment:
+		// For simplicity, we only create a single tenant + instance that uses all storage
+		// nodes. In the future, we should support randomly creating multiple tenants and
+		// instances.
+		virtualClusterName = "separate-process-tenant"
+		virtualStartOpts = option.StartVirtualClusterOpts(virtualClusterName, nodes, option.StorageCluster(nodes))
+	}
+
+	// We always start the system tenant first in all deployment modes.
+	c.Start(ctx, l, startOpts, settings, nodes)
+
+	// If we picked a multitenant deployment, start the secondary tenant.
+	if deploymentMode != roachprodutil.SystemOnlyDeployment {
+		c.StartServiceForVirtualCluster(ctx, l, virtualStartOpts, settings)
+
+		db := c.Conn(ctx, l, nodes.RandNode()[0], option.VirtualClusterName(virtualClusterName))
+		if err := WaitForSQLReady(ctx, db); err != nil {
+			return "", errors.Wrapf(err, "failed to connect to virtual cluster %s", virtualClusterName)
+		}
+	}
+
+	return virtualClusterName, nil
 }
