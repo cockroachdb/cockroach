@@ -301,6 +301,12 @@ func (i *immediateVisitor) UpdateTableBackReferencesInSequences(
 					}
 				}
 			}
+			for _, t := range tbl.GetTriggers() {
+				// This contains all relation references from the trigger.
+				for _, rel := range t.DependsOn {
+					forwardRefs.Add(rel)
+				}
+			}
 		}
 	}
 	for _, seqID := range op.SequenceIDs {

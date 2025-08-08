@@ -341,7 +341,6 @@ func TestValidateFuncDesc(t *testing.T) {
 				DependedOnBy: []descpb.FunctionDescriptor_Reference{
 					{ID: tableID},
 				},
-				DependsOn:      []descpb.ID{tableID},
 				DependsOnTypes: []descpb.ID{typeID},
 			},
 		},
