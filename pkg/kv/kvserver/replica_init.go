@@ -42,7 +42,7 @@ const (
 // versions >= 24.1 there is an EnvVar for this purpose.
 var useDefaultConnectionClassForRaft = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"kv.raft.use_default_connection_class",
+	"kv.raft.use_default_connection_class.enabled",
 	"if true, use the default rpc.ConnectionClass for raft traffic instead of the raft-specific one",
 	true, // default 23.2 behaviour
 )
