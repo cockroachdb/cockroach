@@ -419,7 +419,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
       │    │    ├── PUBLIC                → ABSENT              IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 1 (t_pkey-)}
       │    │    ├── VALIDATED             → DELETE_ONLY         PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
       │    │    └── PUBLIC                → VALIDATED           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_a_idx-), RecreateSourceIndexID: 0}
-      │    └── 35 Mutation operations
+      │    └── 36 Mutation operations
       │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":6,"TableID":104}
       │         ├── SetIndexName {"IndexID":6,"Name":"crdb_internal_in...","TableID":104}
@@ -439,12 +439,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":8,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":11,"TableID":104}
-      │         ├── MarkRecreatedIndexAsInvisible {"IndexID":4,"TableID":104,"TargetPrimaryIndexID":10}
+      │         ├── MarkRecreatedIndexAsInvisible {"IndexID":4,"SetHideIndexFlag":true,"TableID":104,"TargetPrimaryIndexID":10}
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":4,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":5,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Kind":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":104}
+      │         ├── MarkRecreatedIndexAsVisible {"IndexID":4,"TableID":104}
       │         ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
       │         ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
       │         ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
@@ -475,7 +476,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
       │    │    ├── PUBLIC              → ABSENT                IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 2 (t_a_idx-)}
       │    │    ├── VALIDATED           → DELETE_ONLY           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_a_idx-), RecreateSourceIndexID: 0}
       │    │    └── PUBLIC              → ABSENT                IndexName:{DescID: 104 (t), Name: "t_a_idx", IndexID: 2 (t_a_idx-)}
-      │    └── 20 Mutation operations
+      │    └── 19 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":8,"TableID":104}
@@ -488,7 +489,6 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":6,"Kind":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":6,"Kind":2,"Ordinal":1,"TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":10,"TableID":104}
-      │         ├── MarkRecreatedIndexesAsVisible {"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":6,"Kind":2,"Ordinal":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":1,"TableID":104}
