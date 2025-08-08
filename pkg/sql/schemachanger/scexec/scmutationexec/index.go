@@ -7,7 +7,9 @@ package scmutationexec
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -529,6 +531,11 @@ func (i *immediateVisitor) MarkRecreatedIndexAsInvisible(
 	if idx := m.GetIndex(); idx != nil {
 		idx.Invisibility = 1.0
 		idx.NotVisible = true
+		if op.SetHideIndexFlag {
+			// Prefix the index, so that the index can't accidentally be accessed.
+			idx.Name = fmt.Sprintf("crdb_internal_%s_recreated", idx.Name)
+			idx.HideForPrimaryKeyRecreate = true
+		}
 	}
 	return nil
 }
@@ -552,6 +559,16 @@ func (i *immediateVisitor) MarkRecreatedIndexesAsVisible(
 		} else {
 			idx.IndexDesc().NotVisible = true
 		}
+		// On a mixed version cluster, both reverting the name and unsetting
+		// the hide flag are no-ops, since we check for the name prefix and
+		// the default is for the index to be visible..
+		if strings.HasPrefix(idx.IndexDesc().Name, "crdb_internal") &&
+			strings.HasSuffix(idx.IndexDesc().Name, "_recreated") {
+			idx.IndexDesc().Name = strings.TrimSuffix(strings.TrimPrefix(idx.IndexDesc().Name, "crdb_internal_"),
+				"_recreated")
+
+		}
+		idx.IndexDesc().HideForPrimaryKeyRecreate = false
 	}
 	return nil
 }

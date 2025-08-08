@@ -1896,7 +1896,13 @@ func (desc *wrapper) validateTableIndexes(
 					idx.GetName(), idx.IndexDesc().EncodingType, catenumpb.SecondaryIndexEncoding)
 			}
 		}
-
+		// Validate indexes are only hidden during schema changes.
+		if idx.IndexDesc().HideForPrimaryKeyRecreate &&
+			desc.GetDeclarativeSchemaChangerState() == nil &&
+			len(desc.GetMutations()) == 0 {
+			return errors.AssertionFailedf("index %q (%d) is hidden for a primary key"+
+				" recreate without a schema change", idx.GetName(), idx.GetID())
+		}
 		// Ensure that an index column ID shows up at most once in `keyColumnIDs`,
 		// `keySuffixColumnIDs`, and `storeColumnIDs`.
 		if idx.GetVersion() < descpb.StrictIndexColumnIDGuaranteesVersion {

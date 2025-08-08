@@ -6,6 +6,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -136,7 +137,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.SecondaryIndex) *scop.MarkRecreatedIndexAsInvisible {
+				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.MarkRecreatedIndexAsInvisible {
 					// Recreated indexes are not visible until their final primary index
 					// is usable. While they maybe made public we need to make sure they
 					// are not accidentally used.
@@ -147,6 +148,7 @@ func init() {
 						TableID:              this.TableID,
 						IndexID:              this.IndexID,
 						TargetPrimaryIndexID: this.RecreateTargetIndexID,
+						SetHideIndexFlag:     this.UseHideForPrimaryKeyRecreated,
 					}
 				}),
 				emit(func(this *scpb.SecondaryIndex) *scop.MakeValidatedSecondaryIndexPublic {
@@ -165,6 +167,30 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_VALIDATED,
+				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.MarkRecreatedIndexesAsVisible {
+					// If this index is being replaced because of a primary key swap,
+					// we need to make sure that the index that created to replace it is
+					// visible, right before this one disappears.
+					for _, target := range md.Targets {
+						idx := target.GetSecondaryIndex()
+						// Skip unrelated indexes and indexes that are supposed
+						// to be invisible. Older versions will rely on the
+						// primary key swap to make the index public.
+						if idx == nil ||
+							idx.TableID != this.TableID ||
+							idx.RecreateSourceIndexID != this.IndexID ||
+							!idx.UseHideForPrimaryKeyRecreated {
+							continue
+						}
+						return &scop.MarkRecreatedIndexesAsVisible{
+							TableID: this.TableID,
+							IndexVisibilities: map[descpb.IndexID]float64{
+								idx.IndexID: idx.Invisibility,
+							},
+						}
+					}
+					return nil
+				}),
 				emit(func(this *scpb.SecondaryIndex) *scop.MakePublicSecondaryIndexWriteOnly {
 					// Most of this logic is taken from MakeMutationComplete().
 					return &scop.MakePublicSecondaryIndexWriteOnly{
@@ -222,6 +248,7 @@ func init() {
 					return nil
 				}),
 				emit(func(this *scpb.SecondaryIndex) *scop.MakeIndexAbsent {
+
 					return &scop.MakeIndexAbsent{
 						TableID: this.TableID,
 						IndexID: this.IndexID,

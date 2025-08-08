@@ -4,7 +4,7 @@ CREATE TABLE multiregion_db.public.table_regional_by_row (
   k INT NOT NULL,
   V STRING
 ) LOCALITY REGIONAL BY ROW;
-CREATE INDEX on multiregion_db.table_regional_by_row(v);
+CREATE INDEX idx_v on multiregion_db.table_regional_by_row(v);
 
 /* test */
 alter table multiregion_db.table_regional_by_row add column m int8 default unique_rowid(), alter primary key using columns(k) USING HASH;
@@ -17,8 +17,8 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │    │    ├── VALIDATED             → PUBLIC      PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 1 (table_regional_by_row_pkey+), ConstraintID: 1}
       │    │    ├── ABSENT                → PUBLIC      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 1 (table_regional_by_row_pkey+)}
       │    │    ├── ABSENT                → PUBLIC      IndexName:{DescID: 108 (table_regional_by_row), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey+)}
-      │    │    ├── VALIDATED             → PUBLIC      SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_v_idx+), RecreateSourceIndexID: 0}
-      │    │    └── ABSENT                → PUBLIC      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_v_idx+)}
+      │    │    ├── VALIDATED             → PUBLIC      SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (idx_v+), RecreateSourceIndexID: 0}
+      │    │    └── ABSENT                → PUBLIC      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 2 (idx_v+)}
       │    ├── 56 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY            → DELETE_ONLY Column:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m-)}
       │    │    ├── PUBLIC                → ABSENT      ColumnName:{DescID: 108 (table_regional_by_row), Name: "m", ColumnID: 5 (m-)}
@@ -51,8 +51,8 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │    │    ├── PUBLIC                → VALIDATED   ColumnNotNull:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 10 (table_regional_by_row_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 10 (table_regional_by_row_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 11}
-      │    │    ├── PUBLIC                → VALIDATED   SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_v_idx-), ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 8 (table_regional_by_row_pkey-), RecreateSourceIndexID: 2}
-      │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_v_idx-)}
+      │    │    ├── PUBLIC                → VALIDATED   SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 4 (idx_v-), ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 8 (table_regional_by_row_pkey-), RecreateSourceIndexID: 2}
+      │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 4 (idx_v-)}
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 5, ConstraintID: 4, SourceIndexID: 8 (table_regional_by_row_pkey-)}
       │    │    ├── TRANSIENT_ABSENT      → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 5}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 5}
@@ -144,12 +144,12 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │    │    ├── DELETE_ONLY → ABSENT      PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 10 (table_regional_by_row_pkey-), ConstraintID: 9, TemporaryIndexID: 11, SourceIndexID: 8 (table_regional_by_row_pkey-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m-), IndexID: 8 (table_regional_by_row_pkey-)}
       │    │    ├── VALIDATED   → ABSENT      ColumnNotNull:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 10 (table_regional_by_row_pkey-)}
-      │    │    ├── VALIDATED   → DELETE_ONLY SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_v_idx-), ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 8 (table_regional_by_row_pkey-), RecreateSourceIndexID: 2}
-      │    │    ├── PUBLIC      → ABSENT      IndexName:{DescID: 108 (table_regional_by_row), Name: "table_regional_by_row_v_idx", IndexID: 4 (table_regional_by_row_v_idx-)}
-      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 4 (table_regional_by_row_v_idx-)}
-      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v), IndexID: 4 (table_regional_by_row_v_idx-)}
-      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 4 (table_regional_by_row_v_idx-)}
-      │    │    └── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 4 (table_regional_by_row_v_idx-)}
+      │    │    ├── VALIDATED   → DELETE_ONLY SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 4 (idx_v-), ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 8 (table_regional_by_row_pkey-), RecreateSourceIndexID: 2}
+      │    │    ├── PUBLIC      → ABSENT      IndexName:{DescID: 108 (table_regional_by_row), Name: "idx_v", IndexID: 4 (idx_v-)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 4 (idx_v-)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v), IndexID: 4 (idx_v-)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 4 (idx_v-)}
+      │    │    └── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 4 (idx_v-)}
       │    └── 16 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":10,"TableID":108}
       │         ├── RemoveColumnNotNull {"ColumnID":6,"TableID":108}
@@ -180,8 +180,8 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-)}
       │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 6 (crdb_internal_k_shard_16-), TypeName: "INT8"}
       │    │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), Usage: REGULAR}
-      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_v_idx-), ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 8 (table_regional_by_row_pkey-), RecreateSourceIndexID: 2}
-      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 4 (table_regional_by_row_v_idx-)}
+      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 4 (idx_v-), ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 8 (table_regional_by_row_pkey-), RecreateSourceIndexID: 2}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 4 (idx_v-)}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 5}
       │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_rowid_key-)}
       │    └── 15 Mutation operations
