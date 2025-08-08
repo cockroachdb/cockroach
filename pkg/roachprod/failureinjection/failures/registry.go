@@ -17,13 +17,11 @@ import (
 // ClusterOptions represents options that can be passed to a
 // Failer to describe how it should interact with the cluster.
 type ClusterOptions struct {
-	ConnectionInfo
-	replicationFactor int
-}
-
-type ConnectionInfo struct {
-	secure         bool
-	localCertsPath string
+	// defaultVirtualCluster is the virtual cluster to use if none is specified.
+	defaultVirtualCluster virtualClusterOpt
+	secure                bool
+	localCertsPath        string
+	replicationFactor     int
 }
 
 type failureSpec struct {
@@ -103,7 +101,9 @@ func (r *FailureRegistry) GetFailer(
 		return nil, fmt.Errorf("unknown failure %s", failureName)
 	}
 
-	clusterOpts := ClusterOptions{}
+	clusterOpts := ClusterOptions{
+		replicationFactor: 3,
+	}
 	for _, o := range opts {
 		o(&clusterOpts)
 	}
