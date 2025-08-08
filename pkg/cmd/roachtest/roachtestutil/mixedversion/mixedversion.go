@@ -85,6 +85,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -383,8 +384,9 @@ type (
 		// the following are test-only fields, allowing tests to simulate
 		// cluster properties without passing a cluster.Cluster
 		// implementation.
-		_arch    *vm.CPUArch
-		_isLocal *bool
+		_arch      *vm.CPUArch
+		_isLocal   *bool
+		_getFailer func(name string) (*failures.Failer, error)
 	}
 
 	shouldStop chan struct{}
@@ -964,6 +966,7 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 			bgChans:        t.bgChans,
 			logger:         t.logger,
 			cluster:        t.cluster,
+			_getFailer:     t._getFailer,
 		}
 		// Let's generate a plan.
 		plan, err = planner.Plan()
