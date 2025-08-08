@@ -563,16 +563,40 @@ func accumulateDependentDefaultPrivileges(
 			role.ForAllRoles = true
 		}
 		for object, defaultPrivs := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
-			addDependentPrivileges(object, defaultPrivs, role, userNames, dbName, schemaName)
+			addDependentPrivileges(object, defaultPrivs, role, defaultPrivilegesForRole.GetExplicitRole(),
+				userNames, dbName, schemaName)
 		}
 		return nil
 	})
 }
 
+// addDependentPrivileges checks if a specific default privilege creates dependencies
+// that would prevent dropping any of the target roles.
+//
+// This function examines one default privilege rule and determines if:
+//  1. The role that created the default privilege is being dropped (creator dependency).
+//  2. Any roles that were granted privileges by this default privilege are being
+//     dropped (grantee dependency).
+//
+// Parameters:
+//   - object: The type of database object this default privilege applies to
+//     (e.g., privilege.Tables, privilege.Sequences, privilege.Routines, etc.).
+//   - defaultPrivs: The privilege descriptor containing the actual privilege
+//     grants/revokes for this specific default privilege rule.
+//   - role: The role information for who created this default privilege rule.
+//     Contains either a specific role (role.Role) or indicates it applies to all roles
+//     (role.ForAllRoles)
+//   - explicitRole: This is passed in if the default privilege is for a specific role.
+//   - userNames: Map of roles being dropped -> their accumulated dependency objects.
+//     Used both for lookup (is this role being dropped?) and for recording dependencies.
+//   - dbName: Name of the database where this default privilege is defined.
+//   - schemaName: Name of the schema where this default privilege is defined,
+//     or empty string if this is a database-level default privilege.
 func addDependentPrivileges(
 	object privilege.TargetObjectType,
 	defaultPrivs catpb.PrivilegeDescriptor,
 	role catpb.DefaultPrivilegesRole,
+	explicitRole *catpb.DefaultPrivilegesForRole_ExplicitRole,
 	userNames map[username.SQLUsername][]objectAndType,
 	dbName string,
 	schemaName string,
@@ -587,6 +611,10 @@ func addDependentPrivileges(
 		objectType = "types"
 	case privilege.Schemas:
 		objectType = "schemas"
+	case privilege.Routines:
+		objectType = "routines"
+	default:
+		objectType = object.String()
 	}
 
 	inSchemaMsg := ""
@@ -597,6 +625,8 @@ func addDependentPrivileges(
 	createHint := func(
 		role catpb.DefaultPrivilegesRole,
 		grantee username.SQLUsername,
+		isRevoke bool,
+		privilegeKind privilege.Kind,
 	) string {
 
 		roleString := "ALL ROLES"
@@ -604,15 +634,30 @@ func addDependentPrivileges(
 			roleString = fmt.Sprintf("ROLE %s", role.Role.SQLIdentifier())
 		}
 
-		return fmt.Sprintf("USE %s; ALTER DEFAULT PRIVILEGES FOR %s%s REVOKE ALL ON %s FROM %s;",
-			dbName, roleString, strings.ToUpper(inSchemaMsg), strings.ToUpper(object.String()), grantee.SQLIdentifier())
+		var action, targetKeyword string
+		if isRevoke {
+			action = "REVOKE"
+			targetKeyword = "FROM"
+		} else {
+			action = "GRANT"
+			targetKeyword = "TO"
+		}
+
+		objectKeyword := strings.ToUpper(object.String())
+		if object == privilege.Routines {
+			objectKeyword = "FUNCTIONS"
+		}
+
+		return fmt.Sprintf("USE %s; ALTER DEFAULT PRIVILEGES FOR %s%s %s %s ON %s %s %s;",
+			dbName, roleString, strings.ToUpper(inSchemaMsg), action, string(privilegeKind.DisplayName()),
+			objectKeyword, targetKeyword, grantee.SQLIdentifier())
 	}
 
 	for _, privs := range defaultPrivs.Users {
 		grantee := privs.User()
 		if !role.ForAllRoles {
 			if _, ok := userNames[role.Role]; ok {
-				hint := createHint(role, grantee)
+				hint := createHint(role, grantee, true /* isRevoke */, privilege.ALL)
 				userNames[role.Role] = append(userNames[role.Role],
 					objectAndType{
 						IsDefaultPrivilege: true,
@@ -625,7 +670,7 @@ func addDependentPrivileges(
 			}
 		}
 		if _, ok := userNames[grantee]; ok {
-			hint := createHint(role, grantee)
+			hint := createHint(role, grantee, true /* isRevoke */, privilege.ALL)
 			var err error
 			if role.ForAllRoles {
 				err = errors.Newf(
@@ -643,6 +688,32 @@ func addDependentPrivileges(
 					IsDefaultPrivilege: true,
 					ErrorMessage:       errors.WithHint(err, hint),
 				})
+		}
+	}
+
+	// New roles grant EXECUTE on functions and USAGE on types by default. If any
+	// of those two were revoked, the privilege needs to be granted again to
+	// remove any dependencies.
+	if explicitRole != nil {
+		if _, ok := userNames[role.Role]; ok {
+			var hint string
+			if !explicitRole.PublicHasUsageOnTypes && object == privilege.Types {
+				hint = createHint(role, username.PublicRoleName(), false /* isRevoke */, privilege.USAGE)
+			}
+			if !explicitRole.PublicHasExecuteOnFunctions && object == privilege.Routines {
+				hint = createHint(role, username.PublicRoleName(), false /* isRevoke */, privilege.EXECUTE)
+			}
+			if hint != "" {
+				userNames[role.Role] = append(userNames[role.Role],
+					objectAndType{
+						IsDefaultPrivilege: true,
+						ErrorMessage: errors.WithHint(
+							errors.Newf(
+								"owner of default privileges that revokes privileges of %s from public in database %s%s",
+								objectType, dbName, inSchemaMsg,
+							), hint),
+					})
+			}
 		}
 	}
 }
