@@ -1185,6 +1185,7 @@ type MarkRecreatedIndexAsInvisible struct {
 	TableID              descpb.ID
 	IndexID              descpb.IndexID
 	TargetPrimaryIndexID descpb.IndexID
+	SetHideIndexFlag     bool
 }
 
 // MarkRecreatedIndexesAsVisible is used to mark secondary indexes recreated

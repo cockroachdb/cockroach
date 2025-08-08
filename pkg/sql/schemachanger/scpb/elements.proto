@@ -353,6 +353,9 @@ message SecondaryIndex {
   // index that will make it usable (i.e. the columns required
   // to back this index will be public in this index)
   uint32 recreate_target_id = 5 [(gogoproto.customname) = "RecreateTargetIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  // In a mixed version environment indicates if its safe to hide the
+  // element using the new HideForPrimaryKeyRecreate flag.
+  bool use_hide_for_primary_key_recreated = 6;
 }
 
 message TemporaryIndex {

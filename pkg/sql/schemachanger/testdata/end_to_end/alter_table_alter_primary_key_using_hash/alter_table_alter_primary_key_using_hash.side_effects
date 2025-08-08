@@ -621,7 +621,7 @@ validate CHECK constraint crdb_internal_j_shard_3_auto_not_null in table #104
 validate forward indexes [4] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitPhase stage 8 of 16 with 21 MutationType ops
+## PostCommitPhase stage 8 of 16 with 22 MutationType ops
 upsert descriptor #104
   ...
        fromHashShardedColumn: true
@@ -646,18 +646,14 @@ upsert descriptor #104
   -    id: 2
   +    id: 4
        interleave: {}
-  +    invisibility: 1
        keyColumnDirections:
-       - ASC
   ...
        - j
        keySuffixColumnIds:
   -    - 1
   +    - 5
        name: t_i_j_idx
-  +    notVisible: true
        partitioning: {}
-       sharded:
   ...
          name: crdb_internal_i_j_shard_16
          shardBuckets: 16
@@ -937,7 +933,7 @@ begin transaction #17
 validate forward indexes [6] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitPhase stage 16 of 16 with 9 MutationType ops
+## PostCommitPhase stage 16 of 16 with 8 MutationType ops
 upsert descriptor #104
   ...
            statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH ('bucket_count' = 3)
@@ -945,18 +941,6 @@ upsert descriptor #104
   -    revertible: true
        targetRanks: <redacted>
        targets: <redacted>
-  ...
-       id: 4
-       interleave: {}
-  -    invisibility: 1
-       keyColumnDirections:
-       - ASC
-  ...
-       - 5
-       name: t_i_j_idx
-  -    notVisible: true
-       partitioning: {}
-       sharded:
   ...
        vecConfig: {}
        version: 4
