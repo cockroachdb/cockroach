@@ -637,7 +637,8 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		if feedOptions["initial_scan"] == "'no'" {
 			// copy over all the data from the table to the fingerprint table as of the statement time
 			// this has to be done in two steps for reasons
-			// e.g. CREATE TABLE tmp AS SELECT .. WHERE <find some specific rows you lost> AOST 'beforeLoss' then UPSERT INTO existingtbl SELECT * FROM tmp -- no AOST here
+			// TODO: this is still rly slow on 1k warehouses
+			ct.t.Status(fmt.Sprintf("copying data to fingerprint table for %s as of %s", table, stmtTime))
 			if _, err := db.Exec(fmt.Sprintf(`CREATE TABLE tmp AS SELECT * FROM %s AS OF SYSTEM TIME '%s'`, table, stmtTime.AsOfSystemTime())); err != nil {
 				ct.t.Fatalf("failed to copy data to fingerprint table: %s", err)
 			}
@@ -2130,8 +2131,9 @@ func registerCDC(r registry.Registry) {
 			defer ct.Close()
 
 			// HERE
-			// 100 warehouses was too much (fingerprint method was taking a minute)
-			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
+			// 100 warehouses seems ok with coarse graining.
+			// at 1k it never finishes copying the initial table state.
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1000, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,

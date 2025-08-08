@@ -544,11 +544,12 @@ type validatorRow struct {
 // FingerprintValidator verifies that recreating a table from its changefeed
 // will fingerprint the same at all "interesting" points in time.
 type FingerprintValidator struct {
-	sqlDBFunc              func(func(*gosql.DB) error) error
-	origTable, fprintTable string
-	primaryKeyCols         []string
-	partitionResolved      map[string]hlc.Timestamp
-	resolved               hlc.Timestamp
+	sqlDBFunc                  func(func(*gosql.DB) error) error
+	origTable, fprintTable     string
+	origTableID, fprintTableID int
+	primaryKeyCols             []string
+	partitionResolved          map[string]hlc.Timestamp
+	resolved                   hlc.Timestamp
 	// It's possible to get a resolved timestamp from before the table even
 	// exists, which is valid but complicates the way FingerprintValidator works.
 	// Don't create a fingerprint earlier than the first seen row.
@@ -623,10 +624,24 @@ func NewFingerprintValidator(
 		}
 	}
 
+	// get ids of orig and check tables
+	var origID, checkID int
+	if err := db.QueryRow(`SELECT id FROM system.namespace WHERE name = $1`, fprintTable).Scan(&checkID); err != nil {
+		return nil, err
+	}
+	fmt.Printf("fprintvalidator: fingerprint: checkID: %d\n", checkID)
+	tblnameparts := strings.Split(origTable, ".") // TODO less bad
+	tblname := tblnameparts[len(tblnameparts)-1]
+	if err := db.QueryRow(`SELECT id FROM system.namespace WHERE name = $1`, tblname).Scan(&origID); err != nil {
+		return nil, err
+	}
+
 	v := &FingerprintValidator{
 		sqlDBFunc:         defaultSQLDBFunc(db),
 		origTable:         origTable,
+		origTableID:       origID,
 		fprintTable:       fprintTable,
+		fprintTableID:     checkID,
 		primaryKeyCols:    primaryKeyCols,
 		fprintOrigColumns: fprintOrigColumns,
 		fprintTestColumns: maxTestColumnCount,
@@ -875,7 +890,7 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 	}
 
 	// fprintvalidator: NoteResolved: advanced: 0,0 -> 1754425686.000000000,0; buflen: 1221; parts: map[0:1754425686.000000000,0]
-	fmt.Printf("fprintvalidator: NoteResolved: advanced: %s -> %s; buflen: %d; partsResolveds: %+v\n", v.resolved, newResolved, len(v.buffer), v.partitionResolved)
+	fmt.Printf("fprintvalidator: NoteResolved: advanced: %s -> %s (lag=%s); buflen: %d; partsResolveds: %+v\n", v.resolved, newResolved, time.Since(newResolved.GoTime()).Round(time.Second), len(v.buffer), v.partitionResolved)
 	v.resolved = newResolved
 
 	// NB: Intentionally not stable sort because it shouldn't matter.
@@ -950,27 +965,32 @@ func (v *FingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 		fmt.Printf("fprintvalidator: fingerprint: ts: %s; took %s\n", ts, time.Since(start))
 	}(time.Now())
 
-	var orig string
-	// NOTE: this depends on the primary index being returned first, which does seem likely tbh
+	// note: there's another overload which can take a start time, which we can use to handle initial scans better
+	// but it seems like its exclusive with strip index prefix and timestamp, so maybe we can't use it. we could change that..?
+	query := fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint((select crdb_internal.index_span(%d, 1)), true) as of system time '%s'`, v.origTableID, ts.AsOfSystemTime())
+	fmt.Printf("fprintvalidator: fingerprint: orig query: %q\n", query)
+	var origFingerprint int
 	if err := v.sqlDBFunc(func(db *gosql.DB) error {
-		return db.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
-		SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ` + v.origTable + `
-	] AS OF SYSTEM TIME '` + ts.AsOfSystemTime() + `'`).Scan(&orig)
+		return db.QueryRow(query).Scan(&origFingerprint)
 	}); err != nil {
 		return err
 	}
-	var check string
-	if err := v.sqlDBFunc(func(db *gosql.DB) error {
-		return db.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
-		SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ` + v.fprintTable + `
-	]`).Scan(&check)
-	}); err != nil {
-		return err
-	}
-	if orig != check {
-		// calculate diff for debugging
-		// select * from r2 EXCEPT select * from rides;
 
+	query = fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint((select crdb_internal.index_span(%d, 1)), true)`, v.fprintTableID)
+	fmt.Printf("fprintvalidator: fingerprint: check query: %q\n", query)
+	var checkFingerprint int
+	if err := v.sqlDBFunc(func(db *gosql.DB) error {
+		return db.QueryRow(query).Scan(&checkFingerprint)
+	}); err != nil {
+		return err
+	}
+
+	if origFingerprint != checkFingerprint {
+		v.failures = append(v.failures, fmt.Sprintf(`fingerprints did not match at %s: %d vs %d`, ts.AsOfSystemTime(), origFingerprint, checkFingerprint))
+	}
+
+	if origFingerprint != checkFingerprint {
+		// calculate diff for debugging
 		getRows := func(query string) ([]string, error) {
 			results := []string{}
 			var rows *gosql.Rows
@@ -1059,7 +1079,7 @@ func (v *FingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 		}
 
 		v.failures = append(v.failures, fmt.Sprintf(
-			`fingerprints did not match at %s: %s vs %s; missing: %s; extra: %s; total rows: %d`, ts.AsOfSystemTime(), orig, check, "/tmp/missing.csv", "/tmp/extra.csv", totalRows))
+			`fingerprints did not match at %s: %s vs %s; missing: %s; extra: %s; total rows: %d`, ts.AsOfSystemTime(), origFingerprint, checkFingerprint, "/tmp/missing.csv", "/tmp/extra.csv", totalRows))
 	}
 	return nil
 }
