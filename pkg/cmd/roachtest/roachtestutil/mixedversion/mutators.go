@@ -597,7 +597,7 @@ func (m networkPartitionMutator) Generate(
 		partitionedNode, leftPartition, rightPartition := selectPartitions(rng, nodeList)
 		partitionType := failures.AllPartitionTypes[rng.Intn(len(failures.AllPartitionTypes))]
 
-		partition := failures.NetworkPartition{Source: leftPartition, Destination: rightPartition, Type: partitionType}
+		partition := failures.NetworkPartition{Source: leftPartition, Peer: rightPartition, Type: partitionType}
 
 		addPartition := stepToPartition.
 			InsertBefore(networkPartitionInjectStep{f, partition, partitionedNode})

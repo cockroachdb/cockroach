@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 )
 
 type (
@@ -42,9 +43,9 @@ func MakeResetVMFailure(
 	return &resetVMFailure{GenericFailure: *genericFailure}, nil
 }
 
-// Description implements FailureMode.
-func (r *resetVMFailure) Description() string {
-	return ResetVMFailureName
+// SupportedDeploymentMode implements FailureMode.
+func (r *resetVMFailure) SupportedDeploymentMode(_ roachprodutil.DeploymentMode) bool {
+	return true
 }
 
 // Setup implements FailureMode.
@@ -76,7 +77,18 @@ func (r *resetVMFailure) Cleanup(ctx context.Context, l *logger.Logger, args Fai
 // Recover implements FailureMode.
 func (r *resetVMFailure) Recover(ctx context.Context, l *logger.Logger, args FailureArgs) error {
 	// Restart the processes.
-	return r.RestartProcesses(ctx, l)
+	if err := r.RestartProcesses(ctx, l); err != nil {
+		return err
+	}
+
+	// Restarting the VM seems to cause cgroups controllers to be removed, readd them.
+	if err := r.Run(ctx, l, r.c.Nodes, "sudo", "/bin/bash", "-c",
+		`'echo "+cpuset +cpu +io +memory +pids" > /sys/fs/cgroup/cgroup.subtree_control'`); err != nil {
+		return err
+	}
+
+	return r.Run(ctx, l, r.c.Nodes, "sudo", "/bin/bash", "-c",
+		`'echo "+cpuset +cpu +io +memory +pids" > /sys/fs/cgroup/system.slice/cgroup.subtree_control'`)
 }
 
 // WaitForFailureToPropagate implements FailureMode.

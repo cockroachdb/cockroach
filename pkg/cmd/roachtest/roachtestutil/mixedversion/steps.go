@@ -890,11 +890,11 @@ func (s networkPartitionInjectStep) Description() string {
 	var desc string
 	switch s.partition.Type {
 	case failures.Bidirectional:
-		desc = fmt.Sprintf("setting up bidirectional network partition: dropping connections between nodes %d and %v", s.partition.Source, s.partition.Destination)
+		desc = fmt.Sprintf("setting up bidirectional network partition: dropping connections between nodes %d and %v", s.partition.Source, s.partition.Peer)
 	case failures.Incoming:
-		desc = fmt.Sprintf("setting up incoming network partition: dropping connections from nodes %v to %d", s.partition.Destination, s.partition.Source)
+		desc = fmt.Sprintf("setting up incoming network partition: dropping connections from nodes %v to %d", s.partition.Peer, s.partition.Source)
 	case failures.Outgoing:
-		desc = fmt.Sprintf("setting up outgoing network partition: dropping connections from nodes %d to %v", s.partition.Source, s.partition.Destination)
+		desc = fmt.Sprintf("setting up outgoing network partition: dropping connections from nodes %d to %v", s.partition.Source, s.partition.Peer)
 	}
 	return desc
 }
@@ -937,11 +937,11 @@ func (s networkPartitionRecoveryStep) Description() string {
 	var desc string
 	switch s.partition.Type {
 	case failures.Bidirectional:
-		desc = fmt.Sprintf("recovering from bidirectional network partition: allowing connections between nodes %d and %v", s.partition.Source, s.partition.Destination)
+		desc = fmt.Sprintf("recovering from bidirectional network partition: allowing connections between nodes %d and %v", s.partition.Source, s.partition.Peer)
 	case failures.Incoming:
-		desc = fmt.Sprintf("recovering from incoming network partition: allowing connections from nodes %v to %d", s.partition.Destination, s.partition.Source)
+		desc = fmt.Sprintf("recovering from incoming network partition: allowing connections from nodes %v to %d", s.partition.Peer, s.partition.Source)
 	case failures.Outgoing:
-		desc = fmt.Sprintf("recovering from outgoing network partition: allowing connections from nodes %d to %v", s.partition.Source, s.partition.Destination)
+		desc = fmt.Sprintf("recovering from outgoing network partition: allowing connections from nodes %d to %v", s.partition.Source, s.partition.Peer)
 	}
 	return desc
 }

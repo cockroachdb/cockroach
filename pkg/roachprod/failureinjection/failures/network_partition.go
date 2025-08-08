@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 )
 
 type PartitionType int
@@ -31,9 +32,9 @@ func (p PartitionType) String() string {
 const (
 	// Bidirectional drops traffic in both directions.
 	Bidirectional PartitionType = iota
-	// Incoming drops incoming traffic on the source from the destination
+	// Incoming drops incoming traffic on the source from the peer nodes
 	Incoming
-	// Outgoing drops outgoing traffic from the source to the destination
+	// Outgoing drops outgoing traffic from the source to the peer nodes
 	Outgoing
 )
 
@@ -44,10 +45,10 @@ var AllPartitionTypes = []PartitionType{
 }
 
 type NetworkPartition struct {
-	// Source is a list of nodes that will have the network partition created as
-	// described by Type.
-	Source      install.Nodes
-	Destination install.Nodes
+	// Source is a list of nodes that will create the iptables rules to simulate
+	// a network partition as described by Type.
+	Source install.Nodes
+	Peer   install.Nodes
 	// Type describes the network partition being created.
 	Type PartitionType
 }
@@ -57,10 +58,6 @@ type NetworkPartitionArgs struct {
 	// TODO: Add support for more complex network partitions, e.g. "soft" partitions
 	// where not all packets are dropped.
 	Partitions []NetworkPartition
-
-	// List of nodes to drop iptables rules for when recovering. If empty, all nodes
-	// will have their rules dropped.
-	NodesToRecover install.Nodes
 }
 
 type IPTablesPartitionFailure struct {
@@ -83,8 +80,19 @@ func registerIPTablesPartitionFailure(r *FailureRegistry) {
 	r.add(IPTablesNetworkPartitionName, NetworkPartitionArgs{}, MakeIPTablesPartitionFailure)
 }
 
-func (f *IPTablesPartitionFailure) Description() string {
-	return IPTablesNetworkPartitionName
+func (f *IPTablesPartitionFailure) SupportedDeploymentMode(mode roachprodutil.DeploymentMode) bool {
+	// IPTablesPartitionFailure should ideally be a process scoped failure, i.e. we can define individual
+	// partitions from process to process, but iptables rules apply to the entire VM. This
+	// makes adding partitions in separate process deployments tricky, as adding a rule to a VM
+	// will apply to all processes.
+	// TODO(darryl): Add support for IPTablesPartitionFailure in SeparateProcessDeployments.
+	// Two possible approaches to consider:
+	// 1. Enforce that IPTablesPartitionFailure failures are VM scoped, i.e. we add partitions between machines
+	// not processes. One downside to this is that a common simplification roachprod makes is to
+	// deploy SQL servers on the same machine as the KV pods which is not realistic.
+	// 2. Switch to a more complex network rules alternative that will allow us to mark packets
+	// with associated PIDs. The performance impact of this would have to be investigated.
+	return mode != roachprodutil.SeparateProcessDeployment
 }
 
 func (f *IPTablesPartitionFailure) Setup(_ context.Context, _ *logger.Logger, _ FailureArgs) error {
@@ -112,36 +120,51 @@ sudo iptables -P OUTPUT ACCEPT;
 sudo iptables-save
 `
 
-	// Drop all incoming and outgoing traffic to the ip address.
+	// Drop all incoming and outgoing traffic to peer in both directions.
 	bidirectionalPartitionCmd = `
-sudo iptables %[1]s INPUT  -s {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s OUTPUT -d {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s INPUT  -s {ip:%[2]d} -p tcp --sport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s OUTPUT -d {ip:%[2]d} -p tcp --sport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s INPUT  -s {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s OUTPUT -d {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s INPUT  -s {ip:%[2]d:public} -p tcp --sport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s OUTPUT -d {ip:%[2]d:public} -p tcp --sport {pgport:%[2]d} -j DROP;
+RULE_TYPE=%[1]s
+PEER_IP={ip:%[2]d}
+PEER_PORT={pgport:%[2]d}
+SOURCE_PORT={pgport:%[3]d}
+
+# Drop all incoming traffic from the peer in both directions
+sudo iptables ${RULE_TYPE} INPUT -p tcp -s ${PEER_IP} --dport ${SOURCE_PORT} -j DROP;
+sudo iptables ${RULE_TYPE} INPUT -p tcp -s ${PEER_IP} --sport ${PEER_PORT} -j DROP;
+# Drop all outgoing traffic to the peer in both directions
+sudo iptables ${RULE_TYPE} OUTPUT -p tcp -d ${PEER_IP} --dport ${PEER_PORT} -j DROP;
+sudo iptables ${RULE_TYPE} OUTPUT -p tcp -d ${PEER_IP} --sport ${SOURCE_PORT} -j DROP;
 `
-	// Drop all incoming traffic from the ip address.
+	// Drop all incoming traffic from the peer.
 	asymmetricInputPartitionCmd = `
-sudo iptables %[1]s INPUT -s {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s INPUT -s {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
+RULE_TYPE=%[1]s
+PEER_IP={ip:%[2]d}
+PEER_PORT={pgport:%[2]d}
+SOURCE_PORT={pgport:%[3]d}
+
+sudo iptables ${RULE_TYPE} INPUT -p tcp -s ${PEER_IP} --dport ${SOURCE_PORT} -j DROP;
 `
 
-	// Drop all outgoing traffic to the ip address.
+	// Drop all outgoing traffic to the peer.
 	asymmetricOutputPartitionCmd = `
-sudo iptables %[1]s OUTPUT -d {ip:%[2]d} -p tcp --dport {pgport:%[2]d} -j DROP;
-sudo iptables %[1]s OUTPUT -d {ip:%[2]d:public} -p tcp --dport {pgport:%[2]d} -j DROP;
+RULE_TYPE=%[1]s
+PEER_IP={ip:%[2]d}
+PEER_PORT={pgport:%[2]d}
+SOURCE_PORT={pgport:%[3]d}
+
+sudo iptables ${RULE_TYPE} OUTPUT -p tcp -d ${PEER_IP} --dport ${PEER_PORT} -j DROP;
 `
 )
 
-func constructIPTablesRule(partitionCmd string, targetNode install.Node, addRule bool) string {
+func constructIPTablesRule(
+	partitionCmd string, addRule bool, sourceNode, targetNode install.Node,
+) string {
 	addOrDropRule := "-D"
 	if addRule {
 		addOrDropRule = "-A"
 	}
-	return fmt.Sprintf(partitionTemplateWrapper, fmt.Sprintf(partitionCmd, addOrDropRule, targetNode))
+	return fmt.Sprintf(partitionTemplateWrapper, fmt.Sprintf(
+		partitionCmd, addOrDropRule, targetNode, sourceNode,
+	))
 }
 
 func (f *IPTablesPartitionFailure) Inject(
@@ -149,18 +172,18 @@ func (f *IPTablesPartitionFailure) Inject(
 ) error {
 	partitions := args.(NetworkPartitionArgs).Partitions
 	for _, partition := range partitions {
-		for _, destinationNode := range partition.Destination {
+		for _, peerNode := range partition.Peer {
 			var cmd string
 			switch partition.Type {
 			case Bidirectional:
-				cmd = constructIPTablesRule(bidirectionalPartitionCmd, destinationNode, true /* addRule */)
-				l.Printf("Dropping packets between nodes %d and node %d", partition.Source, destinationNode)
+				cmd = constructIPTablesRule(bidirectionalPartitionCmd, true /* addRule */, partition.Source[0], peerNode)
+				l.Printf("Dropping packets between nodes %d and node %d", partition.Source, peerNode)
 			case Incoming:
-				cmd = constructIPTablesRule(asymmetricInputPartitionCmd, destinationNode, true /* addRule */)
-				l.Printf("Dropping packets from node %d to nodes %d", destinationNode, partition.Source)
+				cmd = constructIPTablesRule(asymmetricInputPartitionCmd, true /* addRule */, partition.Source[0], peerNode)
+				l.Printf("Dropping packets from node %d to nodes %d", peerNode, partition.Source)
 			case Outgoing:
-				cmd = constructIPTablesRule(asymmetricOutputPartitionCmd, destinationNode, true /* addRule */)
-				l.Printf("Dropping packets from nodes %d to node %d", partition.Source, destinationNode)
+				cmd = constructIPTablesRule(asymmetricOutputPartitionCmd, true /* addRule */, partition.Source[0], peerNode)
+				l.Printf("Dropping packets from nodes %d to node %d", partition.Source, peerNode)
 			default:
 				panic("unhandled default case")
 			}
@@ -177,18 +200,19 @@ func (f *IPTablesPartitionFailure) Recover(
 ) error {
 	partitions := args.(NetworkPartitionArgs).Partitions
 	for _, partition := range partitions {
-		for _, destinationNode := range partition.Destination {
+
+		for _, peerNode := range partition.Peer {
 			var cmd string
 			switch partition.Type {
 			case Bidirectional:
-				cmd = constructIPTablesRule(bidirectionalPartitionCmd, destinationNode, false /* addRule */)
-				l.Printf("Resuming packets between nodes %d and node %d", partition.Source, destinationNode)
+				cmd = constructIPTablesRule(bidirectionalPartitionCmd, false /* addRule */, partition.Source[0], peerNode)
+				l.Printf("Resuming packets between nodes %d and node %d", partition.Source, peerNode)
 			case Incoming:
-				cmd = constructIPTablesRule(asymmetricInputPartitionCmd, destinationNode, false /* addRule */)
-				l.Printf("Resuming packets from node %d to nodes %d", destinationNode, partition.Source)
+				cmd = constructIPTablesRule(asymmetricInputPartitionCmd, false /* addRule */, partition.Source[0], peerNode)
+				l.Printf("Resuming packets from node %d to nodes %d", peerNode, partition.Source)
 			case Outgoing:
-				cmd = constructIPTablesRule(asymmetricOutputPartitionCmd, destinationNode, false /* addRule */)
-				l.Printf("Resuming packets from nodes %d to node %d", partition.Source, destinationNode)
+				cmd = constructIPTablesRule(asymmetricOutputPartitionCmd, false /* addRule */, partition.Source[0], peerNode)
+				l.Printf("Resuming packets from nodes %d to node %d", partition.Source, peerNode)
 			default:
 				panic("unhandled default case")
 			}

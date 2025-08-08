@@ -57,24 +57,52 @@ func WaitForSQLUnavailable(
 	})
 }
 
+func SystemdProcessName(virtualClusterName string, sqlInstance int) string {
+	var sqlInstanceName string
+	if !install.IsSystemInterface(virtualClusterName) {
+		sqlInstanceName = fmt.Sprintf("_%d", sqlInstance)
+	}
+	return fmt.Sprintf("cockroach-%s%s.service", virtualClusterName, sqlInstanceName)
+}
+
+// IsProcessRunning returns if the cockroach process on the given node is still
+// alive according to systemd.
+func IsProcessRunning(
+	ctx context.Context,
+	c *install.SyncedCluster,
+	l *logger.Logger,
+	node install.Nodes,
+	processName string,
+) (bool, string, error) {
+	res, err := c.RunWithDetails(ctx, l, install.WithNodes(node), "IsProcessRunning", fmt.Sprintf("systemctl is-active %s", processName))
+	if err != nil {
+		return false, "", err
+	}
+	status := strings.TrimSpace(res[0].Stdout)
+	return status == "active", status, nil
+}
+
 // WaitForProcessDeath checks systemd until the cockroach process is no longer marked
 // as active.
 func WaitForProcessDeath(
 	ctx context.Context,
-	c install.SyncedCluster,
+	c *install.SyncedCluster,
 	l *logger.Logger,
 	node install.Nodes,
+	virtualClusterName string,
+	sqlInstance int,
 	opts ...install.RetryOptionFunc,
 ) error {
 	config := makeRetryOpts(opts...)
+	processName := SystemdProcessName(virtualClusterName, sqlInstance)
 	start := timeutil.Now()
 	return config.Do(ctx, func(ctx context.Context) error {
-		res, err := c.RunWithDetails(ctx, l, install.WithNodes(node), "WaitForProcessDeath", "systemctl is-active cockroach-system.service")
+		isRunning, status, err := IsProcessRunning(ctx, c, l, node, processName)
 		if err != nil {
+			l.Printf(err.Error())
 			return err
 		}
-		status := strings.TrimSpace(res[0].Stdout)
-		if status != "active" {
+		if !isRunning {
 			l.Printf("n%d cockroach process exited after %s: %s", node, timeutil.Since(start), status)
 			return nil
 		}
@@ -209,18 +237,17 @@ type unbalancedRanges struct {
 func findUnbalancedStores(
 	ctx context.Context, db *gosql.DB, threshold float64,
 ) (unbalancedRanges, error) {
-	lowerBound := 1 - threshold
-	upperBound := 1 + threshold
-
+	// The allocator rounds the threshold as well as sets a minimum of 2
+	// to cover clusters with very low number of ranges.
 	query := fmt.Sprintf(`WITH stats AS (
     SELECT avg(range_count) AS mean_val
     FROM crdb_internal.kv_store_status
 )
 SELECT store_id, range_count, stats.mean_val
 FROM crdb_internal.kv_store_status, stats
-WHERE range_count < mean_val * %f
-   OR range_count > mean_val * %f;
-`, lowerBound, upperBound)
+WHERE range_count < floor(mean_val - greatest(mean_val * %f, 2))
+   OR range_count > ceiling(mean_val + greatest(mean_val * %f, 2));
+`, threshold, threshold)
 
 	var unablancedStores []int
 	var rangeCounts []int
