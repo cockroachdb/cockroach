@@ -541,12 +541,19 @@ func generateAndValidateNewTargets(
 				(initialScanType == `only` && originalInitialScanOnlyOption)
 
 			// TODO(#142376): Audit whether this list is generated correctly.
-			var existingTargetIDs []descpb.ID
+			var existingTargetSpanIDs []spanID
 			for _, targetDesc := range newTableDescs {
-				existingTargetIDs = append(existingTargetIDs, targetDesc.GetID())
+				tableDesc, ok := targetDesc.(catalog.TableDescriptor)
+				if !ok {
+					return nil, nil, hlc.Timestamp{}, nil, errors.AssertionFailedf("expected table descriptor")
+				}
+				existingTargetSpanIDs = append(existingTargetSpanIDs, spanID{
+					tableID: tableDesc.GetID(),
+					indexID: tableDesc.GetPrimaryIndexID(),
+				})
 			}
-			existingTargetSpans := fetchSpansForDescs(p, existingTargetIDs)
-			var newTargetIDs []descpb.ID
+			existingTargetSpans := fetchSpansForDescs(p, existingTargetSpanIDs)
+			var addedTargetSpanIDs []spanID
 			for _, target := range v.Targets {
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
 				if err != nil {
@@ -563,10 +570,17 @@ func generateAndValidateNewTargets(
 				k := targetKey{TableID: desc.GetID(), FamilyName: target.FamilyName}
 				newTargets[k] = target
 				newTableDescs[desc.GetID()] = desc
-				newTargetIDs = append(newTargetIDs, k.TableID)
+				tableDesc, ok := desc.(catalog.TableDescriptor)
+				if !ok {
+					return nil, nil, hlc.Timestamp{}, nil, errors.AssertionFailedf("expected table descriptor")
+				}
+				addedTargetSpanIDs = append(addedTargetSpanIDs, spanID{
+					tableID: tableDesc.GetID(),
+					indexID: tableDesc.GetPrimaryIndexID(),
+				})
 			}
 
-			addedTargetSpans := fetchSpansForDescs(p, newTargetIDs)
+			addedTargetSpans := fetchSpansForDescs(p, addedTargetSpanIDs)
 
 			// By default, we will not perform an initial scan on newly added
 			// targets. Hence, the user must explicitly state that they want an
@@ -632,13 +646,18 @@ func generateAndValidateNewTargets(
 		for k := range newTargets {
 			addedTargets[k.TableID] = struct{}{}
 		}
-		droppedIDs := make([]descpb.ID, 0, len(droppedTargets))
+		droppedSpanIDs := make([]spanID, 0, len(droppedTargets))
 		for k := range droppedTargets {
 			if _, wasAdded := addedTargets[k.TableID]; !wasAdded {
-				droppedIDs = append(droppedIDs, k.TableID)
+				// For dropped tables, we might not have the desc anymore so
+				// we can't get the index ID. In any case, it's safe to wipe
+				// out the entire table span.
+				droppedSpanIDs = append(droppedSpanIDs, spanID{
+					tableID: k.TableID,
+				})
 			}
 		}
-		droppedTargetSpans := fetchSpansForDescs(p, droppedIDs)
+		droppedTargetSpans := fetchSpansForDescs(p, droppedSpanIDs)
 		if err := removeSpansFromProgress(newJobProgress, droppedTargetSpans); err != nil {
 			return nil, nil, hlc.Timestamp{}, nil, err
 		}
@@ -874,19 +893,33 @@ func getSpanLevelCheckpointFromProgress(
 	return changefeedProgress.SpanLevelCheckpoint, nil
 }
 
-func fetchSpansForDescs(p sql.PlanHookState, descIDs []descpb.ID) (primarySpans []roachpb.Span) {
-	seen := make(map[descpb.ID]struct{})
+type spanID struct {
+	tableID descpb.ID
+	indexID descpb.IndexID
+}
+
+func fetchSpansForDescs(p sql.PlanHookState, spanIDs []spanID) (primarySpans []roachpb.Span) {
+	seen := make(map[spanID]struct{})
 	codec := p.ExtendedEvalContext().Codec
-	for _, id := range descIDs {
+	for _, id := range spanIDs {
 		if _, isDup := seen[id]; isDup {
 			continue
 		}
 		seen[id] = struct{}{}
-		tablePrefix := codec.TablePrefix(uint32(id))
-		primarySpan := roachpb.Span{
-			Key:    tablePrefix,
-			EndKey: tablePrefix.PrefixEnd(),
-		}
+		primarySpan := func() roachpb.Span {
+			if id.indexID == 0 {
+				tablePrefix := codec.TablePrefix(uint32(id.tableID))
+				return roachpb.Span{
+					Key:    tablePrefix,
+					EndKey: tablePrefix.PrefixEnd(),
+				}
+			}
+			indexPrefix := codec.IndexPrefix(uint32(id.tableID), uint32(id.indexID))
+			return roachpb.Span{
+				Key:    indexPrefix,
+				EndKey: indexPrefix.PrefixEnd(),
+			}
+		}()
 		primarySpans = append(primarySpans, primarySpan)
 	}
 	return primarySpans

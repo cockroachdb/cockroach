@@ -196,7 +196,6 @@ go_test(
     srcs = [
         "alter_changefeed_test.go",
         "changefeed_dist_test.go",
-        "changefeed_processors_test.go",
         "changefeed_stmt_test.go",
         "changefeed_test.go",
         "csv_test.go",

@@ -8936,7 +8936,13 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		// Verify that the resumed job has restored the progress from the checkpoint
 		// to the change frontier.
-		expectedFrontier, err := span.MakeFrontier(tableSpan)
+		expectedFrontier, err := resolvedspan.NewCoordinatorFrontier(
+			hlc.Timestamp{},
+			hlc.Timestamp{},
+			s.Codec,
+			&s.Server.ClusterSettings().SV,
+			tableSpan,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
