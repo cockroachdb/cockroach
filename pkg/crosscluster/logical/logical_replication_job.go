@@ -350,7 +350,8 @@ func (r *logicalReplicationResumer) ingest(
 				if err != nil {
 					log.Warningf(ctx, "failed to check for updated configuration: %v", err)
 				} else if newDest != resolvedDest {
-					return errors.New("replan due to detail change")
+					log.Infof(ctx, "detected connection change, triggering replan: old=%s, new=%s", resolvedDest, newDest)
+					return errors.Mark(errors.Newf("replan due to detail change: old=%s, new=%s", resolvedDest, newDest), sql.ErrPlanChanged)
 				}
 			}
 		}

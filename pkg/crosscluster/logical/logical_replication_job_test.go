@@ -2481,6 +2481,15 @@ func TestAlterExternalConnection(t *testing.T) {
 	defer cleanup()
 	dbANode1 := sqlutils.MakeSQLRunner(node1.SQLConn(t, serverutils.DBName(dbNames[0])))
 
+	// Configure URLs to use gateway routing
+	q0 := dbANode0URL.Query()
+	q0.Set(streamclient.RoutingModeKey, string(streamclient.RoutingModeGateway))
+	dbANode0URL.RawQuery = q0.Encode()
+
+	q1 := dbANode1URL.Query()
+	q1.Set(streamclient.RoutingModeKey, string(streamclient.RoutingModeGateway))
+	dbANode1URL.RawQuery = q1.Encode()
+
 	// We want to make sure operations for cluster B is on seperate node from cluster A.
 	node2 := server.Server(2).ApplicationLayer()
 	dbBNode2 := sqlutils.MakeSQLRunner(node2.SQLConn(t, serverutils.DBName(dbNames[1])))
@@ -2497,9 +2506,16 @@ func TestAlterExternalConnection(t *testing.T) {
 
 	dbANode0.Exec(t, "INSERT INTO tab VALUES (1, 'via_node_0')")
 
-	time.Sleep(3 * time.Second)
 	now := node0.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbB, jobID)
+
+	// Verify that node0 has the replication connection and node1 does not
+	dbANode0.CheckQueryResults(t,
+		"SELECT count(*) > 0 FROM crdb_internal.node_sessions WHERE application_name like '$ internal repstream job id=%'",
+		[][]string{{"true"}})
+	dbANode1.CheckQueryResults(t,
+		"SELECT count(*) FROM crdb_internal.node_sessions WHERE application_name like '$ internal repstream job id=%'",
+		[][]string{{"0"}})
 
 	dbBNode2.CheckQueryResults(t, "SELECT * FROM tab WHERE pk = 1", [][]string{
 		{"1", "via_node_0"},
@@ -2510,9 +2526,16 @@ func TestAlterExternalConnection(t *testing.T) {
 	WaitUntilReplicatedTime(t, now, dbA, jobID)
 	dbANode1.Exec(t, "INSERT INTO tab VALUES (2, 'via_node_1')")
 
-	time.Sleep(3 * time.Second)
 	now = node0.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbB, jobID)
+
+	// Verify that after ALTER, node0 has no connection and node1 has the replication connection
+	dbANode0.CheckQueryResults(t,
+		"SELECT count(*) FROM crdb_internal.node_sessions WHERE application_name like '$ internal repstream job id=%'",
+		[][]string{{"0"}})
+	dbANode1.CheckQueryResults(t,
+		"SELECT count(*) > 0 FROM crdb_internal.node_sessions WHERE application_name like '$ internal repstream job id=%'",
+		[][]string{{"true"}})
 
 	dbBNode2.CheckQueryResults(t, "SELECT * FROM tab WHERE pk = 2", [][]string{
 		{"2", "via_node_1"},
