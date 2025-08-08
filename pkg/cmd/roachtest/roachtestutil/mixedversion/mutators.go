@@ -501,9 +501,7 @@ type networkPartitionMutator struct{}
 func (m networkPartitionMutator) Name() string { return failures.IPTablesNetworkPartitionName }
 
 func (m networkPartitionMutator) Probability() float64 {
-	// Temporarily set to 0 while we investigate a better way to handle
-	// intersecting failures.
-	return 0
+	return 0.3
 }
 
 func (m networkPartitionMutator) Generate(
