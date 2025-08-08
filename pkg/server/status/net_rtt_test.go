@@ -37,7 +37,7 @@ func TestRTTLinux(t *testing.T) {
 	// 1. Start a TCP echo server.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	serverErrChan := make(chan error, 1)
 	go func() {
