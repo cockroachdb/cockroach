@@ -253,7 +253,7 @@ func (desc *immutable) ValidateForwardReferences(
 	}
 
 	for _, depID := range desc.DependsOn {
-		vea.Report(catalog.ValidateOutboundTableRef(depID, vdg))
+		vea.Report(catalog.ValidateOutboundTableRef(desc.GetID(), depID, vdg))
 	}
 
 	for _, typeID := range desc.DependsOnTypes {
