@@ -43,7 +43,8 @@ const (
 //
 // NB: for a subset of system ranges, SystemClass is used instead of this.
 var defRaftConnClass = func() rpc.ConnectionClass {
-	if envutil.EnvOrDefaultBool("COCKROACH_RAFT_USE_DEFAULT_CONNECTION_CLASS", false) {
+	// NB: Switch the default value of the EnvVar to match the old 23.2 behaviour.
+	if envutil.EnvOrDefaultBool("COCKROACH_RAFT_USE_DEFAULT_CONNECTION_CLASS", true) {
 		return rpc.DefaultClass
 	}
 	return rpc.RaftClass
