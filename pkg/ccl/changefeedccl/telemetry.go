@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -55,10 +56,11 @@ func makePeriodicTelemetryLogger(
 	description string,
 	jobID jobspb.JobID,
 	s *cluster.Settings,
+	targetsSize uint,
 ) (*periodicTelemetryLogger, error) {
 	return &periodicTelemetryLogger{
 		ctx:               ctx,
-		changefeedDetails: makeCommonChangefeedEventDetails(ctx, details, description, jobID),
+		changefeedDetails: makeCommonChangefeedEventDetails(ctx, details, description, jobID, targetsSize),
 		sinkTelemetryData: sinkTelemetryData{},
 		settings:          s,
 	}, nil
@@ -131,9 +133,10 @@ func wrapMetricsRecorderWithTelemetry(
 	s *cluster.Settings,
 	mb metricsRecorder,
 	knobs TestingKnobs,
+	targets changefeedbase.Targets,
 ) (*telemetryMetricsRecorder, error) {
 	var logger telemetryLogger
-	logger, err := makePeriodicTelemetryLogger(ctx, details, description, jobID, s)
+	logger, err := makePeriodicTelemetryLogger(ctx, details, description, jobID, s, targets.Size)
 	if err != nil {
 		return &telemetryMetricsRecorder{}, err
 	}
