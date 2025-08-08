@@ -370,6 +370,12 @@ func convertProtobufValueToDatum(
 			return nil, err
 		}
 		return tree.NewDJSON(j), nil
+	case types.LTreeFamily:
+		l, err := tree.ParseDLTree(val.GetStringValue())
+		if err != nil {
+			return nil, err
+		}
+		return l, nil
 	case types.EnumFamily:
 		logical := val.GetStringValue()
 		return tree.NewDEnum(tree.DEnum{

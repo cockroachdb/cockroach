@@ -2154,3 +2154,11 @@ SELECT '$'::CITEXT -- normalized!
 SELECT (('$')::CITEXT) -- fully parenthesized
 SELECT '_'::CITEXT -- literals removed
 SELECT '$'::CITEXT -- identifiers removed
+
+parse
+SELECT 'foo-bar.baz'::LTREE
+----
+SELECT 'foo-bar.baz'::LTREE
+SELECT (('foo-bar.baz')::LTREE) -- fully parenthesized
+SELECT '_'::LTREE -- literals removed
+SELECT 'foo-bar.baz'::LTREE -- identifiers removed

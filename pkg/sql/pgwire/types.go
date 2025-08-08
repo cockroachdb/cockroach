@@ -286,6 +286,10 @@ func writeTextDatumNotNull(
 		// Enums are serialized with their logical representation.
 		b.writeLengthPrefixedString(v.LogicalRep)
 
+	case *tree.DLTree:
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
+
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
 	}
@@ -870,6 +874,19 @@ func writeBinaryDatumNotNull(
 	case *tree.DOid:
 		b.putInt32(4)
 		b.putInt32(int32(v.Oid))
+
+	case *tree.DLTree:
+		// Postgres version number, as of writing, `1` is the only valid value.
+		// The first byte is always used for the version number
+		size := int32(1)
+		size += int32(v.LTree.ByteSize())
+
+		b.putInt32(size)
+		b.writeByte(1)
+
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtxWithoutLength(b.textFormatter)
+
 	default:
 		b.setError(errors.AssertionFailedf("unsupported type %T", d))
 	}
