@@ -635,16 +635,20 @@ func (opc *optPlanningCtx) buildNonIdealGenericPlan() bool {
 // ideal generic query plan is always chosen, if it exists. A non-ideal generic
 // plan is chosen if CustomPlanThreshold custom plans have already been built
 // and the generic plan is optimal or it has not yet been built.
-func (opc *optPlanningCtx) chooseGenericPlan() bool {
+func (opc *optPlanningCtx) chooseGenericPlan(ctx context.Context) bool {
 	ps := opc.p.stmt.Prepared
 	// Always use an ideal generic plan.
 	if ps.IdealGenericPlan {
+		opc.log(ctx, "ideal generic plan")
 		return true
 	}
 	switch opc.p.SessionData().PlanCacheMode {
 	case sessiondatapb.PlanCacheModeForceGeneric:
 		return true
 	case sessiondatapb.PlanCacheModeAuto:
+		if log.ExpensiveLogEnabled(ctx, 1) {
+			log.Eventf(ctx, "%s", ps.Costs.Summary())
+		}
 		return ps.Costs.NumCustom() >= prep.CustomPlanThreshold &&
 			(!ps.Costs.HasGeneric() || ps.Costs.IsGenericOptimal())
 	default:
@@ -706,7 +710,7 @@ func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.M
 
 	// NOTE: The generic or base memos returned below could be nil if they have
 	// not yet been built.
-	if opc.chooseGenericPlan() {
+	if opc.chooseGenericPlan(ctx) {
 		return prep.GenericMemo, nil
 	}
 	return prep.BaseMemo, nil
@@ -775,7 +779,7 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 			prep.Costs.SetGeneric(newMemo.RootExpr().Cost())
 			// Now that the cost of the generic plan is known, we need to
 			// re-evaluate the decision to use a generic or custom plan.
-			if !opc.chooseGenericPlan() {
+			if !opc.chooseGenericPlan(ctx) {
 				// The generic plan that we just built is too expensive, so we need
 				// to build a custom plan. We recursively call fetchPreparedMemo in
 				// case we have a custom plan that can be reused as a starting point
