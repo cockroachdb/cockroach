@@ -531,6 +531,7 @@ ElementState:
     tableId: 104
     temporaryIndexId: 0
     type: INVERTED
+    hideForPrimaryKeyRecreated: false
     vecConfig: null
   Status: PUBLIC
 - Table:
@@ -970,6 +971,7 @@ ElementState:
     tableId: 105
     temporaryIndexId: 0
     type: FORWARD
+    hideForPrimaryKeyRecreated: false
     vecConfig: null
   Status: PUBLIC
 - Table:

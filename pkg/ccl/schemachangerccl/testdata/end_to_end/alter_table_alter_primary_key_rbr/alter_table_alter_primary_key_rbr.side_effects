@@ -4,7 +4,7 @@ CREATE TABLE multiregion_db.public.table_regional_by_row (
   k INT NOT NULL,
   V STRING
 ) LOCALITY REGIONAL BY ROW;
-CREATE INDEX on multiregion_db.table_regional_by_row(v);
+CREATE INDEX idx_v on multiregion_db.table_regional_by_row(v);
 ----
 ...
 +database {0 0 multiregion_db} -> 104
@@ -290,7 +290,7 @@ upsert descriptor #108
   +        "0": primary
   +      id: 108
   +      indexes:
-  +        "4": table_regional_by_row_v_idx
+  +        "4": idx_v
   +        "6": table_regional_by_row_rowid_key
   +        "10": table_regional_by_row_pkey
   +      name: table_regional_by_row
@@ -973,7 +973,7 @@ validate CHECK constraint crdb_internal_k_shard_16_auto_not_null in table #108
 validate forward indexes [4] in table #108
 commit transaction #17
 begin transaction #18
-## PostCommitPhase stage 16 of 24 with 26 MutationType ops
+## PostCommitPhase stage 16 of 24 with 27 MutationType ops
 upsert descriptor #108
    table:
   -  checks:
@@ -998,19 +998,15 @@ upsert descriptor #108
   -    id: 2
   +    id: 4
        interleave: {}
-  +    invisibility: 1
        keyColumnDirections:
-       - ASC
   ...
        - v
        keySuffixColumnIds:
   -    - 4
   +    - 1
   +    - 6
-       name: table_regional_by_row_v_idx
-  +    notVisible: true
+       name: idx_v
        partitioning:
-         list:
   ...
          numImplicitColumns: 1
        sharded: {}
@@ -1263,7 +1259,7 @@ upsert descriptor #108
   +      - v
   +      keySuffixColumnIds:
   +      - 4
-  +      name: table_regional_by_row_v_idx
+  +      name: idx_v
   +      partitioning:
   +        list:
   +        - name: us-east1
@@ -1731,7 +1727,7 @@ upsert descriptor #108
   ...
          keySuffixColumnIds:
          - 4
-  -      name: table_regional_by_row_v_idx
+  -      name: idx_v
   +      name: crdb_internal_index_2_name_placeholder
          partitioning:
            list:
@@ -1748,10 +1744,10 @@ upsert descriptor #108
   -  version: "24"
   +  version: "25"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (13 operations) — PostCommitNonRevertible phase (stage 2 of 6)."
+update progress of schema change job #1: "Pending: Updating schema metadata (12 operations) — PostCommitNonRevertible phase (stage 2 of 6)."
 commit transaction #27
 begin transaction #28
-## PostCommitNonRevertiblePhase stage 2 of 6 with 15 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 6 with 14 MutationType ops
 upsert descriptor #108
    table:
   -  checks: []
@@ -1787,18 +1783,6 @@ upsert descriptor #108
   +    virtual: true
      createAsOfTime:
        wallTime: "1640995200000000000"
-  ...
-       id: 4
-       interleave: {}
-  -    invisibility: 1
-       keyColumnDirections:
-       - ASC
-  ...
-       - 6
-       name: table_regional_by_row_v_idx
-  -    notVisible: true
-       partitioning:
-         list:
   ...
      modificationTime: {}
      mutations:
@@ -2178,7 +2162,7 @@ upsert descriptor #108
   -        "0": primary
   -      id: 108
   -      indexes:
-  -        "4": table_regional_by_row_v_idx
+  -        "4": idx_v
   -        "6": table_regional_by_row_rowid_key
   -        "10": table_regional_by_row_pkey
   -      name: table_regional_by_row
