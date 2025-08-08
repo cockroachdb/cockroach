@@ -64,9 +64,9 @@ type cgroupDiskStaller struct {
 var _ DiskStaller = (*cgroupDiskStaller)(nil)
 
 func MakeCgroupDiskStaller(
-	f Fataler, c cluster.Cluster, stallReads bool, stallLogs bool,
+	f Fataler, c cluster.Cluster, stallReads bool, stallLogs bool, disableStateValidation bool,
 ) DiskStaller {
-	diskStaller, err := c.GetFailer(f.L(), c.CRDBNodes(), failures.CgroupsDiskStallName)
+	diskStaller, err := c.GetFailer(f.L(), c.CRDBNodes(), failures.CgroupsDiskStallName, disableStateValidation)
 	if err != nil {
 		f.Fatalf("failed to get failer: %s", err)
 	}
@@ -158,8 +158,8 @@ type dmsetupDiskStaller struct {
 
 var _ DiskStaller = (*dmsetupDiskStaller)(nil)
 
-func MakeDmsetupDiskStaller(f Fataler, c cluster.Cluster) DiskStaller {
-	diskStaller, err := c.GetFailer(f.L(), c.CRDBNodes(), failures.DmsetupDiskStallName)
+func MakeDmsetupDiskStaller(f Fataler, c cluster.Cluster, disableStateValidation bool) DiskStaller {
+	diskStaller, err := c.GetFailer(f.L(), c.CRDBNodes(), failures.DmsetupDiskStallName, disableStateValidation)
 	if err != nil {
 		f.Fatalf("failed to get failer: %s", err)
 	}

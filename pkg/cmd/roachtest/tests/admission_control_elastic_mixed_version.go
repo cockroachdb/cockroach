@@ -66,7 +66,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 			setDiskBandwidth := func() {
 				t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", diskBand))
 				staller := roachtestutil.MakeCgroupDiskStaller(t, c,
-					false /* readsToo */, false /* logsToo */)
+					false /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
 				staller.Setup(ctx)
 				staller.Slow(ctx, c.CRDBNodes(), diskBand)
 			}
