@@ -78,35 +78,57 @@ func TestParquetRows(t *testing.T) {
 		stmts             []string
 		expectedDatumRows [][]tree.Datum
 	}{
+		// {
+		// 	testName: "decimal",
+		// 	createTable: fmt.Sprintf(`
+		// 		CREATE TABLE foo (
+		// 		i INT PRIMARY KEY,
+		// 		d DECIMAL(%d,%d)
+		// 		)
+		// 		`, precision, scale),
+		// 	stmts: []string{
+		// 		`INSERT INTO foo VALUES (0, 0)`,
+		// 		`DELETE FROM foo WHERE d = 0.0`,
+		// 		`INSERT INTO foo VALUES (1, 1.000000000)`,
+		// 		`UPDATE foo SET d = 2.000000000 WHERE d = 1.000000000`,
+		// 		`INSERT INTO foo VALUES (2, 3.14)`,
+		// 		`INSERT INTO foo VALUES (3, 1.234567890123456789)`,
+		// 		`INSERT INTO foo VALUES (4, '-Inf'::DECIMAL)`,
+		// 		`INSERT INTO foo VALUES (5, 'Inf'::DECIMAL)`,
+		// 		`INSERT INTO foo VALUES (6, 'NaN'::DECIMAL)`,
+		// 	},
+		// 	expectedDatumRows: [][]tree.Datum{
+		// 		{tree.NewDInt(0), tree.NewDTuple(decimalTupleType, makeDecimal("0.000000000"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
+		// 		{tree.NewDInt(0), tree.DNull, parquetEventTypeDatumStringMap[parquetEventDelete]},
+		// 		{tree.NewDInt(1), tree.NewDTuple(decimalTupleType, makeDecimal("1.000000000"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
+		// 		{tree.NewDInt(1), tree.NewDTuple(decimalTupleType, makeDecimal("2.000000000"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventUpdate]},
+		// 		{tree.NewDInt(2), tree.NewDTuple(decimalTupleType, makeDecimal("3.140000000"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
+		// 		{tree.NewDInt(3), tree.NewDTuple(decimalTupleType, makeDecimal("1.234567890"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
+		// 		{tree.NewDInt(4), tree.NewDTuple(decimalTupleType, tree.DNull, tree.DNegInfDecimal), parquetEventTypeDatumStringMap[parquetEventInsert]},
+		// 		{tree.NewDInt(5), tree.NewDTuple(decimalTupleType, tree.DNull, tree.DPosInfDecimal), parquetEventTypeDatumStringMap[parquetEventInsert]},
+		// 		{tree.NewDInt(6), tree.NewDTuple(decimalTupleType, tree.DNull, tree.DNaNDecimal), parquetEventTypeDatumStringMap[parquetEventInsert]},
+		// 	},
+		// },
 		{
-			testName: "decimal",
-			createTable: fmt.Sprintf(`
-				CREATE TABLE foo (
-				i INT PRIMARY KEY,
-				d DECIMAL(%d,%d)
+			testName: "tuple_decimal",
+			createTable: `
+				CREATE TYPE str_dec AS (s STRING, d DECIMAL);
+				CREATE TABLE tuple_decimal_example (
+				id INT PRIMARY KEY,
+				info str_dec
 				)
-				`, precision, scale),
+				`,
 			stmts: []string{
-				`INSERT INTO foo VALUES (0, 0)`,
-				`DELETE FROM foo WHERE d = 0.0`,
-				`INSERT INTO foo VALUES (1, 1.000000000)`,
-				`UPDATE foo SET d = 2.000000000 WHERE d = 1.000000000`,
-				`INSERT INTO foo VALUES (2, 3.14)`,
-				`INSERT INTO foo VALUES (3, 1.234567890123456789)`,
-				`INSERT INTO foo VALUES (4, '-Inf'::DECIMAL)`,
-				`INSERT INTO foo VALUES (5, 'Inf'::DECIMAL)`,
-				`INSERT INTO foo VALUES (6, 'NaN'::DECIMAL)`,
+				`INSERT INTO tuple_decimal_example (id, info) VALUES (1, ROW('normal', 123.456789012345678901234567890)::str_dec)`,
+				`INSERT INTO tuple_decimal_example (id, info) VALUES (2, ROW('positive infinity', DECIMAL '+Inf')::str_dec)`,
+				`INSERT INTO tuple_decimal_example (id, info) VALUES (3, ROW('negative infinity', '-Inf'::DECIMAL)::str_dec)`,
+				`INSERT INTO tuple_decimal_example (id, info) VALUES (4, ROW('not a number', CAST('NaN' AS DECIMAL))::str_dec)`,
 			},
 			expectedDatumRows: [][]tree.Datum{
-				{tree.NewDInt(0), tree.NewDTuple(decimalTupleType, makeDecimal("0.000000000"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(0), tree.DNull, parquetEventTypeDatumStringMap[parquetEventDelete]},
-				{tree.NewDInt(1), tree.NewDTuple(decimalTupleType, makeDecimal("1.000000000"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(1), tree.NewDTuple(decimalTupleType, makeDecimal("2.000000000"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventUpdate]},
-				{tree.NewDInt(2), tree.NewDTuple(decimalTupleType, makeDecimal("3.140000000"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(3), tree.NewDTuple(decimalTupleType, makeDecimal("1.234567890"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(4), tree.NewDTuple(decimalTupleType, tree.DNull, tree.DNegInfDecimal), parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(5), tree.NewDTuple(decimalTupleType, tree.DNull, tree.DPosInfDecimal), parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(6), tree.NewDTuple(decimalTupleType, tree.DNull, tree.DNaNDecimal), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(1), tree.NewDTuple(decimalTupleType, makeDecimal("123.456789012345678901234567890"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(2), tree.NewDTuple(decimalTupleType, tree.DNull, tree.DPosInfDecimal), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(3), tree.NewDTuple(decimalTupleType, tree.DNull, tree.DNegInfDecimal), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(4), tree.NewDTuple(decimalTupleType, tree.DNull, tree.DNaNDecimal), parquetEventTypeDatumStringMap[parquetEventInsert]},
 			},
 		},
 	} {

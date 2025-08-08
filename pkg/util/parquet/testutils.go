@@ -243,12 +243,15 @@ func readColInRowGroup(
 		}
 		return colDatums, nil
 	case parquet.Types.ByteArray:
+		fmt.Println("AMF: col.Descriptor()", col.Descriptor())
 		colDesc := col.Descriptor()
 		var colDatums []tree.Datum
 		if decLT, ok := colDesc.LogicalType().(*schema.DecimalLogicalType); ok {
 			if decimalDec, ok := dec.(decimalDecoder); ok {
+				fmt.Println("AMF: decimalDec.precision, decimalDec.scale", decimalDec.precision, decimalDec.scale)
 				decimalDec.precision = decLT.Precision()
 				decimalDec.scale = decLT.Scale()
+				fmt.Println("AMF: decimalDec.precision, decimalDec.scale", decimalDec.precision, decimalDec.scale)
 				dec = decimalDec
 				fmt.Println("ps", decLT.Precision(), decLT.Scale())
 			} else {

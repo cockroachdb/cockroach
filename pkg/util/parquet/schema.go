@@ -193,6 +193,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (d
 			scale = min(precision, tree.DecimalMaxScale)
 		}
 
+		fmt.Println("AMF: making a column (name: ", colName, ") with precision, scale", precision, scale)
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
 			repetitions, schema.NewDecimalLogicalType(precision,
 				scale), parquet.Types.ByteArray, defaultTypeLength,
