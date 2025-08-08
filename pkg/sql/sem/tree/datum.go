@@ -1036,6 +1036,7 @@ func ParseDDecimal(s string) (*DDecimal, error) {
 }
 
 func ParseDDecimalWithPrecisionAndScale(s string, precision int32, scale int32) (*DDecimal, error) {
+	fmt.Println("AMF: ParseDDecimalWithPrecisionAndScale s, precision, scale", s, precision, scale)
 	dd := &DDecimal{}
 	err := dd.SetString(s)
 	if precision == 0 {

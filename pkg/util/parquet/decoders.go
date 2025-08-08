@@ -6,6 +6,7 @@
 package parquet
 
 import (
+	"fmt"
 	"math/big"
 	"time"
 
@@ -127,9 +128,11 @@ func (d decimalDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
 		}
 	}
 
+	fmt.Println("AMF: decoding and seeing z, d.scale", z, d.scale)
 	dd := &tree.DDecimal{
 		Decimal: *apd.NewWithBigInt(z, d.scale),
 	}
+	fmt.Println("AMF: decoded dd", dd)
 	return dd, nil
 
 }
