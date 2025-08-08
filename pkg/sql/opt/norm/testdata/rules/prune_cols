@@ -458,7 +458,7 @@ project
            └── f:7 = i:2::FLOAT8 [outer=(2,7), immutable, constraints=(/7: (/NULL - ]), fd=(2)-->(7)]
 
 # Detect PruneSelectCols and PushSelectIntoProject dependency cycle.
-norm
+norm disable=EliminateGroupBy
 SELECT f, f+1.1 AS r FROM (SELECT f, k FROM a GROUP BY f, k HAVING sum(k)=100) a
 ----
 project
@@ -1672,7 +1672,7 @@ project
       └── filters
            └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
-norm
+norm disable=EliminateGroupBy
 SELECT k FROM (SELECT k, min(s) FROM a GROUP BY k HAVING sum(i) > 5)
 ----
 project
