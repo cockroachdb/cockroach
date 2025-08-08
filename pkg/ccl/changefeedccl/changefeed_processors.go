@@ -615,9 +615,13 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 	if err != nil {
 		return nil, err
 	}
+	var perTableTracking bool
+	if ca.spec.ProgressConfig != nil {
+		perTableTracking = ca.spec.ProgressConfig.PerTableTracking
+	}
 	ca.frontier, err = resolvedspan.NewAggregatorFrontier(
 		ca.spec.Feed.StatementTime, initialHighWater, ca.FlowCtx.Codec(),
-		&ca.FlowCtx.Cfg.Settings.SV,
+		perTableTracking,
 		spans...)
 	if err != nil {
 		return nil, err
@@ -1422,9 +1426,13 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	}
 
 	// Set up the resolved span frontier.
+	var perTableTracking bool
+	if cf.spec.ProgressConfig != nil {
+		perTableTracking = cf.spec.ProgressConfig.PerTableTracking
+	}
 	cf.frontier, err = resolvedspan.NewCoordinatorFrontier(
 		cf.spec.Feed.StatementTime, initialHighwater, cf.FlowCtx.Codec(),
-		&cf.FlowCtx.Cfg.Settings.SV,
+		perTableTracking,
 		cf.spec.TrackedSpans...)
 	if err != nil {
 		log.Infof(cf.Ctx(), "change frontier moving to draining due to error setting up frontier: %v", err)

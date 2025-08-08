@@ -16,20 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-)
-
-// FrontierPerTableTracking controls whether the in-memory frontiers changefeeds
-// use for tracking span progress should do per-table tracking (via partitioning
-// into one sub-frontier per table).
-var FrontierPerTableTracking = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"changefeed.frontier.per_table_tracking.enabled",
-	"track progress on a per-table basis in-memory",
-	metamorphic.ConstantWithTestBool("changefeed.frontier.per_table_tracking.enabled", true),
 )
 
 // AggregatorFrontier wraps a resolvedSpanFrontier with additional
@@ -43,10 +32,10 @@ func NewAggregatorFrontier(
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
 	decoder TablePrefixDecoder,
-	sv *settings.Values,
+	perTableTracking bool,
 	spans ...roachpb.Span,
 ) (*AggregatorFrontier, error) {
-	rsf, err := newResolvedSpanFrontier(statementTime, initialHighWater, decoder, sv, spans...)
+	rsf, err := newResolvedSpanFrontier(statementTime, initialHighWater, decoder, perTableTracking, spans...)
 	if err != nil {
 		return nil, err
 	}
@@ -92,10 +81,10 @@ func NewCoordinatorFrontier(
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
 	decoder TablePrefixDecoder,
-	sv *settings.Values,
+	perTableTracking bool,
 	spans ...roachpb.Span,
 ) (*CoordinatorFrontier, error) {
-	rsf, err := newResolvedSpanFrontier(statementTime, initialHighWater, decoder, sv, spans...)
+	rsf, err := newResolvedSpanFrontier(statementTime, initialHighWater, decoder, perTableTracking, spans...)
 	if err != nil {
 		return nil, err
 	}
@@ -230,11 +219,11 @@ func newResolvedSpanFrontier(
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
 	decoder TablePrefixDecoder,
-	sv *settings.Values,
+	perTableTracking bool,
 	spans ...roachpb.Span,
 ) (*resolvedSpanFrontier, error) {
 	sf, err := func() (maybeTablePartitionedFrontier, error) {
-		if FrontierPerTableTracking.Get(sv) {
+		if perTableTracking {
 			return span.NewMultiFrontierAt(newTableIDPartitioner(decoder), initialHighWater, spans...)
 		}
 		f, err := span.MakeFrontierAt(initialHighWater, spans...)
