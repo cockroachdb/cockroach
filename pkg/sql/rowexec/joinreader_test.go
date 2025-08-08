@@ -1814,8 +1814,9 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 
 								spec := execinfrapb.JoinReaderSpec{
 									FetchSpec:           fetchSpec,
-									LookupColumnsAreKey: parallel,
+									LookupColumnsAreKey: parallel && columnDef.matchesPerLookupRow == 1,
 									MaintainOrdering:    reqOrdering,
+									Parallelize:         parallel,
 								}
 								if lookupExpr {
 									// @1 is the column in the input, @2 is the only fetched column.
@@ -2026,9 +2027,10 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 				b.Fatal(err)
 			}
 			spec := execinfrapb.JoinReaderSpec{
-				FetchSpec: fetchSpec,
-				LookupColumnsAreKey:/*parallel=*/ true,
-				MaintainOrdering:/*reqOrdering=*/ false,
+				FetchSpec:           fetchSpec,
+				LookupColumnsAreKey: true,
+				MaintainOrdering:    false,
+				Parallelize:         true,
 			}
 			lookupExprString := "@1 = @2"
 			for i := 0; i < numExprs; i++ {
