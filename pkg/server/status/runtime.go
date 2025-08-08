@@ -497,7 +497,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	if err != nil {
 		log.Ops.Errorf(ctx, "could not get initial disk IO counters: %v", err)
 	}
-	netCounters, err := getSummedNetStats(ctx)
+	nc, err := getSummedNetStats(ctx)
 	if err != nil {
 		log.Ops.Errorf(ctx, "could not get initial network stat counters: %v", err)
 	}
@@ -505,7 +505,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	rsr := &RuntimeStatSampler{
 		clock:                    clock,
 		startTimeNanos:           clock.Now().UnixNano(),
-		initialNetCounters:       netCounters,
+		initialNetCounters:       nc,
 		initialDiskCounters:      diskCounters,
 		goRuntimeSampler:         NewGoRuntimeSampler(runtimeMetrics),
 		CgoCalls:                 metric.NewCounter(metaCgoCalls),
