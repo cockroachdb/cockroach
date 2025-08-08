@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -37,18 +37,27 @@ const (
 	mergeQueueThrottleDuration = 5 * time.Second
 )
 
+// useDefaultConnectionClassForRaft is a cluster setting to control whether
+// the default rpc.ConnectionClass should be used for Raft traffic or not. In
+// versions >= 24.1 there is an EnvVar for this purpose.
+var useDefaultConnectionClassForRaft = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.raft.use_default_connection_class",
+	"if true, use the default rpc.ConnectionClass for raft traffic instead of the raft-specific one",
+	true, // default 23.2 behaviour
+)
+
 // defRaftConnClass is the default rpc.ConnectionClass used for non-system raft
-// traffic. Normally it is RaftClass, but can be flipped to DefaultClass if the
-// corresponding env variable is true.
+// traffic. Normally it is DefaultClass, but can be flipped to RaftClass by
+// changing the cluster setting above.
 //
 // NB: for a subset of system ranges, SystemClass is used instead of this.
-var defRaftConnClass = func() rpc.ConnectionClass {
-	// NB: Switch the default value of the EnvVar to match the old 23.2 behaviour.
-	if envutil.EnvOrDefaultBool("COCKROACH_RAFT_USE_DEFAULT_CONNECTION_CLASS", true) {
+var defRaftConnClass = func(sv *settings.Values) rpc.ConnectionClass {
+	if useDefaultConnectionClassForRaft.Get(sv) {
 		return rpc.DefaultClass
 	}
 	return rpc.RaftClass
-}()
+}
 
 // loadInitializedReplicaForTesting loads and constructs an initialized Replica,
 // after checking its invariants.
@@ -406,7 +415,8 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 
 	r.rangeStr.store(r.replicaID, desc)
 	r.isInitialized.Set(desc.IsInitialized())
-	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
+	connClass := defRaftConnClass(&r.store.ClusterSettings().SV)
+	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey, connClass))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
 	r.mu.replicaFlowControlIntegration.onDescChanged(ctx)

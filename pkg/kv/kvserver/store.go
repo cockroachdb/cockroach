@@ -1533,6 +1533,22 @@ func NewStore(
 		s.consistencyLimiter.UpdateLimit(quotapool.Limit(rate), rate*consistencyCheckRateBurstFactor)
 	})
 
+	useDefaultConnectionClassForRaft.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		connClass := defRaftConnClass(&cfg.Settings.SV)
+		log.Infof(ctx,
+			"updating raft transport connection class on all replicas to : %v", connClass,
+		)
+		s.VisitReplicas(func(r *Replica) (wantMore bool) {
+			if !r.IsInitialized() {
+				return true // don't  need to do anything for uninitialized replicas
+			}
+			desc := r.Desc()
+			r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey, connClass))
+			return true
+		})
+		log.Infof(ctx, "updated raft transprot connection class on all replicas")
+	})
+
 	s.limiters.BulkIOWriteRate = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), kvserverbase.BulkIOWriteBurst)
 	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		s.limiters.BulkIOWriteRate.SetLimit(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)))
