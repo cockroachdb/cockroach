@@ -112,9 +112,10 @@ func init() {
 					}
 				}),
 				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.MarkRecreatedIndexesAsVisible {
-					// While making a primary index swap public, we will also make
-					// any invisible indexes that were created as part of the swap
-					// visible.
+					// For secondary indexes with a recreate source, we make the index visible
+					// when the original source is hidden. Otherwise, they become public with
+					// the primary key. Older releases without the HideForPrimaryKeyRecreated
+					// flag always wait for the primary key to be public.
 					var indexVisibilities map[descpb.IndexID]float64
 					for _, target := range md.Targets {
 						idx := target.GetSecondaryIndex()
@@ -124,7 +125,8 @@ func init() {
 							idx.TableID != this.TableID ||
 							idx.RecreateTargetIndexID != this.IndexID ||
 							idx.IsNotVisible ||
-							idx.Invisibility == 1.0 {
+							idx.Invisibility == 1.0 ||
+							(idx.HideForPrimaryKeyRecreated && idx.RecreateSourceIndexID != 0) {
 							continue
 						}
 						if indexVisibilities == nil {

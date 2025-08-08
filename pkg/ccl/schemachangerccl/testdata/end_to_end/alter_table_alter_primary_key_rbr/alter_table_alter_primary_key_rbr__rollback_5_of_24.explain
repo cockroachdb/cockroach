@@ -4,7 +4,7 @@ CREATE TABLE multiregion_db.public.table_regional_by_row (
   k INT NOT NULL,
   V STRING
 ) LOCALITY REGIONAL BY ROW;
-CREATE INDEX on multiregion_db.table_regional_by_row(v);
+CREATE INDEX idx_v on multiregion_db.table_regional_by_row(v);
 
 /* test */
 alter table multiregion_db.table_regional_by_row add column m int8 default unique_rowid(), alter primary key using columns(k) USING HASH;
