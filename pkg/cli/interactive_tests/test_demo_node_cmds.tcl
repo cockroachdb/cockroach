@@ -65,7 +65,7 @@ send "\\demo restart 3\r"
 eexpect "node 3 has been restarted"
 eexpect "defaultdb>"
 
-set timeout 1
+set timeout 2
 set stmt "select node_id, draining, membership from crdb_internal.kv_node_liveness ORDER BY node_id;\r"
 send $stmt
 expect {
@@ -89,6 +89,26 @@ eexpect "3 |    f     | active"
 eexpect "4 |    f     | active"
 eexpect "5 |    f     | active"
 eexpect "defaultdb>"
+
+# Wait for the liveness range to have the default 5 voters. If its replication
+# factor is too low, shutting down the node below can cause it to lose quorum
+# and stall the decommissioning command (example: #147867).
+set timeout 2
+set stmt "select range_id, array_length(voting_replicas,1) from crdb_internal.ranges where range_id=2;\r"
+send $stmt
+expect {
+    "2 |            5" {
+        puts "\rliveness range has 5 voters"
+    }
+    timeout {
+        puts "\rliveness range does not yet have 5 voters"
+        sleep 2
+        send $stmt
+        exp_continue
+    }
+}
+# Reset timeout back to 45 to match common.tcl.
+set timeout 45
 
 # Try decommissioning commands
 send "\\demo decommission 4\r"
