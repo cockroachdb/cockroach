@@ -399,6 +399,12 @@ func (s *drainServer) isDraining() bool {
 func (s *drainServer) drainClients(
 	ctx context.Context, reporter func(int, redact.SafeString),
 ) error {
+	return s.drainClientsInternal(ctx, reporter, true /* assertOnLeakedDescriptor */)
+}
+
+func (s *drainServer) drainClientsInternal(
+	ctx context.Context, reporter func(int, redact.SafeString), assertOnLeakedDescriptor bool,
+) error {
 	// Setup a cancelable context so that the logOpenConns goroutine exits when
 	// this function returns.
 	var cancel context.CancelFunc
@@ -486,7 +492,7 @@ func (s *drainServer) drainClients(
 	// Drain all SQL table leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work and after the background
 	// tasks that may issue SQL statements have shut down.
-	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter, true /*assertOnLeakedDescriptor*/)
+	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter, assertOnLeakedDescriptor)
 
 	session, err := s.sqlServer.sqlLivenessProvider.Release(ctx)
 	if err != nil {
