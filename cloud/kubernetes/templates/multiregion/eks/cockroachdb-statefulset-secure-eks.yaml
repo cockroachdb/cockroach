@@ -124,7 +124,7 @@ spec:
   selector:
     app: cockroachdb
 ---
-apiVersion: policy/v1beta1
+apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: cockroachdb-budget
@@ -171,9 +171,13 @@ spec:
       - command:
         - sh
         - -ecx
-        - echo "aws-$(curl http://169.254.169.254/latest/meta-data/placement/availability-zone/)"
-          > /etc/cockroach-env/zone
-        image: byrnedo/alpine-curl:0.1
+        - |
+          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" \
+            -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+          echo "aws-$(curl -H "X-aws-ec2-metadata-token: $TOKEN" \
+            http://169.254.169.254/latest/meta-data/placement/availability-zone/)" \
+            > /etc/cockroach-env/zone
+        image: byrnedo/alpine-curl:3.20
         imagePullPolicy: IfNotPresent
         name: locality-container
         resources: {}
