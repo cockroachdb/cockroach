@@ -8,6 +8,7 @@ package cli
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/gob"
 	"fmt"
 	"io"
 	"math/rand"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -99,6 +101,188 @@ func TestMakeOpenMetricsWriter(t *testing.T) {
 		res = append(res, s)
 	}
 	require.Equal(t, dataPointsNum+1 /* datapoints + EOF final line */, len(res))
+}
+
+// TestEmbeddedMetadata tests the core functionality for writing and reading
+// embedded metadata in tsdump files, including error handling for invalid data.
+func TestEmbeddedMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("writeEmbeddedMetadata", func(t *testing.T) {
+		var buf bytes.Buffer
+		metadata := TSDumpMetadata{
+			Version: "v23.1.0",
+			StoreToNodeMap: map[string]string{
+				"1": "1",
+				"2": "1",
+				"3": "2",
+				"4": "2",
+			},
+			CreatedAt: timeutil.Unix(1609459200, 0), // 2021-01-01 00:00:00 UTC
+		}
+
+		err := writeEmbeddedMetadata(&buf, metadata)
+		require.NoError(t, err)
+		require.Greater(t, buf.Len(), 0, "should have written some data")
+	})
+
+	t.Run("readEmbeddedMetadata", func(t *testing.T) {
+		originalMetadata := TSDumpMetadata{
+			Version: "v23.2.1",
+			StoreToNodeMap: map[string]string{
+				"1": "1",
+				"2": "2",
+				"3": "3",
+			},
+			CreatedAt: timeutil.Unix(1640995200, 0), // 2022-01-01 00:00:00 UTC
+		}
+
+		var buf bytes.Buffer
+		err := writeEmbeddedMetadata(&buf, originalMetadata)
+		require.NoError(t, err)
+
+		dec := gob.NewDecoder(&buf)
+		readMetadata, err := readEmbeddedMetadata(dec)
+		require.NoError(t, err)
+		require.NotNil(t, readMetadata)
+
+		require.Equal(t, originalMetadata.Version, readMetadata.Version)
+		require.Equal(t, originalMetadata.StoreToNodeMap, readMetadata.StoreToNodeMap)
+		require.Equal(t, originalMetadata.CreatedAt.Unix(), readMetadata.CreatedAt.Unix())
+	})
+
+	t.Run("readEmbeddedMetadata_NoMetadata", func(t *testing.T) {
+		var buf bytes.Buffer
+		enc := gob.NewEncoder(&buf)
+
+		kv := roachpb.KeyValue{
+			Key:   roachpb.Key("test-key"),
+			Value: roachpb.MakeValueFromString("test-value"),
+		}
+		err := enc.Encode(kv)
+		require.NoError(t, err)
+
+		dec := gob.NewDecoder(&buf)
+		metadata, err := readEmbeddedMetadata(dec)
+		require.Error(t, err)
+		require.Nil(t, metadata)
+	})
+
+	t.Run("readEmbeddedMetadata_InvalidMetadata", func(t *testing.T) {
+		// Create a buffer with a metadata marker but invalid JSON
+		var buf bytes.Buffer
+		enc := gob.NewEncoder(&buf)
+
+		marker := metadataMarker{
+			IsMetadata: true,
+			Data:       []byte("invalid json"),
+		}
+		err := enc.Encode(marker)
+		require.NoError(t, err)
+
+		dec := gob.NewDecoder(&buf)
+		metadata, err := readEmbeddedMetadata(dec)
+		require.Error(t, err)
+		require.Nil(t, metadata)
+	})
+}
+
+// TestTSDumpConversionWithEmbeddedMetadata tests the conversion of tsdump files
+// containing embedded metadata to CSV format, verifying metadata extraction.
+func TestTSDumpConversionWithEmbeddedMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tmpFile, err := os.CreateTemp("", "tsdump_with_metadata_*.gob")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	metadata := TSDumpMetadata{
+		Version: "v23.1.0",
+		StoreToNodeMap: map[string]string{
+			"1": "1",
+			"2": "2",
+		},
+		CreatedAt: timeutil.Unix(1609459200, 0),
+	}
+	err = writeEmbeddedMetadata(tmpFile, metadata)
+	require.NoError(t, err)
+
+	enc := gob.NewEncoder(tmpFile)
+	kv, err := createMockTimeSeriesKV("cr.node.sql.query.count", "1", 1609459200000000000, 100.5)
+	require.NoError(t, err)
+	err = enc.Encode(kv)
+	require.NoError(t, err)
+
+	tmpFile.Close()
+
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
+
+	// Convert to CSV format
+	out, err := c.RunWithCapture(fmt.Sprintf(
+		"debug tsdump --format=csv %s",
+		tmpFile.Name(),
+	))
+	require.NoError(t, err)
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+
+	require.Contains(t, out, "Found embedded store-to-node mapping with 2 entries")
+
+	csvFound := false
+	for _, line := range lines {
+		if strings.Contains(line, "cr.node.sql.query.count") &&
+			strings.Contains(line, "2021-01-01T00:00:00Z") {
+			csvFound = true
+			break
+		}
+	}
+	require.True(t, csvFound, "should contain converted CSV data")
+}
+
+// TestTSDumpRawGenerationWithEmbeddedMetadata tests that raw format tsdump generation
+// automatically includes embedded store-to-node mapping metadata in the output.
+func TestTSDumpRawGenerationWithEmbeddedMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
+
+	out, err := c.RunWithCapture("debug tsdump --format=raw --cluster-name=test-cluster-1 --disable-cluster-name-verification")
+	require.NoError(t, err)
+	require.NotEmpty(t, out)
+
+	// Remove the command prefix from the output to get the actual binary data
+	// The output starts with something like "debug tsdump --format=raw..."
+	// Find the first occurrence of gob magic bytes or skip the command line
+	actualData := out
+	if idx := strings.Index(out, "\n"); idx != -1 {
+		actualData = out[idx+1:] // Skip the command line
+	}
+
+	// Write the cleaned binary data to file
+	tmpFile, err := os.CreateTemp("", "tsdump_*.gob")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	_, err = tmpFile.Write([]byte(actualData))
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	file, err := os.Open(tmpFile.Name())
+	require.NoError(t, err)
+	defer file.Close()
+
+	dec := gob.NewDecoder(file)
+	readMetadata, err := readEmbeddedMetadata(dec)
+	require.NoError(t, err)
+
+	// Verify store-to-node mapping is embedded
+	require.NotNil(t, readMetadata.StoreToNodeMap)
+	require.Equal(t, "1", readMetadata.StoreToNodeMap["1"])
 }
 
 func makeTS(name, source string, dataPointsNum int) *tspb.TimeSeriesData {
