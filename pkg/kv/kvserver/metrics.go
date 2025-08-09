@@ -848,6 +848,7 @@ See storage.AggregatedIteratorStats for more details.`,
 		Measurement: "Iterator Ops",
 		Unit:        metric.Unit_COUNT,
 	}
+
 	metaStorageCompactionsDuration = metric.Metadata{
 		Name: "storage.compactions.duration",
 		Help: `Cumulative sum of all compaction durations.
@@ -2696,6 +2697,13 @@ Note that the measurement does not include the duration for replicating the eval
 		Category:    metric.Metadata_STORAGE,
 		HowToUse:    "If this value is greater than `100ms`, it is an indication of a disk stall. To mitigate the effects of disk stalls, consider deploying your cluster with WAL failover configured.",
 	}
+	metaStorageMVCCGetBlockLoads = metric.Metadata{
+		Name:        "storage.mvcc.get.blocks_loaded",
+		Help:        "Number of blocks loaded per MVCC get operation",
+		Measurement: "Block Loads",
+		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_STORAGE,
+	}
 	metaStorageWALFailoverSwitchCount = metric.Metadata{
 		Name: "storage.wal.failover.switch.count",
 		Help: "Count of the number of times WAL writing has switched from primary to secondary " +
@@ -2977,6 +2985,7 @@ type StoreMetrics struct {
 	IterExternalSteps                 *metric.Counter
 	IterInternalSeeks                 *metric.Counter
 	IterInternalSteps                 *metric.Counter
+	MVCCGetBlocksLoadedHistogram      *metric.ManualWindowHistogram
 	FlushableIngestCount              *metric.Counter
 	FlushableIngestTableCount         *metric.Counter
 	FlushableIngestTableSize          *metric.Counter
@@ -4041,6 +4050,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		FsyncLatency: metric.NewManualWindowHistogram(
 			metaStorageFsyncLatency,
 			pebble.FsyncLatencyBuckets,
+			false, /* withRotate */
+		),
+		MVCCGetBlocksLoadedHistogram: metric.NewManualWindowHistogram(
+			metaStorageMVCCGetBlockLoads,
+			metric.Count1KBuckets.GetBucketsFromBucketConfig(),
 			false, /* withRotate */
 		),
 

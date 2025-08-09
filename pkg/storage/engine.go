@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
+	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
@@ -611,6 +612,9 @@ type Reader interface {
 	// the first call to PinEngineStateForIterators.
 	// REQUIRES: ConsistentIterators returns true.
 	PinEngineStateForIterators(readCategory fs.ReadCategory) error
+
+	// RecordMVCCGetBlocksLoaded records the number of blocks loaded during an MVCC get operation.
+	RecordMVCCGetBlocksLoaded(blockLoads int64)
 }
 
 // Writer is the write interface to an engine's data.
@@ -1219,8 +1223,9 @@ func (stats BatchCommitStats) SafeFormat(p redact.SafePrinter, _ rune) {
 // *pebble.Metrics struct, which has its own documentation.
 type Metrics struct {
 	*pebble.Metrics
-	Iterator         AggregatedIteratorStats
-	BatchCommitStats AggregatedBatchCommitStats
+	Iterator                    AggregatedIteratorStats
+	BatchCommitStats            AggregatedBatchCommitStats
+	MVCCGetBlockLoadsCumulative prometheus.Histogram
 	// DiskSlowCount counts the number of times Pebble records disk slowness.
 	DiskSlowCount int64
 	// DiskStallCount counts the number of times Pebble observes slow writes
@@ -1322,6 +1327,7 @@ type MetricsForInterval struct {
 	WALFsyncLatency                prometheusgo.Metric
 	FlushWriteThroughput           pebble.ThroughputMetric
 	WALFailoverWriteAndSyncLatency prometheusgo.Metric
+	MVCCGetBlocksLoaded            prometheusgo.Metric
 }
 
 // NumSSTables returns the total number of SSTables in the LSM, aggregated
