@@ -728,7 +728,10 @@ message LocalOnlySessionData {
   // then the heuristic applies to all statements (both read-only and
   // mutations), regardless of the table being multi-region.
   bool parallelize_multi_key_lookup_joins_only_on_mr_mutations = 182 [(gogoproto.customname) = "ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations"];
-
+  // OptimizerUseImprovedHoistJoinProject controls whether the
+  // HoistJoinProjectLeft normalization rule hoists more kinds of projections
+  // above joins.
+  bool optimizer_use_improved_hoist_join_project = 183;
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
