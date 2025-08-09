@@ -175,7 +175,7 @@ func runAdmissionControlSnapshotOverloadIO(
 		const bandwidthLimit = 128 << 20 // 128 MiB
 		t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", bandwidthLimit))
 		staller := roachtestutil.MakeCgroupDiskStaller(t, c,
-			false /* readsToo */, false /* logsToo */)
+			false /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
 		staller.Setup(ctx)
 		staller.Slow(ctx, c.CRDBNodes(), bandwidthLimit)
 

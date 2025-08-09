@@ -515,7 +515,7 @@ func (m networkPartitionMutator) Generate(
 	nodeList := planner.currentContext.System.Descriptor.Nodes
 
 	failure := failures.GetFailureRegistry()
-	f, err := failure.GetFailer(planner.cluster.Name(), failures.IPTablesNetworkPartitionName, planner.logger)
+	f, err := failure.GetFailer(planner.cluster.Name(), failures.IPTablesNetworkPartitionName, planner.logger, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get failer for %s: %w", failures.IPTablesNetworkPartitionName, err)
 	}

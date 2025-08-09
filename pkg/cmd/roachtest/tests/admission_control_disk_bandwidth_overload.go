@@ -72,7 +72,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			const provisionedBandwidth = 128 << 20 // 128 MiB
 			t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", provisionedBandwidth))
 			staller := roachtestutil.MakeCgroupDiskStaller(t, c,
-				false /* readsToo */, false /* logsToo */)
+				false /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
 			staller.Setup(ctx)
 			staller.Slow(ctx, c.CRDBNodes(), provisionedBandwidth)
 
