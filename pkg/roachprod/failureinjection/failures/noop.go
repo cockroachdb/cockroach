@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 )
 
 const NoopFailureName = "noop"
@@ -32,8 +33,8 @@ type NoopFailureArgs struct {
 	InjectedError error
 }
 
-func (n NoopFailureMode) Description() string {
-	return ""
+func (n NoopFailureMode) SupportedDeploymentMode(_ roachprodutil.DeploymentMode) bool {
+	return true
 }
 
 func (n NoopFailureMode) Setup(ctx context.Context, l *logger.Logger, args FailureArgs) error {

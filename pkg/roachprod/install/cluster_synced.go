@@ -499,6 +499,7 @@ func (c *SyncedCluster) Stop(
 		if err != nil {
 			return err
 		}
+		virtualClusterName = name
 
 		if !IsSystemInterface(name) {
 			isExternal, err := c.IsExternalService(ctx, name)
@@ -531,6 +532,7 @@ func (c *SyncedCluster) Stop(
 
 			return err
 		}
+		l.Printf("stopped shared service for virtual cluster %q: %s", virtualClusterName, res[0].CombinedOut)
 	}
 
 	return nil

@@ -30,12 +30,10 @@ type FailureArgs interface {
 }
 
 // FailureMode describes a failure that can be injected into a system.
-//
-// For now, this interface is not necessarily needed, however it sets up for
-// future failure injection work when we want a failure controller to be
-// able to inject multiple different types of failures.
 type FailureMode interface {
-	Description() string
+	// SupportedDeploymentMode returns true if the FailureMode supports running
+	// on the given deployment mode.
+	SupportedDeploymentMode(mode roachprodutil.DeploymentMode) bool
 
 	// Setup any dependencies required for the failure to be injected. The
 	// same args passed to Setup, must be passed to Cleanup. Setup is a
@@ -75,32 +73,37 @@ type diskDevice struct {
 // provide commonly used functionality that doesn't differ between failure modes,
 // e.g. running remote commands on the cluster.
 type GenericFailure struct {
-	// TODO(Darryl): support specifying virtual clusters
-	c *install.SyncedCluster
+	c                     *install.SyncedCluster
+	defaultVirtualCluster virtualClusterOpt
 	// runTitle is the title to prefix command output with.
 	runTitle          string
 	networkInterfaces []string
 	diskDevice        diskDevice
-	connCache         []*gosql.DB
+	// map of node and virtual cluster selector to connection pools.
+	connCache         map[string]*gosql.DB
 	localCertsPath    string
 	replicationFactor int
+	processes         processMap
 }
 
 func makeGenericFailure(
 	clusterName string, l *logger.Logger, clusterOpts ClusterOptions, failureModeName string,
 ) (*GenericFailure, error) {
-	connectionInfo := clusterOpts.ConnectionInfo
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(connectionInfo.secure))
+	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
 	if err != nil {
 		return nil, err
 	}
 
 	genericFailure := GenericFailure{
-		c:                 c,
-		runTitle:          failureModeName,
-		connCache:         make([]*gosql.DB, len(c.Nodes)),
-		localCertsPath:    connectionInfo.localCertsPath,
-		replicationFactor: clusterOpts.replicationFactor,
+		c:                     c,
+		defaultVirtualCluster: clusterOpts.defaultVirtualCluster,
+		runTitle:              failureModeName,
+		connCache:             make(map[string]*gosql.DB, len(c.Nodes)),
+		localCertsPath:        clusterOpts.localCertsPath,
+		replicationFactor:     clusterOpts.replicationFactor,
+	}
+	if genericFailure.defaultVirtualCluster.name == "" {
+		genericFailure.defaultVirtualCluster.name = install.SystemInterfaceName
 	}
 	return &genericFailure, nil
 }
@@ -136,15 +139,18 @@ func (f *GenericFailure) RunWithDetails(
 
 // Conn returns a connection to the given node. The connection is cached.
 func (f *GenericFailure) Conn(
-	ctx context.Context, l *logger.Logger, node install.Nodes,
+	ctx context.Context,
+	l *logger.Logger,
+	node install.Nodes,
+	virtualClusterName string,
+	sqlInstance int,
 ) (*gosql.DB, error) {
-	nodeIdx := node[0] - 1
-	if f.connCache[nodeIdx] == nil {
+	nodeSelector := fmt.Sprintf("%d:%s_%d", node[0]-1, virtualClusterName, sqlInstance)
+	if f.connCache[nodeSelector] == nil {
 		// We are connecting to the cluster from a local machine, e.g. from the test runner or
 		// roachprod CLI, so we need to use the certs found locally.
 		c := f.c.WithCerts(f.localCertsPath)
-
-		desc, err := c.ServiceDescriptor(ctx, node[0], "" /* virtualClusterName */, install.ServiceTypeSQL, 0 /* sqlInstance */)
+		desc, err := c.ServiceDescriptor(ctx, node[0], virtualClusterName, install.ServiceTypeSQL, sqlInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -156,7 +162,7 @@ func (f *GenericFailure) Conn(
 		if !c.Secure {
 			authMode = install.AuthRootCert
 		}
-		nodeURL := c.NodeURL(ip, desc.Port, "" /* virtualClusterName */, desc.ServiceMode, authMode, "" /* database */)
+		nodeURL := c.NodeURL(ip, desc.Port, virtualClusterName, desc.ServiceMode, authMode, "" /* database */)
 		nodeURL = strings.Trim(nodeURL, "'")
 		pgurl, err := url.Parse(nodeURL)
 		if err != nil {
@@ -165,14 +171,14 @@ func (f *GenericFailure) Conn(
 		vals := make(url.Values)
 		vals.Add("connect_timeout", "30")
 		nodeURL = pgurl.String() + "&" + vals.Encode()
-		l.Printf("Creating connection to node %d at %s", node[0], nodeURL)
-		f.connCache[nodeIdx], err = gosql.Open("postgres", nodeURL)
+		l.Printf("Creating %s connection to node %d at %s", virtualClusterName, node[0], nodeURL)
+		f.connCache[nodeSelector], err = gosql.Open("postgres", nodeURL)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return f.connCache[nodeIdx], nil
+	return f.connCache[nodeSelector], nil
 }
 
 func (f *GenericFailure) CloseConnections() {
@@ -243,8 +249,11 @@ func (f *GenericFailure) DiskDeviceMajorMinor(
 	return f.diskDevice.major, f.diskDevice.minor, nil
 }
 
-func (f *GenericFailure) PingNode(ctx context.Context, l *logger.Logger, node install.Nodes) error {
-	db, err := f.Conn(ctx, l, node)
+func (f *GenericFailure) PingNode(
+	ctx context.Context, l *logger.Logger, node install.Nodes, options ...virtualClusterOptFunc,
+) error {
+	virtualClusterName, sqlInstance := f.targetVirtualCluster(options)
+	db, err := f.Conn(ctx, l, node, virtualClusterName, sqlInstance)
 	if err != nil {
 		return err
 	}
@@ -254,9 +263,14 @@ func (f *GenericFailure) PingNode(ctx context.Context, l *logger.Logger, node in
 // WaitForSQLReady waits until the corresponding node's SQL subsystem is fully initialized and ready
 // to serve SQL clients.
 func (f *GenericFailure) WaitForSQLReady(
-	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
+	ctx context.Context,
+	l *logger.Logger,
+	node install.Nodes,
+	timeout time.Duration,
+	options ...virtualClusterOptFunc,
 ) error {
-	db, err := f.Conn(ctx, l, node)
+	virtualClusterName, sqlInstance := f.targetVirtualCluster(options)
+	db, err := f.Conn(ctx, l, node, virtualClusterName, sqlInstance)
 	if err != nil {
 		return err
 	}
@@ -269,9 +283,14 @@ func (f *GenericFailure) WaitForSQLReady(
 
 // WaitForSQLUnavailable pings a node until the SQL connection is unavailable.
 func (f *GenericFailure) WaitForSQLUnavailable(
-	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
+	ctx context.Context,
+	l *logger.Logger,
+	node install.Nodes,
+	timeout time.Duration,
+	options ...virtualClusterOptFunc,
 ) error {
-	db, err := f.Conn(ctx, l, node)
+	virtualClusterName, sqlInstance := f.targetVirtualCluster(options)
+	db, err := f.Conn(ctx, l, node, virtualClusterName, sqlInstance)
 	if err != nil {
 		return err
 	}
@@ -282,12 +301,27 @@ func (f *GenericFailure) WaitForSQLUnavailable(
 	return errors.Wrapf(err, "connections to node %d still available after %s", node, timeout)
 }
 
+// IsProcessRunning returns if the cockroach process on the given node is still
+// alive according to systemd.
+func (f *GenericFailure) IsProcessRunning(
+	ctx context.Context, l *logger.Logger, node install.Nodes, options ...virtualClusterOptFunc,
+) (bool, error) {
+	virtualClusterName, sqlInstance := f.targetVirtualCluster(options)
+	isRunning, _, err := roachprod.IsProcessRunning(ctx, f.c, l, node, roachprod.SystemdProcessName(virtualClusterName, sqlInstance))
+	return isRunning, err
+}
+
 // WaitForProcessDeath checks systemd until the cockroach process is no longer running
 // or the timeout is reached.
 func (f *GenericFailure) WaitForProcessDeath(
-	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
+	ctx context.Context,
+	l *logger.Logger,
+	node install.Nodes,
+	timeout time.Duration,
+	options ...virtualClusterOptFunc,
 ) error {
-	err := roachprod.WaitForProcessDeath(ctx, *f.c, l, node,
+	virtualClusterName, sqlInstance := f.targetVirtualCluster(options)
+	err := roachprod.WaitForProcessDeath(ctx, f.c, l, node, virtualClusterName, sqlInstance,
 		install.WithMaxRetries(0),
 		install.WithMaxDuration(timeout),
 	)
@@ -295,22 +329,32 @@ func (f *GenericFailure) WaitForProcessDeath(
 	return errors.Wrapf(err, "n%d process never exited after %s", node, timeout)
 }
 
-func (f *GenericFailure) StopCluster(
-	ctx context.Context, l *logger.Logger, stopOpts roachprod.StopOpts,
-) error {
-	return f.c.Stop(ctx, l, stopOpts.Sig, stopOpts.Wait, stopOpts.GracePeriod, "" /* VirtualClusterName*/)
-}
-
-func (f *GenericFailure) StartCluster(ctx context.Context, l *logger.Logger) error {
-	return f.StartNodes(ctx, l, f.c.Nodes)
-}
-
 func (f *GenericFailure) StartNodes(
-	ctx context.Context, l *logger.Logger, nodes install.Nodes,
+	ctx context.Context, l *logger.Logger, nodes install.Nodes, options ...virtualClusterOptFunc,
 ) error {
-	// Invoke the cockroach start script directly so we restart the nodes with the same
-	// arguments as before.
-	return f.Run(ctx, l, nodes, "./cockroach.sh")
+	virtualClusterName, sqlInstance := f.targetVirtualCluster(options)
+	target := install.StartDefault
+	if !install.IsSystemInterface(virtualClusterName) {
+		isExternal, err := f.c.IsExternalService(ctx, virtualClusterName)
+		if err != nil {
+			return err
+		}
+		if isExternal {
+			target = install.StartServiceForVirtualCluster
+		} else {
+			target = install.StartSharedProcessForVirtualCluster
+		}
+	}
+
+	return f.c.WithNodes(nodes).Start(ctx, l, install.StartOpts{
+		Target:             target,
+		VirtualClusterName: virtualClusterName,
+		SQLInstance:        sqlInstance,
+		IsRestart:          true,
+		// For restarts, Start() will iterate through each node in the StorageCluster
+		// until one succeeds, so it's fine to pass the entire cluster.
+		StorageCluster: f.c,
+	})
 }
 
 // forEachNode is a helper function that calls fn for each node in nodes.
@@ -348,7 +392,8 @@ func (f *GenericFailure) WaitForReplication(
 	replicationFactor int,
 	timeout time.Duration,
 ) error {
-	db, err := f.Conn(ctx, l, node)
+	// We want to wait for both the system and secondary tenant ranges to be replicated.
+	db, err := f.Conn(ctx, l, node, install.SystemInterfaceName, 0)
 	if err != nil {
 		return err
 	}
@@ -375,7 +420,8 @@ func (f *GenericFailure) WaitForReplication(
 func (f *GenericFailure) WaitForBalancedReplicas(
 	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
 ) error {
-	db, err := f.Conn(ctx, l, node)
+	// We want to wait for both the system and secondary tenant ranges to be rebalanced.
+	db, err := f.Conn(ctx, l, node, install.SystemInterfaceName, 0)
 	if err != nil {
 		return err
 	}
@@ -419,4 +465,131 @@ func (f *GenericFailure) WaitForRestartedNodesToStabilize(
 	// Finally, we also have to block until the cluster is done rebalancing replicas.
 	// If replicas were not moved around during the downtime, this will likely be a noop.
 	return f.WaitForBalancedReplicas(timeoutCtx, l, nodes, 0 /* timeout */)
+}
+
+// WaitForSQLLivenessTTL blocks until the default SQL liveness TTL duration has passed.
+// This is useful when we are injecting failures that potentially cause SQL processes to
+// be unable to heartbeat, e.g. we partition the sqlliveness leaseholder from
+// the separate process servers. A common pattern may be to recover from such a
+// failure then wait to see if any of the SQL processes exit.
+func (f *GenericFailure) WaitForSQLLivenessTTL(ctx context.Context) error {
+	// 40 seconds is the default server.sqlliveness.ttl. We could query for the actual
+	// value, but it is an application setting which means we'd have to query _every_
+	// tenant to find the maximum. However, we may not even be able to query the tenants
+	// if they have already exited.
+	//
+	// Instead, lets assume that most clusters don't touch this value and best effort
+	// wait for the default value.
+	ttlDuration := 40 * time.Second
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(ttlDuration):
+	}
+
+	return nil
+}
+
+// CaptureProcesses captures all running processes on the specified nodes.
+// This is used with StopProcesses and RestartProcesses to easily stop and
+// start all processes running on a node without having to explicitly specify
+// every process.
+func (f *GenericFailure) CaptureProcesses(
+	ctx context.Context, l *logger.Logger, nodes install.Nodes,
+) {
+	f.processes = make(processMap)
+	// Capture the processes running on the nodes.
+	monitorChan := f.c.WithNodes(nodes).Monitor(l, ctx, install.MonitorOpts{OneShot: true})
+	for e := range monitorChan {
+		if p, ok := e.Event.(install.MonitorProcessRunning); ok {
+			f.processes.add(p.VirtualClusterName, p.SQLInstance, e.Node)
+		}
+	}
+	l.Printf("captured processes: %+v", f.processes)
+}
+
+// StopProcesses stops all processes captured by the last CaptureProcesses call.
+func (f *GenericFailure) StopProcesses(ctx context.Context, l *logger.Logger) error {
+	for _, virtualClusterName := range f.processes.getStopOrder() {
+		instanceMap := f.processes[virtualClusterName]
+		for instance, nodeMap := range instanceMap {
+			var stopNodes install.Nodes
+			for node := range nodeMap {
+				stopNodes = append(stopNodes, node)
+			}
+			l.Printf("Stopping process %s on nodes %v", virtualClusterName, stopNodes)
+			label := install.VirtualClusterLabel(virtualClusterName, instance)
+			stopOpts := roachprod.DefaultStopOpts()
+			err := f.c.WithNodes(stopNodes).Stop(ctx, l, stopOpts.Sig, true, stopOpts.GracePeriod, label)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// RestartProcesses restarts all processes captured by the last CaptureProcesses call.
+func (f *GenericFailure) RestartProcesses(ctx context.Context, l *logger.Logger) error {
+	// Restart the processes.
+	for _, virtualClusterName := range f.processes.getStartOrder() {
+		instanceMap := f.processes[virtualClusterName]
+		for instance, nodeMap := range instanceMap {
+			var nodes install.Nodes
+			for node := range nodeMap {
+				nodes = append(nodes, node)
+			}
+			l.Printf("Starting process %s on nodes %v", virtualClusterName, nodes)
+			err := f.c.WithNodes(nodes).Start(ctx, l, install.StartOpts{
+				VirtualClusterName: virtualClusterName,
+				SQLInstance:        instance,
+				IsRestart:          true,
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// MaybeRestartSeparateProcesses restarts any stopped separate processes captured by the
+// last CaptureProcesses call.
+func (f *GenericFailure) MaybeRestartSeparateProcesses(
+	ctx context.Context, l *logger.Logger,
+) error {
+	// Restart the processes.
+	for _, virtualClusterName := range f.processes.getStartOrder() {
+		if install.IsSystemInterface(virtualClusterName) {
+			continue
+		}
+		instanceMap := f.processes[virtualClusterName]
+		for instance, nodeMap := range instanceMap {
+			// We need to start each process sequentially as only some of the processes may
+			// have exited out.
+			for node := range nodeMap {
+				l.Printf("attempting to start process %s on node %v", virtualClusterName, node)
+				err := f.c.WithNodes(install.Nodes{node}).Start(ctx, l, install.StartOpts{
+					VirtualClusterName: virtualClusterName,
+					SQLInstance:        instance,
+					IsRestart:          true,
+				})
+				if err != nil {
+					l.Printf("failed to restart process %s on node %v: %v", virtualClusterName, node, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (f *GenericFailure) targetVirtualCluster(opts []virtualClusterOptFunc) (string, int) {
+	o := &virtualClusterOpt{
+		name:     f.defaultVirtualCluster.name,
+		instance: f.defaultVirtualCluster.instance,
+	}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return o.name, o.instance
 }

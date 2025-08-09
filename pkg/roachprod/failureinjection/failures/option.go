@@ -5,6 +5,10 @@
 
 package failures
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+)
+
 type ClusterOptionFunc func(*ClusterOptions)
 
 func Secure(secure bool) ClusterOptionFunc {
@@ -22,5 +26,42 @@ func LocalCertsPath(localCertsPath string) ClusterOptionFunc {
 func ReplicationFactor(replicationFactor int) ClusterOptionFunc {
 	return func(o *ClusterOptions) {
 		o.replicationFactor = replicationFactor
+	}
+}
+
+func DefaultVirtualClusterName(virtualClusterName string) ClusterOptionFunc {
+	return func(o *ClusterOptions) {
+		o.defaultVirtualCluster.name = virtualClusterName
+	}
+}
+func DefaultSQLInstance(instance int) ClusterOptionFunc {
+	return func(o *ClusterOptions) {
+		o.defaultVirtualCluster.instance = instance
+	}
+}
+
+type virtualClusterOpt struct {
+	name     string
+	instance int
+}
+
+type virtualClusterOptFunc func(*virtualClusterOpt)
+
+func withVirtualCluster(virtualCluster string) virtualClusterOptFunc {
+	return func(o *virtualClusterOpt) {
+		o.name = virtualCluster
+	}
+}
+
+func withSQLInstance(sqlInstance int) virtualClusterOptFunc {
+	return func(o *virtualClusterOpt) {
+		o.instance = sqlInstance
+	}
+}
+
+func withSystemCluster() virtualClusterOptFunc {
+	return func(o *virtualClusterOpt) {
+		o.name = install.SystemInterfaceName
+		o.instance = 0
 	}
 }

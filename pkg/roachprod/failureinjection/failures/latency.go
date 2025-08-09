@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -71,8 +72,19 @@ func MakeNetworkLatencyFailure(
 
 const NetworkLatencyName = "network-latency"
 
-func (f *NetworkLatency) Description() string {
-	return NetworkLatencyName
+func (f *NetworkLatency) SupportedDeploymentMode(mode roachprodutil.DeploymentMode) bool {
+	// NetworkLatency should ideally be a process scoped failure, i.e. we can define individual
+	// latencies from process to process, but iptables and tc rules apply to the entire VM.
+	// This makes adding latency in separate process deployments tricky, as adding a rule to a VM
+	// will apply to all processes.
+	// TODO(darryl): Add support for NetworkLatency in SeparateProcessDeployments.
+	// Two possible approaches to consider:
+	// 1. Enforce that NetworkLatency failures are VM scoped, i.e. we add latency between machines
+	// not processes. One downside to this is that a common simplification roachprod makes is to
+	// deploy SQL servers on the same machine as the KV pods which is not realistic.
+	// 2. Switch to a more complex network rules alternative that will allow us to mark packets
+	// with associated PIDs. The performance impact of this would have to be investigated.
+	return mode != roachprodutil.SeparateProcessDeployment
 }
 
 func (f *NetworkLatency) Setup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
