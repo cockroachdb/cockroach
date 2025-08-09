@@ -28,16 +28,24 @@ setting split_queue_enabled=false
 eval duration=20m samples=1 seed=42 cfgs=(mma-only,both) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
 cpu#1: last:  [s1=50109583, s2=49628333, s3=50182500, s4=49952500, s5=49919166, s6=49699166, s7=49752916, s8=50564583, s9=50066250, s10=50125000] (stddev=261258.69, mean=49999999.70, sum=499999997)
+cpu#1: thrashing: [max(s3)=(freq=1223, mag=0.56) (s1=(freq=1204, mag=0.58), s2=(freq=1208, mag=1.60), s3=(freq=1223, mag=0.56), s4=(freq=1206, mag=0.62), s5=(freq=1216, mag=1.59), s6=(freq=1167, mag=0.56), s7=(freq=1216, mag=0.56), s8=(freq=1187, mag=0.55), s9=(freq=1200, mag=1.65), s10=(freq=1196, mag=1.59))]
 leases#1: first: [s1=19, s2=11, s3=6, s4=3, s5=3, s6=3, s7=4, s8=3, s9=4, s10=4] (stddev=4.92, mean=6.00, sum=60)
 leases#1: last:  [s1=10, s2=6, s3=6, s4=3, s5=6, s6=4, s7=4, s8=6, s9=9, s10=6] (stddev=2.05, mean=6.00, sum=60)
+leases#1: thrashing: [max(s1)=(freq=20, mag=1.72) (s1=(freq=20, mag=1.72), s2=(freq=12, mag=1.91), s3=(freq=6, mag=1.13), s4=(freq=2, mag=0.64), s5=(freq=2, mag=0.36), s6=(freq=0, mag=0.00), s7=(freq=4, mag=0.89), s8=(freq=2, mag=0.34), s9=(freq=6, mag=0.77), s10=(freq=4, mag=0.67))]
 replicas#1: first: [s1=39, s2=33, s3=23, s4=16, s5=13, s6=12, s7=11, s8=11, s9=11, s10=11] (stddev=9.76, mean=18.00, sum=180)
 replicas#1: last:  [s1=18, s2=18, s3=18, s4=18, s5=18, s6=18, s7=18, s8=18, s9=18, s10=18] (stddev=0.00, mean=18.00, sum=180)
+replicas#1: thrashing: [max(s1)=(freq=40, mag=2.50) (s1=(freq=40, mag=2.50), s2=(freq=30, mag=1.64), s3=(freq=18, mag=0.98), s4=(freq=14, mag=0.90), s5=(freq=8, mag=0.45), s6=(freq=6, mag=0.34), s7=(freq=4, mag=0.23), s8=(freq=2, mag=0.11), s9=(freq=24, mag=1.40), s10=(freq=10, mag=0.57))]
 write_bytes_per_second#1: last:  [s1=5987983, s2=5994822, s3=5992147, s4=6010824, s5=5991846, s6=5993816, s7=5993780, s8=6013651, s9=5996138, s10=6012394] (stddev=9123.97, mean=5998740.10, sum=59987401)
+write_bytes_per_second#1: thrashing: [max(s4)=(freq=1223, mag=5.20) (s1=(freq=1180, mag=5.52), s2=(freq=1140, mag=5.22), s3=(freq=1218, mag=3.21), s4=(freq=1223, mag=5.20), s5=(freq=1158, mag=4.01), s6=(freq=1170, mag=3.71), s7=(freq=1147, mag=2.09), s8=(freq=1177, mag=2.11), s9=(freq=1161, mag=3.72), s10=(freq=1147, mag=3.12))]
 artifacts[mma-only]: d1dfa3825f5aa113
 cpu#1: last:  [s1=49766856, s2=49962142, s3=49944178, s4=49861368, s5=49856608, s6=50176752, s7=49997572, s8=50324179, s9=50047522, s10=49969265] (stddev=154062.46, mean=49990644.20, sum=499906442)
+cpu#1: thrashing: [max(s4)=(freq=1248, mag=2.18) (s1=(freq=1202, mag=5.54), s2=(freq=1223, mag=2.97), s3=(freq=1215, mag=4.68), s4=(freq=1248, mag=2.18), s5=(freq=1210, mag=3.22), s6=(freq=1213, mag=3.27), s7=(freq=1183, mag=3.01), s8=(freq=1195, mag=1.38), s9=(freq=1209, mag=4.28), s10=(freq=1198, mag=2.23))]
 leases#1: first: [s1=19, s2=11, s3=6, s4=3, s5=3, s6=3, s7=4, s8=3, s9=4, s10=4] (stddev=4.92, mean=6.00, sum=60)
 leases#1: last:  [s1=10, s2=5, s3=3, s4=3, s5=5, s6=6, s7=8, s8=4, s9=9, s10=7] (stddev=2.32, mean=6.00, sum=60)
+leases#1: thrashing: [max(s1)=(freq=38, mag=3.69) (s1=(freq=38, mag=3.69), s2=(freq=20, mag=3.75), s3=(freq=16, mag=4.63), s4=(freq=4, mag=1.38), s5=(freq=4, mag=0.87), s6=(freq=10, mag=1.69), s7=(freq=14, mag=1.77), s8=(freq=4, mag=1.47), s9=(freq=10, mag=1.15), s10=(freq=10, mag=1.47))]
 replicas#1: first: [s1=39, s2=33, s3=23, s4=16, s5=13, s6=12, s7=11, s8=11, s9=11, s10=11] (stddev=9.76, mean=18.00, sum=180)
 replicas#1: last:  [s1=18, s2=18, s3=17, s4=19, s5=19, s6=18, s7=17, s8=18, s9=18, s10=18] (stddev=0.63, mean=18.00, sum=180)
+replicas#1: thrashing: [max(s1)=(freq=64, mag=4.68) (s1=(freq=64, mag=4.68), s2=(freq=34, mag=3.25), s3=(freq=24, mag=1.73), s4=(freq=12, mag=0.64), s5=(freq=12, mag=0.64), s6=(freq=14, mag=0.95), s7=(freq=38, mag=2.82), s8=(freq=8, mag=0.56), s9=(freq=16, mag=0.89), s10=(freq=14, mag=0.78))]
 write_bytes_per_second#1: last:  [s1=6014996, s2=5993243, s3=6011888, s4=5988889, s5=5994900, s6=6012972, s7=5993648, s8=5996647, s9=5990770, s10=5994204] (stddev=9454.23, mean=5999215.70, sum=59992157)
+write_bytes_per_second#1: thrashing: [max(s5)=(freq=1221, mag=3.43) (s1=(freq=1195, mag=8.16), s2=(freq=1198, mag=9.02), s3=(freq=1145, mag=6.01), s4=(freq=1206, mag=5.18), s5=(freq=1221, mag=3.43), s6=(freq=1220, mag=4.92), s7=(freq=1202, mag=5.17), s8=(freq=1178, mag=2.82), s9=(freq=1138, mag=3.95), s10=(freq=1175, mag=2.02))]
 artifacts[both]: 9411650b130765a1
