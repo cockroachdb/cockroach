@@ -6,7 +6,6 @@
 package resolvedspan_test
 
 import (
-	"context"
 	"iter"
 	"testing"
 
@@ -14,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,8 +27,6 @@ func TestAggregatorFrontier(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	st := cluster.MakeTestingClusterSettings()
-
 	// Create a fresh frontier with no progress.
 	statementTime := makeTS(10)
 	var initialHighwater hlc.Timestamp
@@ -38,7 +34,7 @@ func TestAggregatorFrontier(t *testing.T) {
 		statementTime,
 		initialHighwater,
 		mockDecoder{},
-		&st.SV,
+		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
 	require.NoError(t, err)
@@ -84,7 +80,7 @@ func TestAggregatorFrontier(t *testing.T) {
 		statementTime,
 		initialHighwater,
 		mockDecoder{},
-		&st.SV,
+		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
 	require.NoError(t, err)
@@ -103,8 +99,6 @@ func TestCoordinatorFrontier(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	st := cluster.MakeTestingClusterSettings()
-
 	// Create a fresh frontier with no progress.
 	statementTime := makeTS(10)
 	var initialHighwater hlc.Timestamp
@@ -112,7 +106,7 @@ func TestCoordinatorFrontier(t *testing.T) {
 		statementTime,
 		initialHighwater,
 		mockDecoder{},
-		&st.SV,
+		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
 	require.NoError(t, err)
@@ -161,7 +155,7 @@ func TestCoordinatorFrontier(t *testing.T) {
 		statementTime,
 		initialHighwater,
 		mockDecoder{},
-		&st.SV,
+		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
 	require.NoError(t, err)
@@ -266,14 +260,12 @@ func TestAggregatorFrontier_ForwardResolvedSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	st := cluster.MakeTestingClusterSettings()
-
 	// Create a fresh frontier with no progress.
 	f, err := resolvedspan.NewAggregatorFrontier(
 		hlc.Timestamp{},
 		hlc.Timestamp{},
 		mockDecoder{},
-		&st.SV,
+		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
 	require.NoError(t, err)
@@ -328,12 +320,6 @@ func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-
-	// Explicitly enable per-table tracking for this test.
-	resolvedspan.FrontierPerTableTracking.Override(ctx, &st.SV, true)
-
 	for _, frontierType := range []string{"aggregator", "coordinator"} {
 		t.Run(frontierType, func(t *testing.T) {
 			rnd, _ := randutil.NewPseudoRand()
@@ -373,7 +359,7 @@ func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
 						statementTime,
 						initialHighWater,
 						codec,
-						&st.SV,
+						true, /* perTableTracking */
 						tableSpans...,
 					)
 				case "coordinator":
@@ -381,7 +367,7 @@ func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
 						statementTime,
 						initialHighWater,
 						codec,
-						&st.SV,
+						true, /* perTableTracking */
 						tableSpans...,
 					)
 				default:

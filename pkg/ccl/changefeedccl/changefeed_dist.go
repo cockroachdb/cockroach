@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -453,6 +454,14 @@ func makePlan(
 			maybeCfKnobs.SpanPartitionsCallback(spanPartitions)
 		}
 
+		// Create progress config based on current settings.
+		var progressConfig *execinfrapb.ChangefeedProgressConfig
+		if execCtx.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+			progressConfig = &execinfrapb.ChangefeedProgressConfig{
+				PerTableTracking: changefeedbase.TrackPerTableProgress.Get(sv),
+			}
+		}
+
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 		for i, sp := range spanPartitions {
 			if log.ExpensiveLogEnabled(ctx, 2) {
@@ -475,6 +484,7 @@ func makePlan(
 				JobID:               jobID,
 				Select:              execinfrapb.Expression{Expr: details.Select},
 				Description:         description,
+				ProgressConfig:      progressConfig,
 			}
 		}
 
@@ -489,6 +499,7 @@ func makePlan(
 			JobID:               jobID,
 			UserProto:           execCtx.User().EncodeProto(),
 			Description:         description,
+			ProgressConfig:      progressConfig,
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {

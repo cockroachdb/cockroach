@@ -388,3 +388,16 @@ var UseBareTableNames = settings.RegisterBoolSetting(
 	"changefeed.bare_table_names.enabled",
 	"set to true to use bare table names in changefeed topics, false to use quoted table names; default is true",
 	true)
+
+// TrackPerTableProgress controls whether a changefeed's in-memory frontiers
+// should track span progress on a per-table basis (via partitioning into
+// one sub-frontier per table). Enabling this is necessary for any other
+// per-table progress features (e.g. per-table PTS) to work.
+var TrackPerTableProgress = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.progress.per_table_tracking.enabled",
+	"track progress on a per-table basis in-memory; enabling this will enable more "+
+		"granular saving/restoring of progress, which will reduce duplicates during restarts, "+
+		"but doing so may incur additional overhead during ordinary changefeed execution",
+	metamorphic.ConstantWithTestBool("changefeed.progress.per_table_tracking.enabled", true),
+)
