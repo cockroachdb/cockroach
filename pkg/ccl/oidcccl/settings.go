@@ -42,6 +42,7 @@ const (
 	OIDCAuthZEnabledSettingName                    = baseOIDCSettingName + "authorization.enabled"
 	OIDCAuthGroupClaimSettingName                  = baseOIDCSettingName + "group_claim"
 	OIDCAuthUserinfoGroupKeySettingName            = baseOIDCSettingName + "userinfo_group_key"
+	OIDCPKCEEnabledSettingName                     = baseOIDCSettingName + "pkce.enabled"
 )
 
 // OIDCEnabled enables or disabled OIDC login for the DB Console.
@@ -112,6 +113,15 @@ var OIDCAuthUserinfoGroupKey = settings.RegisterStringSetting(
 	OIDCAuthUserinfoGroupKeySettingName, // "server.oidc_authentication.userinfo_group_key"
 	"sets the field name in userinfo JSON containing the groups claim for authorization",
 	"groups",
+)
+
+// OIDCPKCEEnabled enables or disables PKCE for the OIDC authentication flow.
+// It is recommended to leave this enabled unless your OIDC provider does not support it.
+var OIDCPKCEEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	OIDCPKCEEnabledSettingName,
+	"enables or disables PKCE for the OIDC authentication flow; disabling is not recommended",
+	false, // default false for now, might want to make it default true
 )
 
 type redirectURLConf struct {
