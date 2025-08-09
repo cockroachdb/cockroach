@@ -250,7 +250,7 @@ func (rd *Deleter) encodeValueForPrimaryIndexFamily(
 			return roachpb.Value{}, err
 		}
 
-		return marshaled, err
+		return marshaled, nil
 	}
 
 	rd.rawValueBuf = rd.rawValueBuf[:0]

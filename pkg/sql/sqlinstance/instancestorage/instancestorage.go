@@ -347,7 +347,7 @@ func (s *Storage) createInstanceRow(
 				SessionID:       session.ID(),
 				Locality:        locality,
 				BinaryVersion:   binaryVersion,
-			}, err
+			}, nil
 		}
 		if !errors.Is(err, errNoPreallocatedRows) {
 			return sqlinstance.InstanceInfo{}, err

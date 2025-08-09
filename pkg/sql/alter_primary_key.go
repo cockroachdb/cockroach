@@ -428,7 +428,7 @@ func (p *planner) AlterPrimaryKey(
 					return false, err
 				}
 				if col.IsVirtual() && !newPrimaryKeyColIDs.Contains(colID) {
-					return true, err
+					return true, nil
 				}
 			}
 		}

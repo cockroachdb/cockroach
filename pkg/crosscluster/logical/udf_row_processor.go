@@ -437,7 +437,7 @@ func makeApplierInsertQueries(
 			inputColumns:  inputColumnNames,
 			scratchDatums: make([]interface{}, len(inputColumnNames)),
 		}
-		return err
+		return nil
 	}); err != nil {
 		return nil, err
 	}

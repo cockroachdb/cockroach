@@ -136,7 +136,7 @@ func (u *urlParser) Set(v string) error {
 
 	// Store the parsed URL for later.
 	u.clientOpts.ExplicitURL = purl
-	return err
+	return nil
 }
 
 var _ clientsecopts.CLIFlagInterfaceForClientURL = (*urlParser)(nil)

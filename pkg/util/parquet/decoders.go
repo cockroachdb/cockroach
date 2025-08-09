@@ -142,7 +142,7 @@ func (bitDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &tree.DBitArray{BitArray: ba}, err
+	return &tree.DBitArray{BitArray: ba}, nil
 }
 
 type bytesDecoder struct{}

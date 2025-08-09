@@ -873,7 +873,7 @@ func makeLWWInsertQueries(
 			inputColumns:         inputColumnNames,
 			scratchDatums:        make([]interface{}, len(inputColumnNames)+1),
 		}
-		return err
+		return nil
 	}); err != nil {
 		return nil, err
 	}

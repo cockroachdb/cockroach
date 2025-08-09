@@ -494,7 +494,7 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 		// Conditionally perform handshake connection and determine additional restrictions.
 		if err := security.TLSCipherRestrict(newConn); err != nil {
 			clientErr = pgerror.Wrapf(err, pgcode.SQLserverRejectedEstablishmentOfSQLconnection, "cannot use SSL/TLS with the requested ciphers")
-			return
+			return // nolint:nilness
 		}
 		newConnType = hba.ConnHostSSL
 	}
@@ -508,21 +508,18 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 // readVersion reads the start-up message, then returns the version
 // code (first uint32 in message) and the buffer containing the rest
 // of the payload.
-func (s *PreServeConnHandler) readVersion(
-	conn io.Reader,
-) (version uint32, buf pgwirebase.ReadBuffer, err error) {
-	var n int
-	buf = pgwirebase.MakeReadBuffer(
+func (s *PreServeConnHandler) readVersion(conn io.Reader) (uint32, pgwirebase.ReadBuffer, error) {
+	buf := pgwirebase.MakeReadBuffer(
 		pgwirebase.ReadBufferOptionWithClusterSettings(&s.st.SV),
 	)
-	n, err = buf.ReadUntypedMsg(conn)
+	n, err := buf.ReadUntypedMsg(conn)
 	if err != nil {
-		return
+		return 0, buf, err
 	}
-	version, err = buf.GetUint32()
+	version, err := buf.GetUint32()
 	if err != nil {
-		return
+		return version, buf, err
 	}
 	s.tenantIndependentMetrics.PreServeBytesInCount.Inc(int64(n))
-	return
+	return version, buf, nil
 }

@@ -467,14 +467,21 @@ func makeRangeKeyPrefixWithExtraCapacity(key roachpb.RKey, extra int) roachpb.Ke
 
 // DecodeRangeKey decodes the range key into range start key,
 // suffix and optional detail (may be nil).
-func DecodeRangeKey(key roachpb.Key) (startKey, suffix, detail roachpb.Key, err error) {
+func DecodeRangeKey(
+	key roachpb.Key,
+) (
+	roachpb.Key, /* startKey */
+	roachpb.Key, /* suffix */
+	roachpb.Key, /* detail */
+	error,
+) {
 	if !bytes.HasPrefix(key, LocalRangePrefix) {
 		return nil, nil, nil, errors.Errorf("key %q does not have %q prefix",
 			key, LocalRangePrefix)
 	}
 	// Cut the prefix and the Range ID.
 	b := key[len(LocalRangePrefix):]
-	b, startKey, err = encoding.DecodeBytesAscending(b, nil)
+	b, startKey, err := encoding.DecodeBytesAscending(b, nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -483,9 +490,9 @@ func DecodeRangeKey(key roachpb.Key) (startKey, suffix, detail roachpb.Key, err 
 			key, localSuffixLength)
 	}
 	// Cut the suffix.
-	suffix = b[:localSuffixLength]
-	detail = b[localSuffixLength:]
-	return
+	suffix := b[:localSuffixLength]
+	detail := b[localSuffixLength:]
+	return startKey, suffix, detail, nil
 }
 
 // RangeDescriptorKey returns a range-local key for the descriptor
@@ -584,7 +591,7 @@ func DecodeLockTableSingleKey(key roachpb.Key) (lockedKey roachpb.Key, err error
 		return nil, errors.Errorf("key %q has left-over bytes %d after decoding",
 			key, len(b))
 	}
-	return lockedKey, err
+	return lockedKey, nil
 }
 
 // ValidateLockTableSingleKey is like DecodeLockTableSingleKey, except that it

@@ -2216,7 +2216,7 @@ func planSelectionOperators(
 				// the result will be NULL and the selection vector will always
 				// be empty. So we can simply plan a zero operator.
 				op = colexecutils.NewZeroOp(input)
-				return op, resultIdx, ct, err
+				return op, resultIdx, ct, nil
 			}
 			switch cmpOp.Symbol {
 			case treecmp.Like, treecmp.NotLike, treecmp.ILike, treecmp.NotILike:
@@ -2286,7 +2286,7 @@ func planSelectionOperators(
 		op = colexec.NewIsNullSelOp(
 			op, resultIdx, true /* negate */, typs[resultIdx].Family() == types.TupleFamily,
 		)
-		return op, resultIdx, typs, err
+		return op, resultIdx, typs, nil
 	case *tree.IsNullExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
 			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, allocator, releasables,
@@ -2297,7 +2297,7 @@ func planSelectionOperators(
 		op = colexec.NewIsNullSelOp(
 			op, resultIdx, false /* negate */, typs[resultIdx].Family() == types.TupleFamily,
 		)
-		return op, resultIdx, typs, err
+		return op, resultIdx, typs, nil
 	case *tree.NotExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
 			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, allocator, releasables,
@@ -2935,7 +2935,7 @@ func planProjectionExpr(
 		*releasables = append(*releasables, r)
 	}
 	typs = append(typs, outputType)
-	return op, resultIdx, typs, err
+	return op, resultIdx, typs, nil
 }
 
 // planLogicalProjectionOp plans all the needed operators for a projection of

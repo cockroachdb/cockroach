@@ -1625,7 +1625,7 @@ func WaitToUpdateLeases(
 		return nil, err
 	}
 	log.Infof(ctx, "waiting for a single version... done (at v %d), took %v", desc.GetVersion(), timeutil.Since(start))
-	return desc, err
+	return desc, nil
 }
 
 // done finalizes the mutations (adds new cols/indexes to the table).
@@ -3618,7 +3618,7 @@ func (p *planner) CanPerformDropOwnedBy(
 	if err != nil {
 		return false, err
 	}
-	return tree.MustBeDInt(row[0]) == 0, err
+	return tree.MustBeDInt(row[0]) == 0, nil
 }
 
 // CanCreateCrossDBSequenceOwnerRef returns if cross database sequence

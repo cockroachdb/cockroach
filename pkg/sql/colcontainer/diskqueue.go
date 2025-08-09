@@ -143,7 +143,7 @@ func (w *diskQueueWriter) compressAndFlush(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	w.buffer.Reset()
-	return nType + nBody, err
+	return nType + nBody, nil
 }
 
 func (w *diskQueueWriter) numBytesBuffered() int {

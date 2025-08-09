@@ -262,7 +262,7 @@ func updateRoleOptions(
 		rowsAffected += affected
 	}
 
-	return rowsAffected, err
+	return rowsAffected, nil
 }
 
 // Next implements the planNode interface.

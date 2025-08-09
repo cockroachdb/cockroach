@@ -75,7 +75,7 @@ func (s *Store) getOrCreateReplica(
 		if err != nil {
 			return nil, false, err
 		}
-		return r, created, err
+		return r, created, nil
 	}
 }
 

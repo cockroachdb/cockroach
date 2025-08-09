@@ -78,7 +78,7 @@ func EncodeIndexKey(
 	if err != nil {
 		return nil, false, err
 	}
-	return key, containsNull, err
+	return key, containsNull, nil
 }
 
 // EncodePartialIndexSpan creates the minimal key span for the key specified by the
@@ -422,7 +422,7 @@ func DecodeIndexKeyPrefix(
 		return 0, nil, errors.Errorf(
 			"unexpected table ID %d, expected %d instead", tableID, expectedTableID)
 	}
-	return indexID, key, err
+	return indexID, key, nil
 }
 
 // DecodeIndexKey decodes the values that are a part of the specified index
@@ -1160,7 +1160,7 @@ func encodeVectorIndexKey(
 	}
 	key = vecencoding.EncodePartitionKey(key, partitionKey)
 	key = vecencoding.EncodePartitionLevel(key, cspann.LeafLevel)
-	return key, err
+	return key, nil
 }
 
 // EncodePrimaryIndex constructs the key prefix for the primary index and

@@ -367,7 +367,7 @@ func (wb *writeBatch) Commit(sync bool) error {
 	}
 	wb.batchStatsReporter.aggregateBatchCommitStats(
 		BatchCommitStats{wb.batch.CommitStats()})
-	return err
+	return nil
 }
 
 // CommitNoSyncWait implements the WriteBatch interface.
@@ -386,7 +386,7 @@ func (wb *writeBatch) CommitNoSyncWait() error {
 		// or don't have after they receive an error from this method.
 		panic(err)
 	}
-	return err
+	return nil
 }
 
 // SyncWait implements the WriteBatch interface.
@@ -407,7 +407,7 @@ func (wb *writeBatch) SyncWait() error {
 	}
 	wb.batchStatsReporter.aggregateBatchCommitStats(
 		BatchCommitStats{wb.batch.CommitStats()})
-	return err
+	return nil
 }
 
 // Empty implements the WriteBatch interface.

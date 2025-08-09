@@ -215,7 +215,7 @@ func ExamineDescriptors(
 		}
 	}
 
-	return !problemsFound, err
+	return !problemsFound, nil
 }
 
 // ExamineJobs runs a suite of consistency checks over the system.jobs table.
