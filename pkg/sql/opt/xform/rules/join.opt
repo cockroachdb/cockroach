@@ -88,7 +88,7 @@
         $private
     )
     []
-    (OutputCols $left)
+    (MakePassthrough (OutputCols $left))
 )
 
 # ConvertSemiToInnerJoin applies in the cases where CommuteSemiJoin does not:
@@ -121,7 +121,7 @@
         (MakeGrouping (KeyCols $newLeft) (EmptyOrdering))
     )
     []
-    (OutputCols $left)
+    (MakePassthrough (OutputCols $left))
 )
 
 # SplitDisjunctionOfJoinTerms splits disjunctions (OR expressions) of ON clause
@@ -192,7 +192,7 @@
         (MakeGrouping $groupingCols (EmptyOrdering))
     )
     []
-    (OutputCols (Root))
+    (MakePassthrough (OutputCols (Root)))
 )
 
 # SplitDisjunctionOfAntiJoinTerms splits disjunctions (OR expressions) of ON
@@ -247,7 +247,7 @@
         (MakeGrouping $groupingCols (EmptyOrdering))
     )
     []
-    (OutputCols (Root))
+    (MakePassthrough (OutputCols (Root)))
 )
 
 # GenerateMergeJoins creates MergeJoin operators for the join, using the
@@ -469,7 +469,7 @@
     $proj:(Project
         $right:* & (CanHoistProjectInput $right)
         $projections:* & ^(HasVolatileProjection $projections)
-        $passthrough:*
+        $projPrivate:*
     )
     $on:* &
         ^(ColsIntersect
@@ -482,7 +482,9 @@
 (Project
     (InnerJoin $left $right $on $private)
     $projections
-    (UnionCols $passthrough (OutputCols $left))
+    (MakePassthrough
+        (UnionCols (Passthrough $projPrivate) (OutputCols $left))
+    )
 )
 
 # HoistProjectFromLeftJoin pulls a project of a canonical scan or of a select
@@ -511,7 +513,7 @@
     (Project
         $right:* & (CanHoistProjectInput $right)
         $projections:* & ^(HasVolatileProjection $projections)
-        $passthrough:*
+        $projPrivate:*
     )
     $on:* &
         ^(ColsIntersect
@@ -527,7 +529,9 @@
 (Project
     (LeftJoin $left $right $on $private)
     (MakeProjectionsForOuterJoin $canaryCol $projections)
-    (UnionCols $passthrough (OutputCols $left))
+    (MakePassthrough
+        (UnionCols (Passthrough $projPrivate) (OutputCols $left))
+    )
 )
 
 # GenerateLocalityOptimizedAntiJoin converts an anti join into a locality
