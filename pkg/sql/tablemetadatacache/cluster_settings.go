@@ -15,7 +15,7 @@ const (
 	defaultDataValidDuration = time.Minute * 20
 	// defaultTableBatchSize is the number of tables to fetch in a
 	// single batch from the system tables.
-	defaultTableBatchSize = 20
+	defaultTableBatchSize = 5
 )
 
 var AutomaticCacheUpdatesEnabledSetting = settings.RegisterBoolSetting(
