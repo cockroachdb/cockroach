@@ -222,6 +222,7 @@ const (
 var failureInjectionMutators = []mutator{
 	panicNodeMutator{},
 	networkPartitionMutator{},
+	replicatePanicMutator{},
 }
 
 // clusterSettingMutators includes a list of all

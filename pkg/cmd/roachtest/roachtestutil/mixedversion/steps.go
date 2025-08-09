@@ -969,3 +969,74 @@ func (s networkPartitionRecoveryStep) Run(
 func (s networkPartitionRecoveryStep) ConcurrencyDisabled() bool {
 	return false
 }
+
+type alterReplicationFactorStep struct {
+	rf       int
+	max_rate string
+}
+
+func (s alterReplicationFactorStep) Background() shouldStop { return nil }
+func (s alterReplicationFactorStep) Description() string {
+	return fmt.Sprintf("alter replication factor to %d", s.rf)
+}
+
+func (s alterReplicationFactorStep) Run(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
+) error {
+	stmt := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING num_replicas = %d", s.rf)
+	if err := h.System.Exec(
+		rng,
+		stmt,
+	); err != nil {
+		return errors.Wrap(err, "failed to up-replicate")
+	}
+	if h.IsMultitenant() {
+		if err := h.Tenant.Exec(
+			rng,
+			stmt,
+		); err != nil {
+			return errors.Wrap(err, "failed to up-replicate")
+		}
+	}
+	stmt = fmt.Sprintf("SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '%s'", s.max_rate)
+	if err := h.System.Exec(
+		rng,
+		stmt,
+	); err != nil {
+		return errors.Wrap(err, "failed to set cluster setting kv.snapshot_rebalance.max_rate")
+	}
+	const maxWait = 3 * time.Hour
+	const pollInterval = 10 * time.Second
+	timeout := time.After(maxWait)
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	stmt = fmt.Sprintf("SELECT count(1) FROM crdb_internal.ranges WHERE array_length(replicas, 1) < %d", s.rf)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timeout:
+			return errors.New("timed out waiting for up-replication to complete")
+		case <-ticker.C:
+			var count int
+			err := h.QueryRow(
+				rng,
+				stmt,
+			).Scan(&count)
+			if err != nil {
+				return errors.Wrap(err, "error querying ranges")
+			}
+			if count == 0 {
+				l.Printf("Replication complete.")
+				return nil
+			}
+			l.Printf("Waiting for replication... %d under-replicated ranges", count)
+		}
+	}
+}
+
+func (s alterReplicationFactorStep) ConcurrencyDisabled() bool {
+	return false
+}
