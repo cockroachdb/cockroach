@@ -1038,7 +1038,10 @@ func (r *raft) maybeCommit() bool {
 	return true
 }
 
-func (r *raft) reset(term uint64) {
+// reset is called during state transitions, such as becoming leader or
+// follower. The visit function is used to initialize/reset every peer in the
+// config. Can be nil, in which case the default initializer is used.
+func (r *raft) reset(term uint64, visit func(id pb.PeerID, pr *tracker.Progress)) {
 	if r.Term != term {
 		// NB: There are state transitions where reset may be called on a follower
 		// that supports a fortified leader. One example is when a follower is
@@ -1062,16 +1065,25 @@ func (r *raft) reset(term uint64) {
 
 	r.abortLeaderTransfer()
 
+	if visit != nil {
+		r.trk.Visit(visit)
+	} else {
+		r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+			// TODO(pav-kv): do not use progress map in non-StateLeader.
+			// Except IsLearner and the fact that certain IDs are populated, none
+			// of the fields are used in other states. We can instead rely on
+			// r.config for these signals.
+			*pr = tracker.Progress{
+				Match:       0,
+				MatchCommit: 0,
+				Next:        r.raftLog.lastIndex() + 1,
+				Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
+				IsLearner:   pr.IsLearner,
+			}
+		})
+	}
+
 	r.electionTracker.ResetVotes()
-	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
-		*pr = tracker.Progress{
-			Match:       0,
-			MatchCommit: 0,
-			Next:        r.raftLog.lastIndex() + 1,
-			Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
-			IsLearner:   pr.IsLearner,
-		}
-	})
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
@@ -1280,7 +1292,7 @@ func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 		r.bcastDeFortify()
 	}
 
-	r.reset(term)
+	r.reset(term, nil)
 	r.setLead(lead)
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
 	r.logger.Debugf("%x reset election elapsed to %d", r.id, r.electionElapsed)
@@ -1295,7 +1307,8 @@ func (r *raft) becomeCandidate() {
 	// we're already fortified.
 	assertTrue(!r.supportingFortifiedLeader(), "shouldn't become a candidate if we're supporting a fortified leader")
 	r.step = stepCandidate
-	r.reset(r.Term + 1)
+	r.reset(r.Term+1, nil)
+
 	r.tick = r.tickElection
 	r.setVote(r.id)
 	r.state = pb.StateCandidate
@@ -1329,7 +1342,43 @@ func (r *raft) becomeLeader() {
 		panic("invalid transition [follower -> leader]")
 	}
 	r.step = stepLeader
-	r.reset(r.Term)
+
+	// A special visit function to use the recorded hints and optimize the first
+	// round of MsgApp after becoming leader.
+	r.reset(r.Term, func(id pb.PeerID, pr *tracker.Progress) {
+		// matchGuess would only be recorded if the voter voted for this candidate.
+		matchGuess, voted := r.electionTracker.MatchGuess(id)
+		if !voted {
+			matchGuess = tracker.MatchGuess{Index: r.raftLog.lastIndex()}
+		}
+
+		*pr = tracker.Progress{
+			Match:       0,
+			MatchCommit: 0,
+			Next:        matchGuess.Index + 1,
+			Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
+			IsLearner:   pr.IsLearner,
+			// Since the voter voted for us(not during pre-election), we can set
+			// RecentActive to true.
+			// (We set RecentActive to true for every MsgAppResp, so we treat
+			// MsgVoteResp(non-reject) the same in this case)
+			// In the case that Progress.Next <= r.raftLog.storage.Compacted(),
+			// RecentActive needs to be true in order to send out a snapshot
+			// immediately after becoming leader.
+			RecentActive: voted,
+		}
+
+		if matchGuess.Match {
+			// Follower's log matches the leader's log at next-1.
+			// Set the follower's state to StateReplicate early.
+			r.becomeReplicate(pr)
+			// NB: this is a bit of a hack, but we need to set the Next again since
+			// r.becomeReplicate sets pr.Next to match + 1.
+			// Where match is 0 in this case.
+			pr.Next = matchGuess.Index + 1
+		}
+	})
+
 	// NB: The fortificationTracker holds state from a peer's leadership stint
 	// that's acted upon after it has stepped down. We reset it right before
 	// stepping up to become leader again, but not when stepping down as leader
@@ -1352,11 +1401,14 @@ func (r *raft) becomeLeader() {
 			return
 		}
 		// All peer flows, except the leader's own, are initially in StateProbe.
+		// However, if discovered during voting that the follower's log matches the
+		// leader's, the follower is set to StateReplicate.
 		// Account the probe state entering in metrics here. All subsequent flow
 		// state changes, while we are the leader, are counted in the corresponding
 		// methods: becomeProbe, becomeReplicate, becomeSnapshot.
-		assertTrue(pr.State == tracker.StateProbe, "peers must be in StateProbe on leader step up")
-		r.metrics.FlowsEnteredStateProbe.Inc(1)
+		if pr.State == tracker.StateProbe {
+			r.metrics.FlowsEnteredStateProbe.Inc(1)
+		}
 	})
 
 	// Conservatively set the pendingConfIndex to the last index in the
@@ -1527,14 +1579,14 @@ func (r *raft) campaign(t CampaignType) {
 }
 
 func (r *raft) poll(
-	id pb.PeerID, t pb.MessageType, v bool,
+	id pb.PeerID, t pb.MessageType, v bool, matchGuess tracker.MatchGuess,
 ) (granted int, rejected int, result quorum.VoteResult) {
 	if v {
 		r.logger.Infof("%x received %s from %x at term %d", r.id, t, id, r.Term)
 	} else {
 		r.logger.Infof("%x received %s rejection from %x at term %d", r.id, t, id, r.Term)
 	}
-	r.electionTracker.RecordVote(id, v)
+	r.electionTracker.RecordVote(id, v, matchGuess)
 	return r.electionTracker.TallyVotes()
 }
 
@@ -1735,6 +1787,18 @@ func (r *raft) Step(m pb.Message) error {
 			// https://github.com/etcd-io/etcd/issues/7625#issuecomment-488798263.
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] cast %s for %x [logterm: %d, index: %d] at term %d",
 				r.id, lastID.term, lastID.index, r.Vote, m.Type, m.From, candLastID.term, candLastID.index, r.Term)
+			var logHint entryID
+			if m.Type == pb.MsgVote {
+				// Compute a best guess on where our log matches the candidate's log.
+				// In most cases, the returned (index, term) pair should be non-zero,
+				// which represents an entryID on our log.
+				//
+				// NB: logHint.index <= min(candLastID.index, lastID.index)
+				//     logHInt.term <= candLastID.term
+				//
+				// See comments in findConflictByTerm for detailed explanation.
+				logHint.index, logHint.term = r.raftLog.findConflictByTerm(candLastID.index, candLastID.term)
+			}
 			// When responding to Msg{Pre,}Vote messages we include the term
 			// from the message, not the local term. To see why, consider the
 			// case where a single node was previously partitioned away and
@@ -1744,7 +1808,22 @@ func (r *raft) Step(m pb.Message) error {
 			// the message (it ignores all out of date messages).
 			// The term in the original message and current local term are the
 			// same in the case of regular votes, but different for pre-votes.
-			r.send(pb.Message{To: m.From, Term: m.Term, Type: voteRespMsgType(m.Type)})
+			r.send(pb.Message{
+				To:   m.From,
+				Term: m.Term,
+				// RejectHint and LogTerm are also populated although the message is
+				// non-reject. This helps the new leader (if the candidate wins election)
+				// to set the state of the follower to StateReplicate if the logs match.
+				// Even if the new leader can't infer a match from this hint, it still
+				// has a better chance of replicating to the correct fork point for the
+				// first round of MsgApp to this follower.
+				// See raft.becomeLeader for more details.
+				// TODO(hakuuww): Consider renaming RejectHint to something more
+				//  general like LogHint.
+				RejectHint: logHint.index,
+				LogTerm:    logHint.term,
+				Type:       voteRespMsgType(m.Type),
+			})
 			if m.Type == pb.MsgVote {
 				// Only record real votes.
 				r.electionElapsed = 0
@@ -2188,22 +2267,7 @@ func stepCandidate(r *raft, m pb.Message) error {
 		r.becomeFollower(m.Term, None)
 		r.handleSnapshot(m)
 	case myVoteRespType:
-		gr, rj, res := r.poll(m.From, m.Type, !m.Reject)
-		r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
-		switch res {
-		case quorum.VoteWon:
-			if r.state == pb.StatePreCandidate {
-				r.campaign(campaignElection)
-			} else {
-				r.becomeLeader()
-				r.bcastFortify()
-				r.bcastAppend()
-			}
-		case quorum.VoteLost:
-			// pb.MsgPreVoteResp contains future term of pre-candidate
-			// m.Term > r.Term; reuse r.Term
-			r.becomeFollower(r.Term, None)
-		}
+		r.handleVoteResp(m, myVoteRespType)
 	}
 	return nil
 }
@@ -2329,6 +2393,61 @@ func leadSliceFromMsgApp(m *pb.Message) LeadSlice {
 			prev:    entryID{term: m.LogTerm, index: m.Index},
 			entries: m.Entries,
 		},
+	}
+}
+
+func (r *raft) handleVoteResp(m pb.Message, myVoteRespType pb.MessageType) {
+	voterHint := entryID{index: m.RejectHint, term: m.LogTerm}
+	matchGuess := tracker.MatchGuess{Index: r.raftLog.lastIndex()}
+
+	// If the voter voted for us through MsgVoteResp, it will not vote again at
+	// terms <= r.Term, and can only accept MsgApp from terms >= term. Thus, if
+	// this candidate wins election, the voter's log will not change until the
+	// first MsgApp from this or later leader.
+	// (See section 5.2 & 5.4 of the Raft paper for more details.)
+	if myVoteRespType == pb.MsgVoteResp && !m.Reject &&
+		// Avoid scanning the whole leader log in findConflictByTerm if the voter
+		// did not attach a valid hint for any reason.
+		voterHint.term > 0 && voterHint.index > 0 &&
+		// Voter side logic should ensure this is true.
+		// Leaving this check here just to be safe.
+		voterHint.index <= r.raftLog.lastIndex() {
+		// index <= voterHint.index.
+		// Also, raftLog.term(index) <= voterHint.term, or the entry at index
+		// is missing.
+		index, term := r.raftLog.findConflictByTerm(voterHint.index, voterHint.term)
+		matchGuess = tracker.MatchGuess{
+			Index: index,
+			// If we found an entry at <= voterHint.index with a matching term then
+			// our log matches the voter's at matchGuess, by Log Matching Property.
+			// (See findConflictByTerm for proof.)
+			//
+			// If this candidate becomes the leader, it can directly set this
+			// follower to StateReplicate and begin sending MsgApp from matchGuess.
+			//
+			// The returned term can be 0 if the entry at the index is missing, in
+			// which case we don't consider it a match.
+			Match: term == voterHint.term,
+		}
+	}
+
+	// Record Vote and hint information. The collected matchGuess will be used
+	// for the first round of MsgApp if this candidate wins election.
+	gr, rj, res := r.poll(m.From, m.Type, !m.Reject, matchGuess)
+	r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
+	switch res {
+	case quorum.VoteWon:
+		if r.state == pb.StatePreCandidate {
+			r.campaign(campaignElection)
+		} else {
+			r.becomeLeader()
+			r.bcastFortify()
+			r.bcastAppend()
+		}
+	case quorum.VoteLost:
+		// pb.MsgPreVoteResp contains future term of pre-candidate
+		// m.Term > r.Term; reuse r.Term
+		r.becomeFollower(r.Term, None)
 	}
 }
 
