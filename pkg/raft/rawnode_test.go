@@ -776,7 +776,7 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 			Data:  []byte("a"),
 		}
 		entries[i] = ent
-		size += uint64(ent.Size())
+		size += ent.SizeEst()
 	}
 	s.ls = LogSlice{entries: entries}
 
@@ -784,7 +784,7 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 	// Set a MaxSizePerMsg that would suggest to Raft that the last committed entry should
 	// not be included in the initial rd.CommittedEntries. However, our storage will ignore
 	// this and *will* return it (which is how the Commit index ended up being 10 initially).
-	cfg.MaxSizePerMsg = size - uint64(entries[len(entries)-1].Size()) - 1
+	cfg.MaxSizePerMsg = size - entries[len(entries)-1].SizeEst() - 1
 
 	s.ls.entries = append(s.ls.entries, pb.Entry{
 		Term:  1,
