@@ -220,7 +220,7 @@ func distanceInternal(
 	aIt := geo.NewGeomTIterator(aGeomT, emptyBehavior)
 	aGeom, aNext, aErr := aIt.Next()
 	if aErr != nil {
-		return 0, err
+		return 0, aErr
 	}
 	for aNext {
 		aGeodist, err := geomToGeodist(aGeom)
@@ -231,7 +231,7 @@ func distanceInternal(
 		bIt := geo.NewGeomTIterator(bGeomT, emptyBehavior)
 		bGeom, bNext, bErr := bIt.Next()
 		if bErr != nil {
-			return 0, err
+			return 0, bErr
 		}
 		for bNext {
 			bGeodist, err := geomToGeodist(bGeom)
@@ -248,13 +248,13 @@ func distanceInternal(
 
 			bGeom, bNext, bErr = bIt.Next()
 			if bErr != nil {
-				return 0, err
+				return 0, bErr
 			}
 		}
 
 		aGeom, aNext, aErr = aIt.Next()
 		if aErr != nil {
-			return 0, err
+			return 0, aErr
 		}
 	}
 	return c.DistanceUpdater().Distance(), nil
