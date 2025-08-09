@@ -1380,6 +1380,15 @@ func (*Import) StatementTag() string { return ImportTag }
 func (*Import) cclOnlyStatement() {}
 
 // StatementReturnType implements the Statement interface.
+func (*Inspect) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*Inspect) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Inspect) StatementTag() string { return "INSPECT" }
+
+// StatementReturnType implements the Statement interface.
 func (*LiteralValuesClause) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -2613,6 +2622,7 @@ func (n *Grant) String() string                               { return AsString(
 func (n *GrantRole) String() string                           { return AsString(n) }
 func (n *MoveCursor) String() string                          { return AsString(n) }
 func (n *Insert) String() string                              { return AsString(n) }
+func (n *Inspect) String() string                             { return AsString(n) }
 func (n *Import) String() string                              { return AsString(n) }
 func (n *LiteralValuesClause) String() string                 { return AsString(n) }
 func (n *ParenSelect) String() string                         { return AsString(n) }
