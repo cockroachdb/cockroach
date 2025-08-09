@@ -114,8 +114,13 @@ INSERT INTO t values (1), (10), (100);
 `)
 
 	backupAsOfTimes := make([]time.Time, 0)
-	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
+	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, statementTime time.Time) {
 		backupAsOfTime := th.cfg.DB.KV().Clock().PhysicalTime()
+		if backupAsOfTime.After(statementTime) {
+			// If the backupAsOfTime is after the statement time, then we use the
+			// statement time to avoid "AOST in the future" errors.
+			backupAsOfTime = statementTime
+		}
 		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
 		require.NoError(t, err)
 		clause.Expr = expr
@@ -241,8 +246,13 @@ INSERT INTO t values (1), (10), (100);
 `)
 
 	backupAsOfTimes := make([]time.Time, 0)
-	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
+	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, statementTime time.Time) {
 		backupAsOfTime := th.cfg.DB.KV().Clock().PhysicalTime()
+		if backupAsOfTime.After(statementTime) {
+			// If the backupAsOfTime is after the statement time, then we use the
+			// statement time to avoid "AOST in the future" errors.
+			backupAsOfTime = statementTime
+		}
 		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
 		require.NoError(t, err)
 		clause.Expr = expr
@@ -336,8 +346,13 @@ INSERT INTO t values (1), (10), (100);
 `)
 
 	backupAsOfTimes := make([]time.Time, 0)
-	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
+	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, statementTime time.Time) {
 		backupAsOfTime := th.cfg.DB.KV().Clock().PhysicalTime()
+		if backupAsOfTime.After(statementTime) {
+			// If the backupAsOfTime is after the statement time, then we use the
+			// statement time to avoid "AOST in the future" errors.
+			backupAsOfTime = statementTime
+		}
 		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
 		require.NoError(t, err)
 		clause.Expr = expr
