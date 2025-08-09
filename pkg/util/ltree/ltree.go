@@ -85,22 +85,6 @@ func (lt T) ByteSize() int {
 	return size
 }
 
-// ForEachLabel iterates over each label in the LTREE path,
-// calling the provided function with the index and label.
-func (lt T) ForEachLabel(fn func(int, string)) {
-	for i, l := range lt.path {
-		fn(i, l)
-	}
-}
-
-// LabelAt returns the label at the specified index in an LTree path.
-func (lt T) LabelAt(idx int) (string, error) {
-	if idx < 0 || idx >= lt.Len() {
-		return "", pgerror.Newf(pgcode.InvalidParameterValue, "index %d out of bounds", idx)
-	}
-	return lt.path[idx], nil
-}
-
 // Compare compares two LTrees lexicographically based on their labels.
 func (lt T) Compare(other T) int {
 	minLen := min(lt.Len(), other.Len())
@@ -212,4 +196,72 @@ func prevChar(c byte) byte {
 		return prev
 	}
 	return c - 1
+}
+
+// SubPath returns a sub-path of the LTree starting from the given offset
+// and of the specified length. If the offset is negative, it counts from the end of the path.
+// If the length is negative, it extends to the end of the path from the offset.
+func (lt T) SubPath(offset, length int) (T, error) {
+	start := offset
+	if start < 0 {
+		start += lt.Len()
+	}
+	if length < 0 {
+		length += lt.Len() - start
+	}
+	if start < 0 || start >= lt.Len() || length < 0 {
+		return Empty, pgerror.Newf(pgcode.InvalidParameterValue, "invalid positions")
+	}
+
+	end := min(start+length, lt.Len())
+	return T{
+		path: lt.path[start:end],
+	}, nil
+}
+
+// IndexOf returns the first index in l that matches the other l sub-ltree,
+// starting from offset. If offset is negative, it counts from the end of the ltree.
+// If the sub-ltree is not found, it returns -1.
+func (lt T) IndexOf(other T, offset int) int {
+	// TODO(paulniziolek): We could optimize this by using a more efficient search algorithm
+	start := offset
+	if start < 0 {
+		start += lt.Len()
+	}
+	for i := max(start, 0); i < lt.Len()-other.Len()+1; i++ {
+		match := true
+		for j := 0; j < other.Len(); j++ {
+			if lt.path[i+j] != other.path[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return i
+		}
+	}
+	return -1
+}
+
+// Lca computes the Lowest Common Ancestor of a non-empty slice of LTree instances.
+// The LCA is the longest common prefix of the paths in the provided LTree slice.
+// If the paths have no common prefix, it returns an empty LTree.
+func Lca(ltrees []T) T {
+	if len(ltrees) == 0 {
+		return T{}
+	}
+	var minLength = ltrees[0].Len()
+	for _, ltree := range ltrees {
+		minLength = min(minLength, ltree.Len())
+	}
+	var i int
+	for i = 0; i < minLength; i++ {
+		label := ltrees[0].path[i]
+		for _, t := range ltrees[1:] {
+			if t.path[i] != label {
+				break
+			}
+		}
+	}
+	return T{path: ltrees[0].path[:i]}
 }
