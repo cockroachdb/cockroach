@@ -2797,11 +2797,16 @@ message Header {
   // - RevertRangeRequest
   // - ResolveIntentRangeRequest
   // - QueryLocksRequest
+  // - IsSpanEmptyRequest
   //
-  // The following two requests types are also allowed in the batch, although
-  // the limit has no effect on them:
+  // The following requests types are also allowed in the batch, although the
+  // limit has no effect on them:
+  // - ExportRequest
   // - QueryIntentRequest
   // - EndTxnRequest
+  // - ResolveIntentRequest
+  // - DeleteRequest
+  // - PutRequest
   //
   // [*] DeleteRangeRequests are generally not allowed to be batched together
   // with a commit (i.e. 1PC), except if Require1PC is also set. See #37457.
