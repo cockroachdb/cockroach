@@ -587,11 +587,6 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		if typ.ArrayContents().Family() == types.JsonpathFamily {
 			continue
 		}
-		// TODO(paulniziolek): Temporarily skip arrays with LTREEs as they are
-		// currently missing keyside indexing support.
-		if typ.ArrayContents().Family() == types.LTreeFamily {
-			continue
-		}
 
 		// Generate two random arrays and evaluate the result of `left @> right`.
 		left := randgen.RandArray(rng, typ, 0 /* nullChance */)
@@ -733,12 +728,6 @@ func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		typ := randgen.RandArrayType(rng)
-
-		// TODO(paulniziolek): Temporarily skip arrays with LTREEs as they are
-		// currently missing keyside indexing support.
-		if typ.ArrayContents().Family() == types.LTreeFamily {
-			continue
-		}
 
 		// Generate two random arrays and evaluate the result of `left <@ right`.
 		left := randgen.RandArray(rng, typ, 0 /* nullChance */)
@@ -982,11 +971,6 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 
 		// We don't allow jsonpath indices.
 		if typ.ArrayContents().Family() == types.JsonpathFamily {
-			continue
-		}
-		// TODO(paulniziolek): Temporarily skip arrays with LTREEs as they are
-		// currently missing keyside indexing support.
-		if typ.ArrayContents().Family() == types.LTreeFamily {
 			continue
 		}
 

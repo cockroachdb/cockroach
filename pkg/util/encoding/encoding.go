@@ -136,9 +136,17 @@ const (
 	jsonArrayKeyDescendingMarker      = jsonTrueKeyDescendingMarker - 1
 	jsonObjectKeyDescendingMarker     = jsonArrayKeyDescendingMarker - 1
 
+	// LTREE key encoding markers
+	ltreeKeyMarker           = jsonEmptyArrayKeyDescendingMarker + 1
+	ltreeKeyDescendingMarker = ltreeKeyMarker + 1
+
 	// Terminators for JSON Key encoding.
 	jsonKeyTerminator           byte = 0x00
 	jsonKeyDescendingTerminator byte = 0xFF
+
+	// Terminators for LTREE Key encoding.
+	ltreeKeyTerminator           byte = 0x0F
+	ltreeKeyDescendingTerminator byte = 0xF0
 
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
@@ -861,6 +869,20 @@ func getBytesLength(b []byte, e escapes) (int, error) {
 			return skipped, nil
 		}
 	}
+}
+
+// getBytesLength finds the length of a bytes encoding.
+func getLTreeLength(b []byte, dir Direction) (int, error) {
+	var i int
+	if dir == Ascending {
+		i = bytes.IndexByte(b, ltreeKeyTerminator)
+	} else {
+		i = bytes.IndexByte(b, ltreeKeyDescendingTerminator)
+	}
+	if i == -1 {
+		return 0, errors.Errorf("did not find terminator %#x", ltreeKeyTerminator)
+	}
+	return i + 1, nil
 }
 
 // prettyPrintInvertedIndexKey returns a string representation of the path part of a JSON inverted
@@ -1726,6 +1748,89 @@ func DecodeBitArrayDescending(b []byte) ([]byte, bitarray.BitArray, error) {
 	return b, ba, err
 }
 
+// EncodeLTreeAscending encodes a ltree.T value, appends it to the
+// supplied buffer, and returns the final buffer. The encoding is guaranteed to
+// be ordered such that if t1 < t2 then bytes.Compare will order them the same
+// way after encoding.
+//
+// The encoding uses escaped bytes encoding for each label in the ltree.T.
+func EncodeLTreeAscending(b []byte, d ltree.T) []byte {
+	b = append(b, ltreeKeyMarker)
+	d.ForEachLabel(func(i int, label string) {
+		b = EncodeBytesAscending(b, []byte(label))
+	})
+	b = append(b, ltreeKeyTerminator)
+	return b
+}
+
+// EncodeLTreeDescending is the descending version of EncodeLTreeAscending.
+func EncodeLTreeDescending(b []byte, d ltree.T) []byte {
+	b = append(b, ltreeKeyDescendingMarker)
+	d.ForEachLabel(func(i int, label string) {
+		b = EncodeBytesDescending(b, []byte(label))
+	})
+	b = append(b, ltreeKeyDescendingTerminator)
+	return b
+}
+
+// DecodeLTreeAscending decodes a ltree.T value which was encoded using
+// EncodeLTreeAscending. The remainder of the input buffer and the
+// decoded ltree.T are returned.
+func DecodeLTreeAscending(b []byte) ([]byte, ltree.T, error) {
+	if PeekType(b) != LTree {
+		return nil, ltree.Empty, errors.Errorf("did not find marker %#x", b)
+	}
+	b = b[1:]
+
+	var labels []string
+	for {
+		if len(b) != 0 && b[0] == ltreeKeyTerminator {
+			b = b[1:]
+			break
+		}
+		var label []byte
+		var err error
+		b, label, err = DecodeBytesAscending(b, label)
+		if err != nil {
+			return nil, ltree.Empty, err
+		}
+		labels = append(labels, string(label))
+	}
+	l, err := ltree.ParseLTreeFromLabels(labels)
+	if err != nil {
+		return nil, ltree.Empty, err
+	}
+	return b, l, nil
+}
+
+// DecodeLTreeDescending is the descending version of DecodeLTreeAscending.
+func DecodeLTreeDescending(b []byte) ([]byte, ltree.T, error) {
+	if PeekType(b) != LTreeDesc {
+		return nil, ltree.Empty, errors.Errorf("did not find marker %#x", b)
+	}
+	b = b[1:]
+
+	var labels []string
+	for {
+		if len(b) != 0 && b[0] == ltreeKeyDescendingTerminator {
+			b = b[1:]
+			break
+		}
+		var label []byte
+		var err error
+		b, label, err = DecodeBytesDescending(b, label)
+		if err != nil {
+			return nil, ltree.Empty, err
+		}
+		labels = append(labels, string(label))
+	}
+	l, err := ltree.ParseLTreeFromLabels(labels)
+	if err != nil {
+		return nil, ltree.Empty, err
+	}
+	return b, l, nil
+}
+
 // Type represents the type of a value encoded by
 // Encode{Null,NotNull,Varint,Uvarint,Float,Bytes}.
 //
@@ -1788,6 +1893,7 @@ const (
 	JsonEmptyArrayDesc Type = 43
 	PGVector           Type = 44
 	LTree              Type = 45
+	LTreeDesc          Type = 46
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -1890,6 +1996,10 @@ func slowPeekType(b []byte) Type {
 			return Decimal
 		case m == voidMarker:
 			return Void
+		case m == ltreeKeyMarker:
+			return LTree
+		case m == ltreeKeyDescendingMarker:
+			return LTreeDesc
 		}
 	}
 	return Unknown
@@ -2086,6 +2196,10 @@ func PeekLength(b []byte) (int, error) {
 			return 0, errors.Errorf("slice too short for float (%d)", len(b))
 		}
 		return 9, nil
+	case ltreeKeyMarker:
+		return getLTreeLength(b, Ascending)
+	case ltreeKeyDescendingMarker:
+		return getLTreeLength(b, Descending)
 	}
 	if m >= IntMin && m <= IntMax {
 		return getVarintLen(b)

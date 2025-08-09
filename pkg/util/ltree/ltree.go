@@ -54,6 +54,19 @@ func ParseLTree(pathStr string) (T, error) {
 	return T{path: labels}, nil
 }
 
+// ParseLTreeFromLabels parses a slice of labels into a T struct.
+func ParseLTreeFromLabels(labels []string) (T, error) {
+	if len(labels) > maxNumOfLabels {
+		return T{}, pgerror.Newf(pgcode.ProgramLimitExceeded, "number of ltree labels (%d) exceeds the maximum allowed (%d)", len(labels), maxNumOfLabels)
+	}
+	for _, label := range labels {
+		if err := validateLabel(label); err != nil {
+			return Empty, err
+		}
+	}
+	return T{path: labels}, nil
+}
+
 // String returns the string representation of T.
 func (lt T) String() string {
 	var b bytes.Buffer
