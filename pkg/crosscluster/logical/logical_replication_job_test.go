@@ -2443,6 +2443,105 @@ func TestLogicalReplicationGatewayRoute(t *testing.T) {
 	require.Empty(t, progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.PartitionConnUris)
 }
 
+// TestAlterExternalConnection tests that logical replication streams can
+// dynamically switch between different source nodes when the external
+// connection URI is updated. It verifies that data continues to replicate
+// correctly after the connection change.
+func TestAlterExternalConnection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	pollingInterval := 100 * time.Millisecond
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				Streaming: &sql.StreamingTestingKnobs{
+					ExternalConnectionPollingInterval: &pollingInterval,
+				},
+			},
+		},
+	}
+
+	server, node0, runners, dbNames := setupServerWithNumDBs(t, ctx, clusterArgs, 3, 2)
+	defer server.Stopper().Stop(ctx)
+
+	dbA := runners[0]
+	dbB := runners[1]
+
+	dbANode0URL, cleanup := node0.PGUrl(t, serverutils.DBName(dbNames[0]))
+	defer cleanup()
+	dbANode0 := sqlutils.MakeSQLRunner(node0.SQLConn(t, serverutils.DBName(dbNames[0])))
+	node1 := server.Server(1).ApplicationLayer()
+	dbANode1URL, cleanup := node1.PGUrl(t, serverutils.DBName(dbNames[0]))
+	defer cleanup()
+	dbANode1 := sqlutils.MakeSQLRunner(node1.SQLConn(t, serverutils.DBName(dbNames[0])))
+
+	// Configure URLs to use gateway routing
+	q0 := dbANode0URL.Query()
+	q0.Set(streamclient.RoutingModeKey, string(streamclient.RoutingModeGateway))
+	dbANode0URL.RawQuery = q0.Encode()
+
+	q1 := dbANode1URL.Query()
+	q1.Set(streamclient.RoutingModeKey, string(streamclient.RoutingModeGateway))
+	dbANode1URL.RawQuery = q1.Encode()
+
+	// We want to make sure operations for cluster B is on seperate node from cluster A.
+	node2 := server.Server(2).ApplicationLayer()
+	dbBNode2 := sqlutils.MakeSQLRunner(node2.SQLConn(t, serverutils.DBName(dbNames[1])))
+
+	require.NotEqual(t, dbANode0URL.String(), dbANode1URL.String())
+
+	externalConnName := "test_conn"
+	dbBNode2.Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION '%s' AS '%s'", externalConnName, dbANode0URL.String()))
+
+	var jobID jobspb.JobID
+	dbBNode2.QueryRow(t, fmt.Sprintf(
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON 'external://%s' INTO TABLE tab",
+		externalConnName)).Scan(&jobID)
+
+	dbANode0.Exec(t, "INSERT INTO tab VALUES (1, 'via_node_0')")
+
+	now := node0.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbB, jobID)
+
+	// Verify that node0 has the replication connection and node1 does not
+	dbANode0.CheckQueryResults(t,
+		"SELECT count(*) > 0 FROM crdb_internal.node_sessions WHERE application_name like '$ internal repstream job id=%'",
+		[][]string{{"true"}})
+	dbANode1.CheckQueryResults(t,
+		"SELECT count(*) FROM crdb_internal.node_sessions WHERE application_name like '$ internal repstream job id=%'",
+		[][]string{{"0"}})
+
+	dbBNode2.CheckQueryResults(t, "SELECT * FROM tab WHERE pk = 1", [][]string{
+		{"1", "via_node_0"},
+	})
+
+	dbBNode2.Exec(t, fmt.Sprintf("ALTER EXTERNAL CONNECTION '%s' AS '%s'", externalConnName, dbANode1URL.String()))
+	now = node0.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbA, jobID)
+	dbANode1.Exec(t, "INSERT INTO tab VALUES (2, 'via_node_1')")
+
+	now = node0.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbB, jobID)
+
+	// Verify that after ALTER, node0 has no connection and node1 has the replication connection
+	dbANode0.CheckQueryResults(t,
+		"SELECT count(*) FROM crdb_internal.node_sessions WHERE application_name like '$ internal repstream job id=%'",
+		[][]string{{"0"}})
+	dbANode1.CheckQueryResults(t,
+		"SELECT count(*) > 0 FROM crdb_internal.node_sessions WHERE application_name like '$ internal repstream job id=%'",
+		[][]string{{"true"}})
+
+	dbBNode2.CheckQueryResults(t, "SELECT * FROM tab WHERE pk = 2", [][]string{
+		{"2", "via_node_1"},
+	})
+}
+
 func TestMismatchColIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
