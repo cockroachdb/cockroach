@@ -11,14 +11,17 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -124,10 +127,207 @@ func TestJoinURLPath(t *testing.T) {
 
 	// path.Join has different behavior for this input.
 	require.Equal(t, "/../path", backuputils.JoinURLPath("/top", "../../path"))
-
 }
 
-func TestFindPriorBackups(t *testing.T) {
+func TestFindAllIncrementals(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc, _, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, backuptestutils.SingleNode)
+	defer cleanupFn()
+
+	ctx := context.Background()
+	execCfg := tc.Server(0).ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
+	emptyReader := bytes.NewReader(nil)
+
+	writeBackup := func(
+		t *testing.T, store cloud.ExternalStorage, indexed bool,
+		collectionURI string, start, end, fullEnd time.Time,
+	) {
+		subdir := fullEnd.Format(backupbase.DateBasedIntoFolderName)
+		backupPath := subdir
+		if start.UnixNano() != 0 {
+			backupPath = backuputils.JoinURLPath(
+				backupbase.DefaultIncrementalsSubdir,
+				backupdest.ConstructDateBasedIncrementalFolderName(start, end),
+			)
+		}
+		backupURI, err := backuputils.AppendPath(collectionURI, backupPath)
+		require.NoError(t, err)
+
+		manifestPath := backuputils.JoinURLPath(backupPath, backupbase.BackupManifestName)
+		require.NoError(t, cloud.WriteFile(ctx, store, manifestPath, emptyReader))
+
+		if indexed {
+			backupDetails := jobspb.BackupDetails{
+				StartTime:     hlc.Timestamp{WallTime: start.UnixNano()},
+				EndTime:       hlc.Timestamp{WallTime: end.UnixNano()},
+				CollectionURI: collectionURI,
+				Destination: jobspb.BackupDetails_Destination{
+					To:     []string{collectionURI},
+					Exists: start.UnixNano() != 0,
+					Subdir: subdir,
+				},
+				URI: backupURI,
+			}
+			require.NoError(
+				t,
+				backupdest.WriteBackupIndexMetadata(
+					ctx, &execCfg, username.RootUserName(),
+					execCfg.DistSQLSrv.ExternalStorageFromURI, backupDetails,
+				),
+			)
+		}
+	}
+
+	type backup struct {
+		// For simplicity, start and end will represent hours in a day in 24 hour
+		// format (0 will be treated as null time).
+		start int
+		end   int
+	}
+
+	type backupChain struct {
+		backups   []backup
+		skipIndex bool
+	}
+
+	testCases := []struct {
+		name         string
+		backupChains []backupChain
+		targetChain  int
+	}{
+		{
+			name: "single indexed full backup with incrementals",
+			backupChains: []backupChain{
+				{
+					backups: []backup{
+						{start: 0, end: 1},
+						{start: 1, end: 2},
+						{start: 1, end: 3},
+					},
+				},
+			},
+		},
+		{
+			name: "single indexed full backup",
+			backupChains: []backupChain{
+				{
+					backups: []backup{
+						{start: 0, end: 1},
+					},
+				},
+			},
+		},
+		{
+			name: "single indexed full backup with compacted backups",
+			backupChains: []backupChain{
+				{
+					backups: []backup{
+						{start: 0, end: 1},
+						{start: 1, end: 2},
+						{start: 2, end: 3},
+						{start: 1, end: 3},
+					},
+				},
+			},
+		},
+		{
+			name: "multiple indexed full backups",
+			backupChains: []backupChain{
+				{
+					backups: []backup{
+						{start: 0, end: 1},
+						{start: 1, end: 2},
+						{start: 2, end: 3},
+						{start: 1, end: 3},
+					},
+				},
+				{
+					backups: []backup{
+						{start: 0, end: 4},
+						{start: 4, end: 5},
+					},
+				},
+			},
+			targetChain: 1,
+		},
+		{
+			name: "non-indexed full backup should fallback to legacy logic",
+			backupChains: []backupChain{
+				{
+					backups: []backup{
+						{start: 0, end: 1},
+						{start: 1, end: 2},
+						{start: 1, end: 3},
+					},
+					skipIndex: true,
+				},
+			},
+		},
+	}
+
+	toTime := func(hour int) time.Time {
+		if hour == 0 {
+			return time.Unix(0, 0) // 0 is treated as a null time
+		}
+		return time.Date(2025, 7, 31, hour, 0, 0, 0, time.UTC)
+	}
+
+	for tcIdx, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			collectionURI := fmt.Sprintf("nodelocal://1/backup/%d", tcIdx)
+			store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(
+				ctx, collectionURI, username.RootUserName(),
+			)
+			require.NoError(t, err)
+			defer store.Close()
+
+			incStoreURI, err := backuputils.AppendPath(
+				collectionURI, backupbase.DefaultIncrementalsSubdir,
+			)
+			require.NoError(t, err)
+
+			incStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(
+				ctx, incStoreURI, username.RootUserName(),
+			)
+			require.NoError(t, err)
+			defer incStore.Close()
+
+			for _, chain := range tc.backupChains {
+				fullEnd := toTime(chain.backups[0].end)
+
+				for idx, b := range chain.backups {
+					if idx == 0 {
+						require.Zero(t, b.start, "first backup in chain should be a full backup with 0 start")
+					}
+					start := toTime(b.start)
+					end := toTime(b.end)
+					writeBackup(t, store, !chain.skipIndex, collectionURI, start, end, fullEnd)
+				}
+			}
+
+			targetChain := tc.backupChains[tc.targetChain]
+			targetSubdir := toTime(targetChain.backups[0].end).Format(backupbase.DateBasedIntoFolderName)
+			incs, err := backupdest.FindAllIncrementals(
+				ctx, incStore, store, targetSubdir, false, /* includeManifest */
+			)
+			require.NoError(t, err)
+			require.Len(t, incs, len(targetChain.backups)-1)
+
+			var expectedPaths []string
+			for _, b := range targetChain.backups[1:] {
+				expectedPaths = append(expectedPaths, backupdest.ConstructDateBasedIncrementalFolderName(
+					toTime(b.start), toTime(b.end),
+				))
+			}
+
+			require.Equal(t, expectedPaths, incs)
+		})
+	}
+}
+
+func TestLegacyFindPriorBackups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -253,7 +453,7 @@ func TestFindPriorBackups(t *testing.T) {
 			for _, path := range tc.paths {
 				writeManifest(t, store, path.path, path.useOldBackup)
 			}
-			prev, err := backupdest.FindPriorBackups(ctx, store, false)
+			prev, err := backupdest.LegacyFindPriorBackups(ctx, store, false)
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedPaths, prev)
 		})
