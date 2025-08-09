@@ -2053,12 +2053,12 @@ func BenchmarkSqlStatsDrain(b *testing.B) {
 	for _, bc := range benchCase {
 		b.Run(fmt.Sprintf("drainsql-%d", bc.statsCount), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
+				b.StopTimer()
 				sqlStats := createNewSqlStats()
 				populateSqlStats(b, sqlStats, bc.statsCount)
-				b.ResetTimer()
+				b.StartTimer()
 				sqlStats.DrainStats(ctx)
 			}
-
 		})
 	}
 }
