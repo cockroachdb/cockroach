@@ -2396,6 +2396,7 @@ func TestLint(t *testing.T) {
 				filter,
 				stream.GrepNot("sql/colexec/execgen/cmd/execgen/*"),
 				stream.GrepNot("sql/colexec/execgen/testdata/*"),
+				stream.GrepNot("sql/lexbase/allkeywords/main.go"),
 				stream.GrepNot("testutils/lint/lint_test.go"),
 			), func(s string) {
 				// s here is of the form
