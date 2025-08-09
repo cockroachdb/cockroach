@@ -480,6 +480,9 @@ func makeCloudStorageSink(
 	case changefeedbase.OptFormatParquet:
 		s.ext = `.parquet`
 		s.rowDelimiter = nil
+	case changefeedbase.OptFormatProtobuf:
+		s.ext = `.pb`
+		s.rowDelimiter = nil
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptFormat, encodingOpts.Format)
