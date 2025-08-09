@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "disk_stall.go",
         "failer.go",
+        "failer_util.go",
         "failure.go",
         "latency.go",
         "multiregion_latency.go",
