@@ -195,7 +195,7 @@ func TestRevertTenantToTimestampPTS(t *testing.T) {
 			t,
 			spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
 		)
-		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
+		require.NoError(t, repl.TestingReadProtectedTimestamps(ctx))
 
 		t.Logf("enqueuing range %d for mvccGC", rangeID)
 		systemSQL.Exec(t, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, rangeID)
