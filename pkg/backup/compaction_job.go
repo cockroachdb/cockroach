@@ -99,6 +99,28 @@ func maybeStartCompactionJob(
 		user,
 	)
 
+	// A race condition can occur where a compaction job ends after we fetch the
+	// backup chain but before we open a transaction to write the record. As a
+	// result, the written record is based on a chain that did not include the
+	// newly completed compaction job. In this scenario, it is possible that the
+	// chosen times for this compaction job actually no longer exist in the chain
+	// because it was compacted away. To avoid this, we need to check for the lock
+	// before fetching the backup chain.
+	//
+	// Note: _Technically_, this isn't entirely alleviated as a compaction job
+	// could start and finish in between the time we grab the backup chain and
+	// before we write the job record. However, this would require the schedule to
+	// have `on_previous_running=start` and realistically speaking, no compaction
+	// job would complete that quickly.
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := getScheduledExecutionArgsAndCheckCompactionLock(
+			ctx, txn, env, triggerJob.ScheduleID,
+		)
+		return err
+	}); err != nil {
+		return 0, err
+	}
+
 	chain, _, _, _, err := getBackupChain(
 		ctx, execCfg, user, triggerJob.Destination, triggerJob.EncryptionOptions,
 		triggerJob.EndTime, &kmsEnv,
@@ -115,23 +137,14 @@ func maybeStartCompactionJob(
 		return 0, err
 	}
 	startTS, endTS := chain[start].StartTime, chain[end-1].EndTime
-	log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
 
 	var jobID jobspb.JobID
 	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		_, args, err := getScheduledBackupExecutionArgsFromSchedule(
-			ctx, env, jobs.ScheduledJobTxn(txn), triggerJob.ScheduleID,
+		args, err := getScheduledExecutionArgsAndCheckCompactionLock(
+			ctx, txn, env, triggerJob.ScheduleID,
 		)
 		if err != nil {
-			return errors.Wrapf(
-				err, "failed to get scheduled backup execution args for schedule %d", triggerJob.ScheduleID,
-			)
-		}
-		if args.CompactionJobID != 0 {
-			return errors.Newf(
-				"compaction job %d already running for schedule %d",
-				args.CompactionJobID, triggerJob.ScheduleID,
-			)
+			return err
 		}
 		datums, err := txn.QueryRowEx(
 			ctx,
@@ -171,6 +184,9 @@ func maybeStartCompactionJob(
 		)
 		return scheduledJob.Update(ctx, backupSchedule)
 	})
+	if err == nil {
+		log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
+	}
 	return jobID, err
 }
 
@@ -929,6 +945,33 @@ func maybeWriteBackupCheckpoint(
 		return false, err
 	}
 	return true, nil
+}
+
+// getScheduledExecutionArgsAndCheckCompactionLock retrieves the scheduled
+// backup execution args and also checks if a compaction jobs is already
+// running. If we fail to fetch the args or if a compaction job is already
+// running for this schedule, an error is returned.
+func getScheduledExecutionArgsAndCheckCompactionLock(
+	ctx context.Context,
+	txn isql.Txn,
+	env scheduledjobs.JobSchedulerEnv,
+	scheduleID jobspb.ScheduleID,
+) (*backuppb.ScheduledBackupExecutionArgs, error) {
+	_, args, err := getScheduledBackupExecutionArgsFromSchedule(
+		ctx, env, jobs.ScheduledJobTxn(txn), scheduleID,
+	)
+	if err != nil {
+		return nil, errors.Wrapf(
+			err, "failed to get scheduled backup execution args for schedule %d", scheduleID,
+		)
+	}
+	if args.CompactionJobID != 0 {
+		return nil, errors.Newf(
+			"compaction job %d already running for schedule %d",
+			args.CompactionJobID, scheduleID,
+		)
+	}
+	return args, nil
 }
 
 func init() {
