@@ -7,14 +7,13 @@ package jwtauthccl
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/jwthelper"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/errors"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"golang.org/x/oauth2"
 )
 
 const (
@@ -32,35 +31,6 @@ var (
 	authorizationUserinfoNoGrpUseCtr   = telemetry.GetCounterOnce(authorizationUserinfoNoGrpCtr)
 	authorizationFailureUseCtr         = telemetry.GetCounterOnce(authorizationFailureCtr)
 )
-
-// getUserinfoEndpoint returns <issuer>'s user-info URL as advertised in the
-// OpenID-Connect discovery document. An empty string means the provider
-// doesn’t expose one.
-//
-// It’s a free function instead of a (*jwtAuthenticator) method so that it
-// remains mock-friendly in tests and also as it is part of the authz flow
-// and not the authn flow.
-// We still pass the authenticator so the code can reuse getHttpResponse
-// (which already wraps authenticator.mu.conf.httpClient
-// and therefore honours custom CAs).
-func getUserinfoEndpoint(
-	ctx context.Context, issuer string, authenticator *jwtAuthenticator,
-) (string, error) {
-	cfgURL := getOpenIdConfigEndpoint(issuer)
-
-	body, err := getHttpResponse(ctx, cfgURL, authenticator)
-	if err != nil {
-		return "", errors.Wrapf(err, "discovery fetch failed: GET %s", cfgURL)
-	}
-
-	var oidcConfigResp struct {
-		UserinfoEndpoint string `json:"userinfo_endpoint"`
-	}
-	if err := json.Unmarshal(body, &oidcConfigResp); err != nil {
-		return "", errors.Wrap(err, "invalid discovery document")
-	}
-	return oidcConfigResp.UserinfoEndpoint, nil
-}
 
 // parseUserinfoGroups pulls the group list out of a decoded user-info payload,
 // applies the same normalisation rules as jwthelper.ExtractGroups, and returns
@@ -103,11 +73,7 @@ func (a *jwtAuthenticator) ExtractGroups(
 	ctx context.Context, st *cluster.Settings, tokenBytes []byte,
 ) ([]string, error) {
 	telemetry.Inc(beginAuthorizationUseCounter)
-	//This call grabs a writelock internally and therefore must happen
-	//before we acquire readlock below to avoid deadlocking.
 	a.reloadConfig(ctx, st)
-	a.mu.RLock()
-	defer a.mu.RUnlock()
 
 	if !JWTAuthZEnabled.Get(&st.SV) {
 		return nil, nil
@@ -123,15 +89,29 @@ func (a *jwtAuthenticator) ExtractGroups(
 	groups, err := jwthelper.ParseGroupsClaim(tok, JWTAuthGroupClaim.Get(&st.SV))
 	if err == nil {
 		telemetry.Inc(authorizationTokenSuccessUseCtr)
-		if groups == nil { // empty claim -> empty (non-nil) slice
+		if groups == nil {
 			groups = []string{}
 		}
-		return groups, nil // found groups in jwt, early exit
+		return groups, nil
 	}
 
-	// Fallback to userinfo
-	groups, err = fetchGroupsFromUserinfo(
-		ctx, st, tok.Issuer(), tokenBytes, a)
+	// Fallback to userinfo, now using the dynamic provider getter.
+	issuer := tok.Issuer()
+	if issuer == "" {
+		return nil, errors.New("JWT authorization: token has no issuer claim, cannot perform userinfo lookup")
+	}
+
+	provider, err := a.getProviderForIssuer(ctx, issuer)
+	if err != nil {
+		telemetry.Inc(authorizationFailureUseCtr)
+		clientErr := errors.New("JWT authorization: userinfo lookup failed")
+		// The detailed internal error now comes from the provider initialization.
+		return nil, errors.WithSecondaryError(clientErr, err)
+	}
+
+	userInfo, err := provider.UserInfo(ctx, oauth2.StaticTokenSource(&oauth2.Token{
+		AccessToken: string(tokenBytes),
+	}))
 	if err != nil {
 		telemetry.Inc(authorizationFailureUseCtr)
 		internalErr := errors.Wrap(err, "JWT authorization: userinfo lookup failed")
@@ -139,78 +119,27 @@ func (a *jwtAuthenticator) ExtractGroups(
 		return nil, errors.WithSecondaryError(clientErr, internalErr)
 	}
 
-	// Userinfo endpoint was explicitly ""
-	if groups == nil {
-		telemetry.Inc(authorizationUserinfoNoGrpUseCtr)
-		internalErr := errors.Newf("JWT authorization: groups claim missing in token and there is no userinfo endpoint (issuer=%q subject=%q)",
-			tok.Issuer(), tok.Subject())
-		clientErr := errors.New("JWT authorization: No userinfo endpoint")
-
-		return nil, errors.WithSecondaryError(clientErr, internalErr)
+	var claims map[string]interface{}
+	if err := userInfo.Claims(&claims); err != nil {
+		telemetry.Inc(authorizationFailureUseCtr)
+		return nil, errors.Wrap(err, "JWT authorization: could not decode claims from userinfo")
 	}
 
-	telemetry.Inc(authorizationUserinfoSuccessUseCtr)
-	return groups, nil
-}
-
-// fetchGroupsFromUserinfo calls the user-info endpoint advertised by the
-// provider, decodes the JSON payload, and returns the value of the field named
-// by server.jwt_authentication.userinfo_group_key (default “groups”) as a
-// normalised, deduped slice.
-//
-// Return values:
-//   - (nil,  nil)  – userinfo endpoint explicitly set to ""
-//   - ([] , nil)   – endpoint responded, key not present or value is an empty list.
-//     Callers should treat this as “authorization failure” and reject login.
-//   - (slice, nil) – one or more groups extracted successfully.
-//   - (nil,  err)  – any parsing / type / network error (details wrapped with
-//     errors.WithDetailf).
-var fetchGroupsFromUserinfo = func(
-	ctx context.Context,
-	st *cluster.Settings,
-	issuer string,
-	bearer []byte,
-	auth *jwtAuthenticator, // we need this both for HTTP client & custom CA
-) ([]string, error) {
-
-	//Discover the user-info endpoint from the OIDC configuration.
-	userinfoEndpoint, err := getUserinfoEndpoint(ctx, issuer, auth)
-	if err != nil {
-		return nil, errors.Wrapf(err, "userinfo discovery failed")
-	}
-	if userinfoEndpoint == "" {
-		// Provider's UserinfoEndpoint was explicitly set to ""
-		// caller should decide what to do.
-		return nil, nil
-	}
-
-	header := http.Header{}
-	header.Set("Authorization", "Bearer "+string(bearer))
-
-	body, err := getHttpResponse(ctx, userinfoEndpoint, auth, header)
-	if err != nil {
-		return nil, errors.Wrapf(err, "userinfo request failed")
-	}
-
-	//Decode the JSON payload.
-	var payload map[string]any
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, errors.Wrapf(err, "invalid userinfo response")
-	}
-
-	// Extract and normalise groups
-	groups, err := parseUserinfoGroups(
-		payload,
+	groups, err = parseUserinfoGroups(
+		claims,
 		JWTAuthUserinfoGroupKey.Get(&st.SV),
 		JWTAuthGroupClaim.Get(&st.SV),
 	)
 	if err != nil {
-		return nil, errors.Wrapf(err, "invalid groups in user-info")
+		telemetry.Inc(authorizationFailureUseCtr)
+		return nil, errors.Wrap(err, "JWT authorization: could not parse groups from userinfo")
 	}
-	// if IdP doesn’t supply a groups key, better to assume that user is no
-	// longer part of any roles. thus, return empty list
+
 	if groups == nil {
+		telemetry.Inc(authorizationUserinfoNoGrpUseCtr)
 		return []string{}, nil
 	}
+
+	telemetry.Inc(authorizationUserinfoSuccessUseCtr)
 	return groups, nil
 }
