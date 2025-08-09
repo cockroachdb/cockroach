@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -220,7 +221,7 @@ type SSTBatcher struct {
 	disallowShadowingBelow hlc.Timestamp
 
 	// pacer for admission control during SST ingestion
-	pacer CPUPacer
+	pacer *admission.Pacer
 
 	// skips duplicate keys (iff they are buffered together). This is true when
 	// used to backfill an inverted index. An array in JSONB with multiple values
@@ -444,7 +445,9 @@ func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, val
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
 	// Pace based on admission control before adding the key.
-	b.pacer.Pace(ctx)
+	if err := b.pacer.Pace(ctx); err != nil {
+		return err
+	}
 
 	if len(b.batch.endKey) > 0 && bytes.Equal(b.batch.endKey, key.Key) {
 		if b.ingestAll && key.Timestamp.Equal(b.batch.endTimestamp) {
