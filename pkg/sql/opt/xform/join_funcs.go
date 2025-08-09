@@ -1203,17 +1203,6 @@ func (c *CustomFuncs) ConvertIndexToLookupJoinPrivate(
 	}
 }
 
-// HasVolatileProjection returns true if any of the projection items of the
-// ProjectionsExpr contains a volatile expression.
-func (c *CustomFuncs) HasVolatileProjection(projections memo.ProjectionsExpr) bool {
-	for i := range projections {
-		if projections[i].ScalarProps().VolatilitySet.HasVolatile() {
-			return true
-		}
-	}
-	return false
-}
-
 // FindLeftJoinCanaryColumn tries to find a "canary" column from the right input
 // of a left join. This is a column that is NULL in the join output iff the row
 // is an "outer left" row that had no match in the join.

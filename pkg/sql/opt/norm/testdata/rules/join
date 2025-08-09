@@ -1470,44 +1470,44 @@ SELECT (SELECT i_name FROM item LIMIT 1)
 project
  ├── columns: i_name:57
  ├── inner-join (hash)
- │    ├── columns: h_data:9!null ol_dist_info:21!null ol_i_id:39 exists:49!null
- │    ├── fd: (9)==(21), (21)==(9)
+ │    ├── columns: h_data:9!null ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21!null ol_i_id:39 canary_agg:48
+ │    ├── fd: (12-15)-->(21,39,48), (9)==(21), (21)==(9)
  │    ├── scan history
  │    │    └── columns: h_data:9
  │    ├── select
- │    │    ├── columns: ol_dist_info:21 ol_i_id:39 exists:49!null
+ │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 ol_i_id:39 canary_agg:48
+ │    │    ├── key: (12-15)
+ │    │    ├── fd: (12-15)-->(21,39,48)
  │    │    ├── left-join (cross)
- │    │    │    ├── columns: ol_dist_info:21 ol_i_id:39 exists:49!null
+ │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 ol_i_id:39 canary_agg:48
  │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- │    │    │    ├── project
- │    │    │    │    ├── columns: exists:49!null ol_dist_info:21
- │    │    │    │    ├── group-by (hash)
- │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 canary_agg:48
- │    │    │    │    │    ├── grouping columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null
- │    │    │    │    │    ├── key: (12-15)
- │    │    │    │    │    ├── fd: (12-15)-->(21,48)
- │    │    │    │    │    ├── left-join (cross)
- │    │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 rowid:24 h_data:32
- │    │    │    │    │    │    ├── fd: (12-15)-->(21)
- │    │    │    │    │    │    ├── scan order_line
- │    │    │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21
- │    │    │    │    │    │    │    ├── key: (12-15)
- │    │    │    │    │    │    │    └── fd: (12-15)-->(21)
- │    │    │    │    │    │    ├── select
- │    │    │    │    │    │    │    ├── columns: rowid:24!null h_data:32!null
- │    │    │    │    │    │    │    ├── scan history
- │    │    │    │    │    │    │    │    └── columns: rowid:24!null h_data:32
- │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │         └── h_data:32 IS NOT NULL [outer=(32), constraints=(/32: (/NULL - ]; tight)]
+ │    │    │    ├── key: (12-15)
+ │    │    │    ├── fd: (12-15)-->(21,39,48)
+ │    │    │    ├── group-by (hash)
+ │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 canary_agg:48
+ │    │    │    │    ├── grouping columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null
+ │    │    │    │    ├── key: (12-15)
+ │    │    │    │    ├── fd: (12-15)-->(21,48)
+ │    │    │    │    ├── left-join (cross)
+ │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 rowid:24 h_data:32
+ │    │    │    │    │    ├── fd: (12-15)-->(21)
+ │    │    │    │    │    ├── scan order_line
+ │    │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21
+ │    │    │    │    │    │    ├── key: (12-15)
+ │    │    │    │    │    │    └── fd: (12-15)-->(21)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: rowid:24!null h_data:32!null
+ │    │    │    │    │    │    ├── scan history
+ │    │    │    │    │    │    │    └── columns: rowid:24!null h_data:32
  │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         └── ol_dist_info:21 IS NOT NULL [outer=(21), constraints=(/21: (/NULL - ]; tight)]
- │    │    │    │    │    └── aggregations
- │    │    │    │    │         ├── const-not-null-agg [as=canary_agg:48, outer=(24)]
- │    │    │    │    │         │    └── rowid:24
- │    │    │    │    │         └── const-agg [as=ol_dist_info:21, outer=(21)]
- │    │    │    │    │              └── ol_dist_info:21
- │    │    │    │    └── projections
- │    │    │    │         └── canary_agg:48 IS NOT NULL [as=exists:49, outer=(48)]
+ │    │    │    │    │    │         └── h_data:32 IS NOT NULL [outer=(32), constraints=(/32: (/NULL - ]; tight)]
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── ol_dist_info:21 IS NOT NULL [outer=(21), constraints=(/21: (/NULL - ]; tight)]
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── const-not-null-agg [as=canary_agg:48, outer=(24)]
+ │    │    │    │         │    └── rowid:24
+ │    │    │    │         └── const-agg [as=ol_dist_info:21, outer=(21)]
+ │    │    │    │              └── ol_dist_info:21
  │    │    │    ├── limit
  │    │    │    │    ├── columns: ol_i_id:39!null
  │    │    │    │    ├── cardinality: [0 - 1]
@@ -1519,7 +1519,7 @@ project
  │    │    │    │    └── 1
  │    │    │    └── filters (true)
  │    │    └── filters
- │    │         └── exists:49 OR (ol_i_id:39 IS NOT NULL) [outer=(39,49)]
+ │    │         └── (canary_agg:48 IS NOT NULL) OR (ol_i_id:39 IS NOT NULL) [outer=(39,48)]
  │    └── filters
  │         └── h_data:9 = ol_dist_info:21 [outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ]), fd=(9)==(21), (21)==(9)]
  └── projections
@@ -3239,6 +3239,554 @@ inner-join-apply
  │    └── filters
  │         └── k:9 = baz:8 [outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
  └── filters (true)
+
+# Test hoisting projections above joins in more cases for #150704.
+
+exec-ddl
+CREATE TABLE t150704 (
+  x INT PRIMARY KEY,
+  y INT
+)
+----
+
+exec-ddl
+CREATE TABLE u150704 (
+  y INT PRIMARY KEY,
+  z INT
+)
+----
+
+# Check that we hoist the projection when no join conditions use p.
+
+norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
+WITH w AS (SELECT x, y, x + y AS p FROM t150704 WHERE x = 1)
+SELECT *
+FROM w
+JOIN u150704 USING (y)
+----
+project
+ ├── columns: y:7!null x:6!null p:8!null z:10
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(6-8,10)
+ ├── inner-join (hash)
+ │    ├── columns: t150704.x:1!null t150704.y:2!null u150704.y:9!null z:10
+ │    ├── cardinality: [0 - 1]
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2,9,10), (2)==(9), (9)==(2)
+ │    ├── select
+ │    │    ├── columns: t150704.x:1!null t150704.y:2
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    ├── scan t150704
+ │    │    │    ├── columns: t150704.x:1!null t150704.y:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    └── filters
+ │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    ├── scan u150704
+ │    │    ├── columns: u150704.y:9!null z:10
+ │    │    ├── key: (9)
+ │    │    └── fd: (9)-->(10)
+ │    └── filters
+ │         └── t150704.y:2 = u150704.y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ └── projections
+      ├── t150704.x:1 [as=x:6, outer=(1)]
+      ├── t150704.y:2 [as=y:7, outer=(2)]
+      └── t150704.x:1 + t150704.y:2 [as=p:8, outer=(1,2), immutable]
+
+norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
+WITH w AS (SELECT x, y, x + y AS p FROM t150704 WHERE x = 1)
+SELECT *
+FROM w
+LEFT JOIN u150704 USING (y)
+----
+project
+ ├── columns: y:7 x:6!null p:8 z:10
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(6-8,10)
+ ├── left-join (hash)
+ │    ├── columns: t150704.x:1!null t150704.y:2 u150704.y:9 z:10
+ │    ├── cardinality: [0 - 1]
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2,9,10)
+ │    ├── select
+ │    │    ├── columns: t150704.x:1!null t150704.y:2
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    ├── scan t150704
+ │    │    │    ├── columns: t150704.x:1!null t150704.y:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    └── filters
+ │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    ├── scan u150704
+ │    │    ├── columns: u150704.y:9!null z:10
+ │    │    ├── key: (9)
+ │    │    └── fd: (9)-->(10)
+ │    └── filters
+ │         └── t150704.y:2 = u150704.y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ └── projections
+      ├── t150704.x:1 [as=x:6, outer=(1)]
+      ├── t150704.y:2 [as=y:7, outer=(2)]
+      └── t150704.x:1 + t150704.y:2 [as=p:8, outer=(1,2), immutable]
+
+norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
+WITH w AS (SELECT x, y, x + y AS p FROM t150704 WHERE x = 1)
+SELECT w.*, (SELECT max(z) FROM u150704 WHERE y = w.y)
+FROM w
+----
+project
+ ├── columns: x:6!null y:7 p:8 max:14
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(6-8,14)
+ ├── group-by (streaming)
+ │    ├── columns: x:6!null y:7 p:8 max:13
+ │    ├── cardinality: [0 - 1]
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(6-8,13)
+ │    ├── project
+ │    │    ├── columns: x:6!null y:7 p:8 z:10
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── immutable
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(6-8,10)
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: t150704.x:1!null t150704.y:2 u150704.y:9 z:10
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(1,2,9,10)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: t150704.x:1!null t150704.y:2
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    ├── fd: ()-->(1,2)
+ │    │    │    │    ├── scan t150704
+ │    │    │    │    │    ├── columns: t150704.x:1!null t150704.y:2
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    │    └── filters
+ │    │    │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    │    │    ├── scan u150704
+ │    │    │    │    ├── columns: u150704.y:9!null z:10
+ │    │    │    │    ├── key: (9)
+ │    │    │    │    └── fd: (9)-->(10)
+ │    │    │    └── filters
+ │    │    │         └── u150704.y:9 = t150704.y:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    │    └── projections
+ │    │         ├── t150704.x:1 [as=x:6, outer=(1)]
+ │    │         ├── t150704.y:2 [as=y:7, outer=(2)]
+ │    │         └── t150704.x:1 + t150704.y:2 [as=p:8, outer=(1,2), immutable]
+ │    └── aggregations
+ │         ├── max [as=max:13, outer=(10)]
+ │         │    └── z:10
+ │         ├── const-agg [as=x:6, outer=(6)]
+ │         │    └── x:6
+ │         ├── const-agg [as=y:7, outer=(7)]
+ │         │    └── y:7
+ │         └── const-agg [as=p:8, outer=(8)]
+ │              └── p:8
+ └── projections
+      └── max:13 [as=max:14, outer=(13)]
+
+norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
+WITH w AS (SELECT x, y, x + y AS p FROM t150704 WHERE x = 1)
+SELECT *
+FROM u150704
+RIGHT JOIN w USING (y)
+----
+project
+ ├── columns: y:11 z:7 x:10!null p:12
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(7,10-12)
+ ├── left-join (hash)
+ │    ├── columns: t150704.x:1!null t150704.y:2 u150704.y:6 z:7
+ │    ├── cardinality: [0 - 1]
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2,6,7)
+ │    ├── select
+ │    │    ├── columns: t150704.x:1!null t150704.y:2
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    ├── scan t150704
+ │    │    │    ├── columns: t150704.x:1!null t150704.y:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    └── filters
+ │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    ├── scan u150704
+ │    │    ├── columns: u150704.y:6!null z:7
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7)
+ │    └── filters
+ │         └── u150704.y:6 = t150704.y:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+ └── projections
+      ├── t150704.x:1 [as=x:10, outer=(1)]
+      ├── t150704.y:2 [as=y:11, outer=(2)]
+      └── t150704.x:1 + t150704.y:2 [as=p:12, outer=(1,2), immutable]
+
+norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
+WITH w AS (SELECT x, y, x + y AS p FROM t150704 WHERE x = 1),
+v AS (SELECT y, z, y + z AS q FROM u150704 WHERE y = 2)
+SELECT *
+FROM w
+JOIN v USING (y)
+----
+project
+ ├── columns: y:12!null x:11!null p:13!null z:15 q:16
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(11-13,15,16)
+ ├── inner-join (hash)
+ │    ├── columns: t150704.x:1!null t150704.y:2!null y:14!null z:15 q:16
+ │    ├── cardinality: [0 - 1]
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2,14-16), (2)==(14), (14)==(2)
+ │    ├── select
+ │    │    ├── columns: t150704.x:1!null t150704.y:2
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    ├── scan t150704
+ │    │    │    ├── columns: t150704.x:1!null t150704.y:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    └── filters
+ │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    ├── project
+ │    │    ├── columns: y:14!null z:15 q:16
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── immutable
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(14-16)
+ │    │    ├── select
+ │    │    │    ├── columns: u150704.y:6!null u150704.z:7
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(6,7)
+ │    │    │    ├── scan u150704
+ │    │    │    │    ├── columns: u150704.y:6!null u150704.z:7
+ │    │    │    │    ├── key: (6)
+ │    │    │    │    └── fd: (6)-->(7)
+ │    │    │    └── filters
+ │    │    │         └── u150704.y:6 = 2 [outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
+ │    │    └── projections
+ │    │         ├── u150704.y:6 [as=y:14, outer=(6)]
+ │    │         ├── u150704.z:7 [as=z:15, outer=(7)]
+ │    │         └── u150704.y:6 + u150704.z:7 [as=q:16, outer=(6,7), immutable]
+ │    └── filters
+ │         └── t150704.y:2 = y:14 [outer=(2,14), constraints=(/2: (/NULL - ]; /14: (/NULL - ]), fd=(2)==(14), (14)==(2)]
+ └── projections
+      ├── t150704.x:1 [as=x:11, outer=(1)]
+      ├── t150704.y:2 [as=y:12, outer=(2)]
+      └── t150704.x:1 + t150704.y:2 [as=p:13, outer=(1,2), immutable]
+
+# Check that we hoist the projection when no join conditions use p and there is
+# also a remapping projection.
+
+norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
+WITH w AS (SELECT x AS m, y AS n, x + y AS p FROM t150704 WHERE x = 1)
+SELECT *
+FROM w
+JOIN u150704 ON y = n
+----
+project
+ ├── columns: m:6!null n:7!null p:8!null y:9!null z:10
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(6-10), (7)==(9), (9)==(7)
+ ├── inner-join (hash)
+ │    ├── columns: x:1!null t150704.y:2!null u150704.y:9!null z:10
+ │    ├── cardinality: [0 - 1]
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2,9,10), (2)==(9), (9)==(2)
+ │    ├── select
+ │    │    ├── columns: x:1!null t150704.y:2
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    ├── scan t150704
+ │    │    │    ├── columns: x:1!null t150704.y:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    └── filters
+ │    │         └── x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    ├── scan u150704
+ │    │    ├── columns: u150704.y:9!null z:10
+ │    │    ├── key: (9)
+ │    │    └── fd: (9)-->(10)
+ │    └── filters
+ │         └── u150704.y:9 = t150704.y:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ └── projections
+      ├── x:1 [as=m:6, outer=(1)]
+      ├── t150704.y:2 [as=n:7, outer=(2)]
+      └── x:1 + t150704.y:2 [as=p:8, outer=(1,2), immutable]
+
+# Check that we do not hoist the projection when a join condition uses p.
+
+norm expect-not=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
+WITH w AS (SELECT x AS m, y AS n, x + y AS p FROM t150704 WHERE x = 1)
+SELECT *
+FROM w
+JOIN u150704 ON y = p
+----
+inner-join (hash)
+ ├── columns: m:6!null n:7 p:8!null y:9!null z:10
+ ├── cardinality: [0 - 1]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(6-10), (8)==(9), (9)==(8)
+ ├── project
+ │    ├── columns: m:6!null n:7 p:8
+ │    ├── cardinality: [0 - 1]
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(6-8)
+ │    ├── select
+ │    │    ├── columns: x:1!null t150704.y:2
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    ├── scan t150704
+ │    │    │    ├── columns: x:1!null t150704.y:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    └── filters
+ │    │         └── x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    └── projections
+ │         ├── x:1 [as=m:6, outer=(1)]
+ │         ├── t150704.y:2 [as=n:7, outer=(2)]
+ │         └── x:1 + t150704.y:2 [as=p:8, outer=(1,2), immutable]
+ ├── scan u150704
+ │    ├── columns: u150704.y:9!null z:10
+ │    ├── key: (9)
+ │    └── fd: (9)-->(10)
+ └── filters
+      └── u150704.y:9 = p:8 [outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
+
+norm expect-not=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
+WITH w AS (SELECT x, y, x + y AS p FROM t150704 WHERE x = 1)
+SELECT w.*, (SELECT max(z) FROM u150704 WHERE y = w.p)
+FROM w
+----
+project
+ ├── columns: x:6!null y:7 p:8 max:14
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(6-8,14)
+ ├── group-by (streaming)
+ │    ├── columns: x:6!null y:7 p:8 max:13
+ │    ├── cardinality: [0 - 1]
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(6-8,13)
+ │    ├── left-join (hash)
+ │    │    ├── columns: x:6!null y:7 p:8 u150704.y:9 z:10
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    │    ├── immutable
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(6-10)
+ │    │    ├── project
+ │    │    │    ├── columns: x:6!null y:7 p:8
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── immutable
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(6-8)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: t150704.x:1!null t150704.y:2
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    ├── fd: ()-->(1,2)
+ │    │    │    │    ├── scan t150704
+ │    │    │    │    │    ├── columns: t150704.x:1!null t150704.y:2
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    │    └── filters
+ │    │    │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    │    │    └── projections
+ │    │    │         ├── t150704.x:1 [as=x:6, outer=(1)]
+ │    │    │         ├── t150704.y:2 [as=y:7, outer=(2)]
+ │    │    │         └── t150704.x:1 + t150704.y:2 [as=p:8, outer=(1,2), immutable]
+ │    │    ├── scan u150704
+ │    │    │    ├── columns: u150704.y:9!null z:10
+ │    │    │    ├── key: (9)
+ │    │    │    └── fd: (9)-->(10)
+ │    │    └── filters
+ │    │         └── u150704.y:9 = p:8 [outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
+ │    └── aggregations
+ │         ├── max [as=max:13, outer=(10)]
+ │         │    └── z:10
+ │         ├── const-agg [as=x:6, outer=(6)]
+ │         │    └── x:6
+ │         ├── const-agg [as=y:7, outer=(7)]
+ │         │    └── y:7
+ │         └── const-agg [as=p:8, outer=(8)]
+ │              └── p:8
+ └── projections
+      └── max:13 [as=max:14, outer=(13)]
+
+# Check that we do not hoist the projection when an outer join could NULL-extend
+# it.
+
+norm expect-not=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
+WITH w AS (SELECT x, y, x + y AS p FROM t150704 WHERE x = 1)
+SELECT *
+FROM w
+RIGHT JOIN u150704 USING (y)
+----
+project
+ ├── columns: y:9!null x:6 p:8 z:10
+ ├── immutable
+ ├── key: (9)
+ ├── fd: (9)-->(6,8,10)
+ └── left-join (hash)
+      ├── columns: x:6 y:7 p:8 u150704.y:9!null z:10
+      ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+      ├── immutable
+      ├── key: (9)
+      ├── fd: (9)-->(6-8,10)
+      ├── scan u150704
+      │    ├── columns: u150704.y:9!null z:10
+      │    ├── key: (9)
+      │    └── fd: (9)-->(10)
+      ├── project
+      │    ├── columns: x:6!null y:7 p:8
+      │    ├── cardinality: [0 - 1]
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    ├── select
+      │    │    ├── columns: t150704.x:1!null t150704.y:2
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(1,2)
+      │    │    ├── scan t150704
+      │    │    │    ├── columns: t150704.x:1!null t150704.y:2
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2)
+      │    │    └── filters
+      │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      │    └── projections
+      │         ├── t150704.x:1 [as=x:6, outer=(1)]
+      │         ├── t150704.y:2 [as=y:7, outer=(2)]
+      │         └── t150704.x:1 + t150704.y:2 [as=p:8, outer=(1,2), immutable]
+      └── filters
+           └── y:7 = u150704.y:9 [outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ]), fd=(7)==(9), (9)==(7)]
+
+# Also test the view example from #150704.
+
+exec-ddl
+CREATE VIEW v150704 AS
+SELECT x, y, z, 4 AS d
+FROM t150704
+LEFT JOIN u150704 USING (y)
+----
+
+norm
+WITH w AS (SELECT unnest(ARRAY[1, 2, 3]) AS x)
+SELECT x, y, z, 4 AS d
+FROM t150704
+LEFT JOIN u150704 USING (y)
+JOIN w USING (x)
+----
+project
+ ├── columns: x:2!null y:3 z:7 d:11!null
+ ├── cardinality: [0 - 3]
+ ├── fd: ()-->(11), (2)-->(3,7)
+ ├── inner-join (hash)
+ │    ├── columns: t150704.x:2!null t150704.y:3 u150704.y:6 z:7 x:10!null
+ │    ├── cardinality: [0 - 3]
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    ├── fd: (2)-->(3,6,7), (6)-->(7), (2)==(10), (10)==(2)
+ │    ├── left-join (hash)
+ │    │    ├── columns: t150704.x:2!null t150704.y:3 u150704.y:6 z:7
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    │    ├── key: (2)
+ │    │    ├── fd: (2)-->(3,6,7), (6)-->(7)
+ │    │    ├── scan t150704
+ │    │    │    ├── columns: t150704.x:2!null t150704.y:3
+ │    │    │    ├── key: (2)
+ │    │    │    └── fd: (2)-->(3)
+ │    │    ├── scan u150704
+ │    │    │    ├── columns: u150704.y:6!null z:7
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7)
+ │    │    └── filters
+ │    │         └── t150704.y:3 = u150704.y:6 [outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+ │    ├── values
+ │    │    ├── columns: x:10!null
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── (1,)
+ │    │    ├── (2,)
+ │    │    └── (3,)
+ │    └── filters
+ │         └── t150704.x:2 = x:10 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+ └── projections
+      └── 4 [as=d:11]
+
+norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
+WITH w AS (SELECT unnest(ARRAY[1, 2, 3]) AS x)
+SELECT x, y, z, d
+FROM v150704
+JOIN w USING (x)
+----
+project
+ ├── columns: x:2!null y:3 z:7 d:10!null
+ ├── cardinality: [0 - 3]
+ ├── fd: ()-->(10), (2)-->(3,7)
+ ├── inner-join (hash)
+ │    ├── columns: t150704.x:2!null t150704.y:3 u150704.y:6 z:7 x:11!null
+ │    ├── cardinality: [0 - 3]
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    ├── fd: (2)-->(3,6,7), (6)-->(7), (2)==(11), (11)==(2)
+ │    ├── left-join (hash)
+ │    │    ├── columns: t150704.x:2!null t150704.y:3 u150704.y:6 z:7
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    │    ├── key: (2)
+ │    │    ├── fd: (2)-->(3,6,7), (6)-->(7)
+ │    │    ├── scan t150704
+ │    │    │    ├── columns: t150704.x:2!null t150704.y:3
+ │    │    │    ├── key: (2)
+ │    │    │    └── fd: (2)-->(3)
+ │    │    ├── scan u150704
+ │    │    │    ├── columns: u150704.y:6!null z:7
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7)
+ │    │    └── filters
+ │    │         └── t150704.y:3 = u150704.y:6 [outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+ │    ├── values
+ │    │    ├── columns: x:11!null
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── (1,)
+ │    │    ├── (2,)
+ │    │    └── (3,)
+ │    └── filters
+ │         └── t150704.x:2 = x:11 [outer=(2,11), constraints=(/2: (/NULL - ]; /11: (/NULL - ]), fd=(2)==(11), (11)==(2)]
+ └── projections
+      └── 4 [as=d:10]
 
 # --------------------------------------------------
 # SimplifyJoinNotNullEquality
