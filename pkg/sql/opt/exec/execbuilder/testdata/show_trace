@@ -35,6 +35,7 @@ SELECT $$
     FROM [SHOW KV TRACE FOR SESSION]
    WHERE message NOT LIKE '%Z/%'
          AND operation NOT LIKE 'kv.DistSender: sending partial batch%'
+         AND operation NOT LIKE 'kv.DistSender: sending pre-commit query intents%'
          AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
          AND tag NOT LIKE '%intExec=%'
          AND tag NOT LIKE '%scExec%'

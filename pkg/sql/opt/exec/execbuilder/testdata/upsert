@@ -1069,6 +1069,7 @@ SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,3); SET tracing = 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+  AND operation NOT LIKE 'kv.DistSender: sending pre-commit query intents%'
 ----
 colbatchscan  Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
 count         CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
