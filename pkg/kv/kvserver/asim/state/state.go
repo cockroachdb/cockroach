@@ -205,7 +205,7 @@ type State interface {
 	// SetClusterSetting sets the cluster setting for the state.
 	SetClusterSetting(Key string, Value interface{})
 	// NodeCapacity returns the capacity of the node with ID NodeID.
-	NodeCapacity(NodeID) roachpb.NodeCapacity
+	NodeCapacity(nodeID NodeID, useCached bool) roachpb.NodeCapacity
 	// SetNodeCPURateCapacity sets the CPU rate capacity for the node with ID
 	// NodeID to be equal to the value given.
 	SetNodeCPURateCapacity(NodeID, int64)
