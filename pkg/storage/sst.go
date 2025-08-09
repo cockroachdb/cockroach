@@ -100,18 +100,21 @@ func errorIfReaderContainsRangeKeys(
 	return nil
 }
 
+var ComputeStatsDiffViolation = errors.New("ComputeStatsDiff assumptions violated")
+
 // ComputeSSTStatsDiff computes a diff of the key span's mvcc stats if the sst
 // were applied. Note, the incoming sst must not contain any range keys. The key
 // span must be contained in the global keyspace.
 //
-// This function assumes that if an engine key overlaps with an sst key
-// (i.e. engKey.Key == iterKey.Key), the sst key shadows the latest eng key or
-// is a duplicate. Here are two valid examples:
+// This function can only compute accurate stats if an engine key overlaps with
+// an sst key (i.e. engKey.Key == iterKey.Key), the sst key shadows the latest
+// eng key or is a duplicate. If the sst violates this assumption, an error is
+// thrown. Here are two valid examples:
 //
 // 1. sst: a2, a1, eng: a4, a3, a2, a1
 // 2. sst: a4, a3, a2 eng: a2, a1
 //
-// The function cannot handle the following case: sst: a1, eng: a2
+// The function cannot handle the following case: sst: a1, eng: a2.
 //
 // Overall control flow:
 //
@@ -131,7 +134,7 @@ func errorIfReaderContainsRangeKeys(
 // Call sstIter.Next()
 //
 // TODO(msbutler): Currently, this helper throws an error if the engine contains
-// range keys. support range keys in the engine.
+// range keys. Support range keys in the engine.
 func ComputeSSTStatsDiff(
 	ctx context.Context, sst []byte, reader Reader, nowNanos int64, start, end MVCCKey,
 ) (enginepb.MVCCStats, error) {
@@ -221,13 +224,76 @@ func ComputeSSTStatsDiff(
 		return ms, errors.New("SST is empty")
 	}
 
-	// processDuplicates advances the sst iterator to the next roachpb key, as all
-	// remaining versions of this sst key should not contribute to stats.
+	// processDuplicates returns an error if the sst violates an assumption
+	// required to compute accurate stats: if an engine key overlaps with an sst
+	// key (i.e. engKey.Key == iterKey.Key), the sst key shadows the latest eng
+	// key or is a duplicate. In other words, if there exists an sst key that the
+	// eng also shadows, but is not already in the engine, then we bump the
+	// containsEstimate field.
 	processDuplicates := func() error {
-		// TODO (msbutler): detect if the sst contains a version of the key not in
-		// the engine, and if so, increment ContainsEstimates.
-		sstIter.NextKey()
-		return nil
+
+		checkEngIterValid := func() error {
+			ok, err := engIter.Valid()
+			if err != nil {
+				return err
+			}
+			if !ok {
+				// We've exhausted the eng iter after detecting sstKey == engKey, but
+				// there there exists a valid sstIter key that is not already in the
+				// engine.
+				//
+				// sst:    a2
+				// eng: a3
+				return ComputeStatsDiffViolation
+
+			}
+			return nil
+		}
+
+		curSSTKey := sstIter.UnsafeKey()
+		// First advance the engine iterator to the sstIterator mvcc key. Recall we
+		// entered this function with the following properties: sstKey == engKey and
+		// engKeyTimestamp >= sstKeyTimestamp-- i.e. a4 or a3 below:
+		//
+		// sst:         a2, a1
+		// eng: a4, a3, a2, a1
+		engIter.SeekGE(curSSTKey)
+		if err := checkEngIterValid(); err != nil {
+			return err
+		}
+
+		newSSTKey := MVCCKey{}
+		for {
+			// At the top of the loop, both are iterators are valid, and should
+			// be equal if shadowing assumptions are held.
+			engIterKey = engIter.UnsafeKey()
+			if curSSTKey.Compare(engIterKey) != 0 {
+				// The current sstKey does not exist in the engine.
+				return ComputeStatsDiffViolation
+			}
+
+			// The current engine and sst keys match. Move to next mvcc verstion.
+			sstIter.Next()
+
+			if ok, err := sstIter.Valid(); !ok || err != nil {
+				return err
+			}
+			newSSTKey = sstIter.UnsafeKey()
+
+			if curSSTKey.Key.Less(newSSTKey.Key) {
+				// sstIterator now lives on the next key, so we have finished processing
+				// duplicates.
+				return nil
+			}
+
+			curSSTKey.Key = append(curSSTKey.Key[:0], newSSTKey.Key...)
+			curSSTKey.Timestamp = newSSTKey.Timestamp
+
+			engIter.Next()
+			if err := checkEngIterValid(); err != nil {
+				return err
+			}
+		}
 	}
 
 	prevSSTKey := NilKey
