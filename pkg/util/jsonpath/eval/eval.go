@@ -144,6 +144,16 @@ func jsonpathQuery(
 	return ctx.eval(expr.Path, ctx.root, !ctx.strict /* unwrap */)
 }
 
+// eval evaluates a JSONPath expression against a JSON value and returns a slice of results.
+//
+// Return value semantics are critical for proper JSONPath behavior:
+//   - nil slice: Path evaluation failed or path does not exist (e.g., $.nonexistent)
+//     In comparisons: returns unknown/null in strict mode, false in lax mode
+//   - Empty slice ([]json.JSON{}): Path exists but contains no items (e.g., empty array [])
+//     In comparisons: returns false in lax mode (no items to compare)
+//   - Non-empty slice: Path found one or more matching items
+//
+// This distinction is essential for JSONPath comparison operations to match PostgreSQL behavior.
 func (ctx *jsonpathCtx) eval(
 	jsonPath jsonpath.Path, jsonValue json.JSON, unwrap bool,
 ) ([]json.JSON, error) {
@@ -219,7 +229,8 @@ func (ctx *jsonpathCtx) executeAnyItem(
 	jsonPath jsonpath.Path, jsonValue json.JSON, unwrapNext bool,
 ) ([]json.JSON, error) {
 	if jsonValue.Len() == 0 {
-		return nil, nil
+		// Return empty slice (not nil) to indicate "empty array found" vs "path not found".
+		return []json.JSON{}, nil
 	}
 	var agg []json.JSON
 	processItem := func(item json.JSON) error {
@@ -284,6 +295,10 @@ func (ctx *jsonpathCtx) evalAndUnwrapResult(
 			} else {
 				agg = append(agg, j)
 			}
+		}
+		// If agg is nil, return an empty slice to distinguish empty arrays from missing paths
+		if agg == nil {
+			return []json.JSON{}, nil
 		}
 		return agg, nil
 	}

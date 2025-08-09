@@ -290,6 +290,16 @@ func (ctx *jsonpathCtx) evalPredicate(
 		right = append(right, nil)
 	}
 
+	// In lax mode, if either operand is empty (empty array unwrapped),
+	// no items to compare means no matches found -> false
+	// Note: For OpLikeRegex, evalRight is false and right contains [nil], so we only check left
+	if !ctx.strict && len(left) == 0 {
+		return jsonpathBoolFalse, nil
+	}
+	if !ctx.strict && evalRight && len(right) == 0 {
+		return jsonpathBoolFalse, nil
+	}
+
 	errored := false
 	found := false
 	for _, l := range left {

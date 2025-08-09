@@ -947,10 +947,142 @@ SELECT jsonb_path_query('{"a": [1, 2], "b": "hello"}', '$.a ? ($.b == "hello") '
 1
 2
 
+# Test empty array comparisons in lax mode (should return false) - Issue #145099
+query T
+SELECT jsonb_path_query('{"a": [1], "b": []}', '$.a == $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": []}', '$.a == $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": {}}', '$.a == $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": {"c": 1}}', '$.a == $.b')
+----
+false
+
+# Test empty array comparisons with different operators in lax mode
+query T
+SELECT jsonb_path_query('{"a": [], "b": []}', '$.a != $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [1], "b": []}', '$.a != $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": [1]}', '$.a < $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": [1]}', '$.a <= $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": [1]}', '$.a > $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": [1]}', '$.a >= $.b')
+----
+false
+
+# Test empty array comparisons in strict mode (should return null)
+query T
+SELECT jsonb_path_query('{"a": [1], "b": []}', 'strict $.a == $.b')
+----
+NULL
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": []}', 'strict $.a == $.b')
+----
+NULL
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": {}}', 'strict $.a == $.b')
+----
+NULL
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": {"c": 1}}', 'strict $.a == $.b')
+----
+NULL
+
+# Test mixed empty/non-empty arrays
+query T
+SELECT jsonb_path_query('{"a": [1, 2], "b": []}', '$.a == $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": [1, 2]}', '$.a == $.b')
+----
+false
+
+# Test empty array vs specific value types
+query T
+SELECT jsonb_path_query('{"a": [], "b": [null]}', '$.a == $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": [0]}', '$.a == $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": [false]}', '$.a == $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": [""]}', '$.a == $.b')
+----
+false
+
+# Regression tests - ensure existing behavior is preserved
+query T
+SELECT jsonb_path_query('{"a": [1], "b": [1]}', '$.a == $.b')
+----
+true
+
+query T
+SELECT jsonb_path_query('{"a": [1], "b": [2]}', '$.a == $.b')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": "test", "b": "test"}', '$.a == $.b')
+----
+true
+
 query T
 SELECT jsonb_path_query('{"a": [1, 2], "b": "hello"}', 'strict $.a ? ($.b == "hello") ');
 ----
 [1, 2]
+
+# Test logical operators with empty arrays
+query T
+SELECT jsonb_path_query('{"a": [], "b": []}', '$ ? ($.a == $.b || $.a != $.b)')
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": [], "b": []}', '$ ? ($.a == $.b && $.a != $.b)')
+----
+false
 
 query T rowsort
 SELECT jsonb_path_query('{"a": "world", "b": 2, "c": true}', '$.*');
