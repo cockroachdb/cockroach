@@ -118,38 +118,45 @@ func getColumnValue(
 	indexes []int,
 	i int,
 ) string {
-	var raw string
-	if allPksAreFK && (p.Clause == insert || p.Clause == update) {
-		tableName := getTableName(p, d)
-		key := fmt.Sprintf("%s.%s", tableName, p.Name)
-		fk := d.columnGens[key].columnMeta.FK
-		parts := strings.Split(fk, ".")
-		parentCol := parts[len(parts)-1] // The last part is the column name.
-		if vals, ok := inserted[parentCol]; ok && len(vals) > 0 {
-			raw = vals[0].(string)         // Using the first value from the inserted map.
-			inserted[parentCol] = vals[1:] // Remove the first value from the map.
-		} else {
-			//Fallback that shouldn't really happen.
-			raw = d.getRegularColumnValue(p, indexes[i])
-		}
-	} else {
-		raw = d.getRegularColumnValue(p, indexes[i])
+	// If not all PKs are FKs or if the clause is not insert/update, use regular column value
+	if !allPksAreFK || (p.Clause != insert && p.Clause != update) {
+		return d.getRegularColumnValue(p, indexes[i])
 	}
-	return raw
+
+	// Handle the case where all PKs are FKs and clause is insert/update
+	tableName := getTableName(p, d)
+	key := fmt.Sprintf("%s.%s", tableName, p.Name)
+	fk := d.columnGens[key].columnMeta.FK
+	parts := strings.Split(fk, ".")
+	parentCol := parts[len(parts)-1] // The last part is the column name.
+
+	// Check if we have inserted values for this parent column
+	if vals, ok := inserted[parentCol]; ok && len(vals) > 0 {
+		raw := vals[0].(string)        // Using the first value from the inserted map.
+		inserted[parentCol] = vals[1:] // Remove the first value from the map.
+		return raw
+	}
+
+	// Fallback that shouldn't really happen
+	return d.getRegularColumnValue(p, indexes[i])
 }
 
 // checkIfAllPkAreFk checks if all primary keys in the SQL query are foreign keys.
 func checkIfAllPkAreFk(sqlQuery SQLQuery, d *workloadGenerator) bool {
-	allPksAreFK := true
+	pkCount := 0
+	pkWithFkCount := 0
 	for _, p := range sqlQuery.Placeholders {
 		tableName := getTableName(p, d)
 		key := fmt.Sprintf("%s.%s", tableName, p.Name)
-		if p.IsPrimaryKey && !d.columnGens[key].columnMeta.HasForeignKey {
-			allPksAreFK = false
-			break
+		if p.IsPrimaryKey {
+			// Here we check if the column is a primary key and if it has a foreign key.
+			pkCount++
+			if d.columnGens[key].columnMeta.HasForeignKey {
+				pkWithFkCount++
+			}
 		}
 	}
-	return allPksAreFK
+	return pkCount == pkWithFkCount && pkCount > 0
 }
 
 // readSQL reads <dbName><read/write>.sql and returns a slice of Transactions.
@@ -172,39 +179,48 @@ func readSQL(path, typ string) ([]Transaction, error) {
 	// Each transaction block
 	blocks := txnRe.FindAllStringSubmatch(text, -1)
 
-	// Currently we are defining two types of transactions - read and write.
-	var txns []Transaction
+	// Pre-allocate the transactions slice with the expected capacity
+	txns := make([]Transaction, 0, len(blocks))
+
 	// For every transaction block.
 	for _, blk := range blocks {
 		body := blk[1]
 		lines := strings.Split(body, "\n")
-		var txn Transaction
-		var curr SQLQuery
+		txn := Transaction{typ: typ} // Set the type immediately
+
+		var currBuilder strings.Builder
+
 		// For every sql query line.
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
 			if line == "" || line == "BEGIN;" || line == "COMMIT;" {
 				continue
 			}
+
 			// build up the SQL text
-			curr.SQL += line + " "
+			currBuilder.WriteString(line)
+			currBuilder.WriteString(" ")
+
 			if strings.HasSuffix(line, ";") {
 				// once we hit the end of a statement, re-number from $1
 				stmtPos := 1
 				var placeholders []Placeholder
-				// sqlOut is the rewritten SQL where the placeholders have been replaced with $x.
-				sqlOut := placeholderRe.ReplaceAllStringFunc(curr.SQL, getPlaceholderReplacer(&placeholders, &stmtPos))
+				currSQL := currBuilder.String()
 
-				curr.SQL = strings.TrimSpace(sqlOut)
-				curr.Placeholders = placeholders
-				txn.Queries = append(txn.Queries, curr)
+				// sqlOut is the rewritten SQL where the placeholders have been replaced with $x.
+				sqlOut := placeholderRe.ReplaceAllStringFunc(currSQL, getPlaceholderReplacer(&placeholders, &stmtPos))
+
+				// Create a new SQLQuery and add it to the transaction
+				txn.Queries = append(txn.Queries, SQLQuery{
+					SQL:          strings.TrimSpace(sqlOut),
+					Placeholders: placeholders,
+				})
 
 				// reset for next statement
-				curr = SQLQuery{}
+				currBuilder.Reset()
 			}
 		}
-		// Decide whether the transaction is a read type or write type.
-		txn.typ = typ
+
 		txns = append(txns, txn)
 	}
 
@@ -218,26 +234,51 @@ func getPlaceholderReplacer(placeholders *[]Placeholder, stmtPos *int) func(stri
 		inner := placeholderRe.FindStringSubmatch(match)[1]
 		parts := splitQuoted(inner)
 
-		var p Placeholder
-		//Set all the fields in the placeholder struct based on the information from the sql.
-		p.Name = trimQuotes(parts[0])
-		p.ColType = trimQuotes(parts[1])
-		p.IsNullable = trimQuotes(parts[2]) == "NULL"
-		p.IsPrimaryKey = strings.Contains(trimQuotes(parts[3]), "PRIMARY KEY")
-		if d := trimQuotes(parts[4]); d != "" {
-			p.Default = &d
+		// Pre-allocate the placeholder with the expected fields
+		p := Placeholder{
+			Position: *stmtPos,
 		}
-		p.IsUnique = trimQuotes(parts[5]) == "UNIQUE"
-		if fk := trimQuotes(parts[6]); fk != "" {
-			fkParts := strings.Split(strings.TrimPrefix(fk, "FK→"), ".")
-			p.FKReference = &FKRef{Table: fkParts[0], Column: fkParts[1]}
+
+		// Process parts in a single pass
+		if len(parts) > 0 {
+			p.Name = trimQuotes(parts[0])
 		}
-		if chk := trimQuotes(parts[7]); chk != "" {
-			p.InlineCheck = &chk
+		if len(parts) > 1 {
+			p.ColType = trimQuotes(parts[1])
 		}
-		p.Clause = trimQuotes(parts[8])
-		p.Position = *stmtPos
-		p.TableName = trimQuotes(parts[9])
+		if len(parts) > 2 {
+			p.IsNullable = trimQuotes(parts[2]) == "NULL"
+		}
+		if len(parts) > 3 {
+			p.IsPrimaryKey = strings.Contains(trimQuotes(parts[3]), "PRIMARY KEY")
+		}
+		if len(parts) > 4 {
+			if d := trimQuotes(parts[4]); d != "" {
+				p.Default = &d
+			}
+		}
+		if len(parts) > 5 {
+			p.IsUnique = trimQuotes(parts[5]) == "UNIQUE"
+		}
+		if len(parts) > 6 {
+			if fk := trimQuotes(parts[6]); fk != "" {
+				fkParts := strings.Split(strings.TrimPrefix(fk, "FK→"), ".")
+				if len(fkParts) > 1 {
+					p.FKReference = &FKRef{Table: fkParts[0], Column: fkParts[1]}
+				}
+			}
+		}
+		if len(parts) > 7 {
+			if chk := trimQuotes(parts[7]); chk != "" {
+				p.InlineCheck = &chk
+			}
+		}
+		if len(parts) > 8 {
+			p.Clause = trimQuotes(parts[8])
+		}
+		if len(parts) > 9 {
+			p.TableName = trimQuotes(parts[9])
+		}
 
 		*stmtPos++
 		*placeholders = append(*placeholders, p)
@@ -248,27 +289,30 @@ func getPlaceholderReplacer(placeholders *[]Placeholder, stmtPos *int) func(stri
 // splitQuoted splits a string like "'a','b','c'" into ["'a'", "'b'", "'c'"].
 func splitQuoted(s string) []string {
 	var out []string
-	buf := ""
+	var buf strings.Builder
 	inQuote := false
+
 	for _, r := range s {
 		switch r {
 		case '\'':
 			inQuote = !inQuote
-			buf += string(r)
+			buf.WriteRune(r)
 		case ',':
 			if inQuote {
-				buf += string(r)
+				buf.WriteRune(r)
 			} else {
-				out = append(out, strings.TrimSpace(buf))
-				buf = ""
+				out = append(out, strings.TrimSpace(buf.String()))
+				buf.Reset()
 			}
 		default:
-			buf += string(r)
+			buf.WriteRune(r)
 		}
 	}
-	if buf != "" {
-		out = append(out, strings.TrimSpace(buf))
+
+	if buf.Len() > 0 {
+		out = append(out, strings.TrimSpace(buf.String()))
 	}
+
 	return out
 }
 
