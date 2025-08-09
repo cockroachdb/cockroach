@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -81,8 +82,16 @@ func validateExternalConnectionSinkURI(
 	if err != nil {
 		return errors.Wrap(err, "invalid changefeed sink URI")
 	}
-	if err := s.Close(); err != nil {
-		return errors.Wrap(err, "failed to close canary sink")
+	defer func() {
+		if err := s.Close(); err != nil {
+			// Log the error but don't override the primary validation error
+			log.Warningf(ctx, "failed to close canary sink: %v", err)
+		}
+	}()
+
+	// Dial the sink to ensure it can actually connect to the target.
+	if err := s.Dial(); err != nil {
+		return errors.Wrap(err, "failed to dial changefeed sink")
 	}
 
 	return nil
