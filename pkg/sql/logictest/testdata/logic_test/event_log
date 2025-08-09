@@ -482,12 +482,12 @@ AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
 ORDER BY "timestamp", info
 ----
-1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}
-1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
-1  {"EventType": "set_cluster_setting", "SettingName": "feature.vector_index.enabled", "Statement": "SET CLUSTER SETTING \"feature.vector_index.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
-1  {"EventType": "set_cluster_setting", "SettingName": "sql.vecindex.deterministic_fixups.enabled", "Statement": "SET CLUSTER SETTING \"sql.vecindex.deterministic_fixups.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
-1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
-1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}
+1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "DefaultValue": "true", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}
+1  {"DefaultValue": "-10s", "EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
+1  {"DefaultValue": "false", "EventType": "set_cluster_setting", "SettingName": "feature.vector_index.enabled", "Statement": "SET CLUSTER SETTING \"feature.vector_index.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
+1  {"DefaultValue": "false", "EventType": "set_cluster_setting", "SettingName": "sql.vecindex.deterministic_fixups.enabled", "Statement": "SET CLUSTER SETTING \"sql.vecindex.deterministic_fixups.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
+1  {"DefaultValue": "true", "EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = false", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "false"}
+1  {"DefaultValue": "true", "EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = DEFAULT", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "DEFAULT"}
 1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.label", "Statement": "SET CLUSTER SETTING \"cluster.label\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
 
 onlyif config 3node-tenant-default-configs
@@ -503,10 +503,10 @@ AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
 ORDER BY "timestamp", info
 ----
-1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}
-1  {"EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
-1  {"EventType": "set_cluster_setting", "SettingName": "feature.vector_index.enabled", "Statement": "SET CLUSTER SETTING \"feature.vector_index.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
-1  {"EventType": "set_cluster_setting", "SettingName": "sql.vecindex.deterministic_fixups.enabled", "Statement": "SET CLUSTER SETTING \"sql.vecindex.deterministic_fixups.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
+1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "DefaultValue": "true", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}
+1  {"DefaultValue": "-10s", "EventType": "set_cluster_setting", "SettingName": "sql.crdb_internal.table_row_statistics.as_of_time", "Statement": "SET CLUSTER SETTING \"sql.crdb_internal.table_row_statistics.as_of_time\" = e'-1\\u00B5s'", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "-00:00:00.000001"}
+1  {"DefaultValue": "false", "EventType": "set_cluster_setting", "SettingName": "feature.vector_index.enabled", "Statement": "SET CLUSTER SETTING \"feature.vector_index.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
+1  {"DefaultValue": "false", "EventType": "set_cluster_setting", "SettingName": "sql.vecindex.deterministic_fixups.enabled", "Statement": "SET CLUSTER SETTING \"sql.vecindex.deterministic_fixups.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
 1  {"EventType": "set_cluster_setting", "PlaceholderValues": ["'some string'"], "SettingName": "cluster.label", "Statement": "SET CLUSTER SETTING \"cluster.label\" = $1", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "'some string'"}
 
 # Set and unset zone configs
