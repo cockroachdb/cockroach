@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "unsafe",
+    srcs = ["unsafe.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/unsafe",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlerrors",
+        "//pkg/util/log",
+    ],
+)
+
+go_test(
+    name = "unsafe_test",
+    srcs = ["unsafe_test.go"],
+)
