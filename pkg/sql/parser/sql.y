@@ -3839,7 +3839,7 @@ alter_external_connection_stmt:
 				 ConnectionLabelSpec: *($4.labelSpec()),
 		     As: $6.expr(),
 		}
-	} 
+	}
 | ALTER EXTERNAL CONNECTION IF EXISTS /*$6=*/label_spec AS /*$8=*/string_or_placeholder
 	{
 		   $$.val = &tree.AlterExternalConnection{
@@ -4911,11 +4911,11 @@ logical_replication_create_table_options:
   }
 | UNIDIRECTIONAL
   {
-   $$.val = &tree.LogicalReplicationOptions{Unidirectional: tree.MakeDBool(true)} 
+   $$.val = &tree.LogicalReplicationOptions{Unidirectional: tree.MakeDBool(true)}
   }
 | BIDIRECTIONAL ON string_or_placeholder
   {
-   $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()} 
+   $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()}
   }
 
 
@@ -9290,7 +9290,15 @@ show_jobs_stmt:
   }
 | SHOW JOBS WHEN COMPLETE select_stmt
   {
-    $$.val = &tree.ShowJobs{Jobs: $5.slct(), Block: true}
+    $$.val = &tree.ShowJobs{Jobs: $5.slct(), Block: true, BlockTarget: tree.BlockTargetFinished}
+  }
+| SHOW JOBS WHEN PAUSED select_stmt
+  {
+    $$.val = &tree.ShowJobs{Jobs: $5.slct(), Block: true, BlockTarget: tree.BlockTargetPaused}
+  }
+| SHOW JOBS WHEN RUNNING select_stmt
+  {
+    $$.val = &tree.ShowJobs{Jobs: $5.slct(), Block: true, BlockTarget: tree.BlockTargetRunning}
   }
 | SHOW JOBS for_schedules_clause
   {
@@ -9333,6 +9341,27 @@ show_jobs_stmt:
         Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$5.expr()}}},
       },
       Block: true,
+      BlockTarget: tree.BlockTargetFinished,
+    }
+  }
+| SHOW JOB WHEN PAUSED a_expr
+  {
+    $$.val = &tree.ShowJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$5.expr()}}},
+      },
+      Block: true,
+      BlockTarget: tree.BlockTargetPaused,
+    }
+  }
+| SHOW JOB WHEN RUNNING a_expr
+  {
+    $$.val = &tree.ShowJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$5.expr()}}},
+      },
+      Block: true,
+      BlockTarget: tree.BlockTargetRunning,
     }
   }
 | SHOW JOB error // SHOW HELP: SHOW JOBS

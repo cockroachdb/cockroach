@@ -488,6 +488,9 @@ type ShowJobs struct {
 	// Whether to block and wait for completion of all running jobs to be displayed.
 	Block bool
 
+	// Block until which terminal status is reached
+	BlockTarget BlockTarget
+
 	// If non-nil, only display jobs started by the specified
 	// schedules.
 	Schedules *Select
@@ -504,7 +507,15 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 	}
 	ctx.WriteString("JOBS")
 	if node.Block {
-		ctx.WriteString(" WHEN COMPLETE")
+		ctx.WriteString(" WHEN ")
+		switch node.BlockTarget {
+		case BlockTargetFinished:
+			ctx.WriteString("COMPLETE")
+		case BlockTargetPaused:
+			ctx.WriteString("PAUSED")
+		case BlockTargetRunning:
+			ctx.WriteString("RUNNING")
+		}
 	}
 	if node.Jobs != nil {
 		ctx.WriteString(" ")
@@ -519,6 +530,14 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Options)
 	}
 }
+
+type BlockTarget string
+
+const (
+	BlockTargetFinished BlockTarget = ""
+	BlockTargetPaused   BlockTarget = "paused"
+	BlockTargetRunning  BlockTarget = "running"
+)
 
 // ShowJobOptions describes options for the SHOW JOB execution.
 type ShowJobOptions struct {
