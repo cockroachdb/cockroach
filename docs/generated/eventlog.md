@@ -797,6 +797,42 @@ a table marked as audited.
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 | `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
+### `unsafe_table_access`
+
+An event of type `unsafe_table_access` is recorded when an access is performed to
+an unsafe internal table.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Query` | The query which generated this access. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
+| `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
+| `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
+| `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
+| `ErrorText` | The text of the error if any. | partially |
+| `Age` | Age of the query in milliseconds. | no |
+| `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
+| `FullTableScan` | Whether the query contains a full table scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
+| `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
+| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
+
 ## SQL Execution Log
 
 Events in this category report executed queries.

@@ -742,6 +742,13 @@ func (oc *optCatalog) codec() keys.SQLCodec {
 	return oc.planner.ExecCfg().Codec
 }
 
+func (oc *optCatalog) DisableUnsafeInternalCheck() func() {
+	oc.planner.skipUnsafeInternalsCheck = true
+	return func() {
+		oc.planner.skipUnsafeInternalsCheck = false
+	}
+}
+
 // optView is a wrapper around catalog.TableDescriptor that implements
 // the cat.Object, cat.DataSource, and cat.View interfaces.
 type optView struct {

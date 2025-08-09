@@ -286,4 +286,7 @@ type Catalog interface {
 
 	// IsOwner returns true if user is the owner of the object o
 	IsOwner(ctx context.Context, o Object, user username.SQLUsername) (bool, error)
+
+	// DisableUnsafeInternalCheck disables the checks on unsafe internal access
+	DisableUnsafeInternalCheck() func()
 }
