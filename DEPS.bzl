@@ -858,6 +858,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_azure_azure_sdk_for_go_sdk_resourcemanager_authorization_armauthorization_v3",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization/v3",
+        sha256 = "65c9ee8d60edb9b4e798e7bd8be18f585d8de36ab01413dfc44c2ed76c5e3215",
+        strip_prefix = "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization/v3@v3.0.0-beta.2",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization/v3/com_github_azure_azure_sdk_for_go_sdk_resourcemanager_authorization_armauthorization_v3-v3.0.0-beta.2.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_azure_azure_sdk_for_go_sdk_resourcemanager_compute_armcompute",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute",
