@@ -30,7 +30,7 @@
   - 24.2.1
   predecessor: "24.1"
 "24.3":
-  latest: 24.3.17
+  latest: 24.3.18
   predecessor: "24.2"
 "25.1":
   latest: 25.1.10
