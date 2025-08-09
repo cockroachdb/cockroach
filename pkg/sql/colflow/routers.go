@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -270,12 +269,14 @@ func (o *routerOutputOp) Next() coldata.Batch {
 }
 
 func (o *routerOutputOp) DrainMeta() []execinfrapb.ProducerMetadata {
-	o.mu.Lock()
-	o.maybeUnblockLocked()
-	// The call to DrainMeta() indicates that the caller will no longer need any
-	// more data from this output, so we can close it.
-	o.closeLocked(o.Ctx)
-	o.mu.Unlock()
+	func() {
+		o.mu.Lock()
+		defer o.mu.Unlock()
+		o.maybeUnblockLocked()
+		// The call to DrainMeta() indicates that the caller will no longer need
+		// any more data from this output, so we can close it.
+		o.closeLocked(o.Ctx)
+	}()
 	return o.drainCoordinator.drainMeta()
 }
 
@@ -295,12 +296,7 @@ func (o *routerOutputOp) initWithHashRouter(r *HashRouter) {
 // possible disk infrastructure. It is safe to be called multiple times.
 func (o *routerOutputOp) closeLocked(ctx context.Context) {
 	o.mu.state = routerOutputOpDraining
-	if err := o.mu.data.Close(ctx); err != nil {
-		// This log message is Info instead of Warning because the flow will also
-		// attempt to clean up the parent directory, so this failure might not have
-		// any effect.
-		log.Infof(ctx, "error closing vectorized hash router output, files may be left over: %s", err)
-	}
+	o.mu.data.Close(ctx)
 }
 
 // cancel wakes up a reader in Next if there is one and results in the output
@@ -309,12 +305,12 @@ func (o *routerOutputOp) closeLocked(ctx context.Context) {
 func (o *routerOutputOp) cancel(ctx context.Context, err error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.closeLocked(ctx)
 	o.forwardErrLocked(err)
 	// Some goroutine might be waiting on the condition variable, so wake it up.
 	// Note that read goroutines check o.mu.done, so won't wait on the condition
 	// variable after we unlock the mutex.
 	o.mu.cond.Signal()
+	o.closeLocked(ctx)
 }
 
 func (o *routerOutputOp) forwardErrLocked(err error) {

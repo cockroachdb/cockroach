@@ -139,9 +139,7 @@ func (h *hashGroupJoiner) ReleaseAfterExport(input colexecop.Operator) {
 		// Resources have already been released.
 		return
 	}
-	if err := h.hjLeftSource.sq.Close(h.Ctx); err != nil {
-		colexecerror.InternalError(err)
-	}
+	h.hjLeftSource.sq.Close(h.Ctx)
 	h.hjLeftSource.sq = nil
 }
 
@@ -206,7 +204,7 @@ func (c *copyingOperator) Close(ctx context.Context) error {
 	if c.sq == nil {
 		return nil
 	}
-	err := c.sq.Close(ctx)
+	c.sq.Close(ctx)
 	c.sq = nil
-	return err
+	return nil
 }
