@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -395,13 +395,22 @@ func datumToProtoValue(
 		if err != nil {
 			return nil, err
 		}
-		return &changefeedpb.Value{Value: &changefeedpb.Value_TimestampValue{TimestampValue: ts}}, nil
+		return &changefeedpb.Value{
+			Value: &changefeedpb.Value_TimestampValue{
+				TimestampValue: ts,
+			},
+		}, nil
+
 	case *tree.DTimestamp:
 		ts, err := types.TimestampProto(v.Time.UTC())
 		if err != nil {
 			return nil, err
 		}
-		return &changefeedpb.Value{Value: &changefeedpb.Value_TimestampValue{TimestampValue: ts}}, nil
+		return &changefeedpb.Value{
+			Value: &changefeedpb.Value_TimestampValue{
+				TimestampValue: ts,
+			},
+		}, nil
 	case *tree.DBytes:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_BytesValue{BytesValue: []byte(*v)}}, nil
 	case *tree.DGeography:
