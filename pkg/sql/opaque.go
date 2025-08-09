@@ -236,7 +236,7 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 	case *tree.GrantRole:
 		return p.GrantRole(ctx, n)
 	case *tree.MoveCursor:
-		return p.FetchCursor(ctx, &n.CursorStmt)
+		return p.MoveCursor(ctx, &n.CursorStmt)
 	case *tree.ReassignOwnedBy:
 		return p.ReassignOwnedBy(ctx, n)
 	case *tree.RefreshMaterializedView:

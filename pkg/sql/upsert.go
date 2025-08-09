@@ -9,11 +9,19 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 var upsertNodePool = sync.Pool{
@@ -43,106 +51,43 @@ type upsertRun struct {
 	// insertCols are the columns being inserted/upserted into.
 	insertCols []catalog.Column
 
-	// done informs a new call to BatchedNext() that the previous call to
-	// BatchedNext() has completed the work already.
-	done bool
-
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
 
 	originTimestampCPutHelper row.OriginTimestampCPutHelper
 }
 
-func (r *upsertRun) init(params runParams) {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+func (r *upsertRun) init(ctx context.Context, evalCtx *eval.Context, txn *kv.Txn) error {
+	if ots := evalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
 	}
+	return r.tw.init(ctx, txn, evalCtx)
 }
 
 func (n *upsertNode) startExec(params runParams) error {
-	// cache traceKV during execution, to avoid re-evaluating it for every row.
-	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
-
-	n.run.init(params)
-
-	return n.run.tw.init(params.ctx, params.p.txn, params.EvalContext())
+	panic("upsertNode cannot be run in local mode")
 }
 
-// Next is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (n *upsertNode) Next(params runParams) (bool, error) { panic("not valid") }
+// Next implements the planNode interface.
+func (n *upsertNode) Next(_ runParams) (bool, error) {
+	panic("upsertNode cannot be run in local mode")
+}
 
-// Values is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (n *upsertNode) Values() tree.Datums { panic("not valid") }
-
-// BatchedNext implements the batchedPlanNode interface.
-func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
-	if n.run.done {
-		return false, nil
-	}
-
-	// Advance one batch. First, clear the last batch.
-	n.run.tw.clearLastBatch(params.ctx)
-
-	// Now consume/accumulate the rows for this batch.
-	lastBatch := false
-	for {
-		if err := params.p.cancelChecker.Check(); err != nil {
-			return false, err
-		}
-
-		// Advance one individual row.
-		if next, err := n.input.Next(params); !next {
-			lastBatch = true
-			if err != nil {
-				return false, err
-			}
-			break
-		}
-
-		// Process the insertion for the current input row, potentially
-		// accumulating the result row for later.
-		if err := n.run.processSourceRow(params, n.input.Values()); err != nil {
-			return false, err
-		}
-
-		// Are we done yet with the current batch?
-		if n.run.tw.currentBatchSize >= n.run.tw.maxBatchSize ||
-			n.run.tw.b.ApproximateMutationBytes() >= n.run.tw.maxBatchByteSize {
-			break
-		}
-	}
-
-	if n.run.tw.currentBatchSize > 0 {
-		if !lastBatch {
-			// We only run/commit the batch if there were some rows processed
-			// in this batch.
-			if err := n.run.tw.flushAndStartNewBatch(params.ctx); err != nil {
-				return false, err
-			}
-		}
-	}
-
-	if lastBatch {
-		n.run.tw.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err := n.run.tw.finalize(params.ctx); err != nil {
-			return false, err
-		}
-		// Remember we're done for the next call to BatchedNext().
-		n.run.done = true
-		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(n.run.tw.tableDesc(), int(n.run.tw.rowsWritten))
-	}
-
-	return n.run.tw.lastBatchSize > 0, nil
+// Values implements the planNode interface.
+func (n *upsertNode) Values() tree.Datums {
+	panic("upsertNode cannot be run in local mode")
 }
 
 // processSourceRow processes one row from the source for upsertion.
 // The table writer is in charge of accumulating the result rows.
-func (r *upsertRun) processSourceRow(params runParams, rowVals tree.Datums) error {
+func (r *upsertRun) processSourceRow(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	execCfg *ExecutorConfig,
+	rowVals tree.Datums,
+) error {
 	// Check for NOT NULL constraint violations.
 	if r.tw.canaryOrdinal != -1 && rowVals[r.tw.canaryOrdinal] != tree.DNull {
 		// When there is a canary column and its value is not NULL, then an
@@ -176,7 +121,7 @@ func (r *upsertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	// contain the results of evaluation.
 	if !r.checkOrds.Empty() {
 		if err := checkMutationInput(
-			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
+			ctx, evalCtx, semaCtx, sessionData,
 			r.tw.tableDesc(), r.checkOrds, rowVals[:r.checkOrds.Len()],
 		); err != nil {
 			return err
@@ -206,21 +151,15 @@ func (r *upsertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 
 	if buildutil.CrdbTestBuild {
 		// This testing knob allows us to suspend execution to force a race condition.
-		if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
+		if fn := execCfg.TestingKnobs.AfterArbiterRead; fn != nil {
 			fn()
 		}
 	}
 
 	// Process the row. This is also where the tableWriter will accumulate
 	// the row for later.
-	return r.tw.row(params.ctx, upsertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV)
+	return r.tw.row(ctx, upsertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV)
 }
-
-// BatchedCount implements the batchedPlanNode interface.
-func (n *upsertNode) BatchedCount() int { return n.run.tw.lastBatchSize }
-
-// BatchedValues implements the batchedPlanNode interface.
-func (n *upsertNode) BatchedValues(rowIdx int) tree.Datums { return n.run.tw.rows.At(rowIdx) }
 
 func (n *upsertNode) Close(ctx context.Context) {
 	n.input.Close(ctx)
@@ -230,9 +169,185 @@ func (n *upsertNode) Close(ctx context.Context) {
 }
 
 func (n *upsertNode) rowsWritten() int64 {
-	return n.run.tw.rowsWritten
+	return n.run.tw.modifiedRowCount()
+}
+
+func (n *upsertNode) returnsRowsAffected() bool {
+	return !n.run.tw.rowsNeeded
 }
 
 func (n *upsertNode) enableAutoCommit() {
 	n.run.tw.enableAutoCommit()
+}
+
+// upsertProcessor is a LocalProcessor that wraps upsertNode execution logic.
+type upsertProcessor struct {
+	execinfra.ProcessorBase
+
+	input execinfra.RowSource
+	node  *upsertNode
+
+	outputTypes []*types.T
+
+	datumAlloc      tree.DatumAlloc
+	datumScratch    tree.Datums
+	encDatumScratch rowenc.EncDatumRow
+}
+
+var _ execinfra.LocalProcessor = &upsertProcessor{}
+
+// Init initializes the upsertProcessor.
+func (u *upsertProcessor) Init(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	post *execinfrapb.PostProcessSpec,
+) error {
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("upsert-mem"))
+	return u.InitWithEvalCtx(
+		ctx, u, post, u.outputTypes, flowCtx, flowCtx.EvalCtx, processorID, memMonitor,
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				u.close()
+				return nil
+			},
+		},
+	)
+}
+
+// SetInput sets the input RowSource for the upsertProcessor.
+func (u *upsertProcessor) SetInput(ctx context.Context, input execinfra.RowSource) error {
+	u.input = input
+	u.AddInputToDrain(input)
+	return nil
+}
+
+// Start begins execution of the upsertProcessor.
+func (u *upsertProcessor) Start(ctx context.Context) {
+	u.StartInternal(ctx, "upsertProcessor")
+	u.input.Start(ctx)
+	u.node.run.traceKV = u.FlowCtx.TraceKV
+	if err := u.node.run.init(u.Ctx(), u.FlowCtx.EvalCtx, u.FlowCtx.Txn); err != nil {
+		u.MoveToDraining(err)
+		return
+	}
+
+	// Run the mutation to completion.
+	for {
+		lastBatch, err := u.processBatch()
+		if err != nil {
+			u.MoveToDraining(err)
+			return
+		}
+		if lastBatch {
+			return
+		}
+	}
+}
+
+// processBatch implements the batch processing logic moved from upsertNode.processBatch.
+func (u *upsertProcessor) processBatch() (lastBatch bool, err error) {
+	// Consume/accumulate the rows for this batch.
+	lastBatch = false
+	for {
+		// Check for cancellation.
+		if err = u.Ctx().Err(); err != nil {
+			return false, err
+		}
+
+		// Advance one individual row from input RowSource.
+		row, meta := u.input.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				return false, meta.Err
+			}
+			continue
+		}
+		if row == nil {
+			lastBatch = true
+			break
+		}
+
+		// Convert EncDatumRow to tree.Datums.
+		if cap(u.datumScratch) < len(row) {
+			u.datumScratch = make(tree.Datums, len(row))
+		}
+		datumRow := u.datumScratch[:len(row)]
+		err := rowenc.EncDatumRowToDatums(u.input.OutputTypes(), datumRow, row, &u.datumAlloc)
+		if err != nil {
+			return false, err
+		}
+
+		// Process the upsert of the current input row.
+		execCfg := u.FlowCtx.Cfg.ExecutorConfig.(*ExecutorConfig)
+		if err = u.node.run.processSourceRow(u.Ctx(), u.FlowCtx.EvalCtx, &u.SemaCtx, u.FlowCtx.EvalCtx.SessionData(), execCfg, datumRow); err != nil {
+			return false, err
+		}
+
+		// Are we done yet with the current batch?
+		if u.node.run.tw.currentBatchSize >= u.node.run.tw.maxBatchSize ||
+			u.node.run.tw.b.ApproximateMutationBytes() >= u.node.run.tw.maxBatchByteSize {
+			break
+		}
+	}
+
+	if u.node.run.tw.currentBatchSize > 0 {
+		if !lastBatch {
+			// We only run/commit the batch if there were some rows processed
+			// in this batch.
+			if err = u.node.run.tw.flushAndStartNewBatch(u.Ctx()); err != nil {
+				return false, err
+			}
+		}
+	}
+
+	if lastBatch {
+		u.node.run.tw.setRowsWrittenLimit(u.FlowCtx.EvalCtx.SessionData())
+		if err = u.node.run.tw.finalize(u.Ctx()); err != nil {
+			return false, err
+		}
+		// Possibly initiate a run of CREATE STATISTICS.
+		u.FlowCtx.Cfg.StatsRefresher.NotifyMutation(u.node.run.tw.tableDesc(), int(u.node.run.tw.modifiedRowCount()))
+	}
+	return lastBatch, nil
+}
+
+// Next implements the RowSource interface.
+func (u *upsertProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if u.State != execinfra.StateRunning {
+		return nil, u.DrainHelper()
+	}
+
+	// Return next row from accumulated results.
+	for u.node.run.tw.next() {
+		datumRow := u.node.run.tw.values()
+		if cap(u.encDatumScratch) < len(datumRow) {
+			u.encDatumScratch = make(rowenc.EncDatumRow, len(datumRow))
+		}
+		encRow := u.encDatumScratch[:len(datumRow)]
+		for i, datum := range datumRow {
+			encRow[i] = rowenc.DatumToEncDatum(u.outputTypes[i], datum)
+		}
+		if outRow := u.ProcessRowHelper(encRow); outRow != nil {
+			return outRow, nil
+		}
+	}
+
+	// No more rows to return.
+	u.MoveToDraining(nil)
+	return nil, u.DrainHelper()
+}
+
+func (u *upsertProcessor) close() {
+	if u.InternalClose() {
+		u.node.run.tw.close(u.Ctx())
+		u.node = nil
+		u.MemMonitor.Stop(u.Ctx())
+	}
+}
+
+// ConsumerClosed implements the RowSource interface.
+func (u *upsertProcessor) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	u.close()
 }

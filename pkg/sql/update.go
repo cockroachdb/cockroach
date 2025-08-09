@@ -11,10 +11,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,14 +46,10 @@ var _ mutationPlanNode = &updateNode{}
 
 // updateRun contains the run-time state of updateNode during local execution.
 type updateRun struct {
-	tu         tableUpdater
-	rowsNeeded bool
+	mutationOutputHelper
+	tu tableUpdater
 
 	checkOrds checkSet
-
-	// done informs a new call to BatchedNext() that the previous call to
-	// BatchedNext() has completed the work already.
-	done bool
 
 	// resultRowBuffer is used to prepare a result row for accumulation
 	// into the row container above, when rowsNeeded is set.
@@ -76,16 +79,18 @@ type updateRun struct {
 	originTimestampCPutHelper row.OriginTimestampCPutHelper
 }
 
-func (r *updateRun) init(params runParams, columns colinfo.ResultColumns) {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+func (r *updateRun) init(
+	ctx context.Context, evalCtx *eval.Context, mon *mon.BytesMonitor, columns colinfo.ResultColumns,
+) {
+	if ots := evalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
 	}
 
 	if !r.rowsNeeded {
 		return
 	}
-	r.tu.rows = rowcontainer.NewRowContainer(
-		params.p.Mon().MakeBoundAccount(),
+	r.rows = rowcontainer.NewRowContainer(
+		mon.MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
 	r.resultRowBuffer = make([]tree.Datum, len(columns))
@@ -95,89 +100,28 @@ func (r *updateRun) init(params runParams, columns colinfo.ResultColumns) {
 }
 
 func (u *updateNode) startExec(params runParams) error {
-	// cache traceKV during execution, to avoid re-evaluating it for every row.
-	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
-
-	u.run.init(params, u.columns)
-
-	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
+	panic("updateNode cannot be run in local mode")
 }
 
-// Next is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (u *updateNode) Next(params runParams) (bool, error) { panic("not valid") }
+// Next implements the planNode interface.
+func (u *updateNode) Next(_ runParams) (bool, error) {
+	panic("updateNode cannot be run in local mode")
+}
 
-// Values is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (u *updateNode) Values() tree.Datums { panic("not valid") }
-
-// BatchedNext implements the batchedPlanNode interface.
-func (u *updateNode) BatchedNext(params runParams) (bool, error) {
-	if u.run.done {
-		return false, nil
-	}
-
-	// Advance one batch. First, clear the last batch.
-	u.run.tu.clearLastBatch(params.ctx)
-
-	// Now consume/accumulate the rows for this batch.
-	lastBatch := false
-	for {
-		if err := params.p.cancelChecker.Check(); err != nil {
-			return false, err
-		}
-
-		// Advance one individual row.
-		if next, err := u.input.Next(params); !next {
-			lastBatch = true
-			if err != nil {
-				return false, err
-			}
-			break
-		}
-
-		// Process the update for the current input row, potentially
-		// accumulating the result row for later.
-		if err := u.run.processSourceRow(params, u.input.Values()); err != nil {
-			return false, err
-		}
-
-		// Are we done yet with the current batch?
-		if u.run.tu.currentBatchSize >= u.run.tu.maxBatchSize ||
-			u.run.tu.b.ApproximateMutationBytes() >= u.run.tu.maxBatchByteSize {
-			break
-		}
-	}
-
-	if u.run.tu.currentBatchSize > 0 {
-		if !lastBatch {
-			// We only run/commit the batch if there were some rows processed
-			// in this batch.
-			if err := u.run.tu.flushAndStartNewBatch(params.ctx); err != nil {
-				return false, err
-			}
-		}
-	}
-
-	if lastBatch {
-		u.run.tu.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err := u.run.tu.finalize(params.ctx); err != nil {
-			return false, err
-		}
-		// Remember we're done for the next call to BatchedNext().
-		u.run.done = true
-		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), int(u.run.tu.rowsWritten))
-	}
-
-	return u.run.tu.lastBatchSize > 0, nil
+// Values implements the planNode interface.
+func (u *updateNode) Values() tree.Datums {
+	panic("updateNode cannot be run in local mode")
 }
 
 // processSourceRow processes one row from the source for update and, if
 // result rows are needed, saves it in the result row container.
-func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) error {
+func (r *updateRun) processSourceRow(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	sourceVals tree.Datums,
+) error {
 	// sourceVals contains values for the columns from the table, in the order of the
 	// table descriptor. (One per column in u.tw.ru.FetchCols)
 	//
@@ -210,7 +154,7 @@ func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 	// contain the results of evaluation.
 	if !r.checkOrds.Empty() {
 		if err := checkMutationInput(
-			params.ctx, params.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
+			ctx, evalCtx, semaCtx, sessionData,
 			r.tu.tableDesc(), r.checkOrds, sourceVals[:r.checkOrds.Len()],
 		); err != nil {
 			return err
@@ -247,66 +191,239 @@ func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 
 	// Queue the insert in the KV batch.
 	newValues, err := r.tu.rowForUpdate(
-		params.ctx, oldValues, updateValues, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
+		ctx, oldValues, updateValues, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
 	)
 	if err != nil {
 		return err
 	}
+	// NOTE: we intentionally do not increment the modified row count if there
+	// was an error. UpdateSwap can swallow a ConditionFailedError and no-op, in
+	// which case the count should be left at 0.
+	r.onModifiedRow()
 
-	// If result rows need to be accumulated, do it.
-	if r.tu.rows != nil {
-		// The new values can include all columns,  so the values may contain
-		// additional columns for every newly added column not yet visible. We do
-		// not want them to be available for RETURNING.
-		//
-		// MakeUpdater guarantees that the first columns of the new values
-		// are those specified u.columns.
-		largestRetIdx := -1
-		for i := range r.rowIdxToRetIdx {
-			retIdx := r.rowIdxToRetIdx[i]
-			if retIdx >= 0 {
-				if retIdx >= largestRetIdx {
-					largestRetIdx = retIdx
-				}
-				r.resultRowBuffer[retIdx] = newValues[i]
+	if !r.rowsNeeded {
+		return nil
+	}
+
+	// Result rows must be accumulated.
+	//
+	// The new values can include all columns,  so the values may contain
+	// additional columns for every newly added column not yet visible. We do
+	// not want them to be available for RETURNING.
+	//
+	// MakeUpdater guarantees that the first columns of the new values
+	// are those specified u.columns.
+	largestRetIdx := -1
+	for i := range r.rowIdxToRetIdx {
+		retIdx := r.rowIdxToRetIdx[i]
+		if retIdx >= 0 {
+			if retIdx >= largestRetIdx {
+				largestRetIdx = retIdx
 			}
-		}
-
-		// At this point we've extracted all the RETURNING values that are part
-		// of the target table. We must now extract the columns in the RETURNING
-		// clause that refer to other tables (from the FROM clause of the update).
-		for i := 0; i < r.numPassthrough; i++ {
-			largestRetIdx++
-			r.resultRowBuffer[largestRetIdx] = passthroughValues[i]
-		}
-
-		if _, err := r.tu.rows.AddRow(params.ctx, r.resultRowBuffer); err != nil {
-			return err
+			r.resultRowBuffer[retIdx] = newValues[i]
 		}
 	}
 
-	return nil
+	// At this point we've extracted all the RETURNING values that are part
+	// of the target table. We must now extract the columns in the RETURNING
+	// clause that refer to other tables (from the FROM clause of the update).
+	for i := 0; i < r.numPassthrough; i++ {
+		largestRetIdx++
+		r.resultRowBuffer[largestRetIdx] = passthroughValues[i]
+	}
+
+	return r.addRow(ctx, r.resultRowBuffer)
 }
-
-// BatchedCount implements the batchedPlanNode interface.
-func (u *updateNode) BatchedCount() int { return u.run.tu.lastBatchSize }
-
-// BatchedCount implements the batchedPlanNode interface.
-func (u *updateNode) BatchedValues(rowIdx int) tree.Datums { return u.run.tu.rows.At(rowIdx) }
 
 func (u *updateNode) Close(ctx context.Context) {
 	u.input.Close(ctx)
-	u.run.tu.close(ctx)
+	u.run.close(ctx)
 	*u = updateNode{}
 	updateNodePool.Put(u)
 }
 
 func (u *updateNode) rowsWritten() int64 {
-	return u.run.tu.rowsWritten
+	return u.run.modifiedRowCount()
+}
+
+func (u *updateNode) returnsRowsAffected() bool {
+	return !u.run.rowsNeeded
 }
 
 func (u *updateNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
+}
+
+// updateProcessor is a LocalProcessor that wraps updateNode execution logic.
+type updateProcessor struct {
+	execinfra.ProcessorBase
+
+	input execinfra.RowSource
+	node  *updateNode
+
+	outputTypes []*types.T
+
+	datumAlloc      tree.DatumAlloc
+	datumScratch    tree.Datums
+	encDatumScratch rowenc.EncDatumRow
+}
+
+var _ execinfra.LocalProcessor = &updateProcessor{}
+
+// Init initializes the updateProcessor.
+func (u *updateProcessor) Init(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	post *execinfrapb.PostProcessSpec,
+) error {
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("update-mem"))
+	return u.InitWithEvalCtx(
+		ctx, u, post, u.outputTypes, flowCtx, flowCtx.EvalCtx, processorID, memMonitor,
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				u.close()
+				return nil
+			},
+		},
+	)
+}
+
+// SetInput sets the input RowSource for the updateProcessor.
+func (u *updateProcessor) SetInput(ctx context.Context, input execinfra.RowSource) error {
+	u.input = input
+	u.AddInputToDrain(input)
+	return nil
+}
+
+// Start begins execution of the updateProcessor.
+func (u *updateProcessor) Start(ctx context.Context) {
+	u.StartInternal(ctx, "updateProcessor")
+	u.input.Start(ctx)
+	u.node.run.traceKV = u.FlowCtx.TraceKV
+	u.node.run.init(u.Ctx(), u.FlowCtx.EvalCtx, u.MemMonitor, u.node.columns)
+	if err := u.node.run.tu.init(u.Ctx(), u.FlowCtx.Txn, u.FlowCtx.EvalCtx); err != nil {
+		u.MoveToDraining(err)
+		return
+	}
+
+	// Run the mutation to completion.
+	for {
+		lastBatch, err := u.processBatch()
+		if err != nil {
+			u.MoveToDraining(err)
+			return
+		}
+		if lastBatch {
+			return
+		}
+	}
+}
+
+// processBatch implements the batch processing logic moved from updateNode.processBatch.
+func (u *updateProcessor) processBatch() (lastBatch bool, err error) {
+	// Consume/accumulate the rows for this batch.
+	lastBatch = false
+	for {
+		// Check for cancellation.
+		if err = u.Ctx().Err(); err != nil {
+			return false, err
+		}
+
+		// Advance one individual row from input RowSource.
+		row, meta := u.input.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				return false, meta.Err
+			}
+			continue
+		}
+		if row == nil {
+			lastBatch = true
+			break
+		}
+
+		// Convert EncDatumRow to tree.Datums.
+		if cap(u.datumScratch) < len(row) {
+			u.datumScratch = make(tree.Datums, len(row))
+		}
+		datumRow := u.datumScratch[:len(row)]
+		err := rowenc.EncDatumRowToDatums(u.input.OutputTypes(), datumRow, row, &u.datumAlloc)
+		if err != nil {
+			return false, err
+		}
+
+		// Process the update of the current input row.
+		if err = u.node.run.processSourceRow(u.Ctx(), u.FlowCtx.EvalCtx, &u.SemaCtx, u.FlowCtx.EvalCtx.SessionData(), datumRow); err != nil {
+			return false, err
+		}
+
+		// Are we done yet with the current batch?
+		if u.node.run.tu.currentBatchSize >= u.node.run.tu.maxBatchSize ||
+			u.node.run.tu.b.ApproximateMutationBytes() >= u.node.run.tu.maxBatchByteSize {
+			break
+		}
+	}
+
+	if u.node.run.tu.currentBatchSize > 0 {
+		if !lastBatch {
+			// We only run/commit the batch if there were some rows processed
+			// in this batch.
+			if err = u.node.run.tu.flushAndStartNewBatch(u.Ctx()); err != nil {
+				return false, err
+			}
+		}
+	}
+
+	if lastBatch {
+		u.node.run.tu.setRowsWrittenLimit(u.FlowCtx.EvalCtx.SessionData())
+		if err = u.node.run.tu.finalize(u.Ctx()); err != nil {
+			return false, err
+		}
+		// Possibly initiate a run of CREATE STATISTICS.
+		u.FlowCtx.Cfg.StatsRefresher.NotifyMutation(u.node.run.tu.tableDesc(), int(u.node.run.modifiedRowCount()))
+	}
+	return lastBatch, nil
+}
+
+// Next implements the RowSource interface.
+func (u *updateProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if u.State != execinfra.StateRunning {
+		return nil, u.DrainHelper()
+	}
+
+	// Return next row from accumulated results.
+	for u.node.run.next() {
+		datumRow := u.node.run.values()
+		if cap(u.encDatumScratch) < len(datumRow) {
+			u.encDatumScratch = make(rowenc.EncDatumRow, len(datumRow))
+		}
+		encRow := u.encDatumScratch[:len(datumRow)]
+		for i, datum := range datumRow {
+			encRow[i] = rowenc.DatumToEncDatum(u.outputTypes[i], datum)
+		}
+		if outRow := u.ProcessRowHelper(encRow); outRow != nil {
+			return outRow, nil
+		}
+	}
+
+	// No more rows, move to draining.
+	u.MoveToDraining(nil)
+	return nil, u.DrainHelper()
+}
+
+func (u *updateProcessor) close() {
+	if u.InternalClose() {
+		u.node.run.close(u.Ctx())
+		u.node = nil
+		u.MemMonitor.Stop(u.Ctx())
+	}
+}
+
+// ConsumerClosed implements the RowSource interface.
+func (u *updateProcessor) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	u.close()
 }
 
 // enforceNotNullConstraints enforces NOT NULL column constraints. row and cols
