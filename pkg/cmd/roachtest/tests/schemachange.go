@@ -433,6 +433,10 @@ func makeSchemaChangeBulkIngestTest(
 				db := c.Conn(ctx, t.L(), 1)
 				defer db.Close()
 
+				t.L().Printf("Computing table statistics manually")
+				if _, err := db.Exec("CREATE STATISTICS stats from bulkingest.bulkingest"); err != nil {
+					t.Fatal(err)
+				}
 				if !c.IsLocal() {
 					// Wait for the load generator to run for a few minutes before performing the schema change.
 					sleepInterval := time.Minute * 5
