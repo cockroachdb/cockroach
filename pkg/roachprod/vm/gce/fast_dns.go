@@ -35,7 +35,9 @@ func googleDNSResolvers() []*net.Resolver {
 
 // waitForRecordsAvailable waits for the DNS records to become available on all
 // the DNS servers through a standard net tools lookup.
-func (n *dnsProvider) waitForRecordsAvailable(ctx context.Context, records ...vm.DNSRecord) error {
+func (n *dnsProvider) waitForSRVRecordsAvailable(
+	ctx context.Context, records ...vm.DNSRecord,
+) error {
 	checkResolver := func(resolver *net.Resolver) error {
 		type recordKey struct {
 			name string
