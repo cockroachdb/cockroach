@@ -296,6 +296,26 @@ func (o *OS) IsDir(dirname string) (bool, error) {
 	return strconv.ParseBool(strings.TrimSpace(output))
 }
 
+// Exists wraps around os.Stat, which returns the os.FileInfo of the named
+// path. Exists returns true if and only if it exists. If there is an error,
+// it will return false and the error.
+func (o *OS) Exists(filename string) (bool, error) {
+	command := fmt.Sprintf("cat %s", filename)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
+
+	output, _ := o.Next(command, func() (output string, err error) {
+		_, err = os.Stat(filename)
+		exists := !errors.Is(err, fs.ErrNotExist)
+		if exists && err != nil {
+			return "false", err
+		}
+		return strconv.FormatBool(exists), nil
+	})
+	return strconv.ParseBool(strings.TrimSpace(output))
+}
+
 // ReadFile wraps around os.ReadFile, reading a file from disk and
 // returning the contents.
 func (o *OS) ReadFile(filename string) (string, error) {
