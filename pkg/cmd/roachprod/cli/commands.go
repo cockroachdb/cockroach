@@ -736,7 +736,7 @@ cluster setting will be set to its value.
 			clusterSettingsOpts := []install.ClusterSettingOption{
 				install.TagOption(tag),
 				install.PGUrlCertsDirOption(pgurlCertsDir),
-				install.SecureOption(isSecure),
+				isSecure,
 				install.UseTreeDistOption(useTreeDist),
 				install.EnvOption(nodeEnv),
 				install.NumRacksOption(numRacks),
@@ -773,7 +773,7 @@ Note that if the cluster is started in insecure mode, set the insecure mode here
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
 			clusterSettingsOpts := []install.ClusterSettingOption{
-				install.SecureOption(isSecure),
+				isSecure,
 			}
 			return roachprod.UpdateTargets(context.Background(), config.Logger, args[0], clusterSettingsOpts...)
 		}),
@@ -857,7 +857,7 @@ environment variables to the cockroach process.
 			clusterSettingsOpts := []install.ClusterSettingOption{
 				install.TagOption(tag),
 				install.PGUrlCertsDirOption(pgurlCertsDir),
-				install.SecureOption(isSecure),
+				isSecure,
 				install.UseTreeDistOption(useTreeDist),
 				install.EnvOption(nodeEnv),
 				install.NumRacksOption(numRacks),
@@ -1723,7 +1723,7 @@ roachprod grafana-annotation grafana.testeng.crdb.io example-annotation-event --
 				return errors.Newf("Too many arguments for --time-range, expected 1 or 2, got: %d", len(grafanaTimeRange))
 			}
 
-			return roachprod.AddGrafanaAnnotation(context.Background(), args[0] /* host */, isSecure, req)
+			return roachprod.AddGrafanaAnnotation(context.Background(), args[0] /* host */, isSecure.DefaultSecure, req)
 		}),
 	}
 	initGrafanaAnnotationCmdFlags(grafanaAnnotationCmd)
