@@ -116,6 +116,7 @@ package ctxgroup
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -147,7 +148,7 @@ func (g Group) Wait() error {
 	err := g.wrapped.Wait()
 
 	if g.panicMu.payload != nil {
-		panic(g.panicMu.payload)
+		panic(verboseError{g.panicMu.payload})
 	}
 
 	if err != nil {
@@ -224,15 +225,39 @@ func GoAndWait(ctx context.Context, fs ...func(ctx context.Context) error) error
 }
 
 // wrapPanic turns r into an error if it is not one already.
-//
-// TODO(dt): consider raw recovered payload as well.
-//
-// TODO(dt): replace this with logcrash.PanicAsError after moving that to a new
-// standalone pkg (since we cannot depend on `util/log` here) and teaching it to
-// preserve the original payload.
 func wrapPanic(depth int, r interface{}) error {
+	// If r is already a verboseError, we remove the `verboseError` wrapper
+	// because it will be reapplied when the panic is rethrown by wait. The stack
+	// trace is attached to the inner error. Its desirable to remove the verbose
+	// format wrapper from the child because the parent verbose wrapper will
+	// print the child errors .Error() method and the child's stack. If we left
+	// the wrapper in place, this would print the child error's stack twice.
+	if err, ok := r.(verboseError); ok {
+		return errors.WithStackDepth(err.error, depth+1)
+	}
 	if err, ok := r.(error); ok {
 		return errors.WithStackDepth(err, depth+1)
 	}
 	return errors.NewWithDepthf(depth+1, "panic: %v", r)
+}
+
+type verboseError struct {
+	error // always a errors.WithStack.withStack
+}
+
+// Error overrides WithStack.withStack()'s Error to include the stack.
+//
+// Typically withstack's Error() just delegates to the underlying error and
+// requires formatting with %+v to print the stacktrace. However this wrapper is
+// used to wrap a recovered panic that is *rethrown*. If this rethrown panic is
+// not recovered, the runtime will eventually crash and print it... by calling
+// .Error(), which will *not* indicate the stack to the original panic we so
+// dutifully captured by using WithStack. So override .Error() to include the
+// stack, but leave .Format() to fallthrough to withStack as usual.
+func (p verboseError) Error() string {
+	return fmt.Sprintf("%+v", p.error)
+}
+
+func (p verboseError) Unwrap() error {
+	return p.error
 }
