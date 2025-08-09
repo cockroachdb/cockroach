@@ -679,7 +679,7 @@ func generateAndValidateNewTargets(
 		hasSelectPrivOnAllTables = hasSelectPrivOnAllTables && hasSelect
 		hasChangefeedPrivOnAllTables = hasChangefeedPrivOnAllTables && hasChangefeed
 	}
-	if err := authorizeUserToCreateChangefeed(ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables); err != nil {
+	if err := authorizeUserToCreateChangefeed(ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables, tree.ChangefeedLevelTable); err != nil {
 		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 
