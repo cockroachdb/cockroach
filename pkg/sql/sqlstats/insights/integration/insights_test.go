@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -803,7 +804,6 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	// Chan to wait for the txn to complete to avoid checking for insights before the txn is committed.
 	txnDoneChan := make(chan struct{})
 
-	observerConn := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
 	txConn := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
 	tx := txConn.Begin(t)
 
@@ -828,10 +828,20 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	require.NoError(t, errTxn)
 
 	var waitingTxnID uuid.UUID
-	observerConn.QueryRow(t,
-		`SELECT id
+	testutils.SucceedsSoon(t, func() error {
+		r, err := tc.ApplicationLayer(0).SQLConn(t).Query(`SELECT id
          FROM crdb_internal.node_transactions
-         WHERE application_name = 'waiting_txn'`).Scan(&waitingTxnID)
+         WHERE application_name = 'waiting_txn'`)
+		require.NoError(t, err)
+		defer r.Close()
+
+		if !r.Next() {
+			return errors.New("waiting_txn not found")
+		}
+		err = r.Scan(&waitingTxnID)
+		require.NoError(t, err)
+		return nil
+	})
 
 	require.NoError(t, tx.Commit())
 
