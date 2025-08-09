@@ -1741,12 +1741,20 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 
 	midTxnFlush := !hasEndTxn
 
+	// SkipLocked reads cannot be in a batch with basically anything else. If we
+	// encounter one, we need to flush our buffer in its own batch.
+	splitBatchRequired := ba.WaitPolicy == lock.WaitPolicy_SkipLocked
+
 	// Flush all buffered writes by pre-pending them to the requests being sent
 	// in the batch.
 	//
 	// TODO(ssd): We can maintain the revision count in the buffer as well to
 	// allocate this more accurately.
-	reqs := make([]kvpb.RequestUnion, 0, numKeysBuffered+len(ba.Requests))
+	numReqs := numKeysBuffered
+	if !splitBatchRequired {
+		numReqs += len(ba.Requests)
+	}
+	reqs := make([]kvpb.RequestUnion, 0, numReqs)
 	it := twb.buffer.MakeIter()
 	numRevisionsBuffered := 0
 	for it.First(); it.Valid(); it.Next() {
@@ -1776,16 +1784,31 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		}
 	})
 
-	ba = ba.ShallowCopy()
-	ba.Requests = append(reqs, ba.Requests...)
-	br, pErr := twb.wrapped.SendLocked(ctx, ba)
-	if pErr != nil {
-		return nil, twb.adjustErrorUponFlush(ctx, numRevisionsBuffered, pErr)
-	}
+	if splitBatchRequired {
+		log.VEventf(ctx, 2, "flushing buffer via separate batch")
+		flushBatch := ba.ShallowCopy()
+		flushBatch.WaitPolicy = 0
+		flushBatch.Requests = reqs
+		br, pErr := twb.wrapped.SendLocked(ctx, flushBatch)
+		if pErr != nil {
+			pErr.Index = nil
+			return nil, pErr
+		}
 
-	// Strip out responses for all the flushed buffered writes.
-	br.Responses = br.Responses[numRevisionsBuffered:]
-	return br, nil
+		ba.UpdateTxn(br.Txn)
+		return twb.wrapped.SendLocked(ctx, ba)
+	} else {
+		ba = ba.ShallowCopy()
+		ba.Requests = append(reqs, ba.Requests...)
+		br, pErr := twb.wrapped.SendLocked(ctx, ba)
+		if pErr != nil {
+			return nil, twb.adjustErrorUponFlush(ctx, numRevisionsBuffered, pErr)
+		}
+
+		// Strip out responses for all the flushed buffered writes.
+		br.Responses = br.Responses[numRevisionsBuffered:]
+		return br, nil
+	}
 }
 
 // hasBufferedWrites returns whether the interceptor has buffered any writes
