@@ -62,6 +62,7 @@ go_library(
         "//pkg/util/netutil/addr",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/grpcinterceptor",

@@ -1690,7 +1690,7 @@ func BenchmarkGRPCDial(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, err := rpcCtx.grpcDialRaw(ctx, remoteAddr, rpcbase.DefaultClass)
+			_, err := rpcCtx.grpcDialRaw(ctx, remoteAddr, rpcbase.DefaultClass, nil /* onNetworkDial */)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -2052,8 +2052,8 @@ func TestVerifyDialback(t *testing.T) {
 				ctx context.Context, _ string, _ roachpb.NodeID, _ rpcbase.ConnectionClass) context.Context {
 				return ctx
 			})
-			mockRPCCtx.EXPECT().grpcDialRaw(gomock.Any() /* ctx */, "1.1.1.1", rpcbase.SystemClass, gomock.Any()).
-				DoAndReturn(func(context.Context, string, rpcbase.ConnectionClass, ...grpc.DialOption) (*grpc.ClientConn, error) {
+			mockRPCCtx.EXPECT().grpcDialRaw(gomock.Any() /* ctx */, "1.1.1.1", rpcbase.SystemClass, gomock.Any() /* onDialFunc */, gomock.Any()).
+				DoAndReturn(func(context.Context, string, rpcbase.ConnectionClass, onDialFunc, ...grpc.DialOption) (*grpc.ClientConn, error) {
 					if dialbackOK {
 						return nil, nil
 					}
@@ -2088,8 +2088,8 @@ func TestVerifyDialback(t *testing.T) {
 			ctx context.Context, _ string, _ roachpb.NodeID, _ rpcbase.ConnectionClass) context.Context {
 			return ctx
 		})
-		mockRPCCtx.EXPECT().grpcDialRaw(gomock.Any() /* ctx */, "1.1.1.1", rpcbase.SystemClass, gomock.Any()).
-			DoAndReturn(func(context.Context, string, rpcbase.ConnectionClass, ...grpc.DialOption) (*grpc.ClientConn, error) {
+		mockRPCCtx.EXPECT().grpcDialRaw(gomock.Any() /* ctx */, "1.1.1.1", rpcbase.SystemClass, gomock.Any() /* onDialFunc */, gomock.Any()).
+			DoAndReturn(func(context.Context, string, rpcbase.ConnectionClass, onDialFunc, ...grpc.DialOption) (*grpc.ClientConn, error) {
 				return nil, nil
 			})
 		require.NoError(t, VerifyDialback(context.Background(), mockRPCCtx, req, &PingResponse{}, roachpb.Locality{}, sv))
@@ -2297,7 +2297,7 @@ func BenchmarkGRPCPing(b *testing.B) {
 
 			cliRPCCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
 			cliRPCCtx.NodeID.Set(ctx, 2)
-			cc, err := cliRPCCtx.grpcDialRaw(ctx, remoteAddr, rpcbase.DefaultClass)
+			cc, err := cliRPCCtx.grpcDialRaw(ctx, remoteAddr, rpcbase.DefaultClass, nil /* onNetworkDial */)
 			require.NoError(b, err)
 
 			for _, tc := range []struct {

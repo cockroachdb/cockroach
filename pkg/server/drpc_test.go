@@ -248,7 +248,7 @@ func TestDialDRPC_InterceptorsAreSet(t *testing.T) {
 			return mockStreamInterceptor
 		},
 	}
-	getConn := rpc.DialDRPC(rpcCtx)
+	getConn := rpc.DialDRPC(rpcCtx, nil /* onNetworkDial */)
 	conn, err := getConn(ctx, rpcAddr, rpcbase.DefaultClass)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, conn.Close()) }()
