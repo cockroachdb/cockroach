@@ -1385,10 +1385,10 @@ func (rpcCtx *Context) GRPCDialOptions(
 	ctx context.Context, target string, class rpcbase.ConnectionClass,
 ) ([]grpc.DialOption, error) {
 	transport := tcpTransport
-	if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
-		// See the explanation on loopbackDialFn for an explanation about this.
-		transport = loopbackTransport
-	}
+	// if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+	// 	// See the explanation on loopbackDialFn for an explanation about this.
+	// 	transport = loopbackTransport
+	// }
 	return rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport)
 }
 
@@ -1984,10 +1984,10 @@ func (rpcCtx *Context) grpcDialRaw(
 	additionalOpts ...grpc.DialOption,
 ) (*grpc.ClientConn, error) {
 	transport := tcpTransport
-	if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
-		// See the explanation on loopbackDialFn for an explanation about this.
-		transport = loopbackTransport
-	}
+	// if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+	// 	// See the explanation on loopbackDialFn for an explanation about this.
+	// 	transport = loopbackTransport
+	// }
 	dialOpts, err := rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport)
 	if err != nil {
 		return nil, err
