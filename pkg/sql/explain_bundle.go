@@ -1132,7 +1132,9 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 		case "direct_columnar_scans_enabled":
 			// In test builds we might randomize some setting defaults, so
 			// we need to ignore them to make the tests deterministic.
-			skip = buildutil.CrdbTestBuild
+			if buildutil.CrdbTestBuild {
+				skip = true
+			}
 		case "role":
 			// If a role is set, we comment it out in env.sql. Otherwise, running
 			// 'debug sb recreate' will fail with a non-existent user/role error.
