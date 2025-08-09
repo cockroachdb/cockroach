@@ -8,6 +8,7 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -19,8 +20,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	gogo "github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 )
+
+// ─── pool sizes ───────────────────────────────────────────────────────────────
+
+const bareBufSize = 1024
+
+// ─── pooled entry for BareEnvelope ───────────────────────────────────────────
+
+type bareEntry struct {
+	// embedded inner protobuf so only one heap-alloc
+	bare changefeedpb.BareEnvelope
+	// outer message wrapper
+	msg changefeedpb.Message
+	// fixed-size array backing all marshals
+	buf [bareBufSize]byte
+}
+
+var barePool = sync.Pool{
+	New: func() any {
+		// prime the map so we never realloc for up to ~8 columns
+		return &bareEntry{
+			bare: changefeedpb.BareEnvelope{
+				Values: make(map[string]*changefeedpb.Value, 8),
+			},
+		}
+	},
+}
+
+var valuePool = sync.Pool{
+	New: func() any { return new(changefeedpb.Value) },
+}
+
+var protoBufPool = sync.Pool{
+	New: func() any {
+		// NewBuffer seeds an internal slice with our array capacity
+		return gogo.NewBuffer(make([]byte, 0, bareBufSize))
+	},
+}
 
 type protobufEncoder struct {
 	updatedField                   bool
@@ -164,29 +203,146 @@ func (e *protobufEncoder) EncodeResolvedTimestamp(
 	return protoutil.Marshal(msg)
 }
 
-// buildBare constructs a BareEnvelope with optional metadata and serializes it.
+// // buildBare constructs a BareEnvelope with optional metadata and serializes it.
+// func (e *protobufEncoder) buildBare(
+// 	evCtx eventContext, updatedRow cdcevent.Row, prevRow cdcevent.Row,
+// ) ([]byte, error) {
+// 	after, err := encodeRowToRecord(updatedRow)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	meta, err := e.buildMetadata(evCtx, updatedRow)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	env := &changefeedpb.Message{
+// 		Data: &changefeedpb.Message_Bare{
+// 			Bare: &changefeedpb.BareEnvelope{
+// 				Values:  after.Values,
+// 				XCrdb__: meta,
+// 			},
+// 		},
+// 	}
+// 	return protoutil.Marshal(env)
+// }
+
+// func (e *protobufEncoder) buildBare(
+// 	evCtx eventContext, updatedRow, prevRow cdcevent.Row,
+// ) ([]byte, error) {
+// 	// 1) pull a bareEntry from the pool
+// 	be := barePool.Get().(*bareEntry)
+
+// 	// 2) clear any previous map entries
+// 	for k := range be.bare.Values {
+// 		delete(be.bare.Values, k)
+// 	}
+
+// 	// 3) populate the inner envelope
+// 	after, err := encodeRowToRecord(updatedRow)
+// 	if err != nil {
+// 		barePool.Put(be)
+// 		return nil, err
+// 	}
+// 	be.bare.Values = after.Values
+
+// 	meta, err := e.buildMetadata(evCtx, updatedRow)
+// 	if err != nil {
+// 		barePool.Put(be)
+// 		return nil, err
+// 	}
+// 	be.bare.XCrdb__ = meta
+
+// 	// 4) reset the outer Message union and wire it up
+// 	be.msg = changefeedpb.Message{
+// 		Data: &changefeedpb.Message_Bare{Bare: &be.bare},
+// 	}
+
+// 	// 5) marshal _in place_ into our embedded array
+// 	buf := be.buf[:0] // zero-length slice backed by the array
+// 	pBuf := &gogo.Buffer{Buf: buf}
+// 	if err := pBuf.Marshal(&be.msg); err != nil {
+// 		barePool.Put(be)
+// 		return nil, err
+// 	}
+// 	data := pBuf.Bytes() // this reuses the same backing array
+
+// 	// 6) return the entry to its pool
+// 	barePool.Put(be)
+
+// 	return data, nil
+// }
+
+var metadataPool = sync.Pool{
+	New: func() any { return &changefeedpb.Metadata{} },
+}
+var keyPool = sync.Pool{
+	New: func() any { return &changefeedpb.Key{Key: make(map[string]*changefeedpb.Value, 4)} },
+}
+
+// ─── the optimized buildBare ────────────────────────────────────────────────
+
 func (e *protobufEncoder) buildBare(
-	evCtx eventContext, updatedRow cdcevent.Row, prevRow cdcevent.Row,
+	evCtx eventContext, updatedRow, _ cdcevent.Row,
 ) ([]byte, error) {
-	after, err := encodeRowToRecord(updatedRow)
-	if err != nil {
-		return nil, err
+	// 1) grab entry
+	be := barePool.Get().(*bareEntry)
+
+	// 2) clear inner Values map
+	for k := range be.bare.Values {
+		delete(be.bare.Values, k)
 	}
 
-	meta, err := e.buildMetadata(evCtx, updatedRow)
-	if err != nil {
-		return nil, err
+	// 3) inline encodeRowToRecord → fill Values
+	if updatedRow.HasValues() {
+		if err := updatedRow.ForEachColumn().Datum(func(
+			d tree.Datum, col cdcevent.ResultColumn,
+		) error {
+			v, err := datumToProtoValue(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+			if err != nil {
+				return err
+			}
+			be.bare.Values[col.Name] = v
+			return nil
+		}); err != nil {
+			barePool.Put(be)
+			return nil, err
+		}
 	}
 
-	env := &changefeedpb.Message{
-		Data: &changefeedpb.Message_Bare{
-			Bare: &changefeedpb.BareEnvelope{
-				Values:  after.Values,
-				XCrdb__: meta,
-			},
-		},
+	// 4) pull & populate in-place Metadata
+	m := metadataPool.Get().(*changefeedpb.Metadata)
+	*m = changefeedpb.Metadata{} // reset all fields
+	m.Updated = evCtx.updated.AsOfSystemTime()
+	m.MvccTimestamp = evCtx.mvcc.AsOfSystemTime()
+	be.bare.XCrdb__ = m
+
+	// 5) wire up the outer Message
+	be.msg = changefeedpb.Message{
+		Data: &changefeedpb.Message_Bare{Bare: &be.bare},
 	}
-	return protoutil.Marshal(env)
+
+	// 6) marshal into embedded array via gogo.Buffer
+	buf := protoBufPool.Get().(*gogo.Buffer)
+	buf.Reset()
+	buf.SetBuf(be.buf[:0])
+
+	if err := buf.Marshal(&be.msg); err != nil {
+		// return both to pools on error
+		barePool.Put(be)
+		protoBufPool.Put(buf)
+		metadataPool.Put(m)
+		return nil, err
+	}
+	data := buf.Bytes()
+
+	// 7) put everything back
+	barePool.Put(be)
+	protoBufPool.Put(buf)
+	metadataPool.Put(m)
+
+	return data, nil
 }
 
 // buildWrapped constructs a WrappedEnvelope serializes it.
@@ -393,13 +549,19 @@ func datumToProtoValue(
 	case *tree.DTimestampTZ:
 		ts, err := types.TimestampProto(v.Time)
 		if err != nil {
-			return nil, err
+			// fallback: encode as RFC3339 string instead of failing
+			return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{
+				StringValue: v.Time.Format(time.RFC3339Nano),
+			}}, nil
 		}
 		return &changefeedpb.Value{Value: &changefeedpb.Value_TimestampValue{TimestampValue: ts}}, nil
 	case *tree.DTimestamp:
 		ts, err := types.TimestampProto(v.Time.UTC())
 		if err != nil {
-			return nil, err
+			// fallback: encode as RFC3339 string instead of failing
+			return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{
+				StringValue: v.Time.Format(time.RFC3339Nano),
+			}}, nil
 		}
 		return &changefeedpb.Value{Value: &changefeedpb.Value_TimestampValue{TimestampValue: ts}}, nil
 	case *tree.DBytes:
