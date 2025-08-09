@@ -311,6 +311,11 @@ type kvnemesisTestCfg struct {
 	// testGeneratorConfig modifies the default generator configuration. This is
 	// useful if a test configuration does not yet support particular operations.
 	testGeneratorConfig func(*GeneratorConfig)
+
+	// swarm defines whether the full set of operations will be used by the
+	// generator (swarm=false), or a randomly selected subset (swarm = true).
+	// Swarm testing: https://users.cs.utah.edu/~regehr/papers/swarm12.pdf
+	swarm bool
 }
 
 func defaultTestConfiguration(numNodes int) kvnemesisTestCfg {
@@ -451,6 +456,22 @@ func FuzzKVNemesisSingleNode(f *testing.F) {
 	})
 }
 
+func TestKVNemesisMultiNode_Swarm(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		swarm:                        true,
+	})
+}
+
 func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	skip.UnderRace(t)
 
@@ -480,7 +501,12 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	// This gives kvnemesis a chance to hit NPEs related to tracing.
 	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING trace.debug_http_endpoint.enabled = true`)
 
-	config := NewDefaultConfig()
+	var config GeneratorConfig
+	if cfg.swarm {
+		config = NewSwarmConfig(rng)
+	} else {
+		config = NewDefaultConfig()
+	}
 	config.NumNodes = cfg.numNodes
 	config.NumReplicas = 3
 	config.TxnConfig.BufferedWritesProb = cfg.bufferedWriteProb
