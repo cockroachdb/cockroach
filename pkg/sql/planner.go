@@ -941,6 +941,7 @@ func (p *planner) resetPlanner(
 	p.txn = txn
 	p.stmt = Statement{}
 	p.instrumentation = instrumentationHelper{}
+	p.curPlan = planTop{}
 	p.monitor = plannerMon
 	p.sessionMonitor = sessionMon
 
