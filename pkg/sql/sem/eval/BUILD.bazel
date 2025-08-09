@@ -82,6 +82,7 @@ go_library(
         "//pkg/util/arith",
         "//pkg/util/bitarray",
         "//pkg/util/cidr",
+        "//pkg/util/collatedstring",
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
