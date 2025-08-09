@@ -94,7 +94,7 @@ func prepareInsertOrUpdateBatch(
 	kvKey *roachpb.Key,
 	kvValue *roachpb.Value,
 	rawValueBuf []byte,
-	oth *OriginTimestampCPutHelper,
+	oth OriginTimestampCPutHelper,
 	oldValues []tree.Datum,
 	kvOp KVInsertOp,
 	mustValidateOldPKValues bool,

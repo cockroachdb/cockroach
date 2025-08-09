@@ -48,10 +48,11 @@ func (ti *tableInserter) row(
 	values tree.Datums,
 	pm row.PartialIndexUpdateHelper,
 	vh row.VectorIndexUpdateHelper,
+	oth row.OriginTimestampCPutHelper,
 	traceKV bool,
 ) error {
 	ti.currentBatchSize++
-	return ti.ri.InsertRow(ctx, &ti.putter, values, pm, vh, nil, row.CPutOp, traceKV)
+	return ti.ri.InsertRow(ctx, &ti.putter, values, pm, vh, oth, row.CPutOp, traceKV)
 }
 
 // tableDesc returns the TableDescriptor for the table that the tableInserter
