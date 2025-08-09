@@ -24,42 +24,42 @@ import (
 type (
 	// TestPlan is the output of planning a mixed-version test.
 	TestPlan struct {
-		// seed is the seed used to generate this test plan.
-		seed int64
-		// services is the list of services being upgraded as part of this
+		// Seed is the seed used to generate this test plan.
+		Seed int64
+		// Services is the list of services being upgraded as part of this
 		// test plan.
-		services []*ServiceDescriptor
-		// setup groups together steps that setup the cluster for a test
+		Services []*ServiceDescriptor `yaml:",omitempty"`
+		// Setup groups together steps that setup the cluster for a test
 		// run. This involves starting the cockroach process in the
 		// initial version, installing fixtures, running initial upgrades,
 		// etc.
-		setup testSetup
+		Setup testSetup
 		// initSteps is the sequence of user-provided steps to be
 		// performed when the test starts (i.e., the cluster is running in
 		// a supported version).
-		initSteps []testStep
+		InitSteps []testStep `yaml:",omitempty"`
 		// startSystemID is the step ID after which the system tenant
 		// should be ready to receive connections.
-		startSystemID int
+		StartSystemID int
 		// startTenantID is the step ID after which the secondary tenant,
 		// if any, should be ready to receive connections.
-		startTenantID int
-		// upgrades is the list of upgrade plans to be performed during
+		StartTenantID int
+		// Upgrades is the list of upgrade plans to be performed during
 		// the run encoded by this plan. These upgrades happen *after*
 		// every update in `setup` is finished.
-		upgrades []*upgradePlan
-		// deploymentMode is the associated deployment mode used when
+		Upgrades []*upgradePlan `yaml:",omitempty"`
+		// DeploymentMode is the associated deployment mode used when
 		// generating this test plan.
-		deploymentMode DeploymentMode
-		// enabledMutators is a list of `mutator` implementations that
+		DeploymentMode DeploymentMode
+		// EnabledMutatorNames is a list of the mutator's names that
 		// were applied when generating this test plan.
-		enabledMutators []mutator
-		// isLocal indicates if this test plan is generated for a `local`
+		EnabledMutatorNames []string `yaml:",omitempty"`
+		// IsLocal indicates if this test plan is generated for a `local`
 		// run.
-		isLocal bool
-		// length denotes the total number of steps in this test plan.
+		IsLocal bool
+		// Length denotes the total number of steps in this test plan.
 		// It is computed in `assignIDs`.
-		length int
+		Length int
 	}
 
 	// serviceSetup encapsulates the steps to setup a service in the
@@ -68,18 +68,18 @@ type (
 	// upgrades that may run after the service is setup (and before the
 	// cluster reaches the desired minimum version).
 	serviceSetup struct {
-		steps    []testStep
-		upgrades []*upgradePlan
+		Steps    []testStep
+		Upgrades []*upgradePlan `yaml:",omitempty"`
 	}
 
 	// testSetup includes the sequence of steps that run to setup the
 	// cluster before any user-provided hooks are scheduled. These are
-	// divided into `systemSetup` (sets up the storage cluster, always
-	// runs first) and `tenantSetup` (creates tenants in multitenant
+	// divided into `SystemSetup` (sets up the storage cluster, always
+	// runs first) and `TenantSetup` (creates tenants in multitenant
 	// deployments).
 	testSetup struct {
-		systemSetup *serviceSetup
-		tenantSetup *serviceSetup
+		SystemSetup *serviceSetup
+		TenantSetup *serviceSetup
 	}
 
 	// testPlanner wraps the state and the logic involved in generating
@@ -107,9 +107,9 @@ type (
 	UpgradeStage int
 
 	upgradePlan struct {
-		from           *clusterupgrade.Version
-		to             *clusterupgrade.Version
-		sequentialStep sequentialRunStep
+		From           *clusterupgrade.Version
+		To             *clusterupgrade.Version
+		SequentialStep sequentialRunStep
 	}
 
 	// mutator describes the interface to be implemented by different
@@ -354,7 +354,7 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 
 	planUpgrade := func(upgrade *upgradePlan, virtualClusterRunning, scheduleHooks bool) {
 		for _, s := range p.services() {
-			s.startUpgrade(upgrade.to)
+			s.startUpgrade(upgrade.To)
 		}
 
 		// systemUpgradeSteps does a rolling restart of the system tenant
@@ -362,7 +362,7 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 		// shared-process deployments, this is the only upgrade to be
 		// performed.
 		systemUpgradeSteps := upgradeStepsForService(
-			p.currentContext.System, upgrade.from, upgrade.to, virtualClusterRunning, scheduleHooks,
+			p.currentContext.System, upgrade.From, upgrade.To, virtualClusterRunning, scheduleHooks,
 		)
 
 		if p.deploymentMode != SeparateProcessDeployment || !virtualClusterRunning {
@@ -375,16 +375,16 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 		// created and is running. Therefore, we need to do a rolling
 		// restart of the tenant binaries as well.
 		tenantUpgradeSteps := upgradeStepsForService(
-			p.currentContext.Tenant, upgrade.from, upgrade.to, virtualClusterRunning, scheduleHooks,
+			p.currentContext.Tenant, upgrade.From, upgrade.To, virtualClusterRunning, scheduleHooks,
 		)
 
 		upgrade.Add([]testStep{
-			sequentialRunStep{label: upgradeStorageClusterLabel, steps: systemUpgradeSteps},
-			sequentialRunStep{label: upgradeTenantLabel, steps: tenantUpgradeSteps},
+			{sequentialRunStep{Label: upgradeStorageClusterLabel, Steps: systemUpgradeSteps}},
+			{sequentialRunStep{Label: upgradeTenantLabel, Steps: tenantUpgradeSteps}},
 		})
 	}
 
-	for _, upgrade := range setup.systemSetup.upgrades {
+	for _, upgrade := range setup.SystemSetup.Upgrades {
 		planUpgrade(
 			upgrade,
 			// We are performing setup upgrades after the system service is
@@ -396,7 +396,7 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 	}
 
 	if p.isMultitenant() {
-		for _, upgrade := range setup.tenantSetup.upgrades {
+		for _, upgrade := range setup.TenantSetup.Upgrades {
 			planUpgrade(
 				upgrade,
 				// These setup upgrades happen after our tenant service is
@@ -421,16 +421,16 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 	// Use first tested upgrade version in the context passed to startup
 	// functions; the setup upgrades that happened before should be
 	// invisible to them.
-	firstTestedUpgradeVersion := testUpgrades[0].from
+	firstTestedUpgradeVersion := testUpgrades[0].From
 
 	testPlan := &TestPlan{
-		seed:           p.seed,
-		services:       p.serviceDescriptors(),
-		setup:          setup,
-		initSteps:      p.testStartSteps(firstTestedUpgradeVersion),
-		upgrades:       testUpgrades,
-		deploymentMode: p.deploymentMode,
-		isLocal:        p.isLocal,
+		Seed:           p.seed,
+		Services:       p.serviceDescriptors(),
+		Setup:          setup,
+		InitSteps:      p.testStartSteps(firstTestedUpgradeVersion),
+		Upgrades:       testUpgrades,
+		DeploymentMode: p.deploymentMode,
+		IsLocal:        p.isLocal,
 	}
 
 	failureInjections := make(map[string]struct{})
@@ -461,11 +461,11 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 				return nil, err
 			}
 			testPlan.applyMutations(p.prng, mutations)
-			testPlan.enabledMutators = append(testPlan.enabledMutators, mut)
+			testPlan.EnabledMutatorNames = append(testPlan.EnabledMutatorNames, mut.Name())
 		}
 	}
 
-	testPlan.assignIDs()
+	testPlan.assignIDs(p.prng)
 	return testPlan, nil
 }
 
@@ -524,7 +524,7 @@ func (p *testPlanner) setupTest() (testSetup, []*upgradePlan) {
 	// Find which upgrades are part of setup and which upgrades will be
 	// tested, based on the test's minimum supported version.
 	idx := slices.IndexFunc(allUpgrades, func(upgrade *upgradePlan) bool {
-		return upgrade.from.AtLeast(p.options.minimumSupportedVersion)
+		return upgrade.From.AtLeast(p.options.minimumSupportedVersion)
 	})
 	setupUpgrades := allUpgrades[:idx]
 	testUpgrades := allUpgrades[idx:]
@@ -533,7 +533,7 @@ func (p *testPlanner) setupTest() (testSetup, []*upgradePlan) {
 	// cluster is created.
 	upgradesAfterSystemSetup := setupUpgrades
 	var upgradesAfterTenantSetup []*upgradePlan
-	tenantBootstrapVersion := allUpgrades[0].from
+	tenantBootstrapVersion := allUpgrades[0].From
 
 	if len(setupUpgrades) > 0 && p.isMultitenant() {
 		oldestSupported := OldestSupportedVersion
@@ -545,13 +545,13 @@ func (p *testPlanner) setupTest() (testSetup, []*upgradePlan) {
 		// upgrades to run, we find the first setup upgrade before which a
 		// tenant can be started.
 		firstSupportedUpgradeIdx := slices.IndexFunc(setupUpgrades, func(upgrade *upgradePlan) bool {
-			return upgrade.from.AtLeast(oldestSupported)
+			return upgrade.From.AtLeast(oldestSupported)
 		})
 
 		if firstSupportedUpgradeIdx == -1 {
 			// If there is no such upgrade, it means that the tenant will be
 			// created after the last setup upgrade.
-			tenantBootstrapVersion = setupUpgrades[len(setupUpgrades)-1].to
+			tenantBootstrapVersion = setupUpgrades[len(setupUpgrades)-1].To
 		} else {
 			// If there *is* a setup upgrade where we could create a tenant,
 			// we pick a random point during the setup upgrades in which we
@@ -565,13 +565,13 @@ func (p *testPlanner) setupTest() (testSetup, []*upgradePlan) {
 			// created.
 			upgradesAfterSystemSetup = setupUpgrades[:upgradesAfterSystemSetupIdx]
 			upgradesAfterTenantSetup = setupUpgrades[upgradesAfterSystemSetupIdx:]
-			tenantBootstrapVersion = setupUpgrades[upgradesAfterSystemSetupIdx].from
+			tenantBootstrapVersion = setupUpgrades[upgradesAfterSystemSetupIdx].From
 		}
 	}
 
 	systemSetup := &serviceSetup{
-		steps:    p.systemSetupSteps(),
-		upgrades: upgradesAfterSystemSetup,
+		Steps:    p.systemSetupSteps(),
+		Upgrades: upgradesAfterSystemSetup,
 	}
 
 	var tenantSetup *serviceSetup
@@ -590,8 +590,8 @@ func (p *testPlanner) setupTest() (testSetup, []*upgradePlan) {
 		}
 
 		tenantSetup = &serviceSetup{
-			steps:    p.tenantSetupSteps(tenantBootstrapVersion),
-			upgrades: upgradesAfterTenantSetup,
+			Steps:    p.tenantSetupSteps(tenantBootstrapVersion),
+			Upgrades: upgradesAfterTenantSetup,
 		}
 	}
 
@@ -606,7 +606,7 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 	if p.usingFixtures {
 		steps = []testStep{
 			p.newSingleStep(
-				installFixturesStep{version: initialVersion},
+				installFixturesStep{Version: initialVersion},
 			),
 		}
 	}
@@ -619,17 +619,16 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 	}
 	return append(steps,
 		p.newSingleStepWithContext(setupContext, startStep{
-			version:            initialVersion,
-			rt:                 p.rt,
-			initTarget:         p.currentContext.System.Descriptor.Nodes[0],
-			waitForReplication: p.shouldWaitForReplication(),
-			settings:           p.clusterSettingsForSystem(initialVersion),
+			Version:            initialVersion,
+			InitTarget:         p.currentContext.System.Descriptor.Nodes[0],
+			WaitForReplication: p.shouldWaitForReplication(),
+			Settings:           p.clusterSettingsForSystem(initialVersion),
 		}),
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
-			nodes:              p.currentContext.System.Descriptor.Nodes,
-			timeout:            p.options.upgradeTimeout,
-			desiredVersion:     versionToClusterVersion(initialVersion),
-			virtualClusterName: install.SystemInterfaceName,
+			Nodes:              p.currentContext.System.Descriptor.Nodes,
+			Timeout:            p.options.upgradeTimeout,
+			DesiredVersion:     versionToClusterVersion(initialVersion),
+			VirtualClusterName: install.SystemInterfaceName,
 		}),
 	)
 }
@@ -646,16 +645,15 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	var startStep singleStepProtocol
 	if p.deploymentMode == SharedProcessDeployment {
 		startStep = startSharedProcessVirtualClusterStep{
-			name:       p.tenantName(),
-			initTarget: p.currentContext.Tenant.Descriptor.Nodes[0],
-			settings:   p.clusterSettingsForTenant(v),
+			Name:       p.tenantName(),
+			InitTarget: p.currentContext.Tenant.Descriptor.Nodes[0],
+			Settings:   p.clusterSettingsForTenant(v),
 		}
 	} else {
 		startStep = startSeparateProcessVirtualClusterStep{
-			name:     p.tenantName(),
-			rt:       p.rt,
-			version:  v,
-			settings: p.clusterSettingsForTenant(v),
+			Name:     p.tenantName(),
+			Version:  v,
+			Settings: p.clusterSettingsForTenant(v),
 		}
 	}
 
@@ -670,10 +668,10 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	steps = append(steps,
 		p.newSingleStepWithContext(setupContext, startStep),
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
-			nodes:              p.currentContext.Tenant.Descriptor.Nodes,
-			timeout:            p.options.upgradeTimeout,
-			desiredVersion:     versionToClusterVersion(v),
-			virtualClusterName: p.tenantName(),
+			Nodes:              p.currentContext.Tenant.Descriptor.Nodes,
+			Timeout:            p.options.upgradeTimeout,
+			DesiredVersion:     versionToClusterVersion(v),
+			VirtualClusterName: p.tenantName(),
 		}),
 	)
 
@@ -682,30 +680,30 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	// rely on roachtest's `c.SetDefaultVirtualCluster`.
 	if p.deploymentMode == SharedProcessDeployment {
 		steps = append(steps, p.newSingleStepWithContext(setupContext, setClusterSettingStep{
-			name:               defaultTenantClusterSetting(v),
-			value:              p.tenantName(),
-			virtualClusterName: install.SystemInterfaceName,
+			Name:               defaultTenantClusterSetting(v),
+			Value:              p.tenantName(),
+			VirtualClusterName: install.SystemInterfaceName,
 		}))
 	}
 
 	if p.deploymentMode == SeparateProcessDeployment {
 		steps = append(steps, p.newSingleStepWithContext(setupContext, setClusterSettingStep{
-			name:               "spanconfig.tenant_limit",
-			value:              spanConfigTenantLimit,
-			virtualClusterName: p.tenantName(),
-			systemVisible:      true,
+			Name:               "spanconfig.tenant_limit",
+			Value:              spanConfigTenantLimit,
+			VirtualClusterName: p.tenantName(),
+			SystemVisible:      true,
 		}))
 
 		steps = append(steps, p.newSingleStepWithContext(setupContext, disableRateLimitersStep{
-			virtualClusterName: p.tenantName(),
+			VirtualClusterName: p.tenantName(),
 		}))
 	}
 
 	if shouldGrantCapabilities {
 		steps = append(steps, p.newSingleStepWithContext(setupContext, setClusterSettingStep{
-			name:               "server.secondary_tenants.authorization.mode",
-			value:              "allow-all",
-			virtualClusterName: install.SystemInterfaceName,
+			Name:               "server.secondary_tenants.authorization.mode",
+			Value:              "allow-all",
+			VirtualClusterName: install.SystemInterfaceName,
 		}))
 	}
 
@@ -737,7 +735,7 @@ func (p *testPlanner) testStartSteps(firstUpgradeVersion *clusterupgrade.Version
 	return append(
 		p.startupSteps(firstUpgradeVersion),
 		p.concurrently(backgroundLabel, p.hooks.BackgroundSteps(
-			p.nonUpgradeContext(firstUpgradeVersion, OnStartupStage), p.bgChans, p.prng,
+			p.nonUpgradeContext(firstUpgradeVersion, OnStartupStage), p.prng,
 		))...,
 	)
 }
@@ -750,9 +748,9 @@ func (p *testPlanner) initUpgradeSteps(
 ) []testStep {
 	p.setStage(service, InitUpgradeStage)
 
-	preserveDowngradeForService := func(name string) *singleStep {
+	preserveDowngradeForService := func(name string) testStep {
 		return p.newSingleStep(preserveDowngradeOptionStep{
-			virtualClusterName: name,
+			VirtualClusterName: name,
 		})
 	}
 
@@ -859,22 +857,20 @@ func (p *testPlanner) changeVersionSteps(
 		var restartStep singleStepProtocol
 		if service.IsSystem() {
 			restartStep = restartWithNewBinaryStep{
-				version:            to,
-				node:               node,
-				rt:                 p.rt,
-				settings:           p.clusterSettingsForSystem(to),
-				tenantRunning:      virtualClusterRunning,
-				deploymentMode:     p.deploymentMode,
-				initTarget:         p.currentContext.System.Descriptor.Nodes[0],
-				waitForReplication: p.shouldWaitForReplication(),
+				Version:            to,
+				Node:               node,
+				Settings:           p.clusterSettingsForSystem(to),
+				TenantRunning:      virtualClusterRunning,
+				DeploymentMode:     p.deploymentMode,
+				InitTarget:         p.currentContext.System.Descriptor.Nodes[0],
+				WaitForReplication: p.shouldWaitForReplication(),
 			}
 		} else {
 			restartStep = restartVirtualClusterStep{
-				version:        to,
-				node:           node,
-				virtualCluster: p.tenantName(),
-				rt:             p.rt,
-				settings:       p.clusterSettingsForTenant(to),
+				Version:        to,
+				Node:           node,
+				VirtualCluster: p.tenantName(),
+				Settings:       p.clusterSettingsForTenant(to),
 			}
 		}
 
@@ -899,12 +895,12 @@ func (p *testPlanner) changeVersionSteps(
 			// operations to run.
 			possibleWaitDurations := []time.Duration{1 * time.Minute, 5 * time.Minute, 10 * time.Minute}
 			steps = append(steps, p.newSingleStep(waitStep{
-				dur: pickRandomDelay(p.prng, p.isLocal, possibleWaitDurations),
+				Dur: pickRandomDelay(p.prng, p.isLocal, possibleWaitDurations),
 			}))
 		}
 	}
 
-	return []testStep{sequentialRunStep{label: label, steps: steps}}
+	return []testStep{{sequentialRunStep{Label: label, Steps: steps}}}
 }
 
 // finalizeUpgradeSteps finalizes the upgrade by resetting the
@@ -920,7 +916,7 @@ func (p *testPlanner) finalizeUpgradeSteps(
 	p.setStage(service, RunningUpgradeMigrationsStage)
 
 	allowAutoUpgrade := p.newSingleStep(allowUpgradeStep{
-		virtualClusterName: service.Descriptor.Name,
+		VirtualClusterName: service.Descriptor.Name,
 	})
 
 	var steps []testStep
@@ -932,8 +928,8 @@ func (p *testPlanner) finalizeUpgradeSteps(
 	runStepsWithTenantMigrations := func() {
 		upgradeSteps := []testStep{
 			p.newSingleStep(setClusterVersionStep{
-				v:                  toVersion,
-				virtualClusterName: p.tenantName(),
+				Version:            toVersion,
+				VirtualClusterName: p.tenantName(),
 			}),
 		}
 
@@ -963,10 +959,10 @@ func (p *testPlanner) finalizeUpgradeSteps(
 
 	steps = append(steps, p.newSingleStep(
 		waitForStableClusterVersionStep{
-			nodes:              service.Descriptor.Nodes,
-			timeout:            p.options.upgradeTimeout,
-			desiredVersion:     versionToClusterVersion(toVersion),
-			virtualClusterName: service.Descriptor.Name,
+			Nodes:              service.Descriptor.Nodes,
+			Timeout:            p.options.upgradeTimeout,
+			DesiredVersion:     versionToClusterVersion(toVersion),
+			VirtualClusterName: service.Descriptor.Name,
 		},
 	))
 
@@ -990,7 +986,7 @@ func (p *testPlanner) finalizeUpgradeSteps(
 		steps = append(
 			steps,
 			p.newSingleStep(allowUpgradeStep{
-				virtualClusterName: p.tenantName(),
+				VirtualClusterName: p.tenantName(),
 			}),
 		)
 
@@ -1011,10 +1007,10 @@ func (p *testPlanner) finalizeUpgradeSteps(
 		// Finally, we confirm that every node is aware of the new
 		// `version` cluster setting.
 		steps = append(steps, p.newSingleStep(waitForStableClusterVersionStep{
-			nodes:              p.currentContext.Tenant.Descriptor.Nodes,
-			timeout:            p.options.upgradeTimeout,
-			desiredVersion:     versionToClusterVersion(toVersion),
-			virtualClusterName: p.currentContext.Tenant.Descriptor.Name,
+			Nodes:              p.currentContext.Tenant.Descriptor.Nodes,
+			Timeout:            p.options.upgradeTimeout,
+			DesiredVersion:     versionToClusterVersion(toVersion),
+			VirtualClusterName: p.currentContext.Tenant.Descriptor.Name,
 		}))
 	}
 
@@ -1060,13 +1056,13 @@ func (p *testPlanner) maybeDeleteAllTenantsVersionOverride(
 	return []testStep{p.newSingleStep(deleteAllTenantsVersionOverrideStep{})}
 }
 
-func (p *testPlanner) newSingleStep(impl singleStepProtocol) *singleStep {
+func (p *testPlanner) newSingleStep(impl singleStepProtocol) testStep {
 	return p.newSingleStepWithContext(p.currentContext, impl)
 }
 
 func (p *testPlanner) newSingleStepWithContext(
 	testContext *Context, impl singleStepProtocol,
-) *singleStep {
+) testStep {
 	return newSingleStep(testContext, impl, p.newRNG())
 }
 
@@ -1122,7 +1118,7 @@ func (p *testPlanner) shouldWaitForReplication() bool {
 func (p *testPlanner) clusterSettingsForSystem(
 	v *clusterupgrade.Version,
 ) []install.ClusterSettingOption {
-	cs := []install.ClusterSettingOption{}
+	var cs []install.ClusterSettingOption
 	cs = append(cs, defaultClusterSettings...)
 	cs = append(cs, p.options.settings...)
 
@@ -1164,7 +1160,7 @@ func (p *testPlanner) clusterSettingsForTenant(
 	return tenantSettings
 }
 
-func (p *testPlanner) newRNG() *rand.Rand {
+func (p *testPlanner) newRNG() *serializableRand {
 	return rngFromRNG(p.prng)
 }
 
@@ -1179,45 +1175,45 @@ func (p *testPlanner) mutatorEnabled(mut mutator) bool {
 
 func newUpgradePlan(from, to *clusterupgrade.Version) *upgradePlan {
 	return &upgradePlan{
-		from: from,
-		to:   to,
-		sequentialStep: sequentialRunStep{
-			label: fmt.Sprintf("upgrade cluster from %q to %q", from.String(), to.String()),
+		From: from,
+		To:   to,
+		SequentialStep: sequentialRunStep{
+			Label: fmt.Sprintf("upgrade cluster from %q to %q", from.String(), to.String()),
 		},
 	}
 }
 
 func (up *upgradePlan) Add(steps []testStep) {
-	up.sequentialStep.steps = append(up.sequentialStep.steps, steps...)
+	up.SequentialStep.Steps = append(up.SequentialStep.Steps, steps...)
 }
 
 // mapSingleSteps iterates over every step in the test plan and calls
 // the given function `f` for every `singleStep` (i.e., every step
 // that actually performs an action). The function should return a
 // list of testSteps that replace the given step in the plan.
-func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
+func (plan *TestPlan) mapSingleSteps(rng *rand.Rand, f func(*singleStep, bool) []testStep) {
 	var mapStep func(testStep, bool) []testStep
 	mapStep = func(step testStep, isConcurrent bool) []testStep {
-		switch s := step.(type) {
+		switch s := step.Val.(type) {
 		case sequentialRunStep:
 			var newSteps []testStep
-			for _, seqStep := range s.steps {
+			for _, seqStep := range s.Steps {
 				newSteps = append(newSteps, mapStep(seqStep, false)...)
 			}
-			s.steps = newSteps
-			return []testStep{s}
+			s.Steps = newSteps
+			return []testStep{{s}}
 		case concurrentRunStep:
 			var newSteps []testStep
-			for _, concurrentStep := range s.delayedSteps {
-				ds := concurrentStep.(delayedStep)
-				for _, ss := range mapStep(ds.step, true) {
+			for _, concurrentStep := range s.DelayedSteps {
+				ds := concurrentStep.Val.(delayedStep)
+				for _, ss := range mapStep(ds.Step, true) {
 					// If the function returned the original step, don't
 					// generate a new delay for it.
-					if ss == ds.step {
-						newSteps = append(newSteps, delayedStep{delay: ds.delay, step: ss})
+					if ss == ds.Step {
+						newSteps = append(newSteps, testStep{delayedStep{Delay: ds.Delay, Step: ss}})
 					} else {
-						newSteps = append(newSteps, delayedStep{
-							delay: randomConcurrencyDelay(s.rng, plan.isLocal), step: ss},
+						newSteps = append(newSteps, testStep{delayedStep{
+							Delay: randomConcurrencyDelay(rng, plan.IsLocal), Step: ss}},
 						)
 					}
 				}
@@ -1228,12 +1224,12 @@ func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
 			// test execution standpoint, to leave this as-is, it's silly to
 			// have a "concurrent run" of a single step, so this
 			// simplification makes the test plan more understandable.
-			if s.label == genericLabel && len(newSteps) == 1 {
-				return []testStep{newSteps[0].(delayedStep).step}
+			if s.Label == genericLabel && len(newSteps) == 1 {
+				return []testStep{newSteps[0].Val.(delayedStep).Step}
 			}
 
-			s.delayedSteps = newSteps
-			return []testStep{s}
+			s.DelayedSteps = newSteps
+			return []testStep{{s}}
 		default:
 			ss := s.(*singleStep)
 			return f(ss, isConcurrent)
@@ -1253,11 +1249,11 @@ func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
 		var newUpgrades []*upgradePlan
 		for _, upgrade := range upgrades {
 			newUpgrades = append(newUpgrades, &upgradePlan{
-				from: upgrade.from,
-				to:   upgrade.to,
-				sequentialStep: sequentialRunStep{
-					label: upgrade.sequentialStep.label,
-					steps: mapSteps(upgrade.sequentialStep.steps),
+				From: upgrade.From,
+				To:   upgrade.To,
+				SequentialStep: sequentialRunStep{
+					Label: upgrade.SequentialStep.Label,
+					Steps: mapSteps(upgrade.SequentialStep.Steps),
 				},
 			})
 		}
@@ -1271,26 +1267,26 @@ func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
 		}
 
 		return &serviceSetup{
-			steps:    mapSteps(s.steps),
-			upgrades: mapUpgrades(s.upgrades),
+			Steps:    mapSteps(s.Steps),
+			Upgrades: mapUpgrades(s.Upgrades),
 		}
 	}
 
-	plan.setup.systemSetup = mapServiceSetup(plan.setup.systemSetup)
-	plan.setup.tenantSetup = mapServiceSetup(plan.setup.tenantSetup)
-	plan.initSteps = mapSteps(plan.initSteps)
-	plan.upgrades = mapUpgrades(plan.upgrades)
+	plan.Setup.SystemSetup = mapServiceSetup(plan.Setup.SystemSetup)
+	plan.Setup.TenantSetup = mapServiceSetup(plan.Setup.TenantSetup)
+	plan.InitSteps = mapSteps(plan.InitSteps)
+	plan.Upgrades = mapUpgrades(plan.Upgrades)
 }
 
-func newStepIndex(plan *TestPlan) stepIndex {
+func newStepIndex(rng *rand.Rand, plan *TestPlan) stepIndex {
 	var index stepIndex
 
-	plan.mapSingleSteps(func(ss *singleStep, isConcurrent bool) []testStep {
+	plan.mapSingleSteps(rng, func(ss *singleStep, isConcurrent bool) []testStep {
 		index = append(index, singleStepInfo{
 			step:         ss,
 			isConcurrent: isConcurrent,
 		})
-		return []testStep{ss}
+		return []testStep{{ss}}
 	})
 
 	return index
@@ -1316,7 +1312,7 @@ func (si stepIndex) ContextForInsertion(step *singleStep, op mutationOp) Context
 			// same context if we are inserting the new step relative to a
 			// step that is part of a concurrent group.
 			if j == 0 || j == len(si)-1 || op == mutationInsertConcurrent {
-				return info.step.context.clone()
+				return info.step.Context.clone()
 			}
 
 			var idx int
@@ -1329,7 +1325,7 @@ func (si stepIndex) ContextForInsertion(step *singleStep, op mutationOp) Context
 				panic(fmt.Errorf("internal error: ContextForInsertion: unexpected operation %d", op))
 			}
 
-			return si[idx].step.context.clone()
+			return si[idx].step.Context.clone()
 		}
 	}
 
@@ -1349,11 +1345,11 @@ func (si stepIndex) IsConcurrent(step *singleStep) bool {
 }
 
 // singleSteps returns a list of all `singleStep`s in the test plan.
-func (plan *TestPlan) singleSteps() []*singleStep {
+func (plan *TestPlan) singleSteps(rng *rand.Rand) []*singleStep {
 	var result []*singleStep
-	plan.mapSingleSteps(func(ss *singleStep, _ bool) []testStep {
+	plan.mapSingleSteps(rng, func(ss *singleStep, _ bool) []testStep {
 		result = append(result, ss)
-		return []testStep{ss}
+		return []testStep{{ss}}
 	})
 
 	return result
@@ -1362,8 +1358,8 @@ func (plan *TestPlan) singleSteps() []*singleStep {
 // newStepSelector creates a `stepSelector` instance that can be used
 // by mutators to find a specific step or set of steps. The returned
 // selector will match every singleStep in the test plan.
-func (plan *TestPlan) newStepSelector() stepSelector {
-	return plan.singleSteps()
+func (plan *TestPlan) newStepSelector(rng *rand.Rand) stepSelector {
+	return plan.singleSteps(rng)
 }
 
 // Filter returns a new selector that only applies to steps that match
@@ -1416,10 +1412,10 @@ func (ss stepSelector) CutBefore(predicate func(*singleStep) bool) (stepSelector
 func (ss stepSelector) MarkNodesUnavailable(systemUnavailable bool, tenantUnavailable bool) {
 	for _, s := range ss {
 		if systemUnavailable {
-			s.context.System.hasUnavailableNodes = true
+			s.Context.System.hasUnavailableNodes = true
 		}
-		if tenantUnavailable && s.context.Tenant != nil {
-			s.context.Tenant.hasUnavailableNodes = true
+		if tenantUnavailable && s.Context.Tenant != nil {
+			s.Context.Tenant.hasUnavailableNodes = true
 		}
 	}
 }
@@ -1518,11 +1514,11 @@ func (ss stepSelector) Remove() []mutation {
 // making in place updates.
 func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 	for _, mut := range mutationApplicationOrder(mutations) {
-		plan.mapSingleSteps(func(ss *singleStep, isConcurrent bool) []testStep {
-			index := newStepIndex(plan)
+		plan.mapSingleSteps(rng, func(ss *singleStep, isConcurrent bool) []testStep {
+			index := newStepIndex(rng, plan)
 			// If the mutation is not relative to this step, move on.
 			if ss != mut.reference {
-				return []testStep{ss}
+				return []testStep{{ss}}
 			}
 
 			// If we are inserting a new step via this mutation, create the
@@ -1533,19 +1529,19 @@ func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 				mut.op == mutationInsertAfter ||
 				mut.op == mutationInsertConcurrent {
 				newSingleStep = &singleStep{
-					context: index.ContextForInsertion(ss, mut.op),
-					impl:    mut.impl,
-					rng:     rngFromRNG(rng),
+					Context: index.ContextForInsertion(ss, mut.op),
+					Impl:    singleStepContainer{mut.impl},
+					RNG:     rngFromRNG(rng),
 				}
 			}
 
 			switch mut.op {
 			case mutationInsertBefore:
-				return []testStep{newSingleStep, ss}
+				return []testStep{{newSingleStep}, {ss}}
 			case mutationInsertAfter:
-				return []testStep{ss, newSingleStep}
+				return []testStep{{ss}, {newSingleStep}}
 			case mutationInsertConcurrent:
-				steps := []testStep{ss, newSingleStep}
+				steps := []testStep{{ss}, {newSingleStep}}
 
 				// If the reference step is already part of a
 				// `concurrentRunStep`, return the existing and new steps in
@@ -1558,7 +1554,7 @@ func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 				// Otherwise, create a new `concurrentRunStep` for the two
 				// steps.
 				return []testStep{
-					newConcurrentRunStep(genericLabel, steps, rng, plan.isLocal),
+					newConcurrentRunStep(genericLabel, steps, rng, plan.IsLocal),
 				}
 			case mutationRemove:
 				return nil
@@ -1597,44 +1593,44 @@ func mutationApplicationOrder(mutations []mutation) []mutation {
 // assigns them a unique numeric ID. These IDs are not necessary for
 // correctness, but are nice to have when debugging failures and
 // matching output from a step to where it happens in the test plan.
-func (plan *TestPlan) assignIDs() {
+func (plan *TestPlan) assignIDs(rng *rand.Rand) {
 	var currentID int
 	nextID := func() int {
 		currentID++
 		return currentID
 	}
 
-	plan.mapSingleSteps(func(ss *singleStep, _ bool) []testStep {
+	plan.mapSingleSteps(rng, func(ss *singleStep, _ bool) []testStep {
 		stepID := nextID()
-		_, isStartSystem := ss.impl.(startStep)
-		_, isStartSharedProcess := ss.impl.(startSharedProcessVirtualClusterStep)
-		_, isStartSeparateProcess := ss.impl.(startSeparateProcessVirtualClusterStep)
+		_, isStartSystem := ss.Impl.Val.(startStep)
+		_, isStartSharedProcess := ss.Impl.Val.(startSharedProcessVirtualClusterStep)
+		_, isStartSeparateProcess := ss.Impl.Val.(startSeparateProcessVirtualClusterStep)
 		isStartTenant := isStartSharedProcess || isStartSeparateProcess
 
-		if plan.startSystemID == 0 && isStartSystem {
-			plan.startSystemID = stepID
+		if plan.StartSystemID == 0 && isStartSystem {
+			plan.StartSystemID = stepID
 		}
 
-		if plan.startTenantID == 0 && isStartTenant {
-			plan.startTenantID = stepID
+		if plan.StartTenantID == 0 && isStartTenant {
+			plan.StartTenantID = stepID
 		}
 
 		ss.ID = stepID
-		return []testStep{ss}
+		return []testStep{{ss}}
 	})
 	// Record the length, which corresponds to the last stepID assigned.
-	plan.length = currentID
+	plan.Length = currentID
 }
 
 // allUpgrades returns a list of all upgrades encoded in this test
 // plan, including the ones that are run as part of test setup (i.e.,
 // before any user-provided test logic is scheduled).
 func (plan *TestPlan) allUpgrades() []*upgradePlan {
-	allUpgrades := append([]*upgradePlan{}, plan.setup.systemSetup.upgrades...)
-	if plan.setup.tenantSetup != nil {
-		allUpgrades = append(allUpgrades, plan.setup.tenantSetup.upgrades...)
+	allUpgrades := append([]*upgradePlan{}, plan.Setup.SystemSetup.Upgrades...)
+	if plan.Setup.TenantSetup != nil {
+		allUpgrades = append(allUpgrades, plan.Setup.TenantSetup.Upgrades...)
 	}
-	allUpgrades = append(allUpgrades, plan.upgrades...)
+	allUpgrades = append(allUpgrades, plan.Upgrades...)
 
 	return allUpgrades
 }
@@ -1644,14 +1640,14 @@ func (plan *TestPlan) allUpgrades() []*upgradePlan {
 func (plan *TestPlan) Steps() []testStep {
 	// 1. Set up the cluster (install fixtures, start binaries, start
 	// tenant if any, run setup upgrades, etc)
-	steps := append([]testStep{}, plan.setup.Steps()...)
+	steps := append([]testStep{}, plan.Setup.Steps()...)
 
 	// 2. Run user provided initial steps.
-	steps = append(steps, plan.initSteps...)
+	steps = append(steps, plan.InitSteps...)
 
 	// 3. Run upgrades with user-provided hooks.
-	for _, upgrade := range plan.upgrades {
-		steps = append(steps, upgrade.sequentialStep)
+	for _, upgrade := range plan.Upgrades {
+		steps = append(steps, testStep{upgrade.SequentialStep})
 	}
 
 	return steps
@@ -1660,16 +1656,16 @@ func (plan *TestPlan) Steps() []testStep {
 // Steps returns the list of steps to be performed to setup the
 // cluster for the test (which may include creating tenants where the
 // tests will run).
-func (ts testSetup) Steps() []testStep {
-	steps := append([]testStep{}, ts.systemSetup.steps...)
-	for _, upgrade := range ts.systemSetup.upgrades {
-		steps = append(steps, upgrade.sequentialStep)
+func (ts *testSetup) Steps() []testStep {
+	steps := append([]testStep{}, ts.SystemSetup.Steps...)
+	for _, upgrade := range ts.SystemSetup.Upgrades {
+		steps = append(steps, testStep{upgrade.SequentialStep})
 	}
 
-	if ts.tenantSetup != nil {
-		steps = append(steps, ts.tenantSetup.steps...)
-		for _, upgrade := range ts.tenantSetup.upgrades {
-			steps = append(steps, upgrade.sequentialStep)
+	if ts.TenantSetup != nil {
+		steps = append(steps, ts.TenantSetup.Steps...)
+		for _, upgrade := range ts.TenantSetup.Upgrades {
+			steps = append(steps, testStep{upgrade.SequentialStep})
 		}
 	}
 
@@ -1680,9 +1676,9 @@ func (ts testSetup) Steps() []testStep {
 // the process of running this mixed-version test.
 func (plan *TestPlan) Versions() []*clusterupgrade.Version {
 	upgrades := plan.allUpgrades()
-	result := []*clusterupgrade.Version{upgrades[0].from}
+	result := []*clusterupgrade.Version{upgrades[0].From}
 	for _, upgrade := range upgrades {
-		result = append(result, upgrade.to)
+		result = append(result, upgrade.To)
 	}
 
 	return result
@@ -1718,17 +1714,12 @@ func (plan *TestPlan) prettyPrintInternal(debug bool) string {
 		lines = append(lines, fmt.Sprintf("%-20s%v", titleWithColon, val))
 	}
 
-	addLine("Seed", plan.seed)
+	addLine("Seed", plan.Seed)
 	addLine("Upgrades", formatVersions(plan.Versions()))
-	addLine("Deployment mode", plan.deploymentMode)
+	addLine("Deployment mode", plan.DeploymentMode)
 
-	if len(plan.enabledMutators) > 0 {
-		mutatorNames := make([]string, 0, len(plan.enabledMutators))
-		for _, mut := range plan.enabledMutators {
-			mutatorNames = append(mutatorNames, mut.Name())
-		}
-
-		addLine("Mutators", strings.Join(mutatorNames, ", "))
+	if len(plan.EnabledMutatorNames) > 0 {
+		addLine("Mutators", strings.Join(plan.EnabledMutatorNames, ", "))
 	}
 
 	return fmt.Sprintf(
@@ -1765,30 +1756,30 @@ func (plan *TestPlan) prettyPrintStep(
 		var debugInfo string
 		if debug {
 			var finalizingStr string
-			if ss.context.Finalizing() {
+			if ss.Context.Finalizing() {
 				finalizingStr = ",finalizing"
 			}
 
-			stageStr := ss.context.System.Stage.String()
-			if plan.deploymentMode != SystemOnlyDeployment {
-				stageStr = fmt.Sprintf("system:%s;tenant:%s", ss.context.System.Stage, ss.context.Tenant.Stage)
+			stageStr := ss.Context.System.Stage.String()
+			if plan.DeploymentMode != SystemOnlyDeployment {
+				stageStr = fmt.Sprintf("system:%s;tenant:%s", ss.Context.System.Stage, ss.Context.Tenant.Stage)
 			}
 			debugInfo = fmt.Sprintf(" [stage=%s%s]", stageStr, finalizingStr)
 		}
 
 		out.WriteString(fmt.Sprintf(
-			"%s %s%s (%d)%s\n", prefix, ss.impl.Description(), extras, ss.ID, debugInfo,
+			"%s %s%s (%d)%s\n", prefix, ss.Impl.Val.Description(), extras, ss.ID, debugInfo,
 		))
 	}
 
-	switch s := step.(type) {
+	switch s := step.Val.(type) {
 	case sequentialRunStep:
-		writeNested(s.Description(), s.steps)
+		writeNested(s.Description(), s.Steps)
 	case concurrentRunStep:
-		writeNested(s.Description(), s.delayedSteps)
+		writeNested(s.Description(), s.DelayedSteps)
 	case delayedStep:
-		delayStr := fmt.Sprintf("after %s delay", s.delay)
-		writeSingle(s.step.(*singleStep), delayStr)
+		delayStr := fmt.Sprintf("after %s delay", s.Delay)
+		writeSingle(s.Step.Val.(*singleStep), delayStr)
 	default:
 		writeSingle(s.(*singleStep))
 	}

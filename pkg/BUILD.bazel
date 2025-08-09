@@ -1695,6 +1695,7 @@ GO_TARGETS = [
     "//pkg/roachprod/prometheus:prometheus_test",
     "//pkg/roachprod/promhelperclient:promhelperclient",
     "//pkg/roachprod/promhelperclient:promhelperclient_test",
+    "//pkg/roachprod/roachprodutil/serde:serde",
     "//pkg/roachprod/roachprodutil:roachprodutil",
     "//pkg/roachprod/ssh:ssh",
     "//pkg/roachprod/ssh:ssh_test",

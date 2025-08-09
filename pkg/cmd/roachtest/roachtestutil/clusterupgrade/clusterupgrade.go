@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -92,6 +93,25 @@ func (v *Version) LessThan(other *Version) bool {
 // Series returns the release series this version is a part of.
 func (v *Version) Series() string {
 	return release.VersionSeries(&v.Version)
+}
+
+func (v Version) MarshalYAML() (any, error) {
+	// We only need to serialize the version string.
+	return v.String(), nil
+}
+
+func (v *Version) UnmarshalYAML(value *yaml.Node) error {
+	var versionStr string
+	if err := value.Decode(&versionStr); err != nil {
+		return err
+	}
+
+	parsedVersion, err := ParseVersion(versionStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse version %q: %w", versionStr, err)
+	}
+	*v = *parsedVersion
+	return nil
 }
 
 // CurrentVersion returns the version associated with the current
