@@ -3005,6 +3005,7 @@ func (ex *connExecutor) execCopyOut(
 	}()
 
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
+	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 	ex.resetPlanner(ctx, &ex.planner, ex.state.mu.txn, stmtTS)
 	ex.setCopyLoggingFields(cmd.ParsedStmt)
@@ -3219,6 +3220,7 @@ func (ex *connExecutor) execCopyIn(
 		stmtTimestamp: ex.server.cfg.Clock.PhysicalTime(),
 		initPlanner:   ex.initPlanner,
 		resetPlanner: func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time) {
+			ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			ex.resetPlanner(ctx, p, txn, stmtTS)
 			ex.setCopyLoggingFields(cmd.ParsedStmt)

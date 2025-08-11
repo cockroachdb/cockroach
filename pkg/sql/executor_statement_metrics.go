@@ -290,7 +290,7 @@ func (ex *connExecutor) recordStatementSummary(
 		ex.extraTxnState.transactionStatementsHash.Add(uint64(stmtFingerprintID))
 	}
 	ex.extraTxnState.numRows += rowsAffected
-	ex.extraTxnState.idleLatency += idleLatRaw
+	// NB: idleLatency is accumulated at statsCollector.Reset() time
 
 	if log.V(2) {
 		// ages since significant epochs
