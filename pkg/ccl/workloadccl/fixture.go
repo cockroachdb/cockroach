@@ -540,7 +540,7 @@ func disableAutoStats(ctx context.Context, sqlDB *gosql.DB) func() {
 		`SHOW CLUSTER SETTING sql.stats.automatic_collection.enabled`,
 	).Scan(&autoStatsEnabled)
 	if err != nil {
-		log.Warningf(ctx, "error retrieving automatic stats cluster setting: %v", err)
+		log.Dev.Warningf(ctx, "error retrieving automatic stats cluster setting: %v", err)
 		return func() {}
 	}
 
@@ -549,7 +549,7 @@ func disableAutoStats(ctx context.Context, sqlDB *gosql.DB) func() {
 			`SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`,
 		)
 		if err != nil {
-			log.Warningf(ctx, "error disabling automatic stats: %v", err)
+			log.Dev.Warningf(ctx, "error disabling automatic stats: %v", err)
 			return func() {}
 		}
 		return func() {
@@ -557,7 +557,7 @@ func disableAutoStats(ctx context.Context, sqlDB *gosql.DB) func() {
 				`SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`,
 			)
 			if err != nil {
-				log.Warningf(ctx, "error enabling automatic stats: %v", err)
+				log.Dev.Warningf(ctx, "error enabling automatic stats: %v", err)
 			}
 		}
 	}

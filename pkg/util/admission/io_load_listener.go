@@ -862,7 +862,7 @@ func (io *ioLoadListener) adjustTokensInner(
 	if intL0AddedBytes < 0 {
 		// intL0AddedBytes is a simple delta computation over individually cumulative
 		// stats, so should not be negative.
-		log.Warningf(ctx, "intL0AddedBytes %d is negative", intL0AddedBytes)
+		log.Dev.Warningf(ctx, "intL0AddedBytes %d is negative", intL0AddedBytes)
 		intL0AddedBytes = 0
 	}
 	// intL0CompactedBytes are due to finished compactions.

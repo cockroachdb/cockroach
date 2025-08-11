@@ -280,7 +280,7 @@ func (s *FileSSTSink) Flush(ctx context.Context) error {
 		return err
 	}
 	if err := s.out.Close(); err != nil {
-		log.Warningf(ctx, "failed to close write in FileSSTSink: % #v", pretty.Formatter(err))
+		log.Dev.Warningf(ctx, "failed to close write in FileSSTSink: % #v", pretty.Formatter(err))
 		return errors.Wrap(err, "writing SST")
 	}
 	wroteSize := s.sst.Meta.Size

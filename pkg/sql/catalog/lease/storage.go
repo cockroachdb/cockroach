@@ -307,7 +307,7 @@ func (s storage) release(
 		}
 		err := s.writer.deleteLease(ctx, nil /* txn */, lf)
 		if err != nil {
-			log.Warningf(ctx, "error releasing lease %q: %s", lease, err)
+			log.Dev.Warningf(ctx, "error releasing lease %q: %s", lease, err)
 			if grpcutil.IsConnectionRejected(err) {
 				return
 			}

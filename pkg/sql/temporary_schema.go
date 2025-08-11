@@ -465,7 +465,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 			func() error {
 				err := do()
 				if err != nil {
-					log.Warningf(ctx, "error during schema cleanup, retrying: %v", err)
+					log.Dev.Warningf(ctx, "error during schema cleanup, retrying: %v", err)
 				}
 				return err
 			},
@@ -542,7 +542,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 				}
 				if isTempSchema, sessionID, err := temporarySchemaSessionID(e.GetName()); err != nil {
 					// This should not cause an error.
-					log.Warningf(ctx, "could not parse %q as temporary schema name", e.GetName())
+					log.Dev.Warningf(ctx, "could not parse %q as temporary schema name", e.GetName())
 				} else if isTempSchema {
 					sessionIDs[sessionID] = struct{}{}
 				}
@@ -600,7 +600,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 				)
 			}); err != nil {
 				// Log error but continue trying to delete the rest.
-				log.Warningf(ctx, "failed to clean temp objects under session %q: %v", sessionID, err)
+				log.Dev.Warningf(ctx, "failed to clean temp objects under session %q: %v", sessionID, err)
 				c.metrics.SchemasDeletionError.Inc(1)
 			} else {
 				c.metrics.SchemasDeletionSuccess.Inc(1)
@@ -627,7 +627,7 @@ func (c *TemporaryObjectCleaner) Start(ctx context.Context, stopper *stop.Stoppe
 			select {
 			case <-nextTickCh:
 				if err := c.doTemporaryObjectCleanup(ctx, stopper.ShouldQuiesce()); err != nil {
-					log.Warningf(ctx, "failed to clean temp objects: %v", err)
+					log.Dev.Warningf(ctx, "failed to clean temp objects: %v", err)
 				}
 			case <-stopper.ShouldQuiesce():
 				return

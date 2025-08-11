@@ -121,7 +121,7 @@ func (r *logicalReplicationResumer) updateStatusMessage(
 		return nil
 	})
 	if err != nil {
-		log.Warningf(ctx, "error when updating job running status: %s", err)
+		log.Dev.Warningf(ctx, "error when updating job running status: %s", err)
 	}
 }
 
@@ -184,7 +184,7 @@ func (r *logicalReplicationResumer) ingest(
 
 	status, err := client.Heartbeat(ctx, streampb.StreamID(payload.StreamID), progress.ReplicatedTime)
 	if err != nil {
-		log.Warningf(ctx, "could not heartbeat source cluster with stream id %d", payload.StreamID)
+		log.Dev.Warningf(ctx, "could not heartbeat source cluster with stream id %d", payload.StreamID)
 	}
 	if status.StreamStatus == streampb.StreamReplicationStatus_STREAM_INACTIVE {
 		return jobs.MarkAsPermanentJobError(errors.Newf("history retention job is no longer active"))
@@ -962,11 +962,11 @@ func loadOnlineReplicatedTime(
 	// latest progress.
 	progress, err := jobs.LoadJobProgress(ctx, db, ingestionJob.ID())
 	if err != nil {
-		log.Warningf(ctx, "error loading job progress: %s", err)
+		log.Dev.Warningf(ctx, "error loading job progress: %s", err)
 		return hlc.Timestamp{}
 	}
 	if progress == nil {
-		log.Warningf(ctx, "no job progress yet: %s", err)
+		log.Dev.Warningf(ctx, "no job progress yet: %s", err)
 		return hlc.Timestamp{}
 	}
 	return progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.ReplicatedTime
@@ -1063,13 +1063,13 @@ func (r *logicalReplicationResumer) completeProducerJob(
 			return client.Complete(ctx, streamID, false /* successfulIngestion */)
 		},
 	); err != nil {
-		log.Warningf(ctx, "error completing the source cluster producer job %d: %s", streamID, err.Error())
+		log.Dev.Warningf(ctx, "error completing the source cluster producer job %d: %s", streamID, err.Error())
 	}
 }
 
 func closeAndLog(ctx context.Context, d streamclient.Client) {
 	if err := d.Close(ctx); err != nil {
-		log.Warningf(ctx, "error closing stream client: %s", err.Error())
+		log.Dev.Warningf(ctx, "error closing stream client: %s", err.Error())
 	}
 }
 

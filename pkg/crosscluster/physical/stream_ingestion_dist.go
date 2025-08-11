@@ -181,7 +181,7 @@ func startDistIngestion(
 	spanConfigIngestStopper := make(chan struct{})
 	streamSpanConfigs := func(ctx context.Context) error {
 		if !crosscluster.ReplicateSpanConfigsEnabled.Get(&execCtx.ExecCfg().Settings.SV) {
-			log.Warningf(ctx, "span config replication is disabled")
+			log.Dev.Warningf(ctx, "span config replication is disabled")
 			return nil
 		}
 		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.SkipSpanConfigReplication {
@@ -440,7 +440,7 @@ func splitAndScatter(
 		return err
 	}
 	if err := s.scatter(ctx, splitAndScatterKey); err != nil {
-		log.Warningf(ctx, "failed to scatter span starting at %s: %v",
+		log.Dev.Warningf(ctx, "failed to scatter span starting at %s: %v",
 			splitAndScatterKey, err)
 	}
 	return nil
@@ -898,7 +898,7 @@ func waitUntilProducerActive(
 		if status.StreamStatus != streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
 			break
 		}
-		log.Warningf(ctx, "producer job %d has status %s, retrying", streamID, status.StreamStatus)
+		log.Dev.Warningf(ctx, "producer job %d has status %s, retrying", streamID, status.StreamStatus)
 	}
 	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
 		return jobs.MarkAsPermanentJobError(errors.Errorf("failed to resume ingestion job %d "+

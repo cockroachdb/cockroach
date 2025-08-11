@@ -186,7 +186,7 @@ func (r *Registry) poll(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-				log.Warningf(ctx, "error polling for statement diagnostics requests: %s", err)
+				log.Dev.Warningf(ctx, "error polling for statement diagnostics requests: %s", err)
 			}
 			lastPoll = timeutil.Now()
 		}
@@ -739,7 +739,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		if prob, ok := row[4].(*tree.DFloat); ok {
 			samplingProbability = float64(*prob)
 			if samplingProbability < 0 || samplingProbability > 1 {
-				log.Warningf(ctx, "malformed sampling probability for request %d: %f (expected in range [0, 1]), resetting to 1.0",
+				log.Dev.Warningf(ctx, "malformed sampling probability for request %d: %f (expected in range [0, 1]), resetting to 1.0",
 					id, samplingProbability)
 				samplingProbability = 1.0
 			}

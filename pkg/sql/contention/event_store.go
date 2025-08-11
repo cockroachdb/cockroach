@@ -216,7 +216,7 @@ func (s *eventStore) startResolver(ctx context.Context, stopper *stop.Stopper) {
 			case <-timer.C:
 				if err := s.flushAndResolve(ctx); err != nil {
 					if log.V(1) {
-						log.Warningf(ctx, "unexpected error encountered when performing "+
+						log.Dev.Warningf(ctx, "unexpected error encountered when performing "+
 							"txn id resolution %s", err)
 					}
 				}

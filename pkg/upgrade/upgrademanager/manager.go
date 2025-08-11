@@ -314,7 +314,7 @@ func (m *Manager) Migrate(
 	ctx = logtags.AddTag(ctx, "migration-mgr", nil)
 	defer func() {
 		if returnErr != nil {
-			log.Warningf(ctx, "error encountered during version upgrade: %v", returnErr)
+			log.Dev.Warningf(ctx, "error encountered during version upgrade: %v", returnErr)
 		}
 	}()
 
@@ -747,7 +747,7 @@ func (m *Manager) getOrCreateMigrationJob(
 			ctx, version, txn.KV(), txn, enterpriseEnabled, migrationstable.ConsistentRead,
 		)
 		if err != nil && ctx.Err() == nil {
-			log.Warningf(ctx, "failed to check if migration already completed: %v", err)
+			log.Dev.Warningf(ctx, "failed to check if migration already completed: %v", err)
 		}
 		if err != nil || alreadyCompleted {
 			return err

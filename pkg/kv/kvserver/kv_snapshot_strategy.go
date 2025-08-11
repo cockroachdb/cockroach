@@ -605,7 +605,7 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 		// disk space (which is reclaimed on node restart). It is unexpected
 		// though, so log a warning.
 		if err := kvSS.scratch.Close(); err != nil {
-			log.Warningf(ctx, "error closing kvBatchSnapshotStrategy: %v", err)
+			log.Dev.Warningf(ctx, "error closing kvBatchSnapshotStrategy: %v", err)
 		}
 	}
 }

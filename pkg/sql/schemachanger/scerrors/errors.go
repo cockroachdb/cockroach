@@ -82,7 +82,7 @@ func (el EventLogger) HandlePanicAndLogError(ctx context.Context, err *error) {
 		*err = errors.Wrapf(*err, "%s", el.msg)
 		fallthrough
 	default:
-		log.WarningfDepth(ctx, depth, "failed %s with error: %v", el.msg, *err)
+		log.Dev.WarningfDepth(ctx, depth, "failed %s with error: %v", el.msg, *err)
 	}
 }
 

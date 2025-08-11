@@ -420,7 +420,7 @@ func (b *backupResumer) ResumeCompaction(
 			return jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
 		}
 
-		log.Warningf(ctx, "encountered retryable error: %+v", err)
+		log.Dev.Warningf(ctx, "encountered retryable error: %+v", err)
 
 		// Reload the backup manifest to pick up any spans we may have completed on
 		// previous attempts.
@@ -736,7 +736,7 @@ func getBackupChain(
 	}
 	defer func() {
 		if err := baseCleanup(); err != nil {
-			log.Warningf(ctx, "failed to cleanup base backup stores: %+v", err)
+			log.Dev.Warningf(ctx, "failed to cleanup base backup stores: %+v", err)
 		}
 	}()
 	incStores, incCleanup, err := backupdest.MakeBackupDestinationStores(
@@ -747,7 +747,7 @@ func getBackupChain(
 	}
 	defer func() {
 		if err := incCleanup(); err != nil {
-			log.Warningf(ctx, "failed to cleanup incremental backup stores: %+v", err)
+			log.Dev.Warningf(ctx, "failed to cleanup incremental backup stores: %+v", err)
 		}
 	}()
 	baseEncryptionInfo := encryptionOpts

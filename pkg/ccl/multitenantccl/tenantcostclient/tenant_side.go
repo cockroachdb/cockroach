@@ -612,14 +612,14 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		if err != nil {
 			// Don't log any errors caused by the stopper canceling the context.
 			if !errors.Is(err, context.Canceled) {
-				log.Warningf(ctx, "TokenBucket RPC error: %v", err)
+				log.Dev.Warningf(ctx, "TokenBucket RPC error: %v", err)
 			}
 			resp = nil
 		} else if (resp.Error != errorspb.EncodedError{}) {
 			// This is a "logic" error which indicates a configuration problem on the
 			// host side. We will keep retrying periodically.
 			err = errors.DecodeError(ctx, resp.Error)
-			log.Warningf(ctx, "TokenBucket error: %v", err)
+			log.Dev.Warningf(ctx, "TokenBucket error: %v", err)
 			resp = nil
 		}
 		c.responseChan <- resp

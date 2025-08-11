@@ -396,7 +396,7 @@ func MaybeApplyPendingRecoveryPlan(
 			return err
 		}
 		if len(prepRep.MissingStores) > 0 {
-			log.Warningf(ctx, "loss of quorum recovery plan application expected stores on the node %s",
+			log.Dev.Warningf(ctx, "loss of quorum recovery plan application expected stores on the node %s",
 				strutil.JoinIDs("s", prepRep.MissingStores))
 		}
 		_, err = CommitReplicaChanges(batches)

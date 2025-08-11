@@ -129,7 +129,7 @@ func (u *UpdateChecker) CheckForUpdates(ctx context.Context) bool {
 
 	err = decoder.Decode(&r)
 	if err != nil && err != io.EOF {
-		log.Warningf(ctx, "error decoding updates info: %v", err)
+		log.Dev.Warningf(ctx, "error decoding updates info: %v", err)
 		return false
 	}
 

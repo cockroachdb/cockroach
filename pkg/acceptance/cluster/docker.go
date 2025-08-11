@@ -307,7 +307,7 @@ func (c *Container) WaitUntilNotRunning(ctx context.Context) error {
 
 		out := io.MultiWriter(cmdLog, os.Stderr)
 		if err := c.Logs(ctx, out); err != nil {
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 
 		if exitCode := waitOKBody.StatusCode; exitCode != 0 {
@@ -405,7 +405,7 @@ func (cli resilientDockerClient) ContainerStart(
 		// Keep going if ContainerStart timed out, but client's context is not
 		// expired.
 		if errors.Is(err, context.DeadlineExceeded) && clientCtx.Err() == nil {
-			log.Warningf(clientCtx, "ContainerStart timed out, retrying")
+			log.Dev.Warningf(clientCtx, "ContainerStart timed out, retrying")
 			continue
 		}
 		return err
@@ -452,7 +452,7 @@ func (cli resilientDockerClient) ContainerCreate(
 				return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, platformSpec, containerName)
 			}
 		}
-		log.Warningf(ctx, "error indicated existing container %s, "+
+		log.Dev.Warningf(ctx, "error indicated existing container %s, "+
 			"but none found:\nerror: %s\ncontainers: %+v",
 			containerName, err, containers)
 		// We likely raced with a previous (late) removal of the container.

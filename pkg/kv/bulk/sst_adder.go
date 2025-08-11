@@ -217,7 +217,7 @@ func (a *sstAdder) AddSSTable(
 				err = pErr.GoError()
 				// Retry on AmbiguousResult.
 				if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
-					log.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v", start, end, r.CurrentAttempt(), err)
+					log.Dev.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v", start, end, r.CurrentAttempt(), err)
 					continue
 				}
 				// This range has split -- we need to split the SST to try again.

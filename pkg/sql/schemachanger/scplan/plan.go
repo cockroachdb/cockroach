@@ -204,7 +204,7 @@ func getMinValidVersionForRules(
 	ctx context.Context, activeVersion clusterversion.ClusterVersion,
 ) clusterversion.ClusterVersion {
 	if !activeVersion.IsActive(minVersionForRules) {
-		log.Warningf(ctx, "falling back to rules for minimum version (%v),"+
+		log.Dev.Warningf(ctx, "falling back to rules for minimum version (%v),"+
 			"active version was : %v",
 			minVersionForRules,
 			activeVersion)

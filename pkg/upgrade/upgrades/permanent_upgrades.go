@@ -273,7 +273,7 @@ func createDefaultDbs(
 		stmt := fmt.Sprintf(createDbStmt, dbName)
 		_, err = deps.InternalExecutor.Exec(ctx, "create-default-DB", nil /* txn */, stmt)
 		if err != nil {
-			log.Warningf(ctx, "failed attempt to add database %q: %s", dbName, err)
+			log.Dev.Warningf(ctx, "failed attempt to add database %q: %s", dbName, err)
 			return err
 		}
 	}

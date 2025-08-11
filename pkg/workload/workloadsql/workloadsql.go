@@ -162,7 +162,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 						// SCATTER can collide with normal replicate queue
 						// operations and fail spuriously, so only print the
 						// error.
-						log.Warningf(ctx, `%s: %v`, stmt, err)
+						log.Dev.Warningf(ctx, `%s: %v`, stmt, err)
 					}
 
 					select {

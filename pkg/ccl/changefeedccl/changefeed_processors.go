@@ -1230,7 +1230,7 @@ func (j *jobState) checkpointCompleted(ctx context.Context, checkpointDuration t
 		}
 		behind := j.ts.Now().Sub(j.lastProgressUpdate)
 		if behind > warnThreshold {
-			log.Warningf(ctx, "high water mark update was delayed by %s; mean checkpoint duration %s",
+			log.Dev.Warningf(ctx, "high water mark update was delayed by %s; mean checkpoint duration %s",
 				behind, j.checkpointDuration)
 		}
 	}
@@ -1426,7 +1426,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		}
 		cf.js.job = job
 		if changefeedbase.SpanCheckpointInterval.Get(&cf.FlowCtx.Cfg.Settings.SV) == 0 {
-			log.Warning(ctx,
+			log.Dev.Warning(ctx,
 				"span-level checkpointing disabled; set changefeed.span_checkpoint.interval to positive duration to re-enable")
 		}
 
@@ -1557,7 +1557,7 @@ func (cf *changeFrontier) runUsageMetricReporting(ctx context.Context) {
 		if err != nil {
 			// Don't increment the error count if it's due to us being shut down, or due to a backing table being dropped (since that will result in us shutting down also).
 			if shouldCountUsageError(err) {
-				log.Warningf(ctx, "failed to fetch usage bytes: %v", err)
+				log.Dev.Warningf(ctx, "failed to fetch usage bytes: %v", err)
 				cf.metrics.UsageMetrics.RecordError()
 			}
 			continue
@@ -1879,7 +1879,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
 
 			if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress); err != nil {
-				log.Warningf(ctx, "error managing protected timestamp record: %v", err)
+				log.Dev.Warningf(ctx, "error managing protected timestamp record: %v", err)
 				return err
 			}
 

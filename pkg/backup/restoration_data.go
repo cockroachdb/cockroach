@@ -173,7 +173,7 @@ func writeAtBatchTS(ctx context.Context, span roachpb.Span, fromSystemTenant boo
 	// vs importing keys to rollback.
 	if fromSystemTenant &&
 		(bytes.HasPrefix(span.Key, keys.TenantPrefix) || bytes.HasPrefix(span.EndKey, keys.TenantPrefix)) {
-		log.Warningf(ctx, "restoring span %s at its original timestamps because it is a tenant span", span)
+		log.Dev.Warningf(ctx, "restoring span %s at its original timestamps because it is a tenant span", span)
 		return false
 	}
 	return true

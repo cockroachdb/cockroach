@@ -564,10 +564,10 @@ func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error
 
 	if err := n.cmd.Start(); err != nil {
 		if err := stdout.Close(); err != nil {
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 		if err := stderr.Close(); err != nil {
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 		return errors.Wrapf(err, "running %s %v", n.cmd.Path, n.cmd.Args)
 	}
@@ -577,13 +577,13 @@ func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error
 	go func(cmd *exec.Cmd) {
 		waitErr := cmd.Wait()
 		if waitErr != nil {
-			log.Warningf(ctx, "%v", waitErr)
+			log.Dev.Warningf(ctx, "%v", waitErr)
 		}
 		if err := stdout.Close(); err != nil {
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 		if err := stderr.Close(); err != nil {
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 
 		log.Dev.Infof(ctx, "process %d: %s", cmd.Process.Pid, cmd.ProcessState)
@@ -795,7 +795,7 @@ func (n *Node) Signal(s os.Signal) {
 		return
 	}
 	if err := n.cmd.Process.Signal(s); err != nil {
-		log.Warningf(context.Background(), "%v", err)
+		log.Dev.Warningf(context.Background(), "%v", err)
 	}
 }
 
@@ -806,7 +806,7 @@ func (n *Node) Wait() *exec.ExitError {
 	ch := n.notRunning
 	n.Unlock()
 	if ch == nil {
-		log.Warning(context.Background(), "(*Node).Wait called when node was not running")
+		log.Dev.Warning(context.Background(), "(*Node).Wait called when node was not running")
 		return nil
 	}
 	<-ch

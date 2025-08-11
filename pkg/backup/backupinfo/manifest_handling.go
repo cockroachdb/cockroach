@@ -1353,7 +1353,7 @@ func CheckForPreviousBackup(
 		if !errors.Is(err, cloud.ErrListingUnsupported) {
 			return errors.Wrap(err, "checking for BACKUP-LOCK file")
 		}
-		log.Warningf(ctx, "external storage %s does not support listing: skip checking for BACKUP_LOCK", redactedURI)
+		log.Dev.Warningf(ctx, "external storage %s does not support listing: skip checking for BACKUP_LOCK", redactedURI)
 	}
 
 	// Check for a BACKUP-CHECKPOINT that might have been written by a node

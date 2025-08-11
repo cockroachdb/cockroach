@@ -104,7 +104,7 @@ func (authManager *ldapAuthManager) reloadConfigLocked(ctx context.Context, st *
 	var err error
 	authManager.mu.util, err = NewLDAPUtil(ctx, authManager.mu.conf)
 	if err != nil {
-		log.Warningf(ctx, "LDAP auth manager: unable to initialize LDAP connection: %v", err)
+		log.Dev.Warningf(ctx, "LDAP auth manager: unable to initialize LDAP connection: %v", err)
 		return
 	}
 

@@ -52,7 +52,7 @@ func gcTables(
 			if isMissingDescriptorError(err) {
 				// This can happen if another GC job created for the same table got to
 				// the table first. See #50344.
-				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
+				log.Dev.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
 				// Update the details payload to indicate that the table was dropped.
 				markTableGCed(ctx, droppedTable.ID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 				continue
@@ -290,7 +290,7 @@ func deleteTableDescriptorsAfterGC(
 			if isMissingDescriptorError(err) {
 				// This can happen if another GC job created for the same table got to
 				// the table first. See #50344.
-				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
+				log.Dev.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
 				// Update the details payload to indicate that the table was dropped.
 				markTableGCed(ctx, droppedTable.ID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 				continue

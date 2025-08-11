@@ -686,7 +686,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	if extConf != nil && extConf.Get(&bq.store.cfg.Settings.SV) {
 		hasExternal, err := realRepl.HasExternalBytes()
 		if err != nil {
-			log.Warningf(ctx, "could not determine if %s has external bytes: %s", realRepl, err)
+			log.Dev.Warningf(ctx, "could not determine if %s has external bytes: %s", realRepl, err)
 			return
 		}
 		if hasExternal {
@@ -925,7 +925,7 @@ func (bq *baseQueue) processOneAsyncAndReleaseSem(
 		// happens during a system shutdown. If the func is started this will
 		// never return an error.
 		bq.finishProcessingReplica(ctx, stopper, repl, err)
-		log.Warningf(ctx, "%s: task did not start %v", taskName, err)
+		log.Dev.Warningf(ctx, "%s: task did not start %v", taskName, err)
 		<-bq.processSem
 	}
 }
@@ -1026,7 +1026,7 @@ func (bq *baseQueue) replicaCanBeProcessed(
 		confReader, err = bq.store.GetConfReader(ctx)
 		if err != nil {
 			if log.V(1) || !errors.Is(err, errSpanConfigsUnavailable) {
-				log.Warningf(ctx, "unable to retrieve conf reader, skipping: %v", err)
+				log.Dev.Warningf(ctx, "unable to retrieve conf reader, skipping: %v", err)
 			}
 			return nil, err
 		}
@@ -1036,7 +1036,7 @@ func (bq *baseQueue) replicaCanBeProcessed(
 			// be spilt because of a span config.
 			needsSplit, err := confReader.NeedsSplit(ctx, repl.Desc().StartKey, repl.Desc().EndKey)
 			if err != nil {
-				log.Warningf(ctx, "unable to compute NeedsSplit, skipping: %v", err)
+				log.Dev.Warningf(ctx, "unable to compute NeedsSplit, skipping: %v", err)
 				return nil, err
 			}
 			if needsSplit {

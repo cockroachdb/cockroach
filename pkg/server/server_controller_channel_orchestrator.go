@@ -398,7 +398,7 @@ func (o *channelOrchestrator) startControlledServer(
 				if startErrorFn != nil {
 					startErrorFn(ctx, tenantName, err)
 				}
-				log.Warningf(ctx,
+				log.Dev.Warningf(ctx,
 					"unable to start server for tenant %q (attempt %d, will retry): %v",
 					tenantName, retry.CurrentAttempt(), err)
 				state.startErr = err

@@ -478,7 +478,7 @@ func releaseProtectedTimestamp(
 	if errors.Is(err, protectedts.ErrNotExists) {
 		// No reason to return an error which might cause problems if it doesn't
 		// seem to exist.
-		log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+		log.Dev.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
 		err = nil
 	}
 	return err
@@ -500,7 +500,7 @@ func getTableStatsForBackup(
 			tableDesc := tabledesc.NewBuilder(tbl).BuildImmutableTable()
 			tableStatisticsAcc, err := stats.GetTableStatsProtosFromDB(ctx, tableDesc, executor)
 			if err != nil {
-				log.Warningf(
+				log.Dev.Warningf(
 					ctx, "failed to collect stats for table: %s, table ID: %d during a backup: %s",
 					tableDesc.GetName(), tableDesc.GetID(), err,
 				)
@@ -771,7 +771,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
 		}
 
-		log.Warningf(ctx, "encountered retryable error: %+v", err)
+		log.Dev.Warningf(ctx, "encountered retryable error: %+v", err)
 
 		// Reload the backup manifest to pick up any spans we may have completed on
 		// previous attempts.
@@ -789,7 +789,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			log.Warningf(ctx, "BACKUP job %d could not reload job progress when retrying: %+v",
+			log.Dev.Warningf(ctx, "BACKUP job %d could not reload job progress when retrying: %+v",
 				b.job.ID(), reloadErr)
 		} else {
 			curProgress := reloadedJob.FractionCompleted()
@@ -1947,7 +1947,7 @@ func (b *backupResumer) processScheduledBackupCompletion(
 		if _, err := maybeStartCompactionJob(
 			ctx, execCtx.ExecCfg(), execCtx.User(), details,
 		); err != nil {
-			log.Warningf(ctx, "failed to trigger backup compaction for schedule %d: %v", scheduleID, err)
+			log.Dev.Warningf(ctx, "failed to trigger backup compaction for schedule %d: %v", scheduleID, err)
 		}
 	}
 	return nil
@@ -2028,11 +2028,11 @@ func (b *backupResumer) deleteCheckpoint(
 		// backups, and then from the progress directory.
 		err = exportStore.Delete(ctx, backupinfo.BackupManifestCheckpointName)
 		if err != nil {
-			log.Warningf(ctx, "unable to delete checkpointed backup descriptor file in base directory: %+v", err)
+			log.Dev.Warningf(ctx, "unable to delete checkpointed backup descriptor file in base directory: %+v", err)
 		}
 		err = exportStore.Delete(ctx, backupinfo.BackupManifestCheckpointName+backupinfo.BackupManifestChecksumSuffix)
 		if err != nil {
-			log.Warningf(ctx, "unable to delete checkpoint checksum file in base directory: %+v", err)
+			log.Dev.Warningf(ctx, "unable to delete checkpoint checksum file in base directory: %+v", err)
 		}
 		// Delete will not delete a nonempty directory, so we have to go through
 		// all files and delete each file one by one.
@@ -2040,7 +2040,7 @@ func (b *backupResumer) deleteCheckpoint(
 			return exportStore.Delete(ctx, backupinfo.BackupProgressDirectory+p)
 		})
 	}(); err != nil {
-		log.Warningf(ctx, "unable to delete checkpointed backup descriptor file in progress directory: %+v", err)
+		log.Dev.Warningf(ctx, "unable to delete checkpointed backup descriptor file in progress directory: %+v", err)
 	}
 }
 

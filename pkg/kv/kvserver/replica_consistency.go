@@ -689,16 +689,16 @@ func (r *Replica) computeChecksumPostApply(
 		sl := stateloader.Make(r.RangeID)
 		as, err := sl.LoadRangeAppliedState(ctx, snap)
 		if err != nil {
-			log.Warningf(ctx, "unable to load applied index, continuing anyway")
+			log.Dev.Warningf(ctx, "unable to load applied index, continuing anyway")
 		}
 		// NB: the names here will match on all nodes, which is nice for debugging.
 		tag := fmt.Sprintf("r%d_at_%d", r.RangeID, as.RaftAppliedIndex)
 		spans := r.store.checkpointSpans(&desc)
-		log.Warningf(ctx, "creating checkpoint %s with spans %+v", tag, spans)
+		log.Dev.Warningf(ctx, "creating checkpoint %s with spans %+v", tag, spans)
 		if dir, err := r.store.checkpoint(tag, spans); err != nil {
-			log.Warningf(ctx, "unable to create checkpoint %s: %+v", tag, err)
+			log.Dev.Warningf(ctx, "unable to create checkpoint %s: %+v", tag, err)
 		} else {
-			log.Warningf(ctx, "created checkpoint %s", dir)
+			log.Dev.Warningf(ctx, "created checkpoint %s", dir)
 		}
 	}
 
@@ -812,7 +812,7 @@ creation. These directories should be deleted, or inspected with caution.
 		attentionArgs := []any{r, desc.Replicas(), redact.Safe(auxDir), redact.Safe(path)}
 		preventStartupMsg := fmt.Sprintf(attentionFmt, attentionArgs...)
 		if err := fs.WriteFile(r.store.TODOEngine().Env(), path, []byte(preventStartupMsg), fs.UnspecifiedWriteCategory); err != nil {
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 
 		if p := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal; p != nil {

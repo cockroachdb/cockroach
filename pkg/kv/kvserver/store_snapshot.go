@@ -410,7 +410,7 @@ func (s *Store) checkSnapshotOverlapLocked(
 		exReplica, err := s.GetReplica(it.Desc().RangeID)
 		msg := IntersectingSnapshotMsg
 		if err != nil {
-			log.Warningf(ctx, "unable to look up overlapping replica on %s: %v", exReplica, err)
+			log.Dev.Warningf(ctx, "unable to look up overlapping replica on %s: %v", exReplica, err)
 		} else {
 			inactive := func(r *Replica) bool {
 				if r.RaftStatus() == nil {
@@ -775,7 +775,7 @@ func SendEmptySnapshot(
 
 	defer func() {
 		if err := stream.CloseSend(); err != nil {
-			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
+			log.Dev.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
 

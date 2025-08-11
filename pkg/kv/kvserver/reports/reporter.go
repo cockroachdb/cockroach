@@ -755,7 +755,7 @@ func (r *meta2RangeIter) handleErr(ctx context.Context, err error) {
 		return
 	}
 	if errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
-		log.Warningf(ctx, "unexpected retryable error from "+
+		log.Dev.Warningf(ctx, "unexpected retryable error from "+
 			"read-only transaction with fixed read timestamp: %s", err)
 	}
 	if r.txn != nil {

@@ -179,7 +179,7 @@ func initTraceDir(ctx context.Context, dir string) {
 		// from a directory which is not writable, we won't
 		// be able to create a sub-directory here.
 		err = errors.WithHint(err, "Try changing the CWD of the cockroach process to a writable directory.")
-		log.Warningf(ctx, "cannot create trace dir; traces will not be dumped: %v", err)
+		log.Dev.Warningf(ctx, "cannot create trace dir; traces will not be dumped: %v", err)
 		return
 	}
 }

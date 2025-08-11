@@ -46,7 +46,7 @@ func (ex *connExecutor) execPrepareTransactionInOpenState(
 	// > ROLLBACK: the current transaction is canceled.
 	if prepareErr != nil {
 		if rbErr := ex.state.mu.txn.Rollback(ctx); rbErr != nil {
-			log.Warningf(ctx, "txn rollback failed: err=%s", rbErr)
+			log.Dev.Warningf(ctx, "txn rollback failed: err=%s", rbErr)
 		}
 	}
 
@@ -140,7 +140,7 @@ func (ex *connExecutor) cleanupAfterFailedPrepareTransaction(ctx context.Context
 	// row if we successfully rollback the transaction.
 	err := ex.state.mu.txn.Rollback(ctx)
 	if err != nil {
-		log.Warningf(ctx, "txn rollback failed: err=%s", err)
+		log.Dev.Warningf(ctx, "txn rollback failed: err=%s", err)
 		return
 	}
 	if ctx.Err() != nil {
@@ -157,7 +157,7 @@ func (ex *connExecutor) cleanupAfterFailedPrepareTransaction(ctx context.Context
 	txnKey := txn.Key()
 	txnRecord, err := queryPreparedTransactionRecord(ctx, ex.server.cfg.DB, txnID, txnKey)
 	if err != nil {
-		log.Warningf(ctx, "query prepared transaction record after rollback failed: %s", err)
+		log.Dev.Warningf(ctx, "query prepared transaction record after rollback failed: %s", err)
 		return
 	}
 	if txnRecord.Status != roachpb.ABORTED {
@@ -172,7 +172,7 @@ func (ex *connExecutor) cleanupAfterFailedPrepareTransaction(ctx context.Context
 		return deletePreparedTransaction(ctx, sqlTxn, globalID)
 	})
 	if err != nil {
-		log.Warningf(ctx, "cleanup prepared transaction row failed: %s", err)
+		log.Dev.Warningf(ctx, "cleanup prepared transaction row failed: %s", err)
 	}
 }
 

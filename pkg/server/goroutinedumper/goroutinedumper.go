@@ -94,7 +94,7 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 			)
 			path := gd.store.GetFullPath(filename)
 			if err := gd.takeGoroutineDump(path); err != nil {
-				log.Warningf(ctx, "error dumping goroutines: %s", err)
+				log.Dev.Warningf(ctx, "error dumping goroutines: %s", err)
 				continue
 			}
 			gd.maxGoroutinesDumped = goroutines

@@ -120,7 +120,7 @@ func (s *KeyVisualizerServer) getSamplesFromFanOut(
 	var samples []keyvispb.Sample
 	for sampleTimeNanos, sampleFragments := range globalSamples {
 		if !verifySampleBoundariesEqual(sampleFragments) {
-			log.Warningf(ctx, "key visualizer sample boundaries differ between nodes")
+			log.Dev.Warningf(ctx, "key visualizer sample boundaries differ between nodes")
 		}
 		samples = append(samples, keyvispb.Sample{
 			SampleTime: timeutil.Unix(0, sampleTimeNanos),

@@ -259,7 +259,7 @@ func getFirstClient[T any](
 			return clientCandidate, nil
 		}
 		// Note the failure and attempt the next uri
-		log.Warningf(ctx, "failed to connect to uri %s: %s", uri.Redacted(), err.Error())
+		log.Dev.Warningf(ctx, "failed to connect to uri %s: %s", uri.Redacted(), err.Error())
 		combinedError = errors.CombineErrors(combinedError, err)
 	}
 	return zero, errors.Wrap(combinedError, "failed to connect to any connection uri")

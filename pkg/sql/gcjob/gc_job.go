@@ -136,7 +136,7 @@ func deleteTableData(
 			if isMissingDescriptorError(err) {
 				// This can happen if another GC job created for the same table got to
 				// the table first. See #50344.
-				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
+				log.Dev.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
 				// Update the details payload to indicate that the table was dropped.
 				markTableGCed(ctx, droppedTable.ID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 				continue
@@ -233,7 +233,7 @@ func unsplitRangesInSpanForSecondaryTenant(
 			// but this means in some cases the user may be left
 			// with empty, unmergable ranges.
 			if !execCfg.Codec.ForSystemTenant() && grpcutil.IsAuthError(err) {
-				log.Warningf(ctx, "failed to unsplit range at %s: %s", key, err)
+				log.Dev.Warningf(ctx, "failed to unsplit range at %s: %s", key, err)
 				continue
 			}
 			return err

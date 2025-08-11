@@ -4123,7 +4123,7 @@ func (si *systemInfoOnce) systemInfo(ctx context.Context) serverpb.SystemInfo {
 		cmd.Stderr = &errBuf
 		output, err := cmd.Output()
 		if err != nil {
-			log.Warningf(ctx, "failed to get system information: %v\nstderr: %v",
+			log.Dev.Warningf(ctx, "failed to get system information: %v\nstderr: %v",
 				err, errBuf.String())
 			return
 		}
@@ -4133,7 +4133,7 @@ func (si *systemInfoOnce) systemInfo(ctx context.Context) serverpb.SystemInfo {
 		cmd.Stderr = &errBuf
 		output, err = cmd.Output()
 		if err != nil {
-			log.Warningf(ctx, "failed to get kernel information: %v\nstderr: %v",
+			log.Dev.Warningf(ctx, "failed to get kernel information: %v\nstderr: %v",
 				err, errBuf.String())
 			return
 		}

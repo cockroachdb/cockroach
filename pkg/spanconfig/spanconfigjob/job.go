@@ -181,7 +181,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 				// the reconciliation job during restore, or observing a checkpoint in
 				// the restore job, or re-keying restored descriptors to not re-use the
 				// same IDs as previously existing ones) is a lot more invasive.
-				log.Warningf(ctx, "observed %v, kicking off full reconciliation...", err)
+				log.Dev.Warningf(ctx, "observed %v, kicking off full reconciliation...", err)
 				lastCheckpoint = hlc.Timestamp{}
 				continue
 			}

@@ -79,11 +79,11 @@ func (r *raftLogger) Infof(format string, v ...interface{}) {
 }
 
 func (r *raftLogger) Warning(v ...interface{}) {
-	log.WarningfDepth(r.ctx, 1, "", v...)
+	log.Dev.WarningfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Warningf(format string, v ...interface{}) {
-	log.WarningfDepth(r.ctx, 1, format, v...)
+	log.Dev.WarningfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Error(v ...interface{}) {

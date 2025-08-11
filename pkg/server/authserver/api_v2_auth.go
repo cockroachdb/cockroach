@@ -295,12 +295,12 @@ func (a *authenticationV2Mux) getSession(
 	} else {
 		decoded, err := base64.StdEncoding.DecodeString(rawSession)
 		if err != nil {
-			log.Warningf(ctx, "attempted to decode session but failed: %v", err)
+			log.Dev.Warningf(ctx, "attempted to decode session but failed: %v", err)
 			return "", nil, http.StatusBadRequest, err
 		}
 		err = protoutil.Unmarshal(decoded, cookie)
 		if err != nil {
-			log.Warningf(ctx, "attempted to unmarshal session but failed: %v", err)
+			log.Dev.Warningf(ctx, "attempted to unmarshal session but failed: %v", err)
 		}
 	}
 	if err != nil {

@@ -303,7 +303,7 @@ func (l *DockerCluster) createNetwork(ctx context.Context) {
 	})
 	maybePanic(err)
 	if resp.Warning != "" {
-		log.Warningf(ctx, "creating network: %s", resp.Warning)
+		log.Dev.Warningf(ctx, "creating network: %s", resp.Warning)
 	}
 	l.networkID = resp.ID
 }
@@ -920,7 +920,7 @@ func (l *DockerCluster) ExecCLI(ctx context.Context, i int, cmd []string) (strin
 func (l *DockerCluster) Cleanup(ctx context.Context, preserveLogs bool) {
 	volumes, err := os.ReadDir(l.volumesDir)
 	if err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		return
 	}
 	for _, v := range volumes {
@@ -929,7 +929,7 @@ func (l *DockerCluster) Cleanup(ctx context.Context, preserveLogs bool) {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(l.volumesDir, v.Name())); err != nil {
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 	}
 }

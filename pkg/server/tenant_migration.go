@@ -52,7 +52,7 @@ func validateTargetClusterVersion(
 			"binary's minimum supported version %s for SQL server instance %d",
 			targetCV, tenantVersion.MinSupportedVersion(),
 			instanceID)
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		return err
 	}
 
@@ -61,7 +61,7 @@ func validateTargetClusterVersion(
 			"less than the attempted upgrade version %s",
 			instanceID,
 			tenantVersion.LatestVersion(), targetCV)
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		return errors.WithHintf(err,
 			"upgrade sql server %d binary to version %s (or higher) to allow tenant upgrade to succeed",
 			instanceID,

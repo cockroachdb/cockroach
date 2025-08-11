@@ -1097,7 +1097,7 @@ func sanityCheckErrWithTxn(
 			Detail: "you have encountered a known bug in CockroachDB, please consider " +
 				"reporting on the Github issue or reach out via Support.",
 		}))
-	log.Warningf(ctx, "%v", err)
+	log.Dev.Warningf(ctx, "%v", err)
 	return err
 }
 

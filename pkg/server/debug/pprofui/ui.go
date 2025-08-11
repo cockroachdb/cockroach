@@ -30,7 +30,7 @@ func (*fakeUI) Print(args ...interface{}) {
 
 func (*fakeUI) PrintErr(args ...interface{}) {
 	msg := fmt.Sprint(args...)
-	log.WarningfDepth(pprofCtx(context.Background()), 1, "%s", msg)
+	log.Dev.WarningfDepth(pprofCtx(context.Background()), 1, "%s", msg)
 }
 
 func (*fakeUI) IsTerminal() bool {

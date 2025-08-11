@@ -336,7 +336,7 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	if nodeCtx.nodeDecommissionSelf {
-		log.Warningf(ctx, "--%s for decommission is deprecated.", cliflags.NodeDecommissionSelf.Name)
+		log.Dev.Warningf(ctx, "--%s for decommission is deprecated.", cliflags.NodeDecommissionSelf.Name)
 	}
 
 	if !nodeCtx.nodeDecommissionSelf && len(args) == 0 {

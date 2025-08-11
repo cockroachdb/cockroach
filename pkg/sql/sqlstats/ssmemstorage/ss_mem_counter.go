@@ -106,7 +106,7 @@ func (s *SQLStatsAtomicCounters) maybeLogDiscardMessage(ctx context.Context) {
 	// The count being slightly off won't impact users looking at the message. It
 	// also avoids holding a lock on the counts which would block requests until
 	// the log is sent.
-	log.Warningf(ctx, "statistics discarded due to memory limit. transaction discard count: %d with limit: %d, statement discard count: %d with limit: %d, logged at interval: %s, last logged: %s",
+	log.Dev.Warningf(ctx, "statistics discarded due to memory limit. transaction discard count: %d with limit: %d, statement discard count: %d with limit: %d, logged at interval: %s, last logged: %s",
 		discardTxnCnt, stmtLimit, discardSmtCnt, txnLimit, discardLogInterval, s.mu.lastDiscardLogMessageSent)
 	s.mu.lastDiscardLogMessageSent = timeNow
 

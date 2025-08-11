@@ -1406,7 +1406,7 @@ func (t *Transaction) Update(o *Transaction) {
 		if !t.Status.IsFinalized() {
 			t.Status = o.Status
 		} else if t.Status == COMMITTED {
-			log.Warningf(ctx, "updating COMMITTED txn %s with txn at later epoch %s", t.String(), o.String())
+			log.Dev.Warningf(ctx, "updating COMMITTED txn %s with txn at later epoch %s", t.String(), o.String())
 		}
 		// Replace all epoch-scoped state.
 		t.Epoch = o.Epoch
@@ -1430,7 +1430,7 @@ func (t *Transaction) Update(o *Transaction) {
 			}
 		case ABORTED:
 			if o.Status == COMMITTED {
-				log.Warningf(ctx, "updating ABORTED txn %s with COMMITTED txn %s", t.String(), o.String())
+				log.Dev.Warningf(ctx, "updating ABORTED txn %s with COMMITTED txn %s", t.String(), o.String())
 			}
 		case COMMITTED:
 			// Nothing to do.
@@ -1466,7 +1466,7 @@ func (t *Transaction) Update(o *Transaction) {
 			// aborted.
 			t.Status = ABORTED
 		case PREPARED, COMMITTED:
-			log.Warningf(ctx, "updating txn %s with %s txn at earlier epoch %s", t.String(), o.Status, o.String())
+			log.Dev.Warningf(ctx, "updating txn %s with %s txn at earlier epoch %s", t.String(), o.Status, o.String())
 		}
 	}
 

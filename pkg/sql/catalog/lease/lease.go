@@ -1106,7 +1106,7 @@ func releaseLease(ctx context.Context, lease *storedLease, m *Manager) (released
 		func(ctx context.Context) {
 			m.storage.release(ctx, m.stopper, lease)
 		}); err != nil {
-		log.Warningf(ctx, "error: %s, not releasing lease: %q", err, lease)
+		log.Dev.Warningf(ctx, "error: %s, not releasing lease: %q", err, lease)
 	}
 	// Asynchronous job is releasing it.
 	return true
@@ -1892,7 +1892,7 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 					state := m.findNewest(id)
 					if state != nil {
 						if err := m.purgeOldVersions(ctx, db, id, true /* dropped */, state.GetVersion()); err != nil {
-							log.Warningf(ctx, "error purging leases for deleted descriptor %d",
+							log.Dev.Warningf(ctx, "error purging leases for deleted descriptor %d",
 								id)
 						}
 					}
@@ -1944,7 +1944,7 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 						m.findDescriptorState(desc.GetParentSchemaID(), false) != nil {
 						err := ensureVersion(ctx, desc.GetID(), desc.GetVersion(), m)
 						if err != nil {
-							log.Warningf(ctx, "error fetching lease for descriptor %s", err)
+							log.Dev.Warningf(ctx, "error fetching lease for descriptor %s", err)
 						}
 					}
 					// Even if an initial acquisition happens above, we need to purge old
@@ -1952,7 +1952,7 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 					// For example the range feed sees version 2 and a query concurrently
 					// acquires version 1.
 					if err := m.purgeOldVersions(ctx, db, desc.GetID(), dropped, desc.GetVersion()); err != nil {
-						log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
+						log.Dev.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
 							desc.GetID(), desc.GetName(), err)
 					}
 				}
@@ -2082,7 +2082,7 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		if buildutil.CrdbTestBuild {
 			panic(errors.AssertionFailedf("range feed was not closed before a restart attempt"))
 		}
-		log.Warningf(ctx, "range feed was not closed before a restart attempt")
+		log.Dev.Warningf(ctx, "range feed was not closed before a restart attempt")
 	}
 	// Ignore errors here because they indicate that the server is shutting down.
 	// Also note that the range feed automatically shuts down when the server
@@ -2138,11 +2138,11 @@ func (m *Manager) checkRangeFeedStatus(ctx context.Context) (forceRefresh bool) 
 		m.mu.rangeFeedIsUnavailableAt.IsZero() {
 		// Track the first unavailability event.
 		m.mu.rangeFeedIsUnavailableAt = timeutil.Now()
-		log.Warningf(ctx, "lease manager range feed has stopped making progress.")
+		log.Dev.Warningf(ctx, "lease manager range feed has stopped making progress.")
 	} else if !m.mu.rangeFeedIsUnavailableAt.IsZero() &&
 		lastCheckpoints > 0 {
 		m.mu.rangeFeedIsUnavailableAt = time.Time{}
-		log.Warningf(ctx, "lease manager range feed has recovered.")
+		log.Dev.Warningf(ctx, "lease manager range feed has recovered.")
 		// Force all descriptors to refresh.
 		forceRefresh = true
 	}
@@ -2195,7 +2195,7 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 					rangeFeedProgressWatchDogEnabled = m.getRangeFeedMonitorSettings()
 				rangeFeedProgressWatchDog.Reset(rangeFeedProgressWatchDogTimeout)
 			case err := <-m.rangefeedErrCh:
-				log.Warningf(ctx, "lease rangefeed failed with error: %s", err.Error())
+				log.Dev.Warningf(ctx, "lease rangefeed failed with error: %s", err.Error())
 				m.handleRangeFeedError(ctx)
 				m.refreshSomeLeases(ctx, true /*refreshAndPurgeAllDescriptors*/)
 			case <-refreshTimer.C:
@@ -2243,7 +2243,7 @@ func (m *Manager) restartLeasingRangeFeedLocked(ctx context.Context) {
 	if m.mu.rangeFeedRestartInProgress {
 		return
 	}
-	log.Warning(ctx, "attempting restart of leasing range feed")
+	log.Dev.Warning(ctx, "attempting restart of leasing range feed")
 	// We will temporarily release the lock closing the range feed,
 	// in case things need to drain before termination. It is possible for
 	// another restart to enter once we release the lock.
@@ -2375,7 +2375,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, refreshAndPurgeAllDescr
 						if err := m.purgeOldVersions(
 							ctx, m.storage.db.KV(), id, true /* dropped */, 0, /* minVersion */
 						); err != nil {
-							log.Warningf(ctx, "error purging leases for descriptor %d: %v",
+							log.Dev.Warningf(ctx, "error purging leases for descriptor %d: %v",
 								id, err)
 						}
 						func() {
@@ -2390,7 +2390,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, refreshAndPurgeAllDescr
 					// we are doing this operation.
 					err := m.purgeOldVersions(ctx, m.storage.db.KV(), id, false /* dropped */, 0 /* minVersion */)
 					if err != nil {
-						log.Warningf(ctx, "error purging leases for descriptor %d: %v",
+						log.Dev.Warningf(ctx, "error purging leases for descriptor %d: %v",
 							id, err)
 					}
 				}
@@ -2634,7 +2634,7 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 		sessiondata.NodeUserSessionDataOverride,
 		"SELECT EXISTS (SELECT * FROM [SHOW REGIONS FROM DATABASE system])")
 	if err != nil {
-		log.Warningf(ctx, "unable to query if system database is multi-region: %v", err)
+		log.Dev.Warningf(ctx, "unable to query if system database is multi-region: %v", err)
 		return
 	}
 	// For multi-region system databases, only focus on our own region; there is
@@ -2672,7 +2672,7 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 		})
 		if err != nil {
 			if !startup.IsRetryableReplicaError(err) {
-				log.Warningf(ctx, "unable to read session IDs for orphaned leases: %v", err)
+				log.Dev.Warningf(ctx, "unable to read session IDs for orphaned leases: %v", err)
 				return
 			}
 		}
@@ -2686,7 +2686,7 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 			sessionID := sqlliveness.SessionID(tree.MustBeDBytes(sessionRow[0]))
 			sessionLeasesDeleted, err := deleteLeaseWithSessionIDWithBatch(ctx, ex, retryOpts, syntheticDescriptors, sessionID, region, limit)
 			if err != nil {
-				log.Warningf(ctx, "unable to delete orphaned leases for session %s: %v", sessionID, err)
+				log.Dev.Warningf(ctx, "unable to delete orphaned leases for session %s: %v", sessionID, err)
 				break
 			}
 			totalLeasesDeleted += sessionLeasesDeleted
@@ -2782,7 +2782,7 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 			return err
 		})
 	}); err != nil {
-		log.Warningf(ctx, "unable to read orphaned leases: %v", err)
+		log.Dev.Warningf(ctx, "unable to read orphaned leases: %v", err)
 		return
 	}
 
@@ -2829,7 +2829,7 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 						instanceID, released, totalLeases)
 				}
 			}); err != nil {
-			log.Warningf(ctx, "could not start async task for releasing orphaned lease %+v: %v", lease, err)
+			log.Dev.Warningf(ctx, "could not start async task for releasing orphaned lease %+v: %v", lease, err)
 			wg.Done()
 		}
 	}

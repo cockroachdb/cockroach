@@ -48,7 +48,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.T
 		} else if num != 1 {
 			// It's possible for us to be GCing a tenant record that hasn't
 			// been fully written yet, e.g. during RESTORE.
-			log.Warningf(ctx, "tenant GC: no record to delete for %d", info.ID)
+			log.Dev.Warningf(ctx, "tenant GC: no record to delete for %d", info.ID)
 		}
 
 		if _, err := txn.ExecEx(

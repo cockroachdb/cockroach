@@ -1010,7 +1010,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 			for _, kv := range batch {
 				if ts := kv.KeyValue.Value.Timestamp; ts.After(hlcNow) {
 					if logClock || log.V(1) {
-						log.Warningf(ctx, "event timestamp %s is ahead of local clock %s; delaying batch...", ts, hlcNow)
+						log.Dev.Warningf(ctx, "event timestamp %s is ahead of local clock %s; delaying batch...", ts, hlcNow)
 						logClock = false
 					}
 					if err := lrw.FlowCtx.Cfg.DB.KV().Clock().SleepUntil(ctx, ts); err != nil {

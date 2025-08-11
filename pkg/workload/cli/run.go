@@ -481,7 +481,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		var err error
 		for retry.Next() {
 			if err != nil {
-				log.Warningf(ctx, "retrying after error while creating load: %v", err)
+				log.Dev.Warningf(ctx, "retrying after error while creating load: %v", err)
 			}
 			ops, err = o.Ops(ctx, urls, reg)
 			if err == nil {
@@ -596,7 +596,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				formatter.outputTick(startElapsed, t)
 				if t.Exporter != nil && rampDone == nil {
 					if err := t.Exporter.SnapshotAndWrite(t.Hist, t.Now, t.Elapsed, &t.Name); err != nil {
-						log.Warningf(ctx, "histogram: %v", err)
+						log.Dev.Warningf(ctx, "histogram: %v", err)
 					}
 				}
 			})
@@ -621,7 +621,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				formatter.outputTotal(startElapsed, t)
 				if t.Exporter != nil {
 					if err := t.Exporter.SnapshotAndWrite(t.Hist, t.Now, t.Elapsed, &t.Name); err != nil {
-						log.Warningf(ctx, "histogram: %v", err)
+						log.Dev.Warningf(ctx, "histogram: %v", err)
 					}
 				}
 				if ops.ResultHist == `` || ops.ResultHist == t.Name {
@@ -735,7 +735,7 @@ func closeExporter(ctx context.Context, metricsExporter exporter.Exporter, file 
 
 			return renameTempFile(file, *histograms)
 		}); err != nil {
-			log.Warningf(ctx, "failed to close metrics exporter: %v", err)
+			log.Dev.Warningf(ctx, "failed to close metrics exporter: %v", err)
 		}
 	}
 }

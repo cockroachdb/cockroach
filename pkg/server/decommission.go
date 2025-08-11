@@ -84,12 +84,12 @@ func (t *decommissioningNodeMap) makeOnNodeDecommissioningCallback(
 						// NB: The only case where we would expect to see a processErr when
 						// enqueuing a replica async is if it does not have the lease. We
 						// are checking that above, but that check is inherently racy.
-						log.Warningf(
+						log.Dev.Warningf(
 							ctx, "unexpected processing error when enqueuing replica asynchronously: %v", processErr,
 						)
 					}
 					if enqueueErr != nil && logLimiter.ShouldLog() {
-						log.Warningf(ctx, "unable to enqueue replica: %s", enqueueErr)
+						log.Dev.Warningf(ctx, "unable to enqueue replica: %s", enqueueErr)
 					}
 					return true /* wantMore */
 				})

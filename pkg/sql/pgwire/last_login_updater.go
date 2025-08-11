@@ -136,10 +136,10 @@ func (u *lastLoginUpdater) updateLastLoginTime(ctx context.Context, dbUser usern
 		if err := u.execCfg.Stopper.RunAsyncTask(ctx, "wait_last_login_update", func(ctx context.Context) {
 			result := future.WaitForResult(ctx)
 			if result.Err != nil {
-				log.Warningf(ctx, "could not update last login times: %v", result.Err)
+				log.Dev.Warningf(ctx, "could not update last login times: %v", result.Err)
 			}
 		}); err != nil {
-			log.Warningf(ctx, "could not create async task to wait for last login update: %v", err)
+			log.Dev.Warningf(ctx, "could not create async task to wait for last login update: %v", err)
 		}
 	}
 }

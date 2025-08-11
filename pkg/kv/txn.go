@@ -1208,13 +1208,13 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 					txn.DebugName(), attempt, err, maxRetries, rollbackErr,
 				),
 				ErrAutoRetryLimitExhausted)
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 			break
 		}
 
 		const warnEvery = 10
 		if attempt%warnEvery == 0 {
-			log.Warningf(ctx, "have retried transaction: %s %d times, most recently because of the "+
+			log.Dev.Warningf(ctx, "have retried transaction: %s %d times, most recently because of the "+
 				"retryable error: %s. Is the transaction stuck in a retry loop?", txn.DebugName(), attempt, err)
 		}
 

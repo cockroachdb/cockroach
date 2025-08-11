@@ -449,7 +449,7 @@ func reloadConfigLocked(
 
 	redirectURL, err := getRegionSpecificRedirectURL(locality, oidcAuthServer.conf.redirectURLConf)
 	if err != nil {
-		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
+		log.Dev.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
 			log.Dev.Infof(ctx, "check redirect URL OIDC cluster setting: "+OIDCRedirectURLSettingName)
 		}
@@ -458,7 +458,7 @@ func reloadConfigLocked(
 
 	manager, err := NewOIDCManager(ctx, oidcAuthServer.conf, redirectURL, scopesForOauth)
 	if err != nil {
-		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
+		log.Dev.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
 			log.Dev.Infof(ctx, "check provider URL OIDC cluster setting: "+OIDCProviderURLSettingName)
 		}

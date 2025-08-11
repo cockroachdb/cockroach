@@ -187,7 +187,7 @@ func (dlq *deadLetterQueueClient) Log(
 
 	jsonRow, err := cdcEventRow.ToJSON()
 	if err != nil {
-		log.Warningf(ctx, "failed to convert cdc event row to json: %v", err)
+		log.Dev.Warningf(ctx, "failed to convert cdc event row to json: %v", err)
 		if _, err := dlq.ie.Exec(
 			ctx,
 			"insert-row-into-dlq-table-fallback",

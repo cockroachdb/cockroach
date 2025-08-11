@@ -765,7 +765,7 @@ func (sc *SchemaChanger) ignoreRevertedDropIndex(
 			if !m.IsRollback() || !m.Adding() || m.AsIndex() == nil {
 				continue
 			}
-			log.Warningf(ctx, "ignoring rollback of index drop; index %q will be dropped", m.AsIndex().GetName())
+			log.Dev.Warningf(ctx, "ignoring rollback of index drop; index %q will be dropped", m.AsIndex().GetName())
 			mut.Mutations[m.MutationOrdinal()].Direction = descpb.DescriptorMutation_DROP
 			mutationsModified = true
 		}
@@ -979,7 +979,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) (retErr error) {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return err
 			}
-			log.Warningf(ctx, "waiting to update leases: %+v", err)
+			log.Dev.Warningf(ctx, "waiting to update leases: %+v", err)
 			// As we are dismissing the error, go through the recording motions.
 			// This ensures that any important error gets reported to Sentry, etc.
 			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
@@ -1116,7 +1116,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) (retErr error) {
 			// We only expect ErrDescriptorNotFound to be returned. This happens
 			// when the table descriptor was deleted. We can ignore this error.
 
-			log.Warningf(ctx, "unexpected error while waiting for leases to update: %+v", err)
+			log.Dev.Warningf(ctx, "unexpected error while waiting for leases to update: %+v", err)
 			// As we are dismissing the error, go through the recording motions.
 			// This ensures that any important error gets reported to Sentry, etc.
 			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
@@ -1142,7 +1142,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	// Clean up any protected timestamps as a last resort, in case the job
 	// execution never did itself.
 	if err := sc.execCfg.ProtectedTimestampManager.Unprotect(ctx, sc.job); err != nil {
-		log.Warningf(ctx, "unexpected error cleaning up protected timestamp %v", err)
+		log.Dev.Warningf(ctx, "unexpected error cleaning up protected timestamp %v", err)
 	}
 	// Ensure that this is a table descriptor and that the mutation is first in
 	// line prior to reverting.
@@ -1187,7 +1187,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return err
 			}
-			log.Warningf(ctx, "waiting to update leases: %+v", err)
+			log.Dev.Warningf(ctx, "waiting to update leases: %+v", err)
 			// As we are dismissing the error, go through the recording motions.
 			// This ensures that any important error gets reported to Sentry, etc.
 			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
@@ -1205,7 +1205,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 			// We only expect ErrDescriptorNotFound to be returned. This happens
 			// when the table descriptor was deleted. We can ignore this error.
 
-			log.Warningf(ctx, "unexpected error while waiting for leases to update: %+v", err)
+			log.Dev.Warningf(ctx, "unexpected error while waiting for leases to update: %+v", err)
 			// As we are dismissing the error, go through the recording motions.
 			// This ensures that any important error gets reported to Sentry, etc.
 			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
@@ -1260,7 +1260,7 @@ func (sc *SchemaChanger) dropViewDeps(
 	for _, depID := range dependedOn {
 		dependencyDesc, err := descsCol.MutableByID(txn).Table(ctx, depID)
 		if err != nil {
-			log.Warningf(ctx, "error resolving dependency relation ID %d", depID)
+			log.Dev.Warningf(ctx, "error resolving dependency relation ID %d", depID)
 			continue
 		}
 		// The dependency is also being deleted, so we don't have to remove the
@@ -1270,7 +1270,7 @@ func (sc *SchemaChanger) dropViewDeps(
 		}
 		dependencyDesc.DependedOnBy = removeMatchingReferences(dependencyDesc.DependedOnBy, viewDesc.ID)
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace*/, dependencyDesc, b); err != nil {
-			log.Warningf(ctx, "error removing dependency from releation ID %d", depID)
+			log.Dev.Warningf(ctx, "error removing dependency from releation ID %d", depID)
 			return err
 		}
 	}
@@ -1280,7 +1280,7 @@ func (sc *SchemaChanger) dropViewDeps(
 	for _, depRef := range DependedOnBy {
 		dependencyDesc, err := descsCol.MutableByID(txn).Table(ctx, depRef.ID)
 		if err != nil {
-			log.Warningf(ctx, "error resolving dependency relation ID %d", depRef.ID)
+			log.Dev.Warningf(ctx, "error resolving dependency relation ID %d", depRef.ID)
 			continue
 		}
 		if dependencyDesc.Dropped() {
@@ -1297,12 +1297,12 @@ func (sc *SchemaChanger) dropViewDeps(
 		for _, id := range typeClosure.Ordered() {
 			typeDesc, err := descsCol.MutableByID(txn).Type(ctx, id)
 			if err != nil {
-				log.Warningf(ctx, "error resolving type dependency %d", id)
+				log.Dev.Warningf(ctx, "error resolving type dependency %d", id)
 				continue
 			}
 			if typeDesc.RemoveReferencingDescriptorID(viewDesc.GetID()) {
 				if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace*/, typeDesc, b); err != nil {
-					log.Warningf(ctx, "error removing dependency from type ID %d", id)
+					log.Dev.Warningf(ctx, "error removing dependency from type ID %d", id)
 					return err
 				}
 			}
@@ -1311,7 +1311,7 @@ func (sc *SchemaChanger) dropViewDeps(
 			id := col.GetUsesSequenceID(i)
 			seqDesc, err := descsCol.MutableByID(txn).Table(ctx, id)
 			if err != nil {
-				log.Warningf(ctx, "error resolving sequence dependency %d", id)
+				log.Dev.Warningf(ctx, "error resolving sequence dependency %d", id)
 				continue
 			}
 			if seqDesc.Dropped() {
@@ -1325,7 +1325,7 @@ func (sc *SchemaChanger) dropViewDeps(
 				}
 			}
 			if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace*/, seqDesc, b); err != nil {
-				log.Warningf(ctx, "error removing dependency from sequence ID %d", id)
+				log.Dev.Warningf(ctx, "error removing dependency from sequence ID %d", id)
 				return err
 			}
 		}
@@ -1334,7 +1334,7 @@ func (sc *SchemaChanger) dropViewDeps(
 }
 
 func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) error {
-	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", sc.job.ID(), err)
+	log.Dev.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", sc.job.ID(), err)
 	if errReverse := sc.maybeReverseMutations(ctx, err); errReverse != nil {
 		return errReverse
 	}
@@ -2455,14 +2455,14 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 				scTable.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_ONLY
 				scTable.Mutations[m.MutationOrdinal()].Direction = descpb.DescriptorMutation_DROP
 			} else {
-				log.Warningf(ctx, "reverse schema change mutation: %+v", scTable.Mutations[m.MutationOrdinal()])
+				log.Dev.Warningf(ctx, "reverse schema change mutation: %+v", scTable.Mutations[m.MutationOrdinal()])
 				scTable.Mutations[m.MutationOrdinal()], columns = sc.reverseMutation(scTable.Mutations[m.MutationOrdinal()], false /*notStarted*/, columns)
 			}
 
 			// If the mutation is for validating a constraint that is being added,
 			// drop the constraint because validation has failed.
 			if constraint := m.AsConstraintWithoutIndex(); constraint != nil && constraint.Adding() {
-				log.Warningf(ctx, "dropping constraint %s", constraint)
+				log.Dev.Warningf(ctx, "dropping constraint %s", constraint)
 				if err := sc.maybeDropValidatingConstraint(ctx, scTable, constraint); err != nil {
 					return err
 				}
@@ -2666,7 +2666,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 								mutation.State != sc.startingStateForAddIndexMutations() {
 								panic(errors.AssertionFailedf("mutation in bad state: %+v", mutation))
 							}
-							log.Warningf(ctx, "drop schema change mutation: %+v", mutation)
+							log.Dev.Warningf(ctx, "drop schema change mutation: %+v", mutation)
 							dropMutations[mutation.MutationID] = struct{}{}
 							break
 						}
@@ -3057,7 +3057,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			case !IsPermanentSchemaChangeError(scErr):
 				// Check if the error is on a allowlist of errors we should retry on,
 				// including the schema change not having the first mutation in line.
-				log.Warningf(ctx, "error while running schema change, retrying: %v", scErr)
+				log.Dev.Warningf(ctx, "error while running schema change, retrying: %v", scErr)
 				if IsConstraintError(scErr) {
 					telemetry.Inc(sc.metrics.ConstraintErrors)
 				} else {

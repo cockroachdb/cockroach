@@ -133,7 +133,7 @@ func (sc *spanConfigIngestor) ingestSpanConfigs(
 	group.GoCtx(func(ctx context.Context) error {
 		defer func() {
 			if err := sc.client.Close(ctx); err != nil {
-				log.Warningf(ctx, "error closing span config client: %s", err.Error())
+				log.Dev.Warningf(ctx, "error closing span config client: %s", err.Error())
 			}
 		}()
 		return sc.consumeSpanConfigs(ctx, sub)
@@ -192,7 +192,7 @@ func (sc *spanConfigIngestor) bufferRecord(
 		return err
 	}
 	if !ok {
-		log.Warningf(ctx, "could not rekey this span as part of an ephemeral table %s", sourceSpan)
+		log.Dev.Warningf(ctx, "could not rekey this span as part of an ephemeral table %s", sourceSpan)
 		// No need to replicate the span cfgs for ephemeral tables in the app tenant
 		//
 		// TODO(msbutler): This error handling isn't ideal as the span for this span

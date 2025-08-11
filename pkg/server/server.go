@@ -615,7 +615,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			goschedstats.UnregisterRunnableCountCallback(cbID)
 		}))
 	} else {
-		log.Warning(ctx, "goschedstats not supported; admission control will be impaired")
+		log.Dev.Warning(ctx, "goschedstats not supported; admission control will be impaired")
 	}
 	stopper.AddCloser(gcoords)
 

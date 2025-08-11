@@ -150,7 +150,7 @@ func processInvalidObjects(
 
 			// IDs are always non-sensitive, and the validationErr is written to the
 			// table with redact.Sprint, so it's a RedactableString.
-			log.Warningf(ctx, "found invalid object with ID %d: %s",
+			log.Dev.Warningf(ctx, "found invalid object with ID %d: %s",
 				redact.SafeInt(*descID), redact.RedactableString(*validationErr),
 			)
 		}

@@ -141,7 +141,7 @@ func (bs *asyncProcessorRouter) maybeFlushAsyncLocked(ctx context.Context) {
 		select {
 		case bs.flushC <- struct{}{}:
 		default:
-			log.Warning(ctx, "asyncProcessorRouter's flushC full, aborting flush")
+			log.Dev.Warning(ctx, "asyncProcessorRouter's flushC full, aborting flush")
 		}
 	}
 

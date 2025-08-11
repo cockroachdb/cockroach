@@ -1128,7 +1128,7 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
 			if err := it.Close(); err != nil {
 				// TODO(yuzefovich): this error should be propagated further up
 				// and not simply being logged. Fix it (#61123).
-				log.Warningf(ctx, "error closing an iterator: %v", err)
+				log.Dev.Warningf(ctx, "error closing an iterator: %v", err)
 			}
 		}
 		defer cleanup(ctx)
@@ -2208,7 +2208,7 @@ func populateTransactionsTable(
 		}
 	}
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, the error for the txn string,
 			// and nulls for all other columns.
@@ -2436,7 +2436,7 @@ func populateQueriesTable(
 	}
 
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, the error for query, and
 			// nulls for all other columns.
@@ -2660,7 +2660,7 @@ func populateSessionsTable(
 	}
 
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, error in active queries, and nulls
 			// for all other columns.
@@ -2922,7 +2922,7 @@ func populateContentionEventsTable(
 		}
 	}
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 	}
 	return nil
 }
@@ -2987,7 +2987,7 @@ func populateDistSQLFlowsTable(
 		}
 	}
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 	}
 	return nil
 }
@@ -3932,7 +3932,7 @@ CREATE TABLE crdb_internal.table_indexes (
 						if ts := idx.CreatedAt(); !ts.IsZero() {
 							tsDatum, err := tree.MakeDTimestamp(ts, time.Nanosecond)
 							if err != nil {
-								log.Warningf(ctx, "failed to construct timestamp for index: %v", err)
+								log.Dev.Warningf(ctx, "failed to construct timestamp for index: %v", err)
 							} else {
 								createdAt = tsDatum
 							}

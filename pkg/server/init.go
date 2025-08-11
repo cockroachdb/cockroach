@@ -372,7 +372,7 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 			if grpcutil.IsWaitingForInit(err) {
 				log.Dev.Infof(ctx, "%s is itself waiting for init, will retry", addr)
 			} else {
-				log.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
+				log.Dev.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
 			}
 			continue
 		}
@@ -418,7 +418,7 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 				if grpcutil.IsWaitingForInit(err) {
 					log.Dev.Infof(ctx, "%s is itself waiting for init, will retry", addr)
 				} else {
-					log.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
+					log.Dev.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
 				}
 				continue
 			}

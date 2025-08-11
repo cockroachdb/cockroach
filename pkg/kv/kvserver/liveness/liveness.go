@@ -670,7 +670,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 					}
 					return nil
 				}); err != nil {
-				log.Warningf(ctx, heartbeatFailureLogFormat, err)
+				log.Dev.Warningf(ctx, heartbeatFailureLogFormat, err)
 			} else if nl.onSelfHeartbeat != nil {
 				nl.onSelfHeartbeat(ctx)
 			}
@@ -756,7 +756,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 		dur := timeutil.Since(start)
 		nl.metrics.HeartbeatLatency.RecordValue(dur.Nanoseconds())
 		if dur > time.Second {
-			log.Warningf(ctx, "slow heartbeat took %s; err=%v", dur, err)
+			log.Dev.Warningf(ctx, "slow heartbeat took %s; err=%v", dur, err)
 		}
 	}(timeutil.Now())
 

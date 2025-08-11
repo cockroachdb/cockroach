@@ -176,7 +176,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *kvpb.Error) {
 					}
 				default:
 					// Any other error is worth being logged visibly.
-					log.Warningf(ctx, "could not acquire lease for range gossip: %s", pErr)
+					log.Dev.Warningf(ctx, "could not acquire lease for range gossip: %s", pErr)
 				}
 			}
 		}); err != nil {

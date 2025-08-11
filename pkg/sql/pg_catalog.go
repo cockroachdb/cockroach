@@ -1054,7 +1054,7 @@ func populateTableConstraints(
 			if refConstraint, err := catalog.FindFKReferencedUniqueConstraint(referencedTable, fk); err != nil {
 				// We couldn't find a unique constraint that matched. This shouldn't
 				// happen.
-				log.Warningf(ctx, "broken fk reference: %v", err)
+				log.Dev.Warningf(ctx, "broken fk reference: %v", err)
 			} else if idx := refConstraint.AsUniqueWithIndex(); idx != nil {
 				conindid = h.IndexOid(referencedTable.GetID(), idx.GetID())
 			}
@@ -1739,7 +1739,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 				if refConstraint, err := catalog.FindFKReferencedUniqueConstraint(referencedTable, fk); err != nil {
 					// We couldn't find a unique constraint that matched. This shouldn't
 					// happen.
-					log.Warningf(ctx, "broken fk reference: %v", err)
+					log.Dev.Warningf(ctx, "broken fk reference: %v", err)
 				} else if idx := refConstraint.AsUniqueWithIndex(); idx != nil {
 					refObjID = h.IndexOid(referencedTable.GetID(), idx.GetID())
 				}

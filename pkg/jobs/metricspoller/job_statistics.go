@@ -231,7 +231,7 @@ func processJobPTSRecord(
 				ptsExpired := errors.Newf(
 					"protected timestamp records %s as of %s (age %s) exceeds job configured limit of %s",
 					rec.ID, rec.Timestamp, timeutil.Since(rec.Timestamp.GoTime()), p.MaximumPTSAge)
-				log.Warningf(ctx, "job %d canceled due to %s", jobID, ptsExpired)
+				log.Dev.Warningf(ctx, "job %d canceled due to %s", jobID, ptsExpired)
 				return ju.CancelRequestedWithReason(ctx, md, ptsExpired)
 			}
 			return nil

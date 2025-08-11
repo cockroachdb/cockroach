@@ -118,7 +118,7 @@ func (j *jobMonitor) start(
 	})
 	if err != nil {
 		tasksWG.Done()
-		log.Warningf(ctx, "error starting sql stats scheduled compaction job monitor: %v", err)
+		log.Dev.Warningf(ctx, "error starting sql stats scheduled compaction job monitor: %v", err)
 	}
 }
 
@@ -191,7 +191,7 @@ func (j *jobMonitor) updateSchedule(ctx context.Context, cronExpr string) {
 
 	if ctx.Err() == nil {
 		if err = CheckScheduleAnomaly(sj); err != nil {
-			log.Warningf(ctx, "schedule anomaly detected, disabling sql stats compaction may cause performance impact: %s", err)
+			log.Dev.Warningf(ctx, "schedule anomaly detected, disabling sql stats compaction may cause performance impact: %s", err)
 		}
 	}
 

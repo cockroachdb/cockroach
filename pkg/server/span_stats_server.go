@@ -177,7 +177,7 @@ func collectSpanStatsResponses(
 
 			_, ok := res.SpanToStats[spanStr]
 			if !ok {
-				log.Warningf(ctx, "Received Span not in original request: %s", spanStr)
+				log.Dev.Warningf(ctx, "Received Span not in original request: %s", spanStr)
 				res.SpanToStats[spanStr] = &roachpb.SpanStats{}
 			}
 

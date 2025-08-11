@@ -207,7 +207,7 @@ func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
 		for {
 			allTenants, updateCh := c.watcher.GetAllTenants()
 			if err := c.startMissingServers(ctx, allTenants); err != nil {
-				log.Warningf(ctx, "cannot update running tenant services: %v", err)
+				log.Dev.Warningf(ctx, "cannot update running tenant services: %v", err)
 			}
 
 			timer.Reset(watchInterval)

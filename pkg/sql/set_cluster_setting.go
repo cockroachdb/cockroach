@@ -458,7 +458,7 @@ func writeSettingInternal(
 
 		if setting.IsUnsafe() {
 			// Also mention the change in the non-structured DEV log.
-			log.Warningf(ctx, "unsafe setting changed: %q -> %v", name, reportedValue)
+			log.Dev.Warningf(ctx, "unsafe setting changed: %q -> %v", name, reportedValue)
 		}
 
 		return logFn(ctx,
@@ -709,7 +709,7 @@ func waitForSettingUpdate(
 		return nil
 	})
 	if err != nil {
-		log.Warningf(
+		log.Dev.Warningf(
 			ctx, "SET CLUSTER SETTING %q timed out waiting for value %q, observed %q",
 			name, expectedEncodedValue, observed,
 		)

@@ -185,7 +185,7 @@ func manageFullBackupPTSChaining(
 	)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
-			log.Warningf(ctx, "could not find dependent schedule with id %d",
+			log.Dev.Warningf(ctx, "could not find dependent schedule with id %d",
 				fullScheduleArgs.DependentScheduleID)
 			return nil
 		}
@@ -282,7 +282,7 @@ func manageIncrementalBackupPTSChaining(
 	// In such a scenario it is okay to do nothing since the next incremental on
 	// the new full backup will rely on the pts record written by the full backup.
 	if err != nil && errors.Is(err, protectedts.ErrNotExists) {
-		log.Warningf(ctx, "failed to update timestamp record %d since it does not exist", ptsRecordID)
+		log.Dev.Warningf(ctx, "failed to update timestamp record %d since it does not exist", ptsRecordID)
 		return nil //nolint:returnerrcheck
 	}
 	return err

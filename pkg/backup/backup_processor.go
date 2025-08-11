@@ -232,7 +232,7 @@ func (bp *backupDataProcessor) constructProgressProducerMeta(
 	// Annotate the progress with the fraction completed by this backupDataProcessor.
 	progDetails := backuppb.BackupManifest_Progress{}
 	if err := gogotypes.UnmarshalAny(&prog.ProgressDetails, &progDetails); err != nil {
-		log.Warningf(bp.Ctx(), "failed to unmarshal progress details %v", err)
+		log.Dev.Warningf(bp.Ctx(), "failed to unmarshal progress details %v", err)
 	} else {
 		totalSpans := int32(len(bp.spec.Spans) + len(bp.spec.IntroducedSpans))
 		bp.completedSpans += progDetails.CompletedSpans
@@ -464,7 +464,7 @@ func runBackupProcessor(
 		sink := backupsink.MakeFileSSTSink(sinkConf, storage, pacer)
 		defer func() {
 			if err := sink.Flush(ctx); err != nil {
-				log.Warningf(ctx, "failed to flush SST sink: %s", err)
+				log.Dev.Warningf(ctx, "failed to flush SST sink: %s", err)
 			}
 			logClose(ctx, sink, "SST sink")
 		}()
@@ -561,7 +561,7 @@ func runBackupProcessor(
 									tracer = flowCtx.Cfg.Tracer
 								}
 								if tracer == nil {
-									log.Warning(ctx, "nil tracer in backup processor")
+									log.Dev.Warning(ctx, "nil tracer in backup processor")
 								}
 								opts := make([]tracing.SpanOption, 0)
 								opts = append(opts, tracing.WithParent(sp))
@@ -657,7 +657,7 @@ func runBackupProcessor(
 						}
 
 						if len(resp.Files) > 1 {
-							log.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
+							log.Dev.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
 						}
 
 						// Even if the ExportRequest did not export any data we want to report
@@ -756,7 +756,7 @@ func reserveWorkerMemory(
 	workerCount := minimumWorkerCount
 	for i := 0; i < (maxWorkerCount - minimumWorkerCount); i++ {
 		if err := memAcc.Grow(ctx, perWorkerMemory); err != nil {
-			log.Warningf(ctx, "backup worker count restricted by memory limit")
+			log.Dev.Warningf(ctx, "backup worker count restricted by memory limit")
 			break
 		}
 		workerCount++
@@ -766,7 +766,7 @@ func reserveWorkerMemory(
 
 func logClose(ctx context.Context, c io.Closer, desc string) {
 	if err := c.Close(); err != nil {
-		log.Warningf(ctx, "failed to close %s: %s", redact.SafeString(desc), err.Error())
+		log.Dev.Warningf(ctx, "failed to close %s: %s", redact.SafeString(desc), err.Error())
 	}
 }
 

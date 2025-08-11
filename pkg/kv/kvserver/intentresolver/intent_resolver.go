@@ -546,7 +546,7 @@ func (ir *IntentResolver) CleanupIntentsAsync(
 				return err
 			})
 		if err != nil && ir.every.ShouldLog() {
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 	})
 }
@@ -664,7 +664,7 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 				ctx, kv.AdmissionHeaderForLockUpdateForTxn(et.Txn), rangeID, et.Txn, et.Poison, onComplete,
 			); err != nil {
 				if ir.every.ShouldLog() {
-					log.Warningf(ctx, "failed to cleanup transaction intents: %v", err)
+					log.Dev.Warningf(ctx, "failed to cleanup transaction intents: %v", err)
 				}
 			}
 		}); err != nil {
@@ -784,7 +784,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 			ctx, admissionHeader, rangeID, txn, false /* poison */, onCleanupComplete)
 		if err != nil {
 			if ir.every.ShouldLog() {
-				log.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
+				log.Dev.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
 			}
 		}
 	}(ctx)
@@ -887,7 +887,7 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 		}
 		if err != nil {
 			if ir.every.ShouldLog() {
-				log.Warningf(ctx, "failed to gc transaction record: %v", err)
+				log.Dev.Warningf(ctx, "failed to gc transaction record: %v", err)
 			}
 		}
 	}(ctx)
@@ -937,14 +937,14 @@ func (ir *IntentResolver) lookupRangeID(ctx context.Context, key roachpb.Key) ro
 	rKey, err := keys.Addr(key)
 	if err != nil {
 		if ir.every.ShouldLog() {
-			log.Warningf(ctx, "failed to resolve addr for key %q: %+v", key, err)
+			log.Dev.Warningf(ctx, "failed to resolve addr for key %q: %+v", key, err)
 		}
 		return 0
 	}
 	rangeID, err := ir.rdc.LookupRangeID(ctx, rKey)
 	if err != nil {
 		if ir.every.ShouldLog() {
-			log.Warningf(ctx, "failed to look up range descriptor for key %q: %+v", key, err)
+			log.Dev.Warningf(ctx, "failed to look up range descriptor for key %q: %+v", key, err)
 		}
 		return 0
 	}
@@ -1068,7 +1068,7 @@ func (ir *IntentResolver) resolveIntents(
 	// TODO(aaditya): reconsider this once #112680 is resolved.
 	// if !build.IsRelease() && h == (kvpb.AdmissionHeader{}) && ir.everyAdmissionHeaderMissing.ShouldLog() {
 	if false {
-		log.Warningf(ctx,
+		log.Dev.Warningf(ctx,
 			"test-only warning: if you see this, please report to https://github.com/cockroachdb/cockroach/issues/112680. empty admission header provided by %s", debugutil.Stack())
 	}
 	// Send the requests ...

@@ -327,7 +327,7 @@ func (a *apiV2Server) getTableCreateStatement(
 		sessiondata.NodeUserSessionDataOverride, query.String(), query.QueryArguments()...)
 	if err != nil {
 		statementError := fmt.Sprintf("Unable to retrieve create statement for %s.%s", escDbName, escTableName)
-		log.Warningf(ctx, "%v", errors.Wrapf(err, "%s", statementError))
+		log.Dev.Warningf(ctx, "%v", errors.Wrapf(err, "%s", statementError))
 		return statementError, nil
 	}
 	scanner := makeResultScanner(types)

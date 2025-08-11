@@ -138,7 +138,7 @@ func maybeDropMsgApp(
 		// the above analysis) in which a split trigger just isn't coming. If
 		// there are, the idea is that we notice this log message and improve
 		// the heuristics.
-		log.Warningf(
+		log.Dev.Warningf(
 			ctx,
 			"would have dropped incoming MsgApp to wait for split trigger, "+
 				"but allowing because uninitialized replica was created %s (>%s) ago",

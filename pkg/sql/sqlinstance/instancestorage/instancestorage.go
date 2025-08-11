@@ -365,7 +365,7 @@ func (s *Storage) createInstanceRow(
 		// would require one round trip for reading and one round trip for
 		// writes.
 		if err := s.generateAvailableInstanceRows(ctx, [][]byte{region}, session.Expiration()); err != nil {
-			log.Warningf(ctx, "failed to generate available instance rows: %v", err)
+			log.Dev.Warningf(ctx, "failed to generate available instance rows: %v", err)
 		}
 	}
 
@@ -576,7 +576,7 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 				// regions can be added/removed to/from the system DB.
 				regions, err := loadRegions(ctx)
 				if err != nil {
-					log.Warningf(ctx, "failed to load regions from the system DB: %v", err)
+					log.Dev.Warningf(ctx, "failed to load regions from the system DB: %v", err)
 					continue
 				}
 
@@ -586,13 +586,13 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 				for _, region := range regions {
 
 					if err := s.reclaimRegion(ctx, region); err != nil {
-						log.Warningf(ctx, "failed to reclaim instances in region '%v': %v", region, err)
+						log.Dev.Warningf(ctx, "failed to reclaim instances in region '%v': %v", region, err)
 					}
 				}
 
 				// Allocate new ids regions that do not have enough pre-allocated sql instances.
 				if err := s.generateAvailableInstanceRows(ctx, regions, sessionExpirationFn()); err != nil {
-					log.Warningf(ctx, "failed to generate available instance rows: %v", err)
+					log.Dev.Warningf(ctx, "failed to generate available instance rows: %v", err)
 				}
 			}
 		}

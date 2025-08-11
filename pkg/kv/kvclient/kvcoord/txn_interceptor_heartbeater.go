@@ -632,7 +632,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 		TaskName: taskName,
 	})
 	if err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		h.metrics.AsyncRollbacksFailed.Inc(1)
 		return
 	}

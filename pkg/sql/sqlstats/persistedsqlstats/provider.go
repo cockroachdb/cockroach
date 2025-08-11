@@ -197,7 +197,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 					// stats for this node.
 					s.cfg.FlushDoneSignalsIgnored.Inc(1)
 					if log.V(1) {
-						log.Warning(ctx, "sql-stats-worker: unable to signal flush completion")
+						log.Dev.Warning(ctx, "sql-stats-worker: unable to signal flush completion")
 					}
 				}
 			}
@@ -205,7 +205,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 	})
 	if err != nil {
 		s.tasksDoneWG.Done()
-		log.Warningf(ctx, "failed to start sql-stats-worker: %v", err)
+		log.Dev.Warningf(ctx, "failed to start sql-stats-worker: %v", err)
 	}
 }
 
@@ -265,7 +265,7 @@ func (s *PersistedSQLStats) ResetClusterSQLStats(ctx context.Context) error {
 	if _, err := s.cfg.FanoutServer.ResetSQLStats(ctx, req); err != nil {
 		// Failure to flush in-memory stats is not fatal. We should still
 		// try to reset the persisted stats.
-		log.Warningf(ctx, "error resetting in-memory sql stats: %s", err)
+		log.Dev.Warningf(ctx, "error resetting in-memory sql stats: %s", err)
 	}
 
 	// Reset persisted stats by truncating tables.

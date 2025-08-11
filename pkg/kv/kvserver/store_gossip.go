@@ -347,7 +347,7 @@ func (s *StoreGossip) asyncGossipStore(ctx context.Context, reason string, useCa
 	gossipFn := func(ctx context.Context) {
 		log.VEventf(ctx, 2, "gossiping on %s", reason)
 		if err := s.GossipStore(ctx, useCached); err != nil {
-			log.Warningf(ctx, "error gossiping on %s: %+v", reason, err)
+			log.Dev.Warningf(ctx, "error gossiping on %s: %+v", reason, err)
 		}
 	}
 
@@ -361,7 +361,7 @@ func (s *StoreGossip) asyncGossipStore(ctx context.Context, reason string, useCa
 	if err := s.stopper.RunAsyncTask(
 		ctx, fmt.Sprintf("storage.Store: gossip on %s", reason), gossipFn,
 	); err != nil {
-		log.Warningf(ctx, "unable to gossip on %s: %+v", reason, err)
+		log.Dev.Warningf(ctx, "unable to gossip on %s: %+v", reason, err)
 	}
 }
 

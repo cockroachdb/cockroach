@@ -1668,7 +1668,7 @@ func (r *Replica) refreshProposalsLocked(
 	if maxSlowProposalDuration > 0 && r.breaker.Signal().Err() == nil && !destroyed {
 		err := errors.Errorf("have been waiting %.2fs for slow proposal %s",
 			maxSlowProposalDuration.Seconds(), maxSlowProposalDurationRequest)
-		log.Warningf(ctx, "%s", err)
+		log.Dev.Warningf(ctx, "%s", err)
 		// NB: this is async because we're holding lots of locks here, and we want
 		// to avoid having to pass all the information about the replica into the
 		// breaker (since the breaker needs access to this information at will to
@@ -1978,12 +1978,12 @@ func (r *Replica) sendRaftMessage(
 	r.mu.RUnlock()
 
 	if fromErr != nil {
-		log.Warningf(ctx, "failed to look up sender replica %d in r%d while sending %s: %s",
+		log.Dev.Warningf(ctx, "failed to look up sender replica %d in r%d while sending %s: %s",
 			msg.From, r.RangeID, msg.Type, fromErr)
 		return
 	}
 	if toErr != nil {
-		log.Warningf(ctx, "failed to look up recipient replica %d in r%d while sending %s: %s",
+		log.Dev.Warningf(ctx, "failed to look up recipient replica %d in r%d while sending %s: %s",
 			msg.To, r.RangeID, msg.Type, toErr)
 		return
 	}
@@ -2119,7 +2119,7 @@ func (r *Replica) addSnapshotLogTruncationConstraint(
 		// fed into this method twice) or a UUID collision. We discard the update
 		// (which is benign) but log it loudly. If the index is the same, it's
 		// likely the former, otherwise the latter.
-		log.Warningf(ctx, "UUID collision at %s for %+v (index %d)", snapUUID, item, appliedIndex)
+		log.Dev.Warningf(ctx, "UUID collision at %s for %+v (index %d)", snapUUID, item, appliedIndex)
 		return appliedIndex, func() {}
 	}
 

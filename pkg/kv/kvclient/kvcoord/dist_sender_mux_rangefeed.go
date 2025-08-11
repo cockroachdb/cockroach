@@ -403,7 +403,7 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 	maybeCloseClient := func() {
 		if closer, ok := mux.(io.Closer); ok {
 			if err := closer.Close(); err != nil {
-				log.Warningf(ctx, "error closing mux rangefeed client: %v", err)
+				log.Dev.Warningf(ctx, "error closing mux rangefeed client: %v", err)
 			}
 		}
 	}

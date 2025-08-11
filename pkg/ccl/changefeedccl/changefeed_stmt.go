@@ -370,7 +370,7 @@ func changefeedPlanHook(
 			}); err != nil {
 				if sj != nil {
 					if err := sj.CleanupOnRollback(ctx); err != nil {
-						log.Warningf(ctx, "failed to cleanup aborted job: %v", err)
+						log.Dev.Warningf(ctx, "failed to cleanup aborted job: %v", err)
 					}
 				}
 				return err
@@ -1355,7 +1355,7 @@ func (b *changefeedResumer) setJobStatusMessage(
 
 	status := jobs.StatusMessage(fmt.Sprintf(fmtOrMsg, args...))
 	if err := b.job.NoTxn().UpdateStatusMessage(ctx, status); err != nil {
-		log.Warningf(ctx, "failed to set status: %v", err)
+		log.Dev.Warningf(ctx, "failed to set status: %v", err)
 	}
 
 	return timeutil.Now()
@@ -1453,19 +1453,19 @@ func (b *changefeedResumer) handleChangefeedError(
 	// Execution relocation errors just get returned immediately, as they indicate
 	// another node has taken over execution and this execution should end now.
 	if jobs.IsLeaseRelocationError(changefeedErr) {
-		log.Warningf(ctx, "job lease relocated (%v)", changefeedErr)
+		log.Dev.Warningf(ctx, "job lease relocated (%v)", changefeedErr)
 		return changefeedErr
 	}
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	onError, errErr := opts.GetOnError()
 	if errErr != nil {
-		log.Warningf(ctx, "job failed (%v) but was unable to get on error option (%v)", changefeedErr, errErr)
+		log.Dev.Warningf(ctx, "job failed (%v) but was unable to get on error option (%v)", changefeedErr, errErr)
 		return errors.CombineErrors(changefeedErr, errErr)
 	}
 	switch onError {
 	// default behavior
 	case changefeedbase.OptOnErrorFail:
-		log.Warningf(ctx, "job failed (%v)", changefeedErr)
+		log.Dev.Warningf(ctx, "job failed (%v)", changefeedErr)
 		return changefeedErr
 	// pause instead of failing
 	case changefeedbase.OptOnErrorPause:
@@ -1479,11 +1479,11 @@ func (b *changefeedResumer) handleChangefeedError(
 			// directly update running status to avoid the running/reverted job status check
 			md.Progress.StatusMessage = errorMessage
 			ju.UpdateProgress(md.Progress)
-			log.Warningf(ctx, errorFmt, changefeedErr, changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
+			log.Dev.Warningf(ctx, errorFmt, changefeedErr, changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
 			return nil
 		}, errorMessage)
 	default:
-		log.Warningf(ctx, "job failed (%v) but has unrecognized option value %s=%s", changefeedErr, changefeedbase.OptOnError, details.Opts[changefeedbase.OptOnError])
+		log.Dev.Warningf(ctx, "job failed (%v) but has unrecognized option value %s=%s", changefeedErr, changefeedbase.OptOnError, details.Opts[changefeedbase.OptOnError])
 		return errors.Wrapf(changefeedErr, "unrecognized option value: %s=%s for handling error",
 			changefeedbase.OptOnError, details.Opts[changefeedbase.OptOnError])
 	}
@@ -1535,7 +1535,7 @@ func (b *changefeedResumer) resumeWithRetries(
 
 	resolvedDest, err := resolveDest(ctx, execCfg, details.SinkURI)
 	if err != nil {
-		log.Warningf(ctx, "failed to resolve destination details for change monitoring: %v", err)
+		log.Dev.Warningf(ctx, "failed to resolve destination details for change monitoring: %v", err)
 	}
 
 	onTracingEvent := func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents) {
@@ -1586,7 +1586,7 @@ func (b *changefeedResumer) resumeWithRetries(
 					case <-t.C:
 						newDest, err := reloadDest(ctx, jobID, execCfg)
 						if err != nil {
-							log.Warningf(ctx, "failed to check for updated configuration: %v", err)
+							log.Dev.Warningf(ctx, "failed to check for updated configuration: %v", err)
 						} else if newDest != resolvedDest {
 							resolvedDest = newDest
 							return replanErr
@@ -1623,7 +1623,7 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 
 		// All other errors retry.
-		log.Warningf(ctx, `Changefeed job %d encountered transient error: %v (attempt %d)`,
+		log.Dev.Warningf(ctx, `Changefeed job %d encountered transient error: %v (attempt %d)`,
 			jobID, flowErr, 1+r.CurrentAttempt())
 		lastRunStatusUpdate = b.setJobStatusMessage(ctx, lastRunStatusUpdate, "transient error: %s", flowErr)
 
@@ -1656,7 +1656,7 @@ func (b *changefeedResumer) resumeWithRetries(
 				// and this node restarting changefeed before this happens.
 				// We could come up with a mechanism to provide additional
 				// information to dist sql planner.  Or... we could just wait a bit.
-				log.Warningf(ctx, "Changefeed %d delaying restart due to %d node(s) (%v) draining",
+				log.Dev.Warningf(ctx, "Changefeed %d delaying restart due to %d node(s) (%v) draining",
 					jobID, len(localState.drainingNodes), localState.drainingNodes)
 				r.Next() // default config: ~5 sec delay, plus 10 sec on the retry loop.
 			}
@@ -1704,7 +1704,7 @@ func reconcileJobStateWithLocalState(
 	// been updated by the changeFrontier processor since the flow started.
 	reloadedJob, reloadErr := execCfg.JobRegistry.LoadClaimedJob(ctx, jobID)
 	if reloadErr != nil {
-		log.Warningf(ctx, `CHANGEFEED job %d could not reload job progress (%s); `+
+		log.Dev.Warningf(ctx, `CHANGEFEED job %d could not reload job progress (%s); `+
 			`job should be retried later`, jobID, reloadErr)
 		return reloadErr
 	}
@@ -1839,7 +1839,7 @@ func (b *changefeedResumer) maybeCleanUpProtectedTimestamp(
 		// NB: The record should get cleaned up by the reconciliation loop.
 		// No good reason to cause more trouble by returning an error here.
 		// Log and move on.
-		log.Warningf(ctx, "failed to remove protected timestamp record %v: %v", ptsID, err)
+		log.Dev.Warningf(ctx, "failed to remove protected timestamp record %v: %v", ptsID, err)
 	}
 }
 
@@ -1992,7 +1992,7 @@ func makeCommonChangefeedEventDetails(
 	if details.SinkURI != `` {
 		parsedSink, err := url.Parse(details.SinkURI)
 		if err != nil {
-			log.Warningf(ctx, "failed to parse sink for telemetry logging: %v", err)
+			log.Dev.Warningf(ctx, "failed to parse sink for telemetry logging: %v", err)
 		}
 		sinkType = parsedSink.Scheme
 	}

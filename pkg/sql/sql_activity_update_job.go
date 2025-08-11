@@ -112,7 +112,7 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 				startTime := timeutil.Now().UnixNano()
 				updater := newSqlActivityUpdater(settings, execCtx.ExecCfg().InternalDB, nil)
 				if err := updater.TransferStatsToActivity(ctx); err != nil {
-					log.Warningf(ctx, "error running sql activity updater job: %v", err)
+					log.Dev.Warningf(ctx, "error running sql activity updater job: %v", err)
 					metrics.NumFailedUpdates.Inc(1)
 				} else {
 					metrics.NumSuccessfulUpdates.Inc(1)

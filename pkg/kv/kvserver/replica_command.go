@@ -493,7 +493,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		if r.GetMVCCStats().ContainsEstimates == 0 {
 			useEstimatedStatsForExternalBytes = false
 		} else if hasExternal, err := r.HasExternalBytes(); err != nil {
-			log.Warningf(ctx, "failed to get approximate disk bytes: %v", err)
+			log.Dev.Warningf(ctx, "failed to get approximate disk bytes: %v", err)
 			useEstimatedStatsForExternalBytes = false
 		} else {
 			useEstimatedStatsForExternalBytes = hasExternal
@@ -527,7 +527,7 @@ func (r *Replica) adminSplitWithDescriptor(
 				// the error here, and let the code below handle the descriptor-changed
 				// error coming from splitTxnAttempt.
 				if errors.Is(err, batcheval.RecomputeStatsMismatchError) {
-					log.Warningf(ctx, "failed to re-compute MVCCStats pre split: %v", err)
+					log.Dev.Warningf(ctx, "failed to re-compute MVCCStats pre split: %v", err)
 				} else {
 					return reply, errors.Wrapf(err, "failed to re-compute MVCCStats pre split")
 				}
@@ -694,7 +694,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 			break
 		}
 		if splitRetryLogLimiter.ShouldLog() {
-			log.Warningf(ctx, "retrying split after err: %v", lastErr)
+			log.Dev.Warningf(ctx, "retrying split after err: %v", lastErr)
 		}
 	}
 	return kvpb.NewError(lastErr)
@@ -982,7 +982,7 @@ func (r *Replica) AdminMerge(
 			if attempt < 3 {
 				log.VEventf(ctx, 2, "merge txn failed: %s", err)
 			} else {
-				log.Warningf(ctx, "merge txn failed (attempt %d): %s", attempt, err)
+				log.Dev.Warningf(ctx, "merge txn failed (attempt %d): %s", attempt, err)
 			}
 			if rollbackErr := txn.Rollback(ctx); rollbackErr != nil {
 				log.VEventf(ctx, 2, "merge txn rollback failed: %s", rollbackErr)
@@ -1433,7 +1433,7 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 		// to continue trying to leave the JOINT config. If this is the case,
 		// our replica will not be able to leave the JOINT config, but the new
 		// leaseholder will be able to do so.
-		log.Warningf(ctx, "no VOTER_INCOMING to transfer lease to. This replica probably lost the "+
+		log.Dev.Warningf(ctx, "no VOTER_INCOMING to transfer lease to. This replica probably lost the "+
 			"lease, but still thinks its the leaseholder. In this case the new leaseholder is expected to "+
 			"complete LEAVE_JOINT. Range descriptor: %v", desc)
 		return nil
@@ -3321,7 +3321,7 @@ func (r *Replica) followerSendSnapshot(
 		end := snap.State.Desc.EndKey.AsRawKey()
 		total, _, external, err := r.store.StateEngine().ApproximateDiskBytes(start, end)
 		if err != nil {
-			log.Warningf(ctx, "could not determine if store has external bytes: %v", err)
+			log.Dev.Warningf(ctx, "could not determine if store has external bytes: %v", err)
 			externalReplicate = false
 		}
 
@@ -3586,7 +3586,7 @@ func (r *Replica) AdminRelocateRange(
 	// the joint config if we're in one.
 	newDesc, _, err := r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, &rangeDesc)
 	if err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		return err
 	}
 	rangeDesc = *newDesc
@@ -3637,7 +3637,7 @@ func (r *Replica) relocateReplicas(
 		if err := r.store.DB().AdminTransferLease(
 			ctx, startKey, target.StoreID,
 		); err != nil {
-			log.Warningf(ctx, "while transferring lease: %+v", err)
+			log.Dev.Warningf(ctx, "while transferring lease: %+v", err)
 			if r.store.TestingKnobs().DontIgnoreFailureToTransferLease {
 				return err
 			}
@@ -4174,7 +4174,7 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 
 	// Return early with number of replicas moved as 0.
 	if tokenErr != nil {
-		log.Warningf(ctx, "unable to acquire allocator "+
+		log.Dev.Warningf(ctx, "unable to acquire allocator "+
 			"due to %v after %d attempts", tokenErr, retryOpts.MaxRetries)
 		return 0
 	}
@@ -4219,7 +4219,7 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 		_, err := rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
 		if err != nil {
 			// The replica can not be processed, so skip it.
-			log.Warningf(ctx,
+			log.Dev.Warningf(ctx,
 				"cannot process range (%v) due to %v at attempt %d",
 				desc, err, currentAttempt+1)
 			break
@@ -4236,7 +4236,7 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 				log.Errorf(ctx, "retrying scatter process for range %v after retryable error: %v", desc, err)
 				continue
 			}
-			log.Warningf(ctx, "failed to process range (%v) due to %v at attempt %d",
+			log.Dev.Warningf(ctx, "failed to process range (%v) due to %v at attempt %d",
 				desc, err, currentAttempt+1)
 			break
 		}
@@ -4258,7 +4258,7 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 			if targetStoreID != r.store.StoreID() {
 				log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
 				if err := r.AdminTransferLease(ctx, targetStoreID, false /* bypassSafetyChecks */); err != nil {
-					log.Warningf(ctx, "scatter lease to s%d failed due to %v: candidates included %v",
+					log.Dev.Warningf(ctx, "scatter lease to s%d failed due to %v: candidates included %v",
 						targetStoreID, err, potentialLeaseTargets)
 				}
 			}

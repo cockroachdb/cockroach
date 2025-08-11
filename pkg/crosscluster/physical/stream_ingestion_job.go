@@ -103,9 +103,9 @@ func updateStatus(
 		return nil
 	})
 	if err != nil {
-		log.Warningf(ctx, "error when updating job running status: %s", err)
+		log.Dev.Warningf(ctx, "error when updating job running status: %s", err)
 	} else if replicationStatus == jobspb.ReplicationError {
-		log.Warningf(ctx, "%s", status)
+		log.Dev.Warningf(ctx, "%s", status)
 	} else {
 		log.Dev.Infof(ctx, "%s", status)
 	}
@@ -140,7 +140,7 @@ func completeIngestion(
 	completeProducerJob(ctx, ingestionJob, execCtx.ExecCfg().InternalDB, true)
 	evalContext := &execCtx.ExtendedEvalContext().Context
 	if err := startPostCutoverRetentionJob(ctx, execCtx.ExecCfg(), details, evalContext, cutoverTimestamp); err != nil {
-		log.Warningf(ctx, "failed to begin post cutover retention job: %s", err.Error())
+		log.Dev.Warningf(ctx, "failed to begin post cutover retention job: %s", err.Error())
 	}
 
 	// Now that we have completed the cutover we can release the protected
@@ -179,7 +179,7 @@ func completeProducerJob(
 			return client.Complete(ctx, streamID, successfulIngestion)
 		},
 	); err != nil {
-		log.Warningf(ctx, `encountered error when completing the source cluster producer job %d: %s`, streamID, err.Error())
+		log.Dev.Warningf(ctx, `encountered error when completing the source cluster producer job %d: %s`, streamID, err.Error())
 	}
 }
 
@@ -346,7 +346,7 @@ func releaseDestinationTenantProtectedTimestamp(
 ) error {
 	if err := ptp.Release(ctx, ptsID); err != nil {
 		if errors.Is(err, protectedts.ErrNotExists) {
-			log.Warningf(ctx, "failed to release protected ts as it does not to exist: %s", err)
+			log.Dev.Warningf(ctx, "failed to release protected ts as it does not to exist: %s", err)
 			err = nil
 		}
 		return err
@@ -637,7 +637,7 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	// Ensure no sip processors are still ingesting data, so a subsequent DROP
 	// TENANT cmd will cleanly wipe out all data.
 	if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, s.job, maxIngestionProcessorShutdownWait); err != nil {
-		log.Warningf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", s.job.ID(), maxIngestionProcessorShutdownWait, err)
+		log.Dev.Warningf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", s.job.ID(), maxIngestionProcessorShutdownWait, err)
 	} else {
 		log.Dev.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", s.job.ID())
 	}
@@ -693,7 +693,7 @@ func (s *streamIngestionResumer) CollectProfile(ctx context.Context, execCtx int
 
 func closeAndLog(ctx context.Context, d streamclient.Client) {
 	if err := d.Close(ctx); err != nil {
-		log.Warningf(ctx, "error closing stream client: %s", err.Error())
+		log.Dev.Warningf(ctx, "error closing stream client: %s", err.Error())
 	}
 }
 
@@ -809,7 +809,7 @@ func (c *cutoverProgressTracker) onCompletedCallback(
 	}
 
 	if err := c.updateJobProgress(ctx, c.remainingSpans.Slice()); err != nil {
-		log.Warningf(ctx, "failed to update job progress: %s", err)
+		log.Dev.Warningf(ctx, "failed to update job progress: %s", err)
 	}
 	return nil
 }
