@@ -8,7 +8,6 @@ package backupinfo
 import (
 	"bytes"
 	"context"
-	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -17,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/pebble/objstorage"
 )
 
 func makeWriter(
@@ -25,8 +25,8 @@ func makeWriter(
 	filename string,
 	enc *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) (io.WriteCloser, error) {
-	w, err := dest.Writer(ctx, filename)
+) (objstorage.Writable, error) {
+	w, err := cloud.OpenPebbleWriter(ctx, dest, filename)
 	if err != nil {
 		return nil, err
 	}

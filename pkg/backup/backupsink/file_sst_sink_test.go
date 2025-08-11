@@ -6,7 +6,6 @@
 package backupsink
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"reflect"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 )
@@ -43,13 +43,13 @@ func TestFileSSTSinkExtendOneFile(t *testing.T) {
 	ctx := context.Background()
 
 	getKeys := func(prefix string, n int) []byte {
-		var b bytes.Buffer
+		var b objstorage.MemObj
 		sst := storage.MakeTransportSSTWriter(ctx, cluster.MakeTestingClusterSettings(), &b)
 		for i := 0; i < n; i++ {
 			require.NoError(t, sst.PutUnversioned([]byte(fmt.Sprintf("%s%08d", prefix, i)), nil))
 		}
 		sst.Close()
-		return b.Bytes()
+		return b.Data()
 	}
 
 	exportResponse1 := ExportedSpan{
@@ -661,8 +661,8 @@ func TestFileSSTSinkCopyPointKeys(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			buf := &bytes.Buffer{}
-			sst := storage.MakeTransportSSTWriter(ctx, settings, buf)
+			buf := objstorage.MemObj{}
+			sst := storage.MakeTransportSSTWriter(ctx, settings, &buf)
 			sink := FileSSTSink{sst: sst}
 			compareSST := true
 
@@ -713,7 +713,7 @@ func TestFileSSTSinkCopyPointKeys(t *testing.T) {
 				UpperBound: keys.MaxKey,
 			}
 
-			iter, err := storage.NewMemSSTIterator(buf.Bytes(), false, iterOpts)
+			iter, err := storage.NewMemSSTIterator(buf.Data(), false, iterOpts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -840,8 +840,8 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			buf := &bytes.Buffer{}
-			sst := storage.MakeTransportSSTWriter(ctx, settings, buf)
+			buf := objstorage.MemObj{}
+			sst := storage.MakeTransportSSTWriter(ctx, settings, &buf)
 			sink := FileSSTSink{sst: sst}
 			compareSST := true
 
@@ -887,7 +887,7 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 				UpperBound: keys.MaxKey,
 			}
 
-			iter, err := storage.NewMemSSTIterator(buf.Bytes(), false, iterOpts)
+			iter, err := storage.NewMemSSTIterator(buf.Data(), false, iterOpts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1029,8 +1029,8 @@ func (b *exportedSpanBuilder) build() ExportedSpan {
 func (b *exportedSpanBuilder) buildWithEncoding(stringToKey func(string) roachpb.Key) ExportedSpan {
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
-	buf := &bytes.Buffer{}
-	sst := storage.MakeTransportSSTWriter(ctx, settings, buf)
+	buf := objstorage.MemObj{}
+	sst := storage.MakeTransportSSTWriter(ctx, settings, &buf)
 	for _, d := range b.keyValues {
 		v := roachpb.Value{}
 		v.SetBytes(d.value)
@@ -1058,7 +1058,7 @@ func (b *exportedSpanBuilder) buildWithEncoding(stringToKey func(string) roachpb
 
 	sst.Close()
 
-	b.es.DataSST = buf.Bytes()
+	b.es.DataSST = buf.Data()
 
 	return *b.es
 }

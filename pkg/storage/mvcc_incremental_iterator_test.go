@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -207,7 +208,7 @@ func assertExportedErrs(
 		MaxLockConflicts:        uint64(MaxConflictsPerLockConflictError.Default()),
 		TargetLockConflictBytes: uint64(TargetBytesPerLockConflictError.Default()),
 		StopMidKey:              false,
-	}, &bytes.Buffer{})
+	}, &objstorage.MemObj{})
 	require.Error(t, err)
 
 	if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
@@ -233,7 +234,7 @@ func assertExportedKVs(
 	expected []MVCCKeyValue,
 ) {
 	const big = 1 << 30
-	var sstFile bytes.Buffer
+	var sstFile objstorage.MemObj
 	st := cluster.MakeTestingClusterSettings()
 	_, _, err := MVCCExportToSST(context.Background(), st, e, MVCCExportOptions{
 		StartKey:           MVCCKey{Key: startKey},
@@ -246,7 +247,7 @@ func assertExportedKVs(
 		StopMidKey:         false,
 	}, &sstFile)
 	require.NoError(t, err)
-	data := sstFile.Bytes()
+	data := sstFile.Data()
 	if data == nil {
 		require.Nil(t, expected)
 		return
