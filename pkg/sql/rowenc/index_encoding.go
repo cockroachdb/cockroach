@@ -1724,7 +1724,7 @@ func writeColumnValues(
 }
 
 // EncodeSecondaryIndexes encodes key/values for the secondary indexes. colMap
-// maps descpb.ColumnIDs to indices in `values`. keyPrefixes is a slice that
+// maps descpb.ColumnIDs to indexes in `values`. keyPrefixes is a slice that
 // associates indexes to their key prefix; the caller can reuse this between
 // rows to save work from creating key prefixes. the indexes and keyPrefixes
 // slice should have the same ordering. secondaryIndexEntries is the return

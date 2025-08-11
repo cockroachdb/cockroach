@@ -207,7 +207,7 @@ func (h *_OP_STRING) getIdx(ctx context.Context, currRow, lastIdx int) (idx int)
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.

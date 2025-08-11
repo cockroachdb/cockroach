@@ -55,12 +55,12 @@ const (
 	// hbpProcessNewPartitionUsingMain indicates that the operator should choose
 	// a partition index and process the corresponding partitions from all
 	// inputs using the "main" operator. We will only process the partitions if
-	// the partition fits into memory. If there are no partition indices that
+	// the partition fits into memory. If there are no partition indexes that
 	// the operator can process, it transitions into hbpRecursivePartitioning
-	// state. If there are no partition indices to process using the main
-	// operator, but there are indices to process using the "fallback" strategy,
+	// state. If there are no partition indexes to process using the main
+	// operator, but there are indexes to process using the "fallback" strategy,
 	// the operator transitions to hbpProcessNewPartitionUsingFallback state. If
-	// there are no partition indices left at all to process, the operator
+	// there are no partition indexes left at all to process, the operator
 	// transitions to hbpFinished state.
 	hbpProcessNewPartitionUsingMain
 	// hbpProcessingUsingMain indicates that the operator is currently
@@ -72,7 +72,7 @@ const (
 	hbpProcessingUsingMain
 	// hbpProcessNewPartitionUsingFallback indicates that the operator should
 	// choose a partition index to process using the "fallback" strategy. If
-	// there are no partition indices for this strategy left, the operator
+	// there are no partition indexes for this strategy left, the operator
 	// transitions to hbpFinished state.
 	hbpProcessNewPartitionUsingFallback
 	// hbpProcessingUsingFallback indicates that the operator is currently
@@ -142,13 +142,13 @@ type hashBasedPartitioner struct {
 	// numBuckets is the number of buckets that a partition is divided into.
 	numBuckets int
 	// partitionsToProcessUsingMain is a map from partitionIdx to a utility
-	// struct. This map contains all partition indices that need to be processed
+	// struct. This map contains all partition indexes that need to be processed
 	// using the in-memory "main" operator. If the partition is too big, it will
 	// be tried to be repartitioned; if during repartitioning the size doesn't
 	// decrease enough, it will be added to partitionsToProcessUsingFallback.
 	partitionsToProcessUsingMain map[int]*hbpPartitionInfo
-	// partitionsToProcessUsingFallback contains all partition indices that need
-	// to be processed using the "fallback" strategy. Partition indices will be
+	// partitionsToProcessUsingFallback contains all partition indexes that need
+	// to be processed using the "fallback" strategy. Partition indexes will be
 	// added into this map if recursive partitioning doesn't seem to make
 	// progress on partition' size reduction.
 	partitionsToProcessUsingFallback []int

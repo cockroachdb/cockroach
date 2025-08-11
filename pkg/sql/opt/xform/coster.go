@@ -1065,7 +1065,7 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 	// pressure and the possibility of spilling to disk.
 	cost.Add(c.rowBufferCost(rightRowCount))
 
-	// Compute filter cost. Fetch the indices of the filters that will be used in
+	// Compute filter cost. Fetch the indexes of the filters that will be used in
 	// the join, since they will not add to the cost and should be skipped.
 	on := join.Child(2).(*memo.FiltersExpr)
 	leftCols := join.Child(0).(memo.RelExpr).Relational().OutputCols
@@ -1341,7 +1341,7 @@ func (c *coster) computeExprCost(expr opt.Expr) memo.Cost {
 // a filter. Callers of this function should add setupCost and multiply
 // perRowCost by the number of rows expected to be filtered.
 //
-// filtersToSkip identifies the indices of filters that should be skipped,
+// filtersToSkip identifies the indexes of filters that should be skipped,
 // because they do not add to the cost. This can happen when a condition still
 // exists in the filters even though it is handled by the join.
 func (c *coster) computeFiltersCost(

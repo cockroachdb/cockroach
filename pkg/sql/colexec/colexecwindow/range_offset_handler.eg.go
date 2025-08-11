@@ -766,7 +766,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInt16) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -913,7 +913,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInt32) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -1060,7 +1060,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInt64) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -1207,7 +1207,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDecimal) getIdx(ctx context.Context,
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -1344,7 +1344,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscFloat64) getIdx(ctx context.Context,
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -1496,7 +1496,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInterval) getIdx(ctx context.Context
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -1625,7 +1625,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDate) getIdx(ctx context.Context, cu
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -1784,7 +1784,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscTimestamp) getIdx(ctx context.Contex
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -1928,7 +1928,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDatum) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -2064,7 +2064,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInt16) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -2184,7 +2184,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInt32) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -2304,7 +2304,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInt64) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -2424,7 +2424,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDecimal) getIdx(ctx context.Context
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -2534,7 +2534,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescFloat64) getIdx(ctx context.Context
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -2659,7 +2659,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInterval) getIdx(ctx context.Contex
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -2761,7 +2761,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDate) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -2893,7 +2893,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescTimestamp) getIdx(ctx context.Conte
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -3010,7 +3010,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDatum) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -3119,7 +3119,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInt16) getIdx(ctx context.Context, cur
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -3283,7 +3283,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInt32) getIdx(ctx context.Context, cur
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -3447,7 +3447,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInt64) getIdx(ctx context.Context, cur
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -3611,7 +3611,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDecimal) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -3765,7 +3765,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscFloat64) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -3934,7 +3934,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInterval) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -4080,7 +4080,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDate) getIdx(ctx context.Context, curr
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -4256,7 +4256,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscTimestamp) getIdx(ctx context.Context,
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -4417,7 +4417,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDatum) getIdx(ctx context.Context, cur
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -4570,7 +4570,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInt16) getIdx(ctx context.Context, cu
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -4707,7 +4707,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInt32) getIdx(ctx context.Context, cu
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -4844,7 +4844,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInt64) getIdx(ctx context.Context, cu
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -4981,7 +4981,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDecimal) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -5108,7 +5108,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescFloat64) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -5250,7 +5250,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInterval) getIdx(ctx context.Context,
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -5369,7 +5369,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDate) getIdx(ctx context.Context, cur
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -5518,7 +5518,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescTimestamp) getIdx(ctx context.Context
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -5652,7 +5652,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDatum) getIdx(ctx context.Context, cu
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -5778,7 +5778,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInt16) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -5925,7 +5925,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInt32) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -6072,7 +6072,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInt64) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -6219,7 +6219,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDecimal) getIdx(ctx context.Context,
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -6356,7 +6356,7 @@ func (h *rangeHandlerOffsetFollowingStartAscFloat64) getIdx(ctx context.Context,
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -6508,7 +6508,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInterval) getIdx(ctx context.Context
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -6637,7 +6637,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDate) getIdx(ctx context.Context, cu
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -6796,7 +6796,7 @@ func (h *rangeHandlerOffsetFollowingStartAscTimestamp) getIdx(ctx context.Contex
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -6940,7 +6940,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDatum) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -7076,7 +7076,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInt16) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -7196,7 +7196,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInt32) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -7316,7 +7316,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInt64) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -7436,7 +7436,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDecimal) getIdx(ctx context.Context
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -7546,7 +7546,7 @@ func (h *rangeHandlerOffsetFollowingStartDescFloat64) getIdx(ctx context.Context
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -7671,7 +7671,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInterval) getIdx(ctx context.Contex
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -7773,7 +7773,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDate) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -7905,7 +7905,7 @@ func (h *rangeHandlerOffsetFollowingStartDescTimestamp) getIdx(ctx context.Conte
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -8022,7 +8022,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDatum) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -8131,7 +8131,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInt16) getIdx(ctx context.Context, cur
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -8295,7 +8295,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInt32) getIdx(ctx context.Context, cur
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -8459,7 +8459,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInt64) getIdx(ctx context.Context, cur
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -8623,7 +8623,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDecimal) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -8777,7 +8777,7 @@ func (h *rangeHandlerOffsetFollowingEndAscFloat64) getIdx(ctx context.Context, c
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -8946,7 +8946,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInterval) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -9092,7 +9092,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDate) getIdx(ctx context.Context, curr
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -9268,7 +9268,7 @@ func (h *rangeHandlerOffsetFollowingEndAscTimestamp) getIdx(ctx context.Context,
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -9429,7 +9429,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDatum) getIdx(ctx context.Context, cur
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -9582,7 +9582,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInt16) getIdx(ctx context.Context, cu
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -9719,7 +9719,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInt32) getIdx(ctx context.Context, cu
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -9856,7 +9856,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInt64) getIdx(ctx context.Context, cu
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -9993,7 +9993,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDecimal) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -10120,7 +10120,7 @@ func (h *rangeHandlerOffsetFollowingEndDescFloat64) getIdx(ctx context.Context, 
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -10262,7 +10262,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInterval) getIdx(ctx context.Context,
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -10381,7 +10381,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDate) getIdx(ctx context.Context, cur
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -10530,7 +10530,7 @@ func (h *rangeHandlerOffsetFollowingEndDescTimestamp) getIdx(ctx context.Context
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.
@@ -10664,7 +10664,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDatum) getIdx(ctx context.Context, cu
 
 	// When the order column is null, the offset is ignored. The start index is
 	// the first null value, and the end index is the end of the null group. All
-	// null rows have the same start and end indices.
+	// null rows have the same start and end indexes.
 	if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(vecIdx) {
 		// Since this function is only called for the first row of each peer group,
 		// this is the first null row.

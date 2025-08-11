@@ -343,7 +343,7 @@ func TestRangeMode(t *testing.T) {
 	}
 }
 
-// indexedRows are rows with the corresponding indices.
+// indexedRows are rows with the corresponding indexes.
 type indexedRows struct {
 	rows []indexedRow
 }

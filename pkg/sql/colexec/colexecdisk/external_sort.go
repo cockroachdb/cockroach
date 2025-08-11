@@ -176,7 +176,7 @@ type externalSorter struct {
 	// currentPartitionIdx keeps track of the next available partition index.
 	currentPartitionIdx int
 	// currentPartitionIdxs is a slice of size maxNumberPartitions containing
-	// the mapping of all partitions to their corresponding partition indices.
+	// the mapping of all partitions to their corresponding partition indexes.
 	currentPartitionIdxs []int
 	// maxMerged is a slice of size maxNumberPartitions containing
 	// the mapping of all partitions to their maximum number of merges.
@@ -704,7 +704,7 @@ func (s *externalSorter) createMergerForPartitions(n int) *colexec.OrderedSynchr
 			sizes.WriteString(string(humanizeutil.IBytes(s.partitionsInfo.totalSize[partitionOrdinal])))
 		}
 		log.Infof(s.Ctx,
-			"external sorter is merging partitions with partition indices %v with counts [%s] and sizes [%s]",
+			"external sorter is merging partitions with partition indexes %v with counts [%s] and sizes [%s]",
 			s.currentPartitionIdxs[s.numPartitions-n:s.numPartitions], counts.String(), sizes.String(),
 		)
 	}

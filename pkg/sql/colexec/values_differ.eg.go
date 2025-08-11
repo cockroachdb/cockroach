@@ -27,7 +27,7 @@ var (
 	_ tree.AggType
 )
 
-// valuesDiffer takes in two ColVecs as well as values indices to check whether
+// valuesDiffer takes in two ColVecs as well as values indexes to check whether
 // the values differ. This function pays attention to NULLs.
 func valuesDiffer(
 	aColVec *coldata.Vec, aValueIdx int, bColVec *coldata.Vec, bValueIdx int, nullsAreDistinct bool,

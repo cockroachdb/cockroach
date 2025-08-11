@@ -37,7 +37,7 @@ func MakeWindowIntoBatch(
 		windowedBatch.SetSelection(true)
 		windowIntoSel := sel[startIdx:endIdx]
 		copy(windowedBatch.Selection(), windowIntoSel)
-		// We have to adjust the indices of our window based on the selection
+		// We have to adjust the indexes of our window based on the selection
 		// vector. The window needs to start from the zeroth tuple (even if it
 		// is not included in the selection vector) so that we don't have to
 		// shift the selection vector on the windowed batch.
@@ -196,7 +196,7 @@ func (b *AppendOnlyBufferedBatch) String() string {
 	return b.batch.String()
 }
 
-// AppendTuples is a helper method that appends all tuples with indices in range
+// AppendTuples is a helper method that appends all tuples with indexes in range
 // [startIdx, endIdx) from batch (paying attention to the selection vector)
 // into b. The newly allocated memory is registered with the allocator used to
 // create this AppendOnlyBufferedBatch.

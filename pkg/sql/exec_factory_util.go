@@ -199,10 +199,10 @@ func getResultColumnsForSimpleProject(
 	return resultCols
 }
 
-func getEqualityIndicesAndMergeJoinOrdering(
+func getEqualityIndexesAndMergeJoinOrdering(
 	leftOrdering, rightOrdering colinfo.ColumnOrdering,
 ) (
-	leftEqualityIndices, rightEqualityIndices []exec.NodeColumnOrdinal,
+	leftEqualityIndexes, rightEqualityIndexes []exec.NodeColumnOrdinal,
 	mergeJoinOrdering colinfo.ColumnOrdering,
 	err error,
 ) {
@@ -212,23 +212,23 @@ func getEqualityIndicesAndMergeJoinOrdering(
 			"orderings from the left and right side must be the same non-zero length",
 		)
 	}
-	leftEqualityIndices = make([]exec.NodeColumnOrdinal, n)
-	rightEqualityIndices = make([]exec.NodeColumnOrdinal, n)
+	leftEqualityIndexes = make([]exec.NodeColumnOrdinal, n)
+	rightEqualityIndexes = make([]exec.NodeColumnOrdinal, n)
 	for i := 0; i < n; i++ {
 		leftColIdx, rightColIdx := leftOrdering[i].ColIdx, rightOrdering[i].ColIdx
-		leftEqualityIndices[i] = exec.NodeColumnOrdinal(leftColIdx)
-		rightEqualityIndices[i] = exec.NodeColumnOrdinal(rightColIdx)
+		leftEqualityIndexes[i] = exec.NodeColumnOrdinal(leftColIdx)
+		rightEqualityIndexes[i] = exec.NodeColumnOrdinal(rightColIdx)
 	}
 
 	mergeJoinOrdering = make(colinfo.ColumnOrdering, n)
 	for i := 0; i < n; i++ {
-		// The mergeJoinOrdering "columns" are equality column indices.  Because of
-		// the way we constructed the equality indices, the ordering will always be
+		// The mergeJoinOrdering "columns" are equality column indexes.  Because of
+		// the way we constructed the equality indexes, the ordering will always be
 		// 0,1,2,3..
 		mergeJoinOrdering[i].ColIdx = i
 		mergeJoinOrdering[i].Direction = leftOrdering[i].Direction
 	}
-	return leftEqualityIndices, rightEqualityIndices, mergeJoinOrdering, nil
+	return leftEqualityIndexes, rightEqualityIndexes, mergeJoinOrdering, nil
 }
 
 func getResultColumnsForGroupBy(

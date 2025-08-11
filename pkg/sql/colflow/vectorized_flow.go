@@ -595,7 +595,7 @@ type vectorizedFlowCreator struct {
 	// NB: must be accessed atomically.
 	numOutboxesDrained int32
 
-	// procIdxQueue is a queue of indices into processorSpecs (the argument to
+	// procIdxQueue is a queue of indexes into processorSpecs (the argument to
 	// setupFlow), for topologically ordered processing.
 	procIdxQueue []int
 	// opChains accumulates all operators that have no further outputs on the

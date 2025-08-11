@@ -21,11 +21,11 @@ type groupNode struct {
 	// The schema for this groupNode.
 	columns colinfo.ResultColumns
 
-	// Indices of the group by columns in the source plan.
+	// Indexes of the group by columns in the source plan.
 	groupCols []exec.NodeColumnOrdinal
 
 	// Set when we have an input ordering on (a subset of) grouping columns. Only
-	// column indices in groupCols can appear in this ordering.
+	// column indexes in groupCols can appear in this ordering.
 	groupColOrdering colinfo.ColumnOrdering
 
 	// isScalar is set for "scalar groupby", where we want a result

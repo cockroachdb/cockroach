@@ -311,9 +311,9 @@ func (c *CustomFuncs) extractVarEqualsConst(
 //
 //	SELECT * FROM foo WHERE a = 4 AND 4 IN (1, 2, 3, 4).
 func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
-	// usedIndices tracks the set of filter indices we've used to infer constant
+	// usedIndexes tracks the set of filter indexes we've used to infer constant
 	// values, so we don't inline into them.
-	var usedIndices intsets.Fast
+	var usedIndexes intsets.Fast
 	// fixedCols is the set of columns that the filters restrict to be a constant
 	// value.
 	var fixedCols opt.ColSet
@@ -330,12 +330,12 @@ func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 			}
 			if !fixedCols.Contains(l.Col) {
 				fixedCols.Add(l.Col)
-				usedIndices.Add(i)
+				usedIndexes.Add(i)
 			}
 		}
 	}
 	for i := range f {
-		if usedIndices.Contains(i) {
+		if usedIndexes.Contains(i) {
 			continue
 		}
 		if f[i].ScalarProps().OuterCols.Intersects(fixedCols) {
@@ -347,9 +347,9 @@ func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 
 // InlineConstVar performs the inlining detected by CanInlineConstVar.
 func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
-	// usedIndices tracks the set of filter indices we've used to infer constant
+	// usedIndexes tracks the set of filter indexes we've used to infer constant
 	// values, so we don't inline into them.
-	var usedIndices intsets.Fast
+	var usedIndexes intsets.Fast
 	// fixedCols is the set of columns that the filters restrict to be a constant
 	// value.
 	var fixedCols opt.ColSet
@@ -368,7 +368,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 			if _, ok := vals[v.Col]; !ok {
 				vals[v.Col] = e
 				fixedCols.Add(v.Col)
-				usedIndices.Add(i)
+				usedIndexes.Add(i)
 			}
 		}
 	}
@@ -388,7 +388,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 		inliningNeeded := f[i].ScalarProps().OuterCols.Intersects(fixedCols)
 		// Don't inline if we used this position to infer a constant value, or if
 		// the expression doesn't contain any fixed columns.
-		if usedIndices.Contains(i) || !inliningNeeded {
+		if usedIndexes.Contains(i) || !inliningNeeded {
 			result[i] = f[i]
 		} else {
 			newCondition := replace(f[i].Condition).(opt.ScalarExpr)

@@ -43,7 +43,7 @@ import "gogoproto/gogo.proto";
 //
 // The core outputs rows of a certain schema to the post-processing stage. We
 // call this the "internal schema" (or "internal columns") and it differs for
-// each type of core. Column indices in a PostProcessSpec refers to these
+// each type of core. Column indexes in a PostProcessSpec refers to these
 // internal columns. Some columns may be unused by the post-processing stage;
 // processor implementations are internally optimized to not produce values for
 // such unneeded columns.

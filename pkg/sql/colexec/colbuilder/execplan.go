@@ -1524,7 +1524,7 @@ func NewColOperator(
 				// Set any nil values in the window frame to their default values.
 				wf.Frame = colexecwindow.NormalizeWindowFrame(wf.Frame)
 
-				// Copy the argument indices into a mutable slice.
+				// Copy the argument indexes into a mutable slice.
 				argIdxs := make([]int, len(wf.ArgsIdxs))
 				argTypes := make([]*types.T, len(wf.ArgsIdxs))
 				for i, idx := range wf.ArgsIdxs {

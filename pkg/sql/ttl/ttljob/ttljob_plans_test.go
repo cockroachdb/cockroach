@@ -151,7 +151,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 						query = strings.ReplaceAll(query, "'", "''")
 						query = strings.ReplaceAll(query, "$1", "'"+cutoff.String()+"'")
 						// Confusingly, all End bounds go before all Start
-						// bounds when assigning placeholder indices in the
+						// bounds when assigning placeholder indexes in the
 						// SelectQueryBuilder.
 						for i, d := range selectBounds.End {
 							query = strings.ReplaceAll(query, fmt.Sprintf("$%d", i+2), d.String())

@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// populateEqChains populates op.scratch.eqChains with indices of tuples from b
+// populateEqChains populates op.scratch.eqChains with indexes of tuples from b
 // that belong to the same groups. It returns the number of equality chains.
 // Passed-in sel is updated to include tuples that are "heads" of the
 // corresponding equality chains and op.ht.ProbeScratch.HashBuffer is adjusted
@@ -80,7 +80,7 @@ func populateEqChains(
 
 var zeroIntColumn = make([]int, coldata.MaxBatchSize)
 
-// populateEqChains populates op.scratch.eqChains with indices of tuples from b
+// populateEqChains populates op.scratch.eqChains with indexes of tuples from b
 // that belong to the same groups. It returns the number of equality chains as
 // well as a selection vector that contains "heads" of each of the chains. The
 // method assumes that op.ht.ProbeScratch.HeadID has been populated with keyIDs

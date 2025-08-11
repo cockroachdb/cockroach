@@ -424,7 +424,7 @@ type HashRouter struct {
 	// inputMetaInfo contains all of the meta components that the hash router
 	// is responsible for. Root field is exactly the same as OneInputNode.Input.
 	inputMetaInfo colexecargs.OpWithMetaInfo
-	// hashCols is a slice of indices of the columns used for hashing.
+	// hashCols is a slice of indexes of the columns used for hashing.
 	hashCols []uint32
 
 	// One output for each stream.

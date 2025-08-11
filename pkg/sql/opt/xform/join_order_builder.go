@@ -1032,7 +1032,7 @@ func (jb *JoinOrderBuilder) allVertexes() vertexSet {
 	return vertexSet((1 << len(jb.vertexes)) - 1)
 }
 
-// allEdges returns an edgeSet that represents indices to all edges in the join
+// allEdges returns an edgeSet that represents indexes to all edges in the join
 // graph.
 func (jb *JoinOrderBuilder) allEdges() edgeSet {
 	allEdgeSet := edgeSet{}

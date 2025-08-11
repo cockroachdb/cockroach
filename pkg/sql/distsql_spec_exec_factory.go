@@ -539,7 +539,7 @@ func (e *distSQLSpecExecFactory) ConstructMergeJoin(
 	leftEqColsAreKey, rightEqColsAreKey bool,
 	estimatedLeftRowCount, estimatedRightRowCount uint64,
 ) (exec.Node, error) {
-	leftEqCols, rightEqCols, mergeJoinOrdering, err := getEqualityIndicesAndMergeJoinOrdering(leftOrdering, rightOrdering)
+	leftEqCols, rightEqCols, mergeJoinOrdering, err := getEqualityIndexesAndMergeJoinOrdering(leftOrdering, rightOrdering)
 	if err != nil {
 		return nil, err
 	}

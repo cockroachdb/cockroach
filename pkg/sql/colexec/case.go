@@ -51,7 +51,7 @@ type caseOp struct {
 	//   scratch order = {4, 0, 2, 1, 5, 3}.
 	//
 	// It is guaranteed that after running all WHEN and ELSE arms, order will
-	// contain all tuple indices, and once that is the case, we simply need to
+	// contain all tuple indexes, and once that is the case, we simply need to
 	// copy the data out of the scratch into the output batch according to sel.
 	//
 	// Note that order doesn't satisfy the assumption of our normal selection
@@ -72,7 +72,7 @@ type caseOp struct {
 	// After running the ELSE arm projection:
 	//   scratch output = {-1, -1, -2, -2, 42, 42}
 	//   scratch order = {x, 4, 0, x, 2, 1, 5, x, 3}.
-	// Note that order has the length sufficient to support all indices
+	// Note that order has the length sufficient to support all indexes
 	// mentioned in the original selection vector and not selected elements will
 	// have garbage left in the corresponding positions in order.
 	//

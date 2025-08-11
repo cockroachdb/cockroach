@@ -1499,7 +1499,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 
 			if c.FiltersBoundBy(zigzagJoin.On, zigzagCols) {
 				// The ON condition refers only to the columns available in the zigzag
-				// indices.
+				// indexes.
 				indexJoin.On = memo.TrueFilter
 			} else {
 				// ON has some conditions that are bound by the columns in the index (at
@@ -1885,7 +1885,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 
 		if c.FiltersBoundBy(zigzagJoin.On, zigzagCols) {
 			// The ON condition refers only to the columns available in the zigzag
-			// indices.
+			// indexes.
 			indexJoin.On = memo.TrueFilter
 		} else {
 			// ON has some conditions that are bound by the columns in the index (at

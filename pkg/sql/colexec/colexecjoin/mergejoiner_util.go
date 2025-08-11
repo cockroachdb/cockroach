@@ -327,7 +327,7 @@ func (b *circularGroupsBuffer) addRightSemiGroup(curRIdx int, rRunLength int) {
 	b.advanceEnd()
 }
 
-// finishedCol is used to notify the circular buffer to update the indices
+// finishedCol is used to notify the circular buffer to update the indexes
 // representing the "window" of available values for the next column.
 func (b *circularGroupsBuffer) finishedCol() {
 	b.startIdx = b.nextColStartIdx

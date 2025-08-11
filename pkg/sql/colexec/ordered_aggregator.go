@@ -72,7 +72,7 @@ const (
 // overflow values are copied to the start of the batch. Since the input batch
 // size is not necessarily the same as the output batch size, more than one copy
 // and return must be performed until the aggregator is in a state where its
-// functions are in a state where the output indices would not overflow the
+// functions are in a state where the output indexes would not overflow the
 // output batch if a worst case input batch is encountered (one where every
 // value is part of a new group).
 type orderedAggregator struct {

@@ -3180,12 +3180,12 @@ func typeCheckSameTypedTupleExprs(
 	// All expressions within tuples at the same indexes must be the same type.
 	resTypes := types.MakeLabeledTuple(make([]*types.T, firstLen), first.Labels)
 	sameTypeExprs := make([]Expr, 0, len(exprs))
-	// We will be skipping nulls, so we need to keep track at which indices in
+	// We will be skipping nulls, so we need to keep track at which indexes in
 	// exprs are the non-null tuples.
-	sameTypeExprsIndices := make([]int, 0, len(exprs))
+	sameTypeExprsIndexes := make([]int, 0, len(exprs))
 	for elemIdx := range first.Exprs {
 		sameTypeExprs = sameTypeExprs[:0]
-		sameTypeExprsIndices = sameTypeExprsIndices[:0]
+		sameTypeExprsIndexes = sameTypeExprsIndexes[:0]
 		for exprIdx, expr := range exprs {
 			// Skip expressions that are not Tuple expressions (e.g. NULLs or CastExpr).
 			// They are checked at the end of this function.
@@ -3193,7 +3193,7 @@ func typeCheckSameTypedTupleExprs(
 				continue
 			}
 			sameTypeExprs = append(sameTypeExprs, expr.(*Tuple).Exprs[elemIdx])
-			sameTypeExprsIndices = append(sameTypeExprsIndices, exprIdx)
+			sameTypeExprsIndexes = append(sameTypeExprsIndexes, exprIdx)
 		}
 		desiredElem := types.AnyElement
 		if len(desired.TupleContents()) > elemIdx {
@@ -3204,7 +3204,7 @@ func typeCheckSameTypedTupleExprs(
 			return nil, nil, pgerror.Wrapf(err, pgcode.DatatypeMismatch, "tuples %s are not the same type", Exprs(exprs))
 		}
 		for j, typedExpr := range typedSubExprs {
-			tupleIdx := sameTypeExprsIndices[j]
+			tupleIdx := sameTypeExprsIndexes[j]
 			exprs[tupleIdx].(*Tuple).Exprs[elemIdx] = typedExpr
 		}
 		resTypes.TupleContents()[elemIdx] = resType

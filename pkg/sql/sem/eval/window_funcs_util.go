@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 )
 
-// PeerGroupChecker can check if a pair of row indices within a partition are
+// PeerGroupChecker can check if a pair of row indexes within a partition are
 // in the same peer group. It also returns an error if it occurs while checking
 // the peer groups.
 type PeerGroupChecker interface {
@@ -24,7 +24,7 @@ type peerGroup struct {
 	rowCount     int
 }
 
-// PeerGroupsIndicesHelper computes peer groups using the given
+// PeerGroupsIndexesHelper computes peer groups using the given
 // PeerGroupChecker. In ROWS and RANGE modes, it processes one peer group at
 // a time and stores information only about single peer group. In GROUPS mode,
 // it's behavior depends on the frame bounds; in the worst case, it stores
@@ -32,7 +32,7 @@ type peerGroup struct {
 // peer groups within the frame at any point and O is the maximum of two
 // offsets if we have OFFSET_FOLLOWING type of bound (both F and O are
 // upper-bounded by total number of peer groups).
-type PeerGroupsIndicesHelper struct {
+type PeerGroupsIndexesHelper struct {
 	groups               ring.Buffer[*peerGroup]
 	peerGrouper          PeerGroupChecker
 	headPeerGroupNum     int  // number of the peer group at the head of the queue
@@ -44,7 +44,7 @@ type PeerGroupsIndicesHelper struct {
 // Init computes all peer groups necessary to perform calculations of a window
 // function over the first row of the partition. It returns any error if it
 // occurs.
-func (p *PeerGroupsIndicesHelper) Init(wfr *WindowFrameRun, peerGrouper PeerGroupChecker) error {
+func (p *PeerGroupsIndexesHelper) Init(wfr *WindowFrameRun, peerGrouper PeerGroupChecker) error {
 	// We first reset the helper to reuse the same one for all partitions when
 	// computing a particular window function.
 	p.groups.Reset()
@@ -148,7 +148,7 @@ func (p *PeerGroupsIndicesHelper) Init(wfr *WindowFrameRun, peerGrouper PeerGrou
 // rows in wfr.CurRowPeerGroupNum peer group. If not all rows have been already
 // processed, it computes the next peer group. It returns any error if it
 // occurs.
-func (p *PeerGroupsIndicesHelper) Update(wfr *WindowFrameRun) error {
+func (p *PeerGroupsIndexesHelper) Update(wfr *WindowFrameRun) error {
 	if p.allPeerGroupsSkipped {
 		// No peer groups to process.
 		return nil
@@ -201,7 +201,7 @@ func (p *PeerGroupsIndicesHelper) Update(wfr *WindowFrameRun) error {
 
 // GetFirstPeerIdx returns index of the first peer within peer group of number
 // peerGroupNum (counting from 0).
-func (p *PeerGroupsIndicesHelper) GetFirstPeerIdx(peerGroupNum int) int {
+func (p *PeerGroupsIndexesHelper) GetFirstPeerIdx(peerGroupNum int) int {
 	posInBuffer := peerGroupNum - p.headPeerGroupNum
 	if posInBuffer < 0 || p.groups.Len() < posInBuffer {
 		panic("peerGroupNum out of bounds")
@@ -211,7 +211,7 @@ func (p *PeerGroupsIndicesHelper) GetFirstPeerIdx(peerGroupNum int) int {
 
 // GetRowCount returns the number of rows within peer group of number
 // peerGroupNum (counting from 0).
-func (p *PeerGroupsIndicesHelper) GetRowCount(peerGroupNum int) int {
+func (p *PeerGroupsIndexesHelper) GetRowCount(peerGroupNum int) int {
 	posInBuffer := peerGroupNum - p.headPeerGroupNum
 	if posInBuffer < 0 || p.groups.Len() < posInBuffer {
 		panic("peerGroupNum out of bounds")
@@ -220,7 +220,7 @@ func (p *PeerGroupsIndicesHelper) GetRowCount(peerGroupNum int) int {
 }
 
 // GetLastPeerGroupNum returns the number of the last peer group in the queue.
-func (p *PeerGroupsIndicesHelper) GetLastPeerGroupNum() int {
+func (p *PeerGroupsIndexesHelper) GetLastPeerGroupNum() int {
 	if p.groups.Len() == 0 {
 		panic("GetLastPeerGroupNum on empty RingBuffer")
 	}

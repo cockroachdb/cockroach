@@ -75,12 +75,12 @@ type minMaxRemovableAggBase struct {
 	outputColIdx  int
 	framer        windowFramer
 
-	// A partial deque of indices into the current partition ordered by the value
-	// of the input column at each index. It contains only indices that are part
+	// A partial deque of indexes into the current partition ordered by the value
+	// of the input column at each index. It contains only indexes that are part
 	// of the current window frame. The first value in the queue is the index of
 	// the current value for the aggregation (NULL if empty). Under the
 	// simplifying assumption that the window frame has no exclusion clause, the
-	// queue does not need to contain any indices smaller than the best index -
+	// queue does not need to contain any indexes smaller than the best index -
 	// this keeps the queue small in many common cases.
 	queue minMaxQueue
 

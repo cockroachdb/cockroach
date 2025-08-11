@@ -54,7 +54,7 @@ type PrefixSorter struct {
 	EvalCtx *eval.Context
 	Entry   []Prefix
 
-	// A slice of indices of the last element of each equal-length group of
+	// A slice of indexes of the last element of each equal-length group of
 	// entries in the Entry array above. Used by Slice(i int)
 	idx []int
 

@@ -801,7 +801,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			}
 			storedTypes := make([]*types.T, len(typs)+1)
 			copy(storedTypes, typs)
-			// The container will add an extra int column for indices.
+			// The container will add an extra int column for indexes.
 			storedTypes[len(typs)] = types.OneIntCol[0]
 
 			func() {
@@ -842,7 +842,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			}
 			storedTypes := make([]*types.T, len(typs)+1)
 			copy(storedTypes, typs)
-			// The container will add an extra int column for indices.
+			// The container will add an extra int column for indexes.
 			storedTypes[len(typs)] = types.OneIntCol[0]
 
 			func() {
@@ -876,7 +876,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	})
 }
 
-// indexedRows are rows with the corresponding indices.
+// indexedRows are rows with the corresponding indexes.
 type indexedRows struct {
 	rows []IndexedRow
 }

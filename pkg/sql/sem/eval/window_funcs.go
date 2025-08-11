@@ -38,7 +38,7 @@ type WindowFunc interface {
 	Close(context.Context, *Context)
 }
 
-// IndexedRows are rows with the corresponding indices.
+// IndexedRows are rows with the corresponding indexes.
 type IndexedRows interface {
 	Len() int                                                // returns number of rows
 	GetRow(ctx context.Context, idx int) (IndexedRow, error) // returns a row at the given index or an error
@@ -48,14 +48,14 @@ type IndexedRows interface {
 type IndexedRow interface {
 	GetIdx() int                                         // returns index of the row
 	GetDatum(idx int) (tree.Datum, error)                // returns a datum at the given index
-	GetDatums(startIdx, endIdx int) (tree.Datums, error) // returns datums at indices [startIdx, endIdx)
+	GetDatums(startIdx, endIdx int) (tree.Datums, error) // returns datums at indexes [startIdx, endIdx)
 }
 
 // WindowFrameRun contains the runtime state of window frame during calculations.
 type WindowFrameRun struct {
 	// constant for all calls to WindowFunc.Add
 	Rows             IndexedRows
-	ArgsIdxs         []uint32          // indices of the arguments to the window function
+	ArgsIdxs         []uint32          // indexes of the arguments to the window function
 	Frame            *tree.WindowFrame // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
 	StartBoundOffset tree.Datum
 	EndBoundOffset   tree.Datum
@@ -63,7 +63,7 @@ type WindowFrameRun struct {
 	OrdColIdx        int                // Column over which rows are ordered within the partition. It is only required in RANGE mode.
 	OrdDirection     encoding.Direction // Direction of the ordering over OrdColIdx.
 	PlusOp, MinusOp  *tree.BinOp        // Binary operators for addition and subtraction required only in RANGE mode.
-	PeerHelper       PeerGroupsIndicesHelper
+	PeerHelper       PeerGroupsIndexesHelper
 
 	// Any error that occurred within methods that cannot return an error (like
 	// within a closure that is passed into sort.Search()).

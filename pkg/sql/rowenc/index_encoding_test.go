@@ -583,7 +583,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		typ := randgen.RandArrayType(rng)
 
-		// We don't allow jsonpath indices.
+		// We don't allow jsonpath indexes.
 		if typ.ArrayContents().Family() == types.JsonpathFamily {
 			continue
 		}
@@ -980,7 +980,7 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		typ := randgen.RandArrayType(rng)
 
-		// We don't allow jsonpath indices.
+		// We don't allow jsonpath indexes.
 		if typ.ArrayContents().Family() == types.JsonpathFamily {
 			continue
 		}

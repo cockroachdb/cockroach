@@ -110,7 +110,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 }
 
 type windowTestSpec struct {
-	// The column indices of PARTITION BY clause.
+	// The column indexes of PARTITION BY clause.
 	partitionBy []uint32
 	// Window function to be computed.
 	windowFn windowFnTestSpec

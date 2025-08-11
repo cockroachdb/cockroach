@@ -669,7 +669,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 	// where arr is an ARRAY type tag used to indicate that the next key is
 	// part of an array, 1 is the table id, 2 is the inverted index id and
 	// pk is a primary key of a row in the table. Since the array
-	// elements do not have their respective indices stored in
+	// elements do not have their respective indexes stored in
 	// the encoding, the original filter needs to be applied after the initial
 	// scan.
 	for i := range keys {
@@ -759,7 +759,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValContainsCondition(
 	// where arr is an ARRAY type tag used to indicate that the next key is
 	// part of an array, 1 is the table id, 2 is the inverted index id and
 	// pk is a primary key of a row in the table. Since the array
-	// elements do not have their respective indices stored in
+	// elements do not have their respective indexes stored in
 	// the encoding, the original filter needs to be applied after the initial
 	// scan.
 	for i := range keys {

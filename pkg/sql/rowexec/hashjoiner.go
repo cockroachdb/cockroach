@@ -51,7 +51,7 @@ const (
 type hashJoiner struct {
 	joinerBase
 
-	// eqCols contains the indices of the columns that are constrained to be
+	// eqCols contains the indexes of the columns that are constrained to be
 	// equal. Specifically column eqCols[0][i] on the left side must match the
 	// column eqCols[1][i] on the right side.
 	eqCols [2][]uint32

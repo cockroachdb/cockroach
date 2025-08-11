@@ -58,7 +58,7 @@ type sampleAggregator struct {
 	sampledCols []descpb.ColumnID
 	sketches    []sketchInfo
 
-	// Input column indices for special columns.
+	// Input column indexes for special columns.
 	rankCol      int
 	sketchIdxCol int
 	numRowsCol   int

@@ -411,8 +411,8 @@ func (ef *execFactory) ConstructHashJoin(
 	pred := makePredicate(joinType, leftCols, rightCols, extraOnCond)
 
 	numEqCols := len(leftEqCols)
-	pred.leftEqualityIndices = leftEqCols
-	pred.rightEqualityIndices = rightEqCols
+	pred.leftEqualityIndexes = leftEqCols
+	pred.rightEqualityIndexes = rightEqCols
 	nameBuf := make(tree.NameList, 2*numEqCols)
 	pred.leftColNames = nameBuf[:numEqCols:numEqCols]
 	pred.rightColNames = nameBuf[numEqCols:]
@@ -462,7 +462,7 @@ func (ef *execFactory) ConstructMergeJoin(
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
 
-	pred.leftEqualityIndices, pred.rightEqualityIndices, node.mergeJoinOrdering, err = getEqualityIndicesAndMergeJoinOrdering(leftOrdering, rightOrdering)
+	pred.leftEqualityIndexes, pred.rightEqualityIndexes, node.mergeJoinOrdering, err = getEqualityIndexesAndMergeJoinOrdering(leftOrdering, rightOrdering)
 	if err != nil {
 		return nil, err
 	}

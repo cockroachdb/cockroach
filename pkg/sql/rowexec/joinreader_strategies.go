@@ -116,7 +116,7 @@ type joinReaderNoOrderingStrategy struct {
 	inputRows            []rowenc.EncDatumRow
 	remoteSpansGenerated bool
 
-	scratchMatchingInputRowIndices []int
+	scratchMatchingInputRowIndexes []int
 
 	emitState struct {
 		// processingLookupRow is an explicit boolean that specifies whether the
@@ -128,16 +128,16 @@ type joinReaderNoOrderingStrategy struct {
 		processingLookupRow bool
 
 		// Used when processingLookupRow is false.
-		unmatchedInputRowIndicesCursor int
-		// unmatchedInputRowIndices is used only when emitting unmatched rows after
+		unmatchedInputRowIndexesCursor int
+		// unmatchedInputRowIndexes is used only when emitting unmatched rows after
 		// processing lookup results. It is populated once when first emitting
 		// unmatched rows.
-		unmatchedInputRowIndices            []int
-		unmatchedInputRowIndicesInitialized bool
+		unmatchedInputRowIndexes            []int
+		unmatchedInputRowIndexesInitialized bool
 
 		// Used when processingLookupRow is true.
-		matchingInputRowIndicesCursor int
-		matchingInputRowIndices       []int
+		matchingInputRowIndexesCursor int
+		matchingInputRowIndexes       []int
 		lookedUpRow                   rowenc.EncDatumRow
 	}
 
@@ -202,25 +202,25 @@ func (s *joinReaderNoOrderingStrategy) processLookupRows(
 ) (roachpb.Spans, []int, error) {
 	s.inputRows = rows
 	s.remoteSpansGenerated = false
-	s.emitState.unmatchedInputRowIndicesInitialized = false
+	s.emitState.unmatchedInputRowIndexesInitialized = false
 	return s.generateSpans(s.Ctx(), s.inputRows)
 }
 
 func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 	_ context.Context, row rowenc.EncDatumRow, spanID int,
 ) (joinReaderState, error) {
-	matchingInputRowIndices := s.getMatchingRowIndices(spanID)
+	matchingInputRowIndexes := s.getMatchingRowIndexes(spanID)
 	if s.isPartialJoin {
 		// In the case of partial joins, only process input rows that have not been
-		// matched yet. Make a copy of the matching input row indices to avoid
+		// matched yet. Make a copy of the matching input row indexes to avoid
 		// overwriting the caller's slice.
-		s.scratchMatchingInputRowIndices = s.scratchMatchingInputRowIndices[:0]
-		for _, inputRowIdx := range matchingInputRowIndices {
+		s.scratchMatchingInputRowIndexes = s.scratchMatchingInputRowIndexes[:0]
+		for _, inputRowIdx := range matchingInputRowIndexes {
 			if !s.groupingState.getMatched(inputRowIdx) {
-				s.scratchMatchingInputRowIndices = append(s.scratchMatchingInputRowIndices, inputRowIdx)
+				s.scratchMatchingInputRowIndexes = append(s.scratchMatchingInputRowIndexes, inputRowIdx)
 			}
 		}
-		matchingInputRowIndices = s.scratchMatchingInputRowIndices
+		matchingInputRowIndexes = s.scratchMatchingInputRowIndexes
 
 		// Perform memory accounting.
 		if err := s.resizeMemoryAccount(s.strategyMemAcc, s.strategyMemAcc.Used(), s.memUsage()); err != nil {
@@ -229,8 +229,8 @@ func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 	}
 	s.emitState.processingLookupRow = true
 	s.emitState.lookedUpRow = row
-	s.emitState.matchingInputRowIndices = matchingInputRowIndices
-	s.emitState.matchingInputRowIndicesCursor = 0
+	s.emitState.matchingInputRowIndexes = matchingInputRowIndexes
+	s.emitState.matchingInputRowIndexesCursor = 0
 	return jrEmittingRows, nil
 }
 
@@ -248,15 +248,15 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 			return nil, jrReadingInput, nil
 		}
 
-		if !s.emitState.unmatchedInputRowIndicesInitialized {
-			s.emitState.unmatchedInputRowIndices = s.emitState.unmatchedInputRowIndices[:0]
+		if !s.emitState.unmatchedInputRowIndexesInitialized {
+			s.emitState.unmatchedInputRowIndexes = s.emitState.unmatchedInputRowIndexes[:0]
 			for inputRowIdx := range s.inputRows {
 				if s.groupingState.isUnmatched(inputRowIdx) {
-					s.emitState.unmatchedInputRowIndices = append(s.emitState.unmatchedInputRowIndices, inputRowIdx)
+					s.emitState.unmatchedInputRowIndexes = append(s.emitState.unmatchedInputRowIndexes, inputRowIdx)
 				}
 			}
-			s.emitState.unmatchedInputRowIndicesInitialized = true
-			s.emitState.unmatchedInputRowIndicesCursor = 0
+			s.emitState.unmatchedInputRowIndexesInitialized = true
+			s.emitState.unmatchedInputRowIndexesCursor = 0
 
 			// Perform memory accounting.
 			if err := s.resizeMemoryAccount(s.strategyMemAcc, s.strategyMemAcc.Used(), s.memUsage()); err != nil {
@@ -264,21 +264,21 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 			}
 		}
 
-		if s.emitState.unmatchedInputRowIndicesCursor >= len(s.emitState.unmatchedInputRowIndices) {
+		if s.emitState.unmatchedInputRowIndexesCursor >= len(s.emitState.unmatchedInputRowIndexes) {
 			// All unmatched rows have been emitted.
 			return nil, jrReadingInput, nil
 		}
-		inputRow := s.inputRows[s.emitState.unmatchedInputRowIndices[s.emitState.unmatchedInputRowIndicesCursor]]
-		s.emitState.unmatchedInputRowIndicesCursor++
+		inputRow := s.inputRows[s.emitState.unmatchedInputRowIndexes[s.emitState.unmatchedInputRowIndexesCursor]]
+		s.emitState.unmatchedInputRowIndexesCursor++
 		if !s.joinType.ShouldIncludeRightColsInOutput() {
 			return inputRow, jrEmittingRows, nil
 		}
 		return s.renderUnmatchedRow(inputRow, leftSide), jrEmittingRows, nil
 	}
 
-	for s.emitState.matchingInputRowIndicesCursor < len(s.emitState.matchingInputRowIndices) {
-		inputRowIdx := s.emitState.matchingInputRowIndices[s.emitState.matchingInputRowIndicesCursor]
-		s.emitState.matchingInputRowIndicesCursor++
+	for s.emitState.matchingInputRowIndexesCursor < len(s.emitState.matchingInputRowIndexes) {
+		inputRowIdx := s.emitState.matchingInputRowIndexes[s.emitState.matchingInputRowIndexesCursor]
+		s.emitState.matchingInputRowIndexesCursor++
 		inputRow := s.inputRows[inputRowIdx]
 		if s.joinType == descpb.LeftSemiJoin && s.groupingState.getMatched(inputRowIdx) {
 			// Already output a row for this group. Note that we've already excluded
@@ -341,11 +341,11 @@ func (s *joinReaderNoOrderingStrategy) close(ctx context.Context) {
 // memUsage returns the size of the data structures in the
 // joinReaderNoOrderingStrategy for memory accounting purposes.
 func (s *joinReaderNoOrderingStrategy) memUsage() int64 {
-	// Account for scratchMatchingInputRowIndices.
-	size := memsize.IntSliceOverhead + memsize.Int*int64(cap(s.scratchMatchingInputRowIndices))
+	// Account for scratchMatchingInputRowIndexes.
+	size := memsize.IntSliceOverhead + memsize.Int*int64(cap(s.scratchMatchingInputRowIndexes))
 
-	// Account for emitState.unmatchedInputRowIndices.
-	size += memsize.IntSliceOverhead + memsize.Int*int64(cap(s.emitState.unmatchedInputRowIndices))
+	// Account for emitState.unmatchedInputRowIndexes.
+	size += memsize.IntSliceOverhead + memsize.Int*int64(cap(s.emitState.unmatchedInputRowIndexes))
 	return size
 }
 
@@ -453,7 +453,7 @@ func (s *joinReaderIndexJoinStrategy) close(ctx context.Context) {
 	*s = joinReaderIndexJoinStrategy{}
 }
 
-// partialJoinSentinel is used as the inputRowIdxToLookedUpRowIndices value for
+// partialJoinSentinel is used as the inputRowIdxToLookedUpRowIndexes value for
 // semi- and anti-joins, where we only need to know about the existence of a
 // match.
 var partialJoinSentinel = []int{-1}
@@ -490,8 +490,8 @@ type joinReaderOrderingStrategy struct {
 	inputRows            []rowenc.EncDatumRow
 	remoteSpansGenerated bool
 
-	// inputRowIdxToLookedUpRowIndices is a multimap from input row indices to
-	// corresponding looked up row indices (indexes into the lookedUpRows
+	// inputRowIdxToLookedUpRowIndexes is a multimap from input row indexes to
+	// corresponding looked up row indexes (indexes into the lookedUpRows
 	// container). This serves to emit rows in input
 	// order even though lookups are performed out of order.
 	//
@@ -501,7 +501,7 @@ type joinReaderOrderingStrategy struct {
 	// with respect to the on-condition. For semi/anti join, we store at most one
 	// sentinel value, indicating a matching lookup if it's present, since the
 	// right side of a semi/anti join is not used.
-	inputRowIdxToLookedUpRowIndices [][]int
+	inputRowIdxToLookedUpRowIndexes [][]int
 
 	// lookedUpRows buffers looked-up rows for one batch of input rows (i.e.
 	// during one jrFetchingLookupRows phase). When we move to state jrReadingInput,
@@ -515,13 +515,13 @@ type joinReaderOrderingStrategy struct {
 	lookedUpRows *rowcontainer.DiskBackedNumberedRowContainer
 
 	// emitCursor contains information about where the next row to emit is within
-	// inputRowIdxToLookedUpRowIndices.
+	// inputRowIdxToLookedUpRowIndexes.
 	emitCursor struct {
-		// inputRowIdx contains the index into inputRowIdxToLookedUpRowIndices that
+		// inputRowIdx contains the index into inputRowIdxToLookedUpRowIndexes that
 		// we're about to emit.
 		inputRowIdx int
 		// outputRowIdx contains the index into the inputRowIdx'th row of
-		// inputRowIdxToLookedUpRowIndices that we're about to emit.
+		// inputRowIdxToLookedUpRowIndexes that we're about to emit.
 		outputRowIdx int
 		// notBufferedRow, if non-nil, contains a looked-up row that matches the
 		// first input row of the batch. Since joinReaderOrderingStrategy returns
@@ -549,18 +549,18 @@ type joinReaderOrderingStrategy struct {
 	strategyMemAcc *mon.BoundAccount
 	accountedFor   struct {
 		// sliceOverhead contains the memory usage of
-		// inputRowIdxToLookedUpRowIndices and
-		// accountedFor.inputRowIdxToLookedUpRowIndices that is currently
+		// inputRowIdxToLookedUpRowIndexes and
+		// accountedFor.inputRowIdxToLookedUpRowIndexes that is currently
 		// registered with memAcc.
 		sliceOverhead int64
-		// inputRowIdxToLookedUpRowIndices is a 1:1 mapping with the multimap
+		// inputRowIdxToLookedUpRowIndexes is a 1:1 mapping with the multimap
 		// with the same name, where each int64 indicates the memory usage of
 		// the corresponding []int that is currently registered with memAcc.
 		//
-		// Note that inputRowIdxToLookedUpRowIndices does not contain entries for
+		// Note that inputRowIdxToLookedUpRowIndexes does not contain entries for
 		// the first input row, because matches to the first row are emitted
 		// immediately.
-		inputRowIdxToLookedUpRowIndices []int64
+		inputRowIdxToLookedUpRowIndexes []int64
 	}
 
 	// testingInfoSpilled is set when the strategy is closed to indicate whether
@@ -612,39 +612,39 @@ func (s *joinReaderOrderingStrategy) generatedRemoteSpans() bool {
 func (s *joinReaderOrderingStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, []int, error) {
-	// Reset s.inputRowIdxToLookedUpRowIndices. This map will be populated in
+	// Reset s.inputRowIdxToLookedUpRowIndexes. This map will be populated in
 	// processedLookedUpRow(), as lookup results are received (possibly out of
 	// order).
-	if cap(s.inputRowIdxToLookedUpRowIndices) >= len(rows) {
+	if cap(s.inputRowIdxToLookedUpRowIndexes) >= len(rows) {
 		// We can reuse the multimap from the previous lookup rows batch.
-		s.inputRowIdxToLookedUpRowIndices = s.inputRowIdxToLookedUpRowIndices[:len(rows)]
-		for i := range s.inputRowIdxToLookedUpRowIndices {
-			s.inputRowIdxToLookedUpRowIndices[i] = s.inputRowIdxToLookedUpRowIndices[i][:0]
+		s.inputRowIdxToLookedUpRowIndexes = s.inputRowIdxToLookedUpRowIndexes[:len(rows)]
+		for i := range s.inputRowIdxToLookedUpRowIndexes {
+			s.inputRowIdxToLookedUpRowIndexes[i] = s.inputRowIdxToLookedUpRowIndexes[i][:0]
 		}
 	} else {
 		// We have to allocate a new multimap but can reuse the old slices.
-		oldSlices := s.inputRowIdxToLookedUpRowIndices
+		oldSlices := s.inputRowIdxToLookedUpRowIndexes
 		// Make sure to go up to the capacity to reuse all old slices.
 		oldSlices = oldSlices[:cap(oldSlices)]
-		s.inputRowIdxToLookedUpRowIndices = make([][]int, len(rows))
+		s.inputRowIdxToLookedUpRowIndexes = make([][]int, len(rows))
 		for i := range oldSlices {
-			s.inputRowIdxToLookedUpRowIndices[i] = oldSlices[i][:0]
+			s.inputRowIdxToLookedUpRowIndexes[i] = oldSlices[i][:0]
 		}
 	}
 	// Now make sure that memory accounting is up to date.
-	if cap(s.accountedFor.inputRowIdxToLookedUpRowIndices) >= len(rows) {
-		s.accountedFor.inputRowIdxToLookedUpRowIndices = s.accountedFor.inputRowIdxToLookedUpRowIndices[:len(rows)]
+	if cap(s.accountedFor.inputRowIdxToLookedUpRowIndexes) >= len(rows) {
+		s.accountedFor.inputRowIdxToLookedUpRowIndexes = s.accountedFor.inputRowIdxToLookedUpRowIndexes[:len(rows)]
 	} else {
-		oldAccountedFor := s.accountedFor.inputRowIdxToLookedUpRowIndices
-		s.accountedFor.inputRowIdxToLookedUpRowIndices = make([]int64, len(rows))
+		oldAccountedFor := s.accountedFor.inputRowIdxToLookedUpRowIndexes
+		s.accountedFor.inputRowIdxToLookedUpRowIndexes = make([]int64, len(rows))
 		// Since the capacity of old slices hasn't changed, we simply carry over
 		// what we've already accounted for. Make sure to go up to the capacity
 		// to ensure that all old slices are properly accounted for.
-		copy(s.accountedFor.inputRowIdxToLookedUpRowIndices, oldAccountedFor[:cap(oldAccountedFor)])
+		copy(s.accountedFor.inputRowIdxToLookedUpRowIndexes, oldAccountedFor[:cap(oldAccountedFor)])
 	}
 	// Account for the new allocations, if any.
-	sliceOverhead := memsize.IntSliceOverhead*int64(cap(s.inputRowIdxToLookedUpRowIndices)) +
-		memsize.Int64*int64(cap(s.accountedFor.inputRowIdxToLookedUpRowIndices))
+	sliceOverhead := memsize.IntSliceOverhead*int64(cap(s.inputRowIdxToLookedUpRowIndexes)) +
+		memsize.Int64*int64(cap(s.accountedFor.inputRowIdxToLookedUpRowIndexes))
 	if err := s.growMemoryAccount(s.strategyMemAcc, sliceOverhead-s.accountedFor.sliceOverhead); err != nil {
 		return nil, nil, err
 	}
@@ -658,12 +658,12 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	ctx context.Context, row rowenc.EncDatumRow, spanID int,
 ) (joinReaderState, error) {
-	matchingInputRowIndices := s.getMatchingRowIndices(spanID)
+	matchingInputRowIndexes := s.getMatchingRowIndexes(spanID)
 
 	// Avoid adding to the buffer if only the first input row was matched, since
 	// in this case we can just output the row immediately.
 	var containerIdx int
-	if !s.isPartialJoin && (len(matchingInputRowIndices) != 1 || matchingInputRowIndices[0] != 0) {
+	if !s.isPartialJoin && (len(matchingInputRowIndexes) != 1 || matchingInputRowIndexes[0] != 0) {
 		// Replace missing values with nulls to appease the row container.
 		for i := range row {
 			if row[i].IsUnset() {
@@ -678,16 +678,16 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	}
 
 	// Update our map from input rows to looked up rows.
-	for _, inputRowIdx := range matchingInputRowIndices {
+	for _, inputRowIdx := range matchingInputRowIndexes {
 		if !s.isPartialJoin {
 			if inputRowIdx == 0 {
-				// Don't add to inputRowIdxToLookedUpRowIndices in order to avoid
+				// Don't add to inputRowIdxToLookedUpRowIndexes in order to avoid
 				// emitting more than once.
 				s.emitCursor.notBufferedRow = row
 				continue
 			}
-			s.inputRowIdxToLookedUpRowIndices[inputRowIdx] = append(
-				s.inputRowIdxToLookedUpRowIndices[inputRowIdx], containerIdx)
+			s.inputRowIdxToLookedUpRowIndexes[inputRowIdx] = append(
+				s.inputRowIdxToLookedUpRowIndexes[inputRowIdx], containerIdx)
 			continue
 		}
 
@@ -708,22 +708,22 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 			wasMatched := s.groupingState.setMatched(inputRowIdx)
 			if !wasMatched && inputRowIdx == 0 {
 				// This looked up row matches the first row, and we haven't seen a match
-				// for the first row yet. Don't add to inputRowIdxToLookedUpRowIndices
+				// for the first row yet. Don't add to inputRowIdxToLookedUpRowIndexes
 				// in order to avoid emitting more than once.
 				s.emitCursor.notBufferedRow = row
 				continue
 			}
-			s.inputRowIdxToLookedUpRowIndices[inputRowIdx] = partialJoinSentinel
+			s.inputRowIdxToLookedUpRowIndexes[inputRowIdx] = partialJoinSentinel
 		}
 	}
 
 	// Perform memory accounting. Iterate only over the slices that might have
 	// changed in size.
 	var delta int64
-	for _, idx := range matchingInputRowIndices {
-		newSize := memsize.Int * int64(cap(s.inputRowIdxToLookedUpRowIndices[idx]))
-		delta += newSize - s.accountedFor.inputRowIdxToLookedUpRowIndices[idx]
-		s.accountedFor.inputRowIdxToLookedUpRowIndices[idx] = newSize
+	for _, idx := range matchingInputRowIndexes {
+		newSize := memsize.Int * int64(cap(s.inputRowIdxToLookedUpRowIndexes[idx]))
+		delta += newSize - s.accountedFor.inputRowIdxToLookedUpRowIndexes[idx]
+		s.accountedFor.inputRowIdxToLookedUpRowIndexes[idx] = newSize
 	}
 	if err := s.growMemoryAccount(s.strategyMemAcc, delta); err != nil {
 		return jrStateUnknown, err
@@ -740,14 +740,14 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 
 func (s *joinReaderOrderingStrategy) prepareToEmit(ctx context.Context) {
 	if !s.isPartialJoin {
-		s.lookedUpRows.SetupForRead(ctx, s.inputRowIdxToLookedUpRowIndices)
+		s.lookedUpRows.SetupForRead(ctx, s.inputRowIdxToLookedUpRowIndexes)
 	}
 }
 
 func (s *joinReaderOrderingStrategy) nextRowToEmit(
 	ctx context.Context,
 ) (rowenc.EncDatumRow, joinReaderState, error) {
-	if s.emitCursor.inputRowIdx >= len(s.inputRowIdxToLookedUpRowIndices) {
+	if s.emitCursor.inputRowIdx >= len(s.inputRowIdxToLookedUpRowIndexes) {
 		log.VEventf(ctx, 1, "done emitting rows")
 		// Ready for another input batch. Reset state. The groupingState,
 		// which also relates to this batch, will be reset by joinReader.
@@ -760,7 +760,7 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 	}
 
 	inputRow := s.inputRows[s.emitCursor.inputRowIdx]
-	lookedUpRows := s.inputRowIdxToLookedUpRowIndices[s.emitCursor.inputRowIdx]
+	lookedUpRows := s.inputRowIdxToLookedUpRowIndexes[s.emitCursor.inputRowIdx]
 	if s.emitCursor.notBufferedRow == nil && s.emitCursor.outputRowIdx >= len(lookedUpRows) {
 		// We have no more rows for the current input row. Emit an outer or anti
 		// row if we didn't see a match, and bump to the next input row.

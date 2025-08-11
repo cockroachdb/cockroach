@@ -351,7 +351,7 @@ func (c *CustomFuncs) MergeAggs(
 	innerAggs, outerAggs memo.AggregationsExpr, innerGroupingCols opt.ColSet,
 ) memo.AggregationsExpr {
 	// Create a mapping from the output ColumnIDs of the inner aggregates to their
-	// indices in innerAggs.
+	// indexes in innerAggs.
 	innerColsToAggs := map[opt.ColumnID]int{}
 	for i := range innerAggs {
 		innerColsToAggs[innerAggs[i].Col] = i

@@ -763,7 +763,7 @@ func (p *PhysicalPlan) AddRendering(
 	return nil
 }
 
-// reverseProjection remaps expression variable indices to refer to internal
+// reverseProjection remaps expression variable indexes to refer to internal
 // columns (i.e. before post-processing) of a processor instead of output
 // columns (i.e. after post-processing).
 //

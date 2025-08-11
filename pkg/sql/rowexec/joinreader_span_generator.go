@@ -44,10 +44,10 @@ type joinReaderSpanGenerator interface {
 	// accounting system.
 	generateSpans(ctx context.Context, rows []rowenc.EncDatumRow) (roachpb.Spans, []int, error)
 
-	// getMatchingRowIndices returns the indices of the input rows that are
-	// associated with the given span ID (i.e., the indices of the rows passed
+	// getMatchingRowIndexes returns the indexes of the input rows that are
+	// associated with the given span ID (i.e., the indexes of the rows passed
 	// to generateSpans that resulted in the spanID'th generated span).
-	getMatchingRowIndices(spanID int) []int
+	getMatchingRowIndexes(spanID int) []int
 
 	// close releases any resources associated with the joinReaderSpanGenerator.
 	close(context.Context)
@@ -75,12 +75,12 @@ type spanIDHelper struct {
 	//  exactly the same. For now, we can just limit when inequality-only lookup
 	//  joins are planned to avoid regression.
 	spanKeyToSpanID map[string]int
-	// spanIDToInputRowIndices maps a span ID to the input row indices that
+	// spanIDToInputRowIndexes maps a span ID to the input row indexes that
 	// desire the lookup of the span corresponding to that span ID.
 	//
 	// Index joins simply output the fetched rows, so they don't need this
 	// mapping.
-	spanIDToInputRowIndices [][]int
+	spanIDToInputRowIndexes [][]int
 
 	scratchSpanIDs []int
 }
@@ -91,11 +91,11 @@ func (h *spanIDHelper) reset() {
 	for k := range h.spanKeyToSpanID {
 		delete(h.spanKeyToSpanID, k)
 	}
-	h.spanIDToInputRowIndices = h.spanIDToInputRowIndices[:0]
+	h.spanIDToInputRowIndexes = h.spanIDToInputRowIndexes[:0]
 	h.scratchSpanIDs = h.scratchSpanIDs[:0]
 }
 
-// addInputRowIdxForSpan adds the given input row index to the list of indices
+// addInputRowIdxForSpan adds the given input row index to the list of indexes
 // corresponding to the given span (identified by the span key). Span ID of the
 // span as well as a boolean indicating whether this span key is seen for the
 // first time are returned.
@@ -109,14 +109,14 @@ func (h *spanIDHelper) addInputRowIdxForSpan(
 	if !ok {
 		spanID = len(h.spanKeyToSpanID)
 		h.spanKeyToSpanID[spanKey] = spanID
-		if cap(h.spanIDToInputRowIndices) > spanID {
-			h.spanIDToInputRowIndices = h.spanIDToInputRowIndices[:spanID+1]
-			h.spanIDToInputRowIndices[spanID] = h.spanIDToInputRowIndices[spanID][:0]
+		if cap(h.spanIDToInputRowIndexes) > spanID {
+			h.spanIDToInputRowIndexes = h.spanIDToInputRowIndexes[:spanID+1]
+			h.spanIDToInputRowIndexes[spanID] = h.spanIDToInputRowIndexes[spanID][:0]
 		} else {
-			h.spanIDToInputRowIndices = append(h.spanIDToInputRowIndices, nil)
+			h.spanIDToInputRowIndexes = append(h.spanIDToInputRowIndexes, nil)
 		}
 	}
-	h.spanIDToInputRowIndices[spanID] = append(h.spanIDToInputRowIndices[spanID], inputRowIdx)
+	h.spanIDToInputRowIndexes[spanID] = append(h.spanIDToInputRowIndexes[spanID], inputRowIdx)
 	return spanID, !ok
 }
 
@@ -128,8 +128,8 @@ func (h *spanIDHelper) addedSpans(spanID int, count int) {
 	}
 }
 
-func (h *spanIDHelper) getMatchingRowIndices(spanID int) []int {
-	return h.spanIDToInputRowIndices[spanID]
+func (h *spanIDHelper) getMatchingRowIndexes(spanID int) []int {
+	return h.spanIDToInputRowIndexes[spanID]
 }
 
 // memUsage returns the size of the data structures in the spanIDHelper for
@@ -142,10 +142,10 @@ func (h *spanIDHelper) memUsage() int64 {
 	for k := range h.spanKeyToSpanID {
 		size += memsize.String + int64(len(k))
 	}
-	// Account for the two-dimensional spanIDToInputRowIndices.
-	size += int64(cap(h.spanIDToInputRowIndices)) * memsize.IntSliceOverhead
-	// Account for each one-dimensional int slice in spanIDToInputRowIndices.
-	for _, slice := range h.spanIDToInputRowIndices[:cap(h.spanIDToInputRowIndices)] {
+	// Account for the two-dimensional spanIDToInputRowIndexes.
+	size += int64(cap(h.spanIDToInputRowIndexes)) * memsize.IntSliceOverhead
+	// Account for each one-dimensional int slice in spanIDToInputRowIndexes.
+	for _, slice := range h.spanIDToInputRowIndexes[:cap(h.spanIDToInputRowIndexes)] {
 		size += int64(cap(slice)) * memsize.Int64
 	}
 	// Account for scratchSpanIDs.
@@ -818,12 +818,12 @@ func (g *localityOptimizedSpanGenerator) generateRemoteSpans(
 	return g.remoteSpanGen.generateSpans(ctx, rows)
 }
 
-// getMatchingRowIndices is part of the joinReaderSpanGenerator interface.
-func (g *localityOptimizedSpanGenerator) getMatchingRowIndices(spanID int) []int {
+// getMatchingRowIndexes is part of the joinReaderSpanGenerator interface.
+func (g *localityOptimizedSpanGenerator) getMatchingRowIndexes(spanID int) []int {
 	if g.localSpanGenUsedLast {
-		return g.localSpanGen.getMatchingRowIndices(spanID)
+		return g.localSpanGen.getMatchingRowIndexes(spanID)
 	}
-	return g.remoteSpanGen.getMatchingRowIndices(spanID)
+	return g.remoteSpanGen.getMatchingRowIndexes(spanID)
 }
 
 func (g *localityOptimizedSpanGenerator) close(ctx context.Context) {

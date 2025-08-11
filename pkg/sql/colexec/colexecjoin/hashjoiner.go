@@ -69,7 +69,7 @@ type HashJoinerSpec struct {
 }
 
 type hashJoinerSourceSpec struct {
-	// EqCols specify the indices of the source tables equality column during the
+	// EqCols specify the indexes of the source tables equality column during the
 	// hash join.
 	EqCols []uint32
 
@@ -109,14 +109,14 @@ type hashJoinerSourceSpec struct {
 //  2. In order to find the position of these key tuples in the hash table:
 //     - First find the first element in the bucket's linked list for each key tuple
 //     and store it in the ToCheckID array. Initialize the ToCheck array with the
-//     full sequence of input indices (0...batchSize - 1).
+//     full sequence of input indexes (0...batchSize - 1).
 //     - While ToCheck is not empty, each element in ToCheck represents a position
 //     of the key tuples for which the key has not yet been found in the hash
 //     table. Perform a multi-column equality check to see if the key columns
 //     match that of the build table's key columns at ToCheckID.
 //     - Update the differs array to store whether or not the probe's key tuple
 //     matched the corresponding build's key tuple.
-//     - Select the indices that differed and store them into ToCheck since they
+//     - Select the indexes that differed and store them into ToCheck since they
 //     need to be further processed.
 //     - For the differing tuples, find the next ID in that bucket of the hash table
 //     and put it into the ToCheckID array.
@@ -132,19 +132,19 @@ type hashJoinerSourceSpec struct {
 //  2. In order to find the position of these key tuples in the hash table:
 //     - First find the first element in the bucket's linked list for each key tuple
 //     and store it in the ToCheckID array. Initialize the ToCheck array with the
-//     full sequence of input indices (0...batchSize - 1).
+//     full sequence of input indexes (0...batchSize - 1).
 //     - While ToCheck is not empty, each element in ToCheck represents a position
 //     of the key tuples for which the key has not yet been visited by any prior
 //     probe. Perform a multi-column equality check to see if the key columns
 //     match that of the build table's key columns at ToCheckID.
 //     - Update the differs array to store whether or not the probe's key tuple
 //     matched the corresponding build's key tuple.
-//     - For the indices that did not differ, we can lazily update the HashTable's
+//     - For the indexes that did not differ, we can lazily update the HashTable's
 //     Same linked list to store a list of all identical keys starting at head.
 //     Once a key has been added to ht.Same, ht.Visited is set to true. For the
-//     indices that have never been visited, we want to continue checking this
+//     indexes that have never been visited, we want to continue checking this
 //     bucket for identical values by adding this key to ToCheck.
-//     - Select the indices that differed and store them into ToCheck since they
+//     - Select the indexes that differed and store them into ToCheck since they
 //     need to be further processed.
 //     - For the differing tuples, find the next ID in that bucket of the hash table
 //     and put it into the ToCheckID array.
@@ -190,7 +190,7 @@ type hashJoiner struct {
 
 	// probeState is used in hjProbing state.
 	probeState struct {
-		// buildIdx and probeIdx represents the matching row indices that are
+		// buildIdx and probeIdx represents the matching row indexes that are
 		// used to stitch together the join results.
 		buildIdx []int
 		probeIdx []int
@@ -535,7 +535,7 @@ func (hj *hashJoiner) exec() coldata.Batch {
 		hj.ht.ComputeBuckets(hj.probeState.buckets, hj.ht.Keys, batchSize, sel)
 
 		// Then, we initialize ToCheckID with the initial hash buckets and
-		// ToCheck with all applicable indices. Notably, only probing tuples
+		// ToCheck with all applicable indexes. Notably, only probing tuples
 		// that have hash matches are included into ToCheck whereas ToCheckID is
 		// correctly set for all tuples.
 		hj.ht.ProbeScratch.SetupLimitedSlices(batchSize)

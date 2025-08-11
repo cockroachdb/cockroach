@@ -47,7 +47,7 @@ message Expression {
   reserved 1;
 }
 
-// Ordering defines an order - specifically a list of column indices and
+// Ordering defines an order - specifically a list of column indexes and
 // directions. See colinfo.ColumnOrdering.
 message Ordering {
   option (gogoproto.equal) = true;

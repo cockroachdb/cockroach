@@ -936,15 +936,15 @@ func (s *opTestInput) Next() coldata.Batch {
 		for i := range s.selection {
 			s.selection[i] = i
 		}
-		// We have populated s.selection vector with possibly more indices than we
+		// We have populated s.selection vector with possibly more indexes than we
 		// have actual tuples for, so some "default" tuples will be introduced but
 		// will not be selected due to the length of the batch being equal to the
 		// number of actual tuples.
 		//
 		// To introduce an element of chaos in the testing process we shuffle the
 		// selection vector; however, in the real environment we expect that
-		// indices in the selection vector to be in ascending order, so we sort
-		// only those indices that correspond to the actual tuples. For example,
+		// indexes in the selection vector to be in ascending order, so we sort
+		// only those indexes that correspond to the actual tuples. For example,
 		// say we have 3 actual tuples, and after shuffling the selection vector
 		// is [200, 50, 100, ...], so we sort only those 3 values to get to
 		// [50, 100, 200, ...] in order to "scan" the selection vector in

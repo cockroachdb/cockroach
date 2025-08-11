@@ -16,7 +16,7 @@ import (
 
 // FinalStageInfo is a wrapper around an aggregation function performed
 // in the final stage of distributed aggregations that allows us to specify the
-// corresponding inputs from the local aggregations by their indices in the LocalStage.
+// corresponding inputs from the local aggregations by their indexes in the LocalStage.
 type FinalStageInfo struct {
 	Fn execinfrapb.AggregatorSpec_Func
 	// Specifies the ordered slice of outputs from local aggregations to propagate
@@ -49,7 +49,7 @@ type DistAggregationInfo struct {
 
 	// The final stage consists of one or more aggregations that take in an
 	// arbitrary number of inputs from the local stages. The inputs are ordered and
-	// mapped by the indices of the local aggregations in LocalStage (specified by
+	// mapped by the indexes of the local aggregations in LocalStage (specified by
 	// LocalIdxs).
 	FinalStage []FinalStageInfo
 
@@ -69,7 +69,7 @@ type DistAggregationInfo struct {
 	// Instead of defining a canonical non-typed expression and then tweaking it
 	// with visitors, we use a function that directly creates a typed expression
 	// on demand. The expression will refer to the final stage results using
-	// IndexedVars, with indices specified by varIdxs (1-1 mapping).
+	// IndexedVars, with indexes specified by varIdxs (1-1 mapping).
 	FinalRendering func(h *tree.IndexedVarHelper, varIdxs []int) (tree.TypedExpr, error)
 }
 

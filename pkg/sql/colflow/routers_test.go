@@ -165,7 +165,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 		inputBatchSize   int
 		outputBatchSize  int
 		blockedThreshold int
-		// selection determines which indices to add to the router output as well
+		// selection determines which indexes to add to the router output as well
 		// as how many elements from data are compared to the output.
 		selection []int
 		name      string

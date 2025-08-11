@@ -839,7 +839,7 @@ type SetAccountingHelper struct {
 	// fixed-length elements.
 	allFixedLength bool
 
-	// bytesLikeVecIdxs stores the indices of all bytes-like vectors.
+	// bytesLikeVecIdxs stores the indexes of all bytes-like vectors.
 	bytesLikeVecIdxs intsets.Fast
 	// bytesLikeVectors stores all actual bytes-like vectors. It is updated
 	// every time a new batch is allocated.
@@ -848,7 +848,7 @@ type SetAccountingHelper struct {
 	// that we have already accounted for.
 	prevBytesLikeTotalSize int64
 
-	// varSizeVecIdxs stores the indices of all vectors with variable sized
+	// varSizeVecIdxs stores the indexes of all vectors with variable sized
 	// values except for the bytes-like ones.
 	varSizeVecIdxs intsets.Fast
 	// decimalVecs and datumVecs store all decimal and datum-backed vectors,

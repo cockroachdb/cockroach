@@ -33,17 +33,17 @@ type joinPredicate struct {
 	// operands.
 	numLeftCols, numRightCols int
 
-	// left/rightEqualityIndices give the position of equality columns
+	// left/rightEqualityIndexes give the position of equality columns
 	// on the left and right input row arrays, respectively.
 	// Only columns with the same left and right value types can be equality
 	// columns.
-	leftEqualityIndices  []exec.NodeColumnOrdinal
-	rightEqualityIndices []exec.NodeColumnOrdinal
+	leftEqualityIndexes  []exec.NodeColumnOrdinal
+	rightEqualityIndexes []exec.NodeColumnOrdinal
 
-	// The list of names for the columns listed in leftEqualityIndices.
+	// The list of names for the columns listed in leftEqualityIndexes.
 	// Used mainly for pretty-printing.
 	leftColNames tree.NameList
-	// The list of names for the columns listed in rightEqualityIndices.
+	// The list of names for the columns listed in rightEqualityIndexes.
 	// Used mainly for pretty-printing.
 	rightColNames tree.NameList
 

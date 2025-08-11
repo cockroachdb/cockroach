@@ -157,7 +157,7 @@ func (s *substring_StartType_LengthTypeOperator) Next() coldata.Batch {
 
 				// If there is a rune that uses more than 1 byte in the substring or in
 				// the bytes leading up to the substring, then we must adjust the start
-				// and end indices to the rune boundaries. However, we have to test the
+				// and end indexes to the rune boundaries. However, we have to test the
 				// entire bytes slice instead of a subset, since RuneCount will treat an
 				// incomplete encoding as a single byte rune.
 				if utf8.RuneCount(bytes) != len(bytes) {

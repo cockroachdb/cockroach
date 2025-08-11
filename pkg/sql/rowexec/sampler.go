@@ -57,7 +57,7 @@ type samplerProcessor struct {
 	invSr     map[uint32]*stats.SampleReservoir
 	invSketch map[uint32]*sketchInfo
 
-	// Output column indices for special columns.
+	// Output column indexes for special columns.
 	rankCol      int
 	sketchIdxCol int
 	numRowsCol   int

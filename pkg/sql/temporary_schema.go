@@ -285,7 +285,7 @@ func cleanupTempSchemaObjects(
 		{"VIEW", views, nil},
 		{"TABLE", tables, nil},
 		// Drop sequences after tables, because then we reduce the amount of work
-		// that may be needed to drop indices.
+		// that may be needed to drop indexes.
 		{
 			"SEQUENCE",
 			sequences,

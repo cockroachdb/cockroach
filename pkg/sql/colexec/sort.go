@@ -441,7 +441,7 @@ func (p *sortOp) sort() {
 		} else {
 			omitNextPartitioning = false
 		}
-		// Convert the distinct vector into a selection vector - a vector of indices
+		// Convert the distinct vector into a selection vector - a vector of indexes
 		// that were true in the distinct vector.
 		sizeBefore := memsize.Int * int64(cap(p.scratch.partitions))
 		p.scratch.partitions = boolVecToSel(partitionsCol, p.scratch.partitions[:0])

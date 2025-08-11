@@ -229,7 +229,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 					}
 					// After all utility columns, we will have input columns for each
 					// of the aggregate functions. Here, we will set up the column
-					// indices, and the types will be generated below.
+					// indexes, and the types will be generated below.
 					numColsSoFar := numUtilityCols
 					for i := range aggregations {
 						numArguments := aggregateFuncToNumArguments[aggregations[i].Func]

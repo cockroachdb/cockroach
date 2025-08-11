@@ -642,7 +642,7 @@ func checkSupportForPlanNode(
 			return cannotDistribute, err
 		}
 		rec := recLeft.compose(recRight)
-		if len(n.pred.leftEqualityIndices) > 0 {
+		if len(n.pred.leftEqualityIndexes) > 0 {
 			// We can partition both streams on the equality columns.
 			if n.estimatedLeftRowCount == 0 && n.estimatedRightRowCount == 0 {
 				log.VEventf(ctx, 2, "join (no stats) recommends plan distribution")
@@ -1209,7 +1209,7 @@ type PhysicalPlan struct {
 	physicalplan.PhysicalPlan
 
 	// PlanToStreamColMap maps planNode columns (see planColumns()) to columns in
-	// the result streams. These stream indices correspond to the streams
+	// the result streams. These stream indexes correspond to the streams
 	// referenced in ResultTypes.
 	//
 	// Note that in some cases, not all columns in the result streams are
@@ -2982,11 +2982,11 @@ func (dsp *DistSQLPlanner) planAggregators(
 
 			for _, finalInfo := range info.FinalStage {
 				// The input of the final aggregators is
-				// specified as the relative indices of the
+				// specified as the relative indexes of the
 				// local aggregation values. We need to map
-				// these to the corresponding absolute indices
+				// these to the corresponding absolute indexes
 				// in localAggs.
-				// argIdxs consists of the absolute indices
+				// argIdxs consists of the absolute indexes
 				// in localAggs.
 				argIdxs := make([]uint32, len(finalInfo.LocalIdxs))
 				for i, relIdx := range finalInfo.LocalIdxs {
@@ -3167,7 +3167,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 						mappedIdxs[j] = int(finalIdxMap[finalIdx+j])
 					}
 					// Map the final aggregation values
-					// to their corresponding indices.
+					// to their corresponding indexes.
 					expr, err := info.FinalRendering(&h, mappedIdxs)
 					if err != nil {
 						return err
@@ -3945,8 +3945,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	// We initialize these properties of the joiner. They will then be used to
 	// fill in the processor spec. See descriptions for HashJoinerSpec.
 	// Set up the equality columns and the merge ordering.
-	leftEqCols := eqCols(n.pred.leftEqualityIndices, leftMap)
-	rightEqCols := eqCols(n.pred.rightEqualityIndices, rightMap)
+	leftEqCols := eqCols(n.pred.leftEqualityIndexes, leftMap)
+	rightEqCols := eqCols(n.pred.rightEqualityIndexes, rightMap)
 	leftMergeOrd := distsqlOrdering(n.mergeJoinOrdering, leftEqCols)
 	rightMergeOrd := distsqlOrdering(n.mergeJoinOrdering, rightEqCols)
 

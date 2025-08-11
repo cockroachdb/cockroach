@@ -23,9 +23,9 @@ type joinNode struct {
 	pred *joinPredicate
 
 	// mergeJoinOrdering is set if the left and right sides have similar ordering
-	// on the equality columns (or a subset of them). The column indices refer to
+	// on the equality columns (or a subset of them). The column indexes refer to
 	// equality columns: a ColIdx of i refers to left column
-	// pred.leftEqualityIndices[i] and right column pred.rightEqualityIndices[i].
+	// pred.leftEqualityIndexes[i] and right column pred.rightEqualityIndexes[i].
 	mergeJoinOrdering colinfo.ColumnOrdering
 
 	reqOrdering ReqOrdering

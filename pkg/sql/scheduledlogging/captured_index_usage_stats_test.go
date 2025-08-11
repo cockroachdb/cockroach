@@ -146,7 +146,7 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	db.Exec(t, `CREATE TABLE "mIxEd-CaSe""woo☃"."sPe-CiAl✔" (num INT PRIMARY KEY, "HeLlO☀" char)`)
 	db.Exec(t, `CREATE TABLE "index"."index" (num INT PRIMARY KEY, "index" char)`)
 
-	// Create an index on each created table (each table now has two indices:
+	// Create an index on each created table (each table now has two indexes:
 	// primary and this one)
 	db.Exec(t, `CREATE INDEX ON test.test_table (letter)`)
 	db.Exec(t, `CREATE INDEX ON test2.test2_table (letter)`)

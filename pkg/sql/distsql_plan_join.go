@@ -29,7 +29,7 @@ type joinPlanningInfo struct {
 	onExpr              execinfrapb.Expression
 	post                execinfrapb.PostProcessSpec
 	joinToStreamColMap  []int
-	// leftEqCols and rightEqCols are the indices of equality columns. These
+	// leftEqCols and rightEqCols are the indexes of equality columns. These
 	// are only used when planning a hash join.
 	leftEqCols, rightEqCols             []uint32
 	leftEqColsAreKey, rightEqColsAreKey bool
@@ -157,13 +157,13 @@ func (h *joinPlanningHelper) remapOnExpr(
 }
 
 // eqCols produces a slice of ordinal references for the plan columns specified
-// in eqIndices using planToColMap.
-// That is: eqIndices contains a slice of plan column indexes and planToColMap
+// in eqIndexes using planToColMap.
+// That is: eqIndexes contains a slice of plan column indexes and planToColMap
 // maps the plan column indexes to the ordinal references (index of the
 // intermediate row produced).
-func eqCols(eqIndices []exec.NodeColumnOrdinal, planToColMap []int) []uint32 {
-	eqCols := make([]uint32, len(eqIndices))
-	for i, planCol := range eqIndices {
+func eqCols(eqIndexes []exec.NodeColumnOrdinal, planToColMap []int) []uint32 {
+	eqCols := make([]uint32, len(eqIndexes))
+	for i, planCol := range eqIndexes {
 		eqCols[i] = uint32(planToColMap[planCol])
 	}
 

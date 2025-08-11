@@ -18,7 +18,7 @@ import (
 // indexBackfiller and the information about which columns will need to
 // be evaluated during the backfill.
 type indexBackfillerCols struct {
-	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
+	// colIdxMap maps ColumnIDs to indexes into desc.Columns and desc.Mutations.
 	colIdxMap catalog.TableColMap
 
 	// cols are all writable (PUBLIC and WRITE_ONLY) columns in

@@ -121,7 +121,7 @@ type hashTableProbeBuffer struct {
 	// HashTable.maxProbingBatchLength in size.                  //
 	///////////////////////////////////////////////////////////////
 
-	// ToCheck stores the indices of tuples from the probing batch for which we
+	// ToCheck stores the indexes of tuples from the probing batch for which we
 	// still want to keep traversing the hash chain trying to find equality
 	// matches.
 	//
@@ -251,7 +251,7 @@ type HashTable struct {
 	// Vals stores columns of the build source that are specified in colsToStore
 	// in the constructor. The ID of a tuple at any index of Vals is index + 1.
 	Vals *colexecutils.AppendOnlyBufferedBatch
-	// keyCols stores the indices of Vals which are used for equality
+	// keyCols stores the indexes of Vals which are used for equality
 	// comparison.
 	keyCols []uint32
 
@@ -330,8 +330,8 @@ func NewHashTable(
 	// colsToStore indicates the positions of columns to actually store in the
 	// hash table depending on the build mode:
 	// - all columns are stored in the full build mode
-	// - only columns with indices in keyCols are stored in the distinct build
-	// mode (columns with other indices will remain zero-capacity vectors in
+	// - only columns with indexes in keyCols are stored in the distinct build
+	// mode (columns with other indexes will remain zero-capacity vectors in
 	// Vals).
 	var colsToStore []int
 	switch buildMode {
@@ -908,11 +908,11 @@ func (ht *HashTable) CheckBuildForAggregation(
 // DistinctCheck determines if the current key in the ToCheckID bucket matches the
 // equality column key. If there is a match, then the key is removed from
 // ToCheck. If the bucket has reached the end, the key is rejected. The ToCheck
-// list is reconstructed to only hold the indices of the keyCols keys that have
+// list is reconstructed to only hold the indexes of the keyCols keys that have
 // not been found. The new length of ToCheck is returned by this function.
 func (ht *HashTable) DistinctCheck(nToCheck uint32, probeSel []int) uint32 {
 	ht.checkCols(ht.Keys, nToCheck, probeSel)
-	// Select the indices that differ and put them into ToCheck.
+	// Select the indexes that differ and put them into ToCheck.
 	nDiffers := uint32(0)
 	toCheckSlice := ht.ProbeScratch.ToCheck
 	_ = toCheckSlice[nToCheck-1]

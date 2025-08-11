@@ -10953,7 +10953,7 @@ func regexpReplace(evalCtx *eval.Context, s, pattern, to, sqlFlags string) (tree
 					} else {
 						captureGroupNumber := int(to[i] - '0')
 						// regexpReplace expects references to "out-of-bounds"
-						// and empty (when the corresponding match indices
+						// and empty (when the corresponding match indexes
 						// are negative) capture groups to be ignored.
 						if matchIndexPos := 2 * captureGroupNumber; matchIndexPos < len(matchIndex) {
 							startPos := matchIndex[matchIndexPos]

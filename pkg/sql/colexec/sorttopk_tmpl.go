@@ -97,7 +97,7 @@ func processBatch(
 }
 
 // spool reads in the entire input, always storing the top K rows it has seen so
-// far in o.topK. This is done by maintaining a max heap of indices into o.topK.
+// far in o.topK. This is done by maintaining a max heap of indexes into o.topK.
 // Whenever we encounter a row which is smaller than the max row in the heap,
 // we replace the max with that row.
 //
@@ -238,7 +238,7 @@ func compareRow(
 }
 
 // spool reads in the entire input, always storing the top K rows it has seen so
-// far in o.topK. This is done by maintaining a max heap of indices into o.topK.
+// far in o.topK. This is done by maintaining a max heap of indexes into o.topK.
 // Whenever we encounter a row which is smaller than the max row in the heap,
 // we replace the max with that row.
 //

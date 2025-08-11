@@ -663,7 +663,7 @@ func (s *testState) BestCentroids(d *datadriven.TestData) string {
 		offsets[i] = i
 	}
 
-	// Sort indices by distance (argsort).
+	// Sort indexes by distance (argsort).
 	slices.SortFunc(offsets, func(a, b int) int {
 		if distances[a] < distances[b] {
 			return -1

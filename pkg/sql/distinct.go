@@ -16,12 +16,12 @@ import (
 type distinctNode struct {
 	singleInputPlanNode
 
-	// distinctOnColIdxs are the column indices of the child planNode and
+	// distinctOnColIdxs are the column indexes of the child planNode and
 	// is what defines the distinct key.
 	// For a normal DISTINCT (without the ON clause), distinctOnColIdxs
-	// contains all the column indices of the child planNode.
+	// contains all the column indexes of the child planNode.
 	// Otherwise, distinctOnColIdxs is a strict subset of the child
-	// planNode's column indices indicating which columns are specified in
+	// planNode's column indexes indicating which columns are specified in
 	// the DISTINCT ON (<exprs>) clause.
 	distinctOnColIdxs intsets.Fast
 

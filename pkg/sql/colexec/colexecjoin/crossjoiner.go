@@ -297,7 +297,7 @@ func (c *crossJoiner) willEmit() int {
 	}
 }
 
-// setAllNulls sets all tuples in vecs with indices in [0, length) range to
+// setAllNulls sets all tuples in vecs with indexes in [0, length) range to
 // null.
 func setAllNulls(vecs []*coldata.Vec, length int) {
 	for i := range vecs {

@@ -24,13 +24,13 @@ type indexedValue struct {
 	idx   int
 }
 
-// slidingWindow maintains a deque of values along with corresponding indices
+// slidingWindow maintains a deque of values along with corresponding indexes
 // based on cmp function:
 // for Min behavior, cmp = -a.Compare(b)
 // for Max behavior, cmp = a.Compare(b)
 //
 // It assumes that the frame bounds will never go back, i.e. non-decreasing
-// sequences of frame start and frame end indices.
+// sequences of frame start and frame end indexes.
 type slidingWindow struct {
 	values  ring.Buffer[*indexedValue]
 	evalCtx *eval.Context
@@ -67,7 +67,7 @@ func (sw *slidingWindow) add(ctx context.Context, iv *indexedValue) error {
 }
 
 // removeAllBefore removes all values from the beginning of the deque that have
-// indices smaller than given 'idx'. This operation corresponds to shifting the
+// indexes smaller than given 'idx'. This operation corresponds to shifting the
 // start of the frame up to 'idx'.
 func (sw *slidingWindow) removeAllBefore(idx int) {
 	for sw.values.Len() > 0 && sw.values.Get(0).idx < idx {
@@ -197,7 +197,7 @@ func (w *slidingWindowFunc) Close(context.Context, *eval.Context) {
 
 // slidingWindowSumFunc applies sliding window approach to summation over
 // a frame. It assumes that the frame bounds will never go back, i.e.
-// non-decreasing sequences of frame start and frame end indices.
+// non-decreasing sequences of frame start and frame end indexes.
 type slidingWindowSumFunc struct {
 	agg                eval.AggregateFunc // one of the four SumAggregates
 	prevStart, prevEnd int

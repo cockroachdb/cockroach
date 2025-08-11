@@ -43,7 +43,7 @@ func ConvertToSpecOrdering(columnOrdering colinfo.ColumnOrdering) Ordering {
 
 // ConvertToMappedSpecOrdering converts a colinfo.ColumnOrdering type
 // to an Ordering type (as defined in data.proto), using the column
-// indices contained in planToStreamColMap.
+// indexes contained in planToStreamColMap.
 func ConvertToMappedSpecOrdering(
 	columnOrdering colinfo.ColumnOrdering, planToStreamColMap []int,
 ) Ordering {

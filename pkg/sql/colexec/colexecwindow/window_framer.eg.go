@@ -24,7 +24,7 @@ type windowFramer interface {
 	// getColsToStore is called upon initialization of the windowFramer operators
 	// in order to add to the list of columns to store in the SpillingBuffer owned
 	// by the parent operator.
-	// getColsToStore adds column indices to the given list when the windowFramer
+	// getColsToStore adds column indexes to the given list when the windowFramer
 	// operator needs access to values in a column for each partition (for
 	// example, the peer groups column). If a column to be stored is already
 	// present in the list, a duplicate entry will not be created.
@@ -1155,7 +1155,7 @@ func (b *windowFramerBase) frameIntervals() []windowInterval {
 	return b.intervals
 }
 
-// getColsToStore appends to the given slice of column indices whatever columns
+// getColsToStore appends to the given slice of column indexes whatever columns
 // to which the window framer will need access. getColsToStore also remaps the
 // corresponding fields in the window framer to refer to ordinal positions
 // within the colsToStore slice rather than within the input batches.
@@ -1304,7 +1304,7 @@ func (b *windowFramerBase) handleOffsets(
 	}
 }
 
-// handleExcludeForNext updates the start and end indices for rows excluded by
+// handleExcludeForNext updates the start and end indexes for rows excluded by
 // the window frame's exclusion clause.
 func (b *windowFramerBase) handleExcludeForNext(ctx context.Context, currRowIsGroupStart bool) {
 	if b.excludeCurrRow() {
@@ -1316,7 +1316,7 @@ func (b *windowFramerBase) handleExcludeForNext(ctx context.Context, currRowIsGr
 		// actually exclude the current row, but that is handled later (by
 		// handleExcludeForFirstIdx, handleExcludeForLastIdx, etc.).
 		if currRowIsGroupStart {
-			// Only update the exclude indices upon entering a new peer group.
+			// Only update the exclude indexes upon entering a new peer group.
 			b.excludeStartIdx = b.excludeEndIdx
 			b.excludeEndIdx = b.incrementPeerGroup(ctx, b.excludeEndIdx, 1 /* groups */)
 		}
@@ -1427,7 +1427,7 @@ func getSlidingWindowIntervals(
 		// We need to find the set difference currIntervals \ prevIntervals (toAdd)
 		// and the set difference prevIntervals \ currIntervals (toRemove). To do
 		// this, take advantage of the fact that both sets of intervals are in
-		// ascending order, similar to merging sorted lists. Maintain indices into
+		// ascending order, similar to merging sorted lists. Maintain indexes into
 		// each list, and iterate whichever index has the 'smaller' interval
 		// (e.g. whichever ends first). The portions of the intervals that overlap
 		// are ignored, while those that don't are added to one of the 'toAdd' and

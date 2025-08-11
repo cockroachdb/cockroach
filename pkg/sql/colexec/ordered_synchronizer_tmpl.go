@@ -66,14 +66,14 @@ type OrderedSynchronizer struct {
 
 	// inputBatches stores the current batch for each input.
 	inputBatches []coldata.Batch
-	// inputIndices stores the current index into each input batch.
-	inputIndices []int
+	// inputIndexes stores the current index into each input batch.
+	inputIndexes []int
 	// advanceMinBatch, if true, indicates that the minimum input (according to
 	// heap) needs to be advanced by one row. This advancement is delayed in
 	// order to not fetch the next batch from the input too eagerly.
 	advanceMinBatch bool
-	// heap is a min heap which stores indices into inputBatches. The "current
-	// value" of ith input batch is the tuple at inputIndices[i] position of
+	// heap is a min heap which stores indexes into inputBatches. The "current
+	// value" of ith input batch is the tuple at inputIndexes[i] position of
 	// inputBatches[i] batch. If an input is fully exhausted, it will be removed
 	// from heap.
 	heap []int
@@ -146,11 +146,11 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 			// Advance the minimum input batch, fetching a new batch if
 			// necessary.
 			minBatch := o.heap[0]
-			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
-				o.inputIndices[minBatch]++
+			if o.inputIndexes[minBatch]+1 < o.inputBatches[minBatch].Length() {
+				o.inputIndexes[minBatch]++
 			} else {
 				o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next()
-				o.inputIndices[minBatch] = 0
+				o.inputIndexes[minBatch] = 0
 				o.updateComparators(minBatch)
 			}
 			if o.inputBatches[minBatch].Length() == 0 {
@@ -169,7 +169,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 		minBatch := o.heap[0]
 		// Copy the min row into the output.
 		batch := o.inputBatches[minBatch]
-		srcRowIdx := o.inputIndices[minBatch]
+		srcRowIdx := o.inputIndexes[minBatch]
 		if sel := batch.Selection(); sel != nil {
 			srcRowIdx = sel[srcRowIdx]
 		}
@@ -233,7 +233,7 @@ func (o *OrderedSynchronizer) Init(ctx context.Context) {
 		return
 	}
 	o.Ctx, o.span = execinfra.ProcessorSpan(o.Ctx, o.flowCtx, "ordered sync", o.processorID)
-	o.inputIndices = make([]int, len(o.inputs))
+	o.inputIndexes = make([]int, len(o.inputs))
 	for i := range o.inputs {
 		o.inputs[i].Root.Init(o.Ctx)
 	}
@@ -274,8 +274,8 @@ func (o *OrderedSynchronizer) Close(context.Context) error {
 func (o *OrderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
 	batch1 := o.inputBatches[batchIdx1]
 	batch2 := o.inputBatches[batchIdx2]
-	valIdx1 := o.inputIndices[batchIdx1]
-	valIdx2 := o.inputIndices[batchIdx2]
+	valIdx1 := o.inputIndexes[batchIdx1]
+	valIdx2 := o.inputIndexes[batchIdx2]
 	if sel := batch1.Selection(); sel != nil {
 		valIdx1 = sel[valIdx1]
 	}

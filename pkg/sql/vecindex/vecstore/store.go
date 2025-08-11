@@ -30,7 +30,7 @@ import (
 
 var moveFailedErr = errors.New("TryMoveVector failed to find source vector")
 
-// Store implements the cspann.Store interface for KV backed vector indices.
+// Store implements the cspann.Store interface for KV backed vector indexes.
 type Store struct {
 	db descs.DB // Used to generate new partition IDs
 	kv *kv.DB

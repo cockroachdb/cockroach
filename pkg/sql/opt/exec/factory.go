@@ -255,7 +255,7 @@ type WindowInfo struct {
 	// in the same order as Exprs.
 	ArgIdxs [][]NodeColumnOrdinal
 
-	// FilterIdxs is the list of column indices to use as filters.
+	// FilterIdxs is the list of column indexes to use as filters.
 	FilterIdxs []int
 
 	// Partition is the set of input columns to partition on.

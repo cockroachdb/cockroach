@@ -241,7 +241,7 @@ type chunker struct {
 	// partitionCol is a bool slice for partitioners' output to be ORed.
 	partitionCol []bool
 
-	// chunks contains the indices of the first tuples within different chunks
+	// chunks contains the indexes of the first tuples within different chunks
 	// found in the last read batch. Note: the first chunk might be a part of
 	// the chunk that is currently being buffered, and similarly the last chunk
 	// might include tuples from the batches to be read.

@@ -37,7 +37,7 @@ const _ = "template_processGroupsInBatch"
 const _ = "template_processBatch"
 
 // spool reads in the entire input, always storing the top K rows it has seen so
-// far in o.topK. This is done by maintaining a max heap of indices into o.topK.
+// far in o.topK. This is done by maintaining a max heap of indexes into o.topK.
 // Whenever we encounter a row which is smaller than the max row in the heap,
 // we replace the max with that row.
 //
@@ -54,7 +54,7 @@ const _ = "template_spool"
 const _ = "template_compareRow"
 
 // spool reads in the entire input, always storing the top K rows it has seen so
-// far in o.topK. This is done by maintaining a max heap of indices into o.topK.
+// far in o.topK. This is done by maintaining a max heap of indexes into o.topK.
 // Whenever we encounter a row which is smaller than the max row in the heap,
 // we replace the max with that row.
 //
@@ -94,7 +94,7 @@ func (t *topKPartialOrderHeaper) Less(i, j int) bool {
 }
 
 // spool reads in the entire input, always storing the top K rows it has seen so
-// far in o.topK. This is done by maintaining a max heap of indices into o.topK.
+// far in o.topK. This is done by maintaining a max heap of indexes into o.topK.
 // Whenever we encounter a row which is smaller than the max row in the heap,
 // we replace the max with that row.
 //
@@ -296,7 +296,7 @@ func spool_true(t *topKSorter) {
 }
 
 // spool reads in the entire input, always storing the top K rows it has seen so
-// far in o.topK. This is done by maintaining a max heap of indices into o.topK.
+// far in o.topK. This is done by maintaining a max heap of indexes into o.topK.
 // Whenever we encounter a row which is smaller than the max row in the heap,
 // we replace the max with that row.
 //

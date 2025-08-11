@@ -108,7 +108,7 @@ type topKSorter struct {
 	comparators []vecComparator
 	// topK stores the top K rows. It is not sorted internally.
 	topK *colexecutils.AppendOnlyBufferedBatch
-	// heap is a max heap which stores indices into topK.
+	// heap is a max heap which stores indexes into topK.
 	heap   []int
 	heaper heap.Interface
 	// sel is a selection vector which specifies an ordering on topK.

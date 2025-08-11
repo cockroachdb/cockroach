@@ -423,15 +423,15 @@ func TestInboxShutdown(t *testing.T) {
 						},
 					}
 
-					// goroutineIndices will be shuffled around to randomly change the order in
+					// goroutineIndexes will be shuffled around to randomly change the order in
 					// which the goroutines are spawned.
-					goroutineIndices := make([]int, len(goroutines))
-					for i := range goroutineIndices {
-						goroutineIndices[i] = i
+					goroutineIndexes := make([]int, len(goroutines))
+					for i := range goroutineIndexes {
+						goroutineIndexes[i] = i
 					}
-					rng.Shuffle(len(goroutineIndices), func(i, j int) { goroutineIndices[i], goroutineIndices[j] = goroutineIndices[j], goroutineIndices[i] })
+					rng.Shuffle(len(goroutineIndexes), func(i, j int) { goroutineIndexes[i], goroutineIndexes[j] = goroutineIndexes[j], goroutineIndexes[i] })
 					errChans := make([]chan error, 0, len(goroutines))
-					for _, i := range goroutineIndices {
+					for _, i := range goroutineIndexes {
 						errChans = append(errChans, goroutines[i].asyncOperation())
 					}
 
@@ -439,7 +439,7 @@ func TestInboxShutdown(t *testing.T) {
 						for err := <-errCh; err != nil; err = <-errCh {
 							if !testutils.IsError(err, "context canceled|artificial timeout") {
 								// Error to keep on draining errors but mark this test as failed.
-								t.Errorf("unexpected error %v from %s goroutine", err, goroutines[goroutineIndices[i]].name)
+								t.Errorf("unexpected error %v from %s goroutine", err, goroutines[goroutineIndexes[i]].name)
 							}
 						}
 					}

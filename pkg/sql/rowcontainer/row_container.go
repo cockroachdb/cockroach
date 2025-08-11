@@ -697,7 +697,7 @@ func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 
 // DiskBackedIndexedRowContainer is a wrapper around DiskBackedRowContainer
 // that adds an index to each row added in the order of addition of those rows
-// by storing an extra int column at the end of each row. These indices can be
+// by storing an extra int column at the end of each row. These indexes can be
 // thought of as ordinals of the rows.
 //
 // Note: although DiskRowContainer appends unique rowIDs to the keys that the
@@ -868,7 +868,7 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 		if f.idxRowIter > pos {
 			// The iterator has been advanced further than we need, so we need to
 			// start iterating from the beginning.
-			log.VEventf(ctx, 1, "rewinding: cache contains indices [%d, %d) but index %d requested", f.firstCachedRowPos, f.nextPosToCache, pos)
+			log.VEventf(ctx, 1, "rewinding: cache contains indexes [%d, %d) but index %d requested", f.firstCachedRowPos, f.nextPosToCache, pos)
 			f.idxRowIter = 0
 			f.diskRowIter.Rewind()
 			f.resetCache(ctx)

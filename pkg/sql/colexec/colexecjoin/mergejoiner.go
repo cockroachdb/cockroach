@@ -75,8 +75,8 @@ import (
 //
 // We start of with reading first batches from both inputs (we store them in
 // mjProberState) and performing the probing step. We find that we have a single
-// group such that it contains rows with indices [0, 2) on the left and with
-// indices [0, 1) on the right. This group is fully contained within the batch
+// group such that it contains rows with indexes [0, 2) on the left and with
+// indexes [0, 1) on the right. This group is fully contained within the batch
 // (i.e. it is not a buffered group), so we'll be able to populate the cross
 // product during the build step. The last row with index 2 in the left batch
 // starts the left buffered group (we don't know yet whether the second batch
@@ -149,7 +149,7 @@ type mjState int
 
 const (
 	// mjEntry is the entry state of the merge joiner where all the batches and
-	// indices are properly set, regardless if Next was called the first time or
+	// indexes are properly set, regardless if Next was called the first time or
 	// the 1000th time. This state also routes into the correct state based on
 	// the prober state after setup.
 	mjEntry mjState = iota
@@ -266,7 +266,7 @@ type mjProberState struct {
 }
 
 type mergeJoinInput struct {
-	// eqCols specify the indices of the source table equality columns during the
+	// eqCols specify the indexes of the source table equality columns during the
 	// merge join.
 	eqCols []uint32
 
@@ -439,7 +439,7 @@ func NewMergeJoinOp(
 	}
 	for i := 0; i < numRightTypes; i++ {
 		// Merge joiner outputs all columns from both sides, and the columns
-		// from the right have indices in [numActualLeftTypes,
+		// from the right have indexes in [numActualLeftTypes,
 		// numActualLeftTypes + numActualRightTypes) range.
 		projection = append(projection, uint32(numActualLeftTypes+i))
 	}

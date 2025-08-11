@@ -107,7 +107,7 @@ func sqlOrdering(ordering opt.Ordering, cols colOrdMap) (colinfo.ColumnOrdering,
 // builRelational builds a relational expression into an execPlan.
 //
 // outputCols is a map from opt.ColumnID to exec.NodeColumnOrdinal. It maps
-// columns in the output set of a relational expression to indices in the
+// columns in the output set of a relational expression to indexes in the
 // result columns of the exec.Node.
 //
 // The reason we need to keep track of this (instead of using just the

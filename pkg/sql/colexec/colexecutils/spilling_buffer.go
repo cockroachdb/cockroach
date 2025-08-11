@@ -84,7 +84,7 @@ type SpillingBuffer struct {
 //
 // The column indexes that are passed as the last argument(s) are used to
 // determine which columns should be used from input batches during calls to
-// AppendTuples. If nil, columns at indices 0...len(inputTypes)-1 will be used.
+// AppendTuples. If nil, columns at indexes 0...len(inputTypes)-1 will be used.
 // Note that the given inputTypes slice defines the types of the columns that
 // will be stored, but the input batches may have a different schema when
 // colIdxs is not nil.

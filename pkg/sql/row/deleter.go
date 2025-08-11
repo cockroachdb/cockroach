@@ -192,7 +192,7 @@ func (rd *Deleter) DeleteRow(
 		return err
 	}
 
-	// Delete the row from any secondary indices.
+	// Delete the row from any secondary indexes.
 	for i, index := range rd.Helper.Indexes {
 		// If the index ID exists in the set of indexes to ignore, do not
 		// attempt to delete from the index.

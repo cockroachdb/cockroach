@@ -72,7 +72,7 @@ type windowFuncHolder struct {
 	expr *tree.FuncExpr
 	args []tree.Expr
 
-	argsIdxs     []uint32 // indices of the columns that are arguments to the window function
+	argsIdxs     []uint32 // indexes of the columns that are arguments to the window function
 	filterColIdx int      // optional index of filtering column, -1 if no filter
 	outputColIdx int      // index of the column that the output should be put into
 

@@ -186,7 +186,7 @@ func storedEqColsToOrdering(storedEqCols columns) colinfo.ColumnOrdering {
 
 // HashMemRowContainer is an in-memory implementation of a HashRowContainer.
 // The rows are stored in an underlying MemRowContainer and an accompanying
-// map stores the mapping from equality column encodings to indices in the
+// map stores the mapping from equality column encodings to indexes in the
 // MemRowContainer corresponding to matching rows.
 // NOTE: Once a row is marked, adding more rows to the HashMemRowContainer
 // results in undefined behavior. It is not necessary to do otherwise for the
@@ -208,14 +208,14 @@ type HashMemRowContainer struct {
 	// HashMemRowContainer.
 	markMemoryReserved bool
 
-	// buckets contains the indices into MemRowContainer for a given group
+	// buckets contains the indexes into MemRowContainer for a given group
 	// key (which is the encoding of storedEqCols).
 	buckets map[string][]int
 	// bucketsAcc is the memory account for the buckets. The datums themselves
 	// are all in the MemRowContainer.
 	bucketsAcc mon.BoundAccount
 
-	// storedEqCols contains the indices of the columns of a row that are
+	// storedEqCols contains the indexes of the columns of a row that are
 	// encoded and used as a key into buckets when adding a row.
 	storedEqCols columns
 }
@@ -321,7 +321,7 @@ type hashMemRowBucketIterator struct {
 	scratchEncRow   rowenc.EncDatumRow
 	probeEqCols     columns
 	probeEqColTypes []*types.T
-	// rowIdxs are the indices of rows in the bucket.
+	// rowIdxs are the indexes of rows in the bucket.
 	rowIdxs []int
 	curIdx  int
 }

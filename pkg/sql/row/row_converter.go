@@ -231,7 +231,7 @@ type DatumRowConverter struct {
 
 	tableDesc catalog.TableDescriptor
 
-	// Tracks which column indices in the set of visible columns are part of the
+	// Tracks which column indexes in the set of visible columns are part of the
 	// user specified target columns. This can be used before populating Datums
 	// to filter out unwanted column data.
 	TargetColOrds intsets.Fast

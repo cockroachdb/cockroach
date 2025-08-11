@@ -639,7 +639,7 @@ func TestMergeProcessor(t *testing.T) {
 			EvalCtx: &evalCtx,
 		}
 
-		// Here want to have different entries for the two indices, so we manipulate
+		// Here want to have different entries for the two indexes, so we manipulate
 		// the index to DELETE_ONLY when we don't want to write to it, and
 		// WRITE_ONLY when we write to it.
 		setUseDeletePreservingEncoding := func(b bool) func(*descpb.IndexDescriptor) error {

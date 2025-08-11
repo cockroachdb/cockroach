@@ -536,7 +536,7 @@ func (b *ConstraintBuilder) findComputedColJoinEquality(
 // findJoinVariableRangeFilters attempts to find inequality constraints for the
 // given index column that reference input columns (not constants). If either
 // (or both) start and end bounds are found, findJoinVariableInequalityFilter
-// returns the corresponding filter indices.
+// returns the corresponding filter indexes.
 func (b *ConstraintBuilder) findJoinVariableRangeFilters(
 	rightCmp opt.ColList,
 	inequalityFilterOrds []int,

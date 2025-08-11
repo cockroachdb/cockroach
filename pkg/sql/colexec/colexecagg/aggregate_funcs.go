@@ -87,7 +87,7 @@ type AggregateFunc interface {
 	SetOutput(vec *coldata.Vec)
 
 	// CurrentOutputIndex returns the current index in the output vector that
-	// the aggregate function is writing to. All indices < the index returned
+	// the aggregate function is writing to. All indexes < the index returned
 	// are finished aggregations for previous groups.
 	CurrentOutputIndex() int
 

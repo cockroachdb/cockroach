@@ -1006,7 +1006,7 @@ message WindowerSpec {
   message WindowFn {
     // Func is which function to compute.
     optional Func func = 1 [(gogoproto.nullable) = false];
-    // ArgsIdxs contains indices of the columns that are arguments to the
+    // ArgsIdxs contains indexes of the columns that are arguments to the
     // window function.
     repeated uint32 argsIdxs = 7;
     // Ordering specifies in which order rows should be considered by this

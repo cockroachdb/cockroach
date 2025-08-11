@@ -172,7 +172,7 @@ func checkDistAggregationInfo(
 	numFinal := len(info.FinalStage)
 	for _, finalInfo := range info.FinalStage {
 		if len(finalInfo.LocalIdxs) == 0 {
-			t.Fatalf("final stage must specify input local indices: %#v", info)
+			t.Fatalf("final stage must specify input local indexes: %#v", info)
 		}
 		for _, localIdx := range finalInfo.LocalIdxs {
 			if localIdx >= uint32(numIntermediary) {
@@ -195,7 +195,7 @@ func checkDistAggregationInfo(
 	// The type(s) outputted by the final stage can be different than the
 	// input type (e.g. DECIMAL instead of INT).
 	finalOutputTypes := make([]*types.T, numFinal)
-	// Passed into FinalIndexing as the indices for the IndexedVars inputs
+	// Passed into FinalIndexing as the indexes for the IndexedVars inputs
 	// to the post processor.
 	varIdxs := make([]int, numFinal)
 	for i, finalInfo := range info.FinalStage {

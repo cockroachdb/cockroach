@@ -42,7 +42,7 @@ func TestIndexUsageStatisticsSubsystem(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 
-	indices := []roachpb.IndexUsageKey{
+	indexes := []roachpb.IndexUsageKey{
 		{
 			TableID: 1,
 			IndexID: 1,
@@ -59,47 +59,47 @@ func TestIndexUsageStatisticsSubsystem(t *testing.T) {
 
 	testInputs := []indexUse{
 		{
-			key:      indices[0],
+			key:      indexes[0],
 			usageTyp: readOp,
 		},
 		{
-			key:      indices[0],
+			key:      indexes[0],
 			usageTyp: readOp,
 		},
 		{
-			key:      indices[0],
+			key:      indexes[0],
 			usageTyp: writeOp,
 		},
 		{
-			key:      indices[1],
+			key:      indexes[1],
 			usageTyp: readOp,
 		},
 		{
-			key:      indices[1],
+			key:      indexes[1],
 			usageTyp: readOp,
 		},
 		{
-			key:      indices[2],
+			key:      indexes[2],
 			usageTyp: writeOp,
 		},
 		{
-			key:      indices[2],
+			key:      indexes[2],
 			usageTyp: writeOp,
 		},
 	}
 
 	expectedIndexUsage := map[roachpb.IndexUsageKey]roachpb.IndexUsageStatistics{
-		indices[0]: {
+		indexes[0]: {
 			TotalReadCount:  2,
 			LastRead:        timeutil.Now(),
 			TotalWriteCount: 1,
 			LastWrite:       timeutil.Now(),
 		},
-		indices[1]: {
+		indexes[1]: {
 			TotalReadCount: 2,
 			LastRead:       timeutil.Now(),
 		},
-		indices[2]: {
+		indexes[2]: {
 			TotalWriteCount: 2,
 			LastWrite:       timeutil.Now(),
 		},
@@ -118,7 +118,7 @@ func TestIndexUsageStatisticsSubsystem(t *testing.T) {
 
 	t.Run("point lookup", func(t *testing.T) {
 		actualEntryCount := 0
-		for _, index := range indices {
+		for _, index := range indexes {
 			stats := localIndexUsage.Get(index.TableID, index.IndexID)
 			require.NotNil(t, stats)
 

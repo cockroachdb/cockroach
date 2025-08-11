@@ -27,7 +27,7 @@ type aggTestSpec struct {
 	// The name of the aggregate function.
 	fname    string
 	distinct bool
-	// The column indices of the arguments to the function.
+	// The column indexes of the arguments to the function.
 	colIdx       []uint32
 	filterColIdx *uint32
 }

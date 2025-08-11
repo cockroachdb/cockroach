@@ -30,7 +30,7 @@ type indexJoinNode struct {
 type indexJoinPlanningInfo struct {
 	fetch fetchPlanningInfo
 
-	// Indices of the PK columns in the input plan.
+	// Indexes of the PK columns in the input plan.
 	keyCols []exec.NodeColumnOrdinal
 
 	reqOrdering ReqOrdering
