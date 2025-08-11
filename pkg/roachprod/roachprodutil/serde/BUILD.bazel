@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "serde",
+    srcs = ["types.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil/serde",
+    visibility = ["//visibility:public"],
+    deps = ["@in_gopkg_yaml_v3//:yaml_v3"],
+)
