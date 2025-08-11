@@ -464,8 +464,9 @@ func writeSettingInternal(
 		return logFn(ctx,
 			0, /* no target */
 			&eventpb.SetClusterSetting{
-				SettingName: string(name),
-				Value:       reportedValue,
+				SettingName:  string(name),
+				Value:        reportedValue,
+				DefaultValue: setting.DefaultString(),
 			})
 	}(); err != nil {
 		return "", err
