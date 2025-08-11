@@ -2036,6 +2036,13 @@ func TestRepeatableReadLogic_show_indexes(
 	runLogicTest(t, "show_indexes")
 }
 
+func TestRepeatableReadLogic_show_inspect_errors(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_inspect_errors")
+}
+
 func TestRepeatableReadLogic_show_transfer_state(
 	t *testing.T,
 ) {
