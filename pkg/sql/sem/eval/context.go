@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -311,6 +312,29 @@ type Context struct {
 
 	// CidrLookup is used to look up the tag name for a given IP address.
 	CidrLookup *cidr.Lookup
+
+	// StartedRoutineStatementCounters contains metrics for statements initiated by
+	// users when calling a UDF/SP. These metrics count user-initiated
+	// operations, regardless of success
+	StartedRoutineStatementCounters RoutineStatementCounters
+	// ExecutedStatementCounters contains metrics for successfully executed
+	// statements defined within the body of a UDF/SP.
+	ExecutedRoutineStatementCounters RoutineStatementCounters
+}
+
+// RoutineStatementCounters encapsulates metrics for tracking the execution
+// of different statement types defined within the body of a UDF or stored
+// procedure (SP).
+type RoutineStatementCounters struct {
+	// QueryCount includes all statements, and it is therefore the sum of
+	// all the below metrics.
+	QueryCount *telemetry.CounterWithMetric
+
+	// Basic CRUD statements.
+	SelectCount *telemetry.CounterWithAggMetric
+	UpdateCount *telemetry.CounterWithAggMetric
+	InsertCount *telemetry.CounterWithAggMetric
+	DeleteCount *telemetry.CounterWithAggMetric
 }
 
 // RNGFactory is a simple wrapper to preserve the RNG throughout the session.

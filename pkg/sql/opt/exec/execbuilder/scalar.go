@@ -693,7 +693,8 @@ func (b *Builder) buildExistsSubquery(
 			params,
 			stmts,
 			stmtProps,
-			nil,  /* stmtStr */
+			nil, /* stmtStr */
+			make([]string, len(stmts)),
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
 			0, /* resultBufferID */
@@ -819,7 +820,8 @@ func (b *Builder) buildSubquery(
 			params,
 			stmts,
 			stmtProps,
-			nil,  /* stmtStr */
+			nil, /* stmtStr */
+			make([]string, len(stmts)),
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
 			0,    /* resultBufferID */
@@ -1014,6 +1016,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.Body,
 		udf.Def.BodyProps,
 		udf.Def.BodyStmts,
+		udf.Def.BodyTags,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		udf.Def.ResultBufferID,
@@ -1087,6 +1090,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.Body,
 			action.BodyProps,
 			action.BodyStmts,
+			action.BodyTags,
 			false, /* allowOuterWithRefs */
 			nil,   /* wrapRootExpr */
 			0,     /* resultBufferID */
@@ -1136,6 +1140,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	stmts []memo.RelExpr,
 	stmtProps []*physical.Required,
 	stmtStr []string,
+	stmtTags []string,
 	allowOuterWithRefs bool,
 	wrapRootExpr wrapRootExprFn,
 	resultBufferID memo.RoutineResultBufferID,
@@ -1199,9 +1204,13 @@ func (b *Builder) buildRoutinePlanGenerator(
 			}
 		}()
 
+		dbName := b.evalCtx.SessionData().Database
+		appName := b.evalCtx.SessionData().ApplicationName
+
 		for i := range stmts {
 			stmt := stmts[i]
 			props := stmtProps[i]
+			tag := stmtTags[i]
 			o.Init(ctx, b.evalCtx, b.catalog)
 			f := o.Factory()
 
@@ -1309,14 +1318,32 @@ func (b *Builder) buildRoutinePlanGenerator(
 			if i < len(stmtStr) {
 				stmtForDistSQLDiagram = stmtStr[i]
 			}
+			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag)
 			err = fn(plan, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err
 			}
+			incrementRoutineStmtCounter(b.evalCtx.ExecutedRoutineStatementCounters, dbName, appName, tag)
 		}
 		return nil
 	}
 	return planGen
+}
+
+// TODO(janexing): should i move it into a separate file?
+func incrementRoutineStmtCounter(
+	counters eval.RoutineStatementCounters, dbName string, appName string, stmtTag string,
+) {
+	switch stmtTag {
+	case "INSERT":
+		counters.InsertCount.Inc(dbName, appName)
+	case "UPDATE":
+		counters.UpdateCount.Inc(dbName, appName)
+	case "SELECT":
+		counters.SelectCount.Inc(dbName, appName)
+	case "DELETE":
+		counters.DeleteCount.Inc(dbName, appName)
+	}
 }
 
 func (b *Builder) addRoutineResultBuffer(

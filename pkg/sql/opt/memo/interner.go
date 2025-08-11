@@ -1140,6 +1140,10 @@ func (h *hasher) IsScalarExprEqual(l, r opt.ScalarExpr) bool {
 	return l == r
 }
 
+func (h *hasher) IsStmtTagEqual(l, r string) bool {
+	return l == r
+}
+
 func (h *hasher) IsScalarListExprEqual(l, r ScalarListExpr) bool {
 	if len(l) != len(r) {
 		return false
@@ -1326,6 +1330,9 @@ func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
 			return false
 		}
 		if !h.IsPhysPropsEqual(l.BodyProps[i], r.BodyProps[i]) {
+			return false
+		}
+		if !h.IsStmtTagEqual(l.BodyStmts[i], r.BodyStmts[i]) {
 			return false
 		}
 	}
