@@ -464,7 +464,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		nil, /* knobs */
 	)
 
-	ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sqlStats)
+	ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sslocal.NewIngesterMetrics(), sqlStats)
 	ingester.Start(ctx, stopper)
 
 	appStats := sqlStats.GetApplicationStats("" /* appName */)
@@ -590,7 +590,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			nil,
 			nil,
 		)
-		ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sqlStats)
+		ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sslocal.NewIngesterMetrics(), sqlStats)
 		appStats := sqlStats.GetApplicationStats("" /* appName */)
 		statsCollector := sslocal.NewStatsCollector(
 			st,

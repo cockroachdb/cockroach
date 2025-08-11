@@ -430,6 +430,9 @@ type ServerMetrics struct {
 
 	// InsightsMetrics contains metrics related to outlier detection.
 	InsightsMetrics insights.Metrics
+
+	// IngesterMetrics contains metrics related to SQL stats ingestion.
+	IngesterMetrics sslocal.Metrics
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -461,7 +464,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		cfg.SQLStatsTestingKnobs,
 	)
 	sqlStatsIngester := sslocal.NewSQLStatsIngester(
-		cfg.Settings, cfg.SQLStatsTestingKnobs, insightsProvider, localSQLStats)
+		cfg.Settings, cfg.SQLStatsTestingKnobs, serverMetrics.IngesterMetrics, insightsProvider, localSQLStats)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
 		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
@@ -675,6 +678,7 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 		},
 		ContentionSubsystemMetrics: txnidcache.NewMetrics(),
 		InsightsMetrics:            insights.NewMetrics(),
+		IngesterMetrics:            sslocal.NewIngesterMetrics(),
 	}
 }
 
