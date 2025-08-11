@@ -3832,6 +3832,8 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			RNGFactory:                     &ex.rng.external,
 			ULIDEntropyFactory:             &ex.rng.ulidEntropy,
 			CidrLookup:                     p.execCfg.CidrLookup,
+			StartedUDFStatementCounters:    ex.metrics.StartedStatementCounters.toUDFStmtCounters(),
+			ExecutedUDFStatementCounters:   ex.metrics.ExecutedStatementCounters.toUDFStmtCounters(),
 		},
 		Tracing:              &ex.sessionTracing,
 		MemMetrics:           &ex.memMetrics,
@@ -4605,8 +4607,15 @@ type StatementCounters struct {
 	UpdateCount telemetry.CounterWithAggMetric
 	InsertCount telemetry.CounterWithAggMetric
 	DeleteCount telemetry.CounterWithAggMetric
+
 	// CRUDQueryCount includes all 4 CRUD statements above.
 	CRUDQueryCount telemetry.CounterWithAggMetric
+
+	// Basic CRUD statements within the UDF/SP body.
+	UDFSelectCount telemetry.CounterWithAggMetric
+	UDFUpdateCount telemetry.CounterWithAggMetric
+	UDFInsertCount telemetry.CounterWithAggMetric
+	UDFDeleteCount telemetry.CounterWithAggMetric
 
 	// Transaction operations.
 	TxnBeginCount    telemetry.CounterWithAggMetric
@@ -4686,6 +4695,14 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaInsertStarted, internal)),
 		DeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaDeleteStarted, internal)),
+		UDFSelectCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaUDFSelectStarted, internal)),
+		UDFUpdateCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaUDFUpdateStarted, internal)),
+		UDFInsertCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaUDFInsertStarted, internal)),
+		UDFDeleteCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaUDFDeleteStarted, internal)),
 		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDStarted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
@@ -4739,6 +4756,14 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaInsertExecuted, internal)),
 		DeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaDeleteExecuted, internal)),
+		UDFSelectCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaUDFSelectExecuted, internal)),
+		UDFUpdateCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaUDFUpdateExecuted, internal)),
+		UDFInsertCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaUDFInsertExecuted, internal)),
+		UDFDeleteCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaUDFDeleteExecuted, internal)),
 		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDExecuted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
@@ -4822,6 +4847,18 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 		} else {
 			sc.MiscCount.Inc()
 		}
+	}
+}
+
+// toUDFStmtCounters converts the StatementCounters to a UDFStatementCounters
+// so that it can be passed along eval ctx to the opt layer, avoiding
+// import cycle.
+func (sc *StatementCounters) toUDFStmtCounters() eval.UDFStatementCounters {
+	return eval.UDFStatementCounters{
+		SelectCount: &sc.UDFSelectCount,
+		UpdateCount: &sc.UDFUpdateCount,
+		InsertCount: &sc.UDFInsertCount,
+		DeleteCount: &sc.UDFDeleteCount,
 	}
 }
 

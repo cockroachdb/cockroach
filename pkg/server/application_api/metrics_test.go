@@ -8,6 +8,7 @@ package application_api_test
 import (
 	"bytes"
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -303,4 +304,216 @@ func TestSpanStatsResponse(t *testing.T) {
 	if a, e := int(responseSpanStats.RangeCount), initialRanges; a != e {
 		t.Errorf("expected %d ranges, found %d", e, a)
 	}
+}
+
+// extractLinesContainingSubstring returns all lines from body that
+// contain the given key substring.
+func extractLinesContainingSubstring(body []byte, key string) []string {
+	var result []string
+
+	lines := bytes.Split(body, []byte("\n"))
+	for _, line := range lines {
+		if bytes.Contains(line, []byte(key)) {
+			result = append(result, string(line))
+		}
+	}
+	return result
+}
+
+// bodyContainsRegexMatch returns true if any line in the body matches
+// the given regex pattern. It is because in local test, the metrics shows
+// up with and without `tenant="system"` tag indeterministically.
+func bodyContainsRegexMatch(t *testing.T, body []byte, pattern string) bool {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lines := bytes.Split(body, []byte("\n"))
+	for _, line := range lines {
+		if re.Match(line) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestStoreProcedureCallStatementMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// Registry.GetLabels() has unsafe concurrent access to shared label state
+	skip.UnderRace(t, "unrelated data race")
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.SystemLayer()
+	db := s.SQLConn(t)
+
+	if _, err := db.Exec(`
+		CREATE TABLE tbl (id SERIAL PRIMARY KEY, t text UNIQUE);
+
+		INSERT INTO tbl (t) VALUES ('d');
+
+		CREATE OR REPLACE PROCEDURE inserttbl()
+		LANGUAGE plpgsql
+		AS $$
+		BEGIN
+				INSERT INTO tbl (t) VALUES ('a');
+				COMMIT;
+				INSERT INTO tbl (t) VALUES ('b');
+				COMMIT;
+				INSERT INTO tbl (t) VALUES ('c');
+        INSERT INTO tbl (t) VALUES ('d'); -- this will fail due to unique constraint.
+        INSERT INTO tbl (t) VALUES ('z');
+		END;
+		$$;`); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if expected := `sql_udf_insert_started_count_internal{node_id="1"\S*\} 0`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_insert_started_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
+	// Only after the first call to inserttbl() do we expect to see the metrics.
+	if _, err := db.Exec(`CALL inserttbl();`); err == nil {
+		t.Fatal("expected error")
+	}
+
+	body, err = srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The actual execution will halt at `INSERT INTO tbl (t) VALUES
+	// ('d');` due to violation of the unique constraint. So we expect 4
+	// started insert statements, but only 3 successful insert statements.
+	// The one after inserting 'd' will not be executed.
+	if expected := `sql_udf_insert_started_count{node_id="1"\S*\} 4`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_insert_started_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
+	if expected := `sql_udf_insert_count{node_id="1"\S*\} 3`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_insert_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
+	// This is to show that the metrics is globally aggregated across all calls of
+	// store procedures.
+	if _, err := db.Exec(`
+		TRUNCATE tbl;
+		CALL inserttbl();
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err = srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Now with the table truncated, we expect the whole procedure body to
+	// be executed without error. So there should be 5 more insert inc in
+	// both started and executed insert statements.
+	if expected := `sql_udf_insert_started_count{node_id="1"\S*\} 9`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_insert_started_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
+	if expected := `sql_udf_insert_count{node_id="1"\S*\} 8`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_insert_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
+	// Now we test the update, delete and select statements.
+	if _, err := db.Exec(`
+		CREATE OR REPLACE PROCEDURE updatetbl()
+		LANGUAGE plpgsql
+		AS $$
+		BEGIN
+				UPDATE tbl SET t = 'y' WHERE t = 'd';
+				DELETE FROM tbl WHERE t = 'b';
+			  SELECT t FROM tbl WHERE t > 'a';
+		END;
+		$$;
+		CALL updatetbl();`); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err = srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if expected := `sql_udf_update_started_count{node_id="1"\S*\} 1`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_update_started_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
+	if expected := `sql_udf_update_count{node_id="1"\S*\} 1`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_update_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
+	if expected := `sql_udf_delete_started_count{node_id="1"\S*\} 1`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_delete_started_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
+	if expected := `sql_udf_delete_count{node_id="1"\S*\} 1`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_delete_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
+	if expected := `sql_udf_select_started_count{node_id="1"\S*\} 1`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_select_started_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
+	if expected := `sql_udf_select_count{node_id="1"\S*\} 1`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_select_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
+	// Now we test the nested procedure calls.
+	if _, err := db.Exec(`
+		CREATE OR REPLACE PROCEDURE insertone()
+		LANGUAGE plpgsql
+		AS $$
+		BEGIN
+				INSERT INTO tbl (t) VALUES ('x');
+		END;
+		$$;
+		
+		CREATE OR REPLACE PROCEDURE nested_insertone()
+		LANGUAGE plpgsql
+		AS $$
+		BEGIN
+				CALL insertone();
+		END;
+		$$;
+		CALL nested_insertone();`); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err = srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if expected := `sql_udf_insert_started_count{node_id="1"\S*\} 10`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_insert_started_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
+	if expected := `sql_udf_insert_count{node_id="1"\S*\} 9`; !bodyContainsRegexMatch(t, body, expected) {
+		got := extractLinesContainingSubstring(body, "sql_udf_insert_count")
+		t.Errorf("expected %q, got: %s", expected, got)
+	}
+
 }

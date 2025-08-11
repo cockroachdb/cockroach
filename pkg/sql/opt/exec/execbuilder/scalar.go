@@ -1199,6 +1199,9 @@ func (b *Builder) buildRoutinePlanGenerator(
 			}
 		}()
 
+		dbName := b.evalCtx.SessionData().Database
+		appName := b.evalCtx.SessionData().ApplicationName
+
 		for i := range stmts {
 			stmt := stmts[i]
 			props := stmtProps[i]
@@ -1309,14 +1312,32 @@ func (b *Builder) buildRoutinePlanGenerator(
 			if i < len(stmtStr) {
 				stmtForDistSQLDiagram = stmtStr[i]
 			}
+			incrementUDFStmtCounter(b.evalCtx.StartedUDFStatementCounters, dbName, appName, stmt)
 			err = fn(plan, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err
 			}
+			incrementUDFStmtCounter(b.evalCtx.ExecutedUDFStatementCounters, dbName, appName, stmt)
 		}
 		return nil
 	}
 	return planGen
+}
+
+// TODO(janexing): should i move it into a separate file?
+func incrementUDFStmtCounter(
+	counters eval.UDFStatementCounters, dbName string, appName string, stmt memo.RelExpr,
+) {
+	switch stmt.(type) {
+	case *memo.InsertExpr:
+		counters.InsertCount.Inc(dbName, appName)
+	case *memo.UpdateExpr:
+		counters.UpdateCount.Inc(dbName, appName)
+	case *memo.SelectExpr:
+		counters.SelectCount.Inc(dbName, appName)
+	case *memo.DeleteExpr:
+		counters.DeleteCount.Inc(dbName, appName)
+	}
 }
 
 func (b *Builder) addRoutineResultBuffer(

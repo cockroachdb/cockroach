@@ -1397,6 +1397,75 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaUDFSelectStarted = metric.Metadata{
+		Name:        "sql.udf.select.started.count",
+		Help:        "Number of SQL SELECT statements started within UDF invocation",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaUDFUpdateStarted = metric.Metadata{
+		Name:        "sql.udf.update.started.count",
+		Help:        "Number of SQL UPDATE statements started within UDF invocation",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaUDFInsertStarted = metric.Metadata{
+		Name:        "sql.udf.insert.started.count",
+		Help:        "Number of SQL INSERT statements started within UDF invocation",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaUDFDeleteStarted = metric.Metadata{
+		Name:        "sql.udf.delete.started.count",
+		Help:        "Number of SQL DELETE statements started within UDF invocation",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	MetaUDFSelectExecuted = metric.Metadata{
+		Name:         "sql.udf.select.count",
+		Help:         "Number of SQL SELECT statements successfully executed within UDF invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.udf.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "select"),
+		Essential:    true,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+	}
+	MetaUDFUpdateExecuted = metric.Metadata{
+		Name:         "sql.udf.update.count",
+		Help:         "Number of SQL UPDATE statements successfully executed within UDF invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.udf.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "update"),
+		Essential:    true,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+	}
+	MetaUDFInsertExecuted = metric.Metadata{
+		Name:         "sql.udf.insert.count",
+		Help:         "Number of SQL INSERT statements successfully executed within UDF invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.udf.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "insert"),
+		Essential:    true,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+	}
+	MetaUDFDeleteExecuted = metric.Metadata{
+		Name:         "sql.udf.delete.count",
+		Help:         "Number of SQL DELETE statements successfully executed within UDF invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.udf.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "delete within UDF invocation"),
+		Essential:    true,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
