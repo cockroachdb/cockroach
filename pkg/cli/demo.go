@@ -213,7 +213,7 @@ func runDemoInternal(
 	demoCtx.WorkloadGenerator = gen
 
 	c, err := democluster.NewDemoCluster(ctx, &demoCtx.Context,
-		log.Infof,
+		log.Dev.Infof,
 		log.Warningf,
 		log.Ops.Shoutf,
 		func(ctx context.Context) (*stop.Stopper, error) {

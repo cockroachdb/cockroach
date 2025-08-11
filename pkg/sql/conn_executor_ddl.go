@@ -124,7 +124,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	scs.jobID = jobID
 	if jobID != jobspb.InvalidJobID {
 		ex.extraTxnState.jobs.addCreatedJobID(jobID)
-		log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
+		log.Dev.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
 	}
 	return nil
 }

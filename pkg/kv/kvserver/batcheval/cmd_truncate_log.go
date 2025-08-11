@@ -51,7 +51,7 @@ func TruncateLog(
 	// the range specified in the request body.
 	rangeID := cArgs.EvalCtx.GetRangeID()
 	if rangeID != args.RangeID {
-		log.Infof(ctx, "attempting to truncate raft logs for another range: r%d. Normally this is due to a merge and can be ignored.",
+		log.Dev.Infof(ctx, "attempting to truncate raft logs for another range: r%d. Normally this is due to a merge and can be ignored.",
 			args.RangeID)
 		return result.Result{}, nil
 	}
@@ -69,7 +69,7 @@ func TruncateLog(
 	firstIndex := cArgs.EvalCtx.GetCompactedIndex() + 1
 	if firstIndex >= args.Index {
 		if log.V(3) {
-			log.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
+			log.Dev.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
 				firstIndex, args.Index)
 		}
 		return result.Result{}, nil

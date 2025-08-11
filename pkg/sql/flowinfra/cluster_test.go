@@ -218,7 +218,7 @@ func runTestClusterFlow(
 	}
 
 	setupRemoteFlow := func(nodeIdx int, req *execinfrapb.SetupFlowRequest) {
-		log.Infof(ctx, "Setting up flow on %d", nodeIdx)
+		log.Dev.Infof(ctx, "Setting up flow on %d", nodeIdx)
 		if resp, err := clients[nodeIdx].SetupFlow(ctx, req); err != nil {
 			t.Fatal(err)
 		} else if resp.Error != nil {
@@ -229,7 +229,7 @@ func runTestClusterFlow(
 	setupRemoteFlow(0 /* nodeIdx */, req1)
 	setupRemoteFlow(1 /* nodeIdx */, req2)
 
-	log.Infof(ctx, "Running local sync flow on 2")
+	log.Dev.Infof(ctx, "Running local sync flow on 2")
 	rows, err := runLocalFlowTenant(ctx, servers[2], req3)
 	if err != nil {
 		t.Fatal(err)

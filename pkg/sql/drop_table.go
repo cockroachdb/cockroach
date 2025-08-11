@@ -477,7 +477,7 @@ func (p *planner) markTableMutationJobsSuccessful(
 				// they're eligible to ever succeed, so mark them as failed.
 				status = jobs.StateFailed
 			}
-			log.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
+			log.Dev.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
 			ju.UpdateState(status)
 			return nil
 		}); err != nil {

@@ -695,7 +695,7 @@ func (n *Node) start(
 					return
 				}
 				n.addStore(ctx, s)
-				log.Infof(ctx, "initialized store s%s in %s (%d replicas)",
+				log.Dev.Infof(ctx, "initialized store s%s in %s (%d replicas)",
 					s.StoreID(), timeutil.Since(start).Truncate(time.Millisecond), s.ReplicaCount())
 				engineErrC <- nil
 			})
@@ -806,7 +806,7 @@ func (n *Node) start(
 		}
 	})
 
-	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
+	log.Dev.Infof(ctx, "started with attributes %v", attrs.Attrs)
 
 	n.startPeriodicLivenessCompaction(n.stopper, livenessRangeCompactInterval)
 	return nil
@@ -1015,7 +1015,7 @@ func (n *Node) initializeAdditionalStores(ctx context.Context, engines []storage
 			}
 
 			n.addStore(ctx, s)
-			log.Infof(ctx, "initialized new store s%s", s.StoreID())
+			log.Dev.Infof(ctx, "initialized new store s%s", s.StoreID())
 
 			// Done regularly in Node.startGossiping, but this cuts down the time
 			// until this store is used for range allocations.
@@ -1178,7 +1178,7 @@ func (n *Node) startPeriodicLivenessCompaction(
 								log.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
 							}
 
-							log.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
+							log.Dev.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
 								repl, timeutil.Since(timeBeforeCompaction))
 						}
 						return true
@@ -1447,7 +1447,7 @@ func startGraphiteStatsExporter(
 				endpoint := graphiteEndpoint.Get(&st.SV)
 				if endpoint != "" {
 					if err := recorder.ExportToGraphite(ctx, endpoint, &pm); err != nil {
-						log.Infof(ctx, "error pushing metrics to graphite: %s\n", err)
+						log.Dev.Infof(ctx, "error pushing metrics to graphite: %s\n", err)
 					}
 				}
 			}
@@ -1702,7 +1702,7 @@ func (n *Node) batchInternal(
 		if sp := tracing.SpanFromContext(ctx); sp != nil {
 			recording := sp.GetConfiguredRecording()
 			if recording.Len() != 0 {
-				log.Infof(ctx, "batch request %s failed with error: %v\ntrace:\n%s", args.String(),
+				log.Dev.Infof(ctx, "batch request %s failed with error: %v\ntrace:\n%s", args.String(),
 					pErr.GoError(), recording)
 			}
 		}
@@ -1775,7 +1775,7 @@ func (n *Node) getLocalityComparison(
 ) roachpb.LocalityComparisonType {
 	gossip := n.storeCfg.Gossip
 	if gossip == nil {
-		log.VInfof(ctx, 2, "gossip is not configured")
+		log.Dev.VInfof(ctx, 2, "gossip is not configured")
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
@@ -1787,7 +1787,7 @@ func (n *Node) getLocalityComparison(
 	}
 	gatewayNodeDesc, err := gossip.GetNodeDescriptor(gatewayNodeID)
 	if err != nil {
-		log.VInfof(ctx, 5,
+		log.Dev.VInfof(ctx, 5,
 			"failed to perform look up for node descriptor %v", err)
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
@@ -2126,7 +2126,7 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 		dur := start.Elapsed()
 		if dur > slowMuxStreamSendThreshold {
 			s.metrics.SlowSends.Inc(1)
-			log.Infof(s.wrapped.Context(), "slow send on stream %d for r%d took %s", e.StreamID, e.RangeID, dur)
+			log.Dev.Infof(s.wrapped.Context(), "slow send on stream %d for r%d took %s", e.StreamID, e.RangeID, dur)
 		}
 	}()
 
@@ -2311,7 +2311,7 @@ func (n *Node) ResetQuorum(
 	if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txnTries++
 		if txnTries > 1 {
-			log.Infof(ctx, "failed to retrieve range descriptor for r%d, retrying...", req.RangeID)
+			log.Dev.Infof(ctx, "failed to retrieve range descriptor for r%d, retrying...", req.RangeID)
 		}
 		kvs, err := kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
 			Key:    roachpb.KeyMin,
@@ -2335,7 +2335,7 @@ func (n *Node) ResetQuorum(
 		log.Errorf(ctx, "range descriptor for r%d could not be read: %v", req.RangeID, err)
 		return nil, err
 	}
-	log.Infof(ctx, "retrieved original range descriptor %s", desc)
+	log.Dev.Infof(ctx, "retrieved original range descriptor %s", desc)
 
 	// Check that we've actually lost quorum.
 	available := desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
@@ -2372,7 +2372,7 @@ func (n *Node) ResetQuorum(
 	// Increment the generation so that the various caches will recognize this descriptor as newer.
 	desc.IncrementGeneration()
 
-	log.Infof(ctx, "initiating recovery process using %s", desc)
+	log.Dev.Infof(ctx, "initiating recovery process using %s", desc)
 
 	// Update the meta2 entry. Note that we're intentionally
 	// eschewing updateRangeAddressing since the copy of the
@@ -2381,7 +2381,7 @@ func (n *Node) ResetQuorum(
 	if err := n.storeCfg.DB.CPut(ctx, metaKey, &desc, expValue.TagAndDataBytes()); err != nil {
 		return nil, err
 	}
-	log.Infof(ctx, "updated meta2 entry for r%d", desc.RangeID)
+	log.Dev.Infof(ctx, "updated meta2 entry for r%d", desc.RangeID)
 
 	// Set up connection to self. Use rpc.SystemClass to avoid throttling.
 	client, err := kvserver.DialMultiRaftClient(n.storeCfg.NodeDialer, ctx, n.Descriptor.NodeID, rpcbase.SystemClass)
@@ -2404,7 +2404,7 @@ func (n *Node) ResetQuorum(
 	); err != nil {
 		return nil, err
 	}
-	log.Infof(ctx, "sent empty snapshot to %s", toReplicaDescriptor)
+	log.Dev.Infof(ctx, "sent empty snapshot to %s", toReplicaDescriptor)
 
 	return &kvpb.ResetQuorumResponse{}, nil
 }
@@ -2533,7 +2533,7 @@ func (n *Node) tenantSettings(
 	}
 
 	sendSettings := func(precedence kvpb.TenantSettingsEvent_Precedence, overrides []kvpb.TenantSetting, incremental bool) error {
-		log.VInfof(ctx, 1, "sending precedence %d (incremental=%v): %v", precedence, overrides, incremental)
+		log.Dev.VInfof(ctx, 1, "sending precedence %d (incremental=%v): %v", precedence, overrides, incremental)
 		return stream.Send(&kvpb.TenantSettingsEvent{
 			EventType:   kvpb.TenantSettingsEvent_SETTING_EVENT,
 			Precedence:  precedence,
@@ -2546,7 +2546,7 @@ func (n *Node) tenantSettings(
 		fakePrecedence kvpb.TenantSettingsEvent_Precedence,
 		tInfo tenantcapabilities.Entry,
 	) error {
-		log.VInfof(ctx, 1, "sending tenant info: %+v", tInfo)
+		log.Dev.VInfof(ctx, 1, "sending tenant info: %+v", tInfo)
 		// Note: we are piggy-backing on the TenantSetting streaming RPC
 		// to send non-setting data. This must be careful to work on
 		// SQL servers running previous versions of the CockroachDB code.
@@ -2773,7 +2773,7 @@ func (n *Node) Join(
 		return nil, err
 	}
 
-	log.Infof(ctx, "allocated IDs: n%d, s%d", nodeID, storeID)
+	log.Dev.Infof(ctx, "allocated IDs: n%d, s%d", nodeID, storeID)
 
 	return &kvpb.JoinNodeResponse{
 		ClusterID:     n.clusterID.Get().GetBytes(),

@@ -1073,7 +1073,7 @@ func (r *ReplicaCircuitBreaker) OnReset(b *circuit.Breaker, prev error) {
 		// TODO(erikgrinaker): consider rate limiting these with log.Every, but for
 		// now we want to know which ones reset for debugging.
 		ctx := r.d.ambientCtx.AnnotateCtx(context.Background())
-		log.Infof(ctx, "%s circuit breaker reset", r.id())
+		log.Dev.Infof(ctx, "%s circuit breaker reset", r.id())
 
 		r.d.metrics.CircuitBreaker.ReplicasTripped.Dec(1)
 	}

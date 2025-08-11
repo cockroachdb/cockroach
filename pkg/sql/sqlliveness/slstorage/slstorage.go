@@ -387,7 +387,7 @@ func (s *Storage) deleteOrFetchSession(
 	}
 	if deleted {
 		s.metrics.SessionsDeleted.Inc(1)
-		log.Infof(ctx, "deleted session %s which expired at %s", sid, prevExpiration)
+		log.Dev.Infof(ctx, "deleted session %s which expired at %s", sid, prevExpiration)
 	}
 	return alive, expiration, nil
 }
@@ -535,7 +535,7 @@ func (s *Storage) Insert(
 		s.metrics.WriteFailures.Inc(1)
 		return errors.Wrapf(err, "could not insert session %s", sid)
 	}
-	log.Infof(ctx, "inserted sqlliveness session %s with expiry %s", sid, expiration)
+	log.Dev.Infof(ctx, "inserted sqlliveness session %s with expiry %s", sid, expiration)
 	s.metrics.WriteSuccesses.Inc(1)
 	return nil
 }

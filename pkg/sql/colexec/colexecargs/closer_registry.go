@@ -45,11 +45,11 @@ func (r *CloserRegistry) Close(ctx context.Context) {
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
 		for _, closer := range r.toClose {
 			if err := closer.Close(ctx); err != nil && log.V(1) {
-				log.Infof(ctx, "error closing Closer: %v", err)
+				log.Dev.Infof(ctx, "error closing Closer: %v", err)
 			}
 		}
 	}); err != nil && log.V(1) {
-		log.Infof(ctx, "runtime error closing the closers: %v", err)
+		log.Dev.Infof(ctx, "runtime error closing the closers: %v", err)
 	}
 }
 

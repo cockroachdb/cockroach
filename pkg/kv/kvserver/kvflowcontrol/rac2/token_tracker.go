@@ -87,7 +87,7 @@ func (t *Tracker) Track(
 	t.deducted[pri] += tokens
 
 	if log.V(1) {
-		log.Infof(ctx, "tracking %v flow control tokens for pri=%s stream=%s log-position=%d/%d",
+		log.Dev.Infof(ctx, "tracking %v flow control tokens for pri=%s stream=%s log-position=%d/%d",
 			tokens, pri, t.stream, id.term, id.index)
 	}
 	return true

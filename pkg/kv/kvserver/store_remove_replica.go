@@ -145,7 +145,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 	// During merges, the context might have the subsuming range, so we explicitly
 	// log the replica to be removed.
-	log.Infof(ctx, "removing replica r%d/%d (%s)", rep.RangeID, rep.replicaID, reason)
+	log.Dev.Infof(ctx, "removing replica r%d/%d (%s)", rep.RangeID, rep.replicaID, reason)
 
 	s.mu.Lock()
 	if it := s.getOverlappingKeyRangeLocked(desc); it.repl != rep {
@@ -278,7 +278,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 		log.Fatalf(ctx, "uninitialized replica was removed in the meantime")
 	}
 	if existing == rep {
-		log.Infof(ctx, "removing uninitialized replica %v", rep)
+		log.Dev.Infof(ctx, "removing uninitialized replica %v", rep)
 	} else {
 		log.Fatalf(ctx, "uninitialized replica %v was unexpectedly replaced", existing)
 	}

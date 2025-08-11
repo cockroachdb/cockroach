@@ -173,7 +173,7 @@ func (s *server) gossip(stream RPCGossip_GossipStream) error {
 		// the remote node receives our high water stamps in a timely fashion.
 		if infoCount := len(delta); init || infoCount > 0 {
 			if log.V(1) {
-				log.Infof(ctx, "returning %d info(s) to n%d: %s",
+				log.Dev.Infof(ctx, "returning %d info(s) to n%d: %s",
 					infoCount, args.NodeID, extractKeys(delta))
 			}
 			// Ensure that the high water stamps for the remote client are kept up to
@@ -238,7 +238,7 @@ func (s *server) gossipReceiver(
 			// Let the connection through so that the client can get a node ID. Once it
 			// has one, we'll run the logic below to decide whether to keep the
 			// connection to it or to forward it elsewhere.
-			log.Infof(ctx, "received initial cluster-verification connection from %s", args.Addr)
+			log.Dev.Infof(ctx, "received initial cluster-verification connection from %s", args.Addr)
 		} else if !nodeIdentified {
 			nodeIdentified = true
 
@@ -248,14 +248,14 @@ func (s *server) gossipReceiver(
 				// This is an incoming loopback connection which should be closed by
 				// the client.
 				if log.V(2) {
-					log.Infof(ctx, "ignoring gossip from n%d (loopback)", args.NodeID)
+					log.Dev.Infof(ctx, "ignoring gossip from n%d (loopback)", args.NodeID)
 				}
 			} else if _, ok := s.mu.nodeMap[args.Addr]; ok {
 				// This is a duplicate incoming connection from the same node as an existing
 				// connection. This can happen when bootstrap connections are initiated
 				// through a load balancer.
 				if log.V(2) {
-					log.Infof(ctx, "duplicate connection received from n%d at %s", args.NodeID, args.Addr)
+					log.Dev.Infof(ctx, "duplicate connection received from n%d at %s", args.NodeID, args.Addr)
 				}
 				return errors.Errorf("duplicate connection from node at %s", args.Addr)
 			} else if s.mu.incoming.hasSpace() {
@@ -289,7 +289,7 @@ func (s *server) gossipReceiver(
 				}
 
 				s.nodeMetrics.ConnectionsRefused.Inc(1)
-				log.Infof(ctx, "refusing gossip from n%d (max %d conns); forwarding to n%d (%s)",
+				log.Dev.Infof(ctx, "refusing gossip from n%d (max %d conns); forwarding to n%d (%s)",
 					args.NodeID, s.mu.incoming.maxSize, alternateNodeID, alternateAddr)
 
 				*reply = Response{
@@ -327,7 +327,7 @@ func (s *server) gossipReceiver(
 			log.Warningf(ctx, "failed to fully combine gossip delta from n%d: %s", args.NodeID, err)
 		}
 		if log.V(1) {
-			log.Infof(ctx, "received %s from n%d (%d fresh)", extractKeys(args.Delta), args.NodeID, freshCount)
+			log.Dev.Infof(ctx, "received %s from n%d (%d fresh)", extractKeys(args.Delta), args.NodeID, freshCount)
 		}
 		s.maybeTightenLocked()
 

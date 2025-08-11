@@ -166,7 +166,7 @@ func TestSortRandomized(t *testing.T) {
 					matchLen = rng.Intn(nOrderingCols)
 				}
 				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/matchLen=%d/topK=%t", nCols, nOrderingCols, matchLen, topK)
-				log.Infof(context.Background(), "%s", name)
+				log.Dev.Infof(context.Background(), "%s", name)
 				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols, matchLen)
 				if topK {
 					expected = expected[:k]

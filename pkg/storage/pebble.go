@@ -1327,13 +1327,13 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			switch info.Kind {
 			case pebble.IneffectualSingleDelete:
 				if p.singleDelLogEvery.ShouldLog() {
-					log.Infof(p.logCtx, "possible ineffectual SingleDel on key %s", roachpb.Key(info.UserKey))
+					log.Dev.Infof(p.logCtx, "possible ineffectual SingleDel on key %s", roachpb.Key(info.UserKey))
 				}
 				atomic.AddInt64(&p.singleDelIneffectualCount, 1)
 
 			case pebble.NondeterministicSingleDelete:
 				if p.singleDelLogEvery.ShouldLog() {
-					log.Infof(p.logCtx, "possible nondeterministic SingleDel on key %s", roachpb.Key(info.UserKey))
+					log.Dev.Infof(p.logCtx, "possible nondeterministic SingleDel on key %s", roachpb.Key(info.UserKey))
 				}
 				atomic.AddInt64(&p.singleDelInvariantViolationCount, 1)
 			}

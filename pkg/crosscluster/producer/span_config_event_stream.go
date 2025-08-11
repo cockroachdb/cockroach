@@ -190,7 +190,7 @@ func (s *spanConfigEventStream) handleUpdate(
 		log.Warningf(ctx, "rangefeedcache context cancelled with error %s", ctx.Err())
 	case s.updateCh <- update:
 		if update.Type == rangefeedcache.CompleteUpdate {
-			log.VInfof(ctx, 1, "observed complete scan")
+			log.Dev.VInfof(ctx, 1, "observed complete scan")
 		}
 	}
 }

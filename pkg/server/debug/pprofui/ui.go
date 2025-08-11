@@ -25,7 +25,7 @@ func (*fakeUI) ReadLine(prompt string) (string, error) { return "", io.EOF }
 
 func (*fakeUI) Print(args ...interface{}) {
 	msg := fmt.Sprint(args...)
-	log.InfofDepth(pprofCtx(context.Background()), 1, "%s", msg)
+	log.Dev.InfofDepth(pprofCtx(context.Background()), 1, "%s", msg)
 }
 
 func (*fakeUI) PrintErr(args ...interface{}) {

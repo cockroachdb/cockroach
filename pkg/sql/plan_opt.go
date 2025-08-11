@@ -337,7 +337,7 @@ func (p *planner) runExecBuild(
 		}
 		// TODO(yuzefovich): make the logging conditional on the verbosity
 		// level once new DistSQL planning is no longer experimental.
-		log.Infof(
+		log.Dev.Infof(
 			ctx, "distSQLSpecExecFactory failed planning with %v, falling back to the old path", err,
 		)
 	}
@@ -430,11 +430,11 @@ func (opc *optPlanningCtx) log(ctx context.Context, msg string) {
 		// msg is guaranteed to be a constant string by the fmtsafe linter, so
 		// it is safe to convert to a redact.SafeString.
 		//
-		// Also, note that passing msg directly to log.InfofDepth() would cause
+		// Also, note that passing msg directly to log.Dev.InfofDepth() would cause
 		// a heap allocation to box it, even if the else path is taken. With the
 		// type conversion, a new implicit variable is created that only causes
 		// a heap allocation if this branch is taken.
-		log.InfofDepth(ctx, 1, "%s: %s", redact.SafeString(msg), opc.p.stmt)
+		log.Dev.InfofDepth(ctx, 1, "%s: %s", redact.SafeString(msg), opc.p.stmt)
 	} else {
 		log.Event(ctx, msg)
 	}

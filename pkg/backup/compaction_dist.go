@@ -43,7 +43,7 @@ func runCompactionPlan(
 	kmsEnv cloud.KMSEnv,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
-	log.Infof(
+	log.Dev.Infof(
 		ctx, "planning compaction of %d backups: %s",
 		len(compactChain.chainToCompact),
 		util.Map(compactChain.chainToCompact, func(m backuppb.BackupManifest) string {

@@ -1278,7 +1278,7 @@ func (sp *StorePool) Throttle(reason ThrottleReason, why string, storeID roachpb
 		detail.ThrottledUntil = sp.clock.Now().AddDuration(timeout)
 		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())
-			log.Infof(ctx, "snapshot failed (%s), s%d will be throttled for %s until %s",
+			log.Dev.Infof(ctx, "snapshot failed (%s), s%d will be throttled for %s until %s",
 				why, storeID, timeout, detail.ThrottledUntil)
 		}
 	default:

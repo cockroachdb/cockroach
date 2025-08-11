@@ -402,7 +402,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		return err
 	}
 	if *doInit || *drop {
-		log.Info(ctx, `DEPRECATION: `+
+		log.Dev.Info(ctx, `DEPRECATION: `+
 			`the --init flag on "workload run" will no longer be supported after 19.2`)
 		for {
 			err = runInitImpl(ctx, gen, initDB, dbName)
@@ -412,7 +412,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			if !*tolerateErrors {
 				return err
 			}
-			log.Infof(ctx, "retrying after error during init: %v", err)
+			log.Dev.Infof(ctx, "retrying after error during init: %v", err)
 		}
 	}
 
@@ -461,7 +461,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 	var ops workload.QueryLoad
 	prepareStart := timeutil.Now()
-	log.Infof(ctx, "creating load generator...")
+	log.Dev.Infof(ctx, "creating load generator...")
 
 	prepareCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -503,7 +503,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}(prepareCtx); prepareErr != nil {
 		return prepareErr
 	}
-	log.Infof(ctx, "creating load generator... done (took %s)", timeutil.Since(prepareStart))
+	log.Dev.Infof(ctx, "creating load generator... done (took %s)", timeutil.Since(prepareStart))
 
 	start := timeutil.Now()
 	errCh := make(chan error)
@@ -653,7 +653,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 // if a seed is being used.
 func maybeLogRandomSeed(ctx context.Context, gen workload.Generator) {
 	if randomSeed := gen.Meta().RandomSeed; randomSeed != nil {
-		log.Infof(ctx, "%s", randomSeed.LogMessage())
+		log.Dev.Infof(ctx, "%s", randomSeed.LogMessage())
 	}
 }
 
@@ -723,7 +723,7 @@ func closeExporter(ctx context.Context, metricsExporter exporter.Exporter, file 
 	if metricsExporter != nil {
 		if err := metricsExporter.Close(func() error {
 			if file == nil {
-				log.Infof(ctx, "no file to close")
+				log.Dev.Infof(ctx, "no file to close")
 				return nil
 			}
 

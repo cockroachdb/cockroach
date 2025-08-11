@@ -395,7 +395,7 @@ func (nl *NodeLiveness) SetDraining(
 		}
 		if err := nl.setDrainingInternal(ctx, oldLivenessRec, drain, reporter); err != nil {
 			if log.V(1) {
-				log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
+				log.Dev.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
 			}
 			if grpcutil.IsConnectionRejected(err) {
 				return err
@@ -515,7 +515,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 	})
 	if err != nil {
 		if log.V(1) {
-			log.Infof(ctx, "updating liveness record: %v", err)
+			log.Dev.Infof(ctx, "updating liveness record: %v", err)
 		}
 		if errors.Is(err, errNodeDrainingSet) {
 			return nil
@@ -543,7 +543,7 @@ func (nl *NodeLiveness) cacheUpdated(old livenesspb.Liveness, new livenesspb.Liv
 		nl.onNodeDecommissioning(new.NodeID)
 	}
 	if log.V(2) {
-		log.Infof(nl.ambientCtx.AnnotateCtx(context.Background()), "received liveness update: %s", new)
+		log.Dev.Infof(nl.ambientCtx.AnnotateCtx(context.Background()), "received liveness update: %s", new)
 	}
 }
 
@@ -650,7 +650,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 							nodeID := nl.cache.selfID()
 							liveness, err := nl.getLivenessRecordFromKV(ctx, nodeID)
 							if err != nil {
-								log.Infof(ctx, "unable to get liveness record from KV: %s", err)
+								log.Dev.Infof(ctx, "unable to get liveness record from KV: %s", err)
 								if grpcutil.IsConnectionRejected(err) {
 									return err
 								}
@@ -660,7 +660,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 						}
 						if err := nl.heartbeatInternal(ctx, oldLiveness, incrementEpoch); err != nil {
 							if errors.Is(err, ErrEpochIncremented) {
-								log.Infof(ctx, "%s; retrying", err)
+								log.Dev.Infof(ctx, "%s; retrying", err)
 								continue
 							}
 							return err
@@ -1018,7 +1018,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness livenesspb.
 		return err
 	}
 
-	log.Infof(ctx, "incremented n%d liveness epoch to %d", written.NodeID, written.Epoch)
+	log.Dev.Infof(ctx, "incremented n%d liveness epoch to %d", written.NodeID, written.Epoch)
 	nl.cache.maybeUpdate(ctx, written)
 	nl.metrics.EpochIncrements.Inc()
 	return nil
@@ -1070,7 +1070,7 @@ func (nl *NodeLiveness) updateLiveness(
 		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed)
 		if err != nil {
 			if errors.HasType(err, (*errRetryLiveness)(nil)) {
-				log.Infof(ctx, "retrying liveness update after %s", err)
+				log.Dev.Infof(ctx, "retrying liveness update after %s", err)
 				continue
 			}
 			return Record{}, err

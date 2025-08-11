@@ -1043,7 +1043,7 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 		return eng, nil
 	}
 
-	log.Infof(context.Background(), "creating test data: %s", dir)
+	log.Dev.Infof(context.Background(), "creating test data: %s", dir)
 
 	// Generate the same data every time.
 	rng := rand.New(rand.NewSource(1449168817))
@@ -1064,7 +1064,7 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 	for i, key := range keys {
 		if (i % batchSize) == 0 {
 			if i > 0 {
-				log.Infof(ctx, "committing (%d/~%d)", i/batchSize, numBatches)
+				log.Dev.Infof(ctx, "committing (%d/~%d)", i/batchSize, numBatches)
 				if err := batch.Commit(false /* sync */); err != nil {
 					return nil, err
 				}
@@ -1674,7 +1674,7 @@ func runMVCCComputeStats(ctx context.Context, b *testing.B, valueBytes int, numR
 	}
 
 	b.StopTimer()
-	log.Infof(ctx, "live_bytes: %d", stats.LiveBytes)
+	log.Dev.Infof(ctx, "live_bytes: %d", stats.LiveBytes)
 }
 
 // runMVCCCFindSplitKey benchmarks MVCCFindSplitKey on a 64MB range of data.

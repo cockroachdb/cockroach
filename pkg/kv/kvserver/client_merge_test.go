@@ -1921,7 +1921,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 			// When this test was written, it would always produce the above
 			// interleaving, and successfully trigger the race when run with the race
 			// detector enabled about 50% of the time.
-			log.Infof(ctx, "starting req %d", i)
+			log.Dev.Infof(ctx, "starting req %d", i)
 			var req kvpb.Request
 			if i%2 == 0 {
 				req = getArgs(rhsSentinel)
@@ -4167,7 +4167,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 
 		// Restore Raft traffic to the LHS on store2.
-		log.Infof(ctx, "restored traffic to store 2")
+		log.Dev.Infof(ctx, "restored traffic to store 2")
 		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
 			rangeID:                    aRepl0.RangeID,
 			IncomingRaftMessageHandler: store2,

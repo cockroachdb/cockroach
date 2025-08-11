@@ -296,7 +296,7 @@ func (ex *connExecutor) recordStatementSummary(
 		// ages since significant epochs
 		sessionAge := phaseTimes.GetSessionAge().Seconds()
 
-		log.Infof(ctx,
+		log.Dev.Infof(ctx,
 			"query stats: %d rows, %d retries, "+
 				"parse %.2fµs (%.1f%%), "+
 				"plan %.2fµs (%.1f%%), "+

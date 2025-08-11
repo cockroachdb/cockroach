@@ -643,7 +643,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 				start := timeutil.Now()
 				err := check.Fn(db, w.asOfSystemTime /* asOfSystemTime */)
-				log.Infof(ctx, `check %s took %s`, check.Name, timeutil.Since(start))
+				log.Dev.Infof(ctx, `check %s took %s`, check.Name, timeutil.Since(start))
 				if err != nil {
 					return errors.Wrapf(err, `check failed: %s`, check.Name)
 				}

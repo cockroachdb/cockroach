@@ -478,12 +478,12 @@ func (w *worker) run(ctx context.Context) error {
 		w.hists.Get(fmt.Sprintf("%d", queryNum)).Record(elapsed)
 		// Note: if you are changing the output format here, please change the
 		// regex in roachtest/tpchvec.go accordingly.
-		log.Infof(ctx, "[q%d] returned %d rows after %4.2f seconds:\n%s",
+		log.Dev.Infof(ctx, "[q%d] returned %d rows after %4.2f seconds:\n%s",
 			queryNum, numRows, elapsed.Seconds(), query)
 	} else {
 		// Note: if you are changing the output format here, please change the
 		// regex in roachtest/tpchvec.go accordingly.
-		log.Infof(ctx, "[q%d] returned %d rows after %4.2f seconds",
+		log.Dev.Infof(ctx, "[q%d] returned %d rows after %4.2f seconds",
 			queryNum, numRows, elapsed.Seconds())
 	}
 	return nil

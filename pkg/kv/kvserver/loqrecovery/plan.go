@@ -230,7 +230,7 @@ func planReplicasWithMeta(
 			}
 			problems = append(problems, checkDescriptor(rankedRangeReplicas)...)
 			updates = append(updates, u)
-			log.Infof(ctx, "replica has lost quorum, recovering: %s -> %s",
+			log.Dev.Infof(ctx, "replica has lost quorum, recovering: %s -> %s",
 				rankedRangeReplicas.survivor().Desc, u.NewReplica)
 		}
 	}

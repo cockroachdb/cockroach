@@ -3210,7 +3210,7 @@ func populateQueryLevelStats(
 		if buildutil.CrdbTestBuild {
 			panic(fmt.Sprintf(msg, ih.fingerprint, err))
 		}
-		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
+		log.Dev.VInfof(ctx, 1, msg, ih.fingerprint, err)
 	} else {
 		// If this query is being run by a tenant, record the RUs consumed by CPU
 		// usage and network egress to the client.

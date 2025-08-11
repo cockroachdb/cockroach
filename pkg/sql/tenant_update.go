@@ -230,7 +230,7 @@ func stepTenantServiceState(
 		if mode == mtinfopb.ServiceModeShared || mode == mtinfopb.ServiceModeExternal {
 			info.LastRevertTenantTimestamp = hlc.Timestamp{}
 		}
-		log.Infof(ctx, "transitioning tenant %d from %s to %s", info.ID, info.ServiceMode, mode)
+		log.Dev.Infof(ctx, "transitioning tenant %d from %s to %s", info.ID, info.ServiceMode, mode)
 		info.ServiceMode = mode
 		return UpdateTenantRecord(ctx, settings, txn, info)
 	}
@@ -318,7 +318,7 @@ func stepTenantServiceState(
 		//
 		// We could avoid this by treating these transitions
 		// more like schema changes.
-		log.Infof(ctx, "waiting for all nodes to stop service for tenant %d", inInfo.ID)
+		log.Dev.Infof(ctx, "waiting for all nodes to stop service for tenant %d", inInfo.ID)
 		if err := timeutil.RunWithTimeout(ctx, "wait-for-tenant-stop", 10*time.Minute, func(ctx context.Context) error {
 			retryOpts := retry.Options{MaxBackoff: 10 * time.Second}
 			for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
@@ -335,7 +335,7 @@ func stepTenantServiceState(
 				for n, info := range resp.StatusByNodeID {
 					stoppedOrStopping := info.ServiceMode == mtinfopb.ServiceModeStopping || info.ServiceMode == mtinfopb.ServiceModeNone
 					if !stoppedOrStopping {
-						log.Infof(ctx, "tenant %d is still running on node %s", info.ID, n)
+						log.Dev.Infof(ctx, "tenant %d is still running on node %s", info.ID, n)
 						allStopped = false
 					}
 				}

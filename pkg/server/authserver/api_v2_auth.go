@@ -240,7 +240,7 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 		err := status.Errorf(
 			codes.InvalidArgument,
 			"session with id %d nonexistent", sessionCookie.ID)
-		log.Infof(ctx, "%v", err)
+		log.Dev.Infof(ctx, "%v", err)
 		http.Error(w, "invalid session", http.StatusBadRequest)
 		return
 	}

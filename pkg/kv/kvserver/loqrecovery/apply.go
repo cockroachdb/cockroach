@@ -380,7 +380,7 @@ func MaybeApplyPendingRecoveryPlan(
 			return errors.Wrap(err, "failed to check cluster version against storage")
 		}
 
-		log.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
+		log.Dev.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
 		batches := make(map[roachpb.StoreID]storage.Batch)
 		for _, e := range engines {
 			ident, err := kvstorage.ReadStoreIdent(ctx, e)

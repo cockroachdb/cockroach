@@ -644,7 +644,7 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	part := resolved.GoTime().Format(s.partitionFormat)
 	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
 	if log.V(1) {
-		log.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
+		log.Dev.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
 	}
 	return cloud.WriteFile(ctx, s.es, filepath.Join(part, filename), bytes.NewReader(payload))
 }
@@ -833,7 +833,7 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 		return nil
 	default:
 		if logQueueDepth.ShouldLog() {
-			log.Infof(ctx, "changefeed flush queue is full; ~%d bytes to flush",
+			log.Dev.Infof(ctx, "changefeed flush queue is full; ~%d bytes to flush",
 				flushQueueDepth*s.targetMaxFileSize)
 		}
 	}

@@ -87,7 +87,7 @@ type traceValue struct {
 // trace.
 func (t *traceValue) logf(depth int, format string, args ...interface{}) {
 	if t.ctx != nil {
-		log.InfofDepth(t.ctx, depth+1, format, args...)
+		log.Dev.InfofDepth(t.ctx, depth+1, format, args...)
 	}
 
 	t.mu.Lock()
@@ -210,7 +210,7 @@ func (r *RaftTracer) reserveSpace() bool {
 	// traces and don't register this request. Note that when this happens we
 	// also wont't log this request.
 	if numRegisteredReplica > numAllowed {
-		log.Infof(r.ctx, "flushing all traces due to setting change")
+		log.Dev.Infof(r.ctx, "flushing all traces due to setting change")
 		r.m.Range(func(index kvpb.RaftIndex, t *traceValue) bool {
 			r.removeEntry(index)
 			return true

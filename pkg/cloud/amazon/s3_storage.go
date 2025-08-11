@@ -584,7 +584,7 @@ type awsLogAdapter struct {
 }
 
 func (l *awsLogAdapter) Logf(_ logging.Classification, format string, v ...interface{}) {
-	log.Infof(l.ctx, format, v...)
+	log.Dev.Infof(l.ctx, format, v...)
 }
 
 func newLogAdapter(ctx context.Context) *awsLogAdapter {

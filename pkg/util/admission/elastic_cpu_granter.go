@@ -221,7 +221,7 @@ func (e *elasticCPUGranter) setUtilizationLimit(utilizationLimit float64) {
 
 	e.metrics.UtilizationLimit.Update(utilizationLimit)
 	if log.V(1) {
-		log.Infof(e.ctx, "elastic cpu granter refill rate = %0.4f cpu seconds per second (utilization across %d procs = %0.2f%%)",
+		log.Dev.Infof(e.ctx, "elastic cpu granter refill rate = %0.4f cpu seconds per second (utilization across %d procs = %0.2f%%)",
 			time.Duration(rate).Seconds(), runtime.GOMAXPROCS(0), utilizationLimit*100)
 	}
 }

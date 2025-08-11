@@ -337,7 +337,7 @@ func (r *FileRegistry) maybeElideEntries(ctx context.Context) error {
 			path = r.FS.PathJoin(r.DBDir, filename)
 		}
 		if _, err := r.FS.Stat(path); oserror.IsNotExist(err) {
-			log.Infof(ctx, "eliding file registry entry %s", redact.SafeString(filename))
+			log.Dev.Infof(ctx, "eliding file registry entry %s", redact.SafeString(filename))
 			batch.DeleteEntry(filename)
 		}
 	}

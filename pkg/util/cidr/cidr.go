@@ -74,7 +74,7 @@ func NewLookup(st *settings.Values) *Lookup {
 	c.changed = make(chan time.Duration, 1)
 
 	cidrMappingUrl.SetOnChange(st, func(ctx context.Context) {
-		log.Infof(ctx, "url changed to '%s'", cidrMappingUrl.Get(st))
+		log.Dev.Infof(ctx, "url changed to '%s'", cidrMappingUrl.Get(st))
 		// Reset the lastUpdate time so that the URL is always reloaded even if
 		// the new file/URL has an older timestamp.
 		c.lastUpdate.Store(time.Time{})
@@ -88,7 +88,7 @@ func NewLookup(st *settings.Values) *Lookup {
 	// and the setting is changed before we register the callback and the
 	// ticker will not be reset to the new value.
 	cidrRefreshInterval.SetOnChange(c.st, func(ctx context.Context) {
-		log.Infof(ctx, "refresh interval changed to '%s'", cidrRefreshInterval.Get(c.st))
+		log.Dev.Infof(ctx, "refresh interval changed to '%s'", cidrRefreshInterval.Get(c.st))
 		select {
 		case c.changed <- cidrRefreshInterval.Get(c.st):
 		default:
@@ -296,7 +296,7 @@ func (c *Lookup) setDestinations(ctx context.Context, contents []byte) error {
 		val := hexString(cidr.IP.Mask(mask))
 		byLength[lenBits][val] = d.Name
 	}
-	log.Infof(ctx, "CIDR lookup updated with %d destinations", len(destinations))
+	log.Dev.Infof(ctx, "CIDR lookup updated with %d destinations", len(destinations))
 	c.byLength.Store(&byLength)
 	c.onChange(ctx)
 	return nil

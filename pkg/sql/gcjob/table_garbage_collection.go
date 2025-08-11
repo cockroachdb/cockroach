@@ -35,7 +35,7 @@ func gcTables(
 	ctx context.Context, execCfg *sql.ExecutorConfig, progress *jobspb.SchemaChangeGCProgress,
 ) error {
 	if log.V(2) {
-		log.Infof(ctx, "GC is being considered for tables: %+v", progress.Tables)
+		log.Dev.Infof(ctx, "GC is being considered for tables: %+v", progress.Tables)
 	}
 
 	for _, droppedTable := range progress.Tables {
@@ -106,7 +106,7 @@ func ClearTableData(
 	sv *settings.Values,
 	table catalog.TableDescriptor,
 ) error {
-	log.Infof(ctx, "clearing data for table %d", table.GetID())
+	log.Dev.Infof(ctx, "clearing data for table %d", table.GetID())
 	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.GetID())))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 	return clearSpanData(ctx, db, distSender, tableSpan)
@@ -199,7 +199,7 @@ func DeleteAllTableData(
 	codec keys.SQLCodec,
 	table catalog.TableDescriptor,
 ) error {
-	log.Infof(ctx, "deleting data for table %d", table.GetID())
+	log.Dev.Infof(ctx, "deleting data for table %d", table.GetID())
 	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.GetID())))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 	return deleteAllSpanData(ctx, db, distSender, tableSpan)

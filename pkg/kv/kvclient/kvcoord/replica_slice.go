@@ -143,7 +143,7 @@ func NewReplicaSlice(
 		nd, err := nodeDescs.GetNodeDescriptor(r.NodeID)
 		if err != nil {
 			if log.V(1) {
-				log.Infof(ctx, "node %d is not gossiped: %v", r.NodeID, err)
+				log.Dev.Infof(ctx, "node %d is not gossiped: %v", r.NodeID, err)
 			}
 			continue
 		}

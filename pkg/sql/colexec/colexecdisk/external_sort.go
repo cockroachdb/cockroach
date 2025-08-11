@@ -703,7 +703,7 @@ func (s *externalSorter) createMergerForPartitions(n int) *colexec.OrderedSynchr
 			counts.WriteString(fmt.Sprintf("%d", s.partitionsInfo.tupleCount[partitionOrdinal]))
 			sizes.WriteString(string(humanizeutil.IBytes(s.partitionsInfo.totalSize[partitionOrdinal])))
 		}
-		log.Infof(s.Ctx,
+		log.Dev.Infof(s.Ctx,
 			"external sorter is merging partitions with partition indices %v with counts [%s] and sizes [%s]",
 			s.currentPartitionIdxs[s.numPartitions-n:s.numPartitions], counts.String(), sizes.String(),
 		)

@@ -1129,7 +1129,7 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if disabledRules.Contains(int(ruleName)) {
-			log.Infof(o.ctx, "disabled rule matched: %s", ruleName.String())
+			log.Dev.Infof(o.ctx, "disabled rule matched: %s", ruleName.String())
 			return false
 		}
 		return true

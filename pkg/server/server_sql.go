@@ -1388,11 +1388,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	startedWithExplicitVModule := log.GetVModule() != ""
 	fn := func(ctx context.Context) {
 		if startedWithExplicitVModule {
-			log.Infof(ctx, "ignoring vmodule cluster setting due to starting with explicit vmodule flag")
+			log.Dev.Infof(ctx, "ignoring vmodule cluster setting due to starting with explicit vmodule flag")
 		} else {
 			s := vmoduleSetting.Get(&cfg.Settings.SV)
 			if log.GetVModule() != s {
-				log.Infof(ctx, "updating vmodule from cluster setting to %s", s)
+				log.Dev.Infof(ctx, "updating vmodule from cluster setting to %s", s)
 				if err := log.SetVModule(s); err != nil {
 					log.Warningf(ctx, "failed to apply vmodule cluster setting: %v", err)
 				}
@@ -1618,7 +1618,7 @@ func (s *SQLServer) preStart(
 	// quiescing doesn't work. Doing it too soon, for example as part of draining,
 	// is potentially dangerous because the server will continue to use the
 	// instance ID for a while.
-	log.Infof(ctx, "bound sqlinstance: %v", instance)
+	log.Dev.Infof(ctx, "bound sqlinstance: %v", instance)
 	if err := s.sqlIDContainer.SetSQLInstanceID(ctx, instance.InstanceID); err != nil {
 		return err
 	}
@@ -1720,7 +1720,7 @@ func (s *SQLServer) preStart(
 		return err
 	}
 
-	log.Infof(ctx, "done ensuring all necessary startup migrations have run")
+	log.Dev.Infof(ctx, "done ensuring all necessary startup migrations have run")
 
 	// Prevent the server from starting if its binary version is too low
 	// for the current tenant cluster version.

@@ -180,20 +180,20 @@ func (f *forwarder) TransferConnection() (retErr error) {
 		// When TransferConnection returns, it's either the forwarder has been
 		// closed, or the procesors have been resumed.
 		if !ctx.isRecoverable() {
-			log.Infof(logCtx, "transfer failed: connection closed, latency=%v, err=%v", latencyDur, retErr)
+			log.Dev.Infof(logCtx, "transfer failed: connection closed, latency=%v, err=%v", latencyDur, retErr)
 			f.metrics.ConnMigrationErrorFatalCount.Inc(1)
 			f.Close()
 		} else {
 			// Transfer was successful.
 			if retErr == nil {
-				log.Infof(logCtx, "transfer successful, latency=%v", latencyDur)
+				log.Dev.Infof(logCtx, "transfer successful, latency=%v", latencyDur)
 				f.metrics.ConnMigrationSuccessCount.Inc(1)
 			} else {
-				log.Infof(logCtx, "transfer failed: connection recovered, latency=%v, err=%v", latencyDur, retErr)
+				log.Dev.Infof(logCtx, "transfer failed: connection recovered, latency=%v, err=%v", latencyDur, retErr)
 				f.metrics.ConnMigrationErrorRecoverableCount.Inc(1)
 			}
 			if err := f.resumeProcessors(); err != nil {
-				log.Infof(logCtx, "unable to resume processors: %v", err)
+				log.Dev.Infof(logCtx, "unable to resume processors: %v", err)
 				f.Close()
 			}
 		}

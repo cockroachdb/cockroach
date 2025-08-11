@@ -85,7 +85,7 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 			if h.name != "" {
 				prefix = fmt.Sprintf("[%s] ", h.name)
 			}
-			log.Infof(
+			log.Dev.Infof(
 				ctx,
 				"%sdropping r%d Raft message %s",
 				prefix,
@@ -105,7 +105,7 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 			if h.name != "" {
 				prefix = fmt.Sprintf("[%s] ", h.name)
 			}
-			log.Infof(
+			log.Dev.Infof(
 				ctx,
 				"%s [raft] r%d Raft message %s",
 				prefix,
@@ -420,10 +420,10 @@ func setupPartitionedRangeWithHandlers(
 					DropStoreLivenessMsg: func(msg *storelivenesspb.Message) bool {
 						drop := shouldDropStoreLivenessMessage(msg.From.StoreID, msg.To.StoreID)
 						if drop {
-							log.Infof(context.Background(), "dropping StoreLiveness msg %s from store %d: to %d",
+							log.Dev.Infof(context.Background(), "dropping StoreLiveness msg %s from store %d: to %d",
 								msg.Type, msg.From.StoreID, msg.To.StoreID)
 						} else {
-							log.Infof(context.Background(), "allowing StoreLiveness msg %s from store %d: to %d",
+							log.Dev.Infof(context.Background(), "allowing StoreLiveness msg %s from store %d: to %d",
 								msg.Type, msg.From.StoreID, msg.To.StoreID)
 						}
 						return drop

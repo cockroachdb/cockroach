@@ -409,7 +409,7 @@ func handleNodeDecommissionSelf(
 			cliflags.NodeDecommissionSelf.Name)
 	}
 
-	log.Infof(ctx, "%s node %d", redact.Safe(command), localNodeID)
+	log.Dev.Infof(ctx, "%s node %d", redact.Safe(command), localNodeID)
 	return []roachpb.NodeID{localNodeID}, nil
 }
 

@@ -62,7 +62,7 @@ func DeleteTableWithPredicate(
 	batchSize int64,
 ) error {
 
-	log.Infof(ctx, "deleting data for table %d with predicate %s", tableID, predicates.String())
+	log.Dev.Infof(ctx, "deleting data for table %d with predicate %s", tableID, predicates.String())
 	tableKey := roachpb.RKey(codec.TablePrefix(uint32(tableID)))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 

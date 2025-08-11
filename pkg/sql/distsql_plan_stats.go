@@ -127,7 +127,7 @@ func computeNumberSamples(ctx context.Context, numRows uint64, st *cluster.Setti
 	minSampleSize := minAutoHistogramSamples.Get(&st.SV)
 
 	if maxSampleSize < minSampleSize {
-		log.Infof(
+		log.Dev.Infof(
 			ctx,
 			"using default sample size bounds since max sample size %d is less than min sample size %d",
 			maxSampleSize,
@@ -205,7 +205,7 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 					rowsExpected,
 					dsp.st,
 				)
-				log.Infof(ctx, "using computed sample size of %d for histogram construction", histogramSamplesCount)
+				log.Dev.Infof(ctx, "using computed sample size of %d for histogram construction", histogramSamplesCount)
 			}
 			sampler.SampleSize = histogramSamplesCount
 			// This could be anything >= 2 to produce a histogram, but the max number
@@ -797,7 +797,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 			// trade-off than having auto partial stats fail repeatedly due to
 			// expected conditions (like a lower bound doesn't exist) raising
 			// concerns for users. See #149279 for more discussion.
-			log.Infof(ctx, "job %d: stats collection is swallowing benign error %v", jobId, err)
+			log.Dev.Infof(ctx, "job %d: stats collection is swallowing benign error %v", jobId, err)
 			return nil
 		}
 		return err

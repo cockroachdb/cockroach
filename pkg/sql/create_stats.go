@@ -174,7 +174,7 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 				details.Table.ID,
 			); err != nil {
 				if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) && errors.Is(err, stats.ConcurrentCreateStatsError) {
-					log.Infof(ctx, "concurrent create stats job found, skipping")
+					log.Dev.Infof(ctx, "concurrent create stats job found, skipping")
 					return nil
 				}
 				return err
@@ -199,7 +199,7 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 		return n.p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &job, jobID, txn, *record)
 	}); err != nil {
 		if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) && errors.Is(err, stats.ConcurrentCreateStatsError) {
-			log.Infof(ctx, "concurrent create stats job found, skipping")
+			log.Dev.Infof(ctx, "concurrent create stats job found, skipping")
 			return nil
 		}
 		if job != nil {

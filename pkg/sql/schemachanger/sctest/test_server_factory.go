@@ -148,7 +148,7 @@ func newJobsKnobs() *jobs.TestingKnobs {
 		defer injectedFailures.Unlock()
 		if _, ok := injectedFailures.m[orig.ID]; !ok {
 			injectedFailures.m[orig.ID] = struct{}{}
-			log.Infof(context.Background(), "injecting failure while marking job succeeded")
+			log.Dev.Infof(context.Background(), "injecting failure while marking job succeeded")
 			return errors.New("injected failure when marking succeeded")
 		}
 		return nil

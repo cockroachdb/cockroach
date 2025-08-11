@@ -423,7 +423,7 @@ func (r *Replica) propose(
 		log.VEvent(p.Context(), 4, "sideloadable proposal detected")
 		r.store.metrics.AddSSTableProposals.Inc(1)
 	} else if log.V(4) {
-		log.Infof(p.Context(), "proposing command %x: %s", p.idKey, p.Request.Summary())
+		log.Dev.Infof(p.Context(), "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
 
 	raftAdmissionMeta := p.raftAdmissionMeta
@@ -450,7 +450,7 @@ func (r *Replica) propose(
 	// Too verbose even for verbose logging, so manually enable if you want to
 	// debug proposal sizes.
 	if false {
-		log.Infof(p.Context(), `%s: proposal: %d
+		log.Dev.Infof(p.Context(), `%s: proposal: %d
   RaftCommand.ReplicatedEvalResult:          %d
   RaftCommand.ReplicatedEvalResult.Delta:    %d
   RaftCommand.WriteBatch:                    %d
@@ -1112,7 +1112,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// indicating a newly elected leader or a conf change. Replay protection
 			// prevents any corruption, so the waste is only a performance issue.
 			if log.V(3) {
-				log.Infof(ctx, "raft leader changed: %d -> %d", leaderID, hs.Lead)
+				log.Dev.Infof(ctx, "raft leader changed: %d -> %d", leaderID, hs.Lead)
 			}
 			if !r.store.TestingKnobs().DisableRefreshReasonNewLeader {
 				refreshReason = reasonNewLeader
@@ -1681,7 +1681,7 @@ func (r *Replica) refreshProposalsLocked(
 		return
 	}
 
-	log.VInfof(ctx, 2,
+	log.Dev.VInfof(ctx, 2,
 		"pending commands: reproposing %d (at applied index %d, lease applied index %d) %s",
 		len(reproposals), r.shMu.state.RaftAppliedIndex,
 		r.shMu.state.LeaseAppliedIndex, reason)
@@ -1754,7 +1754,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		LaggingFollowersOnQuiesceAccurate: quiesce,
 	}
 	if log.V(4) {
-		log.Infof(ctx, "coalescing beat: %+v", beat)
+		log.Dev.Infof(ctx, "coalescing beat: %+v", beat)
 	}
 	toStore := roachpb.StoreIdent{
 		StoreID: toReplica.StoreID,
@@ -1786,7 +1786,7 @@ func (r *replicaSyncCallback) OnLogSync(
 
 	r.store.metrics.RaftLogCommitLatency.RecordValue(stats.CommitDur.Nanoseconds())
 	if stats.TotalDuration > defaultReplicaRaftMuWarnThreshold {
-		log.Infof(repl.raftCtx, "slow non-blocking raft commit: %s", stats.BatchCommitStats)
+		log.Dev.Infof(repl.raftCtx, "slow non-blocking raft commit: %s", stats.BatchCommitStats)
 	}
 }
 
@@ -2050,7 +2050,7 @@ func (r *Replica) sendRaftMessageRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest,
 ) bool {
 	if log.V(4) {
-		log.Infof(ctx, "sending raft request %+v", req)
+		log.Dev.Infof(ctx, "sending raft request %+v", req)
 	}
 	return r.store.cfg.Transport.SendAsync(req, r.connectionClass.get())
 }

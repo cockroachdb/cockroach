@@ -126,7 +126,7 @@ func (e *eventExecutor) TickEvents(
 	// to.
 	for e.nextEventIndex < len(e.scheduledEvents) {
 		if !tick.Before(e.scheduledEvents[e.nextEventIndex].At) {
-			log.Infof(ctx, "applying event (scheduled=%s tick=%s)", e.scheduledEvents[e.nextEventIndex].At, tick)
+			log.Dev.Infof(ctx, "applying event (scheduled=%s tick=%s)", e.scheduledEvents[e.nextEventIndex].At, tick)
 			scheduledEvent := e.scheduledEvents[e.nextEventIndex]
 			fn := scheduledEvent.TargetEvent.Func()
 			if scheduledEvent.IsMutationEvent() {

@@ -29,7 +29,7 @@ var cpuPacerRequestDuration = settings.RegisterDurationSetting(
 // Pacer which noops if pacing is disabled or its arguments are nil.
 func NewCPUPacer(ctx context.Context, db *kv.DB, setting *settings.BoolSetting) *admission.Pacer {
 	if db == nil || db.AdmissionPacerFactory == nil || !setting.Get(db.SettingsValues()) {
-		log.Infof(ctx, "admission control is not configured to pace bulk ingestion")
+		log.Dev.Infof(ctx, "admission control is not configured to pace bulk ingestion")
 		return nil
 	}
 	tenantID, ok := roachpb.ClientTenantFromContext(ctx)

@@ -69,7 +69,7 @@ func TestExternalSort(t *testing.T) {
 		}
 		for _, tcs := range [][]sortTestCase{sortAllTestCases, topKSortTestCases, sortChunksTestCases} {
 			for _, tc := range tcs {
-				log.Infof(context.Background(), "spillForced=%t/numRepartitions=%d/%s", spillForced, numForcedRepartitions, tc.description)
+				log.Dev.Infof(context.Background(), "spillForced=%t/numRepartitions=%d/%s", spillForced, numForcedRepartitions, tc.description)
 				var semsToCheck []semaphore.Semaphore
 				var numRuns, numSpills int
 				colexectestutils.RunTestsWithTyps(
@@ -172,7 +172,7 @@ func TestExternalSortRandomized(t *testing.T) {
 					}
 					delegateFDAcquisition := rng.Float64() < 0.5
 					name := fmt.Sprintf("%s/nCols=%d/nOrderingCols=%d/delegateFDAcquisition=%t/k=%d", namePrefix, nCols, nOrderingCols, delegateFDAcquisition, k)
-					log.Infof(ctx, "%s", name)
+					log.Dev.Infof(ctx, "%s", name)
 					var semsToCheck []semaphore.Semaphore
 					tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols, 0 /* matchLen */)
 					if k > 0 {

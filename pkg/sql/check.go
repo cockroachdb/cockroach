@@ -62,7 +62,7 @@ func validateCheckExpr(
 	if indexIDForValidation != 0 {
 		queryStr = fmt.Sprintf(`SELECT %s FROM [%d AS t]@[%d] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), indexIDForValidation, exprStr)
 	}
-	log.Infof(ctx, "validating check constraint %q with query %q", formattedCkExpr, queryStr)
+	log.Dev.Infof(ctx, "validating check constraint %q with query %q", formattedCkExpr, queryStr)
 	violatingRow, err = txn.QueryRowEx(
 		ctx,
 		"validate check constraint",
@@ -297,7 +297,7 @@ func validateForeignKey(
 			return err
 		}
 
-		log.Infof(ctx, "validating MATCH FULL FK %q (%q [%v] -> %q [%v]) with query %q",
+		log.Dev.Infof(ctx, "validating MATCH FULL FK %q (%q [%v] -> %q [%v]) with query %q",
 			fk.Name,
 			srcTable.Name, colNames,
 			targetTable.GetName(), referencedColumnNames,
@@ -322,7 +322,7 @@ func validateForeignKey(
 		return err
 	}
 
-	log.Infof(ctx, "validating FK %q (%q [%v] -> %q [%v]) with query %q",
+	log.Dev.Infof(ctx, "validating FK %q (%q [%v] -> %q [%v]) with query %q",
 		fk.Name,
 		srcTable.Name, colNames, targetTable.GetName(), referencedColumnNames,
 		query,
@@ -421,7 +421,7 @@ func duplicateRowQuery(
 // constraint defined on the table.
 func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) error {
 	dbName := p.CurrentDatabase()
-	log.Infof(ctx, "validating unique constraints in database %s", dbName)
+	log.Dev.Infof(ctx, "validating unique constraints in database %s", dbName)
 	db, err := p.Descriptors().ByNameWithLeased(p.Txn()).Get().Database(ctx, dbName)
 	if err != nil {
 		return err
@@ -597,7 +597,7 @@ func RevalidateUniqueConstraintsInTable(
 		}
 	}
 
-	log.Infof(ctx, "validated all unique constraints in table %s", tableDesc.GetName())
+	log.Dev.Infof(ctx, "validated all unique constraints in table %s", tableDesc.GetName())
 	return nil
 }
 
@@ -632,7 +632,7 @@ func validateUniqueConstraint(
 		return err
 	}
 
-	log.Infof(ctx, "validating unique constraint %q (%q [%v]) with query %q",
+	log.Dev.Infof(ctx, "validating unique constraint %q (%q [%v]) with query %q",
 		constraintName,
 		srcTable.GetName(),
 		colNames,
@@ -666,7 +666,7 @@ func validateUniqueConstraint(
 			// An example error that we want to retry is "no inbound stream"
 			// connection error which can occur if the node that is used for the
 			// distributed query goes down.
-			log.Infof(ctx, "retrying the validation query because of %v", err)
+			log.Dev.Infof(ctx, "retrying the validation query because of %v", err)
 			continue
 		}
 		return err
@@ -700,7 +700,7 @@ func validateUniqueConstraint(
 // ValidateTTLScheduledJobsInCurrentDB is part of the EvalPlanner interface.
 func (p *planner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error {
 	dbName := p.CurrentDatabase()
-	log.Infof(ctx, "validating scheduled jobs in database %s", dbName)
+	log.Dev.Infof(ctx, "validating scheduled jobs in database %s", dbName)
 	db, err := p.Descriptors().ByNameWithLeased(p.Txn()).Get().Database(ctx, dbName)
 	if err != nil {
 		return err

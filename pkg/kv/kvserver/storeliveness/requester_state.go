@@ -201,7 +201,7 @@ func (rsh *requesterStateHandler) markIdleStores(ctx context.Context) {
 	for _, rs := range rsh.requesterState.supportFrom {
 		if !rs.recentlyQueried.CompareAndSwap(active, inactive) {
 			if rs.recentlyQueried.CompareAndSwap(inactive, idle) {
-				log.Infof(ctx, "stopping heartbeats to idle store %+v", rs.state.Target)
+				log.Dev.Infof(ctx, "stopping heartbeats to idle store %+v", rs.state.Target)
 			}
 		}
 	}
@@ -422,13 +422,13 @@ func handleHeartbeatResponse(
 func logSupportFromChange(ctx context.Context, ss slpb.SupportState, ssNew slpb.SupportState) {
 	if ss.Epoch == ssNew.Epoch {
 		if ss.Expiration.IsEmpty() {
-			log.Infof(ctx, "received support from %s", supportChangeStr(ss, ssNew))
+			log.Dev.Infof(ctx, "received support from %s", supportChangeStr(ss, ssNew))
 		} else if log.ExpensiveLogEnabled(ctx, 3) {
-			log.VInfof(ctx, 3, "extended support from %s", supportChangeStr(ss, ssNew))
+			log.Dev.VInfof(ctx, 3, "extended support from %s", supportChangeStr(ss, ssNew))
 		}
 	} else {
 		assert(ss.Epoch < ssNew.Epoch, "epoch regressed")
-		log.Infof(ctx, "lost support from %s", supportChangeStr(ss, ssNew))
+		log.Dev.Infof(ctx, "lost support from %s", supportChangeStr(ss, ssNew))
 	}
 }
 

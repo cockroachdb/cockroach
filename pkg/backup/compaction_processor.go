@@ -92,7 +92,7 @@ func (p *compactBackupsProcessor) Start(ctx context.Context) {
 		for range p.progCh {
 		}
 	}
-	log.Infof(ctx, "starting backup compaction")
+	log.Dev.Infof(ctx, "starting backup compaction")
 	if err := p.FlowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
 		TaskName: compactBackupsProcessorName + ".runCompactBackups",
 		SpanOpt:  stop.ChildSpan,
@@ -391,7 +391,7 @@ func openSSTs(
 		entry: entry,
 		iter:  compactionIter,
 		cleanup: func() {
-			log.VInfof(ctx, 1, "finished with and closing %d files in span %d %v", len(entry.Files), entry.ProgressIdx, entry.Span.String())
+			log.Dev.VInfof(ctx, 1, "finished with and closing %d files in span %d %v", len(entry.Files), entry.ProgressIdx, entry.Span.String())
 			compactionIter.Close()
 			cleanupDirs()
 		},

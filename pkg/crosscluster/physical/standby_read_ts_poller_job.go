@@ -143,7 +143,7 @@ func (r *standbyReadTSPollerResumer) poll(ctx context.Context, execCfg *sql.Exec
 				continue
 			}
 			if log.V(1) {
-				log.Infof(ctx, "attempting to advance reader tenant catalog to %s",
+				log.Dev.Infof(ctx, "attempting to advance reader tenant catalog to %s",
 					replicatedTime)
 			}
 			previousReplicatedTimestamp = replicatedTime

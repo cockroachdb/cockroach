@@ -494,7 +494,7 @@ func TestMVCCHistories(t *testing.T) {
 
 					// Trace the execution in testing.T, to clarify where we
 					// are in case an error occurs.
-					log.Infof(context.Background(), "TestMVCCHistories:\n\t%s: %s", d.Pos, line)
+					log.Dev.Infof(context.Background(), "TestMVCCHistories:\n\t%s: %s", d.Pos, line)
 
 					// Decompose the current script line.
 					var err error

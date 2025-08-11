@@ -65,7 +65,7 @@ func NewStatsProfiler(
 		),
 	}
 
-	log.Infof(ctx, "writing memory stats to %s at last every %s", log.SafeManaged(dir), hp.resetInterval())
+	log.Dev.Infof(ctx, "writing memory stats to %s at last every %s", log.SafeManaged(dir), hp.resetInterval())
 
 	return hp, nil
 }

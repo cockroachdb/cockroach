@@ -212,7 +212,7 @@ func protectTenantSpanWithSession(
 		tsToProtect,
 		ptpb.MakeTenantsTarget([]roachpb.TenantID{tenantID}),
 	)
-	log.Infof(ctx, "protecting timestamp: %#+v", ptsRecord)
+	log.Dev.Infof(ctx, "protecting timestamp: %#+v", ptsRecord)
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
 		return pts.Protect(ctx, ptsRecord)

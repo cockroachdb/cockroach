@@ -1692,7 +1692,7 @@ func TestMergeJoiner(t *testing.T) {
 			// We test all cases with the default memory limit (regular scenario) and a
 			// limit of 1 byte (to force the buffered groups to spill to disk).
 			for _, memoryLimit := range []int64{1, execinfra.DefaultMemoryLimit} {
-				log.Infof(context.Background(), "MemoryLimit=%s/%s", humanizeutil.IBytes(memoryLimit), tc.description)
+				log.Dev.Infof(context.Background(), "MemoryLimit=%s/%s", humanizeutil.IBytes(memoryLimit), tc.description)
 				runner(t, testAllocator, []colexectestutils.Tuples{tc.leftTuples, tc.rightTuples},
 					[][]*types.T{tc.leftTypes, tc.rightTypes},
 					tc.expected, verifier,
@@ -2016,7 +2016,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 		for _, maxRunLength := range []int64{2, 3, 100} {
 			for _, skipValues := range []bool{false, true} {
 				for _, randomIncrement := range []int64{0, 1} {
-					log.Infof(ctx, "numInputBatches=%d/maxRunLength=%d/skipValues=%t/randomIncrement=%d", numInputBatches, maxRunLength, skipValues, randomIncrement)
+					log.Dev.Infof(ctx, "numInputBatches=%d/maxRunLength=%d/skipValues=%t/randomIncrement=%d", numInputBatches, maxRunLength, skipValues, randomIncrement)
 					nTuples := coldata.BatchSize() * numInputBatches
 					typs := []*types.T{types.Int}
 					lCols, rCols, exp := newBatchesOfRandIntRows(nTuples, maxRunLength, skipValues, randomIncrement)

@@ -207,7 +207,7 @@ func (r *Replica) checkConsistencyImpl(
 		// isn't duplicated except in rare leaseholder change scenarios (and concurrent invocation of
 		// RecomputeStats is allowed because these requests block on one another). Also, we're
 		// essentially paced by the consistency checker so we won't call this too often.
-		log.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
+		log.Dev.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
 
 		var b kv.Batch
 		b.AddRawRequest(&kvpb.RecomputeStatsRequest{
@@ -414,7 +414,7 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksu
 			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
 	case c, ok := <-c.result:
 		if log.V(1) {
-			log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
+			log.Dev.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
 		}
 		if !ok || c.Checksum == nil {
 			return CollectChecksumResponse{}, errors.Errorf("no checksum found (ID = %s)", id)

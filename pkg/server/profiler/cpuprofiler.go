@@ -84,7 +84,7 @@ func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CPU
 		return nil, err
 	}
 
-	log.Infof(ctx, "writing cpu profile dumps to %s", log.SafeManaged(dir))
+	log.Dev.Infof(ctx, "writing cpu profile dumps to %s", log.SafeManaged(dir))
 	dumpStore := dumpstore.NewStore(dir, maxCombinedCPUProfFileSize, st)
 	cp := &CPUProfiler{
 		profiler: makeProfiler(
@@ -124,7 +124,7 @@ func (cp *CPUProfiler) takeCPUProfile(
 		}
 		defer pprof.StopCPUProfile()
 		dur := cpuProfileDuration.Get(&cp.st.SV)
-		log.Infof(ctx, "taking CPU profile for %.2fs", dur.Seconds())
+		log.Dev.Infof(ctx, "taking CPU profile for %.2fs", dur.Seconds())
 		select {
 		case <-ctx.Done():
 		case <-time.After(cpuProfileDuration.Get(&cp.st.SV)):
@@ -133,7 +133,7 @@ func (cp *CPUProfiler) takeCPUProfile(
 	}); err != nil {
 		// Only log the errors, since errors can occur due to cpu profiles being taken
 		// elsewhere.
-		log.Infof(ctx, "error during CPU profile: %s", err)
+		log.Dev.Infof(ctx, "error during CPU profile: %s", err)
 		return false
 	}
 	return true

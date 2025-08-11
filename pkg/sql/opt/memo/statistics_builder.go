@@ -5170,7 +5170,7 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 				if distinctVals <= maxValuesForFullHistogramFromCheckConstraint {
 					values, hasNullValue, _ = filterConstraint.CollectFirstColumnValues(sb.ctx, sb.evalCtx)
 					if hasNullValue {
-						log.Infof(
+						log.Dev.Infof(
 							sb.ctx, "null value seen in histogram built from check constraint: %s", filterConstraint.String(),
 						)
 					}
@@ -5223,7 +5223,7 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 					histogram = unencodedBuckets
 				} else {
 					useHistogram = false
-					log.Infof(
+					log.Dev.Infof(
 						sb.ctx, "histogram could not be generated from check constraint due to error: %v", err,
 					)
 				}

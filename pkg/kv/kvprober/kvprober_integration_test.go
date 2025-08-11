@@ -328,7 +328,7 @@ func TestPlannerMakesPlansCoveringAllRanges(t *testing.T) {
 			"SELECT count(*) FROM crdb_internal.ranges").Scan(&numRanges); err != nil {
 			require.True(t, false)
 		}
-		log.Infof(ctx, "want numRanges %v", numRanges)
+		log.Dev.Infof(ctx, "want numRanges %v", numRanges)
 
 		require.Eventually(t, func() bool {
 			step, err := p.ReadPlannerNext(ctx)
@@ -336,7 +336,7 @@ func TestPlannerMakesPlansCoveringAllRanges(t *testing.T) {
 
 			rangeIDToTimesWouldBeProbed[int64(step.RangeID)]++
 
-			log.Infof(ctx, "current rangeID to times would be probed map: %v", rangeIDToTimesWouldBeProbed)
+			log.Dev.Infof(ctx, "current rangeID to times would be probed map: %v", rangeIDToTimesWouldBeProbed)
 
 			for i := int64(1); i <= numRanges; i++ {
 				// Expect all ranges to eventually be returned by Next n or n+1 times.

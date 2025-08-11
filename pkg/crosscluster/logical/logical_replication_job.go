@@ -114,7 +114,7 @@ func (r *logicalReplicationResumer) handleResumeError(
 func (r *logicalReplicationResumer) updateStatusMessage(
 	ctx context.Context, status redact.RedactableString,
 ) {
-	log.Infof(ctx, "%s", status)
+	log.Dev.Infof(ctx, "%s", status)
 	err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		md.Progress.StatusMessage = string(status.Redact())
 		ju.UpdateProgress(md.Progress)
@@ -398,7 +398,7 @@ func (r *logicalReplicationResumer) maybeStartReverseStream(
 	}); err != nil {
 		return err
 	}
-	log.Infof(ctx, "started reverse stream")
+	log.Dev.Infof(ctx, "started reverse stream")
 	return nil
 }
 
@@ -420,7 +420,7 @@ func (r *logicalReplicationResumer) maybePublishCreatedTables(
 	if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, r.job, maxWait); err != nil {
 		return errors.Wrapf(err, "unable to verify that attempted LDR job %d had stopped offline ingesting %s", r.job.ID(), maxWait)
 	}
-	log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", r.job.ID())
+	log.Dev.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", r.job.ID())
 
 	return sql.DescsTxn(ctx, jobExecCtx.ExecCfg(), func(ctx context.Context, txn isql.Txn, descCol *descs.Collection) error {
 		b := txn.KV().NewBatch()
@@ -812,7 +812,7 @@ func (rh *rowHandler) handleMeta(ctx context.Context, meta *execinfrapb.Producer
 	}
 
 	if meta.BulkProcessorProgress == nil {
-		log.VInfof(ctx, 2, "received non progress producer meta: %v", meta)
+		log.Dev.VInfof(ctx, 2, "received non progress producer meta: %v", meta)
 		return nil
 	}
 
@@ -856,7 +856,7 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 	}
 
 	rh.lastPartitionUpdate = timeutil.Now()
-	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime.GoTime())
+	log.Dev.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime.GoTime())
 	if err := rh.job.NoTxn().Update(ctx,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
@@ -938,7 +938,7 @@ func (r *logicalReplicationResumer) ingestWithRetries(
 			break
 		}
 
-		log.Infof(ctx, "hit retryable error %s", err)
+		log.Dev.Infof(ctx, "hit retryable error %s", err)
 		newReplicatedTime := loadOnlineReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob)
 		if lastReplicatedTime.Less(newReplicatedTime) {
 			retrier.Reset()
@@ -993,7 +993,7 @@ func (r *logicalReplicationResumer) OnFailOrCancel(
 		if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, r.job, maxWait); err != nil {
 			log.Errorf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", r.job.ID(), maxWait, err)
 		} else {
-			log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", r.job.ID())
+			log.Dev.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", r.job.ID())
 		}
 		if err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 			return externalcatalog.DropIngestedExternalCatalog(ctx, execCfg, jobExecCtx.User(), details.IngestedExternalCatalog, txn, execCfg.JobRegistry, txn.Descriptors(), fmt.Sprintf("gc for ldr job %d", r.job.ID()))
@@ -1042,7 +1042,7 @@ func (r *logicalReplicationResumer) completeProducerJob(
 	)
 
 	streamID := streampb.StreamID(payload.StreamID)
-	log.Infof(ctx, "attempting to update producer job %d", streamID)
+	log.Dev.Infof(ctx, "attempting to update producer job %d", streamID)
 	if err := timeutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
 		func(ctx context.Context) error {
 			uris, err := r.getClusterUris(ctx, r.job, internalDB)

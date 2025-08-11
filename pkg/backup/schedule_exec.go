@@ -110,7 +110,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 	// pause the schedule. To maintain backward compatability with schedules
 	// without a clusterID, don't pause schedules without a clusterID.
 	if !currentDetails.ClusterID.Equal(uuid.Nil) && currentClusterID != currentDetails.ClusterID {
-		log.Infof(ctx, "schedule %d last run by different cluster %s, pausing until manually resumed",
+		log.Dev.Infof(ctx, "schedule %d last run by different cluster %s, pausing until manually resumed",
 			sj.ScheduleID(),
 			currentDetails.ClusterID)
 		currentDetails.ClusterID = currentClusterID
@@ -119,7 +119,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 		return nil
 	}
 
-	log.Infof(ctx, "Starting scheduled backup %d", sj.ScheduleID())
+	log.Dev.Infof(ctx, "Starting scheduled backup %d", sj.ScheduleID())
 
 	if knobs, ok := cfg.TestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.OverrideAsOfClause != nil {
@@ -188,7 +188,7 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 ) error {
 	if jobState == jobs.StateSucceeded {
 		e.metrics.NumSucceeded.Inc(1)
-		log.Infof(ctx, "backup job %d scheduled by %d succeeded", jobID, schedule.ScheduleID())
+		log.Dev.Infof(ctx, "backup job %d scheduled by %d succeeded", jobID, schedule.ScheduleID())
 		return e.backupSucceeded(ctx, jobs.ScheduledJobTxn(txn), schedule, details, env)
 	}
 

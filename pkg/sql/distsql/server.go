@@ -742,7 +742,7 @@ func (ds *ServerImpl) flowStreamInt(
 	flowID := msg.Header.FlowID
 	streamID := msg.Header.StreamID
 	if log.V(1) {
-		log.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
+		log.Dev.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
 	}
 	f, streamStrategy, cleanup, err := ds.flowRegistry.ConnectInboundStream(
 		ctx, flowID, streamID, stream, flowinfra.SettingFlowStreamTimeout.Get(&ds.Settings.SV),
@@ -775,7 +775,7 @@ func (ds *ServerImpl) flowStream(stream execinfrapb.RPCDistSQL_FlowStreamStream)
 		// flowStreamInt may return an error during normal operation (e.g. a flow
 		// was canceled as part of a graceful teardown). Log this error at the INFO
 		// level behind a verbose flag for visibility.
-		log.Infof(ctx, "%v", err)
+		log.Dev.Infof(ctx, "%v", err)
 	}
 	return err
 }

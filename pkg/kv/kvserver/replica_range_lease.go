@@ -568,7 +568,7 @@ func (p *pendingLeaseRequest) requestLease(
 				return errors.NewAssertionErrorWithWrappedErrf(liveness.ErrRecordCacheMiss, "after heartbeat")
 			}
 			if l.Expiration.ToTimestamp().Less(nl.HeartbeatMinExpiration) {
-				log.Infof(ctx, "expiration of liveness record %s is not greater than "+
+				log.Dev.Infof(ctx, "expiration of liveness record %s is not greater than "+
 					"expiration of the previous lease after liveness heartbeat, retrying...", l)
 				curLiveness = l.Liveness
 				continue
@@ -628,7 +628,7 @@ func (p *pendingLeaseRequest) requestLease(
 				// ErrEpochCondFailed indicates that someone else changed the liveness
 				// record while we were incrementing it. The node could still be
 				// alive, or someone else updated it. Don't log this as an error.
-				log.Infof(ctx, "failed to increment leaseholder's epoch: %s", err)
+				log.Dev.Infof(ctx, "failed to increment leaseholder's epoch: %s", err)
 			} else {
 				log.Errorf(ctx, "failed to increment leaseholder's epoch: %s", err)
 			}
@@ -1465,7 +1465,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					//nolint:deferloop
 					defer func(attempt int) {
 						r.store.metrics.SlowLeaseRequests.Dec(1)
-						log.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)
+						log.Dev.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)
 					}(attempt)
 				case <-ctx.Done():
 					llHandle.Cancel()

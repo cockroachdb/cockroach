@@ -102,7 +102,7 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.Te
 		return errors.Errorf("tenant %d is not in state DROP", info.ID)
 	}
 
-	log.Infof(ctx, "clearing data for tenant %d", info.ID)
+	log.Dev.Infof(ctx, "clearing data for tenant %d", info.ID)
 
 	prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(info.ID))
 	prefixEnd := prefix.PrefixEnd()

@@ -214,7 +214,7 @@ func (e *Writer) writeToSystemEventsTable(
 		log.Errorf(ctx, "Wrote %d events to system.eventlog", rows)
 		return errors.AssertionFailedf("%d rows affected by log insertion; expected %d rows affected", rows, numEntries)
 	}
-	log.Infof(ctx, "Wrote %d events to system.eventlog", numEntries)
+	log.Dev.Infof(ctx, "Wrote %d events to system.eventlog", numEntries)
 	return nil
 }
 

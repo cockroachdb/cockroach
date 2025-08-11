@@ -1045,7 +1045,7 @@ func (txn *Txn) rollback(ctx context.Context) *kvpb.Error {
 						// already committed. We don't spam the logs with those.
 						log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
 					} else {
-						log.Infof(ctx, "async rollback failed: %s", pErr)
+						log.Dev.Infof(ctx, "async rollback failed: %s", pErr)
 					}
 				}
 				return nil

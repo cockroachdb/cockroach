@@ -719,7 +719,7 @@ func MaybeConvertStoredPasswordHash(
 		autoUpgradePasswordHashesBool, autoDowngradePasswordHashesBool, autoRehashOnCostChangeBool,
 		configuredHashMethod, configuredSCRAMCost, cleartext, currentHash,
 		security.GetExpensiveHashComputeSem(ctx),
-		log.Infof,
+		log.Dev.Infof,
 	)
 	if err != nil {
 		// We're not returning an error: clients should not be refused a

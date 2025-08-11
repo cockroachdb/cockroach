@@ -122,8 +122,8 @@ func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 // Stop stops the background tasks. This is used during graceful drain
 // to quiesce just the SQL activity.
 func (s *PersistedSQLStats) Stop(ctx context.Context) {
-	log.Infof(ctx, "stopping persisted SQL stats tasks")
-	defer log.Infof(ctx, "persisted SQL stats tasks successfully shut down")
+	log.Dev.Infof(ctx, "stopping persisted SQL stats tasks")
+	defer log.Dev.Infof(ctx, "persisted SQL stats tasks successfully shut down")
 	s.setDraining.Do(func() {
 		close(s.drain)
 	})
@@ -154,7 +154,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 		var timer timeutil.Timer
 		timer.Reset(initialDelay)
 
-		log.Infof(ctx, "starting sql-stats-worker with initial delay: %s", initialDelay)
+		log.Dev.Infof(ctx, "starting sql-stats-worker with initial delay: %s", initialDelay)
 		for {
 			waitInterval := s.nextFlushInterval()
 			timer.Reset(waitInterval)

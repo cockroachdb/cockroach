@@ -685,7 +685,7 @@ func (t *tokenCounter) adjustLockedAndUnlock(
 		t.metrics.onUnaccounted(unaccounted)
 	}
 	if expensiveLog {
-		log.Infof(ctx, "adjusted %v flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
+		log.Dev.Infof(ctx, "adjusted %v flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
 			t.tokenType, class, t.stream, delta, flag, regularTokens, elasticTokens)
 	}
 }

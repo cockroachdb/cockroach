@@ -119,7 +119,7 @@ func (s *Settings) SetCPUProfiling(to CPUProfileType) error {
 		return errors.New("a CPU profile is already in process, try again later")
 	}
 	if log.V(1) {
-		log.Infof(context.Background(), "active CPU profile type set to: %d", to)
+		log.Dev.Infof(context.Background(), "active CPU profile type set to: %d", to)
 	}
 	return nil
 }

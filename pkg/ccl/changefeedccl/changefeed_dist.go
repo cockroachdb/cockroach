@@ -252,7 +252,7 @@ func startDistChangefeed(
 		return err
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "tracked spans: %s", trackedSpans)
+		log.Dev.Infof(ctx, "tracked spans: %s", trackedSpans)
 	}
 	localState.trackedSpans = trackedSpans
 
@@ -265,7 +265,7 @@ func startDistChangefeed(
 	if progress := localState.progress.GetChangefeed(); progress != nil && progress.SpanLevelCheckpoint != nil {
 		spanLevelCheckpoint = progress.SpanLevelCheckpoint
 		if log.V(2) {
-			log.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
+			log.Dev.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
 		}
 	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
@@ -413,7 +413,7 @@ func makePlan(
 		evalCtx := execCtx.ExtendedEvalContext()
 		oracle := replicaoracle.NewOracle(replicaOracleChoice, dsp.ReplicaOracleConfig(locFilter))
 		if useBulkOracle.Get(&evalCtx.Settings.SV) {
-			log.Infof(ctx, "using bulk oracle for DistSQL planning")
+			log.Dev.Infof(ctx, "using bulk oracle for DistSQL planning")
 			oracle = kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), locFilter, kvfollowerreadsccl.StreakConfig{})
 		}
 		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil, /* planner */
@@ -423,12 +423,12 @@ func makePlan(
 			return nil, nil, err
 		}
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, "spans returned by DistSQL: %v", spanPartitions)
+			log.Dev.Infof(ctx, "spans returned by DistSQL: %v", spanPartitions)
 		}
 		switch {
 		case distMode == sql.LocalDistribution || rangeDistribution == defaultDistribution:
 		case rangeDistribution == balancedSimpleDistribution:
-			log.Infof(ctx, "rebalancing ranges using balanced simple distribution")
+			log.Dev.Infof(ctx, "rebalancing ranges using balanced simple distribution")
 			sender := execCtx.ExecCfg().DB.NonTransactionalSender()
 			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 			ri := kvcoord.MakeRangeIterator(distSender)
@@ -438,7 +438,7 @@ func makePlan(
 				return nil, nil, err
 			}
 			if log.ExpensiveLogEnabled(ctx, 2) {
-				log.Infof(ctx, "spans after balanced simple distribution rebalancing: %v", spanPartitions)
+				log.Dev.Infof(ctx, "spans after balanced simple distribution rebalancing: %v", spanPartitions)
 			}
 		default:
 			return nil, nil, errors.AssertionFailedf("unsupported dist strategy %d and dist mode %d",
@@ -467,7 +467,7 @@ func makePlan(
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 		for i, sp := range spanPartitions {
 			if log.ExpensiveLogEnabled(ctx, 2) {
-				log.Infof(ctx, "watched spans for node %d: %v", sp.SQLInstanceID, sp)
+				log.Dev.Infof(ctx, "watched spans for node %d: %v", sp.SQLInstanceID, sp)
 			}
 
 			watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
@@ -541,7 +541,7 @@ func makePlan(
 		} else if diagURL := diagURL.String(); len(diagURL) > maxLenDiagURL {
 			log.Warningf(ctx, "changefeed plan diagram length is too large to be logged: %d", len(diagURL))
 		} else {
-			log.Infof(ctx, "changefeed plan diagram: %s", diagURL)
+			log.Dev.Infof(ctx, "changefeed plan diagram: %s", diagURL)
 		}
 
 		return p, planCtx, nil

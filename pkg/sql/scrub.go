@@ -512,7 +512,7 @@ func (n *scrubNode) runScrubTableJob(
 		return err
 	}
 
-	log.Infof(ctx, "created and started inspect job %d (no-op)", jobID)
+	log.Dev.Infof(ctx, "created and started inspect job %d (no-op)", jobID)
 	if err := sj.Start(ctx); err != nil {
 		return err
 	}

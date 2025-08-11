@@ -47,7 +47,7 @@ func WaitForNoIngestingNodes(
 		if err == nil {
 			break
 		}
-		log.Infof(ctx, "failed to verify job no longer importing on all nodes: %+v", err)
+		log.Dev.Infof(ctx, "failed to verify job no longer importing on all nodes: %+v", err)
 
 		if timeutil.Since(started) > maxWait {
 			return err

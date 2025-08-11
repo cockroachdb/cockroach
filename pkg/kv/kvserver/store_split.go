@@ -328,7 +328,7 @@ func (s *Store) SplitRange(
 
 	// Acquire unreplicated locks on the RHS. We expect locksToAcquireOnRHS to be
 	// empty if UnreplicatedLockReliabilityUpgrade is false.
-	log.VInfof(ctx, 2, "acquiring %d locks on the RHS", len(locksToAcquireOnRHS))
+	log.Dev.VInfof(ctx, 2, "acquiring %d locks on the RHS", len(locksToAcquireOnRHS))
 	for _, l := range locksToAcquireOnRHS {
 		rightRepl.concMgr.OnLockAcquired(ctx, &l)
 	}

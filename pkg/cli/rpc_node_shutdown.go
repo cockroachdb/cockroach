@@ -103,7 +103,7 @@ func doDrain(
 		return err
 	})
 	if errors.HasType(err, (*timeutil.TimeoutError)(nil)) || grpcutil.IsTimeout(err) {
-		log.Infof(ctx, "drain timed out: %v", err)
+		log.Dev.Infof(ctx, "drain timed out: %v", err)
 		err = errors.New("drain timeout, consider adjusting --drain-wait, especially under " +
 			"custom server.shutdown cluster settings")
 	}
@@ -115,7 +115,7 @@ func doDrainNoTimeout(
 ) (hardError, remainingWork bool, err error) {
 	defer func() {
 		if grpcutil.IsWaitingForInit(err) {
-			log.Infof(ctx, "%v", err)
+			log.Dev.Infof(ctx, "%v", err)
 			err = errors.New("node cannot be drained before it has been initialized")
 		}
 	}()
@@ -152,7 +152,7 @@ func doDrainNoTimeout(
 			if err != nil {
 				// Unexpected error.
 				fmt.Fprintf(stderr, "\n") // finish the line started above.
-				log.Infof(ctx, "graceful drain failed: %v", err)
+				log.Dev.Infof(ctx, "graceful drain failed: %v", err)
 				return false, remaining > 0, err
 			}
 
@@ -181,7 +181,7 @@ func doDrainNoTimeout(
 			if resp.DrainRemainingDescription != "" {
 				// Only show this information in the log; we'd use this for debugging.
 				// (This can be revealed e.g. via --logtostderr.)
-				log.Infof(ctx, "drain details: %s\n", resp.DrainRemainingDescription)
+				log.Dev.Infof(ctx, "drain details: %s\n", resp.DrainRemainingDescription)
 			}
 
 			// Iterate until end of stream, which indicates the drain is
@@ -214,7 +214,7 @@ func doShutdown(
 	defer func() {
 		if err != nil {
 			if grpcutil.IsWaitingForInit(err) {
-				log.Infof(ctx, "encountered error: %v", err)
+				log.Dev.Infof(ctx, "encountered error: %v", err)
 				err = errors.New("node cannot be shut down before it has been initialized")
 				err = errors.WithHint(err, "You can still stop the process using a service manager or a signal.")
 				hardError = true

@@ -1170,7 +1170,7 @@ func (rc *RangeCache) insertLockedInner(ctx context.Context, rs []*cacheEntry) [
 			continue
 		}
 		if log.V(2) {
-			log.Infof(ctx, "adding cache entry: value=%s", ent)
+			log.Dev.Infof(ctx, "adding cache entry: value=%s", ent)
 		}
 		rc.addEntryLocked(ent)
 		entries[i] = ent
@@ -1211,7 +1211,7 @@ func (rc *RangeCache) clearOlderOverlappingLocked(
 		entry := rc.getValue(e)
 		if newEntry.overrides(entry) {
 			if log.V(2) {
-				log.Infof(ctx, "clearing overlapping descriptor: key=%s entry=%s", e.Key, rc.getValue(e))
+				log.Dev.Infof(ctx, "clearing overlapping descriptor: key=%s entry=%s", e.Key, rc.getValue(e))
 			}
 			rc.delEntryLocked(e)
 		} else {

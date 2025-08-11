@@ -647,7 +647,7 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 	for s.NumTasks() > 0 {
 		since := timeutil.Since(start)
 		if !loggedQuiescing && since > 5*time.Second {
-			log.Infof(ctx, "quiescing...")
+			log.Dev.Infof(ctx, "quiescing...")
 			loggedQuiescing = true
 		}
 		if !loggedSlowQuiescing && since > 2*time.Minute {

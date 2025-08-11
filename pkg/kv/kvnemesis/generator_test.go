@@ -36,7 +36,7 @@ func trueForEachIntField(c *OperationConfig, fn func(int) bool) bool {
 			ok := fn(int(v.Int()))
 			if !ok {
 				if log.V(1) {
-					log.Infof(context.Background(), "returned false for %d: %v", v.Int(), v)
+					log.Dev.Infof(context.Background(), "returned false for %d: %v", v.Int(), v)
 				}
 			}
 			return ok
@@ -44,7 +44,7 @@ func trueForEachIntField(c *OperationConfig, fn func(int) bool) bool {
 			for fieldIdx := 0; fieldIdx < v.NumField(); fieldIdx++ {
 				if !forEachIntField(v.Field(fieldIdx)) {
 					if log.V(1) {
-						log.Infof(context.Background(), "returned false for %s in %s",
+						log.Dev.Infof(context.Background(), "returned false for %s in %s",
 							v.Type().Field(fieldIdx).Name, v.Type().Name())
 					}
 					return false

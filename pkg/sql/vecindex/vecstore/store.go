@@ -132,7 +132,7 @@ func New(
 		if ext := tableDesc.ExternalRowData(); ext != nil {
 			// The table is external, so use the external codec and table ID. Also set
 			// the index to read-only.
-			log.VInfof(ctx, 2,
+			log.Dev.VInfof(ctx, 2,
 				"table %d is external, using read-only mode for vector index %d",
 				tableDesc.GetID(), indexID,
 			)

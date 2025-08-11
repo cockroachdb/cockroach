@@ -232,7 +232,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 			// Previous insert was ambiguous, so select a new session ID,
 			// since there may be a row that exists.
 			if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
-				log.Infof(ctx,
+				log.Dev.Infof(ctx,
 					"failed to create a session due to an ambiguous result error: %s",
 					s.ID().String())
 				s.id = ""
@@ -244,7 +244,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Infof(ctx, "created new SQL liveness session %s", s.ID())
+	log.Dev.Infof(ctx, "created new SQL liveness session %s", s.ID())
 	return s, nil
 }
 
@@ -313,7 +313,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 
 	select {
 	case <-l.drain:
-		log.Infof(ctx, "draining heartbeat loop")
+		log.Dev.Infof(ctx, "draining heartbeat loop")
 	default:
 		log.Warningf(ctx, "exiting heartbeat loop with error: %v", l.mu.stopErr)
 		if l.mu.s != nil {
@@ -430,7 +430,7 @@ func NewSQLInstance(
 func (l *Instance) Start(ctx context.Context, regionPhysicalRep []byte) {
 	l.currentRegion = regionPhysicalRep
 
-	log.Infof(ctx, "starting SQL liveness instance")
+	log.Dev.Infof(ctx, "starting SQL liveness instance")
 	// Detach from ctx's cancelation.
 	taskCtx := l.AnnotateCtx(context.Background())
 	taskCtx = logtags.WithTags(taskCtx, logtags.FromContext(ctx))
@@ -472,7 +472,7 @@ func (l *Instance) PauseLivenessHeartbeat(ctx context.Context) {
 	firstToBlock := l.mu.blockedExtensions == 0
 	l.mu.blockedExtensions++
 	if firstToBlock {
-		log.Infof(ctx, "disabling sqlliveness extension because of availability issue on system tables")
+		log.Dev.Infof(ctx, "disabling sqlliveness extension because of availability issue on system tables")
 	}
 }
 
@@ -482,7 +482,7 @@ func (l *Instance) UnpauseLivenessHeartbeat(ctx context.Context) {
 	l.mu.blockedExtensions--
 	lastToUnblock := l.mu.blockedExtensions == 0
 	if lastToUnblock {
-		log.Infof(ctx, "enabling sqlliveness extension due to restored availability")
+		log.Dev.Infof(ctx, "enabling sqlliveness extension due to restored availability")
 	}
 }
 

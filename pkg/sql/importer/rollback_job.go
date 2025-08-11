@@ -72,7 +72,7 @@ func (r *importRollbackResumer) rollbackTable(
 		// if we finish bringing the table online but then can't move
 		// the job to succeeded for some reason.
 		if desc.Public() {
-			log.Infof(ctx, "table %d already PUBLIC cannot rollback", tableID)
+			log.Dev.Infof(ctx, "table %d already PUBLIC cannot rollback", tableID)
 			return nil
 		}
 
@@ -99,7 +99,7 @@ func (r *importRollbackResumer) rollbackTable(
 			return errors.Wrap(err, "rolling back IMPORT INTO in non empty table via DeleteRange")
 		}
 
-		log.Infof(ctx, "transitioning table %q (%d) to PUBLIC", desc.GetName(), desc.GetID())
+		log.Dev.Infof(ctx, "transitioning table %q (%d) to PUBLIC", desc.GetName(), desc.GetID())
 		desc.SetPublic()
 		desc.FinalizeImport()
 		b := txn.KV().NewBatch()

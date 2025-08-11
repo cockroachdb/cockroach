@@ -204,12 +204,12 @@ func outputDotFile(
 				totalAge += int64(cycle) - int64(val)
 			}
 		}
-		log.Infof(context.TODO(), "node %d: missing infos for nodes %s", node.NodeID.Get(), missing)
+		log.Dev.Infof(context.TODO(), "node %d: missing infos for nodes %s", node.NodeID.Get(), missing)
 
 		var sentinelAge int64
 		// GetInfo returns an error if the info is missing.
 		if info, err := node.GetInfo(gossip.KeySentinel); err != nil {
-			log.Infof(context.TODO(), "error getting info for sentinel gossip key %q: %s", gossip.KeySentinel, err)
+			log.Dev.Infof(context.TODO(), "error getting info for sentinel gossip key %q: %s", gossip.KeySentinel, err)
 		} else {
 			_, val, err := encoding.DecodeUint64Ascending(info)
 			if err != nil {

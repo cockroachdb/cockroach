@@ -146,7 +146,7 @@ WHERE id = $1
 				state, j.session.ID(), sqlliveness.SessionID(storedSession))
 		}
 	} else {
-		log.VInfof(ctx, 1, "job %d: update called with no session ID", j.ID())
+		log.Dev.VInfof(ctx, 1, "job %d: update called with no session ID", j.ID())
 	}
 
 	lastRun, ok := row[4].(*tree.DTimestamp)
@@ -435,7 +435,7 @@ func (ju *JobUpdater) PauseRequestedWithFunc(
 	ju.UpdateState(StatePauseRequested)
 	md.Payload.PauseReason = reason
 	ju.UpdatePayload(md.Payload)
-	log.Infof(ctx, "job %d: pause requested recorded with reason %s", md.ID, reason)
+	log.Dev.Infof(ctx, "job %d: pause requested recorded with reason %s", md.ID, reason)
 	return nil
 }
 

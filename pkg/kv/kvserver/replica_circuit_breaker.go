@@ -135,7 +135,7 @@ func newReplicaCircuitBreaker(
 			ambientCtx: ambientCtx,
 			EventHandler: &circuit.EventLogger{
 				Log: func(buf redact.StringBuilder) {
-					log.Infof(ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
+					log.Dev.Infof(ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
 				},
 			},
 			onTrip:  onTrip,

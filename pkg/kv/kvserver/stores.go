@@ -258,7 +258,7 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	if err != nil {
 		return err
 	}
-	log.Infof(ctx, "read %d node addresses from persistent storage", len(bi.Addresses))
+	log.Dev.Infof(ctx, "read %d node addresses from persistent storage", len(bi.Addresses))
 
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
@@ -277,7 +277,7 @@ func (ls *Stores) WriteBootstrapInfo(bi *gossip.BootstrapInfo) error {
 		return err
 	}
 	ctx := ls.AnnotateCtx(context.TODO())
-	log.Infof(ctx, "wrote %d node addresses to persistent storage", len(bi.Addresses))
+	log.Dev.Infof(ctx, "wrote %d node addresses to persistent storage", len(bi.Addresses))
 	return nil
 }
 

@@ -107,7 +107,7 @@ func updateStatus(
 	} else if replicationStatus == jobspb.ReplicationError {
 		log.Warningf(ctx, "%s", status)
 	} else {
-		log.Infof(ctx, "%s", status)
+		log.Dev.Infof(ctx, "%s", status)
 	}
 }
 
@@ -129,7 +129,7 @@ func completeIngestion(
 	cutoverTimestamp hlc.Timestamp,
 ) error {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
-	log.Infof(ctx, "activating destination tenant %d", details.DestinationTenantID)
+	log.Dev.Infof(ctx, "activating destination tenant %d", details.DestinationTenantID)
 	if err := activateTenant(ctx, execCtx, details, cutoverTimestamp); err != nil {
 		return err
 	}
@@ -218,7 +218,7 @@ func ingest(
 		return err
 	}
 	if reverted {
-		log.Infof(ctx, "job completed cutover on resume")
+		log.Dev.Infof(ctx, "job completed cutover on resume")
 		return completeIngestion(ctx, execCtx, ingestionJob, cutoverTimestamp)
 	}
 	if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.BeforeIngestionStart != nil {
@@ -276,14 +276,14 @@ func ingestWithRetries(
 		if jobs.IsPermanentJobError(err) || ctx.Err() != nil {
 			break
 		}
-		log.Infof(ctx, "hit retryable error %s", err)
+		log.Dev.Infof(ctx, "hit retryable error %s", err)
 
 		currentPersistedSpans = resumer.job.Progress().Details.(*jobspb.Progress_StreamIngest).StreamIngest.Checkpoint.ResolvedSpans
 		if !currentPersistedSpans.Equal(previousPersistedSpans) {
 			// If the previous persisted spans are different than the current, it
 			// implies that further progress has been persisted.
 			r.Reset()
-			log.Infof(ctx, "resolved spans have advanced since last retry, resetting retry counter")
+			log.Dev.Infof(ctx, "resolved spans have advanced since last retry, resetting retry counter")
 		}
 		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterRetryIteration != nil {
 			knobs.AfterRetryIteration(err)
@@ -425,13 +425,13 @@ func cutoverTimeIsEligibleForCutover(
 	ctx context.Context, cutoverTime hlc.Timestamp, progress *jobspb.Progress,
 ) bool {
 	if cutoverTime.IsEmpty() {
-		log.Infof(ctx, "empty cutover time, no revert required")
+		log.Dev.Infof(ctx, "empty cutover time, no revert required")
 		return false
 	}
 
 	replicatedTime := replicationutils.ReplicatedTimeFromProgress(progress)
 	if replicatedTime.Less(cutoverTime) {
-		log.Infof(ctx, "job with replicated time %s not yet ready to revert to cutover at %s",
+		log.Dev.Infof(ctx, "job with replicated time %s not yet ready to revert to cutover at %s",
 			replicatedTime,
 			cutoverTime.String())
 		return false
@@ -510,9 +510,9 @@ func maybeRevertToCutoverTimestamp(
 	if err := ingeststopped.WaitForNoIngestingNodes(ctx, p, ingestionJob, maxIngestionProcessorShutdownWait); err != nil {
 		return cutoverTimestamp, false, errors.Wrapf(err, "unable to verify that attempted LDR job %d had stopped offline ingesting %s", ingestionJob.ID(), maxIngestionProcessorShutdownWait)
 	}
-	log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", ingestionJob.ID())
+	log.Dev.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", ingestionJob.ID())
 
-	log.Infof(ctx, "reverting to cutover timestamp %s", cutoverTimestamp)
+	log.Dev.Infof(ctx, "reverting to cutover timestamp %s", cutoverTimestamp)
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
 		p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted()
 	}
@@ -639,7 +639,7 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, s.job, maxIngestionProcessorShutdownWait); err != nil {
 		log.Warningf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", s.job.ID(), maxIngestionProcessorShutdownWait, err)
 	} else {
-		log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", s.job.ID())
+		log.Dev.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", s.job.ID())
 	}
 
 	return execCfg.InternalDB.Txn(ctx, func(

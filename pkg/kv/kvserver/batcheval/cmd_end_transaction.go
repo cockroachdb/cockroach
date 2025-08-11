@@ -833,7 +833,7 @@ func updateFinalizedTxn(
 	opts := storage.MVCCWriteOptions{Stats: ms, Category: fs.BatchEvalReadCategory}
 	if !evalCtx.EvalKnobs().DisableTxnAutoGC && len(externalLocks) == 0 {
 		if log.V(2) {
-			log.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
+			log.Dev.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
 		}
 		if !recordAlreadyExisted {
 			// Nothing to delete, so there's no use writing a deletion tombstone. This

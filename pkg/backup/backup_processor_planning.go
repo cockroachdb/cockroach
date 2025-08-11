@@ -74,7 +74,7 @@ func distBackupPlanSpecs(
 		defer func() {
 			err := kms.Close()
 			if err != nil {
-				log.Infof(ctx, "failed to close KMS: %+v", err)
+				log.Dev.Infof(ctx, "failed to close KMS: %+v", err)
 			}
 		}()
 

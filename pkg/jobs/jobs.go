@@ -328,10 +328,10 @@ func (u Updater) FractionProgressed(ctx context.Context, progressedFn FractionPr
 
 		// Clamp to [0.0, 1.0].
 		if fractionCompleted > 1.0 {
-			log.VInfof(ctx, 1, "clamping fraction completed %f to [0.0, 1.0]", fractionCompleted)
+			log.Dev.VInfof(ctx, 1, "clamping fraction completed %f to [0.0, 1.0]", fractionCompleted)
 			fractionCompleted = 1.0
 		} else if fractionCompleted < 0.0 {
-			log.VInfof(ctx, 1, "clamping fraction completed %f to [0.0, 1.0]", fractionCompleted)
+			log.Dev.VInfof(ctx, 1, "clamping fraction completed %f to [0.0, 1.0]", fractionCompleted)
 			fractionCompleted = 0
 		}
 

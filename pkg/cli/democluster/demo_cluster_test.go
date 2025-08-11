@@ -179,7 +179,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		stopper:           stop.NewStopper(),
 		demoDir:           certsDir,
 		stickyVFSRegistry: fs.NewStickyRegistry(),
-		infoLog:           log.Infof,
+		infoLog:           log.Dev.Infof,
 		warnLog:           log.Warningf,
 		shoutLog:          log.Ops.Shoutf,
 	}
@@ -291,7 +291,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		stopper:           stop.NewStopper(),
 		demoDir:           certsDir,
 		stickyVFSRegistry: fs.NewStickyRegistry(),
-		infoLog:           log.Infof,
+		infoLog:           log.Dev.Infof,
 		warnLog:           log.Warningf,
 		shoutLog:          log.Ops.Shoutf,
 	}
@@ -325,7 +325,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		// Create a table on each tenant to make sure that the tenants are separate.
 		require.NoError(t, conn.Exec(ctx, "CREATE TABLE a (a int PRIMARY KEY)"))
 
-		log.Infof(ctx, "test succeeded")
+		log.Dev.Infof(ctx, "test succeeded")
 		t.Log("test succeeded")
 	})
 }
@@ -355,7 +355,7 @@ func TestTenantCapabilities(t *testing.T) {
 		stopper:           stop.NewStopper(),
 		demoDir:           certsDir,
 		stickyVFSRegistry: fs.NewStickyRegistry(),
-		infoLog:           log.Infof,
+		infoLog:           log.Dev.Infof,
 		warnLog:           log.Warningf,
 		shoutLog:          log.Ops.Shoutf,
 	}

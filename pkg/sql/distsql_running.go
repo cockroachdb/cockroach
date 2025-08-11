@@ -875,7 +875,7 @@ func (dsp *DistSQLPlanner) Run(
 			}
 			tis, err := txn.GetLeafTxnInputState(ctx, readsTree)
 			if err != nil {
-				log.Infof(ctx, "%s: %s", clientRejectedMsg, err)
+				log.Dev.Infof(ctx, "%s: %s", clientRejectedMsg, err)
 				recv.SetError(err)
 				return
 			}

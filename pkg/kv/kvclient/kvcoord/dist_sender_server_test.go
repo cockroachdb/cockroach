@@ -4099,13 +4099,13 @@ func TestRefreshNoFalsePositive(t *testing.T) {
 
 	txn := db.NewTxn(ctx, "test")
 	origTimestamp := txn.ReadTimestamp()
-	log.Infof(ctx, "test txn starting @ %s", origTimestamp)
+	log.Dev.Infof(ctx, "test txn starting @ %s", origTimestamp)
 	require.NoError(t, db.Put(ctx, "a", "test"))
 	// Attempt to overwrite b, which will result in a push.
 	require.NoError(t, txn.Put(ctx, "a", "test2"))
 	afterPush := txn.ReadTimestamp()
 	require.True(t, origTimestamp.Less(afterPush))
-	log.Infof(ctx, "txn pushed to %s", afterPush)
+	log.Dev.Infof(ctx, "txn pushed to %s", afterPush)
 
 	// Read a so that we have to refresh it when we're pushed again.
 	_, err := txn.Get(ctx, "a")
@@ -4115,10 +4115,10 @@ func TestRefreshNoFalsePositive(t *testing.T) {
 
 	// Attempt to overwrite b, which will result in another push. The point of the
 	// test is to check that this push succeeds in refreshing "a".
-	log.Infof(ctx, "test txn writing b")
+	log.Dev.Infof(ctx, "test txn writing b")
 	require.NoError(t, txn.Put(ctx, "b", "test2"))
 	require.True(t, afterPush.Less(txn.ReadTimestamp()))
-	log.Infof(ctx, "txn pushed to %s", txn.ReadTimestamp())
+	log.Dev.Infof(ctx, "txn pushed to %s", txn.ReadTimestamp())
 
 	require.NoError(t, txn.Commit(ctx))
 }

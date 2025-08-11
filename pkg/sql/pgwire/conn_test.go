@@ -90,7 +90,7 @@ func TestConn(t *testing.T) {
 		t.Fatal(err)
 	}
 	serverAddr := ln.Addr()
-	log.Infof(context.Background(), "started listener on %s", serverAddr)
+	log.Dev.Infof(context.Background(), "started listener on %s", serverAddr)
 
 	var g errgroup.Group
 	ctx, cancelConn := context.WithCancel(context.Background())
@@ -202,7 +202,7 @@ func TestPipelineMetric(t *testing.T) {
 		t.Fatal(err)
 	}
 	serverAddr := ln.Addr()
-	log.Infof(context.Background(), "started listener on %s", serverAddr)
+	log.Dev.Infof(context.Background(), "started listener on %s", serverAddr)
 
 	ctx, cancelConn := context.WithCancel(context.Background())
 	defer cancelConn()
@@ -560,26 +560,26 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 		}
 
 		if _, ok := cmd.(sql.Sync); ok {
-			log.Infof(ctx, "advancing Sync")
+			log.Dev.Infof(ctx, "advancing Sync")
 			rd.AdvanceOne()
 			continue
 		}
 
 		exec, ok := cmd.(sql.ExecStmt)
 		if !ok {
-			log.Infof(ctx, "stop wait at: %v", cmd)
+			log.Dev.Infof(ctx, "stop wait at: %v", cmd)
 			return nil
 		}
 		query := exec.AST.String()
 		if !strings.HasPrefix(query, "SELECT t.oid") {
-			log.Infof(ctx, "stop wait at query: %s", query)
+			log.Dev.Infof(ctx, "stop wait at query: %s", query)
 			return nil
 		}
 		if err := execQuery(ctx, query, s, c); err != nil {
 			log.Errorf(ctx, "execQuery %s error: %v", query, err)
 			return err
 		}
-		log.Infof(ctx, "executed query: %s", query)
+		log.Dev.Infof(ctx, "executed query: %s", query)
 		rd.AdvanceOne()
 	}
 }
@@ -1076,7 +1076,7 @@ type pgxTestLogger struct{}
 func (l pgxTestLogger) Log(
 	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
 ) {
-	log.Infof(ctx, "pgx log [%s] %s - %s", level, msg, data)
+	log.Dev.Infof(ctx, "pgx log [%s] %s - %s", level, msg, data)
 }
 
 // pgxTestLogger implements pgx.Logger.
@@ -1706,7 +1706,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 			}
 			defer func() { _ = ln.Close() }()
 			serverAddr := ln.Addr()
-			log.Infof(context.Background(), "started listener on %s", serverAddr)
+			log.Dev.Infof(context.Background(), "started listener on %s", serverAddr)
 			baseURL := fmt.Sprintf("postgres://%s/system?sslmode=disable", serverAddr)
 
 			var netConn net.Conn

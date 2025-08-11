@@ -210,7 +210,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		// `Start` call. This ensures that all the overrides have been
 		// applied by the time the `Start` call completes.
 		overridesCh := s.updateOverrides(ctx)
-		log.Infof(ctx, "applied initial setting overrides")
+		log.Dev.Infof(ctx, "applied initial setting overrides")
 
 		// Set up a worker to watch the monitor asynchronously.
 		if err := s.stopper.RunAsyncTask(ctx, "setting-overrides", func(ctx context.Context) {
@@ -465,7 +465,7 @@ func (s *SettingsWatcher) setLocked(
 			if err := s.settings.Version.SetActiveVersion(ctx, newVersion); err != nil {
 				log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
 			} else {
-				log.Infof(ctx, "set cluster version from %v to: %v", oldVersion, newVersion)
+				log.Dev.Infof(ctx, "set cluster version from %v to: %v", oldVersion, newVersion)
 			}
 		}
 		return
@@ -507,7 +507,7 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) (updateCh <-chan 
 				// storageClusterVersion for use in determining if it's safe to
 				// upgrade the tenant (since we don't want to upgrade tenants
 				// to a version that's beyond that of the storage cluster).
-				log.Infof(ctx, "updating storage cluster cached version from: %v to: %v", s.mu.storageClusterVersion, newVersion)
+				log.Dev.Infof(ctx, "updating storage cluster cached version from: %v to: %v", s.mu.storageClusterVersion, newVersion)
 				s.mu.storageClusterVersion = newVersion
 			}
 			continue

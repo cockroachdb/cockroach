@@ -117,7 +117,7 @@ func (u *UpdateChecker) CheckForUpdates(ctx context.Context) bool {
 
 	if res.StatusCode != http.StatusOK {
 		b, err := io.ReadAll(res.Body)
-		log.Infof(ctx, "failed to check for updates: status: %s, body: %s, error: %v",
+		log.Dev.Infof(ctx, "failed to check for updates: status: %s, body: %s, error: %v",
 			res.Status, b, err)
 		return false
 	}
@@ -140,7 +140,7 @@ func (u *UpdateChecker) CheckForUpdates(ctx context.Context) bool {
 		r.Details = r.Details[len(r.Details)-updateMaxVersionsToReport:]
 	}
 	for _, v := range r.Details {
-		log.Infof(ctx, "a new version is available: %s, details: %s", v.Version, v.Details)
+		log.Dev.Infof(ctx, "a new version is available: %s, details: %s", v.Version, v.Details)
 	}
 	return true
 }

@@ -244,7 +244,7 @@ func restoreWithRetry(
 			// If the previous persisted spans are different than the current, it
 			// implies that further progress has been persisted.
 			r.Reset()
-			log.Infof(ctx, "restored frontier has advanced since last retry, resetting retry counter")
+			log.Dev.Infof(ctx, "restored frontier has advanced since last retry, resetting retry counter")
 		}
 		prevPersistedSpans = currPersistedSpans
 
@@ -1343,7 +1343,7 @@ func createImportingDescriptors(
 					// If we're not in a cluster restore, rebuild the database-level zone
 					// configuration.
 					if details.DescriptorCoverage != tree.AllDescriptors {
-						log.Infof(ctx, "restoring zone configuration for database %d", desc.ID)
+						log.Dev.Infof(ctx, "restoring zone configuration for database %d", desc.ID)
 						var regionNames []catpb.RegionName
 						_ = regionTypeDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
 							regionNames = append(regionNames, name)
@@ -1405,7 +1405,7 @@ func createImportingDescriptors(
 			}
 			// Write the updated databases.
 			for dbID, schemas := range existingDBsWithNewSchemas {
-				log.Infof(ctx, "writing %d schema entries to database %d", len(schemas), dbID)
+				log.Dev.Infof(ctx, "writing %d schema entries to database %d", len(schemas), dbID)
 				desc, err := descsCol.MutableByID(txn.KV()).Desc(ctx, dbID)
 				if err != nil {
 					return err
@@ -2007,7 +2007,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 				return err
 			}
 		}
-		log.Infof(ctx, "finished restoring the pre-data bundle")
+		log.Dev.Infof(ctx, "finished restoring the pre-data bundle")
 	}
 
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.after_pre_data"); err != nil {
@@ -2031,7 +2031,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 
 		resTotal.Add(res)
-		log.Infof(ctx, "finished restoring the validate data bundle")
+		log.Dev.Infof(ctx, "finished restoring the validate data bundle")
 	}
 	{
 		// Restore the main data bundle. We notably only restore the system tables
@@ -2052,7 +2052,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 
 		resTotal.Add(res)
-		log.Infof(ctx, "finished restoring the main data bundle")
+		log.Dev.Infof(ctx, "finished restoring the main data bundle")
 	}
 
 	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
@@ -2356,7 +2356,7 @@ func insertStats(
 	if len(latestStats)%batchSize != 0 {
 		totalNumBatches += 1
 	}
-	log.Infof(ctx, "restore will insert %d TableStatistics in %d batches", len(latestStats), totalNumBatches)
+	log.Dev.Infof(ctx, "restore will insert %d TableStatistics in %d batches", len(latestStats), totalNumBatches)
 	insertStatsProgress := log.Every(10 * time.Second)
 
 	startingStatsInsertion := timeutil.Now()
@@ -2383,7 +2383,7 @@ func insertStats(
 			rate := completedBatches / timeSinceStart
 			msg = fmt.Sprintf("%s; ingesting at the rate of %d batches/sec", msg, rate)
 		}
-		log.Infof(ctx, "%s", msg)
+		log.Dev.Infof(ctx, "%s", msg)
 	}
 
 	mu := struct {
@@ -2586,7 +2586,7 @@ func (r *restoreResumer) publishDescriptors(
 	if err := all.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		d := desc.(catalog.MutableDescriptor)
 		if details.OnlineImpl() && epochBasedInProgressImport(desc) {
-			log.Infof(ctx, "table %q (%d) with in-progress IMPORT remaining offline", desc.GetName(), desc.GetID())
+			log.Dev.Infof(ctx, "table %q (%d) with in-progress IMPORT remaining offline", desc.GetName(), desc.GetID())
 		} else {
 			d.SetPublic()
 		}
@@ -2889,7 +2889,7 @@ func (r *restoreResumer) dropDescriptors(
 				log.Warningf(ctx, "setting low GC TTL for table %q failed: %s", tableToDrop.GetName(), err.Error())
 			}
 		} else {
-			log.Infof(ctx, "cannot lower GC TTL for table %q", tableToDrop.GetName())
+			log.Dev.Infof(ctx, "cannot lower GC TTL for table %q", tableToDrop.GetName())
 		}
 
 		// In the legacy GC job, setting DropTime ensures a table uses RangeClear
@@ -3066,7 +3066,7 @@ func (r *restoreResumer) dropDescriptors(
 	// loop below so that we do not accidentally `b.Put` the descriptor with the
 	// modified schema slice after we have issued a `b.Del` to drop it.
 	for dbID, entry := range dbsWithDeletedSchemas {
-		log.Infof(ctx, "deleting %d schema entries from database %d", len(entry.schemas), dbID)
+		log.Dev.Infof(ctx, "deleting %d schema entries from database %d", len(entry.schemas), dbID)
 		if err := descsCol.WriteDescToBatch(
 			ctx, kvTrace, entry.db, b,
 		); err != nil {

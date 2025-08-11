@@ -168,7 +168,7 @@ func observeNValues(n int) (chan struct{}, func(ev kvcoord.RangeFeedMessage)) {
 			count.Lock()
 			defer count.Unlock()
 			count.c++
-			log.Infof(context.Background(), "Waiting N values: saw %d, want %d; current=%s", count.c, n, ev.Val.Key)
+			log.Dev.Infof(context.Background(), "Waiting N values: saw %d, want %d; current=%s", count.c, n, ev.Val.Key)
 			if count.c == n {
 				close(allSeen)
 			}
@@ -530,7 +530,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 							skipSet.Lock()
 							skipSet.retry.Add(checkpoint.Span)
 							skipSet.Unlock()
-							log.Infof(ctx, "skipping span %s", checkpoint.Span)
+							log.Dev.Infof(ctx, "skipping span %s", checkpoint.Span)
 							*event = transientErrEvent
 							return false, nil
 						}
@@ -546,7 +546,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 							skipSet.Lock()
 							skipSet.stuck.Add(checkpoint.Span)
 							skipSet.Unlock()
-							log.Infof(ctx, "skipping stuck span %s", checkpoint.Span)
+							log.Dev.Infof(ctx, "skipping stuck span %s", checkpoint.Span)
 							return true /* skip */, nil
 						}
 					}
@@ -755,7 +755,7 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 					// Keep track of mux errors due to RangeFeedRetryError_REASON_RANGEFEED_CLOSED.
 					// Those results when we issue CloseStream request.
 					err := t.Error.GoError()
-					log.Infof(ctx, "Got err: %v", err)
+					log.Dev.Infof(ctx, "Got err: %v", err)
 					var retryErr *kvpb.RangeFeedRetryError
 					if ok := errors.As(err, &retryErr); ok && retryErr.Reason == kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED {
 						numRestartStreams.Add(1)

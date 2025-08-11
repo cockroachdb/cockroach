@@ -335,7 +335,7 @@ func (s *Storage) createInstanceRow(
 		Multiplier:     2,
 	}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		log.Infof(ctx, "assigning instance id to rpc addr %s and sql addr %s", rpcAddr, sqlAddr)
+		log.Dev.Infof(ctx, "assigning instance id to rpc addr %s and sql addr %s", rpcAddr, sqlAddr)
 		instanceID, err := assignInstance()
 		// Instance was successfully assigned an ID.
 		if err == nil {

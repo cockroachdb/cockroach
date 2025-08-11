@@ -112,7 +112,7 @@ func (m *Manager) Get(
 		} else {
 			// This is the expected "fast" path; don't emit an event.
 			if log.V(2) {
-				log.Infof(ctx, "config for index %d of table %d found in cache", indexID, tableID)
+				log.Dev.Infof(ctx, "config for index %d of table %d found in cache", indexID, tableID)
 			}
 		}
 		return e.idx, e.err

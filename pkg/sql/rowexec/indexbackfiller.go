@@ -637,7 +637,7 @@ func (b *indexBatchRetry) buildBatchWithRetry(ctx context.Context, db isql.DB) e
 					return errors.Wrapf(err, "failed after %d retries", r.CurrentAttempt())
 				}
 				b.nextChunkSize = max(1, b.nextChunkSize/2)
-				log.Infof(ctx,
+				log.Dev.Infof(ctx,
 					"out of memory while building index entries; retrying with batch size %d. Silencing error: %v",
 					b.nextChunkSize, err)
 				continue

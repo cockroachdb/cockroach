@@ -113,7 +113,7 @@ func (sne SetNodeLivenessEvent) String() string {
 
 func (sce SetCapacityOverrideEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {
-		log.Infof(ctx, "setting capacity override %v", sce.CapacityOverride)
+		log.Dev.Infof(ctx, "setting capacity override %v", sce.CapacityOverride)
 		s.SetCapacityOverride(sce.StoreID, sce.CapacityOverride)
 	})
 }
@@ -124,7 +124,7 @@ func (sce SetCapacityOverrideEvent) String() string {
 
 func (sne SetNodeLocalityEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {
-		log.Infof(ctx, "setting node locality %v", sne.LocalityString)
+		log.Dev.Infof(ctx, "setting node locality %v", sne.LocalityString)
 		if sne.LocalityString != "" {
 			var locality roachpb.Locality
 			if err := locality.Set(sne.LocalityString); err != nil {

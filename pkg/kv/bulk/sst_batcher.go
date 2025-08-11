@@ -928,7 +928,7 @@ func (b *SSTBatcher) maybeDelay(ctx context.Context) (limit.Reservation, error) 
 	// is on by default.
 	if delay := ingestDelay.Get(&b.settings.SV); delay != 0 {
 		if delay > time.Second || log.V(1) {
-			log.Infof(ctx, "%s delaying %s before flushing ingestion buffer...", b.name, delay)
+			log.Dev.Infof(ctx, "%s delaying %s before flushing ingestion buffer...", b.name, delay)
 		}
 		select {
 		case <-ctx.Done():

@@ -435,7 +435,7 @@ func TestRPCPaginatorWithTimeout(t *testing.T) {
 	var timeoutError error
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		timeoutError = err
-		log.Infof(ctx, "error from node %d: %v", nodeID, err)
+		log.Dev.Infof(ctx, "error from node %d: %v", nodeID, err)
 	}
 
 	pagState := paginationState{}

@@ -177,7 +177,7 @@ func (ls *storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error 
 		if err == nil {
 			// We'll learn about this liveness record through gossip eventually, so we
 			// don't bother updating our in-memory view of node liveness.
-			log.Infof(ctx, "created liveness record for n%d", nodeID)
+			log.Dev.Infof(ctx, "created liveness record for n%d", nodeID)
 			return nil
 		}
 		if !isErrRetryLiveness(ctx, err) {

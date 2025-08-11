@@ -5537,7 +5537,7 @@ func requireTerminalErrorSoon(
 					assert.Regexp(t, errRegex, err)
 					return nil
 				}
-				log.Infof(ctx, "waiting for error; skipping test feed message: %s", m.String())
+				log.Dev.Infof(ctx, "waiting for error; skipping test feed message: %s", m.String())
 			}
 		}
 	})
@@ -5862,7 +5862,7 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 		t.Helper()
 		for {
 			if ev, err := f.Next(); err != nil {
-				log.Infof(context.Background(), "got event %v %v", ev, err)
+				log.Dev.Infof(context.Background(), "got event %v %v", ev, err)
 				tsStr = timestampStrFromError(t, err)
 				_ = f.Close()
 				return tsStr

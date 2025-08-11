@@ -231,7 +231,7 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 		t.Fatalf("no store has gossiped %s; gossip contents: %+v",
 			nodeLivenessKey, tc.GetFirstStoreFromServer(t, 0).Gossip().GetInfoStatus())
 	}
-	log.Infof(context.Background(), "%s gossiped from s%d",
+	log.Dev.Infof(context.Background(), "%s gossiped from s%d",
 		nodeLivenessKey, initialServerId)
 
 	newServerIdx := (initialServerId + 1) % numStores

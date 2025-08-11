@@ -182,8 +182,8 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		}
 		c.Server = s
 
-		log.Infof(context.Background(), "server started at %s", c.Server.AdvRPCAddr())
-		log.Infof(context.Background(), "SQL listener at %s", c.Server.AdvSQLAddr())
+		log.Dev.Infof(context.Background(), "server started at %s", c.Server.AdvRPCAddr())
+		log.Dev.Infof(context.Background(), "SQL listener at %s", c.Server.AdvSQLAddr())
 
 		// When run under leader leases, requests will not heartbeat NodeLiveness on
 		// the lease acquisition codepath. This may then cause CLI commands
@@ -249,7 +249,7 @@ func setCLIDefaultsForTests() {
 // stopServer stops the test server.
 func (c *TestCLI) stopServer() {
 	if c.Server != nil {
-		log.Infof(context.Background(), "stopping server at %s / %s",
+		log.Dev.Infof(context.Background(), "stopping server at %s / %s",
 			c.Server.AdvRPCAddr(), c.Server.AdvSQLAddr())
 		c.Server.Stopper().Stop(context.Background())
 	}
@@ -259,7 +259,7 @@ func (c *TestCLI) stopServer() {
 // have changed after this method returns.
 func (c *TestCLI) RestartServer(params TestCLIParams) {
 	c.stopServer()
-	log.Info(context.Background(), "restarting server")
+	log.Dev.Info(context.Background(), "restarting server")
 	s, err := serverutils.StartServerOnlyE(params.T, base.TestServerArgs{
 		Insecure:    params.Insecure,
 		SSLCertsDir: c.certsDir,
@@ -270,14 +270,14 @@ func (c *TestCLI) RestartServer(params TestCLIParams) {
 	}
 	c.Insecure = params.Insecure
 	c.Server = s
-	log.Infof(context.Background(), "restarted server at %s / %s",
+	log.Dev.Infof(context.Background(), "restarted server at %s / %s",
 		c.Server.AdvRPCAddr(), c.Server.AdvSQLAddr())
 	if params.TenantArgs != nil {
 		if c.Insecure {
 			params.TenantArgs.ForceInsecure = true
 		}
 		c.tenant, _ = serverutils.StartTenant(c.t, c.Server, *params.TenantArgs)
-		log.Infof(context.Background(), "restarted tenant SQL only server at %s", c.tenant.SQLAddr())
+		log.Dev.Infof(context.Background(), "restarted tenant SQL only server at %s", c.tenant.SQLAddr())
 	}
 }
 
@@ -293,7 +293,7 @@ func (c *TestCLI) Cleanup() {
 	// Restore stderr.
 	stderr = c.prevStderr
 
-	log.Info(context.Background(), "stopping server and cleaning up CLI test")
+	log.Dev.Info(context.Background(), "stopping server and cleaning up CLI test")
 
 	c.stopServer()
 

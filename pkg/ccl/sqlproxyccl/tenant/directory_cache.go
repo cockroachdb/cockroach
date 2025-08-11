@@ -317,7 +317,7 @@ func (d *directoryCache) getEntry(
 		}
 
 		// Create the tenant entry and enter it into the tenants map.
-		log.Infof(ctx, "creating directory entry for tenant %d", tenantID)
+		log.Dev.Infof(ctx, "creating directory entry for tenant %d", tenantID)
 		entry = &tenantEntry{TenantID: tenantID, RefreshDelay: d.options.refreshDelay}
 		d.mut.tenants[tenantID] = entry
 		return entry
@@ -332,7 +332,7 @@ func (d *directoryCache) getEntry(
 	if err != nil {
 		// Remove the entry from the tenants map, since initialization failed.
 		if d.deleteEntry(entry) {
-			log.Infof(ctx, "error initializing tenant %d: %v", tenantID, err)
+			log.Dev.Infof(ctx, "error initializing tenant %d: %v", tenantID, err)
 		}
 		return nil, err
 	}
@@ -403,7 +403,7 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 					sleepContext(ctx, time.Second)
 					continue
 				} else {
-					log.Info(ctx, "established watch on pods")
+					log.Dev.Info(ctx, "established watch on pods")
 				}
 			}
 
@@ -472,18 +472,18 @@ func (d *directoryCache) updateTenantPodEntry(ctx context.Context, pod *Pod) {
 	case RUNNING, DRAINING:
 		// Add entries of RUNNING and DRAINING pods if they are not already present.
 		if entry.AddPod(pod) {
-			log.Infof(ctx, "added IP address %s for tenant %d", pod.Addr, pod.TenantID)
+			log.Dev.Infof(ctx, "added IP address %s for tenant %d", pod.Addr, pod.TenantID)
 		} else {
-			log.Infof(ctx, "updated IP address %s for tenant %d", pod.Addr, pod.TenantID)
+			log.Dev.Infof(ctx, "updated IP address %s for tenant %d", pod.Addr, pod.TenantID)
 		}
 	case DELETING:
 		// Remove addresses of DELETING pods.
 		if entry.RemovePodByAddr(pod.Addr) {
-			log.Infof(ctx, "deleted IP address %s for tenant %d", pod.Addr, pod.TenantID)
+			log.Dev.Infof(ctx, "deleted IP address %s for tenant %d", pod.Addr, pod.TenantID)
 		}
 	default:
 		// Pods with UNKNOWN state.
-		log.Infof(ctx, "invalid pod entry with IP address %s for tenant %d", pod.Addr, pod.TenantID)
+		log.Dev.Infof(ctx, "invalid pod entry with IP address %s for tenant %d", pod.Addr, pod.TenantID)
 	}
 }
 
@@ -510,7 +510,7 @@ func (d *directoryCache) watchTenants(ctx context.Context, stopper *stop.Stopper
 					sleepContext(ctx, time.Second)
 					continue
 				} else {
-					log.Info(ctx, "established watch on tenants")
+					log.Dev.Info(ctx, "established watch on tenants")
 				}
 			}
 
@@ -586,13 +586,13 @@ func (d *directoryCache) updateTenantMetadataEntry(
 	switch typ {
 	case EVENT_ADDED, EVENT_MODIFIED:
 		entry.UpdateTenant(tenant)
-		log.Infof(ctx, "updated entry for tenant %d: %v", tenant.TenantID, tenant)
+		log.Dev.Infof(ctx, "updated entry for tenant %d: %v", tenant.TenantID, tenant)
 	case EVENT_DELETED:
 		entry.MarkInvalid()
-		log.Infof(ctx, "invalidating entry for tenant %d", tenant.TenantID)
+		log.Dev.Infof(ctx, "invalidating entry for tenant %d", tenant.TenantID)
 	default:
 		// Watch events with EVENT_UNKNOWN type
-		log.Infof(ctx, "invalid watcher entry for tenant %d: %v", tenant.TenantID, tenant)
+		log.Dev.Infof(ctx, "invalid watcher entry for tenant %d: %v", tenant.TenantID, tenant)
 	}
 }
 

@@ -54,7 +54,7 @@ type Network struct {
 // NewNetwork creates nodeCount gossip nodes.
 func NewNetwork(stopper *stop.Stopper, nodeCount int, createAddresses bool) *Network {
 	ctx := context.TODO()
-	log.Infof(ctx, "simulating gossip network with %d nodes", nodeCount)
+	log.Dev.Infof(ctx, "simulating gossip network with %d nodes", nodeCount)
 
 	n := &Network{
 		Nodes:   []*Node{},
@@ -202,7 +202,7 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	log.Infof(context.TODO(), "gossip network simulation: total infos sent=%d, received=%d", n.infosSent(), n.infosReceived())
+	log.Dev.Infof(context.TODO(), "gossip network simulation: total infos sent=%d, received=%d", n.infosSent(), n.infosReceived())
 }
 
 // Start starts all gossip nodes.

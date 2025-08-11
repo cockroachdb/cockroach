@@ -432,7 +432,7 @@ func TestWrongTxnRetry(t *testing.T) {
 
 	var retries int
 	txnClosure := func(ctx context.Context, outerTxn *Txn) error {
-		log.Infof(ctx, "outer retry")
+		log.Dev.Infof(ctx, "outer retry")
 		retries++
 		// Ensure the KV transaction is created.
 		if err := outerTxn.Put(ctx, "a", "b"); err != nil {

@@ -29,7 +29,7 @@ func gcTenant(
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
 	if log.V(2) {
-		log.Infof(ctx, "GC is being considered for tenant: %d", tenID)
+		log.Dev.Infof(ctx, "GC is being considered for tenant: %d", tenID)
 	}
 
 	if progress.Tenant.Status == jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR {

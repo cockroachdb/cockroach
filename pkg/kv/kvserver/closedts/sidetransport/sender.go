@@ -834,7 +834,7 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 				}
 				if err := r.maybeConnect(ctx, stopper); err != nil {
 					if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && everyN.ShouldLog() {
-						log.Infof(ctx, "side-transport failed to connect to n%d: %s", r.nodeID, err)
+						log.Dev.Infof(ctx, "side-transport failed to connect to n%d: %s", r.nodeID, err)
 					}
 					time.Sleep(errSleepTime)
 					continue

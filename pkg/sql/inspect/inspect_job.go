@@ -31,7 +31,7 @@ var _ jobs.Resumer = &inspectResumer{}
 
 // Resume implements the Resumer interface
 func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error {
-	log.Infof(ctx, "starting INSPECT job")
+	log.Dev.Infof(ctx, "starting INSPECT job")
 
 	jobExecCtx := execCtx.(sql.JobExecContext)
 	execCfg := jobExecCtx.ExecCfg()

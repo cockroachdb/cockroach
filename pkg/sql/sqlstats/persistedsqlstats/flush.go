@@ -79,7 +79,7 @@ func (s *PersistedSQLStats) MaybeFlushWithDrainer(
 	}
 
 	if flushingTooSoon {
-		log.Infof(ctx, "flush aborted due to high flush frequency. "+
+		log.Dev.Infof(ctx, "flush aborted due to high flush frequency. "+
 			"The minimum interval between flushes is %s", minimumFlushInterval.String())
 		return false
 	}
@@ -96,7 +96,7 @@ func (s *PersistedSQLStats) MaybeFlushWithDrainer(
 		log.Errorf(ctx, "encountered an error at flush, checking for statement statistics size limit: %v", err)
 	}
 	if limitReached {
-		log.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
+		log.Dev.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
 		return false
 	}
 
@@ -107,7 +107,7 @@ func (s *PersistedSQLStats) MaybeFlushWithDrainer(
 	stmtStats, txnStats, fingerprintCount := ssDrainer.DrainStats(ctx)
 	s.cfg.FlushedFingerprintCount.Inc(fingerprintCount)
 	if log.V(1) {
-		log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
+		log.Dev.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
 			fingerprintCount, s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(lastFlush))
 	}
 
@@ -132,7 +132,7 @@ func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, er
 	intervalToCheck := SQLStatsLimitTableCheckInterval.Get(&s.cfg.Settings.SV)
 	if !s.lastSizeCheck.IsZero() && s.lastSizeCheck.Add(intervalToCheck).After(timeutil.Now()) {
 		if log.V(1) {
-			log.Infof(ctx, "PersistedSQLStats.StmtsLimitSizeReached skipped with last check at: %s and check interval: %s", s.lastSizeCheck, intervalToCheck)
+			log.Dev.Infof(ctx, "PersistedSQLStats.StmtsLimitSizeReached skipped with last check at: %s and check interval: %s", s.lastSizeCheck, intervalToCheck)
 		}
 		return false, nil
 	}

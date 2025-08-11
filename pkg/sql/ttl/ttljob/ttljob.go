@@ -408,7 +408,7 @@ func replanDecider(
 		}
 
 		if shouldReplan || growth > 0.1 || log.V(1) {
-			log.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, consecutive decisions %d/%d, replan %v",
+			log.Dev.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, consecutive decisions %d/%d, replan %v",
 				changed, growth, threshold, currentDecisions, stabilityWindow, replan)
 		}
 
