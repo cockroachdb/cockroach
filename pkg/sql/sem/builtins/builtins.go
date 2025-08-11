@@ -8563,6 +8563,40 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Stable,
 		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "span", Typ: types.BytesArray},
+				{Name: "start_time", Typ: types.Decimal},
+				{Name: "all_revisions", Typ: types.Bool},
+				{Name: "stripped", Typ: types.Bool},
+				// NB: The function can be called with an AOST clause that will be used
+				// as the `end_time` when issuing the ExportRequests for the purposes of
+				// fingerprinting.
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return verboseFingerprint(ctx, evalCtx, args)
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Stable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "span", Typ: types.BytesArray},
+				{Name: "start_time", Typ: types.TimestampTZ},
+				{Name: "all_revisions", Typ: types.Bool},
+				{Name: "stripped", Typ: types.Bool},
+				// NB: The function can be called with an AOST clause that will be used
+				// as the `end_time` when issuing the ExportRequests for the purposes of
+				// fingerprinting.
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return verboseFingerprint(ctx, evalCtx, args)
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Stable,
+		},
 	),
 	"crdb_internal.hide_sql_constants": makeBuiltin(tree.FunctionProperties{
 		Category:     builtinconstants.CategoryString,
@@ -9988,8 +10022,8 @@ func verboseFingerprint(
 		return nil, pgerror.Wrap(err, pgcode.InsufficientPrivilege, "crdb_internal.fingerprint()")
 	}
 
-	if len(args) != 3 {
-		return nil, errors.New("argument list must have three elements")
+	if len(args) < 3 || len(args) > 4 {
+		return nil, errors.New("argument list must have three or four elements")
 	}
 	span, err := parseSpan(args[0])
 	if err != nil {
@@ -10009,7 +10043,12 @@ func verboseFingerprint(
 	}
 
 	allRevisions := bool(tree.MustBeDBool(args[2]))
-	fp, err := evalCtx.Planner.FingerprintSpan(ctx, span, startTimestamp, allRevisions, false /* stripped */)
+
+	var stripped bool
+	if len(args) == 4 {
+		stripped = bool(tree.MustBeDBool(args[3]))
+	}
+	fp, err := evalCtx.Planner.FingerprintSpan(ctx, span, startTimestamp, allRevisions, stripped)
 	if err != nil {
 		return nil, err
 	}

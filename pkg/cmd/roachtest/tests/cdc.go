@@ -646,6 +646,26 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 				ct.t.Fatalf("failed to copy data to fingerprint table: %s", err)
 			}
 			ct.t.Status(fmt.Sprintf("copied data to fingerprint table for %s as of %s", table, stmtTime))
+
+			// split & scatter
+			// THIS TOOK AN HOUR WTF
+			pkeyCols, err := fetchPrimaryKeyCols(db, table)
+			if err != nil {
+				ct.t.Fatalf("failed to fetch primary key columns: %s", err)
+			}
+			ct.t.Status(fmt.Sprintf("fetched primary key columns: %s", pkeyCols))
+
+			const numRanges = 100
+
+			if _, err := db.Exec(fmt.Sprintf(`ALTER TABLE fprint SPLIT AT SELECT %s FROM fprint ORDER BY random() LIMIT %d`, strings.Join(pkeyCols, ", "), numRanges)); err != nil {
+				ct.t.Fatalf("failed to split fingerprint table: %s", err)
+			}
+			fmt.Printf("splitted\n")
+			if _, err := db.Exec(`ALTER TABLE fprint SCATTER`); err != nil {
+				ct.t.Fatalf("failed to scatter fingerprint table: %s", err)
+			}
+			fmt.Printf("scattered\n")
+			ct.t.Status(fmt.Sprintf("split & scattered fingerprint table for %s as of %s", table, stmtTime))
 		} else {
 			// no action needed but it's also slow as shit and not really viable
 		}
@@ -688,7 +708,8 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 			ct.t.Fatalf("failed to create fingerprint validator: %s", err)
 		}
 
-		fprintV.CoarseGrainedChecks = true // DBG
+		// still necessary
+		// fprintV.CoarseGrainedChecks = true // DBG
 
 		var baV cdctest.Validator
 		if _, ok := feedOptions["diff"]; ok {
@@ -2121,7 +2142,7 @@ func registerCDC(r registry.Registry) {
 		Name:      "cdc/tpcc-1000/sink=kafka",
 		Owner:     registry.OwnerCDC,
 		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
+		Cluster:   r.MakeClusterSpec(8, spec.WorkloadNode(), spec.CPU(16)),
 		Leases:    registry.MetamorphicLeases,
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoIBM(),
@@ -2131,9 +2152,9 @@ func registerCDC(r registry.Registry) {
 			defer ct.Close()
 
 			// HERE
-			// 100 warehouses seems ok with coarse graining.
+			// 100 warehouses seems ok with coarse graining. (still cant really keep up tho.. 15min lag?)
 			// at 1k it never finishes copying the initial table state.
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1000, duration: "30m"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
@@ -4770,4 +4791,45 @@ func verifyMetricsUnderThreshold(
 		}
 		return false
 	}
+}
+
+func fetchPrimaryKeyCols(sqlDB *gosql.DB, tableStr string) ([]string, error) {
+	parts := strings.Split(tableStr, ".")
+	var db, table string
+	switch len(parts) {
+	case 1:
+		table = parts[0]
+	case 2:
+		db = parts[0] + "."
+		table = parts[1]
+	default:
+		return nil, errors.Errorf("could not parse table %s", parts)
+	}
+	rows, err := sqlDB.Query(fmt.Sprintf(`
+		SELECT column_name
+		FROM %sinformation_schema.key_column_usage
+		WHERE table_name=$1
+			AND constraint_name like '%%_pkey'
+		ORDER BY ordinal_position`, db),
+		table,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var primaryKeyCols []string
+	for rows.Next() {
+		var primaryKeyCol string
+		if err := rows.Scan(&primaryKeyCol); err != nil {
+			return nil, err
+		}
+		primaryKeyCols = append(primaryKeyCols, primaryKeyCol)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(primaryKeyCols) == 0 {
+		return nil, errors.Errorf("no primary key information found for %s", tableStr)
+	}
+	return primaryKeyCols, nil
 }

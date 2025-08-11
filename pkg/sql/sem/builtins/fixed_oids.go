@@ -2753,6 +2753,8 @@ var builtinOidsArray = []string{
 	2790: `any_in(input: anyelement) -> any`,
 	2791: `trigger_out(trigger: trigger) -> bytes`,
 	2792: `trigger_in(input: anyelement) -> trigger`,
+	2793: `crdb_internal.fingerprint(span: bytes[], start_time: decimal, all_revisions: bool, stripped: bool) -> int`,
+	2794: `crdb_internal.fingerprint(span: bytes[], start_time: timestamptz, all_revisions: bool, stripped: bool) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
