@@ -50,11 +50,7 @@ func TestDistSenderReplicaStall(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "clientTimeout", func(t *testing.T, clientTimeout bool) {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer time.AfterFunc(29*time.Second, func() {
-			log.Errorf(ctx, "about to time out, all stacks:\n\n%s", allstacks.Get())
-		}).Stop()
-		defer cancel()
+		ctx := context.Background()
 
 		// The lease won't move unless we use expiration-based leases. We also
 		// speed up the test by reducing various intervals and timeouts.
@@ -88,6 +84,12 @@ func TestDistSenderReplicaStall(t *testing.T) {
 		key := tc.ScratchRange(t)
 		desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 		t.Logf("created %s", desc)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer time.AfterFunc(29*time.Second, func() {
+			log.Errorf(ctx, "about to time out, all stacks:\n\n%s", allstacks.Get())
+		}).Stop()
+		defer cancel()
 
 		// Move the lease to n3, and make sure everyone has applied it by
 		// replicating a write.
