@@ -328,6 +328,17 @@ func DecodeMVCCValueAndErr(buf []byte, err error) (MVCCValue, error) {
 	return DecodeMVCCValue(buf)
 }
 
+func DecodeTieringAttributeFromMVCCValue(buf []byte) (uint64, error) {
+	if _, ok, err := tryDecodeSimpleMVCCValue(buf); ok || err != nil {
+		return 0, err
+	}
+	v, err := decodeExtendedMVCCValue(buf, true)
+	if err != nil {
+		return 0, err
+	}
+	return v.TieringAttribute, nil
+}
+
 // Static error definitions, to permit inlining.
 var errMVCCValueMissingTag = errors.Errorf("invalid encoded mvcc value, missing tag")
 var errMVCCValueMissingHeader = errors.Errorf("invalid encoded mvcc value, missing header")

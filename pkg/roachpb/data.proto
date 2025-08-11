@@ -87,6 +87,12 @@ message Value {
   bytes raw_bytes = 1;
   // Timestamp of value.
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+
+  // Tiering attribute is used to populate the corresponding field in
+  // MVCCValueHeader.
+  // TODO(radu): prototype the alternative of encoding the tiering attribute
+  // directly into raw_bytes, as an optional header with a special tag.
+  uint64 tiering_attribute = 3;
 }
 
 // KeyValue is a pair of Key and Value for returned Key/Value pairs

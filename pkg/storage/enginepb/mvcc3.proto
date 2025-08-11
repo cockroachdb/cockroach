@@ -217,7 +217,12 @@ message MVCCValueHeader {
     (gogoproto.omitempty) = true,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.Timestamp"];
 
-   // NextID = 7.
+  // Tiering attribute is used when tiering is enabled at the storage layer. It
+  // associates each KV with a uint64 value (typically derived from a timestamp)
+  // in a way that is easily decodable from the storage layer.
+  uint64 tiering_attribute = 7;
+
+  // NextID = 8.
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
