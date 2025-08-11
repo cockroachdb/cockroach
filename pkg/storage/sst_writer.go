@@ -8,7 +8,6 @@ package storage
 import (
 	"bytes"
 	"context"
-	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -49,34 +48,6 @@ var _ Writer = &SSTWriter{}
 var _ ExportWriter = &SSTWriter{}
 var _ InternalWriter = &SSTWriter{}
 
-// NoopFinishAbortWritable wraps an io.Writer to make a objstorage.Writable that
-// will ignore Finish and Abort calls.
-func NoopFinishAbortWritable(w io.Writer) objstorage.Writable {
-	return &noopFinishAbort{Writer: w}
-}
-
-// noopFinishAbort is used to wrap io.Writers for sstable.Writer.
-type noopFinishAbort struct {
-	io.Writer
-}
-
-var _ objstorage.Writable = (*noopFinishAbort)(nil)
-
-// Write is part of the objstorage.Writable interface.
-func (n *noopFinishAbort) Write(p []byte) error {
-	// An io.Writer always returns an error if it can't write the entire slice.
-	_, err := n.Writer.Write(p)
-	return err
-}
-
-// Finish is part of the objstorage.Writable interface.
-func (*noopFinishAbort) Finish() error {
-	return nil
-}
-
-// Abort is part of the objstorage.Writable interface.
-func (*noopFinishAbort) Abort() {}
-
 // MakeIngestionWriterOptions returns writer options suitable for writing SSTs
 // that will subsequently be ingested (e.g. with AddSSTable). These options are
 // also used when constructing sstables for backups (because these sstables may
@@ -116,7 +87,9 @@ func makeSSTRewriteOptions(
 // sstables using this writer, those sstables will be sent over the network,
 // scanned and their keys inserted into new sstables (NB: constructed using
 // MakeIngestionSSTWriter) that ultimately are uploaded to object storage.
-func MakeTransportSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer) SSTWriter {
+func MakeTransportSSTWriter(
+	ctx context.Context, cs *cluster.Settings, f objstorage.Writable,
+) SSTWriter {
 	format := minPebbleFormatVersionInCluster(cs.Version.ActiveVersion(ctx).Version).MaxTableFormat()
 
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
@@ -134,7 +107,7 @@ func MakeTransportSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writ
 	opts.Compression = CompressionAlgorithmBackupTransport.Get(&cs.SV).CompressionProfile()
 	opts.MergerName = "nullptr"
 	return SSTWriter{
-		fw: sstable.NewWriter(&noopFinishAbort{f}, opts),
+		fw: sstable.NewWriter(f, opts),
 	}
 }
 
