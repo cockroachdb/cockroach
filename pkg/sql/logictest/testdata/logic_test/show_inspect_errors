@@ -1,0 +1,27 @@
+user testuser
+
+statement error pq: user testuser does not have INSPECT system privilege
+SHOW INSPECT ERRORS
+
+user root
+
+statement error relation "bad_table" does not exist
+SHOW INSPECT ERRORS FOR TABLE bad_table
+
+statement ok
+CREATE TABLE foo (a INT)
+
+statement ok
+SHOW INSPECT ERRORS
+
+statement ok
+SHOW INSPECT ERRORS WITH DETAILS
+
+statement ok
+SHOW INSPECT ERRORS FOR JOB 666
+
+statement ok
+SHOW INSPECT ERRORS FOR TABLE foo
+
+statement ok
+SHOW INSPECT ERRORS FOR TABLE foo FOR JOB 666 WITH DETAILS
