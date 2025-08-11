@@ -319,6 +319,9 @@ func (ed *EncDatum) Encode(
 	}
 }
 
+// TODO(yuzefovich): evaluate whether this method can call
+// colinfo.MustBeValueEncoded for most types. We need to be careful with
+// mixed-version clusters since Fingerprint is used by row-by-row hash routers.
 func mustUseValueEncodingForFingerprinting(t *types.T) bool {
 	switch t.Family() {
 	// Both TSQuery and TSVector types don't have key-encoding, so we must use
@@ -327,6 +330,9 @@ func mustUseValueEncodingForFingerprinting(t *types.T) bool {
 	// value-encoding (Fingerprint is used by hash routers, so changing its
 	// behavior can result in incorrect results in mixed version clusters).
 	case types.JsonFamily, types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily:
+		return true
+	case types.LTreeFamily:
+		// TODO(paulniziolek): remove this once key encoding is added.
 		return true
 	case types.ArrayFamily:
 		// Note that at time of this writing we don't support arrays of JSON
@@ -348,7 +354,7 @@ func mustUseValueEncodingForFingerprinting(t *types.T) bool {
 
 // Fingerprint appends a unique hash of ed to the given slice. If datums are intended
 // to be deduplicated or grouped with hashes, this function should be used
-// instead of encode. Additionally, Fingerprint has the property that if the
+// instead of Encode. Additionally, Fingerprint has the property that if the
 // fingerprints of a set of datums are appended together, the resulting
 // fingerprint will uniquely identify the set.
 // It takes an optional (can be nil) memory account that should be updated if
