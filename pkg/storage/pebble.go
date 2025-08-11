@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/minversion"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -1077,7 +1078,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 
 	// Read the current store cluster version.
-	storeClusterVersion, minVerFileExists, err := getMinVersion(p.cfg.env.UnencryptedFS, cfg.env.Dir)
+	storeClusterVersion, minVerFileExists, err := minversion.GetMinVersion(p.cfg.env.UnencryptedFS, cfg.env.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -1110,7 +1111,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		if cfg.opts.ErrorIfNotExists || cfg.opts.ReadOnly {
 			// Make sure the message is not confusing if the store does exist but
 			// there is no min version file.
-			filename := p.cfg.env.UnencryptedFS.PathJoin(cfg.env.Dir, MinVersionFilename)
+			filename := p.cfg.env.UnencryptedFS.PathJoin(cfg.env.Dir, minversion.MinVersionFilename)
 			return nil, errors.Errorf(
 				"pebble: database %q does not exist (missing required file %q)",
 				cfg.env.Dir, filename,
@@ -2301,7 +2302,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 
 	// TODO(#90543, cockroachdb/pebble#2285): move spans info to Pebble manifest.
 	if len(spans) > 0 {
-		if err := safeWriteToUnencryptedFile(
+		if err := fs.SafeWriteToUnencryptedFile(
 			p.cfg.env.UnencryptedFS, dir, p.cfg.env.PathJoin(dir, "checkpoint.txt"),
 			checkpointSpansNote(spans),
 			fs.UnspecifiedWriteCategory,
