@@ -965,11 +965,9 @@ func (v *FingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 		fmt.Printf("fprintvalidator: fingerprint: ts: %s; took %s\n", ts, time.Since(start))
 	}(time.Now())
 
-	startTime := v.firstRowTimestamp
-	// fingerprint between start_time and ts. strip timestamps bc they will be different.
 	// TODO: can we fingerprint between prev resolved/prev row and ts to only validate the new row(s)?
-	query := fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint((select crdb_internal.index_span(%d, 1)), %s, true, true) as of system time '%s'`,
-		v.origTableID, startTime.AsOfSystemTime(), ts.AsOfSystemTime())
+	query := fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint((select crdb_internal.index_span(%d, 1)), true) as of system time '%s'`,
+		v.origTableID, ts.AsOfSystemTime())
 	fmt.Printf("fprintvalidator: fingerprint: orig query: %q\n", query)
 	var origFingerprint int
 	if err := v.sqlDBFunc(func(db *gosql.DB) error {
@@ -978,8 +976,8 @@ func (v *FingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 		return err
 	}
 
-	query = fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint((select crdb_internal.index_span(%d, 1)), %s, true, true)`,
-		v.fprintTableID, startTime.AsOfSystemTime())
+	query = fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint((select crdb_internal.index_span(%d, 1)), true)`,
+		v.fprintTableID)
 	fmt.Printf("fprintvalidator: fingerprint: check query: %q\n", query)
 	var checkFingerprint int
 	if err := v.sqlDBFunc(func(db *gosql.DB) error {
