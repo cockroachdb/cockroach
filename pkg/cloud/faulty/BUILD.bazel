@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "faulty",
+    srcs = [
+        "doc.go",
+        "faulty.go",
+        "faulty_reader.go",
+        "faulty_writer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cloud/faulty",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/fault",
+        "//pkg/util/ioctx",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

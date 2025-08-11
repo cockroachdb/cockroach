@@ -14,8 +14,9 @@ import (
 
 type config struct {
 	syncutil.Mutex
-	allowedFailures map[string]struct{}
-	cantSkip        map[string]struct{}
+	allowAllFailures bool
+	allowedFailures  map[string]struct{}
+	cantSkip         map[string]struct{}
 }
 
 var cfg = &config{
@@ -29,6 +30,9 @@ func isAllowedFailure(name string) bool {
 	}
 	cfg.Lock()
 	defer cfg.Unlock()
+	if cfg.allowAllFailures {
+		return true
+	}
 	_, ok := cfg.allowedFailures[name]
 	return ok
 }
@@ -118,5 +122,38 @@ func TestForbidSkip(name string) (cleanup func()) {
 		cfg.Lock()
 		defer cfg.Unlock()
 		delete(cfg.cantSkip, name)
+	}
+}
+
+// TestAllowAllFailures allows all besteffort operations to fail without
+// panicking in test builds.
+//
+// This is useful for tests that inject faults into the system, where
+// besteffort operations like cleanup or telemetry may fail due to the
+// injected errors.
+//
+// Returns a cleanup function that should be deferred to restore the default
+// panic behavior. This has no effect in production builds.
+//
+// Example usage:
+//
+//	func TestWithFaultInjection(t *testing.T) {
+//		defer besteffort.TestAllowAllFailures()()
+//
+//		// Run test with fault injection that may cause besteffort
+//		// operations to fail
+//		runTestWithFaults(t)
+//	}
+func TestAllowAllFailures() (cleanup func()) {
+	if !buildutil.CrdbTestBuild {
+		return func() {}
+	}
+	cfg.Lock()
+	defer cfg.Unlock()
+	cfg.allowAllFailures = true
+	return func() {
+		cfg.Lock()
+		defer cfg.Unlock()
+		cfg.allowAllFailures = false
 	}
 }

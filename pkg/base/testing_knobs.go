@@ -60,4 +60,5 @@ type TestingKnobs struct {
 	VecIndexTestingKnobs           ModuleTestingKnobs
 	PolicyRefresherTestingKnobs    ModuleTestingKnobs
 	NodeCapacityProviderKnobs      ModuleTestingKnobs
+	CloudStorageKnobs              ModuleTestingKnobs
 }
