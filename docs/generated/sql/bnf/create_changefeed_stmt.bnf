@@ -1,9 +1,9 @@
 create_changefeed_stmt ::=
-	'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
-	| 'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
-	| 'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
-	| 'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
-	| 'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 
+	'CREATE' 'CHANGEFEED' for_with_lookahead_variants changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' for_with_lookahead_variants changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' for_with_lookahead_variants changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' for_with_lookahead_variants changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' for_with_lookahead_variants changefeed_table_target ( ( ',' changefeed_table_target ) )* 'INTO' sink 
 	| 'CREATE_CHANGEFEED_FOR_DATABASE' 'CHANGEFEED' 'FOR' 'DATABASE' database_option db_level_changefeed_filter_option 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
 	| 'CREATE_CHANGEFEED_FOR_DATABASE' 'CHANGEFEED' 'FOR' 'DATABASE' database_option db_level_changefeed_filter_option 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
 	| 'CREATE_CHANGEFEED_FOR_DATABASE' 'CHANGEFEED' 'FOR' 'DATABASE' database_option db_level_changefeed_filter_option 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*

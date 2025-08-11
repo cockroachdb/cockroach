@@ -16,6 +16,7 @@ go_library(
         "show_function.go",
         "show_functions.go",
         "show_grants.go",
+        "show_inspect_errors.go",
         "show_jobs.go",
         "show_logical_replication_jobs.go",
         "show_partitions.go",
