@@ -2935,7 +2935,7 @@ func (r *Replica) maybeEnqueueProblemRange(
 	if !isLeaseholder || !leaseValid {
 		// The replicate queue will not process the replica without a valid lease.
 		// Nothing to do.
-		if log.V(2) {
+		if log.V(1) {
 			log.Infof(ctx, "maybeEnqueueProblemRange: not enqueuing replica %s because it is not the leaseholder or the lease is not valid", r.RangeID)
 		}
 		return
@@ -2944,7 +2944,7 @@ func (r *Replica) maybeEnqueueProblemRange(
 	interval := EnqueueProblemRangeInReplicateQueueInterval.Get(&r.store.cfg.Settings.SV)
 	if interval == 0 {
 		// The setting is disabled.
-		if log.V(2) {
+		if log.V(1) {
 			log.Infof(ctx, "maybeEnqueueProblemRange: not enqueuing replica %s because the setting is disabled", r.RangeID)
 		}
 		return
@@ -2953,7 +2953,7 @@ func (r *Replica) maybeEnqueueProblemRange(
 	if lastTime.Add(interval).After(now) {
 		// The last time the replica was enqueued is less than the interval ago,
 		// nothing to do.
-		if log.V(2) {
+		if log.V(1) {
 			log.Infof(ctx, "maybeEnqueueProblemRange: not enqueuing replica %s because the last time the replica was enqueued is less than the interval ago", r.RangeID)
 		}
 		if r.store.metrics.DecommissioningNudgerEnqueueAttempts != nil {
@@ -2967,7 +2967,7 @@ func (r *Replica) maybeEnqueueProblemRange(
 	// expect a race, however if the value changed underneath us we won't enqueue
 	// the replica as we lost the race.
 	if !r.lastProblemRangeReplicateEnqueueTime.CompareAndSwap(lastTime, now) {
-		if log.V(2) {
+		if log.V(1) {
 			log.Infof(ctx, "maybeEnqueueProblemRange: not enqueuing replica %s because the last time the replica was enqueued is less than the interval ago", r.RangeID)
 		}
 		if r.store.metrics.DecommissioningNudgerEnqueueFailure != nil {
@@ -2975,7 +2975,7 @@ func (r *Replica) maybeEnqueueProblemRange(
 		}
 		return
 	}
-	if log.V(2) {
+	if log.V(1) {
 		log.Infof(ctx, "maybeEnqueueProblemRange: enqueuing replica %s", r.RangeID)
 	}
 	if r.store.metrics.DecommissioningNudgerEnqueueSuccess != nil {
