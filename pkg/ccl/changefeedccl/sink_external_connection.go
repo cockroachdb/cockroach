@@ -129,6 +129,7 @@ func init() {
 		changefeedbase.SinkParamClientKey,
 		changefeedbase.SinkParamConfluentAPISecret,
 		changefeedbase.SinkParamAzureAccessKey,
+		changefeedbase.SinkParamAzureAccessKeyCamel,
 	))
 }
 

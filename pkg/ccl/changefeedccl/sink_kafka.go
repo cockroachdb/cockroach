@@ -1065,12 +1065,33 @@ func buildAzureKafkaConfig(u *changefeedbase.SinkURL) (dialConfig kafkaDialConfi
 	hostName := u.Hostname()
 	// saslUser="$ConnectionString"
 	// saslPassword="Endpoint=sb://<NamespaceName>.servicebus.windows.net/;SharedAccessKeyName=<KeyName>;SharedAccessKey=<KeyValue>;
-	sharedAccessKeyName := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyName)
+	sharedAccessKeyNameSnake := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyName)
+	sharedAccessKeyNameCamel := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyNameCamel)
+	if sharedAccessKeyNameSnake != `` && sharedAccessKeyNameCamel != `` {
+		return kafkaDialConfig{}, errors.Newf(`scheme %s cannot specify both %s and %s`, u.Scheme, changefeedbase.SinkParamAzureAccessKeyName, changefeedbase.SinkParamAzureAccessKeyNameCamel)
+	}
+
+	sharedAccessKeyName := sharedAccessKeyNameSnake
+	if sharedAccessKeyName == `` {
+		sharedAccessKeyName = sharedAccessKeyNameCamel
+	}
+
 	if sharedAccessKeyName == `` {
 		return kafkaDialConfig{},
 			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKeyName /*param*/)
 	}
-	sharedAccessKey := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKey)
+
+	sharedAccessKeySnake := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKey)
+	sharedAccessKeyCamel := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyCamel)
+	if sharedAccessKeySnake != `` && sharedAccessKeyCamel != `` {
+		return kafkaDialConfig{}, errors.Newf(`scheme %s cannot specify both %s and %s`, u.Scheme, changefeedbase.SinkParamAzureAccessKey, changefeedbase.SinkParamAzureAccessKeyCamel)
+	}
+
+	sharedAccessKey := sharedAccessKeySnake
+	if sharedAccessKey == `` {
+		sharedAccessKey = sharedAccessKeyCamel
+	}
+
 	if sharedAccessKey == `` {
 		return kafkaDialConfig{},
 			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKey /*param*/)
