@@ -697,6 +697,86 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: sql.udf.delete.count
+      exported_name: sql_udf_delete_count
+      labeled_name: 'sql.udf.count{query_type: delete within UDF invocation}'
+      description: Number of SQL DELETE statements successfully executed within UDF invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.udf.delete.count.internal
+      exported_name: sql_udf_delete_count_internal
+      labeled_name: 'sql.udf.count{query_type: delete within UDF invocation, query_internal: true}'
+      description: Number of SQL DELETE statements successfully executed within UDF invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.insert.count
+      exported_name: sql_udf_insert_count
+      labeled_name: 'sql.udf.count{query_type: insert}'
+      description: Number of SQL INSERT statements successfully executed within UDF invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.udf.insert.count.internal
+      exported_name: sql_udf_insert_count_internal
+      labeled_name: 'sql.udf.count{query_type: insert, query_internal: true}'
+      description: Number of SQL INSERT statements successfully executed within UDF invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.select.count
+      exported_name: sql_udf_select_count
+      labeled_name: 'sql.udf.count{query_type: select}'
+      description: Number of SQL SELECT statements successfully executed within UDF invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.udf.select.count.internal
+      exported_name: sql_udf_select_count_internal
+      labeled_name: 'sql.udf.count{query_type: select, query_internal: true}'
+      description: Number of SQL SELECT statements successfully executed within UDF invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.update.count
+      exported_name: sql_udf_update_count
+      labeled_name: 'sql.udf.count{query_type: update}'
+      description: Number of SQL UPDATE statements successfully executed within UDF invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.udf.update.count.internal
+      exported_name: sql_udf_update_count_internal
+      labeled_name: 'sql.udf.count{query_type: update, query_internal: true}'
+      description: Number of SQL UPDATE statements successfully executed within UDF invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.update.count
       exported_name: sql_update_count
       labeled_name: 'sql.count{query_type: update}'
@@ -9385,6 +9465,70 @@ layers:
     - name: sql.txn.upgraded_iso_level.count.internal
       exported_name: sql_txn_upgraded_iso_level_count_internal
       description: Number of times a weak isolation level was automatically upgraded to a stronger one (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.delete.started.count
+      exported_name: sql_udf_delete_started_count
+      description: Number of SQL DELETE statements started within UDF invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.delete.started.count.internal
+      exported_name: sql_udf_delete_started_count_internal
+      description: Number of SQL DELETE statements started within UDF invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.insert.started.count
+      exported_name: sql_udf_insert_started_count
+      description: Number of SQL INSERT statements started within UDF invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.insert.started.count.internal
+      exported_name: sql_udf_insert_started_count_internal
+      description: Number of SQL INSERT statements started within UDF invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.select.started.count
+      exported_name: sql_udf_select_started_count
+      description: Number of SQL SELECT statements started within UDF invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.select.started.count.internal
+      exported_name: sql_udf_select_started_count_internal
+      description: Number of SQL SELECT statements started within UDF invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.update.started.count
+      exported_name: sql_udf_update_started_count
+      description: Number of SQL UPDATE statements started within UDF invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.update.started.count.internal
+      exported_name: sql_udf_update_started_count_internal
+      description: Number of SQL UPDATE statements started within UDF invocation (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
       unit: COUNT
