@@ -135,6 +135,7 @@ ORDER BY name ASC`)
 		tables = append(tables, table)
 	}
 	tables = append(tables, "crdb_internal.probe_ranges_1s_read_limit_100")
+	tables = append(tables, "cluster_settings_history")
 	sort.Strings(tables)
 
 	var exp []string
