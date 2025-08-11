@@ -7,9 +7,9 @@
 
 package sysutil
 
-import "syscall"
+import "net"
 
 // GetRTTInfo is a stub implementation for non-Linux platforms returning (nil, false).
-func GetRTTInfo(conn syscall.RawConn) (value *RTTInfo, ok bool) {
+func GetRTTInfo(conn *net.TCPConn) (value *RTTInfo, ok bool) {
 	return nil, false
 }

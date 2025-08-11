@@ -7,10 +7,12 @@ package rpc
 
 import (
 	"context"
+	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -63,7 +65,26 @@ func newGRPCPeerOptions(
 			dial: func(ctx context.Context, target string, class rpcbase.ConnectionClass) (*grpc.ClientConn, error) {
 				additionalDialOpts := []grpc.DialOption{grpc.WithStatsHandler(&statsTracker{lm})}
 				additionalDialOpts = append(additionalDialOpts, rpcCtx.testingDialOpts...)
-				return rpcCtx.grpcDialRaw(ctx, target, class, additionalDialOpts...)
+				// onNetworkDial is a callback that is called after we dial a TCP connection.
+				// It is not called if we use the loopback dialer.
+				// We define it here because we need access to the peer map.
+				onNetworkDial := func(conn net.Conn) {
+					tcpConn, ok := conn.(*net.TCPConn)
+					if !ok {
+						return
+					}
+
+					rpcCtx.peers.mu.Lock()
+					defer rpcCtx.peers.mu.Unlock()
+					p := rpcCtx.peers.mu.m[k]
+
+					p.mu.Lock()
+					defer p.mu.Unlock()
+					p.mu.tcpConn = tcpConn
+
+					log.VEventf(ctx, 2, "gRPC network dial: laddr=%v", tcpConn.LocalAddr())
+				}
+				return rpcCtx.grpcDialRaw(ctx, target, class, onNetworkDial, additionalDialOpts...)
 			},
 			connEquals: func(a, b *grpc.ClientConn) bool {
 				return a == b
