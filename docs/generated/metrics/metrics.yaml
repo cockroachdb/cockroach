@@ -533,6 +533,166 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: The rate of this metric shows how frequently new connections are being established. This can be useful in determining if a high rate of incoming new connections is causing additional load on the server due to a misconfigured application.
       essential: true
+    - name: sql.routine.delete.count
+      exported_name: sql_routine_delete_count
+      labeled_name: 'sql.count{query_type: routine-delete}'
+      description: Number of SQL DELETE statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.routine.delete.count.internal
+      exported_name: sql_routine_delete_count_internal
+      labeled_name: 'sql.count{query_type: routine-delete, query_internal: true}'
+      description: Number of SQL DELETE statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.delete.started.count
+      exported_name: sql_routine_delete_started_count
+      labeled_name: 'sql.count{query_type: routine-started-delete}'
+      description: Number of SQL DELETE statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.routine.delete.started.count.internal
+      exported_name: sql_routine_delete_started_count_internal
+      labeled_name: 'sql.count{query_type: routine-started-delete, query_internal: true}'
+      description: Number of SQL DELETE statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.insert.count
+      exported_name: sql_routine_insert_count
+      labeled_name: 'sql.count{query_type: routine-insert}'
+      description: Number of SQL INSERT statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.routine.insert.count.internal
+      exported_name: sql_routine_insert_count_internal
+      labeled_name: 'sql.count{query_type: routine-insert, query_internal: true}'
+      description: Number of SQL INSERT statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.insert.started.count
+      exported_name: sql_routine_insert_started_count
+      labeled_name: 'sql.count{query_type: routine-started-insert}'
+      description: Number of SQL INSERT statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.routine.insert.started.count.internal
+      exported_name: sql_routine_insert_started_count_internal
+      labeled_name: 'sql.count{query_type: routine-started-insert, query_internal: true}'
+      description: Number of SQL INSERT statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.select.count
+      exported_name: sql_routine_select_count
+      labeled_name: 'sql.count{query_type: routine-select}'
+      description: Number of SQL SELECT statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.routine.select.count.internal
+      exported_name: sql_routine_select_count_internal
+      labeled_name: 'sql.count{query_type: routine-select, query_internal: true}'
+      description: Number of SQL SELECT statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.select.started.count
+      exported_name: sql_routine_select_started_count
+      labeled_name: 'sql.count{query_type: routine-started-select}'
+      description: Number of SQL SELECT statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.routine.select.started.count.internal
+      exported_name: sql_routine_select_started_count_internal
+      labeled_name: 'sql.count{query_type: routine-started-select, query_internal: true}'
+      description: Number of SQL SELECT statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.update.count
+      exported_name: sql_routine_update_count
+      labeled_name: 'sql.count{query_type: routine-update}'
+      description: Number of SQL UPDATE statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.routine.update.count.internal
+      exported_name: sql_routine_update_count_internal
+      labeled_name: 'sql.count{query_type: routine-update, query_internal: true}'
+      description: Number of SQL UPDATE statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.update.started.count
+      exported_name: sql_routine_update_started_count
+      labeled_name: 'sql.count{query_type: routine-started-update}'
+      description: Number of SQL UPDATE statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.routine.update.started.count.internal
+      exported_name: sql_routine_update_started_count_internal
+      labeled_name: 'sql.count{query_type: routine-started-update, query_internal: true}'
+      description: Number of SQL UPDATE statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.select.count
       exported_name: sql_select_count
       labeled_name: 'sql.count{query_type: select}'

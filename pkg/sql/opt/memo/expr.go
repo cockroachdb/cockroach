@@ -746,6 +746,10 @@ type UDFDefinition struct {
 	// Body. It is only populated when verbose tracing is enabled.
 	BodyStmts []string
 
+	// BodyTags contains the type of each statement in Body, which is populated
+	// via `tree.Statement.StatementTag()`.
+	BodyTags []string
+
 	// FirstStmtOutput allows the result of the first body statement to be
 	// redirected. Only one of the options can be set. If one is set, there will
 	// be at least two body statements - the first with redirected output, and the
