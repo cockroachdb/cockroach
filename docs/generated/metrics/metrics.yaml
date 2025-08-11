@@ -7369,6 +7369,17 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: round-trip-default-class-latency
+      exported_name: round_trip_default_class_latency
+      description: |
+        Distribution of round-trip latencies with other nodes.
+
+        Similar to round-trip-latency, but only for default class connections.
+      y_axis_label: Round-trip time
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: round-trip-latency
       exported_name: round_trip_latency
       description: |
@@ -7381,6 +7392,39 @@ layers:
         metrics such as packet loss, retransmits, etc, to conclusively diagnose network
         issues. Heartbeats are not very frequent (~seconds), so they may not capture
         rare or short-lived degradations.
+      y_axis_label: Round-trip time
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: round-trip-raft-class-latency
+      exported_name: round_trip_raft_class_latency
+      description: |
+        Distribution of round-trip latencies with other nodes.
+
+        Similar to round-trip-latency, but only for raft class connections.
+      y_axis_label: Round-trip time
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: round-trip-rangefeed-class-latency
+      exported_name: round_trip_rangefeed_class_latency
+      description: |
+        Distribution of round-trip latencies with other nodes.
+
+        Similar to round-trip-latency, but only for rangefeed class connections.
+      y_axis_label: Round-trip time
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: round-trip-system-class-latency
+      exported_name: round_trip_system_class_latency
+      description: |
+        Distribution of round-trip latencies with other nodes.
+
+        Similar to round-trip-latency, but only for system class connections.
       y_axis_label: Round-trip time
       type: HISTOGRAM
       unit: NANOSECONDS
