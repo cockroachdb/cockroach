@@ -967,7 +967,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 
 	cost := mem.RootExpr().Cost()
-	if cost.MaxCardinality() <= 1 {
+	if cost.MaxCardinality() <= 10 {
 		// Use the row-by-row engine if the entire plan is guaranteed to operate
 		// on one row or less.
 		planTop.avoidVectorization = true
