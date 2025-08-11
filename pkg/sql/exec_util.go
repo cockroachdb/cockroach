@@ -1397,6 +1397,95 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaRoutineSelectStarted = metric.Metadata{
+		Name:         "sql.routine.select.started.count",
+		Help:         "Number of SQL SELECT statements started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-started-select"),
+		Essential:    true,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+	}
+	MetaRoutineUpdateStarted = metric.Metadata{
+		Name:         "sql.routine.update.started.count",
+		Help:         "Number of SQL UPDATE statements started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-started-update"),
+		Essential:    true,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+	}
+	MetaRoutineInsertStarted = metric.Metadata{
+		Name:         "sql.routine.insert.started.count",
+		Help:         "Number of SQL INSERT statements started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-started-insert"),
+		Essential:    true,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+	}
+	MetaRoutineDeleteStarted = metric.Metadata{
+		Name:         "sql.routine.delete.started.count",
+		Help:         "Number of SQL DELETE statements started within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-started-delete"),
+		Essential:    true,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+	}
+
+	MetaRoutineSelectExecuted = metric.Metadata{
+		Name:         "sql.routine.select.count",
+		Help:         "Number of SQL SELECT statements successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-select"),
+		Essential:    true,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+	}
+	MetaRoutineUpdateExecuted = metric.Metadata{
+		Name:         "sql.routine.update.count",
+		Help:         "Number of SQL UPDATE statements successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-update"),
+		Essential:    true,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+	}
+	MetaRoutineInsertExecuted = metric.Metadata{
+		Name:         "sql.routine.insert.count",
+		Help:         "Number of SQL INSERT statements successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-insert"),
+		Essential:    true,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+	}
+	MetaRoutineDeleteExecuted = metric.Metadata{
+		Name:         "sql.routine.delete.count",
+		Help:         "Number of SQL DELETE statements successfully executed within routine invocation",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-delete"),
+		Essential:    true,
+		Category:     metric.Metadata_SQL,
+		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
