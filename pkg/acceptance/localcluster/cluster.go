@@ -181,7 +181,7 @@ func (c *Cluster) Start(ctx context.Context) {
 			// Luckily, it takes only ~2 seconds from zero to a replicated 4
 			// node cluster.
 			if err := <-chs[0]; err != nil {
-				log.Fatalf(ctx, "while starting first node: %s", err)
+				log.Dev.Fatalf(ctx, "while starting first node: %s", err)
 			}
 			ch := make(chan error)
 			close(ch)
@@ -192,7 +192,7 @@ func (c *Cluster) Start(ctx context.Context) {
 	if !c.Cfg.NoWait {
 		for i := range chs {
 			if err := <-chs[i]; err != nil {
-				log.Fatalf(ctx, "node %d: %s", i+1, err)
+				log.Dev.Fatalf(ctx, "node %d: %s", i+1, err)
 			}
 		}
 	}
@@ -295,7 +295,7 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 	n.Cfg.ExtraArgs = append(args, cfg.ExtraArgs...)
 
 	if err := os.MkdirAll(n.logDir(), 0755); err != nil {
-		log.Fatalf(context.Background(), "%v", err)
+		log.Dev.Fatalf(context.Background(), "%v", err)
 	}
 
 	joins := c.joins()
@@ -335,7 +335,7 @@ func (c *Cluster) isReplicated() (bool, string) {
 		if testutils.IsError(err, "(table|relation) \"crdb_internal.ranges\" does not exist") {
 			return true, ""
 		}
-		log.Fatalf(context.Background(), "%v", err)
+		log.Dev.Fatalf(context.Background(), "%v", err)
 	}
 	defer rows.Close()
 
@@ -347,7 +347,7 @@ func (c *Cluster) isReplicated() (bool, string) {
 		var startKey, endKey roachpb.Key
 		var numReplicas int
 		if err := rows.Scan(&rangeID, &startKey, &endKey, &numReplicas); err != nil {
-			log.Fatalf(context.Background(), "unable to scan range replicas: %s", err)
+			log.Dev.Fatalf(context.Background(), "unable to scan range replicas: %s", err)
 		}
 		fmt.Fprintf(tw, "\t%s\t%s\t[%d]\t%d\n", startKey, endKey, rangeID, numReplicas)
 		// This check is coarse since it doesn't know the real configuration.
@@ -369,11 +369,11 @@ func (c *Cluster) UpdateZoneConfig(rangeMinBytes, rangeMaxBytes int64) {
 
 	buf, err := protoutil.Marshal(&zone)
 	if err != nil {
-		log.Fatalf(context.Background(), "%v", err)
+		log.Dev.Fatalf(context.Background(), "%v", err)
 	}
 	_, err = c.Nodes[0].DB().Exec(`UPSERT INTO system.zones (id, config) VALUES (0, $1)`, buf)
 	if err != nil {
-		log.Fatalf(context.Background(), "%v", err)
+		log.Dev.Fatalf(context.Background(), "%v", err)
 	}
 }
 
@@ -481,13 +481,13 @@ func (n *Node) StatusClient(ctx context.Context) serverpb.RPCStatusClient {
 	if !rpcbase.TODODRPC {
 		conn, err := n.rpcCtx.GRPCUnvalidatedDial(n.RPCAddr(), roachpb.Locality{}).Connect(ctx)
 		if err != nil {
-			log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
+			log.Dev.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 		}
 		return serverpb.NewGRPCStatusClientAdapter(conn)
 	}
 	conn, err := n.rpcCtx.DRPCUnvalidatedDial(n.RPCAddr(), roachpb.Locality{}).Connect(ctx)
 	if err != nil {
-		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
+		log.Dev.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 	}
 	return serverpb.NewDRPCStatusClientAdapter(conn)
 }
@@ -506,7 +506,7 @@ func (n *Node) listeningURLFile() string {
 // Start starts a node.
 func (n *Node) Start(ctx context.Context, joins ...string) {
 	if err := <-n.StartAsync(ctx, joins...); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 }
 
@@ -640,7 +640,7 @@ func portFromURL(rawURL string) (string, *url.URL, error) {
 func makeDB(url string, numWorkers int, dbName string) *gosql.DB {
 	conn, err := gosql.Open("postgres", url)
 	if err != nil {
-		log.Fatalf(context.Background(), "%v", err)
+		log.Dev.Fatalf(context.Background(), "%v", err)
 	}
 	if numWorkers == 0 {
 		numWorkers = 1

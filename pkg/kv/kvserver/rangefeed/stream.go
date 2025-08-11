@@ -86,7 +86,7 @@ func (s *PerRangeEventSink) SendError(err *kvpb.Error) {
 		Error: *transformRangefeedErrToClientError(err),
 	})
 	if ev.Error == nil {
-		log.Fatalf(context.Background(),
+		log.Dev.Fatalf(context.Background(),
 			"unexpected: SendWithoutBlocking called with non-error event")
 	}
 	if err := s.wrapped.sendBuffered(ev, nil); err != nil {

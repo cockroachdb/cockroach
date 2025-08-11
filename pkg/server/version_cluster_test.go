@@ -158,7 +158,7 @@ func prev(version roachpb.Version) roachpb.Version {
 	// Logic for versions below 19.1.
 
 	if version.Major > 2 {
-		log.Fatalf(context.Background(), "can't compute previous version for %s", version)
+		log.Dev.Fatalf(context.Background(), "can't compute previous version for %s", version)
 	}
 
 	if version.Minor != 0 {

@@ -265,7 +265,7 @@ func (s *SpanSet) Intersects(other *SpanSet) bool {
 // only the span boundaries are checked.
 func (s *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
 	if err := s.CheckAllowed(access, span); err != nil {
-		log.Fatalf(context.TODO(), "%v", err)
+		log.Dev.Fatalf(context.TODO(), "%v", err)
 	}
 }
 

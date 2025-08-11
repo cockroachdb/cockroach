@@ -192,7 +192,7 @@ func (s *Store) Apply(
 
 	deleted, added, err := s.applyInternal(ctx, updates...)
 	if err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 	return deleted, added
 }

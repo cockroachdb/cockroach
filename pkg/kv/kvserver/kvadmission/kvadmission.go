@@ -465,7 +465,7 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 		if err != nil {
 			// This shouldn't be happening.
 			if buildutil.CrdbTestBuild {
-				log.Fatalf(context.Background(), "%s", errors.WithAssertionFailure(err))
+				log.Dev.Fatalf(context.Background(), "%s", errors.WithAssertionFailure(err))
 			}
 			if n.every.ShouldLog() {
 				log.Dev.Errorf(context.Background(), "%s", err)
@@ -574,7 +574,7 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 	}
 
 	if entry.RequestedCount == 0 {
-		log.Fatal(ctx, "found (unexpected) empty raft command for below-raft admission")
+		log.Dev.Fatal(ctx, "found (unexpected) empty raft command for below-raft admission")
 	}
 	wi := admission.WorkInfo{
 		TenantID:        entry.TenantID,
@@ -604,7 +604,7 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 		return false
 	}
 	if handle.UseAdmittedWorkDone() {
-		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
+		log.Dev.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
 	}
 	return true
 }

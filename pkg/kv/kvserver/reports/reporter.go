@@ -270,7 +270,7 @@ func (stats *Reporter) meta1LeaseHolderStore(ctx context.Context) *kvserver.Stor
 		return nil
 	}
 	if err != nil {
-		log.Fatalf(ctx, "unexpected error when visiting stores: %s", err)
+		log.Dev.Fatalf(ctx, "unexpected error when visiting stores: %s", err)
 	}
 	if repl.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
 		return store
@@ -707,7 +707,7 @@ func (r *meta2RangeIter) readBatch(ctx context.Context) (retErr error) {
 	defer func() { r.handleErr(ctx, retErr) }()
 
 	if len(r.buffer) > 0 {
-		log.Fatalf(ctx, "buffer not exhausted: %d keys remaining", len(r.buffer))
+		log.Dev.Fatalf(ctx, "buffer not exhausted: %d keys remaining", len(r.buffer))
 	}
 	if r.txn == nil {
 		r.txn = r.db.NewTxn(ctx, "rangeStoreImpl")

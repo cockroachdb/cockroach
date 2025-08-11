@@ -77,7 +77,7 @@ func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s
 	desc := repl.Desc()
 	conf, err := repl.SpanConfig()
 	if err != nil {
-		log.Fatalf(ctx, "conf not found err=%v", err)
+		log.Dev.Fatalf(ctx, "conf not found err=%v", err)
 	}
 	log.VEventf(ctx, 1, "maybe add replica=%s, config=%s", desc, conf)
 

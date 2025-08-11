@@ -169,11 +169,11 @@ func (l *Instance) clearSession(ctx context.Context) (createNewSession bool) {
 
 func (l *Instance) clearSessionLocked(ctx context.Context) (createNewSession bool) {
 	if l.mu.s == nil {
-		log.Fatal(ctx, "expected session to be set")
+		log.Dev.Fatal(ctx, "expected session to be set")
 	}
 	// When the session is set, blockCh should not be set.
 	if l.mu.blockCh != nil {
-		log.Fatal(ctx, "unexpected blockCh")
+		log.Dev.Fatal(ctx, "unexpected blockCh")
 	}
 
 	l.mu.s = nil
@@ -286,7 +286,7 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	}
 	if err != nil {
 		if ctx.Err() == nil {
-			log.Fatalf(ctx, "expected canceled ctx on err: %s", err)
+			log.Dev.Fatalf(ctx, "expected canceled ctx on err: %s", err)
 		}
 		return false, err
 	}
@@ -301,7 +301,7 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 func (l *Instance) heartbeatLoop(ctx context.Context) {
 	err := l.heartbeatLoopInner(ctx)
 	if err == nil {
-		log.Fatal(ctx, "expected heartbeat to always terminate with an error")
+		log.Dev.Fatal(ctx, "expected heartbeat to always terminate with an error")
 	}
 
 	// Keep track of the fact that this Instance is not usable anymore. Further

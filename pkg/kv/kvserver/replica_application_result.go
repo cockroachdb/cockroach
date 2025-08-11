@@ -101,7 +101,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	}
 
 	if cmd.Rejection != kvserverbase.ProposalRejectionPermanent && pErr == nil {
-		log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", cmd.proposal)
+		log.Dev.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", cmd.proposal)
 	}
 	if pErr != nil {
 		// A forced error was set (i.e. we did not apply the proposal,
@@ -236,7 +236,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	} else if cmd.proposal.Local.Reply != nil {
 		cmd.response.Reply = cmd.proposal.Local.Reply
 	} else {
-		log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", cmd.proposal)
+		log.Dev.Fatalf(ctx, "proposal must return either a reply or an error: %+v", cmd.proposal)
 	}
 
 	// The current proposal has no error (and wasn't reproposed successfully or we
@@ -270,7 +270,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 			resp.LeaseAppliedIndex = cmd.LeaseIndex
 			resp.RangeDesc = *r.Desc()
 		} else {
-			log.Fatalf(ctx, "PopulateBarrierResponse for %T", cmd.response.Reply.Responses[0].GetInner())
+			log.Dev.Fatalf(ctx, "PopulateBarrierResponse for %T", cmd.response.Reply.Responses[0].GetInner())
 		}
 	}
 
@@ -279,14 +279,14 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 		if resp := cmd.response.Reply.Responses[0].GetSubsume(); resp != nil {
 			resp.LeaseAppliedIndex = cmd.LeaseIndex
 		} else {
-			log.Fatalf(ctx, "RepopulateSubsumeResponse for %T", cmd.response.Reply.Responses[0].GetInner())
+			log.Dev.Fatalf(ctx, "RepopulateSubsumeResponse for %T", cmd.response.Reply.Responses[0].GetInner())
 		}
 	}
 
 	if pErr == nil {
 		cmd.localResult = cmd.proposal.Local
 	} else if cmd.localResult != nil {
-		log.Fatalf(ctx, "shouldn't have a local result if command processing failed. pErr: %s", pErr)
+		log.Dev.Fatalf(ctx, "shouldn't have a local result if command processing failed. pErr: %s", pErr)
 	}
 }
 
@@ -479,7 +479,7 @@ func (r *Replica) handleMergeResult(ctx context.Context, merge *kvserverpb.Merge
 		merge.RightReadSummary,
 	); err != nil {
 		// Our in-memory state has diverged from the on-disk state.
-		log.Fatalf(ctx, "failed to update store after merging range: %s", err)
+		log.Dev.Fatalf(ctx, "failed to update store after merging range: %s", err)
 	}
 }
 
@@ -640,7 +640,7 @@ func (r *Replica) handleGCHintResult(ctx context.Context, hint *roachpb.GCHint) 
 
 func (r *Replica) handleVersionResult(ctx context.Context, version *roachpb.Version) {
 	if (*version == roachpb.Version{}) {
-		log.Fatal(ctx, "not expecting empty replica version downstream of raft")
+		log.Dev.Fatal(ctx, "not expecting empty replica version downstream of raft")
 	}
 	r.mu.Lock()
 	r.shMu.state.Version = version
@@ -692,14 +692,14 @@ func (r *Replica) handleChangeReplicasResult(
 			// We destroyed the data when the batch committed so don't destroy it again.
 			DestroyData: false,
 		}); err != nil {
-		log.Fatalf(ctx, "failed to remove replica: %v", err)
+		log.Dev.Fatalf(ctx, "failed to remove replica: %v", err)
 	}
 
 	// NB: postDestroyRaftMuLocked requires that the batch which removed the data
 	// be durably synced to disk, which we have.
 	// See replicaAppBatch.ApplyToStateMachine().
 	if err := r.postDestroyRaftMuLocked(ctx); err != nil {
-		log.Fatalf(ctx, "failed to run Replica postDestroy: %v", err)
+		log.Dev.Fatalf(ctx, "failed to run Replica postDestroy: %v", err)
 	}
 
 	return true

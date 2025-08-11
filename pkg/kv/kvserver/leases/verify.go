@@ -124,7 +124,7 @@ func verifyAcquisition(ctx context.Context, st Settings, i VerifyInput) error {
 	leaderKnown := leader != roachpb.ReplicaID(raft.None)
 	iAmTheLeader := i.RaftStatus.RaftState == raftpb.StateLeader
 	if (leader == i.LocalReplicaID) != iAmTheLeader {
-		log.Fatalf(ctx, "inconsistent Raft state: %s", i.RaftStatus)
+		log.Dev.Fatalf(ctx, "inconsistent Raft state: %s", i.RaftStatus)
 	}
 
 	// If the local replica is the raft leader, it can proceed with the lease

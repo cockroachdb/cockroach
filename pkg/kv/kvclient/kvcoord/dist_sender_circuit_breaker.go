@@ -628,7 +628,7 @@ func (r *ReplicaCircuitBreaker) Track(
 	if inflightReqs := r.inflightReqs.Add(1); inflightReqs == 1 {
 		r.stallSince.Store(now)
 	} else if inflightReqs < 0 {
-		log.Fatalf(ctx, "inflightReqs %d < 0", inflightReqs) // overflow
+		log.Dev.Fatalf(ctx, "inflightReqs %d < 0", inflightReqs) // overflow
 	}
 
 	// If enabled, create a send context that can be used to cancel in-flight
@@ -680,7 +680,7 @@ func (r *ReplicaCircuitBreaker) done(
 
 	// Untrack the request.
 	if inflightReqs := r.inflightReqs.Add(-1); inflightReqs < 0 {
-		log.Fatalf(ctx, "inflightReqs %d < 0", inflightReqs)
+		log.Dev.Fatalf(ctx, "inflightReqs %d < 0", inflightReqs)
 	}
 
 	// Detect if the circuit breaker cancelled the request, and prepare a

@@ -403,7 +403,7 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchRequest, *kvpb.Error) {
 	if ba.BoundedStaleness == nil {
-		log.Fatal(ctx, "BoundedStaleness header required for server-side negotiation fast-path")
+		log.Dev.Fatal(ctx, "BoundedStaleness header required for server-side negotiation fast-path")
 	}
 	cfg := ba.BoundedStaleness
 	if cfg.MinTimestampBound.IsEmpty() {

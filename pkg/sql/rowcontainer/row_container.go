@@ -241,7 +241,7 @@ func (mc *MemRowContainer) getEncRow(encRow rowenc.EncDatumRow, idx int) {
 // AddRow adds a row to the container.
 func (mc *MemRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) error {
 	if len(row) != len(mc.types) {
-		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(mc.types))
+		log.Dev.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(mc.types))
 	}
 	for i := range row {
 		err := row[i].EnsureDecoded(mc.types[i], &mc.datumAlloc)
@@ -550,7 +550,7 @@ func (f *DiskBackedRowContainer) AddRowWithDeDup(
 
 func (f *DiskBackedRowContainer) encodeKey(ctx context.Context, row rowenc.EncDatumRow) error {
 	if len(row) != len(f.mrc.types) {
-		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(f.mrc.types))
+		log.Dev.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(f.mrc.types))
 	}
 	f.scratchKey = f.scratchKey[:0]
 	for i, orderInfo := range f.mrc.ordering {

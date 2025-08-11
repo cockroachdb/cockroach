@@ -540,7 +540,7 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 	}
 
 	if !lResult.IsZero() {
-		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
+		log.Dev.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}
 	return nil
 }

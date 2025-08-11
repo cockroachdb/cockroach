@@ -374,7 +374,7 @@ func (g *drpcGossip) Gossip(stream DRPCGossip_GossipStream) error {
 // AssertNotStarted fatals if the Gossip instance was already started.
 func (g *Gossip) AssertNotStarted(ctx context.Context) {
 	if g.started {
-		log.Fatalf(ctx, "gossip instance was already started")
+		log.Dev.Fatalf(ctx, "gossip instance was already started")
 	}
 }
 
@@ -393,7 +393,7 @@ func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Dev.VInfof(ctx, 1, "NodeDescriptor set to %+v", desc)
 	if desc.Address.IsEmpty() {
-		log.Fatalf(ctx, "n%d address is empty", desc.NodeID)
+		log.Dev.Fatalf(ctx, "n%d address is empty", desc.NodeID)
 	}
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, NodeDescriptorTTL); err != nil {
 		return errors.Wrapf(err, "n%d: couldn't gossip descriptor", desc.NodeID)
@@ -867,7 +867,7 @@ func (g *Gossip) getNodeDescriptor(
 ) (*roachpb.NodeDescriptor, error) {
 	if desc, ok := g.nodeDescs.Load(nodeID); ok {
 		if desc.Address.IsEmpty() {
-			log.Fatalf(g.AnnotateCtx(context.Background()), "n%d has an empty address", nodeID)
+			log.Dev.Fatalf(g.AnnotateCtx(context.Background()), "n%d has an empty address", nodeID)
 		}
 		return desc, nil
 	}

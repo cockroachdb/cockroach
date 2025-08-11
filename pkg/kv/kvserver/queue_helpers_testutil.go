@@ -41,7 +41,7 @@ func forceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) error {
 
 func mustForceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) {
 	if err := forceScanAndProcess(ctx, s, q); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 }
 

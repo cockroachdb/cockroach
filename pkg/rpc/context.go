@@ -2067,7 +2067,7 @@ func (rpcCtx *Context) GRPCDialNode(
 	class rpcbase.ConnectionClass,
 ) *GRPCConnection {
 	if remoteNodeID == 0 && !rpcCtx.TestingAllowNamedRPCToAnonymousServer {
-		log.Fatalf(
+		log.Dev.Fatalf(
 			rpcCtx.makeDialCtx(target, remoteNodeID, class),
 			"%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
 	}
@@ -2088,7 +2088,7 @@ func (rpcCtx *Context) DRPCDialNode(
 	class rpcbase.ConnectionClass,
 ) *DRPCConnection {
 	if remoteNodeID == 0 && !rpcCtx.TestingAllowNamedRPCToAnonymousServer {
-		log.Fatalf(
+		log.Dev.Fatalf(
 			rpcCtx.makeDialCtx(target, remoteNodeID, class),
 			"%v", errors.AssertionFailedf("invalid node ID 0 in DRPCDialNode()"))
 	}

@@ -340,7 +340,7 @@ const (
 	// still may include an exception and stack trace.
 	ReportTypeError
 	// ReportTypeLogFatal signifies that this is an error report that
-	// was generated via a log.Fatal call.
+	// was generated via a log.Dev.Fatal call.
 	ReportTypeLogFatal
 )
 

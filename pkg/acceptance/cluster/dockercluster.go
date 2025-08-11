@@ -158,7 +158,7 @@ func CreateDocker(
 	}
 
 	if *cockroachImage == defaultImage && !exists(*CockroachBinary) {
-		log.Fatalf(ctx, "\"%s\": does not exist", *CockroachBinary)
+		log.Dev.Fatalf(ctx, "\"%s\": does not exist", *CockroachBinary)
 	}
 
 	cli, err := client.NewClientWithOpts(client.FromEnv)

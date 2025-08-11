@@ -107,7 +107,7 @@ func (z *zeroSum) run(workers, monkeys int) {
 func (z *zeroSum) setup() uint32 {
 	db := z.Nodes[0].DB()
 	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS zerosum"); err != nil {
-		log.Fatalf(context.Background(), "%v", err)
+		log.Dev.Fatalf(context.Background(), "%v", err)
 	}
 
 	accounts := `
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 )
 `
 	if _, err := db.Exec(accounts); err != nil {
-		log.Fatalf(context.Background(), "%v", err)
+		log.Dev.Fatalf(context.Background(), "%v", err)
 	}
 
 	tableIDQuery := `
@@ -127,7 +127,7 @@ SELECT tables.id FROM system.namespace tables
 `
 	var tableID uint32
 	if err := db.QueryRow(tableIDQuery, "zerosum", "accounts").Scan(&tableID); err != nil {
-		log.Fatalf(context.Background(), "%v", err)
+		log.Dev.Fatalf(context.Background(), "%v", err)
 	}
 	return tableID
 }
@@ -178,7 +178,7 @@ func (z *zeroSum) worker() {
 				var id uint64
 				var balance int64
 				if err = rows.Scan(&id, &balance); err != nil {
-					log.Fatalf(context.Background(), "%v", err)
+					log.Dev.Fatalf(context.Background(), "%v", err)
 				}
 				switch id {
 				case from:
@@ -280,7 +280,7 @@ func (z *zeroSum) chaos() {
 	case "flappy":
 		go z.chaosFlappy()
 	default:
-		log.Fatalf(context.Background(), "unknown chaos type: %s", z.chaosType)
+		log.Dev.Fatalf(context.Background(), "unknown chaos type: %s", z.chaosType)
 	}
 }
 
@@ -310,10 +310,10 @@ func (z *zeroSum) verify(d time.Duration) {
 			continue
 		}
 		if total != 0 {
-			log.Fatalf(context.Background(), "unexpected total balance %d", total)
+			log.Dev.Fatalf(context.Background(), "unexpected total balance %d", total)
 		}
 		if accounts < committedAccounts {
-			log.Fatalf(context.Background(), "expected at least %d accounts, but found %d",
+			log.Dev.Fatalf(context.Background(), "expected at least %d accounts, but found %d",
 				committedAccounts, accounts)
 		}
 	}

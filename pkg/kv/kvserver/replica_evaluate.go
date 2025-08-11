@@ -185,7 +185,7 @@ func optimizePuts(
 				shallow.Blind = true
 				reqs[i].MustSetInner(&shallow)
 			default:
-				log.Fatalf(ctx, "unexpected non-put request: %s", t)
+				log.Dev.Fatalf(ctx, "unexpected non-put request: %s", t)
 			}
 		}
 	}
@@ -395,7 +395,7 @@ func evaluateBatch(
 		//
 		// TODO(tbg): find out if that's true and why and improve the comment.
 		if err := mergedResult.MergeAndDestroy(curResult); err != nil {
-			log.Fatalf(
+			log.Dev.Fatalf(
 				ctx,
 				"unable to absorb Result: %s\ndiff(new, old): %s",
 				err, pretty.Diff(curResult, mergedResult),
@@ -488,7 +488,7 @@ func evaluateBatch(
 		// we had an EndTxn that decided that it can refresh to something higher
 		// than baHeader.Timestamp because there were no refresh spans.
 		if br.Txn.ReadTimestamp.Less(baHeader.Timestamp) {
-			log.Fatalf(ctx, "br.Txn.ReadTimestamp < ba.Timestamp (%s < %s). ba: %s",
+			log.Dev.Fatalf(ctx, "br.Txn.ReadTimestamp < ba.Timestamp (%s < %s). ba: %s",
 				br.Txn.ReadTimestamp, baHeader.Timestamp, ba)
 		}
 		br.Timestamp = br.Txn.ReadTimestamp
@@ -609,14 +609,14 @@ func canDoServersideRetry(
 	deadline hlc.Timestamp,
 ) (*kvpb.BatchRequest, bool) {
 	if pErr == nil {
-		log.Fatalf(ctx, "canDoServersideRetry called without error")
+		log.Dev.Fatalf(ctx, "canDoServersideRetry called without error")
 	}
 	if ba.Txn != nil {
 		if !ba.CanForwardReadTimestamp {
 			return ba, false
 		}
 		if !deadline.IsEmpty() {
-			log.Fatal(ctx, "deadline passed for transactional request")
+			log.Dev.Fatal(ctx, "deadline passed for transactional request")
 		}
 		if etArg, ok := ba.GetArg(kvpb.EndTxn); ok {
 			et := etArg.(*kvpb.EndTxnRequest)

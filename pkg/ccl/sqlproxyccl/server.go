@@ -304,7 +304,7 @@ func (s *Server) serve(ctx context.Context, ln net.Listener, requireProxyProtoco
 	err := s.Stopper.RunAsyncTask(ctx, "listen-quiesce", func(ctx context.Context) {
 		<-s.Stopper.ShouldQuiesce()
 		if err := ln.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
-			log.Fatalf(ctx, "closing proxy listener: %s", err)
+			log.Dev.Fatalf(ctx, "closing proxy listener: %s", err)
 		}
 	})
 	if err != nil {

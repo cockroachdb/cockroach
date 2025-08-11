@@ -1024,12 +1024,12 @@ func (h ConnectionHandler) GetParamStatus(ctx context.Context, varName string) s
 	name := strings.ToLower(varName)
 	v, ok := varGen[name]
 	if !ok {
-		log.Fatalf(ctx, "programming error: status param %q must be defined session var", varName)
+		log.Dev.Fatalf(ctx, "programming error: status param %q must be defined session var", varName)
 		return ""
 	}
 	hasDefault, defVal := getSessionVarDefaultString(name, v, h.ex.dataMutatorIterator.sessionDataMutatorBase)
 	if !hasDefault {
-		log.Fatalf(ctx, "programming error: status param %q must have a default value", varName)
+		log.Dev.Fatalf(ctx, "programming error: status param %q must have a default value", varName)
 		return ""
 	}
 	return defVal
@@ -3689,7 +3689,7 @@ func txnPriorityToProto(mode tree.UserPriority) roachpb.UserPriority {
 	case tree.High:
 		pri = roachpb.MaxUserPriority
 	default:
-		log.Fatalf(context.Background(), "unknown user priority: %s", mode)
+		log.Dev.Fatalf(context.Background(), "unknown user priority: %s", mode)
 	}
 	return pri
 }

@@ -526,7 +526,7 @@ func TestServerStartStop(t *testing.T) {
 
 	defer time.AfterFunc(10*time.Second, func() {
 		log.DumpStacks(ctx, "slow quiesce")
-		log.Fatalf(ctx, "test took too long to shut down")
+		log.Dev.Fatalf(ctx, "test took too long to shut down")
 	}).Stop()
 	s.Stopper().Stop(ctx)
 }

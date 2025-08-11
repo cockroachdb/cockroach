@@ -96,7 +96,7 @@ func (t *decommissioningNodeMap) makeOnNodeDecommissioningCallback(
 			return nil
 		}); err != nil {
 			// We're swallowing any errors above, so this shouldn't ever happen.
-			log.Fatalf(
+			log.Dev.Fatalf(
 				ctx, "error while nudging replicas for decommissioning node n%d", decommissioningNodeID,
 			)
 		}

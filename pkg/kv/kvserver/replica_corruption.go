@@ -63,6 +63,6 @@ A file preventing this node from restarting was placed at:
 		log.Dev.Warningf(ctx, "%v", err)
 	}
 
-	log.FatalfDepth(ctx, 1, "replica is corrupted: %s", cErr)
+	log.Dev.FatalfDepth(ctx, 1, "replica is corrupted: %s", cErr)
 	return kvpb.NewError(cErr)
 }

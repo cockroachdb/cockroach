@@ -107,7 +107,7 @@ func (twc *tokenCounterPerWorkClass) adjustTokensLocked(
 		}
 	}
 	if buildutil.CrdbTestBuild && !isReset && unaccounted != 0 {
-		log.Fatalf(ctx, "unaccounted[%s]=%d delta=%d limit=%d",
+		log.Dev.Fatalf(ctx, "unaccounted[%s]=%d delta=%d limit=%d",
 			twc.wc, unaccounted, delta, twc.limit)
 	}
 
@@ -502,7 +502,7 @@ func WaitForEval(
 ) (state WaitEndState, scratch2 []reflect.SelectCase) {
 	scratch = scratch[:0]
 	if len(handles) < requiredQuorum {
-		log.Fatalf(ctx, "%v", errors.AssertionFailedf(
+		log.Dev.Fatalf(ctx, "%v", errors.AssertionFailedf(
 			"invalid arguments to WaitForEval: len(handles)=%d < required_quorum=%d",
 			len(handles), requiredQuorum))
 	}
@@ -528,7 +528,7 @@ func WaitForEval(
 			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: chanValue})
 	}
 	if requiredQuorum == 0 && requiredWaitCount == 0 {
-		log.Fatalf(ctx, "both requiredQuorum and requiredWaitCount are zero")
+		log.Dev.Fatalf(ctx, "both requiredQuorum and requiredWaitCount are zero")
 	}
 
 	// m is the current length of the scratch slice.

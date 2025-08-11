@@ -43,7 +43,7 @@ type Options struct {
 	Incrementer Incrementer
 	BlockSize   int64
 	Stopper     *stop.Stopper
-	Fatalf      func(context.Context, string, ...interface{}) // defaults to log.Fatalf
+	Fatalf      func(context.Context, string, ...interface{}) // defaults to log.Dev.Fatalf
 }
 
 // An Allocator is used to increment a key in allocation blocks of arbitrary
@@ -66,7 +66,7 @@ func NewAllocator(opts Options) (*Allocator, error) {
 		return nil, errors.Errorf("blockSize must be a positive integer: %d", opts.BlockSize)
 	}
 	if opts.Fatalf == nil {
-		opts.Fatalf = log.Fatalf
+		opts.Fatalf = log.Dev.Fatalf
 	}
 	opts.AmbientCtx.AddLogTag("idalloc", nil)
 	return &Allocator{

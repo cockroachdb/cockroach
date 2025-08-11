@@ -236,11 +236,11 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 	log.VEventf(ctx, 4, "received side-transport update: %v", msg)
 
 	if msg.NodeID == 0 {
-		log.Fatalf(ctx, "missing NodeID in message: %s", msg)
+		log.Dev.Fatalf(ctx, "missing NodeID in message: %s", msg)
 	}
 
 	if msg.NodeID != r.nodeID {
-		log.Fatalf(ctx, "wrong NodeID; expected %d, got %d", r.nodeID, msg.NodeID)
+		log.Dev.Fatalf(ctx, "wrong NodeID; expected %d, got %d", r.nodeID, msg.NodeID)
 	}
 
 	// Handle the removed ranges. In order to not lose closed ts info, before we
@@ -259,11 +259,11 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 		for _, rangeID := range msg.Removed {
 			info, ok := r.mu.tracked[rangeID]
 			if !ok {
-				log.Fatalf(ctx, "attempting to unregister a missing range: r%d", rangeID)
+				log.Dev.Fatalf(ctx, "attempting to unregister a missing range: r%d", rangeID)
 			}
 			ts, ok := r.mu.lastClosed[info.policy]
 			if !ok {
-				log.Fatalf(ctx, "missing closed timestamp policy %v for range r%d", info.policy, rangeID)
+				log.Dev.Fatalf(ctx, "missing closed timestamp policy %v for range r%d", info.policy, rangeID)
 			}
 			r.stores.ForwardSideTransportClosedTimestampForRange(ctx, rangeID, ts, info.lai)
 		}
@@ -279,7 +279,7 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 		r.mu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp, len(r.mu.lastClosed))
 		r.mu.tracked = make(map[roachpb.RangeID]trackedRange, len(r.mu.tracked))
 	} else if msg.SeqNum != r.mu.lastSeqNum+1 {
-		log.Fatalf(ctx, "expected closed timestamp side-transport message with sequence number "+
+		log.Dev.Fatalf(ctx, "expected closed timestamp side-transport message with sequence number "+
 			"%d, got %d", r.mu.lastSeqNum+1, msg.SeqNum)
 	}
 	r.mu.lastSeqNum = msg.SeqNum
@@ -334,7 +334,7 @@ func (r *incomingStream) Run(
 					ch <- struct{}{}
 				}
 				if !msg.Snapshot {
-					log.Fatal(ctx, "expected the first message to be a snapshot")
+					log.Dev.Fatal(ctx, "expected the first message to be a snapshot")
 				}
 				r.AddLogTag("remote", r.nodeID)
 				ctx = r.AnnotateCtx(ctx)

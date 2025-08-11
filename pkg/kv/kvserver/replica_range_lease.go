@@ -174,7 +174,7 @@ func OverrideDefaultLeaseType(ctx context.Context, sv *settings.Values, typ roac
 		ExpirationLeasesOnly.Override(ctx, sv, false)
 		RaftLeaderFortificationFractionEnabled.Override(ctx, sv, 1.0)
 	default:
-		log.Fatalf(ctx, "unexpected lease type: %v", typ)
+		log.Dev.Fatalf(ctx, "unexpected lease type: %v", typ)
 	}
 }
 
@@ -1535,7 +1535,7 @@ func (r *Replica) shouldRequestLeaseRLocked(
 		return false, false
 
 	default:
-		log.Fatalf(context.Background(), "invalid lease state %s", st.State)
+		log.Dev.Fatalf(context.Background(), "invalid lease state %s", st.State)
 		return false, false
 	}
 }

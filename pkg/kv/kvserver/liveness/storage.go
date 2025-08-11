@@ -100,7 +100,7 @@ func (ls *storageImpl) Update(
 		b := txn.NewBatch()
 		key := keys.NodeLivenessKey(update.newLiveness.NodeID)
 		if err := v.SetProto(&update.newLiveness); err != nil {
-			log.Fatalf(ctx, "failed to marshall proto: %s", err)
+			log.Dev.Fatalf(ctx, "failed to marshall proto: %s", err)
 		}
 		b.CPut(key, v, update.oldRaw)
 		// Use a trigger on EndTxn to indicate that node liveness should be
@@ -158,7 +158,7 @@ func (ls *storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error 
 			b := txn.NewBatch()
 			key := keys.NodeLivenessKey(nodeID)
 			if err := v.SetProto(&liveness); err != nil {
-				log.Fatalf(ctx, "failed to marshall proto: %s", err)
+				log.Dev.Fatalf(ctx, "failed to marshall proto: %s", err)
 			}
 			// Given we're looking to create a new liveness record here, we don't
 			// expect to find anything.

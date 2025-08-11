@@ -481,14 +481,14 @@ func generateAndSetNewDataKey(
 			return nil, err
 		}
 		if n != keyLength {
-			log.Fatalf(ctx, "rand.Read returned no error but fewer bytes %d than promised %d", n, keyLength)
+			log.Dev.Fatalf(ctx, "rand.Read returned no error but fewer bytes %d than promised %d", n, keyLength)
 		}
 		keyID := make([]byte, keyIDLength)
 		if n, err = rand.Read(keyID); err != nil {
 			return nil, err
 		}
 		if n != keyIDLength {
-			log.Fatalf(ctx, "rand.Read returned no error but fewer bytes %d than promised %d", n, keyIDLength)
+			log.Dev.Fatalf(ctx, "rand.Read returned no error but fewer bytes %d than promised %d", n, keyIDLength)
 		}
 		// Hex encoding to make it human readable.
 		key.Info.KeyId = hex.EncodeToString(keyID)

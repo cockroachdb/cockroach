@@ -537,7 +537,7 @@ func (p *processorImpl) InitRaftLocked(
 	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	p.opts.ReplicaMutexAsserter.ReplicaMuAssertHeld()
 	if p.desc.replicas != nil {
-		log.Fatalf(ctx, "initializing RaftNode after replica is initialized")
+		log.Dev.Fatalf(ctx, "initializing RaftNode after replica is initialized")
 	}
 	p.raftInterface = rn
 	p.logTracker.init(logMark)
@@ -623,7 +623,7 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 	ctx context.Context, state RaftNodeBasicState,
 ) {
 	if state.Term < p.term {
-		log.Fatalf(ctx, "term regressed from %d to %d", p.term, state.Term)
+		log.Dev.Fatalf(ctx, "term regressed from %d to %d", p.term, state.Term)
 	}
 	termChanged := state.Term > p.term
 	if termChanged {
@@ -767,7 +767,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(
 		return
 	}
 	if p.raftInterface == nil {
-		log.Fatal(ctx, "RaftInterface is not initialized")
+		log.Dev.Fatal(ctx, "RaftInterface is not initialized")
 		return
 	}
 

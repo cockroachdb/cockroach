@@ -84,7 +84,7 @@ func WriteDescriptors(
 			if mut, ok := desc.(*dbdesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
 			} else {
-				log.Fatalf(ctx, "wrong type for database %d, %T, expected Mutable",
+				log.Dev.Fatalf(ctx, "wrong type for database %d, %T, expected Mutable",
 					desc.GetID(), desc)
 			}
 		}
@@ -122,7 +122,7 @@ func WriteDescriptors(
 			if mut, ok := sc.(*schemadesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
 			} else {
-				log.Fatalf(ctx, "wrong type for schema %d, %T, expected Mutable",
+				log.Dev.Fatalf(ctx, "wrong type for schema %d, %T, expected Mutable",
 					sc.GetID(), sc)
 			}
 		}
@@ -151,7 +151,7 @@ func WriteDescriptors(
 			if mut, ok := table.(*tabledesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
 			} else {
-				log.Fatalf(ctx, "wrong type for table %d, %T, expected Mutable",
+				log.Dev.Fatalf(ctx, "wrong type for table %d, %T, expected Mutable",
 					table.GetID(), table)
 			}
 		}
@@ -183,7 +183,7 @@ func WriteDescriptors(
 			if mut, ok := typ.(*typedesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
 			} else {
-				log.Fatalf(ctx, "wrong type for type %d, %T, expected Mutable",
+				log.Dev.Fatalf(ctx, "wrong type for type %d, %T, expected Mutable",
 					typ.GetID(), typ)
 			}
 		}
@@ -209,7 +209,7 @@ func WriteDescriptors(
 			if mut, ok := fn.(*funcdesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
 			} else {
-				log.Fatalf(ctx, "wrong type for function %d, %T, expected Mutable", fn.GetID(), fn)
+				log.Dev.Fatalf(ctx, "wrong type for function %d, %T, expected Mutable", fn.GetID(), fn)
 			}
 		}
 		if err := descsCol.WriteDescToBatch(

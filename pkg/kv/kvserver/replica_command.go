@@ -438,7 +438,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	// as a no-op and return success instead of throwing an error.
 	if desc.StartKey.Equal(splitKey) {
 		if len(args.SplitKey) == 0 {
-			log.Fatal(ctx, "MVCCFindSplitKey returned start key of range")
+			log.Dev.Fatal(ctx, "MVCCFindSplitKey returned start key of range")
 		}
 		log.Event(ctx, "range already split")
 		// Even if the range is already split, we should still update the sticky
@@ -1902,7 +1902,7 @@ func (r *Replica) initializeRaftLearners(
 	case roachpb.NON_VOTER:
 		iChangeType = internalChangeTypeAddNonVoter
 	default:
-		log.Fatalf(ctx, "unexpected replicaType %s", replicaType)
+		log.Dev.Fatalf(ctx, "unexpected replicaType %s", replicaType)
 	}
 
 	// Lock learner snapshots even before we run the ConfChange txn to add them

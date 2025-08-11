@@ -634,7 +634,7 @@ func newInitServerConfig(
 		}
 	}
 	if latestVersion.Less(minSupportedVersion) {
-		log.Fatalf(ctx, "binary version (%s) less than min supported version (%s)",
+		log.Dev.Fatalf(ctx, "binary version (%s) less than min supported version (%s)",
 			latestVersion, minSupportedVersion)
 	}
 

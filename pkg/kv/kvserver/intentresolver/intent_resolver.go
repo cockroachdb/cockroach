@@ -339,7 +339,7 @@ func updateIntentTxnStatus(
 		if !ok {
 			// The intent was not pushed.
 			if !skipIfInFlight {
-				log.Fatalf(ctx, "no PushTxn response for intent %+v", intent)
+				log.Dev.Fatalf(ctx, "no PushTxn response for intent %+v", intent)
 			}
 			// It must have been skipped.
 			continue
@@ -369,7 +369,7 @@ func (ir *IntentResolver) PushTransaction(
 	}
 	pushedTxn, ok := pushedTxns[pushTxn.ID]
 	if !ok {
-		log.Fatalf(ctx, "missing PushTxn responses for %s", pushTxn)
+		log.Dev.Fatalf(ctx, "missing PushTxn responses for %s", pushTxn)
 	}
 	return pushedTxn, ambiguousAbort, nil
 }
@@ -476,7 +476,7 @@ func (ir *IntentResolver) MaybePushTransactions(
 		txn := &resp.PusheeTxn
 		anyAmbiguousAbort = anyAmbiguousAbort || resp.AmbiguousAbort
 		if _, ok := pushedTxns[txn.ID]; ok {
-			log.Fatalf(ctx, "have two PushTxn responses for %s", txn.ID)
+			log.Dev.Fatalf(ctx, "have two PushTxn responses for %s", txn.ID)
 		}
 		pushedTxns[txn.ID] = txn
 		log.Eventf(ctx, "%s is now %s", txn.ID, txn.Status)

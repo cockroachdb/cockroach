@@ -283,7 +283,7 @@ func (k *schedulerLatencyListenerMetrics) MetricStruct() {}
 
 func clamp(min, max, val float64) float64 {
 	if buildutil.CrdbTestBuild && min > max {
-		log.Fatalf(context.Background(), "min (%f) > max (%f)", min, max)
+		log.Dev.Fatalf(context.Background(), "min (%f) > max (%f)", min, max)
 	}
 	if val < min {
 		val = min // floor

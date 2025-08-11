@@ -930,7 +930,7 @@ func (sp *StorePool) liveAndDeadReplicasWithLiveness(
 				liveReplicas = append(liveReplicas, repl)
 			}
 		default:
-			log.Fatalf(context.TODO(), "unknown store status %d", status)
+			log.Dev.Fatalf(context.TODO(), "unknown store status %d", status)
 		}
 	}
 	return

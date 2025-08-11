@@ -355,7 +355,7 @@ func (s *Store) HandleRaftRequest(
 	// already tied to the Store's Stopper.
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		if req.RangeID != 0 {
-			log.Fatalf(ctx, "coalesced heartbeats must have rangeID == 0")
+			log.Dev.Fatalf(ctx, "coalesced heartbeats must have rangeID == 0")
 		}
 		s.uncoalesceBeats(ctx, req.Heartbeats, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeat, respStream)
 		s.uncoalesceBeats(ctx, req.HeartbeatResps, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeatResp, respStream)
@@ -375,7 +375,7 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) (enqueue bool) {
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
-		log.Fatalf(ctx, "HandleRaftUncoalescedRequest cannot be given coalesced heartbeats or heartbeat responses, received %s", req)
+		log.Dev.Fatalf(ctx, "HandleRaftUncoalescedRequest cannot be given coalesced heartbeats or heartbeat responses, received %s", req)
 	}
 	// HandleRaftRequest is called on locally uncoalesced heartbeats (which are
 	// not sent over the network if the environment variable is set) so do not
@@ -447,12 +447,12 @@ func (s *Store) processRaftRequestWithReplica(
 	}
 
 	if req.Message.Type == raftpb.MsgSnap {
-		log.Fatalf(ctx, "unexpected snapshot: %+v", req)
+		log.Dev.Fatalf(ctx, "unexpected snapshot: %+v", req)
 	}
 
 	if req.Quiesce {
 		if req.Message.Type != raftpb.MsgHeartbeat {
-			log.Fatalf(ctx, "unexpected quiesce: %+v", req)
+			log.Dev.Fatalf(ctx, "unexpected quiesce: %+v", req)
 		}
 		if r.maybeQuiesceOnNotify(
 			ctx,
@@ -498,7 +498,7 @@ func (s *Store) processRaftSnapshotRequest(
 	) (pErr *kvpb.Error) {
 		ctx = r.AnnotateCtx(ctx)
 		if snapHeader.RaftMessageRequest.Message.Type != raftpb.MsgSnap {
-			log.Fatalf(ctx, "expected snapshot: %+v", snapHeader.RaftMessageRequest)
+			log.Dev.Fatalf(ctx, "expected snapshot: %+v", snapHeader.RaftMessageRequest)
 		}
 
 		typ := removePlaceholderFailed
@@ -517,7 +517,7 @@ func (s *Store) processRaftSnapshotRequest(
 			// snapshot's is at least RaftInitialLogIndex).
 			if inSnap.placeholder != nil {
 				if _, err := s.removePlaceholder(ctx, inSnap.placeholder, typ); err != nil {
-					log.Fatalf(ctx, "unable to remove placeholder: %s", err)
+					log.Dev.Fatalf(ctx, "unable to remove placeholder: %s", err)
 				}
 			}
 		}()
@@ -1065,7 +1065,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 	} else if len(beats) == 0 {
 		msgType = raftpb.MsgHeartbeatResp
 	} else {
-		log.Fatal(ctx, "cannot coalesce both heartbeats and responses")
+		log.Dev.Fatal(ctx, "cannot coalesce both heartbeats and responses")
 	}
 
 	chReq := newRaftMessageRequest()

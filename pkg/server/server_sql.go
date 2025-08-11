@@ -898,7 +898,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		AdminURL: cfg.AdminURL,
 		PGURL: func(user *url.Userinfo) (*pgurl.URL, error) {
 			if cfg.Config.SQLAdvertiseAddr == "" {
-				log.Fatal(ctx, "programming error: usage of advertised addr before listeners have started")
+				log.Dev.Fatal(ctx, "programming error: usage of advertised addr before listeners have started")
 			}
 			ccopts := clientsecopts.ClientSecurityOptions{
 				Insecure: cfg.Config.Insecure,
@@ -1790,7 +1790,7 @@ func (s *SQLServer) preStart(
 			warnCtx := s.AnnotateCtx(context.Background())
 
 			if sk != nil && sk.RequireGracefulDrain {
-				log.Fatalf(warnCtx, "drain required but not performed")
+				log.Dev.Fatalf(warnCtx, "drain required but not performed")
 			}
 
 			log.Dev.Warningf(warnCtx, "server shutdown without a prior graceful drain")

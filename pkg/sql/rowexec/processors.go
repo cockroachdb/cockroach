@@ -70,7 +70,7 @@ func emitHelper(
 		output.Push(nil /* row */, &execinfrapb.ProducerMetadata{
 			Err: errors.AssertionFailedf("not allowed to pause and switch to another portal"),
 		})
-		log.Fatalf(ctx, "not allowed to pause and switch to another portal")
+		log.Dev.Fatalf(ctx, "not allowed to pause and switch to another portal")
 		return false
 	case execinfra.DrainRequested:
 		log.VEventf(ctx, 1, "no more rows required. drain requested.")
@@ -82,7 +82,7 @@ func emitHelper(
 		output.ProducerDone()
 		return false
 	default:
-		log.Fatalf(ctx, "unexpected consumerStatus: %d", consumerStatus)
+		log.Dev.Fatalf(ctx, "unexpected consumerStatus: %d", consumerStatus)
 		return false
 	}
 }

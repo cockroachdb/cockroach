@@ -198,7 +198,7 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *kvpb.Error {
 	// so we error out below.
 	if gossipClusterID, err := r.store.Gossip().GetClusterID(); err == nil {
 		if gossipClusterID != r.store.ClusterID() {
-			log.Fatalf(
+			log.Dev.Fatalf(
 				ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
 				r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
 		}

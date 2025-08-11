@@ -545,7 +545,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			if err := nodeTombStorage.SetDecommissioned(
 				ctx, id, clock.PhysicalTime().UTC(),
 			); err != nil {
-				log.Fatalf(ctx, "unable to add tombstone for n%d: %s", id, err)
+				log.Dev.Fatalf(ctx, "unable to add tombstone for n%d: %s", id, err)
 			}
 
 			decomNodeMap.onNodeDecommissioned(id)

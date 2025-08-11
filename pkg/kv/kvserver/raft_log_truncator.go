@@ -570,7 +570,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	// so that the subsequent removals from the sideloaded storage are safe.
 	sync := pendingTruncs.mu.truncs[enactIndex].hasSideloaded
 	if err := batch.Commit(sync); err != nil {
-		log.Fatalf(ctx, "while committing batch to truncate raft log: %+v", err)
+		log.Dev.Fatalf(ctx, "while committing batch to truncate raft log: %+v", err)
 		return
 	}
 	r.finalizeTruncation(ctx)

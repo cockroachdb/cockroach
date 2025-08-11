@@ -433,7 +433,7 @@ func (a *allocatorState) rebalanceStores(
 						//
 						// TODO(tbg): see also the other assertion below (leaseholderID !=
 						// store.StoreID) which seems similar to this one.
-						log.Fatalf(ctx, "internal state inconsistency: replica considered for lease shedding has no pending"+
+						log.Dev.Fatalf(ctx, "internal state inconsistency: replica considered for lease shedding has no pending"+
 							" changes but is not leaseholder: %+v", rstate)
 					}
 				}

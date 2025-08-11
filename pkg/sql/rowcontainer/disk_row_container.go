@@ -331,7 +331,7 @@ func (d *DiskRowContainer) clearDeDupCache(ctx context.Context) {
 
 func (d *DiskRowContainer) testingFlushBuffer(ctx context.Context) {
 	if err := d.bufferedRows.Flush(); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 	d.clearDeDupCache(ctx)
 }
@@ -340,7 +340,7 @@ func (d *DiskRowContainer) testingFlushBuffer(ctx context.Context) {
 // memory account is updated according to the new capacity of these slices.
 func (d *DiskRowContainer) encodeRow(ctx context.Context, row rowenc.EncDatumRow) (retErr error) {
 	if len(row) != len(d.types) {
-		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(d.types))
+		log.Dev.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(d.types))
 	}
 	oldScratchMemUse := int64(cap(d.scratchKey) + cap(d.scratchVal))
 	defer func() {
@@ -489,7 +489,7 @@ var _ RowIterator = &diskRowIterator{}
 
 func (d *DiskRowContainer) newIterator(ctx context.Context) diskRowIterator {
 	if err := d.bufferedRows.Flush(); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 	return diskRowIterator{
 		rowContainer:          d,

@@ -770,7 +770,7 @@ func (n *Node) start(
 		n.additionalStoreInitCh = make(chan struct{})
 		if err := n.stopper.RunAsyncTask(workersCtx, "initialize-additional-stores", func(ctx context.Context) {
 			if err := n.initializeAdditionalStores(ctx, state.uninitializedEngines); err != nil {
-				log.Fatalf(ctx, "while initializing additional stores: %v", err)
+				log.Dev.Fatalf(ctx, "while initializing additional stores: %v", err)
 			}
 			close(n.additionalStoreInitCh)
 		}); err != nil {
@@ -864,7 +864,7 @@ func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
 	if cv == (roachpb.Version{}) {
 		// The store should have had a version written to it during the store
 		// initialization process.
-		log.Fatal(ctx, "attempting to add a store without a version")
+		log.Dev.Fatal(ctx, "attempting to add a store without a version")
 	}
 	store.TODOEngine().RegisterDiskSlowCallback(func(info pebble.DiskSlowInfo) {
 		n.onStoreDiskSlow(n.AnnotateCtx(context.Background()), store.StoreID(), info)
@@ -1854,7 +1854,7 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 			br = &kvpb.BatchResponse{}
 		}
 		if br.Error != nil {
-			log.Fatalf(
+			log.Dev.Fatalf(
 				ctx, "attempting to return both a plain error (%s) and kvpb.Error (%s)", err, br.Error,
 			)
 		}
@@ -2012,7 +2012,7 @@ func setupSpanForIncomingRPC(
 		// one, it'd be unclear what needRecordingCollection should be set to.
 		parentSpan := tracing.SpanFromContext(ctx)
 		if parentSpan != nil {
-			log.Fatalf(ctx, "unexpected span found in non-local RPC: %s", parentSpan)
+			log.Dev.Fatalf(ctx, "unexpected span found in non-local RPC: %s", parentSpan)
 		}
 
 		ctx, newSpan = tr.StartSpanCtx(

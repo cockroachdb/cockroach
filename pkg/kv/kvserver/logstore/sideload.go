@@ -215,7 +215,7 @@ func MaybeInlineSideloadedRaftCommand(
 func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) {
 	typ, _, err := raftlog.EncodingOf(*ent)
 	if err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 	if !typ.IsSideloaded() {
 		return
@@ -223,12 +223,12 @@ func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 
 	e, err := raftlog.NewEntry(*ent)
 	if err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 
 	if len(e.Cmd.ReplicatedEvalResult.AddSSTable.Data) == 0 {
 		// The entry is "thin", which is what this assertion is checking for.
-		log.Fatalf(ctx, "found thin sideloaded raft command: %+v", e.Cmd)
+		log.Dev.Fatalf(ctx, "found thin sideloaded raft command: %+v", e.Cmd)
 	}
 }
 

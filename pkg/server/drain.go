@@ -250,7 +250,7 @@ func (s *drainServer) maybeShutdownAfterDrain(
 		// The signal-based shutdown path uses a similar time-based escape hatch.
 		// Until we spend (potentially lots of time to) understand and fix this
 		// issue, this will serve us well.
-		log.Fatal(ctx, "timeout after drain")
+		log.Dev.Fatal(ctx, "timeout after drain")
 		return errors.New("unreachable")
 	}
 }

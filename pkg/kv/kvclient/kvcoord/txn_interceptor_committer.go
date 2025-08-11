@@ -552,7 +552,7 @@ func makeTxnCommitExplicitLocked(
 		case *kvpb.TransactionRetryError:
 			logFunc := log.Dev.Errorf
 			if util.RaceEnabled {
-				logFunc = log.Fatalf
+				logFunc = log.Dev.Fatalf
 			}
 			logFunc(ctx, "unexpected retry error when making commit explicit for %s: %v", txn, t)
 		}

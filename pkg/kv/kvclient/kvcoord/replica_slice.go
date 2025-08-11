@@ -95,7 +95,7 @@ func NewReplicaSlice(
 ) (ReplicaSlice, error) {
 	if leaseholder != nil {
 		if _, ok := desc.GetReplicaDescriptorByID(leaseholder.ReplicaID); !ok {
-			log.Fatalf(ctx, "leaseholder not in descriptor; leaseholder: %s, desc: %s", leaseholder, desc)
+			log.Dev.Fatalf(ctx, "leaseholder not in descriptor; leaseholder: %s, desc: %s", leaseholder, desc)
 		}
 	}
 	canReceiveLease := func(rDesc roachpb.ReplicaDescriptor) bool {
@@ -122,7 +122,7 @@ func NewReplicaSlice(
 	case AllExtantReplicas:
 		replicas = desc.Replicas().VoterAndNonVoterDescriptors()
 	default:
-		log.Fatalf(ctx, "unknown ReplicaSliceFilter %v", filter)
+		log.Dev.Fatalf(ctx, "unknown ReplicaSliceFilter %v", filter)
 	}
 	// If we know a leaseholder, though, let's make sure we include it.
 	if leaseholder != nil && len(replicas) < len(desc.Replicas().Descriptors()) {

@@ -72,7 +72,7 @@ func (p synthetic) ByteSize() int64 {
 	return 0
 }
 func (p synthetic) NewBuilder() catalog.DescriptorBuilder {
-	log.Fatalf(context.TODO(),
+	log.Dev.Fatalf(context.TODO(),
 		"%s schema cannot create a builder", p.kindName())
 	return nil // unreachable
 }

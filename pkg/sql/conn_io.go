@@ -581,11 +581,11 @@ func (buf *StmtBuf) Ltrim(ctx context.Context, pos CmdPos) {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	if pos < buf.mu.startPos {
-		log.Fatalf(ctx, "invalid ltrim position: %d. buf starting at: %d",
+		log.Dev.Fatalf(ctx, "invalid ltrim position: %d. buf starting at: %d",
 			pos, buf.mu.startPos)
 	}
 	if buf.mu.curPos < pos {
-		log.Fatalf(ctx, "invalid ltrim position: %d when cursor is: %d",
+		log.Dev.Fatalf(ctx, "invalid ltrim position: %d when cursor is: %d",
 			pos, buf.mu.curPos)
 	}
 	// Remove commands one by one.
@@ -683,7 +683,7 @@ func (buf *StmtBuf) Rewind(ctx context.Context, pos CmdPos) {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	if pos < buf.mu.startPos {
-		log.Fatalf(ctx, "attempting to rewind below buffer start")
+		log.Dev.Fatalf(ctx, "attempting to rewind below buffer start")
 	}
 	if buf.PipelineCount != nil {
 		buf.PipelineCount.Inc(int64(buf.mu.curPos - pos))

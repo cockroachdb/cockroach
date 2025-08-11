@@ -82,7 +82,7 @@ func (s channelServer) HandleRaftResponse(
 			return err
 		}
 	}
-	log.Fatalf(ctx, "unexpected raft response: %s", resp)
+	log.Dev.Fatalf(ctx, "unexpected raft response: %s", resp)
 	return nil
 }
 

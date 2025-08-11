@@ -405,7 +405,7 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 					if prevResps != nil {
 						prevResp := prevResps[i]
 						if cErr := kvpb.CombineResponses(ctx, prevResp, resp, batchRequest); cErr != nil {
-							log.Fatalf(ctx, "%v", cErr)
+							log.Dev.Fatalf(ctx, "%v", cErr)
 						}
 						resp = prevResp
 					}

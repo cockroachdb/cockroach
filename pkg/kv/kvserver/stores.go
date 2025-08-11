@@ -130,7 +130,7 @@ func (ls *Stores) ForwardSideTransportClosedTimestampForRange(
 		}
 		return nil
 	}); err != nil {
-		log.Fatalf(ctx, "unexpected error: %s", err)
+		log.Dev.Fatalf(ctx, "unexpected error: %s", err)
 	}
 }
 
@@ -164,7 +164,7 @@ func (ls *Stores) GetReplicaForRangeID(
 		}
 		return nil
 	}); err != nil {
-		log.Fatalf(ctx, "unexpected error: %s", err)
+		log.Dev.Fatalf(ctx, "unexpected error: %s", err)
 	}
 	if replica == nil {
 		return nil, nil, kvpb.NewRangeNotFoundError(rangeID, 0)
@@ -213,9 +213,9 @@ func (ls *Stores) RangeFeed(
 	perConsumerCatchupLimiter *limit.ConcurrentRequestLimiter,
 ) (rangefeed.Disconnector, error) {
 	if args.RangeID == 0 {
-		log.Fatal(streamCtx, "rangefeed request missing range ID")
+		log.Dev.Fatal(streamCtx, "rangefeed request missing range ID")
 	} else if args.Replica.StoreID == 0 {
-		log.Fatal(streamCtx, "rangefeed request missing store ID")
+		log.Dev.Fatal(streamCtx, "rangefeed request missing store ID")
 	}
 
 	store, err := ls.GetStore(args.Replica.StoreID)

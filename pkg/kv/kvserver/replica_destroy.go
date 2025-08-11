@@ -168,7 +168,7 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	}
 
 	if !r.mu.destroyStatus.Removed() {
-		log.Fatalf(ctx, "removing raft group before destroying replica %s", r)
+		log.Dev.Fatalf(ctx, "removing raft group before destroying replica %s", r)
 	}
 	r.mu.internalRaftGroup = nil
 	r.mu.raftTracer.Close()

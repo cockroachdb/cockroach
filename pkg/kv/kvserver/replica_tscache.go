@@ -74,7 +74,7 @@ func (r *Replica) addToTSCacheChecked(
 	// production logic.
 	if st := r.CurrentLeaseStatus(ctx); st.IsValid() && st.OwnedBy(r.StoreID()) {
 		if exp := st.Expiration(); exp.LessEq(ts) {
-			log.Fatalf(ctx, "Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
+			log.Dev.Fatalf(ctx, "Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
 				"cache after evaluating %v (resp=%v; err=%v) with lease expiration %v. The timestamp "+
 				"cache update could be lost on a non-cooperative lease change.", ts, ba, br, pErr, exp)
 		}
@@ -239,7 +239,7 @@ func (r *Replica) updateTimestampCache(
 				// timestamp was already below the prepared transaction's timestamp.
 				continue
 			default:
-				log.Fatalf(ctx, "unexpected transaction status: %v", pushee.Status)
+				log.Dev.Fatalf(ctx, "unexpected transaction status: %v", pushee.Status)
 			}
 
 			var key roachpb.Key

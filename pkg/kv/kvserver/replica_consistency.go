@@ -819,7 +819,7 @@ creation. These directories should be deleted, or inspected with caution.
 			p(*r.store.Ident)
 		} else {
 			time.Sleep(10 * time.Second)
-			log.Fatalf(r.AnnotateCtx(context.Background()), attentionFmt, attentionArgs...)
+			log.Dev.Fatalf(r.AnnotateCtx(context.Background()), attentionFmt, attentionArgs...)
 		}
 	}); err != nil {
 		taskCancel()

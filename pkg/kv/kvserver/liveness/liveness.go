@@ -612,7 +612,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 	log.VEventf(ctx, 1, "starting node liveness instance")
 	if nl.started.Load() {
 		// This is meant to prevent tests from calling start twice.
-		log.Fatal(ctx, "liveness already started")
+		log.Dev.Fatal(ctx, "liveness already started")
 	}
 
 	retryOpts := base.DefaultRetryOptions()

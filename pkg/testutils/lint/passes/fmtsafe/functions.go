@@ -38,7 +38,7 @@ in the form (main.yourStruct).yourFuncF
 var requireConstFmt = map[string]bool{
 	// Logging things.
 	"log.Printf":           true,
-	"log.Fatalf":           true,
+	"log.Dev.Fatalf":       true,
 	"log.Panicf":           true,
 	"(*log.Logger).Fatalf": true,
 	"(*log.Logger).Panicf": true,
