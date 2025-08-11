@@ -1302,10 +1302,10 @@ func TestIncompatibleVersion(t *testing.T) {
 	p.Close()
 
 	// Overwrite the min version file with an unsupported version.
-	version := roachpb.Version{Major: 21, Minor: 1}
-	b, err := protoutil.Marshal(&version)
+	ver := roachpb.Version{Major: 21, Minor: 1}
+	b, err := protoutil.Marshal(&ver)
 	require.NoError(t, err)
-	require.NoError(t, safeWriteToUnencryptedFile(memFS, "", MinVersionFilename, b, fs.UnspecifiedWriteCategory))
+	require.NoError(t, fs.SafeWriteToUnencryptedFile(memFS, "", fs.MinVersionFilename, b, fs.UnspecifiedWriteCategory))
 
 	env = mustInitTestEnv(t, memFS, "")
 	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())
@@ -1331,7 +1331,7 @@ func TestNoMinVerFile(t *testing.T) {
 	p.Close()
 
 	// Remove the min version filename.
-	require.NoError(t, memFS.Remove(MinVersionFilename))
+	require.NoError(t, memFS.Remove(fs.MinVersionFilename))
 
 	// We are still allowed the open the store if we haven't written anything to it.
 	// This is useful in case the initial Open crashes right before writinng the
@@ -1347,7 +1347,7 @@ func TestNoMinVerFile(t *testing.T) {
 	p.Close()
 
 	// Remove the min version filename.
-	require.NoError(t, memFS.Remove(MinVersionFilename))
+	require.NoError(t, memFS.Remove(fs.MinVersionFilename))
 
 	env = mustInitTestEnv(t, memFS, "")
 	_, err = Open(ctx, env, st)
