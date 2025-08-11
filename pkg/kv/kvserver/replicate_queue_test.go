@@ -2477,7 +2477,18 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 	// decommissioning replica is noticed via maybeEnqueueProblemRange.
 	scratchKey := tc.ScratchRange(t)
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decommissioningSrvIdx))
+
+	// Get the initial metric values before enabling the replicate queue
+	initialAttempts := getDecommissioningNudgerMetricValue(t, tc, "attempts")
+	initialSuccesses := getDecommissioningNudgerMetricValue(t, tc, "success")
+	initialFailures := getDecommissioningNudgerMetricValue(t, tc, "failure")
+
+	t.Logf("Initial metric values - Attempts: %d, Successes: %d, Failures: %d",
+		initialAttempts, initialSuccesses, initialFailures)
+
 	tc.ToggleReplicateQueues(true /* active */)
+
+	// Wait for the replica to be removed and verify metrics were incremented
 	testutils.SucceedsSoon(t, func() error {
 		var descs []*roachpb.RangeDescriptor
 		tc.GetFirstStoreFromServer(t, decommissioningSrvIdx).VisitReplicas(func(r *kvserver.Replica) bool {
@@ -2489,4 +2500,51 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 		}
 		return nil
 	})
+
+	// Verify that the decommissioning nudger metrics were incremented
+	finalAttempts := getDecommissioningNudgerMetricValue(t, tc, "attempts")
+	finalSuccesses := getDecommissioningNudgerMetricValue(t, tc, "success")
+	finalFailures := getDecommissioningNudgerMetricValue(t, tc, "failure")
+
+	t.Logf("Final metric values - Attempts: %d, Successes: %d, Failures: %d",
+		finalAttempts, finalSuccesses, finalFailures)
+
+	// Verify that attempts were incremented (at least one attempt should have been made)
+	require.Greater(t, finalAttempts, initialAttempts,
+		"Expected decommissioning nudger enqueue attempts to be incremented")
+
+	// Verify that successes were incremented (at least one success should have occurred)
+	require.Greater(t, finalSuccesses, initialSuccesses,
+		"Expected decommissioning nudger enqueue successes to be incremented")
+
+	t.Logf("Decommissioning nudger enqueue failures increased by %d",
+		finalFailures-initialFailures)
+}
+
+// getDecommissioningNudgerMetricValue retrieves the value of a specific decommissioning
+// nudger metric from the test cluster. It aggregates the values across all stores.
+func getDecommissioningNudgerMetricValue(
+	t *testing.T, tc *testcluster.TestCluster, metricType string,
+) int64 {
+	var total int64
+
+	for i := 0; i < tc.NumServers(); i++ {
+		store := tc.GetFirstStoreFromServer(t, i)
+		var value int64
+
+		switch metricType {
+		case "attempts":
+			value = store.Metrics().DecommissioningNudgerEnqueueAttempts.Count()
+		case "success":
+			value = store.Metrics().DecommissioningNudgerEnqueueSuccess.Count()
+		case "failure":
+			value = store.Metrics().DecommissioningNudgerEnqueueFailure.Count()
+		default:
+			t.Fatalf("Unknown metric type: %s", metricType)
+		}
+
+		total += value
+	}
+
+	return total
 }
