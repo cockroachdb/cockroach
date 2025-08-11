@@ -2522,6 +2522,20 @@ func TestAlterExternalConnection(t *testing.T) {
 	})
 
 	dbBNode2.Exec(t, fmt.Sprintf("ALTER EXTERNAL CONNECTION '%s' AS '%s'", externalConnName, dbANode1URL.String()))
+
+	// Wait for job to detect change, complete replan, and resume running
+	testutils.SucceedsSoon(t, func() error {
+		var status string
+		err := dbBNode2.DB.QueryRowContext(ctx, "SELECT status FROM crdb_internal.jobs WHERE job_id = $1", jobID).Scan(&status)
+		if err != nil {
+			return err
+		}
+		if status != "running" {
+			return errors.Errorf("job %d status is %s, waiting for running", jobID, status)
+		}
+		return nil
+	})
+
 	now = node0.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobID)
 	dbANode1.Exec(t, "INSERT INTO tab VALUES (2, 'via_node_1')")
