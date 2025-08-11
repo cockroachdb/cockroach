@@ -171,7 +171,7 @@ func TestWriteBackupIndexMetadata(t *testing.T) {
 	require.Equal(t, subdir, metadata.Path)
 }
 
-func TestWriteBackupIndexMetadataWithLocalityAwareAndIncrementalStorage(t *testing.T) {
+func TestWriteBackupIndexMetadataWithLocalityAwareBackups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -184,13 +184,9 @@ func TestWriteBackupIndexMetadataWithLocalityAwareAndIncrementalStorage(t *testi
 
 	collections := `('nodelocal://1/us-west?COCKROACH_LOCALITY=region%3Dus-west',
 		'nodelocal://1/us-east?COCKROACH_LOCALITY=default')`
-	incStorage := `('nodelocal://1/us-west/inc?COCKROACH_LOCALITY=region%3Dus-west',
-		'nodelocal://1/us-east-inc?COCKROACH_LOCALITY=default')`
 
-	sqlDB.Exec(t, fmt.Sprintf(`BACKUP INTO %s WITH incremental_location = %s`, collections, incStorage))
-	sqlDB.Exec(t, fmt.Sprintf(
-		`BACKUP INTO LATEST IN %s WITH incremental_location = %s`, collections, incStorage,
-	))
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP INTO %s`, collections))
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP INTO LATEST IN %s`, collections))
 
 	indexDir := path.Join(tempDir, "us-east", backupbase.BackupIndexDirectoryPath)
 	fullIndexes, err := os.ReadDir(indexDir)
@@ -224,6 +220,36 @@ func TestWriteBackupIndexMetadataWithLocalityAwareAndIncrementalStorage(t *testi
 	// index path, implying that its path starts from the root of the incremental
 	// storage directory.
 	require.True(t, strings.HasPrefix(incrIndex.Path, fullIndex.Path))
+}
+
+func TestWriteBackupindexMetadataWithSpecifiedIncrementalLocation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tempDir, tempDirCleanup := testutils.TempDir(t)
+	defer tempDirCleanup()
+	_, sqlDB, _, cleanup := backuptestutils.StartBackupRestoreTestCluster(
+		t, 1, backuptestutils.WithTempDir(tempDir),
+	)
+	defer cleanup()
+
+	const collectionURI = "nodelocal://1/backup"
+	const incLoc = "nodelocal://1/incremental_backup"
+
+	sqlDB.Exec(t, "BACKUP INTO $1", collectionURI)
+	sqlDB.Exec(t, "BACKUP INTO LATEST IN $1 WITH incremental_location=$2", collectionURI, incLoc)
+
+	indexDir := path.Join(tempDir, "backup", backupbase.BackupIndexDirectoryPath)
+	fullIndexes, err := os.ReadDir(indexDir)
+	require.NoError(t, err)
+	require.Len(t, fullIndexes, 1)
+
+	chainIndexes, err := os.ReadDir(path.Join(indexDir, fullIndexes[0].Name()))
+	require.NoError(t, err)
+
+	// Since we specified an incremental location, we should not see an index
+	// being written for the incremental backup.
+	require.Len(t, chainIndexes, 1)
 }
 
 func TestDontWriteBackupIndexMetadata(t *testing.T) {
