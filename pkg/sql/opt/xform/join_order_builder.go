@@ -620,6 +620,9 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 	jb.equivs.AddFromFDs(&jb.plans[s1].Relational().FuncDeps)
 	jb.equivs.AddFromFDs(&jb.plans[s2].Relational().FuncDeps)
 
+	notNullCols := jb.plans[s1].Relational().NotNullCols.Copy()
+	notNullCols.UnionWith(jb.plans[s2].Relational().NotNullCols)
+
 	// Gather all inner edges that connect the left and right relation sets.
 	var innerJoinFilters memo.FiltersExpr
 	for i, ok := jb.innerEdges.Next(0); ok; i, ok = jb.innerEdges.Next(i + 1) {
@@ -631,7 +634,11 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 			// Record this edge as applied even if it's redundant, since redundant
 			// edges are trivially applied.
 			appliedEdges.Add(i)
-			if areFiltersRedundant(&jb.equivs, e.filters) {
+			redundant := areFiltersRedundant(&jb.equivs, e.filters, notNullCols)
+			// Update notNullCols based on null-rejecting filters to aid in
+			// finding subsequent redundant filters.
+			notNullCols.UnionWith(memo.NullColsRejectedByFilter(jb.ctx, jb.evalCtx, e.filters))
+			if redundant {
 				// Avoid adding redundant filters.
 				continue
 			}
@@ -887,7 +894,11 @@ func (jb *JoinOrderBuilder) addJoin(
 
 // areFiltersRedundant returns true if the given FiltersExpr contains a single
 // equality filter that is already represented by the given EquivGroups set.
-func areFiltersRedundant(equivs *props.EquivGroups, filters memo.FiltersExpr) bool {
+// notNullCols is the set of columns that are known to be non-null, either from
+// the logical properties of the join inputs, or from other filters.
+func areFiltersRedundant(
+	equivs *props.EquivGroups, filters memo.FiltersExpr, notNullCols opt.ColSet,
+) bool {
 	if len(filters) != 1 {
 		return false
 	}
@@ -898,6 +909,13 @@ func areFiltersRedundant(equivs *props.EquivGroups, filters memo.FiltersExpr) bo
 	var1, ok1 := eq.Left.(*memo.VariableExpr)
 	var2, ok2 := eq.Right.(*memo.VariableExpr)
 	if !ok1 || !ok2 {
+		return false
+	}
+	if !notNullCols.Contains(var1.Col) || !notNullCols.Contains(var2.Col) {
+		// An equality between columns is not redundant if either column is
+		// nullable because equality is null-rejecting. equivs allows for NULL
+		// values of equivalent columns, so we must check for nullable columns
+		// before checking for equivalence.
 		return false
 	}
 	return equivs.AreColsEquiv(var1.Col, var2.Col)

@@ -3558,7 +3558,7 @@ right-join (hash)
 
 # Only 2 joins are considered (instead of 8) when the STRAIGHT hint is present in one join.
 reorderjoins format=hide-all
-SELECT * 
+SELECT *
 FROM straight_join1
 INNER STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
 INNER JOIN straight_join3 ON straight_join1.x = straight_join3.z
@@ -3608,7 +3608,7 @@ inner-join (hash)
 
 # No joins are considered when the STRAIGHT hint is present in both joins.
 reorderjoins format=hide-all
-SELECT * 
+SELECT *
 FROM straight_join1
 INNER STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
 INNER STRAIGHT JOIN straight_join3 ON straight_join1.x = straight_join3.z
@@ -3628,3 +3628,50 @@ inner-join (hash)
  ├── scan straight_join3
  └── filters
       └── straight_join1.x = z
+
+exec-ddl
+CREATE TABLE t146507 (
+  a INT,
+  b INT
+)
+----
+
+# Regression test for #146507. Join reordering must not eliminate the
+# null-rejecting filter t.b:2 = t.b:2. There should be no inner-joins with empty
+# filters.
+memo disable=(SimplifySameVarEqualities,PushFilterIntoJoinLeft,HoistUnboundFilterFromExistsSubquery)
+SELECT a FROM t146507 AS t WHERE b IN (SELECT t.b FROM t146507 AS t2)
+----
+memo (optimized, ~23KB, required=[presentation: a:1])
+ ├── G1: (project G2 G3 a)
+ │    └── [presentation: a:1]
+ │         ├── best: (project G2 G3 a)
+ │         └── cost: 1130.15
+ ├── G2: (semi-join G4 G5 G6) (project G7 G3 a b)
+ │    └── []
+ │         ├── best: (project G7 G3 a b)
+ │         └── cost: 1120.13
+ ├── G3: (projections)
+ ├── G4: (scan t146507 [as=t],cols=(1,2))
+ │    └── []
+ │         ├── best: (scan t146507 [as=t],cols=(1,2))
+ │         └── cost: 1078.52
+ ├── G5: (scan t146507 [as=t2],cols=())
+ │    ├── [limit hint: 1.00]
+ │    │    ├── best: (scan t146507 [as=t2],cols=())
+ │    │    └── cost: 19.05
+ │    └── []
+ │         ├── best: (scan t146507 [as=t2],cols=())
+ │         └── cost: 1058.32
+ ├── G6: (filters G8)
+ ├── G7: (inner-join G4 G9 G6) (inner-join G9 G4 G6)
+ │    └── []
+ │         ├── best: (inner-join G4 G9 G6)
+ │         └── cost: 1110.11
+ ├── G8: (eq G10 G10)
+ ├── G9: (limit G5 G11) (scan t146507 [as=t2],cols=(),lim=1)
+ │    └── []
+ │         ├── best: (scan t146507 [as=t2],cols=(),lim=1)
+ │         └── cost: 9.04
+ ├── G10: (variable t.b)
+ └── G11: (const 1)

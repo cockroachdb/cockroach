@@ -89,18 +89,20 @@ func (eq *EquivGroups) ContainsCol(col opt.ColumnID) bool {
 	return false
 }
 
-// AreColsEquiv indicates whether the given columns are equivalent.
-func (eq *EquivGroups) AreColsEquiv(left, right opt.ColumnID) bool {
+// AreColsEquiv indicates whether the given columns are equivalent. If "a" and
+// "b" are the same column, true is always returned, even for an empty
+// EquivGroups.
+func (eq *EquivGroups) AreColsEquiv(a, b opt.ColumnID) bool {
 	if buildutil.CrdbTestBuild {
 		defer eq.verify()
 	}
-	if left == right {
+	if a == b {
 		return true
 	}
 	for i := range eq.groups {
-		containsLeft, containsRight := eq.groups[i].Contains(left), eq.groups[i].Contains(right)
-		if containsLeft || containsRight {
-			return containsLeft && containsRight
+		containsA, containsB := eq.groups[i].Contains(a), eq.groups[i].Contains(b)
+		if containsA || containsB {
+			return containsA && containsB
 		}
 	}
 	return false
