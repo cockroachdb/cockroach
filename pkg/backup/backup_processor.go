@@ -602,7 +602,7 @@ func runBackupProcessor(
 							// message so use that instead.
 							if errors.HasType(exportRequestErr, (*timeutil.TimeoutError)(nil)) {
 								if recording != nil {
-									log.Errorf(ctx, "failed export request for span %s\n trace:\n%s", span.span, recording)
+									log.Dev.Errorf(ctx, "failed export request for span %s\n trace:\n%s", span.span, recording)
 								}
 								return errors.Wrap(exportRequestErr, "KV storage layer did not respond to BACKUP within timeout")
 							}
@@ -620,7 +620,7 @@ func runBackupProcessor(
 							}
 
 							if recording != nil {
-								log.Errorf(ctx, "failed export request %s\n trace:\n%s", span.span, recording)
+								log.Dev.Errorf(ctx, "failed export request %s\n trace:\n%s", span.span, recording)
 							}
 							return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 						}

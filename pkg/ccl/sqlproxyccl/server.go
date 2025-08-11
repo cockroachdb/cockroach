@@ -161,7 +161,7 @@ func (s *Server) handleMetricsHelper(w http.ResponseWriter, r *http.Request, use
 		pm.ScrapeRegistry(s.metricsRegistry, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true), metric.WithUseStaticLabels(useStaticLabels))
 	}
 	if err := s.prometheusExporter.ScrapeAndPrintAsText(w, contentType, scrape); err != nil {
-		log.Errorf(r.Context(), "%v", err)
+		log.Dev.Errorf(r.Context(), "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
@@ -427,7 +427,7 @@ func (s *Server) shouldLogError(
 	// Instead of panicking, we'll skip throttling.
 	tenantIDStr, ok := tenantID.(string)
 	if !ok {
-		log.Errorf(
+		log.Dev.Errorf(
 			ctx,
 			"unexpected error: cannot extract tenant ID from request tags; found: %v",
 			tenantID,
@@ -440,7 +440,7 @@ func (s *Server) shouldLogError(
 	// will always return a valid IP.
 	ipAddr, _, err := addr.SplitHostPort(conn.RemoteAddr().String(), "")
 	if err != nil {
-		log.Errorf(
+		log.Dev.Errorf(
 			ctx,
 			"unexpected error: cannot extract remote IP from connection; found: %v",
 			conn.RemoteAddr().String(),

@@ -147,7 +147,7 @@ func (z *zeroSum) maybeLogError(err error) {
 	if localcluster.IsUnavailableError(err) || strings.Contains(err.Error(), "range is frozen") {
 		return
 	}
-	log.Errorf(context.Background(), "%v", err)
+	log.Dev.Errorf(context.Background(), "%v", err)
 	atomic.AddUint64(&z.stats.errors, 1)
 }
 

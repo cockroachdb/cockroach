@@ -571,7 +571,7 @@ func RevalidateUniqueConstraintsInTable(
 				user,
 				true, /* preExisting */
 			); err != nil {
-				log.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
+				log.Dev.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
 				return errors.Wrapf(err, "for table %s", tableDesc.GetName())
 			}
 		}
@@ -591,7 +591,7 @@ func RevalidateUniqueConstraintsInTable(
 				user,
 				true, /* preExisting */
 			); err != nil {
-				log.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
+				log.Dev.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
 				return errors.Wrapf(err, "for table %s", tableDesc.GetName())
 			}
 		}

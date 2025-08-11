@@ -326,7 +326,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 
 	// Update the fetcher to use the new txn.
 	if err := cb.fetcher.SetTxn(txn); err != nil {
-		log.Errorf(ctx, "scan error during SetTxn: %s", err)
+		log.Dev.Errorf(ctx, "scan error during SetTxn: %s", err)
 		return roachpb.Key{}, err
 	}
 
@@ -343,7 +343,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		rowinfra.GetDefaultBatchBytesLimit(cb.evalCtx.TestingKnobs.ForceProductionValues),
 		chunkSize,
 	); err != nil {
-		log.Errorf(ctx, "scan error: %s", err)
+		log.Dev.Errorf(ctx, "scan error: %s", err)
 		return roachpb.Key{}, err
 	}
 
@@ -1080,7 +1080,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		rowinfra.GetDefaultBatchBytesLimit(ib.evalCtx.TestingKnobs.ForceProductionValues),
 		initBufferSize,
 	); err != nil {
-		log.Errorf(ctx, "scan error: %s", err)
+		log.Dev.Errorf(ctx, "scan error: %s", err)
 		return nil, nil, memUsedPerChunk, err
 	}
 

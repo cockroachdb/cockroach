@@ -130,7 +130,7 @@ func getCombinedStatementStats(
 		sort,
 	)
 	if err != nil {
-		log.Errorf(ctx, "Error on activityTablesHaveFullData: %s", err)
+		log.Dev.Errorf(ctx, "Error on activityTablesHaveFullData: %s", err)
 	}
 
 	stmtsRunTime, txnsRunTime, oldestDate, stmtSourceTable, txnSourceTable, err := getSourceStatsInfo(

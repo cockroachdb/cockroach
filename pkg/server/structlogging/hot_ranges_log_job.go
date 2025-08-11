@@ -62,7 +62,7 @@ func (j *hotRangesLoggingJob) OnFailOrCancel(
 		err := errors.NewAssertionErrorWithWrappedErrf(
 			jobErr, "hot range logging job is not cancelable",
 		)
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 	}
 	return nil
 }

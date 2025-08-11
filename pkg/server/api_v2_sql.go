@@ -236,7 +236,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusInternalServerError)
-			log.Errorf(r.Context(), "JSON marshal error: %v", err)
+			log.Dev.Errorf(r.Context(), "JSON marshal error: %v", err)
 			_, err = w.Write([]byte(err.Error()))
 			if err != nil {
 				log.Dev.Warningf(r.Context(), "HTTP short write: %v", err)

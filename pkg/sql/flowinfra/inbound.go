@@ -245,7 +245,7 @@ func processProducerMessage(
 			if !*draining {
 				*draining = true
 				if err := sendDrainSignalToStreamProducer(ctx, stream); err != nil {
-					log.Errorf(ctx, "draining error: %s", err)
+					log.Dev.Errorf(ctx, "draining error: %s", err)
 				}
 			}
 		case execinfra.ConsumerClosed:

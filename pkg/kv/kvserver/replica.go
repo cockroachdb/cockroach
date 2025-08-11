@@ -1531,7 +1531,7 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 			// I wish this could be a Fatal, but unfortunately it's possible for the
 			// lease to be incoherent with the descriptor after a leaseholder was
 			// brutally removed through `cockroach debug recover`.
-			log.Errorf(ctx, "leaseholder replica not in descriptor; desc: %s, lease: %s", desc, l)
+			log.Dev.Errorf(ctx, "leaseholder replica not in descriptor; desc: %s, lease: %s", desc, l)
 			// Let's not return an incoherent lease; for example if we end up
 			// returning it to a client through a br.RangeInfos, the client will freak
 			// out.
@@ -1991,7 +1991,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 		// The roundabout way of printing here is to expose this information in sentry.io.
 		//
 		// TODO(dt): expose properly once #15892 is addressed.
-		log.Errorf(ctx, "on-disk and in-memory state diverged:\n%s",
+		log.Dev.Errorf(ctx, "on-disk and in-memory state diverged:\n%s",
 			pretty.Diff(diskState, r.shMu.state))
 		r.shMu.state.Desc, diskState.Desc = nil, nil
 		log.Fatalf(ctx, "on-disk and in-memory state diverged: %s",

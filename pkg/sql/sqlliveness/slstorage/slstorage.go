@@ -420,7 +420,7 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 	toCheck, err := s.fetchExpiredSessionIDs(ctx)
 	if err != nil {
 		if ctx.Err() == nil {
-			log.Errorf(ctx, "could not delete expired sessions: %v", err)
+			log.Dev.Errorf(ctx, "could not delete expired sessions: %v", err)
 		}
 		return
 	}

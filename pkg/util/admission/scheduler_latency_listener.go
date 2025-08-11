@@ -168,7 +168,7 @@ func (e *schedulerLatencyListener) getParams(period time.Duration) schedulerLate
 	if minUtilization > maxUtilization { // user error
 		defaultMinUtilization := elasticCPUMinUtilization.Default()
 		defaultMaxUtilization := elasticCPUMaxUtilization.Default()
-		log.Errorf(e.ctx, "min utilization (%0.2f%%) > max utilization (%0.2f%%); resetting to defaults [%0.2f%%, %0.2f%%]",
+		log.Dev.Errorf(e.ctx, "min utilization (%0.2f%%) > max utilization (%0.2f%%); resetting to defaults [%0.2f%%, %0.2f%%]",
 			minUtilization*100, maxUtilization*100, defaultMinUtilization*100, defaultMaxUtilization*100,
 		)
 		minUtilization, maxUtilization = defaultMinUtilization, defaultMaxUtilization

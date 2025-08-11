@@ -77,7 +77,7 @@ func logPendingLossOfQuorumRecoveryEvents(ctx context.Context, stores *kvserver.
 	}); err != nil {
 		// We don't want to abort server if we can't record recovery events
 		// as it is the last thing we need if cluster is already unhealthy.
-		log.Errorf(ctx, "failed to record loss of quorum recovery events: %v", err)
+		log.Dev.Errorf(ctx, "failed to record loss of quorum recovery events: %v", err)
 	}
 }
 
@@ -117,7 +117,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 		}); err != nil {
 			// We don't want to abort server if we can't record recovery events
 			// as it is the last thing we need if cluster is already unhealthy.
-			log.Errorf(ctx, "failed to update range log with loss of quorum recovery events: %v", err)
+			log.Dev.Errorf(ctx, "failed to update range log with loss of quorum recovery events: %v", err)
 		}
 	})
 
@@ -126,7 +126,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	err := stores.VisitStores(func(s *kvserver.Store) error {
 		c, found, err := loqrecovery.ReadCleanupActionsInfo(ctx, s.TODOEngine())
 		if err != nil {
-			log.Errorf(ctx, "failed to read loss of quorum recovery cleanup actions info from store: %s", err)
+			log.Dev.Errorf(ctx, "failed to read loss of quorum recovery cleanup actions info from store: %s", err)
 			return nil
 		}
 		if found {

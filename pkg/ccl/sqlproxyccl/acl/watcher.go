@@ -355,7 +355,7 @@ func pollAndUpdateChan(
 			select {
 			case <-ctx.Done():
 				close(result)
-				log.Errorf(ctx, "WatchList daemon stopped: %v", ctx.Err())
+				log.Dev.Errorf(ctx, "WatchList daemon stopped: %v", ctx.Err())
 				return
 			case <-t.Ch():
 				result <- accessController

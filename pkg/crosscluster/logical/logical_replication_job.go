@@ -991,7 +991,7 @@ func (r *logicalReplicationResumer) OnFailOrCancel(
 	}
 	if details.CreateTable && !progress.PublishedNewTables {
 		if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, r.job, maxWait); err != nil {
-			log.Errorf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", r.job.ID(), maxWait, err)
+			log.Dev.Errorf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", r.job.ID(), maxWait, err)
 		} else {
 			log.Dev.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", r.job.ID())
 		}

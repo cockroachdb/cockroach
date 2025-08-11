@@ -123,7 +123,7 @@ func (rgcq *replicaGCQueue) shouldQueue(
 	}
 	lastCheck, err := repl.GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
-		log.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
+		log.Dev.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
 		return false, 0
 	}
 	isSuspect := replicaIsSuspect(repl)

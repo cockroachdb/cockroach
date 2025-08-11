@@ -328,7 +328,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 			updatedVal := []byte("updatedVal")
 			if err := txn.CPut(ctx, key, updatedVal, kvclientutils.StrToCPutExistingValue("initVal")); err != nil {
-				log.Errorf(context.Background(), "failed put value: %+v", err)
+				log.Dev.Errorf(context.Background(), "failed put value: %+v", err)
 				return err
 			}
 

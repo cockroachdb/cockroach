@@ -278,7 +278,7 @@ func (b *Balancer) RebalanceTenant(ctx context.Context, tenantID roachpb.TenantI
 
 	tenantPods, err := b.directoryCache.TryLookupTenantPods(ctx, tenantID)
 	if err != nil {
-		log.Errorf(ctx, "could not rebalance tenant %s: %v", tenantID, err.Error())
+		log.Dev.Errorf(ctx, "could not rebalance tenant %s: %v", tenantID, err.Error())
 		return
 	}
 
@@ -345,14 +345,14 @@ func (b *Balancer) processQueue(ctx context.Context) {
 	// or false otherwise.
 	processOneReq := func() (canContinue bool) {
 		if err := b.processSem.Acquire(ctx, 1); err != nil {
-			log.Errorf(ctx, "could not acquire processSem: %v", err.Error())
+			log.Dev.Errorf(ctx, "could not acquire processSem: %v", err.Error())
 			return false
 		}
 
 		req, err := b.queue.dequeue(ctx)
 		if err != nil {
 			// Context is cancelled.
-			log.Errorf(ctx, "could not dequeue from rebalancer queue: %v", err.Error())
+			log.Dev.Errorf(ctx, "could not dequeue from rebalancer queue: %v", err.Error())
 			return false
 		}
 
@@ -382,7 +382,7 @@ func (b *Balancer) processQueue(ctx context.Context) {
 		}); err != nil {
 			// We should not hit this case, but if we did, log and abandon the
 			// transfer.
-			log.Errorf(ctx, "could not run async task for processQueue-item: %v", err.Error())
+			log.Dev.Errorf(ctx, "could not run async task for processQueue-item: %v", err.Error())
 		}
 		return true
 	}

@@ -57,7 +57,7 @@ func Deserialize[T any](reader io.Reader) (T, error) {
 func readFile[T FromFile](ctx context.Context, filename string, postRead func(c T)) (T, error) {
 	handle, err := os.Open(filename)
 	if err != nil {
-		log.Errorf(ctx, "open file %s: %v", filename, err)
+		log.Dev.Errorf(ctx, "open file %s: %v", filename, err)
 		return *new(T), err
 	}
 	defer handle.Close()
@@ -66,10 +66,10 @@ func readFile[T FromFile](ctx context.Context, filename string, postRead func(c 
 	if err != nil {
 		stat, _ := handle.Stat()
 		if stat != nil {
-			log.Errorf(ctx, "error updating access control list from file %s modified at %s: %v",
+			log.Dev.Errorf(ctx, "error updating access control list from file %s modified at %s: %v",
 				filename, stat.ModTime(), err)
 		} else {
-			log.Errorf(ctx, "error updating access control list from file %s: %v",
+			log.Dev.Errorf(ctx, "error updating access control list from file %s: %v",
 				filename, err)
 		}
 		return *new(T), err
@@ -103,7 +103,7 @@ func watchForUpdate[T FromFile](
 			select {
 			case <-ctx.Done():
 				close(result)
-				log.Errorf(ctx, "WatchList daemon stopped: %v", ctx.Err())
+				log.Dev.Errorf(ctx, "WatchList daemon stopped: %v", ctx.Err())
 				return
 			case <-t.Ch():
 				list, err := readFile[T](ctx, filename, postRead)
@@ -112,7 +112,7 @@ func watchForUpdate[T FromFile](
 						hasError = true
 						errorCount.Inc(1)
 					}
-					log.Errorf(ctx, "Could not read file %s for %T: %v", filename, list, err)
+					log.Dev.Errorf(ctx, "Could not read file %s for %T: %v", filename, list, err)
 					continue
 				}
 				if hasError && errorCount != nil {

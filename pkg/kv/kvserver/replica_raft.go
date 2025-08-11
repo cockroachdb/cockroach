@@ -415,7 +415,7 @@ func (r *Replica) propose(
 
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		if err := checkReplicationChangeAllowed(p.command, r.Desc(), r.StoreID()); err != nil {
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 			return kvpb.NewError(err)
 		}
 		log.KvDistribution.Infof(p.Context(), "proposing %s", crt)

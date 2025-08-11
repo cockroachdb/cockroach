@@ -151,7 +151,7 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 					if err := stats.update(
 						ctx, &constraintsSaver, &replStatsSaver, &criticalLocSaver,
 					); err != nil {
-						log.Errorf(ctx, "failed to generate replication reports: %s", err)
+						log.Dev.Errorf(ctx, "failed to generate replication reports: %s", err)
 					}
 				}
 				timer.Reset(interval)
@@ -230,7 +230,7 @@ func (stats *Reporter) update(
 		&constraintConfVisitor, &localityStatsVisitor, &replicationStatsVisitor,
 	); err != nil {
 		if errors.HasType(err, (*visitorError)(nil)) {
-			log.Errorf(ctx, "some reports have not been generated: %s", err)
+			log.Dev.Errorf(ctx, "some reports have not been generated: %s", err)
 		} else {
 			return errors.Wrap(err, "failed to compute constraint conformance report")
 		}

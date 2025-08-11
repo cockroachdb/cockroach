@@ -323,7 +323,7 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 		}
 
 		if !errors.IsAny(lastErr, io.EOF, io.ErrUnexpectedEOF) {
-			log.Errorf(ctx, "%s", lastErr)
+			log.Dev.Errorf(ctx, "%s", lastErr)
 		}
 
 		// Use the configured retry-on-error decider to check for a resumable error.
@@ -331,7 +331,7 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 			if retries >= maxNoProgressReads {
 				return read, errors.Wrapf(lastErr, "multiple Read calls (%d) return no data", retries)
 			}
-			log.Errorf(ctx, "Retry IO error: %s", lastErr)
+			log.Dev.Errorf(ctx, "Retry IO error: %s", lastErr)
 			lastErr = nil
 			if r.Reader != nil {
 				r.Reader.Close()

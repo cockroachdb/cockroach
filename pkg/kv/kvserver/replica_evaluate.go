@@ -116,7 +116,7 @@ func optimizePuts(
 	if ok, err := iter.Valid(); err != nil {
 		// TODO(bdarnell): return an error here instead of silently
 		// running without the optimization?
-		log.Errorf(ctx, "Seek returned error; disabling blind-put optimization: %+v", err)
+		log.Dev.Errorf(ctx, "Seek returned error; disabling blind-put optimization: %+v", err)
 		return origReqs, nil
 	} else if ok && bytes.Compare(iter.UnsafeKey().Key, maxKey) <= 0 {
 		iterKey = iter.UnsafeKey().Key.Clone()
@@ -146,17 +146,17 @@ func optimizePuts(
 		defer ltIter.Close()
 
 		if valid, err := ltIter.SeekEngineKeyGE(storage.EngineKey{Key: ltStart}); err != nil {
-			log.Errorf(ctx, "SeekEngineKeyGE error; disabling blind-put optimization: %+v", err)
+			log.Dev.Errorf(ctx, "SeekEngineKeyGE error; disabling blind-put optimization: %+v", err)
 			return origReqs, nil
 		} else if valid {
 			engineKey, err := ltIter.EngineKey()
 			if err != nil {
-				log.Errorf(ctx, "EngineKey error; disabling blind-put optimization: %+v", err)
+				log.Dev.Errorf(ctx, "EngineKey error; disabling blind-put optimization: %+v", err)
 				return origReqs, nil
 			}
 			ltKey, err := engineKey.ToLockTableKey()
 			if err != nil {
-				log.Errorf(ctx, "ToLockTableKey error; disabling blind-put optimization: %+v", err)
+				log.Dev.Errorf(ctx, "ToLockTableKey error; disabling blind-put optimization: %+v", err)
 				return origReqs, nil
 			}
 			if bytes.Compare(ltKey.Key, maxKey) <= 0 &&

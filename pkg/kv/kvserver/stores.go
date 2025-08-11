@@ -108,7 +108,7 @@ func (ls *Stores) AddStore(s *Store) {
 	if !ls.mu.biLatestTS.IsEmpty() {
 		if err := ls.updateBootstrapInfoLocked(ls.mu.latestBI); err != nil {
 			ctx := ls.AnnotateCtx(context.TODO())
-			log.Errorf(ctx, "failed to update bootstrap info on newly added store: %+v", err)
+			log.Dev.Errorf(ctx, "failed to update bootstrap info on newly added store: %+v", err)
 		}
 	}
 }

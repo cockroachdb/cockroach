@@ -426,14 +426,14 @@ func MaybeApplyPendingRecoveryPlan(
 			// This is wrong, we must not have staged plans in a non-bootstrapped
 			// node. But we can't write an error here as store init might refuse to
 			// work if there are already some keys in store.
-			log.Errorf(ctx, "node is not bootstrapped but it already has a recovery plan staged: %s", err)
+			log.Dev.Errorf(ctx, "node is not bootstrapped but it already has a recovery plan staged: %s", err)
 			return nil
 		}
 		return err
 	}
 
 	if err := planStore.RemovePlan(); err != nil {
-		log.Errorf(ctx, "failed to remove loss of quorum recovery plan: %s", err)
+		log.Dev.Errorf(ctx, "failed to remove loss of quorum recovery plan: %s", err)
 	}
 
 	err = applyPlan(storeIdent.NodeID, plan)
@@ -443,11 +443,11 @@ func MaybeApplyPendingRecoveryPlan(
 	}
 	if err != nil {
 		r.Error = err.Error()
-		log.Errorf(ctx, "failed to apply staged loss of quorum recovery plan %s", err)
+		log.Dev.Errorf(ctx, "failed to apply staged loss of quorum recovery plan %s", err)
 	}
 	if err = writeNodeRecoveryResults(ctx, engines[0], r,
 		loqrecoverypb.DeferredRecoveryActions{DecommissionedNodeIDs: plan.DecommissionedNodeIDs}); err != nil {
-		log.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
+		log.Dev.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
 	}
 	return nil
 }

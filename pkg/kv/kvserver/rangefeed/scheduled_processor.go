@@ -695,7 +695,7 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 	case e.sync != nil:
 		if e.sync.testRegCatchupSpan != nil {
 			if err := p.reg.waitForCaughtUp(ctx, *e.sync.testRegCatchupSpan); err != nil {
-				log.Errorf(
+				log.Dev.Errorf(
 					ctx,
 					"error waiting for registries to catch up during test, results might be impacted: %s",
 					err,

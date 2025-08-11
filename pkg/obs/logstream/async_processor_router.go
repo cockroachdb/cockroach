@@ -214,7 +214,7 @@ func (bs *asyncProcessorRouter) routeAndProcess(ctx context.Context, events *lis
 		for _, r := range routes {
 			if err := r.Process(ctx, typed.event); err != nil {
 				// TODO(abarganier): Protect against log spam.
-				log.Errorf(ctx, "processing structured event: %v", err)
+				log.Dev.Errorf(ctx, "processing structured event: %v", err)
 			}
 		}
 	}

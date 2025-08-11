@@ -545,7 +545,7 @@ func (r *Replica) leasePostApplyLocked(
 				return
 			}
 			if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, keys.NodeLivenessSpan); err != nil {
-				log.Errorf(ctx, "%v", err)
+				log.Dev.Errorf(ctx, "%v", err)
 			}
 		})
 	}
@@ -918,7 +918,7 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 
 	if lResult.MaybeGossipNodeLiveness != nil {
 		if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, *lResult.MaybeGossipNodeLiveness); err != nil {
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 		}
 		lResult.MaybeGossipNodeLiveness = nil
 	}

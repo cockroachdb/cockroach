@@ -40,7 +40,7 @@ func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
 	if err := r.store.Gossip().AddInfo(
 		gossip.KeySentinel, r.store.ClusterID().GetBytes(),
 		r.store.cfg.SentinelGossipTTL()); err != nil {
-		log.Errorf(ctx, "failed to gossip sentinel: %+v", err)
+		log.Dev.Errorf(ctx, "failed to gossip sentinel: %+v", err)
 	}
 	if log.V(1) {
 		log.Dev.Infof(ctx, "gossiping first range from store %d, r%d: %s",
@@ -48,7 +48,7 @@ func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
 	}
 	if err := r.store.Gossip().AddInfoProto(
 		gossip.KeyFirstRangeDescriptor, r.shMu.state.Desc, configGossipTTL); err != nil {
-		log.Errorf(ctx, "failed to gossip first range metadata: %+v", err)
+		log.Dev.Errorf(ctx, "failed to gossip first range metadata: %+v", err)
 	}
 }
 
@@ -211,7 +211,7 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *kvpb.Error {
 			r.store.StoreID(), r.RangeID)
 	}
 	if err := r.store.Gossip().AddClusterID(r.store.ClusterID()); err != nil {
-		log.Errorf(ctx, "failed to gossip cluster ID: %+v", err)
+		log.Dev.Errorf(ctx, "failed to gossip cluster ID: %+v", err)
 	}
 
 	hasLease, pErr := r.getLeaseForGossip(ctx)

@@ -390,7 +390,7 @@ func (s *SQLServerWrapper) reportTenantInfo(ctx context.Context) error {
 	clientConnOptions, serverParams := MakeServerOptionsForURL(s.cfg.Config)
 	pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
 	if err != nil {
-		log.Errorf(ctx, "failed computing the URL: %v", err)
+		log.Dev.Errorf(ctx, "failed computing the URL: %v", err)
 	} else {
 		buf.Printf("sql:\t%s\n", pgURL.ToPQ())
 		buf.Printf("sql (JDBC):\t%s\n", pgURL.ToJDBC())

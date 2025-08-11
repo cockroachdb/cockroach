@@ -468,7 +468,7 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 				log.Fatalf(context.Background(), "%s", errors.WithAssertionFailure(err))
 			}
 			if n.every.ShouldLog() {
-				log.Errorf(context.Background(), "%s", err)
+				log.Dev.Errorf(context.Background(), "%s", err)
 			}
 		}
 	}
@@ -569,7 +569,7 @@ var _ replica_rac2.ACWorkQueue = &controllerImpl{}
 func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForAdmission) bool {
 	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(entry.StoreID)
 	if storeAdmissionQ == nil {
-		log.Errorf(ctx, "unable to find queue for store: %s", entry.StoreID)
+		log.Dev.Errorf(ctx, "unable to find queue for store: %s", entry.StoreID)
 		return false // nothing to do
 	}
 
@@ -600,7 +600,7 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 		WorkInfo: wi,
 	})
 	if err != nil {
-		log.Errorf(ctx, "error while admitting to store admission queue: %v", err)
+		log.Dev.Errorf(ctx, "error while admitting to store admission queue: %v", err)
 		return false
 	}
 	if handle.UseAdmittedWorkDone() {

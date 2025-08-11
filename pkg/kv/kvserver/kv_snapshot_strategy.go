@@ -136,7 +136,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	snapshotQ := s.cfg.KVAdmissionController.GetSnapshotQueue(s.StoreID())
 	if snapshotQ == nil {
-		log.Errorf(ctx, "unable to find snapshot queue for store: %s", s.StoreID())
+		log.Dev.Errorf(ctx, "unable to find snapshot queue for store: %s", s.StoreID())
 	}
 	// Using a nil pacer is effectively a noop if snapshot control is disabled.
 	var pacer *admission.SnapshotPacer = nil

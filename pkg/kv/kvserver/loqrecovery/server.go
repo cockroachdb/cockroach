@@ -492,7 +492,7 @@ func (s Server) NodeStatus(
 		return nil
 	})
 	if err = iterutil.Map(err); err != nil {
-		log.Errorf(ctx, "failed to read loss of quorum recovery application status %s", err)
+		log.Dev.Errorf(ctx, "failed to read loss of quorum recovery application status %s", err)
 		return nil, err
 	}
 

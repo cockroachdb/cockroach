@@ -206,10 +206,10 @@ func NewPartitionableConn(serverConn net.Conn) *PartitionableConn {
 			c.mu.err = err
 		}()
 		if err := c.clientConn.Close(); err != nil {
-			log.Errorf(context.TODO(), "unexpected error closing internal pipe: %s", err)
+			log.Dev.Errorf(context.TODO(), "unexpected error closing internal pipe: %s", err)
 		}
 		if err := c.serverConn.Close(); err != nil {
-			log.Errorf(context.TODO(), "error closing server conn: %s", err)
+			log.Dev.Errorf(context.TODO(), "error closing server conn: %s", err)
 		}
 	}()
 
@@ -233,7 +233,7 @@ func NewPartitionableConn(serverConn net.Conn) *PartitionableConn {
 			log.Fatalf(context.TODO(), "unexpected error closing internal pipe: %s", err)
 		}
 		if err := c.serverConn.Close(); err != nil {
-			log.Errorf(context.TODO(), "error closing server conn: %s", err)
+			log.Dev.Errorf(context.TODO(), "error closing server conn: %s", err)
 		}
 	}()
 

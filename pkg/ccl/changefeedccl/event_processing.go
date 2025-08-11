@@ -702,7 +702,7 @@ func (c *parallelEventConsumer) workerLoop(
 	defer func() {
 		err := consumer.Close()
 		if err != nil {
-			log.Errorf(ctx, "closing consumer: %v", err)
+			log.Dev.Errorf(ctx, "closing consumer: %v", err)
 		}
 	}()
 

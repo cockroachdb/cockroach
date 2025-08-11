@@ -433,7 +433,7 @@ func ReportOrPanic(
 	if !build.IsRelease() || (sv != nil && PanicOnAssertions.Get(sv)) {
 		panic(err)
 	}
-	log.Errorf(ctx, "%v", err)
+	log.Dev.Errorf(ctx, "%v", err)
 	sendCrashReport(ctx, sv, err, ReportTypeError)
 }
 

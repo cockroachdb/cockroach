@@ -110,7 +110,7 @@ func (c *Cache) livenessGossipUpdate(_ string, content roachpb.Value, _ int64) {
 	ctx := context.TODO()
 	var liveness livenesspb.Liveness
 	if err := content.GetProto(&liveness); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		return
 	}
 
@@ -122,12 +122,12 @@ func (c *Cache) storeGossipUpdate(_ string, content roachpb.Value, _ int64) {
 	ctx := context.TODO()
 	var storeDesc roachpb.StoreDescriptor
 	if err := content.GetProto(&storeDesc); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		return
 	}
 	nodeID := storeDesc.Node.NodeID
 	if nodeID == 0 {
-		log.Errorf(ctx, "unexpected update for node 0, %v", storeDesc)
+		log.Dev.Errorf(ctx, "unexpected update for node 0, %v", storeDesc)
 		return
 	}
 	c.mu.Lock()

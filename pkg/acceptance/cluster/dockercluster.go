@@ -235,7 +235,7 @@ func (l *DockerCluster) OneShot(
 	l.oneshot = c
 	defer func() {
 		if err := l.oneshot.Remove(ctx); err != nil {
-			log.Errorf(ctx, "ContainerRemove: %s", err)
+			log.Dev.Errorf(ctx, "ContainerRemove: %s", err)
 		}
 		l.oneshot = nil
 	}()
@@ -576,7 +576,7 @@ func (l *DockerCluster) processEvent(ctx context.Context, event events.Message) 
 	for i, n := range l.Nodes {
 		if n != nil && n.id == event.ID {
 			if log.V(1) {
-				log.Errorf(ctx, "node=%d status=%s", i, event.Status)
+				log.Dev.Errorf(ctx, "node=%d status=%s", i, event.Status)
 			}
 			select {
 			case l.events <- Event{NodeIndex: i, Status: event.Status}:
@@ -597,7 +597,7 @@ func (l *DockerCluster) processEvent(ctx context.Context, event events.Message) 
 	default:
 		// There is a very tiny race here: the signal handler might be closing the
 		// stopper simultaneously.
-		log.Errorf(ctx, "stopping due to unexpected event: %+v", event)
+		log.Dev.Errorf(ctx, "stopping due to unexpected event: %+v", event)
 		if rc, err := l.client.ContainerLogs(context.Background(), event.Actor.ID, types.ContainerLogsOptions{
 			ShowStdout: true,
 			ShowStderr: true,

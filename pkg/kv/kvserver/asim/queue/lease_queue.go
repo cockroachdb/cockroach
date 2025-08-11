@@ -160,7 +160,7 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 			CanTransferLease: true,
 		})
 		if err != nil {
-			log.Errorf(ctx, "error planning change %s", err.Error())
+			log.Dev.Errorf(ctx, "error planning change %s", err.Error())
 			continue
 		}
 

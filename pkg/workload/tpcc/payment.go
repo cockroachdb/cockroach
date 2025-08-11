@@ -271,7 +271,7 @@ func (p *payment) startResetValueWorker() {
 
 							return nil
 						}); err != nil {
-						log.Errorf(ctx, "%v", err)
+						log.Dev.Errorf(ctx, "%v", err)
 					}
 				}
 			}

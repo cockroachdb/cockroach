@@ -291,7 +291,7 @@ func (s *KVSubscriber) Start(ctx context.Context, stopper *stop.Stopper) error {
 func (s *KVSubscriber) updateMetrics(ctx context.Context) {
 	protectedTimestamps, lastUpdated, err := s.GetProtectionTimestamps(ctx, keys.EverythingSpan)
 	if err != nil {
-		log.Errorf(ctx, "while refreshing kvsubscriber metrics: %v", err)
+		log.Dev.Errorf(ctx, "while refreshing kvsubscriber metrics: %v", err)
 		return
 	}
 

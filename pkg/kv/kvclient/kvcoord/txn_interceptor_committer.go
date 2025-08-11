@@ -509,7 +509,7 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 		tc.mu.Lock()
 		defer tc.mu.Unlock()
 		if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans); err != nil {
-			log.Errorf(ctx, "making txn commit explicit failed for %s: %v", txn, err)
+			log.Dev.Errorf(ctx, "making txn commit explicit failed for %s: %v", txn, err)
 		}
 	}
 
@@ -550,7 +550,7 @@ func makeTxnCommitExplicitLocked(
 				return nil
 			}
 		case *kvpb.TransactionRetryError:
-			logFunc := log.Errorf
+			logFunc := log.Dev.Errorf
 			if util.RaceEnabled {
 				logFunc = log.Fatalf
 			}

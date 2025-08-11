@@ -618,7 +618,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 
 	systemMemory, _, err := GetTotalMemoryWithoutLogging()
 	if err != nil {
-		log.Errorf(ctx, "could not get total system memory: %v", err)
+		log.Dev.Errorf(ctx, "could not get total system memory: %v", err)
 	}
 
 	// Generate a node status with no store data.
@@ -659,7 +659,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 		// Gather descriptor from store.
 		descriptor, err := mr.mu.stores[storeID].Descriptor(ctx, false /* useCached */)
 		if err != nil {
-			log.Errorf(ctx, "could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
+			log.Dev.Errorf(ctx, "could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
 			continue
 		}
 
@@ -729,7 +729,7 @@ func (mr *MetricsRecorder) WriteNodeStatus(
 	if log.V(2) {
 		statusJSON, err := json.Marshal(&nodeStatus)
 		if err != nil {
-			log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
+			log.Dev.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
 		}
 		log.Dev.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
 	}

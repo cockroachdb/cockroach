@@ -1221,7 +1221,7 @@ func (rc *RangeCache) clearOlderOverlappingLocked(
 				// We've found a similar descriptor in the cache; there can't be any
 				// other overlapping ones so let's stop the iteration.
 				if len(overlapping) != 1 {
-					log.Errorf(ctx, "%s", errors.AssertionFailedf(
+					log.Dev.Errorf(ctx, "%s", errors.AssertionFailedf(
 						"found compatible descriptor but also got multiple overlapping results. newEntry: %s. overlapping: %s",
 						newEntry, overlapping).Error())
 				}

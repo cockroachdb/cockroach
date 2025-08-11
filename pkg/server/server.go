@@ -910,7 +910,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		func(_ string, content roachpb.Value, origTimestampNanos int64) {
 			var storeDesc roachpb.StoreDescriptor
 			if err := content.GetProto(&storeDesc); err != nil {
-				log.Errorf(ctx, "%v", err)
+				log.Dev.Errorf(ctx, "%v", err)
 				return
 			}
 			storeLoadMsg := mmaintegration.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
@@ -2377,7 +2377,7 @@ func (s *topLevelServer) runIdempontentSQLForInitType(
 	}
 	for r := retry.StartWithCtx(ctx, rOpts); r.Next(); {
 		if err := initAttempt(); err != nil {
-			log.Errorf(ctx, "cluster initialization attempt failed: %s", err.Error())
+			log.Dev.Errorf(ctx, "cluster initialization attempt failed: %s", err.Error())
 			continue
 		}
 		return nil

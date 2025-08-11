@@ -41,7 +41,7 @@ func (r *Replica) setCorruptRaftMuLocked(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	log.ErrorfDepth(ctx, 1, "stalling replica due to: %s", cErr.ErrorMsg)
+	log.Dev.ErrorfDepth(ctx, 1, "stalling replica due to: %s", cErr.ErrorMsg)
 	cErr.Processed = true
 	r.mu.destroyStatus.Set(cErr, destroyReasonRemoved)
 

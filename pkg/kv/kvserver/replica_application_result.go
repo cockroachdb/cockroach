@@ -565,7 +565,7 @@ func (r *replicaLogStorage) finalizeApplySnapshotRaftMuLocked(ctx context.Contex
 	// sideloaded entries. Rather than remember the old last index, we instead
 	// clear the sideloaded storage entirely. This is equivalent.
 	if err := r.ls.Sideload.Clear(ctx); err != nil {
-		log.Errorf(ctx, "while clearing sideloaded storage after snapshot: %+v", err)
+		log.Dev.Errorf(ctx, "while clearing sideloaded storage after snapshot: %+v", err)
 	}
 }
 
@@ -615,7 +615,7 @@ func (r *Replica) finalizeTruncationRaftMuLocked(ctx context.Context) {
 	if err := r.logStorage.ls.Sideload.TruncateTo(ctx, index); err != nil {
 		// We don't *have* to remove these entries for correctness. Log a loud
 		// error, but keep humming along.
-		log.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
+		log.Dev.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
 	}
 	// NB: we don't sync the sideloaded entry files removal here for performance
 	// reasons.
@@ -651,7 +651,7 @@ func (r *Replica) handleComputeChecksumResult(ctx context.Context, cc *kvserverp
 	err := r.computeChecksumPostApply(ctx, *cc)
 	// Don't log errors caused by the store quiescing, they are expected.
 	if err != nil && !errors.Is(err, stop.ErrUnavailable) {
-		log.Errorf(ctx, "failed to start ComputeChecksum task %s: %v", cc.ChecksumID, err)
+		log.Dev.Errorf(ctx, "failed to start ComputeChecksum task %s: %v", cc.ChecksumID, err)
 	}
 }
 

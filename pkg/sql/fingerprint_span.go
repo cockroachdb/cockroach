@@ -286,7 +286,7 @@ func fingerprintSpanImpl(
 			})
 		if exportRequestErr != nil {
 			if recording != nil {
-				log.Errorf(ctx, "failed export request trace:\n%s", recording)
+				log.Dev.Errorf(ctx, "failed export request trace:\n%s", recording)
 			}
 			return 0, nil, exportRequestErr
 		}

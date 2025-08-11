@@ -612,7 +612,7 @@ func (d *eventDecoder) DecodeKV(
 	err = changefeedbase.WithTerminalError(errors.Wrapf(err,
 		"error decoding key %s@%s (hex_kv: %x)",
 		keys.PrettyPrint(nil, kv.Key), kv.Value.Timestamp, kvBytes))
-	log.Errorf(ctx, "terminal error decoding KV: %v", err)
+	log.Dev.Errorf(ctx, "terminal error decoding KV: %v", err)
 	return Row{}, err
 }
 

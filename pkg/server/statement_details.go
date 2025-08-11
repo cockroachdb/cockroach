@@ -93,7 +93,7 @@ func getStatementDetails(
 		serverpb.StatsSortOptions_SERVICE_LAT, //Order is not used on this endpoint, so any value can be passed here.
 	)
 	if err != nil {
-		log.Errorf(ctx, "Error on getStatementDetails: %s", err)
+		log.Dev.Errorf(ctx, "Error on getStatementDetails: %s", err)
 	}
 
 	// This expression is used to merge the metadata column from statement

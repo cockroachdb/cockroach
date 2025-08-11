@@ -696,7 +696,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	}
 	_, err = bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority)
 	if !isExpectedQueueError(err) {
-		log.Errorf(ctx, "unable to add: %+v", err)
+		log.Dev.Errorf(ctx, "unable to add: %+v", err)
 	}
 }
 
@@ -1189,7 +1189,7 @@ func (bq *baseQueue) finishProcessingReplica(
 
 		// If not a benign or purgatory error, log.
 		if !benign {
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 		}
 	}
 
@@ -1209,7 +1209,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 	// Check whether the queue supports purgatory errors. If not then something
 	// went wrong because a purgatory error should not have ended up here.
 	if bq.impl.purgatoryChan() == nil {
-		log.Errorf(ctx, "queue does not support purgatory errors, but saw %v", purgErr)
+		log.Dev.Errorf(ctx, "queue does not support purgatory errors, but saw %v", purgErr)
 		return
 	}
 
@@ -1267,7 +1267,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 				}
 				bq.mu.Unlock()
 				for errStr, count := range errMap {
-					log.Errorf(ctx, "%d replicas failing with %q", count, errStr)
+					log.Dev.Errorf(ctx, "%d replicas failing with %q", count, errStr)
 				}
 			case <-stopper.ShouldQuiesce():
 				return

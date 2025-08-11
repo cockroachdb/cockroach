@@ -367,7 +367,7 @@ func (c *Container) Inspect(ctx context.Context) (types.ContainerJSON, error) {
 func (c *Container) Addr(ctx context.Context, port nat.Port) *net.TCPAddr {
 	containerInfo, err := c.Inspect(ctx)
 	if err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		return nil
 	}
 	bindings, ok := containerInfo.NetworkSettings.Ports[port]
@@ -376,7 +376,7 @@ func (c *Container) Addr(ctx context.Context, port nat.Port) *net.TCPAddr {
 	}
 	portNum, err := strconv.Atoi(bindings[0].HostPort)
 	if err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		return nil
 	}
 	return &net.TCPAddr{

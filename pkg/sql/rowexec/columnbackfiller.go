@@ -233,7 +233,7 @@ func GetResumeSpans(
 	}
 
 	if jobID == 0 {
-		log.Errorf(ctx, "mutation with no job: %d, table desc: %+v", mutationID, tableDesc)
+		log.Dev.Errorf(ctx, "mutation with no job: %d, table desc: %+v", mutationID, tableDesc)
 		return nil, nil, 0, errors.AssertionFailedf(
 			"no job found for mutation %d", errors.Safe(mutationID))
 	}

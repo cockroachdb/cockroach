@@ -1044,7 +1044,7 @@ func (r *ReplicaCircuitBreaker) OnTrip(b *circuit.Breaker, prev, cur error) {
 		now := crtime.NowMono()
 		stallSince := r.stallDuration(now).Truncate(time.Millisecond)
 		errorSince := r.errorDuration(now).Truncate(time.Millisecond)
-		log.Errorf(ctx, "%s circuit breaker tripped: %s (stalled for %s, erroring for %s)",
+		log.Dev.Errorf(ctx, "%s circuit breaker tripped: %s (stalled for %s, erroring for %s)",
 			r.id(), cur, stallSince, errorSince)
 
 		r.d.metrics.CircuitBreaker.ReplicasTripped.Inc(1)

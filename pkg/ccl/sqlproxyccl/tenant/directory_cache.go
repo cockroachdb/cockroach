@@ -398,7 +398,7 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 				}
 				if err != nil {
 					if watchPodsErr.ShouldLog() {
-						log.Errorf(ctx, "err creating new watch pod client: %s", err)
+						log.Dev.Errorf(ctx, "err creating new watch pod client: %s", err)
 					}
 					sleepContext(ctx, time.Second)
 					continue
@@ -411,7 +411,7 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 			resp, err := client.Recv()
 			if err != nil {
 				if recvErr.ShouldLog() {
-					log.Errorf(ctx, "err receiving stream events: %s", err)
+					log.Dev.Errorf(ctx, "err receiving stream events: %s", err)
 				}
 				// If stream ends, immediately try to establish a new one. Otherwise,
 				// wait for a second to avoid slamming server.
@@ -463,7 +463,7 @@ func (d *directoryCache) updateTenantPodEntry(ctx context.Context, pod *Pod) {
 		if !grpcutil.IsContextCanceled(err) {
 			// This should only happen in case of a deleted tenant or a transient
 			// error during fetch of tenant metadata (i.e. very rarely).
-			log.Errorf(ctx, "ignoring error getting entry for tenant %d: %v", pod.TenantID, err)
+			log.Dev.Errorf(ctx, "ignoring error getting entry for tenant %d: %v", pod.TenantID, err)
 		}
 		return
 	}
@@ -505,7 +505,7 @@ func (d *directoryCache) watchTenants(ctx context.Context, stopper *stop.Stopper
 				client, err = d.client.WatchTenants(ctx, &WatchTenantsRequest{})
 				if err != nil {
 					if watchTenantsErr.ShouldLog() {
-						log.Errorf(ctx, "err creating new watch tenant client: %s", err)
+						log.Dev.Errorf(ctx, "err creating new watch tenant client: %s", err)
 					}
 					sleepContext(ctx, time.Second)
 					continue
@@ -518,7 +518,7 @@ func (d *directoryCache) watchTenants(ctx context.Context, stopper *stop.Stopper
 			resp, err := client.Recv()
 			if err != nil {
 				if recvErr.ShouldLog() {
-					log.Errorf(ctx, "err receiving stream events: %s", err)
+					log.Dev.Errorf(ctx, "err receiving stream events: %s", err)
 				}
 				// If stream ends, immediately try to establish a new one.
 				// Otherwise, wait for a second to avoid slamming server.
@@ -573,7 +573,7 @@ func (d *directoryCache) updateTenantMetadataEntry(
 		if !grpcutil.IsContextCanceled(err) {
 			// This should only happen in case of a deleted tenant or a transient
 			// error during fetch of tenant metadata (i.e. very rarely).
-			log.Errorf(ctx, "ignoring error getting entry for tenant %d: %v", tenant.TenantID, err)
+			log.Dev.Errorf(ctx, "ignoring error getting entry for tenant %d: %v", tenant.TenantID, err)
 		}
 		return
 	}

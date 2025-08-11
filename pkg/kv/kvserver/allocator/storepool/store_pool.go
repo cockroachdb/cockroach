@@ -487,7 +487,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value, _ int64)
 
 	if err := content.GetProto(&storeDesc); err != nil {
 		ctx := sp.AnnotateCtx(context.TODO())
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		return
 	}
 

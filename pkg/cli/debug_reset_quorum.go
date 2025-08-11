@@ -47,7 +47,7 @@ func runDebugResetQuorum(cmd *cobra.Command, args []string) error {
 	// Set up GRPC Connection for running ResetQuorum.
 	conn, finish, err := newClientConn(ctx, serverCfg)
 	if err != nil {
-		log.Errorf(ctx, "connection to server failed: %v", err)
+		log.Dev.Errorf(ctx, "connection to server failed: %v", err)
 		return err
 	}
 	defer finish()

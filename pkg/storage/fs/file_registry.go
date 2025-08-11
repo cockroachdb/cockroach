@@ -185,7 +185,7 @@ func (r *FileRegistry) Load(ctx context.Context) error {
 				// must have crashed while creating it.
 				err := r.FS.Remove(r.FS.PathJoin(r.DBDir, f))
 				if err != nil {
-					log.Errorf(ctx, "unable to remove registry file %s", f)
+					log.Dev.Errorf(ctx, "unable to remove registry file %s", f)
 				}
 			}
 			if fileNum < registryFileNum {

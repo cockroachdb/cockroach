@@ -4051,7 +4051,7 @@ CREATE TABLE crdb_internal.index_columns (
 							// We log an error here, instead of reporting an error
 							// to the user, because we really want to see the
 							// erroneous data in the virtual table.
-							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
+							log.Dev.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
 								table.GetID(), idx.GetID(), parentName, table.GetName(), idx.GetName(),
 								len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnNames))
 						} else {
@@ -4059,7 +4059,7 @@ CREATE TABLE crdb_internal.index_columns (
 						}
 						if i >= len(idx.IndexDesc().KeyColumnDirections) {
 							// See comment above.
-							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
+							log.Dev.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
 								table.GetID(), idx.GetID(), parentName, table.GetName(), idx.GetName(),
 								len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnDirections))
 						} else {

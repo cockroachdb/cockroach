@@ -475,7 +475,7 @@ func (metrics *ReplicateQueueMetrics) trackSuccessByAllocatorAction(
 		allocatorimpl.AllocatorFinalizeAtomicReplicationChange:
 		// Nothing to do, not recorded here.
 	default:
-		log.Errorf(ctx, "AllocatorAction %v unsupported in metrics tracking", action)
+		log.Dev.Errorf(ctx, "AllocatorAction %v unsupported in metrics tracking", action)
 	}
 }
 
@@ -503,7 +503,7 @@ func (metrics *ReplicateQueueMetrics) trackErrorByAllocatorAction(
 		allocatorimpl.AllocatorFinalizeAtomicReplicationChange:
 		// Nothing to do, not recorded here.
 	default:
-		log.Errorf(ctx, "AllocatorAction %v unsupported in metrics tracking", action)
+		log.Dev.Errorf(ctx, "AllocatorAction %v unsupported in metrics tracking", action)
 	}
 
 }

@@ -717,10 +717,10 @@ func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryE
 		}
 
 		if err := newProducer.Close(); err != nil {
-			log.Errorf(s.ctx, "closing of previous sarama producer for retry failed with: %s", err.Error())
+			log.Dev.Errorf(s.ctx, "closing of previous sarama producer for retry failed with: %s", err.Error())
 		}
 		if err := newClient.Close(); err != nil {
-			log.Errorf(s.ctx, "closing of previous sarama client for retry failed with: %s", err.Error())
+			log.Dev.Errorf(s.ctx, "closing of previous sarama client for retry failed with: %s", err.Error())
 		}
 
 		if lastSendErr == nil {

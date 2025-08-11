@@ -222,7 +222,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 				break
 			}
 			if everySecond.ShouldLog() {
-				log.Errorf(ctx, "failed to create a session at %d-th attempt: %v", i, err)
+				log.Dev.Errorf(ctx, "failed to create a session at %d-th attempt: %v", i, err)
 			}
 			// Unauthenticated errors are unrecoverable, we should break instead
 			// of retrying.

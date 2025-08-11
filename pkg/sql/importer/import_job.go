@@ -837,7 +837,7 @@ func (r *importResumer) OnFailOrCancel(
 		log.Dev.Infof(ctx, "need to verify that no nodes are still importing since job had started writing...")
 		const maxWait = time.Minute * 5
 		if err := ingeststopped.WaitForNoIngestingNodes(ctx, p, r.job, maxWait); err != nil {
-			log.Errorf(ctx, "unable to verify that attempted IMPORT job %d had stopped writing before reverting after %s: %v", r.job.ID(), maxWait, err)
+			log.Dev.Errorf(ctx, "unable to verify that attempted IMPORT job %d had stopped writing before reverting after %s: %v", r.job.ID(), maxWait, err)
 		} else {
 			log.Dev.Infof(ctx, "verified no nodes still ingesting on behalf of job %d", r.job.ID())
 		}
@@ -850,7 +850,7 @@ func (r *importResumer) OnFailOrCancel(
 		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
 		if err := r.dropTables(ctx, txn, descsCol, cfg); err != nil {
-			log.Errorf(ctx, "drop tables failed: %s", err.Error())
+			log.Dev.Errorf(ctx, "drop tables failed: %s", err.Error())
 			return err
 		}
 

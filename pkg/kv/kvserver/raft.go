@@ -87,11 +87,11 @@ func (r *raftLogger) Warningf(format string, v ...interface{}) {
 }
 
 func (r *raftLogger) Error(v ...interface{}) {
-	log.ErrorfDepth(r.ctx, 1, "", v...)
+	log.Dev.ErrorfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Errorf(format string, v ...interface{}) {
-	log.ErrorfDepth(r.ctx, 1, format, v...)
+	log.Dev.ErrorfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Fatal(v ...interface{}) {

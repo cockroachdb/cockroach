@@ -555,7 +555,7 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 	for {
 		cmd, err := rd.CurCmd()
 		if err != nil {
-			log.Errorf(ctx, "CurCmd error: %v", err)
+			log.Dev.Errorf(ctx, "CurCmd error: %v", err)
 			return err
 		}
 
@@ -576,7 +576,7 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 			return nil
 		}
 		if err := execQuery(ctx, query, s, c); err != nil {
-			log.Errorf(ctx, "execQuery %s error: %v", query, err)
+			log.Dev.Errorf(ctx, "execQuery %s error: %v", query, err)
 			return err
 		}
 		log.Dev.Infof(ctx, "executed query: %s", query)

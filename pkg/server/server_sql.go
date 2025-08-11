@@ -519,7 +519,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 			return
 		}
 	}); err != nil {
-		log.Errorf(ctx, "failed to run update of instance with new session ID: %v", err)
+		log.Dev.Errorf(ctx, "failed to run update of instance with new session ID: %v", err)
 	}
 	return true
 }

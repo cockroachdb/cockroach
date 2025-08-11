@@ -1568,7 +1568,7 @@ func (hv *HistogramVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 		o := hv.promVec.WithLabelValues(labels...)
 		histogram, ok := o.(prometheus.Histogram)
 		if !ok {
-			log.Errorf(context.TODO(), "Unable to convert Observer to prometheus.Histogram. Metric name=%s", hv.Name)
+			log.Dev.Errorf(context.TODO(), "Unable to convert Observer to prometheus.Histogram. Metric name=%s", hv.Name)
 			continue
 		}
 		if err := histogram.Write(m); err != nil {

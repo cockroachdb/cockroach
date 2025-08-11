@@ -1216,7 +1216,7 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 				p.writePreventStartupFile(ctx, info.Details)
 				log.Fatalf(ctx, "local corruption detected: %+v", info.Details)
 			} else {
-				log.Errorf(ctx, "remote corruption detected: %+v", info.Details)
+				log.Dev.Errorf(ctx, "remote corruption detected: %+v", info.Details)
 			}
 		},
 		WriteStallBegin: func(info pebble.WriteStallBeginInfo) {
@@ -1268,10 +1268,10 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 				} else {
 					if p.cfg.diskMonitor != nil {
 						p.async(func() {
-							log.Errorf(ctx, "disk stall detected: %s\n%s", info, p.cfg.diskMonitor.LogTrace())
+							log.Dev.Errorf(ctx, "disk stall detected: %s\n%s", info, p.cfg.diskMonitor.LogTrace())
 						})
 					} else {
-						p.async(func() { log.Errorf(ctx, "disk stall detected: %s", info) })
+						p.async(func() { log.Dev.Errorf(ctx, "disk stall detected: %s", info) })
 					}
 				}
 				return
@@ -1361,7 +1361,7 @@ func (p *Pebble) Close() {
 		if buildutil.CrdbTestBuild {
 			log.Fatalf(p.logCtx, "error during engine close: %s\n", err)
 		} else {
-			log.Errorf(p.logCtx, "error during engine close: %s\n", err)
+			log.Dev.Errorf(p.logCtx, "error during engine close: %s\n", err)
 		}
 	}
 

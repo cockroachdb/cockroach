@@ -197,7 +197,7 @@ var raftStorageErrorLogger = log.Every(30 * time.Second)
 
 func (r *replicaRaftStorage) reportRaftStorageError(err error) {
 	if raftStorageErrorLogger.ShouldLog() {
-		log.Errorf(r.raftCtx, "error in raft.Storage %v", err)
+		log.Dev.Errorf(r.raftCtx, "error in raft.Storage %v", err)
 	}
 	r.store.metrics.RaftStorageError.Inc(1)
 }
@@ -248,7 +248,7 @@ func (r *Replica) GetSnapshot(
 	// create a new state loader.
 	snapData, err := snapshot(ctx, snapUUID, stateloader.Make(rangeID), snap, startKey)
 	if err != nil {
-		log.Errorf(ctx, "error generating snapshot: %+v", err)
+		log.Dev.Errorf(ctx, "error generating snapshot: %+v", err)
 		return nil, err
 	}
 	return &snapData, nil

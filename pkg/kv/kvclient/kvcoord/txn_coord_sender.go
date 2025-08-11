@@ -789,7 +789,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			// unexpected for it to find the transaction already in a txnFinalized
 			// state. This may be a bug, so log a stack trace.
 			stack := debugutil.Stack()
-			log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
+			log.Dev.Errorf(ctx, "%s. stack:\n%s", msg, stack)
 		}
 		reason := kvpb.TransactionStatusError_REASON_UNKNOWN
 		if tc.mu.txn.Status == roachpb.COMMITTED {

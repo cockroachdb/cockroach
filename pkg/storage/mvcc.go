@@ -7903,7 +7903,7 @@ func mvccExportToWriter(
 				stats := iter.Stats()
 				elapsed := timeutil.Since(startTime)
 				preWorkCPUTime, workCPUTime := elasticCPUHandle.RunningTime()
-				log.Errorf(ctx,
+				log.Dev.Errorf(ctx,
 					"export exceeded deadline work wall: %v, cpu: %v, pre-work-cpu: %v, stats: %v",
 					elapsed, workCPUTime, preWorkCPUTime, &stats.Stats)
 			default:

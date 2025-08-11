@@ -156,7 +156,7 @@ func (p *scanRequestScanner) tryAcquireMemory(
 		// Sink implements memory allocator interface, so acquire
 		// memory needed to hold scan reply.
 		if logMemAcquireEvery.ShouldLog() {
-			log.Errorf(ctx, "Failed to acquire memory for export span: %s (attempt %d)",
+			log.Dev.Errorf(ctx, "Failed to acquire memory for export span: %s (attempt %d)",
 				err, attempt.CurrentAttempt()+1)
 		}
 		alloc, err = allocator.AcquireMemory(ctx, changefeedbase.ScanRequestSize.Get(&p.settings.SV))

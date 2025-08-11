@@ -70,7 +70,7 @@ func CreateTempDir(parentDir, prefix string) (_ string, unlockDirFn func(), _ er
 	}
 	unlockDirFn = func() {
 		if err := unlockFile(flock); err != nil {
-			log.Errorf(context.TODO(), "could not unlock file lock on temporary directory: %s", err.Error())
+			log.Dev.Errorf(context.TODO(), "could not unlock file lock on temporary directory: %s", err.Error())
 		}
 	}
 
@@ -143,7 +143,7 @@ func CleanupTempDirs(recordPath string) error {
 		// process is dead because we were able to acquire the lock in the first
 		// place.
 		if err := unlockFile(flock); err != nil {
-			log.Errorf(context.TODO(), "could not unlock file lock when removing temporary directory: %s", err.Error())
+			log.Dev.Errorf(context.TODO(), "could not unlock file lock when removing temporary directory: %s", err.Error())
 		}
 
 		// If path/directory does not exist, error is nil.

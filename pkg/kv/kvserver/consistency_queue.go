@@ -202,7 +202,7 @@ func (q *consistencyQueue) process(
 			return false, nil
 		}
 		err := pErr.GoError()
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		return false, err
 	}
 	if fn := repl.store.cfg.TestingKnobs.ConsistencyTestingKnobs.ConsistencyQueueResultHook; fn != nil {

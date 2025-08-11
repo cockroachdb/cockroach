@@ -2743,7 +2743,7 @@ func (ds *DistSender) sendToReplicas(
 		} else if routing.Leaseholder() == nil {
 			// NB: Normally we don't have both routeToLeaseholder and a nil
 			// leaseholder. This could be changed to an assertion.
-			log.Errorf(ctx, "attempting %v to route to leaseholder, but the leaseholder is unknown %v", ba, routing)
+			log.Dev.Errorf(ctx, "attempting %v to route to leaseholder, but the leaseholder is unknown %v", ba, routing)
 		} else if ba.Replica.NodeID == routing.Leaseholder().NodeID {
 			// We are sending this request to the leaseholder, so it doesn't
 			// make sense to attempt to proxy it.

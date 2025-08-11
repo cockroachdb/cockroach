@@ -18,6 +18,6 @@ var _ inspectLogger = &logSink{}
 
 // logIssue implements the inspectLogger interface.
 func (c *logSink) logIssue(ctx context.Context, issue *inspectIssue) error {
-	log.Errorf(ctx, "inspect issue: %+v", issue)
+	log.Dev.Errorf(ctx, "inspect issue: %+v", issue)
 	return nil
 }

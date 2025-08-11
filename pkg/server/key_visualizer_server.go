@@ -99,7 +99,7 @@ func (s *KeyVisualizerServer) getSamplesFromFanOut(
 	}
 
 	errorFn := func(nodeID roachpb.NodeID, err error) {
-		log.Errorf(ctx, "could not get key visualizer sample for node %d: %v",
+		log.Dev.Errorf(ctx, "could not get key visualizer sample for node %d: %v",
 			nodeID, err)
 	}
 

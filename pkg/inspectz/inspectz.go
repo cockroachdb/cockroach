@@ -84,7 +84,7 @@ func (s *Server) makeKVFlowHandlesHandler(
 		}
 		resp, err := impl(ctx, req)
 		if err != nil {
-			log.ErrorfDepth(ctx, 1, "%s", err)
+			log.Dev.ErrorfDepth(ctx, 1, "%s", err)
 			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
 			return
 		}
@@ -104,7 +104,7 @@ func (s *Server) makeKVFlowControllerHandler(
 		req := &kvflowinspectpb.ControllerRequest{}
 		resp, err := impl(ctx, req)
 		if err != nil {
-			log.ErrorfDepth(ctx, 1, "%s", err)
+			log.Dev.ErrorfDepth(ctx, 1, "%s", err)
 			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
 			return
 		}
@@ -122,7 +122,7 @@ func (s *Server) makeStoreLivenessHandler(
 		req := &slpb.InspectStoreLivenessRequest{}
 		resp, err := impl(ctx, req)
 		if err != nil {
-			log.ErrorfDepth(ctx, 1, "%s", err)
+			log.Dev.ErrorfDepth(ctx, 1, "%s", err)
 			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
 			return
 		}
@@ -201,7 +201,7 @@ func kvFlowController(
 func respond(ctx context.Context, w http.ResponseWriter, code int, payload interface{}) {
 	res, err := json.Marshal(payload)
 	if err != nil {
-		log.ErrorfDepth(ctx, 1, "%s", err)
+		log.Dev.ErrorfDepth(ctx, 1, "%s", err)
 		http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
 		return
 	}

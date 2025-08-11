@@ -141,7 +141,7 @@ func (l *grpcLogger) ErrorDepth(depth int, args ...interface{}) {
 	if !l.shouldLog(severity.ERROR, depth) {
 		return
 	}
-	log.ErrorfDepth(context.TODO(), depth, "", l.sanitize(args)...)
+	log.Dev.ErrorfDepth(context.TODO(), depth, "", l.sanitize(args)...)
 }
 
 func (l *grpcLogger) FatalDepth(depth int, args ...interface{}) {

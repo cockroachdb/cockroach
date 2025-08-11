@@ -186,7 +186,7 @@ func (a *allocSim) maybeLogError(err error) {
 	if localcluster.IsUnavailableError(err) {
 		return
 	}
-	log.Errorf(context.Background(), "%v", err)
+	log.Dev.Errorf(context.Background(), "%v", err)
 	atomic.AddUint64(&a.stats.errors, 1)
 }
 
@@ -479,7 +479,7 @@ func main() {
 			}
 			defer func() {
 				if err := tcController.CleanUp(); err != nil {
-					log.Errorf(context.Background(), "%v", err)
+					log.Dev.Errorf(context.Background(), "%v", err)
 				}
 			}()
 		}

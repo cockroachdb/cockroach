@@ -828,7 +828,7 @@ func (m *Manager) getRunningMigrationJob(
 			id, status := parseRow(row)
 			buf.Printf("(%d, %s)", id, redact.Safe(status))
 		}
-		log.Errorf(ctx, "%s", buf)
+		log.Dev.Errorf(ctx, "%s", buf)
 		return false, 0, errors.AssertionFailedf("%s", buf)
 	}
 }

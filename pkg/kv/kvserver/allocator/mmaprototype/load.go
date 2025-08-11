@@ -574,7 +574,7 @@ func loadSummaryForDimension(
 
 func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
 	if capacity == UnknownCapacity {
-		log.Errorf(context.Background(), "disk capacity is unknown")
+		log.Dev.Errorf(context.Background(), "disk capacity is unknown")
 		return false
 	}
 	fractionUsed := float64(load) / float64(capacity)

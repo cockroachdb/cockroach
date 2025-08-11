@@ -132,7 +132,7 @@ func MatchesF(pattern string) func(entry logpb.Entry) bool {
 	return func(entry logpb.Entry) bool {
 		exists, err := regexp.MatchString(pattern, entry.Message)
 		if err != nil {
-			log.Errorf(context.Background(), "failed to match regex %s: %s", pattern, err)
+			log.Dev.Errorf(context.Background(), "failed to match regex %s: %s", pattern, err)
 		}
 		return exists
 	}

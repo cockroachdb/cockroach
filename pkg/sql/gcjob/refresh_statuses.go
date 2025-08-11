@@ -106,7 +106,7 @@ func updateStatusForGCElements(
 		}
 		zoneCfg, err := cfg.GetZoneConfigForObject(execCfg.Codec, config.ObjectID(tableID))
 		if err != nil {
-			log.Errorf(ctx, "zone config for desc: %d, err = %+v", tableID, err)
+			log.Dev.Errorf(ctx, "zone config for desc: %d, err = %+v", tableID, err)
 			return nil
 		}
 		tableTTL := getTableTTL(defTTL, zoneCfg)
@@ -181,7 +181,7 @@ func updateTableStatus(
 			sp,
 		)
 		if err != nil {
-			log.Errorf(ctx, "error checking protection status %v", err)
+			log.Dev.Errorf(ctx, "error checking protection status %v", err)
 			// We don't want to make GC decisions if we can't validate the protection
 			// status of a table. We don't change the status of the table to DELETING
 			// and simply return a high deadline value; The GC job will be retried
@@ -249,7 +249,7 @@ func updateIndexesStatus(
 			sp,
 		)
 		if err != nil {
-			log.Errorf(ctx, "error checking protection status %v", err)
+			log.Dev.Errorf(ctx, "error checking protection status %v", err)
 			continue
 		}
 		if isProtected {
@@ -464,7 +464,7 @@ func refreshTenant(
 	if err == nil {
 		tenantTTLSeconds = zoneCfg.GC.TTLSeconds
 	} else {
-		log.Errorf(ctx, "zone config for tenants range: err = %+v", err)
+		log.Dev.Errorf(ctx, "zone config for tenants range: err = %+v", err)
 	}
 
 	deadlineNanos := dropTime + int64(tenantTTLSeconds)*time.Second.Nanoseconds()

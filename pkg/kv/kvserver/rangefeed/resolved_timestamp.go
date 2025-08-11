@@ -291,7 +291,7 @@ func (rts *resolvedTimestamp) assertOpAboveRTS(
 		if fatal {
 			log.Fatalf(ctx, "%v", err)
 		} else {
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 		}
 	}
 }

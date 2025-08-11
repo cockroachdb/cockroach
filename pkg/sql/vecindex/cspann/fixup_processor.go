@@ -467,7 +467,7 @@ func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	err := fp.stopper.RunAsyncTask(fp.initCtx, taskName, worker.Start)
 	if err != nil {
 		// Log error and continue.
-		log.Errorf(ctx, "error starting vector index background worker: %v", err)
+		log.Dev.Errorf(ctx, "error starting vector index background worker: %v", err)
 	}
 }
 

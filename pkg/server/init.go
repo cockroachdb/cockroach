@@ -323,7 +323,7 @@ func (s *initServer) Bootstrap(
 
 	state, err := bootstrapCluster(ctx, s.inspectedDiskState.uninitializedEngines, s.config)
 	if err != nil {
-		log.Errorf(ctx, "bootstrap: %v", err)
+		log.Dev.Errorf(ctx, "bootstrap: %v", err)
 		s.mu.rejectErr = errInternalBootstrapError
 		return nil, s.mu.rejectErr
 	}

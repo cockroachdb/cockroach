@@ -554,7 +554,7 @@ func (p *pendingLeaseRequest) requestLease(
 			err := p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, curLiveness)
 			if err != nil {
 				if logFailedHeartbeatOwnLiveness.ShouldLog() {
-					log.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
+					log.Dev.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
 				}
 				return kvpb.NewNotLeaseHolderError(roachpb.Lease{}, p.repl.store.StoreID(), p.repl.Desc(),
 					fmt.Sprintf("failed to manipulate liveness record: %s", err))
@@ -630,7 +630,7 @@ func (p *pendingLeaseRequest) requestLease(
 				// alive, or someone else updated it. Don't log this as an error.
 				log.Dev.Infof(ctx, "failed to increment leaseholder's epoch: %s", err)
 			} else {
-				log.Errorf(ctx, "failed to increment leaseholder's epoch: %s", err)
+				log.Dev.Errorf(ctx, "failed to increment leaseholder's epoch: %s", err)
 			}
 		}
 		if err != nil {
@@ -1197,7 +1197,7 @@ func (r *Replica) leaseGoodToGoForStatus(
 			//
 			// However, this is possible if the `cockroach debug recover` command has
 			// been used, so this is just a logged error instead of a fatal assertion.
-			log.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
+			log.Dev.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
 				st.Lease, st.Lease.Replica)
 		}
 		// Otherwise, if the lease is currently held by another replica, redirect
@@ -1335,7 +1335,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					_, stillMember := r.shMu.state.Desc.GetReplicaDescriptor(status.Lease.Replica.StoreID)
 					if !stillMember {
 						// See corresponding comment in leaseGoodToGoRLocked.
-						log.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
+						log.Dev.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
 							status.Lease, status.Lease.Replica)
 					}
 					// Otherwise, if the lease is currently held by another replica, redirect

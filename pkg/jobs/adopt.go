@@ -188,7 +188,7 @@ func (r *Registry) resumeClaimedJobs(
 		go func(id jobspb.JobID) {
 			defer done()
 			if err := r.resumeJob(ctx, id, s); err != nil && ctx.Err() == nil {
-				log.Errorf(ctx, "could not run claimed job %d: %v", id, err)
+				log.Dev.Errorf(ctx, "could not run claimed job %d: %v", id, err)
 			}
 		}(id)
 	}
@@ -416,7 +416,7 @@ func (r *Registry) runJob(
 	// as presumably they are due to the context cancellation which commonly
 	// happens during shutdown.
 	if err != nil && ctx.Err() == nil {
-		log.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
+		log.Dev.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
 	}
 
 	r.maybeRecordExecutionFailure(ctx, err, job)

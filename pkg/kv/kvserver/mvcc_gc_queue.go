@@ -793,7 +793,7 @@ func (mgcq *mvccGCQueue) process(
 		b.AddRawRequest(&req)
 		err := repl.store.db.Run(ctx, &b)
 		if err != nil {
-			log.Errorf(ctx, "failed to recompute stats with error=%s", err)
+			log.Dev.Errorf(ctx, "failed to recompute stats with error=%s", err)
 		}
 	}
 

@@ -324,7 +324,7 @@ func (t *raftLogTruncator) addPendingTruncation(
 		After: alreadyTruncIndex, Last: pendingTrunc.Index,
 	}); err != nil {
 		// Log a loud error since we need to continue enqueuing the truncation.
-		log.Errorf(ctx, "while computing size of sideloaded files to truncate: %+v", err)
+		log.Dev.Errorf(ctx, "while computing size of sideloaded files to truncate: %+v", err)
 		pendingTrunc.isDeltaTrusted = false
 	} else if entries != 0 {
 		pendingTrunc.logDeltaBytes -= size
@@ -523,7 +523,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	stateLoader := r.getStateLoader()
 	as, err := stateLoader.LoadRangeAppliedState(ctx, reader)
 	if err != nil {
-		log.Errorf(ctx, "error loading RangeAppliedState, dropping all pending log truncations: %s",
+		log.Dev.Errorf(ctx, "error loading RangeAppliedState, dropping all pending log truncations: %s",
 			err)
 		pendingTruncs.reset()
 		return
@@ -551,7 +551,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 		pendingTruncs.mu.truncs[enactIndex].RaftTruncatedState,
 		stateLoader.StateLoader, batch,
 	); err != nil {
-		log.Errorf(ctx, "while attempting to truncate raft log: %+v", err)
+		log.Dev.Errorf(ctx, "while attempting to truncate raft log: %+v", err)
 		pendingTruncs.reset()
 		return
 	}

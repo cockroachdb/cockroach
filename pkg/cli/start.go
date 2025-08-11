@@ -292,7 +292,7 @@ func initTempStorageConfig(
 			unlockDirFn()
 			// Remove the temp directory directly since there is no record file.
 			if err := os.RemoveAll(tempStorageConfig.Path); err != nil {
-				log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
+				log.Dev.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
 			}
 		}))
 	} else {
@@ -308,7 +308,7 @@ func initTempStorageConfig(
 		stopper.AddCloser(stop.CloserFn(func() {
 			unlockDirFn()
 			if err := fs.CleanupTempDirs(recordPath); err != nil {
-				log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
+				log.Dev.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
 			}
 		}))
 	}
@@ -1551,7 +1551,7 @@ func reportReadinessExternally(ctx context.Context, cmd *cobra.Command, waitForI
 		clientConnOptions, serverParams := server.MakeServerOptionsForURL(serverCfg.Config)
 		pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
 		if err != nil {
-			log.Errorf(ctx, "failed computing the URL: %v", err)
+			log.Dev.Errorf(ctx, "failed computing the URL: %v", err)
 			return
 		}
 

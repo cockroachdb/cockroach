@@ -87,12 +87,12 @@ func takeMemoryMonitoringDump(
 	ctx context.Context, path string, args ...interface{},
 ) (success bool) {
 	if len(args) != 1 {
-		log.Errorf(ctx, "%v", errors.AssertionFailedf("expected exactly 1 argument (root memory monitor), got %d", len(args)))
+		log.Dev.Errorf(ctx, "%v", errors.AssertionFailedf("expected exactly 1 argument (root memory monitor), got %d", len(args)))
 		return false
 	}
 	root, ok := args[0].(*mon.BytesMonitor)
 	if !ok {
-		log.Errorf(ctx, "%v", errors.AssertionFailedf("expected *mon.BytesMonitor, got %T", args[0]))
+		log.Dev.Errorf(ctx, "%v", errors.AssertionFailedf("expected *mon.BytesMonitor, got %T", args[0]))
 		return false
 	}
 	f, err := os.Create(path)

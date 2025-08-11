@@ -1106,7 +1106,7 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 			select {
 			case <-ticker.C:
 				if err := n.computeMetricsPeriodically(ctx, previousMetrics, tick); err != nil {
-					log.Errorf(ctx, "failed computing periodic metrics: %s", err)
+					log.Dev.Errorf(ctx, "failed computing periodic metrics: %s", err)
 				}
 			case <-stopper.ShouldQuiesce():
 				return
@@ -1175,7 +1175,7 @@ func (n *Node) startPeriodicLivenessCompaction(
 							timeBeforeCompaction := timeutil.Now()
 							if err := store.StateEngine().CompactRange(
 								context.Background(), startEngineKey, endEngineKey); err != nil {
-								log.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
+								log.Dev.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
 							}
 
 							log.Dev.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
@@ -1192,7 +1192,7 @@ func (n *Node) startPeriodicLivenessCompaction(
 			}
 		}
 	}); err != nil {
-		log.Errorf(ctx, "failed to start the async liveness compaction task")
+		log.Dev.Errorf(ctx, "failed to start the async liveness compaction task")
 	}
 
 }
@@ -1247,7 +1247,7 @@ func (n *Node) computeMetricsPeriodically(
 func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOThreshold) {
 	s, err := n.stores.GetStore(id)
 	if err != nil {
-		log.Errorf(n.AnnotateCtx(context.Background()), "%v", err)
+		log.Dev.Errorf(n.AnnotateCtx(context.Background()), "%v", err)
 	}
 	s.UpdateIOThreshold(threshold)
 }
@@ -2332,7 +2332,7 @@ func (n *Node) ResetQuorum(
 		}
 		return errors.Errorf("r%d not found", req.RangeID)
 	}); err != nil {
-		log.Errorf(ctx, "range descriptor for r%d could not be read: %v", req.RangeID, err)
+		log.Dev.Errorf(ctx, "range descriptor for r%d could not be read: %v", req.RangeID, err)
 		return nil, err
 	}
 	log.Dev.Infof(ctx, "retrieved original range descriptor %s", desc)

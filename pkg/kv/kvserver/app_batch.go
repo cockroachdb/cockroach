@@ -138,7 +138,7 @@ func (b *appBatch) addWriteBatch(
 		return nil
 	}
 	if mutations, err := storage.BatchCount(wb.Data); err != nil {
-		log.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
+		log.Dev.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
 	} else {
 		b.numMutations += mutations
 	}
