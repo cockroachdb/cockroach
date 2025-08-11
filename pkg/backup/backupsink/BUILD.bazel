@@ -32,6 +32,7 @@ go_library(
 
 go_test(
     name = "backupsink_test",
+    size = "large",
     srcs = [
         "file_sst_sink_test.go",
         "sst_sink_key_writer_test.go",
