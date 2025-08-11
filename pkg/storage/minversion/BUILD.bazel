@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "version",
+    srcs = ["min_version.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/version",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_pebble//vfs",
+    ],
+)
+
+go_library(
+    name = "minversion",
+    srcs = ["min_version.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/minversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_pebble//vfs",
+    ],
+)

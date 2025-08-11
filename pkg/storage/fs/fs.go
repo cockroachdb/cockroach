@@ -524,3 +524,44 @@ func ReadFile(fs vfs.FS, filename string) ([]byte, error) {
 	defer file.Close()
 	return io.ReadAll(file)
 }
+
+const tempFileExtension = ".crdbtmp"
+
+// SafeWriteToUnencryptedFile writes the byte slice to the filename, contained
+// in dir, using the given fs. It returns after both the file and the containing
+// directory are synced.
+//
+// This function requires that the fs NOT be encrypted, because the
+// encryption-at-rest filesystem does NOT support atomic renames. See
+// pebble/vfs/atomicfs for a mechanism of atomically switching files on
+// encrypted filesystems.
+func SafeWriteToUnencryptedFile(
+	fs vfs.FS, dir string, filename string, b []byte, category vfs.DiskWriteCategory,
+) error {
+	tempName := filename + tempFileExtension
+	f, err := fs.Create(tempName, category)
+	if err != nil {
+		return err
+	}
+	bReader := bytes.NewReader(b)
+	if _, err = io.Copy(f, bReader); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	if err = fs.Rename(tempName, filename); err != nil {
+		return err
+	}
+	fdir, err := fs.OpenDir(dir)
+	if err != nil {
+		return err
+	}
+	defer fdir.Close()
+	return fdir.Sync()
+}
