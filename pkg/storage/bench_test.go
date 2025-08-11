@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/stretchr/testify/require"
@@ -2126,7 +2127,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 			MaxSize:                0,
 			StopMidKey:             false,
 			IncludeMVCCValueHeader: opts.importEpochs,
-		}, &buf)
+		}, &objstorage.MemObj{})
 		if err != nil {
 			b.Fatal(err)
 		}

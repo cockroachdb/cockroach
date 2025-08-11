@@ -6,7 +6,6 @@
 package batcheval
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/objstorage"
 )
 
 // SSTTargetSizeSetting is the cluster setting name for the
@@ -180,7 +180,7 @@ func evalExport(
 
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
-		var destFile bytes.Buffer
+		var destFile objstorage.MemObj
 		opts := storage.MVCCExportOptions{
 			StartKey:                storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
 			EndKey:                  args.EndKey,
@@ -234,7 +234,7 @@ func evalExport(
 			// part of the ExportResponse. This frees up the memory used by the empty
 			// SST file.
 			if !hasRangeKeys {
-				destFile = bytes.Buffer{}
+				destFile = objstorage.MemObj{}
 			}
 		} else {
 			summary, resumeInfo, err = storage.MVCCExportToSST(ctx, cArgs.EvalCtx.ClusterSettings(), reader,
@@ -252,7 +252,7 @@ func evalExport(
 		default:
 		}
 
-		data := destFile.Bytes()
+		data := destFile.Data()
 
 		// NB: This should only happen in two cases:
 		//
