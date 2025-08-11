@@ -26,7 +26,6 @@ go_library(
         "//pkg/util/unique",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//types",
-        "@com_github_kr_pretty//:pretty",
     ],
 )
 
@@ -56,6 +55,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//objstorage",
         "@com_github_gogo_protobuf//types",
         "@com_github_stretchr_testify//require",
     ],

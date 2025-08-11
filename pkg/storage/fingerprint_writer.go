@@ -6,11 +6,9 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"hash"
 	"hash/fnv"
-	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -18,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/objstorage"
 )
 
 // fingerprintWriter hashes every key/timestamp and value for point keys, and
@@ -44,7 +43,7 @@ func makeFingerprintWriter(
 	ctx context.Context,
 	hasher hash.Hash64,
 	cs *cluster.Settings,
-	f io.Writer,
+	f objstorage.Writable,
 	opts MVCCExportFingerprintOptions,
 ) fingerprintWriter {
 	// TODO(adityamaru,dt): Once
@@ -265,7 +264,7 @@ func FingerprintRangekeys(
 	}
 	defer iter.Close()
 
-	var destFile bytes.Buffer
+	var destFile objstorage.MemObj
 	fw := makeFingerprintWriter(ctx, fnv.New64(), cs, &destFile, opts)
 	defer fw.Close()
 	fingerprintRangeKey := func(stack MVCCRangeKeyStack) (uint64, error) {
@@ -316,7 +315,7 @@ func FingerprintRangekeys(
 		fw.xorAgg.add(rangekeyFingerprint)
 	}
 
-	if destFile.Len() != 0 {
+	if len(destFile.Data()) != 0 {
 		return 0, errors.AssertionFailedf("unexpected data found in destFile")
 	}
 

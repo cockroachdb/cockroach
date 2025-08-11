@@ -6,7 +6,6 @@
 package storage_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"maps"
@@ -45,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
@@ -1593,7 +1593,7 @@ func cmdExport(e *evalCtx) error {
 	r := e.newReader()
 	defer r.Close()
 
-	var sstFile bytes.Buffer
+	var sstFile objstorage.MemObj
 
 	var summary kvpb.BulkOpSummary
 	var resumeInfo storage.ExportRequestResumeInfo
@@ -1607,7 +1607,7 @@ func cmdExport(e *evalCtx) error {
 			return err
 		}
 		if !hasRangeKeys {
-			sstFile.Reset()
+			sstFile = objstorage.MemObj{}
 		}
 		e.results.buf.Printf("export: %s", &summary)
 		e.results.buf.Print(" fingerprint=true")
@@ -1626,8 +1626,8 @@ func cmdExport(e *evalCtx) error {
 
 	if shouldFingerprint {
 		var ssts [][]byte
-		if sstFile.Len() != 0 {
-			ssts = append(ssts, sstFile.Bytes())
+		if len(sstFile.Data()) != 0 {
+			ssts = append(ssts, sstFile.Data())
 		}
 		// Fingerprint the rangekeys returned as a pebble SST.
 		rangekeyFingerprint, err := storage.FingerprintRangekeys(e.ctx, e.st, opts.FingerprintOptions, ssts)
@@ -1642,7 +1642,7 @@ func cmdExport(e *evalCtx) error {
 		return nil
 	}
 
-	iter, err := storage.NewMemSSTIterator(sstFile.Bytes(), false /* verify */, storage.IterOptions{
+	iter, err := storage.NewMemSSTIterator(sstFile.Data(), false /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		UpperBound: keys.MaxKey,
 	})

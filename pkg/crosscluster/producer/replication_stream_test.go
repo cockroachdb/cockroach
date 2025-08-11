@@ -6,7 +6,6 @@
 package producer_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -51,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
@@ -679,7 +679,7 @@ USE d;
 		}
 		require.NoError(t, engine.Flush())
 
-		var sstFile bytes.Buffer
+		var sstFile objstorage.MemObj
 		_, _, err := storage.MVCCExportToSST(ctx,
 			cluster.MakeTestingClusterSettings(), engine,
 			storage.MVCCExportOptions{
@@ -690,7 +690,7 @@ USE d;
 				ExportAllRevisions: true,
 			}, &sstFile)
 		require.NoError(t, err, "failed to export expected data")
-		keys, rKeys := storageutils.KeysFromSST(t, sstFile.Bytes())
+		keys, rKeys := storageutils.KeysFromSST(t, sstFile.Data())
 		require.Equal(t, 0, len(keys), "unexpected point keys")
 		rKeySpans := make([]roachpb.Span, 0, len(rKeys))
 		for _, rk := range rKeys {
