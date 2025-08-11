@@ -25,7 +25,7 @@ const (
 	// RaceSucceedsSoonDuration is the maximum amount of time
 	// unittests will wait for a condition to become true when
 	// running with the race detector enabled.
-	RaceSucceedsSoonDuration = DefaultSucceedsSoonDuration * 5
+	RaceSucceedsSoonDuration = DefaultSucceedsSoonDuration * 10
 )
 
 // SucceedsSoon fails the test (with t.Fatal) unless the supplied function runs

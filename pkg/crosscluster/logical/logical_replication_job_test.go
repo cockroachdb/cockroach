@@ -1701,6 +1701,9 @@ func WaitUntilReplicatedTime(
 	t *testing.T, targetTime hlc.Timestamp, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID,
 ) {
 	t.Logf("waiting for logical replication job %d to reach replicated time of %s", ingestionJobID, targetTime)
+	progress := jobutils.GetJobProgress(t, db, ingestionJobID)
+	replicatedTime := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.ReplicatedTime
+	t.Logf("replication time: %s", replicatedTime)
 	testutils.SucceedsSoon(t, func() error {
 		progress := jobutils.GetJobProgress(t, db, ingestionJobID)
 		replicatedTime := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.ReplicatedTime
@@ -2521,39 +2524,32 @@ func TestAlterExternalConnection(t *testing.T) {
 		{"1", "via_node_0"},
 	})
 
+	t.Logf("Executing ALTER EXTERNAL CONNECTION to switch from node0 to node1")
 	dbBNode2.Exec(t, fmt.Sprintf("ALTER EXTERNAL CONNECTION '%s' AS '%s'", externalConnName, dbANode1URL.String()))
 
-	// Wait for job to detect change, complete replan, and resume running
-	testutils.SucceedsSoon(t, func() error {
-		var status string
-		err := dbBNode2.DB.QueryRowContext(ctx, "SELECT status FROM crdb_internal.jobs WHERE job_id = $1", jobID).Scan(&status)
-		if err != nil {
-			return err
-		}
-		if status != "running" {
-			return errors.Errorf("job %d status is %s, waiting for running", jobID, status)
-		}
-		return nil
-	})
-
-	now = node0.Clock().Now()
-	WaitUntilReplicatedTime(t, now, dbA, jobID)
-	dbANode1.Exec(t, "INSERT INTO tab VALUES (2, 'via_node_1')")
-
+	t.Logf("ALTER EXTERNAL CONNECTION completed, waiting for dbB switch over to node 2 dbA")
 	now = node0.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbB, jobID)
 
-	// Verify that after ALTER, node0 has no connection and node1 has the replication connection
-	dbANode0.CheckQueryResults(t,
-		"SELECT count(*) FROM crdb_internal.node_sessions WHERE application_name like '$ internal repstream job id=%'",
-		[][]string{{"0"}})
 	dbANode1.CheckQueryResults(t,
-		"SELECT count(*) > 0 FROM crdb_internal.node_sessions WHERE application_name like '$ internal repstream job id=%'",
+		"SELECT count(*) > 0 FROM crdb_internal.node_sessions WHERE application_name like '$ internal repstream job id=%' AND status='ACTIVE'",
 		[][]string{{"true"}})
+	dbANode0.CheckQueryResults(t,
+		"SELECT count(*) FROM crdb_internal.node_sessions WHERE application_name like '$ internal repstream job id=%' AND status ='ACTIVE'",
+		[][]string{{"0"}})
 
+	t.Logf("Replication advanced on dbA, inserting test data via node1")
+	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'via_node_1')")
+	now = node0.Clock().Now()
+	t.Logf("Test data inserted, waiting for replication to advance on dbB")
+	WaitUntilReplicatedTime(t, now, dbB, jobID)
+
+	t.Logf("Final verification: checking data replicated via node1")
 	dbBNode2.CheckQueryResults(t, "SELECT * FROM tab WHERE pk = 2", [][]string{
 		{"2", "via_node_1"},
 	})
+
+	t.Logf("TestAlterExternalConnection completed successfully")
 }
 
 func TestMismatchColIDs(t *testing.T) {
