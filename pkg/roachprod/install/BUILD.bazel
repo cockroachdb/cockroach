@@ -34,6 +34,7 @@ go_library(
         "//pkg/roachprod/errors",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/roachprodutil",
+        "//pkg/roachprod/roachprodutil/serde",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm",
@@ -49,6 +50,7 @@ go_library(
         "@com_github_alessio_shellescape//:shellescape",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_version//:version",
+        "@in_gopkg_yaml_v3//:yaml_v3",
         "@org_golang_x_exp//maps",
         "@org_golang_x_sync//errgroup",
         "@org_golang_x_sys//unix",
@@ -58,6 +60,7 @@ go_library(
 go_test(
     name = "install_test",
     srcs = [
+        "cluster_settings_test.go",
         "cluster_synced_test.go",
         "cockroach_test.go",
         "expander_test.go",
@@ -84,5 +87,6 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
