@@ -234,6 +234,8 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 		// TODO(paulniziolek): LTreeFamily should be supported in keyside encoding.
 		// Temporarily, we disallow it, until implemented.
 		return true
+		// NB: if you're adding a new type here, you probably also want to
+		// include it into rowenc.mustUseValueEncodingForFingerprinting.
 	}
 	return false
 }
