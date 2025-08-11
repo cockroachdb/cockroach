@@ -171,6 +171,26 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	// Decommissioning nudger metrics.
+	metaDecommissioningNudgerEnqueueAttempts = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.enqueue.attempts",
+		Help:        "Number of attempts to enqueue a range for decommissioning",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDecommissioningNudgerEnqueueSuccess = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.enqueue.success",
+		Help:        "Number of successful enqueues of a range for decommissioning",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDecommissioningNudgerEnqueueFailure = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.enqueue.failure",
+		Help:        "Number of failed enqueues of a range for decommissioning",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount = metric.Metadata{
 		Name:        "leases.success",
@@ -2861,6 +2881,11 @@ type StoreMetrics struct {
 	DecommissioningRangeCount       *metric.Gauge
 	RangeClosedTimestampPolicyCount [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge
 
+	// Decommissioning nudger metrics.
+	DecommissioningNudgerEnqueueAttempts *metric.Counter
+	DecommissioningNudgerEnqueueSuccess  *metric.Counter
+	DecommissioningNudgerEnqueueFailure  *metric.Counter
+
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
 	// lease).
@@ -3578,6 +3603,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		OverReplicatedRangeCount:        metric.NewGauge(metaOverReplicatedRangeCount),
 		DecommissioningRangeCount:       metric.NewGauge(metaDecommissioningRangeCount),
 		RangeClosedTimestampPolicyCount: makePolicyRefresherMetrics(),
+
+		// Decommissioning nudger metrics.
+		DecommissioningNudgerEnqueueAttempts: metric.NewCounter(metaDecommissioningNudgerEnqueueAttempts),
+		DecommissioningNudgerEnqueueSuccess:  metric.NewCounter(metaDecommissioningNudgerEnqueueSuccess),
+		DecommissioningNudgerEnqueueFailure:  metric.NewCounter(metaDecommissioningNudgerEnqueueFailure),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
