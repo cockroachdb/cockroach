@@ -41,7 +41,7 @@ func TestPreserveDowngradeOptionRandomizerMutator(t *testing.T) {
 	for j < len(mutations) {
 		// Removal
 		require.Equal(t, mutationRemove, mutations[j].op)
-		require.IsType(t, allowUpgradeStep{}, mutations[j].reference.impl)
+		require.IsType(t, allowUpgradeStep{}, mutations[j].reference.Impl.Val)
 
 		// Insertion
 		require.Equal(t, mutationInsertBefore, mutations[j+1].op)
@@ -72,7 +72,7 @@ func TestClusterSettingMutator(t *testing.T) {
 		}
 
 		var nodesInValidVersion option.NodeListOption
-		stepContext := m.reference.context
+		stepContext := m.reference.Context
 		for _, node := range stepContext.System.Descriptor.Nodes {
 			nodeV, err := stepContext.NodeVersion(node)
 			require.NoError(t, err)
@@ -112,9 +112,9 @@ func TestClusterSettingMutator(t *testing.T) {
 
 			switch step := m.impl.(type) {
 			case setClusterSettingStep:
-				require.Equal(t, mut.minVersion, step.minVersion)
-				require.Equal(t, mut.name, step.name)
-				require.Contains(t, mut.possibleValues, step.value)
+				require.Equal(t, mut.minVersion, step.MinVersion)
+				require.Equal(t, mut.name, step.Name)
+				require.Contains(t, mut.possibleValues, step.Value)
 
 				// If this is the first mutation being generated, there's
 				// nothing to verify: a SET mutation is always valid as the
@@ -131,8 +131,8 @@ func TestClusterSettingMutator(t *testing.T) {
 					// other value, we verify that the new value is different
 					// from the previous one.
 					require.NotEqualValues(
-						t, step.value, prevStep.value,
-						"found two consecutive SET steps to value %v", step.value,
+						t, step.Value, prevStep.Value,
+						"found two consecutive SET steps to value %v", step.Value,
 					)
 
 				case resetClusterSettingStep:
@@ -145,8 +145,8 @@ func TestClusterSettingMutator(t *testing.T) {
 				}
 
 			case resetClusterSettingStep:
-				require.Equal(t, mut.minVersion, step.minVersion)
-				require.Equal(t, mut.name, step.name)
+				require.Equal(t, mut.minVersion, step.MinVersion)
+				require.Equal(t, mut.name, step.Name)
 
 				// If we are attempting to RESET the cluster setting:
 

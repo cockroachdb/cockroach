@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"sync/atomic"
 	"testing"
 
@@ -21,15 +22,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func successStep() *singleStep {
+func successStep() testStep {
 	return newTestStep(func() error { return nil })
 }
 
-func errorStep() *singleStep {
+func errorStep() testStep {
 	return newTestStep(func() error { return fmt.Errorf("oops") })
 }
 
-func panicStep() *singleStep {
+func panicStep() testStep {
 	return newTestStep(func() error {
 		var ids []int
 		if ids[0] > 42 {
@@ -43,18 +44,18 @@ func Test_runSingleStep(t *testing.T) {
 	tr := testTestRunner()
 
 	// steps that run without errors do not return errors
-	err := tr.runSingleStep(ctx, successStep(), nilLogger)
+	err := tr.runSingleStep(ctx, successStep().Val.(*singleStep), nilLogger)
 	require.NoError(t, err)
 
 	// steps that return an error have that error surfaced
-	err = tr.runSingleStep(ctx, errorStep(), nilLogger)
+	err = tr.runSingleStep(ctx, errorStep().Val.(*singleStep), nilLogger)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "oops")
 
 	// steps that panic cause an error to be returned
 	err = nil
 	require.NotPanics(t, func() {
-		err = tr.runSingleStep(ctx, panicStep(), nilLogger)
+		err = tr.runSingleStep(ctx, panicStep().Val.(*singleStep), nilLogger)
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "panic (stack trace above): runtime error: index out of range [0] with length 0")
@@ -64,26 +65,32 @@ func Test_runSingleStep(t *testing.T) {
 // appropriately change ownership to Test Eng when no user provided
 // functions have run at the time the failure happened.
 func Test_run(t *testing.T) {
-	hookStep := func(name string, retErr error) *singleStep {
+	hooks := &testHooks{
+		registry: make(stepFuncRegistry),
+	}
+	hookStep := func(name string, retErr error) testStep {
+		stepFn := func(_ context.Context, _ *logger.Logger, _ *rand.Rand, _ *Helper) error {
+			return retErr
+		}
+		desc := fmt.Sprintf("hook %s", name)
+		ref := hooks.NewStepFuncRef(name, stepFn, nil)
 		step := runHookStep{
-			hook: versionUpgradeHook{
-				name: fmt.Sprintf("hook %s", name),
-				fn: func(_ context.Context, _ *logger.Logger, _ *rand.Rand, _ *Helper) error {
-					return retErr
-				},
-			},
+			Desc:        desc,
+			StepFuncRef: ref,
 		}
 
 		initialVersion := clusterupgrade.MustParseVersion(predecessorVersion)
 		return newSingleStep(
 			newInitialContext(initialVersion, nodes, nil),
 			step,
-			newRand(),
+			&serializableRand{
+				Seed: seed,
+			},
 		)
 	}
 
-	successfulHook := func() *singleStep { return hookStep("success", nil) }
-	buggyHook := func() *singleStep { return hookStep("buggy", errors.New("oops")) }
+	successfulHook := func() testStep { return hookStep("success", nil) }
+	buggyHook := func() testStep { return hookStep("buggy", errors.New("oops")) }
 
 	testCases := []struct {
 		name                  string
@@ -110,13 +117,14 @@ func Test_run(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			runner := testTestRunner()
+			runner.hooks = hooks
 			runner.plan = &TestPlan{
-				setup:     testSetup{systemSetup: &serviceSetup{}},
-				initSteps: tc.steps,
+				Setup:     testSetup{SystemSetup: &serviceSetup{}},
+				InitSteps: tc.steps,
 				// Set an artificially large `startSystemID` to stop the test
 				// runner from attempting to perform post-initialization tasks
 				// that wouldn't work in this limited test environment.
-				startSystemID: 9999,
+				StartSystemID: 9999,
 			}
 
 			runErr := runner.run()
@@ -159,7 +167,7 @@ func testTestRunner() *testRunner {
 		systemService:  newServiceRuntime(systemDescriptor),
 		background:     task.NewManager(runnerCtx, nilLogger),
 		ranUserHooks:   &ranUserHooks,
-		plan:           &TestPlan{seed: seed},
+		plan:           &TestPlan{Seed: seed},
 		_addAnnotation: testAddAnnotation,
 	}
 }
@@ -168,21 +176,51 @@ type testSingleStep struct {
 	runFunc func() error
 }
 
-func (s *testSingleStep) Description() string  { return "testSingleStep" }
-func (*testSingleStep) Background() shouldStop { return nil }
+func (testSingleStep) Description() string             { return "testSingleStep" }
+func (testSingleStep) Background(_ *Helper) shouldStop { return nil }
 
-func (tss *testSingleStep) Run(_ context.Context, _ *logger.Logger, _ *rand.Rand, _ *Helper) error {
-	return tss.runFunc()
+func (s testSingleStep) Run(_ context.Context, _ *logger.Logger, _ *rand.Rand, _ *Helper) error {
+	return s.runFunc()
 }
 func (s testSingleStep) ConcurrencyDisabled() bool {
 	return false
 }
 
-func newTestStep(f func() error) *singleStep {
+func (s testSingleStep) getTypeName(_ *stepProtocolTypes) (string, error) {
+	panic("not serializable")
+}
+
+func newTestStep(f func() error) testStep {
 	initialVersion := clusterupgrade.MustParseVersion(predecessorVersion)
 	return newSingleStep(
 		newInitialContext(initialVersion, nodes, nil),
 		&testSingleStep{runFunc: f},
-		newRand(),
+		&serializableRand{
+			Seed: seed,
+		},
 	)
+}
+
+type serializableTestSingleStep struct{}
+
+func (serializableTestSingleStep) Description() string             { return "testSingleStep" }
+func (serializableTestSingleStep) Background(_ *Helper) shouldStop { return nil }
+
+func (s serializableTestSingleStep) Run(
+	_ context.Context, _ *logger.Logger, _ *rand.Rand, _ *Helper,
+) error {
+	return nil
+}
+func (s serializableTestSingleStep) ConcurrencyDisabled() bool {
+	return false
+}
+
+func (s serializableTestSingleStep) getTypeName(_ *stepProtocolTypes) (string, error) {
+	// Inject the `serializableTestSingleStep` type into the `stepProtocolTypesMap`
+	// in order for the decoder to recognize it, during testing.
+	sType := reflect.TypeOf(serializableTestSingleStep{})
+	stepProtocolTypesMap[sType.Name()] = reflect.StructField{
+		Type: sType,
+	}
+	return sType.Name(), nil
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/errors"
@@ -34,7 +35,7 @@ type (
 
 		// Nodes is the set of nodes in the cluster where clients can
 		// connect to that service.
-		Nodes option.NodeListOption
+		Nodes option.NodeListOption `yaml:",flow"`
 	}
 
 	// Service implements helper functions on behalf of a specific
@@ -181,7 +182,7 @@ func (h *Helper) IsMultitenant() bool {
 }
 
 func (h *Helper) DeploymentMode() DeploymentMode {
-	return h.runner.plan.deploymentMode
+	return h.runner.plan.DeploymentMode
 }
 
 func (h *Helper) DefaultService() *Service {
@@ -348,6 +349,24 @@ func (h *Helper) IsSkipVersionUpgrade() bool {
 	// used when upgrading: we keep release data starting from 21.2.
 	numReleases, _ := release.MajorReleasesBetween(&h.testContext.FromVersion().Version, &h.testContext.ToVersion().Version)
 	return numReleases > 1
+}
+
+func (h *Helper) getStepFuncFromRef(ref stepFuncRef) stepFuncInfo {
+	return h.runner.hooks.registry[ref]
+}
+
+func (h *Helper) getFailureFromRef(ref string, l *logger.Logger) (*failures.Failer, error) {
+	existingFailer := h.runner.failures[ref]
+	if existingFailer != nil {
+		return existingFailer, nil
+	}
+	failure := failures.GetFailureRegistry()
+	f, err := failure.GetFailer(h.runner.cluster.Name(), ref, l)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get failer for %s: %w", ref, err)
+	}
+	h.runner.failures[ref] = f
+	return f, nil
 }
 
 // logSQL standardizes the logging when a SQL statement or query is

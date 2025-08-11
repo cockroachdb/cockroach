@@ -92,6 +92,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -256,7 +257,14 @@ type (
 	// error over calling `t.Fatal` directly. The error is handled by
 	// the mixedversion framework and better error messages are produced
 	// as a result.
-	stepFunc      func(context.Context, *logger.Logger, *rand.Rand, *Helper) error
+	stepFunc     func(context.Context, *logger.Logger, *rand.Rand, *Helper) error
+	stepFuncRef  string
+	stepFuncInfo struct {
+		name       string
+		fn         stepFunc
+		shouldStop shouldStop
+	}
+
 	predicateFunc func(Context) bool
 
 	// versionUpgradeHook is a hook that can be called at any time
@@ -268,14 +276,17 @@ type (
 	versionUpgradeHook struct {
 		name      string
 		predicate predicateFunc
-		fn        stepFunc
+		ref       stepFuncRef
 	}
 
 	// testStep is an opaque reference to one step of a mixed-version
 	// test. It can be a singleStep (see below), or a "meta-step",
 	// meaning that it combines other steps in some way (for instance, a
 	// series of steps to be run sequentially or concurrently).
-	testStep interface{}
+	//testStep interface{}
+	testStep struct {
+		Val dynamicStep
+	}
 
 	// singleStepProtocol is the set of functions that single step
 	// implementations need to provide.
@@ -291,7 +302,7 @@ type (
 		// When a step is *not* run in the background, the test will wait
 		// for it to finish before moving on. When a background step
 		// fails, the entire test fails.
-		Background() shouldStop
+		Background(*Helper) shouldStop
 		// Run implements the actual functionality of the step. This
 		// signature should remain in sync with `stepFunc`.
 		Run(context.Context, *logger.Logger, *rand.Rand, *Helper) error
@@ -300,19 +311,34 @@ type (
 		// that involve restarting a node, as they may attempt to connect
 		// to an unavailable node.
 		ConcurrencyDisabled() bool
+
+		// getTypeName returns the name of the type implementing
+		// singleStepProtocol.
+		getTypeName(*stepProtocolTypes) (string, error)
+	}
+
+	serializableRand struct {
+		Seed     int64 // Seed is the seed used to create this instance of `rand.Rand`.
+		lazyRand *rand.Rand
+		once     sync.Once
+	}
+
+	singleStepContainer struct {
+		Val singleStepProtocol
 	}
 
 	// singleStep represents steps that implement the pieces on top of
 	// which a mixed-version test is built. In other words, they are not
 	// composed by other steps and hence can be directly executed.
 	singleStep struct {
-		context Context            // the context the step runs in
-		rng     *rand.Rand         // the RNG to be used when running this step
-		ID      int                // unique ID associated with the step
-		impl    singleStepProtocol // the concrete implementation of the step
+		Context Context             // the context the step runs in
+		RNG     *serializableRand   // the RNG to be used when running this step
+		ID      int                 // unique ID associated with the step
+		Impl    singleStepContainer // the concrete implementation of the step
 	}
 
-	hooks []versionUpgradeHook
+	hooks            []versionUpgradeHook
+	stepFuncRegistry map[stepFuncRef]stepFuncInfo
 
 	// testHooks groups hooks associated with a mixed-version test in
 	// its different stages: startup, mixed-version, and after-test.
@@ -323,6 +349,7 @@ type (
 		mixedVersion          hooks
 		afterUpgradeFinalized hooks
 		crdbNodes             option.NodeListOption
+		registry              stepFuncRegistry
 	}
 
 	// testOptions contains some options that can be changed by the user
@@ -397,6 +424,31 @@ type (
 
 	DeploymentMode string
 )
+
+// MarshalYAML implements [yaml.Marshaler].
+func (s *serializableRand) MarshalYAML() (any, error) {
+	return s.Seed, nil
+}
+
+// UnmarshalYAML implements [yaml.Unmarshaler].
+func (s *serializableRand) UnmarshalYAML(value *yaml.Node) error {
+	var seed int64
+	if err := value.Decode(&seed); err != nil {
+		return err
+	}
+	s.Seed = seed
+	return nil
+}
+
+// Rand returns a [rand.Rand] instance. The first time this function is called,
+// it initializes the lazyRand field with a new [rand.Rand] instance seeded with
+// the value of Seed.
+func (s *serializableRand) Rand() *rand.Rand {
+	s.once.Do(func() {
+		s.lazyRand = rand.New(rand.NewSource(s.Seed))
+	})
+	return s.lazyRand
+}
 
 // NeverUseFixtures is an option that can be passed to `NewTest` to
 // disable the use of fixtures in the test. Necessary if the test
@@ -681,7 +733,7 @@ func NewTest(
 		rt:        t,
 		prng:      prng,
 		seed:      seed,
-		hooks:     &testHooks{crdbNodes: crdbNodes},
+		hooks:     &testHooks{crdbNodes: crdbNodes, registry: make(stepFuncRegistry)},
 	}
 
 	assertValidTest(test, t.Fatal)
@@ -752,7 +804,9 @@ func (t *Test) InMixedVersion(desc string, fn stepFunc) {
 		return len(upgradingService.NodesInNextVersion()) == numUpgradedNodes
 	}
 
-	t.hooks.AddMixedVersion(versionUpgradeHook{name: desc, predicate: predicate, fn: fn})
+	t.hooks.AddMixedVersion(
+		versionUpgradeHook{name: desc, predicate: predicate, ref: t.hooks.NewStepFuncRef(desc, fn, nil)},
+	)
 }
 
 // BeforeClusterStart registers a callback that is run before cluster
@@ -764,7 +818,7 @@ func (t *Test) BeforeClusterStart(desc string, fn stepFunc) {
 	// Since the callbacks here are only referenced in the setup steps
 	// of the planner, there is no need to have a predicate function
 	// gating them.
-	t.hooks.AddBeforeClusterStart(versionUpgradeHook{name: desc, fn: fn})
+	t.hooks.AddBeforeClusterStart(versionUpgradeHook{name: desc, ref: t.hooks.NewStepFuncRef(desc, fn, nil)})
 }
 
 // OnStartup registers a callback that is run once the cluster is
@@ -776,7 +830,7 @@ func (t *Test) OnStartup(desc string, fn stepFunc) {
 	// Since the callbacks here are only referenced in the setup steps
 	// of the planner, there is no need to have a predicate function
 	// gating them.
-	t.hooks.AddStartup(versionUpgradeHook{name: desc, fn: fn})
+	t.hooks.AddStartup(versionUpgradeHook{name: desc, ref: t.hooks.NewStepFuncRef(desc, fn, nil)})
 }
 
 // AfterUpgradeFinalized registers a callback that is run once per
@@ -784,7 +838,7 @@ func (t *Test) OnStartup(desc string, fn stepFunc) {
 // successfully.  If multiple such hooks are passed, they may be
 // executed concurrently.
 func (t *Test) AfterUpgradeFinalized(desc string, fn stepFunc) {
-	t.hooks.AddAfterUpgradeFinalized(versionUpgradeHook{name: desc, fn: fn})
+	t.hooks.AddAfterUpgradeFinalized(versionUpgradeHook{name: desc, ref: t.hooks.NewStepFuncRef(desc, fn, nil)})
 }
 
 // BackgroundFunc runs the function passed as argument in the
@@ -797,9 +851,9 @@ func (t *Test) AfterUpgradeFinalized(desc string, fn stepFunc) {
 // that can be called to terminate the step, which will cancel the
 // context passed to `stepFunc`.
 func (t *Test) BackgroundFunc(desc string, fn stepFunc) StopFunc {
-	t.hooks.AddBackground(versionUpgradeHook{name: desc, fn: fn})
-
 	ch := make(shouldStop)
+	t.hooks.AddBackground(versionUpgradeHook{name: desc, ref: t.hooks.NewStepFuncRef(desc, fn, ch)})
+
 	t.bgChans = append(t.bgChans, ch)
 	var closeOnce sync.Once
 	// Make sure to only close the background channel once, allowing the
@@ -900,7 +954,7 @@ func (t *Test) RunE() (*TestPlan, error) {
 
 	// Mark the deployment mode and versions, so they show up in the github issue. This makes
 	// it easier to group failures together without having to dig into the test logs.
-	t.rt.AddParam("mvtDeploymentMode", string(plan.deploymentMode))
+	t.rt.AddParam("mvtDeploymentMode", string(plan.DeploymentMode))
 	t.rt.AddParam("mvtVersions", formatVersions(plan.Versions()))
 
 	if err := t.run(plan); err != nil {
@@ -911,7 +965,7 @@ func (t *Test) RunE() (*TestPlan, error) {
 }
 
 func (t *Test) run(plan *TestPlan) error {
-	return newTestRunner(t.ctx, t.cancel, plan, t.rt, t.options.tag, t.logger, t.cluster).run()
+	return newTestRunner(t.ctx, t.cancel, plan, t.hooks, t.rt, t.options.tag, t.logger, t.cluster).run()
 }
 
 func (t *Test) plan() (plan *TestPlan, retErr error) {
@@ -970,15 +1024,15 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "error generating test plan")
 		}
-		if plan.length <= t.options.maxNumPlanSteps {
+		if plan.Length <= t.options.maxNumPlanSteps {
 			break
 		}
 	}
-	if plan.length > t.options.maxNumPlanSteps {
+	if plan.Length > t.options.maxNumPlanSteps {
 		return nil, errors.Newf("unable to generate a test plan with at most %d steps", t.options.maxNumPlanSteps)
 	}
 	if retries > 0 {
-		t.logger.Printf("WARNING: generated a smaller (%d) test plan after %d retries", plan.length, retries)
+		t.logger.Printf("WARNING: generated a smaller (%d) test plan after %d retries", plan.Length, retries)
 	}
 	return plan, nil
 }
@@ -1279,12 +1333,16 @@ func (t *Test) tenantDescriptor(deploymentMode DeploymentMode) *ServiceDescripto
 // a way to group related steps so that a test plan is easier to
 // understand for a human.
 type sequentialRunStep struct {
-	label string
-	steps []testStep
+	Label string
+	Steps []testStep
 }
 
 func (s sequentialRunStep) Description() string {
-	return s.label
+	return s.Label
+}
+
+func (s sequentialRunStep) getTypeName(t *stepTypes) (string, error) {
+	return t.getTypeName(s, &t.SequentialRunStep)
 }
 
 // delayedStep is a thin wrapper around a test step that marks steps
@@ -1295,41 +1353,49 @@ func (s sequentialRunStep) Description() string {
 // uniformly distributed, and the delay is inteded to expose scenarios
 // where a specific ordering of events leads to a failure.
 type delayedStep struct {
-	delay time.Duration
-	step  testStep
+	Delay time.Duration
+	Step  testStep
+}
+
+func (d delayedStep) getTypeName(t *stepTypes) (string, error) {
+	return t.getTypeName(d, &t.DelayedStep)
 }
 
 // concurrentRunStep is a "meta-step" that groups multiple test steps
 // that are meant to be executed concurrently. A random delay is added
 // before each step starts, see notes on `delayedStep`.
 type concurrentRunStep struct {
-	label        string
-	rng          *rand.Rand
-	delayedSteps []testStep
+	Label        string
+	DelayedSteps []testStep
 }
 
-func newConcurrentRunStep(
-	label string, steps []testStep, rng *rand.Rand, isLocal bool,
-) concurrentRunStep {
+func newConcurrentRunStep(label string, steps []testStep, rng *rand.Rand, isLocal bool) testStep {
 	delayedSteps := make([]testStep, 0, len(steps))
 	for _, step := range steps {
-		delayedSteps = append(delayedSteps, delayedStep{
-			delay: randomConcurrencyDelay(rng, isLocal), step: step,
-		})
+		delayedSteps = append(delayedSteps, testStep{delayedStep{
+			Delay: randomConcurrencyDelay(rng, isLocal), Step: step,
+		}})
 	}
 
-	return concurrentRunStep{label: label, delayedSteps: delayedSteps, rng: rng}
+	return testStep{concurrentRunStep{Label: label, DelayedSteps: delayedSteps}}
 }
 
 func (s concurrentRunStep) Description() string {
-	return fmt.Sprintf("%s concurrently", s.label)
+	return fmt.Sprintf("%s concurrently", s.Label)
+}
+
+func (s concurrentRunStep) getTypeName(t *stepTypes) (string, error) {
+	return t.getTypeName(s, &t.ConcurrentRunStep)
 }
 
 // newSingleStep creates a `singleStep` struct for the implementation
 // passed, making sure to copy the context so that any modifications
 // made to it do not affect this step's view of the context.
-func newSingleStep(context *Context, impl singleStepProtocol, rng *rand.Rand) *singleStep {
-	return &singleStep{context: context.clone(), impl: impl, rng: rng}
+func newSingleStep(context *Context, impl singleStepProtocol, rng *serializableRand) testStep {
+	return testStep{&singleStep{Context: context.clone(), Impl: singleStepContainer{impl}, RNG: rng}}
+}
+func (s singleStep) getTypeName(t *stepTypes) (string, error) {
+	return t.getTypeName(s, &t.SingleStep)
 }
 
 // prefixedLogger returns a logger instance off of the given `l`
@@ -1366,19 +1432,12 @@ func (h hooks) Filter(testContext Context) hooks {
 // (sequentially, concurrently, etc). `stopChans` should either be
 // `nil` for steps that are not meant to be run in the background, or
 // contain one stop channel (`shouldStop`) for each hook.
-func (h hooks) AsSteps(prng *rand.Rand, testContext *Context, stopChans []shouldStop) []testStep {
+func (h hooks) AsSteps(prng *rand.Rand, testContext *Context) []testStep {
 	steps := make([]testStep, 0, len(h))
-	stopChanFor := func(j int) shouldStop {
-		if len(stopChans) == 0 {
-			return nil
-		}
-		return stopChans[j]
-	}
-
-	for j, hook := range h {
+	for _, hook := range h {
 		steps = append(steps, newSingleStep(testContext, runHookStep{
-			hook:     hook,
-			stopChan: stopChanFor(j),
+			Desc:        hook.name,
+			StepFuncRef: hook.ref,
 		}, rngFromRNG(prng)))
 	}
 
@@ -1406,32 +1465,40 @@ func (th *testHooks) AddAfterUpgradeFinalized(hook versionUpgradeHook) {
 }
 
 func (th *testHooks) BeforeClusterStartSteps(testContext *Context, rng *rand.Rand) []testStep {
-	return th.beforeClusterStart.AsSteps(rng, testContext, nil)
+	return th.beforeClusterStart.AsSteps(rng, testContext)
 }
 
 func (th *testHooks) StartupSteps(testContext *Context, rng *rand.Rand) []testStep {
-	return th.startup.AsSteps(rng, testContext, nil)
+	return th.startup.AsSteps(rng, testContext)
 }
 
-func (th *testHooks) BackgroundSteps(
-	testContext *Context, stopChans []shouldStop, rng *rand.Rand,
-) []testStep {
+func (th *testHooks) BackgroundSteps(testContext *Context, rng *rand.Rand) []testStep {
 	testContext.System.Stage = BackgroundStage
 	if testContext.Tenant != nil {
 		testContext.Tenant.Stage = BackgroundStage
 	}
 
-	return th.background.AsSteps(rng, testContext, stopChans)
+	return th.background.AsSteps(rng, testContext)
 }
 
 func (th *testHooks) MixedVersionSteps(testContext *Context, rng *rand.Rand) []testStep {
 	return th.mixedVersion.
 		Filter(*testContext).
-		AsSteps(rng, testContext, nil)
+		AsSteps(rng, testContext)
 }
 
 func (th *testHooks) AfterUpgradeFinalizedSteps(testContext *Context, rng *rand.Rand) []testStep {
-	return th.afterUpgradeFinalized.AsSteps(rng, testContext, nil)
+	return th.afterUpgradeFinalized.AsSteps(rng, testContext)
+}
+
+func (th *testHooks) NewStepFuncRef(name string, fn stepFunc, shouldStop shouldStop) stepFuncRef {
+	ref := stepFuncRef(name)
+	th.registry[ref] = stepFuncInfo{
+		name:       name,
+		fn:         fn,
+		shouldStop: shouldStop,
+	}
+	return ref
 }
 
 // pickRandomDelay chooses a random duration from the list passed,
@@ -1450,8 +1517,11 @@ func randomConcurrencyDelay(rng *rand.Rand, isLocal bool) time.Duration {
 	return pickRandomDelay(rng, isLocal, possibleDelays)
 }
 
-func rngFromRNG(rng *rand.Rand) *rand.Rand {
-	return rand.New(rand.NewSource(rng.Int63()))
+func rngFromRNG(rng *rand.Rand) *serializableRand {
+	seed := rng.Int63()
+	return &serializableRand{
+		Seed: seed,
+	}
 }
 
 // virtualClusterName returns a random name that can be used as a

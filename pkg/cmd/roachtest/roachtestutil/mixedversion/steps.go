@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -53,20 +52,20 @@ func restartSystemSettings(waitForReplication bool, initTarget int) []option.Sta
 // `pkg/cmd/roachtest/fixtures` for a specific version into the nodes'
 // store dir.
 type installFixturesStep struct {
-	version *clusterupgrade.Version
+	Version *clusterupgrade.Version
 }
 
-func (s installFixturesStep) Background() shouldStop { return nil }
+func (s installFixturesStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s installFixturesStep) Description() string {
-	return fmt.Sprintf("install fixtures for version %q", s.version.String())
+	return fmt.Sprintf("install fixtures for version %q", s.Version.String())
 }
 
 func (s installFixturesStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
 	return clusterupgrade.InstallFixtures(
-		ctx, l, h.runner.cluster, h.System.Descriptor.Nodes, s.version,
+		ctx, l, h.runner.cluster, h.System.Descriptor.Nodes, s.Version,
 	)
 }
 
@@ -74,20 +73,23 @@ func (s installFixturesStep) ConcurrencyDisabled() bool {
 	return false
 }
 
+func (s installFixturesStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.InstallFixturesStep)
+}
+
 // startStep is the step that starts the cluster from a specific
 // `version`.
 type startStep struct {
-	rt                 test.Test
-	version            *clusterupgrade.Version
-	initTarget         int
-	waitForReplication bool
-	settings           []install.ClusterSettingOption
+	Version            *clusterupgrade.Version
+	InitTarget         int
+	WaitForReplication bool
+	Settings           install.ClusterSettingOptionList `yaml:",omitempty"`
 }
 
-func (s startStep) Background() shouldStop { return nil }
+func (s startStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s startStep) Description() string {
-	return fmt.Sprintf("start cluster at version %q", s.version)
+	return fmt.Sprintf("start cluster at version %q", s.Version)
 }
 
 // Run uploads the binary associated with the given version and starts
@@ -95,20 +97,20 @@ func (s startStep) Description() string {
 func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper) error {
 	systemNodes := h.System.Descriptor.Nodes
 	binaryPath, err := clusterupgrade.UploadCockroach(
-		ctx, s.rt, l, h.runner.cluster, systemNodes, s.version,
+		ctx, h.runner.rt, l, h.runner.cluster, systemNodes, s.Version,
 	)
 	if err != nil {
 		return err
 	}
 
 	clusterSettings := append(
-		append([]install.ClusterSettingOption{}, s.settings...),
+		append([]install.ClusterSettingOption{}, s.Settings...),
 		install.BinaryOption(binaryPath),
 		install.TagOption(systemTag),
 	)
 
-	customStartOpts := []option.StartStopOption{option.WithInitTarget(s.initTarget)}
-	if s.waitForReplication {
+	customStartOpts := []option.StartStopOption{option.WithInitTarget(s.InitTarget)}
+	if s.WaitForReplication {
 		customStartOpts = append(customStartOpts, option.WaitForReplication())
 	}
 
@@ -123,29 +125,33 @@ func (s startStep) ConcurrencyDisabled() bool {
 	return true
 }
 
+func (s startStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.StartStep)
+}
+
 // startSharedProcessVirtualCluster step creates a new shared-process
 // virtual cluster with the given name, and starts it. At the end of
 // this step, the virtual cluster should be ready to receive requests.
 type startSharedProcessVirtualClusterStep struct {
-	name       string
-	initTarget int
-	settings   []install.ClusterSettingOption
+	Name       string
+	InitTarget int
+	Settings   install.ClusterSettingOptionList `yaml:",omitempty"`
 }
 
-func (s startSharedProcessVirtualClusterStep) Background() shouldStop { return nil }
+func (s startSharedProcessVirtualClusterStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s startSharedProcessVirtualClusterStep) Description() string {
-	return fmt.Sprintf("start shared-process tenant %q", s.name)
+	return fmt.Sprintf("start shared-process tenant %q", s.Name)
 }
 
 func (s startSharedProcessVirtualClusterStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	l.Printf("starting shared process virtual cluster %s", s.name)
-	startOpts := option.StartSharedVirtualClusterOpts(s.name, startStopOpts(option.WithInitTarget(s.initTarget))...)
+	l.Printf("starting shared process virtual cluster %s", s.Name)
+	startOpts := option.StartSharedVirtualClusterOpts(s.Name, startStopOpts(option.WithInitTarget(s.InitTarget))...)
 
 	if err := h.runner.cluster.StartServiceForVirtualClusterE(
-		ctx, l, startOpts, install.MakeClusterSettings(s.settings...),
+		ctx, l, startOpts, install.MakeClusterSettings(s.Settings...),
 	); err != nil {
 		return err
 	}
@@ -160,41 +166,44 @@ func (s startSharedProcessVirtualClusterStep) ConcurrencyDisabled() bool {
 	return true
 }
 
+func (s startSharedProcessVirtualClusterStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.StartSharedProcessVirtualClusterStep)
+}
+
 // startSeparateProcessVirtualCluster step creates a new separate-process
 // virtual cluster with the given name, and starts it.
 type startSeparateProcessVirtualClusterStep struct {
-	name     string
-	rt       test.Test
-	version  *clusterupgrade.Version
-	settings []install.ClusterSettingOption
+	Name     string
+	Version  *clusterupgrade.Version
+	Settings install.ClusterSettingOptionList `yaml:",omitempty"`
 }
 
-func (s startSeparateProcessVirtualClusterStep) Background() shouldStop { return nil }
+func (s startSeparateProcessVirtualClusterStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s startSeparateProcessVirtualClusterStep) Description() string {
 	return fmt.Sprintf(
 		"start separate process virtual cluster %s with binary version %s",
-		s.name, s.version,
+		s.Name, s.Version,
 	)
 }
 
 func (s startSeparateProcessVirtualClusterStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	l.Printf("starting separate process virtual cluster %s at version %s", s.name, s.version)
+	l.Printf("starting separate process virtual cluster %s at version %s", s.Name, s.Version)
 	startOpts := option.StartVirtualClusterOpts(
-		s.name,
+		s.Name,
 		h.Tenant.Descriptor.Nodes,
 		startStopOpts(option.StorageCluster(h.System.Descriptor.Nodes))...,
 	)
 
-	binaryPath := clusterupgrade.BinaryPathForVersion(s.rt, s.version, "cockroach")
-	settings := install.MakeClusterSettings(append(s.settings, install.BinaryOption(binaryPath))...)
+	binaryPath := clusterupgrade.BinaryPathForVersion(h.runner.rt, s.Version, "cockroach")
+	settings := install.MakeClusterSettings(append(s.Settings, install.BinaryOption(binaryPath))...)
 
 	if err := h.runner.cluster.StartServiceForVirtualClusterE(ctx, l, startOpts, settings); err != nil {
 		return err
 	}
-	h.runner.cluster.SetDefaultVirtualCluster(s.name)
+	h.runner.cluster.SetDefaultVirtualCluster(s.Name)
 
 	return waitForTenantProcess(ctx, l, h, h.Tenant.Descriptor.Nodes, h.DeploymentMode())
 }
@@ -203,20 +212,23 @@ func (s startSeparateProcessVirtualClusterStep) ConcurrencyDisabled() bool {
 	return true
 }
 
-type restartVirtualClusterStep struct {
-	virtualCluster string
-	version        *clusterupgrade.Version
-	rt             test.Test
-	node           int
-	settings       []install.ClusterSettingOption
+func (s startSeparateProcessVirtualClusterStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.StartSeparateProcessVirtualClusterStep)
 }
 
-func (s restartVirtualClusterStep) Background() shouldStop { return nil }
+type restartVirtualClusterStep struct {
+	VirtualCluster string
+	Version        *clusterupgrade.Version
+	Node           int
+	Settings       install.ClusterSettingOptionList `yaml:",omitempty"`
+}
+
+func (s restartVirtualClusterStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s restartVirtualClusterStep) Description() string {
 	return fmt.Sprintf(
 		"restart %s server on node %d with binary version %s",
-		s.virtualCluster, s.node, s.version,
+		s.VirtualCluster, s.Node, s.Version,
 	)
 }
 
@@ -225,24 +237,24 @@ func (s restartVirtualClusterStep) Run(
 ) error {
 	const maxWait = 300 // 5 minutes
 
-	l.Printf("restarting node %d (tenant %s) into version %s", s.node, s.virtualCluster, s.version)
-	node := h.runner.cluster.Node(s.node)
+	l.Printf("restarting node %d (tenant %s) into version %s", s.Node, s.VirtualCluster, s.Version)
+	node := h.runner.cluster.Node(s.Node)
 
-	stopOpts := option.StopVirtualClusterOpts(s.virtualCluster, node, option.Graceful(maxWait))
+	stopOpts := option.StopVirtualClusterOpts(s.VirtualCluster, node, option.Graceful(maxWait))
 	if err := h.runner.cluster.StopServiceForVirtualClusterE(ctx, l, stopOpts); err != nil {
 		return errors.Wrap(err, "failed to stop cockroach process for tenant")
 	}
 
 	// Assume the binary already exists on the node as this step should
 	// only be scheduled after the storage cluster has already upgraded.
-	binaryPath := clusterupgrade.BinaryPathForVersion(s.rt, s.version, "cockroach")
+	binaryPath := clusterupgrade.BinaryPathForVersion(h.runner.rt, s.Version, "cockroach")
 	opts := startStopOpts()
 	// Specify the storage cluster if it's separate process.
 	if h.DeploymentMode() == SeparateProcessDeployment {
 		opts = append(opts, option.StorageCluster(h.System.Descriptor.Nodes))
 	}
-	startOpts := option.StartVirtualClusterOpts(s.virtualCluster, node, opts...)
-	settings := install.MakeClusterSettings(append(s.settings, install.BinaryOption(binaryPath))...)
+	startOpts := option.StartVirtualClusterOpts(s.VirtualCluster, node, opts...)
+	settings := install.MakeClusterSettings(append(s.Settings, install.BinaryOption(binaryPath))...)
 	return h.runner.cluster.StartServiceForVirtualClusterE(ctx, l, startOpts, settings)
 }
 
@@ -250,23 +262,27 @@ func (s restartVirtualClusterStep) ConcurrencyDisabled() bool {
 	return true
 }
 
+func (s restartVirtualClusterStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.RestartVirtualClusterStep)
+}
+
 // waitForStableClusterVersionStep implements the process of waiting
 // for the `version` cluster setting being the same on all nodes of
 // the cluster and equal to the binary version of the first node in
 // the `nodes` field.
 type waitForStableClusterVersionStep struct {
-	nodes              option.NodeListOption
-	desiredVersion     string
-	timeout            time.Duration
-	virtualClusterName string
+	Nodes              option.NodeListOption
+	DesiredVersion     string
+	Timeout            time.Duration
+	VirtualClusterName string
 }
 
-func (s waitForStableClusterVersionStep) Background() shouldStop { return nil }
+func (s waitForStableClusterVersionStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s waitForStableClusterVersionStep) Description() string {
 	return fmt.Sprintf(
 		"wait for all nodes (%v) to acknowledge cluster version %s on %s tenant",
-		s.nodes, quoteVersionForPresentation(s.desiredVersion), s.virtualClusterName,
+		s.Nodes, quoteVersionForPresentation(s.DesiredVersion), s.VirtualClusterName,
 	)
 }
 
@@ -274,7 +290,7 @@ func (s waitForStableClusterVersionStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
 	return clusterupgrade.WaitForClusterUpgrade(
-		ctx, l, s.nodes, serviceByName(h, s.virtualClusterName).Connect, s.timeout,
+		ctx, l, s.Nodes, serviceByName(h, s.VirtualClusterName).Connect, s.Timeout,
 	)
 }
 
@@ -282,26 +298,30 @@ func (s waitForStableClusterVersionStep) ConcurrencyDisabled() bool {
 	return false
 }
 
+func (s waitForStableClusterVersionStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.WaitForStableClusterVersionStep)
+}
+
 // preserveDowngradeOptionStep sets the `preserve_downgrade_option`
 // cluster setting to the binary version running in a random node in
 // the cluster.
 type preserveDowngradeOptionStep struct {
-	virtualClusterName string
+	VirtualClusterName string
 }
 
-func (s preserveDowngradeOptionStep) Background() shouldStop { return nil }
+func (s preserveDowngradeOptionStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s preserveDowngradeOptionStep) Description() string {
 	return fmt.Sprintf(
 		"prevent auto-upgrades on %s tenant by setting `preserve_downgrade_option`",
-		s.virtualClusterName,
+		s.VirtualClusterName,
 	)
 }
 
 func (s preserveDowngradeOptionStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
-	service := serviceByName(h, s.virtualClusterName)
+	service := serviceByName(h, s.VirtualClusterName)
 	node, db := service.RandomDB(rng)
 	l.Printf("checking binary version (via node %d)", node)
 	bv, err := clusterupgrade.BinaryVersion(ctx, db)
@@ -316,6 +336,10 @@ func (s preserveDowngradeOptionStep) ConcurrencyDisabled() bool {
 	return false
 }
 
+func (s preserveDowngradeOptionStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.PreserveDowngradeOptionStep)
+}
+
 // restartWithNewBinaryStep restarts a certain `node` with a new
 // cockroach binary. Any existing `cockroach` process will be stopped,
 // then the new binary will be uploaded and the `cockroach` process
@@ -323,61 +347,60 @@ func (s preserveDowngradeOptionStep) ConcurrencyDisabled() bool {
 // system tenant. For the (separate-process) multitenant equivalent,
 // see `restartVirtualClusterStep`.
 type restartWithNewBinaryStep struct {
-	version            *clusterupgrade.Version
-	rt                 test.Test
-	node               int
-	settings           []install.ClusterSettingOption
-	initTarget         int
-	waitForReplication bool
-	tenantRunning      bool // whether the test tenant is running when this step is called
-	deploymentMode     DeploymentMode
+	Version            *clusterupgrade.Version
+	Node               int
+	Settings           install.ClusterSettingOptionList `yaml:",omitempty"`
+	InitTarget         int
+	WaitForReplication bool
+	TenantRunning      bool // whether the test tenant is running when this step is called
+	DeploymentMode     DeploymentMode
 }
 
-func (s restartWithNewBinaryStep) Background() shouldStop { return nil }
+func (s restartWithNewBinaryStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s restartWithNewBinaryStep) Description() string {
 	var systemDesc string
-	if s.deploymentMode == SeparateProcessDeployment {
+	if s.DeploymentMode == SeparateProcessDeployment {
 		systemDesc = " system server on"
 	}
 
 	return fmt.Sprintf(
 		"restart%s node %d with binary version %s",
-		systemDesc, s.node, s.version,
+		systemDesc, s.Node, s.Version,
 	)
 }
 
 func (s restartWithNewBinaryStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	customStartOpts := restartSystemSettings(s.waitForReplication, s.initTarget)
+	customStartOpts := restartSystemSettings(s.WaitForReplication, s.InitTarget)
 
 	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 
 	settings := append([]install.ClusterSettingOption{
 		install.TagOption(systemTag),
-	}, s.settings...)
+	}, s.Settings...)
 
-	node := h.runner.cluster.Node(s.node)
+	node := h.runner.cluster.Node(s.Node)
 	if err := clusterupgrade.RestartNodesWithNewBinary(
 		startCtx,
-		s.rt,
+		h.runner.rt,
 		l,
 		h.runner.cluster,
 		node,
 		startOpts(customStartOpts...),
-		s.version,
+		s.Version,
 		settings...,
 	); err != nil {
 		return err
 	}
 
-	if s.deploymentMode == SharedProcessDeployment && s.tenantRunning {
+	if s.DeploymentMode == SharedProcessDeployment && s.TenantRunning {
 		// If we are in shared-process mode and the tenant is already
 		// running at this point, we wait for the server on the restarted
 		// node to be up before moving on.
-		return waitForTenantProcess(ctx, l, h, node, s.deploymentMode)
+		return waitForTenantProcess(ctx, l, h, node, s.DeploymentMode)
 	}
 
 	return nil
@@ -387,26 +410,30 @@ func (s restartWithNewBinaryStep) ConcurrencyDisabled() bool {
 	return true
 }
 
+func (s restartWithNewBinaryStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.RestartWithNewBinaryStep)
+}
+
 // allowUpgradeStep resets the `preserve_downgrade_option` cluster
 // setting, allowing the upgrade migrations to run and the cluster
 // version to eventually reach the binary version on the nodes.
 type allowUpgradeStep struct {
-	virtualClusterName string
+	VirtualClusterName string
 }
 
-func (s allowUpgradeStep) Background() shouldStop { return nil }
+func (s allowUpgradeStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s allowUpgradeStep) Description() string {
 	return fmt.Sprintf(
 		"allow upgrade to happen on %s tenant by resetting `preserve_downgrade_option`",
-		s.virtualClusterName,
+		s.VirtualClusterName,
 	)
 }
 
 func (s allowUpgradeStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
-	return serviceByName(h, s.virtualClusterName).Exec(
+	return serviceByName(h, s.VirtualClusterName).Exec(
 		rng, "RESET CLUSTER SETTING cluster.preserve_downgrade_option",
 	)
 }
@@ -415,23 +442,27 @@ func (s allowUpgradeStep) ConcurrencyDisabled() bool {
 	return false
 }
 
+func (s allowUpgradeStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.AllowUpgradeStep)
+}
+
 // waitStep does nothing but sleep for the provided duration. Most
 // commonly used to allow the cluster to stay in a certain state
 // before attempting node restarts or other upgrade events.
 type waitStep struct {
-	dur time.Duration
+	Dur time.Duration
 }
 
-func (s waitStep) Background() shouldStop { return nil }
+func (s waitStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s waitStep) Description() string {
-	return fmt.Sprintf("wait for %s", s.dur)
+	return fmt.Sprintf("wait for %s", s.Dur)
 }
 
 func (s waitStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper) error {
-	l.Printf("waiting for %s", s.dur)
+	l.Printf("waiting for %s", s.Dur)
 	select {
-	case <-time.After(s.dur):
+	case <-time.After(s.Dur):
 	case <-ctx.Done():
 	}
 
@@ -442,42 +473,54 @@ func (s waitStep) ConcurrencyDisabled() bool {
 	return false
 }
 
+func (s waitStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.WaitStep)
+}
+
 // runHookStep is a step used to run a user-provided hook (i.e.,
 // callbacks passed to `OnStartup`, `InMixedVersion`, or `AfterTest`).
 type runHookStep struct {
-	hook     versionUpgradeHook
-	stopChan shouldStop
+	Desc        string
+	StepFuncRef stepFuncRef
 }
 
-func (s runHookStep) Background() shouldStop { return s.stopChan }
+func (s runHookStep) Background(h *Helper) shouldStop {
+	sf := h.getStepFuncFromRef(s.StepFuncRef)
+	return sf.shouldStop
+}
 
 func (s runHookStep) Description() string {
-	return fmt.Sprintf("run %q", s.hook.name)
+	return fmt.Sprintf("run %q", s.Desc)
 }
 
 func (s runHookStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
-	return s.hook.fn(ctx, l, rng, h)
+	sf := h.getStepFuncFromRef(s.StepFuncRef)
+	return sf.fn(ctx, l, rng, h)
 }
 
 func (s runHookStep) ConcurrencyDisabled() bool {
 	return false
 }
 
-// setClusterSettingStep sets the cluster setting `name` to `value`.
-type setClusterSettingStep struct {
-	minVersion         *clusterupgrade.Version
-	name               string
-	value              interface{}
-	virtualClusterName string
-	systemVisible      bool
+func (s runHookStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.RunHookStep)
 }
 
-func (s setClusterSettingStep) Background() shouldStop { return nil }
+// setClusterSettingStep sets the cluster setting `name` to `value`.
+type setClusterSettingStep struct {
+	MinVersion         *clusterupgrade.Version
+	Name               string
+	Value              interface{}
+	VirtualClusterName string
+	SystemVisible      bool
+}
+
+func (s setClusterSettingStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s setClusterSettingStep) Description() string {
 	return fmt.Sprintf(
 		"set cluster setting %q to '%v' on %s tenant",
-		s.name, s.value, s.virtualClusterName,
+		s.Name, s.Value, s.VirtualClusterName,
 	)
 }
 
@@ -488,9 +531,9 @@ func (s setClusterSettingStep) Run(
 	// However, if `systemVisible` is true, it means the setting
 	// is only settable via the system interface.
 	var tenantPrefix string
-	serviceName := s.virtualClusterName
-	if s.systemVisible {
-		tenantPrefix = fmt.Sprintf("ALTER TENANT %q ", s.virtualClusterName)
+	serviceName := s.VirtualClusterName
+	if s.SystemVisible {
+		tenantPrefix = fmt.Sprintf("ALTER TENANT %q ", s.VirtualClusterName)
 		serviceName = install.SystemInterfaceName
 	}
 
@@ -499,22 +542,22 @@ func (s setClusterSettingStep) Run(
 	// We do a type switch on common types to avoid errors when using
 	// placeholders, as type detection is often not implemented for some
 	// private cluster settings.
-	switch val := s.value.(type) {
+	switch val := s.Value.(type) {
 	case string:
-		stmt = fmt.Sprintf("%sSET CLUSTER SETTING %s = '%s'", tenantPrefix, s.name, val)
+		stmt = fmt.Sprintf("%sSET CLUSTER SETTING %s = '%s'", tenantPrefix, s.Name, val)
 	case bool:
-		stmt = fmt.Sprintf("%sSET CLUSTER SETTING %s = %t", tenantPrefix, s.name, val)
+		stmt = fmt.Sprintf("%sSET CLUSTER SETTING %s = %t", tenantPrefix, s.Name, val)
 	case int:
-		stmt = fmt.Sprintf("%sSET CLUSTER SETTING %s = %d", tenantPrefix, s.name, val)
+		stmt = fmt.Sprintf("%sSET CLUSTER SETTING %s = %d", tenantPrefix, s.Name, val)
 	default:
 		// If not using any of these types, do a best-effort attempt using
 		// a placeholder.
-		stmt = fmt.Sprintf("%sSET CLUSTER SETTING %s = $1", tenantPrefix, s.name)
+		stmt = fmt.Sprintf("%sSET CLUSTER SETTING %s = $1", tenantPrefix, s.Name)
 		args = []interface{}{val}
 	}
 
 	return serviceByName(h, serviceName).ExecWithGateway(
-		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt, args...,
+		rng, nodesRunningAtLeast(s.VirtualClusterName, s.MinVersion, h), stmt, args...,
 	)
 }
 
@@ -522,33 +565,37 @@ func (s setClusterSettingStep) ConcurrencyDisabled() bool {
 	return false
 }
 
+func (s setClusterSettingStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.SetClusterSettingStep)
+}
+
 // setClusterVersionStep sets the special `version` cluster setting to
 // the provided version.
 type setClusterVersionStep struct {
-	v                  *clusterupgrade.Version
-	virtualClusterName string
+	Version            *clusterupgrade.Version
+	VirtualClusterName string
 }
 
-func (s setClusterVersionStep) Background() shouldStop { return nil }
+func (s setClusterVersionStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s setClusterVersionStep) Description() string {
-	value := versionToClusterVersion(s.v)
-	if !s.v.IsCurrent() {
+	value := versionToClusterVersion(s.Version)
+	if !s.Version.IsCurrent() {
 		value = fmt.Sprintf("'%s'", value)
 	}
 
 	return fmt.Sprintf(
 		"set `version` to %s on %s tenant",
-		value, s.virtualClusterName,
+		value, s.VirtualClusterName,
 	)
 }
 
 func (s setClusterVersionStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
-	service := serviceByName(h, s.virtualClusterName)
-	binaryVersion := versionToClusterVersion(s.v)
-	if s.v.IsCurrent() {
+	service := serviceByName(h, s.VirtualClusterName)
+	binaryVersion := versionToClusterVersion(s.Version)
+	if s.Version.IsCurrent() {
 		node, db := service.RandomDB(rng)
 		l.Printf("fetching binary version via n%d", node)
 
@@ -568,30 +615,38 @@ func (s setClusterVersionStep) ConcurrencyDisabled() bool {
 	return false
 }
 
-// resetClusterSetting resets cluster setting `name`.
-type resetClusterSettingStep struct {
-	minVersion         *clusterupgrade.Version
-	name               string
-	virtualClusterName string
+func (s setClusterVersionStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.SetClusterVersionStep)
 }
 
-func (s resetClusterSettingStep) Background() shouldStop { return nil }
+// resetClusterSetting resets cluster setting `name`.
+type resetClusterSettingStep struct {
+	MinVersion         *clusterupgrade.Version
+	Name               string
+	VirtualClusterName string
+}
+
+func (s resetClusterSettingStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s resetClusterSettingStep) Description() string {
-	return fmt.Sprintf("reset cluster setting %q on %s tenant", s.name, s.virtualClusterName)
+	return fmt.Sprintf("reset cluster setting %q on %s tenant", s.Name, s.VirtualClusterName)
 }
 
 func (s resetClusterSettingStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
-	stmt := fmt.Sprintf("RESET CLUSTER SETTING %s", s.name)
-	return serviceByName(h, s.virtualClusterName).ExecWithGateway(
-		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt,
+	stmt := fmt.Sprintf("RESET CLUSTER SETTING %s", s.Name)
+	return serviceByName(h, s.VirtualClusterName).ExecWithGateway(
+		rng, nodesRunningAtLeast(s.VirtualClusterName, s.MinVersion, h), stmt,
 	)
 }
 
 func (s resetClusterSettingStep) ConcurrencyDisabled() bool {
 	return false
+}
+
+func (s resetClusterSettingStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.ResetClusterSettingStep)
 }
 
 // deleteAllTenantsVersionOverrideStep is a hack that deletes bad data
@@ -603,7 +658,7 @@ func (s resetClusterSettingStep) ConcurrencyDisabled() bool {
 // versions older than 24.2 without hitting this (already fixed) bug.
 type deleteAllTenantsVersionOverrideStep struct{}
 
-func (s deleteAllTenantsVersionOverrideStep) Background() shouldStop { return nil }
+func (s deleteAllTenantsVersionOverrideStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s deleteAllTenantsVersionOverrideStep) Description() string {
 	return "delete all-tenants override for the `version` key"
@@ -620,6 +675,10 @@ func (s deleteAllTenantsVersionOverrideStep) ConcurrencyDisabled() bool {
 	return false
 }
 
+func (s deleteAllTenantsVersionOverrideStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.DeleteAllTenantsVersionOverrideStep)
+}
+
 // disableRateLimitersStep disables both the KV and the tenant(SQL) rate limiter
 // for the given virtual cluster. This step is necessary for separate process
 // tenants to avoid rate limiting which can cause tests to hang and fail.
@@ -631,13 +690,13 @@ func (s deleteAllTenantsVersionOverrideStep) ConcurrencyDisabled() bool {
 // exemption from the kv rate limiter. For older versions, the mvt framework already
 // handles granting said capabilities (see: TenantsAndSystemAlignedSettingsVersion).
 type disableRateLimitersStep struct {
-	virtualClusterName string
+	VirtualClusterName string
 }
 
-func (s disableRateLimitersStep) Background() shouldStop { return nil }
+func (s disableRateLimitersStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s disableRateLimitersStep) Description() string {
-	return fmt.Sprintf("disable KV and tenant(SQL) rate limiter on %s tenant", s.virtualClusterName)
+	return fmt.Sprintf("disable KV and tenant(SQL) rate limiter on %s tenant", s.VirtualClusterName)
 }
 
 func (s disableRateLimitersStep) Run(
@@ -646,7 +705,7 @@ func (s disableRateLimitersStep) Run(
 	// Disable the KV rate limiter.
 	stmt := fmt.Sprintf(
 		"ALTER TENANT %q GRANT CAPABILITY exempt_from_rate_limiting = true",
-		s.virtualClusterName,
+		s.VirtualClusterName,
 	)
 	if err := h.System.Exec(rng, stmt); err != nil {
 		return err
@@ -663,13 +722,13 @@ func (s disableRateLimitersStep) Run(
 	// resource limits to an arbitrarily high value.
 	stmt = fmt.Sprintf(
 		"SELECT crdb_internal.update_tenant_resource_limits('%s', %v, %v, %d, now(), 0);",
-		s.virtualClusterName, availableTokens, refillRate, maxBurstTokens,
+		s.VirtualClusterName, availableTokens, refillRate, maxBurstTokens,
 	)
 
 	if h.System.FromVersion.AtLeast(updateTenantResourceLimitsDeprecatedArgsVersion) {
 		stmt = fmt.Sprintf(
 			"SELECT crdb_internal.update_tenant_resource_limits('%s', %v, %v, %d);",
-			s.virtualClusterName, availableTokens, refillRate, maxBurstTokens,
+			s.VirtualClusterName, availableTokens, refillRate, maxBurstTokens,
 		)
 	}
 
@@ -678,6 +737,10 @@ func (s disableRateLimitersStep) Run(
 
 func (s disableRateLimitersStep) ConcurrencyDisabled() bool {
 	return false
+}
+
+func (s disableRateLimitersStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.DisableRateLimitersStep)
 }
 
 // nodesRunningAtLeast returns a list of nodes running a system or
@@ -789,36 +852,36 @@ func startStopOpts(opts ...option.StartStopOption) []option.StartStopOption {
 
 // TODO(kyleli): This step currently only affects the system tenant, should support panicking secondary tenants as well.
 type panicNodeStep struct {
-	initTarget int
-	targetNode option.NodeListOption
+	InitTarget int
+	TargetNode option.NodeListOption
 }
 
-func (s panicNodeStep) Background() shouldStop { return nil }
+func (s panicNodeStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s panicNodeStep) Description() string {
-	return fmt.Sprintf("panicking system interface on node %d", s.targetNode[0])
+	return fmt.Sprintf("panicking system interface on node %d", s.TargetNode[0])
 }
 
 func (s panicNodeStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
 
-	h.runner.monitor.ExpectProcessDead(s.targetNode)
+	h.runner.monitor.ExpectProcessDead(s.TargetNode)
 
 	// ExecWithGateway cannot be used here because the monitor marks the target node as expected
 	// dead, and it will be filtered out of the list of available nodes. This a unique case, so
 	// we manually log the SQL statement and execute it directly on the target node.
 	const query = "SELECT crdb_internal.force_panic('expected panic from panicNodeMutator')"
-	db := h.System.Connect(s.targetNode[0])
+	db := h.System.Connect(s.TargetNode[0])
 
-	v, err := h.System.NodeVersion(s.targetNode[0])
+	v, err := h.System.NodeVersion(s.TargetNode[0])
 	if err != nil {
-		return errors.Wrapf(err, "failed to get node version for %d", s.targetNode[0])
+		return errors.Wrapf(err, "failed to get node version for %d", s.TargetNode[0])
 	}
 	logSQL(
-		h.System.stepLogger, s.targetNode[0], v, h.System.Descriptor.Name, query,
+		h.System.stepLogger, s.TargetNode[0], v, h.System.Descriptor.Name, query,
 	)
 
 	if _, err = db.ExecContext(h.System.ctx, query); err == nil {
-		return errors.Errorf("expected panic statement to fail, but it succeeded on %s", s.targetNode)
+		return errors.Errorf("expected panic statement to fail, but it succeeded on %s", s.TargetNode)
 	}
 
 	return nil
@@ -828,32 +891,35 @@ func (s panicNodeStep) ConcurrencyDisabled() bool {
 	return true
 }
 
+func (s panicNodeStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.PanicNodeStep)
+}
+
 // Restarts a dead node on the same binary version it was running, unlike
 // `restartWithNewBinaryStep` which restarts an alive node with a new binary.
 type restartNodeStep struct {
-	initTarget  int
-	targetNode  option.NodeListOption
-	rt          test.Test
-	description string
+	InitTarget     int
+	TargetNode     option.NodeListOption
+	ExtDescription string
 }
 
-func (restartNodeStep) Background() shouldStop { return nil }
+func (restartNodeStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s restartNodeStep) Description() string {
-	return s.description
+	return s.ExtDescription
 }
 
 func (s restartNodeStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper) error {
-	nodeVersion, err := h.System.NodeVersion(s.targetNode[0])
+	nodeVersion, err := h.System.NodeVersion(s.TargetNode[0])
 	if err != nil {
-		return errors.Wrapf(err, "failed to get node version for %s", s.targetNode)
+		return errors.Wrapf(err, "failed to get node version for %s", s.TargetNode)
 	}
-	binary := clusterupgrade.CockroachPathForVersion(s.rt, nodeVersion)
+	binary := clusterupgrade.CockroachPathForVersion(h.runner.rt, nodeVersion)
 	settings := install.MakeClusterSettings(
 		install.BinaryOption(binary),
 		install.TagOption(systemTag),
 	)
-	customStartOpts := restartSystemSettings(true, s.initTarget)
+	customStartOpts := restartSystemSettings(true, s.InitTarget)
 
 	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
@@ -863,11 +929,11 @@ func (s restartNodeStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand
 		l,
 		startOpts(customStartOpts...),
 		settings,
-		s.targetNode,
+		s.TargetNode,
 	)
 	if err != nil {
 		return errors.Wrapf(
-			err, "failed to restart node %d with binary %s", s.targetNode[0], binary,
+			err, "failed to restart node %d with binary %s", s.TargetNode[0], binary,
 		)
 	}
 	return nil
@@ -878,23 +944,27 @@ func (s restartNodeStep) ConcurrencyDisabled() bool {
 	return true
 }
 
-type networkPartitionInjectStep struct {
-	f          *failures.Failer
-	partition  failures.NetworkPartition
-	targetNode option.NodeListOption
+func (s restartNodeStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.RestartNodeStep)
 }
 
-func (s networkPartitionInjectStep) Background() shouldStop { return nil }
+type networkPartitionInjectStep struct {
+	FailureRef string
+	Partition  failures.NetworkPartition
+	TargetNode option.NodeListOption
+}
+
+func (s networkPartitionInjectStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s networkPartitionInjectStep) Description() string {
 	var desc string
-	switch s.partition.Type {
+	switch s.Partition.Type {
 	case failures.Bidirectional:
-		desc = fmt.Sprintf("setting up bidirectional network partition: dropping connections between nodes %d and %v", s.partition.Source, s.partition.Destination)
+		desc = fmt.Sprintf("setting up bidirectional network partition: dropping connections between nodes %d and %v", s.Partition.Source, s.Partition.Destination)
 	case failures.Incoming:
-		desc = fmt.Sprintf("setting up incoming network partition: dropping connections from nodes %v to %d", s.partition.Destination, s.partition.Source)
+		desc = fmt.Sprintf("setting up incoming network partition: dropping connections from nodes %v to %d", s.Partition.Destination, s.Partition.Source)
 	case failures.Outgoing:
-		desc = fmt.Sprintf("setting up outgoing network partition: dropping connections from nodes %d to %v", s.partition.Source, s.partition.Destination)
+		desc = fmt.Sprintf("setting up outgoing network partition: dropping connections from nodes %d to %v", s.Partition.Source, s.Partition.Destination)
 	}
 	return desc
 }
@@ -902,46 +972,55 @@ func (s networkPartitionInjectStep) Description() string {
 func (s networkPartitionInjectStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	h.runner.monitor.ExpectProcessDead(s.targetNode)
-	if h.Tenant != nil {
-		opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
-		h.runner.monitor.ExpectProcessDead(s.targetNode, opt)
+	f, err := h.getFailureFromRef(s.FailureRef, l)
+	if err != nil {
+		return err
 	}
 
-	args := failures.NetworkPartitionArgs{Partitions: []failures.NetworkPartition{s.partition}}
+	h.runner.monitor.ExpectProcessDead(s.TargetNode)
+	if h.Tenant != nil {
+		opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
+		h.runner.monitor.ExpectProcessDead(s.TargetNode, opt)
+	}
 
-	if err := s.f.Setup(ctx, l, args); err != nil {
+	args := failures.NetworkPartitionArgs{Partitions: []failures.NetworkPartition{s.Partition}}
+
+	if err := f.Setup(ctx, l, args); err != nil {
 		return errors.Wrapf(err, "failed to setup failure %s", failures.IPTablesNetworkPartitionName)
 	}
 
-	if err := s.f.Inject(ctx, l, args); err != nil {
+	if err := f.Inject(ctx, l, args); err != nil {
 		return errors.Wrapf(err, "failed to inject failure %s", failures.IPTablesNetworkPartitionName)
 	}
 
-	return s.f.WaitForFailureToPropagate(ctx, l)
+	return f.WaitForFailureToPropagate(ctx, l)
 }
 
 func (s networkPartitionInjectStep) ConcurrencyDisabled() bool {
 	return true
 }
 
-type networkPartitionRecoveryStep struct {
-	f          *failures.Failer
-	partition  failures.NetworkPartition
-	targetNode option.NodeListOption
+func (s networkPartitionInjectStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.NetworkPartitionInjectStep)
 }
 
-func (s networkPartitionRecoveryStep) Background() shouldStop { return nil }
+type networkPartitionRecoveryStep struct {
+	FailureRef string
+	Partition  failures.NetworkPartition
+	TargetNode option.NodeListOption
+}
+
+func (s networkPartitionRecoveryStep) Background(_ *Helper) shouldStop { return nil }
 
 func (s networkPartitionRecoveryStep) Description() string {
 	var desc string
-	switch s.partition.Type {
+	switch s.Partition.Type {
 	case failures.Bidirectional:
-		desc = fmt.Sprintf("recovering from bidirectional network partition: allowing connections between nodes %d and %v", s.partition.Source, s.partition.Destination)
+		desc = fmt.Sprintf("recovering from bidirectional network partition: allowing connections between nodes %d and %v", s.Partition.Source, s.Partition.Destination)
 	case failures.Incoming:
-		desc = fmt.Sprintf("recovering from incoming network partition: allowing connections from nodes %v to %d", s.partition.Destination, s.partition.Source)
+		desc = fmt.Sprintf("recovering from incoming network partition: allowing connections from nodes %v to %d", s.Partition.Destination, s.Partition.Source)
 	case failures.Outgoing:
-		desc = fmt.Sprintf("recovering from outgoing network partition: allowing connections from nodes %d to %v", s.partition.Source, s.partition.Destination)
+		desc = fmt.Sprintf("recovering from outgoing network partition: allowing connections from nodes %d to %v", s.Partition.Source, s.Partition.Destination)
 	}
 	return desc
 }
@@ -949,23 +1028,32 @@ func (s networkPartitionRecoveryStep) Description() string {
 func (s networkPartitionRecoveryStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	if err := s.f.Recover(ctx, l); err != nil {
+	f, err := h.getFailureFromRef(s.FailureRef, l)
+	if err != nil {
+		return err
+	}
+
+	if err := f.Recover(ctx, l); err != nil {
 		return errors.Wrapf(err, "failed to recover failure %s", failures.IPTablesNetworkPartitionName)
 	}
 
-	if err := s.f.WaitForFailureToRecover(ctx, l); err != nil {
+	if err := f.WaitForFailureToRecover(ctx, l); err != nil {
 		return errors.Wrapf(err, "failed to wait for recovery of failure %s", failures.IPTablesNetworkPartitionName)
 	}
 
-	h.runner.monitor.ExpectProcessAlive(s.targetNode)
+	h.runner.monitor.ExpectProcessAlive(s.TargetNode)
 	if h.Tenant != nil {
 		opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
-		h.runner.monitor.ExpectProcessAlive(s.targetNode, opt)
+		h.runner.monitor.ExpectProcessAlive(s.TargetNode, opt)
 	}
-	return s.f.Cleanup(ctx, l)
+	return f.Cleanup(ctx, l)
 
 }
 
 func (s networkPartitionRecoveryStep) ConcurrencyDisabled() bool {
 	return false
+}
+
+func (s networkPartitionRecoveryStep) getTypeName(t *stepProtocolTypes) (string, error) {
+	return t.getTypeName(s, &t.NetworkPartitionRecoveryStep)
 }

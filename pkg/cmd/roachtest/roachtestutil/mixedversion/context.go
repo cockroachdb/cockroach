@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -38,9 +39,13 @@ type (
 		// that are currently marked as unavailable.
 		hasUnavailableNodes bool
 
-		// nodesByVersion maps released versions to which nodes are
+		// NodesByVersion maps released versions to which nodes are
 		// currently running that version.
-		nodesByVersion map[clusterupgrade.Version]*intsets.Fast
+		NodesByVersion map[clusterupgrade.Version]IntSet `yaml:",flow"`
+	}
+
+	IntSet struct {
+		*intsets.Fast
 	}
 
 	// Context wraps the context passed to predicate functions that
@@ -52,6 +57,20 @@ type (
 		Tenant *ServiceContext
 	}
 )
+
+func (i IntSet) MarshalYAML() (any, error) {
+	return i.Ordered(), nil
+}
+
+func (i *IntSet) UnmarshalYAML(value *yaml.Node) error {
+	var values []int
+	if err := value.Decode(&values); err != nil {
+		return err
+	}
+	s := intsets.MakeFast(values...)
+	i.Fast = &s
+	return nil
+}
 
 // clone creates a copy of the caller service context.
 func (sc *ServiceContext) clone() *ServiceContext {
@@ -67,10 +86,10 @@ func (sc *ServiceContext) clone() *ServiceContext {
 		Nodes: append(option.NodeListOption{}, sc.Descriptor.Nodes...),
 	}
 
-	nodesByVersion := make(map[clusterupgrade.Version]*intsets.Fast)
-	for v, nodes := range sc.nodesByVersion {
+	nodesByVersion := make(map[clusterupgrade.Version]IntSet)
+	for v, nodes := range sc.NodesByVersion {
 		newSet := nodes.Copy()
-		nodesByVersion[v] = &newSet
+		nodesByVersion[v] = IntSet{&newSet}
 	}
 
 	fromVersion := sc.FromVersion.Version
@@ -82,14 +101,14 @@ func (sc *ServiceContext) clone() *ServiceContext {
 		FromVersion:    &clusterupgrade.Version{Version: fromVersion},
 		ToVersion:      &clusterupgrade.Version{Version: toVersion},
 		Finalizing:     sc.Finalizing,
-		nodesByVersion: nodesByVersion,
+		NodesByVersion: nodesByVersion,
 	}
 }
 
 // nodesInVersion returns a list of all nodes running the version
 // passed, if any.
 func (sc *ServiceContext) nodesInVersion(v *clusterupgrade.Version) option.NodeListOption {
-	set, ok := sc.nodesByVersion[*v]
+	set, ok := sc.NodesByVersion[*v]
 	if !ok {
 		return nil
 	}
@@ -114,12 +133,12 @@ func (sc *ServiceContext) changeVersion(node int, v *clusterupgrade.Version) err
 		return err
 	}
 
-	sc.nodesByVersion[*currentVersion].Remove(node)
-	if _, exists := sc.nodesByVersion[*v]; !exists {
-		sc.nodesByVersion[*v] = intSetP()
+	sc.NodesByVersion[*currentVersion].Remove(node)
+	if _, exists := sc.NodesByVersion[*v]; !exists {
+		sc.NodesByVersion[*v] = IntSet{intSetP()}
 	}
 
-	sc.nodesByVersion[*v].Add(node)
+	sc.NodesByVersion[*v].Add(node)
 	return nil
 }
 
@@ -131,7 +150,7 @@ func (sc *ServiceContext) IsSystem() bool {
 // currently running. Returns an error if the node is not valid (i.e.,
 // the underlying service is not deployed on the node passed).
 func (sc *ServiceContext) NodeVersion(node int) (*clusterupgrade.Version, error) {
-	for version, nodes := range sc.nodesByVersion {
+	for version, nodes := range sc.NodesByVersion {
 		if nodes.Contains(node) {
 			return &version, nil
 		}
@@ -183,8 +202,8 @@ func newContext(
 			Stage:       stage,
 			FromVersion: from,
 			ToVersion:   to,
-			nodesByVersion: map[clusterupgrade.Version]*intsets.Fast{
-				*from: intSetP(nodes...),
+			NodesByVersion: map[clusterupgrade.Version]IntSet{
+				*from: {intSetP(nodes...)},
 			},
 		}
 	}
