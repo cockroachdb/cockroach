@@ -183,6 +183,11 @@ func Encode(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, error) {
 		return encodeJSONKey(b, t, dir)
 	}
 	if buildutil.CrdbTestBuild {
+		if _, isLTree := val.(*tree.DLTree); isLTree {
+			// TODO(paulniziolek): remove this exception once key encoding is
+			// added.
+			return nil, errors.Newf("LTREE key encoding is not implemented yet")
+		}
 		return nil, errors.AssertionFailedf("unable to encode table key: %T", val)
 	}
 	return nil, errors.Errorf("unable to encode table key: %T", val)
