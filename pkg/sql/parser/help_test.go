@@ -627,6 +627,8 @@ func TestContextualHelp(t *testing.T) {
 		{`INSPECT ??`, `INSPECT`},
 		{`INSPECT TABLE ??`, `INSPECT TABLE`},
 		{`INSPECT DATABASE ??`, `INSPECT DATABASE`},
+
+		{`SHOW INSPECT ERRORS ??`, `SHOW INSPECT ERRORS`},
 	}
 
 	// The following checks that the test definition above exercises all
