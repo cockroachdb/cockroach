@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // tenantAuthorizer authorizes RPCs sent by tenants to a node's tenant RPC
@@ -572,4 +573,20 @@ func (ss *wrappedServerStream) Context() context.Context {
 // RecvMsg overrides the nested grpc.ServerStream.RecvMsg().
 func (ss *wrappedServerStream) RecvMsg(m interface{}) error {
 	return ss.recv(m)
+}
+
+type wrappedDRPCServerStream struct {
+	drpc.Stream
+	ctx  context.Context
+	recv func(m drpc.Message, enc drpc.Encoding) error
+}
+
+// Context overrides the nested stream.Context().
+func (s *wrappedDRPCServerStream) Context() context.Context {
+	return s.ctx
+}
+
+// MsgRecv overrides the nested stream.MsgRecv().
+func (s *wrappedDRPCServerStream) MsgRecv(m drpc.Message, enc drpc.Encoding) error {
+	return s.recv(m, enc)
 }
