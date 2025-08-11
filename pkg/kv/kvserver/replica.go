@@ -2920,9 +2920,17 @@ func (r *Replica) RefreshLeaderlessWatcherUnavailableStateForTesting(
 // a decommissioning range is not enqueued in the replicate queue in a timely
 // manner via the replica scanner, see #130199. This functionality is disabled
 // by default for this reason.
+
+var problemRangeLogLimiter = log.Every(1 * time.Minute)
+
 func (r *Replica) maybeEnqueueProblemRange(
 	ctx context.Context, now time.Time, leaseValid, isLeaseholder bool,
 ) {
+
+	if r.store.metrics.DecommissioningNudgerEnqueueAttempts != nil {
+		r.store.metrics.DecommissioningNudgerEnqueueAttempts.Inc(1)
+	}
+
 	// The method expects the caller to provide whether the lease is valid and
 	// the replica is the leaseholder for the range, so that it can avoid
 	// unnecessary work. We expect this method to be called in the context of
@@ -2930,18 +2938,36 @@ func (r *Replica) maybeEnqueueProblemRange(
 	if !isLeaseholder || !leaseValid {
 		// The replicate queue will not process the replica without a valid lease.
 		// Nothing to do.
+		if !isLeaseholder {
+			if problemRangeLogLimiter.ShouldLog() {
+				log.KvDistribution.VInfof(ctx, 1, "Not enqueuing replica %s because it is not the leaseholder", r.Desc())
+			}
+		} else {
+			if problemRangeLogLimiter.ShouldLog() {
+				log.KvDistribution.VInfof(ctx, 1, "Not enqueuing replica %s because the lease is not valid", r.Desc())
+			}
+		}
 		return
 	}
 
 	interval := EnqueueProblemRangeInReplicateQueueInterval.Get(&r.store.cfg.Settings.SV)
 	if interval == 0 {
 		// The setting is disabled.
+		if problemRangeLogLimiter.ShouldLog() {
+			log.KvDistribution.VInfof(ctx, 1, "Not enqueuing replica %s because the setting is disabled", r.Desc())
+		}
 		return
 	}
 	lastTime := r.lastProblemRangeReplicateEnqueueTime.Load().(time.Time)
 	if lastTime.Add(interval).After(now) {
 		// The last time the replica was enqueued is less than the interval ago,
 		// nothing to do.
+		if problemRangeLogLimiter.ShouldLog() {
+			log.KvDistribution.VInfof(ctx, 1, "Not enqueuing replica %s because the last time the replica was enqueued is less than the interval ago", r.Desc())
+		}
+		if r.store.metrics.DecommissioningNudgerEnqueueAttempts != nil {
+			r.store.metrics.DecommissioningNudgerEnqueueAttempts.Inc(1)
+		}
 		return
 	}
 	// The replica is the leaseholder for a range which requires action and it
@@ -2950,7 +2976,19 @@ func (r *Replica) maybeEnqueueProblemRange(
 	// expect a race, however if the value changed underneath us we won't enqueue
 	// the replica as we lost the race.
 	if !r.lastProblemRangeReplicateEnqueueTime.CompareAndSwap(lastTime, now) {
+		if problemRangeLogLimiter.ShouldLog() {
+			log.KvDistribution.VInfof(ctx, 1, "Not enqueuing replica %s because the last time the replica was enqueued is less than the interval ago", r.Desc())
+		}
+		if r.store.metrics.DecommissioningNudgerEnqueueFailure != nil {
+			r.store.metrics.DecommissioningNudgerEnqueueFailure.Inc(1)
+		}
 		return
+	}
+	if problemRangeLogLimiter.ShouldLog() {
+		log.KvDistribution.VInfof(ctx, 1, "Enqueuing replica %s with priority %d", r.Desc(), allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
+	}
+	if r.store.metrics.DecommissioningNudgerEnqueueSuccess != nil {
+		r.store.metrics.DecommissioningNudgerEnqueueSuccess.Inc(1)
 	}
 	r.store.replicateQueue.AddAsync(ctx, r,
 		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
