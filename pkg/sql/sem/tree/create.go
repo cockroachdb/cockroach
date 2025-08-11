@@ -1581,10 +1581,6 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 			ctx.FormatNode(&node.StorageParams)
 			ctx.WriteByte(')')
 		}
-		if node.Locality != nil {
-			ctx.WriteString(" ")
-			ctx.FormatNode(node.Locality)
-		}
 	}
 	switch node.OnCommit {
 	case CreateTableOnCommitUnset:
@@ -1592,6 +1588,10 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 		ctx.WriteString(" ON COMMIT PRESERVE ROWS")
 	default:
 		panic(errors.AssertionFailedf("unexpected CreateTableOnCommitSetting: %d", node.OnCommit))
+	}
+	if node.Locality != nil {
+		ctx.WriteString(" ")
+		ctx.FormatNode(node.Locality)
 	}
 }
 
