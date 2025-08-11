@@ -1,0 +1,76 @@
+statement ok
+SHOW INSPECT ERRORS;
+
+statement ok
+CREATE TABLE foo (a INT PRIMARY KEY)
+
+let $table_id
+SELECT 'foo'::regclass::oid
+
+statement ok
+INSERT INTO system.jobs (id, status, job_type) VALUES (
+  12345, 'succeeded', 'INSPECT'
+)
+
+statement ok
+INSERT INTO system.job_info (job_id, info_key, value) VALUES (
+  12345, 
+  'legacy_payload',
+  crdb_internal.json_to_pb('cockroach.sql.jobs.jobspb.Payload', json_build_object(
+    'description', 'INSPECT job for testing',
+    'inspectDetails', json_build_object(
+      'checks', json_build_array(
+        json_build_object(
+          'type', 1,
+          'tableId', $table_id
+        )
+      )
+    )
+  ))
+)
+
+statement ok
+SHOW INSPECT ERRORS FOR TABLE foo WITH DETAILS
+
+statement ok
+SHOW INSPECT ERRORS FOR JOB 12345 WITH DETAILS
+
+statement ok
+GRANT SYSTEM ALL TO testuser
+
+user testuser
+
+statement error user does not have INSPECT privilege on table foo or its parent database
+SHOW INSPECT ERRORS FOR TABLE foo WITH DETAILS;
+
+statement error user does not have INSPECT privilege on table foo or its parent database
+SHOW INSPECT ERRORS FOR JOB 12345 WITH DETAILS;
+
+user root
+
+statement ok
+GRANT INSPECT ON TABLE foo TO testuser
+
+user testuser
+
+statement ok
+SHOW INSPECT ERRORS FOR TABLE foo WITH DETAILS
+
+statement ok
+SHOW INSPECT ERRORS FOR JOB 12345 WITH DETAILS
+
+user root
+
+statement ok
+REVOKE INSPECT ON TABLE foo FROM testuser
+
+statement ok
+GRANT INSPECT ON DATABASE test TO testuser
+
+user testuser
+
+statement ok
+SHOW INSPECT ERRORS FOR TABLE foo WITH DETAILS
+
+statement ok
+SHOW INSPECT ERRORS FOR JOB 12345 WITH DETAILS

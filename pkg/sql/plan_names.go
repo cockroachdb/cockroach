@@ -177,6 +177,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&setVarNode{}):                              "set",
 	reflect.TypeOf(&setZoneConfigNode{}):                       "configure zone",
 	reflect.TypeOf(&showFingerprintsNode{}):                    "show fingerprints",
+	reflect.TypeOf(&showInspectErrorsNode{}):                   "show inspect errors",
 	reflect.TypeOf(&showTenantNode{}):                          "show tenant",
 	reflect.TypeOf(&showTraceNode{}):                           "show trace for",
 	reflect.TypeOf(&showTraceReplicaNode{}):                    "replica trace",
