@@ -287,6 +287,23 @@ func TestDecodeMVCCValueErrors(t *testing.T) {
 	}
 }
 
+func TestDecodeTieringAttributeFromMVCCValue(t *testing.T) {
+	var v MVCCValue
+	enc, err := EncodeMVCCValue(v)
+	require.NoError(t, err)
+	tieringAttr, err := DecodeTieringAttributeFromMVCCValue(enc)
+	require.NoError(t, err)
+	assert.Equal(t, tieringAttr, uint64(0))
+
+	v.TieringAttribute = 123
+	v.Value.RawBytes = []byte{1, 2, 3}
+	enc, err = EncodeMVCCValue(v)
+	require.NoError(t, err)
+	tieringAttr, err = DecodeTieringAttributeFromMVCCValue(enc)
+	require.NoError(t, err)
+	assert.Equal(t, tieringAttr, uint64(123))
+}
+
 func mvccValueBenchmarkConfigs() (
 	headers map[string]enginepb.MVCCValueHeader,
 	values map[string]roachpb.Value,
