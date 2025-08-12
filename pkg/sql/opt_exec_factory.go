@@ -210,13 +210,6 @@ func (ef *execFactory) ConstructFilter(
 	}
 	f.filter = filter
 	f.reqOrdering = ReqOrdering(reqOrdering)
-
-	// If there's a spool, pull it up.
-	if spool, ok := f.input.(*spoolNode); ok {
-		f.input = spool.input
-		spool.input = f
-		return spool, nil
-	}
 	return f, nil
 }
 
@@ -369,11 +362,6 @@ func (ef *execFactory) ConstructSerializingProject(
 	switch r := res.(type) {
 	case *renderNode:
 		r.serialize = true
-	case *spoolNode:
-		// If we pulled up a spoolNode, we don't need to materialize the
-		// ordering (because all mutations are currently not distributed).
-		// TODO(yuzefovich): evaluate whether we still need to push renderings
-		// through the spoolNode.
 	default:
 		return nil, errors.AssertionFailedf("unexpected planNode type %T in ConstructSerializingProject", res)
 	}
@@ -1077,12 +1065,6 @@ func (ef *execFactory) ConstructLimit(
 		l.countExpr = limit
 		return l, nil
 	}
-	// If the input plan is a spoolNode, then propagate any constant limit to it.
-	if spool, ok := plan.(*spoolNode); ok {
-		if val, ok := limit.(*tree.DInt); ok {
-			spool.hardLimit = int64(*val)
-		}
-	}
 	return &limitNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
 		countExpr:           limit,
@@ -1218,10 +1200,6 @@ func (ef *execFactory) ConstructPlan(
 	rootRowCount int64,
 	flags exec.PlanFlags,
 ) (exec.Plan, error) {
-	// No need to spool at the root.
-	if spool, ok := root.(*spoolNode); ok {
-		root = spool.input
-	}
 	return constructPlan(root, subqueries, cascades, triggers, checks, rootRowCount, flags)
 }
 
@@ -1477,19 +1455,7 @@ func (ef *execFactory) ConstructInsert(
 	if autoCommit {
 		ins.enableAutoCommit()
 	}
-
-	// serialize the data-modifying plan to ensure that no data is
-	// observed that hasn't been validated first. See the comments
-	// on BatchedNext() in plan_batch.go.
-	if rowsNeeded {
-		return &spoolNode{
-			singleInputPlanNode: singleInputPlanNode{&serializeNode{source: ins}},
-		}, nil
-	}
-
-	// We could use serializeNode here, but using rowCountNode is an
-	// optimization that saves on calls to Next() by the caller.
-	return &rowCountNode{source: ins}, nil
+	return ins, nil
 }
 
 func (ef *execFactory) ConstructInsertFastPath(
@@ -1569,19 +1535,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	if autoCommit {
 		ins.enableAutoCommit()
 	}
-
-	// serialize the data-modifying plan to ensure that no data is
-	// observed that hasn't been validated first. See the comments
-	// on BatchedNext() in plan_batch.go.
-	if rowsNeeded {
-		return &spoolNode{
-			singleInputPlanNode: singleInputPlanNode{&serializeNode{source: ins}},
-		}, nil
-	}
-
-	// We could use serializeNode here, but using rowCountNode is an
-	// optimization that saves on calls to Next() by the caller.
-	return &rowCountNode{source: ins}, nil
+	return ins, nil
 }
 
 func (ef *execFactory) ConstructUpdate(
@@ -1634,19 +1588,7 @@ func (ef *execFactory) ConstructUpdate(
 	if autoCommit {
 		upd.enableAutoCommit()
 	}
-
-	// Serialize the data-modifying plan to ensure that no data is observed that
-	// hasn't been validated first. See the comments on BatchedNext() in
-	// plan_batch.go.
-	if rowsNeeded {
-		return &spoolNode{
-			singleInputPlanNode: singleInputPlanNode{&serializeNode{source: upd}},
-		}, nil
-	}
-
-	// We could use serializeNode here, but using rowCountNode is an
-	// optimization that saves on calls to Next() by the caller.
-	return &rowCountNode{source: upd}, nil
+	return upd, nil
 }
 
 func (ef *execFactory) ConstructUpdateSwap(
@@ -1709,19 +1651,7 @@ func (ef *execFactory) ConstructUpdateSwap(
 	if autoCommit {
 		upd.enableAutoCommit()
 	}
-
-	// Serialize the data-modifying plan to ensure that no data is observed that
-	// hasn't been validated first. See the comments on BatchedNext() in
-	// plan_batch.go.
-	if rowsNeeded {
-		return &spoolNode{
-			singleInputPlanNode: singleInputPlanNode{&serializeNode{source: upd}},
-		}, nil
-	}
-
-	// We could use serializeNode here, but using rowCountNode is an
-	// optimization that saves on calls to Next() by the caller.
-	return &rowCountNode{source: upd}, nil
+	return upd, nil
 }
 
 func (ef *execFactory) constructUpdateRun(
@@ -1867,19 +1797,7 @@ func (ef *execFactory) ConstructUpsert(
 	if autoCommit {
 		ups.enableAutoCommit()
 	}
-
-	// Serialize the data-modifying plan to ensure that no data is observed that
-	// hasn't been validated first. See the comments on BatchedNext() in
-	// plan_batch.go.
-	if rowsNeeded {
-		return &spoolNode{
-			singleInputPlanNode: singleInputPlanNode{&serializeNode{source: ups}},
-		}, nil
-	}
-
-	// We could use serializeNode here, but using rowCountNode is an
-	// optimization that saves on calls to Next() by the caller.
-	return &rowCountNode{source: ups}, nil
+	return ups, nil
 }
 
 func (ef *execFactory) ConstructDelete(
@@ -1919,19 +1837,7 @@ func (ef *execFactory) ConstructDelete(
 	if autoCommit {
 		del.enableAutoCommit()
 	}
-
-	// Serialize the data-modifying plan to ensure that no data is observed that
-	// hasn't been validated first. See the comments on BatchedNext() in
-	// plan_batch.go.
-	if rowsNeeded {
-		return &spoolNode{
-			singleInputPlanNode: singleInputPlanNode{&serializeNode{source: del}},
-		}, nil
-	}
-
-	// We could use serializeNode here, but using rowCountNode is an
-	// optimization that saves on calls to Next() by the caller.
-	return &rowCountNode{source: del}, nil
+	return del, nil
 }
 
 func (ef *execFactory) ConstructDeleteSwap(
@@ -1984,19 +1890,7 @@ func (ef *execFactory) ConstructDeleteSwap(
 	if autoCommit {
 		del.enableAutoCommit()
 	}
-
-	// Serialize the data-modifying plan to ensure that no data is observed that
-	// hasn't been validated first. See the comments on BatchedNext() in
-	// plan_batch.go.
-	if rowsNeeded {
-		return &spoolNode{
-			singleInputPlanNode: singleInputPlanNode{&serializeNode{source: del}},
-		}, nil
-	}
-
-	// We could use serializeNode here, but using rowCountNode is an
-	// optimization that saves on calls to Next() by the caller.
-	return &rowCountNode{source: del}, nil
+	return del, nil
 }
 
 func (ef *execFactory) constructDeleteRun(
@@ -2556,15 +2450,7 @@ func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering) {
 		columns:             planColumns(p),
 	}
 	rb.r.reqOrdering = ReqOrdering(reqOrdering)
-
-	// If there's a spool, pull it up.
-	if spool, ok := rb.r.input.(*spoolNode); ok {
-		rb.r.input = spool.input
-		spool.input = rb.r
-		rb.res = spool
-	} else {
-		rb.res = rb.r
-	}
+	rb.res = rb.r
 }
 
 // setOutput sets the output of the renderNode. exprs is the list of render
