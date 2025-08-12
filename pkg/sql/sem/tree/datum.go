@@ -4547,11 +4547,7 @@ func (d *DLTree) Compare(ctx context.Context, cmpCtx CompareContext, other Datum
 
 // Prev implements the Datum interface.
 func (d *DLTree) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	prevLTree, ok := d.LTree.Prev()
-	if !ok {
-		return nil, false
-	}
-	return NewDLTree(prevLTree), true
+	return nil, false
 }
 
 // Next implements the Datum interface.

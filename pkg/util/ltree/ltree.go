@@ -131,27 +131,6 @@ func (lt T) Copy() T {
 	return T{path: copiedLabels}
 }
 
-// Prev returns the lexicographically previous LTree and a bool
-// indicating whether it exists.
-func (lt T) Prev() (T, bool) {
-	if lt.Len() == 0 {
-		return Empty, false
-	}
-
-	lastLabel := lt.path[lt.Len()-1]
-	if l := prevLabel(lastLabel); l != "" {
-		result := lt.Copy()
-		result.path[lt.Len()-1] = l
-		return result, true
-	}
-
-	if lt.Len() > 1 {
-		return T{path: lt.path[:lt.Len()-1]}, true
-	}
-
-	return Empty, true
-}
-
 // validateLabel checks if a label is valid and returns an error if it is not,
 // otherwise, it returns nil.
 // A label is valid if it:
@@ -173,43 +152,7 @@ func validateLabel(l string) error {
 	return nil
 }
 
-// prevLabel returns the lexicographically previous label or empty string if
-// none exists.
-func prevLabel(s string) string {
-	if len(s) == 0 {
-		return ""
-	}
-
-	lastChar := s[len(s)-1]
-	if prev := prevChar(lastChar); prev != 0 {
-		return s[:len(s)-1] + string(prev)
-	}
-
-	if len(s) > 1 {
-		return s[:len(s)-1]
-	}
-
-	return ""
-}
-
 // isValidChar returns true if the character is valid in an LTree label.
 func isValidChar(c byte) bool {
 	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_') || (c == '-')
-}
-
-var prevCharMap = map[byte]byte{
-	'-': 0,
-	'0': '-',
-	'A': '9',
-	'_': 'Z',
-	'a': '_',
-}
-
-// prevChar returns the previous valid character assuming a given valid
-// character, or 0 if none exists.
-func prevChar(c byte) byte {
-	if prev, ok := prevCharMap[c]; ok {
-		return prev
-	}
-	return c - 1
 }
