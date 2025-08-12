@@ -95,11 +95,18 @@ type Failer struct {
 	// on all nodes in the cluster, but then randomly inject the failure on a
 	// subset of nodes at a time.
 	injectArgs FailureArgs
+	// disableStateValidation skips the state validation checks in the Failer.
+	// This is needed for long running clusters (i.e. DRT) where the setup and
+	// cleanup occurs as separate processes and we can't maintain a state.
+	disableStateValidation bool
 }
 
 // checkValidTransition is a helper that returns a generic error message if
 // the current state of the Failer is not in one of the valid states passed.
 func (f *Failer) checkValidTransition(validStates ...failureModeStage) error {
+	if f.disableStateValidation {
+		return nil
+	}
 	validStateMap := make(map[failureModeStage]struct{}, len(validStates))
 	for _, state := range validStates {
 		validStateMap[state] = struct{}{}

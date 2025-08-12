@@ -222,5 +222,5 @@ type Cluster interface {
 
 	RegisterClusterHook(hookName string, hookType option.ClusterHookType, timeout time.Duration, hook func(context.Context) error)
 
-	GetFailer(l *logger.Logger, nodes option.NodeListOption, failureModeName string, opts ...failures.ClusterOptionFunc) (*failures.Failer, error)
+	GetFailer(l *logger.Logger, nodes option.NodeListOption, failureModeName string, disableStateValidation bool, opts ...failures.ClusterOptionFunc) (*failures.Failer, error)
 }

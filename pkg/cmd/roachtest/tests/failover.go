@@ -1236,7 +1236,7 @@ func makeFailerWithoutLocalNoop(
 			c:             c,
 			m:             m,
 			startSettings: settings,
-			staller:       roachtestutil.MakeDmsetupDiskStaller(t, c),
+			staller:       roachtestutil.MakeDmsetupDiskStaller(t, c, false),
 		}
 	case failureModePause:
 		return &pauseFailer{
