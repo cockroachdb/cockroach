@@ -481,9 +481,10 @@ func TestDiagnosticsRequest(t *testing.T) {
 		runner.Exec(t, "INSERT INTO large VALUES (1);")
 		runner.Exec(t, "INSERT INTO large SELECT 2 FROM generate_series(1, 100);")
 		runner.Exec(t, "ANALYZE large;")
+		runner.Exec(t, "SET optimizer_min_row_count = 0;")
 
 		// query1 results in scan + lookup join whereas query2 does two scans +
-		// merge join.
+		// merge join (after adjusting optimizer_min_row_count).
 		const (
 			fprint = `SELECT v FROM small INNER JOIN large ON (k = v) AND (k = _)`
 			query1 = "SELECT v FROM small INNER JOIN large ON k = v AND k = 0;"
