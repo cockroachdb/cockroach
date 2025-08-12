@@ -61,8 +61,8 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 	for _, upgradeSelector := range randomUpgrades(rng, plan) {
 		removeExistingStep := upgradeSelector.
 			Filter(func(s *singleStep) bool {
-				step, ok := s.impl.(allowUpgradeStep)
-				return ok && step.virtualClusterName == install.SystemInterfaceName
+				step, ok := s.Impl.Val.(allowUpgradeStep)
+				return ok && step.VirtualClusterName == install.SystemInterfaceName
 			}).
 			Remove()
 
@@ -71,17 +71,17 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 				// It is valid to reset the cluster setting when we are
 				// performing a rollback (as we know the next upgrade will be
 				// the final one); or during the final upgrade itself.
-				return (s.context.System.Stage == LastUpgradeStage || s.context.System.Stage == RollbackUpgradeStage) &&
+				return (s.Context.System.Stage == LastUpgradeStage || s.Context.System.Stage == RollbackUpgradeStage) &&
 					// We also don't want all nodes to be running the latest
 					// binary, as that would be equivalent to the test plan
 					// without this mutator.
-					len(s.context.System.NodesInNextVersion()) < len(s.context.System.Descriptor.Nodes)
+					len(s.Context.System.NodesInNextVersion()) < len(s.Context.System.Descriptor.Nodes)
 			}).
 			RandomStep(rng).
 			// Note that we don't attempt a concurrent insert because the
 			// selected step could be one that restarts a cockroach node,
 			// and `allowUpgradeStep` could fail in that situation.
-			InsertBefore(allowUpgradeStep{virtualClusterName: install.SystemInterfaceName})
+			InsertBefore(allowUpgradeStep{VirtualClusterName: install.SystemInterfaceName})
 
 		// Finally, we update the context associated with every step where
 		// all nodes are running the next version to indicate they are in
@@ -91,10 +91,10 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 		// next version.
 		for _, step := range upgradeSelector.
 			Filter(func(s *singleStep) bool {
-				return s.context.System.Stage == LastUpgradeStage &&
-					len(s.context.System.NodesInNextVersion()) == len(s.context.System.Descriptor.Nodes)
+				return s.Context.System.Stage == LastUpgradeStage &&
+					len(s.Context.System.NodesInNextVersion()) == len(s.Context.System.Descriptor.Nodes)
 			}) {
-			step.context.System.Finalizing = true
+			step.Context.System.Finalizing = true
 		}
 
 		mutations = append(mutations, removeExistingStep...)
@@ -118,16 +118,16 @@ func randomUpgrades(rng *rand.Rand, plan *TestPlan) []stepSelector {
 
 	byUpgrade := func(upgrade *upgradePlan) func(*singleStep) bool {
 		return func(s *singleStep) bool {
-			return s.context.System.FromVersion.Equal(upgrade.from)
+			return s.Context.System.FromVersion.Equal(upgrade.From)
 		}
 	}
 
 	// By default, include the last upgrade.
 	selectors := []stepSelector{
-		plan.newStepSelector().Filter(byUpgrade(allUpgrades[len(allUpgrades)-1])),
+		plan.newStepSelector(rng).Filter(byUpgrade(allUpgrades[len(allUpgrades)-1])),
 	}
 	for _, upgrade := range allExceptLastUpgrade[:numChanges] {
-		selectors = append(selectors, plan.newStepSelector().Filter(byUpgrade(upgrade)))
+		selectors = append(selectors, plan.newStepSelector(rng).Filter(byUpgrade(upgrade)))
 	}
 
 	return selectors
@@ -232,12 +232,12 @@ func (m clusterSettingMutator) Generate(
 	// valid points in time during the mixedversion test where applying
 	// a cluster setting change is acceptable.
 	possiblePointsInTime := plan.
-		newStepSelector().
+		newStepSelector(rng).
 		Filter(func(s *singleStep) bool {
 			if m.minVersion != nil {
 				// If we have a minimum version set, we need to make sure we
 				// are upgrading to a supported version.
-				if !s.context.System.ToVersion.AtLeast(m.minVersion) {
+				if !s.Context.System.ToVersion.AtLeast(m.minVersion) {
 					return false
 				}
 
@@ -245,13 +245,13 @@ func (m clusterSettingMutator) Generate(
 				// minimum supported version, then only upgraded nodes are
 				// able to service the cluster setting change request. In that
 				// case, we ensure there is at least one such node.
-				if !s.context.System.FromVersion.AtLeast(m.minVersion) && len(s.context.System.NodesInNextVersion()) == 0 {
+				if !s.Context.System.FromVersion.AtLeast(m.minVersion) && len(s.Context.System.NodesInNextVersion()) == 0 {
 					return false
 				}
 			}
 			// Cluster setting changes can be inserted concurrently, so we want to avoid
 			// inserting into any steps that cannot run concurrently with other steps.
-			return s.context.System.Stage >= OnStartupStage && !s.impl.ConcurrencyDisabled()
+			return s.Context.System.Stage >= OnStartupStage && !s.Impl.Val.ConcurrencyDisabled()
 		})
 
 	for _, changeStep := range m.changeSteps(rng, len(possiblePointsInTime)) {
@@ -328,10 +328,10 @@ func (m clusterSettingMutator) changeSteps(
 		newValue := possibleValues[rng.Intn(len(possibleValues))]
 		steps = append(steps, clusterSettingChangeStep{
 			impl: setClusterSettingStep{
-				minVersion:         m.minVersion,
-				name:               m.name,
-				value:              newValue,
-				virtualClusterName: install.SystemInterfaceName,
+				MinVersion:         m.minVersion,
+				Name:               m.name,
+				Value:              newValue,
+				VirtualClusterName: install.SystemInterfaceName,
 			},
 			slot: nextSlot(),
 		})
@@ -344,9 +344,9 @@ func (m clusterSettingMutator) changeSteps(
 	resetClusterSettingTransition := func() {
 		steps = append(steps, clusterSettingChangeStep{
 			impl: resetClusterSettingStep{
-				minVersion:         m.minVersion,
-				name:               m.name,
-				virtualClusterName: install.SystemInterfaceName,
+				MinVersion:         m.minVersion,
+				Name:               m.name,
+				VirtualClusterName: install.SystemInterfaceName,
 			},
 			slot: nextSlot(),
 		})
@@ -406,7 +406,7 @@ func (m panicNodeMutator) Generate(
 ) ([]mutation, error) {
 	var mutations []mutation
 	upgrades := randomUpgrades(rng, plan)
-	idx := newStepIndex(plan)
+	idx := newStepIndex(rng, plan)
 	nodeList := planner.currentContext.System.Descriptor.Nodes
 
 	for _, upgrade := range upgrades {
@@ -416,7 +416,7 @@ func (m panicNodeMutator) Generate(
 			// We don't want to panic the system on a node while a system node is already down, as that could cause
 			// the cluster to lose quorum, so we filter out any steps with unavailable system nodes.
 			Filter(func(s *singleStep) bool {
-				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !s.context.System.hasUnavailableNodes
+				return s.Context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !s.Context.System.hasUnavailableNodes
 			})
 
 		targetNode := nodeList.SeededRandNode(rng)
@@ -427,13 +427,13 @@ func (m panicNodeMutator) Generate(
 		isIncompatibleStep := func(s *singleStep) bool {
 			// Restarting the system on a different node while our panicked node is still dead can
 			// cause the cluster to lose quorum, so we avoid any system restarts.
-			_, restart := s.impl.(restartWithNewBinaryStep)
+			_, restart := s.Impl.Val.(restartWithNewBinaryStep)
 			// Waiting for stable cluster version targets every node in
 			// the cluster, so a node cannot be dead during this step.
-			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
+			_, waitForStable := s.Impl.Val.(waitForStableClusterVersionStep)
 			// Many hook steps do not support running with a dead node,
 			// so we avoid inserting after a hook step.
-			_, runHook := s.impl.(runHookStep)
+			_, runHook := s.Impl.Val.(runHookStep)
 
 			if idx.IsConcurrent(s) {
 				if firstStepInConcurrentBlock == nil {
@@ -445,7 +445,7 @@ func (m panicNodeMutator) Generate(
 				firstStepInConcurrentBlock = nil
 			}
 
-			return restart || waitForStable || runHook || s.context.System.hasUnavailableNodes
+			return restart || waitForStable || runHook || s.Context.System.hasUnavailableNodes
 		}
 
 		// The node should be restarted after the panic, but before any steps that are
@@ -477,11 +477,11 @@ func (m panicNodeMutator) Generate(
 		// are compatible with a dead node, so we immediately restart the node after the panic.
 		if validEndStep == nil {
 			restartStep = cutStep
-			addRestartStep = cutStep.InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+			addRestartStep = cutStep.InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, restartDesc})
 		} else {
 			restartStep = validEndStep.RandomStep(rng)
 			addRestartStep = restartStep.
-				Insert(rng, restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+				Insert(rng, restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, restartDesc})
 		}
 
 		failureContextSteps, _ := validStartStep.CutBefore(func(s *singleStep) bool {
@@ -511,14 +511,8 @@ func (m networkPartitionMutator) Generate(
 ) ([]mutation, error) {
 	var mutations []mutation
 	upgrades := randomUpgrades(rng, plan)
-	idx := newStepIndex(plan)
+	idx := newStepIndex(rng, plan)
 	nodeList := planner.currentContext.System.Descriptor.Nodes
-
-	failure := failures.GetFailureRegistry()
-	f, err := failure.GetFailer(planner.cluster.Name(), failures.IPTablesNetworkPartitionName, planner.logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get failer for %s: %w", failures.IPTablesNetworkPartitionName, err)
-	}
 
 	for _, upgrade := range upgrades {
 		possiblePointsInTime := upgrade.
@@ -530,11 +524,11 @@ func (m networkPartitionMutator) Generate(
 				//	so we filter out steps with unavailable nodes.
 				var unavailableNodes bool
 				if planner.isMultitenant() {
-					unavailableNodes = s.context.Tenant.hasUnavailableNodes || s.context.System.hasUnavailableNodes
+					unavailableNodes = s.Context.Tenant.hasUnavailableNodes || s.Context.System.hasUnavailableNodes
 				} else {
-					unavailableNodes = s.context.System.hasUnavailableNodes
+					unavailableNodes = s.Context.System.hasUnavailableNodes
 				}
-				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !unavailableNodes
+				return s.Context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !unavailableNodes
 			})
 
 		stepToPartition := possiblePointsInTime.RandomStep(rng)
@@ -552,11 +546,11 @@ func (m networkPartitionMutator) Generate(
 			// TODO: The partitioned node should be able to restart safely, provided
 			// the necessary steps are altered to allow it.
 
-			_, restartSystem := s.impl.(restartWithNewBinaryStep)
-			_, restartTenant := s.impl.(restartVirtualClusterStep)
+			_, restartSystem := s.Impl.Val.(restartWithNewBinaryStep)
+			_, restartTenant := s.Impl.Val.(restartVirtualClusterStep)
 			// Many hook steps require communication between specific nodes, so we
 			// should recover the network partition before running them.
-			_, runHook := s.impl.(runHookStep)
+			_, runHook := s.Impl.Val.(runHookStep)
 
 			if idx.IsConcurrent(s) {
 				if firstStepInConcurrentBlock == nil {
@@ -570,9 +564,9 @@ func (m networkPartitionMutator) Generate(
 
 			var unavailableNodes bool
 			if planner.isMultitenant() {
-				unavailableNodes = s.context.Tenant.hasUnavailableNodes || s.context.System.hasUnavailableNodes
+				unavailableNodes = s.Context.Tenant.hasUnavailableNodes || s.Context.System.hasUnavailableNodes
 			} else {
-				unavailableNodes = s.context.System.hasUnavailableNodes
+				unavailableNodes = s.Context.System.hasUnavailableNodes
 			}
 			return unavailableNodes || restartTenant || restartSystem || runHook
 		}
@@ -600,18 +594,18 @@ func (m networkPartitionMutator) Generate(
 		partition := failures.NetworkPartition{Source: leftPartition, Destination: rightPartition, Type: partitionType}
 
 		addPartition := stepToPartition.
-			InsertBefore(networkPartitionInjectStep{f, partition, partitionedNode})
+			InsertBefore(networkPartitionInjectStep{failures.IPTablesNetworkPartitionName, partition, partitionedNode})
 		var addRecoveryStep []mutation
 		var recoveryStep stepSelector
 		// If validEndStep is nil, it means that there are no steps after the partition step that are
 		// compatible with a network partition, so we immediately restart the node after the partition.
 		if validEndStep == nil {
 			recoveryStep = cutStep
-			addRecoveryStep = cutStep.InsertBefore(networkPartitionRecoveryStep{f, partition, partitionedNode})
+			addRecoveryStep = cutStep.InsertBefore(networkPartitionRecoveryStep{failures.IPTablesNetworkPartitionName, partition, partitionedNode})
 		} else {
 			recoveryStep = validEndStep.RandomStep(rng)
 			addRecoveryStep = recoveryStep.
-				Insert(rng, networkPartitionRecoveryStep{f, partition, partitionedNode})
+				Insert(rng, networkPartitionRecoveryStep{failures.IPTablesNetworkPartitionName, partition, partitionedNode})
 		}
 
 		failureContextSteps, _ := validStartStep.CutBefore(func(s *singleStep) bool {

@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,8 +25,8 @@ func TestServiceContext_startUpgrade(t *testing.T) {
 		Descriptor:  &ServiceDescriptor{Name: install.SystemInterfaceName, Nodes: option.NodeListOption{1, 2, 3}},
 		FromVersion: initialVersion,
 		ToVersion:   upgradeVersion,
-		nodesByVersion: map[clusterupgrade.Version]*intsets.Fast{
-			*initialVersion: intSetP(1, 2, 3),
+		NodesByVersion: map[clusterupgrade.Version]IntSet{
+			*initialVersion: {intSetP(1, 2, 3)},
 		},
 	}, sc)
 }

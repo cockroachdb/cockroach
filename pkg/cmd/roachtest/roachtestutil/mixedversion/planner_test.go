@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/rand"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,6 +92,12 @@ func TestTestPlanner(t *testing.T) {
 				if len(d.CmdArgs) > 0 && d.CmdArgs[0].Vals[0] == "true" {
 					debug = true
 				}
+
+				// Test serialization and deserialization of the plan.
+				newPlan, err := encodeAndDecode(plan)
+				require.NoError(t, err)
+				require.Equal(t, plan, newPlan)
+				plan = newPlan
 
 				return plan.prettyPrintInternal(debug)
 			}
@@ -199,30 +206,34 @@ func TestDeterministicHookSeeds(t *testing.T) {
 
 		var (
 			// these variables are not used by the hook so they can be nil
-			ctx         = context.Background()
-			emptyHelper = &Helper{}
+			ctx        = context.Background()
+			hookHelper = &Helper{
+				runner: &testRunner{
+					hooks: mvt.hooks,
+				},
+			}
 		)
 
 		plan, err := mvt.plan()
 		require.NoError(t, err)
 
-		upgradeStep := plan.Steps()[3].(sequentialRunStep)
+		upgradeStep := plan.Steps()[3].Val.(sequentialRunStep)
 		// We can hardcode these paths since we are using a fixed seed in
 		// these tests.
-		firstRunStep := upgradeStep.steps[1].(sequentialRunStep).steps[1].(*singleStep)
-		firstRun := firstRunStep.impl.(runHookStep)
-		require.Equal(t, "do something", firstRun.hook.name)
-		require.NoError(t, firstRun.Run(ctx, nilLogger, firstRunStep.rng, emptyHelper))
+		firstRunStep := upgradeStep.Steps[1].Val.(sequentialRunStep).Steps[1].Val.(*singleStep)
+		firstRun := firstRunStep.Impl.Val.(runHookStep)
+		require.Equal(t, stepFuncRef("do something"), firstRun.StepFuncRef)
+		require.NoError(t, firstRun.Run(ctx, nilLogger, firstRunStep.RNG.Rand(), hookHelper))
 
-		secondRunStep := upgradeStep.steps[2].(sequentialRunStep).steps[2].(*singleStep)
-		secondRun := secondRunStep.impl.(runHookStep)
-		require.Equal(t, "do something", secondRun.hook.name)
-		require.NoError(t, secondRun.Run(ctx, nilLogger, secondRunStep.rng, emptyHelper))
+		secondRunStep := upgradeStep.Steps[2].Val.(sequentialRunStep).Steps[2].Val.(*singleStep)
+		secondRun := secondRunStep.Impl.Val.(runHookStep)
+		require.Equal(t, stepFuncRef("do something"), secondRun.StepFuncRef)
+		require.NoError(t, secondRun.Run(ctx, nilLogger, secondRunStep.RNG.Rand(), hookHelper))
 
-		thirdRunStep := upgradeStep.steps[3].(sequentialRunStep).steps[3].(*singleStep)
-		thirdRun := thirdRunStep.impl.(runHookStep)
-		require.Equal(t, "do something", thirdRun.hook.name)
-		require.NoError(t, thirdRun.Run(ctx, nilLogger, thirdRunStep.rng, emptyHelper))
+		thirdRunStep := upgradeStep.Steps[3].Val.(sequentialRunStep).Steps[3].Val.(*singleStep)
+		thirdRun := thirdRunStep.Impl.Val.(runHookStep)
+		require.Equal(t, stepFuncRef("do something"), thirdRun.StepFuncRef)
+		require.NoError(t, thirdRun.Run(ctx, nilLogger, thirdRunStep.RNG.Rand(), hookHelper))
 
 		require.Len(t, generatedData, 3)
 		return generatedData
@@ -250,10 +261,10 @@ func Test_startClusterID(t *testing.T) {
 	plan, err := mvt.plan()
 	require.NoError(t, err)
 
-	ss := plan.Steps()[0].(*singleStep)
-	require.IsType(t, startStep{}, ss.impl)
+	ss := plan.Steps()[0].Val.(*singleStep)
+	require.IsType(t, startStep{}, ss.Impl.Val)
 	require.Equal(t, 1, ss.ID)
-	require.Equal(t, 1, plan.startSystemID)
+	require.Equal(t, 1, plan.StartSystemID)
 
 	// When fixtures are used, the startStep should always be the second
 	// step of the test (ID = 2) in system-only deployments i.e., after
@@ -261,10 +272,10 @@ func Test_startClusterID(t *testing.T) {
 	mvt = newTest(AlwaysUseFixtures, EnabledDeploymentModes(SystemOnlyDeployment))
 	plan, err = mvt.plan()
 	require.NoError(t, err)
-	ss = plan.Steps()[1].(*singleStep)
-	require.IsType(t, startStep{}, ss.impl)
+	ss = plan.Steps()[1].Val.(*singleStep)
+	require.IsType(t, startStep{}, ss.Impl.Val)
 	require.Equal(t, 2, ss.ID)
-	require.Equal(t, 2, plan.startSystemID)
+	require.Equal(t, 2, plan.StartSystemID)
 }
 
 // Test_upgradeTimeout tests the behaviour of upgrade timeouts in
@@ -275,8 +286,8 @@ func Test_upgradeTimeout(t *testing.T) {
 	findUpgradeWaitSteps := func(plan *TestPlan) []waitForStableClusterVersionStep {
 		var steps []waitForStableClusterVersionStep
 		for _, s := range plan.Steps() {
-			if ss, isSingle := s.(*singleStep); isSingle {
-				if step, isUpgrade := ss.impl.(waitForStableClusterVersionStep); isUpgrade {
+			if ss, isSingle := s.Val.(*singleStep); isSingle {
+				if step, isUpgrade := ss.Impl.Val.(waitForStableClusterVersionStep); isUpgrade {
 					steps = append(steps, step)
 				}
 			}
@@ -294,7 +305,7 @@ func Test_upgradeTimeout(t *testing.T) {
 		waitUpgrades := findUpgradeWaitSteps(plan)
 
 		for _, s := range waitUpgrades {
-			require.Equal(t, expectedTimeout, s.timeout)
+			require.Equal(t, expectedTimeout, s.Timeout)
 		}
 	}
 
@@ -312,7 +323,7 @@ func Test_maxNumPlanSteps(t *testing.T) {
 	plan, err := mvt.plan()
 	require.NoError(t, err)
 	// N.B. the upper bound is very conservative; largest "basic upgrade" plan is well below it.
-	require.LessOrEqual(t, plan.length, 100)
+	require.LessOrEqual(t, plan.Length, 100)
 
 	mvt = newBasicUpgradeTest(MaxNumPlanSteps(15))
 	r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5})
@@ -321,7 +332,7 @@ func Test_maxNumPlanSteps(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		require.LessOrEqual(t, plan.length, 15)
+		require.LessOrEqual(t, plan.Length, 15)
 		break
 	}
 
@@ -413,7 +424,7 @@ func newTest(options ...CustomOption) *Test {
 		_arch:     archP(vm.ArchAMD64),
 		_isLocal:  boolP(false),
 		prng:      newRand(),
-		hooks:     &testHooks{crdbNodes: nodes},
+		hooks:     &testHooks{crdbNodes: nodes, registry: make(stepFuncRegistry)},
 		seed:      seed,
 	}
 }
@@ -559,7 +570,7 @@ func Test_stepSelectorFilter(t *testing.T) {
 		{
 			name: "filter eliminates all steps",
 			predicate: func(s *singleStep) bool {
-				return s.context.System.Stage == BackgroundStage // no background steps in the plan used in the test
+				return s.Context.System.Stage == BackgroundStage // no background steps in the plan used in the test
 			},
 			assertStepsFunc: func(t *testing.T, sel stepSelector) {
 				require.Empty(t, sel)
@@ -569,14 +580,14 @@ func Test_stepSelectorFilter(t *testing.T) {
 		{
 			name: "filtering by a specific stage",
 			predicate: func(s *singleStep) bool {
-				return s.context.System.Stage == AfterUpgradeFinalizedStage
+				return s.Context.System.Stage == AfterUpgradeFinalizedStage
 			},
 			assertStepsFunc: func(t *testing.T, sel stepSelector) {
 				require.Len(t, sel, 3) // number of upgrades we are performing
 				for _, s := range sel {
-					require.IsType(t, runHookStep{}, s.impl)
-					rhs := s.impl.(runHookStep)
-					require.Equal(t, "after finalization", rhs.hook.name)
+					require.IsType(t, runHookStep{}, s.Impl.Val)
+					rhs := s.Impl.Val.(runHookStep)
+					require.Equal(t, stepFuncRef("after finalization"), rhs.StepFuncRef)
 				}
 			},
 			expectedRandomStepType: runHookStep{},
@@ -584,13 +595,13 @@ func Test_stepSelectorFilter(t *testing.T) {
 		{
 			name: "filtering by a specific stage and upgrade cycle",
 			predicate: func(s *singleStep) bool {
-				return s.context.System.ToVersion.IsCurrent() && s.context.System.Stage == AfterUpgradeFinalizedStage
+				return s.Context.System.ToVersion.IsCurrent() && s.Context.System.Stage == AfterUpgradeFinalizedStage
 			},
 			assertStepsFunc: func(t *testing.T, sel stepSelector) {
 				require.Len(t, sel, 1)
-				require.IsType(t, runHookStep{}, sel[0].impl)
-				rhs := sel[0].impl.(runHookStep)
-				require.Equal(t, "after finalization", rhs.hook.name)
+				require.IsType(t, runHookStep{}, sel[0].Impl.Val)
+				rhs := sel[0].Impl.Val.(runHookStep)
+				require.Equal(t, stepFuncRef("after finalization"), rhs.StepFuncRef)
 			},
 			expectedRandomStepType: runHookStep{},
 		},
@@ -606,7 +617,7 @@ func Test_stepSelectorFilter(t *testing.T) {
 			plan, err := mvt.plan()
 			require.NoError(t, err)
 
-			sel := plan.newStepSelector()
+			sel := plan.newStepSelector(mvt.prng)
 			allSteps := sel
 
 			newSelector := sel.Filter(tc.predicate)
@@ -621,7 +632,7 @@ func Test_stepSelectorFilter(t *testing.T) {
 				require.Empty(t, randomSelector)
 			} else {
 				require.Len(t, randomSelector, 1)
-				require.IsType(t, tc.expectedRandomStepType, randomSelector[0].impl)
+				require.IsType(t, tc.expectedRandomStepType, randomSelector[0].Impl.Val)
 			}
 		})
 	}
@@ -642,9 +653,9 @@ func Test_stepSelectorMutations(t *testing.T) {
 
 		var ops []mutationOp
 		for _, mut := range mutations {
-			require.IsType(t, runHookStep{}, mut.reference.impl)
-			rhs := mut.reference.impl.(runHookStep)
-			require.Equal(t, expectedName, rhs.hook.name)
+			require.IsType(t, runHookStep{}, mut.reference.Impl.Val)
+			rhs := mut.reference.Impl.Val.(runHookStep)
+			require.Equal(t, stepFuncRef(expectedName), rhs.StepFuncRef)
 
 			require.Equal(t, expectedImpl, mut.impl)
 			ops = append(ops, mut.op)
@@ -672,7 +683,7 @@ func Test_stepSelectorMutations(t *testing.T) {
 			name:        "insert step when filter has no matches",
 			numUpgrades: 1,
 			predicate: func(s *singleStep) bool {
-				return s.context.System.Stage == BackgroundStage // no background steps
+				return s.Context.System.Stage == BackgroundStage // no background steps
 			},
 			op: "insert",
 			assertMutationsFunc: func(t *testing.T, step *singleStep, mutations []mutation) {
@@ -683,12 +694,12 @@ func Test_stepSelectorMutations(t *testing.T) {
 			name:        "insert step in single upgrade, single step filtered",
 			numUpgrades: 1,
 			predicate: func(s *singleStep) bool {
-				return s.context.System.Stage == AfterUpgradeFinalizedStage
+				return s.Context.System.Stage == AfterUpgradeFinalizedStage
 			},
 			op: "insert",
 			assertMutationsFunc: func(t *testing.T, step *singleStep, mutations []mutation) {
 				validateMutations(
-					t, mutations, 1, "after finalization", step.impl,
+					t, mutations, 1, "after finalization", step.Impl.Val,
 					[]mutationOp{mutationInsertConcurrent},
 				)
 			},
@@ -697,12 +708,12 @@ func Test_stepSelectorMutations(t *testing.T) {
 			name:        "insert step in multiple upgrade plan",
 			numUpgrades: 3,
 			predicate: func(s *singleStep) bool {
-				return s.context.System.Stage == AfterUpgradeFinalizedStage
+				return s.Context.System.Stage == AfterUpgradeFinalizedStage
 			},
 			op: "insert",
 			assertMutationsFunc: func(t *testing.T, step *singleStep, mutations []mutation) {
 				validateMutations(
-					t, mutations, 3, "after finalization", step.impl,
+					t, mutations, 3, "after finalization", step.Impl.Val,
 					[]mutationOp{mutationInsertConcurrent, mutationInsertAfter, mutationInsertAfter},
 				)
 			},
@@ -711,7 +722,7 @@ func Test_stepSelectorMutations(t *testing.T) {
 			name:        "remove step when filter has no matches",
 			numUpgrades: 1,
 			predicate: func(s *singleStep) bool {
-				return s.context.System.Stage == BackgroundStage // no background steps
+				return s.Context.System.Stage == BackgroundStage // no background steps
 			},
 			op: "remove",
 			assertMutationsFunc: func(t *testing.T, _ *singleStep, mutations []mutation) {
@@ -722,7 +733,7 @@ func Test_stepSelectorMutations(t *testing.T) {
 			name:        "remove step in single upgrade, single step filtered",
 			numUpgrades: 1,
 			predicate: func(s *singleStep) bool {
-				return s.context.System.Stage == AfterUpgradeFinalizedStage
+				return s.Context.System.Stage == AfterUpgradeFinalizedStage
 			},
 			op: "remove",
 			assertMutationsFunc: func(t *testing.T, _ *singleStep, mutations []mutation) {
@@ -736,7 +747,7 @@ func Test_stepSelectorMutations(t *testing.T) {
 			name:        "remove step in multiple upgrade plan",
 			numUpgrades: 3,
 			predicate: func(s *singleStep) bool {
-				return s.context.System.Stage == AfterUpgradeFinalizedStage
+				return s.Context.System.Stage == AfterUpgradeFinalizedStage
 			},
 			op: "remove",
 			assertMutationsFunc: func(t *testing.T, _ *singleStep, mutations []mutation) {
@@ -762,19 +773,19 @@ func Test_stepSelectorMutations(t *testing.T) {
 			plan, err := mvt.plan()
 			require.NoError(t, err)
 
-			sel := plan.newStepSelector().Filter(tc.predicate)
+			sel := plan.newStepSelector(mvt.prng).Filter(tc.predicate)
 			ss := newTestStep(func() error { return nil })
 
 			var mutations []mutation
 			if tc.op == "insert" {
-				mutations = sel.Insert(newRand(), ss.impl)
+				mutations = sel.Insert(newRand(), ss.Val.(*singleStep).Impl.Val)
 			} else if tc.op == "remove" {
 				mutations = sel.Remove()
 			} else {
 				require.FailNowf(t, "unknown op: %s", tc.op)
 			}
 
-			tc.assertMutationsFunc(t, ss, mutations)
+			tc.assertMutationsFunc(t, ss.Val.(*singleStep), mutations)
 		})
 	}
 }
@@ -800,9 +811,9 @@ func requireConcurrentHooks(t *testing.T, steps []testStep, names ...string) err
 	// might be within a series of sequential steps.
 	var flattenSequentialSteps func(s testStep) []testStep
 	flattenSequentialSteps = func(s testStep) []testStep {
-		if seqStep, ok := s.(sequentialRunStep); ok {
+		if seqStep, ok := s.Val.(sequentialRunStep); ok {
 			var result []testStep
-			for _, s := range seqStep.steps {
+			for _, s := range seqStep.Steps {
 				result = append(result, flattenSequentialSteps(s)...)
 			}
 
@@ -819,24 +830,24 @@ func requireConcurrentHooks(t *testing.T, steps []testStep, names ...string) err
 
 NEXT_STEP:
 	for _, step := range allSteps {
-		if crs, ok := step.(concurrentRunStep); ok {
-			if len(crs.delayedSteps) != len(names) {
+		if crs, ok := step.Val.(concurrentRunStep); ok {
+			if len(crs.DelayedSteps) != len(names) {
 				continue NEXT_STEP
 			}
 
 			stepNames := map[string]struct{}{}
-			for _, concurrentStep := range crs.delayedSteps {
-				ds := concurrentStep.(delayedStep)
-				ss, ok := ds.step.(*singleStep)
+			for _, concurrentStep := range crs.DelayedSteps {
+				ds := concurrentStep.Val.(delayedStep)
+				ss, ok := ds.Step.Val.(*singleStep)
 				if !ok {
 					continue NEXT_STEP
 				}
-				rhs, ok := ss.impl.(runHookStep)
+				rhs, ok := ss.Impl.Val.(runHookStep)
 				if !ok {
 					continue NEXT_STEP
 				}
 
-				stepNames[rhs.hook.name] = struct{}{}
+				stepNames[string(rhs.StepFuncRef)] = struct{}{}
 			}
 
 			// Check if this concurrent step has all the steps passed as
@@ -868,12 +879,12 @@ func (concurrentUserHooksMutator) Generate(
 	// Insert our `testSingleStep` implementation concurrently with every
 	// user-provided function.
 	return plan.
-		newStepSelector().
+		newStepSelector(rng).
 		Filter(func(s *singleStep) bool {
-			_, ok := s.impl.(runHookStep)
+			_, ok := s.Impl.Val.(runHookStep)
 			return ok
 		}).
-		InsertConcurrent(&testSingleStep{}), nil
+		InsertConcurrent(serializableTestSingleStep{}), nil
 }
 
 // removeUserHooksMutator is a test mutator that removes every
@@ -887,9 +898,9 @@ func (removeUserHooksMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
 ) ([]mutation, error) {
 	return plan.
-		newStepSelector().
+		newStepSelector(rng).
 		Filter(func(s *singleStep) bool {
-			_, ok := s.impl.(runHookStep)
+			_, ok := s.Impl.Val.(runHookStep)
 			return ok
 		}).
 		Remove(), nil
@@ -908,7 +919,7 @@ func Test_DisableAllMutators(t *testing.T) {
 
 	plan, err := mvt.plan()
 	require.NoError(t, err)
-	require.Nil(t, plan.enabledMutators)
+	require.Nil(t, plan.EnabledMutatorNames)
 
 }
 
@@ -922,9 +933,9 @@ func Test_DisableAllClusterSettingMutators(t *testing.T) {
 	plan, err := mvt.plan()
 	require.NoError(t, err)
 
-	for _, enabled := range plan.enabledMutators {
-		if _, ok := enabled.(clusterSettingMutator); ok {
-			t.Errorf("cluster setting mutator %q was not disabled", enabled.Name())
+	for _, name := range plan.EnabledMutatorNames {
+		if strings.Contains(name, "cluster_setting") {
+			t.Errorf("cluster setting mutator %q was not disabled", name)
 		}
 	}
 }
@@ -952,7 +963,7 @@ func Test_SeparateProcessUsesLatestPred(t *testing.T) {
 		_arch:     archP(vm.ArchAMD64),
 		_isLocal:  boolP(false),
 		prng:      newRand(),
-		hooks:     &testHooks{crdbNodes: nodes},
+		hooks:     &testHooks{crdbNodes: nodes, registry: make(stepFuncRegistry)},
 		seed:      seed,
 	}
 
