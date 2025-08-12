@@ -616,19 +616,14 @@ func (s *Store) TryClearPartition(
 	return count, nil
 }
 
-// EnsureUniquePartitionKey checks that the given partition key is not being
-// used yet and also ensures it won't be given out in the future. This is used
-// for testing.
-func (s *Store) EnsureUniquePartitionKey(treeKey cspann.TreeKey, partitionKey cspann.PartitionKey) {
+// SetMinPartitionKey ensures that MakePartitionKey() will never give out a
+// partition key that's less than this key.
+func (s *Store) SetMinPartitionKey(partitionKey cspann.PartitionKey) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.getPartitionLocked(treeKey, partitionKey); ok {
-		panic(errors.AssertionFailedf("partition key %d is already being used", partitionKey))
-	}
-
-	if partitionKey <= s.mu.nextKey {
-		s.mu.nextKey = partitionKey + 1
+	if s.mu.nextKey < partitionKey {
+		s.mu.nextKey = partitionKey
 	}
 }
 

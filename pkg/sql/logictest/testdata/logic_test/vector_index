@@ -539,11 +539,36 @@ INSERT INTO exec_test (a, b, vec1) VALUES
   (2, 1, '[4, 5, 6]'),
   (3, 2, '[7, 8, 9]'),
   (4, 2, '[10, 11, 12]'),
-  (5, 2, '[13, 14, 15]'),
+  (5, 2, '[13, 14, 15]');
+
+statement ok
+INSERT INTO exec_test (a, b, vec1) VALUES
   (6, NULL, '[16, 17, 18]'),
   (7, NULL, '[1, 1, 1]'),
   (8, NULL, NULL),
   (9, 3, NULL);
+
+# Define helper to force fixup processing for the given index.
+statement ok
+CREATE PROCEDURE process_vector_index_fixups_for(desc_name STRING, idx_name STRING)
+LANGUAGE SQL
+AS $$
+  SELECT crdb_internal.process_vector_index_fixups(
+    (SELECT id FROM system.namespace WHERE name = desc_name),
+    (
+      SELECT index_id
+      FROM crdb_internal.table_indexes
+      WHERE descriptor_name = desc_name AND index_name = idx_name
+    )
+  )
+$$;
+
+# Process split fixups for the two indexes.
+statement ok
+CALL process_vector_index_fixups_for('exec_test', 'idx1');
+
+statement ok
+CALL process_vector_index_fixups_for('exec_test', 'idx2');
 
 statement error pgcode 22000 pq: expected 3 dimensions, not 1
 INSERT INTO exec_test (a, b, vec1) VALUES (10, 1, '[1]');
@@ -765,8 +790,21 @@ INSERT INTO distance_metrics (a, v) VALUES
   (1, '[0, 0]'),
   (2, '[-2, -2]'),
   (3, '[2, 2]'),
-  (4, '[4, 4]'),
+  (4, '[4, 4]');
+
+statement ok
+INSERT INTO distance_metrics (a, v) VALUES
   (5, '[-2, 2]');
+
+# Process split fixups for the three indexes.
+statement ok
+CALL process_vector_index_fixups_for('distance_metrics', 'idx1');
+
+statement ok
+CALL process_vector_index_fixups_for('distance_metrics', 'idx2');
+
+statement ok
+CALL process_vector_index_fixups_for('distance_metrics', 'idx3');
 
 # Results using L2 distance.
 query ITF rowsort
