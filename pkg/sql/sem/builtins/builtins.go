@@ -5791,6 +5791,13 @@ SELECT
 		WHERE
 			id = $1 AND id NOT IN (SELECT id FROM system.descriptor)
 	)
+	WHEN 'comment'
+	THEN (
+		SELECT
+			crdb_internal.unsafe_delete_comment(
+				$1
+			)
+	)
 	ELSE NULL
 	END
 `,
@@ -7169,6 +7176,28 @@ SELECT
 			},
 			Info: "Administrators can use this to effectively perform " +
 				"ALTER TABLE ... CONFIGURE ZONE USING gc.ttlseconds = ...; on dropped tables",
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.unsafe_delete_comment": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "object_id", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := evalCtx.Planner.UnsafeDeleteComment(ctx, int64(*args[0].(*tree.DInt))); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: "Deletes all system.comments under an object_id, which can be used" +
+				" to clean dangling comments",
 			Volatility: volatility.Volatile,
 		},
 	),

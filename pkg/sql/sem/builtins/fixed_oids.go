@@ -2661,6 +2661,7 @@ var builtinOidsArray = []string{
 	2699: `jsonb_path_match(target: jsonb, path: jsonpath) -> bool`,
 	2700: `jsonb_path_match(target: jsonb, path: jsonpath, vars: jsonb) -> bool`,
 	2701: `jsonb_path_match(target: jsonb, path: jsonpath, vars: jsonb, silent: bool) -> bool`,
+	2844: `crdb_internal.unsafe_delete_comment(object_id: int) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

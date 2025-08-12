@@ -281,6 +281,9 @@ type Planner interface {
 		force bool,
 	) error
 
+	// UnsafeDeleteComment is used to delete comments for a non-existent object.
+	UnsafeDeleteComment(ctx context.Context, objectID int64) error
+
 	// UserHasAdminRole returns tuple of bool and error:
 	// (true, nil) means that the user has an admin role (i.e. root or node)
 	// (false, nil) means that the user has NO admin role
