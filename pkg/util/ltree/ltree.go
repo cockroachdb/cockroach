@@ -7,6 +7,7 @@ package ltree
 
 import (
 	"bytes"
+	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -142,6 +143,25 @@ func (lt T) Copy() T {
 	copiedLabels := make([]string, lt.Len())
 	copy(copiedLabels, lt.path)
 	return T{path: copiedLabels}
+}
+
+func RandLTree(rng *rand.Rand) T {
+	charSet := "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+	length := rng.Intn(10)
+	if length == 0 {
+		return Empty
+	}
+	labels := make([]string, length)
+	for i := range labels {
+		// Labels cannot be empty.
+		labelLen := rng.Intn(9) + 1
+		p := make([]byte, labelLen)
+		for j := range p {
+			p[j] = charSet[rng.Intn(len(charSet))]
+		}
+		labels[i] = string(p)
+	}
+	return T{path: labels}
 }
 
 // validateLabel checks if a label is valid and returns an error if it is not,
