@@ -227,6 +227,11 @@ func (ep *DummyEvalPlanner) UpsertDroppedRelationGCTTL(
 	return errors.WithStack(errEvalPlanner)
 }
 
+// UnsafeDeleteComment is part of the Planner interface.
+func (ep *DummyEvalPlanner) UnsafeDeleteComment(ctx context.Context, objectID int64) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 // UserHasAdminRole is part of the Planner interface.
 func (ep *DummyEvalPlanner) UserHasAdminRole(
 	ctx context.Context, user username.SQLUsername,
