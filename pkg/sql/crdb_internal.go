@@ -6665,6 +6665,19 @@ CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
 				FROM
 					system.namespace AS ns FULL JOIN system.descriptor AS d ON ns.id = d.id
 			),
+		missing_comments
+				AS (
+					SELECT
+						0 AS parent_id,
+						0 AS parent_schema_id,
+						'' AS name,
+						object_id AS id,
+						'comment' AS corruption
+					FROM
+						system.comments
+					WHERE
+						object_id NOT IN (SELECT id FROM system.descriptor)
+        ),
 		diag
 			AS (
 				SELECT
@@ -6679,9 +6692,10 @@ CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
 					data
 			)
 	SELECT
-		parent_id, parent_schema_id, name, id, corruption
+		*
 	FROM
-		diag
+		(SELECT parent_id, parent_schema_id, name, id, corruption FROM diag UNION 
+		 SELECT * FROM missing_comments)
 	WHERE
 		corruption IS NOT NULL
 	ORDER BY
