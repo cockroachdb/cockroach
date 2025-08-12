@@ -616,17 +616,22 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 	// Keep track of which edges are applicable to this join.
 	var appliedEdges edgeSet
 
-	jb.equivs.Reset()
-	jb.equivs.AddFromFDs(&jb.plans[s1].Relational().FuncDeps)
-	jb.equivs.AddFromFDs(&jb.plans[s2].Relational().FuncDeps)
-
-	notNullCols := jb.plans[s1].Relational().NotNullCols.Copy()
-	notNullCols.UnionWith(jb.plans[s2].Relational().NotNullCols)
+	// Lazily initialize jb.equivs and notNullCols.
+	innerEdgeReady := false
+	var notNullCols opt.ColSet
 
 	// Gather all inner edges that connect the left and right relation sets.
 	var innerJoinFilters memo.FiltersExpr
 	for i, ok := jb.innerEdges.Next(0); ok; i, ok = jb.innerEdges.Next(i + 1) {
 		e := &jb.edges[i]
+		if !innerEdgeReady {
+			jb.equivs.Reset()
+			jb.equivs.AddFromFDs(&jb.plans[s1].Relational().FuncDeps)
+			jb.equivs.AddFromFDs(&jb.plans[s2].Relational().FuncDeps)
+			notNullCols.UnionWith(jb.plans[s1].Relational().NotNullCols)
+			notNullCols.UnionWith(jb.plans[s2].Relational().NotNullCols)
+			innerEdgeReady = true
+		}
 
 		// Ensure that this edge forms a valid connection between the two sets. See
 		// the checkNonInnerJoin and checkInnerJoin comments for more information.

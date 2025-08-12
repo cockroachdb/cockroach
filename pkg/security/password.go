@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl/fipscclbase"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -137,6 +138,16 @@ var AutoDetectPasswordHashes = settings.RegisterBoolSetting(
 	true,
 )
 
+// By default, the minimum password length is 1. In FIPS 140-3 mode, where HMAC
+// is required to have a key of at least 112 bits, the minimum password length
+// is 14 characters.
+var defaultMinPasswordLength = func() int64 {
+	if fipscclbase.IsFIPSReady() {
+		return fipscclbase.FIPSMinPasswordLength
+	}
+	return 1
+}()
+
 // MinPasswordLength is the cluster setting that configures the
 // minimum SQL password length.
 var MinPasswordLength = settings.RegisterIntSetting(
@@ -145,8 +156,8 @@ var MinPasswordLength = settings.RegisterIntSetting(
 	"the minimum length accepted for passwords set in cleartext via SQL. "+
 		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case. "+
 		"This setting only applies when adding new users or altering an existing user's password; it will not affect existing logins.",
-	1,
-	settings.NonNegativeInt,
+	defaultMinPasswordLength,
+	settings.IntWithMinimum(defaultMinPasswordLength),
 	settings.WithPublic)
 
 // AutoUpgradePasswordHashes is the cluster setting that configures whether to
