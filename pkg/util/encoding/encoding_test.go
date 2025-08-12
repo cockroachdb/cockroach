@@ -1725,6 +1725,10 @@ func (rd randData) ipAddr() ipaddr.IPAddr {
 	return ipaddr.RandIPAddr(rd.Rand)
 }
 
+func (rd randData) ltree() ltree.T {
+	return ltree.RandLTree(rd.Rand)
+}
+
 func BenchmarkEncodeUint32(b *testing.B) {
 	rng, _ := randutil.NewTestRand()
 
@@ -2251,6 +2255,25 @@ func TestValueEncodeDecodeDuration(t *testing.T) {
 	}
 }
 
+func TestValueEncodeDecodeLTree(t *testing.T) {
+	rng, seed := randutil.NewTestRand()
+	rd := randData{rng}
+	tests := make([]ltree.T, 1000)
+	for i := range tests {
+		tests[i] = rd.ltree()
+	}
+	for _, test := range tests {
+		buf := EncodeLTreeValue(nil, NoColumnID, test)
+		_, x, err := DecodeLTreeValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x.Compare(test) != 0 {
+			t.Errorf("seed %d: expected %s got %s", seed, test.String(), x.String())
+		}
+	}
+}
+
 func BenchmarkEncodeNonsortingVarint(b *testing.B) {
 	bytes := make([]byte, 0, b.N*MaxNonsortingVarintLen)
 	rng, _ := randutil.NewTestRand()
@@ -2456,6 +2479,9 @@ func randValueEncode(rd randData, buf []byte, colID uint32, typ Type) ([]byte, i
 	case IPAddr:
 		x := rd.ipAddr()
 		return EncodeIPAddrValue(buf, colID, x), x, true
+	case LTree:
+		x := rd.ltree()
+		return EncodeLTreeValue(buf, colID, x), x, true
 	default:
 		return buf, nil, false
 	}
@@ -2611,6 +2637,8 @@ func TestValueEncodingRand(t *testing.T) {
 			buf, decoded, err = DecodeBitArrayValue(buf)
 		case IPAddr:
 			buf, decoded, err = DecodeIPAddrValue(buf)
+		case LTree:
+			buf, decoded, err = DecodeLTreeValue(buf)
 		default:
 			err = errors.Errorf("unknown type %s", typ)
 		}
@@ -2639,6 +2667,12 @@ func TestValueEncodingRand(t *testing.T) {
 			d := decoded.(bitarray.BitArray)
 			val := value.(bitarray.BitArray)
 			if bitarray.Compare(d, val) != 0 {
+				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
+			}
+		case LTree:
+			d := decoded.(ltree.T)
+			val := value.(ltree.T)
+			if d.Compare(val) != 0 {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
 			}
 		default:

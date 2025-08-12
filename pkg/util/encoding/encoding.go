@@ -3644,6 +3644,13 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 		var s string
 		b, s, err = PrettyPrintTupleValueEncoded(b)
 		return b, s, err
+	case LTree:
+		var l ltree.T
+		b, l, err = DecodeLTreeValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, l.String(), nil
 	default:
 		return b, "", errors.Errorf("unknown type %s", typ)
 	}
