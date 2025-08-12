@@ -628,9 +628,9 @@ func (p *peer[Conn]) onSubsequentHeartbeatSucceeded(_ context.Context, now time.
 	p.ConnectionHeartbeats.Inc(1)
 	// ConnectionFailures is not updated here.
 
-	if rttInfo, ok := sysutil.GetRTTInfo(snap.tcpConn); ok {
-		p.TCPRTT.Update(rttInfo.RTT.Nanoseconds())
-		p.TCPRTTVar.Update(rttInfo.RTTVar.Nanoseconds())
+	if tcpInfo, ok := sysutil.GetTCPInfo(snap.tcpConn); ok {
+		p.TCPRTT.Update(int64(tcpInfo.Rtt) * 1000)       // Rtt is in microseconds, metric is in nanoseconds
+		p.TCPRTTVar.Update(int64(tcpInfo.Rttvar) * 1000) // Rttvar is in microseconds, metric is in nanoseconds
 	}
 }
 

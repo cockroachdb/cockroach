@@ -22,7 +22,7 @@ import (
 // GetRTTInfo doesn't panic when it's called with a nil connection.
 func TestGetTCPInfoNilConn(t *testing.T) {
 	var conn *net.TCPConn
-	info, ok := GetRTTInfo(conn)
+	info, ok := GetTCPInfo(conn)
 	require.Nil(t, info)
 	require.False(t, ok)
 }
@@ -68,7 +68,7 @@ func TestGetTCPInfoLinux(t *testing.T) {
 	tcpConn, ok := conn.(*net.TCPConn)
 	require.True(t, ok)
 
-	info, ok := GetRTTInfo(tcpConn)
+	info, ok := GetTCPInfo(tcpConn)
 
 	require.True(t, ok)
 	require.NotNil(t, info)
