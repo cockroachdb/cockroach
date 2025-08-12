@@ -316,25 +316,9 @@ func RandDatumWithNullChance(
 	case types.OidFamily:
 		return tree.NewDOidWithType(oid.Oid(rng.Uint32()), typ)
 	case types.LTreeFamily:
-		length := rng.Intn(10)
-		if length == 1 && rng.Intn(4) == 0 {
-			return tree.NewDLTree(ltree.Empty)
-		}
-		labels := make([]string, length)
-		for i := range labels {
-			// Labels cannot be empty.
-			labelLen := rng.Intn(9) + 1
-			p := make([]byte, labelLen)
-			for j := range p {
-				p[j] = charSet[rng.Intn(len(charSet))]
-			}
-			labels[i] = string(p)
-		}
-		l, err := tree.ParseDLTree(strings.Join(labels, ltree.PathSeparator))
-		if err != nil {
-			return nil
-		}
-		return l
+		lt := ltree.RandLTree(rng)
+		d := tree.NewDLTree(lt)
+		return d
 	case types.UnknownFamily:
 		return tree.DNull
 	case types.ArrayFamily:
