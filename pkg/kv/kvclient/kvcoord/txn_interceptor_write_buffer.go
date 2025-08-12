@@ -55,7 +55,7 @@ var bufferedWritesGetTransformEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.transformations.get.enabled",
 	"if enabled, locking get requests with replicated durability are transformed to unreplicated durability",
-	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.get.enabled", true /* defaultValue */),
+	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.get.enabled", false /* defaultValue */),
 )
 
 const defaultBufferSize = 1 << 22 // 4MB
