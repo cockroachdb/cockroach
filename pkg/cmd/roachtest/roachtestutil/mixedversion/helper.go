@@ -97,13 +97,19 @@ func (s *Service) RandomDB(rng *rand.Rand) (int, *gosql.DB) {
 	return node, s.Connect(node)
 }
 
-// prepareQuery returns a connection to one of the `nodes` provided
-// and logs the query and gateway node in the step's log file. Called
+// prepareQuery returns a connection to one of the available nodes in `nodes`
+// provided and logs the query and gateway node in the step's log file. Called
 // before the query is actually performed.
 func (s *Service) prepareQuery(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...any,
 ) (*gosql.DB, error) {
 	availableNodes := s.AvailableNodes().Intersect(nodes)
+	if len(availableNodes) == 0 {
+		return nil, errors.Newf(
+			"no available nodes in the intersection of %s and %s",
+			s.AvailableNodes(), nodes,
+		)
+	}
 	node := availableNodes.SeededRandNode(rng)[0]
 	db := s.Connect(node)
 
@@ -137,8 +143,7 @@ func (s *Service) Exec(rng *rand.Rand, query string, args ...interface{}) error 
 func (s *Service) ExecWithGateway(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...interface{},
 ) error {
-	availableNodes := s.AvailableNodes().Intersect(nodes)
-	db, err := s.prepareQuery(rng, availableNodes, query, args...)
+	db, err := s.prepareQuery(rng, nodes, query, args...)
 	if err != nil {
 		return err
 	}
