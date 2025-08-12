@@ -2494,10 +2494,14 @@ func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 		humanizeCount(s.NumReverseScans),
 	)
 	if s.SeparatedPointCount != 0 {
-		w.Printf(" separated: (count: %s, bytes: %s, bytes-fetched: %s)",
+		w.Printf(" separated: (count: %s, bytes: %s, bytes-fetched: %s, "+
+			"count-fetched: %s, reader-cache-misses: %s)",
 			humanizeCount(s.SeparatedPointCount),
 			humanizeutil.IBytes(int64(s.SeparatedPointValueBytes)),
-			humanizeutil.IBytes(int64(s.SeparatedPointValueBytesFetched)))
+			humanizeutil.IBytes(int64(s.SeparatedPointValueBytesFetched)),
+			humanizeCount(s.SeparatedPointValueCountFetched),
+			humanizeCount(s.SeparatedPointValueReaderCacheMisses),
+		)
 	}
 }
 

@@ -4410,6 +4410,8 @@ func recordIteratorStats(iter iteratorWithStats, scanStats *kvpb.ScanStats) {
 	scanStats.SeparatedPointCount += stats.InternalStats.SeparatedPointValue.Count
 	scanStats.SeparatedPointValueBytes += stats.InternalStats.SeparatedPointValue.ValueBytes
 	scanStats.SeparatedPointValueBytesFetched += stats.InternalStats.SeparatedPointValue.ValueBytesFetched
+	scanStats.SeparatedPointValueCountFetched += stats.InternalStats.SeparatedPointValue.CountFetched
+	scanStats.SeparatedPointValueReaderCacheMisses += stats.InternalStats.SeparatedPointValue.ReaderCacheMisses
 	scanStats.BlockReadDuration += blockReads.BlockReadDuration
 }
 

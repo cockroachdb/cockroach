@@ -3906,6 +3906,8 @@ message ScanStats {
   uint64 separated_point_count = 14;
   uint64 separated_point_value_bytes = 15;
   uint64 separated_point_value_bytes_fetched = 16;
+  uint64 separated_point_value_count_fetched = 23;
+  uint64 separated_point_value_reader_cache_misses = 24;
   google.protobuf.Duration block_read_duration = 20 [(gogoproto.nullable) = false,
     (gogoproto.stdduration) = true];
 
