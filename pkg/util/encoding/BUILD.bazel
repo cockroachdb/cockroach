@@ -61,6 +61,7 @@ go_test(
         "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/log",
+        "//pkg/util/ltree",
         "//pkg/util/randutil",
         "//pkg/util/timeofday",
         "//pkg/util/timetz",

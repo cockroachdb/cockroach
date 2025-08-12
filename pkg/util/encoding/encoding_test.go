@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -1548,6 +1549,84 @@ func TestEncodeDecodeDescending(t *testing.T) {
 	testCustomEncodeDuration(testCases, EncodeDurationDescending, DecodeDurationDescending, t)
 }
 
+func TestEncodeDecodeLTreeAscending(t *testing.T) {
+	testCases := []struct {
+		value  string
+		expEnc []byte
+	}{
+		{
+			value:  "",
+			expEnc: []byte{0x55, 0x00},
+		},
+		{
+			value:  "a",
+			expEnc: []byte{0x55, 0x61, 0x01, 0x00},
+		},
+		{
+			value:  "a.b.c",
+			expEnc: []byte{0x55, 0x61, 0x01, 0x62, 0x01, 0x63, 0x01, 0x00},
+		},
+		{
+			value:  "foo-bar.baz_bop",
+			expEnc: []byte{0x55, 0x66, 0x6f, 0x6f, 0x2d, 0x62, 0x61, 0x72, 0x01, 0x62, 0x61, 0x7a, 0x5f, 0x62, 0x6f, 0x70, 0x01, 0x00},
+		},
+	}
+	for i, tc := range testCases {
+		lt, err := ltree.ParseLTree(tc.value)
+		require.NoError(t, err)
+		enc := EncodeLTreeAscending(nil, lt)
+		if !bytes.Equal(enc, tc.expEnc) {
+			t.Errorf("%d expected [% x]; got [% x] (value: %s)", i, tc.expEnc, enc, tc.value)
+		}
+		_, decoded, err := DecodeLTreeAscending(enc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if lt.Compare(decoded) != 0 {
+			t.Errorf("%d ltree changed during roundtrip [%s] vs [%s]", i, lt.String(), decoded.String())
+		}
+	}
+}
+
+func TestEncodeDecodeLTreeDescending(t *testing.T) {
+	testCases := []struct {
+		value  string
+		expEnc []byte
+	}{
+		{
+			value:  "",
+			expEnc: []byte{0x56, 0xff},
+		},
+		{
+			value:  "a",
+			expEnc: []byte{0x56, 0x9e, 0xfe, 0xff},
+		},
+		{
+			value:  "a.b.c",
+			expEnc: []byte{0x56, 0x9e, 0xfe, 0x9d, 0xfe, 0x9c, 0xfe, 0xff},
+		},
+		{
+			value:  "foo-bar.baz_bop",
+			expEnc: []byte{0x56, 0x99, 0x90, 0x90, 0xd2, 0x9d, 0x9e, 0x8d, 0xfe, 0x9d, 0x9e, 0x85, 0xa0, 0x9d, 0x90, 0x8f, 0xfe, 0xff},
+		},
+	}
+	for i, tc := range testCases {
+		lt, err := ltree.ParseLTree(tc.value)
+		require.NoError(t, err)
+		enc := EncodeLTreeDescending(nil, lt)
+		if !bytes.Equal(enc, tc.expEnc) {
+			t.Errorf("%d expected [% x]; got [% x] (value: %s)", i, tc.expEnc, enc, tc.value)
+		}
+		_, decoded, err := DecodeLTreeDescending(enc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if lt.Compare(decoded) != 0 {
+			t.Errorf("%d ltree changed during roundtrip [%s] vs [%s]", i, lt.String(), decoded.String())
+		}
+	}
+}
+
 func TestPeekType(t *testing.T) {
 	encodedDurationAscending, err := EncodeDurationAscending(nil, duration.Duration{})
 	require.NoError(t, err)
@@ -1585,6 +1664,8 @@ func TestPeekType(t *testing.T) {
 		{encodedDurationDescending, Duration},
 		{EncodeBitArrayAscending(nil, bitarray.BitArray{}), BitArray},
 		{EncodeBitArrayDescending(nil, bitarray.BitArray{}), BitArrayDesc},
+		{EncodeLTreeAscending(nil, ltree.Empty), LTree},
+		{EncodeLTreeDescending(nil, ltree.Empty), LTreeDesc},
 	}
 	for i, c := range testCases {
 		typ := PeekType(c.enc)

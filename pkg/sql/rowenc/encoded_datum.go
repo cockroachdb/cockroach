@@ -331,9 +331,6 @@ func mustUseValueEncodingForFingerprinting(t *types.T) bool {
 	// behavior can result in incorrect results in mixed version clusters).
 	case types.JsonFamily, types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily:
 		return true
-	case types.LTreeFamily:
-		// TODO(paulniziolek): remove this once key encoding is added.
-		return true
 	case types.ArrayFamily:
 		// Note that at time of this writing we don't support arrays of JSON
 		// (tracked via #23468) nor of TSQuery / TSVector / PGVector types (tracked by
