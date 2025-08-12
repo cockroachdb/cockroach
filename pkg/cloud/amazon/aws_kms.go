@@ -19,7 +19,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -51,7 +50,7 @@ type kmsURIParams struct {
 	auth                  string
 	roleProvider          roleProvider
 	delegateRoleProviders []roleProvider
-	verbose               bool
+	logMode               aws.ClientLogMode
 }
 
 var reuseKMSSession = settings.RegisterBoolSetting(
@@ -85,7 +84,7 @@ func resolveKMSURIParams(kmsURI cloud.ConsumeURL) (kmsURIParams, error) {
 		auth:                  kmsURI.ConsumeParam(cloud.AuthParam),
 		roleProvider:          assumeRoleProvider,
 		delegateRoleProviders: delegateProviders,
-		verbose:               log.V(2),
+		logMode:               getLogMode(),
 	}
 
 	// Validate that all the passed in parameters are supported.
@@ -134,8 +133,8 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		loadOptions = append(loadOptions, option)
 	}
 	addLoadOption(config.WithLogger(newLogAdapter(ctx)))
-	if kmsURIParams.verbose {
-		addLoadOption(config.WithClientLogMode(awsVerboseLogging))
+	if kmsURIParams.logMode != 0 {
+		addLoadOption(config.WithClientLogMode(kmsURIParams.logMode))
 	}
 
 	var endpointURI string
