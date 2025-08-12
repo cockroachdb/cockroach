@@ -11472,16 +11472,16 @@ func TestChangefeedPerTableProtectedTimestampAdvancement(t *testing.T) {
 					return err
 				}
 
-				var ptsEntries jobspb.ProtectedTimestampRecords
+				var ptsEntries execinfrapb.ProtectedTimestampRecords
 				if err := protoutil.Unmarshal(perTablePTS, &ptsEntries); err != nil {
 					return err
 				}
 
-				if ptsEntries.Size() != 3 {
+				if len(ptsEntries.ProtectedTimestampRecords) != 3 {
 					return errors.New("expected 3 per-table PTS records")
 				}
 
-				ptsTimestamps := make([]hlc.Timestamp, 0, ptsEntries.Size())
+				ptsTimestamps := make([]hlc.Timestamp, 0, len(ptsEntries.ProtectedTimestampRecords))
 
 				for _, recordID := range ptsEntries.ProtectedTimestampRecords {
 					err := s.Server.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -11501,24 +11501,11 @@ func TestChangefeedPerTableProtectedTimestampAdvancement(t *testing.T) {
 					return errors.New("expected 3 per-table PTS timestamps")
 				}
 
-				// This is placeholder behavior until we have per table highwatermarks.
-				// We should assert that all per table PTS records are the same and equal
-				// to the high watermark. Later, we will assert that each per table PTS record
-				// is equal to its table's high watermark.
-				baseTimestamp := ptsTimestamps[0]
-				for i, ts := range ptsTimestamps {
-					if !ts.Equal(baseTimestamp) {
-						return errors.Newf("PTS record %d timestamp %s does not equal base timestamp %s", i, ts, baseTimestamp)
-					}
-				}
-
-				if baseTimestamp.IsEmpty() {
-					return errors.New("PTS timestamps should not be empty")
-				}
-
-				if !baseTimestamp.Equal(hwm) {
-					return errors.Newf("PTS timestamp %s does not equal high watermark %s", baseTimestamp, hwm)
-				}
+				// Ideally, we would assert that the separate per-table PTS records
+				// are at some point different. In this test setup that doesn't happen
+				// consistently. There is also no guarantee that these timestamps are
+				// past the recent high watermark if the most recent high water mark
+				// advance did not cause us to update the PTS records.
 
 				return nil
 			})
@@ -12108,7 +12095,7 @@ func TestChangefeedMultiTableProtectedTimestampUpdate(t *testing.T) {
 				perTablePTS, err := jobs.ReadChunkedFileToJobInfo(context.Background(), perTablePTSInfoKey, txn, eFeed.JobID())
 				require.NoError(t, err)
 
-				var ptsEntries jobspb.ProtectedTimestampRecords
+				var ptsEntries execinfrapb.ProtectedTimestampRecords
 				err = protoutil.Unmarshal(perTablePTS, &ptsEntries)
 				require.NoError(t, err)
 
@@ -12159,7 +12146,7 @@ func TestChangefeedMultiTableProtectedTimestampUpdate(t *testing.T) {
 				perTablePTS, err := jobs.ReadChunkedFileToJobInfo(context.Background(), perTablePTSInfoKey, txn, eFeed.JobID())
 				require.NoError(t, err)
 
-				var ptsEntries jobspb.ProtectedTimestampRecords
+				var ptsEntries execinfrapb.ProtectedTimestampRecords
 				err = protoutil.Unmarshal(perTablePTS, &ptsEntries)
 				require.NoError(t, err)
 

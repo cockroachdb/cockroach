@@ -1871,7 +1871,10 @@ func (cf *changeFrontier) checkpointJobProgress(
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
 
-			if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress); err != nil {
+			if ptsUpdated, err = cf.manageProtectedTimestamps(
+				ctx, txn, changefeedProgress, cf.spec.ProgressConfig.PerTableTracking,
+				cf.spec.ProgressConfig.PerTableProtectedTimestamps,
+			); err != nil {
 				log.Warningf(ctx, "error managing protected timestamp record: %v", err)
 				return err
 			}
@@ -1922,7 +1925,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 // NOTE: this method may be retried by `txn`, so don't mutate any state that
 // would interfere with that.
 func (cf *changeFrontier) manageProtectedTimestamps(
-	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress,
+	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, usePerTableTracking bool, usePerTablePTS bool,
 ) (updated bool, err error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.manage_protected_timestamps")
 	defer sp.Finish()
@@ -1935,15 +1938,6 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 
 	recordPTSMetricsTime := cf.sliMetrics.Timers.PTSManage.Start()
 	recordPTSMetricsErrorTime := cf.sliMetrics.Timers.PTSManageError.Start()
-
-	perTablePTS, err := jobs.ReadChunkedFileToJobInfo(ctx, perTablePTSInfoKey, txn, cf.spec.JobID)
-	if err != nil {
-		return false, err
-	}
-	var ptsEntries jobspb.ProtectedTimestampRecords
-	if err := protoutil.Unmarshal(perTablePTS, &ptsEntries); err != nil {
-		return false, err
-	}
 
 	defer func() {
 		if err != nil {
@@ -1963,26 +1957,75 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		highWater = cf.highWaterAtStart
 	}
 
-	if len(ptsEntries.ProtectedTimestampRecords) > 0 {
+	if usePerTablePTS {
+		// TODO: check if we need to migrate back to the old style of pts
+		// and make that update here. We probably do that whenever we manage
+		// pts and the flag is off.
 		if cf.knobs.ManagePTSError != nil {
 			return false, cf.knobs.ManagePTSError()
 		}
-		for _, recId := range ptsEntries.ProtectedTimestampRecords {
-			rec, err := pts.GetRecord(ctx, *recId)
-			if err != nil {
-				return false, err
+
+		perTablePTS, err := jobs.ReadChunkedFileToJobInfo(ctx, perTablePTSInfoKey, txn, cf.spec.JobID)
+		if err != nil {
+			return false, err
+		}
+		var ptsEntries execinfrapb.ProtectedTimestampRecords
+		if err := protoutil.Unmarshal(perTablePTS, &ptsEntries); err != nil {
+			return false, err
+		}
+
+		if usePerTableTracking {
+			for tableId, frontier := range cf.frontier.Frontiers() {
+				if tableId == 0 {
+					// tableId of 0 represents the changefeed level highwater.
+					continue
+				}
+				recId := ptsEntries.ProtectedTimestampRecords[tableId]
+				if recId == nil {
+					// In DB-level feeds we expect to add a record for a new table
+					// when it is seen by the table watcher. For legacy multi-table
+					// feeds, we rely on manage pts to add pts records for new tables.
+					// TODO: edit remakePTSRecord to be able to handle this case.
+					return false, errors.Newf("no PTS record for table %d", tableId)
+				}
+				rec, err := pts.GetRecord(ctx, *recId)
+				if err != nil {
+					return false, err
+				}
+				if rec.Timestamp.AddDuration(ptsUpdateLag).After(frontier.Frontier()) {
+					continue
+				}
+				err = pts.UpdateTimestamp(ctx, *recId, frontier.Frontier())
+				if err != nil {
+					return false, err
+				}
+				updated = true
 			}
-			if rec.Timestamp.AddDuration(ptsUpdateLag).After(highWater) {
-				continue
+		} else {
+			// TODO: In this case, should we default to the default behaviour?
+			// Maybe even get rid of the per table pts records and remake these
+			// as below?
+			// For now, we'll keep the entries separate but update them all
+			// to the highwater mark.
+			for _, recId := range ptsEntries.ProtectedTimestampRecords {
+				rec, err := pts.GetRecord(ctx, *recId)
+				if err != nil {
+					return false, err
+				}
+				if rec.Timestamp.AddDuration(ptsUpdateLag).After(highWater) {
+					continue
+				}
+				err = pts.UpdateTimestamp(ctx, *recId, highWater)
+				if err != nil {
+					return false, err
+				}
+				updated = true
 			}
-			err = pts.UpdateTimestamp(ctx, *recId, highWater)
-			if err != nil {
-				return false, err
-			}
-			updated = true
 		}
 		return updated, nil
 	}
+
+	// TODO: migrate to the new style of pts records here if the flag is on.
 
 	if progress.ProtectedTimestampRecord == uuid.Nil {
 		ptr := createProtectedTimestampRecord(
@@ -2020,6 +2063,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		if err := cf.remakePTSRecord(ctx, pts, progress, highWater); err != nil {
 			return false, err
 		}
+		log.VEventf(ctx, 2, "remade PTS record %v to include all targets", progress.ProtectedTimestampRecord)
 		return true, nil
 	}
 
