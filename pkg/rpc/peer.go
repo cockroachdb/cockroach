@@ -8,7 +8,6 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"net"
 	"runtime/pprof"
 	"time"
 
@@ -20,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -60,8 +58,6 @@ func (p *peer[Conn]) setUnhealthyLocked(connUnhealthyFor int64) {
 	p.ConnectionHealthyFor.Update(0)
 	p.ConnectionUnhealthyFor.Update(connUnhealthyFor)
 	p.AvgRoundTripLatency.Update(0)
-	p.TCPRTT.Update(0)
-	p.TCPRTTVar.Update(0)
 
 	switch p.mu.peerStatus {
 	case peerStatusHealthy:
@@ -81,8 +77,6 @@ func (p *peer[Conn]) setInactiveLocked() {
 	p.ConnectionHealthyFor.Update(0)
 	p.ConnectionUnhealthyFor.Update(0)
 	p.AvgRoundTripLatency.Update(0)
-	p.TCPRTT.Update(0)
-	p.TCPRTTVar.Update(0)
 
 	switch p.mu.peerStatus {
 	case peerStatusHealthy:
@@ -207,7 +201,7 @@ type PeerSnap[Conn rpcConn] struct {
 	// We store the *net.TCPConn rather than the raw file descriptor so that we
 	// can invoke syscall.RawConn.Control() on it, which guarantees an
 	// up-to-date file descriptor.
-	tcpConn *net.TCPConn
+	tcpConns map[string]*InstrumentedConn
 }
 
 func (p *peer[Conn]) snap() PeerSnap[Conn] {
@@ -276,7 +270,10 @@ func newPeer[Conn rpcConn](rpcCtx *Context, k peerKey, peerOpts *peerOptions[Con
 	})
 	p.b = b
 	c := newConnectionToNodeID(p.opts, k, b.Signal, p.connOptions)
-	p.mu.PeerSnap = PeerSnap[Conn]{c: c}
+	p.mu.PeerSnap = PeerSnap[Conn]{
+		c:        c,
+		tcpConns: make(map[string]*InstrumentedConn),
+	}
 
 	return p
 }
@@ -351,6 +348,7 @@ func (p *peer[Conn]) run(ctx context.Context, report func(error), done func()) {
 		// keep it healthy for as long as possible. On first error, it will return
 		// back to us.
 		err := p.runOnce(ctx, report)
+		log.Errorf(ctx, "runOnce failed: %v", err)
 		// If ctx is done, Stopper is draining. Unconditionally override the error
 		// to clean up the logging in this case.
 		if ctx.Err() != nil {
@@ -388,6 +386,7 @@ func (p *peer[Conn]) run(ctx context.Context, report func(error), done func()) {
 }
 
 func (p *peer[Conn]) runOnce(ctx context.Context, report func(error)) error {
+	log.Infof(ctx, "runOnce: peer_key=%v", p.k)
 	cc, err := p.connOptions.dial(ctx, p.k.TargetAddr, p.k.Class)
 	if err != nil {
 		return err
@@ -628,9 +627,8 @@ func (p *peer[Conn]) onSubsequentHeartbeatSucceeded(_ context.Context, now time.
 	p.ConnectionHeartbeats.Inc(1)
 	// ConnectionFailures is not updated here.
 
-	if rttInfo, ok := sysutil.GetRTTInfo(snap.tcpConn); ok {
-		p.TCPRTT.Update(rttInfo.RTT.Nanoseconds())
-		p.TCPRTTVar.Update(rttInfo.RTTVar.Nanoseconds())
+	for _, instrConn := range snap.tcpConns {
+		instrConn.UpdateMetrics()
 	}
 }
 
