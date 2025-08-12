@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -194,6 +195,7 @@ func backupSuccess(t *testing.T, factory TestServerFactory, cs CumulativeTestCas
 	runfn := func(s serverutils.TestServerInterface, db *gosql.DB) {
 		dbForBackup.Store(db)
 		tdb := sqlutils.MakeSQLRunner(db)
+		tdb.SucceedsSoonDuration = 5 * time.Minute
 
 		// Setup the test cluster.
 		tdb.Exec(t, "CREATE DATABASE backups")
