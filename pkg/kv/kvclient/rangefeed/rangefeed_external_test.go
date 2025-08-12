@@ -1009,7 +1009,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 			if conf, err := repl.LoadSpanConfig(ctx); err != nil || conf.GCPolicy.IgnoreStrictEnforcement {
 				return errors.New("waiting for span config to apply")
 			}
-			require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
+			require.NoError(t, repl.TestingReadProtectedTimestamps(ctx))
 			return nil
 		})
 
