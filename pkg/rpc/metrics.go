@@ -180,6 +180,16 @@ This metric is only available on Linux.
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `High TCP RTT variance values indicate network stability issues outside of CockroachDB that could be impacting the user's workload.`,
 	}
+
+	metaConnectionTCPCongestionWindow = metric.Metadata{
+		Name:        "rpc.connection.tcp_cwnd",
+		Unit:        metric.Unit_BYTES,
+		Help:        "Gauge of the TCP congestion window.",
+		Measurement: "Bytes",
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `See Description.`,
+	}
 	metaConnectionConnected = metric.Metadata{
 		Name: "rpc.connection.connected",
 		Help: `Counter of TCP level connected connections.
@@ -266,6 +276,7 @@ func newMetrics(locality roachpb.Locality) *Metrics {
 		ConnectionAvgRoundTripLatency: aggmetric.NewGauge(metaConnectionAvgRoundTripLatency, childLabels...),
 		ConnectionTCPRTT:              aggmetric.NewGauge(metaConnectionTCPRTT, childLabels...),
 		ConnectionTCPRTTVar:           aggmetric.NewGauge(metaConnectionTCPRTTVar, childLabels...),
+		ConnectionTCPCongestionWindow: aggmetric.NewGauge(metaConnectionTCPCongestionWindow, childLabels...),
 	}
 	m.mu.peerMetrics = make(map[string]peerMetrics)
 	m.mu.localityMetrics = make(map[string]localityMetrics)
@@ -312,6 +323,7 @@ type Metrics struct {
 	ConnectionAvgRoundTripLatency *aggmetric.AggGauge
 	ConnectionTCPRTT              *aggmetric.AggGauge
 	ConnectionTCPRTTVar           *aggmetric.AggGauge
+	ConnectionTCPCongestionWindow *aggmetric.AggGauge
 	mu                            struct {
 		syncutil.Mutex
 		// peerMetrics is a map of peerKey to peerMetrics.
@@ -366,6 +378,8 @@ type peerMetrics struct {
 	// TCP-level round trip time variance as measured by the kernel's TCP stack.
 	// This indicates connection stability and jitter.
 	TCPRTTVar *aggmetric.Gauge
+	// TCP congestion window size.
+	TCPCongestionWindow *aggmetric.Gauge
 	// roundTripLatency is the source for the AvgRoundTripLatency gauge. We don't
 	// want to maintain a full histogram per peer, so instead on each heartbeat we
 	// update roundTripLatency and flush the result into AvgRoundTripLatency.
@@ -403,6 +417,7 @@ func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityM
 			AvgRoundTripLatency:    m.ConnectionAvgRoundTripLatency.AddChild(labelVals...),
 			TCPRTT:                 m.ConnectionTCPRTT.AddChild(labelVals...),
 			TCPRTTVar:              m.ConnectionTCPRTTVar.AddChild(labelVals...),
+			TCPCongestionWindow:    m.ConnectionTCPCongestionWindow.AddChild(labelVals...),
 			// We use a SimpleEWMA which uses the zero value to mean "uninitialized"
 			// and operates on a ~60s decay rate.
 			roundTripLatency: &ThreadSafeMovingAverage{ma: &ewma.SimpleEWMA{}},

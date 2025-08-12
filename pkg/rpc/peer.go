@@ -62,6 +62,7 @@ func (p *peer[Conn]) setUnhealthyLocked(connUnhealthyFor int64) {
 	p.AvgRoundTripLatency.Update(0)
 	p.TCPRTT.Update(0)
 	p.TCPRTTVar.Update(0)
+	p.TCPCongestionWindow.Update(0)
 
 	switch p.mu.peerStatus {
 	case peerStatusHealthy:
@@ -83,6 +84,7 @@ func (p *peer[Conn]) setInactiveLocked() {
 	p.AvgRoundTripLatency.Update(0)
 	p.TCPRTT.Update(0)
 	p.TCPRTTVar.Update(0)
+	p.TCPCongestionWindow.Update(0)
 
 	switch p.mu.peerStatus {
 	case peerStatusHealthy:
@@ -628,9 +630,11 @@ func (p *peer[Conn]) onSubsequentHeartbeatSucceeded(_ context.Context, now time.
 	p.ConnectionHeartbeats.Inc(1)
 	// ConnectionFailures is not updated here.
 
+	// Update TCP metrics.
 	if tcpInfo, ok := sysutil.GetTCPInfo(snap.tcpConn); ok {
-		p.TCPRTT.Update(int64(tcpInfo.Rtt) * 1000)       // Rtt is in microseconds, metric is in nanoseconds
-		p.TCPRTTVar.Update(int64(tcpInfo.Rttvar) * 1000) // Rttvar is in microseconds, metric is in nanoseconds
+		p.TCPRTT.Update(int64(tcpInfo.Rtt) * 1000)            // Rtt is in microseconds, metric is in nanoseconds
+		p.TCPRTTVar.Update(int64(tcpInfo.Rttvar) * 1000)      // Rttvar is in microseconds, metric is in nanoseconds
+		p.TCPCongestionWindow.Update(int64(tcpInfo.Snd_cwnd)) // Snd_cwnd is in bytes, metric is in bytes
 	}
 }
 
