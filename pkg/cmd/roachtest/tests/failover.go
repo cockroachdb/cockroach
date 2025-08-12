@@ -342,7 +342,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 			// on both before failing, since we may need to fetch information from the
 			// cluster which won't work if there's an active failure.
 			nodeFailers := map[int]Failer{}
-			for numNodes := 1 + rng.Intn(2); len(nodeFailers) < numNodes; {
+			for numNodes := 2; len(nodeFailers) < numNodes; {
 				var node int
 				for node == 0 || nodeFailers[node] != nil {
 					node = 3 + rng.Intn(7) // n1-n2 are SQL gateways, n10 is workload runner
@@ -1232,11 +1232,12 @@ func makeFailerWithoutLocalNoop(
 		}
 	case failureModeDiskStall:
 		return &diskStallFailer{
-			t:             t,
-			c:             c,
-			m:             m,
-			startSettings: settings,
-			staller:       roachtestutil.MakeDmsetupDiskStaller(t, c),
+			t:               t,
+			c:               c,
+			m:               m,
+			startSettings:   settings,
+			setupStaller:    roachtestutil.MakeDmsetupDiskStaller(t, c),
+			nodeIDToStaller: make(map[int]diskStaller),
 		}
 	case failureModePause:
 		return &pauseFailer{
@@ -1592,7 +1593,13 @@ type diskStallFailer struct {
 	c             cluster.Cluster
 	m             cluster.Monitor
 	startSettings install.ClusterSettings
-	staller       diskStaller
+	// diskStaller enforces that we only have one active failure per diskStaller at a time
+	// in order to maintain a consistent state. However, we want to inject multiple disk stalls,
+	// which means a new disk staller for each one. setupStaller is used to setup and cleanup
+	// dmsetup, while the nodeIDToStaller map tracks the diskStaller that actually injects
+	// the stall for each node.
+	setupStaller    diskStaller
+	nodeIDToStaller map[int]diskStaller
 }
 
 func (f *diskStallFailer) Mode() failureMode { return failureModeDiskStall }
@@ -1600,23 +1607,20 @@ func (f *diskStallFailer) String() string    { return string(f.Mode()) }
 func (f *diskStallFailer) CanUseLocal() bool { return false } // needs dmsetup
 func (f *diskStallFailer) CanUseChaos() bool { return true }
 
-// CanRunWith returns false for other disk stalls, as the FI library it uses
-// does not allow concurrent failure modes to be injected without recovering
-// from them first.
-// TODO(darryl): This is a temporary workaround to reduce test failure noise.
-// We should fix this by merging concurrent disk stall failures and injecting
-// them in one shot.
-func (f *diskStallFailer) CanRunWith(other failureMode) bool { return other != failureModeDiskStall }
+func (f *diskStallFailer) CanRunWith(other failureMode) bool { return true }
 
 func (f *diskStallFailer) Setup(ctx context.Context) {
-	f.staller.Setup(ctx)
+	f.setupStaller.Setup(ctx)
 }
 
 func (f *diskStallFailer) Cleanup(ctx context.Context) {
 	// We have to stop the cluster before cleaning up the staller.
 	f.m.ExpectDeaths(int32(f.c.Spec().NodeCount))
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.All())
-	f.staller.Cleanup(ctx)
+	f.setupStaller.Cleanup(ctx)
+	for _, staller := range f.nodeIDToStaller {
+		staller.Cleanup(ctx)
+	}
 }
 
 func (f *diskStallFailer) Ready(ctx context.Context, nodeID int) {
@@ -1629,15 +1633,34 @@ func (f *diskStallFailer) Ready(ctx context.Context, nodeID int) {
 }
 
 func (f *diskStallFailer) Fail(ctx context.Context, nodeID int) {
+	if f.nodeIDToStaller[nodeID] != nil {
+		f.t.Fatalf("n%d is already stalled", nodeID)
+	}
+
+	// Create a new staller for our node.
+	newStaller := f.setupStaller.NewStaller()
+	f.nodeIDToStaller[nodeID] = newStaller
+
 	// Pebble's disk stall detector should crash the node.
 	f.m.ExpectDeath()
-	f.staller.Stall(ctx, f.c.Node(nodeID))
+	newStaller.Stall(ctx, f.c.Node(nodeID))
 }
 
 func (f *diskStallFailer) Recover(ctx context.Context, nodeID int) {
-	if err := f.staller.Unstall(ctx, f.c.Node(nodeID)); err != nil {
+	if f.nodeIDToStaller[nodeID] == nil {
+		f.t.Fatalf("n%d is not stalled", nodeID)
+	}
+	staller := f.nodeIDToStaller[nodeID]
+
+	if err := staller.Unstall(ctx, f.c.Node(nodeID)); err != nil {
 		f.t.Fatalf("failed to unstall disk %v", err)
 	}
+	// Cleanup and delete the staller, as we will create a new one if we
+	// stall on this node again. This will not actually clean up the dmsetup
+	// since we still have other active stallers.
+	staller.Cleanup(ctx)
+	delete(f.nodeIDToStaller, nodeID)
+
 	// Pebble's disk stall detector should have terminated the node, but in case
 	// it didn't, we explicitly stop it first.
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))
