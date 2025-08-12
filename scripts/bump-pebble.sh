@@ -11,8 +11,8 @@
 # branch name (e.g. crl-release-23.2, etc.). Also update pebble nightly scripts
 # in build/teamcity/cockroach/nightlies to use `@crl-release-xy.z` instead of
 # `@master`.
-BRANCH=master
-PEBBLE_BRANCH=master
+BRANCH=tiered
+PEBBLE_BRANCH=tiered
 
 # This script may be used to produce a branch bumping the Pebble version. The
 # storage team bumps CockroachDB's Pebble dependency frequently, and this script
