@@ -32,3 +32,18 @@ func logPanicToErr(l *logger.Logger, r interface{}) error {
 	l.Printf("panic stack trace:\n%s", debugutil.Stack())
 	return fmt.Errorf("panic (stack trace above): %v", r)
 }
+
+// DeploymentMode represents the different ways a cockroach cluster can be deployed.
+type DeploymentMode string
+
+const (
+	SystemOnlyDeployment      = DeploymentMode("system-only")
+	SharedProcessDeployment   = DeploymentMode("shared-process")
+	SeparateProcessDeployment = DeploymentMode("separate-process")
+)
+
+var AllDeploymentModes = []DeploymentMode{
+	SystemOnlyDeployment,
+	SharedProcessDeployment,
+	SeparateProcessDeployment,
+}

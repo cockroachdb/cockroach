@@ -12,6 +12,7 @@ go_library(
         "noop.go",
         "option.go",
         "process_kill.go",
+        "process_map.go",
         "registry.go",
         "reset.go",
     ],
