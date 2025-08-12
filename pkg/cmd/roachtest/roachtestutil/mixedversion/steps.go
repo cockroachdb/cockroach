@@ -903,7 +903,7 @@ func (s networkPartitionInjectStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
 	h.runner.monitor.ExpectProcessDead(s.targetNode)
-	if h.Tenant != nil {
+	if h.DeploymentMode() == SeparateProcessDeployment {
 		opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
 		h.runner.monitor.ExpectProcessDead(s.targetNode, opt)
 	}
@@ -958,7 +958,7 @@ func (s networkPartitionRecoveryStep) Run(
 	}
 
 	h.runner.monitor.ExpectProcessAlive(s.targetNode)
-	if h.Tenant != nil {
+	if h.DeploymentMode() == SeparateProcessDeployment {
 		opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
 		h.runner.monitor.ExpectProcessAlive(s.targetNode, opt)
 	}
