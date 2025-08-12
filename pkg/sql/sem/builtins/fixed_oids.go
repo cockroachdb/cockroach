@@ -2605,6 +2605,7 @@ var builtinOidsArray = []string{
 	2642: `crdb_internal.get_fully_qualified_table_name(table_descriptor_id: int) -> string`,
 	2643: `crdb_internal.type_is_indexable(oid: oid) -> bool`,
 	2684: `crdb_internal.sql_liveness_is_alive(session_id: bytes, is_sync: bool) -> bool`,
+	2844: `crdb_internal.unsafe_delete_comment(object_id: int) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
