@@ -499,6 +499,7 @@ func (db *DB) scan(
 	if maxRows > 0 {
 		b.Header.MaxSpanRequestKeys = maxRows
 	}
+	b.Header.IsReverse = isReverse
 	b.scan(begin, end, isReverse, str, dur)
 	r, err := getOneResult(db.Run(ctx, b), b)
 	return r.Rows, err
