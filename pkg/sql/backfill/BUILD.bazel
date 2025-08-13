@@ -31,6 +31,7 @@ go_library(
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowinfra",
+        "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/transform",
