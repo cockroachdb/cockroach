@@ -2675,6 +2675,12 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaValueSeparationValueRetrievalCount = metric.Metadata{
+		Name:        "storage.value_separation.value_retrieval.count",
+		Help:        "The number of value retrievals of values separated into blob files.",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaWALBytesWritten = metric.Metadata{
 		Name:        "storage.wal.bytes_written",
 		Help:        "The number of bytes the storage engine has written to the WAL",
@@ -3002,18 +3008,19 @@ type StoreMetrics struct {
 	CompressionUnknownBytes *metric.Gauge
 	CompressionOverallCR    *metric.GaugeFloat64
 
-	categoryIterMetrics              pebbleCategoryIterMetricsContainer
-	categoryDiskWriteMetrics         pebbleCategoryDiskWriteMetricsContainer
-	ValueSeparationBytesReferenced   *metric.Gauge
-	ValueSeparationBytesUnreferenced *metric.Gauge
-	ValueSeparationBlobFileCount     *metric.Gauge
-	ValueSeparationBlobFileSize      *metric.Gauge
-	WALBytesWritten                  *metric.Counter
-	WALBytesIn                       *metric.Counter
-	WALFailoverSwitchCount           *metric.Counter
-	WALFailoverPrimaryDuration       *metric.Counter
-	WALFailoverSecondaryDuration     *metric.Counter
-	WALFailoverWriteAndSyncLatency   *metric.ManualWindowHistogram
+	categoryIterMetrics                pebbleCategoryIterMetricsContainer
+	categoryDiskWriteMetrics           pebbleCategoryDiskWriteMetricsContainer
+	ValueSeparationBytesReferenced     *metric.Gauge
+	ValueSeparationBytesUnreferenced   *metric.Gauge
+	ValueSeparationBlobFileCount       *metric.Gauge
+	ValueSeparationBlobFileSize        *metric.Gauge
+	ValueSeparationValueRetrievalCount *metric.Counter
+	WALBytesWritten                    *metric.Counter
+	WALBytesIn                         *metric.Counter
+	WALFailoverSwitchCount             *metric.Counter
+	WALFailoverPrimaryDuration         *metric.Counter
+	WALFailoverSecondaryDuration       *metric.Counter
+	WALFailoverWriteAndSyncLatency     *metric.ManualWindowHistogram
 
 	RdbCheckpoints *metric.Gauge
 
@@ -3740,15 +3747,16 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		categoryDiskWriteMetrics: pebbleCategoryDiskWriteMetricsContainer{
 			registry: storeRegistry,
 		},
-		ValueSeparationBytesReferenced:   metric.NewGauge(metaValueSeparationBytesReferenced),
-		ValueSeparationBytesUnreferenced: metric.NewGauge(metaValueSeparationBytesUnreferenced),
-		ValueSeparationBlobFileCount:     metric.NewGauge(metaValueSeparationBlobFileCount),
-		ValueSeparationBlobFileSize:      metric.NewGauge(metaValueSeparationBlobFileSize),
-		WALBytesWritten:                  metric.NewCounter(metaWALBytesWritten),
-		WALBytesIn:                       metric.NewCounter(metaWALBytesIn),
-		WALFailoverSwitchCount:           metric.NewCounter(metaStorageWALFailoverSwitchCount),
-		WALFailoverPrimaryDuration:       metric.NewCounter(metaStorageWALFailoverPrimaryDuration),
-		WALFailoverSecondaryDuration:     metric.NewCounter(metaStorageWALFailoverSecondaryDuration),
+		ValueSeparationBytesReferenced:     metric.NewGauge(metaValueSeparationBytesReferenced),
+		ValueSeparationBytesUnreferenced:   metric.NewGauge(metaValueSeparationBytesUnreferenced),
+		ValueSeparationBlobFileCount:       metric.NewGauge(metaValueSeparationBlobFileCount),
+		ValueSeparationBlobFileSize:        metric.NewGauge(metaValueSeparationBlobFileSize),
+		ValueSeparationValueRetrievalCount: metric.NewCounter(metaValueSeparationValueRetrievalCount),
+		WALBytesWritten:                    metric.NewCounter(metaWALBytesWritten),
+		WALBytesIn:                         metric.NewCounter(metaWALBytesIn),
+		WALFailoverSwitchCount:             metric.NewCounter(metaStorageWALFailoverSwitchCount),
+		WALFailoverPrimaryDuration:         metric.NewCounter(metaStorageWALFailoverPrimaryDuration),
+		WALFailoverSecondaryDuration:       metric.NewCounter(metaStorageWALFailoverSecondaryDuration),
 		WALFailoverWriteAndSyncLatency: metric.NewManualWindowHistogram(
 			metaStorageWALFailoverWriteAndSyncLatency,
 			pebble.FsyncLatencyBuckets,
@@ -4187,6 +4195,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.ValueSeparationBytesUnreferenced.Update(int64(m.BlobFiles.ValueSize - m.BlobFiles.ReferencedValueSize))
 	sm.ValueSeparationBlobFileCount.Update(int64(m.BlobFiles.LiveCount))
 	sm.ValueSeparationBlobFileSize.Update(int64(m.BlobFiles.LiveSize))
+	sm.ValueSeparationValueRetrievalCount.Update(int64(m.Iterator.ValueRetrievalCount))
 	// NB: `UpdateIfHigher` is used here since there is a race in pebble where
 	// sometimes the WAL is rotated but metrics are retrieved prior to the update
 	// to BytesIn to account for the previous WAL.

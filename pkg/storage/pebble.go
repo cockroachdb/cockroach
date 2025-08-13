@@ -1420,6 +1420,7 @@ func (p *Pebble) aggregateIterStats(stats IteratorStats) {
 	p.iterStats.ExternalSteps += stats.Stats.ForwardStepCount[pebble.InterfaceCall] + stats.Stats.ReverseStepCount[pebble.InterfaceCall]
 	p.iterStats.InternalSeeks += stats.Stats.ForwardSeekCount[pebble.InternalIterCall] + stats.Stats.ReverseSeekCount[pebble.InternalIterCall]
 	p.iterStats.InternalSteps += stats.Stats.ForwardStepCount[pebble.InternalIterCall] + stats.Stats.ReverseStepCount[pebble.InternalIterCall]
+	p.iterStats.ValueRetrievalCount += stats.Stats.InternalStats.SeparatedPointValue.CountFetched
 }
 
 func (p *Pebble) aggregateBatchCommitStats(stats BatchCommitStats) {
