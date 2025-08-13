@@ -96,29 +96,7 @@ func StructuredEvent(ctx context.Context, sev logpb.Severity, event logpb.EventP
 func StructuredEventDepth(
 	ctx context.Context, sev logpb.Severity, depth int, event logpb.EventPayload,
 ) {
-	// Populate the missing common fields.
-	common := event.CommonDetails()
-	if common.Timestamp == 0 {
-		common.Timestamp = timeutil.Now().UnixNano()
-	}
-	if len(common.EventType) == 0 {
-		common.EventType = logpb.GetEventTypeName(event)
-	}
-
-	entry := makeStructuredEntry(ctx,
-		sev,
-		event.LoggingChannel(),
-		depth+1,
-		event)
-
-	if sp := getSpan(ctx); sp != nil {
-		// Prevent `entry` from moving to the heap when this branch is not taken.
-		heapEntry := entry
-		eventInternal(sp, entry.sev >= severity.ERROR, &heapEntry)
-	}
-
-	logger := logging.getLogger(entry.ch)
-	logger.outputLogEntry(entry)
+	structuredEventDepth(ctx, sev, depth+1, event.LoggingChannel(), event)
 }
 
 // EventLog emits a structured event log and writes it to the system.eventlog
@@ -186,4 +164,32 @@ func WriteAsync() StructuredEventSettingsFunc {
 		o.writeAsync = true
 		return o
 	}
+}
+
+func structuredEventDepth(
+	ctx context.Context, sev logpb.Severity, depth int, ch Channel, event logpb.EventPayload,
+) {
+	// Populate the missing common fields.
+	common := event.CommonDetails()
+	if common.Timestamp == 0 {
+		common.Timestamp = timeutil.Now().UnixNano()
+	}
+	if len(common.EventType) == 0 {
+		common.EventType = logpb.GetEventTypeName(event)
+	}
+
+	entry := makeStructuredEntry(ctx,
+		sev,
+		ch,
+		depth+1,
+		event)
+
+	if sp := getSpan(ctx); sp != nil {
+		// Prevent `entry` from moving to the heap when this branch is not taken.
+		heapEntry := entry
+		eventInternal(sp, entry.sev >= severity.ERROR, &heapEntry)
+	}
+
+	logger := logging.getLogger(entry.ch)
+	logger.outputLogEntry(entry)
 }
