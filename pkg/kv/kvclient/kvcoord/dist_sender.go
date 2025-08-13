@@ -1079,34 +1079,45 @@ func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequ
 		return kvpb.NewErrorf("empty batch")
 	}
 
-	if ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0 {
-		// Verify that the batch contains only specific requests. Verify that a
-		// batch with a ReverseScan only contains ReverseScan range requests.
-		var foundForward, foundReverse bool
-		for _, req := range ba.Requests {
-			inner := req.GetInner()
-			switch inner.(type) {
-			case *kvpb.ScanRequest, *kvpb.ResolveIntentRangeRequest,
-				*kvpb.DeleteRangeRequest, *kvpb.RevertRangeRequest,
-				*kvpb.ExportRequest, *kvpb.QueryLocksRequest, *kvpb.IsSpanEmptyRequest:
-				// Accepted forward range requests.
-				foundForward = true
+	// Verify that forward and reverse range requests are never in the same
+	// batch. Also verify that the batch with limits contains only specific
+	// requests.
+	var foundForward, foundReverse bool
+	var disallowedReq string
+	for _, req := range ba.Requests {
+		inner := req.GetInner()
+		switch inner.(type) {
+		case *kvpb.ScanRequest, *kvpb.ResolveIntentRangeRequest,
+			*kvpb.DeleteRangeRequest, *kvpb.RevertRangeRequest,
+			*kvpb.ExportRequest, *kvpb.QueryLocksRequest, *kvpb.IsSpanEmptyRequest:
+			// Accepted forward range requests.
+			foundForward = true
 
-			case *kvpb.ReverseScanRequest:
-				// Accepted reverse range requests.
-				foundReverse = true
+		case *kvpb.ReverseScanRequest:
+			// Accepted reverse range requests.
+			foundReverse = true
 
-			case *kvpb.QueryIntentRequest, *kvpb.EndTxnRequest,
-				*kvpb.GetRequest, *kvpb.ResolveIntentRequest, *kvpb.DeleteRequest, *kvpb.PutRequest:
-				// Accepted point requests that can be in batches with limit.
+		case *kvpb.QueryIntentRequest, *kvpb.EndTxnRequest,
+			*kvpb.GetRequest, *kvpb.ResolveIntentRequest, *kvpb.DeleteRequest, *kvpb.PutRequest:
+			// Accepted point requests that can be in batches with limit. No
+			// need to set disallowedReq.
 
-			default:
-				return kvpb.NewErrorf("batch with limit contains %s request", inner.Method())
-			}
+		default:
+			disallowedReq = inner.Method().String()
 		}
-		if foundForward && foundReverse {
-			return kvpb.NewErrorf("batch with limit contains both forward and reverse scans")
-		}
+	}
+	if foundForward && foundReverse {
+		return kvpb.NewErrorf("batch contains both forward and reverse requests")
+	}
+	if (ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0) && disallowedReq != "" {
+		return kvpb.NewErrorf("batch with limit contains %s request", disallowedReq)
+	}
+	// Also verify that IsReverse is set accordingly on the batch header.
+	if foundForward && ba.Header.IsReverse {
+		return kvpb.NewErrorf("batch contains forward requests but IsReverse is set")
+	}
+	if foundReverse && !ba.Header.IsReverse {
+		return kvpb.NewErrorf("batch contains reverse requests but IsReverse is not set")
 	}
 
 	switch ba.WaitPolicy {
@@ -1249,7 +1260,6 @@ func (ds *DistSender) Send(
 		if err != nil {
 			return nil, kvpb.NewError(err)
 		}
-		isReverse := ba.IsReverse()
 
 		// Determine whether this part of the BatchRequest contains a committing
 		// EndTxn request.
@@ -1263,9 +1273,9 @@ func (ds *DistSender) Send(
 		var rpl *kvpb.BatchResponse
 		var pErr *kvpb.Error
 		if withParallelCommit {
-			rpl, pErr = ds.divideAndSendParallelCommit(ctx, ba, rs, isReverse, 0 /* batchIdx */)
+			rpl, pErr = ds.divideAndSendParallelCommit(ctx, ba, rs, 0 /* batchIdx */)
 		} else {
-			rpl, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, 0 /* batchIdx */)
+			rpl, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, 0 /* batchIdx */)
 		}
 
 		if pErr == errNo1PCTxn {
@@ -1456,7 +1466,7 @@ type response struct {
 // method is never invoked recursively, but it is exposed to maintain symmetry
 // with divideAndSendBatchToRanges.
 func (ds *DistSender) divideAndSendParallelCommit(
-	ctx context.Context, ba *kvpb.BatchRequest, rs roachpb.RSpan, isReverse bool, batchIdx int,
+	ctx context.Context, ba *kvpb.BatchRequest, rs roachpb.RSpan, batchIdx int,
 ) (br *kvpb.BatchResponse, pErr *kvpb.Error) {
 	// Search backwards, looking for the first pre-commit QueryIntent.
 	swapIdx := -1
@@ -1472,7 +1482,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	if swapIdx == -1 {
 		// No pre-commit QueryIntents. Nothing to split.
 		log.VEvent(ctx, 3, "no pre-commit QueryIntents found, sending batch as-is")
-		return ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, true /* withCommit */, batchIdx)
+		return ds.divideAndSendBatchToRanges(ctx, ba, rs, true /* withCommit */, batchIdx)
 	}
 
 	// Swap the EndTxn request and the first pre-commit QueryIntent. This
@@ -1499,7 +1509,8 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	if err != nil {
 		return br, kvpb.NewError(err)
 	}
-	qiIsReverse := false // QueryIntentRequests do not carry the isReverse flag
+	// No need to process QueryIntentRequests in the reverse order.
+	qiBa.IsReverse = false
 	qiBatchIdx := batchIdx + 1
 	qiResponseCh := make(chan response, 1)
 
@@ -1525,7 +1536,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 
 		// Send the batch with withCommit=true since it will be inflight
 		// concurrently with the EndTxn batch below.
-		reply, pErr := ds.divideAndSendBatchToRanges(ctx, qiBa, qiRS, qiIsReverse, true /* withCommit */, qiBatchIdx)
+		reply, pErr := ds.divideAndSendBatchToRanges(ctx, qiBa, qiRS, true /* withCommit */, qiBatchIdx)
 		qiResponseCh <- response{reply: reply, positions: positions, pErr: pErr}
 	}
 
@@ -1557,10 +1568,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	if err != nil {
 		return nil, kvpb.NewError(err)
 	}
-	// Note that we don't need to recompute isReverse for the updated batch
-	// since we only separated out QueryIntentRequests which don't carry the
-	// isReverse flag.
-	br, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, true /* withCommit */, batchIdx)
+	br, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, true /* withCommit */, batchIdx)
 
 	// Wait for the QueryIntent-only batch to complete and stitch
 	// the responses together.
@@ -1729,12 +1737,6 @@ func mergeErrors(pErr1, pErr2 *kvpb.Error) *kvpb.Error {
 // is trimmed against each range which is part of the span and sent
 // either serially or in parallel, if possible.
 //
-// isReverse indicates the direction that the provided span should be
-// iterated over while sending requests. It is passed in by callers
-// instead of being recomputed based on the requests in the batch to
-// prevent the iteration direction from switching midway through a
-// batch, in cases where partial batches recurse into this function.
-//
 // withCommit indicates that the batch contains a transaction commit
 // or that a transaction commit is being run concurrently with this
 // batch. Either way, if this is true then sendToReplicas will need
@@ -1744,12 +1746,7 @@ func mergeErrors(pErr1, pErr2 *kvpb.Error) *kvpb.Error {
 // being processed by this method. It's specified as non-zero when
 // this method is invoked recursively.
 func (ds *DistSender) divideAndSendBatchToRanges(
-	ctx context.Context,
-	ba *kvpb.BatchRequest,
-	rs roachpb.RSpan,
-	isReverse bool,
-	withCommit bool,
-	batchIdx int,
+	ctx context.Context, ba *kvpb.BatchRequest, rs roachpb.RSpan, withCommit bool, batchIdx int,
 ) (br *kvpb.BatchResponse, pErr *kvpb.Error) {
 	// Clone the BatchRequest's transaction so that future mutations to the
 	// proto don't affect the proto in this batch.
@@ -1759,7 +1756,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// Get initial seek key depending on direction of iteration.
 	var scanDir ScanDirection
 	var seekKey roachpb.RKey
-	if !isReverse {
+	if !ba.IsReverse {
 		scanDir = Ascending
 		seekKey = rs.Key
 	} else {
@@ -1774,7 +1771,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// Take the fast path if this batch fits within a single range.
 	if !ri.NeedAnother(rs) {
 		resp := ds.sendPartialBatch(
-			ctx, ba, rs, isReverse, withCommit, batchIdx, ri.Token(),
+			ctx, ba, rs, withCommit, batchIdx, ri.Token(),
 		)
 		// resp.positions remains nil since the original batch is fully
 		// contained within a single range.
@@ -1896,7 +1893,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 
 		if pErr == nil && couldHaveSkippedResponses {
-			fillSkippedResponses(ba, br, seekKey, resumeReason, isReverse)
+			fillSkippedResponses(ba, br, seekKey, resumeReason)
 		}
 	}()
 
@@ -1976,7 +1973,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
 		if canParallelize && !lastRange && !ds.disableParallelBatches {
-			if ds.sendPartialBatchAsync(ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(), responseCh, positions) {
+			if ds.sendPartialBatchAsync(ctx, curRangeBatch, curRangeRS, withCommit, batchIdx, ri.Token(), responseCh, positions) {
 				asyncSent = true
 			} else {
 				asyncThrottled = true
@@ -1991,7 +1988,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 					}()
 				}
 				return ds.sendPartialBatch(
-					ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(),
+					ctx, curRangeBatch, curRangeRS, withCommit, batchIdx, ri.Token(),
 				)
 			}()
 			resp.positions = positions
@@ -2078,7 +2075,6 @@ func (ds *DistSender) sendPartialBatchAsync(
 	ctx context.Context,
 	ba *kvpb.BatchRequest,
 	rs roachpb.RSpan,
-	isReverse bool,
 	withCommit bool,
 	batchIdx int,
 	routing rangecache.EvictionToken,
@@ -2100,7 +2096,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 		ds.metrics.AsyncSentCount.Inc(1)
 		ds.metrics.AsyncInProgress.Inc(1)
 		defer ds.metrics.AsyncInProgress.Dec(1)
-		resp := ds.sendPartialBatch(ctx, ba, rs, isReverse, withCommit, batchIdx, routing)
+		resp := ds.sendPartialBatch(ctx, ba, rs, withCommit, batchIdx, routing)
 		resp.positions = positions
 		responseCh <- resp
 	}(ctx)
@@ -2164,7 +2160,6 @@ func (ds *DistSender) sendPartialBatch(
 	ctx context.Context,
 	ba *kvpb.BatchRequest,
 	rs roachpb.RSpan,
-	isReverse bool,
 	withCommit bool,
 	batchIdx int,
 	routingTok rangecache.EvictionToken,
@@ -2192,7 +2187,7 @@ func (ds *DistSender) sendPartialBatch(
 
 		if !routingTok.Valid() {
 			var descKey roachpb.RKey
-			if isReverse {
+			if ba.IsReverse {
 				descKey = rs.EndKey
 			} else {
 				descKey = rs.Key
@@ -2208,7 +2203,7 @@ func (ds *DistSender) sendPartialBatch(
 			// replica, while detecting hazardous cases where the follower does
 			// not have the latest information and the current descriptor did
 			// not result in a successful send.
-			routingTok, err = ds.getRoutingInfo(ctx, descKey, prevTok, isReverse)
+			routingTok, err = ds.getRoutingInfo(ctx, descKey, prevTok, ba.IsReverse)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
 				// We set pErr if we encountered an error getting the descriptor in
@@ -2231,7 +2226,7 @@ func (ds *DistSender) sendPartialBatch(
 			}
 			if !intersection.Equal(rs) {
 				log.Eventf(ctx, "range shrunk; sub-dividing the request")
-				reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, batchIdx)
+				reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
 				return response{reply: reply, pErr: pErr}
 			}
 		}
@@ -2333,7 +2328,7 @@ func (ds *DistSender) sendPartialBatch(
 			// batch here would give a potentially larger response slice
 			// with unknown mapping to our truncated reply).
 			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", tErr.Ranges)
-			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, batchIdx)
+			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
 			return response{reply: reply, pErr: pErr}
 		}
 		break
@@ -2382,7 +2377,6 @@ func fillSkippedResponses(
 	br *kvpb.BatchResponse,
 	nextKey roachpb.RKey,
 	resumeReason kvpb.ResumeReason,
-	isReverse bool,
 ) {
 	// Some requests might have no response at all if we used a batch-wide
 	// limit; simply create trivial responses for those. Note that any type
@@ -2412,7 +2406,7 @@ func fillSkippedResponses(
 	for i, resp := range br.Responses {
 		req := ba.Requests[i].GetInner()
 		hdr := resp.GetInner().Header()
-		maybeSetResumeSpan(req, &hdr, nextKey, isReverse)
+		maybeSetResumeSpan(req, &hdr, nextKey, ba.IsReverse)
 		if hdr.ResumeSpan != nil {
 			hdr.ResumeReason = resumeReason
 		}
