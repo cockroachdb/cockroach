@@ -215,8 +215,14 @@ func TestEncDatumCompare(t *testing.T) {
 
 	for _, typ := range types.OidToType {
 		switch typ.Family() {
-		case types.AnyFamily, types.UnknownFamily, types.ArrayFamily, types.JsonFamily, types.TupleFamily, types.VoidFamily,
-			types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily, types.TriggerFamily, types.JsonpathFamily:
+		case types.AnyFamily, types.UnknownFamily, types.ArrayFamily,
+			types.TupleFamily, types.TSQueryFamily, types.TSVectorFamily,
+			types.PGVectorFamily, types.TriggerFamily, types.JsonpathFamily:
+			// These types don't have key-encoding.
+			continue
+		case types.VoidFamily:
+			// There is no point in testing VOID type as it only supports a
+			// single value.
 			continue
 		case types.LTreeFamily:
 			// TODO(paulniziolek): Temporarily skip LTrees as they are
