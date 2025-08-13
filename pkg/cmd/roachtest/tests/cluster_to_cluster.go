@@ -1012,7 +1012,7 @@ func (rd *replicationDriver) maybeRunSchemaChangeWorkload(
 			if err != nil && ctx.Err() == nil {
 				// Implies the workload context was not cancelled and the workload cmd returned a
 				// different error.
-				return errors.Wrapf(err, `schema change workload context was not cancelled. Error returned by workload cmd`)
+				return errors.Wrapf(handleSchemaChangeWorkloadError(err), `schema change workload context was not cancelled. Error returned by workload cmd`)
 			}
 			return nil
 		})

@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -640,7 +639,8 @@ func TestDropTable(t *testing.T) {
 	s := srv.ApplicationLayer()
 	codec := s.Codec()
 
-	numRows := 2*row.TableTruncateChunkSize + 1
+	const deprecatedTableTruncateChunkSize = 600
+	numRows := 2*deprecatedTableTruncateChunkSize + 1
 	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
@@ -754,7 +754,8 @@ func TestDropTableDeleteData(t *testing.T) {
 	// TTL into the system with AddImmediateGCZoneConfig.
 	defer sqltestutils.DisableGCTTLStrictEnforcement(t, systemDB)()
 
-	const numRows = 2*row.TableTruncateChunkSize + 1
+	const deprecatedTableTruncateChunkSize = 600
+	const numRows = 2*deprecatedTableTruncateChunkSize + 1
 	const numKeys = 3 * numRows
 	const numTables = 5
 	var descs []catalog.TableDescriptor
