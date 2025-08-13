@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -250,8 +251,8 @@ func alterChangefeedPlanHook(
 		}
 
 		telemetry.Count(telemetryPath)
-
-		logAlterChangefeedTelemetry(ctx, j, jobPayload.Description, targets.Size)
+		shouldMigrate := log.ShouldMigrateEvent(p.ExecCfg().SV())
+		logAlterChangefeedTelemetry(ctx, j, jobPayload.Description, targets.Size, shouldMigrate)
 
 		select {
 		case <-ctx.Done():
