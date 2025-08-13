@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -1848,6 +1850,20 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			if updateRunStatus {
 				progress.StatusMessage = fmt.Sprintf("running: resolved=%s", frontier)
+			}
+
+			// Write per-table progress if enabled.
+			if cf.spec.ProgressConfig != nil && cf.spec.ProgressConfig.PerTableTracking {
+				resolvedTables := &changefeedpb.ResolvedTables{
+					Tables: make(map[descpb.ID]hlc.Timestamp),
+				}
+				for tableID, tableFrontier := range cf.frontier.Frontiers() {
+					resolvedTables.Tables[tableID] = tableFrontier.Frontier()
+				}
+
+				if err := writeChangefeedJobInfo(ctx, resolvedTablesFilename, resolvedTables, txn, cf.spec.JobID); err != nil {
+					return errors.Wrap(err, "error writing resolved tables to job info")
+				}
 			}
 
 			ju.UpdateProgress(progress)
