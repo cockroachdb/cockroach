@@ -55,7 +55,6 @@ import (
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/pebble/sstable"
-	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
@@ -934,7 +933,6 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.Experimental.IngestSplit = func() bool {
 		return IngestSplitEnabled.Get(&cfg.settings.SV)
 	}
-	cfg.opts.Experimental.EnableColumnarBlocks = func() bool { return true }
 	cfg.opts.Experimental.EnableDeleteOnlyCompactionExcises = func() bool {
 		return deleteCompactionsCanExcise.Get(&cfg.settings.SV)
 	}
@@ -1499,8 +1497,18 @@ func (p *Pebble) ScanInternal(
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set category.
-	return p.db.ScanInternal(ctx, block.CategoryUnknown, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
+	return p.db.ScanInternal(ctx, pebble.ScanInternalOptions{
+		IterOptions: pebble.IterOptions{
+			LowerBound: rawLower,
+			UpperBound: rawUpper,
+			KeyTypes:   pebble.IterKeyTypePointsAndRanges,
+		},
+		VisitPointKey:     visitPointKey,
+		VisitRangeDel:     visitRangeDel,
+		VisitRangeKey:     visitRangeKey,
+		VisitSharedFile:   visitSharedFile,
+		VisitExternalFile: visitExternalFile,
+	})
 }
 
 // ConsistentIterators implements the Engine interface.
@@ -3001,8 +3009,18 @@ func (p *pebbleSnapshot) ScanInternal(
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set category.
-	return p.efos.ScanInternal(ctx, block.CategoryUnknown, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
+	return p.efos.ScanInternal(ctx, pebble.ScanInternalOptions{
+		IterOptions: pebble.IterOptions{
+			LowerBound: rawLower,
+			UpperBound: rawUpper,
+			KeyTypes:   pebble.IterKeyTypePointsAndRanges,
+		},
+		VisitPointKey:     visitPointKey,
+		VisitRangeDel:     visitRangeDel,
+		VisitRangeKey:     visitRangeKey,
+		VisitSharedFile:   visitSharedFile,
+		VisitExternalFile: visitExternalFile,
+	})
 }
 
 // ExceedMaxSizeError is the error returned when an export request
