@@ -454,3 +454,35 @@ $input
 )
 =>
 (Lock (Offset $input $offset $ordering) $private)
+
+# PushLimitOrOffsetIntoGroupBy moves a Limit or Offset into the input of a
+# GroupBy or DistinctOn operator that collapses the row count back to what it
+# was before one or more "growing" joins. This situation can arise during
+# decorrelation. See the PushLimitOrOffsetIntoGroupBy function for more details.
+#
+# Avoid matching when the GroupBy has outer columns, to avoid interfering with
+# decorrelation.
+[PushLimitOrOffsetIntoGroupBy, Normalize]
+(Limit | Offset
+    $grouping:(GroupBy | DistinctOn
+            $input:*
+            $aggs:*
+            $private:*
+        ) &
+        ^(HasOuterCols $input)
+    $limitOrOffsetExpr:(Const $limitOrOffsetVal:*) &
+        (IsPositiveInt $limitOrOffsetVal)
+    $ordering:* &
+        (Let
+            ($newInput $ok):(TryPushLimitOrOffsetIntoGroupByInput
+                (OpName)
+                $input
+                (GroupingCols $private)
+                $limitOrOffsetExpr
+                $ordering
+            )
+            $ok
+        )
+)
+=>
+((OpName $grouping) $newInput $aggs $private)
