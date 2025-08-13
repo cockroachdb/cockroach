@@ -3085,7 +3085,7 @@ ALTER TABLE t93410_2 INJECT STATISTICS '[
 ----
 
 # A streaming group-by with no TopK operation should be generated.
-opt expect=GenerateStreamingGroupByLimitOrderingHint
+opt expect=GenerateStreamingGroupByLimitOrderingHint disable=PushLimitOrOffsetIntoGroupBy
 SELECT
   DISTINCT
   t1.col1,
@@ -3277,7 +3277,7 @@ top-k
            └── array_remove(array_agg:27, NULL) [as=col6s:28, outer=(27), immutable]
 
 # A distinct-on which satisfies the required ordering should be used.
-opt expect=GenerateStreamingGroupByLimitOrderingHint
+opt expect=GenerateStreamingGroupByLimitOrderingHint disable=PushLimitOrOffsetIntoGroupBy
 SELECT
   DISTINCT ON (t1.col5, t1.col9) t2.col2
 FROM
@@ -3395,7 +3395,7 @@ project
 # A query which normally would produce a streaming group-by with no TopK
 # operation produces a TopK if the GenerateStreamingGroupByLimitOrderingHint
 # rule is disabled.
-opt expect-not=GenerateStreamingGroupByLimitOrderingHint set=optimizer_use_limit_ordering_for_streaming_group_by=false
+opt expect-not=GenerateStreamingGroupByLimitOrderingHint set=optimizer_use_limit_ordering_for_streaming_group_by=false disable=PushLimitOrOffsetIntoGroupBy
 SELECT
   DISTINCT
   t1.col1,

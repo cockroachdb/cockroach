@@ -2498,3 +2498,1180 @@ offset
  │              ├── key: (1)
  │              └── fd: (1)-->(3)
  └── 1
+
+# --------------------------------------------------
+# PushLimitOrOffsetIntoGroupBy
+# --------------------------------------------------
+
+# Basic case: push limit into a GroupBy with an aggregation where grouping
+# columns form a key and there's a growing join between scan and group by.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM a LEFT JOIN b ON i = y) GROUP BY k LIMIT 10
+----
+group-by (hash)
+ ├── columns: k:1!null sum:12
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(12)
+ ├── left-join (hash)
+ │    ├── columns: k:1!null i:2 y:9
+ │    ├── fd: (1)-->(2)
+ │    ├── limit
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── cardinality: [0 - 10]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    └── limit hint: 10.00
+ │    │    └── 10
+ │    ├── scan b
+ │    │    └── columns: y:9
+ │    └── filters
+ │         └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ └── aggregations
+      └── sum [as=sum:12, outer=(9)]
+           └── y:9
+
+# DistinctOn case.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT DISTINCT ON (k) * FROM (SELECT k, i, y FROM a LEFT JOIN b ON i = y) LIMIT 5
+----
+distinct-on
+ ├── columns: k:1!null i:2 y:9
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(2,9)
+ ├── left-join (hash)
+ │    ├── columns: k:1!null i:2 y:9
+ │    ├── fd: (1)-->(2)
+ │    ├── limit
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── cardinality: [0 - 5]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    └── limit hint: 5.00
+ │    │    └── 5
+ │    ├── scan b
+ │    │    └── columns: y:9
+ │    └── filters
+ │         └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ └── aggregations
+      ├── first-agg [as=i:2, outer=(2)]
+      │    └── i:2
+      └── first-agg [as=y:9, outer=(9)]
+           └── y:9
+
+# Offset case.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM a LEFT JOIN b ON i = y) GROUP BY k OFFSET 10
+----
+group-by (hash)
+ ├── columns: k:1!null sum:12
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(12)
+ ├── left-join (hash)
+ │    ├── columns: k:1!null i:2 y:9
+ │    ├── fd: (1)-->(2)
+ │    ├── offset
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    └── 10
+ │    ├── scan b
+ │    │    └── columns: y:9
+ │    └── filters
+ │         └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ └── aggregations
+      └── sum [as=sum:12, outer=(9)]
+           └── y:9
+
+# Cases with a non-duplicating join that maintains the key. The join may filter
+# rows, so the limit has to remain on top of it.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM a INNER JOIN b ON i = x) GROUP BY k LIMIT 10
+----
+group-by (hash)
+ ├── columns: k:1!null sum:12
+ ├── grouping columns: k:1!null
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(12)
+ ├── limit
+ │    ├── columns: k:1!null i:2!null x:8!null y:9
+ │    ├── cardinality: [0 - 10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2), (8)-->(9), (2)==(8), (8)==(2)
+ │    ├── inner-join (hash)
+ │    │    ├── columns: k:1!null i:2!null x:8!null y:9
+ │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2), (8)-->(9), (2)==(8), (8)==(2)
+ │    │    ├── limit hint: 10.00
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── scan b
+ │    │    │    ├── columns: x:8!null y:9
+ │    │    │    ├── key: (8)
+ │    │    │    └── fd: (8)-->(9)
+ │    │    └── filters
+ │    │         └── i:2 = x:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │    └── 10
+ └── aggregations
+      └── sum [as=sum:12, outer=(9)]
+           └── y:9
+
+# DistinctOn case. Note that the DistinctOn ends up being eliminated.
+norm
+SELECT DISTINCT k FROM (SELECT k, i, y FROM a INNER JOIN b ON i = x) LIMIT 5
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ └── limit
+      ├── columns: k:1!null i:2!null x:8!null
+      ├── cardinality: [0 - 5]
+      ├── key: (1)
+      ├── fd: (1)-->(2), (2)==(8), (8)==(2)
+      ├── inner-join (hash)
+      │    ├── columns: k:1!null i:2!null x:8!null
+      │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2), (2)==(8), (8)==(2)
+      │    ├── limit hint: 5.00
+      │    ├── scan a
+      │    │    ├── columns: k:1!null i:2
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    ├── scan b
+      │    │    ├── columns: x:8!null
+      │    │    └── key: (8)
+      │    └── filters
+      │         └── i:2 = x:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+      └── 5
+
+# Case with offset.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM a INNER JOIN b ON i = x) GROUP BY k LIMIT 10 OFFSET 5
+----
+group-by (hash)
+ ├── columns: k:1!null sum:12
+ ├── grouping columns: k:1!null
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(12)
+ ├── offset
+ │    ├── columns: k:1!null i:2!null x:8!null y:9
+ │    ├── cardinality: [0 - 10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2), (8)-->(9), (2)==(8), (8)==(2)
+ │    ├── limit
+ │    │    ├── columns: k:1!null i:2!null x:8!null y:9
+ │    │    ├── cardinality: [0 - 15]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2), (8)-->(9), (2)==(8), (8)==(2)
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── columns: k:1!null i:2!null x:8!null y:9
+ │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2), (8)-->(9), (2)==(8), (8)==(2)
+ │    │    │    ├── limit hint: 15.00
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    ├── scan b
+ │    │    │    │    ├── columns: x:8!null y:9
+ │    │    │    │    ├── key: (8)
+ │    │    │    │    └── fd: (8)-->(9)
+ │    │    │    └── filters
+ │    │    │         └── i:2 = x:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │    │    └── 15
+ │    └── 5
+ └── aggregations
+      └── sum [as=sum:12, outer=(9)]
+           └── y:9
+
+# Case with empty grouping columns.
+norm expect=PushLimitOrOffsetIntoGroupBy disable=EliminateLimit
+SELECT k, sum(y) FROM (SELECT k, i, y FROM a INNER JOIN b ON i = x AND k = 1) GROUP BY k LIMIT 10
+----
+group-by (streaming)
+ ├── columns: k:1!null sum:12
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,12)
+ ├── limit
+ │    ├── columns: k:1!null i:2!null x:8!null y:9
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2,8,9), (2)==(8), (8)==(2)
+ │    ├── inner-join (hash)
+ │    │    ├── columns: k:1!null i:2!null x:8!null y:9
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2,8,9), (2)==(8), (8)==(2)
+ │    │    ├── limit hint: 10.00
+ │    │    ├── select
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(1,2)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    └── filters
+ │    │    │         └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    │    ├── scan b
+ │    │    │    ├── columns: x:8!null y:9
+ │    │    │    ├── key: (8)
+ │    │    │    └── fd: (8)-->(9)
+ │    │    └── filters
+ │    │         └── i:2 = x:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │    └── 10
+ └── aggregations
+      ├── sum [as=sum:12, outer=(9)]
+      │    └── y:9
+      └── const-agg [as=k:1, outer=(1)]
+           └── k:1
+
+# Push limit through FK joins.
+exec-ddl
+CREATE TABLE p1 (id1 INT PRIMARY KEY, val1 INT)
+----
+
+exec-ddl
+CREATE TABLE p2 (id2 INT PRIMARY KEY, val2 INT)
+----
+
+exec-ddl
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  val INT,
+  ref1 INT NOT NULL REFERENCES p1 (id1),
+  ref2 INT NOT NULL REFERENCES p2 (id2)
+)
+----
+
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(val), sum(val1)
+FROM child
+INNER JOIN p1 ON id1 = ref1
+GROUP BY k
+LIMIT 3
+----
+group-by (hash)
+ ├── columns: k:1!null sum:11 sum:12
+ ├── grouping columns: k:1!null
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ ├── fd: (1)-->(11,12)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null val:2 ref1:3!null id1:7!null val1:8
+ │    ├── cardinality: [0 - 3]
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3), (7)-->(8), (3)==(7), (7)==(3)
+ │    ├── limit
+ │    │    ├── columns: k:1!null val:2 ref1:3!null
+ │    │    ├── cardinality: [0 - 3]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,3)
+ │    │    ├── scan child
+ │    │    │    ├── columns: k:1!null val:2 ref1:3!null
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2,3)
+ │    │    │    └── limit hint: 3.00
+ │    │    └── 3
+ │    ├── scan p1
+ │    │    ├── columns: id1:7!null val1:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── filters
+ │         └── id1:7 = ref1:3 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ └── aggregations
+      ├── sum [as=sum:11, outer=(2)]
+      │    └── val:2
+      └── sum [as=sum:12, outer=(8)]
+           └── val1:8
+
+# Case with two joins.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(val), sum(val1), sum(val2)
+FROM child
+INNER JOIN p1 ON id1 = ref1
+INNER JOIN p2 ON id2 = ref2
+GROUP BY k
+LIMIT 3
+----
+group-by (hash)
+ ├── columns: k:1!null sum:15 sum:16 sum:17
+ ├── grouping columns: k:1!null
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ ├── fd: (1)-->(15-17)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null val:2 ref1:3!null ref2:4!null id1:7!null val1:8 id2:11!null val2:12
+ │    ├── cardinality: [0 - 3]
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (7)-->(8), (11)-->(12), (3)==(7), (7)==(3), (4)==(11), (11)==(4)
+ │    ├── inner-join (hash)
+ │    │    ├── columns: k:1!null val:2 ref1:3!null ref2:4!null id1:7!null val1:8
+ │    │    ├── cardinality: [0 - 3]
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4), (7)-->(8), (3)==(7), (7)==(3)
+ │    │    ├── limit
+ │    │    │    ├── columns: k:1!null val:2 ref1:3!null ref2:4!null
+ │    │    │    ├── cardinality: [0 - 3]
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2-4)
+ │    │    │    ├── scan child
+ │    │    │    │    ├── columns: k:1!null val:2 ref1:3!null ref2:4!null
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    ├── fd: (1)-->(2-4)
+ │    │    │    │    └── limit hint: 3.00
+ │    │    │    └── 3
+ │    │    ├── scan p1
+ │    │    │    ├── columns: id1:7!null val1:8
+ │    │    │    ├── key: (7)
+ │    │    │    └── fd: (7)-->(8)
+ │    │    └── filters
+ │    │         └── id1:7 = ref1:3 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │    ├── scan p2
+ │    │    ├── columns: id2:11!null val2:12
+ │    │    ├── key: (11)
+ │    │    └── fd: (11)-->(12)
+ │    └── filters
+ │         └── id2:11 = ref2:4 [outer=(4,11), constraints=(/4: (/NULL - ]; /11: (/NULL - ]), fd=(4)==(11), (11)==(4)]
+ └── aggregations
+      ├── sum [as=sum:15, outer=(2)]
+      │    └── val:2
+      ├── sum [as=sum:16, outer=(8)]
+      │    └── val1:8
+      └── sum [as=sum:17, outer=(12)]
+           └── val2:12
+
+# Offset case.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(val), sum(val1), sum(val2)
+FROM child
+INNER JOIN p1 ON id1 = ref1
+INNER JOIN p2 ON id2 = ref2
+GROUP BY k
+LIMIT 3 OFFSET 5
+----
+group-by (hash)
+ ├── columns: k:1!null sum:15 sum:16 sum:17
+ ├── grouping columns: k:1!null
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ ├── fd: (1)-->(15-17)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null val:2 ref1:3!null ref2:4!null id1:7!null val1:8 id2:11!null val2:12
+ │    ├── cardinality: [0 - 3]
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (7)-->(8), (11)-->(12), (3)==(7), (7)==(3), (4)==(11), (11)==(4)
+ │    ├── inner-join (hash)
+ │    │    ├── columns: k:1!null val:2 ref1:3!null ref2:4!null id1:7!null val1:8
+ │    │    ├── cardinality: [0 - 3]
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4), (7)-->(8), (3)==(7), (7)==(3)
+ │    │    ├── offset
+ │    │    │    ├── columns: k:1!null val:2 ref1:3!null ref2:4!null
+ │    │    │    ├── cardinality: [0 - 3]
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2-4)
+ │    │    │    ├── limit
+ │    │    │    │    ├── columns: k:1!null val:2 ref1:3!null ref2:4!null
+ │    │    │    │    ├── cardinality: [0 - 8]
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    ├── fd: (1)-->(2-4)
+ │    │    │    │    ├── scan child
+ │    │    │    │    │    ├── columns: k:1!null val:2 ref1:3!null ref2:4!null
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    ├── fd: (1)-->(2-4)
+ │    │    │    │    │    └── limit hint: 8.00
+ │    │    │    │    └── 8
+ │    │    │    └── 5
+ │    │    ├── scan p1
+ │    │    │    ├── columns: id1:7!null val1:8
+ │    │    │    ├── key: (7)
+ │    │    │    └── fd: (7)-->(8)
+ │    │    └── filters
+ │    │         └── id1:7 = ref1:3 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │    ├── scan p2
+ │    │    ├── columns: id2:11!null val2:12
+ │    │    ├── key: (11)
+ │    │    └── fd: (11)-->(12)
+ │    └── filters
+ │         └── id2:11 = ref2:4 [outer=(4,11), constraints=(/4: (/NULL - ]; /11: (/NULL - ]), fd=(4)==(11), (11)==(4)]
+ └── aggregations
+      ├── sum [as=sum:15, outer=(2)]
+      │    └── val:2
+      ├── sum [as=sum:16, outer=(8)]
+      │    └── val1:8
+      └── sum [as=sum:17, outer=(12)]
+           └── val2:12
+
+# A filter may prevent matches despite the foreign key, preventing limit
+# push-down below the join.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(val), sum(val1)
+FROM child
+INNER JOIN p1 ON id1 = ref1 AND val1 > 10
+GROUP BY k
+LIMIT 3
+----
+group-by (hash)
+ ├── columns: k:1!null sum:11 sum:12!null
+ ├── grouping columns: k:1!null
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ ├── fd: (1)-->(11,12)
+ ├── limit
+ │    ├── columns: k:1!null val:2 ref1:3!null id1:7!null val1:8!null
+ │    ├── cardinality: [0 - 3]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3), (7)-->(8), (3)==(7), (7)==(3)
+ │    ├── inner-join (hash)
+ │    │    ├── columns: k:1!null val:2 ref1:3!null id1:7!null val1:8!null
+ │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,3), (7)-->(8), (3)==(7), (7)==(3)
+ │    │    ├── limit hint: 3.00
+ │    │    ├── scan child
+ │    │    │    ├── columns: k:1!null val:2 ref1:3!null
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2,3)
+ │    │    ├── select
+ │    │    │    ├── columns: id1:7!null val1:8!null
+ │    │    │    ├── key: (7)
+ │    │    │    ├── fd: (7)-->(8)
+ │    │    │    ├── scan p1
+ │    │    │    │    ├── columns: id1:7!null val1:8
+ │    │    │    │    ├── key: (7)
+ │    │    │    │    └── fd: (7)-->(8)
+ │    │    │    └── filters
+ │    │    │         └── val1:8 > 10 [outer=(8), constraints=(/8: [/11 - ]; tight)]
+ │    │    └── filters
+ │    │         └── id1:7 = ref1:3 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │    └── 3
+ └── aggregations
+      ├── sum [as=sum:11, outer=(2)]
+      │    └── val:2
+      └── sum [as=sum:12, outer=(8)]
+           └── val1:8
+
+# Case with Project operator between join and group by - should still work.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(computed) FROM (SELECT k, i*2 as computed FROM a LEFT JOIN b ON i = y) GROUP BY k LIMIT 7 OFFSET 3
+----
+group-by (hash)
+ ├── columns: k:1!null sum:13
+ ├── grouping columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(13)
+ ├── project
+ │    ├── columns: computed:12 k:1!null
+ │    ├── immutable
+ │    ├── fd: (1)-->(12)
+ │    ├── left-join (hash)
+ │    │    ├── columns: k:1!null i:2 y:9
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── offset
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── cardinality: [0 - 7]
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    ├── limit
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── cardinality: [0 - 10]
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    ├── fd: (1)-->(2)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    ├── fd: (1)-->(2)
+ │    │    │    │    │    └── limit hint: 10.00
+ │    │    │    │    └── 10
+ │    │    │    └── 3
+ │    │    ├── scan b
+ │    │    │    └── columns: y:9
+ │    │    └── filters
+ │    │         └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    └── projections
+ │         └── i:2 * 2 [as=computed:12, outer=(2), immutable]
+ └── aggregations
+      └── sum [as=sum:13, outer=(12)]
+           └── computed:12
+
+# Case with Ordinality operator between join and group by - should still work.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(ordinality) FROM (SELECT k, ordinality FROM a WITH ORDINALITY LEFT JOIN b ON i = y) GROUP BY k LIMIT 7 OFFSET 3
+----
+group-by (hash)
+ ├── columns: k:1!null sum:13!null
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(13)
+ ├── left-join (hash)
+ │    ├── columns: k:1!null i:2 ordinality:8!null y:10
+ │    ├── fd: (1)-->(2,8), (8)-->(1,2)
+ │    ├── ordinality
+ │    │    ├── columns: k:1!null i:2 ordinality:8!null
+ │    │    ├── cardinality: [0 - 7]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,8), (8)-->(1,2)
+ │    │    └── offset
+ │    │         ├── columns: k:1!null i:2
+ │    │         ├── cardinality: [0 - 7]
+ │    │         ├── key: (1)
+ │    │         ├── fd: (1)-->(2)
+ │    │         ├── limit
+ │    │         │    ├── columns: k:1!null i:2
+ │    │         │    ├── cardinality: [0 - 10]
+ │    │         │    ├── key: (1)
+ │    │         │    ├── fd: (1)-->(2)
+ │    │         │    ├── scan a
+ │    │         │    │    ├── columns: k:1!null i:2
+ │    │         │    │    ├── key: (1)
+ │    │         │    │    ├── fd: (1)-->(2)
+ │    │         │    │    └── limit hint: 10.00
+ │    │         │    └── 10
+ │    │         └── 3
+ │    ├── scan b
+ │    │    └── columns: y:10
+ │    └── filters
+ │         └── i:2 = y:10 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+ └── aggregations
+      └── sum [as=sum:13, outer=(8)]
+           └── ordinality:8
+
+# Case with Window operator between join and group by - should still work.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(computed) FROM (SELECT k, row_number() OVER () as computed FROM a LEFT JOIN b ON i = y) GROUP BY k LIMIT 7 OFFSET 3
+----
+group-by (hash)
+ ├── columns: k:1!null sum:13
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(13)
+ ├── window partition=()
+ │    ├── columns: k:1!null i:2 y:9 row_number:12
+ │    ├── fd: (1)-->(2)
+ │    ├── left-join (hash)
+ │    │    ├── columns: k:1!null i:2 y:9
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── offset
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── cardinality: [0 - 7]
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    ├── limit
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── cardinality: [0 - 10]
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    ├── fd: (1)-->(2)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    ├── fd: (1)-->(2)
+ │    │    │    │    │    └── limit hint: 10.00
+ │    │    │    │    └── 10
+ │    │    │    └── 3
+ │    │    ├── scan b
+ │    │    │    └── columns: y:9
+ │    │    └── filters
+ │    │         └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    └── windows
+ │         └── row-number [as=row_number:12]
+ └── aggregations
+      └── sum [as=sum:13, outer=(12)]
+           └── row_number:12
+
+# Case with a Select - the limit is pushed to the filter, but not below it.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM a LEFT JOIN b ON i = y WHERE k > 10) GROUP BY k LIMIT 6
+----
+group-by (hash)
+ ├── columns: k:1!null sum:12
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(12)
+ ├── left-join (hash)
+ │    ├── columns: k:1!null i:2 y:9
+ │    ├── fd: (1)-->(2)
+ │    ├── limit
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── cardinality: [0 - 6]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── select
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    ├── limit hint: 6.00
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    ├── fd: (1)-->(2)
+ │    │    │    │    └── limit hint: 18.00
+ │    │    │    └── filters
+ │    │    │         └── k:1 > 10 [outer=(1), constraints=(/1: [/11 - ]; tight)]
+ │    │    └── 6
+ │    ├── scan b
+ │    │    └── columns: y:9
+ │    └── filters
+ │         └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ └── aggregations
+      └── sum [as=sum:12, outer=(9)]
+           └── y:9
+
+# Offset case.
+norm expect=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM a LEFT JOIN b ON i = y WHERE k > 10) GROUP BY k OFFSET 6
+----
+group-by (hash)
+ ├── columns: k:1!null sum:12
+ ├── grouping columns: k:1!null
+ ├── key: (1)
+ ├── fd: (1)-->(12)
+ ├── left-join (hash)
+ │    ├── columns: k:1!null i:2 y:9
+ │    ├── fd: (1)-->(2)
+ │    ├── offset
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── select
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    └── filters
+ │    │    │         └── k:1 > 10 [outer=(1), constraints=(/1: [/11 - ]; tight)]
+ │    │    └── 6
+ │    ├── scan b
+ │    │    └── columns: y:9
+ │    └── filters
+ │         └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ └── aggregations
+      └── sum [as=sum:12, outer=(9)]
+           └── y:9
+
+# No-op Limit case for ScalarGroupBy.
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT sum(y) FROM (SELECT k, i, y FROM a INNER JOIN b ON i = x) LIMIT 1
+----
+scalar-group-by
+ ├── columns: sum:12
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(12)
+ ├── inner-join (hash)
+ │    ├── columns: i:2!null x:8!null y:9
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    ├── fd: (8)-->(9), (2)==(8), (8)==(2)
+ │    ├── scan a
+ │    │    └── columns: i:2
+ │    ├── scan b
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
+ │    └── filters
+ │         └── i:2 = x:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ └── aggregations
+      └── sum [as=sum:12, outer=(9)]
+           └── y:9
+
+# No-op Offset case for ScalarGroupBy.
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT sum(y) FROM (SELECT k, i, y FROM a INNER JOIN b ON i = x) OFFSET 1
+----
+values
+ ├── columns: sum:12!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(12)
+
+# Don't match when grouping columns don't form a key in the input.
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT i, sum(y) FROM (SELECT k, i, y FROM a INNER JOIN b ON i = x) GROUP BY i LIMIT 5 OFFSET 1
+----
+offset
+ ├── columns: i:2!null sum:12
+ ├── cardinality: [0 - 5]
+ ├── key: (2)
+ ├── fd: (2)-->(12)
+ ├── limit
+ │    ├── columns: i:2!null sum:12
+ │    ├── cardinality: [0 - 6]
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(12)
+ │    ├── group-by (hash)
+ │    │    ├── columns: i:2!null sum:12
+ │    │    ├── grouping columns: i:2!null
+ │    │    ├── key: (2)
+ │    │    ├── fd: (2)-->(12)
+ │    │    ├── limit hint: 6.00
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── columns: i:2!null x:8!null y:9
+ │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    │    ├── fd: (8)-->(9), (2)==(8), (8)==(2)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: i:2
+ │    │    │    ├── scan b
+ │    │    │    │    ├── columns: x:8!null y:9
+ │    │    │    │    ├── key: (8)
+ │    │    │    │    └── fd: (8)-->(9)
+ │    │    │    └── filters
+ │    │    │         └── i:2 = x:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │    │    └── aggregations
+ │    │         └── sum [as=sum:12, outer=(9)]
+ │    │              └── y:9
+ │    └── 6
+ └── 1
+
+# Don't match when input has outer columns (avoid interfering with decorrelation).
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT k, (SELECT sum(y) FROM b WHERE x = i GROUP BY x LIMIT 1) FROM a LIMIT 3
+----
+project
+ ├── columns: k:1!null sum:13
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ ├── fd: (1)-->(13)
+ ├── limit
+ │    ├── columns: k:1!null i:2 sum:12
+ │    ├── cardinality: [0 - 3]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,12)
+ │    ├── left-join-apply
+ │    │    ├── columns: k:1!null i:2 sum:12
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,12)
+ │    │    ├── limit hint: 3.00
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── group-by (streaming)
+ │    │    │    ├── columns: sum:12
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(12)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: x:8!null y:9
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    ├── fd: ()-->(8,9)
+ │    │    │    │    ├── scan b
+ │    │    │    │    │    ├── columns: x:8!null y:9
+ │    │    │    │    │    ├── key: (8)
+ │    │    │    │    │    └── fd: (8)-->(9)
+ │    │    │    │    └── filters
+ │    │    │    │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │    │    │    └── aggregations
+ │    │    │         └── sum [as=sum:12, outer=(9)]
+ │    │    │              └── y:9
+ │    │    └── filters (true)
+ │    └── 3
+ └── projections
+      └── sum:12 [as=sum:13, outer=(12)]
+
+# Don't match when limit >= max rows of input (would be eliminated by EliminateLimit).
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM (SELECT * FROM a LIMIT 5) t INNER JOIN b ON i = x) GROUP BY k LIMIT 10
+----
+group-by (hash)
+ ├── columns: k:1!null sum:12
+ ├── grouping columns: k:1!null
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(12)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2!null x:8!null y:9
+ │    ├── cardinality: [0 - 5]
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2), (8)-->(9), (2)==(8), (8)==(2)
+ │    ├── limit
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── cardinality: [0 - 5]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    └── limit hint: 5.00
+ │    │    └── 5
+ │    ├── scan b
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
+ │    └── filters
+ │         └── i:2 = x:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ └── aggregations
+      └── sum [as=sum:12, outer=(9)]
+           └── y:9
+
+# Don't match when limit ordering can't be satisfied by input columns.
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM a INNER JOIN b ON i = x) GROUP BY k ORDER BY sum(y) LIMIT 4
+----
+limit
+ ├── columns: k:1!null sum:12
+ ├── internal-ordering: +12
+ ├── cardinality: [0 - 4]
+ ├── key: (1)
+ ├── fd: (1)-->(12)
+ ├── ordering: +12
+ ├── sort
+ │    ├── columns: k:1!null sum:12
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(12)
+ │    ├── ordering: +12
+ │    ├── limit hint: 4.00
+ │    └── group-by (hash)
+ │         ├── columns: k:1!null sum:12
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(12)
+ │         ├── inner-join (hash)
+ │         │    ├── columns: k:1!null i:2!null x:8!null y:9
+ │         │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │         │    ├── key: (1)
+ │         │    ├── fd: (1)-->(2), (8)-->(9), (2)==(8), (8)==(2)
+ │         │    ├── scan a
+ │         │    │    ├── columns: k:1!null i:2
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2)
+ │         │    ├── scan b
+ │         │    │    ├── columns: x:8!null y:9
+ │         │    │    ├── key: (8)
+ │         │    │    └── fd: (8)-->(9)
+ │         │    └── filters
+ │         │         └── i:2 = x:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │         └── aggregations
+ │              └── sum [as=sum:12, outer=(9)]
+ │                   └── y:9
+ └── 4
+
+# Offset case.
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM a INNER JOIN b ON i = x) GROUP BY k ORDER BY sum(y) LIMIT 4
+----
+limit
+ ├── columns: k:1!null sum:12
+ ├── internal-ordering: +12
+ ├── cardinality: [0 - 4]
+ ├── key: (1)
+ ├── fd: (1)-->(12)
+ ├── ordering: +12
+ ├── sort
+ │    ├── columns: k:1!null sum:12
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(12)
+ │    ├── ordering: +12
+ │    ├── limit hint: 4.00
+ │    └── group-by (hash)
+ │         ├── columns: k:1!null sum:12
+ │         ├── grouping columns: k:1!null
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(12)
+ │         ├── inner-join (hash)
+ │         │    ├── columns: k:1!null i:2!null x:8!null y:9
+ │         │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │         │    ├── key: (1)
+ │         │    ├── fd: (1)-->(2), (8)-->(9), (2)==(8), (8)==(2)
+ │         │    ├── scan a
+ │         │    │    ├── columns: k:1!null i:2
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2)
+ │         │    ├── scan b
+ │         │    │    ├── columns: x:8!null y:9
+ │         │    │    ├── key: (8)
+ │         │    │    └── fd: (8)-->(9)
+ │         │    └── filters
+ │         │         └── i:2 = x:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │         └── aggregations
+ │              └── sum [as=sum:12, outer=(9)]
+ │                   └── y:9
+ └── 4
+
+# Don't match when the input of the group-by can filter rows.
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM a INNER JOIN b ON i = y) GROUP BY k LIMIT 6 OFFSET 2
+----
+offset
+ ├── columns: k:1!null sum:12!null
+ ├── cardinality: [0 - 6]
+ ├── key: (1)
+ ├── fd: (1)-->(12)
+ ├── limit
+ │    ├── columns: k:1!null sum:12!null
+ │    ├── cardinality: [0 - 8]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(12)
+ │    ├── group-by (hash)
+ │    │    ├── columns: k:1!null sum:12!null
+ │    │    ├── grouping columns: k:1!null
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(12)
+ │    │    ├── limit hint: 8.00
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── columns: k:1!null i:2!null y:9!null
+ │    │    │    ├── fd: (1)-->(2), (2)==(9), (9)==(2)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    ├── scan b
+ │    │    │    │    └── columns: y:9
+ │    │    │    └── filters
+ │    │    │         └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    │    └── aggregations
+ │    │         └── sum [as=sum:12, outer=(9)]
+ │    │              └── y:9
+ │    └── 8
+ └── 2
+
+# Don't match when the input of the group-by can add rows.
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(i) FROM (SELECT k, i FROM a UNION (SELECT x, y FROM b)) GROUP BY k LIMIT 6 OFFSET 6
+----
+offset
+ ├── columns: k:12!null sum:14
+ ├── cardinality: [0 - 6]
+ ├── key: (12)
+ ├── fd: (12)-->(14)
+ ├── limit
+ │    ├── columns: k:12!null sum:14
+ │    ├── cardinality: [0 - 12]
+ │    ├── key: (12)
+ │    ├── fd: (12)-->(14)
+ │    ├── group-by (hash)
+ │    │    ├── columns: k:12!null sum:14
+ │    │    ├── grouping columns: k:12!null
+ │    │    ├── key: (12)
+ │    │    ├── fd: (12)-->(14)
+ │    │    ├── limit hint: 12.00
+ │    │    ├── union
+ │    │    │    ├── columns: k:12!null i:13
+ │    │    │    ├── left columns: a.k:1 a.i:2
+ │    │    │    ├── right columns: x:8 y:9
+ │    │    │    ├── key: (12,13)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: a.k:1!null a.i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    └── scan b
+ │    │    │         ├── columns: x:8!null y:9
+ │    │    │         ├── key: (8)
+ │    │    │         └── fd: (8)-->(9)
+ │    │    └── aggregations
+ │    │         └── sum [as=sum:14, outer=(13)]
+ │    │              └── i:13
+ │    └── 12
+ └── 6
+
+# Don't match with negative limit.
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM a INNER JOIN b ON i = x) GROUP BY k LIMIT -1
+----
+limit
+ ├── columns: k:1!null sum:12
+ ├── cardinality: [0 - 0]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1,12)
+ ├── group-by (hash)
+ │    ├── columns: k:1!null sum:12
+ │    ├── grouping columns: k:1!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(12)
+ │    ├── limit hint: 1.00
+ │    ├── inner-join (hash)
+ │    │    ├── columns: k:1!null i:2!null x:8!null y:9
+ │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2), (8)-->(9), (2)==(8), (8)==(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── scan b
+ │    │    │    ├── columns: x:8!null y:9
+ │    │    │    ├── key: (8)
+ │    │    │    └── fd: (8)-->(9)
+ │    │    └── filters
+ │    │         └── i:2 = x:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │    └── aggregations
+ │         └── sum [as=sum:12, outer=(9)]
+ │              └── y:9
+ └── -1
+
+# No-op because grouping by a projected column.
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT k_proj, sum(y) FROM (SELECT k * 1000 AS k_proj, i, y FROM a LEFT JOIN b ON i = y) GROUP BY k_proj LIMIT 10
+----
+limit
+ ├── columns: k_proj:12!null sum:13
+ ├── cardinality: [0 - 10]
+ ├── immutable
+ ├── key: (12)
+ ├── fd: (12)-->(13)
+ ├── group-by (hash)
+ │    ├── columns: k_proj:12!null sum:13
+ │    ├── grouping columns: k_proj:12!null
+ │    ├── immutable
+ │    ├── key: (12)
+ │    ├── fd: (12)-->(13)
+ │    ├── limit hint: 10.00
+ │    ├── project
+ │    │    ├── columns: k_proj:12!null y:9
+ │    │    ├── immutable
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: k:1!null i:2 y:9
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    ├── scan b
+ │    │    │    │    └── columns: y:9
+ │    │    │    └── filters
+ │    │    │         └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    │    └── projections
+ │    │         └── k:1 * 1000 [as=k_proj:12, outer=(1), immutable]
+ │    └── aggregations
+ │         └── sum [as=sum:13, outer=(9)]
+ │              └── y:9
+ └── 10
+
+# No-op case with grouping on a projected column under the join.
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT k_proj, sum(y) FROM (SELECT k_proj, i, y FROM (SELECT *, k * 1000 AS k_proj FROM a) LEFT JOIN b ON i = y) GROUP BY k_proj LIMIT 10
+----
+limit
+ ├── columns: k_proj:8!null sum:13
+ ├── cardinality: [0 - 10]
+ ├── immutable
+ ├── key: (8)
+ ├── fd: (8)-->(13)
+ ├── group-by (hash)
+ │    ├── columns: k_proj:8!null sum:13
+ │    ├── grouping columns: k_proj:8!null
+ │    ├── immutable
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(13)
+ │    ├── limit hint: 10.00
+ │    ├── left-join (hash)
+ │    │    ├── columns: i:2 k_proj:8!null y:10
+ │    │    ├── immutable
+ │    │    ├── project
+ │    │    │    ├── columns: k_proj:8!null i:2
+ │    │    │    ├── immutable
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    └── projections
+ │    │    │         └── k:1 * 1000 [as=k_proj:8, outer=(1), immutable]
+ │    │    ├── scan b
+ │    │    │    └── columns: y:10
+ │    │    └── filters
+ │    │         └── i:2 = y:10 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+ │    └── aggregations
+ │         └── sum [as=sum:13, outer=(10)]
+ │              └── y:10
+ └── 10
+
+# Do not push into the right input of a LeftJoin.
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM b LEFT JOIN a ON i = y) GROUP BY k LIMIT 5
+----
+limit
+ ├── columns: k:5 sum:12
+ ├── cardinality: [0 - 5]
+ ├── key: (5)
+ ├── fd: (5)-->(12)
+ ├── group-by (hash)
+ │    ├── columns: k:5 sum:12
+ │    ├── grouping columns: k:5
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(12)
+ │    ├── limit hint: 5.00
+ │    ├── left-join (hash)
+ │    │    ├── columns: y:2 k:5 i:6
+ │    │    ├── fd: (5)-->(6)
+ │    │    ├── scan b
+ │    │    │    └── columns: y:2
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:5!null i:6
+ │    │    │    ├── key: (5)
+ │    │    │    └── fd: (5)-->(6)
+ │    │    └── filters
+ │    │         └── i:6 = y:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+ │    └── aggregations
+ │         └── sum [as=sum:12, outer=(2)]
+ │              └── y:2
+ └── 5
+
+# Do not push into either input of a FullJoin.
+norm expect-not=PushLimitOrOffsetIntoGroupBy
+SELECT k, sum(y) FROM (SELECT k, i, y FROM a FULL JOIN b ON i = y) GROUP BY k LIMIT 5
+----
+limit
+ ├── columns: k:1 sum:12
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(12)
+ ├── group-by (hash)
+ │    ├── columns: k:1 sum:12
+ │    ├── grouping columns: k:1
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(12)
+ │    ├── limit hint: 5.00
+ │    ├── full-join (hash)
+ │    │    ├── columns: k:1 i:2 y:9
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── scan b
+ │    │    │    └── columns: y:9
+ │    │    └── filters
+ │    │         └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    └── aggregations
+ │         └── sum [as=sum:12, outer=(9)]
+ │              └── y:9
+ └── 5
