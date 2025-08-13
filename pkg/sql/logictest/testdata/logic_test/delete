@@ -303,7 +303,7 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE family ADD COLUMN z INT CREATE FAMILY
 
-statement ok
+statement count 1
 DELETE FROM family WHERE x=2
 
 statement ok
@@ -332,7 +332,7 @@ SELECT cluster_logical_timestamp()
 statement ok
 COMMIT
 
-statement ok
+statement count 3
 DELETE FROM a WHERE a <= 3
 
 query I rowsort
@@ -390,7 +390,7 @@ statement ok
 INSERT INTO u_c VALUES (1, 'a', 10), (2, 'b', 50), (3, 'c', 50), (4, 'd', 40)
 
 # Test a join with a filter.
-statement ok
+statement count 1
 DELETE FROM u_a USING u_b WHERE c = u_b.a AND u_b.b = 'd'
 
 query ITI rowsort
@@ -404,7 +404,7 @@ SELECT * FROM u_a;
 statement ok
 INSERT INTO u_a VALUES (5, 'd', 5), (6, 'e', 6)
 
-statement ok
+statement count 2
 DELETE FROM u_a USING u_a u_a2 WHERE u_a.a = u_a2.c
 
 query ITI rowsort
@@ -419,7 +419,7 @@ SELECT * FROM u_a;
 statement ok
 INSERT INTO u_c VALUES (30, 'a', 1)
 
-statement ok
+statement count 1
 DELETE FROM u_a USING u_b, u_c WHERE u_a.c = u_b.a AND u_a.c = u_c.a
 
 query ITI rowsort
@@ -507,7 +507,7 @@ SELECT * FROM u_c;
 
 # Test if DELETE FROM ... USING works with LATERAL.
 
-statement ok
+statement count 0
 DELETE FROM u_a USING u_b, LATERAL (SELECT u_c.a, u_c.b, u_c.c FROM u_c WHERE u_b.b = u_c.b) AS other WHERE other.c = 1 AND u_a.c = 35
 
 query ITI rowsort
@@ -531,7 +531,7 @@ CREATE TABLE pindex (
 statement ok
 INSERT INTO pindex VALUES (1.0), (2.0), (3.0), (4.0), (5.0), (8.0)
 
-statement ok
+statement count 1
 DELETE FROM pindex USING (VALUES (5.0), (6.0)) v(b) WHERE pindex.a = v.b
 
 query F rowsort
@@ -549,7 +549,7 @@ SELECT a FROM pindex@pindex_a_idx WHERE a > 3
 4.00
 8.00
 
-statement ok
+statement count 2
 DELETE FROM pindex USING (VALUES (2.0), (4.0)) v(b) WHERE pindex.a = v.b RETURNING v.b
 
 query F rowsort
