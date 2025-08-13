@@ -87,6 +87,7 @@ func TestPrivilege(t *testing.T) {
 					{Kind: privilege.CREATE},
 					{Kind: privilege.DELETE},
 					{Kind: privilege.DROP},
+					{Kind: privilege.INSPECT},
 					{Kind: privilege.REPLICATIONDEST},
 					{Kind: privilege.REPLICATIONSOURCE},
 					{Kind: privilege.TRIGGER},
@@ -127,23 +128,23 @@ func TestPrivilege(t *testing.T) {
 			},
 			privilege.Type,
 		},
-		// Ensure revoking BACKUP, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
-		// from a user with ALL privilege on a table leaves the user with no privileges.
+		// Ensure revoking table privileges from a user with ALL
+		// privilege on a table leaves the user with no privileges.
 		{testUser,
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.CREATE, privilege.DROP, privilege.SELECT, privilege.INSERT,
-				privilege.DELETE, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
+				privilege.DELETE, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG, privilege.INSERT, privilege.INSPECT},
 			[]catpb.UserPrivilege{
 				{User: username.AdminRoleName(), Privileges: []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
 			privilege.Table,
 		},
-		// Ensure revoking BACKUP, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG, RESTORE, CHANGEFEED
-		// from a user with ALL privilege on a database leaves the user with no privileges.
+		// Ensure revoking database privileges from a user with ALL privilege on
+		// a database leaves the user with no privileges.
 		{testUser,
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.BACKUP, privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.SELECT,
-				privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG, privilege.RESTORE, privilege.CHANGEFEED},
+				privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG, privilege.RESTORE, privilege.CHANGEFEED, privilege.INSPECT},
 			[]catpb.UserPrivilege{
 				{User: username.AdminRoleName(), Privileges: []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
@@ -617,7 +618,7 @@ func TestRevokeWithGrantOption(t *testing.T) {
 			true,
 			privilege.List{privilege.CREATE},
 			privilege.List{privilege.ALL},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DELETE, privilege.DROP, privilege.INSERT, privilege.INSPECT, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.SELECT, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
 			false},
 		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.ALL}, privilege.List{privilege.ALL}, username.AdminRoleName()),
 			testUser, privilege.Table,
@@ -651,8 +652,8 @@ func TestRevokeWithGrantOption(t *testing.T) {
 			testUser, privilege.Table,
 			false,
 			privilege.List{privilege.CREATE},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DELETE, privilege.DROP, privilege.INSERT, privilege.INSPECT, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.SELECT, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DELETE, privilege.DROP, privilege.INSERT, privilege.INSPECT, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.SELECT, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
 			false},
 		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.SELECT, privilege.INSERT}, privilege.List{privilege.INSERT}, username.AdminRoleName()),
 			testUser, privilege.Table,
