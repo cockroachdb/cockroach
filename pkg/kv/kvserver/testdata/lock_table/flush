@@ -33,3 +33,4 @@ print-replicated-lock-table start=a end=z
 key: "\xfaa", str: Exclusive, txn: t2
 
 commit txn=t2
+----
