@@ -425,3 +425,10 @@ func decodeMVCCMetaAndVerify(key roachpb.Key, value []byte) error {
 type EngineKeyRange struct {
 	Start, End EngineKey
 }
+
+// EncodeKeyWithNoVersion encodes a key that has no version. This is the same as
+// encoding an EngineKey with no version or an MVCCKey with no timestamp.
+func EncodeKeyWithNoVersion(key roachpb.Key) []byte {
+	e := EngineKey{Key: key}
+	return e.Encode()
+}

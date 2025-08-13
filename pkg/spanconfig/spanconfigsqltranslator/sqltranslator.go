@@ -460,6 +460,37 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		prevEndKey = span.EndKey
 	}
 
+	// The prototype special-cases a table by its name. In a real implementation,
+	// the table descriptor would contain the relevant information.
+	if table.GetName() == "tieredtable" {
+		// This is not an inherent limitation, we just don't want to add more
+		// complicated logic in the prototype.
+		if len(zone.SubzoneSpans) != 0 {
+			return nil, errors.AssertionFailedf("subzone spans not supported with tiered storage")
+		}
+		pkStartKey := s.codec.IndexPrefix(uint32(table.GetID()), uint32(table.GetPrimaryIndexID()))
+		pkEndKey := pkStartKey.PrefixEnd()
+		if !prevEndKey.Equal(pkStartKey) {
+			record, err := spanconfig.MakeRecord(
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: prevEndKey, EndKey: pkStartKey}), tableSpanConfig)
+			if err != nil {
+				return nil, err
+			}
+			records = append(records, record)
+		}
+		pkSpanConfig := tableSpanConfig
+		pkSpanConfig.StorageTieringPolicy = &roachpb.StorageTieringPolicy{
+			FixedThreshold: 100,
+		}
+		record, err := spanconfig.MakeRecord(
+			spanconfig.MakeTargetFromSpan(roachpb.Span{Key: pkStartKey, EndKey: pkEndKey}), pkSpanConfig)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+		prevEndKey = pkEndKey
+	}
+
 	// If the last subzone span doesn't cover the entire table's keyspace then
 	// we cover the remaining key range with the table's zone configuration.
 	if !prevEndKey.Equal(tableEndKey) {

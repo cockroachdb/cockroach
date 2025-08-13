@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
@@ -1110,6 +1111,10 @@ type Engine interface {
 	// Used to show the store ID in logs and to initialize the shared object
 	// creator ID (if shared object storage is configured).
 	SetStoreID(ctx context.Context, storeID int32) error
+
+	// SetSpanConfigReader sets the span config reader for the engine (which is
+	// needed for span policies).
+	SetSpanConfigReader(reader spanconfig.StoreReader)
 
 	// GetStoreID is used to retrieve the configured store ID.
 	GetStoreID() (int32, error)

@@ -2101,6 +2101,9 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			return err
 		}
 	}
+	for _, e := range s.engines {
+		e.SetSpanConfigReader(s.spanConfigSubscriber)
+	}
 
 	// Record node start in telemetry. Get the right counter for this storage
 	// engine type as well as type of start (initial boot vs restart).

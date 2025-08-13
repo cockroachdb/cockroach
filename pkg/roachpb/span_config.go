@@ -98,6 +98,9 @@ func (s *SpanConfig) ValidateSystemTargetSpanConfig() error {
 	if s.ExcludeDataFromBackup {
 		return errors.AssertionFailedf("ExcludeDataFromBackup set on system span config")
 	}
+	if s.StorageTieringPolicy != nil {
+		return errors.AssertionFailedf("StorageTieringPolicy is set on system span config")
+	}
 	return nil
 }
 
