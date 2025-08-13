@@ -44,11 +44,19 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+var unsupportedInProductionBuildErr = errors.New("this option is not supported in production builds")
+
 var bufferedWritesScanTransformEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.transformations.scans.enabled",
 	"if enabled, locking scans and reverse scans with replicated durability are transformed to unreplicated durability",
 	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.scans.enabled", false /* defaultValue */),
+	settings.WithValidateBool(func(_ *settings.Values, enabled bool) error {
+		if enabled && !buildutil.CrdbTestBuild {
+			return unsupportedInProductionBuildErr
+		}
+		return nil
+	}),
 )
 
 var bufferedWritesGetTransformEnabled = settings.RegisterBoolSetting(
@@ -56,6 +64,12 @@ var bufferedWritesGetTransformEnabled = settings.RegisterBoolSetting(
 	"kv.transaction.write_buffering.transformations.get.enabled",
 	"if enabled, locking get requests with replicated durability are transformed to unreplicated durability",
 	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.get.enabled", false /* defaultValue */),
+	settings.WithValidateBool(func(_ *settings.Values, enabled bool) error {
+		if enabled && !buildutil.CrdbTestBuild {
+			return unsupportedInProductionBuildErr
+		}
+		return nil
+	}),
 )
 
 const defaultBufferSize = 1 << 22 // 4MB
