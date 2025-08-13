@@ -224,7 +224,7 @@ catalog:
   "001":
     descriptor: database
     namespace: (0, 0, "system")
-    num_objects: 63
+    num_objects: 64
     zone: gc.ttlseconds=14400
   "016":
     zone: gc.ttlseconds=3600

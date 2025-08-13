@@ -87,6 +87,14 @@ var upgrades = []upgradebase.Upgrade{
 
 	newFirstUpgrade(clusterversion.V25_4_Start.Version()),
 
+	upgrade.NewTenantUpgrade(
+		"add new system.inspect_errors table",
+		clusterversion.V25_4_InspectErrorsTable.Version(),
+		upgrade.NoPrecondition,
+		createInspectErrorsTable,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
