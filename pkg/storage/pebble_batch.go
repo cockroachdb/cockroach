@@ -307,7 +307,7 @@ func (wb *writeBatch) putMVCC(key MVCCKey, value MVCCValue) error {
 	// - encode the MVCC key and MVCC value directly into the Batch
 	// - call Finish on the deferred operation (which will index the key if
 	//   wb.batch is indexed)
-	valueLen, isExtended := mvccValueSize(value)
+	valueLen, isExtended := value.encodedSizeEx()
 	keyLen := mvccencoding.EncodedMVCCKeyLength(key.Key, key.Timestamp)
 	o := wb.batch.SetDeferred(keyLen, valueLen)
 	mvccencoding.EncodeMVCCKeyToBufSized(o.Key, key.Key, key.Timestamp, keyLen)
