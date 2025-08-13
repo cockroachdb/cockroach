@@ -7,7 +7,11 @@ package main
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	gosql "database/sql"
+	"encoding/pem"
 	"fmt"
 	"math"
 	"math/rand"
@@ -114,8 +118,8 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 	var mock sqlmock.Sqlmock
 	var db *gosql.DB
 	var err error
-	_ = os.Setenv("SFUSER", "dummy_user")
-	_ = os.Setenv("SFPASSWORD", "dummy_password")
+	_ = os.Setenv("SNOWFLAKE_USER", "dummy_user")
+	_ = os.Setenv("SNOWFLAKE_PVT_KEY", createPrivateKey(t))
 	testselector.SqlConnectorFunc = func(_, _ string) (*gosql.DB, error) {
 		return db, err
 	}
@@ -482,4 +486,16 @@ func shuffleStrings(r *rand.Rand, strings []string) []string {
 		strings[i], strings[j] = strings[j], strings[i]
 	})
 	return strings
+}
+
+// create a private key for testing
+func createPrivateKey(t *testing.T) string {
+	privateKey, err := rsa.GenerateKey(cryptorand.Reader, 2048)
+	require.Nil(t, err)
+	// Convert private key to PKCS#1 ASN.1 PEM
+	pemBlock := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	}
+	return string(pem.EncodeToMemory(pemBlock))
 }
