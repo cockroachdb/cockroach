@@ -2742,7 +2742,7 @@ func mvccPutInternal(
 	}
 	newMeta.Timestamp = versionKey.Timestamp.ToLegacyTimestamp()
 	newMeta.KeyBytes = MVCCVersionTimestampSize
-	newMeta.ValBytes = int64(encodedMVCCValueSize(versionValue))
+	newMeta.ValBytes = int64(encodedMVCCValueSize(&versionValue))
 	newMeta.Deleted = versionValue.IsTombstone()
 	newMeta.IntentHistory = newIntentHistory
 
@@ -5497,7 +5497,7 @@ func mvccResolveWriteIntent(
 			newMeta.Txn.WriteTimestamp = newTimestamp
 			newMeta.Timestamp = newTimestamp.ToLegacyTimestamp()
 			newMeta.KeyBytes = MVCCVersionTimestampSize
-			newMeta.ValBytes = int64(encodedMVCCValueSize(newValue))
+			newMeta.ValBytes = int64(encodedMVCCValueSize(&newValue))
 			newMeta.Deleted = newValue.IsTombstone()
 
 			if err = writer.PutMVCC(newKey, newValue); err != nil {
