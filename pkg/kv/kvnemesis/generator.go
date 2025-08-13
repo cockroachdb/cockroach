@@ -1517,8 +1517,28 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 		g.registerClientOps(&allowed, c)
 		numOps := rng.Intn(4)
 		ops := make([]Operation, numOps)
-		for i := range ops {
+		var addedForwardScan, addedReverseScan bool
+		for i := 0; i < numOps; i++ {
 			ops[i] = g.selectOp(rng, allowed)
+			if ops[i].Scan != nil {
+				if !ops[i].Scan.Reverse {
+					if addedReverseScan {
+						// We cannot include the forward scan into the batch
+						// that already contains the reverse scan.
+						i--
+						continue
+					}
+					addedForwardScan = true
+				} else {
+					if addedForwardScan {
+						// We cannot include the reverse scan into the batch
+						// that already contains the forward scan.
+						i--
+						continue
+					}
+					addedReverseScan = true
+				}
+			}
 		}
 		return batch(ops...)
 	}
