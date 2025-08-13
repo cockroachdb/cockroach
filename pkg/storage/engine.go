@@ -1303,6 +1303,9 @@ type AggregatedIteratorStats struct {
 	// ExternalSteps, it's a good indication that there's an accumulation of
 	// garbage within the LSM (NOT MVCC garbage).
 	InternalSteps int
+	// ValueRetrievalCount is the total count of value retrievals of values
+	// separated into blob files.
+	ValueRetrievalCount uint64
 }
 
 // AggregatedBatchCommitStats hold cumulative stats summed over all the

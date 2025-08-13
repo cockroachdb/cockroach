@@ -17366,6 +17366,14 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+    - name: storage.value_separation.value_retrieval.count
+      exported_name: storage_value_separation_value_retrieval_count
+      description: The number of value retrievals of values separated into blob files.
+      y_axis_label: Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: storage.wal.bytes_in
       exported_name: storage_wal_bytes_in
       description: The number of logical bytes the storage engine has written to the WAL
