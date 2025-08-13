@@ -522,6 +522,7 @@ An event of type `runtime_stats` is recorded every 10 seconds as server health m
 | `GCRunCount` | The total number of GC runs. | no |
 | `NetHostRecvBytes` | The bytes received on all network interfaces since this process started. | no |
 | `NetHostSendBytes` | The bytes sent on all network interfaces since this process started. | no |
+| `GoLimitBytes` | The soft Go memory limit in bytes. | no |
 
 
 #### Common fields

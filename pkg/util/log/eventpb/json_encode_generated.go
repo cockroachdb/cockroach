@@ -4548,6 +4548,15 @@ func (m *RuntimeStats) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = strconv.AppendUint(b, uint64(m.NetHostSendBytes), 10)
 	}
 
+	if m.GoLimitBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"GoLimitBytes\":"...)
+		b = strconv.AppendUint(b, uint64(m.GoLimitBytes), 10)
+	}
+
 	return printComma, b
 }
 

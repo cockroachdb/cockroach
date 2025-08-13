@@ -51,6 +51,8 @@ export default function (props: GraphDashboardProps) {
             <dd>Memory allocated by the Go layer</dd>
             <dt>Go Total</dt>
             <dd>Total memory managed by the Go layer</dd>
+            <dt>Go Limit</dt>
+            <dd>Go soft memory limit</dd>
             <dt>C Allocated</dt>
             <dd>Memory allocated by the C layer</dd>
             <dt>C Total</dt>
@@ -64,6 +66,7 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.node.sys.rss" title="Total memory (RSS)" />
         <Metric name="cr.node.sys.go.allocbytes" title="Go Allocated" />
         <Metric name="cr.node.sys.go.totalbytes" title="Go Total" />
+        <Metric name="cr.node.sys.go.limitbytes" title="Go Limit" />
         <Metric name="cr.node.sys.cgo.allocbytes" title="CGo Allocated" />
         <Metric name="cr.node.sys.cgo.totalbytes" title="CGo Total" />
       </Axis>
