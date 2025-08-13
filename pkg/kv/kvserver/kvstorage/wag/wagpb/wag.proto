@@ -9,7 +9,6 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/
 
 import "gogoproto/gogo.proto";
 import "kv/kvserver/kvserverpb/raft.proto";
-import "roachpb/data.proto";
 
 // NodeType defines the type of the WAG node. It corresponds to a replica
 // lifecycle event, and specifies how the node is addressed and interpreted.
