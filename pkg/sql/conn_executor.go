@@ -430,6 +430,9 @@ type ServerMetrics struct {
 
 	// InsightsMetrics contains metrics related to outlier detection.
 	InsightsMetrics insights.Metrics
+
+	// IngesterMetrics contains metrics related to SQL stats ingestion.
+	IngesterMetrics sslocal.Metrics
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -444,6 +447,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.MaxMemReportedSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
+		nil, /* discardedStatsCount */
 		pool,
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
@@ -454,11 +458,13 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
+		serverMetrics.StatsMetrics.DiscardedStatsCount,
 		pool,
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
 	)
-	sqlStatsIngester := sslocal.NewSQLStatsIngester(cfg.SQLStatsTestingKnobs, insightsProvider)
+	sqlStatsIngester := sslocal.NewSQLStatsIngester(
+		cfg.Settings, cfg.SQLStatsTestingKnobs, serverMetrics.IngesterMetrics, insightsProvider, localSQLStats)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
 		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
@@ -672,6 +678,7 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 		},
 		ContentionSubsystemMetrics: txnidcache.NewMetrics(),
 		InsightsMetrics:            insights.NewMetrics(),
+		IngesterMetrics:            sslocal.NewIngesterMetrics(),
 	}
 }
 
@@ -1256,7 +1263,6 @@ func (s *Server) newConnExecutor(
 		s.sqlStatsIngester,
 		ex.phaseTimes,
 		s.localSqlStats.GetCounters(),
-		underOuterTxn,
 		s.cfg.SQLStatsTestingKnobs,
 	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
@@ -4082,17 +4088,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				return advanceInfo{}, err
 			}
 			if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
-				// TODO (xinhaoz): This is a temporary hook until
-				// https://github.com/cockroachdb/cockroach/issues/141024
-				// is resolved. The reason this exists is because we
-				// need to recompute the statement fingerprint id for
-				// statements currently in the stats collector, which
-				// were computed once already for insights. There is an
-				// acknowledgement that this means the fingerprint id
-				// given to insights for upgraded transactions are
-				// currently incorrect.
 				ex.extraTxnState.txnFinishClosure.implicit = false
-				ex.statsCollector.UpgradeToExplicitTransaction()
 			}
 		}
 	case txnStart:

@@ -541,6 +541,7 @@ func (s *Server) Metrics() []interface{} {
 		&s.SQLServer.ServerMetrics.StatsMetrics,
 		&s.SQLServer.ServerMetrics.ContentionSubsystemMetrics,
 		&s.SQLServer.ServerMetrics.InsightsMetrics,
+		&s.SQLServer.ServerMetrics.IngesterMetrics,
 	}
 }
 

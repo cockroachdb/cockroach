@@ -9148,6 +9148,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.stats.ingester.num_processed
+      exported_name: sql_stats_ingester_num_processed
+      description: Number of items processed by the SQL stats ingester
+      y_axis_label: Items
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.stats.ingester.queue_size
+      exported_name: sql_stats_ingester_queue_size
+      description: Current number of items queued in the SQL stats ingester
+      y_axis_label: Items
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: sql.stats.mem.current
       exported_name: sql_stats_mem_current
       description: Current memory usage for fingerprint storage
