@@ -179,17 +179,17 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-prepared_transactions
-protected_ts_reco"rds
-ro😪l|e_options
-set                             tings
-span_stats'_bucke ts
-statement_diagnostics_requests
-statement_statisti😍cs
+insp"ect_err"ors
+jobs
+prepared_transaction͌s
+protected_ts_records
+rangelog
+role_options
+se\\xe9ttings
 sta😣tement_statistics
-tenant_tasks
-tran\\u9A2Esaction_statistics
-us ers
+transaction&_statistics
+user'\\U000EC779s
+😍locations
 
 # Again, the column names are randomized.
 query TTT
@@ -198,26 +198,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-prepared_transactions     database         text
-prepared_transactions     global_id        text
-prepared_transactions     heuristic        text
-prepared_transactions     prepared         timestamp with time zone
-prepared_transactions     rowid            bigint
-prepared_transactions     transaction_id_  uuid
-prepared_transactions     transaction_key  bytea
-prepared_transactions     "😠owne\gr"       text
-"protected_ts_reco""rds"  "*meta"          bytea
-"protected_ts_reco""rds"  id               uuid
-"protected_ts_reco""rds"  "meta_typ%ve"    text
-"protected_ts_reco""rds"  num_spans        bigint
-"protected_ts_reco""rds"  rowid            bigint
-"protected_ts_reco""rds"  spans            bytea
-"protected_ts_reco""rds"  target           bytea
-"protected_ts_reco""rds"  ts               numeric
-"protected_ts_reco""rds"  "veri!fied"      boolean
-"ro😪l|e_options"          "%pvalue"        text
-"ro😪l|e_options"          option           text
-"ro😪l|e_options"          rowid            bigint
+"insp""ect_err""ors"  "error_id"                 bigint
+"insp""ect_err""ors"  "databas😩e_!id😝"            oid
+"insp""ect_err""ors"  details                     text
+"insp""ect_err""ors"  er_ror_type                 text
+"insp""ect_err""ors"  "id \v"                     oid
+"insp""ect_err""ors"  "j%vob_id͐"                 bigint
+"insp""ect_err""ors"  primary_key                 text
+"insp""ect_err""ors"  rowid                       bigint
+"insp""ect_err""ors"  schema_id                   oid
+jobs                  claim_instance_id           bigint
+jobs                  claim_session_id            bytea
+jobs                  "cre\\xa7a%6bted_b,y_type"  text
+jobs                  created                     timestamp without time zone
+jobs                  created_by_id               bigint
+jobs                  description                 text
+jobs                  error_msg                   text
+jobs                  "finiShed"                  timestamp with time zone
+jobs                  id                          bigint
+jobs                  "job._type"                 text
+jobs                  "la%55st_run"               timestamp without time zone
 
 subtest templates/different_templates_in_each_db
 
@@ -235,15 +235,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt_1"  public  "external_connect ions"
-"d%qbt_1"  public  reports_meta
-"d%qbt_1"  public  "sta""tement_bundle_chunks"
-"d%qbt_2"  public  "job_progres s"
-"d%qbt_2"  public  web_sessions
-"d%qbt_2"  public  zones
-dbt_3      public  "namespa ce"
-dbt_3      public  "rolE_members"
-dbt_3      public  span_stats_tenant_boundaries
+"d%qbt_1"  public  "span_stats_buckets"""
+"d%qbt_1"  public  span_stats_tenant_boundaries
+"d%qbt_1"  public  😤lea̷se
+"d%qbt_2"  public  span_stats_samples
+"d%qbt_2"  public  "sp😖an_stats_unique_keyS"
+"d%qbt_2"  public  "stateme%vnt_diagnostic🙄s"
+dbt_3      public  "repLication_stats"
+dbt_3      public  statement_activity
+dbt_3      public  table_metadata
 
 
 statement ok
