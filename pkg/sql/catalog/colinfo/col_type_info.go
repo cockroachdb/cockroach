@@ -148,18 +148,14 @@ func ColumnTypeIsIndexable(t *types.T) bool {
 	}
 
 	switch t.Family() {
-	case types.TupleFamily, types.RefCursorFamily, types.JsonpathFamily, types.LTreeFamily:
-		// TODO(paulniziolek): LTreeFamily should be supported in keyside encoding.
-		// Temporarily, we disallow it, until implemented.
+	case types.TupleFamily, types.RefCursorFamily, types.JsonpathFamily:
 		return false
 	}
 
 	// If the type is an array, check its content type as well.
 	if unwrapped := t.ArrayContents(); unwrapped != nil {
 		switch unwrapped.Family() {
-		case types.TupleFamily, types.RefCursorFamily, types.JsonpathFamily, types.LTreeFamily:
-			// TODO(paulniziolek): LTreeFamily should be supported in keyside encoding.
-			// Temporarily, we disallow it, until implemented.
+		case types.TupleFamily, types.RefCursorFamily, types.JsonpathFamily:
 			return false
 		}
 	}
@@ -175,9 +171,7 @@ func ColumnTypeIsInvertedIndexable(t *types.T) bool {
 	switch t.Family() {
 	case types.ArrayFamily:
 		switch t.ArrayContents().Family() {
-		case types.RefCursorFamily, types.JsonpathFamily, types.LTreeFamily:
-			// TODO(paulniziolek): LTreeFamily should be supported in keyside encoding.
-			// Temporarily, we disallow it, until implemented.
+		case types.RefCursorFamily, types.JsonpathFamily:
 			return false
 		default:
 			return true
@@ -229,10 +223,6 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 	case types.TSVectorFamily, types.TSQueryFamily:
 		return true
 	case types.PGVectorFamily:
-		return true
-	case types.LTreeFamily:
-		// TODO(paulniziolek): LTreeFamily should be supported in keyside encoding.
-		// Temporarily, we disallow it, until implemented.
 		return true
 		// NB: if you're adding a new type here, you probably also want to
 		// include it into rowenc.mustUseValueEncodingForFingerprinting.
