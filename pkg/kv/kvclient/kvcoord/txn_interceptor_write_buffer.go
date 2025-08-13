@@ -59,6 +59,7 @@ var bufferedWritesGetTransformEnabled = settings.RegisterBoolSetting(
 )
 
 const defaultBufferSize = 1 << 22 // 4MB
+const minBufferSize = 1 << 10     // 1KB -- below this, some logic tests start to fail
 var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.max_buffer_size",
@@ -66,10 +67,10 @@ var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 		"buffer that will be used to buffer transactional writes per-transaction",
 	int64(metamorphic.ConstantWithTestRange("kv.transaction.write_buffering.max_buffer_size",
 		defaultBufferSize, // default
-		1,                 // min
+		minBufferSize,     // min
 		defaultBufferSize, // max
 	)),
-	settings.NonNegativeInt,
+	settings.ByteSizeWithMinimum(minBufferSize),
 	settings.WithPublic,
 )
 

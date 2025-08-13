@@ -603,7 +603,7 @@ INSERT INTO t7 VALUES (5,1)
 user testuser
 
 statement ok
-SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size='1'
+SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size='1KiB'
 
 user root
 
