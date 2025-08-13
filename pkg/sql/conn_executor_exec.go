@@ -3345,7 +3345,10 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 					CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails,
 				}
 			}
-			log.StructuredEvent(ctx, severity.INFO, event)
+			migrator := log.NewStructuredEventMigrator(func() bool {
+				return log.ShouldMigrateEvent(ex.planner.ExecCfg().SV())
+			}, logpb.Channel_SQL_EXEC)
+			migrator.StructuredEvent(ctx, severity.INFO, event)
 			logCounter.Inc(1)
 		}
 	}
