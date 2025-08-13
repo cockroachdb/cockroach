@@ -1275,24 +1275,19 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
-	hasVectorType := func() bool {
-		// Check if any of the indexes have PGVector types involved.
+
+	// Helper function to check if any column has a type with the given prefix.
+	hasColumnTypeWithPrefix := func(typePrefix string) bool {
 		for _, def := range stmt.Defs {
-			if col, ok := def.(*tree.ColumnTableDef); ok && strings.HasPrefix(col.Type.SQLString(), "VECTOR") {
+			if col, ok := def.(*tree.ColumnTableDef); ok && strings.HasPrefix(col.Type.SQLString(), typePrefix) {
 				return true
 			}
 		}
 		return false
-	}()
-	hasCitextType := func() bool {
-		// Check if any of the columns have CITEXT types involved.
-		for _, def := range stmt.Defs {
-			if col, ok := def.(*tree.ColumnTableDef); ok && col.Type.SQLString() == "CITEXT" {
-				return true
-			}
-		}
-		return false
-	}()
+	}
+	hasVectorType := hasColumnTypeWithPrefix("VECTOR")
+	hasCitextType := hasColumnTypeWithPrefix("CITEXT")
+	hasLtreeType := hasColumnTypeWithPrefix("LTREE")
 
 	// Randomly create as schema locked table.
 	versionBefore253, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_3.Version())
@@ -1326,6 +1321,8 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		{code: pgcode.FeatureNotSupported, condition: hasVectorType},
 		{code: pgcode.Syntax, condition: hasCitextType},
 		{code: pgcode.FeatureNotSupported, condition: hasCitextType},
+		{code: pgcode.Syntax, condition: hasLtreeType},
+		{code: pgcode.FeatureNotSupported, condition: hasLtreeType},
 	})
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
@@ -4111,9 +4108,19 @@ func (og *operationGenerator) randType(
 		return nil, nil, err
 	}
 
+	// Block LTREE usage until v25.4 is finalized.
+	ltreeNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.V25_4.Version())
+	if err != nil {
+		return nil, nil, err
+	}
+
 	typ := randgen.RandSortingType(og.params.rng)
 	for (pgVectorNotSupported && typ.Family() == types.PGVectorFamily) ||
-		(citextNotSupported && typ.Oid() == oidext.T_citext) {
+		(citextNotSupported && typ.Oid() == oidext.T_citext) ||
+		(ltreeNotSupported && typ.Oid() == oidext.T_ltree) {
 		typ = randgen.RandSortingType(og.params.rng)
 	}
 
@@ -4301,6 +4308,11 @@ FROM
 		return nil, err
 	}
 
+	ltreeNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_4.Version())
+	if err != nil {
+		return nil, err
+	}
+
 	// Generate random parameters / values for builtin types.
 	for i, typeVal := range randgen.SeedTypes {
 		// If we have types where invalid values can exist then skip over these,
@@ -4315,6 +4327,9 @@ FROM
 		}
 
 		if citextNotSupported && typeVal.Oid() == oidext.T_citext {
+			continue
+		}
+		if ltreeNotSupported && typeVal.Oid() == oidext.T_ltree {
 			continue
 		}
 
