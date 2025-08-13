@@ -1009,11 +1009,10 @@ func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := &kv.Batch{}
-	b.Header.MaxSpanRequestKeys = 100
 	b.Scan("a", "b")
 	b.ReverseScan("a", "b")
 	if err := db.Run(ctx, b); !testutils.IsError(
-		err, "batch with limit contains both forward and reverse scans",
+		err, "batch contains both forward and reverse requests",
 	) {
 		t.Fatal(err)
 	}
