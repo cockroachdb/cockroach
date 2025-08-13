@@ -173,7 +173,11 @@ func (r *Replica) executeWriteBatch(
 			}
 		}()
 	}
-	log.Event(ctx, "applied timestamp cache")
+	if ba.Txn != nil {
+		log.Eventf(ctx, "applied timestamp cache at wts %s", ba.Txn.WriteTimestamp)
+	} else {
+		log.Eventf(ctx, "applied timestamp cache at ts %s", ba.Timestamp)
+	}
 
 	// Checking the context just before proposing can help avoid ambiguous errors.
 	if err := ctx.Err(); err != nil {

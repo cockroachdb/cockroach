@@ -1,0 +1,87 @@
+statement ok
+CREATE TABLE parent_150282 (
+  p INT PRIMARY KEY,
+  i INT,
+  j INT,
+  INDEX (i),
+  INDEX (j),
+  FAMILY (p, i, j)
+);
+
+statement ok
+CREATE TABLE child_150282 (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_150282 (p) ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX (p),
+  FAMILY (c, p)
+);
+
+statement ok
+GRANT ALL ON TABLE parent_150282 TO testuser;
+
+statement ok
+GRANT ALL ON TABLE child_150282 TO testuser;
+
+statement ok
+INSERT INTO parent_150282 VALUES (1, 2, 3);
+
+user root
+
+# statement ok
+# SET kv_transaction_buffered_writes_enabled = off
+
+# statement ok
+# SET tracing = on
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SELECT 1;
+
+statement async fk_delete
+WITH sleep AS (SELECT pg_sleep(1)) DELETE FROM parent_150282@parent_150282_i_idx WHERE i = 2;
+
+user testuser
+
+# statement ok
+# SET kv_transaction_buffered_writes_enabled = off
+
+# statement ok
+# SET tracing = on
+
+statement async fkinsert error pgcode 23503 pq: insert on table "child_150282" violates foreign key constraint "child_150282_p_fkey"
+INSERT INTO child_150282 VALUES (4, 1);
+
+user root
+
+awaitstatement fk_delete
+
+statement ok
+COMMIT;
+
+# statement ok
+# SET tracing = off
+
+# query TTT nosort
+# SELECT timestamp, tag, message FROM [SHOW TRACE FOR SESSION]
+# ----
+
+user testuser
+
+awaitstatement fkinsert
+
+# statement ok
+# SET tracing = off
+
+query III
+SELECT * FROM parent_150282;
+----
+
+query II
+SELECT * FROM child_150282;
+----
+
+# query TTT nosort
+# SELECT timestamp, tag, message FROM [SHOW TRACE FOR SESSION]
+# ----

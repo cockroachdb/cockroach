@@ -2736,6 +2736,13 @@ func TestReadCommittedLogic_zone_config_system_tenant(
 	runLogicTest(t, "zone_config_system_tenant")
 }
 
+func TestReadCommittedLogicCCL_2tmp(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "2tmp")
+}
+
 func TestReadCommittedLogicCCL_buffered_writes_lock_loss(
 	t *testing.T,
 ) {
@@ -2902,6 +2909,13 @@ func TestReadCommittedLogicCCL_refcursor(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "refcursor")
+}
+
+func TestReadCommittedLogicCCL_repro151663(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "repro151663")
 }
 
 func TestReadCommittedLogicCCL_schema_change_in_txn(

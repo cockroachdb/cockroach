@@ -151,6 +151,7 @@ func (r *Replica) updateTimestampCache(
 			// to that of a set of point read requests like:
 			//  [Get("a"), Get("c")]
 			if err := kvpb.ResponseKeyIterate(req, resp, func(key roachpb.Key) {
+				log.VEventf(ctx, 3, "skip locked addToTsCache(%s)", ts)
 				addToTSCache(key, nil, ts, txnID)
 			}, false /* includeLockedNonExisting */); err != nil {
 				log.Errorf(ctx, "error iterating over response keys while "+
@@ -176,6 +177,7 @@ func (r *Replica) updateTimestampCache(
 			// locks continue to provide protection against writes underneath the
 			// transaction's commit timestamp.
 			for _, sp := range resp.(*kvpb.EndTxnResponse).ReplicatedLocalLocksReleasedOnCommit {
+				log.VEventf(ctx, 3, "endtxn addToTsCache(%s)", br.Txn.WriteTimestamp)
 				addToTSCache(sp.Key, sp.EndKey, br.Txn.WriteTimestamp, txnID)
 			}
 		case *kvpb.HeartbeatTxnRequest:
@@ -183,6 +185,7 @@ func (r *Replica) updateTimestampCache(
 			// initially written. This is used when considering potential 1PC
 			// evaluation, avoiding checking for a transaction record on disk.
 			key := transactionTombstoneMarker(start, txnID)
+			log.VEventf(ctx, 3, "heartbeat addToTsCache(%s)", ts)
 			addToTSCache(key, nil, ts, txnID)
 		case *kvpb.RecoverTxnRequest:
 			// A successful RecoverTxn request may or may not have finalized the
@@ -197,6 +200,7 @@ func (r *Replica) updateTimestampCache(
 			recovered := resp.(*kvpb.RecoverTxnResponse).RecoveredTxn
 			if recovered.Status.IsFinalized() {
 				key := transactionTombstoneMarker(start, recovered.ID)
+				log.VEventf(ctx, 3, "recover addToTsCache(%s)", ts)
 				addToTSCache(key, nil, ts, recovered.ID)
 			}
 		case *kvpb.PushTxnRequest:
@@ -263,12 +267,14 @@ func (r *Replica) updateTimestampCache(
 				key = transactionPushMarker(start, pushee.ID)
 				pushTS = pushee.WriteTimestamp
 			}
+			log.VEventf(ctx, 3, "push addToTsCache(%s)", pushTS)
 			addToTSCache(key, nil, pushTS, t.PusherTxn.ID)
 		case *kvpb.ConditionalPutRequest:
 			// ConditionalPut only updates on ConditionFailedErrors. On other
 			// errors, no information is returned. On successful writes, the
 			// intent already protects against writes underneath the read.
 			if _, ok := pErr.GetDetail().(*kvpb.ConditionFailedError); ok {
+				log.VEventf(ctx, 3, "conditionalput addToTsCache(%s)", ts)
 				addToTSCache(start, end, ts, txnID)
 			}
 		case *kvpb.GetRequest:
@@ -276,7 +282,16 @@ func (r *Replica) updateTimestampCache(
 				// The request did not evaluate. Ignore it.
 				continue
 			}
-			addToTSCache(start, end, ts, txnID)
+			// Check if this Get request would trigger failOnMoreRecent
+			failOnMoreRecent := req.(*kvpb.GetRequest).KeyLockingStrength != lock.None ||
+				!req.(*kvpb.GetRequest).ExpectExclusionSince.IsEmpty()
+			updateTs := ts
+			if failOnMoreRecent && ba.Txn != nil {
+				// Use the transaction's write timestamp for failOnMoreRecent requests
+				updateTs = ba.Txn.WriteTimestamp
+			}
+			log.VEventf(ctx, 3, "get addToTsCache(%s)", updateTs)
+			addToTSCache(start, end, updateTs, txnID)
 		case *kvpb.ScanRequest:
 			if !beforeEval && resp.(*kvpb.ScanResponse).ResumeSpan != nil {
 				resume := resp.(*kvpb.ScanResponse).ResumeSpan
@@ -289,7 +304,15 @@ func (r *Replica) updateTimestampCache(
 				// end key for the span to update the timestamp cache.
 				end = resume.Key
 			}
-			addToTSCache(start, end, ts, txnID)
+			// Check if this Scan request would trigger failOnMoreRecent
+			failOnMoreRecent := req.(*kvpb.ScanRequest).KeyLockingStrength != lock.None
+			updateTs := ts
+			if failOnMoreRecent && ba.Txn != nil {
+				// Use the transaction's write timestamp for failOnMoreRecent requests
+				updateTs = ba.Txn.WriteTimestamp
+			}
+			log.VEventf(ctx, 3, "scan addToTsCache(%s)", updateTs)
+			addToTSCache(start, end, updateTs, txnID)
 		case *kvpb.ReverseScanRequest:
 			if !beforeEval && resp.(*kvpb.ReverseScanResponse).ResumeSpan != nil {
 				resume := resp.(*kvpb.ReverseScanResponse).ResumeSpan
@@ -303,7 +326,15 @@ func (r *Replica) updateTimestampCache(
 				// the span to update the timestamp cache.
 				start = resume.EndKey
 			}
-			addToTSCache(start, end, ts, txnID)
+			// Check if this ReverseScan request would trigger failOnMoreRecent
+			failOnMoreRecent := req.(*kvpb.ReverseScanRequest).KeyLockingStrength != lock.None
+			updateTs := ts
+			if failOnMoreRecent && ba.Txn != nil {
+				// Use the transaction's write timestamp for failOnMoreRecent requests
+				updateTs = ba.Txn.WriteTimestamp
+			}
+			log.VEventf(ctx, 3, "revscan addToTsCache(%s)", updateTs)
+			addToTSCache(start, end, updateTs, txnID)
 		case *kvpb.QueryIntentRequest:
 			// NB: We only need to bump the timestamp cache if the QueryIntentRequest
 			// was querying a write intent and if it wasn't found. This prevents the
@@ -333,6 +364,7 @@ func (r *Replica) updateTimestampCache(
 					// being written in the future. We use an empty transaction ID so that
 					// we block the intent regardless of whether it is part of the current
 					// batch's transaction or not.
+					log.VEventf(ctx, 3, "queryintent addToTsCache(%s)", t.Txn.WriteTimestamp)
 					addToTSCache(start, end, t.Txn.WriteTimestamp, uuid.UUID{})
 				}
 			}
@@ -345,6 +377,7 @@ func (r *Replica) updateTimestampCache(
 			// [1] This is indicated by releasedTs being non-empty.
 			releasedTs := resp.(*kvpb.ResolveIntentResponse).ReplicatedLocksReleasedCommitTimestamp
 			if !releasedTs.IsEmpty() {
+				log.VEventf(ctx, 3, "resolveintent addToTsCache(%s)", releasedTs)
 				addToTSCache(start, end, releasedTs, txnID)
 			}
 		case *kvpb.ResolveIntentRangeRequest:
@@ -360,9 +393,11 @@ func (r *Replica) updateTimestampCache(
 			// [1] Indicated by releasedTs being non-empty.
 			releasedTs := resp.(*kvpb.ResolveIntentRangeResponse).ReplicatedLocksReleasedCommitTimestamp
 			if !releasedTs.IsEmpty() {
+				log.VEventf(ctx, 3, "resolveintentrange addToTsCache(%s)", releasedTs)
 				addToTSCache(start, end, releasedTs, txnID)
 			}
 		default:
+			log.VEventf(ctx, 3, "default addToTsCache(%s)", ts)
 			addToTSCache(start, end, ts, txnID)
 		}
 	}
@@ -414,6 +449,7 @@ func (r *Replica) applyTimestampCache(
 			if rTS.Forward(minReadTS) {
 				forwardedToMinReadTS = true
 				rTxnID = uuid.Nil
+				log.VEventf(ctx, 3, "forwarded to min read ts %s", minReadTS)
 			}
 			nextRTS := rTS.Next()
 			var bumpedCurReq bool
@@ -425,7 +461,11 @@ func (r *Replica) applyTimestampCache(
 						ba = ba.ShallowCopy()
 						ba.Txn = txn
 						bumpedCurReq = true
+					} else {
+						log.VEventf(ctx, 3, "key %s not bumping because wts (%s) >= nextrts (%s), rts (%s), rTxnID (%s)", header.Key, ba.Txn.WriteTimestamp, nextRTS, rTS, rTxnID)
 					}
+				} else {
+					log.VEventf(ctx, 3, "key %s not bumping because own txn", header.Key)
 				}
 			} else {
 				if ba.Timestamp.Less(nextRTS) {

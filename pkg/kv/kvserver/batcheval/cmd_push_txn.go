@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -117,6 +118,11 @@ func PushTxn(
 
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported
+	}
+	if args.PusheeTxn.IsoLevel != isolation.Serializable {
+		err := kvpb.NewTransactionPushError(reply.PusheeTxn)
+		log.VEventf(ctx, 1, "%v", err)
+		return result.Result{}, err
 	}
 	if h.WriteTimestamp().Less(args.PushTo) {
 		// Verify that the PushTxn's header timestamp (the one checked against

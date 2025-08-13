@@ -2759,6 +2759,13 @@ func TestTenantLogic_zone_config(
 	runLogicTest(t, "zone_config")
 }
 
+func TestTenantLogicCCL_2tmp(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "2tmp")
+}
+
 func TestTenantLogicCCL_cluster_locks_tenant(
 	t *testing.T,
 ) {
@@ -2939,6 +2946,13 @@ func TestTenantLogicCCL_refcursor(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "refcursor")
+}
+
+func TestTenantLogicCCL_repro151663(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "repro151663")
 }
 
 func TestTenantLogicCCL_schema_change_in_txn(

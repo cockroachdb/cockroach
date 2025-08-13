@@ -75,6 +75,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestCCLLogic_2tmp(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "2tmp")
+}
+
 func TestCCLLogic_as_of(
 	t *testing.T,
 ) {
@@ -332,6 +339,13 @@ func TestCCLLogic_refcursor(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "refcursor")
+}
+
+func TestCCLLogic_repro151663(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "repro151663")
 }
 
 func TestCCLLogic_restore(

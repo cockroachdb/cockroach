@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -519,6 +520,11 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 			return false, err
 		}
 	}
+
+	if n.run.ti.ri.Helper.TableDesc.GetName() == "child_150282" {
+		time.Sleep(2 * time.Second)
+	}
+
 	n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 	if err := n.run.ti.finalize(params.ctx); err != nil {
 		return false, err
