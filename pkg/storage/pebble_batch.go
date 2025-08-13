@@ -307,21 +307,21 @@ func (wb *writeBatch) putMVCC(key MVCCKey, value MVCCValue) error {
 	// - encode the MVCC key and MVCC value directly into the Batch
 	// - call Finish on the deferred operation (which will index the key if
 	//   wb.batch is indexed)
-	valueLen, isExtended := mvccValueSize(value)
 	keyLen := mvccencoding.EncodedMVCCKeyLength(key.Key, key.Timestamp)
-	o := wb.batch.SetDeferred(keyLen, valueLen)
-	mvccencoding.EncodeMVCCKeyToBufSized(o.Key, key.Key, key.Timestamp, keyLen)
-	if !isExtended {
+	var o *pebble.DeferredBatchOp
+	if value.useSimpleEncoding() {
 		// Fast path; we don't need to use the extended encoding and can copy
 		// RawBytes in verbatim.
+		o = wb.batch.SetDeferred(keyLen, len(value.Value.RawBytes))
 		copy(o.Value, value.Value.RawBytes)
 	} else {
 		// Slow path; we need the MVCC value header.
-		err := encodeExtendedMVCCValueToSizedBuf(value, o.Value)
-		if err != nil {
+		o = wb.batch.SetDeferred(keyLen, value.encodedSize())
+		if err := encodeExtendedMVCCValueToSizedBuf(value, o.Value); err != nil {
 			return err
 		}
 	}
+	mvccencoding.EncodeMVCCKeyToBufSized(o.Key, key.Key, key.Timestamp, keyLen)
 	return o.Finish()
 }
 
