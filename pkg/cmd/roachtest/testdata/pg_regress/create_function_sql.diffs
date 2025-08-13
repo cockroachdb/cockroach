@@ -820,7 +820,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_function_s
  
  -- Regression tests for bugs:
  -- Check that arguments that are R/W expanded datums aren't corrupted by
-@@ -674,70 +758,60 @@
+@@ -674,70 +758,61 @@
  CREATE FUNCTION double_append(anyarray, anyelement) RETURNS SETOF anyarray
  LANGUAGE SQL IMMUTABLE AS
  $$ SELECT array_append($1, $2) || array_append($1, $2) $$;
@@ -847,6 +847,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_function_s
 +array_append(timetz[], timetz) -> timetz[]
 +array_append(jsonb[], jsonb) -> jsonb[]
 +array_append(varbit[], varbit) -> varbit[]
++array_append(ltree[], ltree) -> ltree[]
 +array_append(anyenum[], anyenum) -> anyenum[]
 +array_append(tuple[], tuple) -> tuple[]
 +

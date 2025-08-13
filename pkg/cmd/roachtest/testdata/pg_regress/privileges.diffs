@@ -4497,7 +4497,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP TABLE atest1;
  DROP TABLE atest2;
  DROP TABLE atest3;
-@@ -2680,108 +4209,219 @@
+@@ -2680,108 +4209,214 @@
  DROP TABLE atest5;
  DROP TABLE atest6;
  DROP TABLE atestc;
@@ -4730,7 +4730,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- clean up
  DROP TABLE lock_table;
  DROP USER regress_locktable_user;
-@@ -2791,24 +4431,17 @@
+@@ -2791,24 +4426,17 @@
  \c -
  CREATE ROLE regress_readallstats;
  SELECT has_table_privilege('regress_readallstats','pg_backend_memory_contexts','SELECT'); -- no
@@ -4759,7 +4759,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT has_table_privilege('regress_readallstats','pg_shmem_allocations','SELECT'); -- yes
   has_table_privilege 
  ---------------------
-@@ -2818,11 +4451,7 @@
+@@ -2818,11 +4446,7 @@
  -- run query to ensure that functions within views can be executed
  SET ROLE regress_readallstats;
  SELECT COUNT(*) >= 0 AS ok FROM pg_backend_memory_contexts;
@@ -4772,7 +4772,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT COUNT(*) >= 0 AS ok FROM pg_shmem_allocations;
   ok 
  ----
-@@ -2838,28 +4467,48 @@
+@@ -2838,28 +4462,48 @@
  CREATE ROLE regress_group_indirect_manager;
  CREATE ROLE regress_group_member;
  GRANT regress_group TO regress_group_direct_manager WITH INHERIT FALSE, ADMIN TRUE;
@@ -4831,7 +4831,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP ROLE regress_group;
  DROP ROLE regress_group_direct_manager;
  DROP ROLE regress_group_indirect_manager;
-@@ -2871,22 +4520,59 @@
+@@ -2871,22 +4515,59 @@
  CREATE SCHEMA regress_roleoption;
  GRANT CREATE, USAGE ON SCHEMA regress_roleoption TO PUBLIC;
  GRANT regress_roleoption_donor TO regress_roleoption_protagonist WITH INHERIT TRUE, SET FALSE;
