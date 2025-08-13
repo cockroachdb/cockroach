@@ -106,7 +106,9 @@ func (ptl *periodicTelemetryLogger) maybeFlushLogs() {
 		EmittedMessages:              ptl.resetEmittedMessages(),
 		LoggingInterval:              loggingInterval,
 	}
-	log.StructuredEvent(ptl.ctx, severity.INFO, continuousTelemetryEvent)
+
+	shouldMigrate := log.ShouldMigrateEvent(&ptl.settings.SV)
+	getChangefeedEventMigrator(shouldMigrate).StructuredEvent(ptl.ctx, severity.INFO, continuousTelemetryEvent)
 }
 
 func (ptl *periodicTelemetryLogger) close() {
@@ -122,7 +124,9 @@ func (ptl *periodicTelemetryLogger) close() {
 		LoggingInterval:              loggingInterval,
 		Closing:                      true,
 	}
-	log.StructuredEvent(ptl.ctx, severity.INFO, continuousTelemetryEvent)
+
+	shouldMigrate := log.ShouldMigrateEvent(&ptl.settings.SV)
+	getChangefeedEventMigrator(shouldMigrate).StructuredEvent(ptl.ctx, severity.INFO, continuousTelemetryEvent)
 }
 
 func wrapMetricsRecorderWithTelemetry(

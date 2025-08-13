@@ -32,6 +32,11 @@ Events in this category are logged to the `TELEMETRY` channel.
 
 An event of type `alter_changefeed` is an event for any ALTER CHANGEFEED statements that are run.
 
+Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `CHANGEFEED` instead of `TELEMETRY`.
+
 
 | Field | Description | Sensitive |
 |--|--|--|
@@ -54,6 +59,11 @@ An event of type `alter_changefeed` is an event for any ALTER CHANGEFEED stateme
 
 An event of type `changefeed_canceled` is an event for any changefeed cancellations.
 
+Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `CHANGEFEED` instead of `TELEMETRY`.
+
 
 
 
@@ -72,6 +82,11 @@ An event of type `changefeed_canceled` is an event for any changefeed cancellati
 ### `changefeed_emitted_bytes`
 
 An event of type `changefeed_emitted_bytes` is an event representing the bytes emitted by a changefeed over an interval.
+
+Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `CHANGEFEED` instead of `TELEMETRY`.
 
 
 | Field | Description | Sensitive |
@@ -99,6 +114,11 @@ An event of type `changefeed_emitted_bytes` is an event representing the bytes e
 An event of type `changefeed_failed` is an event for any changefeed failure since the plan hook
 was triggered.
 
+Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `CHANGEFEED` instead of `TELEMETRY`.
+
 
 | Field | Description | Sensitive |
 |--|--|--|
@@ -122,6 +142,11 @@ was triggered.
 An event of type `create_changefeed` is an event for any CREATE CHANGEFEED query that
 successfully starts running. Failed CREATE statements will show up as
 ChangefeedFailed events.
+
+Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `CHANGEFEED` instead of `TELEMETRY`.
 
 
 | Field | Description | Sensitive |
