@@ -457,7 +457,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 	for {
 		event, err := receiver.Recv()
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "receiving from node %d", ms.nodeID)
 		}
 
 		active := ms.lookupStream(event.StreamID)
