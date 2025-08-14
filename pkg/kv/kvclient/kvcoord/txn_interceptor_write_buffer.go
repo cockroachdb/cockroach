@@ -58,7 +58,8 @@ var bufferedWritesGetTransformEnabled = settings.RegisterBoolSetting(
 	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.get.enabled", true /* defaultValue */),
 )
 
-const defaultBufferSize = 1 << 22 // 4MB
+const defaultBufferSize = 1
+
 var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.max_buffer_size",
