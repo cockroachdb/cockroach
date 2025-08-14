@@ -252,7 +252,7 @@ func (e *executor) listBenchmarks(
 // cluster by inspecting the given remote directory.
 func (e *executor) listRemotePackages(log *logger.Logger, dir string) ([]string, error) {
 	ctx := context.Background()
-	results, err := roachprod.RunWithDetails(ctx, log, e.cluster, "", "", false,
+	results, err := roachprod.RunWithDetails(ctx, log, e.cluster, "", "", install.SimpleSecureOption(false),
 		[]string{"find", dir, "-name", "run.sh"}, install.WithNodes(install.Nodes{1}))
 	if err != nil {
 		return nil, err

@@ -55,7 +55,7 @@ func registerGopg(r registry.Registry) {
 		// upgrade support to that version and enable secure mode.
 		c.Start(
 			ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB),
-			install.MakeClusterSettings(install.SecureOption(false)),
+			install.MakeClusterSettings(install.SimpleSecureOption(false)),
 		)
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
