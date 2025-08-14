@@ -247,6 +247,7 @@ func TestPebbleEncryption(t *testing.T) {
 
 	func() {
 		// Initialize the filesystem env.
+		settings := cluster.MakeTestingClusterSettings()
 		env, err := fs.InitEnvFromStoreSpec(
 			ctx,
 			base.StoreSpec{
@@ -255,12 +256,15 @@ func TestPebbleEncryption(t *testing.T) {
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
-			fs.ReadWrite,
+			fs.EnvConfig{
+				RW:      fs.ReadWrite,
+				Version: settings.Version,
+			},
 			stickyRegistry, /* sticky registry */
 			nil,            /* statsCollector */
 		)
 		require.NoError(t, err)
-		db, err := storage.Open(ctx, env, cluster.MakeTestingClusterSettings())
+		db, err := storage.Open(ctx, env, settings)
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -295,6 +299,7 @@ func TestPebbleEncryption(t *testing.T) {
 
 	func() {
 		// Initialize the filesystem env again, replaying the file registries.
+		settings := cluster.MakeTestingClusterSettings()
 		env, err := fs.InitEnvFromStoreSpec(
 			ctx,
 			base.StoreSpec{
@@ -303,12 +308,15 @@ func TestPebbleEncryption(t *testing.T) {
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
-			fs.ReadWrite,
+			fs.EnvConfig{
+				RW:      fs.ReadWrite,
+				Version: settings.Version,
+			},
 			stickyRegistry, /* sticky registry */
 			nil,            /* statsCollector */
 		)
 		require.NoError(t, err)
-		db, err := storage.Open(ctx, env, cluster.MakeTestingClusterSettings())
+		db, err := storage.Open(ctx, env, settings)
 		require.NoError(t, err)
 		defer db.Close()
 		require.Equal(t, []byte("a"), storageutils.MVCCGetRaw(t, db, storageutils.PointKey("a", 0)))
@@ -382,6 +390,7 @@ func TestPebbleEncryption2(t *testing.T) {
 
 		// Initialize the filesystem env.
 		ctx := context.Background()
+		settings := cluster.MakeTestingClusterSettings()
 		env, err := fs.InitEnvFromStoreSpec(
 			ctx,
 			base.StoreSpec{
@@ -390,12 +399,15 @@ func TestPebbleEncryption2(t *testing.T) {
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
-			fs.ReadWrite,
+			fs.EnvConfig{
+				RW:      fs.ReadWrite,
+				Version: settings.Version,
+			},
 			stickyRegistry, /* sticky registry */
 			nil,            /* statsCollector */
 		)
 		require.NoError(t, err)
-		db, err := storage.Open(ctx, env, cluster.MakeTestingClusterSettings())
+		db, err := storage.Open(ctx, env, settings)
 		require.NoError(t, err)
 		defer db.Close()
 

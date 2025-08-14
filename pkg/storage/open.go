@@ -286,6 +286,7 @@ func makeExternalWALDir(
 	env, err := fs.InitEnv(context.Background(), defaultFS, externalDir.Path, fs.EnvConfig{
 		RW:                engineCfg.env.RWMode(),
 		EncryptionOptions: externalDir.Encryption,
+		Version:           engineCfg.settings.Version,
 	}, diskWriteStats)
 	if err != nil {
 		return wal.Dir{}, err

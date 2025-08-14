@@ -1311,6 +1311,7 @@ func TestIncompatibleVersion(t *testing.T) {
 	env = mustInitTestEnv(t, memFS, "")
 	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())
 	require.Error(t, err)
+	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())
 	msg := err.Error()
 	if !strings.Contains(msg, "is too old for running version") &&
 		!strings.Contains(msg, "cannot be opened by development version") {
@@ -1689,7 +1690,10 @@ func TestPebbleLoggingSlowReads(t *testing.T) {
 
 		memFS := vfs.NewMem()
 		dFS := delayFS{FS: memFS}
-		e, err := fs.InitEnv(context.Background(), dFS, "" /* dir */, fs.EnvConfig{}, nil /* statsCollector */)
+		settings := cluster.MakeTestingClusterSettings()
+		e, err := fs.InitEnv(context.Background(), dFS, "" /* dir */, fs.EnvConfig{
+			Version: settings.Version,
+		}, nil /* statsCollector */)
 		require.NoError(t, err)
 		// Tiny block cache, so all reads go to FS.
 		db, err := Open(ctx, e, cluster.MakeClusterSettings(), CacheSize(1024))
@@ -1764,7 +1768,10 @@ func TestPebbleCompactCancellation(t *testing.T) {
 	ctx := context.Background()
 	mem := vfs.NewMem()
 	bfs := &fs.BlockingWriteFSForTesting{FS: mem}
-	e, err := fs.InitEnv(ctx, bfs, "" /* dir */, fs.EnvConfig{}, nil /* statsCollector */)
+	settings := cluster.MakeTestingClusterSettings()
+	e, err := fs.InitEnv(ctx, bfs, "" /* dir */, fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* statsCollector */)
 	require.NoError(t, err)
 	db, err := Open(
 		ctx, e, cluster.MakeClusterSettings(), CacheSize(1024), MaxConcurrentCompactions(1),
