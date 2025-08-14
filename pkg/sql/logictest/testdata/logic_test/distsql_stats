@@ -1,6 +1,6 @@
 # LogicTest: 5node
 
-skip under race
+skip #151839
 
 # Disable histogram collection.
 statement ok
