@@ -44,19 +44,45 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+var unsupportedInProductionBuildErr = errors.New("this option is not supported in production builds")
+
 var bufferedWritesScanTransformEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.transformations.scans.enabled",
 	"if enabled, locking scans and reverse scans with replicated durability are transformed to unreplicated durability",
-	false,
+	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.scans.enabled", false /* defaultValue */),
+	settings.WithValidateBool(func(_ *settings.Values, enabled bool) error {
+		if enabled && !buildutil.CrdbTestBuild {
+			return unsupportedInProductionBuildErr
+		}
+		return nil
+	}),
 )
 
+var bufferedWritesGetTransformEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.transaction.write_buffering.transformations.get.enabled",
+	"if enabled, locking get requests with replicated durability are transformed to unreplicated durability",
+	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.get.enabled", false /* defaultValue */),
+	settings.WithValidateBool(func(_ *settings.Values, enabled bool) error {
+		if enabled && !buildutil.CrdbTestBuild {
+			return unsupportedInProductionBuildErr
+		}
+		return nil
+	}),
+)
+
+const defaultBufferSize = 1 << 22 // 4MB
 var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.max_buffer_size",
 	"if non-zero, defines that maximum size of the "+
 		"buffer that will be used to buffer transactional writes per-transaction",
-	1<<22, // 4MB
+	int64(metamorphic.ConstantWithTestRange("kv.transaction.write_buffering.max_buffer_size",
+		defaultBufferSize, // default
+		1,                 // min
+		defaultBufferSize, // max
+	)),
 	settings.NonNegativeInt,
 	settings.WithPublic,
 )
@@ -215,6 +241,11 @@ type txnWriteBuffer struct {
 	testingOverrideCPutEvalFn func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError
 }
 
+type transformConfig struct {
+	transformScans bool
+	transformGets  bool
+}
+
 func (twb *txnWriteBuffer) setEnabled(enabled bool) {
 	if !enabled && twb.buffer.Len() > 0 {
 		// When disabling write buffering, if we evaluated any requests, we need
@@ -257,7 +288,14 @@ func (twb *txnWriteBuffer) SendLocked(
 		return twb.flushBufferAndSendBatch(ctx, ba)
 	}
 
-	if twb.batchRequiresFlush(ctx, ba) {
+	// We check if scan transforms are enabled once and use that answer until the
+	// end of SendLocked.
+	cfg := transformConfig{
+		transformScans: bufferedWritesScanTransformEnabled.Get(&twb.st.SV),
+		transformGets:  bufferedWritesGetTransformEnabled.Get(&twb.st.SV),
+	}
+
+	if twb.batchRequiresFlush(ctx, ba, cfg) {
 		return twb.flushBufferAndSendBatch(ctx, ba)
 	}
 
@@ -265,10 +303,7 @@ func (twb *txnWriteBuffer) SendLocked(
 	// budget. If it will, we shouldn't buffer writes from the current batch,
 	// and flush the buffer.
 	maxSize := bufferedWritesMaxBufferSize.Get(&twb.st.SV)
-	// We check if scan transforms are enabled once and use that answer until the
-	// end of SendLocked.
-	transformScans := bufferedWritesScanTransformEnabled.Get(&twb.st.SV)
-	bufSize := twb.estimateSize(ba, transformScans) + twb.bufferSize
+	bufSize := twb.estimateSize(ba, cfg) + twb.bufferSize
 
 	// NB: if bufferedWritesMaxBufferSize is set to 0 then we effectively disable
 	// any buffer limiting.
@@ -286,7 +321,7 @@ func (twb *txnWriteBuffer) SendLocked(
 		return nil, kvpb.NewError(err)
 	}
 
-	transformedBa, rr, pErr := twb.applyTransformations(ctx, ba, transformScans)
+	transformedBa, rr, pErr := twb.applyTransformations(ctx, ba, cfg)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -321,7 +356,9 @@ func (twb *txnWriteBuffer) SendLocked(
 	return twb.mergeResponseWithRequestRecords(ctx, rr, br)
 }
 
-func (twb *txnWriteBuffer) batchRequiresFlush(ctx context.Context, ba *kvpb.BatchRequest) bool {
+func (twb *txnWriteBuffer) batchRequiresFlush(
+	ctx context.Context, ba *kvpb.BatchRequest, _ transformConfig,
+) bool {
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
 		switch req.(type) {
@@ -447,7 +484,7 @@ func unsupportedOptionError(m kvpb.Method, option string) error {
 
 // estimateSize returns a conservative estimate by which the buffer will grow in
 // size if the writes from the supplied batch request are buffered.
-func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest, transformScans bool) int64 {
+func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest, cfg transformConfig) int64 {
 	var scratch bufferedWrite
 	estimate := int64(0)
 	scratch.vals = make([]bufferedValue, 1)
@@ -467,7 +504,7 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest, transformScans bo
 			estimate += scratch.size()
 			estimate += lockKeyInfoSize
 		case *kvpb.GetRequest:
-			if t.KeyLockingDurability == lock.Replicated {
+			if IsReplicatedLockingRequest(t) && cfg.transformGets {
 				scratch.key = t.Key
 				estimate += scratch.size()
 				estimate += lockKeyInfoSize
@@ -504,9 +541,7 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest, transformScans bo
 			// the buffer. Here, we assume at least 1 key will be returned that is
 			// about the size of the scan start boundary. We try to protect from large
 			// buffer overflows by transforming the batch's MaxSpanRequestKeys later.
-			shouldTransform := t.KeyLockingStrength > lock.None && t.KeyLockingDurability == lock.Replicated
-			shouldTransform = shouldTransform && transformScans
-			if shouldTransform {
+			if IsReplicatedLockingRequest(t) && cfg.transformScans {
 				scratch.key = t.Key
 				scratch.vals[0] = bufferedValue{
 					seq: t.Sequence,
@@ -515,9 +550,7 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest, transformScans bo
 			}
 		case *kvpb.ReverseScanRequest:
 			// See the comment on the ScanRequest case for more details.
-			shouldTransform := t.KeyLockingStrength > lock.None && t.KeyLockingDurability == lock.Replicated
-			shouldTransform = shouldTransform && transformScans
-			if shouldTransform {
+			if IsReplicatedLockingRequest(t) && cfg.transformScans {
 				scratch.key = t.Key
 				scratch.vals[0] = bufferedValue{
 					seq: t.Sequence,
@@ -813,7 +846,7 @@ func (twb *txnWriteBuffer) closeLocked() {}
 // locking Get request if it can be served from the buffer (i.e if a lock of
 // sufficient strength has been acquired and a value has been buffered).
 func (twb *txnWriteBuffer) applyTransformations(
-	ctx context.Context, ba *kvpb.BatchRequest, transformScans bool,
+	ctx context.Context, ba *kvpb.BatchRequest, cfg transformConfig,
 ) (*kvpb.BatchRequest, requestRecords, *kvpb.Error) {
 	baRemote := ba.ShallowCopy()
 	// TODO(arul): We could improve performance here by pre-allocating
@@ -919,10 +952,10 @@ func (twb *txnWriteBuffer) applyTransformations(
 			_, lockStr, served := twb.maybeServeRead(t.Key, t.Sequence)
 
 			requiresAdditionalLocking := t.KeyLockingStrength > lockStr
-			requiresLockTransform := t.KeyLockingStrength != lock.None && t.KeyLockingDurability == lock.Replicated
+			requiresLockTransform := IsReplicatedLockingRequest(t)
 			requestRequired := requiresAdditionalLocking || !served
 
-			if requestRequired && requiresLockTransform {
+			if requestRequired && requiresLockTransform && cfg.transformGets {
 				var getReqU kvpb.RequestUnion
 				getReq := t.ShallowCopy().(*kvpb.GetRequest)
 				getReq.KeyLockingDurability = lock.Unreplicated
@@ -940,9 +973,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 			// Regardless of whether the scan overlaps with any writes in the buffer
 			// or not, we must send the request to the KV layer. We can't know for
 			// sure that there's nothing else to read.
-			shouldTransform := t.KeyLockingStrength > lock.None && t.KeyLockingDurability == lock.Replicated
-			shouldTransform = shouldTransform && transformScans
-			if shouldTransform {
+			if IsReplicatedLockingRequest(t) && cfg.transformScans {
 				var scanReqU kvpb.RequestUnion
 				scanReq := t.ShallowCopy().(*kvpb.ScanRequest)
 				scanReq.KeyLockingDurability = lock.Unreplicated
@@ -960,9 +991,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 			// Regardless of whether the reverse scan overlaps with any writes in the
 			// buffer or not, we must send the request to the KV layer. We can't know
 			// for sure that there's nothing else to read.
-			shouldTransform := t.KeyLockingStrength > lock.None && t.KeyLockingDurability == lock.Replicated
-			shouldTransform = shouldTransform && transformScans
-			if shouldTransform {
+			if IsReplicatedLockingRequest(t) && cfg.transformScans {
 				var rScanReqU kvpb.RequestUnion
 				rScanReq := t.ShallowCopy().(*kvpb.ReverseScanRequest)
 				rScanReq.KeyLockingDurability = lock.Unreplicated
@@ -1618,6 +1647,19 @@ func (twb *txnWriteBuffer) addToBuffer(
 		}
 		twb.buffer.Set(bw)
 		twb.bufferSize += bw.size()
+	}
+}
+
+func IsReplicatedLockingRequest(req kvpb.Request) bool {
+	switch r := req.(type) {
+	case *kvpb.ScanRequest:
+		return r.KeyLockingStrength > lock.None && r.KeyLockingDurability == lock.Replicated
+	case *kvpb.ReverseScanRequest:
+		return r.KeyLockingStrength > lock.None && r.KeyLockingDurability == lock.Replicated
+	case *kvpb.GetRequest:
+		return r.KeyLockingStrength > lock.None && r.KeyLockingDurability == lock.Replicated
+	default:
+		return false
 	}
 }
 
