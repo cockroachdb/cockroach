@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // BuildStages builds the plan's stages for this and all subsequent phases.
@@ -267,9 +268,10 @@ func buildPostCommitStages(bc buildContext, bs buildState) (stages []Stage) {
 			var trace []string
 			bs.trace = &trace
 			sb = bc.makeStageBuilder(bs)
-			panic(errors.WithDetailf(
-				errors.AssertionFailedf("unable to make progress"),
-				"terminal state:\n%s\nrule trace:\n%s", sb, strings.Join(trace, "\n")))
+			panic(errors.AssertionFailedf(
+				"unable to make progress\nterminal state:\n%v\nrule trace:\n%s",
+				sb, redact.SafeString(strings.Join(trace, "\n")),
+			))
 		}
 		build(sb)
 	}
@@ -726,14 +728,21 @@ func (sb stageBuilder) hasAnyNonRevertibleOps() bool {
 
 // String returns a string representation of the stageBuilder.
 func (sb stageBuilder) String() string {
-	var str strings.Builder
-	for _, t := range sb.current {
-		str.WriteString(" - ")
-		str.WriteString(screl.NodeString(t.n))
-		str.WriteString("\n")
-	}
-	return str.String()
+	return redact.StringWithoutMarkers(sb)
 }
+
+// SafeFormat implements redact.SafeFormatter.
+func (sb stageBuilder) SafeFormat(p redact.SafePrinter, verb rune) {
+	for _, t := range sb.current {
+		p.SafeString(" - ")
+		if err := screl.FormatNode(p, t.n); err != nil {
+			p.UnsafeString(screl.NodeString(t.n))
+		}
+		p.SafeString("\n")
+	}
+}
+
+var _ redact.SafeFormatter = stageBuilder{}
 
 // computeExtraOps generates extra operations to decorate a stage with.
 // These are typically job-related.
