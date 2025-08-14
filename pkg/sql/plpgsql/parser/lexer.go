@@ -32,10 +32,6 @@ type lexer struct {
 
 	stmt *plpgsqltree.Block
 
-	// numPlaceholders is 1 + the highest placeholder index encountered.
-	numPlaceholders int
-	numAnnotations  tree.AnnotationIdx
-
 	lastError error
 
 	parser plpgsqlParser
@@ -46,8 +42,6 @@ func (l *lexer) init(sql string, tokens []plpgsqlSymType, nakedIntType *types.T,
 	l.tokens = tokens
 	l.lastPos = -1
 	l.stmt = nil
-	l.numPlaceholders = 0
-	l.numAnnotations = 0
 	l.lastError = nil
 	l.nakedIntType = nakedIntType
 	l.parser = p
