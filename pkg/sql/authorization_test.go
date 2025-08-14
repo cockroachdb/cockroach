@@ -311,7 +311,7 @@ func checkUnsafeErr(t *testing.T, err error) {
 	t.Fatal("expected unsafe access error, got", err)
 }
 
-func TestCheckUnsafeSystemAccess(t *testing.T) {
+func TestCheckUnsafeInternalsAccess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -321,92 +321,105 @@ func TestCheckUnsafeSystemAccess(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	q := "SELECT * FROM system.namespace"
+	t.Run("accessing the system database", func(t *testing.T) {
+		q := "SELECT * FROM system.namespace"
 
-	t.Run("as an external querier", func(t *testing.T) {
-		for _, test := range []struct {
-			AllowUnsafeInternals bool
-			Passes               bool
-		}{
-			{AllowUnsafeInternals: false, Passes: false},
-			{AllowUnsafeInternals: true, Passes: true},
-		} {
-			t.Run(fmt.Sprintf("%t", test), func(t *testing.T) {
-				conn := s.SQLConn(t)
-				_, err := conn.Exec("SET allow_unsafe_internals = $1", test.AllowUnsafeInternals)
-				require.NoError(t, err)
-
-				_, err = conn.Query(q)
-				if test.Passes {
+		t.Run("as an external querier", func(t *testing.T) {
+			for _, test := range []struct {
+				AllowUnsafeInternals bool
+				Passes               bool
+			}{
+				{AllowUnsafeInternals: false, Passes: false},
+				{AllowUnsafeInternals: true, Passes: true},
+			} {
+				t.Run(fmt.Sprintf("%t", test), func(t *testing.T) {
+					conn := s.SQLConn(t)
+					_, err := conn.Exec("SET allow_unsafe_internals = $1", test.AllowUnsafeInternals)
 					require.NoError(t, err)
-				} else {
-					checkUnsafeErr(t, err)
-				}
-			})
-		}
-	})
 
-	t.Run("as an internal querier", func(t *testing.T) {
-		for _, test := range []struct {
-			AllowUnsafeInternals bool
-			Passes               bool
-		}{
-			{AllowUnsafeInternals: false, Passes: true},
-			{AllowUnsafeInternals: true, Passes: true},
-		} {
-			t.Run(fmt.Sprintf("%t", test), func(t *testing.T) {
-				idb := s.InternalDB().(isql.DB)
-				err := idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-					txn.SessionData().LocalOnlySessionData.AllowUnsafeInternals = test.AllowUnsafeInternals
-
-					_, err := txn.QueryBuffered(ctx, "internal-query", txn.KV(), q)
-					return err
+					_, err = conn.Query(q)
+					if test.Passes {
+						require.NoError(t, err)
+					} else {
+						checkUnsafeErr(t, err)
+					}
 				})
+			}
+		})
 
-				require.NoError(t, err)
+		t.Run("as an internal querier", func(t *testing.T) {
+			for _, test := range []struct {
+				AllowUnsafeInternals bool
+				Passes               bool
+			}{
+				{AllowUnsafeInternals: false, Passes: true},
+				{AllowUnsafeInternals: true, Passes: true},
+			} {
+				t.Run(fmt.Sprintf("%t", test), func(t *testing.T) {
+					idb := s.InternalDB().(isql.DB)
+					err := idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+						txn.SessionData().LocalOnlySessionData.AllowUnsafeInternals = test.AllowUnsafeInternals
 
-				if test.Passes {
+						_, err := txn.QueryBuffered(ctx, "internal-query", txn.KV(), q)
+						return err
+					})
+
 					require.NoError(t, err)
-				} else {
-					checkUnsafeErr(t, err)
-				}
-			})
-		}
+
+					if test.Passes {
+						require.NoError(t, err)
+					} else {
+						checkUnsafeErr(t, err)
+					}
+				})
+			}
+		})
 	})
 
-}
+	t.Run("accessing the crdb_internal schema", func(t *testing.T) {
+		t.Run("supported table allowed", func(t *testing.T) {
+			conn := s.SQLConn(t)
+			_, err := conn.Exec("SET allow_unsafe_internals = false")
+			require.NoError(t, err)
 
-func TestCheckUnsafeCRDBInternalAccess(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+			// Supported crdb_internal tables should be allowed even when allow_unsafe_internals = false
+			_, err = conn.Query("SELECT * FROM crdb_internal.zones")
+			require.NoError(t, err, "supported crdb_internal table (zones) should be accessible when allow_unsafe_internals = false")
+		})
 
-	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-	})
-	defer s.Stopper().Stop(ctx)
+		t.Run("unsupported table denied", func(t *testing.T) {
+			conn := s.SQLConn(t)
+			_, err := conn.Exec("SET allow_unsafe_internals = false")
+			require.NoError(t, err)
 
-	// Test that with allow_unsafe_internals = false:
-	// - Supported tables (zones) are allowed
-	// - Unsupported tables (gossip_alerts) are denied
-
-	t.Run("supported table allowed", func(t *testing.T) {
-		conn := s.SQLConn(t)
-		_, err := conn.Exec("SET allow_unsafe_internals = false")
-		require.NoError(t, err)
-
-		// Supported crdb_internal tables should be allowed even when allow_unsafe_internals = false
-		_, err = conn.Query("SELECT * FROM crdb_internal.zones")
-		require.NoError(t, err, "supported crdb_internal table (zones) should be accessible when allow_unsafe_internals = false")
+			// Unsupported crdb_internal tables should be denied when allow_unsafe_internals = false
+			_, err = conn.Query("SELECT * FROM crdb_internal.gossip_alerts")
+			checkUnsafeErr(t, err)
+		})
 	})
 
-	t.Run("unsupported table denied", func(t *testing.T) {
-		conn := s.SQLConn(t)
-		_, err := conn.Exec("SET allow_unsafe_internals = false")
-		require.NoError(t, err)
+	// The functionality for this lies in the pkg/sql/optbuilder/scalar.go
+	// file, but it is tested here as that package does not setup a test
+	// server.
+	t.Run("accessing crdb_internal builtins", func(t *testing.T) {
+		t.Run("non crdb_internal builtin allowed", func(t *testing.T) {
+			conn := s.SQLConn(t)
+			_, err := conn.Exec("SET allow_unsafe_internals = false")
+			require.NoError(t, err)
 
-		// Unsupported crdb_internal tables should be denied when allow_unsafe_internals = false
-		_, err = conn.Query("SELECT * FROM crdb_internal.gossip_alerts")
-		checkUnsafeErr(t, err)
+			// Non crdb_internal tables should be allowed.
+			_, err = conn.Query("SELECT * FROM generate_series(1,5)")
+			require.NoError(t, err)
+		})
+
+		t.Run("crdb_internal builtin not allowed", func(t *testing.T) {
+			conn := s.SQLConn(t)
+			_, err := conn.Exec("SET allow_unsafe_internals = false")
+			require.NoError(t, err)
+
+			// Unsupported crdb_internal builtins should be denied.
+			_, err = conn.Query("SELECT * FROM crdb_internal.tenant_span_stats()")
+			checkUnsafeErr(t, err)
+		})
 	})
 }
