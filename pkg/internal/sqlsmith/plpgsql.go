@@ -101,6 +101,7 @@ func (s *Smither) makePLpgSQLStatements(scope plpgsqlBlockScope, maxCount int) [
 
 func (s *Smither) makePLpgSQLIf(scope plpgsqlBlockScope) *ast.If {
 	const maxBranchStmts = 3
+	scope.scopeMetas = append(scope.scopeMetas, scopeMeta{typ: ifScope})
 	ifStmt := &ast.If{
 		Condition: s.makePLpgSQLCond(scope),
 		ThenBody:  s.makePLpgSQLStatements(scope, maxBranchStmts),
@@ -144,6 +145,8 @@ var (
 		{5, makePLpgSQLNull},
 		{10, makePLpgSQLAssign},
 		{10, makePLpgSQLExecSQL},
+		{2, makePLpgSQLExit},
+		{2, makePLpgSQLContinue},
 	}
 )
 
@@ -226,6 +229,30 @@ func makePLpgSQLNull(_ *Smither, _ plpgsqlBlockScope) (stmt ast.Statement, ok bo
 	return &ast.Null{}, true
 }
 
+func makePLpgSQLExit(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement, ok bool) {
+	if !scope.inLoop() {
+		// EXIT statements can only be used within loops.
+		return nil, false
+	}
+	res := &ast.Exit{
+		// TODO(#106368): optionally add a label.
+		Condition: s.makePLpgSQLCond(scope),
+	}
+	return res, true
+}
+
+func makePLpgSQLContinue(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement, ok bool) {
+	if !scope.inLoop() {
+		// CONTINUE statements can only be used within loops.
+		return nil, false
+	}
+	res := &ast.Continue{
+		// TODO(#106368): optionally add a label.
+		Condition: s.makePLpgSQLCond(scope),
+	}
+	return res, true
+}
+
 func makePLpgSQLForLoop(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement, ok bool) {
 	// TODO(#105246): add support for other query and cursor FOR loops.
 	control := ast.IntForLoopControl{
@@ -239,6 +266,7 @@ func makePLpgSQLForLoop(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement
 	newScope := scope.makeChild(1 /* numNewVars */)
 	loopVarName := s.makePLpgSQLVarName("loop", newScope)
 	newScope.addVariable(string(loopVarName), types.Int, false /* constant */)
+	newScope.scopeMetas = append(newScope.scopeMetas, scopeMeta{typ: loopScope, name: string(loopVarName)})
 	const maxLoopStmts = 3
 	return &ast.ForLoop{
 		// TODO(#106368): optionally add a label.
@@ -249,12 +277,33 @@ func makePLpgSQLForLoop(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement
 }
 
 func makePLpgSQLWhile(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement, ok bool) {
+	newScope := scope.makeChild(1 /* numNewVars */)
+	loopVarName := s.makePLpgSQLVarName("loop", newScope)
+	newScope.scopeMetas = append(newScope.scopeMetas, scopeMeta{typ: loopScope, name: string(loopVarName)})
 	const maxLoopStmts = 3
 	return &ast.While{
 		// TODO(#106368): optionally add a label.
-		Condition: s.makePLpgSQLCond(scope),
-		Body:      s.makePLpgSQLStatements(scope, maxLoopStmts),
+		Condition: s.makePLpgSQLCond(newScope),
+		Body:      s.makePLpgSQLStatements(newScope, maxLoopStmts),
 	}, true
+}
+
+// scopeType is a type that represents the type of scope that the current block
+// is nested within.
+type scopeType int
+
+const (
+	loopScope scopeType = iota
+	ifScope
+)
+
+// scopeMeta is a name-tagged scopeType. It is used to determine if certain
+// statements are allowed in the current scope, such as EXIT and CONTINUE,
+// which can only be used within loops.
+type scopeMeta struct {
+	typ scopeType
+	// // TODO(#106368): propagate `name` with the loop label.
+	name string
 }
 
 // plpgsqlBlockScope holds the information needed to ensure that generated
@@ -269,6 +318,12 @@ type plpgsqlBlockScope struct {
 	// vars is a list of the names of every variable that is in scope for the
 	// current block.
 	vars []string
+
+	// scopeMetas tracks the nested scopes of the current block. For example,
+	// entering a FOR loop adds a loopScope with the loop label name, while
+	// entering an IF statement adds an ifScope without a name. Used to validate
+	// statements like EXIT and CONTINUE, which are only allowed in loops.
+	scopeMetas []scopeMeta
 
 	// refs is the list of colRefs for every variable in the current scope. It
 	// could be rebuilt from the vars and varTypes fields, but is kept up-to-date
@@ -305,7 +360,18 @@ func (s *plpgsqlBlockScope) makeChild(numNewVars int) plpgsqlBlockScope {
 	}
 	newScope.vars = append(newScope.vars, s.vars...)
 	newScope.refs = append(newScope.refs, s.refs...)
+	newScope.scopeMetas = append(newScope.scopeMetas, s.scopeMetas...)
 	return newScope
+}
+
+// inLoop returns true if the current scope is within a for/while loop.
+func (s *plpgsqlBlockScope) inLoop() bool {
+	for _, m := range s.scopeMetas {
+		if m.typ == loopScope {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *plpgsqlBlockScope) hasVariable(name string) bool {
