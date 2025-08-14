@@ -59,7 +59,10 @@ var bufferedWritesGetTransformEnabled = settings.RegisterBoolSetting(
 )
 
 const defaultBufferSize = 1 << 22 // 4MB
-var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
+
+// BufferedWritesMaxBufferSize controls the per-txn buffer size. It's exported
+// only to be accessed from tests.
+var BufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.max_buffer_size",
 	"if non-zero, defines that maximum size of the "+
@@ -67,7 +70,7 @@ var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 	int64(metamorphic.ConstantWithTestRange("kv.transaction.write_buffering.max_buffer_size",
 		defaultBufferSize, // default
 		1,                 // min
-		defaultBufferSize, // max
+		10<<10,            // max, 10KiB
 	)),
 	settings.NonNegativeInt,
 	settings.WithPublic,
@@ -298,10 +301,10 @@ func (twb *txnWriteBuffer) SendLocked(
 	// Check if buffering writes from the supplied batch will run us over
 	// budget. If it will, we shouldn't buffer writes from the current batch,
 	// and flush the buffer.
-	maxSize := bufferedWritesMaxBufferSize.Get(&twb.st.SV)
+	maxSize := BufferedWritesMaxBufferSize.Get(&twb.st.SV)
 	bufSize := twb.estimateSize(ba, cfg) + twb.bufferSize
 
-	// NB: if bufferedWritesMaxBufferSize is set to 0 then we effectively disable
+	// NB: if BufferedWritesMaxBufferSize is set to 0 then we effectively disable
 	// any buffer limiting.
 	if maxSize != 0 && bufSize > maxSize {
 		twb.txnMetrics.TxnWriteBufferMemoryLimitExceeded.Inc(1)
@@ -1051,9 +1054,9 @@ func (twb *txnWriteBuffer) maybeMutateBatchMaxSpanRequestKeys(
 	}
 
 	// If the user has disabled a maximum buffer size, respect that.
-	maxSize := bufferedWritesMaxBufferSize.Get(&twb.st.SV)
+	maxSize := BufferedWritesMaxBufferSize.Get(&twb.st.SV)
 	if maxSize == 0 {
-		log.VEventf(ctx, 2, "allowing unbounded transformed locking scan because %s=0", bufferedWritesMaxBufferSize.Name())
+		log.VEventf(ctx, 2, "allowing unbounded transformed locking scan because %s=0", BufferedWritesMaxBufferSize.Name())
 		return
 	}
 

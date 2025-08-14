@@ -1057,6 +1057,7 @@ func TestTxnContinueAfterCputError(t *testing.T) {
 		ctx := context.Background()
 		s := createTestDB(t)
 		defer s.Stop()
+		kvcoord.BufferedWritesMaxBufferSize.Override(context.Background(), s.DB.SettingsValues(), 2<<10 /* 2KiB */)
 
 		txn := s.DB.NewTxn(ctx, "test txn")
 
@@ -1097,6 +1098,7 @@ func TestTxnDeleteResponse(t *testing.T) {
 		ctx := context.Background()
 		s := createTestDB(t)
 		defer s.Stop()
+		kvcoord.BufferedWritesMaxBufferSize.Override(context.Background(), s.DB.SettingsValues(), 2<<10 /* 2KiB */)
 
 		txn := s.DB.NewTxn(ctx, "test txn")
 
@@ -1610,6 +1612,7 @@ func TestTxnBasicBufferedWrites(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
+	kvcoord.BufferedWritesMaxBufferSize.Override(context.Background(), s.DB.SettingsValues(), 2<<10 /* 2KiB */)
 
 	testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
 		ctx := context.Background()
@@ -1791,6 +1794,7 @@ func TestTxnBufferedWritesOverlappingScan(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
+	kvcoord.BufferedWritesMaxBufferSize.Override(context.Background(), s.DB.SettingsValues(), 2<<10 /* 2KiB */)
 
 	extractKVs := func(rows []roachpb.KeyValue, batchResponses [][]byte) []roachpb.KeyValue {
 		if rows != nil {
@@ -2031,6 +2035,7 @@ func TestTxnBufferedWritesConditionalPuts(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
+	kvcoord.BufferedWritesMaxBufferSize.Override(context.Background(), s.DB.SettingsValues(), 2<<10 /* 2KiB */)
 
 	testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
 		ctx := context.Background()
@@ -2137,6 +2142,7 @@ func TestTxnBufferedWritesRollbackToSavepointAllBuffered(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
+	kvcoord.BufferedWritesMaxBufferSize.Override(context.Background(), s.DB.SettingsValues(), 2<<10 /* 2KiB */)
 
 	ctx := context.Background()
 	value1 := []byte("value1")
@@ -2196,6 +2202,7 @@ func TestTxnBufferedWriteRetriesCorrectly(t *testing.T) {
 		TestingRequestFilter: reqFilter,
 	})
 	defer s.Stop()
+	kvcoord.BufferedWritesMaxBufferSize.Override(context.Background(), s.DB.SettingsValues(), 2<<10 /* 2KiB */)
 
 	rng, _ := randutil.NewTestRand()
 
@@ -2233,6 +2240,7 @@ func TestTxnBufferedWriteReadYourOwnWrites(t *testing.T) {
 
 	s := createTestDB(t)
 	defer s.Stop()
+	kvcoord.BufferedWritesMaxBufferSize.Override(context.Background(), s.DB.SettingsValues(), 2<<10 /* 2KiB */)
 
 	value1 := []byte("value1")
 	value21 := []byte("value21")
@@ -2412,6 +2420,7 @@ func TestTxnBufferedWritesOmitAbortSpanChecks(t *testing.T) {
 		},
 	})
 	defer s.Stop()
+	kvcoord.BufferedWritesMaxBufferSize.Override(context.Background(), s.DB.SettingsValues(), 2<<10 /* 2KiB */)
 
 	value1 := []byte("value1")
 	valueConflict := []byte("conflict")
