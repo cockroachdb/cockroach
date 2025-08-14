@@ -2915,6 +2915,60 @@ func registerCDC(r registry.Registry) {
 		Timeout:          1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			params := multiTablePTSBenchmarkParams{
+				numTables: 5,
+				numRows:   10,
+				duration:  "3m",
+				perTablePTS: true,
+			}
+			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/multi-table-pts-benchmark/a",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          1 * time.Hour,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			params := multiTablePTSBenchmarkParams{
+				numTables: 5,
+				numRows:   10,
+				duration:  "3m",
+				perTablePTS: true,
+			}
+			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/multi-table-pts-benchmark/b",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          1 * time.Hour,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			params := multiTablePTSBenchmarkParams{
+				numTables: 20,
+				numRows:   10,
+				duration:  "3m",
+				perTablePTS: true,
+			}
+			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/multi-table-pts-benchmark/c",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          1 * time.Hour,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			params := multiTablePTSBenchmarkParams{
 				numTables: 100,
 				numRows:   100,
 				duration:  "5m",
@@ -2933,9 +2987,9 @@ func registerCDC(r registry.Registry) {
 		Timeout:          1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			params := multiTablePTSBenchmarkParams{
-				numTables: 100,
-				numRows:   100,
-				duration:  "5m",
+				numTables: 5,
+				numRows:   10,
+				duration:  "3m",
 			}
 			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
 		},

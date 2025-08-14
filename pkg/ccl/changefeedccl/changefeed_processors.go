@@ -1964,7 +1964,6 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		// c) create/update any new per table PTS records that are needed for
 		// tables that are currently lagging.
 
-
 		mainPTSTimestamp := leastLaggingTimestamp
 		updated := false
 		// We use this to know if we need to update the per table PTS records
@@ -2028,15 +2027,40 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 			updated = true
 			perTablePTSChanged = true
 		}
-		// We need to update the main PTS record to the lowest timestamp of a
-		// non-lagging table.
-		if mainPTSTimestamp.Less(highWater) {
-			err := pts.UpdateTimestamp(ctx, progress.ProtectedTimestampRecord, mainPTSTimestamp)
+
+		if progress.ProtectedTimestampRecord == uuid.Nil {
+			ptr := createProtectedTimestampRecord(
+				ctx, cf.FlowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), mainPTSTimestamp,
+			)
+			progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
+			err := pts.Protect(ctx, ptr)
 			if err != nil {
 				return false, err
 			}
-			updated = true
+			// TODO: revisit and encapsulate some of this
+			return true, nil
 		}
+
+		rec, err := pts.GetRecord(ctx, progress.ProtectedTimestampRecord)
+		if err != nil {
+			return false, err
+		}
+
+		// Only update the PTS timestamp if it is lagging behind this "non-lagging
+		// table highwater". This is to prevent a rush of updates to the PTS if the
+		// changefeed restarts, which can cause contention and second order effects
+		// on system tables.
+		if rec.Timestamp.AddDuration(ptsUpdateLag).After(mainPTSTimestamp) {
+			return updated, nil
+		}
+
+		// We need to update the main PTS record to the lowest timestamp of a
+		// non-lagging table.
+		err = pts.UpdateTimestamp(ctx, progress.ProtectedTimestampRecord, mainPTSTimestamp)
+		if err != nil {
+			return false, err
+		}
+		updated = true
 
 		if perTablePTSChanged {
 			perTablePTS, err := protoutil.Marshal(&ptsEntries)
@@ -2047,6 +2071,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 				return false, err
 			}
 		}
+
 	
 		return updated, nil
 	}
