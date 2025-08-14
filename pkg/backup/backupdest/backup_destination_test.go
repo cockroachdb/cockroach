@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package backupdest_test
+package backupdest
 
 import (
 	"bytes"
@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
-	"github.com/cockroachdb/cockroach/pkg/backup/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
@@ -22,8 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -64,7 +66,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 		storage, err := externalStorageFromURI(ctx, collectionURI, username.RootUserName())
 		defer storage.Close()
 		require.NoError(t, err)
-		require.NoError(t, backupdest.WriteNewLatestFile(ctx, storage.Settings(), storage, latestBackupSuffix))
+		require.NoError(t, WriteNewLatestFile(ctx, storage.Settings(), storage, latestBackupSuffix))
 	}
 
 	// localizeURI returns a slice of just the base URI if localities is nil.
@@ -77,12 +79,12 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 		if localities == nil {
 			return []string{baseURI}
 		}
-		allLocalities := append([]string{backupdest.DefaultLocalityValue}, localities...)
+		allLocalities := append([]string{DefaultLocalityValue}, localities...)
 		localizedURIs := make([]string, len(allLocalities))
 		for i, locality := range allLocalities {
 			parsedURI, err := url.Parse(baseURI)
 			require.NoError(t, err)
-			if locality != backupdest.DefaultLocalityValue {
+			if locality != DefaultLocalityValue {
 				parsedURI.Path = backuputils.JoinURLPath(parsedURI.Path, locality)
 			}
 			q := parsedURI.Query()
@@ -161,11 +163,11 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 						subdir = endTime.GoTime().Format(backupbase.DateBasedIntoFolderName)
 					}
 
-					_, localityCollections, err := backupdest.GetURIsByLocalityKV(collectionTo, "")
+					_, localityCollections, err := GetURIsByLocalityKV(collectionTo, "")
 					require.NoError(t, err)
 
 					if len(incrementalTo) > 0 {
-						_, localityCollections, err = backupdest.GetURIsByLocalityKV(incrementalTo, "")
+						_, localityCollections, err = GetURIsByLocalityKV(incrementalTo, "")
 						require.NoError(t, err)
 					}
 
@@ -173,7 +175,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					kmsEnv := &cloud.TestKMSEnv{
 						ExternalIOConfig: &base.ExternalIODirConfig{},
 					}
-					backupDest, err := backupdest.ResolveDest(
+					backupDest, err := ResolveDest(
 						ctx, username.RootUserName(),
 						jobspb.BackupDetails_Destination{To: collectionTo, Subdir: subdir,
 							IncrementalStorage: incrementalTo, Exists: fullBackupExists},
@@ -337,4 +339,287 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 	}
 }
 
-// TODO(pbardea): Add tests for resolveBackupCollection.
+func TestResolveBackupManifests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestClusterArgs{
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "region", Value: "east"},
+					},
+				},
+			},
+			1: {
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "region", Value: "west"},
+					},
+				},
+			},
+			2: {
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "region", Value: "south"},
+					},
+				},
+			},
+		},
+	}
+	tc, db, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(
+		t, backuptestutils.MultiNode, backuptestutils.WithParams(params),
+	)
+	defer cleanupFn()
+
+	execCfg := tc.Server(0).ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
+
+	collections := []string{
+		"nodelocal://1/backup/default?COCKROACH_LOCALITY=default",
+		"nodelocal://2/backup/west?COCKROACH_LOCALITY=region%3Dwest",
+		"nodelocal://3/backup/south?COCKROACH_LOCALITY=region%3Dsouth",
+	}
+
+	var aost1 string
+	db.Exec(t, "BACKUP INTO ($1, $2, $3)", collections[0], collections[1], collections[2])
+	db.QueryRow(t, "SELECT now()").Scan(&aost1)
+	db.Exec(
+		t, "BACKUP INTO LATEST IN ($1, $2, $3) AS OF SYSTEM TIME $4::STRING",
+		collections[0], collections[1], collections[2], aost1,
+	)
+	db.Exec(
+		t, "BACKUP INTO LATEST IN ($1, $2, $3)",
+		collections[0], collections[1], collections[2],
+	)
+	db.Exec(
+		t, "BACKUP INTO LATEST IN ($1, $2, $3)",
+		collections[0], collections[1], collections[2],
+	)
+
+	aost1TS, err := time.Parse(time.RFC3339, aost1)
+	require.NoError(t, err)
+	aost1Hlc := hlc.Timestamp{WallTime: aost1TS.UnixNano()}
+
+	var fullSubdir string
+	db.QueryRow(
+		t, "SHOW BACKUPS IN ($1, $2, $3)",
+		collections[0], collections[1], collections[2],
+	).Scan(&fullSubdir)
+	require.NotEmpty(t, fullSubdir)
+
+	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
+	defer mem.Close(ctx)
+
+	fullyResolvedBaseDirs, err := backuputils.AppendPaths(collections, fullSubdir)
+	require.NoError(t, err)
+
+	fullyResolvedIncDirs, err := util.MapE(collections, func(uri string) (string, error) {
+		u, err := url.Parse(uri)
+		if err != nil {
+			return "", err
+		}
+		u.Path = backuputils.JoinURLPath(u.Path, "incrementals", fullSubdir)
+		return u.String(), nil
+	})
+	require.NoError(t, err)
+
+	baseStores, err := util.MapE(fullyResolvedBaseDirs, func(uri string) (cloud.ExternalStorage, error) {
+		return execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, uri, username.RootUserName())
+	})
+	require.NoError(t, err)
+	for i := range baseStores {
+		defer baseStores[i].Close()
+	}
+
+	incStores, err := util.MapE(fullyResolvedIncDirs, func(uri string) (cloud.ExternalStorage, error) {
+		return execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, uri, username.RootUserName())
+	})
+	require.NoError(t, err)
+	for i := range incStores {
+		defer incStores[i].Close()
+	}
+
+	t.Run("resolve backup manifests with latest AOST", func(t *testing.T) {
+		uris, manifests, locality, memSize, err := ResolveBackupManifests(
+			ctx,
+			&execCfg,
+			&mem,
+			collections[0],
+			collections,
+			baseStores,
+			incStores,
+			execCfg.DistSQLSrv.ExternalStorageFromURI,
+			fullSubdir,
+			fullyResolvedBaseDirs,
+			fullyResolvedIncDirs,
+			hlc.Timestamp{},
+			nil, /* encryption */
+			nil, /* kms */
+			username.RootUserName(),
+			false, /* includeSkipped */
+			true,  /* includeCompacted */
+			false, /* isCustomIncLocation */
+		)
+		defer mem.Shrink(ctx, memSize)
+		require.NoError(t, err)
+
+		require.Len(t, uris, 4)
+		require.Len(t, manifests, 4)
+		require.Len(t, locality, 4)
+	})
+
+	t.Run("resolve backup manifests with AOST in middle of chain", func(t *testing.T) {
+		uris, manifests, locality, memSize, err := ResolveBackupManifests(
+			ctx,
+			&execCfg,
+			&mem,
+			collections[0],
+			collections,
+			baseStores,
+			incStores,
+			execCfg.DistSQLSrv.ExternalStorageFromURI,
+			fullSubdir,
+			fullyResolvedBaseDirs,
+			fullyResolvedIncDirs,
+			aost1Hlc,
+			nil, /* encryption */
+			nil, /* kms */
+			username.RootUserName(),
+			false, /* includeSkipped */
+			true,  /* includeCompacted */
+			false, /* isCustomIncLocation */
+		)
+		defer mem.Shrink(ctx, memSize)
+		require.NoError(t, err)
+
+		require.Len(t, uris, 2)
+		require.Len(t, manifests, 2)
+		require.Len(t, locality, 2)
+	})
+}
+
+func TestIndexedResolveBackupManifestsWithCompactedBackups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc, db, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(
+		t, backuptestutils.SingleNode,
+	)
+	defer cleanupFn()
+
+	const collectionURI = "nodelocal://1/backup"
+
+	execCfg := tc.Server(0).ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
+	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
+
+	db.Exec(t, "SET CLUSTER SETTING backup.index.read.enabled = true")
+
+	var aostFull string
+	db.QueryRow(t, "SELECT now()").Scan(&aostFull)
+	aostFullTS, err := time.Parse(time.RFC3339, aostFull)
+	require.NoError(t, err)
+	aostFullHlc := hlc.Timestamp{WallTime: aostFullTS.UnixNano()}
+
+	db.Exec(
+		t, "BACKUP INTO $1 AS OF SYSTEM TIME $2::STRING",
+		collectionURI, aostFullHlc.AsOfSystemTime(),
+	)
+	db.Exec(t, "BACKUP INTO LATEST IN $1", collectionURI)
+	db.Exec(t, "BACKUP INTO LATEST IN $1", collectionURI)
+
+	var aostEnd string
+	db.QueryRow(t, "SELECT now()").Scan(&aostEnd)
+	aostEndTS, err := time.Parse(time.RFC3339, aostEnd)
+	require.NoError(t, err)
+	aostEndHlc := hlc.Timestamp{WallTime: aostEndTS.UnixNano()}
+	db.Exec(
+		t, "BACKUP INTO LATEST IN $1 AS OF SYSTEM TIME $2::STRING",
+		collectionURI, aostEndHlc.AsOfSystemTime(),
+	)
+
+	var fullSubdir string
+	db.QueryRow(
+		t, `SELECT path FROM [SHOW BACKUPS IN $1] ORDER BY path DESC`, collectionURI,
+	).Scan(&fullSubdir)
+	require.NotEmpty(t, fullSubdir)
+
+	var compactionJob jobspb.JobID
+	db.QueryRow(
+		t,
+		`SELECT crdb_internal.backup_compaction(
+				0, $1, $2, $3::DECIMAL, $4::DECIMAL
+			)`,
+		fmt.Sprintf("BACKUP INTO LATEST IN '%s'", collectionURI),
+		fullSubdir,
+		aostFullHlc.AsOfSystemTime(),
+		aostEndHlc.AsOfSystemTime(),
+	).Scan(&compactionJob)
+	jobutils.WaitForJobToSucceed(t, db, compactionJob)
+
+	// Backup chain: f@t=0, i1@t=1, i2@t=2, i3@t=4, c@t=4
+	// where c compacts i1, i2, and i3.
+	const totalBackups = 5
+	const filesPerManifest = 2 // Opening a manifest requires opening the metadata file and checksum
+	for _, tt := range []struct {
+		includeSkipped   bool
+		includeCompacted bool
+		expectedCount    int
+	}{
+		{
+			includeSkipped:   false,
+			includeCompacted: true,
+			expectedCount:    2,
+		},
+		{
+			includeSkipped:   true,
+			includeCompacted: true,
+			expectedCount:    5,
+		},
+		{
+			includeSkipped:   false,
+			includeCompacted: false,
+			expectedCount:    4,
+		},
+		{
+			includeSkipped:   true,
+			includeCompacted: false,
+			expectedCount:    4,
+		},
+	} {
+		t.Run(
+			fmt.Sprintf("includeSkipped=%t,includeCompacted=%t", tt.includeSkipped, tt.includeCompacted),
+			func(t *testing.T) {
+				baseReadersOpened := tc.Servers[0].MustGetSQLCounter("cloud.readers_opened")
+				uris, manifests, locality, memSize, err := indexedResolveBackupManifests(
+					ctx,
+					&mem,
+					[]string{collectionURI},
+					execCfg.DistSQLSrv.ExternalStorageFromURI,
+					fullSubdir,
+					hlc.Timestamp{},
+					nil, /* encryption */
+					nil, /* kms */
+					username.RootUserName(),
+					tt.includeSkipped,
+					tt.includeCompacted,
+				)
+				defer mem.Shrink(ctx, memSize)
+				require.NoError(t, err)
+				require.Len(t, uris, tt.expectedCount)
+				require.Len(t, manifests, tt.expectedCount)
+				require.Len(t, locality, tt.expectedCount)
+
+				// To compute number of manifests opened, we use the following equation:
+				// totalBackups = number of indexes opened
+				// readersOpened - totalBackups = number of files opened to read manifests
+				// (readersOpened - totalBackups) / filesPerManifest = number of manifests opened
+				readersOpened := tc.Servers[0].MustGetSQLCounter("cloud.readers_opened") - baseReadersOpened
+				manifestsOpened := (readersOpened - totalBackups) / filesPerManifest
+				require.Equal(t, tt.expectedCount, int(manifestsOpened))
+			},
+		)
+	}
+}

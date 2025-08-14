@@ -552,55 +552,86 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// Using the expected start and end times, create a slice containing the
-			// expected expectedOrder of the manifests based on their original indexes. For
-			// example, [2, 0, 1] means that the expected output should should have
-			// the third input manifest first, the first input manifest second, and the
-			// second input manifest last.
-			expectedOrder := util.Map(tc.expected, func(ts []int) string {
-				return strconv.Itoa(slices.IndexFunc(tc.manifests, func(m backuppb.BackupManifest) bool {
-					return m.StartTime.WallTime == int64(ts[0]) && m.EndTime.WallTime == int64(ts[1])
-				}))
+			t.Run("legacy ValidateEndTimeAndTruncate", func(t *testing.T) {
+				// Using the expected start and end times, create a slice containing the
+				// expected expectedOrder of the manifests based on their original indexes. For
+				// example, [2, 0, 1] means that the expected output should should have
+				// the third input manifest first, the first input manifest second, and the
+				// second input manifest last.
+				expectedOrder := util.Map(tc.expected, func(ts []int) string {
+					return strconv.Itoa(slices.IndexFunc(tc.manifests, func(m backuppb.BackupManifest) bool {
+						return m.StartTime.WallTime == int64(ts[0]) && m.EndTime.WallTime == int64(ts[1])
+					}))
+				})
+				// Create URIs and locality info in a way that we can track their
+				// resulting order after being truncated. We set input URIs to their
+				// stringified index, and locality info maps to a map containing just
+				// their index. We can later use the expectedOrder to check that the
+				// output maps to the expected indexes.
+				inputURIs := make([]string, len(tc.manifests))
+				inputLocs := make([]jobspb.RestoreDetails_BackupLocalityInfo, len(tc.manifests))
+				for i := range tc.manifests {
+					index := strconv.Itoa(i)
+					inputURIs[i] = index
+					inputLocs[i].URIsByOriginalLocalityKV = make(map[string]string)
+					inputLocs[i].URIsByOriginalLocalityKV[index] = index
+				}
+
+				manifestEntries, err := backupinfo.ZipBackupTreeEntries(inputURIs, tc.manifests, inputLocs)
+				require.NoError(t, err)
+				manifestEntries, err = backupinfo.ValidateEndTimeAndTruncate(
+					manifestEntries,
+					hlc.Timestamp{WallTime: int64(tc.endTime)},
+					false, /* includeSkipped */
+					tc.includeCompacted,
+				)
+				if tc.err != "" {
+					require.ErrorContains(t, err, tc.err)
+					return
+				}
+				uris, res, locs := backupinfo.UnzipBackupTreeEntries(manifestEntries)
+				require.Equal(t, len(tc.expected), len(res))
+				require.Equal(t, expectedOrder, uris)
+				require.Len(t, locs, len(tc.expected))
+				for idx, rank := range expectedOrder {
+					_, ok := locs[idx].URIsByOriginalLocalityKV[rank]
+					require.True(t, ok)
+				}
+
+				for i := range tc.expected {
+					actual := []int{int(res[i].StartTime.WallTime), int(res[i].EndTime.WallTime)}
+					require.Equal(t, tc.expected[i], actual)
+				}
 			})
-			// Create URIs and locality info in a way that we can track their
-			// resulting order after being truncated. We set input URIs to their
-			// stringified index, and locality info maps to a map containing just
-			// their index. We can later use the expectedOrder to check that the
-			// output maps to the expected indexes.
-			inputURIs := make([]string, len(tc.manifests))
-			inputLocs := make([]jobspb.RestoreDetails_BackupLocalityInfo, len(tc.manifests))
-			for i := range tc.manifests {
-				index := strconv.Itoa(i)
-				inputURIs[i] = index
-				inputLocs[i].URIsByOriginalLocalityKV = make(map[string]string)
-				inputLocs[i].URIsByOriginalLocalityKV[index] = index
-			}
 
-			manifestEntries, err := backupinfo.ZipBackupTreeEntries(inputURIs, tc.manifests, inputLocs)
-			require.NoError(t, err)
-			manifestEntries, err = backupinfo.ValidateEndTimeAndTruncate(
-				manifestEntries,
-				hlc.Timestamp{WallTime: int64(tc.endTime)},
-				false, /* includeSkipped */
-				tc.includeCompacted,
-			)
-			if tc.err != "" {
-				require.ErrorContains(t, err, tc.err)
-				return
-			}
-			uris, res, locs := backupinfo.UnzipBackupTreeEntries(manifestEntries)
-			require.Equal(t, len(tc.expected), len(res))
-			require.Equal(t, expectedOrder, uris)
-			require.Len(t, locs, len(tc.expected))
-			for idx, rank := range expectedOrder {
-				_, ok := locs[idx].URIsByOriginalLocalityKV[rank]
-				require.True(t, ok)
-			}
-
-			for i := range tc.expected {
-				actual := []int{int(res[i].StartTime.WallTime), int(res[i].EndTime.WallTime)}
-				require.Equal(t, tc.expected[i], actual)
-			}
+			t.Run("ValidateEndTimeAndTruncate with indexes", func(t *testing.T) {
+				indexes := util.Map(
+					tc.manifests, func(m backuppb.BackupManifest) backuppb.BackupIndexMetadata {
+						return backuppb.BackupIndexMetadata{
+							StartTime:         m.StartTime,
+							EndTime:           m.EndTime,
+							IsCompacted:       m.IsCompacted,
+							MVCCFilter:        m.MVCCFilter,
+							RevisionStartTime: m.RevisionStartTime,
+						}
+					},
+				)
+				validatedIndexes, err := backupinfo.ValidateEndTimeAndTruncate(
+					indexes,
+					hlc.Timestamp{WallTime: int64(tc.endTime)},
+					false, /* includeSkipped */
+					tc.includeCompacted,
+				)
+				if tc.err != "" {
+					require.ErrorContains(t, err, tc.err)
+					return
+				}
+				require.Equal(t, len(tc.expected), len(validatedIndexes))
+				for i := range tc.expected {
+					actual := []int{int(validatedIndexes[i].StartTime.WallTime), int(validatedIndexes[i].EndTime.WallTime)}
+					require.Equal(t, tc.expected[i], actual)
+				}
+			})
 		})
 	}
 }
