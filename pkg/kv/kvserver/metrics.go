@@ -171,6 +171,52 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	// Decommisioning nudger metrics.
+	metaDecommissioningNudgerEnqueueFailure = metric.Metadata{
+		Name:         "ranges.decommissioning.nudger.enqueue.failure",
+		Help:         "Number of failed enqueues of a range for decommissioning by the decommissioning nudger",
+		Measurement:  "Ranges",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "ranges.decommissioning.nudger.enqueue.failure",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelStatus, "failure"),
+	}
+	metaDecommissioningNudgerEnqueueEnqueued = metric.Metadata{
+		Name:         "ranges.decommissioning.nudger.enqueue.enqueued",
+		Help:         "Number of enqueued enqueues of a range for decommissioning by the decommissioning nudger",
+		Measurement:  "Ranges",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "ranges.decommissioning.nudger.enqueue.enqueued",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelStatus, "enqueued"),
+	}
+	metaDecommissioningNudgerRateLimited = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.rate_limited",
+		Help:        "Number of rate limited enqueues of a range for decommissioning by the decommissioning nudger",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.rate_limited",
+	}
+	metaDecommissioningNudgerSettingDisabled = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.setting_disabled",
+		Help:        "Number of enqueues of a range for decommissioning by the decommissioning nudger that were disabled",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.setting_disabled",
+	}
+	metaDecommissioningNudgerInvalidLease = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.invalid_lease",
+		Help:        "Number of enqueues of a range for decommissioning by the decommissioning nudger that were invalid",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.invalid_lease",
+	}
+	metaDecommissioningNudgerNotLeaseholder = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.not_leaseholder",
+		Help:        "Number of enqueues of a range for decommissioning by the decommissioning nudger that were not the leaseholder",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.not_leaseholder",
+	}
+
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount = metric.Metadata{
 		Name:        "leases.success",
@@ -2867,6 +2913,14 @@ type StoreMetrics struct {
 	DecommissioningRangeCount       *metric.Gauge
 	RangeClosedTimestampPolicyCount [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge
 
+	// Decommissioning nudger metrics.
+	DecommissioningNudgerEnqueueFailure  *metric.Counter
+	DecommissioningNudgerEnqueueEnqueued *metric.Counter
+	DecommissioningNudgerNotLeaseholder  *metric.Counter
+	DecommissioningNudgerInvalidLease    *metric.Counter
+	DecommissioningNudgerSettingDisabled *metric.Counter
+	DecommissioningNudgerRateLimited     *metric.Counter
+
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
 	// lease).
@@ -3585,6 +3639,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		OverReplicatedRangeCount:        metric.NewGauge(metaOverReplicatedRangeCount),
 		DecommissioningRangeCount:       metric.NewGauge(metaDecommissioningRangeCount),
 		RangeClosedTimestampPolicyCount: makePolicyRefresherMetrics(),
+
+		// Decommissioning nuder metrics.
+		DecommissioningNudgerEnqueueFailure:  metric.NewCounter(metaDecommissioningNudgerEnqueueFailure),
+		DecommissioningNudgerEnqueueEnqueued: metric.NewCounter(metaDecommissioningNudgerEnqueueEnqueued),
+		DecommissioningNudgerNotLeaseholder:  metric.NewCounter(metaDecommissioningNudgerNotLeaseholder),
+		DecommissioningNudgerInvalidLease:    metric.NewCounter(metaDecommissioningNudgerInvalidLease),
+		DecommissioningNudgerSettingDisabled: metric.NewCounter(metaDecommissioningNudgerSettingDisabled),
+		DecommissioningNudgerRateLimited:     metric.NewCounter(metaDecommissioningNudgerRateLimited),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),

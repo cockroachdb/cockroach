@@ -15612,6 +15612,60 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: ranges.decommissioning.nudger.enqueue.enqueued
+      exported_name: ranges_decommissioning_nudger_enqueue_enqueued
+      labeled_name: 'ranges.decommissioning.nudger.enqueue.enqueued{status: enqueued}'
+      description: Number of enqueued enqueues of a range for decommissioning by the decommissioning nudger
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.enqueue.failure
+      exported_name: ranges_decommissioning_nudger_enqueue_failure
+      labeled_name: 'ranges.decommissioning.nudger.enqueue.failure{status: failure}'
+      description: Number of failed enqueues of a range for decommissioning by the decommissioning nudger
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.invalid_lease
+      exported_name: ranges_decommissioning_nudger_invalid_lease
+      labeled_name: ranges.decommissioning.nudger.invalid_lease
+      description: Number of enqueues of a range for decommissioning by the decommissioning nudger that were invalid
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.not_leaseholder
+      exported_name: ranges_decommissioning_nudger_not_leaseholder
+      labeled_name: ranges.decommissioning.nudger.not_leaseholder
+      description: Number of enqueues of a range for decommissioning by the decommissioning nudger that were not the leaseholder
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.rate_limited
+      exported_name: ranges_decommissioning_nudger_rate_limited
+      labeled_name: ranges.decommissioning.nudger.rate_limited
+      description: Number of rate limited enqueues of a range for decommissioning by the decommissioning nudger
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.setting_disabled
+      exported_name: ranges_decommissioning_nudger_setting_disabled
+      labeled_name: ranges.decommissioning.nudger.setting_disabled
+      description: Number of enqueues of a range for decommissioning by the decommissioning nudger that were disabled
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: ranges.overreplicated
       exported_name: ranges_overreplicated
       description: Number of ranges with more live replicas than the replication target
