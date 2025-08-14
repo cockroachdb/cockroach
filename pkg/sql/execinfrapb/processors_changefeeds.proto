@@ -106,4 +106,16 @@ message ChangefeedProgressConfig {
   // span progress on a per-table basis. If configured, any span frontiers
   // created will track spans belonging to different tables separately.
   optional bool per_table_tracking = 1 [(gogoproto.nullable) = false];
+  // PerTableProtectedTimestamps configures whether the changefeed should
+  // store one protected timestamp per target table. If configured, any
+  // new changefeeds created will create one record per table.
+  optional bool per_table_protected_timestamps = 2 [(gogoproto.nullable) = false];
+}
+
+// ProtectedTimestampRecords is a map from table descriptor IDs to protected timestamp record IDs.
+message ProtectedTimestampRecords {
+  map<uint32, bytes> protected_timestamp_records = 1 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
 }
