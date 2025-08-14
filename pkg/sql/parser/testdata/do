@@ -406,3 +406,40 @@ END IF;
 END;
 $$;
  -- identifiers removed
+
+parse
+DO $$
+DECLARE
+  _ _[];
+BEGIN
+END;
+$$;
+----
+DO $$
+DECLARE
+_ _[];
+BEGIN
+END;
+$$;
+ -- normalized!
+DO $$
+DECLARE
+_ _[];
+BEGIN
+END;
+$$;
+ -- fully parenthesized
+DO $$
+DECLARE
+_ _[];
+BEGIN
+END;
+$$;
+ -- literals removed
+DO $$
+DECLARE
+_ _[];
+BEGIN
+END;
+$$;
+ -- identifiers removed

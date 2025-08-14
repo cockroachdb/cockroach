@@ -109,8 +109,17 @@ func (u *plpgsqlSymUnion) numVal() *tree.NumVal {
     return u.val.(*tree.NumVal)
 }
 
+type resolvableTypeRefWithNumAnnotations struct {
+	typ tree.ResolvableTypeReference
+	idx tree.AnnotationIdx
+}
+
 func (u *plpgsqlSymUnion) typ() tree.ResolvableTypeReference {
-    return u.val.(tree.ResolvableTypeReference)
+    return u.val.(resolvableTypeRefWithNumAnnotations).typ
+}
+
+func (u *plpgsqlSymUnion) typNumAnnotations() tree.AnnotationIdx {
+    return u.val.(resolvableTypeRefWithNumAnnotations).idx
 }
 
 func (u *plpgsqlSymUnion) getDiagnosticsKind() plpgsqltree.GetDiagnosticsKind {
@@ -138,6 +147,25 @@ func (u *plpgsqlSymUnion) expr() plpgsqltree.Expr {
         return nil
     }
     return u.val.(plpgsqltree.Expr)
+}
+
+type exprWithNumAnnotations struct {
+    expr plpgsqltree.Expr
+    idx  tree.AnnotationIdx
+}
+
+func (u *plpgsqlSymUnion) exprFromAnnotated() plpgsqltree.Expr {
+    if u.val == nil {
+        return nil
+    }
+    return u.val.(exprWithNumAnnotations).expr
+}
+
+func (u *plpgsqlSymUnion) exprNumAnnotations() tree.AnnotationIdx {
+    if u.val == nil {
+        return 0
+    }
+    return u.val.(exprWithNumAnnotations).idx
 }
 
 func (u *plpgsqlSymUnion) exprs() []plpgsqltree.Expr {
@@ -469,13 +497,15 @@ decl_stmts: decl_stmts opt_declare decl_statement
 
 decl_statement: decl_varname decl_const decl_datatype decl_collate decl_notnull decl_defval
   {
+    ann := tree.MakeAnnotations($3.typNumAnnotations()+$6.exprNumAnnotations())
     $$.val = &plpgsqltree.Declaration{
       Var: plpgsqltree.Variable($1),
       Constant: $2.bool(),
       Typ: $3.typ(),
       Collate: $4,
       NotNull: $5.bool(),
-      Expr: $6.expr(),
+      Expr: $6.exprFromAnnotated(),
+      Annotations: &ann,
     }
   }
 | decl_varname ALIAS FOR decl_aliasitem ';'
@@ -581,15 +611,16 @@ decl_datatype:
     }
     // This is an inlined version of GetTypeFromValidSQLSyntax which doesn't
     // return an assertion failure.
-    castExpr, err := plpgsqllex.(*lexer).ParseExpr("1::" + sqlStr)
+    castExpr, numAnnotations, err := plpgsqllex.(*lexer).ParseExpr("1::" + sqlStr)
     if err != nil {
       return setErr(plpgsqllex, errors.New("unable to parse type of variable declaration"))
     }
+    ref := resolvableTypeRefWithNumAnnotations{idx: numAnnotations}
     switch t := castExpr.(type) {
     case *tree.CollateExpr:
-      $$.val = types.MakeCollatedString(types.String, t.Locale)
+      ref.typ = types.MakeCollatedString(types.String, t.Locale)
     case *tree.CastExpr:
-      $$.val = t.Type
+      ref.typ = t.Type
     default:
       err := errors.New("unable to parse type of variable declaration")
       if strings.Contains(sqlStr, "%") {
@@ -599,6 +630,7 @@ decl_datatype:
       }
       return setErr(plpgsqllex, err)
     }
+    $$.val = ref
   }
 ;
 
@@ -632,11 +664,11 @@ decl_defval: ';'
   }
 | decl_defkey ';'
   {
-    expr, err := plpgsqllex.(*lexer).ParseExpr($1)
+    expr, numAnnotations, err := plpgsqllex.(*lexer).ParseExpr($1)
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    $$.val = expr
+    $$.val = exprWithNumAnnotations{expr: expr, idx: numAnnotations}
   }
 ;
 
@@ -785,7 +817,7 @@ stmt_perform: PERFORM stmt_until_semi ';'
 
 stmt_call: CALL expr_until_semi ';'
   {
-    expr, err := plpgsqllex.(*lexer).ParseExpr($2)
+    expr, _, err := plpgsqllex.(*lexer).ParseExpr($2) // TODO
     if err != nil {
       return setErr(plpgsqllex, err)
     }
@@ -840,7 +872,7 @@ do_stmt_opt_item:
 
 stmt_assign: IDENT assign_operator expr_until_semi ';'
   {
-    expr, err := plpgsqllex.(*lexer).ParseExpr($3)
+    expr, _, err := plpgsqllex.(*lexer).ParseExpr($3) // TODO
     if err != nil {
       return setErr(plpgsqllex, err)
     }
@@ -852,7 +884,7 @@ stmt_assign: IDENT assign_operator expr_until_semi ';'
 | IDENT '.' IDENT assign_operator expr_until_semi ';'
   {
     // TODO(#91779, #122322): allow arbitrary nesting of indirection.
-    expr, err := plpgsqllex.(*lexer).ParseExpr($5)
+    expr, _, err := plpgsqllex.(*lexer).ParseExpr($5) // TODO
     if err != nil {
       return setErr(plpgsqllex, err)
     }
@@ -950,7 +982,7 @@ IDENT
 
 stmt_if: IF expr_until_then THEN proc_sect stmt_elsifs stmt_else END_IF IF ';'
   {
-    cond, err := plpgsqllex.(*lexer).ParseExpr($2)
+    cond, _, err := plpgsqllex.(*lexer).ParseExpr($2) // TODO
     if err != nil {
       return setErr(plpgsqllex, err)
     }
@@ -969,7 +1001,7 @@ stmt_elsifs:
   }
 | stmt_elsifs ELSIF expr_until_then THEN proc_sect
   {
-    cond, err := plpgsqllex.(*lexer).ParseExpr($3)
+    cond, _, err := plpgsqllex.(*lexer).ParseExpr($3) // TODO
     if err != nil {
       return setErr(plpgsqllex, err)
     }
@@ -1072,7 +1104,7 @@ stmt_while: opt_loop_label WHILE expr_until_loop LOOP loop_body opt_label ';'
     if err := checkLoopLabels(loopLabel, loopEndLabel); err != nil {
       return setErr(plpgsqllex, err)
     }
-    cond, err := plpgsqllex.(*lexer).ParseExpr($3)
+    cond, _, err := plpgsqllex.(*lexer).ParseExpr($3) // TODO
     if err != nil {
       return setErr(plpgsqllex, err)
     }
@@ -1287,7 +1319,7 @@ option_expr:
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    optionExpr, err := plpgsqllex.(*lexer).ParseExpr(sqlStr)
+    optionExpr, _, err := plpgsqllex.(*lexer).ParseExpr(sqlStr) // TODO
     if err != nil {
       return setErr(plpgsqllex, err)
     }
@@ -1339,7 +1371,7 @@ format_expr: ','
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    param, err := plpgsqllex.(*lexer).ParseExpr(sqlStr)
+    param, _, err := plpgsqllex.(*lexer).ParseExpr(sqlStr) // TODO
     if err != nil {
       return setErr(plpgsqllex, err)
     }
@@ -1624,7 +1656,7 @@ opt_exitcond: ';'
   { }
 | WHEN expr_until_semi ';'
   {
-    expr, err := plpgsqllex.(*lexer).ParseExpr($2)
+    expr, _, err := plpgsqllex.(*lexer).ParseExpr($2) // TODO
     if err != nil {
       return setErr(plpgsqllex, err)
     }

@@ -237,7 +237,7 @@ func MakeComputedExprs(
 		}
 	}
 
-	exprs, err := parser.ParseExprs(exprStrings)
+	exprs, _, err := parser.ParseExprs(exprStrings)
 	if err != nil {
 		return nil, catalog.TableColSet{}, err
 	}

@@ -625,7 +625,7 @@ func ValidateTTLExpirationExpression(
 		return nil
 	}
 
-	exprs, err := parser.ParseExprs([]string{string(ttl.ExpirationExpr)})
+	exprs, _, err := parser.ParseExprs([]string{string(ttl.ExpirationExpr)})
 	if err != nil {
 		return pgerror.Wrapf(
 			err,

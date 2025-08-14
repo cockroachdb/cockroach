@@ -370,7 +370,7 @@ func ParseTablePattern(sql string) (tree.TablePattern, error) {
 // is, in fact, a comma-delimited sequence of SQL scalar expressions —
 // the results are undefined if the string contains invalid SQL
 // syntax.
-func ParseExprs(exprs []string) (tree.Exprs, error) {
+func ParseExprs(exprs []string) (tree.Exprs, tree.AnnotationIdx, error) {
 	return ParseExprsWithOptions(exprs, DefaultParseOptions)
 }
 
@@ -379,19 +379,21 @@ func ParseExprs(exprs []string) (tree.Exprs, error) {
 // ensuring that the input is, in fact, a comma-delimited sequence of SQL
 // scalar expressions — the results are undefined if the string contains
 // invalid SQL syntax.
-func ParseExprsWithOptions(exprs []string, opts ParseOptions) (tree.Exprs, error) {
+func ParseExprsWithOptions(
+	exprs []string, opts ParseOptions,
+) (tree.Exprs, tree.AnnotationIdx, error) {
 	if len(exprs) == 0 {
-		return tree.Exprs{}, nil
+		return tree.Exprs{}, 0, nil
 	}
 	stmt, err := ParseOneWithOptions(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")), opts)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	set, ok := stmt.AST.(*tree.SetVar)
 	if !ok {
-		return nil, errors.AssertionFailedf("expected a SET statement, but found %T", stmt)
+		return nil, 0, errors.AssertionFailedf("expected a SET statement, but found %T", stmt)
 	}
-	return set.Values, nil
+	return set.Values, stmt.NumAnnotations, nil
 }
 
 // ParseExpr parses a SQL scalar expression. The caller is responsible
@@ -399,7 +401,7 @@ func ParseExprsWithOptions(exprs []string, opts ParseOptions) (tree.Exprs, error
 // expression — the results are undefined if the string contains
 // invalid SQL syntax.
 func ParseExpr(sql string) (tree.Expr, error) {
-	exprs, err := ParseExprs([]string{sql})
+	exprs, _, err := ParseExprs([]string{sql})
 	if err != nil {
 		return nil, err
 	}

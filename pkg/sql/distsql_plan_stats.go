@@ -522,7 +522,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			exprStrings = append(exprStrings, col.GetComputeExpr())
 		}
 
-		virtComputedExprs, err := parser.ParseExprs(exprStrings)
+		virtComputedExprs, _, err := parser.ParseExprs(exprStrings)
 		if err != nil {
 			return nil, err
 		}
