@@ -2190,7 +2190,7 @@ func (c *clusterImpl) StartE(
 		}
 	}
 	// N.B. If `SkipInit` is set, we don't wait for SQL since node(s) may not join the cluster in any definite time.
-	if !startOpts.RoachprodOpts.SkipInit {
+	if !startOpts.RoachprodOpts.SkipInit && !startOpts.RoachprodOpts.SkipWaitForSQL {
 		// Wait for SQL to be ready on all nodes, for 'system' tenant, only.
 		for _, n := range nodes {
 			conn, err := c.ConnE(ctx, l, nodes[0], option.VirtualClusterName(install.SystemInterfaceName))

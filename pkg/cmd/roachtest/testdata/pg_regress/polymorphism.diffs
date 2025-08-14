@@ -332,61 +332,63 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  --
  -- Polymorphic aggregate tests
  --
-@@ -289,6 +260,53 @@
+@@ -289,6 +260,55 @@
  -- dual polymorphic transfn
  CREATE FUNCTION tfp(anyarray,anyelement) RETURNS anyarray AS
  'select $1 || $2' LANGUAGE SQL;
 +ERROR:  ambiguous binary operator: <anyelement[]> || <anyelement>
 +HINT:  candidates are:
++||(ltree[], ltree[]) -> ltree[]
 +||(varbit[], varbit[]) -> varbit[]
 +||(jsonb[], jsonb[]) -> jsonb[]
 +||(timetz[], timetz[]) -> timetz[]
-+||(time[], time[]) -> time[]
 +||(bool[], bool) -> bool[]
-+||(refcursor[], refcursor[]) -> refcursor[]
++||(time[], time[]) -> time[]
 +||(box2d[], box2d) -> box2d[]
-+||(pg_lsn[], pg_lsn[]) -> pg_lsn[]
++||(refcursor[], refcursor[]) -> refcursor[]
 +||(int[], int) -> int[]
-+||(inet[], inet[]) -> inet[]
++||(pg_lsn[], pg_lsn[]) -> pg_lsn[]
 +||(float[], float) -> float[]
-+||(uuid[], uuid[]) -> uuid[]
++||(inet[], inet[]) -> inet[]
 +||(decimal[], decimal) -> decimal[]
-+||(oid[], oid[]) -> oid[]
++||(uuid[], uuid[]) -> uuid[]
 +||(date[], date) -> date[]
-+||(timestamptz[], timestamptz[]) -> timestamptz[]
++||(oid[], oid[]) -> oid[]
 +||(timestamp[], timestamp) -> timestamp[]
-+||(bytes[], bytes[]) -> bytes[]
++||(timestamptz[], timestamptz[]) -> timestamptz[]
 +||(interval[], interval) -> interval[]
-+||(string[], string[]) -> string[]
++||(bytes[], bytes[]) -> bytes[]
 +||(geography[], geography) -> geography[]
-+||(geometry[], geometry[]) -> geometry[]
++||(string[], string[]) -> string[]
 +||(geometry[], geometry) -> geometry[]
-+||(geography[], geography[]) -> geography[]
++||(geometry[], geometry[]) -> geometry[]
 +||(string[], string) -> string[]
-+||(interval[], interval[]) -> interval[]
++||(geography[], geography[]) -> geography[]
 +||(bytes[], bytes) -> bytes[]
-+||(timestamp[], timestamp[]) -> timestamp[]
++||(interval[], interval[]) -> interval[]
 +||(timestamptz[], timestamptz) -> timestamptz[]
-+||(date[], date[]) -> date[]
++||(timestamp[], timestamp[]) -> timestamp[]
 +||(oid[], oid) -> oid[]
-+||(decimal[], decimal[]) -> decimal[]
++||(date[], date[]) -> date[]
 +||(uuid[], uuid) -> uuid[]
-+||(float[], float[]) -> float[]
++||(decimal[], decimal[]) -> decimal[]
 +||(inet[], inet) -> inet[]
-+||(int[], int[]) -> int[]
++||(float[], float[]) -> float[]
 +||(pg_lsn[], pg_lsn) -> pg_lsn[]
-+||(box2d[], box2d[]) -> box2d[]
++||(int[], int[]) -> int[]
 +||(refcursor[], refcursor) -> refcursor[]
-+||(bool[], bool[]) -> bool[]
++||(box2d[], box2d[]) -> box2d[]
 +||(time[], time) -> time[]
-+||(varbit[], varbit) -> varbit[]
++||(bool[], bool[]) -> bool[]
 +||(timetz[], timetz) -> timetz[]
++||(ltree[], ltree) -> ltree[]
 +||(jsonb[], jsonb) -> jsonb[]
++||(varbit[], varbit) -> varbit[]
 +
  -- dual non-polymorphic transfn
  CREATE FUNCTION tfnp(int[],int) RETURNS int[] AS
  'select $1 || $2' LANGUAGE SQL;
-@@ -301,6 +319,36 @@
+@@ -301,6 +321,36 @@
  -- multi-arg polymorphic
  CREATE FUNCTION sum3(anyelement,anyelement,anyelement) returns anyelement AS
  'select $1+$2+$3' language sql strict;
@@ -423,7 +425,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  -- finalfn polymorphic
  CREATE FUNCTION ffp(anyarray) RETURNS anyarray AS
  'select $1' LANGUAGE SQL;
-@@ -323,28 +371,58 @@
+@@ -323,28 +373,58 @@
  -- should CREATE
  CREATE AGGREGATE myaggp01a(*) (SFUNC = stfnp, STYPE = int4[],
    FINALFUNC = ffp, INITCOND = '{}');
@@ -488,7 +490,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  --    Case2 (R = P) && ((B = P) || (B = N))
  --    -------------------------------------
  --    S    tf1      B    tf2
-@@ -353,103 +431,226 @@
+@@ -353,103 +433,226 @@
  -- should CREATE
  CREATE AGGREGATE myaggp05a(BASETYPE = int, SFUNC = tfnp, STYPE = int[],
    FINALFUNC = ffp, INITCOND = '{}');
@@ -736,7 +738,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  --     Case3 (R = N) && (B = A)
  --     ------------------------
  --     S    tf1
-@@ -458,28 +659,58 @@
+@@ -458,28 +661,58 @@
  -- should CREATE
  CREATE AGGREGATE myaggn01a(*) (SFUNC = stfnp, STYPE = int4[],
    FINALFUNC = ffnp, INITCOND = '{}');
@@ -801,7 +803,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  --    Case4 (R = N) && ((B = P) || (B = N))
  --    -------------------------------------
  --    S    tf1      B    tf2
-@@ -488,107 +719,235 @@
+@@ -488,107 +721,235 @@
  -- should CREATE
  CREATE AGGREGATE myaggn05a(BASETYPE = int, SFUNC = tfnp, STYPE = int[],
    FINALFUNC = ffnp, INITCOND = '{}');
@@ -1059,7 +1061,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  -- create test data for polymorphic aggregates
  create temp table t(f1 int, f2 int[], f3 text);
  insert into t values(1,array[1],'a');
-@@ -601,220 +960,66 @@
+@@ -601,220 +962,66 @@
  insert into t values(3,array[3],'b');
  -- test the successfully created polymorphic aggregates
  select f3, myaggp01a(*) from t group by f3 order by f3;
@@ -1306,7 +1308,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  select q2, sql_if(q2 > 0, q2, q2 + 1) from int8_tbl;
          q2         |      sql_if       
  -------------------+-------------------
-@@ -832,20 +1037,18 @@
+@@ -832,20 +1039,18 @@
      stype = anyarray,
      initcond = '{}'
  );
@@ -1335,56 +1337,58 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  -- another kind of polymorphic aggregate
  create function add_group(grp anyarray, ad anyelement, size integer)
    returns anyarray
-@@ -861,30 +1064,137 @@
+@@ -861,30 +1066,141 @@
  end;
  $$
    language plpgsql immutable;
 +ERROR:  ambiguous binary operator: <anyelement[]> || <anyelement> (returning <anyelement[]>)
 +HINT:  candidates are:
++||(ltree[], ltree[]) -> ltree[]
 +||(varbit[], varbit[]) -> varbit[]
 +||(jsonb[], jsonb[]) -> jsonb[]
 +||(timetz[], timetz[]) -> timetz[]
-+||(time[], time[]) -> time[]
 +||(bool[], bool) -> bool[]
-+||(refcursor[], refcursor[]) -> refcursor[]
++||(time[], time[]) -> time[]
 +||(box2d[], box2d) -> box2d[]
-+||(pg_lsn[], pg_lsn[]) -> pg_lsn[]
++||(refcursor[], refcursor[]) -> refcursor[]
 +||(int[], int) -> int[]
-+||(inet[], inet[]) -> inet[]
++||(pg_lsn[], pg_lsn[]) -> pg_lsn[]
 +||(float[], float) -> float[]
-+||(uuid[], uuid[]) -> uuid[]
++||(inet[], inet[]) -> inet[]
 +||(decimal[], decimal) -> decimal[]
-+||(oid[], oid[]) -> oid[]
++||(uuid[], uuid[]) -> uuid[]
 +||(date[], date) -> date[]
-+||(timestamptz[], timestamptz[]) -> timestamptz[]
++||(oid[], oid[]) -> oid[]
 +||(timestamp[], timestamp) -> timestamp[]
-+||(bytes[], bytes[]) -> bytes[]
++||(timestamptz[], timestamptz[]) -> timestamptz[]
 +||(interval[], interval) -> interval[]
-+||(string[], string[]) -> string[]
++||(bytes[], bytes[]) -> bytes[]
 +||(geography[], geography) -> geography[]
-+||(geometry[], geometry[]) -> geometry[]
++||(string[], string[]) -> string[]
 +||(geometry[], geometry) -> geometry[]
-+||(geography[], geography[]) -> geography[]
++||(geometry[], geometry[]) -> geometry[]
 +||(string[], string) -> string[]
-+||(interval[], interval[]) -> interval[]
++||(geography[], geography[]) -> geography[]
 +||(bytes[], bytes) -> bytes[]
-+||(timestamp[], timestamp[]) -> timestamp[]
++||(interval[], interval[]) -> interval[]
 +||(timestamptz[], timestamptz) -> timestamptz[]
-+||(date[], date[]) -> date[]
++||(timestamp[], timestamp[]) -> timestamp[]
 +||(oid[], oid) -> oid[]
-+||(decimal[], decimal[]) -> decimal[]
++||(date[], date[]) -> date[]
 +||(uuid[], uuid) -> uuid[]
-+||(float[], float[]) -> float[]
++||(decimal[], decimal[]) -> decimal[]
 +||(inet[], inet) -> inet[]
-+||(int[], int[]) -> int[]
++||(float[], float[]) -> float[]
 +||(pg_lsn[], pg_lsn) -> pg_lsn[]
-+||(box2d[], box2d[]) -> box2d[]
++||(int[], int[]) -> int[]
 +||(refcursor[], refcursor) -> refcursor[]
-+||(bool[], bool[]) -> bool[]
++||(box2d[], box2d[]) -> box2d[]
 +||(time[], time) -> time[]
-+||(varbit[], varbit) -> varbit[]
++||(bool[], bool[]) -> bool[]
 +||(timetz[], timetz) -> timetz[]
++||(ltree[], ltree) -> ltree[]
 +||(jsonb[], jsonb) -> jsonb[]
++||(varbit[], varbit) -> varbit[]
 +
  create aggregate build_group(anyelement, integer) (
    SFUNC = add_group,
@@ -1431,55 +1435,57 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  'select $1 || $2' language sql immutable;
 +ERROR:  ambiguous binary operator: <anyelement[]> || <anyelement>
 +HINT:  candidates are:
++||(ltree[], ltree[]) -> ltree[]
 +||(varbit[], varbit[]) -> varbit[]
 +||(jsonb[], jsonb[]) -> jsonb[]
 +||(timetz[], timetz[]) -> timetz[]
-+||(time[], time[]) -> time[]
 +||(bool[], bool) -> bool[]
-+||(refcursor[], refcursor[]) -> refcursor[]
++||(time[], time[]) -> time[]
 +||(box2d[], box2d) -> box2d[]
-+||(pg_lsn[], pg_lsn[]) -> pg_lsn[]
++||(refcursor[], refcursor[]) -> refcursor[]
 +||(int[], int) -> int[]
-+||(inet[], inet[]) -> inet[]
++||(pg_lsn[], pg_lsn[]) -> pg_lsn[]
 +||(float[], float) -> float[]
-+||(uuid[], uuid[]) -> uuid[]
++||(inet[], inet[]) -> inet[]
 +||(decimal[], decimal) -> decimal[]
-+||(oid[], oid[]) -> oid[]
++||(uuid[], uuid[]) -> uuid[]
 +||(date[], date) -> date[]
-+||(timestamptz[], timestamptz[]) -> timestamptz[]
++||(oid[], oid[]) -> oid[]
 +||(timestamp[], timestamp) -> timestamp[]
-+||(bytes[], bytes[]) -> bytes[]
++||(timestamptz[], timestamptz[]) -> timestamptz[]
 +||(interval[], interval) -> interval[]
-+||(string[], string[]) -> string[]
++||(bytes[], bytes[]) -> bytes[]
 +||(geography[], geography) -> geography[]
-+||(geometry[], geometry[]) -> geometry[]
++||(string[], string[]) -> string[]
 +||(geometry[], geometry) -> geometry[]
-+||(geography[], geography[]) -> geography[]
++||(geometry[], geometry[]) -> geometry[]
 +||(string[], string) -> string[]
-+||(interval[], interval[]) -> interval[]
++||(geography[], geography[]) -> geography[]
 +||(bytes[], bytes) -> bytes[]
-+||(timestamp[], timestamp[]) -> timestamp[]
++||(interval[], interval[]) -> interval[]
 +||(timestamptz[], timestamptz) -> timestamptz[]
-+||(date[], date[]) -> date[]
++||(timestamp[], timestamp[]) -> timestamp[]
 +||(oid[], oid) -> oid[]
-+||(decimal[], decimal[]) -> decimal[]
++||(date[], date[]) -> date[]
 +||(uuid[], uuid) -> uuid[]
-+||(float[], float[]) -> float[]
++||(decimal[], decimal[]) -> decimal[]
 +||(inet[], inet) -> inet[]
-+||(int[], int[]) -> int[]
++||(float[], float[]) -> float[]
 +||(pg_lsn[], pg_lsn) -> pg_lsn[]
-+||(box2d[], box2d[]) -> box2d[]
++||(int[], int[]) -> int[]
 +||(refcursor[], refcursor) -> refcursor[]
-+||(bool[], bool[]) -> bool[]
++||(box2d[], box2d[]) -> box2d[]
 +||(time[], time) -> time[]
-+||(varbit[], varbit) -> varbit[]
++||(bool[], bool[]) -> bool[]
 +||(timetz[], timetz) -> timetz[]
++||(ltree[], ltree) -> ltree[]
 +||(jsonb[], jsonb) -> jsonb[]
++||(varbit[], varbit) -> varbit[]
 +
  create function first_el(anyarray) returns anyelement as
  'select $1[1]' language sql strict immutable;
  create aggregate first_el_agg_f8(float8) (
-@@ -892,186 +1202,228 @@
+@@ -892,186 +1208,228 @@
    STYPE = float8[],
    FINALFUNC = first_el
  );
@@ -1825,7 +1831,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  -- test pg_typeof() function
  select pg_typeof(null);           -- unknown
   pg_typeof 
-@@ -1082,7 +1434,7 @@
+@@ -1082,7 +1440,7 @@
  select pg_typeof(0);              -- integer
   pg_typeof 
  -----------
@@ -1834,7 +1840,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  (1 row)
  
  select pg_typeof(0.0);            -- numeric
-@@ -1100,7 +1452,7 @@
+@@ -1100,7 +1458,7 @@
  select pg_typeof('x');            -- unknown
   pg_typeof 
  -----------
@@ -1843,7 +1849,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  (1 row)
  
  select pg_typeof('' || '');       -- text
-@@ -1112,7 +1464,7 @@
+@@ -1112,7 +1470,7 @@
  select pg_typeof(pg_typeof(0));   -- regtype
   pg_typeof 
  -----------
@@ -1852,7 +1858,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  (1 row)
  
  select pg_typeof(array[1.2,55.5]); -- numeric[]
-@@ -1122,11 +1474,7 @@
+@@ -1122,11 +1480,7 @@
  (1 row)
  
  select pg_typeof(myleast(10, 1, 20, 33));  -- polymorphic input
@@ -1865,7 +1871,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  -- test functions with default parameters
  -- test basic functionality
  create function dfunc(a int = 1, int = 2) returns int as $$
-@@ -1151,14 +1499,12 @@
+@@ -1151,14 +1505,12 @@
  (1 row)
  
  select dfunc(10, 20, 30);  -- fail
@@ -1882,7 +1888,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  drop function dfunc(int, int);  -- ok
  -- fail: defaults must be at end of argument list
  create function dfunc(a int = 1, b int) returns int as $$
-@@ -1169,21 +1515,29 @@
+@@ -1169,21 +1521,29 @@
  create function dfunc(a int = 1, out sum int, b int = 2) as $$
    select $1 + $2;
  $$ language sql;
@@ -1923,7 +1929,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  -- check implicit coercion
  create function dfunc(a int DEFAULT 1.0, int DEFAULT '-1') returns int as $$
    select $1 + $2;
-@@ -1198,10 +1552,7 @@
+@@ -1198,10 +1558,7 @@
    select $1 || ', ' || $2;
  $$ language sql;
  select dfunc();  -- fail: which dfunc should be called? int or text
@@ -1935,7 +1941,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  select dfunc('Hi');  -- ok
     dfunc   
  -----------
-@@ -1237,20 +1588,17 @@
+@@ -1237,20 +1594,17 @@
  -- Now, dfunc(nargs = 2) and dfunc(nargs = 4) are ambiguous when called
  -- with 0 to 2 arguments.
  select dfunc();  -- fail
@@ -1965,7 +1971,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  select dfunc(1, 2, 3);  -- ok
   dfunc 
  -------
-@@ -1274,84 +1622,79 @@
+@@ -1274,84 +1628,79 @@
  create function dfunc(anyelement = 'World'::text) returns text as $$
    select 'Hello, ' || $1::text;
  $$ language sql;
@@ -2102,7 +2108,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  -- Ambiguity should be reported only if there's not a better match available
  create function dfunc(int = 1, int = 2, int = 3) returns int as $$
    select 3;
-@@ -1364,10 +1707,10 @@
+@@ -1364,10 +1713,10 @@
  $$ language sql;
  -- dfunc(narg=2) and dfunc(narg=3) are ambiguous
  select dfunc(1);  -- fail
@@ -2117,7 +2123,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  -- but this works since the ambiguous functions aren't preferred anyway
  select dfunc('Hi');
   dfunc 
-@@ -1392,27 +1735,22 @@
+@@ -1392,27 +1741,22 @@
  (1 row)
  
  select (dfunc(a := 10, b := 20, c := 30)).*;
@@ -2158,7 +2164,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  select * from dfunc(1,2);
   a | b | c | d 
-@@ -1421,40 +1759,40 @@
+@@ -1421,40 +1765,40 @@
  (1 row)
  
  select * from dfunc(1,2,c := 3);
@@ -2226,7 +2232,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  drop function dfunc(int, int, int, int);
  -- test with different parameter types
  create function dfunc(a varchar, b numeric, c date = current_date)
-@@ -1464,106 +1802,83 @@
+@@ -1464,106 +1808,83 @@
  select (dfunc('Hello World', 20, '2009-07-25'::date)).*;
        a      | b  |     c      
  -------------+----+------------
@@ -2375,7 +2381,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  --fail, named parameters are not unique
  create function testpolym(a int, a int) returns int as $$ select 1;$$ language sql;
  ERROR:  parameter name "a" used more than once
-@@ -1608,47 +1923,40 @@
+@@ -1608,47 +1929,40 @@
  (1 row)
  
  select dfunc(a := 1, b := 2);
@@ -2451,7 +2457,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  select dfunc('a'::text, 'b', false); -- full positional notation
   dfunc 
  -------
-@@ -1656,11 +1964,10 @@
+@@ -1656,11 +1970,10 @@
  (1 row)
  
  select dfunc('a'::text, 'b', flag := false); -- mixed notation
@@ -2467,7 +2473,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  select dfunc('a'::text, 'b', true); -- full positional notation
   dfunc 
  -------
-@@ -1668,54 +1975,46 @@
+@@ -1668,54 +1981,46 @@
  (1 row)
  
  select dfunc('a'::text, 'b', flag := true); -- mixed notation
@@ -2554,7 +2560,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  select dfunc('a'::text, 'b', false); -- full positional notation
   dfunc 
  -------
-@@ -1723,11 +2022,10 @@
+@@ -1723,11 +2028,10 @@
  (1 row)
  
  select dfunc('a'::text, 'b', flag => false); -- mixed notation
@@ -2570,7 +2576,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  select dfunc('a'::text, 'b', true); -- full positional notation
   dfunc 
  -------
-@@ -1735,37 +2033,32 @@
+@@ -1735,37 +2039,32 @@
  (1 row)
  
  select dfunc('a'::text, 'b', flag => true); -- mixed notation
@@ -2628,7 +2634,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  -- need DO to protect the -- from psql
  do $$
    declare r integer;
-@@ -1775,39 +2068,43 @@
+@@ -1775,39 +2074,43 @@
      raise info 'r = %', r;
    end;
  $$;
@@ -2696,7 +2702,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/polymorphism.out 
  drop function dfunc(anyelement, anyelement, bool);
  --
  -- Tests for ANYCOMPATIBLE polymorphism family
-@@ -1816,283 +2113,213 @@
+@@ -1816,283 +2119,213 @@
  returns anycompatible as $$
    select greatest($1, $2)
  $$ language sql;

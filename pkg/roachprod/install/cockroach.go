@@ -127,6 +127,7 @@ type StartOpts struct {
 	// -- Options that apply only to StartDefault target --
 
 	SkipInit        bool
+	SkipWaitForSQL  bool
 	StoreCount      int
 	EncryptedStores bool
 	// WALFailover, if non-empty, configures the value to supply to the
