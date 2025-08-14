@@ -1,6 +1,10 @@
 # LogicTest: !3node-tenant !local-mixed-25.2
 # cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
 
+# TODO(#151895): investigate why setting it to 1B deadlocks the test.
+statement ok
+SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '1KiB';
+
 statement ok
 SET CLUSTER SETTING sql.txn.write_buffering_for_weak_isolation.enabled=true
 

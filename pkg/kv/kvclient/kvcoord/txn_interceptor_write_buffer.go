@@ -67,7 +67,7 @@ var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 	int64(metamorphic.ConstantWithTestRange("kv.transaction.write_buffering.max_buffer_size",
 		defaultBufferSize, // default
 		1,                 // min
-		defaultBufferSize, // max
+		10<<10,            // max, 10KiB
 	)),
 	settings.NonNegativeInt,
 	settings.WithPublic,
