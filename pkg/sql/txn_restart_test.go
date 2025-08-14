@@ -664,6 +664,7 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
+	kvcoord.BufferedWritesMaxBufferSize.Override(ctx, &s.ClusterSettings().SV, 2<<10 /* 2KiB */)
 
 	{
 		pgURL, cleanup := s.PGUrl(t,
@@ -883,6 +884,7 @@ func TestTxnUserRestart(t *testing.T) {
 				srv, sqlDB, _ := serverutils.StartServer(t, params)
 				defer srv.Stopper().Stop(context.Background())
 				s := srv.ApplicationLayer()
+				kvcoord.BufferedWritesMaxBufferSize.Override(context.Background(), &s.ClusterSettings().SV, 2<<10 /* 2KiB */)
 
 				{
 					pgURL, cleanup := s.PGUrl(t,
