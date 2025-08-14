@@ -153,7 +153,7 @@ func TestWriteBackupIndexMetadata(t *testing.T) {
 	}
 
 	require.NoError(t, WriteBackupIndexMetadata(
-		ctx, execCfg, username.RootUserName(), makeExternalStorage, details,
+		ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
 	))
 
 	filepath, err := getBackupIndexFilePath(subdir, start, end)
@@ -219,10 +219,10 @@ func TestWriteBackupIndexMetadataWithLocalityAwareBackups(t *testing.T) {
 	require.True(t, fullIndex.StartTime.IsEmpty())
 	require.False(t, incrIndex.StartTime.IsEmpty())
 
-	// Ensure that the incremental path index starts immediately with the full
-	// index path, implying that its path starts from the root of the incremental
-	// storage directory.
-	require.True(t, strings.HasPrefix(incrIndex.Path, fullIndex.Path))
+	require.True(t, strings.HasPrefix(
+		incrIndex.Path,
+		path.Join(backupbase.DefaultIncrementalsSubdir, fullIndex.Path),
+	))
 }
 
 func TestWriteBackupindexMetadataWithSpecifiedIncrementalLocation(t *testing.T) {
@@ -292,7 +292,7 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 		details.EndTime = end
 
 		require.NoError(t, WriteBackupIndexMetadata(
-			ctx, execCfg, username.RootUserName(), makeExternalStorage, details,
+			ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
 		))
 
 		filepath, err := getBackupIndexFilePath(subdir, start, end)
@@ -317,7 +317,7 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 		details.EndTime = end
 
 		require.NoError(t, WriteBackupIndexMetadata(
-			ctx, execCfg, username.RootUserName(), makeExternalStorage, details,
+			ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
 		))
 
 		filepath, err := getBackupIndexFilePath(subdir, start, end)
@@ -475,7 +475,7 @@ func TestIndexExists(t *testing.T) {
 						URI: collectionURI + "/" + sub.name,
 					}
 					require.NoError(t, WriteBackupIndexMetadata(
-						ctx, execCfg, username.RootUserName(), makeExternalStorage, details,
+						ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
 					))
 				}
 			}
@@ -542,7 +542,10 @@ func TestListIndexes(t *testing.T) {
 	const numBackups = 4
 	for range numBackups {
 		require.NoError(
-			t, WriteBackupIndexMetadata(ctx, execCfg, username.RootUserName(), storageFactory, details),
+			t,
+			WriteBackupIndexMetadata(
+				ctx, execCfg, username.RootUserName(), storageFactory, details, hlc.Timestamp{},
+			),
 		)
 		start := end
 		end = end.Add(1 * time.Hour)

@@ -129,5 +129,5 @@ func RelativeBackupPathInCollectionURI(collectionURI string, backupURI string) (
 	}
 
 	relPath := strings.TrimPrefix(path.Clean(backupURL.Path), path.Clean(collectionURL.Path))
-	return relPath, nil
+	return strings.TrimPrefix(relPath, "/"), nil
 }

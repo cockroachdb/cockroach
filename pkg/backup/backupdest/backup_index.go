@@ -21,8 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -39,6 +42,7 @@ func WriteBackupIndexMetadata(
 	user username.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	details jobspb.BackupDetails,
+	revisionStartTS hlc.Timestamp,
 ) error {
 	indexStore, err := makeExternalStorageFromURI(
 		ctx, details.CollectionURI, user,
@@ -64,29 +68,21 @@ func WriteBackupIndexMetadata(
 		return errors.AssertionFailedf("incremental backup details missing a start time")
 	}
 
-	var backupCollectionURI string
-	// Find the root of the collection URI that the backup is being written to so
-	// that we can determine the relative path of the backup.
-	if details.StartTime.IsEmpty() {
-		backupCollectionURI = details.CollectionURI
-	} else {
-		var err error
-		backupCollectionURI, err = ResolveDefaultBaseIncrementalStorageLocation(
-			details.Destination.To, details.Destination.IncrementalStorage,
-		)
-		if err != nil {
-			return errors.Wrapf(err, "get incremental backup collection URI")
-		}
-	}
-
-	path, err := backuputils.RelativeBackupPathInCollectionURI(backupCollectionURI, details.URI)
+	path, err := backuputils.RelativeBackupPathInCollectionURI(details.CollectionURI, details.URI)
 	if err != nil {
 		return errors.Wrapf(err, "get relative backup path")
 	}
+	mvccFilter := backuppb.MVCCFilter_Latest
+	if details.RevisionHistory {
+		mvccFilter = backuppb.MVCCFilter_All
+	}
 	metadata := &backuppb.BackupIndexMetadata{
-		StartTime: details.StartTime,
-		EndTime:   details.EndTime,
-		Path:      path,
+		StartTime:         details.StartTime,
+		EndTime:           details.EndTime,
+		Path:              path,
+		IsCompacted:       details.Compact,
+		MVCCFilter:        mvccFilter,
+		RevisionStartTime: revisionStartTS,
 	}
 	metadataBytes, err := protoutil.Marshal(metadata)
 	if err != nil {
