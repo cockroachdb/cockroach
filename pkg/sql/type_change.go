@@ -407,7 +407,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		var idsToRemove []int
 		populateIDsToRemove := func(holder context.Context, txn descs.Txn) error {
 			typeDesc, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, t.typeID)
-			if err != nil {
+			if err != nil || typeDesc.GetParentID() != keys.SystemDatabaseID {
 				return err
 			}
 			for _, member := range typeDesc.EnumMembers {
