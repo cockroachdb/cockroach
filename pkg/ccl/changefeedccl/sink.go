@@ -146,8 +146,9 @@ func getEventSink(
 	user username.SQLUsername,
 	jobID jobspb.JobID,
 	m metricsRecorder,
+	targets changefeedbase.Targets,
 ) (EventSink, error) {
-	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets)
 }
 
 func getResolvedTimestampSink(
@@ -158,8 +159,9 @@ func getResolvedTimestampSink(
 	user username.SQLUsername,
 	jobID jobspb.JobID,
 	m metricsRecorder,
+	targets changefeedbase.Targets,
 ) (ResolvedTimestampSink, error) {
-	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets)
 }
 
 func getAndDialSink(
@@ -170,8 +172,9 @@ func getAndDialSink(
 	user username.SQLUsername,
 	jobID jobspb.JobID,
 	m metricsRecorder,
+	targets changefeedbase.Targets,
 ) (Sink, error) {
-	sink, err := getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+	sink, err := getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets)
 	if err != nil {
 		return nil, err
 	}
@@ -203,6 +206,7 @@ func getSink(
 	user username.SQLUsername,
 	jobID jobspb.JobID,
 	m metricsRecorder,
+	targets changefeedbase.Targets,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
 	if err != nil {
@@ -254,11 +258,11 @@ func getSink(
 					return nil, err
 				}
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
-					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, AllTargets(feedCfg), sinkOpts,
+					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts,
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
 						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{})
 				} else {
-					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, AllTargets(feedCfg), sinkOpts, serverCfg.Settings, metricsBuilder)
+					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts, serverCfg.Settings, metricsBuilder)
 				}
 			})
 		case isPulsarSink(u):
@@ -270,7 +274,7 @@ func getSink(
 			if err != nil {
 				return nil, err
 			}
-			return makePulsarSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, AllTargets(feedCfg), sinkOpts.JSONConfig,
+			return makePulsarSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, targets, sinkOpts.JSONConfig,
 				serverCfg.Settings, metricsBuilder, testingKnobs)
 		case isWebhookSink(u):
 			webhookOpts, err := opts.GetWebhookSinkOptions()
@@ -287,7 +291,7 @@ func getSink(
 			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
 				testingKnobs = knobs
 			}
-			return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg),
+			return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), targets,
 				opts.IsSet(changefeedbase.OptUnordered), numSinkIOWorkers(serverCfg),
 				newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
 				metricsBuilder, serverCfg.Settings, testingKnobs)
@@ -310,13 +314,13 @@ func getSink(
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 			return validateOptionsAndMakeSink(changefeedbase.SQLValidOptions, func() (Sink, error) {
-				return makeSQLSink(&changefeedbase.SinkURL{URL: u}, sqlSinkTableName, AllTargets(feedCfg), metricsBuilder)
+				return makeSQLSink(&changefeedbase.SinkURL{URL: u}, sqlSinkTableName, targets, metricsBuilder)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExternalConnection:
 			return validateOptionsAndMakeSink(changefeedbase.ExternalConnectionValidOptions, func() (Sink, error) {
 				return makeExternalConnectionSink(
 					ctx, &changefeedbase.SinkURL{URL: u}, user, makeExternalConnectionProvider(ctx, serverCfg.DB),
-					serverCfg, feedCfg, timestampOracle, jobID, m,
+					serverCfg, feedCfg, timestampOracle, jobID, m, targets,
 				)
 			})
 		case u.Scheme == "":
