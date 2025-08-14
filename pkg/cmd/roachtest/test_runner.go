@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -1268,8 +1269,12 @@ func (r *testRunner) runTest(
 
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
 				params := getTestParameters(t, issueInfo.cluster, issueInfo.vmCreateOpts)
+				githubMsg := output
+				if testGithubMsg := t.getGithubMessage(); testGithubMsg != "" {
+					githubMsg = fmt.Sprintf("%s\n%s", output, testGithubMsg)
+				}
 				logTestParameters(l, params)
-				issue, err := github.MaybePost(t, issueInfo, l, output, params)
+				issue, err := github.MaybePost(t, issueInfo, l, githubMsg, params)
 				if err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
 					atomic.AddInt32(&r.numGithubPostErrs, 1)
@@ -1490,9 +1495,17 @@ func (r *testRunner) runTest(
 	// From now on, all logging goes to test-teardown.log to give a clear separation between
 	// operations originating from the test vs the harness. The only error that can originate here
 	// is from artifact collection, which is best effort and for which we do not fail the test.
+	// TODO(wchoe): improve log destination consistency, above comment doesn't take deferred calls into account
+	// testRunner.runTest's deferred calls write to the original test.log, not test-teardown.log
+	// and the deferred calls aren't necessarily related to test teardown so the
+	// correct log to write to is ambiguous
 	replaceLogger("test-teardown")
 	if err := r.teardownTest(ctx, t, c, timedOut); err != nil {
 		l.PrintfCtx(ctx, "error during test teardown: %v; see test-teardown.log for details", err)
+	}
+	if err := r.inspectArtifacts(ctx, t, l); err != nil {
+		// inspect artifacts and potentially add helpful triage information for failed tests
+		l.PrintfCtx(ctx, "error during artifact inspection: %v", err)
 	}
 }
 
@@ -1721,6 +1734,73 @@ func (r *testRunner) teardownTest(
 		getCpuProfileArtifacts(ctx, c, t)
 	}
 	return nil
+}
+
+// inspectArtifacts inspects node logs and attempts to write helpful triage
+// information to the test log and testRunner.githubMessage
+// This method is best effort and should not fail a test.
+func (r *testRunner) inspectArtifacts(
+	ctx context.Context, t *testImpl, testLogger *logger.Logger,
+) error {
+
+	if t.Failed() || roachtestflags.AlwaysCollectArtifacts {
+		t.L().Printf("Attempting to gather node fatal level logs for triage.")
+		out, err := gatherFatalNodeLogs(t, testLogger)
+		if err != nil {
+			return err
+		}
+		if out == "" {
+			t.L().Printf("No fatal level logs found.")
+			return nil
+		} else {
+			testLogger.PrintfCtx(ctx, "CockroachDB contains Fatal level logs. Up to the first 10 "+
+				"will be shown here. See node logs in artifacts for more details.\n%s", out)
+			t.appendGithubMessage(out)
+			return nil
+		}
+	}
+	return nil
+}
+
+// gatherFatalNodeLogs attempts to gather fatal level node logs to help with
+// triage
+func gatherFatalNodeLogs(t *testImpl, testLogger *logger.Logger) (string, error) {
+	logPattern := `^F[0-9]{6}`
+	filePattern := "logs/*unredacted/cockroach*.log"
+	// *unredacted captures patterns for single node and multi-node clusters
+	// e.g. unredacted, 1.unredacted
+	joinedFilePath := filepath.Join(t.ArtifactsDir(), filePattern)
+	targetFiles, err := filepath.Glob(joinedFilePath)
+	if err != nil {
+		return "", err
+	} else if len(targetFiles) == 0 {
+		return "", errors.Newf("No matching log files found for log pattern: %s and file pattern: %s",
+			logPattern, filePattern)
+	}
+	args := append([]string{"-E", "-m", "10", "-a", logPattern}, targetFiles...)
+	command := "grep"
+	t.L().Printf("Gathering fatal level logs with command: %q %s", command, strings.Join(args, " "))
+	// Works with local and remote node clusters because we will always download
+	// the artifacts if there's a test failure (except for timeout)
+	cmd := exec.Command("grep", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && ee.ExitCode() == 1 {
+			testLogger.Printf("No fatal level logs found.")
+			// Not finding files isn't necessarily an error so don't return an error
+			return "", nil
+		}
+		return "", err
+	}
+	// trim file path from output for readability
+	lines := strings.Split(string(out), "\n")
+	for i, line := range lines {
+		if idx := strings.IndexByte(line, ':'); idx >= 0 {
+			lines[i] = strings.TrimLeft(line[idx+1:], " \t")
+		}
+	}
+	return strings.Join(lines, "\n"), err
 }
 
 // maybeSaveClusterDueToInvariantProblems detects rare conditions (such as
