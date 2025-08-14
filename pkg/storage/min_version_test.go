@@ -92,7 +92,13 @@ func TestSetMinVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	p, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), CacheSize(0))
+	settings := cluster.MakeClusterSettings()
+	e, err := fs.InitEnv(context.Background(), vfs.NewMem(), "" /* dir */, fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* diskWriteStats */)
+	// In practice InitEnv is infallible with this configuration.
+	require.NoError(t, err)
+	p, err := Open(context.Background(), e, settings, CacheSize(0))
 	require.NoError(t, err)
 	defer p.Close()
 	require.Equal(t, MinimumSupportedFormatVersion, p.db.FormatMajorVersion())
@@ -120,6 +126,7 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	baseFS := vfs.NewMem()
 	env, err := fs.InitEnv(ctx, baseFS, "", fs.EnvConfig{
 		EncryptionOptions: &storageconfig.EncryptionOptions{},
+		Version:           st.Version,
 	}, nil /* statsCollector */)
 	require.NoError(t, err)
 
