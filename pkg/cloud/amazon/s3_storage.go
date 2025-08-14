@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/ratelimit"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -89,9 +90,6 @@ const (
 	scheme = "s3"
 
 	checksumAlgorithm = types.ChecksumAlgorithmSha256
-
-	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
-	defaultRetryMaxAttempts = 10
 )
 
 // NightlyEnvVarS3Params maps param keys that get added to an S3
@@ -123,16 +121,6 @@ type s3Storage struct {
 
 	opts   s3ClientConfig
 	cached *s3Client
-}
-
-// retryMaxAttempts defines how many times we will retry a
-// S3 request on a retriable error.
-var retryMaxAttempts = defaultRetryMaxAttempts
-
-// InjectTestingRetryMaxAttempts is used to change the
-// default retries for tests that need quick fail.
-func InjectTestingRetryMaxAttempts(maxAttempts int) {
-	retryMaxAttempts = maxAttempts
 }
 
 // customRetryer implements the `request.Retryer` interface and allows for
@@ -186,6 +174,39 @@ var usePutObject = settings.RegisterBoolSetting(
 	false,
 )
 
+var maxRetries = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"cloudstorage.s3.max_retries",
+	"the maximum number of retries per S3 operation",
+	10)
+
+// The v2 S3 client includes a client side retry token bucket. The high level
+// behavior of the token bucket is:
+//
+// 1. The token bucket starts full with 500 tokens.
+// 2. Each request that completes on the first attempt adds 1 token to the bucket.
+// 3. Each failed retry consumes 5 tokens from the bucket.
+//
+// When the token bucket runs out, the only way to make forward progress is to
+// start a new request that succeeds on the first attempt. This is sensible for
+// an RPC service that can bubble up a retryable error to the RPC client, but
+// it doesn't make sense in the context of something like backup/restrore,
+// where we have a fixed number of workers that are sending requests until they
+// complete all of their work. Since there are no client side requests to
+// refill the token bucket, a handful of errors can permanently exhaust the
+// token bucket.
+//
+// TODO(jeffswenson): consider deleting this after we've had time to evaluate
+// it in production. This setting mostly exists so we can keep it turned on by
+// default in the backport.
+var enableClientRetryTokenBucket = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"cloudstorage.s3.client_retry_token_bucket.enabled",
+	"enable the client side retry token bucket in the AWS S3 client",
+	// TODO(jeffswenson): change this to false in a seperate PR. This is false in
+	// the backports to stay true to the backport policy.
+	true)
+
 // roleProvider contains fields about the role that needs to be assumed
 // in order to access the external storage.
 type roleProvider struct {
@@ -219,8 +240,20 @@ type s3ClientConfig struct {
 
 	skipChecksum  bool
 	skipTLSVerify bool
-	// log.V(2) decides session init params so include it in key.
-	verbose bool
+	logMode       aws.ClientLogMode
+}
+
+func getLogMode() aws.ClientLogMode {
+	switch {
+	case log.VDepth(3, 1):
+		return awsVLevel3Logging
+	case log.VDepth(2, 1):
+		return awsVLevel2Logging
+	case log.VDepth(1, 1):
+		return awsVLevel1Logging
+	default:
+		return 0
+	}
 }
 
 func clientConfig(conf *cloudpb.ExternalStorage_S3) s3ClientConfig {
@@ -259,7 +292,7 @@ func clientConfig(conf *cloudpb.ExternalStorage_S3) s3ClientConfig {
 		secret:                conf.Secret,
 		tempToken:             conf.TempToken,
 		auth:                  conf.Auth,
-		verbose:               log.V(2),
+		logMode:               getLogMode(),
 		assumeRoleProvider:    assumeRoleProvider,
 		delegateRoleProviders: delegateRoleProviders,
 	}
@@ -560,7 +593,9 @@ func newLogAdapter(ctx context.Context) *awsLogAdapter {
 	}
 }
 
-var awsVerboseLogging = aws.LogRequestEventMessage | aws.LogResponseEventMessage | aws.LogRetries | aws.LogSigning
+const awsVLevel1Logging = aws.LogRetries | aws.LogDeprecatedUsage
+const awsVLevel2Logging = awsVLevel1Logging | aws.LogRequestEventMessage | aws.LogResponseEventMessage | aws.LogRequest | aws.LogResponse
+const awsVLevel3Logging = awsVLevel2Logging | aws.LogSigning
 
 func constructEndpointURI(endpoint string) (string, error) {
 	parsedURL, err := url.Parse(endpoint)
@@ -586,6 +621,8 @@ func constructEndpointURI(endpoint string) (string, error) {
 // configures the client with it as well as returning it (so the caller can
 // remember it for future calls).
 func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
+	// TODO(jeffswenson): we should include the settings in the cache key so that
+	// changing the cluster settings invalidates the cached instance.
 
 	// Open a span if client creation will do IO/RPCs to find creds/bucket region.
 	if s.opts.region == "" || s.opts.auth == cloud.AuthParamImplicit {
@@ -611,16 +648,20 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 	}
 	addLoadOption(config.WithHTTPClient(client))
 
+	retryMaxAttempts := int(maxRetries.Get(&s.settings.SV))
 	addLoadOption(config.WithRetryMaxAttempts(retryMaxAttempts))
 
 	addLoadOption(config.WithLogger(newLogAdapter(ctx)))
-	if s.opts.verbose {
-		addLoadOption(config.WithClientLogMode(awsVerboseLogging))
+	if s.opts.logMode != 0 {
+		addLoadOption(config.WithClientLogMode(s.opts.logMode))
 	}
 	config.WithRetryer(func() aws.Retryer {
 		return retry.NewStandard(func(opts *retry.StandardOptions) {
 			opts.MaxAttempts = retryMaxAttempts
 			opts.Retryables = append(opts.Retryables, &customRetryer{})
+			if !enableClientRetryTokenBucket.Get(&s.settings.SV) {
+				opts.RateLimiter = ratelimit.None
+			}
 		})
 	})
 
