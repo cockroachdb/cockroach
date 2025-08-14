@@ -8,9 +8,7 @@ package backupinfo_test
 import (
 	"context"
 	"fmt"
-	"slices"
 	"sort"
-	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
@@ -18,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -383,8 +379,8 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	m := func(start, end int, compacted bool, revision bool) backuppb.BackupManifest {
-		b := backuppb.BackupManifest{
+	m := func(start, end int, compacted bool, revision bool) backuppb.BackupIndexMetadata {
+		b := backuppb.BackupIndexMetadata{
 			StartTime:   hlc.Timestamp{WallTime: int64(start)},
 			EndTime:     hlc.Timestamp{WallTime: int64(end)},
 			IsCompacted: compacted,
@@ -395,13 +391,13 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		}
 		return b
 	}
-	mNorm := func(start, end int) backuppb.BackupManifest {
+	mNorm := func(start, end int) backuppb.BackupIndexMetadata {
 		return m(start, end, false /* compacted */, false /* revision */)
 	}
-	mComp := func(start, end int) backuppb.BackupManifest {
+	mComp := func(start, end int) backuppb.BackupIndexMetadata {
 		return m(start, end, true /* compacted */, false /* revision */)
 	}
-	mRev := func(start, end int) backuppb.BackupManifest {
+	mRev := func(start, end int) backuppb.BackupIndexMetadata {
 		return m(start, end, false /* compacted */, true /* revision */)
 	}
 
@@ -410,7 +406,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 	// order by start time.
 	for _, tc := range []struct {
 		name             string
-		manifests        []backuppb.BackupManifest
+		indexes          []backuppb.BackupIndexMetadata
 		endTime          int
 		includeCompacted bool
 		err              string
@@ -418,7 +414,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 	}{
 		{
 			name: "single backup",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1),
 			},
 			endTime:  1,
@@ -426,7 +422,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "double backup",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1), mNorm(1, 2),
 			},
 			endTime:  2,
@@ -434,7 +430,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "out of bounds end time",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1), mNorm(1, 2),
 			},
 			endTime: 3,
@@ -442,7 +438,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "revision history restore should fail on non-revision history backups",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 2), mNorm(2, 4),
 			},
 			endTime: 3,
@@ -450,7 +446,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "revision history restore should succeed on revision history backups",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mRev(0, 2), mRev(2, 4),
 			},
 			endTime:  3,
@@ -458,7 +454,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "end time in middle of chain should truncate",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1), mNorm(1, 2), mNorm(2, 3),
 				mNorm(3, 5), mNorm(5, 8),
 			},
@@ -467,7 +463,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "non-continuous backup chain should fail",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1), mNorm(2, 3),
 			},
 			endTime: 3,
@@ -475,7 +471,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "ignore compacted backups if includeCompacted is false",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1), mNorm(1, 2), mComp(1, 3), mNorm(2, 3),
 			},
 			endTime:  3,
@@ -483,7 +479,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "compaction of two backups",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1), mNorm(1, 2), mComp(1, 3), mNorm(2, 3),
 				mNorm(3, 5), mNorm(5, 8),
 			},
@@ -493,7 +489,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "compaction of entire incremental chain",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1), mNorm(1, 2), mNorm(2, 3), mNorm(3, 5),
 				mComp(1, 8), mNorm(5, 8),
 			},
@@ -503,7 +499,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "two separate compactions of two backups",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1), mNorm(1, 2), mComp(1, 3), mNorm(2, 3),
 				mNorm(3, 5), mComp(3, 8), mNorm(5, 8),
 			},
@@ -513,7 +509,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "compaction includes a compacted backup in the middle",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1), mNorm(1, 2), mComp(1, 3), mNorm(2, 3),
 				mNorm(3, 5), mComp(1, 8), mNorm(5, 8),
 			},
@@ -523,7 +519,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "two compactions with the same end time",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1), mNorm(1, 2), mNorm(2, 3), mNorm(3, 5),
 				mComp(1, 8), mComp(3, 8), mNorm(5, 8),
 			},
@@ -533,7 +529,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "end time in middle of compacted chain should pick base incremental",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1), mNorm(1, 2), mNorm(2, 3),
 				mComp(1, 5), mNorm(3, 5),
 			},
@@ -543,7 +539,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 		{
 			name: "overlapping compacted backups",
-			manifests: []backuppb.BackupManifest{
+			indexes: []backuppb.BackupIndexMetadata{
 				mNorm(0, 1), mNorm(1, 2), mComp(1, 3), mNorm(2, 3), mComp(2, 4), mNorm(3, 4),
 			},
 			endTime:          4,
@@ -552,34 +548,8 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// Using the expected start and end times, create a slice containing the
-			// expected expectedOrder of the manifests based on their original indexes. For
-			// example, [2, 0, 1] means that the expected output should should have
-			// the third input manifest first, the first input manifest second, and the
-			// second input manifest last.
-			expectedOrder := util.Map(tc.expected, func(ts []int) string {
-				return strconv.Itoa(slices.IndexFunc(tc.manifests, func(m backuppb.BackupManifest) bool {
-					return m.StartTime.WallTime == int64(ts[0]) && m.EndTime.WallTime == int64(ts[1])
-				}))
-			})
-			// Create URIs and locality info in a way that we can track their
-			// resulting order after being truncated. We set input URIs to their
-			// stringified index, and locality info maps to a map containing just
-			// their index. We can later use the expectedOrder to check that the
-			// output maps to the expected indexes.
-			inputURIs := make([]string, len(tc.manifests))
-			inputLocs := make([]jobspb.RestoreDetails_BackupLocalityInfo, len(tc.manifests))
-			for i := range tc.manifests {
-				index := strconv.Itoa(i)
-				inputURIs[i] = index
-				inputLocs[i].URIsByOriginalLocalityKV = make(map[string]string)
-				inputLocs[i].URIsByOriginalLocalityKV[index] = index
-			}
-
-			manifestEntries, err := backupinfo.ZipBackupTreeEntries(inputURIs, tc.manifests, inputLocs)
-			require.NoError(t, err)
-			manifestEntries, err = backupinfo.ValidateEndTimeAndTruncate(
-				manifestEntries,
+			indexes, err := backupinfo.ValidateEndTimeAndTruncate(
+				tc.indexes,
 				hlc.Timestamp{WallTime: int64(tc.endTime)},
 				false, /* includeSkipped */
 				tc.includeCompacted,
@@ -588,17 +558,10 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 				require.ErrorContains(t, err, tc.err)
 				return
 			}
-			uris, res, locs := backupinfo.UnzipBackupTreeEntries(manifestEntries)
-			require.Equal(t, len(tc.expected), len(res))
-			require.Equal(t, expectedOrder, uris)
-			require.Len(t, locs, len(tc.expected))
-			for idx, rank := range expectedOrder {
-				_, ok := locs[idx].URIsByOriginalLocalityKV[rank]
-				require.True(t, ok)
-			}
 
+			require.Equal(t, len(tc.expected), len(indexes))
 			for i := range tc.expected {
-				actual := []int{int(res[i].StartTime.WallTime), int(res[i].EndTime.WallTime)}
+				actual := []int{int(indexes[i].StartTime.WallTime), int(indexes[i].EndTime.WallTime)}
 				require.Equal(t, tc.expected[i], actual)
 			}
 		})

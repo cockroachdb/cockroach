@@ -1805,9 +1805,9 @@ func doRestorePlan(
 	// directories, return the URIs and manifests of all backup layers in all
 	// localities. Incrementals will be searched for automatically.
 	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
-		ctx, p.ExecCfg(), &mem, defaultCollectionURI, baseStores, incStores, mkStore, fullyResolvedSubdir,
-		fullyResolvedBaseDirectory, fullyResolvedIncrementalsDirectory, endTime, encryption,
-		&kmsEnv, p.User(), false, includeCompacted,
+		ctx, p.ExecCfg(), &mem, defaultCollectionURI, from, baseStores, incStores, mkStore,
+		fullyResolvedSubdir, fullyResolvedBaseDirectory, fullyResolvedIncrementalsDirectory, endTime,
+		encryption, &kmsEnv, p.User(), false, includeCompacted, len(incFrom) > 0,
 	)
 	if err != nil {
 		return err

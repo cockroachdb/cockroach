@@ -32,10 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -552,6 +554,59 @@ func ResolveBackupManifests(
 	execCfg *sql.ExecutorConfig,
 	mem *mon.BoundAccount,
 	defaultCollectionURI string,
+	collectionURIs []string,
+	baseStores []cloud.ExternalStorage,
+	incStores []cloud.ExternalStorage,
+	mkStore cloud.ExternalStorageFromURIFactory,
+	resolvedSubdir string,
+	fullyResolvedBaseDirectory []string,
+	fullyResolvedIncrementalsDirectory []string,
+	endTime hlc.Timestamp,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	user username.SQLUsername,
+	includeSkipped bool,
+	includeCompacted bool,
+	isCustomIncLocation bool,
+) (
+	defaultURIs []string,
+	mainBackupManifests []backuppb.BackupManifest,
+	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	reservedMemSize int64,
+	_ error,
+) {
+	rootStore, err := mkStore(ctx, defaultCollectionURI, user)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	defer rootStore.Close()
+
+	exists, err := IndexExists(ctx, rootStore, resolvedSubdir)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	if !ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) || !exists || isCustomIncLocation {
+		return legacyResolveBackupManifests(
+			ctx, execCfg, mem, defaultCollectionURI, baseStores, incStores, mkStore,
+			resolvedSubdir, fullyResolvedBaseDirectory, fullyResolvedIncrementalsDirectory,
+			endTime, encryption, kmsEnv, user, includeSkipped, includeCompacted,
+		)
+	}
+
+	return indexedResolveBackupManifests(
+		ctx, mem, collectionURIs, mkStore, resolvedSubdir, endTime, encryption, kmsEnv,
+		user, includeSkipped, includeCompacted,
+	)
+}
+
+// TODO (kev-cao): Remove in 26.2 when all restorable backups are expected to
+// have an index.
+func legacyResolveBackupManifests(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	mem *mon.BoundAccount,
+	defaultCollectionURI string,
 	baseStores []cloud.ExternalStorage,
 	incStores []cloud.ExternalStorage,
 	mkStore cloud.ExternalStorageFromURIFactory,
@@ -566,7 +621,6 @@ func ResolveBackupManifests(
 	includeCompacted bool,
 ) (
 	defaultURIs []string,
-	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
 	mainBackupManifests []backuppb.BackupManifest,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	reservedMemSize int64,
@@ -702,4 +756,99 @@ func ResolveBackupManifests(
 	}
 	uris, manifests, localityInfo := backupinfo.UnzipBackupTreeEntries(validatedEntries)
 	return uris, manifests, localityInfo, totalMemSize, nil
+}
+
+func indexedResolveBackupManifests(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	collectionURIs []string,
+	mkStore cloud.ExternalStorageFromURIFactory,
+	resolvedSubdir string,
+	endTime hlc.Timestamp,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+	user username.SQLUsername,
+	includeSkipped bool,
+	includeCompacted bool,
+) (
+	defaultURIs []string,
+	mainManifests []backuppb.BackupManifest,
+	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	reservedMemSize int64,
+	_ error,
+) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupdest.ResolveBackupManifestsWithIndexes")
+	defer sp.Finish()
+
+	rootStores := make([]cloud.ExternalStorage, 0, len(collectionURIs))
+	defer func() {
+		for _, store := range rootStores {
+			if store != nil {
+				if err := store.Close(); err != nil {
+					log.Dev.Errorf(ctx, "error closing store: %v", err)
+				}
+			}
+		}
+	}()
+	for _, uri := range collectionURIs {
+		store, err := mkStore(ctx, uri, user)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		rootStores = append(rootStores, store)
+	}
+
+	indexes, err := GetBackupTreeIndexMetadata(
+		ctx, rootStores[0], resolvedSubdir,
+	)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	indexes, err = backupinfo.ValidateEndTimeAndTruncate(
+		indexes, endTime, includeSkipped, includeCompacted,
+	)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	defaultURIs = make([]string, len(indexes))
+	partitionURIs := make([][]string, len(indexes))
+	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(indexes))
+
+	for idx, index := range indexes {
+		indexDests, err := backuputils.AppendPaths(collectionURIs, index.Path)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		partitionURIs[idx] = indexDests
+		defaultURIs[idx] = indexDests[0]
+	}
+
+	mainManifests, manifestsMem, err := backupinfo.GetBackupManifests(
+		ctx, mem, user, mkStore, defaultURIs, encryption, kmsEnv,
+	)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	group, gCtx := errgroup.WithContext(ctx)
+	for i, indexes := range indexes {
+		group.Go(func() error {
+			locality, err := backupinfo.GetLocalityInfo(
+				gCtx, rootStores, partitionURIs[i], mainManifests[i], encryption, kmsEnv, indexes.Path,
+			)
+			if err != nil {
+				return err
+			}
+			localityInfo[i] = locality
+			return nil
+		})
+	}
+
+	if err := group.Wait(); err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	return defaultURIs, mainManifests, localityInfo, manifestsMem, nil
 }
