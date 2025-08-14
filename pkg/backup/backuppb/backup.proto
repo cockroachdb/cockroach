@@ -162,7 +162,10 @@ message BackupIndexMetadata {
   // The path to the directory containing the backup relative to the collection
   // URI.
   string path = 3;
-  // Next ID: 4.
+  bool is_compacted = 4;
+  MVCCFilter mvcc_filter = 5 [(gogoproto.customname) = "MVCCFilter"];
+  util.hlc.Timestamp revision_start_time = 6 [(gogoproto.nullable) = false];
+  // Next ID: 7.
 }
 
 message BackupPartitionDescriptor {

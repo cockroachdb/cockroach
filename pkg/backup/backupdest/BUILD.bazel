@@ -31,12 +31,14 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/ioctx",
+        "//pkg/util/log",
         "//pkg/util/metamorphic",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
@@ -73,6 +75,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/testutils",
+        "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
