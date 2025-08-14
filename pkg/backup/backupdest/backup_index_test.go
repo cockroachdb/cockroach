@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -557,6 +558,195 @@ func TestListIndexes(t *testing.T) {
 	expectedSort := indexes[:]
 	slices.Sort(expectedSort)
 	require.Equal(t, expectedSort, indexes)
+}
+
+func TestGetBackupTreeIndexMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.Latest.Version(),
+		clusterversion.Latest.Version(),
+		true,
+	)
+	execCfg := &sql.ExecutorConfig{Settings: st}
+
+	memMon := mon.NewMonitor(mon.Options{
+		Name:     mon.MakeName("test-monitor"),
+		Settings: st,
+	})
+	memMon.Start(ctx, nil, mon.NewStandaloneBudget(128<<20))
+
+	const collectionURI = "nodelocal://1/backup"
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	externalStorage, err := cloud.ExternalStorageFromURI(
+		ctx,
+		collectionURI,
+		base.ExternalIODirConfig{},
+		st,
+		blobs.TestBlobServiceClient(dir),
+		username.RootUserName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+	require.NoError(t, err)
+	storageFactory := func(
+		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
+	) (cloud.ExternalStorage, error) {
+		return externalStorage, nil
+	}
+
+	writeIndex := func(
+		t *testing.T, store cloud.ExternalStorage, subdirEnd, start, end int,
+	) {
+		t.Helper()
+		subdirTs := time.Date(2025, 8, 12, int(subdirEnd), 0, 0, 0, time.UTC)
+		startTs := hlc.Timestamp{WallTime: time.Date(2025, 8, 12, start, 0, 0, 0, time.UTC).UnixNano()}
+		if start == 0 {
+			startTs = hlc.Timestamp{}
+		}
+		endTs := hlc.Timestamp{WallTime: time.Date(2025, 8, 12, end, 0, 0, 0, time.UTC).UnixNano()}
+		subdir := subdirTs.Format(backupbase.DateBasedIntoFolderName)
+
+		details := jobspb.BackupDetails{
+			Destination: jobspb.BackupDetails_Destination{
+				To:     []string{collectionURI},
+				Subdir: subdir,
+			},
+			StartTime:     startTs,
+			EndTime:       endTs,
+			CollectionURI: collectionURI,
+			// This test doesn't look at the URI stored in the index metadata, so it
+			// doesn't need to be accurate to the exact path differences between full
+			// and incremental backups. We can just set URI to something that looks
+			// valid.
+			URI: collectionURI + subdir,
+		}
+		require.NoError(t, WriteBackupIndexMetadata(
+			ctx, execCfg, username.RootUserName(), storageFactory, details, hlc.Timestamp{},
+		))
+	}
+
+	// Indexes represents the set of index files in the backup collection that the
+	// test cases will be running against. We use ints to represent hours within a
+	// single day to simplify test data.
+	indexes := []struct {
+		// endTime of the full backup.
+		subdirEnd int
+		// start and end times of all backups in the chain, including the full.
+		times [][2]int
+	}{
+		{
+			subdirEnd: 2,
+			times:     [][2]int{{0, 2}, {2, 4}, {4, 6}, {6, 8}},
+		},
+		{
+			subdirEnd: 10,
+			times:     [][2]int{{0, 10}, {10, 12}, {12, 14}, {14, 16}, {10, 16}, {16, 18}},
+		},
+		{
+			subdirEnd: 20,
+			times:     [][2]int{{0, 20}},
+		},
+	}
+	for _, index := range indexes {
+		for _, time := range index.times {
+			writeIndex(t, externalStorage, index.subdirEnd, time[0], time[1])
+		}
+	}
+
+	testcases := []struct {
+		name string
+		// subdir to get index metadata from. Refer to indexes above for valid
+		// subdir end times.
+		subdirEnd int
+		// endTime filter. Set to 0 for no filter.
+		endTime            int
+		expectedIndexTimes [][2]int
+	}{
+		{
+			name:               "fetch all indexes from subdir",
+			subdirEnd:          2,
+			expectedIndexTimes: [][2]int{{0, 2}, {2, 4}, {4, 6}, {6, 8}},
+		},
+		{
+			name:               "exact end time match",
+			subdirEnd:          2,
+			endTime:            6,
+			expectedIndexTimes: [][2]int{{0, 2}, {2, 4}, {4, 6}},
+		},
+		{
+			name:               "end time between two incrementals",
+			subdirEnd:          2,
+			endTime:            5,
+			expectedIndexTimes: [][2]int{{0, 2}, {2, 4}},
+		},
+		{
+			name:               "fetch all indexes from tree with compacted backups",
+			subdirEnd:          10,
+			expectedIndexTimes: [][2]int{{0, 10}, {10, 12}, {12, 14}, {14, 16}, {10, 16}, {16, 18}},
+		},
+		{
+			name:               "end time of compacted backup",
+			subdirEnd:          10,
+			endTime:            16,
+			expectedIndexTimes: [][2]int{{0, 10}, {10, 12}, {12, 14}, {14, 16}, {10, 16}},
+		},
+		{
+			name:               "end time before full backup",
+			subdirEnd:          2,
+			endTime:            1,
+			expectedIndexTimes: nil,
+		},
+		{
+			name:               "index only contains a full backup",
+			subdirEnd:          20,
+			expectedIndexTimes: [][2]int{{0, 20}},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			subdirTs := time.Date(2025, 8, 12, tc.subdirEnd, 0, 0, 0, time.UTC)
+			subdir := subdirTs.Format(backupbase.DateBasedIntoFolderName)
+
+			var end hlc.Timestamp
+			if tc.endTime != 0 {
+				end = hlc.Timestamp{WallTime: time.Date(2025, 8, 12, tc.endTime, 0, 0, 0, time.UTC).UnixNano()}
+			}
+
+			mem := memMon.MakeBoundAccount()
+			defer mem.Close(ctx)
+			metadatas, size, err := GetBackupTreeIndexMetadata(ctx, &mem, externalStorage, subdir, end)
+			defer mem.Shrink(ctx, size)
+
+			require.NoError(t, err)
+			require.Len(t, metadatas, len(tc.expectedIndexTimes))
+
+			expectedIndexTimes := util.Map(tc.expectedIndexTimes, func(t [2]int) [2]hlc.Timestamp {
+				var startTs hlc.Timestamp
+				if t[0] != 0 {
+					startTs.WallTime = time.Date(2025, 8, 12, t[0], 0, 0, 0, time.UTC).UnixNano()
+				}
+				return [...]hlc.Timestamp{
+					startTs,
+					{WallTime: time.Date(2025, 8, 12, t[1], 0, 0, 0, time.UTC).UnixNano()},
+				}
+			})
+			actualIndexTimes := util.Map(metadatas, func(m backuppb.BackupIndexMetadata) [2]hlc.Timestamp {
+				return [...]hlc.Timestamp{m.StartTime, m.EndTime}
+			})
+
+			// It's easier for test writers to write the expected times in increasing
+			// order, but the actual times returned from `GetBackupTreeIndexMetadata`
+			// are in decreasing order, so instead of forcing the test writer to match
+			// that order, we just check that the times match regardless of order.
+			require.ElementsMatch(t, expectedIndexTimes, actualIndexTimes)
+		})
+	}
 }
 
 type fakeExternalStorage struct {

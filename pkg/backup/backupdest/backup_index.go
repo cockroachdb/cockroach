@@ -165,6 +165,117 @@ func ListIndexes(
 	return indexBasenames, nil
 }
 
+// GetBackupTreeIndexMetadata concurrently retrieves the index metadata for all
+// backups within the specified subdir, up to the specified end time, inclusive.
+// It also returns the total size of memory allocated to store the index files.
+// The returned indexes are sorted in reverse chronological order, i.e. the
+// latest index is first in the list. The store should be rooted at the
+// collection URI that contains the `index/` directory.
+//
+// Note: Even if an error is returned, the total memory reserved in the monitor
+// is still returned as it may be non-zero.
+func GetBackupTreeIndexMetadata(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	store cloud.ExternalStorage,
+	subdir string,
+	endTime hlc.Timestamp,
+) ([]backuppb.BackupIndexMetadata, int64, error) {
+	indexBasenames, err := ListIndexes(ctx, store, subdir)
+	if err != nil {
+		return nil, 0, err
+	}
+	// Note that the following logic depends on the fact that ListIndexes
+	// returns the index files in reverse chronological order.
+	startIdx := 0
+	if !endTime.IsEmpty() {
+		// We will still need to open each of the index files to ensure that the
+		// backup end times (which are nano-second specific) are within the
+		// specified endTime, but we can do some preliminary filtering first based
+		// on the filename.
+		for startIdx = len(indexBasenames) - 1; startIdx >= 0; startIdx-- {
+			_, indexEnd, err := parseIndexFilename(indexBasenames[startIdx])
+			if err != nil {
+				return nil, 0, err
+			}
+			// GoTime always truncates an hlc.Timestamp, so to ensure we don't
+			// accidentally leave out an index, we wait until the truncated index end
+			// time exceeds the truncated hlc.Timestamp end time.
+			if indexEnd.After(endTime.GoTime()) {
+				break
+			}
+		}
+		indexBasenames = indexBasenames[max(startIdx-1, 0):]
+	}
+
+	indexes := make([]backuppb.BackupIndexMetadata, len(indexBasenames))
+	memMu := struct {
+		syncutil.Mutex
+		total int64
+		mem   *mon.BoundAccount
+	}{
+		mem: mem,
+	}
+	g := ctxgroup.WithContext(ctx)
+	for i, basename := range indexBasenames {
+		g.GoCtx(func(ctx context.Context) error {
+			reader, size, err := store.ReadFile(
+				ctx, path.Join(indexSubdir(subdir), basename), cloud.ReadOptions{},
+			)
+			if err != nil {
+				return errors.Wrapf(err, "reading index file %s", basename)
+			}
+			defer reader.Close(ctx)
+
+			if err := func() error {
+				memMu.Lock()
+				defer memMu.Unlock()
+				if err := memMu.mem.Grow(ctx, size); err != nil {
+					return errors.Wrapf(err, "growing memory account for index file %s", basename)
+				}
+				memMu.total += size
+				return nil
+			}(); err != nil {
+				return err
+			}
+
+			bytes := make([]byte, size)
+			if _, err := reader.Read(ctx, bytes); err != nil {
+				return errors.Wrapf(err, "reading index file %s bytes", basename)
+			}
+
+			index := backuppb.BackupIndexMetadata{}
+			if err := protoutil.Unmarshal(bytes, &index); err != nil {
+				return errors.Wrapf(err, "unmarshalling index file %s", basename)
+			}
+
+			if !endTime.IsEmpty() && index.EndTime.After(endTime) {
+				return nil
+			}
+			indexes[i] = index
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		memMu.Lock()
+		defer memMu.Unlock()
+		return nil, memMu.total, errors.Wrapf(err, "getting backup index metadata")
+	}
+
+	for startIdx = 0; startIdx < len(indexes); startIdx++ {
+		// An empty end time indicates this index was not saved to the list because
+		// its endTime did not pass the filter.
+		if !indexes[startIdx].EndTime.IsEmpty() {
+			break
+		}
+	}
+
+	memMu.Lock()
+	defer memMu.Unlock()
+	return indexes[startIdx:], memMu.total, nil
+}
+
 // ParseIndexFilename parses the start and end timestamps from the index
 // filename.
 //
