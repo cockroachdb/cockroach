@@ -598,3 +598,62 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 		{"ALTER PARTITION \"us-east3\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east3]',\n\tlease_preferences = '[[+region=us-east3]]'"},
 	})
 }
+
+// TestDropRegionFromUserDBNotAffectsSystemDB verifies that dropping a
+// region from a user database doesn't remove that region from the
+// system database's crdb_internal_region enum, and particularly it
+// doesn't delete rows from the system.sql_instances.
+func TestDropRegionFromUserDBNotAffectsSystemDB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, systemSQL, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3, base.TestingKnobs{},
+	)
+	defer cleanup()
+
+	sDB := sqlutils.MakeSQLRunner(systemSQL)
+	sDB.Exec(t, `SET CLUSTER SETTING sql.multiregion.system_database_multiregion.enabled = true`)
+	sDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
+
+	sDB.Exec(t, `CREATE DATABASE userdb PRIMARY REGION "us-east1" REGIONS "us-east2" SURVIVE ZONE FAILURE`)
+
+	// Snapshot the system DB's multi-region enum (must remain unchanged)
+	sysEnumBefore := sDB.QueryStr(t, `
+		SELECT unnest(values)
+		  FROM [SHOW ENUMS]
+		 WHERE name = 'crdb_internal_region'
+		 ORDER BY 1`)
+
+	var pre int
+	sDB.QueryRow(t,
+		`SELECT count(*) FROM system.sql_instances`,
+	).Scan(&pre)
+	require.Equal(t, 3, pre, "expected sql_instances row for the us-east2 SQL server to exist before DROP REGION")
+
+	// Drop region
+	sDB.Exec(t, `ALTER DATABASE userdb DROP REGION "us-east2"`)
+
+	var post int
+	sDB.QueryRow(t,
+		`SELECT count(*) FROM system.sql_instances`,
+	).Scan(&post)
+	require.Equal(t, 3, post, "sql_instances row disappeared after dropping region from a user DB")
+
+	sysEnumAfter := sDB.QueryStr(t, `
+		SELECT unnest(values)
+		  FROM [SHOW ENUMS]
+		 WHERE name = 'crdb_internal_region'
+		 ORDER BY 1`)
+	require.Equal(t, sysEnumBefore, sysEnumAfter, "system DB enum changed when dropping region from a user DB")
+
+	// make sure the user DB lost the region we dropped.
+	sDB.CheckQueryResults(t, `
+		USE userdb;
+		SELECT unnest(values)
+		  FROM [SHOW ENUMS]
+		 WHERE name = 'crdb_internal_region'
+		 ORDER BY 1`,
+		[][]string{{"us-east1"}},
+	)
+}

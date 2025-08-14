@@ -403,51 +403,10 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			}
 			return nil
 		}
-
-		var idsToRemove []int
-		populateIDsToRemove := func(holder context.Context, txn descs.Txn) error {
-			typeDesc, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, t.typeID)
-			if err != nil {
-				return err
-			}
-			for _, member := range typeDesc.EnumMembers {
-				if !t.isTransitioningInCurrentJob(&member) ||
-					!enumMemberIsRemoving(&member) ||
-					typeDesc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
-					continue
-				}
-				rows, err := txn.QueryBufferedEx(ctx, "select-invalid-instances", txn.KV(),
-					sessiondata.NodeUserSessionDataOverride, `SELECT id FROM system.sql_instances 
- 							WHERE crdb_region = $1`, member.PhysicalRepresentation)
-				if err != nil {
-					return err
-				}
-				for _, row := range rows {
-					idsToRemove = append(idsToRemove, int(tree.MustBeDInt(row[0])))
-				}
-			}
-			return nil
-		}
-
-		removeReferences := func(ctx context.Context, txn descs.Txn) error {
-			for _, id := range idsToRemove {
-				deleteQuery := fmt.Sprintf(
-					`DELETE FROM system.sql_instances WHERE id = %d`, id)
-				if _, err := txn.ExecEx(ctx, "delete-dropped-region-ref", txn.KV(),
-					sessiondata.NodeUserSessionDataOverride, deleteQuery); err != nil {
-					return err
-				}
-
-			}
-			return nil
-		}
 		if err := t.execCfg.InternalDB.DescsTxn(ctx, validateDrops); err != nil {
 			return err
 		}
 		if isDroppingMultiRegionEnumMember {
-			if err := t.execCfg.InternalDB.DescsTxn(ctx, populateIDsToRemove); err != nil {
-				return err
-			}
 			if err := t.execCfg.InternalDB.DescsTxn(ctx, repartitionRegionalByRowTables); err != nil {
 				return err
 			}
@@ -540,12 +499,6 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		// Finally, make sure all of the type descriptor leases are updated.
 		if err := refreshTypeDescriptorLeases(ctx, leaseMgr, t.execCfg.DB, typeDesc); err != nil {
 			return err
-		}
-
-		if isDroppingMultiRegionEnumMember && len(idsToRemove) != 0 {
-			if err := t.execCfg.InternalDB.DescsTxn(ctx, removeReferences); err != nil {
-				return err
-			}
 		}
 	}
 
