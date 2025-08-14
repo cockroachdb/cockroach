@@ -15,8 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
+	"github.com/cockroachdb/cockroach/pkg/storage/minversion"
 	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -62,14 +66,14 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 func InitEnvsFromStoreSpecs(
 	ctx context.Context,
 	specs []base.StoreSpec,
-	rw RWMode,
+	cfg EnvConfig,
 	stickyRegistry StickyRegistry,
 	diskWriteStats disk.WriteStatsManager,
 ) (Envs, error) {
 	envs := make(Envs, len(specs))
 	for i := range specs {
 		var err error
-		envs[i], err = InitEnvFromStoreSpec(ctx, specs[i], rw, stickyRegistry, diskWriteStats)
+		envs[i], err = InitEnvFromStoreSpec(ctx, specs[i], cfg, stickyRegistry, diskWriteStats)
 		if err != nil {
 			envs.CloseAll()
 			return nil, err
@@ -97,7 +101,7 @@ func (e Envs) CloseAll() {
 func InitEnvFromStoreSpec(
 	ctx context.Context,
 	spec base.StoreSpec,
-	rw RWMode,
+	cfg EnvConfig,
 	stickyRegistry StickyRegistry,
 	diskWriteStats disk.WriteStatsManager,
 ) (*Env, error) {
@@ -113,16 +117,16 @@ func InitEnvFromStoreSpec(
 			fs = vfs.NewMem()
 		}
 	}
-	return InitEnv(ctx, fs, dir, EnvConfig{
-		RW:                rw,
-		EncryptionOptions: spec.EncryptionOptions,
-	}, diskWriteStats)
+	// Override encryption options from the store spec.
+	cfg.EncryptionOptions = spec.EncryptionOptions
+	return InitEnv(ctx, fs, dir, cfg, diskWriteStats)
 }
 
 // EnvConfig provides additional configuration settings for Envs.
 type EnvConfig struct {
 	RW                RWMode
 	EncryptionOptions *storageconfig.EncryptionOptions
+	Version           clusterversion.Handle
 }
 
 // InitEnv initializes a new virtual filesystem environment.
@@ -316,7 +320,12 @@ func (e *Env) onDiskSlow(info vfs.DiskSlowInfo) {
 
 // InMemory constructs a new in-memory environment.
 func InMemory() *Env {
-	e, err := InitEnv(context.Background(), vfs.NewMem(), "" /* dir */, EnvConfig{}, nil /* diskWriteStats */)
+	// For in-memory environments, we create a dummy cluster settings to provide
+	// a version handle, since these environments don't persist version information.
+	clusterSettings := cluster.MakeTestingClusterSettings()
+	e, err := InitEnv(context.Background(), vfs.NewMem(), "" /* dir */, EnvConfig{
+		Version: clusterSettings.Version,
+	}, nil /* diskWriteStats */)
 	// In practice InitEnv is infallible with this configuration.
 	if err != nil {
 		panic(err)
@@ -329,7 +338,10 @@ func InMemory() *Env {
 // encryption-at-rest. Since this function ignores the possibility of
 // encryption-at-rest, it should only be used as a testing convenience.
 func MustInitPhysicalTestingEnv(dir string) *Env {
-	e, err := InitEnv(context.Background(), vfs.Default, dir, EnvConfig{}, nil /* diskWriteStats */)
+	clusterSettings := cluster.MakeTestingClusterSettings()
+	e, err := InitEnv(context.Background(), vfs.Default, dir, EnvConfig{
+		Version: clusterSettings.Version,
+	}, nil /* diskWriteStats */)
 	if err != nil {
 		panic(err)
 	}

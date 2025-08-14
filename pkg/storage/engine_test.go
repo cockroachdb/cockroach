@@ -1072,7 +1072,10 @@ func TestCreateCheckpoint(t *testing.T) {
 }
 
 func mustInitTestEnv(t testing.TB, baseFS vfs.FS, dir string) *fs.Env {
-	e, err := fs.InitEnv(context.Background(), baseFS, dir, fs.EnvConfig{}, nil /* statsCollector */)
+	settings := cluster.MakeTestingClusterSettings()
+	e, err := fs.InitEnv(context.Background(), baseFS, dir, fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* statsCollector */)
 	require.NoError(t, err)
 	return e
 }
