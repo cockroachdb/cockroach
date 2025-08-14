@@ -1059,10 +1059,41 @@ func purgeOldVersions(
 		return err
 	}
 
-	// Acquire a refcount on the descriptor on the latest version to maintain an
-	// active lease, so that it doesn't get released when removeInactives()
-	// is called below. Release this lease after calling removeInactives().
-	desc, _, err := t.findForTimestamp(ctx, m.storage.clock.Now())
+	var err error
+	var desc *descriptorVersionState
+	for r := retry.StartWithCtx(ctx, retry.Options{
+		MaxDuration: time.Second * 30}); r.Next(); {
+		// Acquire a refcount on the descriptor on the latest version to maintain an
+		// active lease, so that it doesn't get released when removeInactives()
+		// is called below. Release this lease after calling removeInactives().
+		desc, _, err = t.findForTimestamp(ctx, m.storage.clock.Now())
+		if err == nil || !errors.Is(err, errRenewLease) {
+			break
+		}
+		// We encountered an error telling us to renew the lease.
+		newest := m.findNewest(id)
+		// Assert this should never happen due to a fixed expiration, since the range
+		// feed is responsible for purging old versions and acquiring new versions.
+		if newest.hasFixedExpiration() {
+			return errors.AssertionFailedf("latest version of the descriptor has" +
+				"a fixed expiration, this should never happen")
+		}
+		// Otherwise, we ran into some type of transient issue, where the sqllivness
+		// session was expired. This could happen if the sqlliveness range is slow
+		// for some reason.
+		if r.CurrentAttempt() == 0 {
+			log.Infof(ctx, "unable to acquire lease on latest descriptor "+
+				"version of ID: %d, retrying...", id)
+		}
+	}
+	// As a last resort, we will release all versions of the descriptor. This is
+	// suboptimal, but the safest option.
+	if errors.Is(err, errRenewLease) {
+		log.Warningf(ctx, "unable to acquire lease on latest descriptor "+
+			"version of ID: %d, cleaning up all versions from storage.", id)
+		err = nil
+	}
+
 	if isInactive := catalog.HasInactiveDescriptorError(err); err == nil || isInactive {
 		removeInactives(isInactive)
 		if desc != nil {
