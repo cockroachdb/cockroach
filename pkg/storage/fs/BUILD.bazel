@@ -16,9 +16,13 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cli/exit",
+        "//pkg/clusterversion",
+        "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/storage/disk",
         "//pkg/storage/enginepb",
+        "//pkg/storage/minversion",
         "//pkg/storage/storageconfig",
         "//pkg/util/buildutil",
         "//pkg/util/envutil",

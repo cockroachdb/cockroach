@@ -764,7 +764,10 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		stickyRegistry = serverKnobs.StickyVFSRegistry
 	}
 
-	storeEnvs, err := fs.InitEnvsFromStoreSpecs(ctx, cfg.Stores.Specs, fs.ReadWrite, stickyRegistry, cfg.DiskWriteStats)
+	storeEnvs, err := fs.InitEnvsFromStoreSpecs(ctx, cfg.Stores.Specs, fs.EnvConfig{
+		RW:      fs.ReadWrite,
+		Version: cfg.Settings.Version,
+	}, stickyRegistry, cfg.DiskWriteStats)
 	if err != nil {
 		return Engines{}, err
 	}
