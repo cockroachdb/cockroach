@@ -1949,7 +1949,13 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 			return false, cf.knobs.ManagePTSError()
 		}
 
-		now := timeutil.Now()
+		// TODO: This seems weird, come back to it.
+		var leastLaggingTimestamp hlc.Timestamp
+		for _, frontier := range cf.frontier.Frontiers() {
+			if leastLaggingTimestamp.IsEmpty() || frontier.Frontier().After(leastLaggingTimestamp) {
+				leastLaggingTimestamp = frontier.Frontier()
+			}
+		}
 
 		// PTS entries contains the per table PTS records for lagging tables.
 		// We will a) update the main PTS record's timestamp to the lowest
@@ -1959,8 +1965,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		// tables that are currently lagging.
 
 
-		// TODO: This seems weird, come back to it.
-		mainPTSTimestamp := now
+		mainPTSTimestamp := leastLaggingTimestamp
 		updated := false
 		// We use this to know if we need to update the per table PTS records
 		// in the job info protobuf.
@@ -1969,7 +1974,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 			lagDuration := 2 * time.Minute
 			tableHighWater := frontier.Frontier()
 			
-			isLagging := tableHighWater.AddDuration(lagDuration).Less(now)
+			isLagging := tableHighWater.AddDuration(lagDuration).Less(leastLaggingTimestamp)
 			if !isLagging {	
 				// If the table is not lagging, we can update use the table's highwater
 				// to inform the timestamp the main PTS record should be updated to.
@@ -1998,7 +2003,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 					return false, err
 				}
 				if rec.Timestamp.Less(tableHighWater) {
-					err := pts.UpdateTimestamp(ctx, rec, tableHighWater)
+					err := pts.UpdateTimestamp(ctx, *ptsEntries.ProtectedTimestampRecords[tableId], tableHighWater)
 					if err != nil {
 						return false, err
 					}
@@ -2014,7 +2019,8 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 				// be the table ID.
 				ctx, cf.FlowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), tableHighWater,
 			)
-			ptsEntries.ProtectedTimestampRecords[tableId] = ptr.ID.GetUUID()
+			uuid := ptr.ID.GetUUID()
+			ptsEntries.ProtectedTimestampRecords[tableId] = &uuid
 			err := pts.Protect(ctx, ptr)
 			if err != nil {
 				return false, err
@@ -2033,7 +2039,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		}
 
 		if perTablePTSChanged {
-			perTablePTS, err := protoutil.Marshal(ptsEntries)
+			perTablePTS, err := protoutil.Marshal(&ptsEntries)
 			if err != nil {
 				return false, err
 			}
@@ -2050,13 +2056,13 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	// but we need to release all the per table PTS records that we created earlier.
 	if ptsEntries.ProtectedTimestampRecords != nil && len(ptsEntries.ProtectedTimestampRecords) > 0 {
 		for _, ptr := range ptsEntries.ProtectedTimestampRecords {
-			err := pts.Release(ctx, ptr)
+			err := pts.Release(ctx, *ptr)
 			if err != nil {
 				return false, err
 			}
 		}
 		ptsEntries.ProtectedTimestampRecords = nil
-		perTablePTS, err := protoutil.Marshal(ptsEntries)
+		perTablePTS, err := protoutil.Marshal(&ptsEntries)
 		if err != nil {
 			return false, err
 		}
