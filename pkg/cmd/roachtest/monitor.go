@@ -226,7 +226,10 @@ func (m *monitorImpl) Go(fn func(context.Context) error) {
 			// Note that `t.Fatal` calls `panic(err)`, so this mechanism primarily
 			// enables that use case. But it also offers protection against accidental
 			// panics (NPEs and such) which should not bubble up to the runtime.
-			err = errors.Wrap(errors.WithStack(rErr), "monitor user task failed")
+			//
+			// Also we wrap the error to later attempt to extract fatal level logs to
+			// assist with triage
+			err = registry.FatalMonitor(rErr)
 		}()
 		// Automatically clear the worker status message when the goroutine exits.
 		defer m.t.WorkerStatus()

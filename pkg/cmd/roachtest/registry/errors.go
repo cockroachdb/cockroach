@@ -28,6 +28,10 @@ type (
 	}
 
 	errorOption func(*ErrorWithOwnership)
+
+	FatalMonitorError struct {
+		Err error
+	}
 )
 
 func (ewo ErrorWithOwnership) Error() string {
@@ -72,6 +76,22 @@ func (nre NonReportableError) As(reference interface{}) bool {
 	return errors.As(nre.Err, reference)
 }
 
+func (fme FatalMonitorError) Error() string {
+	return fmt.Sprintf("monitor user task failed: %s", fme.Err)
+}
+
+func (fme FatalMonitorError) Is(target error) bool {
+	return errors.Is(fme.Err, target)
+}
+
+func (fme FatalMonitorError) Unwrap() error {
+	return fme.Err
+}
+
+func (fme FatalMonitorError) As(reference interface{}) bool {
+	return errors.As(fme.Err, reference)
+}
+
 // ErrorWithOwner allows the caller to associate `err` with
 // `owner`. When `t.Fatal` is called with an error of this type, the
 // resulting GitHub issue is created and assigned to the team
@@ -90,4 +110,11 @@ func ErrorWithOwner(owner Owner, err error, opts ...errorOption) ErrorWithOwners
 // logs, but not reported in a GitHub issue.
 func NonReportable(err error) NonReportableError {
 	return NonReportableError{err}
+}
+
+// FatalMonitor wraps the given error as a FatalMonitorError. During artifact
+// collection, fatal level node logs will be searched for and extracted if
+// found to assist with triaging.
+func FatalMonitor(err error) FatalMonitorError {
+	return FatalMonitorError{err}
 }
