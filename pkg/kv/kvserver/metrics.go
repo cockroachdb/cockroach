@@ -171,6 +171,32 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	// Decommisioning nudger metrics.
+	metaDecommissioningNudgerEnqueueAttempts = metric.Metadata{
+		Name:         "ranges.decommissioning.nudger.enqueue.attempts",
+		Help:         "Number of attempts to enqueue a range for decommissioning by the decommissioning nudger",
+		Measurement:  "Ranges",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "ranges.decommissioning.nudger.enqueue",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelStatus, "attempt"),
+	}
+	metaDecommissioningNudgerEnqueueFailure = metric.Metadata{
+		Name:         "ranges.decommissioning.nudger.enqueue.failure",
+		Help:         "Number of failed enqueues of a range for decommissioning by the decommissioning nudger",
+		Measurement:  "Ranges",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "ranges.decommissioning.nudger.enqueue.failure",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelStatus, "failure"),
+	}
+	metaDecommissioningNudgerEnqueueEnqueued = metric.Metadata{
+		Name:         "ranges.decommissioning.nudger.enqueue.enqueued",
+		Help:         "Number of enqueued enqueues of a range for decommissioning by the decommissioning nudger",
+		Measurement:  "Ranges",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "ranges.decommissioning.nudger.enqueue.enqueued",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelStatus, "enqueued"),
+	}
+
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount = metric.Metadata{
 		Name:        "leases.success",
@@ -2867,6 +2893,11 @@ type StoreMetrics struct {
 	DecommissioningRangeCount       *metric.Gauge
 	RangeClosedTimestampPolicyCount [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge
 
+	// Decommissioning nudger metrics.
+	DecommissioningNudgerEnqueueAttempts *metric.Counter
+	DecommissioningNudgerEnqueueFailure  *metric.Counter
+	DecommissioningNudgerEnqueueEnqueued *metric.Counter
+
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
 	// lease).
@@ -3585,6 +3616,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		OverReplicatedRangeCount:        metric.NewGauge(metaOverReplicatedRangeCount),
 		DecommissioningRangeCount:       metric.NewGauge(metaDecommissioningRangeCount),
 		RangeClosedTimestampPolicyCount: makePolicyRefresherMetrics(),
+
+		// Decommissioning nuder metrics.
+		DecommissioningNudgerEnqueueAttempts: metric.NewCounter(metaDecommissioningNudgerEnqueueAttempts),
+		DecommissioningNudgerEnqueueFailure:  metric.NewCounter(metaDecommissioningNudgerEnqueueFailure),
+		DecommissioningNudgerEnqueueEnqueued: metric.NewCounter(metaDecommissioningNudgerEnqueueEnqueued),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
