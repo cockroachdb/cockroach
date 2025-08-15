@@ -233,7 +233,6 @@ const (
 var failureInjectionMutators = []mutator{
 	panicNodeMutator{},
 	networkPartitionMutator{},
-	multiRegionSimulationMutator{},
 }
 
 // clusterSettingMutators includes a list of all
@@ -311,6 +310,14 @@ var planMutators = func() []mutator {
 func (p *testPlanner) Plan() (*TestPlan, error) {
 	setup, testUpgrades := p.setupTest()
 
+	var simulateStep, endSimulationStep *singleStep
+	if p.isMultiRegion {
+		var err error
+		simulateStep, endSimulationStep, err = p.generateMultiRegionSimulationSteps()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate multi-region simulation steps: %w", err)
+		}
+	}
 	upgradeStepsForService := func(
 		service *ServiceContext, from, to *clusterupgrade.Version, virtualClusterRunning, scheduleHooks bool,
 	) []testStep {
@@ -360,6 +367,11 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 
 		// run after upgrade steps, if any,
 		addSteps(p.afterUpgradeSteps(service, from, to, scheduleHooks))
+
+		if p.isMultiRegion {
+			steps = append([]testStep{simulateStep}, steps...)
+			steps = append(steps, endSimulationStep)
+		}
 
 		return steps
 	}
@@ -477,26 +489,14 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 		}
 	}
 
-	if p.isMultiRegion {
-		simulateStep, _, err := p.generateMultiRegionSimulationSteps(p.prng)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate multi-region simulation steps: %w", err)
-		}
-
-		testPlan.initSteps = append([]testStep{simulateStep}, testPlan.initSteps...)
-	}
-
 	testPlan.assignIDs()
 	return testPlan, nil
 }
 
-func (p *testPlanner) generateMultiRegionSimulationSteps(
-	rng *rand.Rand,
-) (*singleStep, *singleStep, error) {
+func (p *testPlanner) generateMultiRegionSimulationSteps() (*singleStep, *singleStep, error) {
 	nodeList := p.currentContext.System.Descriptor.Nodes
 
-	failure := failures.GetFailureRegistry()
-	f, err := failure.GetFailer(p.cluster.Name(), failures.NetworkLatencyName, p.logger)
+	f, err := GetFailer(p, failures.NetworkLatencyName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get failer for %s: %w", failures.NetworkLatencyName, err)
 	}
@@ -508,7 +508,7 @@ func (p *testPlanner) generateMultiRegionSimulationSteps(
 		regionToNodes = make(map[failures.Region][]install.Node)
 
 		for _, n := range nodeList {
-			region := failures.AllRegions[rng.Intn(len(failures.AllRegions))]
+			region := failures.AllRegions[p.prng.Intn(len(failures.AllRegions))]
 			regionToNodes[region] = append(regionToNodes[region], install.Node(n))
 		}
 
