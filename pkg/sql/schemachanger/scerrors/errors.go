@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
 )
 
 // EventLogger is a convenience object used for logging schema changer events.
@@ -206,12 +207,26 @@ func (e *schemaChangerUserError) SafeFormatError(p errors.Printer) (next error) 
 	return e.err
 }
 
+// Error implements error.
 func (e *schemaChangerUserError) Error() string {
 	// We don't want to print the schemaChangerUserError wrapper in the error,
 	// this only serves as a marker to the declarative schema changer to surface.
 	return fmt.Sprintf("%v", e.err)
 }
 
+// Unwrap implements errors.Wrapper.
 func (e *schemaChangerUserError) Unwrap() error {
 	return e.err
+}
+
+// schemaChangerUserErrorDecodeWrapper is a wrapper decoder for
+// schemaChangerUserError.
+func schemaChangerUserErrorDecodeWrapper(
+	_ context.Context, cause error, _ string, _ []string, payload proto.Message,
+) error {
+	return &schemaChangerUserError{err: cause}
+}
+
+func init() {
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*schemaChangerUserError)(nil)), schemaChangerUserErrorDecodeWrapper)
 }
