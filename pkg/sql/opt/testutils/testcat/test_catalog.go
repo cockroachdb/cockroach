@@ -551,6 +551,11 @@ func (tc *Catalog) ExecuteMultipleDDL(sql string) error {
 	return nil
 }
 
+// DisableUnsafeInternalCheck is part of the cat.Catalog interface.
+func (tc *Catalog) DisableUnsafeInternalCheck() func() {
+	return func() {}
+}
+
 // ExecuteDDL parses the given DDL SQL statement and creates objects in the test
 // catalog. This is used to test without spinning up a cluster.
 func (tc *Catalog) ExecuteDDL(sql string) (string, error) {

@@ -952,6 +952,10 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(
 // objectIsUnsafe checks if the privilege object is considered unsafe for external usage.
 // Unsafe objects are any system tables, and crdb_internal tables which are not listed as externally supported.
 func (p *planner) objectIsUnsafe(ctx context.Context, privilegeObject privilege.Object) bool {
+	if p.skipUnsafeInternalsCheck {
+		return false
+	}
+
 	d, ok := privilegeObject.(catalog.TableDescriptor)
 	if !ok {
 		return true

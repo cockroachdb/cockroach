@@ -202,6 +202,10 @@ type Builder struct {
 	// built, and can be safely reused across different call-sites within the same
 	// memo.
 	builtTriggerFuncs map[cat.StableID][]cachedTriggerFunc
+
+	// skipUnsafeInternalsCheck is used to skip the check that the
+	// planner is not used for unsafe internal statements.
+	skipUnsafeInternalsCheck bool
 }
 
 // New creates a new Builder structure initialized with the given
@@ -499,6 +503,8 @@ func (b *Builder) buildStmt(
 			// register all those dependencies with the metadata (for cache
 			// invalidation). We don't care about caching plans for these statements.
 			b.DisableMemoReuse = true
+			// It's considered acceptable when we delegate to unsafe internals.
+			defer b.disableUnsafeInternalCheck()()
 			return b.buildStmt(newStmt, desiredTypes, inScope)
 		}
 
@@ -581,6 +587,18 @@ func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
 				b.schemaTypeDeps.Add(int(id))
 			})
 		}
+	}
+}
+
+// disableUnsafeInternalCheck is used to disable the check that the
+// prevents external users from accessing unsafe internals.
+func (b *Builder) disableUnsafeInternalCheck() func() {
+	b.skipUnsafeInternalsCheck = true
+	cleanup := b.catalog.DisableUnsafeInternalCheck()
+
+	return func() {
+		b.skipUnsafeInternalsCheck = false
+		cleanup()
 	}
 }
 
