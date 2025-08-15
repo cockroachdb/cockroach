@@ -16,6 +16,10 @@ then
     exit 0
 fi
 
+file $1
+du -sh $1
+ls -althr $1
+
 THIS_DIR=$(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)
 
 if [ ! -f _bazel/bin/pkg/cmd/bazci/bazel-github-helper/bazel-github-helper_/bazel-github-helper ]

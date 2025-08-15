@@ -25,6 +25,7 @@ import (
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
+
 	//lint:ignore SA1019 grandfathered
 	gproto "github.com/golang/protobuf/proto"
 	"golang.org/x/net/http2"
@@ -114,10 +115,13 @@ func getHttpClient(certFile, keyFile string) (*http.Client, error) {
 func downloadFile(client *http.Client, uri string) (string, error) {
 	url := strings.ReplaceAll(uri, "bytestream://", "https://")
 	url = strings.ReplaceAll(url, "/blobs/", "/api/v0/blob/")
+	fmt.Fprintln(os.Stderr, "downloading file:", url)
 	resp, err := client.Get(url)
 	if err != nil {
 		return "", err
 	}
+	fmt.Fprintln(os.Stderr, "file download status:", resp.StatusCode)
+
 	defer func() { _ = resp.Body.Close() }()
 	contents, err := io.ReadAll(resp.Body)
 	if err != nil {
