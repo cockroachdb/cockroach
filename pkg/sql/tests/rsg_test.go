@@ -435,9 +435,6 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					"crdb_internal.fingerprint":
 					// Skipped due to long execution time.
 					continue
-				case "st_snap":
-					// TODO(#151103): unskip st_snap.
-					continue
 				}
 				_, variations := builtinsregistry.GetBuiltinProperties(name)
 				for _, builtin := range variations {
@@ -758,10 +755,6 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 		return err
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		s := smither.Generate()
-		if strings.Contains(s, "st_snap(") {
-			// TODO(#151103): unskip st_snap.
-			return nil
-		}
 		err := db.exec(t, ctx, s)
 		if c := (*crasher)(nil); errors.As(err, &c) {
 			if err := db.exec(t, ctx, "USE defaultdb"); err != nil {
