@@ -2044,6 +2044,7 @@ var cockroachdbMetrics = map[string]string{
 	"sys_go_heap_heapfragmentbytes":                               "sys.go.heap.heapfragmentbytes",
 	"sys_go_heap_heapreleasedbytes":                               "sys.go.heap.heapreleasedbytes",
 	"sys_go_heap_heapreservedbytes":                               "sys.go.heap.heapreservedbytes",
+	"sys_go_limitbytes":                                           "sys.go.limitbytes",
 	"sys_go_pause_other_ns":                                       "sys.go.pause.other.ns",
 	"sys_go_stack_systembytes":                                    "sys.go.stack.systembytes",
 	"sys_go_stop_other_ns":                                        "sys.go.stop.other.ns",

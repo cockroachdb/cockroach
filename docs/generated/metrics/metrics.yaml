@@ -10382,6 +10382,14 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+    - name: sys.go.limitbytes
+      exported_name: sys_go_limitbytes
+      description: Go soft memory limit
+      y_axis_label: Memory
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
     - name: sys.go.pause.other.ns
       exported_name: sys_go_pause_other_ns
       description: Estimated non-GC-related total pause time
