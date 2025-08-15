@@ -346,7 +346,7 @@ func (fw *SSTWriter) PutInternalPointKey(key *pebble.InternalKey, value []byte) 
 		return errors.New("cannot decode engine key")
 	}
 	fw.DataSize += int64(len(ek.Key)) + int64(len(value))
-	return fw.fw.Raw().Add(*key, value, false /* forceObsolete */)
+	return fw.fw.Raw().Add(*key, value, false /* forceObsolete */, sstable.KVMeta{})
 }
 
 // clearRange clears all point keys in the given range by dropping a Pebble
