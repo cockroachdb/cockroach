@@ -463,6 +463,7 @@ func (ti *testIndex) Delete(d *datadriven.TestData) string {
 		}
 
 		key, vec := ti.parseKeyAndVector(line)
+		require.NotNil(ti.T, vec)
 
 		// Delete within the scope of a transaction.
 		commontest.RunTransaction(ti.ctx, ti.T, ti.memStore, func(txn cspann.Txn) {
@@ -800,7 +801,7 @@ func parsePartitionStateDetails(s string) cspann.PartitionStateDetails {
 		// Has one parameter - set as Source for merge operations, Target1
 		// otherwise.
 		switch details.State {
-		case cspann.MergingState, cspann.DrainingForMergeState, cspann.RemovingLevelState:
+		case cspann.MergingState, cspann.RemovingLevelState:
 			details.Source = cspann.PartitionKey(num)
 		default:
 			details.Target1 = cspann.PartitionKey(num)

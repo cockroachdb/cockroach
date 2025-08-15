@@ -33,8 +33,6 @@ func ParsePartitionState(s string) PartitionState {
 		return UpdatingState
 	case "DrainingForSplit":
 		return DrainingForSplitState
-	case "DrainingForMerge":
-		return DrainingForMergeState
 	case "DeletingForSplit":
 		return DeletingForSplitState
 	case "AddingLevel":
@@ -48,8 +46,7 @@ func ParsePartitionState(s string) PartitionState {
 // AllowAdd returns true if vectors can be added to the partition in this state.
 func (s PartitionState) AllowAdd() bool {
 	switch s {
-	case ReadyState, SplittingState, MergingState, UpdatingState,
-		AddingLevelState, RemovingLevelState:
+	case ReadyState, SplittingState, UpdatingState, AddingLevelState, RemovingLevelState:
 		return true
 	}
 	return false
@@ -67,6 +64,16 @@ func (s PartitionState) AllowRemove() bool {
 	return s != MissingState
 }
 
+// AllowMerge returns true if vectors in the partition can be merged into
+// sibling partitions.
+func (s PartitionState) AllowMerge() bool {
+	switch s {
+	case ReadyState, MergingState:
+		return true
+	}
+	return false
+}
+
 // String returns the state formatted as a string.
 func (s PartitionState) String() string {
 	switch s {
@@ -82,8 +89,6 @@ func (s PartitionState) String() string {
 		return "Updating"
 	case DrainingForSplitState:
 		return "DrainingForSplit"
-	case DrainingForMergeState:
-		return "DrainingForMerge"
 	case DeletingForSplitState:
 		return "DeletingForSplitState"
 	case AddingLevelState:
@@ -105,9 +110,9 @@ const (
 	// receive vectors from a split of this partition. Searches, inserts, and
 	// deletes are still allowed, but not merges.
 	SplittingState
-	// MergingState indicates that vectors in the paritition are about to be moved
-	// into other partitions at the same level. Searches, inserts, and deletes are
-	// still allowed, but not splits.
+	// MergingState indicates that the partition is actively moving vectors into
+	// other partitions at the same level. Searches are allowed, but not inserts,
+	// splits, or merges.
 	MergingState
 	// UpdatingState indicates that the partition is a target of an ongoing split
 	// or merge operation. Searches, inserts, and deletes are allowed, but not
@@ -117,11 +122,8 @@ const (
 	// vectors to target split sub-partitions. Searches are allowed, but not
 	// inserts, splits, or merges.
 	DrainingForSplitState
-	// DrainingForMergeState indicates that the partition is actively moving
-	// vectors into other partitions at the same level (or deleting vectors if
-	// this is the root partition). Searches are allowed, but not inserts, splits,
-	// or merges.
-	DrainingForMergeState
+	// __reserved__ is not used, but need to avoid updating other enum values.
+	__reserved__
 	// AddingLevelState indicates that a root partition has been drained after a
 	// split and has had its level increased by one. What remains is to add the
 	// target split sub-partitions to the partition. Searches, inserts, and
@@ -192,6 +194,14 @@ func (psd *PartitionStateDetails) MakeSplitting(target1, target2 PartitionKey) {
 	}
 }
 
+// MakeMerging sets Merging partition state details.
+func (psd *PartitionStateDetails) MakeMerging() {
+	*psd = PartitionStateDetails{
+		State:     MergingState,
+		Timestamp: getHigherTimestamp(psd.Timestamp),
+	}
+}
+
 // MakeDrainingForSplit sets DrainingForSplit partition state details, including
 // the two target sub-partitions to which vectors are copied.
 func (psd *PartitionStateDetails) MakeDrainingForSplit(target1, target2 PartitionKey) {
@@ -199,16 +209,6 @@ func (psd *PartitionStateDetails) MakeDrainingForSplit(target1, target2 Partitio
 		State:     DrainingForSplitState,
 		Target1:   target1,
 		Target2:   target2,
-		Timestamp: getHigherTimestamp(psd.Timestamp),
-	}
-}
-
-// MakeDrainingForMerge sets DrainingForMerge partition state details, including
-// the target sub-partition to which vectors can be copied.
-func (psd *PartitionStateDetails) MakeDrainingForMerge(target PartitionKey) {
-	*psd = PartitionStateDetails{
-		State:     DrainingForMergeState,
-		Target1:   target,
 		Timestamp: getHigherTimestamp(psd.Timestamp),
 	}
 }
@@ -276,7 +276,7 @@ func (psd *PartitionStateDetails) MaybeSplitStalled(stalledOpTimeout time.Durati
 // state for longer than the timeout, possibly indicating the fixup is stalled.
 func (psd *PartitionStateDetails) MaybeMergeStalled(stalledOpTimeout time.Duration) bool {
 	switch psd.State {
-	case MergingState, DrainingForMergeState, RemovingLevelState:
+	case MergingState, RemovingLevelState:
 		return timeutil.Since(psd.Timestamp) > stalledOpTimeout
 	}
 	return false

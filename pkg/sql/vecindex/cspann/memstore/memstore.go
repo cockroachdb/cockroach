@@ -444,6 +444,47 @@ func (s *Store) TryUpdatePartitionMetadata(
 	return nil
 }
 
+// TryStartMerge implements the Store interface.
+func (s *Store) TryStartMerge(
+	ctx context.Context,
+	treeKey cspann.TreeKey,
+	partitionKey cspann.PartitionKey,
+	expected cspann.PartitionMetadata,
+	ifReadyKey cspann.PartitionKey,
+) error {
+	memPart, ifReadyPart := s.lockTwoPartitions(treeKey, partitionKey, ifReadyKey)
+	if memPart == nil {
+		// Partition does not exist.
+		return cspann.ErrPartitionNotFound
+	}
+	defer memPart.lock.Release()
+
+	if ifReadyPart == nil {
+		// Partition does not exist.
+		return cspann.ErrPartitionNotFound
+	}
+	defer ifReadyPart.lock.Release()
+
+	// Ensure that the "ifReady" partition is in the Ready state.
+	ifReadyMetadata := ifReadyPart.lock.partition.Metadata()
+	if ifReadyMetadata.StateDetails.State != cspann.ReadyState {
+		return errors.Wrapf(cspann.NewConditionFailedError(*ifReadyMetadata),
+			"ifReady partition is not in the Ready state")
+	}
+
+	// Check partition's precondition.
+	partition := memPart.lock.partition
+	existing := partition.Metadata()
+	if !existing.Equal(&expected) {
+		return cspann.NewConditionFailedError(*existing)
+	}
+
+	// Update partition to the Merging state.
+	existing.StateDetails.MakeMerging()
+
+	return nil
+}
+
 // TryAddToPartition implements the Store interface.
 func (s *Store) TryAddToPartition(
 	ctx context.Context,
@@ -524,35 +565,18 @@ func (s *Store) TryMoveVector(
 	valueBytes cspann.ValueBytes,
 	expected cspann.PartitionMetadata,
 ) (moved bool, err error) {
-	if sourcePartitionKey == targetPartitionKey {
-		// No-op move.
-		return false, nil
-	}
-
-	// Always lock the partition with the lower key first, in order to avoid
-	// deadlocks.
-	partitionKey1 := sourcePartitionKey
-	partitionKey2 := targetPartitionKey
-	if partitionKey2 < partitionKey1 {
-		partitionKey1, partitionKey2 = partitionKey2, partitionKey1
-	}
-	sourceMemPart := s.lockPartition(treeKey, partitionKey1, uniqueOwner, true /* isExclusive */)
+	sourceMemPart, targetMemPart := s.lockTwoPartitions(treeKey, sourcePartitionKey, targetPartitionKey)
 	if sourceMemPart == nil {
 		// Partition does not exist.
 		return false, nil
 	}
 	defer sourceMemPart.lock.Release()
 
-	targetMemPart := s.lockPartition(treeKey, partitionKey2, uniqueOwner, true /* isExclusive */)
 	if targetMemPart == nil {
 		// Partition does not exist.
 		return false, nil
 	}
 	defer targetMemPart.lock.Release()
-
-	if targetPartitionKey < sourcePartitionKey {
-		sourceMemPart, targetMemPart = targetMemPart, sourceMemPart
-	}
 
 	// Check precondition against target partition.
 	targetPartition := targetMemPart.lock.partition
@@ -886,6 +910,43 @@ func (s *Store) lockPartition(
 	}
 
 	return memPart
+}
+
+// lockTwoPartitions acquires exclusive locks on the two given partitions and
+// returns them. It does this in a consistent order to prevent deadlocks. If the
+// first lock cannot be acquired, it returns two nil partitions. If the second
+// lock cannot be acquired, it returns a locked partition and a nil partition.
+// The caller is responsible for releasing any locks that are acquired.
+func (s *Store) lockTwoPartitions(
+	treeKey cspann.TreeKey, partitionKey1, partitionKey2 cspann.PartitionKey,
+) (memPart1, memPart2 *memPartition) {
+	if partitionKey1 == partitionKey2 {
+		// Do not attempt to lock the same partition twice.
+		return nil, nil
+	}
+
+	// Always lock the partition with the lower key first, in order to avoid
+	// deadlocks.
+	swap := partitionKey2 < partitionKey1
+	if swap {
+		partitionKey1, partitionKey2 = partitionKey2, partitionKey1
+	}
+	memPart1 = s.lockPartition(treeKey, partitionKey1, uniqueOwner, true /* isExclusive */)
+	if memPart1 == nil {
+		// Partition 1 does not exist.
+		return nil, nil
+	}
+
+	memPart2 = s.lockPartition(treeKey, partitionKey2, uniqueOwner, true /* isExclusive */)
+	if memPart2 == nil {
+		// Partition 2 does not exist.
+		return memPart1, nil
+	}
+
+	if swap {
+		return memPart2, memPart1
+	}
+	return memPart1, memPart2
 }
 
 // makeEmptyRootMetadata returns the partition metadata for an empty root
