@@ -2536,3 +2536,25 @@ SELECT substring(sequence_schema FOR 7), sequence_name FROM [SHOW SEQUENCES] WHE
 pg_temp  temp_seq
 
 subtest end
+
+
+subtest incorrect_cleanup_of_owned_by
+
+statement ok
+CREATE TABLE t_seq_owner (id BIGSERIAL NOT NULL);
+
+statement ok
+CREATE SEQUENCE id_seq_owned OWNED BY t_seq_owner.id;
+
+statement ok
+ALTER TABLE t_seq_owner ALTER COLUMN id SET DEFAULT nextval('id_seq_owned');
+
+statement ok
+drop table t_seq_owner;
+
+query I
+SELECT count(*) FROM [SHOW TABLES] WHERE table_name='id_seq_owned'
+----
+0
+
+subtest end
