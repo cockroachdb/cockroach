@@ -1900,9 +1900,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}()
 
-	canParallelize := ba.Header.MaxSpanRequestKeys == 0 && ba.Header.TargetBytes == 0 &&
-		!ba.Header.ReturnOnRangeBoundary &&
-		!ba.Header.ReturnElasticCPUResumeSpans
+	canParallelize := !ba.MightStopEarly()
 	if ba.IsSingleCheckConsistencyRequest() {
 		// Don't parallelize full checksum requests as they have to touch the
 		// entirety of each replica of each range they touch.
@@ -2006,9 +2004,8 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				ba.UpdateTxn(resp.reply.Txn)
 			}
 
-			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0 || ba.ReturnOnRangeBoundary || ba.ReturnElasticCPUResumeSpans
 			// Check whether we've received enough responses to exit query loop.
-			if mightStopEarly {
+			if ba.MightStopEarly() {
 				var replyKeys int64
 				var replyBytes int64
 				for _, r := range resp.reply.Responses {

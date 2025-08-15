@@ -1771,7 +1771,7 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 
 	// SkipLocked reads cannot be in a batch with basically anything else. If we
 	// encounter one, we need to flush our buffer in its own batch.
-	splitBatchRequired := ba.WaitPolicy == lock.WaitPolicy_SkipLocked
+	splitBatchRequired := ba.WaitPolicy == lock.WaitPolicy_SkipLocked || ba.MightStopEarly()
 
 	// Flush all buffered writes by pre-pending them to the requests being sent
 	// in the batch.
@@ -1813,10 +1813,11 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	})
 
 	if splitBatchRequired {
-		log.VEventf(ctx, 2, "flushing buffer via separate batch")
 		flushBatch := ba.ShallowCopy()
-		flushBatch.WaitPolicy = 0
+		clearBatchRequestOptions(flushBatch)
 		flushBatch.Requests = reqs
+		log.VEventf(ctx, 2, "flushing %d buffered requests via separate batch")
+
 		br, pErr := twb.wrapped.SendLocked(ctx, flushBatch)
 		if pErr != nil {
 			pErr.Index = nil
@@ -1837,6 +1838,105 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		br.Responses = br.Responses[numRevisionsBuffered:]
 		return br, nil
 	}
+}
+
+func clearBatchRequestOptions(ba *kvpb.BatchRequest) {
+	// TODO(ssd): Maintaining this list does not seem practical. I've made this
+	// annotated list for review, but we should consider how we want to construct
+	// this batch.
+
+	// Managed by store_send:
+	// ba.Timestamp
+	// ba.TimestampFromServerClock
+	// ba.Now
+
+	// Managed by dist_sender
+	// ba.Replica
+	// ba.RangeID
+
+	// TODO(review): It seems reasonable to reasonable to flush at the transaction
+	// priority.
+	// ba.UserPriority
+
+	// We want this batch to be part of the same transaction.
+	// ba.Txn
+
+	// If read consistency is set to anything but CONSISTENT, our flush will fail
+	// because we only allow inconsistent reads for read only requests.
+	ba.ReadConsistency = 0
+
+	// TODO(ssd): It could make sense to reset the routing policy to LEASEHOLDER
+	// since this is a write batch. But it won't affect correctness since this
+	// just affects the ordering that we try things in. But, it am not sure why we
+	// would have a NEAREST routing policy on a request that caused us to flush.
+	// ba.RoutingPolicy
+
+	// If WaitPolicy is set to SkipLocked, our request may fail validation.
+	ba.WaitPolicy = 0
+
+	// Using the configured lock timeout seems reasonable.
+	// ba.LockTimeout
+
+	// Reset options that could result in an early batch return.
+	ba.MaxSpanRequestKeys = 0
+	ba.TargetBytes = 0
+
+	// These two field only matter if the above to field are set
+	// ba.WholeRowsOfSize
+	// ba.AllowEmpty
+
+	// Isn't set by anyone currently. Reset it anyway.
+	ba.ReturnOnRangeBoundary = false
+
+	// Controlled by interceptors below us
+	// ba.DistinctSpans
+	// ba.AsyncConsensus
+	// ba.CanForwardReadTimestamp
+
+	// This should be the same, no reason to change
+	//	ba.GatewayNodeID
+
+	// This can be set be the caller, but it seems fine to ask for range info on
+	// the flush.
+	// ba.ClientRangeInfo
+
+	// We shouldn't see this because it is only allowed via NegotiateAndSend which
+	// is only allowed for non-transactional requests.
+	// ba.BoundedStaleness
+
+	// No need to touch trace info
+	// ba.TraceInfo
+
+	// This is only used by Scan and ReverseScan requests using
+	// COL_BATCH_RESPONSE. We don't have those requests in a flush batch and we
+	// don't support that response type even if we did, so we can leave it.
+	// ba.IndexFetchSpec
+
+	// Only set by ExportRequest which we don't support here. Reset it anyway.
+	ba.ReturnElasticCPUResumeSpans = false
+
+	// Seems good to keep the labels, we could add some.
+	// ba.ProfileLabels
+
+	// Controlled by dist_sender
+	// ba.AmbiguousReplayProtection
+
+	// Flushes should be on the same connection as the original request
+	// ba.ConnectionClass
+
+	// Managed by dist_sender
+	// ba.ProxyRangeInfo
+
+	// TODO(ssd): We check this in validateBatch so we shouldn't have this. But
+	// the validation goes field by field, might be brittle.
+	// ba.WriteOptions
+
+	// Seems reasonable to use the same deadlock timeout as the inbound request
+	// for the flush.
+	// ba.DeadlockTimeout
+
+	// This one is controlled by us.
+	// ba.HasBufferedAllPrecedingWrites
 }
 
 // hasBufferedWrites returns whether the interceptor has buffered any writes
