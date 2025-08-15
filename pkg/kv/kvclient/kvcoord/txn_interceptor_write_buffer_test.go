@@ -32,7 +32,7 @@ func makeMockTxnWriteBuffer(
 	st := cluster.MakeClusterSettings()
 	bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
 	bufferedWritesGetTransformEnabled.Override(ctx, &st.SV, true)
-	bufferedWritesMaxBufferSize.Override(ctx, &st.SV, defaultBufferSize)
+	BufferedWritesMaxBufferSize.Override(ctx, &st.SV, defaultBufferSize)
 
 	var metrics TxnMetrics
 	if len(optionalMetrics) > 0 {
@@ -1586,7 +1586,7 @@ func TestTxnWriteBufferFlushesWhenOverBudget(t *testing.T) {
 
 	putAEstimate := int64(len(keyA)+valA.Size()) + bufferedWriteStructOverhead + bufferedValueStructOverhead
 
-	bufferedWritesMaxBufferSize.Override(ctx, &st.SV, putAEstimate)
+	BufferedWritesMaxBufferSize.Override(ctx, &st.SV, putAEstimate)
 
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
@@ -1739,7 +1739,7 @@ func TestTxnWriteBufferLimitsSizeOfScans(t *testing.T) {
 				txn.Sequence = 10
 
 				bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
-				bufferedWritesMaxBufferSize.Override(ctx, &st.SV, tc.bufferSize)
+				BufferedWritesMaxBufferSize.Override(ctx, &st.SV, tc.bufferSize)
 
 				ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
 				if isReverse {
@@ -1777,7 +1777,7 @@ func TestTxnWriteBufferLimitsSizeOfScans(t *testing.T) {
 		txn := makeTxnProto()
 		txn.Sequence = 10
 
-		bufferedWritesMaxBufferSize.Override(ctx, &st.SV, 10*(lockKeyInfoSize+int64(len(keyA))))
+		BufferedWritesMaxBufferSize.Override(ctx, &st.SV, 10*(lockKeyInfoSize+int64(len(keyA))))
 
 		ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
 		ba.Add(&kvpb.ScanRequest{
@@ -2132,7 +2132,7 @@ func TestTxnWriteBufferSplitsBatchesWithSkipLocked(t *testing.T) {
 		br.Txn = ba.Txn
 		return br, nil
 	})
-	bufferedWritesMaxBufferSize.Override(ctx, &st.SV, 1)
+	BufferedWritesMaxBufferSize.Override(ctx, &st.SV, 1)
 	ba = &kvpb.BatchRequest{
 		Header: kvpb.Header{
 			Txn:        &txn,
@@ -2533,7 +2533,7 @@ func TestTxnWriteBufferHasBufferedAllPrecedingWrites(t *testing.T) {
 		{
 			name: "flushed due to size limit",
 			setup: func(twb *txnWriteBuffer) {
-				bufferedWritesMaxBufferSize.Override(context.Background(), &twb.st.SV, 1)
+				BufferedWritesMaxBufferSize.Override(context.Background(), &twb.st.SV, 1)
 			},
 			ba: func(ba *kvpb.BatchRequest) {
 				putA := putArgs(keyA, "valA", txn.Sequence)

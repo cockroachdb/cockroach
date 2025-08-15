@@ -3,6 +3,9 @@
 statement ok
 SET kv_transaction_buffered_writes_enabled = true;
 
+statement ok
+SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '2KiB';
+
 # This test uses local-read-committed so that it can also test locking behavior
 # with READ COMMITTED transactions. However, we'll use a default of SERIALIZABLE
 # for all transactions.
