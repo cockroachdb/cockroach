@@ -485,6 +485,25 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.delete.started.count
+      exported_name: sql_delete_started_count
+      labeled_name: 'sql.count{query_type: started-delete}'
+      description: Number of SQL DELETE statements started
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+    - name: sql.delete.started.count.internal
+      exported_name: sql_delete_started_count_internal
+      labeled_name: 'sql.count{query_type: started-delete, query_internal: true}'
+      description: Number of SQL DELETE statements started (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.distsql.contended_queries.count
       exported_name: sql_distsql_contended_queries_count
       description: Number of SQL queries that experienced contention
@@ -551,6 +570,25 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.insert.started.count
+      exported_name: sql_insert_started_count
+      labeled_name: 'sql.count{query_type: started-insert}'
+      description: Number of SQL INSERT statements started
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+    - name: sql.insert.started.count.internal
+      exported_name: sql_insert_started_count_internal
+      labeled_name: 'sql.count{query_type: started-insert, query_internal: true}'
+      description: Number of SQL INSERT statements started (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.mem.root.current
       exported_name: sql_mem_root_current
       description: Current sql statement memory usage for root
@@ -586,6 +624,25 @@ layers:
       exported_name: sql_select_count_internal
       labeled_name: 'sql.count{query_type: select, query_internal: true}'
       description: Number of SQL SELECT statements successfully executed (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.select.started.count
+      exported_name: sql_select_started_count
+      labeled_name: 'sql.count{query_type: started-select}'
+      description: Number of SQL SELECT statements started
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+    - name: sql.select.started.count.internal
+      exported_name: sql_select_started_count_internal
+      labeled_name: 'sql.count{query_type: started-select, query_internal: true}'
+      description: Number of SQL SELECT statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
       unit: COUNT
@@ -750,6 +807,25 @@ layers:
       exported_name: sql_update_count_internal
       labeled_name: 'sql.count{query_type: update, query_internal: true}'
       description: Number of SQL UPDATE statements successfully executed (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.update.started.count
+      exported_name: sql_update_started_count
+      labeled_name: 'sql.count{query_type: started-update}'
+      description: Number of SQL UPDATE statements started
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+    - name: sql.update.started.count.internal
+      exported_name: sql_update_started_count_internal
+      labeled_name: 'sql.count{query_type: started-update, query_internal: true}'
+      description: Number of SQL UPDATE statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
       unit: COUNT
@@ -7868,22 +7944,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: sql.delete.started.count
-      exported_name: sql_delete_started_count
-      description: Number of SQL DELETE statements started
-      y_axis_label: SQL Statements
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: sql.delete.started.count.internal
-      exported_name: sql_delete_started_count_internal
-      description: Number of SQL DELETE statements started (internal queries)
-      y_axis_label: SQL Internal Statements
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.disk.distsql.current
       exported_name: sql_disk_distsql_current
       description: Current sql statement disk usage for distsql
@@ -8304,22 +8364,6 @@ layers:
       exported_name: sql_hydrated_udf_cache_misses
       description: counter on the number of cache misses
       y_axis_label: reads
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: sql.insert.started.count
-      exported_name: sql_insert_started_count
-      description: Number of SQL INSERT statements started
-      y_axis_label: SQL Statements
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: sql.insert.started.count.internal
-      exported_name: sql_insert_started_count_internal
-      description: Number of SQL INSERT statements started (internal queries)
-      y_axis_label: SQL Internal Statements
       type: COUNTER
       unit: COUNT
       aggregation: AVG
@@ -8988,22 +9032,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: sql.select.started.count
-      exported_name: sql_select_started_count
-      description: Number of SQL SELECT statements started
-      y_axis_label: SQL Statements
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: sql.select.started.count.internal
-      exported_name: sql_select_started_count_internal
-      description: Number of SQL SELECT statements started (internal queries)
-      y_axis_label: SQL Internal Statements
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.service.latency.consistent
       exported_name: sql_service_latency_consistent
       description: Latency of SQL request execution of non-historical queries
@@ -9439,22 +9467,6 @@ layers:
     - name: sql.txn.upgraded_iso_level.count.internal
       exported_name: sql_txn_upgraded_iso_level_count_internal
       description: Number of times a weak isolation level was automatically upgraded to a stronger one (internal queries)
-      y_axis_label: SQL Internal Statements
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: sql.update.started.count
-      exported_name: sql_update_started_count
-      description: Number of SQL UPDATE statements started
-      y_axis_label: SQL Statements
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: sql.update.started.count.internal
-      exported_name: sql_update_started_count_internal
-      description: Number of SQL UPDATE statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
       unit: COUNT
