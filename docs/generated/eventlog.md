@@ -3364,6 +3364,11 @@ Fields in this struct should be updated in sync with apps_stats.proto.
 An event of type `sampled_query` is the SQL query event logged to the telemetry channel. It
 contains common SQL event/execution details.
 
+Note: in version 26.1, these events will be moved to the `SQL_EXEC` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `SQL_EXEC` instead of `TELEMETRY`.
+
 
 | Field | Description | Sensitive |
 |--|--|--|
@@ -3471,6 +3476,11 @@ contains common SQL event/execution details.
 ### `sampled_transaction`
 
 An event of type `sampled_transaction` is the event logged to telemetry at the end of transaction execution.
+
+Note: in version 26.1, these events will be moved to the `SQL_EXEC` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `SQL_EXEC` instead of `TELEMETRY`.
 
 
 | Field | Description | Sensitive |
