@@ -204,6 +204,54 @@ func InitEnv(
 		return nil, err
 	}
 
+	// Read the current store cluster version.
+	storeClusterVersion, minVerFileExists, err := minversion.GetMinVersion(e.UnencryptedFS, e.Dir)
+	if err != nil {
+		return nil, err
+	}
+
+	if minVerFileExists {
+		v := cfg.Version
+		if v == nil {
+			return nil, errors.New("version must not be nil when min-version file exists")
+		}
+		// Avoid running a binary too new for this store. This is what you'd catch
+		// if, say, you restarted directly from v21.2 into v22.2 (bumping the min
+		// version) without going through v22.1 first.
+		//
+		// Note that "going through" above means that v22.1 successfully upgrades
+		// all existing stores. If v22.1 crashes half-way through the startup
+		// sequence (so now some stores have v21.2, but others v22.1) you are
+		// expected to run v22.1 again (hopefully without the crash this time) which
+		// would then rewrite all the stores.
+		if storeClusterVersion.Less(v.MinSupportedVersion()) {
+			if storeClusterVersion.Major < clusterversion.DevOffset && v.LatestVersion().Major >= clusterversion.DevOffset {
+				return nil, errors.Errorf(
+					"store last used with cockroach non-development version v%s "+
+						"cannot be opened by development version v%s",
+					storeClusterVersion, v.LatestVersion(),
+				)
+			}
+			return nil, errors.Errorf(
+				"store last used with cockroach version v%s "+
+					"is too old for running version v%s (which requires data from v%s or later)",
+				storeClusterVersion, v.LatestVersion(), v.MinSupportedVersion(),
+			)
+		}
+
+		// Avoid running a binary too old for this store. This protects against
+		// scenarios where an older binary attempts to open a store created by
+		// a newer version that may have incompatible data structures or formats.
+		if v.LatestVersion().Less(storeClusterVersion) {
+			return nil, errors.Errorf(
+				"store last used with cockroach version v%s is too high for running "+
+					"version v%s",
+				storeClusterVersion, v.LatestVersion(),
+			)
+		}
+		e.StoreClusterVersion = storeClusterVersion
+	}
+
 	// Validate and configure encryption-at-rest. If no encryption-at-rest
 	// configuration was provided, resolveEncryptedEnvOptions will validate that
 	// there is no file registry.
@@ -240,6 +288,11 @@ type Env struct {
 	// Encryption is non-nil if encryption-at-rest has ever been enabled on
 	// the store. It provides access to encryption-at-rest stats, etc.
 	Encryption *EncryptionEnv
+
+	// StoreClusterVersion is the version of the store as read from the
+	// min-version file. This value will be empty if the min-version file
+	// does not exist (eg, the store is being created for the first time).
+	StoreClusterVersion roachpb.Version
 
 	// defaultFS is the primary VFS that most users should use. If
 	// encryption-at-rest is enabled, this VFS will handle transparently
