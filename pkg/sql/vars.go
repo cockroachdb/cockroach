@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -2718,6 +2719,43 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return formatFloatAsPostgresSetting(0)
+		},
+	},
+
+	// CockroachDB extension.
+	`disable_optimizer_rules`: {
+		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
+			var rules []string
+			if s != "" {
+				rulesRaw := strings.Split(s, ",")
+				rules = make([]string, 0, len(rulesRaw))
+				for _, rule := range rulesRaw {
+					trimmed := strings.TrimSpace(rule)
+					if trimmed != "" {
+						if _, ok := opt.RuleNameMap[strings.ToLower(trimmed)]; !ok {
+							p.BufferClientNotice(ctx, pgnotice.Newf(
+								"rule %s does not exist and will be ignored", trimmed,
+							))
+						} else {
+							rules = append(rules, trimmed)
+						}
+					}
+				}
+			}
+			return p.applyOnSessionDataMutators(
+				ctx,
+				local,
+				func(m sessionDataMutator) error {
+					m.SetDisableOptimizerRules(rules)
+					return nil
+				},
+			)
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strings.Join(evalCtx.SessionData().DisableOptimizerRules, ", "), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return ""
 		},
 	},
 

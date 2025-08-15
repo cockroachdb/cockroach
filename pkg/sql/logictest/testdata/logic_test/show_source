@@ -68,6 +68,7 @@ default_with_oids                                          off
 descriptor_validation                                      on
 disable_changefeed_replication                             off
 disable_hoist_projection_in_join_limitation                off
+disable_optimizer_rules                                    ·
 disable_partially_distributed_plans                        off
 disable_plan_gists                                         off
 disable_vec_union_eager_cancellation                       off
