@@ -320,6 +320,13 @@ func changefeedPlanHook(
 			var ptr *ptpb.Record
 			var ptrs []*ptpb.Record
 			codec := p.ExecCfg().Codec
+
+			targets, err := AllTargets(ctx, details, p.ExecCfg())
+			if err != nil {
+				return err
+			}
+
+			// Create single protected timestamp record for all tables (legacy behavior)
 			ptr = createProtectedTimestampRecord(
 				ctx,
 				codec,
