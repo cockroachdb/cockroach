@@ -160,6 +160,67 @@ func TestChangefeedBasics(t *testing.T) {
 	// cloudStorageTest is a regression test for #36994.
 }
 
+func TestDatabaseLevelChangefeedBasics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (0, 'updated')`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
+		defer closeFeed(t, foo)
+
+		// 'initial' is skipped because only the latest value ('updated') is
+		// emitted by the initial scan.
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo2: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, foo, []string{
+			`foo2: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo2: [2]->{"after": {"a": 2, "b": "b"}}`,
+		})
+
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		assertPayloads(t, foo, []string{
+			`foo: [2]->{"after": {"a": 2, "b": "c"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "d"}}`,
+		})
+
+		sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (2, 'c'), (3, 'd')`)
+		assertPayloads(t, foo, []string{
+			`foo2: [2]->{"after": {"a": 2, "b": "c"}}`,
+			`foo2: [3]->{"after": {"a": 3, "b": "d"}}`,
+		})
+
+		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": null}`,
+		})
+
+		sqlDB.Exec(t, `DELETE FROM foo2 WHERE a = 1`)
+		assertPayloads(t, foo, []string{
+			`foo2: [1]->{"after": null}`,
+		})
+	}
+
+	cdcTest(t, testFn)
+}
+
 func TestChangefeedBasicQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -906,6 +967,75 @@ func TestChangefeedDiff(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
+func TestDatabaseLevelChangefeedDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (0, 'updated')`)
+		d := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d WITH diff`)
+		defer closeFeed(t, d)
+
+		// 'initial' is skipped because only the latest value ('updated') is
+		// emitted by the initial scan.
+		assertPayloads(t, d, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}, "before": null}`,
+			`foo2: [0]->{"after": {"a": 0, "b": "updated"}, "before": null}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, d, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}, "before": null}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}, "before": null}`,
+		})
+		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, d, []string{
+			`foo2: [1]->{"after": {"a": 1, "b": "a"}, "before": null}`,
+			`foo2: [2]->{"after": {"a": 2, "b": "b"}, "before": null}`,
+		})
+
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		assertPayloads(t, d, []string{
+			`foo: [2]->{"after": {"a": 2, "b": "c"}, "before": {"a": 2, "b": "b"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "d"}, "before": null}`,
+		})
+
+		sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (2, 'c'), (3, 'd')`)
+		assertPayloads(t, d, []string{
+			`foo2: [2]->{"after": {"a": 2, "b": "c"}, "before": {"a": 2, "b": "b"}}`,
+			`foo2: [3]->{"after": {"a": 3, "b": "d"}, "before": null}`,
+		})
+
+		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		assertPayloads(t, d, []string{
+			`foo: [1]->{"after": null, "before": {"a": 1, "b": "a"}}`,
+		})
+
+		sqlDB.Exec(t, `DELETE FROM foo2 WHERE a = 1`)
+		assertPayloads(t, d, []string{
+			`foo2: [1]->{"after": null, "before": {"a": 1, "b": "a"}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'new a')`)
+		assertPayloads(t, d, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "new a"}, "before": null}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1, 'new a')`)
+		assertPayloads(t, d, []string{
+			`foo2: [1]->{"after": {"a": 1, "b": "new a"}, "before": null}`,
+		})
+	}
+
+	cdcTest(t, testFn)
+}
+
 func TestChangefeedTenants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -967,6 +1097,22 @@ func TestMissingTableErr(t *testing.T) {
 		kvSQL.ExpectErr(t, `^pq: failed to resolve targets in the CHANGEFEED stmt: table "foo" does not exist`,
 			`CREATE CHANGEFEED FOR foo`,
 		)
+	})
+}
+
+func TestChangefeedMissingDatabaseErr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE foo`, `database "foo" does not exist`)
+	})
+}
+
+func TestChangefeedCannotTargetSystemDatabaseErr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE system`, `changefeed cannot target the system database`)
 	})
 }
 
@@ -12213,21 +12359,7 @@ func TestChangefeedAdditionalHeadersDoesntWorkWithV1KafkaSink(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
-func TestDatabaseLevelChangefeed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE DATABASE foo`)
-		sqlDB.Exec(t, `CREATE TABLE foo.bar(id int primary key, s string)`)
-		sqlDB.Exec(t, `INSERT INTO foo.bar(id, s) VALUES (0, 'hello'), (1, null)`)
-		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED for DATABASE foo`, "database-level changefeed is not implemented")
-	}
-	cdcTest(t, testFn)
-}
-
-func TestChangefeedProtobuf(t *testing.T) {
+func TestChangefeedBareFullProtobuf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -12359,4 +12491,56 @@ func TestChangefeedProtobuf(t *testing.T) {
 			cdcTest(t, testFn, feedTestForceSink("kafka"))
 		})
 	}
+}
+
+func TestDatabaseRenameDuringDatabaseLevelChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE foo;`)
+		sqlDB.Exec(t, `CREATE TABLE foo.bar (id INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO foo.bar VALUES (1);`)
+		expectedRows := []string{
+			`bar: [1]->{"after": {"id": 1}}`,
+		}
+		feed1 := feed(t, f, `CREATE CHANGEFEED FOR DATABASE foo`)
+		defer closeFeed(t, feed1)
+		assertPayloads(t, feed1, expectedRows)
+
+		sqlDB.Exec(t, `ALTER DATABASE foo RENAME TO bar;`)
+		sqlDB.Exec(t, `INSERT INTO bar.bar VALUES (2);`)
+		expectedRows = []string{
+			`bar: [2]->{"after": {"id": 2}}`,
+		}
+		assertPayloads(t, feed1, expectedRows)
+	}
+	cdcTest(t, testFn)
+}
+
+func TestTableRenameDuringDatabaseLevelChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE foo;`)
+		sqlDB.Exec(t, `CREATE TABLE foo.bar (id INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO foo.bar VALUES (1);`)
+		expectedRows := []string{
+			`bar: [1]->{"after": {"id": 1}}`,
+		}
+		feed1 := feed(t, f, `CREATE CHANGEFEED FOR DATABASE foo`)
+		defer closeFeed(t, feed1)
+		assertPayloads(t, feed1, expectedRows)
+
+		sqlDB.Exec(t, `ALTER TABLE foo.bar RENAME TO foo;`)
+		sqlDB.Exec(t, `INSERT INTO foo.foo VALUES (2);`)
+		expectedRows = []string{
+			`bar: [2]->{"after": {"id": 2}}`,
+		}
+		assertPayloads(t, feed1, expectedRows)
+	}
+	cdcTest(t, testFn)
 }
