@@ -41,6 +41,10 @@ func TestUpsertFastPath(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "buffered-writes-enabled", func(t *testing.T, bufferedWritesEnabled bool) {
 		st := cluster.MakeTestingClusterSettings()
 		kvcoord.BufferedWritesEnabled.Override(ctx, &st.SV, bufferedWritesEnabled)
+		// The buffer size can be changed metamoprhically, and if it happens to
+		// be too small (200B or less), then the txn will flush the buffer,
+		// resulting in different KV requests.
+		kvcoord.BufferedWritesMaxBufferSize.Override(ctx, &st.SV, 2<<10 /* 2KiB */)
 
 		if mutations.MaxBatchSize(false /* forceProductionMaxBatchSize */) == 1 {
 			// The fast path requires that the max batch size is at least 2, so
