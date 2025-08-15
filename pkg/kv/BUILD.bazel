@@ -51,6 +51,7 @@ go_test(
     size = "medium",
     srcs = [
         "admission_test.go",
+        "batch_test.go",
         "client_test.go",
         "db_test.go",
         "main_test.go",
