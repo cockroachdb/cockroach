@@ -281,6 +281,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/ttl/ttlbase",
         "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/fingerprintutils",
         "//pkg/testutils/floatcmp",

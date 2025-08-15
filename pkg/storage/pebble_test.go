@@ -1307,16 +1307,45 @@ func TestIncompatibleVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, fs.SafeWriteToUnencryptedFile(memFS, "", fs.MinVersionFilename, b, fs.UnspecifiedWriteCategory))
 
-	env = mustInitTestEnv(t, memFS, "")
-	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())
-	require.Error(t, err)
-	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())
+	settings := cluster.MakeTestingClusterSettings()
+	_, err = fs.InitEnv(context.Background(), memFS, "", fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* statsCollector */)
 	msg := err.Error()
 	if !strings.Contains(msg, "is too old for running version") &&
 		!strings.Contains(msg, "cannot be opened by development version") {
 		t.Fatalf("unexpected error %v", err)
 	}
-	env.Close()
+}
+
+func TestPebbleClusterVersionTooNew(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	memFS := vfs.NewMem()
+	env := mustInitTestEnv(t, memFS, "")
+
+	p, err := Open(ctx, env, cluster.MakeTestingClusterSettings())
+	require.NoError(t, err)
+	p.Close()
+
+	// Overwrite the min version file with a future version that's newer than the
+	// latest supported version. Use a development version higher than the current
+	// running version to ensure it will be considered "too new". We use a very
+	// high development version to avoid conflicts with the current version.
+	ver := roachpb.Version{Major: 1000030, Minor: 0}
+	b, err := protoutil.Marshal(&ver)
+	require.NoError(t, err)
+	require.NoError(t, fs.SafeWriteToUnencryptedFile(memFS, "", fs.MinVersionFilename, b, fs.UnspecifiedWriteCategory))
+
+	settings := cluster.MakeTestingClusterSettings()
+	_, err = fs.InitEnv(context.Background(), memFS, "", fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* statsCollector */)
+	require.Error(t, err)
+	msg := err.Error()
+	require.Contains(t, msg, "is too high for running version")
 }
 
 func TestNoMinVerFile(t *testing.T) {
