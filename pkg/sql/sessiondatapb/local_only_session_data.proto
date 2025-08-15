@@ -728,6 +728,10 @@ message LocalOnlySessionData {
   // then the heuristic applies to all statements (both read-only and
   // mutations), regardless of the table being multi-region.
   bool parallelize_multi_key_lookup_joins_only_on_mr_mutations = 182 [(gogoproto.customname) = "ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations"];
+  // DisableOptimizerRules is a list of optimizer rules that should be disabled
+  // during query optimization. The names of the rules can be found in the
+  // opt/rule_name.og.go file.
+  repeated string disable_optimizer_rules = 183;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
