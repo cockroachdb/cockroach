@@ -1948,20 +1948,6 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		}
 	}()
 
-	pts := cf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
-
-	// Create / advance the protected timestamp record to the highwater mark
-	highwater := cf.frontier.Frontier()
-	if highwater.Less(cf.highWaterAtStart) {
-		highwater = cf.highWaterAtStart
-	}
-
-	mainPTSTimestamp := highwater
-
-	// Fetch the per table PTS records here. If we are using per table protected
-	// timestamps, we will use these to protect lagging tables. If we are not
-	// using per table protected timestamps, we will release these per table
-	// PTS records. We need to fetch them either way.
 	perTablePTS, err := jobs.ReadChunkedFileToJobInfo(ctx, perTablePTSInfoKey, txn, cf.spec.JobID)
 	if err != nil {
 		return false, err
@@ -1971,131 +1957,139 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		return false, err
 	}
 
+	pts := cf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
+
 	if usePerTableTracking && usePerTablePTS {
-		// TODO: This seems weird, come back to it.
-		var leastLaggingTimestamp hlc.Timestamp
-		for _, frontier := range cf.frontier.Frontiers() {
-			if leastLaggingTimestamp.IsEmpty() || frontier.Frontier().After(leastLaggingTimestamp) {
-				leastLaggingTimestamp = frontier.Frontier()
-			}
+		newPtsTimestamp, updatedPerTablePts, err := cf.managePerTableProtectedTimestamps(ctx, txn, progress, ptsEntries)
+		if err != nil {
+			return false, err
 		}
-
-		// PTS entries contains the per table PTS records for lagging tables.
-		// We will a) update the main PTS record's timestamp to the lowest
-		// timestamp of a non-lagging table b) delete any per table PTS
-		// records that are no longer needed (a table is no longer lagging) and
-		// c) create/update any new per table PTS records that are needed for
-		// tables that are currently lagging.
-
-		mainPTSTimestamp = leastLaggingTimestamp
-
-		// We use this to know if we need to update the per table PTS records
-		// in the job info protobuf.
-		perTablePTSChanged := false
-		for tableId, frontier := range cf.frontier.Frontiers() {
-			lagDuration := changefeedbase.ProtectTimestampBucketingInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
-			tableHighWater := frontier.Frontier()
-
-			isLagging := tableHighWater.AddDuration(lagDuration).Less(leastLaggingTimestamp)
-			if !isLagging {
-				// If the table is not lagging, we can update use the table's highwater
-				// to inform the timestamp the main PTS record should be updated to.
-				// We also remove the per table PTS record for this table if it exists
-				// because the table is no longer lagging.
-				if tableHighWater.Less(mainPTSTimestamp) {
-					mainPTSTimestamp = tableHighWater
-				}
-				if ptsEntries.ProtectedTimestampRecords[tableId] != nil {
-					err := pts.Release(ctx, *ptsEntries.ProtectedTimestampRecords[tableId])
-					if err != nil {
-						return false, err
-					}
-					updated = true
-					delete(ptsEntries.ProtectedTimestampRecords, tableId)
-					perTablePTSChanged = true
-				}
-				continue
-			}
-
-			if ptsEntries.ProtectedTimestampRecords[tableId] != nil {
-				// If the table is lagging and already has a per table PTS record,
-				// we simply update the pts record to that table's highwater.
-				rec, err := pts.GetRecord(ctx, *ptsEntries.ProtectedTimestampRecords[tableId])
-				if err != nil {
-					return false, err
-				}
-				if rec.Timestamp.Less(tableHighWater) {
-					err := pts.UpdateTimestamp(ctx, *ptsEntries.ProtectedTimestampRecords[tableId], tableHighWater)
-					if err != nil {
-						return false, err
-					}
-					updated = true
-				}
-				continue
-			}
-
-			// If the table is lagging and doesn't have a per table PTS record,
-			// we create a new one.
-			ptr := createProtectedTimestampRecord(
-				// TODO: I think that cf.targets looks suspicious, should just
-				// be the table ID.
-				ctx, cf.FlowCtx.Codec(), cf.spec.JobID, cf.targets, tableHighWater,
-			)
-			uuid := ptr.ID.GetUUID()
-			ptsEntries.ProtectedTimestampRecords[tableId] = &uuid
-			err := pts.Protect(ctx, ptr)
-			if err != nil {
-				return false, err
-			}
-			updated = true
-			perTablePTSChanged = true
-		}
-
-		if progress.ProtectedTimestampRecord == uuid.Nil {
-			ptr := createProtectedTimestampRecord(
-				ctx, cf.FlowCtx.Codec(), cf.spec.JobID, cf.targets, mainPTSTimestamp,
-			)
-			progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
-			err := pts.Protect(ctx, ptr)
-			if err != nil {
-				return false, err
-			}
-			perTablePTS, err := protoutil.Marshal(&ptsEntries)
-			if err != nil {
-				return false, err
-			}
-			if err := jobs.WriteChunkedFileToJobInfo(ctx, perTablePTSInfoKey, perTablePTS, txn, cf.spec.JobID); err != nil {
-				return false, err
-			}
-			return true, nil
-		}
-
-		if perTablePTSChanged {
-			perTablePTS, err := protoutil.Marshal(&ptsEntries)
-			if err != nil {
-				return false, err
-			}
-			if err := jobs.WriteChunkedFileToJobInfo(ctx, perTablePTSInfoKey, perTablePTS, txn, cf.spec.JobID); err != nil {
-				return false, err
-			}
-		}
+		return cf.advanceProtectedTimestampToTimestamp(ctx, txn, progress, pts, newPtsTimestamp, updatedPerTablePts)
 	}
 
-	// If we're not using per table protected timestamps to protect lagging tables,
-	// we will rely on the single protected timestamp record to protect all tables,
-	// but we need to release all the per table PTS records that we created earlier.
 	if ptsEntries.ProtectedTimestampRecords != nil && len(ptsEntries.ProtectedTimestampRecords) > 0 {
+		// If we're not using per table protected timestamps to protect lagging tables,
+		// we will rely on the single protected timestamp record to protect all tables,
+		// but we need to release all the per table PTS records that we created earlier.
 		if err := cf.releasePerTableProtectedTimestampRecords(ctx, txn, ptsEntries); err != nil {
 			return false, err
 		}
 	}
 
-	advancedMainPTS, err := cf.advanceProtectedTimestampToTimestamp(ctx, txn, progress, pts, mainPTSTimestamp)
+	highwater := cf.frontier.Frontier()
+	if highwater.Less(cf.highWaterAtStart) {
+		highwater = cf.highWaterAtStart
+	}
+	return cf.advanceProtectedTimestampToTimestamp(ctx, txn, progress, pts, highwater, false /* updatedPerTablePts */)
+}
+
+func (cf *changeFrontier) managePerTableProtectedTimestamps(
+	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, ptsEntries execinfrapb.ProtectedTimestampRecords,
+) (newPtsTimestamp hlc.Timestamp, updatedPerTablePts bool, err error) {
+	// TODO: This seems weird, come back to it.
+	var leastLaggingTimestamp hlc.Timestamp
+	for _, frontier := range cf.frontier.Frontiers() {
+		if leastLaggingTimestamp.IsEmpty() || frontier.Frontier().After(leastLaggingTimestamp) {
+			leastLaggingTimestamp = frontier.Frontier()
+		}
+	}
+
+	// We use this to know if we need to update the per table PTS records
+	// in the job info protobuf.
+	perTablePTSChanged := false
+	newPtsTimestamp = leastLaggingTimestamp
+
+	pts := cf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
+	for tableId, frontier := range cf.frontier.Frontiers() {
+		tableHighWater := frontier.Frontier()
+		lagDuration := changefeedbase.ProtectTimestampBucketingInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
+		isLagging := !tableHighWater.AddDuration(lagDuration).After(leastLaggingTimestamp)
+		if isLagging {
+			if tableHighWater.Less(newPtsTimestamp) {
+				newPtsTimestamp = tableHighWater
+			}
+			if ptsEntries.ProtectedTimestampRecords[tableId] != nil {
+				if err := cf.releasePerTableProtectedTimestampRecord(ctx, txn, ptsEntries, tableId, pts); err != nil {
+					return hlc.Timestamp{}, false, err
+				}
+				perTablePTSChanged = true
+				updatedPerTablePts = true
+			}
+		} else {
+			if ptsEntries.ProtectedTimestampRecords[tableId] != nil {
+				if updated, err := cf.advancePerTableProtectedTimestampRecord(ctx, txn, progress, ptsEntries, tableId, tableHighWater, pts); err != nil {
+					return hlc.Timestamp{}, false, err
+				} else if updated {
+					updatedPerTablePts = true
+				}
+			} else {
+				if err := cf.createPerTableProtectedTimestampRecord(ctx, txn, progress, ptsEntries, tableId, tableHighWater, pts); err != nil {
+					return hlc.Timestamp{}, false, err
+				}
+				perTablePTSChanged = true
+				updatedPerTablePts = true
+			}
+		}
+	}
+
+	if perTablePTSChanged {
+		perTablePTS, err := protoutil.Marshal(&ptsEntries)
+		if err != nil {
+			return hlc.Timestamp{}, false, err
+		}
+		if err := jobs.WriteChunkedFileToJobInfo(ctx, perTablePTSInfoKey, perTablePTS, txn, cf.spec.JobID); err != nil {
+			return hlc.Timestamp{}, false, err
+		}
+	}
+
+	return newPtsTimestamp, updatedPerTablePts, nil
+}
+
+func (cf *changeFrontier) releasePerTableProtectedTimestampRecord(
+	ctx context.Context, txn isql.Txn, ptsEntries execinfrapb.ProtectedTimestampRecords, tableId descpb.ID, pts protectedts.Storage,
+) error {
+	err := pts.Release(ctx, *ptsEntries.ProtectedTimestampRecords[tableId])
+	if err != nil {
+		return err
+	}
+	delete(ptsEntries.ProtectedTimestampRecords, tableId)
+	return nil
+}
+
+func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
+	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, ptsEntries execinfrapb.ProtectedTimestampRecords, tableId descpb.ID, tableHighWater hlc.Timestamp, pts protectedts.Storage,
+) (updated bool, err error) {
+	rec, err := pts.GetRecord(ctx, *ptsEntries.ProtectedTimestampRecords[tableId])
 	if err != nil {
 		return false, err
 	}
+	// TODO: get back to this
+	if !rec.Timestamp.Less(tableHighWater) {
+		return false, nil
+	}
 
-	return updated || advancedMainPTS, nil
+	if err := pts.UpdateTimestamp(ctx, *ptsEntries.ProtectedTimestampRecords[tableId], tableHighWater); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (cf *changeFrontier) createPerTableProtectedTimestampRecord(
+	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, ptsEntries execinfrapb.ProtectedTimestampRecords, tableId descpb.ID, tableHighWater hlc.Timestamp, pts protectedts.Storage,
+) error {
+	// If the table is lagging and doesn't have a per table PTS record,
+	// we create a new one.
+	ptr := createProtectedTimestampRecord(
+		// TODO: I think that AllTargets(cf.spec.Feed) looks suspicious, should just
+		// be the table ID.
+		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), tableHighWater,
+	)
+	if ptsEntries.ProtectedTimestampRecords == nil {
+		ptsEntries.ProtectedTimestampRecords = make(map[descpb.ID]*uuid.UUID)
+	}
+	uuid := ptr.ID.GetUUID()
+	ptsEntries.ProtectedTimestampRecords[tableId] = &uuid
+	return pts.Protect(ctx, ptr)
 }
 
 // releasePerTableProtectedTimestampRecords releases all per-table protected timestamp
@@ -2125,7 +2119,7 @@ func (cf *changeFrontier) releasePerTableProtectedTimestampRecords(
 }
 
 func (cf *changeFrontier) advanceProtectedTimestampToTimestamp(
-	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, pts protectedts.Storage, timestamp hlc.Timestamp,
+	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, pts protectedts.Storage, timestamp hlc.Timestamp, updatePerTablePts bool,
 ) (updated bool, err error) {
 	if progress.ProtectedTimestampRecord == uuid.Nil {
 		ptr := createProtectedTimestampRecord(
@@ -2173,7 +2167,7 @@ func (cf *changeFrontier) advanceProtectedTimestampToTimestamp(
 	// changefeed restarts, which can cause contention and second order effects
 	// on system tables.
 	if rec.Timestamp.AddDuration(ptsUpdateLag).After(timestamp) {
-		return false, nil
+		return updatePerTablePts, nil
 	}
 
 	if cf.knobs.ManagePTSError != nil {
