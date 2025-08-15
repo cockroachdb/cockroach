@@ -4618,9 +4618,16 @@ The paths themselves are given in the direction of the first geometry.`,
 				{Name: "geometry", Typ: types.Geometry},
 				{Name: "bbox", Typ: types.Box2D},
 			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
+			CalledOnNullInput: true,
+			ReturnType:        tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDGeometry(args[0]).Geometry
+				if args[1] == tree.DNull {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "geometric bounds cannot be null")
+				}
 				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
 				return asMVTGeometry(g, bbox, 4096, 256, true)
 			},
@@ -4641,10 +4648,20 @@ The rectangular bounds of the tile in the target map coordinate space must be pr
 				{Name: "bbox", Typ: types.Box2D},
 				{Name: "extent", Typ: types.Int},
 			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
+			CalledOnNullInput: true,
+			ReturnType:        tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDGeometry(args[0]).Geometry
+				if args[1] == tree.DNull {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "geometric bounds cannot be null")
+				}
 				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
+				if args[2] == tree.DNull {
+					return tree.DNull, nil
+				}
 				extent := int(tree.MustBeDInt(args[2]))
 				return asMVTGeometry(g, bbox, extent, 256, true)
 			},
@@ -4665,11 +4682,24 @@ The rectangular bounds of the tile in the target map coordinate space must be pr
 				{Name: "extent", Typ: types.Int},
 				{Name: "buffer", Typ: types.Int},
 			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
+			CalledOnNullInput: true,
+			ReturnType:        tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDGeometry(args[0]).Geometry
+				if args[1] == tree.DNull {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "geometric bounds cannot be null")
+				}
 				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
+				if args[2] == tree.DNull {
+					return tree.DNull, nil
+				}
 				extent := int(tree.MustBeDInt(args[2]))
+				if args[3] == tree.DNull {
+					return tree.DNull, nil
+				}
 				buffer := int(tree.MustBeDInt(args[3]))
 				return asMVTGeometry(g, bbox, extent, buffer, true)
 			},
@@ -4690,12 +4720,28 @@ The rectangular bounds of the tile in the target map coordinate space must be pr
 				{Name: "buffer", Typ: types.Int},
 				{Name: "clip", Typ: types.Bool},
 			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
+			CalledOnNullInput: true,
+			ReturnType:        tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDGeometry(args[0]).Geometry
+				if args[1] == tree.DNull {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "geometric bounds cannot be null")
+				}
 				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
+				if args[2] == tree.DNull {
+					return tree.DNull, nil
+				}
 				extent := int(tree.MustBeDInt(args[2]))
+				if args[3] == tree.DNull {
+					return tree.DNull, nil
+				}
 				buffer := int(tree.MustBeDInt(args[3]))
+				if args[4] == tree.DNull {
+					return tree.DNull, nil
+				}
 				clip := bool(tree.MustBeDBool(args[4]))
 				return asMVTGeometry(g, bbox, extent, buffer, clip)
 			},
