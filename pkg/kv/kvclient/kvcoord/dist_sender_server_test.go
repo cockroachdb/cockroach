@@ -454,56 +454,79 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 		}
 	}
 
-	for _, returnOnRangeBoundary := range []bool{false, true} {
-		for _, reverse := range []bool{false, true} {
-			for bound := 1; bound <= maxBound; bound++ {
-				name := fmt.Sprintf("returnOnRangeBoundary=%t, reverse=%t,bound=%d", returnOnRangeBoundary, reverse, bound)
-				t.Run(name, func(t *testing.T) {
-					b := &kv.Batch{}
-					b.Header.MaxSpanRequestKeys = int64(bound)
-					b.Header.ReturnOnRangeBoundary = returnOnRangeBoundary
+	for _, reverse := range []bool{false, true} {
+		for bound := 1; bound <= maxBound; bound++ {
+			name := fmt.Sprintf("reverse=%t,bound=%d", reverse, bound)
+			t.Run(name, func(t *testing.T) {
+				b := &kv.Batch{}
+				b.Header.MaxSpanRequestKeys = int64(bound)
 
-					for _, span := range scans {
-						if !reverse {
-							b.Scan(span[0], span[1])
-						} else {
-							b.ReverseScan(span[0], span[1])
-						}
+				for _, span := range scans {
+					if !reverse {
+						b.Scan(span[0], span[1])
+					} else {
+						b.ReverseScan(span[0], span[1])
 					}
-					require.NoError(t, db.Run(ctx, b))
+				}
+				require.NoError(t, db.Run(ctx, b))
 
-					// Compute the range boundary.
-					expReason := kvpb.RESUME_KEY_LIMIT
-					expCount := maxExpCount
-					if bound < maxExpCount {
-						expCount = bound
+				// Compute the range boundary.
+				expReason := kvpb.RESUME_KEY_LIMIT
+				expCount := maxExpCount
+				if bound < maxExpCount {
+					expCount = bound
+				}
+				// Compute the satisfied scans.
+				expSatisfied := make(map[int]struct{})
+				for i := range b.Results {
+					var threshold int
+					if !reverse {
+						threshold = satisfiedBoundThreshold[i]
+					} else {
+						threshold = satisfiedBoundThresholdReverse[i]
 					}
-					if returnOnRangeBoundary {
-						var threshold int
-						if !reverse {
-							threshold = rangeBoundaryThreshold
-						} else {
-							threshold = rangeBoundaryThresholdReverse
-						}
-						if threshold < expCount {
-							expCount = threshold
-							expReason = kvpb.RESUME_RANGE_BOUNDARY
+					if expCount >= threshold {
+						expSatisfied[i] = struct{}{}
+					}
+				}
+				opt := checkOptions{mode: AcceptPrefix, expCount: expCount}
+				if !reverse {
+					checkScanResults(
+						t, scans, b.Results, expResults, expSatisfied, expReason, opt)
+				} else {
+					checkReverseScanResults(
+						t, scans, b.Results, expResultsReverse, expSatisfied, expReason, opt)
+				}
+
+				// Re-query using the resume spans that were returned; check that all
+				// spans are read properly.
+				if bound < maxExpCount {
+					newB := &kv.Batch{}
+					for _, res := range b.Results {
+						if res.ResumeSpan != nil {
+							if !reverse {
+								newB.Scan(res.ResumeSpan.Key, res.ResumeSpan.EndKey)
+							} else {
+								newB.ReverseScan(res.ResumeSpan.Key, res.ResumeSpan.EndKey)
+							}
 						}
 					}
-					// Compute the satisfied scans.
-					expSatisfied := make(map[int]struct{})
+					require.NoError(t, db.Run(ctx, newB))
+					// Add the results to the previous results.
+					j := 0
+					for i, res := range b.Results {
+						if res.ResumeSpan != nil {
+							b.Results[i].Rows = append(b.Results[i].Rows, newB.Results[j].Rows...)
+							b.Results[i].ResumeSpan = newB.Results[j].ResumeSpan
+							b.Results[i].ResumeReason = newB.Results[j].ResumeReason
+							j++
+						}
+					}
 					for i := range b.Results {
-						var threshold int
-						if !reverse {
-							threshold = satisfiedBoundThreshold[i]
-						} else {
-							threshold = satisfiedBoundThresholdReverse[i]
-						}
-						if expCount >= threshold {
-							expSatisfied[i] = struct{}{}
-						}
+						expSatisfied[i] = struct{}{}
 					}
-					opt := checkOptions{mode: AcceptPrefix, expCount: expCount}
+					// Check that the scan results contain all the expected results.
+					opt = checkOptions{mode: Strict}
 					if !reverse {
 						checkScanResults(
 							t, scans, b.Results, expResults, expSatisfied, expReason, opt)
@@ -511,46 +534,8 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 						checkReverseScanResults(
 							t, scans, b.Results, expResultsReverse, expSatisfied, expReason, opt)
 					}
-
-					// Re-query using the resume spans that were returned; check that all
-					// spans are read properly.
-					if bound < maxExpCount {
-						newB := &kv.Batch{}
-						for _, res := range b.Results {
-							if res.ResumeSpan != nil {
-								if !reverse {
-									newB.Scan(res.ResumeSpan.Key, res.ResumeSpan.EndKey)
-								} else {
-									newB.ReverseScan(res.ResumeSpan.Key, res.ResumeSpan.EndKey)
-								}
-							}
-						}
-						require.NoError(t, db.Run(ctx, newB))
-						// Add the results to the previous results.
-						j := 0
-						for i, res := range b.Results {
-							if res.ResumeSpan != nil {
-								b.Results[i].Rows = append(b.Results[i].Rows, newB.Results[j].Rows...)
-								b.Results[i].ResumeSpan = newB.Results[j].ResumeSpan
-								b.Results[i].ResumeReason = newB.Results[j].ResumeReason
-								j++
-							}
-						}
-						for i := range b.Results {
-							expSatisfied[i] = struct{}{}
-						}
-						// Check that the scan results contain all the expected results.
-						opt = checkOptions{mode: Strict}
-						if !reverse {
-							checkScanResults(
-								t, scans, b.Results, expResults, expSatisfied, expReason, opt)
-						} else {
-							checkReverseScanResults(
-								t, scans, b.Results, expResultsReverse, expSatisfied, expReason, opt)
-						}
-					}
-				})
-			}
+				}
+			})
 		}
 	}
 }
@@ -571,13 +556,12 @@ func TestMultiRangeBoundedBatchScanPartialResponses(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name                  string
-		bound                 int64
-		spans                 [][]string
-		returnOnRangeBoundary bool
-		expResults            [][]string
-		expSatisfied          []int
-		expReason             kvpb.ResumeReason
+		name         string
+		bound        int64
+		spans        [][]string
+		expResults   [][]string
+		expSatisfied []int
+		expReason    kvpb.ResumeReason
 	}{
 		{
 			name:  "unsorted, non-overlapping, neither satisfied",
@@ -718,197 +702,10 @@ func TestMultiRangeBoundedBatchScanPartialResponses(t *testing.T) {
 				{"b1"}, {}, {"a1", "a2", "a3", "b1", "b2", "b3"},
 			},
 		},
-		{
-			name: "range boundary, overlapping, unbounded",
-			spans: [][]string{
-				{"d", "g"}, {"e2", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e1", "e2", "e3"}, {"e2", "e3"},
-			},
-			expReason: kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, overlapping, neither satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"d", "f2"}, {"e2", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e1", "e2", "e3"}, {"e2", "e3"},
-			},
-			expReason: kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, overlapping, neither satisfied, bounded below boundary",
-			bound: 4,
-			spans: [][]string{
-				{"d", "f2"}, {"e2", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e1", "e2", "e3"}, {"e2"},
-			},
-			expReason: kvpb.RESUME_KEY_LIMIT,
-		},
-		{
-			name:  "range boundary, overlapping, neither satisfied, bounded at boundary",
-			bound: 5,
-			spans: [][]string{
-				{"d", "f2"}, {"e2", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e1", "e2", "e3"}, {"e2", "e3"},
-			},
-			expReason: kvpb.RESUME_KEY_LIMIT,
-		},
-		{
-			name:  "range boundary, overlapping, neither satisfied, bounded above boundary",
-			bound: 6,
-			spans: [][]string{
-				{"d", "f2"}, {"e2", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e1", "e2", "e3"}, {"e2", "e3"},
-			},
-			expReason: kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, non-overlapping, first satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"d", "e3"}, {"f", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e1", "e2"}, {},
-			},
-			expSatisfied: []int{0},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, non-overlapping, second satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"e3", "g"}, {"e", "e2"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e3"}, {"e1"},
-			},
-			expSatisfied: []int{1},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, non-overlapping, both satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"e2", "f"}, {"d", "e2"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e2", "e3"}, {"e1"},
-			},
-			expSatisfied: []int{0, 1},
-		},
-		{
-			name:  "range boundary, separate ranges, none satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"c", "e"}, {"e", "f"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"c1", "c2", "c3"}, {},
-			},
-			expReason: kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, separate ranges, first satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"c", "d"}, {"e", "f"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"c1", "c2", "c3"}, {},
-			},
-			expSatisfied: []int{0},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, separate ranges, second satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"e", "f"}, {"c2", "d"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{}, {"c2", "c3"},
-			},
-			expSatisfied: []int{1},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, separate ranges, first empty",
-			bound: 10,
-			spans: [][]string{
-				{"d", "e"}, {"f", "h"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{}, {"f1"},
-			},
-			expSatisfied: []int{0},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, separate ranges, second empty",
-			bound: 10,
-			spans: [][]string{
-				{"f", "h"}, {"d", "e"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"f1"}, {},
-			},
-			expSatisfied: []int{1},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, separate ranges, all empty",
-			bound: 10,
-			spans: [][]string{
-				{"d", "d3"}, {"f3", "h"}, {"a", "a1"}, {"c4", "e"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{}, {}, {}, {},
-			},
-			expSatisfied: []int{0, 1, 2, 3, 4},
-		},
-		{
-			name:  "range boundary, separate ranges, most empty",
-			bound: 10,
-			spans: [][]string{
-				{"d", "d3"}, {"f3", "g"}, {"a", "a1"}, {"c4", "e"}, {"f", "h"}, {"e4", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{}, {}, {}, {}, {"f1"}, {"f1"},
-			},
-			expSatisfied: []int{0, 1, 2, 3, 5},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			b := &kv.Batch{}
 			b.Header.MaxSpanRequestKeys = tc.bound
-			b.Header.ReturnOnRangeBoundary = tc.returnOnRangeBoundary
 			for _, span := range tc.spans {
 				b.Scan(span[0], span[1])
 			}
@@ -1363,109 +1160,102 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 			}
 
 			testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
-				testutils.RunTrueAndFalse(t, "returnOnRangeBoundary", func(t *testing.T, returnOnRangeBoundary bool) {
-					// Iterate through MaxSpanRequestKeys=1..n and TargetBytes=1..m
-					// and (where n and m are chosen to reveal the full result set
-					// in one page). At each(*) combination, paginate both the
-					// forward and reverse scan and make sure we get the right
-					// result.
-					//
-					// (*) we don't increase the limits when there's only one page,
-					// but short circuit to something more interesting instead.
-					msrq := int64(1)
-					for targetBytes := int64(1); ; targetBytes++ {
-						var numPages int
-						t.Run(fmt.Sprintf("targetBytes=%d,maxSpanRequestKeys=%d", targetBytes, msrq), func(t *testing.T) {
+				// Iterate through MaxSpanRequestKeys=1..n and TargetBytes=1..m
+				// and (where n and m are chosen to reveal the full result set
+				// in one page). At each(*) combination, paginate both the
+				// forward and reverse scan and make sure we get the right
+				// result.
+				//
+				// (*) we don't increase the limits when there's only one page,
+				// but short circuit to something more interesting instead.
+				msrq := int64(1)
+				for targetBytes := int64(1); ; targetBytes++ {
+					var numPages int
+					t.Run(fmt.Sprintf("targetBytes=%d,maxSpanRequestKeys=%d", targetBytes, msrq), func(t *testing.T) {
 
-							// Paginate.
-							operations := tc.operations
-							if reverse {
-								operations = make([]roachpb.Span, len(operations))
-								for i := range operations {
-									operations[i] = tc.operations[len(operations)-i-1]
-								}
+						// Paginate.
+						operations := tc.operations
+						if reverse {
+							operations = make([]roachpb.Span, len(operations))
+							for i := range operations {
+								operations[i] = tc.operations[len(operations)-i-1]
 							}
-							var keys []roachpb.Key
-							for {
-								numPages++
-
-								// Build the batch.
-								ba := &kvpb.BatchRequest{}
-								for _, span := range operations {
-									var req kvpb.Request
-									switch {
-									case span.EndKey == nil:
-										req = kvpb.NewGet(span.Key)
-									case reverse:
-										req = kvpb.NewReverseScan(span.Key, span.EndKey)
-									default:
-										req = kvpb.NewScan(span.Key, span.EndKey)
-									}
-									ba.Add(req)
-								}
-
-								ba.Header.TargetBytes = targetBytes
-								ba.Header.MaxSpanRequestKeys = msrq
-								ba.Header.ReturnOnRangeBoundary = returnOnRangeBoundary
-								br, pErr := tds.Send(ctx, ba)
-								require.Nil(t, pErr)
-								for i := range operations {
-									resp := br.Responses[i]
-									if getResp := resp.GetGet(); getResp != nil {
-										if getResp.Value != nil {
-											keys = append(keys, operations[i].Key)
-										}
-										continue
-									}
-									var rows []roachpb.KeyValue
-									if reverse {
-										rows = resp.GetReverseScan().Rows
-									} else {
-										rows = resp.GetScan().Rows
-									}
-									for _, kv := range rows {
-										keys = append(keys, kv.Key)
-									}
-								}
-								operations = nil
-								for _, resp := range br.Responses {
-									if resumeSpan := resp.GetInner().Header().ResumeSpan; resumeSpan != nil {
-										operations = append(operations, *resumeSpan)
-									}
-								}
-								if len(operations) == 0 {
-									// Done with this pagination.
-									break
-								}
-							}
-							if reverse {
-								for i, n := 0, len(keys); i < n-i-1; i++ {
-									keys[i], keys[n-i-1] = keys[n-i-1], keys[i]
-								}
-							}
-							require.Equal(t, tc.keys, keys)
-							if returnOnRangeBoundary {
-								// Definitely more pages than splits.
-								require.Greater(t, numPages, len(tc.splitKeys))
-							}
-							if targetBytes == 1 || msrq < int64(len(tc.keys)) {
-								// Definitely more than one page in this case.
-								require.Greater(t, numPages, 1)
-							}
-							if !returnOnRangeBoundary && targetBytes >= maxTargetBytes && msrq >= int64(len(tc.keys)) {
-								// Definitely one page if limits are larger than result set.
-								require.Equal(t, 1, numPages)
-							}
-						})
-						if targetBytes >= maxTargetBytes || numPages == 1 {
-							if msrq >= int64(len(tc.keys)) {
-								return
-							}
-							targetBytes = 0
-							msrq++
 						}
+						var keys []roachpb.Key
+						for {
+							numPages++
+
+							// Build the batch.
+							ba := &kvpb.BatchRequest{}
+							for _, span := range operations {
+								var req kvpb.Request
+								switch {
+								case span.EndKey == nil:
+									req = kvpb.NewGet(span.Key)
+								case reverse:
+									req = kvpb.NewReverseScan(span.Key, span.EndKey)
+								default:
+									req = kvpb.NewScan(span.Key, span.EndKey)
+								}
+								ba.Add(req)
+							}
+
+							ba.Header.TargetBytes = targetBytes
+							ba.Header.MaxSpanRequestKeys = msrq
+							br, pErr := tds.Send(ctx, ba)
+							require.Nil(t, pErr)
+							for i := range operations {
+								resp := br.Responses[i]
+								if getResp := resp.GetGet(); getResp != nil {
+									if getResp.Value != nil {
+										keys = append(keys, operations[i].Key)
+									}
+									continue
+								}
+								var rows []roachpb.KeyValue
+								if reverse {
+									rows = resp.GetReverseScan().Rows
+								} else {
+									rows = resp.GetScan().Rows
+								}
+								for _, kv := range rows {
+									keys = append(keys, kv.Key)
+								}
+							}
+							operations = nil
+							for _, resp := range br.Responses {
+								if resumeSpan := resp.GetInner().Header().ResumeSpan; resumeSpan != nil {
+									operations = append(operations, *resumeSpan)
+								}
+							}
+							if len(operations) == 0 {
+								// Done with this pagination.
+								break
+							}
+						}
+						if reverse {
+							for i, n := 0, len(keys); i < n-i-1; i++ {
+								keys[i], keys[n-i-1] = keys[n-i-1], keys[i]
+							}
+						}
+						require.Equal(t, tc.keys, keys)
+						if targetBytes == 1 || msrq < int64(len(tc.keys)) {
+							// Definitely more than one page in this case.
+							require.Greater(t, numPages, 1)
+						}
+						if targetBytes >= maxTargetBytes && msrq >= int64(len(tc.keys)) {
+							// Definitely one page if limits are larger than result set.
+							require.Equal(t, 1, numPages)
+						}
+					})
+					if targetBytes >= maxTargetBytes || numPages == 1 {
+						if msrq >= int64(len(tc.keys)) {
+							return
+						}
+						targetBytes = 0
+						msrq++
 					}
-				})
+				}
 			})
 		})
 	}
@@ -4365,76 +4155,6 @@ func TestExplicitRangeInfo(t *testing.T) {
 	require.Equal(t, 4, len(b.RawResponse().Responses))
 	require.Equal(t, 0, len(b.RawResponse().BatchResponse_Header.RangeInfos))
 
-}
-
-func BenchmarkReturnOnRangeBoundary(b *testing.B) {
-	const (
-		Ranges                = 10   // number of ranges to create
-		KeysPerRange          = 9    // number of keys to write per range
-		MaxSpanRequestKeys    = 10   // max number of keys in each scan response
-		ReturnOnRangeBoundary = true // if true, enable ReturnOnRangeBoundary
-		Latency               = 0    // RPC request latency
-	)
-
-	b.StopTimer()
-
-	require.Less(b, Ranges, 26) // a-z
-
-	defer leaktest.AfterTest(b)()
-	defer log.Scope(b).Close(b)
-
-	type scanKey struct{}
-	ctx := context.Background()
-	scanCtx := context.WithValue(ctx, scanKey{}, "scan")
-
-	reqFilter := func(ctx context.Context, _ *kvpb.BatchRequest) *kvpb.Error {
-		if ctx.Value(scanKey{}) != nil && Latency > 0 {
-			time.Sleep(Latency)
-		}
-		return nil
-	}
-
-	s, _, db := serverutils.StartServer(b, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: reqFilter,
-				DisableSplitQueue:    true,
-				DisableMergeQueue:    true,
-			},
-		},
-	})
-	defer s.Stopper().Stop(ctx)
-
-	for r := 0; r < Ranges; r++ {
-		rangeKey := string(rune('a' + r))
-		require.NoError(b, db.AdminSplit(
-			ctx,
-			rangeKey,
-			hlc.MaxTimestamp, /* expirationTime */
-		))
-
-		for k := 0; k < KeysPerRange; k++ {
-			key := fmt.Sprintf("%s%d", rangeKey, k)
-			require.NoError(b, db.Put(ctx, key, "value"))
-		}
-	}
-
-	b.StartTimer()
-
-	for n := 0; n < b.N; n++ {
-		txn := db.NewTxn(ctx, "scanner")
-		span := &roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
-		for span != nil {
-			ba := &kv.Batch{}
-			ba.Header.MaxSpanRequestKeys = MaxSpanRequestKeys
-			ba.Header.ReturnOnRangeBoundary = ReturnOnRangeBoundary
-			ba.Scan(span.Key, span.EndKey)
-
-			require.NoError(b, txn.Run(scanCtx, ba))
-			span = ba.Results[0].ResumeSpan
-		}
-		require.NoError(b, txn.Commit(ctx))
-	}
 }
 
 func TestRefreshFailureIncludesConflictingTxn(t *testing.T) {
