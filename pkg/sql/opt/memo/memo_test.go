@@ -373,6 +373,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().TestingOptimizerDisableRuleProbability = 0
 	notStale()
 
+	// Stale disable_optimizer_rules.
+	evalCtx.SessionData().DisableOptimizerRules = []string{"some_rule"}
+	stale()
+	evalCtx.SessionData().DisableOptimizerRules = nil
+	notStale()
+
 	// Stale allow_ordinal_column_references.
 	evalCtx.SessionData().AllowOrdinalColumnReferences = true
 	stale()

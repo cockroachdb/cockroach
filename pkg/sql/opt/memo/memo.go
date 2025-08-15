@@ -9,6 +9,7 @@ package memo
 import (
 	"bytes"
 	"context"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -167,6 +168,7 @@ type Memo struct {
 	testingOptimizerRandomSeed                 int64
 	testingOptimizerCostPerturbation           float64
 	testingOptimizerDisableRuleProbability     float64
+	disableOptimizerRules                      []string
 	enforceHomeRegion                          bool
 	variableInequalityLookupJoinEnabled        bool
 	allowOrdinalColumnReferences               bool
@@ -272,6 +274,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		testingOptimizerRandomSeed:                 evalCtx.SessionData().TestingOptimizerRandomSeed,
 		testingOptimizerCostPerturbation:           evalCtx.SessionData().TestingOptimizerCostPerturbation,
 		testingOptimizerDisableRuleProbability:     evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
+		disableOptimizerRules:                      evalCtx.SessionData().DisableOptimizerRules,
 		enforceHomeRegion:                          evalCtx.SessionData().EnforceHomeRegion,
 		variableInequalityLookupJoinEnabled:        evalCtx.SessionData().VariableInequalityLookupJoinEnabled,
 		allowOrdinalColumnReferences:               evalCtx.SessionData().AllowOrdinalColumnReferences,
@@ -450,6 +453,7 @@ func (m *Memo) IsStale(
 		m.testingOptimizerRandomSeed != evalCtx.SessionData().TestingOptimizerRandomSeed ||
 		m.testingOptimizerCostPerturbation != evalCtx.SessionData().TestingOptimizerCostPerturbation ||
 		m.testingOptimizerDisableRuleProbability != evalCtx.SessionData().TestingOptimizerDisableRuleProbability ||
+		!reflect.DeepEqual(m.disableOptimizerRules, evalCtx.SessionData().DisableOptimizerRules) ||
 		m.enforceHomeRegion != evalCtx.SessionData().EnforceHomeRegion ||
 		m.variableInequalityLookupJoinEnabled != evalCtx.SessionData().VariableInequalityLookupJoinEnabled ||
 		m.allowOrdinalColumnReferences != evalCtx.SessionData().AllowOrdinalColumnReferences ||
