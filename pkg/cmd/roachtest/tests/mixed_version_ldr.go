@@ -70,12 +70,15 @@ func InitLDRMixed(
 	// TODO(msbutler): allow shared service mode once this test stabilizes.
 	serviceMode := mixedversion.SystemOnlyDeployment
 
+	// The failure injection framework is not supported in multi-cluster tests,
+	// so we disable it for ldr/mixed-version.
 	leftMvt := mixedversion.NewTest(ctx, t, t.L(), c, sp.LeftNodesList(),
 		mixedversion.AlwaysUseLatestPredecessors,
 		mixedversion.EnabledDeploymentModes(serviceMode),
 		mixedversion.NumUpgrades(expectedMajorUpgrades),
 		mixedversion.WithTag("left"),
 		mixedversion.WithSkipVersionProbability(0),
+		mixedversion.DisableAllFailureInjectionMutators(),
 	)
 
 	rightMvt := mixedversion.NewTest(ctx, t, t.L(), c, sp.RightNodesList(),
@@ -84,6 +87,7 @@ func InitLDRMixed(
 		mixedversion.NumUpgrades(expectedMajorUpgrades),
 		mixedversion.WithTag("right"),
 		mixedversion.WithSkipVersionProbability(0),
+		mixedversion.DisableAllFailureInjectionMutators(),
 	)
 
 	return &ldrMixed{

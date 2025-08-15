@@ -969,3 +969,65 @@ func (s networkPartitionRecoveryStep) Run(
 func (s networkPartitionRecoveryStep) ConcurrencyDisabled() bool {
 	return false
 }
+
+type simulateMultiRegionStep struct {
+	f             *failures.Failer
+	args          failures.NetworkLatencyArgs
+	regionToNodes map[failures.Region][]install.Node
+}
+
+func (s simulateMultiRegionStep) Background() shouldStop { return nil }
+func (s simulateMultiRegionStep) Description() string {
+	var desc string
+	for region, nodes := range s.regionToNodes {
+		desc += fmt.Sprintf(" [%s: %v] ", region, nodes)
+	}
+	return fmt.Sprintf("simulating multi-region cluster via artificial network latency:%s", desc)
+}
+func (s simulateMultiRegionStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+
+	if err := s.f.Setup(ctx, l, s.args); err != nil {
+		return errors.Wrapf(err, "failed to setup failure %s", failures.NetworkLatencyName)
+	}
+
+	if err := s.f.Inject(ctx, l, s.args); err != nil {
+		return errors.Wrapf(err, "failed to inject failure %s", failures.NetworkLatencyName)
+	}
+
+	return s.f.WaitForFailureToPropagate(ctx, l)
+}
+
+func (s simulateMultiRegionStep) ConcurrencyDisabled() bool {
+	return false
+}
+
+type endMultiRegionSimulationStep struct {
+	f    *failures.Failer
+	args failures.NetworkLatencyArgs
+}
+
+func (s endMultiRegionSimulationStep) Background() shouldStop { return nil }
+
+func (s endMultiRegionSimulationStep) Description() string {
+	return "ending multi-region cluster simulation"
+}
+func (s endMultiRegionSimulationStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+
+	if err := s.f.Recover(ctx, l); err != nil {
+		return errors.Wrapf(err, "failed to recover failure %s", failures.NetworkLatencyName)
+	}
+
+	if err := s.f.WaitForFailureToRecover(ctx, l); err != nil {
+		return errors.Wrapf(err, "failed to wait for recovery of failure %s", failures.NetworkLatencyName)
+	}
+
+	return s.f.Cleanup(ctx, l)
+}
+
+func (s endMultiRegionSimulationStep) ConcurrencyDisabled() bool {
+	return false
+}

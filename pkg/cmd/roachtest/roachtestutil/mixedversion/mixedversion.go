@@ -937,6 +937,10 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 		deploymentMode := t.deploymentMode()
 		t.updateOptionsForDeploymentMode(deploymentMode)
 
+		// Randomly decide whether the test will be run in a simulated multi-region
+		// environment or not.
+		isMultiRegion := t.prng.Float64() < 1.0
+
 		upgradePath, err := t.chooseUpgradePath()
 		if err != nil {
 			return nil, err
@@ -960,6 +964,7 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 			currentContext: newInitialContext(initialRelease, t.crdbNodes, tenantDescriptor),
 			options:        t.options,
 			rt:             t.rt,
+			isMultiRegion:  isMultiRegion,
 			isLocal:        t.isLocal(),
 			hooks:          t.hooks,
 			prng:           t.prng,
