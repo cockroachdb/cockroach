@@ -1948,15 +1948,10 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		}
 	}()
 
-	perTablePTS, err := jobs.ReadChunkedFileToJobInfo(ctx, perTablePTSInfoKey, txn, cf.spec.JobID)
-	if err != nil {
+	var ptsEntries changefeedpb.ProtectedTimestampRecords
+	if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, cf.spec.JobID); err != nil {
 		return false, err
 	}
-	var ptsEntries execinfrapb.ProtectedTimestampRecords
-	if err := protoutil.Unmarshal(perTablePTS, &ptsEntries); err != nil {
-		return false, err
-	}
-
 	pts := cf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
 
 	if usePerTableTracking && usePerTablePTS {
@@ -1984,7 +1979,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 }
 
 func (cf *changeFrontier) managePerTableProtectedTimestamps(
-	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, ptsEntries execinfrapb.ProtectedTimestampRecords,
+	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, ptsEntries changefeedpb.ProtectedTimestampRecords,
 ) (newPtsTimestamp hlc.Timestamp, updatedPerTablePts bool, err error) {
 	// TODO: This seems weird, come back to it.
 	var leastLaggingTimestamp hlc.Timestamp
@@ -2033,11 +2028,7 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 	}
 
 	if perTablePTSChanged {
-		perTablePTS, err := protoutil.Marshal(&ptsEntries)
-		if err != nil {
-			return hlc.Timestamp{}, false, err
-		}
-		if err := jobs.WriteChunkedFileToJobInfo(ctx, perTablePTSInfoKey, perTablePTS, txn, cf.spec.JobID); err != nil {
+		if err := writeChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, cf.spec.JobID); err != nil {
 			return hlc.Timestamp{}, false, err
 		}
 	}
@@ -2046,7 +2037,7 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 }
 
 func (cf *changeFrontier) releasePerTableProtectedTimestampRecord(
-	ctx context.Context, txn isql.Txn, ptsEntries execinfrapb.ProtectedTimestampRecords, tableId descpb.ID, pts protectedts.Storage,
+	ctx context.Context, txn isql.Txn, ptsEntries changefeedpb.ProtectedTimestampRecords, tableId descpb.ID, pts protectedts.Storage,
 ) error {
 	err := pts.Release(ctx, *ptsEntries.ProtectedTimestampRecords[tableId])
 	if err != nil {
@@ -2057,7 +2048,7 @@ func (cf *changeFrontier) releasePerTableProtectedTimestampRecord(
 }
 
 func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
-	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, ptsEntries execinfrapb.ProtectedTimestampRecords, tableId descpb.ID, tableHighWater hlc.Timestamp, pts protectedts.Storage,
+	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, ptsEntries changefeedpb.ProtectedTimestampRecords, tableId descpb.ID, tableHighWater hlc.Timestamp, pts protectedts.Storage,
 ) (updated bool, err error) {
 	rec, err := pts.GetRecord(ctx, *ptsEntries.ProtectedTimestampRecords[tableId])
 	if err != nil {
@@ -2075,14 +2066,14 @@ func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
 }
 
 func (cf *changeFrontier) createPerTableProtectedTimestampRecord(
-	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, ptsEntries execinfrapb.ProtectedTimestampRecords, tableId descpb.ID, tableHighWater hlc.Timestamp, pts protectedts.Storage,
+	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, ptsEntries changefeedpb.ProtectedTimestampRecords, tableId descpb.ID, tableHighWater hlc.Timestamp, pts protectedts.Storage,
 ) error {
 	// If the table is lagging and doesn't have a per table PTS record,
 	// we create a new one.
 	ptr := createProtectedTimestampRecord(
-		// TODO: I think that AllTargets(cf.spec.Feed) looks suspicious, should just
+		// TODO: I think that cf.targets looks suspicious, should just
 		// be the table ID.
-		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), tableHighWater,
+		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, cf.targets, tableHighWater,
 	)
 	if ptsEntries.ProtectedTimestampRecords == nil {
 		ptsEntries.ProtectedTimestampRecords = make(map[descpb.ID]*uuid.UUID)
@@ -2098,7 +2089,7 @@ func (cf *changeFrontier) createPerTableProtectedTimestampRecord(
 func (cf *changeFrontier) releasePerTableProtectedTimestampRecords(
 	ctx context.Context,
 	txn isql.Txn,
-	ptsEntries execinfrapb.ProtectedTimestampRecords,
+	ptsEntries changefeedpb.ProtectedTimestampRecords,
 ) error {
 	pts := cf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
 	for _, ptr := range ptsEntries.ProtectedTimestampRecords {
@@ -2108,11 +2099,7 @@ func (cf *changeFrontier) releasePerTableProtectedTimestampRecords(
 		}
 	}
 	ptsEntries.ProtectedTimestampRecords = nil
-	perTablePTS, err := protoutil.Marshal(&ptsEntries)
-	if err != nil {
-		return err
-	}
-	if err := jobs.WriteChunkedFileToJobInfo(ctx, perTablePTSInfoKey, perTablePTS, txn, cf.spec.JobID); err != nil {
+	if err := writeChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, cf.spec.JobID); err != nil {
 		return err
 	}
 	return nil

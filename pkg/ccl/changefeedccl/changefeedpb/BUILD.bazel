@@ -44,6 +44,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",
     ],

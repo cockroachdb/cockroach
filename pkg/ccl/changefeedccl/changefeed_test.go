@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
@@ -11472,7 +11473,7 @@ func TestChangefeedPerTableProtectedTimestampAdvancement(t *testing.T) {
 					return err
 				}
 
-				var ptsEntries execinfrapb.ProtectedTimestampRecords
+				var ptsEntries changefeedpb.ProtectedTimestampRecords
 				if err := protoutil.Unmarshal(perTablePTS, &ptsEntries); err != nil {
 					return err
 				}
@@ -12095,7 +12096,7 @@ func TestChangefeedMultiTableProtectedTimestampUpdate(t *testing.T) {
 				perTablePTS, err := jobs.ReadChunkedFileToJobInfo(context.Background(), perTablePTSInfoKey, txn, eFeed.JobID())
 				require.NoError(t, err)
 
-				var ptsEntries execinfrapb.ProtectedTimestampRecords
+				var ptsEntries changefeedpb.ProtectedTimestampRecords
 				err = protoutil.Unmarshal(perTablePTS, &ptsEntries)
 				require.NoError(t, err)
 
@@ -12146,7 +12147,7 @@ func TestChangefeedMultiTableProtectedTimestampUpdate(t *testing.T) {
 				perTablePTS, err := jobs.ReadChunkedFileToJobInfo(context.Background(), perTablePTSInfoKey, txn, eFeed.JobID())
 				require.NoError(t, err)
 
-				var ptsEntries execinfrapb.ProtectedTimestampRecords
+				var ptsEntries changefeedpb.ProtectedTimestampRecords
 				err = protoutil.Unmarshal(perTablePTS, &ptsEntries)
 				require.NoError(t, err)
 
