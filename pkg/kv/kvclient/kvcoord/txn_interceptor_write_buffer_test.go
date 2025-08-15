@@ -8,6 +8,7 @@ package kvcoord
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -2109,47 +2110,102 @@ func TestTxnWriteBufferRollbackNeverHeldLock(t *testing.T) {
 	require.NotNil(t, br)
 }
 
-func TestTxnWriteBufferSplitsBatchesWithSkipLocked(t *testing.T) {
+func TestTxnWriteBufferSplitsBatchesWhenNecessary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender, st := makeMockTxnWriteBuffer(ctx)
 
-	txn := makeTxnProto()
-	txn.Sequence = 10
-
-	ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
-	ba.Add(delArgs(roachpb.Key("a"), txn.Sequence))
-	br, pErr := twb.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-
-	// Arrange for the next scan to flush the buffer and assert that it is split
-	// across two batches.
-	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		require.Len(t, ba.Requests, 1)
-		br = ba.CreateReply()
-		br.Txn = ba.Txn
-		return br, nil
-	})
-	BufferedWritesMaxBufferSize.Override(ctx, &st.SV, 1)
-	ba = &kvpb.BatchRequest{
-		Header: kvpb.Header{
-			Txn:        &txn,
-			WaitPolicy: lock.WaitPolicy_SkipLocked},
+	type testCase struct {
+		name        string
+		mutateBatch func(ba *kvpb.BatchRequest)
 	}
-	ba.Add(&kvpb.ScanRequest{
-		RequestHeader: kvpb.RequestHeader{
-			Key:      roachpb.Key("a"),
-			EndKey:   roachpb.Key("c"),
-			Sequence: txn.Sequence,
-		}})
 
-	prevCalled := mockSender.NumCalled()
-	br, pErr = twb.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-	require.Equal(t, 2, mockSender.NumCalled()-prevCalled, "expected 2 batches to be sent")
+	testCases := []testCase{
+		{
+			name: "WaitPolicy_SkipLocked",
+			mutateBatch: func(ba *kvpb.BatchRequest) {
+				ba.WaitPolicy = lock.WaitPolicy_SkipLocked
+			},
+		},
+		{
+			name: "WaitPolicy_Error",
+			mutateBatch: func(ba *kvpb.BatchRequest) {
+				ba.WaitPolicy = lock.WaitPolicy_Error
+			},
+		},
+		{
+			name: "ReadConsistency_INCONSISTENT",
+			mutateBatch: func(ba *kvpb.BatchRequest) {
+				ba.ReadConsistency = kvpb.INCONSISTENT
+			},
+		},
+		{
+			name: "TargetBytes",
+			mutateBatch: func(ba *kvpb.BatchRequest) {
+				ba.TargetBytes = 1
+			},
+		},
+		{
+			name: "MaxSpanRequestKeys",
+			mutateBatch: func(ba *kvpb.BatchRequest) {
+				ba.MaxSpanRequestKeys = 1
+			},
+		},
+		{
+			name: "ReturnElasticCPUResumeSpans",
+			mutateBatch: func(ba *kvpb.BatchRequest) {
+				ba.ReturnElasticCPUResumeSpans = true
+			},
+		},
+		{
+			name: "IsReverse",
+			mutateBatch: func(ba *kvpb.BatchRequest) {
+				ba.IsReverse = true
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		twb, mockSender, st := makeMockTxnWriteBuffer(ctx)
+
+		txn := makeTxnProto()
+		txn.Sequence = 10
+
+		ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+		ba.Add(delArgs(roachpb.Key("a"), txn.Sequence))
+		br, pErr := twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+
+		// Arrange for the next scan to flush the buffer and assert that it is split
+		// across two batches.
+		requestCount := 0
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			br = ba.CreateReply()
+			br.Txn = ba.Txn
+			if requestCount == 0 {
+				// The buffer flush should not have any problematic settings.
+				require.False(t, separateBatchIsNeeded(ba))
+			}
+			requestCount++
+			return br, nil
+		})
+		BufferedWritesMaxBufferSize.Override(ctx, &st.SV, 1)
+		prevCalled := mockSender.NumCalled()
+		ba = &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+		ba.Add(&kvpb.ScanRequest{
+			RequestHeader: kvpb.RequestHeader{
+				Key:      roachpb.Key("a"),
+				EndKey:   roachpb.Key("c"),
+				Sequence: txn.Sequence,
+			}})
+		tc.mutateBatch(ba)
+		br, pErr = twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.Equal(t, 2, mockSender.NumCalled()-prevCalled, "expected 2 batches to be sent")
+	}
 }
 
 // TestTxnWriteBufferFlushesAfterDisabling verifies that the txnWriteBuffer
@@ -3912,5 +3968,135 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 			require.NotNil(t, br)
 			require.Nil(t, pErr)
 		})
+	}
+}
+
+// TestBatchHeaderFieldsAreAccountedForInBufferedWrites checks that any new
+// fields added to the batch header are appropriately accounted for by the
+// needed functions.
+func TestBatchHeaderFieldsAreAccountedForInBufferedWrites(t *testing.T) {
+	type fieldStatus int
+	const (
+		iSwearFieldDoesNotNeedHandling fieldStatus = iota
+		// fieldIsHandledByBatchSplitting means that batches with this field are
+		// handled by batch splitting.
+		fieldIsHandledByBatchSplitting
+	)
+
+	fieldStatuses := map[string]fieldStatus{
+		// Managed by store_send
+		"Timestamp":                iSwearFieldDoesNotNeedHandling,
+		"TimestampFromServerClock": iSwearFieldDoesNotNeedHandling,
+		"Now":                      iSwearFieldDoesNotNeedHandling,
+		// Managed by dist_sender
+		"Replica": iSwearFieldDoesNotNeedHandling,
+		"RangeID": iSwearFieldDoesNotNeedHandling,
+		// It's rare for the user to change priorities mid-transaction, so we prefer
+		// keeping the user-provided priority.
+		"UserPriority": iSwearFieldDoesNotNeedHandling,
+		// We want this batch to be part of the same transaction.
+		"Txn": iSwearFieldDoesNotNeedHandling,
+		// If read consistency is set to anything but CONSISTENT, our flush will fail
+		// because we only allow inconsistent reads for read only requests.
+		"ReadConsistency": fieldIsHandledByBatchSplitting,
+		// The RoutingPolicy only impacts the ordering of the replicas considered.
+		// For our flush batch, we will need to go to the leaseholder regardless.
+		"RoutingPolicy": iSwearFieldDoesNotNeedHandling,
+		// If WaitPolicy is set to SkipLocked, our request may fail validation.
+		"WaitPolicy": fieldIsHandledByBatchSplitting,
+		// Using the configured lock timeout seems reasonable.
+		"LockTimeout": iSwearFieldDoesNotNeedHandling,
+		// Reset options that could result in an early batch return.
+		"MaxSpanRequestKeys": fieldIsHandledByBatchSplitting,
+		"TargetBytes":        fieldIsHandledByBatchSplitting,
+		// The following two fields are only meaningful if MaxSpanRequestKeys or
+		// TargetBytes is set and those keys are handled.
+		//
+		// TODO(ssd): Should we just clear these anyway?
+		"WholeRowsOfSize": iSwearFieldDoesNotNeedHandling,
+		"AllowEmpty":      iSwearFieldDoesNotNeedHandling,
+		// Controlled by interceptors below us.
+		"DistinctSpans":           iSwearFieldDoesNotNeedHandling,
+		"AsyncConsensus":          iSwearFieldDoesNotNeedHandling,
+		"CanForwardReadTimestamp": iSwearFieldDoesNotNeedHandling,
+		// This should be the same, no reason to change
+		"GatewayNodeID": iSwearFieldDoesNotNeedHandling,
+		// This can be set be the caller, but it seems fine to ask for range info on
+		// the flush.
+		"ClientRangeInfo": iSwearFieldDoesNotNeedHandling,
+		// We shouldn't see this because it is only allowed via NegotiateAndSend
+		// which is only allowed for non-transactional requests.
+		"BoundedStaleness": iSwearFieldDoesNotNeedHandling,
+		// No need to touch trace info.
+		"TraceInfo": iSwearFieldDoesNotNeedHandling,
+		// This is only used by Scan and ReverseScan requests using
+		// COL_BATCH_RESPONSE. We don't have those requests in a flush batch and we
+		// don't support that response type even if we did, so we can leave it.
+		"IndexFetchSpec": iSwearFieldDoesNotNeedHandling,
+		// Only set by ExportRequest which we don't support here. Handle it anyway.
+		"ReturnElasticCPUResumeSpans": fieldIsHandledByBatchSplitting,
+		// Seems good to keep the labels, we could add some.
+		"ProfileLabels": iSwearFieldDoesNotNeedHandling,
+		// Controlled by dist_sender
+		"AmbiguousReplayProtection": iSwearFieldDoesNotNeedHandling,
+		// Flushes should be on the same connection as the original request
+		"ConnectionClass": iSwearFieldDoesNotNeedHandling,
+		// Managed by dist_sender
+		"ProxyRangeInfo": iSwearFieldDoesNotNeedHandling,
+		// We check this in validateBatch so we shouldn't have a WriteOption by the
+		// time this is checked.
+		"WriteOptions": fieldIsHandledByBatchSplitting,
+		// Seems reasonable to use the same deadlock timeout as the inbound request
+		// for the flush.
+		"DeadlockTimeout": iSwearFieldDoesNotNeedHandling,
+		// Controlled by us.
+		"HasBufferedAllPrecedingWrites": iSwearFieldDoesNotNeedHandling,
+		// Our flush should never need isReverse.
+		"IsReverse": fieldIsHandledByBatchSplitting,
+	}
+
+	header := kvpb.Header{}
+	val := reflect.ValueOf(&header)
+	for i := 0; i < val.Elem().Type().NumField(); i++ {
+		fieldName := val.Elem().Type().Field(i).Name
+		s, ok := fieldStatuses[fieldName]
+		if !ok {
+			t.Fatalf(`kvpb.Header field %s has no entry in fieldStatus map.
+
+If this option may result in a batch being incompletely processed, the option
+needs to be accounted for in the following functions:
+
+    separateBatchIsNeeded
+    clearBatchRequestOptions
+`, fieldName)
+		}
+		if s == fieldIsHandledByBatchSplitting {
+			// Trust, but verify.
+			f := val.Elem().Field(i)
+			require.True(t, f.CanSet())
+			switch fieldName {
+			case "WriteOptions":
+				wo := &kvpb.WriteOptions{OriginID: 1}
+				f.Set(reflect.ValueOf(wo))
+			default:
+				switch f.Type().Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					f.SetInt(1)
+				case reflect.Bool:
+					f.SetBool(true)
+				default:
+					t.Fatalf("test does not support type %s (field: %s), please add a case above",
+						f.Type().Kind(), fieldName)
+				}
+			}
+			req := &kvpb.BatchRequest{Header: header}
+			require.True(t, separateBatchIsNeeded(req),
+				"non-zero value for %s not handled in separateBatchIsNeeded", fieldName)
+
+			clearBatchRequestOptions(req)
+			require.Equal(t, kvpb.Header{}, req.Header,
+				"non-zero value for %s not cleared in clearBatchRequestOptions", fieldName)
+			f.SetZero()
+		}
 	}
 }

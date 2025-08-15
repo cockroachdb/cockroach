@@ -1771,10 +1771,7 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	}
 
 	midTxnFlush := !hasEndTxn
-
-	// SkipLocked reads cannot be in a batch with basically anything else. If we
-	// encounter one, we need to flush our buffer in its own batch.
-	splitBatchRequired := ba.WaitPolicy == lock.WaitPolicy_SkipLocked
+	splitBatchRequired := separateBatchIsNeeded(ba)
 
 	// Flush all buffered writes by pre-pending them to the requests being sent
 	// in the batch.
@@ -1816,17 +1813,21 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	})
 
 	if splitBatchRequired {
-		log.VEventf(ctx, 2, "flushing buffer via separate batch")
 		flushBatch := ba.ShallowCopy()
-		flushBatch.WaitPolicy = 0
+		clearBatchRequestOptions(flushBatch)
 		flushBatch.Requests = reqs
+		log.VEventf(ctx, 2, "flushing %d buffered requests via separate batch", len(reqs))
+
 		br, pErr := twb.wrapped.SendLocked(ctx, flushBatch)
 		if pErr != nil {
 			pErr.Index = nil
 			return nil, pErr
 		}
-
+		if err := requireAllFlushedRequestsProcessed(br.Responses); err != nil {
+			return nil, kvpb.NewError(err)
+		}
 		ba.UpdateTxn(br.Txn)
+
 		return twb.wrapped.SendLocked(ctx, ba)
 	} else {
 		ba = ba.ShallowCopy()
@@ -1835,11 +1836,54 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		if pErr != nil {
 			return nil, twb.adjustErrorUponFlush(ctx, numRevisionsBuffered, pErr)
 		}
-
+		if err := requireAllFlushedRequestsProcessed(br.Responses[0:numRevisionsBuffered]); err != nil {
+			return nil, kvpb.NewError(err)
+		}
 		// Strip out responses for all the flushed buffered writes.
 		br.Responses = br.Responses[numRevisionsBuffered:]
 		return br, nil
 	}
+}
+
+func requireAllFlushedRequestsProcessed(responses []kvpb.ResponseUnion) error {
+	for _, resp := range responses {
+		if resp.GetInner().Header().ResumeSpan != nil {
+			return errors.AssertionFailedf("response from buffered request has non-nil resume span")
+		}
+	}
+	return nil
+}
+
+// separateBatchIsNeeded returns true if BatchRequest contains any options that
+// require us to flush buffered requests using a separate batch.
+//
+// NB: If you are updating this function, you need to update
+// clearBatchRequestOptions as well.
+func separateBatchIsNeeded(ba *kvpb.BatchRequest) bool {
+	return ba.MightStopEarly() ||
+		ba.ReadConsistency != 0 ||
+		ba.WaitPolicy != 0 ||
+		ba.WriteOptions != nil && (*ba.WriteOptions != kvpb.WriteOptions{}) ||
+		ba.IsReverse
+}
+
+// clearBatchRequestOptions clears any options that should not be present on a
+// batch used to send previously buffered requests.
+//
+// NB: If you are updating this function, you need to update
+// separateBatchIsNeeded as well.
+func clearBatchRequestOptions(ba *kvpb.BatchRequest) {
+	// If read consistency is set to anything but CONSISTENT, our flush will fail
+	// because we only allow inconsistent reads for read only requests.
+	ba.ReadConsistency = 0
+	// If WaitPolicy is set to SkipLocked, our request may fail validation.
+	ba.WaitPolicy = 0
+	// Reset options that could result in an early batch return.
+	ba.MaxSpanRequestKeys = 0
+	ba.TargetBytes = 0
+	ba.ReturnElasticCPUResumeSpans = false
+	ba.IsReverse = false
+	ba.WriteOptions = nil
 }
 
 // hasBufferedWrites returns whether the interceptor has buffered any writes
