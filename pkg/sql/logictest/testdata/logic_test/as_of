@@ -222,3 +222,12 @@ statement error pq: AS OF SYSTEM TIME: timestamp '2090-05-08 12:00:00' is in the
 CREATE VIEW wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME '2090-05-08 12:00:00'
 
 subtest end
+
+# Regression test for #133395. Ensure that an invalid AS OF SYSTEM TIME clause
+# requiring normalization doesn't panic and returns an error.
+statement ok
+CREATE TABLE v00 (c01 INT)
+
+statement error pq: AS OF SYSTEM TIME: expected timestamp, decimal, or interval, got bool
+SELECT ALL FROM ( v00 AS ta1401 NATURAL JOIN v00 AS ta1402 ) WITH ORDINALITY AS ta1403
+AS OF SYSTEM TIME b'any_bytes' BETWEEN SYMMETRIC 'abc' AND 'abc';

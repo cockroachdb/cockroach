@@ -397,7 +397,7 @@ func normalizeRangeCond(v *Visitor, expr *tree.RangeCond) tree.TypedExpr {
 
 	// "a BETWEEN b AND c" -> "a >= b AND a <= c"
 	// "a NOT BETWEEN b AND c" -> "a < b OR a > c"
-	transform := func(from, to tree.TypedExpr) tree.TypedExpr {
+	transform := func(leftFrom, from, leftTo, to tree.TypedExpr) tree.TypedExpr {
 		var newLeft, newRight tree.TypedExpr
 		if from == tree.DNull {
 			newLeft = tree.DNull
@@ -425,14 +425,15 @@ func normalizeRangeCond(v *Visitor, expr *tree.RangeCond) tree.TypedExpr {
 		return normalizeExpr(v, tree.NewTypedAndExpr(newLeft, newRight))
 	}
 
-	out := transform(from, to)
+	out := transform(leftFrom, from, leftTo, to)
 	if expr.Symmetric {
+		symmetricOut := transform(leftTo, to, leftFrom, from)
 		if expr.Not {
 			// "a NOT BETWEEN SYMMETRIC b AND c" -> "(a < b OR a > c) AND (a < c OR a > b)"
-			out = normalizeExpr(v, tree.NewTypedAndExpr(out, transform(to, from)))
+			out = normalizeExpr(v, tree.NewTypedAndExpr(out, symmetricOut))
 		} else {
 			// "a BETWEEN SYMMETRIC b AND c" -> "(a >= b AND a <= c) OR (a >= c OR a <= b)"
-			out = normalizeExpr(v, tree.NewTypedOrExpr(out, transform(to, from)))
+			out = normalizeExpr(v, tree.NewTypedOrExpr(out, symmetricOut))
 		}
 	}
 	return out
