@@ -401,3 +401,14 @@ var TrackPerTableProgress = settings.RegisterBoolSetting(
 		"but doing so may incur additional overhead during ordinary changefeed execution",
 	metamorphic.ConstantWithTestBool("changefeed.progress.per_table_tracking.enabled", true),
 )
+
+// PerTableProtectedTimestamps enables per-table protected timestamp records
+// instead of a single record for all tables in a changefeed.
+var PerTableProtectedTimestamps = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.protected_timestamp.per_table.enabled",
+	"if true, creates separate protected timestamp records for each table in a changefeed; "+
+	"if false, creates a single protected timestamp record for all tables in a changefeed",
+	metamorphic.ConstantWithTestBool("changefeed.protected_timestamp.per_table.enabled", false),
+)
+
