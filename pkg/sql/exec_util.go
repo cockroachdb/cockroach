@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	apd "github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -3945,6 +3945,10 @@ func (m *sessionDataMutator) SetTestingOptimizerCostPerturbation(val float64) {
 
 func (m *sessionDataMutator) SetTestingOptimizerDisableRuleProbability(val float64) {
 	m.data.TestingOptimizerDisableRuleProbability = val
+}
+
+func (m *sessionDataMutator) SetDisableOptimizerRules(val []string) {
+	m.data.DisableOptimizerRules = val
 }
 
 func (m *sessionDataMutator) SetTrigramSimilarityThreshold(val float64) {

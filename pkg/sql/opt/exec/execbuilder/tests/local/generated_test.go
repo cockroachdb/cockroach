@@ -162,6 +162,13 @@ func TestExecBuild_delete(
 	runExecBuildLogicTest(t, "delete")
 }
 
+func TestExecBuild_disable_optimizer_rules(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "disable_optimizer_rules")
+}
+
 func TestExecBuild_distinct(
 	t *testing.T,
 ) {

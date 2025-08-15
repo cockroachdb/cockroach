@@ -3081,6 +3081,13 @@ func TestTenantLogicCCL_zone_configs_secondary_tenants_unrestricted(
 	runCCLLogicTest(t, "zone_configs_secondary_tenants_unrestricted")
 }
 
+func TestTenantExecBuild_disable_optimizer_rules(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "disable_optimizer_rules")
+}
+
 func TestTenantExecBuild_distsql_tenant(
 	t *testing.T,
 ) {
