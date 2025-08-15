@@ -251,7 +251,7 @@ func (suite *StoreTestSuite) TestAddToPartition() {
 		// Update the partition state to DrainingForMerge.
 		expected := *partition.Metadata()
 		metadata := expected
-		metadata.StateDetails.MakeDrainingForMerge(20)
+		metadata.StateDetails.MakeDrainingForSplit(20, 30)
 		suite.NoError(store.TryUpdatePartitionMetadata(
 			suite.ctx, treeKey, partitionKey, metadata, expected))
 
@@ -261,7 +261,8 @@ func (suite *StoreTestSuite) TestAddToPartition() {
 			err = txn.AddToPartition(suite.ctx, treeKey, partitionKey, cspann.SecondLevel,
 				vec4, partitionKey4, valueBytes4)
 			suite.ErrorAs(err, &errConditionFailed)
-			details := cspann.PartitionStateDetails{State: cspann.DrainingForMergeState, Target1: 20}
+			details := cspann.PartitionStateDetails{
+				State: cspann.DrainingForSplitState, Target1: 20, Target2: 30}
 			CheckPartitionMetadata(suite.T(), errConditionFailed.Actual, cspann.SecondLevel,
 				vector.T{4, 3}, details)
 		})
@@ -792,6 +793,71 @@ func (suite *StoreTestSuite) TestTryUpdatePartitionMetadata() {
 	}
 }
 
+func (suite *StoreTestSuite) TestTryStartMerge() {
+	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
+
+	doTest := func(treeID int) {
+		treeKey := store.MakeTreeKey(suite.T(), treeID)
+
+		// Create target and if-ready partitions.
+		partitionKey, partition := suite.createTestPartition(store, treeKey)
+		ifReadyPartitionKey, _ := suite.createTestPartition(store, treeKey)
+
+		// Target partition does not exist.
+		err := store.TryStartMerge(suite.ctx, treeKey, cspann.PartitionKey(99),
+			cspann.PartitionMetadata{}, ifReadyPartitionKey)
+		suite.ErrorIs(err, cspann.ErrPartitionNotFound)
+
+		// Target partition metadata does not match expected value.
+		var errConditionFailed *cspann.ConditionFailedError
+		expected := *partition.Metadata()
+		err = store.TryStartMerge(suite.ctx, treeKey, partitionKey,
+			cspann.PartitionMetadata{}, ifReadyPartitionKey)
+		suite.ErrorAs(err, &errConditionFailed)
+		suite.True(errConditionFailed.Actual.Equal(&expected))
+
+		// IfReady partition does not exist.
+		err = store.TryStartMerge(suite.ctx, treeKey, partitionKey,
+			*partition.Metadata(), cspann.PartitionKey(99))
+		suite.ErrorIs(err, cspann.ErrPartitionNotFound)
+
+		// IfReady partition is not in the Ready state.
+		notReadyPartitionKey, notReadyPartition := suite.createTestPartition(store, treeKey)
+		expected = *notReadyPartition.Metadata()
+		metadata := expected
+		metadata.StateDetails.MakeUpdating(partitionKey)
+		suite.NoError(store.TryUpdatePartitionMetadata(
+			suite.ctx, treeKey, notReadyPartitionKey, metadata, expected))
+
+		err = store.TryStartMerge(suite.ctx, treeKey, partitionKey,
+			*partition.Metadata(), notReadyPartitionKey)
+		suite.ErrorAs(err, &errConditionFailed)
+		suite.True(errConditionFailed.Actual.Equal(&metadata))
+
+		// TryStartMerge is successful.
+		err = store.TryStartMerge(suite.ctx, treeKey, partitionKey,
+			*partition.Metadata(), ifReadyPartitionKey)
+		suite.NoError(err)
+
+		// Validate that state was changed to Merging.
+		partition, err = store.TryGetPartition(suite.ctx, treeKey, partitionKey)
+		suite.NoError(err)
+		suite.Equal(cspann.MergingState, partition.Metadata().StateDetails.State)
+	}
+
+	suite.Run("default tree", func() {
+		doTest(0)
+	})
+
+	if store.AllowMultipleTrees() {
+		// Ensure that vectors are independent across trees.
+		suite.Run("different tree", func() {
+			doTest(1)
+		})
+	}
+}
+
 func (suite *StoreTestSuite) TestTryAddToPartition() {
 	store := suite.makeStore(suite.quantizer)
 	defer store.Close(suite.T())
@@ -951,7 +1017,7 @@ func (suite *StoreTestSuite) TestTryRemoveFromPartition() {
 		var errConditionFailed *cspann.ConditionFailedError
 		childKeys = []cspann.ChildKey{partitionKey1}
 		metadata := expected
-		metadata.StateDetails.State = cspann.DrainingForMergeState
+		metadata.StateDetails.State = cspann.DrainingForSplitState
 		removed, err = store.TryRemoveFromPartition(suite.ctx, treeKey, partitionKey,
 			childKeys, metadata)
 		suite.ErrorAs(err, &errConditionFailed)
@@ -1048,7 +1114,7 @@ func (suite *StoreTestSuite) TestTryMoveVector() {
 		// Try to move again, but with mismatched expected metadata.
 		var errConditionFailed *cspann.ConditionFailedError
 		metadata = expected
-		metadata.StateDetails.State = cspann.DrainingForMergeState
+		metadata.StateDetails.State = cspann.DrainingForSplitState
 		moved, err = store.TryMoveVector(
 			suite.ctx, treeKey, sourcePartitionKey, targetPartitionKey,
 			vec1, partitionKey3, valueBytes3, metadata)
