@@ -60,13 +60,12 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 
 	sc := log.Scope(t)
 	defer sc.Close(t)
-
 	appName := "telemetry-logging-datadriven"
 	ignoredAppname := "telemetry-datadriven-ignored-appname"
 	ctx := context.Background()
 	stmtSpy := logtestutils.NewStructuredLogSpy(
 		t,
-		[]logpb.Channel{logpb.Channel_TELEMETRY},
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC},
 		[]string{"sampled_query"},
 		logtestutils.FormatEntryAsJSON,
 		func(_ logpb.Entry, logStr string) bool {
@@ -79,7 +78,7 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 
 	txnsSpy := logtestutils.NewStructuredLogSpy(
 		t,
-		[]logpb.Channel{logpb.Channel_TELEMETRY},
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC},
 		[]string{"sampled_transaction"},
 		logtestutils.FormatEntryAsJSON,
 		func(_ logpb.Entry, logStr string) bool {
@@ -209,13 +208,13 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 				}
 
 				newStmtLogCount := stmtSpy.Count()
-				sb.WriteString(strings.Join(stmtSpy.GetLastNLogs(logpb.Channel_TELEMETRY, newStmtLogCount-stmtLogCount), "\n"))
+				sb.WriteString(strings.Join(stmtSpy.GetLastNLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV), newStmtLogCount-stmtLogCount), "\n"))
 				if newStmtLogCount > stmtLogCount {
 					sb.WriteString("\n")
 				}
 
 				newTxnLogCount := txnsSpy.Count()
-				sb.WriteString(strings.Join(txnsSpy.GetLastNLogs(logpb.Channel_TELEMETRY, newTxnLogCount-txnLogCount), "\n"))
+				sb.WriteString(strings.Join(txnsSpy.GetLastNLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV), newTxnLogCount-txnLogCount), "\n"))
 				return sb.String()
 			case "reset-last-sampled":
 				telemetryLogging.resetLastSampledTime()

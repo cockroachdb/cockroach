@@ -358,6 +358,7 @@ func (p *planner) maybeLogStatementInternal(
 
 		*sampledQuery = eventpb.SampledQuery{
 			CommonSQLExecDetails:     execDetails,
+			CommonSQLEventDetails:    p.getCommonSQLEventDetails(),
 			SkippedQueries:           skippedQueries,
 			CostEstimate:             p.curPlan.instrumentation.costEstimate,
 			Distribution:             p.curPlan.instrumentation.distribution.String(),
@@ -436,7 +437,11 @@ func (p *planner) maybeLogStatementInternal(
 			SchemaChangerMode:                     p.curPlan.instrumentation.schemaChangerMode.String(),
 		}
 
-		p.logEventsOnlyExternally(ctx, sampledQuery)
+		migrator := log.NewStructuredEventMigrator(func() bool {
+			return log.ShouldMigrateEvent(p.ExecCfg().SV())
+		}, logpb.Channel_SQL_EXEC)
+
+		migrator.StructuredEvent(ctx, severity.INFO, sampledQuery)
 	}
 }
 
@@ -521,7 +526,11 @@ func (p *planner) logTransaction(
 		}
 	}
 
-	log.StructuredEvent(ctx, severity.INFO, sampledTxn)
+	migrator := log.NewStructuredEventMigrator(func() bool {
+		return log.ShouldMigrateEvent(p.ExecCfg().SV())
+	}, logpb.Channel_SQL_EXEC)
+
+	migrator.StructuredEvent(ctx, severity.INFO, sampledTxn)
 }
 
 func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...logpb.EventPayload) {
