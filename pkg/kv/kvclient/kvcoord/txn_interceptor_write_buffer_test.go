@@ -8,6 +8,7 @@ package kvcoord
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -3912,5 +3913,131 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 			require.NotNil(t, br)
 			require.Nil(t, pErr)
 		})
+	}
+}
+
+// TestBatchHeaderFieldsAreAccountedForInBufferedWrites checks that any new
+// fields added to the batch header are appropriately accounted for by the
+// needed functions.
+func TestBatchHeaderFieldsAreAccountedForInBufferedWrites(t *testing.T) {
+	type fieldStatus int
+	const (
+		iSwearFieldDoesNotNeedHandling fieldStatus = iota
+		fieldIsHandledByWriteBuffer
+		// TODO(ssd): This should be removed before this merged.
+		TODOneedsConsideration
+	)
+
+	fieldStatuses := map[string]fieldStatus{
+		// Managed by store_send
+		"Timestamp":                iSwearFieldDoesNotNeedHandling,
+		"TimestampFromServerClock": iSwearFieldDoesNotNeedHandling,
+		"Now":                      iSwearFieldDoesNotNeedHandling,
+		// Managed by dist_sender
+		"Replica": iSwearFieldDoesNotNeedHandling,
+		"RangeID": iSwearFieldDoesNotNeedHandling,
+		// TODO(review): It seems reasonable to reasonable to flush at the transaction
+		// priority.
+		"UserPriority": TODOneedsConsideration,
+		// We want this batch to be part of the same transaction.
+		"Txn": iSwearFieldDoesNotNeedHandling,
+		// If read consistency is set to anything but CONSISTENT, our flush will fail
+		// because we only allow inconsistent reads for read only requests.
+		"ReadConsistency": fieldIsHandledByWriteBuffer,
+		// TODO(ssd): It could make sense to reset the routing policy to LEASEHOLDER
+		// since this is a write batch. But it won't affect correctness since this
+		// just affects the ordering that we try things in. But, it am not sure why we
+		// would have a NEAREST routing policy on a request that caused us to flush.
+		"RoutingPolicy": TODOneedsConsideration,
+		// If WaitPolicy is set to SkipLocked, our request may fail validation.
+		"WaitPolicy": fieldIsHandledByWriteBuffer,
+		// Using the configured lock timeout seems reasonable.
+		"LockTimeout": iSwearFieldDoesNotNeedHandling,
+		// Reset options that could result in an early batch return.
+		"MaxSpanRequestKeys": fieldIsHandledByWriteBuffer,
+		"TargetBytes":        fieldIsHandledByWriteBuffer,
+		// The following two fields are only meaningful if MaxSpanRequestKeys or
+		// TargetBytes is set.
+		"WholeRowsOfSize": TODOneedsConsideration,
+		"AllowEmpty":      TODOneedsConsideration,
+		// Controlled by interceptors below us.
+		"DistinctSpans":           iSwearFieldDoesNotNeedHandling,
+		"AsyncConsensus":          iSwearFieldDoesNotNeedHandling,
+		"CanForwardReadTimestamp": iSwearFieldDoesNotNeedHandling,
+		// This should be the same, no reason to change
+		"GatewayNodeID": iSwearFieldDoesNotNeedHandling,
+		// This can be set be the caller, but it seems fine to ask for range info on
+		// the flush.
+		"ClientRangeInfo": iSwearFieldDoesNotNeedHandling,
+		// We shouldn't see this because it is only allowed via NegotiateAndSend
+		// which is only allowed for non-transactional requests.
+		"BoundedStaleness": iSwearFieldDoesNotNeedHandling,
+		// No need to touch trace info.
+		"TraceInfo": iSwearFieldDoesNotNeedHandling,
+		// This is only used by Scan and ReverseScan requests using
+		// COL_BATCH_RESPONSE. We don't have those requests in a flush batch and we
+		// don't support that response type even if we did, so we can leave it.
+		"IndexFetchSpec": iSwearFieldDoesNotNeedHandling,
+		// Only set by ExportRequest which we don't support here. Handle it anyway.
+		"ReturnElasticCPUResumeSpans": fieldIsHandledByWriteBuffer,
+		// Seems good to keep the labels, we could add some.
+		"ProfileLabels": iSwearFieldDoesNotNeedHandling,
+		// Controlled by dist_sender
+		"AmbiguousReplayProtection": iSwearFieldDoesNotNeedHandling,
+		// Flushes should be on the same connection as the original request
+		"ConnectionClass": iSwearFieldDoesNotNeedHandling,
+		// Managed by dist_sender
+		"ProxyRangeInfo": iSwearFieldDoesNotNeedHandling,
+		// TODO(ssd): We check this in validateBatch so we shouldn't have this. But
+		// the validation goes field by field, might be brittle.
+		"WriteOptions": TODOneedsConsideration,
+		// Seems reasonable to use the same deadlock timeout as the inbound request
+		// for the flush.
+		"DeadlockTimeout": iSwearFieldDoesNotNeedHandling,
+		// Controlled by us.
+		"HasBufferedAllPrecedingWrites": iSwearFieldDoesNotNeedHandling,
+		// Our flush should never need isReverse.
+		"IsReverse": fieldIsHandledByWriteBuffer,
+	}
+
+	header := kvpb.Header{}
+	val := reflect.ValueOf(&header)
+	for i := 0; i < val.Elem().Type().NumField(); i++ {
+		fieldName := val.Elem().Type().Field(i).Name
+		s, ok := fieldStatuses[fieldName]
+		if !ok {
+			t.Fatalf(`kvpb.Header field %s has no entry in fieldStatus map.
+
+If this option may result in a batch being incompletely processed, the option
+needs to be accounted for in the following functions:
+
+    separateBatchIsNeeded
+    clearBatchRequestOptions
+`, fieldName)
+		}
+		f := val.Elem().Field(i)
+		if s == fieldIsHandledByWriteBuffer {
+			// Trust, but verify.
+			require.True(t, f.CanAddr())
+			switch f.Type().Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				f.SetInt(1)
+			case reflect.Bool:
+				f.SetBool(true)
+			default:
+				t.Fatalf("test does not support type %s (field: %s), please add a case above",
+					f.Type().Kind(), fieldName)
+			}
+
+			req := &kvpb.BatchRequest{Header: header}
+			require.True(t, separateBatchIsNeeded(req),
+				"non-zero value for %s not handled in separateBatchIsNeeded", fieldName)
+
+			clearBatchRequestOptions(req)
+			require.Equal(t, kvpb.Header{}, req.Header,
+				"non-zero value for %s not cleared in clearBatchRequestOptions", fieldName)
+
+			f.SetZero()
+		}
 	}
 }
