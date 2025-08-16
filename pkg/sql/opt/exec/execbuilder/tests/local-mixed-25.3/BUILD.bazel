@@ -12,7 +12,7 @@ go_test(
         "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
         "//conditions:default": {"test.Pool": "large"},
     }),
-    shard_count = 1,
+    shard_count = 2,
     tags = ["cpu:1"],
     deps = [
         "//pkg/base",

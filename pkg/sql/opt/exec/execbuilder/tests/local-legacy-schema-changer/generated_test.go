@@ -85,6 +85,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, serverArgs, configIdx, glob)
 }
 
+func TestExecBuild_disable_optimizer_rules(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "disable_optimizer_rules")
+}
+
 func TestExecBuild_geospatial(
 	t *testing.T,
 ) {

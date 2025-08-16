@@ -2974,6 +2974,13 @@ func TestRepeatableReadLogicCCL_vector(
 	runCCLLogicTest(t, "vector")
 }
 
+func TestRepeatableReadExecBuild_disable_optimizer_rules(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "disable_optimizer_rules")
+}
+
 func TestRepeatableReadExecBuild_geospatial(
 	t *testing.T,
 ) {

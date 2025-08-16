@@ -2988,6 +2988,13 @@ func TestReadCommittedLogicCCL_vector(
 	runCCLLogicTest(t, "vector")
 }
 
+func TestReadCommittedExecBuild_disable_optimizer_rules(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "disable_optimizer_rules")
+}
+
 func TestReadCommittedExecBuild_explain_analyze_read_committed(
 	t *testing.T,
 ) {
