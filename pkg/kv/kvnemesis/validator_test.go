@@ -2383,7 +2383,7 @@ func TestValidate(t *testing.T) {
 				}
 			}
 
-			if failures := Validate(test.steps, e, tr); len(failures) > 0 {
+			if failures := Validate(test.steps, e, tr, 0); len(failures) > 0 {
 				for i := range failures {
 					fmt.Fprintln(&buf, failures[i])
 				}

@@ -8,12 +8,15 @@ package kvnemesis
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -24,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -45,7 +50,7 @@ import (
 var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 100)
 
 func (cfg kvnemesisTestCfg) testClusterArgs(
-	ctx context.Context, tr *SeqTracker,
+	ctx context.Context, tr *SeqTracker, partitioner *rpc.Partitioner, mode TestMode,
 ) base.TestClusterArgs {
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		AllowUnsynchronizedReplicationChanges: true,
@@ -171,31 +176,86 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		cfg.testSettings(ctx, st)
 	}
 
-	args := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Store: storeKnobs,
-				KVClient: &kvcoord.ClientTestingKnobs{
-					// Don't let DistSender split DeleteRangeUsingTombstone across range boundaries.
-					// This does happen in real CRDB, but leads to separate atomic subunits, which
-					// would add complexity to kvnemesis that isn't worth it. Instead, the operation
-					// generator for the most part tries to avoid range-spanning requests, and the
-					// ones that do end up happening get a hard error.
-					OnRangeSpanningNonTxnalBatch: func(ba *kvpb.BatchRequest) *kvpb.Error {
-						for _, req := range ba.Requests {
-							if req.GetInner().Method() != kvpb.DeleteRange {
-								continue
-							}
-							if req.GetDeleteRange().UseRangeTombstone == true {
-								return kvpb.NewError(errDelRangeUsingTombstoneStraddlesRangeBoundary)
-							}
-						}
-						return nil
-					},
+	zoneConfig := zonepb.DefaultZoneConfig()
+	// In liveness mode, ensure all ranges have a voter on nodes 1 and 2, the
+	// nodes guaranteed to be available.
+	if mode == Liveness {
+		zoneConfig.Constraints = []zonepb.ConstraintsConjunction{
+			{
+				NumReplicas: 1,
+				Constraints: []zonepb.Constraint{
+					{Type: zonepb.Constraint_REQUIRED, Key: "node", Value: "1"},
 				},
 			},
-			Settings: st,
+			{
+				NumReplicas: 1,
+				Constraints: []zonepb.Constraint{
+					{Type: zonepb.Constraint_REQUIRED, Key: "node", Value: "2"},
+				},
+			},
+		}
+		zoneConfig.VoterConstraints = []zonepb.ConstraintsConjunction{
+			{
+				NumReplicas: 1,
+				Constraints: []zonepb.Constraint{
+					{Type: zonepb.Constraint_REQUIRED, Key: "node", Value: "1"},
+				},
+			},
+			{
+				NumReplicas: 1,
+				Constraints: []zonepb.Constraint{
+					{Type: zonepb.Constraint_REQUIRED, Key: "node", Value: "2"},
+				},
+			},
+		}
+	}
+
+	commonServerArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DefaultZoneConfigOverride: &zoneConfig,
+			},
+			Store: storeKnobs,
+			KVClient: &kvcoord.ClientTestingKnobs{
+				// Don't let DistSender split DeleteRangeUsingTombstone across range boundaries.
+				// This does happen in real CRDB, but leads to separate atomic subunits, which
+				// would add complexity to kvnemesis that isn't worth it. Instead, the operation
+				// generator for the most part tries to avoid range-spanning requests, and the
+				// ones that do end up happening get a hard error.
+				OnRangeSpanningNonTxnalBatch: func(ba *kvpb.BatchRequest) *kvpb.Error {
+					for _, req := range ba.Requests {
+						if req.GetInner().Method() != kvpb.DeleteRange {
+							continue
+						}
+						if req.GetDeleteRange().UseRangeTombstone == true {
+							return kvpb.NewError(errDelRangeUsingTombstoneStraddlesRangeBoundary)
+						}
+					}
+					return nil
+				},
+			},
 		},
+		Settings: st,
+	}
+
+	args := base.TestClusterArgs{
+		ServerArgs: commonServerArgs,
+		ServerArgsPerNode: func() map[int]base.TestServerArgs {
+			perNode := make(map[int]base.TestServerArgs)
+			for i := 1; i <= cfg.numNodes; i++ {
+				ctk := rpc.ContextTestingKnobs{}
+				partitioner.RegisterTestingKnobs(roachpb.NodeID(i), &ctk)
+				perNodeServerArgs := commonServerArgs
+				perNodeServerArgs.Knobs.Server = &server.TestingKnobs{
+					ContextTestingKnobs: ctk,
+				}
+				perNodeServerArgs.Locality = roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "node", Value: fmt.Sprintf("%d", i)}},
+				}
+				perNode[i] = perNodeServerArgs
+			}
+			return perNode
+		}(),
 	}
 
 	if cfg.testArgs != nil {
@@ -311,6 +371,8 @@ type kvnemesisTestCfg struct {
 	// testGeneratorConfig modifies the default generator configuration. This is
 	// useful if a test configuration does not yet support particular operations.
 	testGeneratorConfig func(*GeneratorConfig)
+
+	mode TestMode
 }
 
 func defaultTestConfiguration(numNodes int) kvnemesisTestCfg {
@@ -401,6 +463,59 @@ func TestKVNemesisMultiNode_BufferedWritesNoPipelining(t *testing.T) {
 	testKVNemesisImpl(t, cfg)
 }
 
+func TestKVNemesisMultiNode_Faults_Safety(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		mode:                         Safety,
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.AddNetworkPartition = 1
+			cfg.Ops.Fault.RemoveNetworkPartition = 1
+		},
+	})
+}
+
+func TestKVNemesisMultiNode_Faults_Liveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		mode:                         Liveness,
+		leaseTypeOverride:            roachpb.LeaseLeader,
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.AddNetworkPartition = 1
+			cfg.Ops.Fault.RemoveNetworkPartition = 1
+			// Disallow replica changes, which might interfere with the zone config
+			// constraints (at least one replica on nodes 1 and 2).
+			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{
+				AddVotingReplica:           0,
+				RemoveVotingReplica:        0,
+				AtomicSwapVotingReplica:    0,
+				AddNonVotingReplica:        0,
+				RemoveNonVotingReplica:     0,
+				AtomicSwapNonVotingReplica: 0,
+				PromoteReplica:             0,
+				DemoteReplica:              0,
+			}
+		},
+	})
+}
+
 func TestKVNemesisMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -468,8 +583,17 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	ctx := context.Background()
 	tr := &SeqTracker{}
-	tc := testcluster.StartTestCluster(t, cfg.numNodes, cfg.testClusterArgs(ctx, tr))
+	var partitioner rpc.Partitioner
+	tc := testcluster.StartTestCluster(
+		t, cfg.numNodes, cfg.testClusterArgs(ctx, tr, &partitioner, cfg.mode),
+	)
 	defer tc.Stopper().Stop(ctx)
+	for i := 0; i < cfg.numNodes; i++ {
+		g := tc.Servers[i].StorageLayer().GossipI().(*gossip.Gossip)
+		addr := g.GetNodeAddr().String()
+		nodeID := g.NodeID.Get()
+		partitioner.RegisterNodeAddr(addr, nodeID)
+	}
 	dbs, sqlDBs := make([]*kv.DB, cfg.numNodes), make([]*gosql.DB, cfg.numNodes)
 	for i := 0; i < cfg.numNodes; i++ {
 		dbs[i] = tc.Server(i).DB()
@@ -479,6 +603,8 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	// Turn net/trace on, which results in real trace spans created throughout.
 	// This gives kvnemesis a chance to hit NPEs related to tracing.
 	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING trace.debug_http_endpoint.enabled = true`)
+
+	require.NoError(t, tc.WaitForFullReplication())
 
 	config := NewDefaultConfig()
 	config.NumNodes = cfg.numNodes
@@ -498,8 +624,8 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 
 	logger := newTBridge(t)
 	defer dumpRaftLogsOnFailure(t, logger.ll.dir, tc.Servers)
-	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger}
-	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, dbs...)
+	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner}
+	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, cfg.mode, dbs...)
 
 	for i := 0; i < cfg.numNodes; i++ {
 		t.Logf("[%d] proposed: %d", i,
