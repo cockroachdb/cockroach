@@ -612,6 +612,14 @@ var DisableUDFs = simpleOption("disable udfs", func(s *Smither) {
 	s.disableUDFCreation = true
 })
 
+var EnableUDFs = simpleOption("enable udfs", func(s *Smither) {
+	s.disableUDFCreation = false
+	s.stmtWeights = []statementWeight{
+		{1, makeCreateFunc},
+		{2, makeDoBlock},
+	}
+})
+
 // DisableIsolationChange causes the Smither to disable stmts that modify the
 // txn isolation level.
 var DisableIsolationChange = simpleOption("disable isolation change", func(s *Smither) {
