@@ -1744,9 +1744,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 				}
 				// We have fully processed all the batches from the right side,
 				// so we need to Rewind the queue.
-				if err := b.rightTuples.Rewind(ctx); err != nil {
-					colexecerror.InternalError(err)
-				}
+				b.rightTuples.Rewind(ctx)
 				bs.currentBatch = nil
 			}
 		})
