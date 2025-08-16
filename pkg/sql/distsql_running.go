@@ -468,17 +468,20 @@ func (dsp *DistSQLPlanner) setupFlows(
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
 	}
-	if localState.IsLocal {
-		// VectorizeMode is the only field that the setup code expects to be set
-		// in the local flows.
-		setupReq.EvalContext.SessionData.VectorizeMode = evalCtx.SessionData().VectorizeMode
-	} else {
+	vectorizeMode := evalCtx.SessionData().VectorizeMode
+	if planCtx.planner != nil && planCtx.planner.curPlan.avoidVectorization {
+		// Vectorization has been automatically disabled for this plan.
+		vectorizeMode = sessiondatapb.VectorizeOff
+	}
+	setupReq.EvalContext.SessionData.VectorizeMode = vectorizeMode
+	if !localState.IsLocal {
 		// In distributed plans populate some extra state.
 		setupReq.EvalContext = serializeEvalContext(evalCtx)
 		if jobTag, ok := logtags.FromContext(ctx).GetTag("job"); ok {
 			setupReq.JobTag = redact.SafeString(jobTag.ValueStr())
 		}
 	}
+	// In local and distributed plans set the vectorized mode.
 	if evalCtx.SessionData().PropagateAdmissionHeaderToLeafTransactions && localState.Txn != nil {
 		// Propagate the admission control header so that leaf transactions
 		// correctly inherit it.
@@ -486,7 +489,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	}
 
 	var isVectorized bool
-	if vectorizeMode := evalCtx.SessionData().VectorizeMode; vectorizeMode != sessiondatapb.VectorizeOff {
+	if vectorizeMode != sessiondatapb.VectorizeOff {
 		// Now we determine whether the vectorized engine supports the flow
 		// specs.
 		isVectorized = true
