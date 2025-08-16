@@ -53,3 +53,29 @@ statement ok
 DROP TABLE t1;
 
 subtest end
+
+# inspect and scrub are converging so for now tests on INSPECT live here
+subtest inspect
+
+statement error INSPECT TABLE is not enabled by enable_inspect_command
+INSPECT TABLE foo;
+
+statement error INSPECT DATABASE is not enabled by enable_inspect_command
+INSPECT DATABASE bar;
+
+statement ok
+SET enable_inspect_command = true;
+
+statement ok
+INSPECT TABLE foo;
+
+statement ok
+INSPECT TABLE foo WITH OPTIONS INDEX (bar.public.biz);
+
+statement ok
+INSPECT TABLE foo AS OF SYSTEM TIME 1 WITH OPTIONS INDEX (bar,biz);
+
+statement ok
+INSPECT DATABASE bar;
+
+subtest end
