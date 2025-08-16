@@ -539,7 +539,7 @@ func TestOracle(t *testing.T) {
 		// the exponentially-weighted moving average to work properly. See the
 		// comment on the WARMUP_SAMPLES const in the ewma package for details.
 		for i := 0; i < 11; i++ {
-			rpcContext.RemoteClocks.UpdateOffset(ctx, id, rpc.RemoteOffset{}, latency)
+			rpcContext.RemoteClocks.UpdateOffset(ctx, id, rpc.RemoteOffset{}, latency, rpc.DefaultClass)
 		}
 	}
 	setLatency(1, 100*time.Millisecond)
