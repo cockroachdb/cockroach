@@ -1801,29 +1801,22 @@ vectorized: true
 │           │ render fk_lookup_crdb_region: fk_lookup_crdb_region
 │           │
 │           └── • render
-│               │ columns: (fk_lookup_crdb_region, k, crdb_region, rowid, k_new)
+│               │ columns: (fk_lookup_crdb_region, k_new, k, crdb_region, rowid)
 │               │ render fk_lookup_crdb_region: CASE WHEN crdb_region IS NOT DISTINCT FROM CAST(NULL AS public.crdb_internal_region) THEN crdb_region ELSE crdb_region END
+│               │ render k_new: 4
 │               │ render k: k
 │               │ render crdb_region: crdb_region
 │               │ render rowid: rowid
-│               │ render k_new: k_new
 │               │
 │               └── • cross join (left outer)
-│                   │ columns: (k_new, k, crdb_region, rowid, k, crdb_region)
+│                   │ columns: (k, crdb_region, rowid, k, crdb_region)
 │                   │ estimated row count: 10 (missing stats)
 │                   │
-│                   ├── • render
-│                   │   │ columns: (k_new, k, crdb_region, rowid)
-│                   │   │ render k_new: 4
-│                   │   │ render k: k
-│                   │   │ render crdb_region: crdb_region
-│                   │   │ render rowid: rowid
-│                   │   │
-│                   │   └── • scan
-│                   │         columns: (k, crdb_region, rowid)
-│                   │         estimated row count: 10 (missing stats)
-│                   │         table: child@child_k_idx
-│                   │         spans: /"@"/3-/"@"/4 /"\x80"/3-/"\x80"/4 /"\xc0"/3-/"\xc0"/4
+│                   ├── • scan
+│                   │     columns: (k, crdb_region, rowid)
+│                   │     estimated row count: 10 (missing stats)
+│                   │     table: child@child_k_idx
+│                   │     spans: /"@"/3-/"@"/4 /"\x80"/3-/"\x80"/4 /"\xc0"/3-/"\xc0"/4
 │                   │
 │                   └── • union all
 │                       │ columns: (k, crdb_region)

@@ -1746,10 +1746,8 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 │               │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column2 = pk)
 │               │ locking strength: for update
 │               │
-│               └── • render
-│                   │
-│                   └── • values
-│                         size: 5 columns, 2 rows
+│               └── • values
+│                     size: 5 columns, 2 rows
 │
 ├── • constraint-check
 │   │
@@ -3358,35 +3356,28 @@ query T retry
 EXPLAIN(OPT) SELECT t2.a, t2.b, t2.v, t1.b FROM regional_by_row_table_virt_partial t2 LEFT OUTER JOIN
   regional_by_row_table t1 ON t1.b = t2.pk WHERE t1.b IS NULL OR t1.b = 7 LIMIT 1
 ----
-distribute
- └── project
-      └── limit
-           ├── select
-           │    ├── project
-           │    │    └── left-join (lookup regional_by_row_table@regional_by_row_table_b_key [as=t1])
-           │    │         ├── lookup columns are key
-           │    │         ├── project
-           │    │         │    ├── scan regional_by_row_table_virt_partial
-           │    │         │    │    ├── check constraint expressions
-           │    │         │    │    │    └── regional_by_row_table_virt_partial.crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
-           │    │         │    │    ├── computed column expressions
-           │    │         │    │    │    ├── v
-           │    │         │    │    │    │    └── regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b
-           │    │         │    │    │    └── crdb_internal_idx_expr
-           │    │         │    │    │         └── regional_by_row_table_virt_partial.a + 10
-           │    │         │    │    └── partial index predicates
-           │    │         │    │         ├── v_a_gt_0: filters
-           │    │         │    │         │    └── regional_by_row_table_virt_partial.a > 0
-           │    │         │    │         ├── v_v_gt_0: filters
-           │    │         │    │         │    └── (regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b) > 0
-           │    │         │    │         └── a_plus_10_v_gt_0: filters
-           │    │         │    │              └── (regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b) > 0
-           │    │         │    └── projections
-           │    │         │         └── regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b
-           │    │         └── filters (true)
-           │    └── filters
-           │         └── (t1.b IS NULL) OR (t1.b = 7)
-           └── 1
+project
+ ├── limit
+ │    ├── select
+ │    │    ├── project
+ │    │    │    └── locality-optimized-search
+ │    │    │         ├── project
+ │    │    │         │    └── left-join (lookup regional_by_row_table@regional_by_row_table_b_key [as=t1])
+ │    │    │         │         ├── lookup columns are key
+ │    │    │         │         ├── scan regional_by_row_table_virt_partial
+ │    │    │         │         │    └── constraint: /27/23: [/'ap-southeast-2' - /'ap-southeast-2']
+ │    │    │         │         └── filters (true)
+ │    │    │         └── project
+ │    │    │              └── left-join (lookup regional_by_row_table@regional_by_row_table_b_key [as=t1])
+ │    │    │                   ├── lookup columns are key
+ │    │    │                   ├── scan regional_by_row_table_virt_partial
+ │    │    │                   │    └── constraint: /37/33: [/'ca-central-1' - /'us-east-1']
+ │    │    │                   └── filters (true)
+ │    │    └── filters
+ │    │         └── (t1.b IS NULL) OR (t1.b = 7)
+ │    └── 1
+ └── projections
+      └── regional_by_row_table_virt_partial.a + regional_by_row_table_virt_partial.b
 
 # Locality-optimized search of anti lookup joins is not supported and should
 # not be picked.

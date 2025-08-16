@@ -894,16 +894,19 @@ project
       │    │    ├── scan t63794_bc@t63794_bc_b_idx
       │    │    └── projections
       │    │         └── b % 2
-      │    ├── inner-join (merge)
+      │    ├── select
       │    │    ├── project
-      │    │    │    ├── scan t63794_bc@t63794_bc_b_idx
+      │    │    │    ├── inner-join (merge)
+      │    │    │    │    ├── scan t63794_bc@t63794_bc_b_idx
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── scan t63794_bc@t63794_bc_b_idx
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── b % 2
+      │    │    │    │    └── filters (true)
       │    │    │    └── projections
       │    │    │         └── b % 2
-      │    │    ├── project
-      │    │    │    ├── scan t63794_bc@t63794_bc_b_idx
-      │    │    │    └── projections
-      │    │    │         └── b % 2
-      │    │    └── filters (true)
+      │    │    └── filters
+      │    │         └── c = c
       │    └── filters (true)
       └── filters
            └── a = b
@@ -1126,8 +1129,8 @@ project
  │    ├── inner-join (cross)
  │    │    ├── select
  │    │    │    ├── full-join (cross)
- │    │    │    │    ├── inner-join (cross)
- │    │    │    │    │    ├── project
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── inner-join (cross)
  │    │    │    │    │    │    ├── scan t136250
  │    │    │    │    │    │    │    └── computed column expressions
  │    │    │    │    │    │    │         ├── col1_8
@@ -1136,22 +1139,22 @@ project
  │    │    │    │    │    │    │         │    └── col1_3::STRING
  │    │    │    │    │    │    │         └── crdb_internal_idx_expr_1
  │    │    │    │    │    │    │              └── col1_2::STRING
- │    │    │    │    │    │    └── projections
- │    │    │    │    │    │         ├── col1_3::STRING
- │    │    │    │    │    │         └── col1_2::STRING
- │    │    │    │    │    ├── project
- │    │    │    │    │    │    ├── scan t136250
- │    │    │    │    │    │    │    └── computed column expressions
- │    │    │    │    │    │    │         ├── col1_8
- │    │    │    │    │    │    │         │    └── CAST(NULL AS STRING)
- │    │    │    │    │    │    │         ├── crdb_internal_idx_expr
- │    │    │    │    │    │    │         │    └── col1_3::STRING
- │    │    │    │    │    │    │         └── crdb_internal_idx_expr_1
- │    │    │    │    │    │    │              └── col1_2::STRING
- │    │    │    │    │    │    └── projections
- │    │    │    │    │    │         ├── col1_3::STRING
- │    │    │    │    │    │         └── col1_2::STRING
- │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    │    ├── project
+ │    │    │    │    │    │    │    ├── scan t136250
+ │    │    │    │    │    │    │    │    └── computed column expressions
+ │    │    │    │    │    │    │    │         ├── col1_8
+ │    │    │    │    │    │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │    │    │    │    │    │         ├── crdb_internal_idx_expr
+ │    │    │    │    │    │    │    │         │    └── col1_3::STRING
+ │    │    │    │    │    │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │    │    │    │    │    │              └── col1_2::STRING
+ │    │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │    │         ├── col1_3::STRING
+ │    │    │    │    │    │    │         └── col1_2::STRING
+ │    │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         ├── col1_3::STRING
+ │    │    │    │    │         └── col1_2::STRING
  │    │    │    │    ├── project
  │    │    │    │    │    ├── scan t136250
  │    │    │    │    │    │    └── computed column expressions
@@ -1172,18 +1175,7 @@ project
  │    │    │              │         ├── subquery
  │    │    │              │         │    └── project
  │    │    │              │         │         ├── inner-join (cross)
- │    │    │              │         │         │    ├── project
- │    │    │              │         │         │    │    ├── scan t136250
- │    │    │              │         │         │    │    │    └── computed column expressions
- │    │    │              │         │         │    │    │         ├── col1_8
- │    │    │              │         │         │    │    │         │    └── CAST(NULL AS STRING)
- │    │    │              │         │         │    │    │         ├── crdb_internal_idx_expr
- │    │    │              │         │         │    │    │         │    └── col1_3::STRING
- │    │    │              │         │         │    │    │         └── crdb_internal_idx_expr_1
- │    │    │              │         │         │    │    │              └── col1_2::STRING
- │    │    │              │         │         │    │    └── projections
- │    │    │              │         │         │    │         ├── col1_3::STRING
- │    │    │              │         │         │    │         └── col1_2::STRING
+ │    │    │              │         │         │    ├── scan t136250@t136250_expr_expr1_idx
  │    │    │              │         │         │    ├── project
  │    │    │              │         │         │    │    ├── scan t136250
  │    │    │              │         │         │    │    │    └── computed column expressions
@@ -1217,9 +1209,7 @@ project
  │    │    │                        │         │    │    │    │         └── crdb_internal_idx_expr_1
  │    │    │                        │         │    │    │    │              └── col1_2::STRING
  │    │    │                        │         │    │    │    └── projections
- │    │    │                        │         │    │    │         ├── CAST(NULL AS STRING)
- │    │    │                        │         │    │    │         ├── col1_3::STRING
- │    │    │                        │         │    │    │         └── col1_2::STRING
+ │    │    │                        │         │    │    │         └── CAST(NULL AS STRING)
  │    │    │                        │         │    │    └── filters
  │    │    │                        │         │    │         └── col1_5 = col1_5
  │    │    │                        │         │    └── projections
@@ -1245,18 +1235,7 @@ project
  │    │    │    │              │         ├── subquery
  │    │    │    │              │         │    └── project
  │    │    │    │              │         │         ├── inner-join (cross)
- │    │    │    │              │         │         │    ├── project
- │    │    │    │              │         │         │    │    ├── scan t136250
- │    │    │    │              │         │         │    │    │    └── computed column expressions
- │    │    │    │              │         │         │    │    │         ├── col1_8
- │    │    │    │              │         │         │    │    │         │    └── CAST(NULL AS STRING)
- │    │    │    │              │         │         │    │    │         ├── crdb_internal_idx_expr
- │    │    │    │              │         │         │    │    │         │    └── col1_3::STRING
- │    │    │    │              │         │         │    │    │         └── crdb_internal_idx_expr_1
- │    │    │    │              │         │         │    │    │              └── col1_2::STRING
- │    │    │    │              │         │         │    │    └── projections
- │    │    │    │              │         │         │    │         ├── col1_3::STRING
- │    │    │    │              │         │         │    │         └── col1_2::STRING
+ │    │    │    │              │         │         │    ├── scan t136250@t136250_expr_expr1_idx
  │    │    │    │              │         │         │    ├── project
  │    │    │    │              │         │         │    │    ├── scan t136250
  │    │    │    │              │         │         │    │    │    └── computed column expressions
@@ -1290,9 +1269,7 @@ project
  │    │    │    │                        │         │    │    │    │         └── crdb_internal_idx_expr_1
  │    │    │    │                        │         │    │    │    │              └── col1_2::STRING
  │    │    │    │                        │         │    │    │    └── projections
- │    │    │    │                        │         │    │    │         ├── CAST(NULL AS STRING)
- │    │    │    │                        │         │    │    │         ├── col1_3::STRING
- │    │    │    │                        │         │    │    │         └── col1_2::STRING
+ │    │    │    │                        │         │    │    │         └── CAST(NULL AS STRING)
  │    │    │    │                        │         │    │    └── filters
  │    │    │    │                        │         │    │         └── col1_5 = col1_5
  │    │    │    │                        │         │    └── projections
@@ -1322,18 +1299,7 @@ project
  │    │    │              │         ├── subquery
  │    │    │              │         │    └── project
  │    │    │              │         │         ├── inner-join (cross)
- │    │    │              │         │         │    ├── project
- │    │    │              │         │         │    │    ├── scan t136250
- │    │    │              │         │         │    │    │    └── computed column expressions
- │    │    │              │         │         │    │    │         ├── col1_8
- │    │    │              │         │         │    │    │         │    └── CAST(NULL AS STRING)
- │    │    │              │         │         │    │    │         ├── crdb_internal_idx_expr
- │    │    │              │         │         │    │    │         │    └── col1_3::STRING
- │    │    │              │         │         │    │    │         └── crdb_internal_idx_expr_1
- │    │    │              │         │         │    │    │              └── col1_2::STRING
- │    │    │              │         │         │    │    └── projections
- │    │    │              │         │         │    │         ├── col1_3::STRING
- │    │    │              │         │         │    │         └── col1_2::STRING
+ │    │    │              │         │         │    ├── scan t136250@t136250_expr_expr1_idx
  │    │    │              │         │         │    ├── project
  │    │    │              │         │         │    │    ├── scan t136250
  │    │    │              │         │         │    │    │    └── computed column expressions
@@ -1367,9 +1333,7 @@ project
  │    │    │                        │         │    │    │    │         └── crdb_internal_idx_expr_1
  │    │    │                        │         │    │    │    │              └── col1_2::STRING
  │    │    │                        │         │    │    │    └── projections
- │    │    │                        │         │    │    │         ├── CAST(NULL AS STRING)
- │    │    │                        │         │    │    │         ├── col1_3::STRING
- │    │    │                        │         │    │    │         └── col1_2::STRING
+ │    │    │                        │         │    │    │         └── CAST(NULL AS STRING)
  │    │    │                        │         │    │    └── filters
  │    │    │                        │         │    │         └── col1_5 = col1_5
  │    │    │                        │         │    └── projections

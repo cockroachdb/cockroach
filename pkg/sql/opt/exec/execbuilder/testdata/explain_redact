@@ -2255,23 +2255,23 @@ EXPLAIN (REDACT) SELECT * FROM bc JOIN f ON b = f + 1
 distribution: local
 vectorized: true
 ·
-• hash join
-│ equality: (b) = (column13)
-│ left cols are key
+• render
 │
-├── • render
-│   │
-│   └── • scan
-│         missing stats
-│         table: bc@bc_pkey
-│         spans: FULL SCAN
-│
-└── • render
+└── • hash join
+    │ equality: (b) = (column13)
+    │ left cols are key
     │
-    └── • scan
-          missing stats
-          table: f@f_pkey
-          spans: FULL SCAN
+    ├── • scan
+    │     missing stats
+    │     table: bc@bc_pkey
+    │     spans: FULL SCAN
+    │
+    └── • render
+        │
+        └── • scan
+              missing stats
+              table: f@f_pkey
+              spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
@@ -2279,25 +2279,23 @@ EXPLAIN (VERBOSE, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
 distribution: local
 vectorized: true
 ·
-• project
+• render
 │ columns: (b, c, f)
+│ render c: b * ‹×›
+│ render b: b
+│ render f: f
 │
 └── • hash join (inner)
-    │ columns: (c, b, column13, f)
+    │ columns: (b, column13, f)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (b) = (column13)
     │ left cols are key
     │
-    ├── • render
-    │   │ columns: (c, b)
-    │   │ render c: b * ‹×›
-    │   │ render b: b
-    │   │
-    │   └── • scan
-    │         columns: (b)
-    │         estimated row count: 1,000 (missing stats)
-    │         table: bc@bc_pkey
-    │         spans: FULL SCAN
+    ├── • scan
+    │     columns: (b)
+    │     estimated row count: 1,000 (missing stats)
+    │     table: bc@bc_pkey
+    │     spans: FULL SCAN
     │
     └── • render
         │ columns: (column13, f)
@@ -2314,23 +2312,22 @@ query T
 EXPLAIN (OPT, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
 ----
 project
- └── inner-join (hash)
-      ├── project
-      │    ├── scan bc
-      │    │    └── computed column expressions
-      │    │         └── c
-      │    │              └── b * ‹×›
-      │    └── projections
-      │         └── b * ‹×›
-      ├── project
-      │    ├── scan f
-      │    │    └── partial index predicates
-      │    │         └── f_f_idx: filters
-      │    │              └── f > ‹×›
-      │    └── projections
-      │         └── f + ‹×›
-      └── filters
-           └── b = column13
+ ├── inner-join (hash)
+ │    ├── scan bc
+ │    │    └── computed column expressions
+ │    │         └── c
+ │    │              └── b * ‹×›
+ │    ├── project
+ │    │    ├── scan f
+ │    │    │    └── partial index predicates
+ │    │    │         └── f_f_idx: filters
+ │    │    │              └── f > ‹×›
+ │    │    └── projections
+ │    │         └── f + ‹×›
+ │    └── filters
+ │         └── b = column13
+ └── projections
+      └── b * ‹×›
 
 query T
 EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
@@ -2339,74 +2336,62 @@ project
  ├── columns: b:1 c:2 f:7
  ├── immutable
  ├── stats: [rows=1000]
- ├── cost: 2247.26625
+ ├── cost: 2237.24625
  ├── cost-flags: unbounded-cardinality
- ├── fd: (1)-->(2), (7)-->(1,2)
+ ├── fd: (7)-->(1,2), (1)-->(2)
  ├── distribution: test
  ├── prune: (1,2,7)
- └── inner-join (hash)
-      ├── columns: b:1 c:2 f:7 column13:13
-      ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      ├── immutable
-      ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(13)=100, null(13)=0]
-      ├── cost: 2237.24625
-      ├── cost-flags: unbounded-cardinality
-      ├── fd: (1)-->(2), (7)-->(13), (1)==(13), (13)==(1)
-      ├── distribution: test
-      ├── project
-      │    ├── columns: c:2 b:1
-      │    ├── immutable
-      │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
-      │    ├── cost: 1088.44
-      │    ├── cost-flags: unbounded-cardinality
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2)
-      │    ├── distribution: test
-      │    ├── prune: (1,2)
-      │    ├── interesting orderings: (+1)
-      │    ├── unfiltered-cols: (1-6)
-      │    ├── scan bc
-      │    │    ├── columns: b:1
-      │    │    ├── computed column expressions
-      │    │    │    └── c:2
-      │    │    │         └── b:1 * ‹×›
-      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
-      │    │    ├── cost: 1068.42
-      │    │    ├── cost-flags: unbounded-cardinality
-      │    │    ├── key: (1)
-      │    │    ├── distribution: test
-      │    │    ├── prune: (1)
-      │    │    ├── interesting orderings: (+1)
-      │    │    └── unfiltered-cols: (1-6)
-      │    └── projections
-      │         └── b:1 * ‹×› [as=c:2, outer=(1), immutable]
-      ├── project
-      │    ├── columns: column13:13 f:7
-      │    ├── immutable
-      │    ├── stats: [rows=1000, distinct(13)=100, null(13)=0]
-      │    ├── cost: 1108.64
-      │    ├── cost-flags: unbounded-cardinality
-      │    ├── fd: (7)-->(13)
-      │    ├── distribution: test
-      │    ├── prune: (7,13)
-      │    ├── interesting orderings: (+7)
-      │    ├── unfiltered-cols: (7-12)
-      │    ├── scan f
-      │    │    ├── columns: f:7
-      │    │    ├── partial index predicates
-      │    │    │    └── f_f_idx: filters
-      │    │    │         └── f:7 > ‹×› [outer=(7), constraints=(‹×›; tight)]
-      │    │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
-      │    │    ├── cost: 1088.62
-      │    │    ├── cost-flags: unbounded-cardinality
-      │    │    ├── distribution: test
-      │    │    ├── prune: (7)
-      │    │    ├── interesting orderings: (+7)
-      │    │    └── unfiltered-cols: (7-12)
-      │    └── projections
-      │         └── f:7 + ‹×› [as=column13:13, outer=(7), immutable]
-      └── filters
-           └── b:1 = column13:13 [outer=(1,13), constraints=(‹×›), fd=(1)==(13), (13)==(1)]
+ ├── inner-join (hash)
+ │    ├── columns: b:1 f:7 column13:13
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    ├── immutable
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(13)=100, null(13)=0]
+ │    ├── cost: 2217.22625
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── fd: (7)-->(13), (1)==(13), (13)==(1)
+ │    ├── distribution: test
+ │    ├── scan bc
+ │    │    ├── columns: b:1
+ │    │    ├── computed column expressions
+ │    │    │    └── c:2
+ │    │    │         └── b:1 * ‹×›
+ │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    │    ├── cost: 1068.42
+ │    │    ├── cost-flags: unbounded-cardinality
+ │    │    ├── key: (1)
+ │    │    ├── distribution: test
+ │    │    ├── prune: (1)
+ │    │    ├── interesting orderings: (+1)
+ │    │    └── unfiltered-cols: (1-6)
+ │    ├── project
+ │    │    ├── columns: column13:13 f:7
+ │    │    ├── immutable
+ │    │    ├── stats: [rows=1000, distinct(13)=100, null(13)=0]
+ │    │    ├── cost: 1108.64
+ │    │    ├── cost-flags: unbounded-cardinality
+ │    │    ├── fd: (7)-->(13)
+ │    │    ├── distribution: test
+ │    │    ├── prune: (7,13)
+ │    │    ├── interesting orderings: (+7)
+ │    │    ├── unfiltered-cols: (7-12)
+ │    │    ├── scan f
+ │    │    │    ├── columns: f:7
+ │    │    │    ├── partial index predicates
+ │    │    │    │    └── f_f_idx: filters
+ │    │    │    │         └── f:7 > ‹×› [outer=(7), constraints=(‹×›; tight)]
+ │    │    │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
+ │    │    │    ├── cost: 1088.62
+ │    │    │    ├── cost-flags: unbounded-cardinality
+ │    │    │    ├── distribution: test
+ │    │    │    ├── prune: (7)
+ │    │    │    ├── interesting orderings: (+7)
+ │    │    │    └── unfiltered-cols: (7-12)
+ │    │    └── projections
+ │    │         └── f:7 + ‹×› [as=column13:13, outer=(7), immutable]
+ │    └── filters
+ │         └── b:1 = column13:13 [outer=(1,13), constraints=(‹×›), fd=(1)==(13), (13)==(1)]
+ └── projections
+      └── b:1 * ‹×› [as=c:2, outer=(1), immutable]
 
 query T
 EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
@@ -2415,145 +2400,97 @@ project
  ├── columns: b:1(float!null) c:2(float!null) f:7(float)
  ├── immutable
  ├── stats: [rows=1000]
- ├── cost: 2247.26625
+ ├── cost: 2237.24625
  ├── cost-flags: unbounded-cardinality
- ├── fd: (1)-->(2), (7)-->(1,2)
+ ├── fd: (7)-->(1,2), (1)-->(2)
  ├── distribution: test
  ├── prune: (1,2,7)
- └── inner-join (hash)
-      ├── columns: b:1(float!null) c:2(float!null) f:7(float) column13:13(float!null)
-      ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      ├── immutable
-      ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(13)=100, null(13)=0]
-      ├── cost: 2237.24625
-      ├── cost-flags: unbounded-cardinality
-      ├── fd: (1)-->(2), (7)-->(13), (1)==(13), (13)==(1)
-      ├── distribution: test
-      ├── project
-      │    ├── columns: c:2(float!null) b:1(float!null)
-      │    ├── immutable
-      │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
-      │    ├── cost: 1088.44
-      │    ├── cost-flags: unbounded-cardinality
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2)
-      │    ├── distribution: test
-      │    ├── prune: (1,2)
-      │    ├── interesting orderings: (+1)
-      │    ├── unfiltered-cols: (1-6)
-      │    ├── scan bc
-      │    │    ├── columns: b:1(float!null)
-      │    │    ├── computed column expressions
-      │    │    │    └── c:2
-      │    │    │         └── mult [type=float]
-      │    │    │              ├── variable: b:1 [type=float]
-      │    │    │              └── const: ‹×› [type=float]
-      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
-      │    │    ├── cost: 1068.42
-      │    │    ├── cost-flags: unbounded-cardinality
-      │    │    ├── key: (1)
-      │    │    ├── distribution: test
-      │    │    ├── prune: (1)
-      │    │    ├── interesting orderings: (+1)
-      │    │    └── unfiltered-cols: (1-6)
-      │    └── projections
-      │         └── mult [as=c:2, type=float, outer=(1), immutable]
-      │              ├── variable: b:1 [type=float]
-      │              └── const: ‹×› [type=float]
-      ├── project
-      │    ├── columns: column13:13(float) f:7(float)
-      │    ├── immutable
-      │    ├── stats: [rows=1000, distinct(13)=100, null(13)=0]
-      │    ├── cost: 1108.64
-      │    ├── cost-flags: unbounded-cardinality
-      │    ├── fd: (7)-->(13)
-      │    ├── distribution: test
-      │    ├── prune: (7,13)
-      │    ├── interesting orderings: (+7)
-      │    ├── unfiltered-cols: (7-12)
-      │    ├── scan f
-      │    │    ├── columns: f:7(float)
-      │    │    ├── partial index predicates
-      │    │    │    └── f_f_idx: filters
-      │    │    │         └── gt [type=bool, outer=(7), constraints=(‹×›; tight)]
-      │    │    │              ├── variable: f:7 [type=float]
-      │    │    │              └── const: ‹×› [type=float]
-      │    │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
-      │    │    ├── cost: 1088.62
-      │    │    ├── cost-flags: unbounded-cardinality
-      │    │    ├── distribution: test
-      │    │    ├── prune: (7)
-      │    │    ├── interesting orderings: (+7)
-      │    │    └── unfiltered-cols: (7-12)
-      │    └── projections
-      │         └── plus [as=column13:13, type=float, outer=(7), immutable]
-      │              ├── variable: f:7 [type=float]
-      │              └── const: ‹×› [type=float]
-      └── filters
-           └── eq [type=bool, outer=(1,13), constraints=(‹×›), fd=(1)==(13), (13)==(1)]
-                ├── variable: b:1 [type=float]
-                └── variable: column13:13 [type=float]
+ ├── inner-join (hash)
+ │    ├── columns: b:1(float!null) f:7(float) column13:13(float!null)
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    ├── immutable
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(13)=100, null(13)=0]
+ │    ├── cost: 2217.22625
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── fd: (7)-->(13), (1)==(13), (13)==(1)
+ │    ├── distribution: test
+ │    ├── scan bc
+ │    │    ├── columns: b:1(float!null)
+ │    │    ├── computed column expressions
+ │    │    │    └── c:2
+ │    │    │         └── mult [type=float]
+ │    │    │              ├── variable: b:1 [type=float]
+ │    │    │              └── const: ‹×› [type=float]
+ │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    │    ├── cost: 1068.42
+ │    │    ├── cost-flags: unbounded-cardinality
+ │    │    ├── key: (1)
+ │    │    ├── distribution: test
+ │    │    ├── prune: (1)
+ │    │    ├── interesting orderings: (+1)
+ │    │    └── unfiltered-cols: (1-6)
+ │    ├── project
+ │    │    ├── columns: column13:13(float) f:7(float)
+ │    │    ├── immutable
+ │    │    ├── stats: [rows=1000, distinct(13)=100, null(13)=0]
+ │    │    ├── cost: 1108.64
+ │    │    ├── cost-flags: unbounded-cardinality
+ │    │    ├── fd: (7)-->(13)
+ │    │    ├── distribution: test
+ │    │    ├── prune: (7,13)
+ │    │    ├── interesting orderings: (+7)
+ │    │    ├── unfiltered-cols: (7-12)
+ │    │    ├── scan f
+ │    │    │    ├── columns: f:7(float)
+ │    │    │    ├── partial index predicates
+ │    │    │    │    └── f_f_idx: filters
+ │    │    │    │         └── gt [type=bool, outer=(7), constraints=(‹×›; tight)]
+ │    │    │    │              ├── variable: f:7 [type=float]
+ │    │    │    │              └── const: ‹×› [type=float]
+ │    │    │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
+ │    │    │    ├── cost: 1088.62
+ │    │    │    ├── cost-flags: unbounded-cardinality
+ │    │    │    ├── distribution: test
+ │    │    │    ├── prune: (7)
+ │    │    │    ├── interesting orderings: (+7)
+ │    │    │    └── unfiltered-cols: (7-12)
+ │    │    └── projections
+ │    │         └── plus [as=column13:13, type=float, outer=(7), immutable]
+ │    │              ├── variable: f:7 [type=float]
+ │    │              └── const: ‹×› [type=float]
+ │    └── filters
+ │         └── eq [type=bool, outer=(1,13), constraints=(‹×›), fd=(1)==(13), (13)==(1)]
+ │              ├── variable: b:1 [type=float]
+ │              └── variable: column13:13 [type=float]
+ └── projections
+      └── mult [as=c:2, type=float, outer=(1), immutable]
+           ├── variable: b:1 [type=float]
+           └── const: ‹×› [type=float]
 
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
 ----
-memo (optimized, ~28KB, required=[presentation: info:14] [distribution: test])
+memo (optimized, ~27KB, required=[presentation: info:14] [distribution: test])
  ├── G1: (explain G2 [presentation: b:1,c:2,f:7] [distribution: test])
  │    └── [presentation: info:14] [distribution: test]
  │         ├── best: (explain G2="[presentation: b:1,c:2,f:7] [distribution: test]" [presentation: b:1,c:2,f:7] [distribution: test])
- │         └── cost: 2247.29
- ├── G2: (project G3 G4 b c f)
+ │         └── cost: 2237.27
+ ├── G2: (project G3 G4 b f)
  │    ├── [presentation: b:1,c:2,f:7] [distribution: test]
- │    │    ├── best: (project G3="[distribution: test]" G4 b c f)
- │    │    └── cost: 2247.27
- │    └── []
- │         ├── best: (project G3 G4 b c f)
- │         └── cost: 2247.27
- ├── G3: (inner-join G5 G6 G7) (inner-join G6 G5 G7) (merge-join G5 G6 G8 inner-join,+1,+13) (project G9 G10 b f column13)
- │    ├── [distribution: test]
- │    │    ├── best: (inner-join G5="[distribution: test]" G6="[distribution: test]" G7)
+ │    │    ├── best: (project G3="[distribution: test]" G4 b f)
  │    │    └── cost: 2237.25
  │    └── []
- │         ├── best: (inner-join G5 G6 G7)
+ │         ├── best: (project G3 G4 b f)
  │         └── cost: 2237.25
- ├── G4: (projections)
- ├── G5: (project G11 G10 b)
+ ├── G3: (inner-join G5 G6 G7) (inner-join G6 G5 G7) (merge-join G5 G6 G8 inner-join,+1,+13) (lookup-join G6 G8 bc,keyCols=[13],outCols=(1,7,13))
  │    ├── [distribution: test]
- │    │    ├── best: (project G11="[distribution: test]" G10 b)
- │    │    └── cost: 1088.44
- │    ├── [ordering: +1]
- │    │    ├── best: (project G11="[ordering: +1]" G10 b)
- │    │    └── cost: 1088.44
- │    ├── [ordering: +1] [distribution: test]
- │    │    ├── best: (project G11="[ordering: +1] [distribution: test]" G10 b)
- │    │    └── cost: 1088.44
- │    └── []
- │         ├── best: (project G11 G10 b)
- │         └── cost: 1088.44
- ├── G6: (project G12 G13 f)
- │    ├── [distribution: test]
- │    │    ├── best: (project G12="[distribution: test]" G13 f)
- │    │    └── cost: 1108.64
- │    ├── [ordering: +13]
- │    │    ├── best: (sort G6)
- │    │    └── cost: 1348.12
- │    ├── [ordering: +13] [distribution: test]
- │    │    ├── best: (distribute G6="[ordering: +13]")
- │    │    └── cost: 1548.14
- │    └── []
- │         ├── best: (project G12 G13 f)
- │         └── cost: 1108.64
- ├── G7: (filters G14)
- ├── G8: (filters)
- ├── G9: (inner-join G6 G11 G7) (lookup-join G6 G8 bc,keyCols=[13],outCols=(1,7,13))
- │    ├── [distribution: test]
- │    │    ├── best: (inner-join G6="[distribution: test]" G11="[distribution: test]" G7)
+ │    │    ├── best: (inner-join G5="[distribution: test]" G6="[distribution: test]" G7)
  │    │    └── cost: 2217.23
  │    └── []
- │         ├── best: (inner-join G6 G11 G7)
+ │         ├── best: (inner-join G5 G6 G7)
  │         └── cost: 2217.23
- ├── G10: (projections G15)
- ├── G11: (scan bc,cols=(1))
+ ├── G4: (projections G9)
+ ├── G5: (scan bc,cols=(1))
  │    ├── [distribution: test]
  │    │    ├── best: (scan bc,cols=(1))
  │    │    └── cost: 1068.42
@@ -2566,40 +2503,54 @@ memo (optimized, ~28KB, required=[presentation: info:14] [distribution: test])
  │    └── []
  │         ├── best: (scan bc,cols=(1))
  │         └── cost: 1068.42
- ├── G12: (scan f,cols=(7))
+ ├── G6: (project G10 G11 f)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G10="[distribution: test]" G11 f)
+ │    │    └── cost: 1108.64
+ │    ├── [ordering: +13]
+ │    │    ├── best: (sort G6)
+ │    │    └── cost: 1348.12
+ │    ├── [ordering: +13] [distribution: test]
+ │    │    ├── best: (distribute G6="[ordering: +13]")
+ │    │    └── cost: 1548.14
+ │    └── []
+ │         ├── best: (project G10 G11 f)
+ │         └── cost: 1108.64
+ ├── G7: (filters G12)
+ ├── G8: (filters)
+ ├── G9: (mult G13 G14)
+ ├── G10: (scan f,cols=(7))
  │    ├── [distribution: test]
  │    │    ├── best: (scan f,cols=(7))
  │    │    └── cost: 1088.62
  │    └── []
  │         ├── best: (scan f,cols=(7))
  │         └── cost: 1088.62
- ├── G13: (projections G16)
- ├── G14: (eq G17 G18)
- ├── G15: (mult G17 G19)
- ├── G16: (plus G20 G21)
- ├── G17: (variable b)
- ├── G18: (variable column13)
- ├── G19: (const ‹×›)
- ├── G20: (variable f)
- └── G21: (const ‹×›)
+ ├── G11: (projections G15)
+ ├── G12: (eq G13 G16)
+ ├── G13: (variable b)
+ ├── G14: (const ‹×›)
+ ├── G15: (plus G17 G18)
+ ├── G16: (variable column13)
+ ├── G17: (variable f)
+ └── G18: (const ‹×›)
 project
- └── inner-join (hash)
-      ├── project
-      │    ├── scan bc
-      │    │    └── computed column expressions
-      │    │         └── c
-      │    │              └── b * ‹×›
-      │    └── projections
-      │         └── b * ‹×›
-      ├── project
-      │    ├── scan f
-      │    │    └── partial index predicates
-      │    │         └── f_f_idx: filters
-      │    │              └── f > ‹×›
-      │    └── projections
-      │         └── f + ‹×›
-      └── filters
-           └── b = column13
+ ├── inner-join (hash)
+ │    ├── scan bc
+ │    │    └── computed column expressions
+ │    │         └── c
+ │    │              └── b * ‹×›
+ │    ├── project
+ │    │    ├── scan f
+ │    │    │    └── partial index predicates
+ │    │    │         └── f_f_idx: filters
+ │    │    │              └── f > ‹×›
+ │    │    └── projections
+ │    │         └── f + ‹×›
+ │    └── filters
+ │         └── b = column13
+ └── projections
+      └── b * ‹×›
 
 # Redaction of constants in apply joins.
 

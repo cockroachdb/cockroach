@@ -469,8 +469,7 @@ $left
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
     $left:(Project
         $input:*
-        $projections:* &
-            (AllAreRemappingProjections $projections)
+        $projections:* & ^(HasVolatileProjection $projections)
         $passThrough:*
     )
     $right:* &
@@ -482,14 +481,28 @@ $left
         # TODO(drewk): we could remap the right input as well.
         ^(IsCorrelated $right (ProjectionCols $projections))
     $on:*
-    $private:*
+    $private:* &
+
+        # We can only hoist the projection if each new column is either:
+        # 1. a simple remapping that can be reversed in the join condition
+        # 2. not referenced in the join condition
+        (Let
+            ($remap $other $ok):(CanHoistNonRemappingProjections
+                $projections
+            )
+            $ok
+        ) &
+        ^(ColsIntersect
+            (FilterOuterCols $on)
+            (ProjectionCols $other)
+        )
 )
 =>
 (Project
     ((OpName)
         $input
         $right
-        (UnbindFiltersFromProjections $projections $on)
+        (UnbindFiltersFromProjections $remap $on)
         $private
     )
     $projections
