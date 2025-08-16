@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
@@ -11407,6 +11408,121 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks, withAllowChangefeedErr("injects error"))
 }
 
+// TestChangefeedPerTableProtectedTimestampAdvancement tests that when per-table
+// protected timestamps are enabled, all individual PTS records advance to exactly
+// the same timestamp as the changefeed's high watermark.
+func TestChangefeedPerTableProtectedTimestampAdvancement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, true)
+
+		// Configure frequent checkpointing and PTS updates for faster testing.
+		changefeedbase.SpanCheckpointInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 100*time.Millisecond)
+		changefeedbase.ProtectTimestampInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 100*time.Millisecond)
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 50*time.Millisecond)
+
+		sqlDB.Exec(t, `CREATE TABLE table1 (id INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE table2 (id INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE table3 (id INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO table1 VALUES (1)`)
+		sqlDB.Exec(t, `INSERT INTO table2 VALUES (1)`)
+		sqlDB.Exec(t, `INSERT INTO table3 VALUES (1)`)
+
+		createStmt := `CREATE CHANGEFEED FOR table1, table2, table3 WITH resolved='100ms'`
+		testFeed := feed(t, f, createStmt)
+		defer closeFeed(t, testFeed)
+
+		assertPayloads(t, testFeed, []string{
+			`table1: [1]->{"after": {"id": 1}}`,
+			`table2: [1]->{"after": {"id": 1}}`,
+			`table3: [1]->{"after": {"id": 1}}`,
+		})
+
+		eFeed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		testutils.SucceedsSoon(t, func() error {
+			hwm, err := eFeed.HighWaterMark()
+			if err != nil {
+				return err
+			}
+			if hwm.IsEmpty() {
+				return errors.New("waiting for high watermark to be set")
+			}
+
+			progress, err := eFeed.Progress()
+			if err != nil {
+				return err
+			}
+
+			if !progress.ProtectedTimestampRecord.Equal(uuid.UUID{}) {
+				return errors.New("single PTS record should be empty when using per-table records")
+			}
+
+			execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+			ptsProvider := execCfg.ProtectedTimestampProvider
+
+			err = execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+				perTablePTS, err := jobs.ReadChunkedFileToJobInfo(context.Background(), perTablePTSInfoKey, txn, eFeed.JobID())
+				if err != nil {
+					return err
+				}
+
+				var ptsEntries changefeedpb.ProtectedTimestampRecords
+				if err := protoutil.Unmarshal(perTablePTS, &ptsEntries); err != nil {
+					return err
+				}
+
+				if len(ptsEntries.ProtectedTimestampRecords) != 3 {
+					return errors.New("expected 3 per-table PTS records")
+				}
+
+				ptsTimestamps := make([]hlc.Timestamp, 0, len(ptsEntries.ProtectedTimestampRecords))
+
+				for _, recordID := range ptsEntries.ProtectedTimestampRecords {
+					err := s.Server.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+						rec, err := ptsProvider.WithTxn(txn).GetRecord(ctx, *recordID)
+						if err != nil {
+							return err
+						}
+						ptsTimestamps = append(ptsTimestamps, rec.Timestamp)
+						return nil
+					})
+					if err != nil {
+						return err
+					}
+				}
+
+				if len(ptsTimestamps) != 3 {
+					return errors.New("expected 3 per-table PTS timestamps")
+				}
+
+				// Ideally, we would assert that the separate per-table PTS records
+				// are at some point different. In this test setup that doesn't happen
+				// consistently. There is also no guarantee that these timestamps are
+				// past the recent high watermark if the most recent high water mark
+				// advance did not cause us to update the PTS records.
+
+				return nil
+			})
+
+			require.NoError(t, err)
+
+			return nil
+		})
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
 // TestChangefeedPubsubResolvedMessages tests that the pubsub sink emits
 // resolved messages to each topic.
 func TestChangefeedPubsubResolvedMessages(t *testing.T) {
@@ -11946,6 +12062,109 @@ func TestChangefeedAvroDecimalColumnWithDiff(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+// TestChangefeedMultiTableProtectedTimestampUpdate tests that a changefeed
+// with multiple tables respects the per-table protected timestamps feature flag.
+func TestChangefeedMultiTableProtectedTimestampUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("per-table feature flag enabled", func(t *testing.T) {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+			sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
+
+			changefeedbase.PerTableProtectedTimestamps.Override(
+				context.Background(), &s.Server.ClusterSettings().SV, true)
+
+			createStmt := `CREATE CHANGEFEED FOR foo, bar`
+			testFeed := feed(t, f, createStmt)
+			defer closeFeed(t, testFeed)
+
+			assertPayloads(t, testFeed, []string{
+				`foo: [1]->{"after": {"id": 1}}`,
+				`bar: [1]->{"after": {"id": 1}}`,
+			})
+
+			eFeed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+			require.True(t, ok)
+			progress, err := eFeed.Progress()
+			require.NoError(t, err)
+
+			execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+			err = execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+				perTablePTS, err := jobs.ReadChunkedFileToJobInfo(context.Background(), perTablePTSInfoKey, txn, eFeed.JobID())
+				require.NoError(t, err)
+
+				var ptsEntries changefeedpb.ProtectedTimestampRecords
+				err = protoutil.Unmarshal(perTablePTS, &ptsEntries)
+				require.NoError(t, err)
+
+				require.Equal(t, 2, len(ptsEntries.ProtectedTimestampRecords))
+				for _, recordID := range ptsEntries.ProtectedTimestampRecords {
+					require.NotEqual(t, uuid.UUID{}, *recordID)
+				}
+				return nil
+			})
+
+			require.NoError(t, err)
+			require.True(t, progress.ProtectedTimestampRecord.Equal(uuid.UUID{}))
+		}
+
+		cdcTest(t, testFn, feedTestForceSink("kafka"))
+	})
+
+	t.Run("per-table feature flag disabled", func(t *testing.T) {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+			sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
+
+			changefeedbase.PerTableProtectedTimestamps.Override(
+				context.Background(), &s.Server.ClusterSettings().SV, false)
+
+			createStmt := `CREATE CHANGEFEED FOR foo, bar`
+			testFeed := feed(t, f, createStmt)
+			defer closeFeed(t, testFeed)
+
+			assertPayloads(t, testFeed, []string{
+				`foo: [1]->{"after": {"id": 1}}`,
+				`bar: [1]->{"after": {"id": 1}}`,
+			})
+
+			eFeed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+			require.True(t, ok)
+			progress, err := eFeed.Progress()
+			require.NoError(t, err)
+
+			require.False(t, progress.ProtectedTimestampRecord.Equal(uuid.UUID{}))
+
+			execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+			err = execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+				perTablePTS, err := jobs.ReadChunkedFileToJobInfo(context.Background(), perTablePTSInfoKey, txn, eFeed.JobID())
+				require.NoError(t, err)
+
+				var ptsEntries changefeedpb.ProtectedTimestampRecords
+				err = protoutil.Unmarshal(perTablePTS, &ptsEntries)
+				require.NoError(t, err)
+
+				require.Equal(t, 0, ptsEntries.Size())
+				return nil
+			})
+
+			require.NoError(t, err)
+		}
+
+		cdcTest(t, testFn, feedTestForceSink("kafka"))
+	})
+}
+
 func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -12050,6 +12269,120 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
 }
 
+// TestChangefeedProtectedTimestampUpdateForMultipleTables verifies that
+// a changefeed with multiple tables will successfully create and update
+// protected timestamp records when PerTableProtectedTimestamps is disabled.
+func TestChangefeedProtectedTimestampUpdateForMultipleTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	verifyFunc := func() {}
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		defer verifyFunc()
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		// Checkpoint and trigger potential protected timestamp updates frequently.
+		// Make the protected timestamp lag long enough that it shouldn't be
+		// immediately updated after a restart.
+		changefeedbase.SpanCheckpointInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.ProtectTimestampInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Hour)
+
+		// Ensure we use legacy single protected timestamp behavior for this test
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (id INT)`)
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+		createPtsCount, _ := metrics.AggMetrics.Timers.PTSCreate.WindowedSnapshot().Total()
+		managePtsCount, _ := metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
+		managePTSErrorCount, _ := metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
+		require.Equal(t, int64(0), createPtsCount)
+		require.Equal(t, int64(0), managePtsCount)
+		require.Equal(t, int64(0), managePTSErrorCount)
+
+		createStmt := `CREATE CHANGEFEED FOR foo, bar WITH resolved='10ms', initial_scan='no'`
+		testFeed := feed(t, f, createStmt)
+		defer closeFeed(t, testFeed)
+
+		createPtsCount, _ = metrics.AggMetrics.Timers.PTSCreate.WindowedSnapshot().Total()
+		managePtsCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
+		require.Equal(t, int64(1), createPtsCount)
+		require.Equal(t, int64(0), managePtsCount)
+
+		eFeed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		// Wait for the changefeed to checkpoint and update PTS at least once.
+		var lastHWM hlc.Timestamp
+		checkHWM := func() error {
+			hwm, err := eFeed.HighWaterMark()
+			if err == nil && !hwm.IsEmpty() && lastHWM.Less(hwm) {
+				lastHWM = hwm
+				return nil
+			}
+			return errors.New("waiting for high watermark to advance")
+		}
+		testutils.SucceedsSoon(t, checkHWM)
+
+		// TODO(#151690): Ideally we could use the same pts record id
+		// for all times we get the PTS, but that's not possible right now
+		// because of the linked issue (pts records rewrite unnecessarily for
+		// multi-table feeds).
+		getPTS := func() string {
+			p, err := eFeed.Progress()
+			require.NoError(t, err)
+			ptsQry := fmt.Sprintf(`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`, p.ProtectedTimestampRecord)
+			var ts string
+			sqlDB.QueryRow(t, ptsQry).Scan(&ts)
+			require.NoError(t, err)
+			return ts
+		}
+		ts := getPTS()
+
+		// Force the changefeed to restart.
+		require.NoError(t, eFeed.Pause())
+		require.NoError(t, eFeed.Resume())
+
+		// Wait for a new checkpoint.
+		testutils.SucceedsSoon(t, checkHWM)
+		// TODO(#151690): Check that the PTS was not updated after the resume.
+		// Right now we cannot do this without the test flaking because of the
+		// linked issue (pts records rewrite unnecessarily for multi-table feeds).
+
+		// Lower the PTS lag and check that it has been updated.
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+
+		// Ensure that the resolved timestamp advances at least once
+		// since the PTS lag override.
+		testutils.SucceedsSoon(t, checkHWM)
+		testutils.SucceedsSoon(t, checkHWM)
+
+		ts2 := getPTS()
+		require.Less(t, ts, ts2)
+
+		managePtsCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
+		managePTSErrorCount, _ = metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
+		require.GreaterOrEqual(t, managePtsCount, int64(2))
+		require.Equal(t, int64(0), managePTSErrorCount)
+	}
+
+	withTxnRetries := withArgsFn(func(args *base.TestServerArgs) {
+		requestFilter, vf := testutils.TestingRequestFilterRetryTxnWithPrefix(t, changefeedJobProgressTxnName, 1)
+		args.Knobs.Store = &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: requestFilter,
+		}
+		verifyFunc = vf
+	})
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
+}
+
 func TestChangefeedProtectedTimestampUpdateError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -12101,7 +12434,6 @@ func TestChangefeedProtectedTimestampUpdateError(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			managePTSErrorCount, _ = metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
 			if managePTSErrorCount > 0 {
-				fmt.Println("manage protected timestamps test: manage pts error count", managePTSErrorCount)
 				return nil
 			}
 			return errors.New("waiting for manage pts error")
