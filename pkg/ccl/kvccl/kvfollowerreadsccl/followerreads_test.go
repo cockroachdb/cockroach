@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -539,7 +540,7 @@ func TestOracle(t *testing.T) {
 		// the exponentially-weighted moving average to work properly. See the
 		// comment on the WARMUP_SAMPLES const in the ewma package for details.
 		for i := 0; i < 11; i++ {
-			rpcContext.RemoteClocks.UpdateOffset(ctx, id, rpc.RemoteOffset{}, latency)
+			rpcContext.RemoteClocks.UpdateOffset(ctx, id, rpc.RemoteOffset{}, latency, rpcbase.DefaultClass)
 		}
 	}
 	setLatency(1, 100*time.Millisecond)
