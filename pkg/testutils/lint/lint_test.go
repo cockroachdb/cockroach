@@ -2850,17 +2850,21 @@ func TestLint(t *testing.T) {
 	t.Run("TestNoEnumeratingAllTables", func(t *testing.T) {
 		t.Parallel()
 		const (
-			// sysTableExample and virtTableExample are the names of a system and
-			// virtual tables respectively, that have been chosen to serve as
-			// indicators, if they are detected in a test, that that test may be
-			// enumerating *all* system or virtual tables which is generally
-			// undesirable outside of a few specific allow-listed cases. There is
-			// nothing special about these two tables other than that they are not
-			// directly referenced in tests other than those deliberately enumerating
-			// all tables, so they're well-suited for this purpose. We could add
-			// others here as well if needed, and add exemptions if one of these is
-			// intentionally used in a test.
-			sysTableExample  = "span_stats_buckets"
+			// sysTableExample and virtTableExample are the names of a system
+			// and virtual tables respectively, that have been chosen to serve
+			// as indicators, if they are detected in a test, that that test may
+			// be enumerating *all* system or virtual tables which is generally
+			// undesirable outside of a few specific allow-listed cases. There
+			// is nothing special about these two tables other than that they
+			// are not directly referenced in tests other than those
+			// deliberately enumerating all tables, so they're well-suited for
+			// this purpose. We could add others here as well if needed, and add
+			// exemptions if one of these is intentionally used in a test.
+			//
+			// Use of `SELECT crdb_internal.generate_test_objects(...)` in tests
+			// may trip this in which case it may be simplest to use a new
+			// table.
+			sysTableExample  = "span_stats_unique_keys"
 			virtTableExample = "logical_replication_node_processors"
 		)
 		cmd, stderr, filter, err := dirCmd(

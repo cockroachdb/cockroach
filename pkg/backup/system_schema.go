@@ -863,6 +863,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.PreparedTransactionsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.InspectErrorsTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup, // FIXME: should backup and what's this (https://github.com/bghal/cockroach/blob/5129e16a70ad2e834e55f75d007f70f31fbe44b9/pkg/backup/backup_test.go#L10966)?
+	},
 }
 
 func rekeySystemTable(

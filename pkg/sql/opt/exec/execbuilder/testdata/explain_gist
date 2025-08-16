@@ -168,10 +168,10 @@ SELECT crdb_internal.decode_plan_gist('AgGSARIAAwlAsJ8BE5IBAhcGFg==')
 • limit
 │
 └── • index join
-    │ table: ?@?
+    │ table: inspect_errors@primary
     │
     └── • scan
-          table: ?@?
+          table: inspect_errors@?
           spans: 1+ spans
           limit
 
