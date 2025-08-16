@@ -917,6 +917,13 @@ func makeCreateFunc(s *Smither) (tree.Statement, bool) {
 	return s.makeCreateFunc()
 }
 
+func makeDoBlock(s *Smither) (tree.Statement, bool) {
+	if s.disableUDFCreation {
+		return nil, false
+	}
+	return s.makeDoBlockTreeStmt()
+}
+
 func makeDropFunc(s *Smither) (tree.Statement, bool) {
 	if s.disableUDFCreation {
 		return nil, false
