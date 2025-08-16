@@ -110,6 +110,11 @@ func FromLogEntry[T any](entry logpb.Entry) (T, error) {
 	return payload, err
 }
 
+func AsLogEntry(entry logpb.Entry) (logpb.Entry, error) {
+	entry.Message = entry.Message[entry.StructuredStart:entry.StructuredEnd]
+	return entry, nil
+}
+
 // StructuredLogSpy is a test utility that intercepts structured log entries
 // and stores them in memory. It can be used to verify the contents of log
 // entries in tests.
