@@ -2736,6 +2736,7 @@ func (t *logicTest) processSubtest(
 			}
 			fullyConsumed := len(fields) == 1
 			var disableCFMutator bool
+			var matchedStatementOK bool
 			// Parse "statement (notice|error) <regexp>"
 			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectNotice = m[1]
@@ -2750,12 +2751,18 @@ func (t *logicTest) processSubtest(
 			} else if len(fields) == 2 && fields[1] == "ok" {
 				// Match 'ok' only if there are no options after it.
 				fullyConsumed = true
+				matchedStatementOK = true
 			}
 			if !fullyConsumed {
 				return errors.Newf("unexpected options for 'statement' command: %s", line)
 			}
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
+			}
+			if matchedStatementOK && strings.HasPrefix(strings.TrimSpace(strings.ToUpper(stmt.sql)), "DELETE") {
+				//return errors.New("DELETE should use 'statement count N' directive instead of 'statement ok'")
+				// Treat 'statement ok' as an alias for 'statement count 1'.
+				stmt.expectCount = 1
 			}
 			if !s.Skip {
 				for i := 0; i < repeat; i++ {
