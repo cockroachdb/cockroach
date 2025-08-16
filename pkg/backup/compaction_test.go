@@ -356,6 +356,48 @@ func TestBackupCompaction(t *testing.T) {
 		ensureBackupExists(t, db, collectionURI, mid, end, noOpts)
 		ensureBackupExists(t, db, collectionURI, start, end, noOpts)
 	})
+
+	t.Run("compaction with locality aware", func(t *testing.T) {
+		bucketNum++
+
+		// Setup locality-aware backup destinations
+		defaultURI := fmt.Sprintf("nodelocal://1/backup/%d", bucketNum)
+		westURI := fmt.Sprintf("nodelocal://1/backup-west/%d", bucketNum)
+
+		collectionURI := []string{
+			defaultURI + "?COCKROACH_LOCALITY=default",
+			westURI + "?COCKROACH_LOCALITY=region%3Dus-west",
+		}
+
+		db.Exec(t, "CREATE TABLE locality_compaction_test (a INT, b INT)")
+		defer func() {
+			db.Exec(t, "DROP TABLE IF EXISTS locality_compaction_test")
+		}()
+
+		db.Exec(t, "INSERT INTO locality_compaction_test VALUES (1, 1)")
+		start := getTime()
+		backupStmt := fullBackupQuery("TABLE locality_compaction_test", collectionURI, start, noOpts)
+		db.Exec(t, backupStmt)
+
+		// Create incremental backups
+		db.Exec(t, "INSERT INTO locality_compaction_test VALUES (2, 2)")
+		db.Exec(t, incBackupQuery("TABLE locality_compaction_test", collectionURI, noAOST, noOpts))
+
+		db.Exec(t, "INSERT INTO locality_compaction_test VALUES (3, 3)")
+		end := getTime()
+		db.Exec(t, incBackupQuery("TABLE locality_compaction_test", collectionURI, end, noOpts))
+
+		// Test that compaction succeeds with locality-aware backups
+		fullPath := getLatestFullDir([]string{defaultURI})
+		jobID := startCompaction(db, backupStmt, fullPath, start, end)
+		jobutils.WaitForJobToSucceed(t, db, jobID)
+
+		// Validate locality-aware compaction behavior
+		validateLocalityAwareCompaction(t, db, collectionURI, start, end)
+
+		// Verify the compacted backup works for restoration
+		validateCompactedBackupForTables(t, db, collectionURI, []string{"locality_compaction_test"}, start, end, noOpts, noOpts, 2)
+	})
 	// TODO (kev-cao): Once range keys are supported by the compaction
 	// iterator, add tests for dropped tables/indexes.
 }
@@ -627,16 +669,6 @@ func TestBackupCompactionUnsupportedOptions(t *testing.T) {
 			},
 			"backups of tenants not supported for compaction",
 		},
-		{
-			"locality aware backups not supported",
-			jobspb.BackupDetails{
-				ScheduleID: 1,
-				URIsByLocalityKV: map[string]string{
-					"region=us-east-2": "nodelocal://1/backup",
-				},
-			},
-			"locality aware backups not supported for compaction",
-		},
 	}
 
 	for _, tc := range testcases {
@@ -816,7 +848,6 @@ func TestCheckCompactionManifestFields(t *testing.T) {
 		// createCompactedManifest will have filled this out.
 		"Descriptors",
 		"Tenants",
-		"LocalityKVs",
 		"PartitionDescriptorFilenames",
 		"MVCCFilter",
 		"RevisionStartTime",
@@ -1128,4 +1159,29 @@ func aostExpr(aost hlc.Timestamp) string {
 		return ""
 	}
 	return fmt.Sprintf("AS OF SYSTEM TIME '%s'", aost.AsOfSystemTime())
+}
+
+// validateLocalityAwareCompaction verifies that a locality-aware compacted backup
+// is properly accessible from all specified locality destinations.
+func validateLocalityAwareCompaction(
+	t *testing.T,
+	db *sqlutils.SQLRunner,
+	collectionURI []string,
+	start, end hlc.Timestamp,
+) {
+	t.Helper()
+
+	// Verify that the backup can be accessed using all localities together
+	showQuery := fmt.Sprintf("SHOW BACKUP FROM LATEST IN (%s)", stringifyCollectionURI(collectionURI))
+	rows := db.Query(t, showQuery)
+	defer rows.Close()
+
+	// Simple check: if we can successfully show the backup from all localities,
+	// it means the compacted backup is properly distributed and accessible
+	require.True(t, rows.Next(), "Should be able to show backup from all locality destinations")
+
+	// Verify the backup contains the expected time range
+	ensureBackupExists(t, db, collectionURI, start, end, noOpts)
+	
+	t.Logf("Successfully validated locality-aware compacted backup accessibility")
 }

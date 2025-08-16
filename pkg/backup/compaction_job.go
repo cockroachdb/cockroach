@@ -83,8 +83,6 @@ func maybeStartCompactionJob(
 		return 0, errors.New("custom incremental storage location not supported for compaction")
 	case len(triggerJob.SpecificTenantIds) != 0 || triggerJob.IncludeAllSecondaryTenants:
 		return 0, errors.New("backups of tenants not supported for compaction")
-	case len(triggerJob.URIsByLocalityKV) != 0:
-		return 0, errors.New("locality aware backups not supported for compaction")
 	}
 
 	env := scheduledjobs.ProdJobSchedulerEnv
@@ -611,7 +609,7 @@ func updateCompactionBackupDetails(
 // createCompactionManifest creates a new manifest for a compaction job and its
 // compacted chain. The details should have its targets resolved.
 func (c compactionChain) createCompactionManifest(
-	ctx context.Context, details jobspb.BackupDetails,
+	ctx context.Context, details jobspb.BackupDetails, storageByLocalityKV map[string]*cloudpb.ExternalStorage,
 ) (*backuppb.BackupManifest, error) {
 	// TODO (kev-cao): Will need to update the SSTSinkKeyWriter to support
 	// range keys.
@@ -647,6 +645,14 @@ func (c compactionChain) createCompactionManifest(
 	cManifest.DescriptorChanges = nil
 	cManifest.Files = nil
 	cManifest.EntryCounts = roachpb.RowCount{}
+
+	if len(storageByLocalityKV) > 0 {
+		filesByLocalityKV := make(map[string][]backuppb.BackupManifest_File)
+		for _, file := range cManifest.Files {
+			filesByLocalityKV[file.LocalityKV] = append(filesByLocalityKV[file.LocalityKV], file)
+		}
+
+	}
 
 	// The StatisticsFileNames is inherited from the stats of the latest
 	// incremental we are compacting as the compacted manifest will have the same

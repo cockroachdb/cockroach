@@ -154,6 +154,25 @@ func (p *compactBackupsProcessor) ConsumerClosed() {
 	p.close()
 }
 
+func (p *compactBackupsProcessor) selectLocalityStorageURI() string {
+	destURI := p.spec.DefaultURI
+
+	if len(p.spec.URIsByLocalityKV) > 0 {
+		nodeLocality := p.FlowCtx.EvalCtx.Locality
+
+		// When matching, more specific KVs in the node locality take precedence
+		// over less specific ones so search back to front.
+		for i := len(nodeLocality.Tiers) - 1; i >= 0; i-- {
+			tier := nodeLocality.Tiers[i].String()
+			if dest, ok := p.spec.URIsByLocalityKV[tier]; ok {
+				destURI = dest
+				break
+			}
+		}
+	}
+	return destURI
+}
+
 // runCompactBackups is the main entry point for the backup compaction processor.
 func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 	if len(p.spec.AssignedSpans) == 0 {
@@ -164,7 +183,7 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 	if !ok {
 		return errors.New("executor config is not of type sql.ExecutorConfig")
 	}
-	defaultConf, err := cloud.ExternalStorageConfFromURI(p.spec.DefaultURI, user)
+	defaultConf, err := cloud.ExternalStorageConfFromURI(p.selectLocalityStorageURI(), user)
 	if err != nil {
 		return errors.Wrapf(err, "export configuration")
 	}
