@@ -43,6 +43,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_go_ldap_ldap_v3//:ldap",
         "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
         "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
