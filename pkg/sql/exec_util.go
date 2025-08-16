@@ -1896,6 +1896,10 @@ type ExecutorTestingKnobs struct {
 	// AfterArbiterRead, if set, will be called after each row read from an arbiter index
 	// for an UPSERT or INSERT.
 	AfterArbiterRead func()
+
+	// BeforeIndexSplitAndScatter is invoked with the split and scatter of an index
+	// occurs.
+	BeforeIndexSplitAndScatter func(splitPoints [][]byte)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
