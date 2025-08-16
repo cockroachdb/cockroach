@@ -27,7 +27,7 @@ func TestOverridesStore(t *testing.T) {
 	var s overridesStore
 	s.Init()
 	t1 := roachpb.MustMakeTenantID(1)
-	t2 := roachpb.MustMakeTenantID(2)
+	t3 := roachpb.MustMakeTenantID(3)
 	expect := func(o *tenantOverrides, expected string) {
 		t.Helper()
 		var vals []string
@@ -50,12 +50,12 @@ func TestOverridesStore(t *testing.T) {
 	expect(o1, "")
 	s.setAll(ctx, map[roachpb.TenantID][]kvpb.TenantSetting{
 		t1: {st("a", "aa"), st("b", "bb"), st("d", "dd")},
-		t2: {st("x", "xx")},
+		t3: {st("x", "xx")},
 	})
 	expectChange(o1)
 	o1 = s.getTenantOverrides(ctx, t1)
 	expect(o1, "a=aa b=bb d=dd")
-	o2 := s.getTenantOverrides(ctx, t2)
+	o2 := s.getTenantOverrides(ctx, t3)
 	expect(o2, "x=xx")
 
 	s.setTenantOverride(ctx, t1, st("b", "changed"))
@@ -74,9 +74,9 @@ func TestOverridesStore(t *testing.T) {
 	expect(o1, "a=aa c=cc d=dd")
 
 	// Set an override for a tenant that has no existing data.
-	t3 := roachpb.MustMakeTenantID(3)
-	s.setTenantOverride(ctx, t3, st("x", "xx"))
-	o3 := s.getTenantOverrides(ctx, t3)
+	t4 := roachpb.MustMakeTenantID(4)
+	s.setTenantOverride(ctx, t4, st("x", "xx"))
+	o3 := s.getTenantOverrides(ctx, t4)
 	expect(o3, "x=xx")
 
 	// Verify that overrides also work for the special "all tenants" ID.
@@ -93,7 +93,7 @@ func TestOverridesStore(t *testing.T) {
 	expect(s.getTenantOverrides(ctx, allTenantOverridesID), "a=aa d=dd")
 
 	// Alternate defaults do not show up for regular tenant IDs.
-	expect(s.getTenantOverrides(ctx, t3), "x=xx")
+	expect(s.getTenantOverrides(ctx, t4), "x=xx")
 
 	// If the custom override is removed, the alternate appears.
 	s.setTenantOverride(ctx, allTenantOverridesID, kvpb.TenantSetting{InternalKey: "d"})
