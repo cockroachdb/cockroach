@@ -235,6 +235,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.Grant(ctx, n)
 	case *tree.GrantRole:
 		return p.GrantRole(ctx, n)
+	case *tree.Inspect:
+		return p.Inspect(ctx, n)
 	case *tree.MoveCursor:
 		return p.FetchCursor(ctx, &n.CursorStmt)
 	case *tree.ReassignOwnedBy:
@@ -285,6 +287,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowExternalConnection(ctx, n)
 	case *tree.ShowHistogram:
 		return p.ShowHistogram(ctx, n)
+	case *tree.ShowInspectErrors:
+		return p.ShowInspectErrors(ctx, n)
 	case *tree.ShowTableStats:
 		return p.ShowTableStats(ctx, n)
 	case *tree.ShowTenant:
@@ -402,6 +406,7 @@ func init() {
 		&tree.FetchCursor{},
 		&tree.Grant{},
 		&tree.GrantRole{},
+		&tree.Inspect{},
 		&tree.MoveCursor{},
 		&tree.ReassignOwnedBy{},
 		&tree.RefreshMaterializedView{},
@@ -427,6 +432,7 @@ func init() {
 		&tree.ShowCreateExternalConnections{},
 		&tree.ShowExternalConnections{},
 		&tree.ShowHistogram{},
+		&tree.ShowInspectErrors{},
 		&tree.ShowTableStats{},
 		&tree.ShowTenant{},
 		&tree.ShowTraceForSession{},

@@ -1640,3 +1640,28 @@ func (node *ShowCreateTrigger) Format(ctx *FmtCtx) {
 }
 
 var _ Statement = &ShowCreateTrigger{}
+
+// SHOW INSPECT ERRORS [FOR TABLE <name>] [FOR LATEST RUN] [WITH DETAILS]
+// ShowInspectErrors represents a SHOW INSPECT ERRORS statement.
+type ShowInspectErrors struct {
+	TableName   *UnresolvedObjectName
+	LatestRun   bool
+	WithDetails bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowInspectErrors) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW INSPECT ERRORS")
+	if node.TableName != nil {
+		ctx.WriteString(" FOR TABLE ")
+		ctx.FormatNode(node.TableName)
+	}
+	if node.LatestRun {
+		ctx.WriteString(" FOR LATEST RUN")
+	}
+	if node.WithDetails {
+		ctx.WriteString(" WITH DETAILS")
+	}
+}
+
+var _ Statement = &ShowInspectErrors{}

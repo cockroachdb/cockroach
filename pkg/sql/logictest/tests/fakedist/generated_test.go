@@ -2026,6 +2026,13 @@ func TestLogic_show_indexes(
 	runLogicTest(t, "show_indexes")
 }
 
+func TestLogic_show_inspect_errors(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_inspect_errors")
+}
+
 func TestLogic_show_transfer_state(
 	t *testing.T,
 ) {
