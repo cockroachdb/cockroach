@@ -203,3 +203,18 @@ func TestReduce(t *testing.T) {
 		}, 0))
 	})
 }
+
+func TestRotate(t *testing.T) {
+	for i, want := range [][]int{
+		{1, 2, 3, 4, 5},
+		{2, 3, 4, 5, 1},
+		{3, 4, 5, 1, 2},
+		{4, 5, 1, 2, 3},
+		{5, 1, 2, 3, 4},
+		{1, 2, 3, 4, 5},
+	} {
+		s := []int{1, 2, 3, 4, 5}
+		Rotate(s, i)
+		require.Equal(t, want, s)
+	}
+}

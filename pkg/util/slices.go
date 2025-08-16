@@ -136,3 +136,11 @@ func Reduce[T any, U any](collection []T, fn func(acc U, el T, idx int) U, init 
 	}
 	return acc
 }
+
+// Rotate performs a left rotation of the slice, so that the specified prefix
+// becomes a suffix. The prefix size must be in [0, len(s)] range.
+func Rotate[S ~[]E, E any](s S, prefix int) {
+	slices.Reverse(s[:prefix])
+	slices.Reverse(s[prefix:])
+	slices.Reverse(s)
+}
