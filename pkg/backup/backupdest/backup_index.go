@@ -116,8 +116,8 @@ func WriteBackupIndexMetadata(
 // The store should be rooted at the default collection URI (the one that
 // contains the `index/` directory).
 //
-// Note: v25.4+ backups will always contain an index file. In other words, we
-// can remove these checks in v26.2+.
+// TODO (kev-cao): v25.4+ backups will always contain an index file. In other
+// words, we can remove these checks in v26.2+.
 func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string) (bool, error) {
 	var indexExists bool
 	indexSubdir := path.Join(backupbase.BackupIndexDirectoryPath, flattenSubdirForIndex(subdir))
@@ -156,6 +156,16 @@ func shouldWriteIndex(
 	// about a mixed-version cluster where we have both v25.4+ nodes and pre-v25.4
 	// nodes.
 	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+		return false, nil
+	}
+
+	// As we are going to be deprecating the `incremental_location` option, we
+	// will avoid writing an index for any backups that specify an `incremental`
+	// location. Note that if `incremental_location` is explicitly set to the
+	// default location, then we will have some backups containing an index and
+	// others not. We are treating this as an unsupported state and the user
+	// should not use `incremental_location` in this manner.
+	if len(details.Destination.IncrementalStorage) != 0 {
 		return false, nil
 	}
 
