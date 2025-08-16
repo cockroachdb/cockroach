@@ -494,7 +494,7 @@ func runSingleHeartbeat(
 	pingDuration, _, err := updateClockOffsetTracking(
 		ctx, remoteClocks, k.NodeID,
 		sendTime, timeutil.Unix(0, response.ServerTime), receiveTime,
-		opts.ToleratedOffset,
+		opts.ToleratedOffset, k.Class,
 	)
 	if err != nil {
 		if opts.FatalOnOffsetViolation {
