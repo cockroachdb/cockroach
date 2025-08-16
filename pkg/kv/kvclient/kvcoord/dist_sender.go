@@ -1901,7 +1901,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	}()
 
 	canParallelize := ba.Header.MaxSpanRequestKeys == 0 && ba.Header.TargetBytes == 0 &&
-		!ba.Header.ReturnOnRangeBoundary &&
 		!ba.Header.ReturnElasticCPUResumeSpans
 	if ba.IsSingleCheckConsistencyRequest() {
 		// Don't parallelize full checksum requests as they have to touch the
@@ -2006,7 +2005,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				ba.UpdateTxn(resp.reply.Txn)
 			}
 
-			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0 || ba.ReturnOnRangeBoundary || ba.ReturnElasticCPUResumeSpans
+			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0 || ba.ReturnElasticCPUResumeSpans
 			// Check whether we've received enough responses to exit query loop.
 			if mightStopEarly {
 				var replyKeys int64
@@ -2039,13 +2038,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 						resumeReason = kvpb.RESUME_BYTE_LIMIT
 						return
 					}
-				}
-				// If we hit a range boundary, return a partial result if requested. We
-				// do this after checking the limits, so that they take precedence.
-				if ba.Header.ReturnOnRangeBoundary && replyKeys > 0 && !lastRange {
-					couldHaveSkippedResponses = true
-					resumeReason = kvpb.RESUME_RANGE_BOUNDARY
-					return
 				}
 			}
 		}
