@@ -450,6 +450,7 @@ func typeToSchema(typ *types.T) (*SchemaField, error) {
 		setNullable(
 			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				// TODO(yuzefovich): we're missing support for NAME here.
 				return string(*d.(*tree.DString)), nil
 			},
 			func(x interface{}) (tree.Datum, error) {
@@ -460,6 +461,7 @@ func typeToSchema(typ *types.T) (*SchemaField, error) {
 		setNullable(
 			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				// TODO(yuzefovich): we're missing support for CITEXT here.
 				return d.(*tree.DCollatedString).Contents, nil
 			},
 			func(x interface{}) (tree.Datum, error) {
