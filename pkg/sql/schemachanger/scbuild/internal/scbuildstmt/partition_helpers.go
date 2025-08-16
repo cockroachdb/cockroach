@@ -380,7 +380,7 @@ func createPartitioning(
 	if err != nil {
 		return nil, catpb.PartitioningDescriptor{}, err
 	}
-	return newImplicitCols, newPartitioning, err
+	return newImplicitCols, newPartitioning, nil
 }
 
 // collectImplicitPartitionColumns collects implicit partitioning columns.

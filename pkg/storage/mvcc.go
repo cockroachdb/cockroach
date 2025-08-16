@@ -4577,7 +4577,7 @@ func mvccScanToKvs(
 	}); err != nil {
 		return MVCCScanResult{}, err
 	}
-	return res, err
+	return res, nil
 }
 
 func buildScanIntents(data []byte) ([]roachpb.Intent, error) {

@@ -110,5 +110,5 @@ rdn_loop:
 	if sqlRole.IsEmptyRole() {
 		return username.EmptyRoleName(), false, nil
 	}
-	return sqlRole, true, err
+	return sqlRole, true, nil
 }

@@ -123,7 +123,7 @@ func (e *evaluator) EvalBinaryExpr(ctx context.Context, expr *tree.BinaryExpr) (
 				"binary op %q", expr)
 		}
 	}
-	return res, err
+	return res, nil
 }
 
 func (e *evaluator) EvalCaseExpr(ctx context.Context, expr *tree.CaseExpr) (tree.Datum, error) {
@@ -488,7 +488,7 @@ func (e *evaluator) EvalFuncExpr(ctx context.Context, expr *tree.FuncExpr) (tree
 		return nil, err
 	}
 	if nullResult {
-		return tree.DNull, err
+		return tree.DNull, nil
 	}
 
 	if fn.Body != "" {
@@ -716,7 +716,7 @@ func (e *evaluator) EvalUnaryExpr(ctx context.Context, expr *tree.UnaryExpr) (tr
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "unary op %q", expr)
 		}
 	}
-	return res, err
+	return res, nil
 }
 
 func (e *evaluator) EvalUnresolvedName(

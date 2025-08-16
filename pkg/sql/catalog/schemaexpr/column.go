@@ -215,7 +215,7 @@ func iterColDescriptors(
 		if err := f(col); err != nil {
 			return false, nil, err
 		}
-		return false, expr, err
+		return false, expr, nil
 	})
 
 	return err

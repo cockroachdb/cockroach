@@ -147,21 +147,23 @@ outer:
 // commas count as separator only when they immediately follow a string.
 //
 // Inspired from pg's src/backend/libpq/hba.c, next_field_expand().
-func nextFieldExpand(buf string) (remaining string, field []String, err error) {
-	remaining = buf
+func nextFieldExpand(buf string) (string, []String, error) {
+	field := []String{}
+	remaining := buf
 	for {
 		var trailingComma, trailingEquals bool
 		var tok String
+		var err error
 		remaining, tok, trailingComma, trailingEquals, err = NextToken(remaining)
 		if tok.Empty() || err != nil {
-			return
+			return remaining, field, err
 		}
 		field = append(field, tok)
 		if !(trailingComma || trailingEquals) {
 			break
 		}
 	}
-	return
+	return remaining, field, nil
 }
 
 // Tokenize splits the input into tokens.

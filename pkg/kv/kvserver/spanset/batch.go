@@ -308,29 +308,33 @@ func (i *EngineIterator) PrevEngineKey() (valid bool, err error) {
 // SeekEngineKeyGEWithLimit is part of the storage.EngineIterator interface.
 func (i *EngineIterator) SeekEngineKeyGEWithLimit(
 	key storage.EngineKey, limit roachpb.Key,
-) (state pebble.IterValidityState, err error) {
-	state, err = i.i.SeekEngineKeyGEWithLimit(key, limit)
-	if state != pebble.IterValid {
+) (pebble.IterValidityState, error) {
+	state, err := i.i.SeekEngineKeyGEWithLimit(key, limit)
+	// TODO(REVIEW): This is more than a mechanical change. Do we want to
+	// CheckAllowed in the case of an error, was this purposeful?
+	if state != pebble.IterValid || err != nil {
 		return state, err
 	}
-	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+	if err := i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		return pebble.IterExhausted, err
 	}
-	return state, err
+	return state, nil
 }
 
 // SeekEngineKeyLTWithLimit is part of the storage.EngineIterator interface.
 func (i *EngineIterator) SeekEngineKeyLTWithLimit(
 	key storage.EngineKey, limit roachpb.Key,
-) (state pebble.IterValidityState, err error) {
-	state, err = i.i.SeekEngineKeyLTWithLimit(key, limit)
-	if state != pebble.IterValid {
+) (pebble.IterValidityState, error) {
+	// TODO(REVIEW): This is more than a mechanical change. Do we want to
+	// CheckAllowed in the case of an error, was this purposeful?
+	state, err := i.i.SeekEngineKeyLTWithLimit(key, limit)
+	if state != pebble.IterValid || err != nil {
 		return state, err
 	}
 	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{EndKey: key.Key}); err != nil {
 		return pebble.IterExhausted, err
 	}
-	return state, err
+	return state, nil
 }
 
 // NextEngineKeyWithLimit is part of the storage.EngineIterator interface.

@@ -391,8 +391,9 @@ func (c *conn) findAuthenticationMethod(
 		}
 		tlsState = tlsConn.ConnectionState()
 	}
-
-	return
+	// TODO(REVIEW): This and other functions that use naked returns are
+	// interesting examples.
+	return // nolint:nilness
 }
 
 func (c *conn) lookupAuthenticationMethodUsingRules(

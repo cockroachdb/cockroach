@@ -140,7 +140,7 @@ func Decode(
 			return nil, nil, err
 		}
 		d := a.NewDJSON(tree.DJSON{JSON: json})
-		return d, rkey, err
+		return d, rkey, nil
 	case types.BytesFamily:
 		var r []byte
 		if dir == encoding.Ascending {

@@ -1448,7 +1448,7 @@ func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) getExpected
 	if err != nil {
 		return zonepb.ZoneConfig{}, err
 	}
-	return expectedZoneConfig, err
+	return expectedZoneConfig, nil
 }
 
 func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) transitioningRegions() catpb.RegionNames {

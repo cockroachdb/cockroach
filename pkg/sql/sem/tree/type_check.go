@@ -881,7 +881,7 @@ func (expr *TupleStar) TypeCheck(
 		return nil, NewTypeIsNotCompositeError(resolvedType)
 	}
 
-	return subExpr, err
+	return subExpr, nil
 }
 
 // ResolvedType implements the TypedExpr interface.

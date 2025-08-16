@@ -215,7 +215,7 @@ func (s *FileSSTSink) Write(ctx context.Context, resp ExportedSpan) (roachpb.Key
 	} else {
 		log.VEventf(ctx, 3, "continuing to write to backup file %s of size %d", s.outName, s.flushedSize)
 	}
-	return resp.ResumeKey, err
+	return resp.ResumeKey, nil
 }
 
 func (s *FileSSTSink) WriteWithNoData(resp ExportedSpan) {

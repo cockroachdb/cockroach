@@ -785,7 +785,7 @@ func iterateColNamesInExpr(
 		if err := f(colNameElem.Name); err != nil {
 			return false, nil, err
 		}
-		return false, expr, err
+		return false, expr, nil
 	})
 
 	if err != nil {

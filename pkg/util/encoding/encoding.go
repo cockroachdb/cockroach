@@ -3217,7 +3217,7 @@ func DecodeUntaggedBox2DValue(b []byte) (remaining []byte, box geopb.BoundingBox
 	if err != nil {
 		return b, box, err
 	}
-	return remaining, box, err
+	return remaining, box, nil
 }
 
 // DecodeUntaggedGeoValue decodes a value encoded by EncodeUntaggedGeoValue into
@@ -3446,7 +3446,7 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 			return 0, err
 		}
 		numWords, _ := bitarray.SizesForBitLen(uint(bitLen))
-		return dataOffset + n + int(numWords)*8, err
+		return dataOffset + n + int(numWords)*8, nil
 	case Tuple:
 		rem, l, numTuples, err := DecodeNonsortingUvarint(b)
 		if err != nil {

@@ -1380,7 +1380,7 @@ func (tc *Collection) LockDescriptorWithLease(
 	if shouldReadFromStore {
 		return 0, ErrDescCannotBeLeased{id: id}
 	}
-	return uint64(desc.GetVersion()), err
+	return uint64(desc.GetVersion()), nil
 }
 
 // MakeTestCollection makes a Collection that can be used for tests.

@@ -1030,7 +1030,7 @@ func (c *stmtEnvCollector) PrintVersion(w io.Writer) error {
 		version = testingOverrideExplainEnvVersion
 	}
 	fmt.Fprintf(w, "-- Version: %s\n", version)
-	return err
+	return nil
 }
 
 func (c *stmtEnvCollector) PrintUser(w io.Writer) {

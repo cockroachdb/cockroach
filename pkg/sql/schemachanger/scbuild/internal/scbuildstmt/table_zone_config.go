@@ -178,7 +178,7 @@ func (tzo *tableZoneConfigObj) getZoneConfig(
 	}
 	// If the zone config exists and is not a subzone placeholder, return.
 	if zc != nil && !zc.IsSubzonePlaceholder() {
-		return zc, err
+		return zc, nil
 	}
 
 	// Otherwise, since our target is a table, recursively get the zone config

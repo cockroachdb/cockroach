@@ -249,7 +249,7 @@ func decryptingReader(ciphertext readerAndReaderAt, key []byte) (sstable.Readabl
 	ivScratch := buf[:nonceSize]
 	buf = buf[nonceSize:]
 	r := &decryptReader{g: gcm, fileIV: iv, ivScratch: ivScratch, ciphertext: ciphertext, buf: buf, chunk: -1}
-	return r, err
+	return r, nil
 }
 
 // fill loads the requested chunk into the buffer.
@@ -274,7 +274,7 @@ func (r *decryptReader) fill(chunk int64) error {
 	}
 	r.buf = buf
 	r.chunk = chunk
-	return err
+	return nil
 }
 
 func (r *decryptReader) chunkIV(num int64) []byte {

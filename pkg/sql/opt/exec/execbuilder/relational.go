@@ -2361,7 +2361,7 @@ func (b *Builder) buildDistribute(
 		// Don't bother creating a no-op distribution. This likely exists because
 		// the input is a Sort expression, and this is an artifact of how physical
 		// properties are enforced.
-		return input, inputCols, err
+		return input, inputCols, nil
 	}
 
 	if b.evalCtx.SessionData().EnforceHomeRegion && b.IsANSIDML {
@@ -2421,7 +2421,7 @@ func (b *Builder) buildDistribute(
 
 	// TODO(rytaft): This is currently a no-op. We should pass this distribution
 	// info to the DistSQL planner.
-	return input, inputCols, err
+	return input, inputCols, nil
 }
 
 func (b *Builder) buildOrdinality(
@@ -4072,7 +4072,7 @@ func (b *Builder) applySaveTable(
 	if err != nil {
 		return execPlan{}, err
 	}
-	return input, err
+	return input, nil
 }
 
 func (b *Builder) buildOpaque(
@@ -4360,7 +4360,7 @@ func (b *Builder) getEnvData() (exec.ExplainEnvData, error) {
 	if err != nil {
 		return envOpts, err
 	}
-	return envOpts, err
+	return envOpts, nil
 }
 
 // statementTag returns a string that can be used in an error message regarding

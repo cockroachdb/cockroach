@@ -103,21 +103,26 @@ type MonotonicReader interface {
 //
 // Safety for concurrent use is only dependent on the safety of the
 // entropy source.
-func New(ms uint64, entropy io.Reader) (id ULID, err error) {
-	if err = id.SetTime(ms); err != nil {
+func New(ms uint64, entropy io.Reader) (ULID, error) {
+	var id ULID
+	if err := id.SetTime(ms); err != nil {
 		return id, err
 	}
 
 	switch e := entropy.(type) {
 	case nil:
-		return id, err
+		return id, nil
 	case MonotonicReader:
-		err = e.MonotonicRead(ms, id[6:])
+		if err := e.MonotonicRead(ms, id[6:]); err != nil {
+			return id, err
+		}
 	default:
-		_, err = io.ReadFull(e, id[6:])
+		if _, err := io.ReadFull(e, id[6:]); err != nil {
+			return id, err
+		}
 	}
 
-	return id, err
+	return id, nil
 }
 
 // MustNew is a convenience function equivalent to New that panics on failure
