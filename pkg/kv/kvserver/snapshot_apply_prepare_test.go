@@ -91,6 +91,7 @@ func TestPrepareSnapApply(t *testing.T) {
 		truncState:    kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
 		hardState:     raftpb.HardState{Term: 20, Commit: 100},
 		desc:          desc(id.RangeID, "a", "k"),
+		origDesc:      desc(id.RangeID, "a", "k"),
 		subsumedDescs: []*roachpb.RangeDescriptor{descA, descB},
 	}
 
