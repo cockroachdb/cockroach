@@ -74,6 +74,9 @@ type Factory interface {
 		flags PlanFlags,
 	) (Plan, error)
 
+	// DisableSpoolElision instructs the factory to not remove the spoolNode at the root.
+	DisableSpoolElision()
+
 	// Ctx returns the ctx of this execution.
 	Ctx() context.Context
 
@@ -113,6 +116,8 @@ func (StubFactory) ConstructPlan(
 ) (Plan, error) {
 	return struct{}{}, nil
 }
+
+func (StubFactory) DisableSpoolElision() {}
 
 func (StubFactory) Ctx() context.Context {
 	return context.Background()
