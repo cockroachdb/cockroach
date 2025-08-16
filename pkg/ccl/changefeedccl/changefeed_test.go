@@ -6253,6 +6253,8 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	require.NoError(t, log.SetVModule("table_event_filter=2"))
+
 	assertFailuresCounter := func(t *testing.T, m *Metrics, exp int64) {
 		t.Helper()
 		// If this changefeed is running as a job, we anticipate that it will move

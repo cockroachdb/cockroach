@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -123,8 +124,15 @@ type tableEventFilter map[tableEventType]bool
 
 func (filter tableEventFilter) shouldFilter(
 	ctx context.Context, e TableEvent, targets changefeedbase.Targets,
-) (bool, error) {
+) (ok bool, _ error) {
 	et := classifyTableEvent(e)
+
+	if log.V(2) {
+		log.Infof(ctx, "table event %v classified as %v", e, et)
+		defer func() {
+			log.Infof(ctx, "should filter table event %v: %t", e, ok)
+		}()
+	}
 
 	// Truncation events are not ignored and return an error.
 	if et.Contains(tableEventTruncate) {
