@@ -721,8 +721,18 @@ func getBackupChain(
 	map[int]*backupinfo.IterFactory,
 	error,
 ) {
+	defaultCollectionURI, _, err := backupdest.GetURIsByLocalityKV(dest.To, "")
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	resolvedSubdir, err := resolveBackupSubdir(
+		ctx, execCfg, user, defaultCollectionURI, dest.Subdir,
+	)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 	resolvedBaseDirs, resolvedIncDirs, _, err := resolveBackupDirs(
-		ctx, execCfg, user, dest.To, dest.IncrementalStorage, dest.Subdir,
+		ctx, execCfg, user, dest.To, dest.IncrementalStorage, resolvedSubdir,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -764,9 +774,9 @@ func getBackupChain(
 	defer mem.Close(ctx)
 
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
-		ctx, &mem, baseStores, incStores, mkStore, resolvedBaseDirs,
-		resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
-		user, false /*includeSkipped */, true, /*includeCompacted */
+		ctx, &mem, defaultCollectionURI, dest.To, baseStores, incStores, mkStore, resolvedSubdir,
+		resolvedBaseDirs, resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
+		user, false /*includeSkipped */, true /*includeCompacted */, len(dest.IncrementalStorage) > 0,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -823,6 +833,7 @@ func concludeBackupCompaction(
 			execCtx.User(),
 			execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
 			details,
+			backupManifest.RevisionStartTime,
 		),
 		"writing backup index metadata",
 	)
