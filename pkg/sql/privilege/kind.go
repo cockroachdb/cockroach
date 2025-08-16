@@ -65,7 +65,8 @@ const (
 	BYPASSRLS                Kind = 38
 	REPLICATIONDEST          Kind = 39
 	REPLICATIONSOURCE        Kind = 40
-	largestKind                   = REPLICATIONSOURCE
+	INSPECT                  Kind = 41
+	largestKind                   = INSPECT
 )
 
 var isDeprecatedKind = map[Kind]bool{
@@ -159,6 +160,8 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "REPLICATIONDEST"
 	case REPLICATIONSOURCE:
 		return "REPLICATIONSOURCE"
+	case INSPECT:
+		return "INSPECT"
 	default:
 		panic(errors.AssertionFailedf("unhandled kind: %d", int(k)))
 	}
