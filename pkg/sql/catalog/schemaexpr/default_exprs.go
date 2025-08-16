@@ -50,7 +50,7 @@ func MakeDefaultExprs(
 			exprStrings = append(exprStrings, col.GetDefaultExpr())
 		}
 	}
-	exprs, err := parser.ParseExprs(exprStrings)
+	exprs, _, err := parser.ParseExprs(exprStrings)
 	if err != nil {
 		return nil, err
 	}

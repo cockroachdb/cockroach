@@ -138,12 +138,13 @@ func (s *Block) WalkStmt(visitor StatementVisitor) Statement {
 // decl_stmt
 type Declaration struct {
 	StatementImpl
-	Var      Variable
-	Constant bool
-	Typ      tree.ResolvableTypeReference
-	Collate  string
-	NotNull  bool
-	Expr     Expr
+	Var         Variable
+	Constant    bool
+	Typ         tree.ResolvableTypeReference
+	Collate     string
+	NotNull     bool
+	Expr        Expr
+	Annotations *tree.Annotations
 }
 
 func (s *Declaration) CopyNode() *Declaration {
@@ -152,24 +153,26 @@ func (s *Declaration) CopyNode() *Declaration {
 }
 
 func (s *Declaration) Format(ctx *tree.FmtCtx) {
-	ctx.FormatNode(&s.Var)
-	if s.Constant {
-		ctx.WriteString(" CONSTANT")
-	}
-	ctx.WriteString(" ")
-	ctx.FormatTypeReference(s.Typ)
-	if s.Collate != "" {
-		ctx.WriteString(" COLLATE ")
-		ctx.FormatNameP(&s.Collate)
-	}
-	if s.NotNull {
-		ctx.WriteString(" NOT NULL")
-	}
-	if s.Expr != nil {
-		ctx.WriteString(" := ")
-		ctx.FormatNode(s.Expr)
-	}
-	ctx.WriteString(";\n")
+	ctx.WithAnnotations(s.Annotations, func() {
+		ctx.FormatNode(&s.Var)
+		if s.Constant {
+			ctx.WriteString(" CONSTANT")
+		}
+		ctx.WriteString(" ")
+		ctx.FormatTypeReference(s.Typ)
+		if s.Collate != "" {
+			ctx.WriteString(" COLLATE ")
+			ctx.FormatNameP(&s.Collate)
+		}
+		if s.NotNull {
+			ctx.WriteString(" NOT NULL")
+		}
+		if s.Expr != nil {
+			ctx.WriteString(" := ")
+			ctx.FormatNode(s.Expr)
+		}
+		ctx.WriteString(";\n")
+	})
 }
 
 func (s *Declaration) PlpgSQLStatementTag() string {

@@ -32,10 +32,6 @@ type lexer struct {
 
 	stmt *plpgsqltree.Block
 
-	// numPlaceholders is 1 + the highest placeholder index encountered.
-	numPlaceholders int
-	numAnnotations  tree.AnnotationIdx
-
 	lastError error
 
 	parser plpgsqlParser
@@ -46,8 +42,6 @@ func (l *lexer) init(sql string, tokens []plpgsqlSymType, nakedIntType *types.T,
 	l.tokens = tokens
 	l.lastPos = -1
 	l.stmt = nil
-	l.numPlaceholders = 0
-	l.numAnnotations = 0
 	l.lastError = nil
 	l.nakedIntType = nakedIntType
 	l.parser = p
@@ -342,16 +336,17 @@ func (l *lexer) ReadIntegerForLoopControl() (plpgsqltree.ForLoopControl, error) 
 		return nil, errors.New("missing LOOP keyword")
 	}
 	var lowerBound, upperBound, byExpr plpgsqltree.Expr
-	lowerBound, err = l.ParseExpr(lowerBoundStr)
+	// TODO: maybe need annotations.
+	lowerBound, _, err = l.ParseExpr(lowerBoundStr)
 	if err != nil {
 		return nil, err
 	}
-	upperBound, err = l.ParseExpr(upperBoundStr)
+	upperBound, _, err = l.ParseExpr(upperBoundStr)
 	if err != nil {
 		return nil, err
 	}
 	if byExprStr != "" {
-		byExpr, err = l.ParseExpr(byExprStr)
+		byExpr, _, err = l.ParseExpr(byExprStr)
 		if err != nil {
 			return nil, err
 		}
@@ -385,7 +380,8 @@ func (l *lexer) ParseReturnExpr() (plpgsqltree.Expr, error) {
 		return nil, err
 	}
 	exprStr := l.getStr(startPos, endPos)
-	return l.ParseExpr(exprStr)
+	expr, _, err := l.ParseExpr(exprStr)
+	return expr, err
 }
 
 // ParseReturnQuery handles reading and parsing the query for a RETURN QUERY
@@ -623,17 +619,17 @@ func (l *lexer) Unimplemented(feature string) {
 	}
 }
 
-func (l *lexer) ParseExpr(sqlStr string) (plpgsqltree.Expr, error) {
+func (l *lexer) ParseExpr(sqlStr string) (plpgsqltree.Expr, tree.AnnotationIdx, error) {
 	// Use ParseExprs instead of ParseExpr in order to correctly handle the case
 	// when multiple expressions are incorrectly passed.
-	exprs, err := parser.ParseExprs([]string{sqlStr})
+	exprs, numAnnotations, err := parser.ParseExprs([]string{sqlStr})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if len(exprs) != 1 {
-		return nil, pgerror.Newf(pgcode.Syntax, "query returned %d columns", len(exprs))
+		return nil, 0, pgerror.Newf(pgcode.Syntax, "query returned %d columns", len(exprs))
 	}
-	return exprs[0], nil
+	return exprs[0], numAnnotations, nil
 }
 
 // ReadTarget reads a comma-separated list of target variables from the current

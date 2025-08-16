@@ -125,10 +125,8 @@ func (p *Parser) parse(
 		return statements.PLpgStatement{}, err
 	}
 	return statements.PLpgStatement{
-		AST:             p.lexer.stmt,
-		SQL:             sql,
-		NumPlaceholders: p.lexer.numPlaceholders,
-		NumAnnotations:  p.lexer.numAnnotations,
+		AST: p.lexer.stmt,
+		SQL: sql,
 	}, nil
 }
 

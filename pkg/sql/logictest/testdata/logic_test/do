@@ -285,3 +285,15 @@ END
 $$;
 
 subtest end
+
+subtest regression_151848
+
+statement error pgcode 42704 type "_" does not exist
+DO $$
+DECLARE
+  _ _[];
+BEGIN
+END;
+$$;
+
+subtest end
