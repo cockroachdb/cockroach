@@ -20,11 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -629,6 +631,76 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	`max_row_size_log`: {
+		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			if datum == tree.DNull {
+				po.TableDesc.MaxRowSizeLog = nil
+				return nil
+			}
+			sizeStr, err := paramparse.DatumAsString(ctx, evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+
+			sizeBytes, err := humanizeutil.ParseBytes(sizeStr)
+			if err != nil {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"invalid value for parameter %q, value should be a valid byte size string like '1KiB', '2MiB'", key)
+			}
+
+			err = IntInRange(rowinfra.MaxRowSizeFloor, rowinfra.MaxRowSizeCeil)(sizeBytes)
+			if err != nil {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"parameter %q value is out of range, expected value in range [%s, %s]", key, humanizeutil.IBytes(rowinfra.MaxRowSizeFloor), humanizeutil.IBytes(rowinfra.MaxRowSizeCeil))
+			}
+			uint32Val := uint32(sizeBytes)
+			po.TableDesc.MaxRowSizeLog = &uint32Val
+
+			return nil
+		},
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+			po.TableDesc.MaxRowSizeLog = nil
+			return nil
+		},
+	},
+	`max_row_size_err`: {
+		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			if datum == tree.DNull {
+				po.TableDesc.MaxRowSizeErr = nil
+				return nil
+			}
+
+			sizeStr, err := paramparse.DatumAsString(ctx, evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+
+			sizeBytes, err := humanizeutil.ParseBytes(sizeStr)
+			if err != nil {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"invalid value for parameter %q, value should be a valid byte size string like '1KiB', '2MiB'", key)
+			}
+
+			err = IntInRange(rowinfra.MaxRowSizeFloor, rowinfra.MaxRowSizeCeil)(sizeBytes)
+			if err != nil {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"parameter %q value is out of range, expected value in range [%s, %s]", key, humanizeutil.IBytes(rowinfra.MaxRowSizeFloor), humanizeutil.IBytes(rowinfra.MaxRowSizeCeil))
+			}
+
+			uint32Val := uint32(sizeBytes)
+			po.TableDesc.MaxRowSizeErr = &uint32Val
+
+			return nil
+		},
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+			po.TableDesc.MaxRowSizeErr = nil
+			return nil
+		},
+	},
 }
 
 func nonNegativeIntWithMaximum(max int64) func(int64) error {
@@ -638,6 +710,15 @@ func nonNegativeIntWithMaximum(max int64) func(int64) error {
 		}
 		if intVal > max {
 			return errors.Newf("cannot be set to an integer larger than %d", max)
+		}
+		return nil
+	}
+}
+
+func IntInRange(min, max int64) func(int64) error {
+	return func(intVal int64) error {
+		if intVal < min || intVal > max {
+			return errors.Newf("expected value in range [%d, %d], got: %d", min, max, intVal)
 		}
 		return nil
 	}
