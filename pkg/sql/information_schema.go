@@ -997,11 +997,11 @@ https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 				}
 				// Note: Cross DB references are deprecated, but this should be
 				// a cached look up when they don't exist.
-				refDB, err := p.Descriptors().ByIDWithoutLeased(p.Txn()).Get().Database(ctx, refTable.GetParentID())
+				refDB, err := p.Descriptors().ByIDWithLeased(p.Txn()).Get().Database(ctx, refTable.GetParentID())
 				if err != nil {
 					return err
 				}
-				refSchema, err := p.Descriptors().ByIDWithoutLeased(p.Txn()).Get().Schema(ctx, refTable.GetParentSchemaID())
+				refSchema, err := p.Descriptors().ByIDWithLeased(p.Txn()).Get().Schema(ctx, refTable.GetParentSchemaID())
 				if err != nil {
 					return err
 				}
