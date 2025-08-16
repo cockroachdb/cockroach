@@ -393,11 +393,24 @@ type RangeStatusReport struct {
 	UnderReplicatedNonVoters, OverReplicatedNonVoters bool
 }
 
+// countLive will first filter the ReplicaSet using filterPred, then
+// count the live descriptors using livePred. It returns the size of
+// both sets.
+func (d ReplicaSet) countLive(
+	filterPred func(rDesc ReplicaDescriptor) bool, livePred func(rDesc ReplicaDescriptor) bool,
+) (total, live int) {
+	filtered := d.FilterToDescriptors(filterPred)
+	wrappedFiltered := ReplicaSet{wrapped: filtered}
+	liveDesc := wrappedFiltered.FilterToDescriptors(livePred)
+
+	return len(filtered), len(liveDesc)
+}
+
 // ReplicationStatus returns availability and over/under-replication
 // determinations for the range.
 //
 // neededVoters is the replica's desired replication for purposes of determining
-// over/under-replication of voters. If the caller is only interested in
+// over/under-replication of voters. If the caller is only interested in the
 // availability of voting replicas, 0 can be passed in. neededNonVoters is the
 // counterpart for non-voting replicas but with -1 as the sentinel value (unlike
 // voters, it's possible to expect 0 non-voters).
@@ -405,52 +418,60 @@ func (d ReplicaSet) ReplicationStatus(
 	liveFunc func(descriptor ReplicaDescriptor) bool, neededVoters int, neededNonVoters int,
 ) RangeStatusReport {
 	var res RangeStatusReport
-	// isBoth takes two replica predicates and returns their conjunction.
-	isBoth := func(
-		pred1 func(rDesc ReplicaDescriptor) bool,
-		pred2 func(rDesc ReplicaDescriptor) bool) func(ReplicaDescriptor) bool {
-		return func(rDesc ReplicaDescriptor) bool {
-			return pred1(rDesc) && pred2(rDesc)
-		}
-	}
 
 	// This functions handles regular, or joint-consensus replica groups. In the
 	// joint-consensus case, we'll independently consider the health of the
 	// outgoing group ("old") and the incoming group ("new"). In the regular case,
 	// the two groups will be identical.
 
-	votersOldGroup := d.FilterToDescriptors(ReplicaDescriptor.IsVoterOldConfig)
-	liveVotersOldGroup := d.FilterToDescriptors(isBoth(ReplicaDescriptor.IsVoterOldConfig, liveFunc))
+	oldGroup, oldLive := d.countLive(ReplicaDescriptor.IsVoterOldConfig, liveFunc)
+	newGroup, newLive := d.countLive(ReplicaDescriptor.IsVoterNewConfig, liveFunc)
 
-	n := len(votersOldGroup)
 	// Empty groups succeed by default, to match the Raft implementation.
-	availableOutgoingGroup := (n == 0) || (len(liveVotersOldGroup) >= n/2+1)
+	availableOutgoingGroup := (oldGroup == 0) || (oldLive >= oldGroup/2+1)
 
-	votersNewGroup := d.FilterToDescriptors(ReplicaDescriptor.IsVoterNewConfig)
-	liveVotersNewGroup := d.FilterToDescriptors(isBoth(ReplicaDescriptor.IsVoterNewConfig, liveFunc))
-
-	n = len(votersNewGroup)
-	availableIncomingGroup := len(liveVotersNewGroup) >= n/2+1
+	availableIncomingGroup := newLive >= newGroup/2+1
 
 	res.Available = availableIncomingGroup && availableOutgoingGroup
 
 	// Determine over/under-replication of voting replicas. Note that learners
 	// don't matter.
-	underReplicatedOldGroup := len(liveVotersOldGroup) < neededVoters
-	underReplicatedNewGroup := len(liveVotersNewGroup) < neededVoters
-	overReplicatedOldGroup := len(votersOldGroup) > neededVoters
-	overReplicatedNewGroup := len(votersNewGroup) > neededVoters
+	underReplicatedOldGroup := oldLive < neededVoters
+	underReplicatedNewGroup := newLive < neededVoters
+	overReplicatedOldGroup := oldGroup > neededVoters
+	overReplicatedNewGroup := newGroup > neededVoters
 	res.UnderReplicated = underReplicatedOldGroup || underReplicatedNewGroup
 	res.OverReplicated = overReplicatedOldGroup || overReplicatedNewGroup
 	if neededNonVoters == -1 {
 		return res
 	}
 
-	nonVoters := d.FilterToDescriptors(ReplicaDescriptor.IsNonVoter)
-	liveNonVoters := d.FilterToDescriptors(isBoth(ReplicaDescriptor.IsNonVoter, liveFunc))
-	res.UnderReplicatedNonVoters = len(liveNonVoters) < neededNonVoters
-	res.OverReplicatedNonVoters = len(nonVoters) > neededNonVoters
+	nonVoters, liveNonVoters := d.countLive(ReplicaDescriptor.IsNonVoter, liveFunc)
+
+	res.UnderReplicatedNonVoters = liveNonVoters < neededNonVoters
+	res.OverReplicatedNonVoters = nonVoters > neededNonVoters
+
 	return res
+}
+
+// ReplicationMargin computes the amount by which live voters exceed quorum. Values >= 0 indicate an available range,
+// as well as the number of additional replicas we can lose before losing quorum.
+func (d ReplicaSet) ReplicationMargin(liveFunc func(descriptor ReplicaDescriptor) bool) int {
+	// This functions handles regular, or joint-consensus replica groups. In the
+	// joint-consensus case, we'll independently consider the health of the
+	// outgoing group ("old") and the incoming group ("new"). In the regular case,
+	// the two groups will be identical.
+
+	oldGroup, oldLive := d.countLive(ReplicaDescriptor.IsVoterOldConfig, liveFunc)
+	newGroup, newLive := d.countLive(ReplicaDescriptor.IsVoterNewConfig, liveFunc)
+
+	marginIncomingGroup := newLive - (newGroup/2 + 1)
+	marginOutgoingGroup := marginIncomingGroup
+	// Empty groups succeed by default, to match the Raft implementation.
+	if oldGroup > 0 {
+		marginOutgoingGroup = oldLive - (oldGroup/2 + 1)
+	}
+	return min(marginIncomingGroup, marginOutgoingGroup)
 }
 
 // Empty returns true if `target` is an empty replication target.
