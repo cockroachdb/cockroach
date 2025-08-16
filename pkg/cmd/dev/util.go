@@ -265,6 +265,7 @@ func (d *dev) getMergeBaseHash(ctx context.Context) (string, error) {
 func addCommonBazelArguments(args *[]string) {
 	if numCPUs != 0 {
 		*args = append(*args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+		*args = append(*args, fmt.Sprintf("--jobs=%d", numCPUs))
 	}
 	if pgoEnabled {
 		*args = append(*args, "--config=pgo")
