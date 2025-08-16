@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -95,6 +96,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randident"
@@ -7945,6 +7948,16 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+	cfLogSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_CHANGEFEED},
+		[]string{"changefeed_emitted_bytes"},
+		logtestutils.FromLogEntry[eventpb.ChangefeedEmittedBytes],
+	)
+
+	cleanup := log.InterceptWith(ctx, cfLogSpy)
+	defer cleanup()
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		// Hack: since setting a zero value disabled, set a negative value to ensure we always log.
 		interval := -10 * time.Millisecond
@@ -7964,9 +7977,8 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 		}
 
 		for i := 0; i < 5; i++ {
-			beforeCreate := timeutil.Now()
 			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d) RETURNING cluster_logical_timestamp()`, i))
-			verifyLogsWithEmittedBytesAndMessages(t, jobID, beforeCreate.UnixNano(), interval.Nanoseconds(), false)
+			verifyLogsWithEmittedBytesAndMessages(t, jobID, cfLogSpy, &s.Server.ClusterSettings().SV, interval.Nanoseconds(), false)
 		}
 	}
 
@@ -8001,7 +8013,16 @@ func (t *testTelemetryLogger) close() {
 func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	cfLogSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_CHANGEFEED},
+		[]string{"changefeed_emitted_bytes"},
+		logtestutils.FromLogEntry[eventpb.ChangefeedEmittedBytes],
+	)
 
+	cleanup := log.InterceptWith(ctx, cfLogSpy)
+	defer cleanup()
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		interval := 24 * time.Hour
 		continuousTelemetryInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, interval)
@@ -8036,18 +8057,16 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 		}
 
 		// Insert a row and wait for logs to be created.
-		beforeFirstLog := timeutil.Now()
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
 		var jobID jobspb.JobID
 		if foo, ok := foo.(cdctest.EnterpriseTestFeed); ok {
 			jobID = foo.JobID()
 		}
 		testutils.SucceedsSoon(t, waitForIncEmittedCounters)
-		verifyLogsWithEmittedBytesAndMessages(t, jobID, beforeFirstLog.UnixNano(), interval.Nanoseconds(), false /* closing */)
+		verifyLogsWithEmittedBytesAndMessages(t, jobID, cfLogSpy, &s.Server.ClusterSettings().SV, interval.Nanoseconds(), false /* closing */)
 
 		// Insert more rows. No logs should be created for these since we recently
 		// published them above and the interval is 24h.
-		afterFirstLog := timeutil.Now()
 		seen.Store(false)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
@@ -8065,9 +8084,7 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 			t.Log("transient error")
 		}
 
-		verifyLogsWithEmittedBytesAndMessages(
-			t, jobID, afterFirstLog.UnixNano(), interval.Nanoseconds(), true, /* closing */
-		)
+		verifyLogsWithEmittedBytesAndMessages(t, jobID, cfLogSpy, &s.Server.ClusterSettings().SV, interval.Nanoseconds(), true /* closing */)
 	}
 
 	cdcTest(t, testFn)
@@ -8076,6 +8093,16 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	cfLogSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_CHANGEFEED},
+		[]string{"changefeed_emitted_bytes"},
+		logtestutils.FromLogEntry[eventpb.ChangefeedEmittedBytes],
+	)
+
+	cleanup := log.InterceptWith(ctx, cfLogSpy)
+	defer cleanup()
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		// Hack: since setting a zero value disabled, set a negative value to ensure we always log.
@@ -8090,16 +8117,14 @@ func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
 		job1 := foo.(cdctest.EnterpriseTestFeed).JobID()
 		job2 := foo2.(cdctest.EnterpriseTestFeed).JobID()
 
-		beforeInsert := timeutil.Now()
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		verifyLogsWithEmittedBytesAndMessages(t, job1, cfLogSpy, &s.Server.ClusterSettings().SV, interval.Nanoseconds(), false)
 		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1)`)
-		verifyLogsWithEmittedBytesAndMessages(t, job1, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
-		verifyLogsWithEmittedBytesAndMessages(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
+		verifyLogsWithEmittedBytesAndMessages(t, job2, cfLogSpy, &s.Server.ClusterSettings().SV, interval.Nanoseconds(), false)
 		require.NoError(t, foo.Close())
 
-		beforeInsert = timeutil.Now()
 		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (2)`)
-		verifyLogsWithEmittedBytesAndMessages(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
+		verifyLogsWithEmittedBytesAndMessages(t, job2, cfLogSpy, &s.Server.ClusterSettings().SV, interval.Nanoseconds(), false)
 		require.NoError(t, foo2.Close())
 	}
 
@@ -10615,6 +10640,17 @@ func TestCreateChangefeedTelemetryLogs(t *testing.T) {
 	s, stopServer := makeServer(t)
 	defer stopServer()
 
+	ctx := context.Background()
+	cfLogSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_CHANGEFEED},
+		[]string{"create_changefeed"},
+		logtestutils.FromLogEntry[eventpb.CreateChangefeed],
+	)
+
+	cleanup := log.InterceptWith(ctx, cfLogSpy)
+	defer cleanup()
+
 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
@@ -10625,22 +10661,20 @@ func TestCreateChangefeedTelemetryLogs(t *testing.T) {
 		coreFeedFactory, cleanup := makeFeedFactory(t, "sinkless", s.Server, s.DB)
 		defer cleanup()
 
-		beforeCreateSinkless := timeutil.Now()
 		coreFeed := feed(t, coreFeedFactory, `CREATE CHANGEFEED FOR foo`)
 		defer closeFeed(t, coreFeed)
 
-		createLogs := checkCreateChangefeedLogs(t, beforeCreateSinkless.UnixNano())
+		createLogs := cfLogSpy.GetUnreadLogs(getChangefeedLoggingChannel(&s.Server.ClusterSettings().SV))
 		require.Equal(t, 1, len(createLogs))
 		require.Equal(t, "core", createLogs[0].SinkType)
 	})
 
 	t.Run(`gcpubsub_sink_type_with_options`, func(t *testing.T) {
 		pubsubFeedFactory := makePubsubFeedFactory(s.Server, s.DB)
-		beforeCreatePubsub := timeutil.Now()
 		pubsubFeed := feed(t, pubsubFeedFactory, `CREATE CHANGEFEED FOR foo, bar WITH resolved="10s", no_initial_scan`)
 		defer closeFeed(t, pubsubFeed)
 
-		createLogs := checkCreateChangefeedLogs(t, beforeCreatePubsub.UnixNano())
+		createLogs := cfLogSpy.GetUnreadLogs(getChangefeedLoggingChannel(&s.Server.ClusterSettings().SV))
 		require.Equal(t, 1, len(createLogs))
 		require.Equal(t, `gcpubsub`, createLogs[0].SinkType)
 		require.Equal(t, int32(2), createLogs[0].NumTables)
@@ -10651,11 +10685,10 @@ func TestCreateChangefeedTelemetryLogs(t *testing.T) {
 
 	t.Run(`with_transformation`, func(t *testing.T) {
 		pubsubFeedFactory := makePubsubFeedFactory(s.Server, s.DB)
-		beforeCreateWithTransformation := timeutil.Now()
 		pubsubFeed := feed(t, pubsubFeedFactory, `CREATE CHANGEFEED AS SELECT b FROM foo`)
 		defer closeFeed(t, pubsubFeed)
 
-		createLogs := checkCreateChangefeedLogs(t, beforeCreateWithTransformation.UnixNano())
+		createLogs := cfLogSpy.GetUnreadLogs(getChangefeedLoggingChannel(&s.Server.ClusterSettings().SV))
 		require.Equal(t, 1, len(createLogs))
 		require.Equal(t, true, createLogs[0].Transformation)
 	})
@@ -10665,12 +10698,21 @@ func TestAlterChangefeedTelemetryLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+	cfLogSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_CHANGEFEED},
+		[]string{"alter_changefeed"},
+		logtestutils.FromLogEntry[eventpb.AlterChangefeed],
+	)
+
+	cleanup := log.InterceptWith(ctx, cfLogSpy)
+	defer cleanup()
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
 
-		beforeCreate := timeutil.Now()
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar`)
 		defer closeFeed(t, testFeed)
 		feed := testFeed.(cdctest.EnterpriseTestFeed)
@@ -10682,7 +10724,7 @@ func TestAlterChangefeedTelemetryLogs(t *testing.T) {
 
 		var logs []eventpb.AlterChangefeed
 		testutils.SucceedsSoon(t, func() error {
-			logs = checkAlterChangefeedLogs(t, beforeCreate.UnixNano())
+			logs = cfLogSpy.GetUnreadLogs(getChangefeedLoggingChannel(&s.Server.ClusterSettings().SV))
 			if len(logs) < 1 {
 				return errors.New("no logs found")
 			}
@@ -10704,10 +10746,22 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	waitForLogs := func(t *testing.T, startTime time.Time) []eventpb.ChangefeedFailed {
+	ctx := context.Background()
+	cfLogSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_CHANGEFEED},
+		[]string{"changefeed_failed"},
+		logtestutils.FromLogEntry[eventpb.ChangefeedFailed],
+	)
+
+	cleanup := log.InterceptWith(ctx, cfLogSpy)
+	defer cleanup()
+
+	waitForLogs := func(t *testing.T, sv *settings.Values) []eventpb.ChangefeedFailed {
+		t.Helper()
 		var logs []eventpb.ChangefeedFailed
 		testutils.SucceedsSoon(t, func() error {
-			logs = checkChangefeedFailedLogs(t, startTime.UnixNano())
+			logs = cfLogSpy.GetUnreadLogs(getChangefeedLoggingChannel(sv))
 			if len(logs) < 1 {
 				return fmt.Errorf("no logs found")
 			}
@@ -10730,12 +10784,11 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 		assertPayloads(t, coreFeed, []string{
 			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
 		})
-		beforeCoreSinkClose := timeutil.Now()
 
 		sinkCleanup()
 		closeFeed(t, coreFeed)
-
-		failLogs := waitForLogs(t, beforeCoreSinkClose)
+		failLogs := waitForLogs(t, &s.Server.ClusterSettings().SV)
+		//failLogs := waitçorLogs(t, beforeCoreSinkClose)
 		require.Equal(t, 1, len(failLogs))
 		require.Equal(t, failLogs[0].FailureType, changefeedbase.ConnectionClosed)
 	})
@@ -10744,11 +10797,10 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
-		beforeCreate := timeutil.Now()
 		_, err := f.Feed(`CREATE CHANGEFEED FOR foo, invalid_table`)
 		require.Error(t, err)
 
-		failLogs := waitForLogs(t, beforeCreate)
+		failLogs := waitForLogs(t, &s.Server.ClusterSettings().SV)
 		require.Equal(t, 1, len(failLogs))
 		require.Equal(t, failLogs[0].FailureType, changefeedbase.UserInput)
 	}, feedTestEnterpriseSinks, withAllowChangefeedErr("expects error"))
@@ -10764,14 +10816,13 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 			return changefeedbase.WithTerminalError(errors.New("should fail"))
 		}
 
-		beforeCreate := timeutil.Now()
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH on_error=FAIL`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'next')`)
 		feedJob := foo.(cdctest.EnterpriseTestFeed)
 		require.NoError(t, feedJob.WaitForState(func(s jobs.State) bool { return s == jobs.StateFailed }))
 
 		closeFeed(t, foo)
-		failLogs := waitForLogs(t, beforeCreate)
+		failLogs := waitForLogs(t, &s.Server.ClusterSettings().SV)
 		require.Equal(t, 1, len(failLogs))
 		require.Equal(t, failLogs[0].FailureType, changefeedbase.UnknownError)
 		require.Contains(t, []string{`gcpubsub`, `external`}, failLogs[0].SinkType)
@@ -10783,10 +10834,20 @@ func TestChangefeedCanceledTelemetryLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	waitForLogs := func(t *testing.T, startTime time.Time) []eventpb.ChangefeedCanceled {
+	ctx := context.Background()
+	cfLogSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_CHANGEFEED},
+		[]string{"changefeed_canceled"},
+		logtestutils.FromLogEntry[eventpb.ChangefeedCanceled],
+	)
+
+	cleanup := log.InterceptWith(ctx, cfLogSpy)
+	defer cleanup()
+	waitForLogs := func(t *testing.T, sv *settings.Values) []eventpb.ChangefeedCanceled {
 		var logs []eventpb.ChangefeedCanceled
 		testutils.SucceedsSoon(t, func() error {
-			logs = checkChangefeedCanceledLogs(t, startTime.UnixNano())
+			logs = cfLogSpy.GetUnreadLogs(getChangefeedLoggingChannel(sv))
 			if len(logs) < 1 {
 				return fmt.Errorf("no logs found")
 			}
@@ -10799,17 +10860,15 @@ func TestChangefeedCanceledTelemetryLogs(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
-		beforeCreate := timeutil.Now()
 		feed, err := f.Feed(`CREATE CHANGEFEED FOR foo`)
 		require.NoError(t, err)
 		enterpriseFeed := feed.(cdctest.EnterpriseTestFeed)
 
 		sqlDB.Exec(t, `CANCEL JOB $1`, enterpriseFeed.JobID())
 
-		canceledLogs := waitForLogs(t, beforeCreate)
+		canceledLogs := waitForLogs(t, &s.Server.ClusterSettings().SV)
 		require.Equal(t, 1, len(canceledLogs))
 		require.Equal(t, enterpriseFeed.JobID().String(), strconv.FormatInt(canceledLogs[0].JobId, 10))
-		require.Equal(t, "changefeed_canceled", canceledLogs[0].EventType)
 		require.NoError(t, feed.Close())
 	}, feedTestEnterpriseSinks)
 }
@@ -12546,4 +12605,11 @@ func TestTableRenameDuringDatabaseLevelChangefeed(t *testing.T) {
 		assertPayloads(t, feed1, expectedRows)
 	}
 	cdcTest(t, testFn)
+}
+
+func getChangefeedLoggingChannel(sv *settings.Values) logpb.Channel {
+	if log.ShouldMigrateEvent(sv) {
+		return logpb.Channel_CHANGEFEED
+	}
+	return logpb.Channel_TELEMETRY
 }
