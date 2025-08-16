@@ -165,6 +165,11 @@ func (p *planner) getCommonSQLEventDetails() eventpb.CommonSQLEventDetails {
 		User:            p.SessionData().SessionUser().Normalized(),
 		ApplicationName: p.SessionData().ApplicationName,
 	}
+	txn := p.InternalSQLTxn()
+	if txn != nil {
+		commonSQLEventDetails.TxnReadTimestamp = txn.KV().ReadTimestamp().WallTime
+	}
+
 	if pls := p.extendedEvalCtx.Context.Placeholders.Values; len(pls) > 0 {
 		commonSQLEventDetails.PlaceholderValues = make([]string, len(pls))
 		for idx, val := range pls {
@@ -273,10 +278,6 @@ func logEventInternalForSQLStatements(
 
 		// Overwrite with the common details.
 		*m = commonSQLEventDetails
-
-		if txn != nil {
-			m.TxnReadTimestamp = txn.KV().ReadTimestamp().WallTime
-		}
 
 		// If the common details didn't have a descriptor ID, keep the
 		// one that was in the event already.

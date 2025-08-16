@@ -251,15 +251,27 @@ func (p *planner) maybeLogStatementInternal(
 	(slowLogFullTableScans && (execDetails.FullTableScan || execDetails.FullIndexScan)) ||
 		// Is the query actually slow?
 		queryDuration > slowLogThreshold) {
+		commonSQLEventDetails := p.getCommonSQLEventDetails()
+		migrator := log.NewStructuredEventMigrator(func() bool {
+			return !log.ChannelCompatibilityModeEnabled.Get(p.ExecCfg().SV())
+		}, logpb.Channel_SQL_EXEC)
 		switch {
 		case execType == executorTypeExec:
 			// Non-internal queries are always logged to the slow query log.
-			p.logEventsOnlyExternally(ctx, &eventpb.SlowQuery{CommonSQLExecDetails: execDetails})
-
+			event := &eventpb.SlowQuery{
+				CommonSQLEventDetails: commonSQLEventDetails,
+				CommonSQLExecDetails:  execDetails,
+			}
+			migrator.StructuredEvent(ctx, severity.INFO, event)
 		case execType == executorTypeInternal && slowInternalQueryLogEnabled:
 			// Internal queries that surpass the slow query log threshold should only
 			// be logged to the slow-internal-only log if the cluster setting dictates.
-			p.logEventsOnlyExternally(ctx, &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails})
+			event := &eventpb.SlowQueryInternal{
+				CommonSQLEventDetails: commonSQLEventDetails,
+				CommonSQLExecDetails:  execDetails,
+			}
+			migrator.StructuredEvent(ctx, severity.INFO,
+				event)
 		}
 	}
 
