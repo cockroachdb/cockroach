@@ -106,14 +106,6 @@ func (lt T) ForEachLabel(fn func(int, string)) {
 	}
 }
 
-// LabelAt returns the label at the specified index in an LTree path.
-func (lt T) LabelAt(idx int) (string, error) {
-	if idx < 0 || idx >= lt.Len() {
-		return "", pgerror.Newf(pgcode.InvalidParameterValue, "index %d out of bounds", idx)
-	}
-	return lt.path[idx], nil
-}
-
 // Compare compares two LTrees lexicographically based on their labels.
 func (lt T) Compare(other T) int {
 	minLen := min(lt.Len(), other.Len())
@@ -168,4 +160,30 @@ func validateLabel(l string) error {
 // isValidChar returns true if the character is valid in an LTree label.
 func isValidChar(c byte) bool {
 	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_') || (c == '-')
+}
+
+// Contains returns true if an LTree path contains another LTree path.
+// This implements the @> and <@ operators. This is equivalent to
+// checking if an LTree path is an ancestor or descendant of another
+// LTree path. This is also equivalent to matching a prefix of labels.
+// Examples:
+// 'a.b.c' @> 'a.b' returns false
+// 'a.b' @> 'a.b.c' returns true
+func (lt T) Contains(other T) bool {
+	for i, label := range lt.path {
+		if i >= other.Len() || label != other.path[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// Concat returns a new LTree that is the concatenation of two valid LTree paths.
+func Concat(l, other T) (T, error) {
+	newLen := l.Len() + other.Len()
+	if newLen > maxNumOfLabels {
+		return Empty, pgerror.Newf(pgcode.ProgramLimitExceeded, "number of ltree levels (%d) exceeds the maximum allowed (%d)", newLen, maxNumOfLabels)
+	}
+	newPath := make([]string, 0, newLen)
+	return T{path: append(append(newPath, l.path...), other.path...)}, nil
 }

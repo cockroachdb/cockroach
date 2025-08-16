@@ -310,6 +310,22 @@ func (s *SQLScanner) Scan(lval ScanSymType) {
 			s.pos++
 			lval.SetID(lexbase.JSON_ALL_EXISTS)
 			return
+		case '@':
+			s.pos++
+			switch s.peek() {
+			case '>': // ?@>
+				s.pos++
+				lval.SetID(lexbase.FIRST_CONTAINS)
+				return
+			}
+		case '<':
+			s.pos++
+			switch s.peek() {
+			case '@': // ?<@
+				s.pos++
+				lval.SetID(lexbase.FIRST_CONTAINED_BY)
+				return
+			}
 		}
 		return
 
