@@ -885,11 +885,19 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if relational.HasPlaceholder {
 			writeFlag("has-placeholder")
 		}
+		if p, ok := e.Private().(*JoinPrivate); ok {
+			if !p.ParameterizedCols.Empty() {
+				tp.Childf("parameterized columns: %s", p.ParameterizedCols)
+			}
+		}
 		if lookupJoin, ok := e.(*LookupJoinExpr); ok {
 			// For lookup joins, indicate whether reverse scans are required to
 			// satisfy the ordering.
 			if lookupJoinMustUseReverseScans(md, lookupJoin, &required.Ordering) {
 				writeFlag("reverse-scans")
+			}
+			if !lookupJoin.ParameterizedCols.Empty() {
+				tp.Childf("parameterized columns: %s", lookupJoin.ParameterizedCols)
 			}
 		}
 
