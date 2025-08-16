@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -1268,8 +1269,12 @@ func (r *testRunner) runTest(
 
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
 				params := getTestParameters(t, issueInfo.cluster, issueInfo.vmCreateOpts)
+				githubMsg := output
+				if testGithubMsg := t.getGithubMessage(); testGithubMsg != "" {
+					githubMsg = fmt.Sprintf("%s\n\n%s", output, testGithubMsg)
+				}
 				logTestParameters(l, params)
-				issue, err := github.MaybePost(t, issueInfo, l, output, params)
+				issue, err := github.MaybePost(t, issueInfo, l, githubMsg, params)
 				if err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
 					atomic.AddInt32(&r.numGithubPostErrs, 1)
@@ -1487,11 +1492,11 @@ func (r *testRunner) runTest(
 	}
 
 	l.Printf("running test teardown (test-teardown.log)")
-	// From now on, all logging goes to test-teardown.log to give a clear separation between
+	// From now on, most logging goes to test-teardown.log to give a clear separation between
 	// operations originating from the test vs the harness. The only error that can originate here
 	// is from artifact collection, which is best effort and for which we do not fail the test.
 	replaceLogger("test-teardown")
-	if err := r.teardownTest(ctx, t, c, timedOut); err != nil {
+	if err := r.teardownTest(ctx, t, c, timedOut, l); err != nil {
 		l.PrintfCtx(ctx, "error during test teardown: %v; see test-teardown.log for details", err)
 	}
 }
@@ -1662,7 +1667,7 @@ func (r *testRunner) postTestAssertions(
 // teardownTest is best effort and should not fail a test.
 // Errors during artifact collection will be propagated up.
 func (r *testRunner) teardownTest(
-	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
+	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool, test_logger *logger.Logger,
 ) error {
 	// Check for rare conditions (such as storage durability crashes) at this
 	// point. This may still mark the test as failed (so that we enter artifacts
@@ -1674,7 +1679,7 @@ func (r *testRunner) teardownTest(
 		if err != nil {
 			t.L().Printf("error collecting artifacts: %v", err)
 		}
-
+		var errMonitor registry.FatalMonitorError
 		if timedOut {
 			// Shut down the cluster. We only do this on timeout to help the test terminate;
 			// for regular failures, if the --debug flag is used, we want the cluster to stay
@@ -1689,6 +1694,40 @@ func (r *testRunner) teardownTest(
 
 			// Cancel tasks to ensure that any stray tasks are cleaned up.
 			t.taskManager.Cancel()
+
+		} else if failuresMatchingError(t.failures(), &errMonitor) {
+			t.L().Printf("Test has failed due to fatal error observed by the monitor")
+			t.L().Printf("Attempting to gather node fatal level logs for triage")
+
+			pattern := `^F[0-9]{6}`
+			// *unredacted captures patterns for single node and multi-node clusters
+			// e.g. unredacted, 1.unredacted
+			joinedFilePath := filepath.Join(t.ArtifactsDir(), "logs/*unredacted/cockroach*.log")
+			targetFiles, err := filepath.Glob(joinedFilePath)
+			if err != nil {
+				return err
+			} else if len(targetFiles) == 0 {
+				return errors.New("No matching log files found")
+			}
+			args := append([]string{"-E", "-m", "10", pattern}, targetFiles...)
+			command := "grep"
+			// Note: need to wrap the regex in quotes if you want to copy this command from the logs and
+			// use directly
+			t.L().Printf("Gathering fatal level logs with command: %s %s", command, strings.Join(args, " "))
+			cmd := exec.Command("grep", args...)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				var ee *exec.ExitError
+				if errors.As(err, &ee) && ee.ExitCode() == 1 {
+					t.L().Printf("No fatal level logs found.")
+					return nil
+				}
+			} else {
+				msg := fmt.Sprintf("CockroachDB contains Fatal level logs. Up to the first 10 "+
+					"will be shown here. See node logs in artifacts for more details.\n%s", string(out))
+				test_logger.PrintfCtx(ctx, msg)
+				t.appendGithubMessage(msg)
+			}
 		}
 		return err
 	}
