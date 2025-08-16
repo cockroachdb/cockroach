@@ -729,6 +729,10 @@ message LocalOnlySessionData {
   // mutations), regardless of the table being multi-region.
   bool parallelize_multi_key_lookup_joins_only_on_mr_mutations = 182 [(gogoproto.customname) = "ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations"];
 
+  // AllowUnsafeInternals allows the caller to access the crdb_internal
+  // or system databases within queries.
+  bool allow_unsafe_internals = 183;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

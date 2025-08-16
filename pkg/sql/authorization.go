@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/errors"
 )
 
@@ -119,6 +120,16 @@ func (p *planner) HasPrivilege(
 	// with an invalid API usage.
 	if p.txn == nil {
 		return false, errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
+	}
+
+	// Do a safety check on the object, if it is considered unsafe
+	// does the user have the appropriate session data to access it?
+	if d, ok := privilegeObject.(catalog.TableDescriptor); ok {
+		if p.tableIsUnsafe(ctx, d) {
+			if err := unsafesql.CheckInternalsAccess(p.SessionData()); err != nil {
+				return false, err
+			}
+		}
 	}
 
 	// root, admin and node user should always have privileges, except NOSQLLOGIN.
@@ -940,6 +951,21 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(
 	return false, false, nil
 }
 
+func (p *planner) tableIsUnsafe(ctx context.Context, d catalog.TableDescriptor) bool {
+	// All system descriptors are considered unsafe.
+	if catalog.IsSystemDescriptor(d) {
+		return true
+	}
+
+	// Unsupported crdb_internal tables are considered unsafe.
+	if d.GetParentSchemaID() == catconstants.CrdbInternalID {
+		if _, ok := SupportedCRDBInternalTables[d.GetName()]; !ok {
+			return true
+		}
+	}
+
+	return false
+}
 func insufficientPrivilegeError(
 	user username.SQLUsername, kind privilege.Kind, object privilege.Object,
 ) error {
