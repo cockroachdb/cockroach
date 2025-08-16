@@ -246,6 +246,25 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 		if opts.skipCleanup {
 			runOptions.skipCleanup = opts.skipCleanup
 		}
+
+		// Enable buffered writes and reads not blocking on exclusive locks.
+		{
+			db := c.Conn(ctx, t.L(), 1)
+			defer db.Close()
+			if _, err := db.ExecContext(
+				ctx, "SET CLUSTER SETTING kv.transaction.write_buffering.enabled = true",
+			); err != nil {
+				t.Fatal(err)
+			}
+			t.Status("enabled buffered writes")
+			if _, err := db.ExecContext(
+				ctx, "SET CLUSTER SETTING kv.lock.exclusive_locks_block_non_locking_reads.enabled = false",
+			); err != nil {
+				t.Fatal(err)
+			}
+			t.Status("disabled reads blocking on exclusive locks")
+		}
+
 		result, err := tpceSpec.run(ctx, t, c, runOptions)
 		if err != nil {
 			t.Fatal(err.Error())
