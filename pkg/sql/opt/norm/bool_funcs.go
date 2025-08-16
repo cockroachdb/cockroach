@@ -37,8 +37,7 @@ func (c *CustomFuncs) NegateComparison(
 
 // CanNegateComparison returns whether the given comparison op can be negated.
 func (c *CustomFuncs) CanNegateComparison(cmp opt.Operator) bool {
-	_, ok := opt.NegateOpMap[cmp]
-	return ok
+	return opt.NegateOpMap[cmp] != opt.UnknownOp
 }
 
 // FindRedundantConjunct takes the left and right operands of an Or operator as
