@@ -196,7 +196,11 @@ var DefaultPubKeyNames = []string{
 	"id_ed25519",
 	"id_ed25519_sk",
 	"id_dsa",
+
+	// Cockroach additions
 	"google_compute_engine",
+	"Roachprod",
+	"roachprod",
 }
 
 // SSHPublicKeyPath returns the path to the default public key expected by
