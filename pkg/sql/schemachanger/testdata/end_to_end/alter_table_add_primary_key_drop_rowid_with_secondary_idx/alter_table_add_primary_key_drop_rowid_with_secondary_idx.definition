@@ -23,7 +23,7 @@ SELECT count(*)=$successfulStageCount*2 FROM t@idx_b;
 true
 
 stage-query phase=PostCommitPhase stage=:
-SELECT DISTINCT index_name FROM [ SHOW INDEXES FROM t] ORDER BY index_name;
+SELECT index_name FROM crdb_internal.table_indexes WHERE descriptor_name='t' ORDER BY index_name;
 ----
 idx_b
 idx_c
@@ -48,7 +48,7 @@ SELECT count(*)=$successfulStageCount*2 FROM t@idx_b;
 true
 
 stage-query phase=PostCommitNonRevertiblePhase stage=:
-SELECT DISTINCT index_name FROM [ SHOW INDEXES FROM t] ORDER BY index_name;
+SELECT index_name FROM crdb_internal.table_indexes WHERE descriptor_name='t' ORDER BY index_name;
 ----
 idx_b
 idx_c

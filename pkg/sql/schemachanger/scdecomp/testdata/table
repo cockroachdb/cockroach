@@ -1121,6 +1121,7 @@ ElementState:
     tableId: 105
     temporaryIndexId: 0
     type: FORWARD
+    useHideForPrimaryKeyRecreated: false
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
