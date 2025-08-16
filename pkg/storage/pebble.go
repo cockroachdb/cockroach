@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // IngestSplitEnabled controls whether ingest-time splitting is enabled in
@@ -725,6 +727,8 @@ type Pebble struct {
 	iterStats                        struct {
 		syncutil.Mutex
 		AggregatedIteratorStats
+		// mvccGetBlocksLoadedCumulative is a cumulative histogram for MVCC get block loads.
+		mvccGetBlocksLoadedCumulative prometheus.Histogram
 	}
 	batchCommitStats struct {
 		syncutil.Mutex
@@ -1015,6 +1019,14 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		singleDelLogEvery:       log.Every(5 * time.Minute),
 		diskWriteStatsCollector: cfg.DiskWriteStatsCollector,
 	}
+
+	// Initialize the cumulative histogram for MVCC get block loads.
+	blockLoadsBuckets := metric.Count1KBuckets.GetBucketsFromBucketConfig()
+	p.iterStats.mvccGetBlocksLoadedCumulative = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "mvcc_get_blocks_loaded_cumulative",
+		Help:    "Cumulative histogram of block loads per MVCC get operation",
+		Buckets: blockLoadsBuckets,
+	})
 
 	// Wrap the CompactionConcurrencyRange function to allow overriding the lower
 	// and upper values at runtime through Engine.SetCompactionConcurrency.
@@ -1924,6 +1936,7 @@ func (p *Pebble) GetMetrics() Metrics {
 	}
 	p.iterStats.Lock()
 	m.Iterator = p.iterStats.AggregatedIteratorStats
+	m.MVCCGetBlockLoadsCumulative = p.iterStats.mvccGetBlocksLoadedCumulative
 	p.iterStats.Unlock()
 	p.batchCommitStats.Lock()
 	m.BatchCommitStats = p.batchCommitStats.AggregatedBatchCommitStats
@@ -1932,6 +1945,13 @@ func (p *Pebble) GetMetrics() Metrics {
 		m.DiskWriteStats = p.diskWriteStatsCollector.GetStats()
 	}
 	return m
+}
+
+// RecordMVCCGetBlocksLoaded implements the Engine interface.
+func (p *Pebble) RecordMVCCGetBlocksLoaded(blockLoads int64) {
+	p.iterStats.Lock()
+	defer p.iterStats.Unlock()
+	p.iterStats.mvccGetBlocksLoadedCumulative.Observe(float64(blockLoads))
 }
 
 // GetPebbleOptions implements the Engine interface.
@@ -2887,6 +2907,13 @@ func (p *pebbleReadOnly) BufferedSize() int {
 	panic(errors.AssertionFailedf("not implemented"))
 }
 
+// RecordMVCCGetBlocksLoaded implements the Reader interface.
+func (p *pebbleReadOnly) RecordMVCCGetBlocksLoaded(blockLoads int64) {
+	if p.parent != nil {
+		p.parent.RecordMVCCGetBlocksLoaded(blockLoads)
+	}
+}
+
 // pebbleSnapshot implements Reader, backed by a Pebble eventually file-only
 // snapshot created using NewEventuallyFileOnlySnapshot.
 type pebbleSnapshot struct {
@@ -3022,6 +3049,13 @@ func (p *pebbleSnapshot) ScanInternal(
 		VisitSharedFile:   visitSharedFile,
 		VisitExternalFile: visitExternalFile,
 	})
+}
+
+// RecordMVCCGetBlocksLoaded implements the Reader interface.
+func (p *pebbleSnapshot) RecordMVCCGetBlocksLoaded(blockLoads int64) {
+	if p.parent != nil {
+		p.parent.RecordMVCCGetBlocksLoaded(blockLoads)
+	}
 }
 
 // ExceedMaxSizeError is the error returned when an export request
