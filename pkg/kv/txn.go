@@ -703,6 +703,7 @@ func (txn *Txn) scan(
 	if maxRows > 0 {
 		b.Header.MaxSpanRequestKeys = maxRows
 	}
+	b.Header.IsReverse = isReverse
 	b.scan(begin, end, isReverse, str, dur)
 	r, err := getOneResult(txn.Run(ctx, b), b)
 	return r.Rows, err
