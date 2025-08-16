@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -171,7 +173,7 @@ func TestWriteBackupIndexMetadata(t *testing.T) {
 	require.Equal(t, subdir, metadata.Path)
 }
 
-func TestWriteBackupIndexMetadataWithLocalityAwareAndIncrementalStorage(t *testing.T) {
+func TestWriteBackupIndexMetadataWithLocalityAwareBackups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -184,13 +186,9 @@ func TestWriteBackupIndexMetadataWithLocalityAwareAndIncrementalStorage(t *testi
 
 	collections := `('nodelocal://1/us-west?COCKROACH_LOCALITY=region%3Dus-west',
 		'nodelocal://1/us-east?COCKROACH_LOCALITY=default')`
-	incStorage := `('nodelocal://1/us-west/inc?COCKROACH_LOCALITY=region%3Dus-west',
-		'nodelocal://1/us-east-inc?COCKROACH_LOCALITY=default')`
 
-	sqlDB.Exec(t, fmt.Sprintf(`BACKUP INTO %s WITH incremental_location = %s`, collections, incStorage))
-	sqlDB.Exec(t, fmt.Sprintf(
-		`BACKUP INTO LATEST IN %s WITH incremental_location = %s`, collections, incStorage,
-	))
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP INTO %s`, collections))
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP INTO LATEST IN %s`, collections))
 
 	indexDir := path.Join(tempDir, "us-east", backupbase.BackupIndexDirectoryPath)
 	fullIndexes, err := os.ReadDir(indexDir)
@@ -224,6 +222,36 @@ func TestWriteBackupIndexMetadataWithLocalityAwareAndIncrementalStorage(t *testi
 	// index path, implying that its path starts from the root of the incremental
 	// storage directory.
 	require.True(t, strings.HasPrefix(incrIndex.Path, fullIndex.Path))
+}
+
+func TestWriteBackupindexMetadataWithSpecifiedIncrementalLocation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tempDir, tempDirCleanup := testutils.TempDir(t)
+	defer tempDirCleanup()
+	_, sqlDB, _, cleanup := backuptestutils.StartBackupRestoreTestCluster(
+		t, 1, backuptestutils.WithTempDir(tempDir),
+	)
+	defer cleanup()
+
+	const collectionURI = "nodelocal://1/backup"
+	const incLoc = "nodelocal://1/incremental_backup"
+
+	sqlDB.Exec(t, "BACKUP INTO $1", collectionURI)
+	sqlDB.Exec(t, "BACKUP INTO LATEST IN $1 WITH incremental_location=$2", collectionURI, incLoc)
+
+	indexDir := path.Join(tempDir, "backup", backupbase.BackupIndexDirectoryPath)
+	fullIndexes, err := os.ReadDir(indexDir)
+	require.NoError(t, err)
+	require.Len(t, fullIndexes, 1)
+
+	chainIndexes, err := os.ReadDir(path.Join(indexDir, fullIndexes[0].Name()))
+	require.NoError(t, err)
+
+	// Since we specified an incremental location, we should not see an index
+	// being written for the incremental backup.
+	require.Len(t, chainIndexes, 1)
 }
 
 func TestDontWriteBackupIndexMetadata(t *testing.T) {
@@ -460,6 +488,77 @@ func TestIndexExists(t *testing.T) {
 	}
 }
 
+func TestListIndexes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanup := testutils.TempDir(t)
+	defer dirCleanup()
+
+	st := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.Latest.Version(),
+		clusterversion.Latest.Version(),
+		true,
+	)
+	execCfg := &sql.ExecutorConfig{Settings: st}
+
+	const collectionURI = "nodelocal://1/test"
+	storage, err := cloud.ExternalStorageFromURI(
+		ctx,
+		collectionURI,
+		base.ExternalIODirConfig{},
+		st,
+		blobs.TestBlobServiceClient(dir),
+		username.RootUserName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+	require.NoError(t, err)
+	defer storage.Close()
+	storageFactory := func(
+		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
+	) (cloud.ExternalStorage, error) {
+		return storage, nil
+	}
+
+	end := time.Date(2025, 8, 13, 0, 0, 0, 0, time.UTC)
+	fullSubdir := end.Format(backupbase.DateBasedIntoFolderName)
+	details := jobspb.BackupDetails{
+		Destination: jobspb.BackupDetails_Destination{
+			To:     []string{collectionURI},
+			Subdir: fullSubdir,
+		},
+		StartTime:     hlc.Timestamp{},
+		EndTime:       hlc.Timestamp{WallTime: end.UnixNano()},
+		CollectionURI: collectionURI,
+		// URI does not need to be set properly for this test since we are not
+		// reading the contents of the files.
+		URI: collectionURI + "/" + fullSubdir,
+	}
+
+	const numBackups = 4
+	for range numBackups {
+		require.NoError(
+			t, WriteBackupIndexMetadata(ctx, execCfg, username.RootUserName(), storageFactory, details),
+		)
+		start := end
+		end = end.Add(1 * time.Hour)
+		details.StartTime = hlc.Timestamp{WallTime: start.UnixNano()}
+		details.EndTime = hlc.Timestamp{WallTime: end.UnixNano()}
+	}
+
+	indexes, err := ListIndexes(ctx, storage, fullSubdir)
+	require.NoError(t, err)
+
+	require.Len(t, indexes, numBackups)
+
+	expectedSort := indexes[:]
+	slices.Sort(expectedSort)
+	require.Equal(t, expectedSort, indexes)
+}
+
 type fakeExternalStorage struct {
 	cloud.ExternalStorage
 	files map[string]*closableBytesWriter
@@ -471,6 +570,10 @@ func newFakeExternalStorage() *fakeExternalStorage {
 	return &fakeExternalStorage{
 		files: make(map[string]*closableBytesWriter),
 	}
+}
+
+func (f *fakeExternalStorage) Close() error {
+	return nil
 }
 
 func (f *fakeExternalStorage) Conf() cloudpb.ExternalStorage {
