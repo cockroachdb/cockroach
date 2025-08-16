@@ -811,8 +811,8 @@ func constructVirtualTableLookupJoin(
 	if err != nil {
 		return nil, err
 	}
-	if !canQueryVirtualTable(p.EvalContext(), virtual) {
-		return nil, newUnimplementedVirtualTableError(tn.Schema(), tn.Table())
+	if err := canQueryVirtualTable(p, virtual, tn); err != nil {
+		return nil, err
 	}
 	if len(eqCols) > 1 {
 		return nil, errors.AssertionFailedf("vtable indexes with more than one column aren't supported yet")

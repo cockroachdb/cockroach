@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -46,6 +47,8 @@ type schemaResolver struct {
 	sessionDataStack *sessiondata.Stack
 	txn              *kv.Txn
 	authAccessor     scbuild.AuthorizationAccessor
+	ambientCtx       *log.AmbientContext
+	stmt             Statement
 
 	// skipDescriptorCache, when true, instructs all code that accesses table/view
 	// descriptors to force reading the descriptors within the transaction. This

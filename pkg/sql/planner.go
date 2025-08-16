@@ -305,6 +305,10 @@ type planner struct {
 	// statement. It's similar to autoRetryCounter / txnState.mu.autoRetryCounter
 	// but for statement retries.
 	autoRetryStmtCounter int
+
+	// skipUnsafeInternalCheck is used to skip the check that the
+	// planner is not used for unsafe internal statements.
+	skipUnsafeInternalsCheck bool
 }
 
 // hasFlowForPausablePortal returns true if the planner is for re-executing a
@@ -476,6 +480,8 @@ func newInternalPlanner(
 	p.schemaResolver.sessionDataStack = sds
 	p.schemaResolver.txn = p.txn
 	p.schemaResolver.authAccessor = p
+	p.schemaResolver.ambientCtx = &execCfg.AmbientCtx
+	p.schemaResolver.stmt = p.stmt
 	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors())
 	p.extendedEvalCtx.CatalogBuiltins = &p.evalCatalogBuiltins
 
@@ -962,6 +968,8 @@ func (p *planner) resetPlanner(
 
 	p.schemaResolver.txn = txn
 	p.schemaResolver.sessionDataStack = p.EvalContext().SessionDataStack
+	p.schemaResolver.ambientCtx = &p.execCfg.AmbientCtx
+	p.schemaResolver.stmt = p.stmt
 	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID

@@ -263,8 +263,8 @@ func constructVirtualScan(
 	if err != nil {
 		return nil, err
 	}
-	if !canQueryVirtualTable(p.EvalContext(), virtual) {
-		return nil, newUnimplementedVirtualTableError(tn.Schema(), tn.Table())
+	if err := canQueryVirtualTable(p, virtual, tn); err != nil {
+		return nil, err
 	}
 	idx := index.(*optVirtualIndex).idx
 	columns, constructor := virtual.getPlanInfo(
