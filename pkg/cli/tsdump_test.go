@@ -8,6 +8,7 @@ package cli
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/gob"
 	"fmt"
 	"io"
 	"math/rand"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -132,6 +134,113 @@ func TestMakeOpenMetricsWriter(t *testing.T) {
 		res = append(res, s)
 	}
 	require.Equal(t, dataPointsNum+1 /* datapoints + EOF final line */, len(res))
+}
+
+// TestTSDumpConversionWithEmbeddedMetadata tests the conversion of tsdump files
+// containing embedded metadata to CSV format, verifying metadata extraction.
+func TestTSDumpConversionWithEmbeddedMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tmpFile, err := os.CreateTemp("", "tsdump_with_metadata_*.gob")
+	require.NoError(t, err)
+	defer func(name string) {
+		err := os.Remove(name)
+		if err != nil {
+			t.Fatalf("failed to remove temporary file %s: %v", name, err)
+		}
+	}(tmpFile.Name())
+
+	metadata := tsdumpmeta.Metadata{
+		Version: "v23.1.0",
+		StoreToNodeMap: map[string]string{
+			"1": "1",
+			"2": "2",
+		},
+		CreatedAt: timeutil.Unix(1609459200, 0),
+	}
+	err = tsdumpmeta.Write(tmpFile, metadata)
+	require.NoError(t, err)
+
+	enc := gob.NewEncoder(tmpFile)
+	kv, err := createMockTimeSeriesKV("cr.node.sql.query.count", "1", 1609459200000000000, 100.5)
+	require.NoError(t, err)
+	err = enc.Encode(kv)
+	require.NoError(t, err)
+
+	tmpFile.Close()
+
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
+
+	// Convert to CSV format
+	out, err := c.RunWithCapture(fmt.Sprintf(
+		"debug tsdump --format=csv %s",
+		tmpFile.Name(),
+	))
+	require.NoError(t, err)
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+
+	require.Contains(t, out, "Found embedded store-to-node mapping with 2 entries")
+
+	csvFound := false
+	for _, line := range lines {
+		if strings.Contains(line, "cr.node.sql.query.count") &&
+			strings.Contains(line, "2021-01-01T00:00:00Z") {
+			csvFound = true
+			break
+		}
+	}
+	require.True(t, csvFound, "should contain converted CSV data")
+}
+
+// TestTSDumpRawGenerationWithEmbeddedMetadata tests that raw format tsdump generation
+// automatically includes embedded store-to-node mapping metadata in the output.
+func TestTSDumpRawGenerationWithEmbeddedMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
+
+	out, err := c.RunWithCapture("debug tsdump --format=raw --cluster-name=test-cluster-1 --disable-cluster-name-verification")
+	require.NoError(t, err)
+	require.NotEmpty(t, out)
+
+	// Remove the command prefix from the output to get the actual binary data
+	// The output starts with something like "debug tsdump --format=raw..."
+	// Find the first occurrence of gob magic bytes or skip the command line
+	actualData := out
+	if idx := strings.Index(out, "\n"); idx != -1 {
+		actualData = out[idx+1:] // Skip the command line
+	}
+
+	// Write the cleaned binary data to file
+	tmpFile, err := os.CreateTemp("", "tsdump_*.gob")
+	require.NoError(t, err)
+	defer func(name string) {
+		err := os.Remove(name)
+		if err != nil {
+			t.Fatalf("failed to remove temporary file %s: %v", name, err)
+		}
+	}(tmpFile.Name())
+
+	_, err = tmpFile.Write([]byte(actualData))
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	file, err := os.Open(tmpFile.Name())
+	require.NoError(t, err)
+	defer file.Close()
+
+	dec := gob.NewDecoder(file)
+	readMetadata, err := tsdumpmeta.Read(dec)
+	require.NoError(t, err)
+
+	// Verify store-to-node mapping is embedded
+	require.NotNil(t, readMetadata.StoreToNodeMap)
+	require.Equal(t, "1", readMetadata.StoreToNodeMap["1"])
 }
 
 func makeTS(name, source string, dataPointsNum int) *tspb.TimeSeriesData {

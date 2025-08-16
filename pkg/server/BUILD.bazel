@@ -298,6 +298,7 @@ go_library(
         "//pkg/testutils/serverutils",
         "//pkg/ts",
         "//pkg/ts/catalog",
+        "//pkg/ts/tsdumpmeta",
         "//pkg/ui",
         "//pkg/upgrade",
         "//pkg/upgrade/upgradebase",
