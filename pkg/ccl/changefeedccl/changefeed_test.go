@@ -6001,8 +6001,9 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 			return err
 		}
 
-		sqlDB.Exec(t, `CREATE TABLE truncate (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `CREATE TABLE truncate_cascade (b INT PRIMARY KEY REFERENCES truncate (a))`)
+		// TODO(#151941): Re-enable auto schema_locked for this test.
+		sqlDB.Exec(t, `CREATE TABLE truncate (a INT PRIMARY KEY) WITH (schema_locked=false)`)
+		sqlDB.Exec(t, `CREATE TABLE truncate_cascade (b INT PRIMARY KEY REFERENCES truncate (a)) WITH (schema_locked=false)`)
 		sqlDB.Exec(t,
 			`BEGIN; INSERT INTO truncate VALUES (1); INSERT INTO truncate_cascade VALUES (1); COMMIT`)
 		truncate := feed(t, f, `CREATE CHANGEFEED FOR truncate`)
