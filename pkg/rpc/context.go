@@ -1396,7 +1396,7 @@ func (rpcCtx *Context) GRPCDialOptions(
 	//
 	// Here, though, we don't currently care about the underlying TCP connection
 	// backing a gRPC channel so onNetworkDial is a no-op.
-	onNetworkDial := func(conn net.Conn) {}
+	onNetworkDial := func(conn net.Conn) net.Conn { return conn }
 	return rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport, onNetworkDial)
 }
 
@@ -1560,7 +1560,7 @@ func (t *statsTracker) HandleConn(ctx context.Context, s stats.ConnStats) {
 	}
 }
 
-type onDialFunc func(conn net.Conn)
+type onDialFunc func(conn net.Conn) net.Conn
 
 func (rpcCtx *Context) dialerWithCallback(
 	dialerFunc dialerFunc, onNetworkDial onDialFunc,
@@ -2141,6 +2141,8 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 		return p.c
 	}
 
+	log.Infof(context.Background(), "grpcDialNodeInternal: peer_key=%v", k)
+
 	// Slow path. Race to create a peer.
 	return rpcDialNodeInternal(
 		rpcCtx, k, newGRPCPeerOptions(rpcCtx, k, remoteLocality),
@@ -2161,6 +2163,8 @@ func (rpcCtx *Context) drpcDialNodeInternal(
 		return p.c
 	}
 
+	log.Infof(context.Background(), "drpcDialNodeInternal: peer_key=%v", k)
+
 	// Slow path. Race to create a peer.
 	return rpcDialNodeInternal(
 		rpcCtx, k, newDRPCPeerOptions(rpcCtx, k, remoteLocality),
@@ -2177,6 +2181,7 @@ func rpcDialNodeInternal[Conn rpcConn](
 	defer conns.mu.Unlock()
 
 	if p, lostRace := conns.getRLocked(k); lostRace {
+		log.Infof(context.Background(), "rpcDialNodeInternal: peer_key=%v, lost race", k)
 		return p.c
 	}
 
@@ -2184,6 +2189,7 @@ func rpcDialNodeInternal[Conn rpcConn](
 	if conns.mu.m == nil {
 		conns.mu.m = map[peerKey]*peer[Conn]{}
 	}
+	log.Infof(context.Background(), "rpcDialNodeInternal: peer_key=%v, won race", k)
 
 	p := newPeer(rpcCtx, k, peerOpts)
 	// (Asynchronously) Start the probe (= heartbeat loop). The breaker is healthy
@@ -2300,7 +2306,7 @@ func VerifyDialback(
 		// A throwaway connection keeps it simple.
 		ctx := rpcCtx.wrapCtx(ctx, target, request.OriginNodeID, rpcbase.SystemClass)
 		ctx = logtags.AddTag(ctx, "dialback", nil)
-		onNetworkDial := func(conn net.Conn) {}
+		onNetworkDial := func(conn net.Conn) net.Conn { return conn }
 		conn, err := rpcCtx.grpcDialRaw(ctx, target, rpcbase.SystemClass, onNetworkDial, grpc.WithBlock())
 		if conn != nil { // NB: the nil check simplifies mocking in TestVerifyDialback
 			_ = conn.Close() // nolint:grpcconnclose

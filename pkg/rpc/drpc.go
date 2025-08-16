@@ -31,7 +31,7 @@ import (
 )
 
 // Default idle connection timeout for DRPC connections in the pool.
-var defaultDRPCConnIdleTimeout = 5 * time.Minute
+var defaultDRPCConnIdleTimeout = 1 * time.Second
 
 type drpcCloseNotifier struct {
 	conn drpc.Conn
@@ -43,9 +43,9 @@ func (d *drpcCloseNotifier) CloseNotify(ctx context.Context) <-chan struct{} {
 
 // TODO(server): unexport this once dial methods are added in rpccontext.
 func DialDRPC(
-	rpcCtx *Context,
+	rpcCtx *Context, onNetworkDial onDialFunc,
 ) func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
-	return func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
+	return func(ctx context.Context, target string, class rpcbase.ConnectionClass) (drpc.Conn, error) {
 		// TODO(server): could use connection class instead of empty key here.
 		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
 			Expiration: defaultDRPCConnIdleTimeout,
@@ -56,6 +56,10 @@ func DialDRPC(
 			netConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
 			if err != nil {
 				return nil, err
+			}
+			if onNetworkDial != nil {
+				log.Infof(ctx, "drpcOnNetworkDial: target=%v, class=%v", target, class)
+				netConn = onNetworkDial(netConn)
 			}
 
 			opts := drpcconn.Options{
@@ -243,11 +247,47 @@ func newDRPCPeerOptions(
 	rpcCtx *Context, k peerKey, locality roachpb.Locality,
 ) *peerOptions[drpc.Conn] {
 	pm, _ := rpcCtx.metrics.acquire(k, locality)
+	onNetworkDial := func(conn net.Conn) net.Conn {
+		// unique key for a TCP connection
+		laddr := conn.LocalAddr().String()
+		cm := rpcCtx.metrics.acquireTCPMetrics(k, laddr)
+
+		instrConn := &InstrumentedConn{
+			Conn:    conn,
+			metrics: &cm,
+			onClose: func() error {
+				rpcCtx.metrics.releaseConnectionMetrics(k, laddr)
+
+				rpcCtx.drpcPeers.mu.Lock()
+				defer rpcCtx.drpcPeers.mu.Unlock()
+				p := rpcCtx.drpcPeers.mu.m[k]
+
+				p.mu.Lock()
+				defer p.mu.Unlock()
+				delete(p.mu.tcpConns, laddr)
+
+				return nil
+			},
+		}
+
+		rpcCtx.drpcPeers.mu.Lock()
+		defer rpcCtx.drpcPeers.mu.Unlock()
+		p := rpcCtx.drpcPeers.mu.m[k]
+
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.mu.tcpConns[laddr] = instrConn
+
+		log.Infof(context.Background(), "DRPC network dial: peer_key=%v local_addr=%v remote_addr=%v",
+			k, conn.LocalAddr(), conn.RemoteAddr())
+
+		return instrConn
+	}
 	return &peerOptions[drpc.Conn]{
 		locality: locality,
 		peers:    &rpcCtx.drpcPeers,
 		connOptions: &ConnectionOptions[drpc.Conn]{
-			dial: DialDRPC(rpcCtx),
+			dial: DialDRPC(rpcCtx, onNetworkDial),
 			connEquals: func(a, b drpc.Conn) bool {
 				return a == b
 			},

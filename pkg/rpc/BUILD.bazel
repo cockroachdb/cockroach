@@ -17,6 +17,7 @@ go_library(
         "errors.go",
         "grpc.go",
         "heartbeat.go",
+        "instrumented_conn.go",
         "keepalive.go",
         "metrics.go",
         "peer.go",

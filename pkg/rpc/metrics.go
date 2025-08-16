@@ -251,6 +251,7 @@ func newMetrics(locality roachpb.Locality) *Metrics {
 		localityLabels = append(localityLabels, "source_"+tier.Key)
 		localityLabels = append(localityLabels, "destination_"+tier.Key)
 	}
+	tcpChildLabels := append(childLabels, "local_addr")
 	m := Metrics{
 		locality:                      locality,
 		ConnectionHealthy:             aggmetric.NewGauge(metaConnectionHealthy, childLabels...),
@@ -264,11 +265,12 @@ func newMetrics(locality roachpb.Locality) *Metrics {
 		ConnectionBytesSent:           aggmetric.NewCounter(metaNetworkBytesEgress, localityLabels...),
 		ConnectionBytesRecv:           aggmetric.NewCounter(metaNetworkBytesIngress, localityLabels...),
 		ConnectionAvgRoundTripLatency: aggmetric.NewGauge(metaConnectionAvgRoundTripLatency, childLabels...),
-		ConnectionTCPRTT:              aggmetric.NewGauge(metaConnectionTCPRTT, childLabels...),
-		ConnectionTCPRTTVar:           aggmetric.NewGauge(metaConnectionTCPRTTVar, childLabels...),
+		ConnectionTCPRTT:              aggmetric.NewGauge(metaConnectionTCPRTT, tcpChildLabels...),
+		ConnectionTCPRTTVar:           aggmetric.NewGauge(metaConnectionTCPRTTVar, tcpChildLabels...),
 	}
 	m.mu.peerMetrics = make(map[string]peerMetrics)
 	m.mu.localityMetrics = make(map[string]localityMetrics)
+	m.mu.tcpMetrics = make(map[string]tcpMetrics)
 	return &m
 }
 
@@ -318,6 +320,8 @@ type Metrics struct {
 		peerMetrics map[string]peerMetrics
 		// localityMetrics is a map of localityKey to localityMetrics.
 		localityMetrics map[string]localityMetrics
+		// tcpMetrics is a map of connectionKey to tcpMetrics.
+		tcpMetrics map[string]tcpMetrics
 	}
 }
 
@@ -360,12 +364,6 @@ type peerMetrics struct {
 	// Updated on each successful heartbeat, reset (along with roundTripLatency)
 	// after runHeartbeatUntilFailure returns.
 	AvgRoundTripLatency *aggmetric.Gauge
-	// TCP-level round trip time as measured by the kernel's TCP stack.
-	// This provides network-level latency without application overhead.
-	TCPRTT *aggmetric.Gauge
-	// TCP-level round trip time variance as measured by the kernel's TCP stack.
-	// This indicates connection stability and jitter.
-	TCPRTTVar *aggmetric.Gauge
 	// roundTripLatency is the source for the AvgRoundTripLatency gauge. We don't
 	// want to maintain a full histogram per peer, so instead on each heartbeat we
 	// update roundTripLatency and flush the result into AvgRoundTripLatency.
@@ -385,6 +383,15 @@ type localityMetrics struct {
 	ConnectionBytesRecv *aggmetric.Counter
 }
 
+type tcpMetrics struct {
+	// TCP-level round trip time as measured by the kernel's TCP stack.
+	// This provides network-level latency without application overhead.
+	TCPRTT *aggmetric.Gauge
+	// TCP-level round trip time variance as measured by the kernel's TCP stack.
+	// This indicates connection stability and jitter.
+	TCPRTTVar *aggmetric.Gauge
+}
+
 func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityMetrics) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -401,8 +408,6 @@ func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityM
 			ConnectionHeartbeats:   m.ConnectionHeartbeats.AddChild(labelVals...),
 			ConnectionFailures:     m.ConnectionFailures.AddChild(labelVals...),
 			AvgRoundTripLatency:    m.ConnectionAvgRoundTripLatency.AddChild(labelVals...),
-			TCPRTT:                 m.ConnectionTCPRTT.AddChild(labelVals...),
-			TCPRTTVar:              m.ConnectionTCPRTTVar.AddChild(labelVals...),
 			// We use a SimpleEWMA which uses the zero value to mean "uninitialized"
 			// and operates on a ~60s decay rate.
 			roundTripLatency: &ThreadSafeMovingAverage{ma: &ewma.SimpleEWMA{}},
@@ -425,6 +430,37 @@ func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityM
 	// We temporarily increment the inactive count until we actually connect.
 	pm.ConnectionInactive.Inc(1)
 	return pm, lm
+}
+
+// acquireTCPMetrics acquires TCP metrics for a given peer key and local address.
+func (m *Metrics) acquireTCPMetrics(k peerKey, localAddr string) tcpMetrics {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String(), localAddr}
+	labelKey := strings.Join(labelVals, ",")
+
+	cm := tcpMetrics{
+		TCPRTT:    m.ConnectionTCPRTT.AddChild(labelVals...),
+		TCPRTTVar: m.ConnectionTCPRTTVar.AddChild(labelVals...),
+	}
+
+	m.mu.tcpMetrics[labelKey] = cm
+
+	return cm
+}
+
+func (m *Metrics) releaseConnectionMetrics(k peerKey, localAddr string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String(), localAddr}
+	labelKey := strings.Join(labelVals, ",")
+
+	m.ConnectionTCPRTT.RemoveChild(labelVals...)
+	m.ConnectionTCPRTTVar.RemoveChild(labelVals...)
+
+	delete(m.mu.tcpMetrics, labelKey)
 }
 
 const (

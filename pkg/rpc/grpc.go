@@ -68,11 +68,9 @@ func newGRPCPeerOptions(
 				// onNetworkDial is a callback that is called after we dial a TCP connection.
 				// It is not called if we use the loopback dialer.
 				// We define it here because we need access to the peer map.
-				onNetworkDial := func(conn net.Conn) {
-					tcpConn, ok := conn.(*net.TCPConn)
-					if !ok {
-						return
-					}
+				onNetworkDial := func(conn net.Conn) net.Conn {
+					// we use laddr as a unique key for a TCP connection
+					laddr := conn.LocalAddr().String()
 
 					rpcCtx.peers.mu.Lock()
 					defer rpcCtx.peers.mu.Unlock()
@@ -80,9 +78,30 @@ func newGRPCPeerOptions(
 
 					p.mu.Lock()
 					defer p.mu.Unlock()
-					p.mu.tcpConn = tcpConn
 
-					log.VEventf(ctx, 2, "gRPC network dial: laddr=%v", tcpConn.LocalAddr())
+					cm := rpcCtx.metrics.acquireTCPMetrics(k, laddr)
+					instrConn := &InstrumentedConn{
+						Conn:    conn,
+						metrics: &cm,
+						onClose: func() error {
+							rpcCtx.metrics.releaseConnectionMetrics(k, laddr)
+
+							rpcCtx.peers.mu.Lock()
+							defer rpcCtx.peers.mu.Unlock()
+							p1 := rpcCtx.peers.mu.m[k]
+
+							p1.mu.Lock()
+							defer p1.mu.Unlock()
+							delete(p1.mu.tcpConns, laddr)
+
+							return nil
+						},
+					}
+					p.mu.tcpConns[laddr] = instrConn
+
+					log.VEventf(ctx, 2, "gRPC network dial: laddr=%v", conn.LocalAddr())
+
+					return instrConn
 				}
 				return rpcCtx.grpcDialRaw(ctx, target, class, onNetworkDial, additionalDialOpts...)
 			},
