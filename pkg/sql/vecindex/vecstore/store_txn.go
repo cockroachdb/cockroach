@@ -274,17 +274,15 @@ func (tx *Txn) SearchPartitions(
 	for i := range toSearch {
 		metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, toSearch[i].Key)
 		b.Get(metadataKey)
-		var startKey, endKey roachpb.Key
+		var startKey roachpb.Key
 		if toSearch[i].ExcludeLeafVectors {
 			// Skip past vectors at the leaf level.
 			startKey = vecencoding.EncodePrefixVectorKey(metadataKey, cspann.SecondLevel)
-			endKey = vecencoding.EncodeEndVectorKey(metadataKey)
-			b.Scan(startKey, endKey)
 		} else {
 			startKey = vecencoding.EncodeStartVectorKey(metadataKey)
-			endKey = vecencoding.EncodeEndVectorKey(metadataKey)
-			b.Scan(startKey, endKey)
 		}
+		endKey := vecencoding.EncodeEndVectorKey(metadataKey)
+		b.Scan(startKey, endKey)
 
 		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.VEventf(ctx, 2, "Scan %s", roachpb.Span{Key: startKey, EndKey: endKey}.String())
