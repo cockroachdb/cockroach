@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -86,6 +87,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/google/pprof/profile"
@@ -393,21 +395,74 @@ func (b *baseStatusServer) localExecutionInsights(
 ) (*serverpb.ListExecutionInsightsResponse, error) {
 	var response serverpb.ListExecutionInsightsResponse
 
+	highContentionInsights := make(map[uuid.UUID]insights.Insight, 0)
 	reader := b.sqlServer.pgServer.SQLServer.GetInsightsReader()
 	reader.IterateInsights(ctx, func(ctx context.Context, insight *insights.Insight) {
 		if insight == nil {
 			return
 		}
 
+		// Collect high contention insights seperately, they need additional validation / filtering.
+		if insight.Transaction != nil && hasHighContentionCause(insight.Transaction.Causes) {
+			// Copy statements slice - these insights objects can be read concurrently.
+			insightsCopy := *insight
+			insightsCopy.Statements = make([]*insights.Statement, len(insight.Statements))
+			copy(insightsCopy.Statements, insight.Statements)
+			// Record the high contention insight, if it is valid we will add it to the response later.
+			highContentionInsights[insightsCopy.Transaction.ID] = insightsCopy
+			return
+		}
+
+		// All other insights are included in the response.
 		insightsCopy := *insight
-		// Copy statements slice - these insights objects can be read concurrently.
 		insightsCopy.Statements = make([]*insights.Statement, len(insight.Statements))
 		copy(insightsCopy.Statements, insight.Statements)
-
 		response.Insights = append(response.Insights, insightsCopy)
 	})
 
+	// Include only the valid high contention insights in the response.
+	valid := validContentionInsights(b.sqlServer.execCfg.ContentionRegistry, highContentionInsights)
+	for validInsightTxnID := range valid {
+		response.Insights = append(response.Insights, highContentionInsights[validInsightTxnID])
+	}
+
 	return &response, nil
+}
+
+// hasHighContentionCause checks if the transaction has a high contention cause.
+func hasHighContentionCause(causes []insights.Cause) bool {
+	for _, cause := range causes {
+		if cause == insights.Cause_HighContention {
+			return true
+		}
+	}
+	return false
+}
+
+// validContentionInsights iterates through the contention event registry and checks the
+// events that are related to the passed in (contention) insights. The insights that have
+// valid (resolved BlockingTxnFingerprintID) contention events are returned.
+func validContentionInsights(
+	registry *contention.Registry, contentionInsights map[uuid.UUID]insights.Insight,
+) map[uuid.UUID]bool {
+	valid := make(map[uuid.UUID]bool, len(contentionInsights))
+	_ = registry.ForEachEvent(func(event *contentionpb.ExtendedContentionEvent) error {
+		// If we have already determined an execution (insight) to be valid, no work to do.
+		if ok := valid[event.WaitingTxnID]; ok {
+			return nil
+		}
+		// We are interested in the contention events that are related to our insights.
+		if _, ok := contentionInsights[event.WaitingTxnID]; ok {
+			// If the event has the blocking transaction fingerprint ID resolved, we consider it
+			// valid for the insights response (since the insight response already has the waiting
+			// transaction fingerprint ID).
+			if event.BlockingTxnFingerprintID != appstatspb.InvalidTransactionFingerprintID {
+				valid[event.WaitingTxnID] = true
+			}
+		}
+		return nil
+	})
+	return valid
 }
 
 func (b *baseStatusServer) localTxnIDResolution(

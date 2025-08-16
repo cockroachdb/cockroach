@@ -339,6 +339,22 @@ func (s *eventStore) upsertBatch(events []contentionpb.ExtendedContentionEvent) 
 	}
 }
 
+// addEventsForTest is a convenience function used by tests to directly add events to
+// the eventStore bypassing the resolver and buffer guard.
+func (s *eventStore) addEventsForTest(events []contentionpb.ExtendedContentionEvent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for i := range events {
+		blockingTxnID := events[i].BlockingEvent.TxnMeta.ID
+		_, ok := s.mu.store.Get(blockingTxnID)
+		if !ok {
+			atomic.AddInt64(&s.atomic.storageSize, int64(entryBytes(&events[i])))
+		}
+		s.mu.store.Add(events[i].Hash(), events[i])
+	}
+}
+
 func (s *eventStore) resolutionIntervalWithJitter() time.Duration {
 	baseInterval := TxnIDResolutionInterval.Get(&s.st.SV)
 
