@@ -254,8 +254,11 @@ func newDeleteStatement(
 			TableID: int64(table.GetID()),
 			As:      tree.AliasClause{Alias: "replication_target"},
 		},
-		Where:     &tree.Where{Type: tree.AstWhere, Expr: whereClause},
-		Returning: tree.AbsentReturningClause,
+		Where: &tree.Where{Type: tree.AstWhere, Expr: whereClause},
+		// NOTE: we use RETURNING * to ensure that every column in the table is decoded.
+		// This ensures that the Deleter can reconstruct the previous value when generating
+		// the cput to update the primary key.
+		Returning: &tree.ReturningExprs{tree.StarSelectExpr()},
 	}
 
 	return toParsedStatement(delete)
