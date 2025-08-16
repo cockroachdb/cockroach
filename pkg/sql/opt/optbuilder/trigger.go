@@ -280,7 +280,7 @@ func (mb *mutationBuilder) applyChangesFromTriggers(
 		panic(errors.AssertionFailedf("missing NEW column for trigger"))
 	}
 	f := mb.b.factory
-	passThroughCols := triggerScope.colSet()
+	passthrough := triggerScope.colSet()
 	projections := make(memo.ProjectionsExpr, 0, len(tableTyp.TupleContents()))
 	for i, colTyp := range tableTyp.TupleContents() {
 		c := mb.tab.Column(visibleColOrds[i])
@@ -305,7 +305,11 @@ func (mb *mutationBuilder) applyChangesFromTriggers(
 		}
 		projections = append(projections, f.ConstructProjectionsItem(elem, elemCol.id))
 	}
-	triggerScope.expr = f.ConstructProject(triggerScope.expr, projections, passThroughCols)
+	triggerScope.expr = f.ConstructProject(triggerScope.expr, projections,
+		&memo.ProjectPrivate{
+			Passthrough: passthrough,
+		},
+	)
 }
 
 // ensureNoRowsModifiedByTrigger adds a runtime check to the scope that ensures

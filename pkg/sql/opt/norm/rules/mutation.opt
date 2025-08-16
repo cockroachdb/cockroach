@@ -9,7 +9,7 @@
 # columns nor the columns referenced in the partial index predicate.
 [SimplifyPartialIndexProjections, Normalize]
 (Update
-    $project:(Project $input:* $projections:* $passthrough:*)
+    $project:(Project $input:* $projections:* $private:*)
     $uniqueChecks:*
     $fkChecks:*
     $mutationPrivate:* &
@@ -32,13 +32,13 @@
                 $simplifiedPrivate
             ):(SimplifyPartialIndexProjections
                 $projections
-                $passthrough
+                (Passthrough $private)
                 $simplifiableCols
                 $mutationPrivate
             )
             $simplifiedProjections
         )
-        $passthrough
+        $private
     )
     $uniqueChecks
     $fkChecks

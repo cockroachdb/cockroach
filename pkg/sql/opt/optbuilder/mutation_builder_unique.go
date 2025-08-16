@@ -584,8 +584,11 @@ func (h *uniqueCheckHelper) buildInsertionCheck(
 	// normalization rules to prune any unnecessary columns from the expression.
 	// The key columns are always needed in order to display the constraint
 	// violation error.
-	project := f.ConstructProject(semiJoin, nil /* projections */, keyCols.ToSet())
-
+	project := f.ConstructProject(semiJoin, nil, /* projections */
+		&memo.ProjectPrivate{
+			Passthrough: keyCols.ToSet(),
+		},
+	)
 	uniqueChecks := f.ConstructUniqueChecksItem(project, &memo.UniqueChecksItemPrivate{
 		Table:        h.mb.tabID,
 		CheckOrdinal: h.uniqueOrdinal,
