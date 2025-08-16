@@ -1162,6 +1162,27 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			unique:           false,
 			remainingFilters: `j IN ('[1, 2, 3]', '{"a": "b"}', '1', '"a"')`,
 		},
+		// TODO: Figure out details of fields here. What should be the correct expected vals.
+		{
+			filters:  `jsonb_path_exists(j, '$.a')`,
+			indexOrd: jsonOrd,
+			ok:       true,
+			tight:    true,
+		},
+		{
+			filters:  `jsonb_path_exists(j, '$.a.b')`,
+			indexOrd: jsonOrd,
+			ok:       true,
+			tight:    true,
+		},
+		{
+			filters:          `jsonb_path_exists(j, '$')`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: `jsonb_path_exists(j, '$')`,
+		},
 		{
 			// Filtering a non-indexed column.
 			filters:  `j2 IN ('1', '2', '3')`,
