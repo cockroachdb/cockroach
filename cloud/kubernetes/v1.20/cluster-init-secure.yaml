@@ -1,3 +1,4 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/v1.20/cluster-init-secure.yaml
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -33,7 +34,7 @@ spec:
           mountPath: /cockroach-certs
       containers:
       - name: cluster-init
-        image: cockroachdb/cockroach:@VERSION@
+        image: cockroachdb/cockroach:v25.2.4
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - name: client-certs
