@@ -1322,8 +1322,23 @@ func (d *BackupRestoreTestDriver) runRestore(
 	if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
 		return nil, "", fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
 	}
+
+	if err := d.testUtils.Exec(ctx, rng, `SET CLUSTER SETTING cloud.flaky_storage.error_probability = '0.01'`); err != nil {
+		return nil, "", fmt.Errorf("backup %s: error setting flaky storage min error interval: %w", bc.name, err)
+	}
+	if err := d.testUtils.Exec(ctx, rng, `SET CLUSTER SETTING cloud.flaky_storage.min_error_interval = '5s'`); err != nil {
+		return nil, "", fmt.Errorf("backup %s: error setting flaky storage min error interval: %w", bc.name, err)
+	}
+	if err := d.testUtils.Exec(ctx, rng, `SET CLUSTER SETTING cloud.flaky_storage.enabled = 'true'`); err != nil {
+		return nil, "", fmt.Errorf("backup %s: error enabling flaky storage: %w", bc.name, err)
+	}
+
 	if err := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); err != nil {
 		return nil, "", err
+	}
+
+	if err := d.testUtils.Exec(ctx, rng, `SET CLUSTER SETTING cloud.flaky_storage.enabled = 'false'`); err != nil {
+		return nil, "", fmt.Errorf("backup %s: error enabling flaky storage: %w", bc.name, err)
 	}
 	return restoredTables, restoreDB, nil
 }
@@ -1342,7 +1357,7 @@ func (d *BackupRestoreTestDriver) getRestoredContents(
 	var restoredContents []tableContents
 	var err error
 	if d.testUtils.onlineRestore {
-		waitForDownloadJob := rng.Intn(3) == 0
+		waitForDownloadJob := true
 		restoredContents, err = d.getOnlineRestoredContents(
 			ctx, l, rng, bc, restoredTables, internalSystemJobs, waitForDownloadJob,
 		)
