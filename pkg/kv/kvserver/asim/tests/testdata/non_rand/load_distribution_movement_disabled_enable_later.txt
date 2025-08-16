@@ -45,9 +45,13 @@ setting rebalance_mode=3 delay=2m
 eval duration=7m samples=1 seed=42 cfgs=(sma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
 cpu#1: last:  [s1=451007155, s2=424066775, s3=481923720, s4=487552810, s5=432089126, s6=536127090, s7=582915883, s8=497226435, s9=545078443, s10=559276708] (stddev=51954473.68, mean=499726414.50, sum=4997264145)
+cpu#1: thrashing: [max(s7)=(freq=402, mag=0.98) (s1=(freq=385, mag=0.96), s2=(freq=293, mag=1.82), s3=(freq=384, mag=3.53), s4=(freq=345, mag=3.02), s5=(freq=374, mag=2.86), s6=(freq=389, mag=0.75), s7=(freq=402, mag=0.98), s8=(freq=390, mag=0.52), s9=(freq=368, mag=0.64), s10=(freq=388, mag=1.18))]
 leases#1: first: [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=6, s8=6, s9=6, s10=6] (stddev=0.00, mean=6.00, sum=60)
 leases#1: last:  [s1=54, s2=56, s3=55, s4=53, s5=57, s6=58, s7=60, s8=57, s9=60, s10=61] (stddev=2.55, mean=57.10, sum=571)
+leases#1: thrashing: [max(s2)=(freq=64, mag=1.34) (s1=(freq=44, mag=1.10), s2=(freq=64, mag=1.34), s3=(freq=32, mag=0.67), s4=(freq=38, mag=0.94), s5=(freq=36, mag=0.76), s6=(freq=20, mag=0.43), s7=(freq=20, mag=0.37), s8=(freq=16, mag=0.33), s9=(freq=14, mag=0.27), s10=(freq=18, mag=0.37))]
 replicas#1: first: [s1=18, s2=18, s3=18, s4=18, s5=18, s6=18, s7=18, s8=18, s9=18, s10=18] (stddev=0.00, mean=18.00, sum=180)
 replicas#1: last:  [s1=175, s2=172, s3=179, s4=173, s5=173, s6=174, s7=167, s8=169, s9=169, s10=162] (stddev=4.50, mean=171.30, sum=1713)
+replicas#1: thrashing: [max(s3)=(freq=132, mag=1.17) (s1=(freq=130, mag=1.08), s2=(freq=126, mag=1.12), s3=(freq=132, mag=1.17), s4=(freq=124, mag=1.31), s5=(freq=132, mag=1.27), s6=(freq=20, mag=0.21), s7=(freq=22, mag=0.18), s8=(freq=20, mag=0.18), s9=(freq=20, mag=0.20), s10=(freq=14, mag=0.16))]
 write_bytes_per_second#1: last:  [s1=2994621, s2=2991747, s3=3008247, s4=2988902, s5=3006699, s6=2993336, s7=2993993, s8=3002728, s9=2996629, s10=2997216] (stddev=6108.70, mean=2997411.80, sum=29974118)
+write_bytes_per_second#1: thrashing: [max(s7)=(freq=444, mag=4.22) (s1=(freq=304, mag=3.06), s2=(freq=274, mag=1.94), s3=(freq=307, mag=4.33), s4=(freq=326, mag=3.97), s5=(freq=276, mag=1.06), s6=(freq=421, mag=5.22), s7=(freq=444, mag=4.22), s8=(freq=390, mag=2.10), s9=(freq=410, mag=4.24), s10=(freq=439, mag=3.78))]
 artifacts[sma-only]: 70a15957c8cfc487
