@@ -150,7 +150,7 @@ type Context struct {
 	level Level
 	// query manages the query vector that was passed to the top-level Index
 	// method.
-	query queryComparer
+	query queryVector
 	// forInsert indicates that this is an insert operation (or a search for
 	// insert operation).
 	forInsert bool
