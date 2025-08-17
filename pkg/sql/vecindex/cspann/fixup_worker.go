@@ -253,22 +253,22 @@ func (fw *fixupWorker) getFullVectorsForPartition(
 
 // transformFullVector ensures that the full vector fetched from a partition at
 // the given level has been properly randomized and normalized. It copies the
-// randomized, normalized vector into "randomized", which must be allocated by
+// randomized, normalized vector into "transformed", which must be allocated by
 // the caller with the same length as the input vector.
-func (fw *fixupWorker) transformFullVector(level Level, vec, randomized vector.T) {
+func (fw *fixupWorker) transformFullVector(level Level, vec, transformed vector.T) {
 	if level == LeafLevel {
 		// Leaf vectors from the primary index need to be randomized and possibly
 		// normalized.
-		fw.index.TransformVector(vec, randomized)
+		fw.index.TransformVector(vec, transformed)
 	} else {
 		// This is an interior level, which means the vector is a partition
-		// centroid that's already normalized. However, it's a mean centroid, and
+		// centroid that's already randomized. However, it's a mean centroid, and
 		// needs to be converted into a spherical centroid for the Cosine and
 		// InnerProduct distance metrics.
-		copy(randomized, vec)
+		copy(transformed, vec)
 		switch fw.index.quantizer.GetDistanceMetric() {
 		case vecpb.CosineDistance, vecpb.InnerProductDistance:
-			num32.Normalize(randomized)
+			num32.Normalize(transformed)
 		}
 	}
 }
