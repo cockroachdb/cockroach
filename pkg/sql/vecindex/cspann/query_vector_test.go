@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestQueryComparer(t *testing.T) {
+func TestQueryVector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -161,8 +161,8 @@ func TestQueryComparer(t *testing.T) {
 			var rot RandomOrthoTransformer
 			rot.Init(vecpb.RotGivens, len(tc.queryVector), 42)
 
-			var comparer queryComparer
-			comparer.InitOriginal(tc.metric, tc.queryVector, &rot)
+			var query queryVector
+			query.InitOriginal(tc.metric, tc.queryVector, &rot)
 
 			// Make a copy of the candidates.
 			candidates := make([]SearchResult, len(tc.candidates))
@@ -176,7 +176,7 @@ func TestQueryComparer(t *testing.T) {
 			}
 
 			// Test ComputeExactDistances.
-			comparer.ComputeExactDistances(tc.level, candidates)
+			query.ComputeExactDistances(tc.level, candidates)
 			require.Len(t, candidates, len(tc.expected), "number of candidates should be preserved")
 
 			for i, expected := range tc.expected {
@@ -199,10 +199,10 @@ func TestQueryComparer(t *testing.T) {
 			if tc.metric == vecpb.CosineDistance {
 				num32.Normalize(queryVector)
 			}
-			comparer.InitTransformed(tc.metric, queryVector, &rot)
+			query.InitTransformed(tc.metric, queryVector, &rot)
 
 			// Test ComputeExactDistances.
-			comparer.ComputeExactDistances(tc.level, candidates)
+			query.ComputeExactDistances(tc.level, candidates)
 			require.Len(t, candidates, len(tc.expected), "number of candidates should be preserved")
 
 			for i, expected := range tc.expected {

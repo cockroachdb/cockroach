@@ -12,12 +12,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
-// queryComparer manages a query vector, applying randomization and normalization
+// queryVector manages a query vector, applying randomization and normalization
 // as needed, and efficiently calculating exact distances to data vectors.
 // Randomization distributes skew more evenly across dimensions, enabling the
 // index to work consistently across diverse data sets. Normalization is applied
 // when using Cosine distance, which is magnitude-agnostic.
-type queryComparer struct {
+type queryVector struct {
 	// distanceMetric specifies the vector similarity function: L2Squared,
 	// InnerProduct, or Cosine.
 	distanceMetric vecpb.DistanceMetric
@@ -30,7 +30,7 @@ type queryComparer struct {
 
 // InitOriginal sets the original query vector and prepares the comparer for
 // use.
-func (c *queryComparer) InitOriginal(
+func (c *queryVector) InitOriginal(
 	distanceMetric vecpb.DistanceMetric, original vector.T, rot *RandomOrthoTransformer,
 ) {
 	c.distanceMetric = distanceMetric
@@ -49,7 +49,7 @@ func (c *queryComparer) InitOriginal(
 // InitRandomized sets the transformed query vector in cases where the original
 // query vector is not available, such as when the vector is an interior
 // partition centroid. It is expected to already be randomized and normalized.
-func (c *queryComparer) InitTransformed(
+func (c *queryVector) InitTransformed(
 	distanceMetric vecpb.DistanceMetric, randomized vector.T, rot *RandomOrthoTransformer,
 ) {
 	c.distanceMetric = distanceMetric
@@ -59,7 +59,7 @@ func (c *queryComparer) InitTransformed(
 
 // Randomized returns the query vector after it has been randomized and
 // normalized as needed.
-func (c *queryComparer) Randomized() vector.T {
+func (c *queryVector) Randomized() vector.T {
 	return c.randomized
 }
 
@@ -74,7 +74,7 @@ func (c *queryComparer) Randomized() vector.T {
 //
 // NOTE: The Vector field must be populated in each candidate before calling
 // this method.
-func (c *queryComparer) ComputeExactDistances(level Level, candidates []SearchResult) {
+func (c *queryVector) ComputeExactDistances(level Level, candidates []SearchResult) {
 	normalize := false
 	queryVector := c.randomized
 	queryNorm := float32(1)
