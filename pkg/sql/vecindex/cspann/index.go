@@ -175,9 +175,10 @@ func (ic *Context) Init(txn Txn) {
 	ic.txn = txn
 }
 
-// RandomizedVector is the randomized form of OriginalVector.
-func (ic *Context) RandomizedVector() vector.T {
-	return ic.query.Randomized()
+// TransformedVector is the randomized, normalized form of the original query
+// vector.
+func (ic *Context) TransformedVector() vector.T {
+	return ic.query.Transformed()
 }
 
 // Index implements the C-SPANN algorithm, which adapts Microsoft's SPANN and
@@ -401,17 +402,23 @@ func (vi *Index) Insert(
 		return err
 	}
 
-	vi.setupInsertContext(idxCtx, treeKey, vec)
+	vi.setupInsertContext(idxCtx, treeKey, LeafLevel)
+	idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 
-	// Insert the vector into the secondary index.
-	childKey := ChildKey{KeyBytes: key}
-	valueBytes := ValueBytes{}
+	return vi.insertHelper(ctx, idxCtx, treeKey, ChildKey{KeyBytes: key})
+}
 
+// insertHelper inserts a new vector into a partition at the given level of the
+// tree. The vector might already have been randomized or transformed (both
+// randomized and normalized).
+func (vi *Index) insertHelper(
+	ctx context.Context, idxCtx *Context, treeKey TreeKey, childKey ChildKey,
+) error {
 	// When a candidate insert partition is found, add the vector to it.
 	addFunc := func(ctx context.Context, idxCtx *Context, result *SearchResult) error {
 		partitionKey := result.ChildKey.PartitionKey
 		err := vi.addToPartition(ctx, idxCtx.txn, idxCtx.treeKey,
-			partitionKey, idxCtx.level-1, idxCtx.query.Randomized(), childKey, valueBytes)
+			partitionKey, idxCtx.level-1, idxCtx.query.Transformed(), childKey, ValueBytes{})
 		if err != nil {
 			return errors.Wrapf(err, "inserting vector into partition %d", partitionKey)
 		}
@@ -448,7 +455,8 @@ func (vi *Index) Delete(
 		return false, err
 	}
 
-	vi.setupDeleteContext(idxCtx, treeKey, vec)
+	vi.setupDeleteContext(idxCtx, treeKey)
+	idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 
 	// When a candidate delete partition is found, remove the vector from it.
 	removeFunc := func(ctx context.Context, idxCtx *Context, result *SearchResult) error {
@@ -482,7 +490,8 @@ func (vi *Index) Search(
 	searchSet *SearchSet,
 	options SearchOptions,
 ) error {
-	vi.setupContext(idxCtx, treeKey, options, LeafLevel, vec, false /* transformed */)
+	vi.setupContext(idxCtx, treeKey, LeafLevel, options)
+	idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 	return vi.searchHelper(ctx, idxCtx, searchSet)
 }
 
@@ -503,7 +512,8 @@ func (vi *Index) SearchForInsert(
 		return nil, err
 	}
 
-	vi.setupInsertContext(idxCtx, treeKey, vec)
+	vi.setupInsertContext(idxCtx, treeKey, LeafLevel)
+	idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 
 	// When a candidate insert partition is found, lock its metadata for update
 	// and get its centroid.
@@ -542,7 +552,8 @@ func (vi *Index) SearchForDelete(
 		return nil, err
 	}
 
-	vi.setupDeleteContext(idxCtx, treeKey, vec)
+	vi.setupDeleteContext(idxCtx, treeKey)
+	idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 
 	// When a candidate delete partition is found, lock its metadata for update.
 	removeFunc := func(ctx context.Context, idxCtx *Context, result *SearchResult) error {
@@ -599,42 +610,34 @@ func (vi *Index) ForceMerge(
 // setupInsertContext sets up the given context for an insert operation. Before
 // performing an insert, we need to search for the best partition with the
 // closest centroid to the query vector. The partition in which to insert the
-// vector is at the parent of the leaf level.
-func (vi *Index) setupInsertContext(idxCtx *Context, treeKey TreeKey, vec vector.T) {
+// vector is at the parent of the given level.
+func (vi *Index) setupInsertContext(idxCtx *Context, treeKey TreeKey, level Level) {
 	// Perform the search using quantized vectors rather than full vectors (i.e.
-	// skip reranking).
-	vi.setupContext(idxCtx, treeKey, SearchOptions{
+	// skip reranking). Use level+1 to search for a parent partition.
+	vi.setupContext(idxCtx, treeKey, level+1, SearchOptions{
 		BaseBeamSize: vi.options.BaseBeamSize,
 		SkipRerank:   true,
 		UpdateStats:  !vi.options.DisableAdaptiveSearch,
-	}, SecondLevel, vec, false /* transformed */)
+	})
 	idxCtx.forInsert = true
 }
 
 // setupDeleteContext sets up the given context for a delete operation.
-func (vi *Index) setupDeleteContext(idxCtx *Context, treeKey TreeKey, vec vector.T) {
+func (vi *Index) setupDeleteContext(idxCtx *Context, treeKey TreeKey) {
 	// Perform the search using quantized vectors rather than full vectors (i.e.
 	// skip reranking). Use a larger beam size to make it more likely that we'll
 	// find the vector to delete.
-	vi.setupContext(idxCtx, treeKey, SearchOptions{
+	vi.setupContext(idxCtx, treeKey, LeafLevel, SearchOptions{
 		BaseBeamSize: vi.options.BaseBeamSize * 2,
 		SkipRerank:   true,
 		UpdateStats:  !vi.options.DisableAdaptiveSearch,
-	}, LeafLevel, vec, false /* transformed */)
+	})
 	idxCtx.forDelete = true
 }
 
-// setupContext sets up the given context as an operation is beginning. If
-// "randomized" is false, then the given vector is expected to be an original,
-// unrandomized vector that was provided by the user. If "transformed" is true,
-// then the vector is expected to already be randomized and normalized.
+// setupContext sets up the given context as an operation is beginning.
 func (vi *Index) setupContext(
-	idxCtx *Context,
-	treeKey TreeKey,
-	options SearchOptions,
-	level Level,
-	vec vector.T,
-	transformed bool,
+	idxCtx *Context, treeKey TreeKey, level Level, options SearchOptions,
 ) {
 	idxCtx.treeKey = treeKey
 	idxCtx.level = level
@@ -644,11 +647,7 @@ func (vi *Index) setupContext(
 	if idxCtx.options.BaseBeamSize == 0 {
 		idxCtx.options.BaseBeamSize = vi.options.BaseBeamSize
 	}
-	if transformed {
-		idxCtx.query.InitTransformed(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
-	} else {
-		idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
-	}
+	idxCtx.query.Clear()
 }
 
 // updateFunc is called by searchForUpdateHelper when it has a candidate
@@ -947,7 +946,7 @@ func (vi *Index) findExactDistances(
 	}
 
 	// Compute exact distance between query vector and the data vectors.
-	idxCtx.query.ComputeExactDistances(idxCtx.level, candidates)
+	idxCtx.query.ComputeExactDistances(vi.quantizer.GetDistanceMetric(), idxCtx.level, candidates)
 
 	return candidates, nil
 }

@@ -412,7 +412,7 @@ func (s *levelSearcher) searchChildPartitions(
 
 	// Search all partitions in parallel.
 	err := s.idxCtx.txn.SearchPartitions(
-		ctx, s.idxCtx.treeKey, s.idxCtx.tempToSearch, s.idxCtx.query.Randomized(), &s.searchSet)
+		ctx, s.idxCtx.treeKey, s.idxCtx.tempToSearch, s.idxCtx.query.Transformed(), &s.searchSet)
 	if err != nil {
 		return InvalidLevel, errors.Wrapf(err, "searching level %d", s.level)
 	}
