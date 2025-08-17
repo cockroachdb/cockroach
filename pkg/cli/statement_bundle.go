@@ -432,7 +432,7 @@ func getExplainCombinations(
 				bucketMap[key] = []string{upperBound}
 				datum, err := rowenc.ParseDatumStringAs(ctx, colType, upperBound, &evalCtx, nil /* semaCtx */)
 				if err != nil {
-					panic("failed parsing datum string as " + datum.String() + " " + err.Error())
+					panic("failed parsing datum string as " + colType.String() + " " + err.Error())
 				}
 				if maxUpperBound == nil {
 					maxUpperBound = datum

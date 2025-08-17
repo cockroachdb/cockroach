@@ -458,13 +458,11 @@ func CheckSSTConflicts(
 		UpperBound: keys.MaxKey,
 	})
 	if err != nil {
-		rkIter.Close()
 		return enginepb.MVCCStats{}, err
 	}
 	rkIter.SeekGE(NilKey)
 
 	if ok, err := rkIter.Valid(); err != nil {
-		rkIter.Close()
 		return enginepb.MVCCStats{}, err
 	} else if ok {
 		// If the incoming SST contains range tombstones, we cannot use prefix
@@ -485,7 +483,6 @@ func CheckSSTConflicts(
 
 	var engineHasRangeKeys bool
 	if ok, err := rkIter.Valid(); err != nil {
-		rkIter.Close()
 		return enginepb.MVCCStats{}, err
 	} else if ok {
 		// If the engine contains range tombstones in this span, we cannot use prefix

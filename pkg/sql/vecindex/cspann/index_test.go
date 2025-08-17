@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 )
@@ -998,7 +999,7 @@ func TestIndexConcurrency(t *testing.T) {
 				}
 
 				// Process any remaining fixups and close the index.
-				require.NoError(t, index.ProcessFixups(ctx))
+				assert.NoError(t, index.ProcessFixups(ctx))
 				index.Close()
 			}(i, min(i+vecsPerInstance, vectors.Count))
 		}

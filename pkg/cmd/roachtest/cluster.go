@@ -2557,6 +2557,9 @@ func (c *clusterImpl) RunWithDetailsSingleNode(
 		return install.RunResultDetails{}, errors.Newf("RunWithDetailsSingleNode received %d nodes. Use RunWithDetails if you need to run on multiple nodes.", len(nodes))
 	}
 	results, err := c.RunWithDetails(ctx, testLogger, options, args...)
+	if err != nil {
+		return install.RunResultDetails{}, err
+	}
 	return results[0], errors.CombineErrors(err, results[0].Err)
 }
 
