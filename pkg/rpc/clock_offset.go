@@ -12,6 +12,7 @@ import (
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -22,9 +23,13 @@ import (
 
 // RemoteClockMetrics is the collection of metrics for the clock monitor.
 type RemoteClockMetrics struct {
-	ClockOffsetMeanNanos   *metric.Gauge
-	ClockOffsetStdDevNanos *metric.Gauge
-	RoundTripLatency       metric.IHistogram
+	ClockOffsetMeanNanos           *metric.Gauge
+	ClockOffsetStdDevNanos         *metric.Gauge
+	RoundTripLatency               metric.IHistogram
+	RoundTripDefaultClassLatency   metric.IHistogram
+	RoundTripSystemClassLatency    metric.IHistogram
+	RoundTripRangefeedClassLatency metric.IHistogram
+	RoundTripRaftClassLatency      metric.IHistogram
 }
 
 // avgLatencyMeasurementAge determines how to exponentially weight the
@@ -61,6 +66,43 @@ can similarly elevate this metric. The operator should look towards OS-level
 metrics such as packet loss, retransmits, etc, to conclusively diagnose network
 issues. Heartbeats are not very frequent (~seconds), so they may not capture
 rare or short-lived degradations.
+`,
+		Measurement: "Round-trip time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	metaDefaultConnectionRoundTripLatency = metric.Metadata{
+		Name: "round-trip-default-class-latency",
+		Help: `Distribution of round-trip latencies with other nodes.
+
+Similar to round-trip-latency, but only for default class connections.
+`,
+		Measurement: "Round-trip time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaSystemConnectionRoundTripLatency = metric.Metadata{
+		Name: "round-trip-system-class-latency",
+		Help: `Distribution of round-trip latencies with other nodes.
+
+Similar to round-trip-latency, but only for system class connections.
+`,
+		Measurement: "Round-trip time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaRangefeedConnectionRoundTripLatency = metric.Metadata{
+		Name: "round-trip-rangefeed-class-latency",
+		Help: `Distribution of round-trip latencies with other nodes.
+
+Similar to round-trip-latency, but only for rangefeed class connections.
+`,
+		Measurement: "Round-trip time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaRaftConnectionRoundTripLatency = metric.Metadata{
+		Name: "round-trip-raft-class-latency",
+		Help: `Distribution of round-trip latencies with other nodes.
+
+Similar to round-trip-latency, but only for raft class connections.
 `,
 		Measurement: "Round-trip time",
 		Unit:        metric.Unit_NANOSECONDS,
@@ -122,6 +164,20 @@ func (r *RemoteClockMonitor) TestingResetLatencyInfos() {
 	}
 }
 
+// createRoundtripLatencyMetricHelper is a helper function to create a histogram
+// metric for an RTT metric with the given metadata and histogram window
+// interval.
+func createRoundtripLatencyMetricHelper(
+	meta metric.Metadata, histogramWindowInterval time.Duration,
+) metric.IHistogram {
+	return metric.NewHistogram(metric.HistogramOptions{
+		Mode:         metric.HistogramModePreferHdrLatency,
+		Metadata:     meta,
+		Duration:     histogramWindowInterval,
+		BucketConfig: metric.IOLatencyBuckets,
+	})
+}
+
 // newRemoteClockMonitor returns a monitor with the given server clock. A
 // toleratedOffset of 0 disables offset checking and metrics, but still records
 // latency metrics.
@@ -145,15 +201,16 @@ func newRemoteClockMonitor(
 	r.metrics = RemoteClockMetrics{
 		ClockOffsetMeanNanos:   metric.NewGauge(metaClockOffsetMeanNanos),
 		ClockOffsetStdDevNanos: metric.NewGauge(metaClockOffsetStdDevNanos),
-		RoundTripLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:     metric.HistogramModePreferHdrLatency,
-			Metadata: metaConnectionRoundTripLatency,
-			Duration: histogramWindowInterval,
-			// NB: the choice of IO over Network buckets is somewhat debatable, but
-			// it's fine. Heartbeats can take >1s which the IO buckets can represent,
-			// but the Network buckets top out at 1s.
-			BucketConfig: metric.IOLatencyBuckets,
-		}),
+		RoundTripLatency: createRoundtripLatencyMetricHelper(metaConnectionRoundTripLatency,
+			histogramWindowInterval),
+		RoundTripDefaultClassLatency: createRoundtripLatencyMetricHelper(metaDefaultConnectionRoundTripLatency,
+			histogramWindowInterval),
+		RoundTripSystemClassLatency: createRoundtripLatencyMetricHelper(metaSystemConnectionRoundTripLatency,
+			histogramWindowInterval),
+		RoundTripRangefeedClassLatency: createRoundtripLatencyMetricHelper(metaRangefeedConnectionRoundTripLatency,
+			histogramWindowInterval),
+		RoundTripRaftClassLatency: createRoundtripLatencyMetricHelper(metaRaftConnectionRoundTripLatency,
+			histogramWindowInterval),
 	}
 	return &r
 }
@@ -225,7 +282,11 @@ func (r *RemoteClockMonitor) OnDisconnect(_ context.Context, nodeID roachpb.Node
 //
 // Pass a roundTripLatency of 0 or less to avoid recording the latency.
 func (r *RemoteClockMonitor) UpdateOffset(
-	ctx context.Context, id roachpb.NodeID, offset RemoteOffset, roundTripLatency time.Duration,
+	ctx context.Context,
+	id roachpb.NodeID,
+	offset RemoteOffset,
+	roundTripLatency time.Duration,
+	rpcClass ConnectionClass,
 ) {
 	emptyOffset := offset == RemoteOffset{}
 	// At startup the remote node's id may not be set. Skip recording latency.
@@ -273,6 +334,22 @@ func (r *RemoteClockMonitor) UpdateOffset(
 		prevAvg := info.avgNanos.Value()
 		info.avgNanos.Add(newLatencyf)
 		r.metrics.RoundTripLatency.RecordValue(roundTripLatency.Nanoseconds())
+		switch rpcClass {
+		case DefaultClass:
+			r.metrics.RoundTripDefaultClassLatency.RecordValue(roundTripLatency.Nanoseconds())
+		case SystemClass:
+			r.metrics.RoundTripSystemClassLatency.RecordValue(roundTripLatency.Nanoseconds())
+		case RangefeedClass:
+			r.metrics.RoundTripRangefeedClassLatency.RecordValue(roundTripLatency.Nanoseconds())
+		case RaftClass:
+			r.metrics.RoundTripRaftClassLatency.RecordValue(roundTripLatency.Nanoseconds())
+		default:
+			log.Dev.Warningf(ctx, "unknown RPC class: %s", rpcClass)
+			if buildutil.CrdbTestBuild {
+				panic(errors.AssertionFailedf("unknown RPC class: %s", rpcClass))
+			}
+
+		}
 
 		// See: https://github.com/cockroachdb/cockroach/issues/96262
 		// See: https://github.com/cockroachdb/cockroach/issues/98066
@@ -398,6 +475,7 @@ func updateClockOffsetTracking(
 	nodeID roachpb.NodeID,
 	sendTime, serverTime, receiveTime time.Time,
 	toleratedOffset time.Duration,
+	rpcClass ConnectionClass,
 ) (time.Duration, RemoteOffset, error) {
 	pingDuration := receiveTime.Sub(sendTime)
 	if remoteClocks == nil {
@@ -421,6 +499,6 @@ func updateClockOffsetTracking(
 		remoteTimeNow := serverTime.Add(pingDuration / 2)
 		offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 	}
-	remoteClocks.UpdateOffset(ctx, nodeID, offset, pingDuration)
+	remoteClocks.UpdateOffset(ctx, nodeID, offset, pingDuration, rpcClass)
 	return pingDuration, offset, remoteClocks.VerifyClockOffset(ctx)
 }
