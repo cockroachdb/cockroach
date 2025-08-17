@@ -38,7 +38,7 @@ func loadTPCHDataset(
 	disableMergeQueue bool,
 ) (retErr error) {
 	_, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
-	if retErr != nil {
+	if err != nil {
 		return err
 	}
 	defer func() {

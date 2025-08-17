@@ -804,9 +804,9 @@ var ConfigureOIDC = func(
 					}
 				} else {
 					log.Infof(ctx, "OIDC: no identity map found for issuer %s; using %s without mapping", token.Issuer, tokenPrincipal)
-					if username, err := secuser.MakeSQLUsernameFromUserInput(tokenPrincipal, secuser.PurposeValidation); err != nil {
-						acceptedUsernames = append(acceptedUsernames, username.Normalized())
-					}
+					// N.B. err is elided when using secuser.PurposeValidation.
+					username, _ := secuser.MakeSQLUsernameFromUserInput(tokenPrincipal, secuser.PurposeValidation)
+					acceptedUsernames = append(acceptedUsernames, username.Normalized())
 				}
 			}
 		}
@@ -835,6 +835,7 @@ var ConfigureOIDC = func(
 		if err != nil {
 			log.Error(ctx, "OIDC: failed to marshal connection parameters (can this happen?)")
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			return
 		}
 
 		w.Header().Add("Content-Security-Policy", "sandbox")
