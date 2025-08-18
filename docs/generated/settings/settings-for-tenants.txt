@@ -106,6 +106,7 @@ kv.transaction.write_pipelining.locking_reads.enabled	boolean	true	if enabled, t
 kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, transactional ranged writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.enabled (alias: kv.transaction.write_pipelining_enabled)	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.max_batch_size (alias: kv.transaction.write_pipelining_max_batch_size)	integer	128	if non-zero, defines that maximum size batch that will be pipelined through Raft consensus	application
+log.channel_compatibility_mode.enabled	boolean	true	when true, logs will continue to log to the expected logging channels; when false, logs will be moved to new logging channels as part of a logging channel consolidation effort	application
 obs.tablemetadata.automatic_updates.enabled	boolean	false	enables automatic updates of the table metadata cache system.table_metadata	application
 obs.tablemetadata.data_valid_duration	duration	20m0s	the duration for which the data in system.table_metadata is considered valid	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
