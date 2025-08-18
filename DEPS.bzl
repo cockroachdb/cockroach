@@ -6301,6 +6301,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_mibk_dupl",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/mibk/dupl",
+        sha256 = "73f61090c1cbee024b771fc60804cbedc5c2861f232bd34eff719afd9ac6e098",
+        strip_prefix = "github.com/mibk/dupl@v1.0.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mibk/dupl/com_github_mibk_dupl-v1.0.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_michaeltjones_walk",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/MichaelTJones/walk",
