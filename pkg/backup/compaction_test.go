@@ -53,7 +53,7 @@ func TestBackupCompaction(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	backupinfo.WriteMetadataWithExternalSSTsEnabled.Override(ctx, &st.SV, true)
 	_, db, cleanupDB := backupRestoreTestSetupEmpty(
-		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
+		t, multiNode, tempDir, InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
 			},
@@ -356,8 +356,43 @@ func TestBackupCompaction(t *testing.T) {
 		ensureBackupExists(t, db, collectionURI, mid, end, noOpts)
 		ensureBackupExists(t, db, collectionURI, start, end, noOpts)
 	})
-	// TODO (kev-cao): Once range keys are supported by the compaction
-	// iterator, add tests for dropped tables/indexes.
+
+	t.Run("compaction of chain with locality aware", func(t *testing.T) {
+		// Running the test like regular compaction backup,
+		// then verify use show locality aware backup command confirm
+		// it show up.
+		bucketNum++
+		collectionURI := []string{fmt.Sprintf("nodelocal://1/backup/%d?COCKROACH_LOCALITY=default", bucketNum)}
+		bucketNum++
+		collectionURI = append(collectionURI, fmt.Sprintf("nodelocal://2/backup/%d?COCKROACH_LOCALITY=region=us-west", bucketNum))
+
+		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
+		defer func() {
+			db.Exec(t, "DROP TABLE foo")
+		}()
+		start := getTime()
+		backupStmt := fullBackupQuery(fullCluster, collectionURI, start, noOpts)
+		db.Exec(t, backupStmt)
+
+		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
+		mid := getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, mid, noOpts))
+
+		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
+		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
+		end := getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
+
+		fullDir := getLatestFullDir(collectionURI)
+		c1JobID := startCompaction(db, backupStmt, fullDir, mid, end)
+		jobutils.WaitForJobToSucceed(t, db, c1JobID)
+
+		c2JobID := startCompaction(db, backupStmt, fullDir, start, end)
+		jobutils.WaitForJobToSucceed(t, db, c2JobID)
+		ensureBackupExists(t, db, collectionURI, mid, end, noOpts)
+		ensureBackupExists(t, db, collectionURI, start, end, noOpts)
+	})
 }
 
 func TestScheduledBackupCompaction(t *testing.T) {
@@ -626,16 +661,6 @@ func TestBackupCompactionUnsupportedOptions(t *testing.T) {
 				IncludeAllSecondaryTenants: true,
 			},
 			"backups of tenants not supported for compaction",
-		},
-		{
-			"locality aware backups not supported",
-			jobspb.BackupDetails{
-				ScheduleID: 1,
-				URIsByLocalityKV: map[string]string{
-					"region=us-east-2": "nodelocal://1/backup",
-				},
-			},
-			"locality aware backups not supported for compaction",
 		},
 	}
 

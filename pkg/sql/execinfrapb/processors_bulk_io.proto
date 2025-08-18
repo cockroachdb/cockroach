@@ -575,5 +575,6 @@ message CompactBackupsSpec {
 	// before the processors can load them.
 	optional int64 target_size = 11 [(gogoproto.nullable) = false];
 	optional int64 max_files = 12 [(gogoproto.nullable) = false];
+  map<string, string> uris_by_locality_kv = 13 [(gogoproto.customname) = "URIsByLocalityKV"];
 	// NEXT ID: 13.
 }

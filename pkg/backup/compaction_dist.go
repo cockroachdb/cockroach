@@ -226,17 +226,18 @@ func createCompactionCorePlacements(
 	for i := range corePlacements {
 		corePlacements[i].SQLInstanceID = sqlInstanceIDs[i]
 		corePlacements[i].Core.CompactBackups = &execinfrapb.CompactBackupsSpec{
-			JobID:       int64(jobID),
-			DefaultURI:  details.URI,
-			Destination: details.Destination,
-			Encryption:  details.EncryptionOptions,
-			StartTime:   details.StartTime,
-			EndTime:     details.EndTime,
-			ElideMode:   elideMode,
-			UserProto:   user.EncodeProto(),
-			Spans:       spansToCompact,
-			TargetSize:  targetSize,
-			MaxFiles:    maxFiles,
+			JobID:            int64(jobID),
+			DefaultURI:       details.URI,
+			Destination:      details.Destination,
+			Encryption:       details.EncryptionOptions,
+			StartTime:        details.StartTime,
+			EndTime:          details.EndTime,
+			ElideMode:        elideMode,
+			UserProto:        user.EncodeProto(),
+			Spans:            spansToCompact,
+			TargetSize:       targetSize,
+			MaxFiles:         maxFiles,
+			URIsByLocalityKV: details.URIsByLocalityKV,
 		}
 	}
 

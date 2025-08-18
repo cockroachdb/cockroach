@@ -7,6 +7,7 @@ package backup
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -83,8 +84,6 @@ func maybeStartCompactionJob(
 		return 0, errors.New("custom incremental storage location not supported for compaction")
 	case len(triggerJob.SpecificTenantIds) != 0 || triggerJob.IncludeAllSecondaryTenants:
 		return 0, errors.New("backups of tenants not supported for compaction")
-	case len(triggerJob.URIsByLocalityKV) != 0:
-		return 0, errors.New("locality aware backups not supported for compaction")
 	}
 
 	env := scheduledjobs.ProdJobSchedulerEnv
@@ -404,8 +403,7 @@ func (b *backupResumer) ResumeCompaction(
 	// TODO (kev-cao): Add progress tracking to compactions.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		if err = doCompaction(
-			ctx, execCtx, b.job.ID(), updatedDetails, compactChain, backupManifest, defaultStore, kmsEnv,
-		); err == nil {
+			ctx, execCtx, b.job.ID(), updatedDetails, compactChain, backupManifest, defaultStore, storageByLocalityKV, kmsEnv); err == nil {
 			break
 		}
 
@@ -587,6 +585,7 @@ func updateCompactionBackupDetails(
 	})
 	destination := initialDetails.Destination
 	destination.Subdir = resolvedDest.ChosenSubdir
+
 	compactedDetails := jobspb.BackupDetails{
 		Destination:      destination,
 		StartTime:        compactionChain.start,
@@ -647,6 +646,7 @@ func (c compactionChain) createCompactionManifest(
 	cManifest.DescriptorChanges = nil
 	cManifest.Files = nil
 	cManifest.EntryCounts = roachpb.RowCount{}
+	cManifest.PartitionDescriptorFilenames = nil
 
 	// The StatisticsFileNames is inherited from the stats of the latest
 	// incremental we are compacting as the compacted manifest will have the same
@@ -794,9 +794,40 @@ func concludeBackupCompaction(
 	details jobspb.BackupDetails,
 	kmsEnv cloud.KMSEnv,
 	backupManifest *backuppb.BackupManifest,
+	storageByLocalityKV map[string]*cloudpb.ExternalStorage,
 ) error {
 	backupID := uuid.MakeV4()
 	backupManifest.ID = backupID
+
+	if len(storageByLocalityKV) > 0 {
+		makeExternalStorage := execCtx.(sql.JobExecContext).ExecCfg().DistSQLSrv.ExternalStorage
+		filesByLocalityKV := make(map[string][]backuppb.BackupManifest_File)
+		for _, file := range backupManifest.Files {
+			filesByLocalityKV[file.LocalityKV] = append(filesByLocalityKV[file.LocalityKV], file)
+		}
+		nextParitionedDescFilenameID := 1
+		for kv, conf := range storageByLocalityKV {
+			filename := fmt.Sprintf("%s_%d_%s", backupPartitionDescriptorPrefix,
+				nextParitionedDescFilenameID, backupinfo.SanitizeLocalityKV(kv))
+			nextParitionedDescFilenameID++
+			backupManifest.PartitionDescriptorFilenames = append(backupManifest.PartitionDescriptorFilenames, filename)
+			desc := backuppb.BackupPartitionDescriptor{
+				LocalityKV: kv,
+				Files:      filesByLocalityKV[kv],
+				BackupID:   backupID,
+			}
+			if err := func() error {
+				paritionStore, err := makeExternalStorage(ctx, *conf)
+				if err != nil {
+					return err
+				}
+				defer paritionStore.Close()
+				return backupinfo.WriteBackupPartitionDescriptor(ctx, paritionStore, filename, details.EncryptionOptions, kmsEnv, &desc)
+			}(); err != nil {
+				return err
+			}
+		}
+	}
 
 	if err := backupinfo.WriteBackupManifest(ctx, store, backupbase.BackupManifestName,
 		details.EncryptionOptions, kmsEnv, backupManifest); err != nil {
@@ -909,6 +940,7 @@ func doCompaction(
 	compactChain compactionChain,
 	manifest *backuppb.BackupManifest,
 	defaultStore cloud.ExternalStorage,
+	storageByLocalityKV map[string]*cloudpb.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
 ) error {
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
@@ -930,7 +962,7 @@ func doCompaction(
 	}
 
 	return concludeBackupCompaction(
-		ctx, execCtx, defaultStore, details, kmsEnv, manifest,
+		ctx, execCtx, defaultStore, details, kmsEnv, manifest, storageByLocalityKV,
 	)
 }
 
