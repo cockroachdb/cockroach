@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/tableset"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
@@ -40,9 +41,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -59,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1750,6 +1754,12 @@ func (b *changefeedResumer) resumeWithRetries(
 
 	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&execCfg.Settings.SV)
 	backoffReset := changefeedbase.RetryBackoffReset.Get(&execCfg.Settings.SV)
+
+	// Create memory monitor for tableset watcher. Similar to how processors create
+	// their monitors at function start, we create this unconditionally.
+	watcherMemMonitor := execinfra.NewMonitor(ctx, execCfg.DistSQLSrv.ChangefeedMonitor, mon.MakeName("changefeed-tableset-watcher-mem"))
+	defer watcherMemMonitor.Stop(ctx)
+
 	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
@@ -1763,7 +1773,7 @@ func (b *changefeedResumer) resumeWithRetries(
 				knobs.BeforeDistChangefeed()
 			}
 
-			confPoller := make(chan struct{})
+			runningChangefeedChan := make(chan struct{})
 			g := ctxgroup.WithContext(ctx)
 			initialHighWater, schemaTS, err := computeDistChangefeedTimestamps(ctx, jobExec, details, localState)
 			if err != nil {
@@ -1777,27 +1787,120 @@ func (b *changefeedResumer) resumeWithRetries(
 			if err != nil {
 				return err
 			}
+
+			// Watcher is only used for db-level changefeeds with no watched tables.
+			var watcher *tableset.Watcher
+			watcherChan := make(chan []tableset.TableDiff, 1)
+			watcherCtx, cancelWatcher := context.WithCancel(ctx)
+			if len(details.TargetSpecifications) == 1 &&
+				details.TargetSpecifications[0].Type == jobspb.ChangefeedTargetSpecification_DATABASE &&
+				targets.NumUniqueTables() == 0 {
+
+				// Create watcher dependencies.
+				dbID := details.TargetSpecifications[0].DescID
+				filter := tableset.Filter{
+					DatabaseID: dbID,
+				}
+				if details.TargetSpecifications[0].FilterList != nil {
+					if details.TargetSpecifications[0].FilterList.FilterType == tree.IncludeFilter &&
+						details.TargetSpecifications[0].FilterList.Tables != nil {
+						filter.IncludeTables = make(map[string]struct{})
+						for fqTableName := range details.TargetSpecifications[0].FilterList.Tables {
+							// Extract just the table name from the fully qualified name (e.g., "db.public.table" -> "table")
+							tn, err := parser.ParseQualifiedTableName(fqTableName)
+							if err != nil {
+								log.Changefeed.Warningf(ctx, "failed to parse table name %q: %v", fqTableName, err)
+								continue
+							}
+							filter.IncludeTables[tn.Object()] = struct{}{}
+						}
+					} else if details.TargetSpecifications[0].FilterList.FilterType == tree.ExcludeFilter &&
+						details.TargetSpecifications[0].FilterList.Tables != nil {
+						filter.ExcludeTables = make(map[string]struct{})
+						for table := range details.TargetSpecifications[0].FilterList.Tables {
+							filter.ExcludeTables[table] = struct{}{}
+						}
+						for fqTableName := range details.TargetSpecifications[0].FilterList.Tables {
+							// Extract just the table name from the fully qualified name (e.g., "db.public.table" -> "table")
+							tn, err := parser.ParseQualifiedTableName(fqTableName)
+							if err != nil {
+								log.Changefeed.Warningf(ctx, "failed to parse table name %q: %v", fqTableName, err)
+								continue
+							}
+							filter.ExcludeTables[tn.Object()] = struct{}{}
+						}
+					}
+				}
+
+				// Create a watcher for the database.
+				watcher = tableset.NewWatcher(filter, execCfg, watcherMemMonitor, int64(jobID))
+				g.GoCtx(func(ctx context.Context) error {
+					go func() {
+						<-ctx.Done()
+						cancelWatcher()
+					}()
+					err := watcher.Start(watcherCtx, schemaTS)
+					if err != nil && !errors.Is(err, context.Canceled) {
+						return err
+					}
+					return nil
+				})
+			} else {
+				cancelWatcher()
+			}
+
+			// Start the changefeed.
 			g.GoCtx(func(ctx context.Context) error {
-				defer close(confPoller)
-				return startDistChangefeed(ctx, jobExec, jobID, schemaTS, details, description,
-					initialHighWater, localState, startedCh, onTracingEvent, targets)
+				defer close(runningChangefeedChan)
+				if watcher != nil {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case diffs := <-watcherChan:
+						schemaTS = diffs[0].AsOf
+						initialHighWater = diffs[0].AsOf
+						targets, err = AllTargets(ctx, details, execCfg, schemaTS)
+						if err != nil {
+							return err
+						}
+					}
+				}
+				return startDistChangefeed(ctx, jobExec, jobID, schemaTS, details, description, initialHighWater, localState, startedCh, onTracingEvent, targets)
 			})
+
+			// Poll for updated configuration or new database tables if hibernating.
 			g.GoCtx(func(ctx context.Context) error {
 				t := time.NewTicker(15 * time.Second)
 				defer t.Stop()
+				diffSent := false
 				for {
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
-					case <-confPoller:
+					case <-runningChangefeedChan:
 						return nil
-					case <-t.C:
+					case tick := <-t.C:
 						newDest, err := reloadDest(ctx, jobID, execCfg)
 						if err != nil {
 							log.Changefeed.Warningf(ctx, "failed to check for updated configuration: %v", err)
 						} else if newDest != resolvedDest {
 							resolvedDest = newDest
 							return replanErr
+						}
+						if watcher != nil && !diffSent {
+							unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: tick.UnixNano()})
+							if err != nil {
+								return err
+							}
+							if !unchanged && len(diffs) > 0 {
+								select {
+								case watcherChan <- diffs:
+									diffSent = true
+									cancelWatcher()
+								case <-ctx.Done():
+									return ctx.Err()
+								}
+							}
 						}
 					}
 				}
