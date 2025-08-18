@@ -6572,7 +6572,7 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		if v, ok := AsDString(inVal); ok {
 			sv = string(v)
 			isString = true
-		} else if v, ok := inVal.(*DCollatedString); ok {
+		} else if v, ok := AsDCollatedString(inVal); ok {
 			sv = v.Contents
 			isCollatedString = true
 		}
@@ -6619,6 +6619,8 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 				}
 				return NewDString(sv), nil
 			} else if isCollatedString {
+				// Note that we cannot have CITEXT here (because of Oid check
+				// above).
 				return NewDCollatedString(sv, typ.Locale(), &CollationEnvironment{})
 			}
 		}
