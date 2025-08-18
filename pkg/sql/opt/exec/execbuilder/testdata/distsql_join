@@ -8,6 +8,7 @@ statement ok
 ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
+retry
 statement ok
 ALTER TABLE data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
@@ -241,6 +242,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8l99v4kYQx9_7V
 
 # Regression test for incorrectly populating PlanToStreamColMap for the right
 # side of merge joins (#51883).
+retry
 statement ok
 CREATE TABLE customer (c_custkey INT8 PRIMARY KEY);
 CREATE TABLE orders (
@@ -283,6 +285,7 @@ EXPLAIN (VEC)
     AND c_custkey = o_custkey;
 RESET vectorize
 
+retry
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k, v));
 ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);

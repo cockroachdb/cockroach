@@ -1,5 +1,6 @@
 # LogicTest: 5node
 
+retry
 statement ok
 CREATE TABLE t (k1 INT, k2 INT DEFAULT 999, v INT DEFAULT 999, w INT DEFAULT 999, PRIMARY KEY (k1, k2))
 

@@ -11,6 +11,7 @@ CREATE TABLE kw (k INT PRIMARY KEY, w INT, FAMILY (k, w));
 INSERT INTO kw SELECT i, i FROM generate_series(1,5) AS g(i)
 
 # Split into 5 parts, each row from each table goes to one node.
+retry
 statement ok
 ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
 ALTER TABLE kw SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);

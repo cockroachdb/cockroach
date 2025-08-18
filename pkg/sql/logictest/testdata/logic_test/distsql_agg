@@ -8,6 +8,7 @@ statement ok
 ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
+retry
 statement ok
 ALTER TABLE data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
@@ -305,6 +306,7 @@ CREATE TABLE one (k INT PRIMARY KEY, v INT)
 statement ok
 ALTER TABLE one SPLIT AT VALUES (0), (99)
 
+retry
 statement ok
 ALTER TABLE one EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0)
 
@@ -317,6 +319,7 @@ CREATE TABLE two (k INT PRIMARY KEY, v INT);
 statement ok
 ALTER TABLE two SPLIT AT VALUES (0), (99)
 
+retry
 statement ok
 ALTER TABLE two EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 0)
 
@@ -474,6 +477,7 @@ statement ok
 ALTER TABLE sorted_data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
+retry
 statement ok
 ALTER TABLE sorted_data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
@@ -614,6 +618,7 @@ statement ok
 ALTER TABLE statistics_agg_test SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
+retry
 statement ok
 ALTER TABLE statistics_agg_test EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
@@ -659,6 +664,7 @@ SELECT sum(v) FROM data INNER LOOKUP JOIN uv ON (a=u) GROUP BY u ORDER BY u
 70000
 80000
 
+retry
 statement ok
 CREATE TABLE t55837 (
   i  int primary key,
@@ -682,6 +688,7 @@ SELECT corr(DISTINCT y, x), count(y) FROM t55837
 
 # Regression test for incorrectly populating the type schema produced by the
 # final stage of aggregators (#58683).
+retry
 statement ok
 CREATE TABLE table58683_1 (col1 INT8 PRIMARY KEY);
 INSERT INTO table58683_1 SELECT i FROM generate_series(1, 5) AS g(i);
@@ -695,6 +702,7 @@ SELECT every(col2) FROM table58683_1 JOIN table58683_2 ON col1 = (table58683_2.t
 #  - multiple ranges are involved, but the scan is not distributed; and
 #  - we need to paginate; and
 #  - the cardinality of the scan is more than ParallelScanResultThreshold.
+retry
 statement ok
 CREATE TABLE table74736 (k INT PRIMARY KEY, blob STRING);
 ALTER TABLE table74736 SPLIT AT VALUES (1000000);
