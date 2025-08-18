@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -700,9 +701,30 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	}
 }
 
-// addInternal adds the replica the queue with specified priority. If
-// the replica is already queued at a lower priority, updates the existing
-// priority. Expects the queue lock to be held by caller.
+func (bq *baseQueue) isDecommissioningNudgerEnqueue(
+	ctx context.Context, desc *roachpb.RangeDescriptor, priority float64,
+) bool {
+	// Check if this is a decommissioning nudger enqueue by checking the priority
+	// The decommissioning nudger uses a specific priority:
+	// `allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority()`.
+	return bq.name == "replicate" &&
+		priority == allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority()
+}
+
+func (bq *baseQueue) trackDecommissioningNudgerFailure(
+	ctx context.Context, desc *roachpb.RangeDescriptor, err error,
+) {
+	if bq.store.metrics.DecommissioningNudgerEnqueueFailure != nil {
+		bq.store.metrics.DecommissioningNudgerEnqueueFailure.Inc(1)
+	}
+	if log.V(1) {
+		log.Infof(
+			ctx, "decommissioning nudger enqueue failed for range %s: %v",
+			desc, err,
+		)
+	}
+}
+
 func (bq *baseQueue) addInternal(
 	ctx context.Context, desc *roachpb.RangeDescriptor, replicaID roachpb.ReplicaID, priority float64,
 ) (bool, error) {
@@ -711,6 +733,10 @@ func (bq *baseQueue) addInternal(
 	if !desc.IsInitialized() {
 		// We checked this above in MaybeAdd(), but we need to check it
 		// again for Add().
+		// Track decommissioning nudger failures.
+		if bq.isDecommissioningNudgerEnqueue(ctx, desc, priority) {
+			bq.trackDecommissioningNudgerFailure(ctx, desc, errors.New("replica not initialized"))
+		}
 		return false, errors.New("replica not initialized")
 	}
 
@@ -718,6 +744,9 @@ func (bq *baseQueue) addInternal(
 	defer bq.mu.Unlock()
 
 	if bq.mu.stopped {
+		if bq.isDecommissioningNudgerEnqueue(ctx, desc, priority) {
+			bq.trackDecommissioningNudgerFailure(ctx, desc, errQueueStopped)
+		}
 		return false, errQueueStopped
 	}
 
@@ -730,12 +759,18 @@ func (bq *baseQueue) addInternal(
 			if log.V(3) {
 				log.Infof(ctx, "queue disabled")
 			}
+			if bq.isDecommissioningNudgerEnqueue(ctx, desc, priority) {
+				bq.trackDecommissioningNudgerFailure(ctx, desc, errQueueDisabled)
+			}
 			return false, errQueueDisabled
 		}
 	}
 
 	// If the replica is currently in purgatory, don't re-add it.
 	if _, ok := bq.mu.purgatory[desc.RangeID]; ok {
+		if bq.isDecommissioningNudgerEnqueue(ctx, desc, priority) {
+			bq.trackDecommissioningNudgerFailure(ctx, desc, errors.New("replica in purgatory"))
+		}
 		return false, nil
 	}
 
@@ -769,6 +804,10 @@ func (bq *baseQueue) addInternal(
 	// If adding this replica has pushed the queue past its maximum size,
 	// remove the lowest priority element.
 	if pqLen := bq.mu.priorityQ.Len(); pqLen > bq.maxSize {
+		// Track when decommissioning nudger replicas get dropped due to queue overflow.
+		if bq.isDecommissioningNudgerEnqueue(ctx, desc, priority) {
+			bq.trackDecommissioningNudgerFailure(ctx, desc, errors.New("queue overflow - replica dropped"))
+		}
 		bq.removeLocked(bq.mu.priorityQ.sl[pqLen-1])
 	}
 	// Signal the processLoop that a replica has been added.
