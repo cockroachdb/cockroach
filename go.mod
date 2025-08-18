@@ -179,6 +179,7 @@ require (
 	github.com/google/skylark v0.0.0-20181101142754-a5f7082aabed
 	github.com/googleapis/gax-go/v2 v2.7.1
 	github.com/gorilla/mux v1.8.0
+	github.com/gorilla/schema v1.4.1
 	github.com/goware/modvendor v0.5.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20240215164046-eb0e60d27cb7
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0

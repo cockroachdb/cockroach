@@ -154,6 +154,7 @@ func (s *httpServer) setupRoutes(
 	handleDebugUnauthenticated http.Handler,
 	handleInspectzUnauthenticated http.Handler,
 	apiServer http.Handler,
+	apiInternalServer http.Handler,
 	flags serverpb.FeatureFlags,
 ) error {
 	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
@@ -209,8 +210,17 @@ func (s *httpServer) setupRoutes(
 	}
 
 	// Admin/Status servers. These are used by the UI via RPC-over-HTTP.
-	s.mux.Handle(apiconstants.StatusPrefix, authenticatedHandler)
 	s.mux.Handle(apiconstants.AdminPrefix, authenticatedHandler)
+	if apiInternalServer != nil && rpc.ExperimentalDRPCEnabled.Get(&s.cfg.Settings.SV) {
+		authenticatedRestHandler := apiInternalServer
+		if !s.cfg.InsecureWebAccess() {
+			authenticatedRestHandler = authserver.NewMux(
+				authnServer, authenticatedRestHandler, false /* allowAnonymous */)
+		}
+		s.mux.Handle(apiconstants.StatusPrefix, authenticatedRestHandler)
+	} else {
+		s.mux.Handle(apiconstants.StatusPrefix, authenticatedHandler)
+	}
 
 	// The timeseries endpoint, used to produce graphs.
 	s.mux.Handle(ts.URLPrefix, authenticatedHandler)
