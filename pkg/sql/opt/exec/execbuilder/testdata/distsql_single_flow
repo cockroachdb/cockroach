@@ -5,9 +5,14 @@ CREATE TABLE t1 (a INT PRIMARY KEY, b INT, c INT);
 CREATE TABLE t2 (a INT PRIMARY KEY, b INT, c INT);
 
 # Move the single range to a remote node.
+
+retry
 statement ok
-ALTER TABLE t1 EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 2);
-ALTER TABLE t2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 2);
+ALTER TABLE t1 EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 2)
+
+retry
+statement ok
+ALTER TABLE t2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 2)
 
 # There are no stats on the table, so the single flow should stay on the remote
 # node.
