@@ -82,6 +82,7 @@ func distChangefeedFlow(
 	resultsCh chan<- tree.Datums,
 	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
 	targets changefeedbase.Targets,
+	schemaTSOverride hlc.Timestamp,
 ) error {
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	progress := localState.progress
@@ -134,6 +135,14 @@ func distChangefeedFlow(
 			knobs.StartDistChangefeedInitialHighwater(ctx, initialHighWater)
 		}
 	}
+	// This isn't fixing current error (flowErr: fetching table descriptor 114: relation "[114]" does not exist)
+	// but I think it's necessary to have it.
+	if !schemaTSOverride.IsEmpty() {
+		schemaTS = schemaTSOverride
+		initialHighWater = schemaTSOverride
+		fmt.Printf("overriding schemaTS to %s from %s\n", schemaTSOverride, schemaTS)
+	}
+
 	return startDistChangefeed(
 		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh, onTracingEvent, targets)
 }
@@ -157,10 +166,13 @@ func fetchTableDescriptors(
 		// and lie within the primary index span. Deduplication is important
 		// here as requesting the same span twice will deadlock.
 		return targets.EachTableID(func(id catid.DescID) error {
+			fmt.Printf("fetching table descriptor %d at timestamp %s\n", id, ts)
+			// tableDesc, err := descriptors.ByIDWithLeased(txn.KV()).Get().Table(ctx, id)
 			tableDesc, err := descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
 			if err != nil {
 				return errors.Wrapf(err, "fetching table descriptor %d", id)
 			}
+			fmt.Printf("fetched table descriptor %d at timestamp %s\n", id, ts)
 			targetDescs = append(targetDescs, tableDesc)
 			return nil
 		})
@@ -242,6 +254,7 @@ func startDistChangefeed(
 	if err != nil {
 		return err
 	}
+	fmt.Printf("fetched table descriptors\n")
 
 	if schemaTS.IsEmpty() {
 		schemaTS = details.StatementTime
@@ -267,11 +280,13 @@ func startDistChangefeed(
 			log.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
 		}
 	}
+	fmt.Printf("making plan\n")
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
 		trackedSpans, spanLevelCheckpoint, localState.drainingNodes)(ctx, dsp)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("made plan\n")
 
 	execPlan := func(ctx context.Context) error {
 		// Derive a separate context so that we can shut down the changefeed
@@ -337,6 +352,7 @@ func startDistChangefeed(
 		return resultRows.Err()
 	}
 
+	fmt.Printf("end of startDistChangefeed\n")
 	return ctxgroup.GoAndWait(ctx, execPlan)
 }
 

@@ -76,7 +76,8 @@ func AllTargets(
 					if len(cd.TargetSpecifications) > 1 {
 						return changefeedbase.Targets{}, errors.New("database-level changefeed is not supported with multiple targets")
 					}
-					targets, err = getTargetsFromDatabaseSpec(ctx, ts, execCfg)
+					// note: I added cd.StatementTime here. It's not using it currently.
+					targets, err = getTargetsFromDatabaseSpec(ctx, ts, execCfg, cd.StatementTime)
 					if err != nil {
 						return changefeedbase.Targets{}, err
 					}
@@ -110,9 +111,11 @@ func AllTargets(
 }
 
 func getTargetsFromDatabaseSpec(
-	ctx context.Context, ts jobspb.ChangefeedTargetSpecification, execCfg *sql.ExecutorConfig,
+	ctx context.Context, ts jobspb.ChangefeedTargetSpecification, execCfg *sql.ExecutorConfig, statementTime hlc.Timestamp,
 ) (targets changefeedbase.Targets, err error) {
 	err = sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descs *descs.Collection) error {
+		// txn.KV().SetFixedTimestamp(ctx, statementTime)
+		// databaseDescriptor, err := descs.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, ts.DescID)
 		databaseDescriptor, err := descs.ByIDWithLeased(txn.KV()).Get().Database(ctx, ts.DescID)
 		if err != nil {
 			return err
@@ -145,6 +148,12 @@ func getTargetsFromDatabaseSpec(
 		}
 		return nil
 	})
+	// otherTargets, err := fetchTableDescriptors(ctx, execCfg, targets, statementTime)
+	// if err != nil {
+	// 	return targets, err
+	// }
+	// fmt.Printf("targets: %v\n", targets)
+	// fmt.Printf("otherTargets: %v\n", otherTargets)
 	return targets, err
 }
 

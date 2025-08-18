@@ -62,6 +62,7 @@ go_library(
         "//pkg/ccl/changefeedccl/kvfeed",
         "//pkg/ccl/changefeedccl/resolvedspan",
         "//pkg/ccl/changefeedccl/schemafeed",
+        "//pkg/ccl/changefeedccl/tableset",
         "//pkg/ccl/changefeedccl/timers",
         "//pkg/ccl/kvccl/kvfollowerreadsccl",
         "//pkg/ccl/utilccl",

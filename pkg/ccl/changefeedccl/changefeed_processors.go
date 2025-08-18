@@ -203,6 +203,7 @@ func newChangeAggregatorProcessor(
 			drainDone()
 		}
 	}()
+	fmt.Printf("newChangeAggregatorProcessor\n")
 
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("changeagg-mem"))
 	ca := &changeAggregator{
