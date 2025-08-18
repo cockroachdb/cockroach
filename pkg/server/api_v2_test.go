@@ -342,7 +342,15 @@ func TestCheckRestartSafe_Criticality(t *testing.T) {
 
 	ctx := context.Background()
 
-	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &TestingKnobs{
+					DisableAssertOnLeakedDescriptor: true,
+				},
+			},
+		},
+	})
 	defer testCluster.Stopper().Stop(ctx)
 
 	ts1 := testCluster.Server(0)
@@ -376,7 +384,15 @@ func TestCheckRestartSafe_RangeStatus(t *testing.T) {
 	ctx := context.Background()
 	var err error
 
-	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &TestingKnobs{
+					DisableAssertOnLeakedDescriptor: true,
+				},
+			},
+		},
+	})
 	defer testCluster.Stopper().Stop(ctx)
 
 	ts0 := testCluster.Server(0)
@@ -441,7 +457,15 @@ func TestCheckRestartSafe_AllowMinimumQuorum_Pass(t *testing.T) {
 	ctx := context.Background()
 	var err error
 
-	testCluster := serverutils.StartCluster(t, 5, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 5, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &TestingKnobs{
+					DisableAssertOnLeakedDescriptor: true,
+				},
+			},
+		},
+	})
 	defer testCluster.Stopper().Stop(ctx)
 
 	// need to set RF=5 on all the ranges
@@ -482,7 +506,15 @@ func TestCheckRestartSafe_AllowMinimumQuorum_Fail(t *testing.T) {
 	ctx := context.Background()
 	var err error
 
-	testCluster := serverutils.StartCluster(t, 5, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 5, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &TestingKnobs{
+					DisableAssertOnLeakedDescriptor: true,
+				},
+			},
+		},
+	})
 	defer testCluster.Stopper().Stop(ctx)
 
 	// need to set RF=5 on all the ranges
@@ -517,7 +549,15 @@ func TestCheckRestartSafe_Integration(t *testing.T) {
 	ctx := context.Background()
 	var err error
 
-	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &TestingKnobs{
+					DisableAssertOnLeakedDescriptor: true,
+				},
+			},
+		},
+	})
 	defer testCluster.Stopper().Stop(ctx)
 
 	ts0 := testCluster.Server(0)
@@ -547,7 +587,7 @@ func drain(ctx context.Context, ts1 serverutils.TestServerInterface, t *testing.
 	timeoutCtx, cancel := context.WithTimeout(ctx, testutils.SucceedsSoonDuration())
 	defer cancel()
 
-	err := ts1.DrainClientsWithoutLeakCheck(ctx)
+	err := ts1.DrainClients(ctx)
 	require.NoError(t, err)
 
 	for timeoutCtx.Err() == nil {

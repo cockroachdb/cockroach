@@ -139,12 +139,13 @@ func (s *drpcSystemAdminServer) Drain(
 type drainServer struct {
 	stopper *stop.Stopper
 	// stopTrigger is used to request that the server is shut down.
-	stopTrigger  *stopTrigger
-	grpc         *grpcServer
-	drpc         *drpcServer
-	sqlServer    *SQLServer
-	drainSleepFn func(time.Duration)
-	serverCtl    *serverController
+	stopTrigger                     *stopTrigger
+	grpc                            *grpcServer
+	drpc                            *drpcServer
+	sqlServer                       *SQLServer
+	drainSleepFn                    func(time.Duration)
+	serverCtl                       *serverController
+	disableAssertOnLeakedDescriptor bool
 
 	kvServer struct {
 		nodeLiveness *liveness.NodeLiveness
@@ -162,18 +163,21 @@ func newDrainServer(
 	sqlServer *SQLServer,
 ) *drainServer {
 	var drainSleepFn = time.Sleep
+	disableAssertOnLeakedDescriptor := false
 	if cfg.TestingKnobs.Server != nil {
 		if cfg.TestingKnobs.Server.(*TestingKnobs).DrainSleepFn != nil {
 			drainSleepFn = cfg.TestingKnobs.Server.(*TestingKnobs).DrainSleepFn
 		}
+		disableAssertOnLeakedDescriptor = cfg.TestingKnobs.Server.(*TestingKnobs).DisableAssertOnLeakedDescriptor
 	}
 	return &drainServer{
-		stopper:      stopper,
-		stopTrigger:  stopTrigger,
-		grpc:         grpc,
-		drpc:         drpc,
-		sqlServer:    sqlServer,
-		drainSleepFn: drainSleepFn,
+		stopper:                         stopper,
+		stopTrigger:                     stopTrigger,
+		grpc:                            grpc,
+		drpc:                            drpc,
+		sqlServer:                       sqlServer,
+		drainSleepFn:                    drainSleepFn,
+		disableAssertOnLeakedDescriptor: disableAssertOnLeakedDescriptor,
 	}
 }
 
@@ -399,11 +403,11 @@ func (s *drainServer) isDraining() bool {
 func (s *drainServer) drainClients(
 	ctx context.Context, reporter func(int, redact.SafeString),
 ) error {
-	return s.drainClientsInternal(ctx, reporter, true /* assertOnLeakedDescriptor */)
+	return s.drainClientsInternal(ctx, reporter)
 }
 
 func (s *drainServer) drainClientsInternal(
-	ctx context.Context, reporter func(int, redact.SafeString), assertOnLeakedDescriptor bool,
+	ctx context.Context, reporter func(int, redact.SafeString),
 ) error {
 	// Setup a cancelable context so that the logOpenConns goroutine exits when
 	// this function returns.
@@ -492,7 +496,7 @@ func (s *drainServer) drainClientsInternal(
 	// Drain all SQL table leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work and after the background
 	// tasks that may issue SQL statements have shut down.
-	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter, assertOnLeakedDescriptor)
+	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter, !s.disableAssertOnLeakedDescriptor)
 
 	session, err := s.sqlServer.sqlLivenessProvider.Release(ctx)
 	if err != nil {

@@ -149,6 +149,10 @@ type TestingKnobs struct {
 
 	// EnvironmentSampleInterval overrides base.DefaultMetricsSampleInterval when used to construct sampleEnvironmentCfg.
 	EnvironmentSampleInterval time.Duration
+
+	// DisableAssertOnLeakedDescriptor permits a test to disable the
+	// assertion that checks for descriptor leaks during drain.
+	DisableAssertOnLeakedDescriptor bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
