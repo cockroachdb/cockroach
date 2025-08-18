@@ -93,6 +93,8 @@ type TestClusterConfig struct {
 	// DisableSchemaLockedByDefault prevents tables from being created
 	// with schema_locked by default.
 	DisableSchemaLockedByDefault bool
+	// PrepareQueries executes queries and statements with Prepare and Execute.
+	PrepareQueries bool
 }
 
 // TenantMode is the type of the UseSecondaryTenant field in TestClusterConfig.
@@ -314,6 +316,12 @@ var LogicTestConfigs = []TestClusterConfig{
 		OverrideDistSQLMode:         "off",
 		IsCCLConfig:                 true,
 		EnableDefaultIsolationLevel: tree.RepeatableReadIsolation,
+	},
+	{
+		Name:                "local-prepared",
+		NumNodes:            1,
+		OverrideDistSQLMode: "off",
+		PrepareQueries:      true,
 	},
 	{
 		Name:                "fakedist",
@@ -603,6 +611,7 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"local-vec-off",
 		"local-read-committed",
 		"local-repeatable-read",
+		"local-prepared",
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",

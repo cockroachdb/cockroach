@@ -1,3 +1,4 @@
+# LogicTest: !local-prepared
 statement error unrecognized configuration parameter "foo"
 RESET FOO
 

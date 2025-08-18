@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 subtest types
 
 statement error pgcode 42P13 pq: function result type must be int because of OUT parameters

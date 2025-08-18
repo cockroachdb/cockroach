@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 skip under race
 
 statement ok
