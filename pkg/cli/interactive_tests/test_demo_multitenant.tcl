@@ -1,10 +1,10 @@
 #! /usr/bin/env expect -f
 
-# TODO(141942): Re-enable this test once we have investigated its flakiness.
-
 source [file join [file dirname $argv0] common.tcl]
 
-spawn $argv demo --no-line-editor --empty --nodes 3 --multitenant --log-dir=logs
+set ::env(COCKROACH_DEMO_PASSWORD) "hunter2hunter2hunter2hunter2"
+
+spawn $argv demo --no-line-editor --empty --nodes 5 --multitenant --log-dir=logs
 
 start_test "Check that the demo cluster starts properly"
 eexpect "Welcome"
@@ -43,31 +43,67 @@ eexpect "defaultdb>"
 end_test
 
 start_test "Check that the demo add command adds a node with no error in ls"
-send "\\demo add region=us-east-1\r"
-eexpect "node 4 has been added"
+send "\\demo add region=us-west1\r"
+eexpect "node 6 has been added"
 eexpect "defaultdb>"
 send "\\demo ls\r"
 eexpect "node 1:"
 eexpect "node 2:"
 eexpect "node 3:"
 eexpect "node 4:"
+eexpect "node 5:"
+eexpect "node 6:"
 eexpect "Application tenant:"
 eexpect "System tenant:"
 eexpect "defaultdb>"
 end_test
 
 start_test "Check that a node can be restarted"
-send "\\demo shutdown 4\r"
-eexpect "node 4 has been shutdown"
+
+# Switch to system tenant to check the liveness range.
+send "\\connect - - - - tenant=system\r"
+eexpect "the cluster ID has changed!"
 eexpect "defaultdb>"
-send "\\demo restart 4\r"
-eexpect "node 4 has been restarted"
+
+# Wait for the liveness range to have the default 5 voters. If its replication
+# factor is too low, shutting down the node below can cause it to lose quorum
+# and stall the shutdown command (example: #147867).
+set timeout 2
+set stmt "select range_id, array_length(voting_replicas,1) from crdb_internal.ranges where range_id=2;\r"
+send $stmt
+expect {
+    "2 |            5" {
+        puts "\rliveness range has 5 voters"
+    }
+    timeout {
+        puts "\rliveness range does not yet have 5 voters"
+        sleep 2
+        send $stmt
+        exp_continue
+    }
+}
+# Reset timeout back to 45 to match common.tcl.
+set timeout 45
+eexpect "defaultdb>"
+
+# Switch back to application tenant for the rest of the test.
+send "\\connect - - - - tenant=demoapp\r"
+eexpect "the cluster ID has changed!"
+eexpect "defaultdb>"
+
+send "\\demo shutdown 6\r"
+eexpect "node 6 has been shutdown"
+eexpect "defaultdb>"
+send "\\demo restart 6\r"
+eexpect "node 6 has been restarted"
 eexpect "defaultdb>"
 send "\\demo ls\r"
 eexpect "node 1:"
 eexpect "node 2:"
 eexpect "node 3:"
 eexpect "node 4:"
+eexpect "node 5:"
+eexpect "node 6:"
 eexpect "Application tenant:"
 eexpect "System tenant:"
 eexpect "defaultdb>"
