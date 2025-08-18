@@ -203,10 +203,7 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 			return r, nil
 		}
 	case types.CollatedStringFamily:
-		if colType.Oid() == oidext.T_citext {
-			val = tree.UnwrapDOidWrapper(val)
-		}
-		if v, ok := val.(*tree.DCollatedString); ok {
+		if v, ok := tree.AsDCollatedString(val); ok {
 			if lex.LocaleNamesAreEqual(v.Locale, colType.Locale()) {
 				r.SetString(v.Contents)
 				return r, nil
