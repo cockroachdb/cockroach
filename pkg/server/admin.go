@@ -305,16 +305,7 @@ func (s *adminServer) RegisterGateway(
 			return
 		}
 
-		// The privilege checks in the privilege checker below checks the user in the incoming
-		// gRPC metadata.
-		md := authserver.TranslateHTTPAuthInfoToGRPCMetadata(req.Context(), req)
-		authCtx := metadata.NewIncomingContext(req.Context(), md)
-		authCtx = s.AnnotateCtx(authCtx)
-		if err := s.privilegeChecker.RequireViewActivityAndNoViewActivityRedactedPermission(authCtx); err != nil {
-			http.Error(w, err.Error(), http.StatusForbidden)
-			return
-		}
-		s.getStatementBundle(req.Context(), id, w)
+		s.GetStatementBundle(req, id, w)
 	})
 
 	// Register the endpoints defined in the proto.
@@ -2649,7 +2640,18 @@ func (s *adminServer) QueryPlan(
 // getStatementBundle retrieves the statement bundle with the given id and
 // writes it out as an attachment. Note this function assumes the user has
 // permission to access the statement bundle.
-func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.ResponseWriter) {
+func (s *adminServer) GetStatementBundle(req *http.Request, id int64, w http.ResponseWriter) {
+	// The privilege checks in the privilege checker below checks the user in the incoming
+	// gRPC metadata.
+	md := authserver.TranslateHTTPAuthInfoToGRPCMetadata(req.Context(), req)
+	authCtx := metadata.NewIncomingContext(req.Context(), md)
+	authCtx = s.AnnotateCtx(authCtx)
+	if err := s.privilegeChecker.RequireViewActivityAndNoViewActivityRedactedPermission(authCtx); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	ctx := req.Context()
 	row, err := s.internalExecutor.QueryRowEx(
 		ctx, "admin-stmt-bundle", nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,
