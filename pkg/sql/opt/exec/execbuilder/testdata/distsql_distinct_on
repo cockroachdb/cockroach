@@ -19,6 +19,7 @@ CREATE TABLE abc (
 statement ok
 ALTER TABLE xyz SPLIT AT VALUES (2), (4), (6), (7)
 
+retry
 statement ok
 ALTER TABLE xyz EXPERIMENTAL_RELOCATE VALUES
   (ARRAY[1], 0),
@@ -35,6 +36,7 @@ ALTER TABLE abc SPLIT AT VALUES
   ('2', '3', '4'),
   ('3', '4', '5')
 
+retry
 statement ok
 ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES
   (ARRAY[1], NULL, NULL, NULL),
