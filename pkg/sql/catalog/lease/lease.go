@@ -265,6 +265,46 @@ SELECT DISTINCT session_id FROM system.lease WHERE desc_id=%d AND crdb_internal.
 	return sessionIDs, nil
 }
 
+// countSessionsHoldingStaleDescriptor finds sessionIDs that are holding a lease
+// on the previous version of desc but not the current version.
+func countSessionsHoldingStaleDescriptor(
+	ctx context.Context, txn isql.Txn, desc catalog.Descriptor, region string,
+) (int, error) {
+	b := strings.Builder{}
+
+	// Counts sessions that have previous version of the descriptor but not the current version
+	b.WriteString(fmt.Sprintf(`
+		SELECT count(DISTINCT l1.session_id)
+		FROM system.lease l1 
+		WHERE l1.desc_id = %d 
+		AND l1.version < %d 
+		AND crdb_internal.sql_liveness_is_alive(l1.session_id)
+		AND NOT EXISTS (
+			SELECT 1 FROM system.lease l2 
+			WHERE l2.desc_id = l1.desc_id 
+			AND l2.session_id = l1.session_id 
+			AND l2.version = %d
+		`, desc.GetID(), desc.GetVersion(), desc.GetVersion()))
+	if region != "" {
+		b.WriteString(fmt.Sprintf(" AND l2.crdb_region='%s'", region))
+	}
+	b.WriteString(")")
+	if region != "" {
+		b.WriteString(fmt.Sprintf(" AND l1.crdb_region='%s'", region))
+	}
+
+	rows, err := txn.QueryBuffered(ctx, "count-sessions-holding-stale-descriptor", txn.KV(), b.String())
+	if err != nil {
+		return 0, err
+	}
+
+	if len(rows) == 0 {
+		return 0, nil
+	}
+
+	return int(tree.MustBeDInt(rows[0][0])), nil
+}
+
 // WaitForInitialVersion waits for a lease to be acquired on a newly created
 // object on any nodes that have already leased the schema out. This ensures
 // that their leaseGeneration is incremented before the user commit completes,
@@ -506,6 +546,100 @@ func (m *Manager) WaitForOneVersion(
 			wsTracker.updateProgress(detail)
 			log.Infof(ctx, "waiting for %d leases to expire: desc=%v", detail.count, descs)
 		}
+	}
+
+	return desc, nil
+}
+
+// WaitForNewVersion returns once all leaseholders of any version of the
+// descriptor hold a lease of the current version.
+//
+// The MaxRetries and MaxDuration in retryOpts should not be set.
+func (m *Manager) WaitForNewVersion(
+	ctx context.Context,
+	descriptorId descpb.ID,
+	retryOpts retry.Options,
+	regions regionliveness.CachedDatabaseRegions,
+) (catalog.Descriptor, error) {
+	if retryOpts.MaxRetries != 0 {
+		return nil, errors.New("The MaxRetries option shouldn't be set in WaitForNewVersion")
+	}
+	if retryOpts.MaxDuration != 0 {
+		return nil, errors.New("The MaxDuration option shouldn't be set in WaitForNewVersion")
+	}
+
+	var desc catalog.Descriptor
+
+	var success bool
+	// Block until each leaseholder on the previous version of the descriptor
+	// also holds a lease on the current version of the descriptor (`for all
+	// session: (session in Prev => session in Curr)` for the set theory
+	// enjoyers).
+	for r := retry.Start(retryOpts); r.Next(); {
+		var err error
+		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, descriptorId, true)
+		if err != nil {
+			return nil, err
+		}
+
+		db := m.storage.db
+
+		// Get the sessions with leases in each region.
+		if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			prober := regionliveness.NewLivenessProber(db.KV(), m.storage.codec, regions, m.settings)
+			regionMap, err := prober.QueryLiveness(ctx, txn.KV())
+			if err != nil {
+				return err
+			}
+
+			// On single region clusters we can query everything at once.
+			if regionMap == nil {
+				regionMap = regionliveness.LiveRegions{"": struct{}{}}
+			}
+
+			var staleSessionCount int
+			for region := range regionMap {
+				var regionStaleSessionCount int
+				var err error
+				if hasTimeout, timeout := prober.GetProbeTimeout(); hasTimeout {
+					err = timeutil.RunWithTimeout(ctx, "count-sessions-holding-stale-descriptor-by-region", timeout, func(ctx context.Context) (countErr error) {
+						regionStaleSessionCount, countErr = countSessionsHoldingStaleDescriptor(ctx, txn, desc, region)
+						return countErr
+					})
+				} else {
+					regionStaleSessionCount, err = countSessionsHoldingStaleDescriptor(ctx, txn, desc, region)
+				}
+				if err != nil {
+					return handleRegionLivenessErrors(ctx, prober, region, err)
+				}
+
+				staleSessionCount += regionStaleSessionCount
+
+				if regionStaleSessionCount != 0 { // quit early
+					if region == "" {
+						log.Infof(ctx, "%d sessions holding stale descriptor", regionStaleSessionCount)
+					} else {
+						log.Infof(ctx, "Region '%s' has %d sessions holding stale descriptor", region, regionStaleSessionCount)
+					}
+					break
+				}
+			}
+
+			if staleSessionCount == 0 {
+				success = true
+			}
+
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		if success {
+			break
+		}
+	}
+	if !success {
+		return nil, errors.New("Exited lease acquisition loop before success")
 	}
 
 	return desc, nil

@@ -4179,6 +4179,9 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs, cachedRegions); err != nil {
 				return advanceInfo{}, err
 			}
+			if err := ex.waitForNewVersionPropagation(descIDsInJobs, cachedRegions); err != nil {
+				return advanceInfo{}, err
+			}
 			if err := ex.waitForInitialVersionForNewDescriptors(cachedRegions); err != nil {
 				return advanceInfo{}, err
 			}
