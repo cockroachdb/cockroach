@@ -34,7 +34,9 @@ import (
 func TestListSessionsSecurity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultDRPCOption: base.TestDRPCDisabled,
+	})
 	defer srv.Stopper().Stop(context.Background())
 
 	s := srv.ApplicationLayer()
@@ -110,7 +112,9 @@ func TestListSessionsPrivileges(t *testing.T) {
 	// Skip under stress race as the sleep query might finish before the stress race can finish.
 	skip.UnderRace(t, "list sessions privileges")
 
-	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultDRPCOption: base.TestDRPCDisabled,
+	})
 	defer srv.Stopper().Stop(context.Background())
 	ts := srv.ApplicationLayer()
 
@@ -230,7 +234,9 @@ func TestStatusCancelSessionGatewayMetadataPropagation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{DefaultDRPCOption: base.TestDRPCDisabled},
+	})
 	defer testCluster.Stopper().Stop(ctx)
 
 	s0 := testCluster.Server(0).ApplicationLayer()
@@ -257,7 +263,9 @@ func TestStatusAPIListSessions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{DefaultDRPCOption: base.TestDRPCDisabled},
+	})
 	defer testCluster.Stopper().Stop(ctx)
 
 	s0 := testCluster.Server(0).ApplicationLayer()

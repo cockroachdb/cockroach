@@ -177,6 +177,7 @@ go_library(
         "//pkg/security/clientsecopts",
         "//pkg/security/username",
         "//pkg/server/apiconstants",
+        "//pkg/server/apiinternal",
         "//pkg/server/apiutil",
         "//pkg/server/authserver",
         "//pkg/server/debug",
