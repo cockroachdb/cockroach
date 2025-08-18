@@ -1319,10 +1319,13 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Syntax, condition: hasVectorType},
 		{code: pgcode.FeatureNotSupported, condition: hasVectorType},
+		{code: pgcode.UndefinedObject, condition: hasVectorType},
 		{code: pgcode.Syntax, condition: hasCitextType},
 		{code: pgcode.FeatureNotSupported, condition: hasCitextType},
+		{code: pgcode.UndefinedObject, condition: hasCitextType},
 		{code: pgcode.Syntax, condition: hasLtreeType},
 		{code: pgcode.FeatureNotSupported, condition: hasLtreeType},
+		{code: pgcode.UndefinedObject, condition: hasLtreeType},
 	})
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
