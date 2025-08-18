@@ -632,12 +632,11 @@ func TestDropRegionFromUserDatabaseCleansUpSystemTables(t *testing.T) {
 	// Drop a region from the USER database (not system database)
 	sDB.Exec(t, `ALTER DATABASE userdb DROP REGION "us-east2"`)
 
-	// BUG: sql_instances table is now empty, but it shouldn't be
-	// The region still exists in the system database, so instances should remain
+	// Verify that dropping a region from a user database doesn't affect system.sql_instances.
+	// The region still exists in the system database, so instances should remain unchanged.
 	finalCount := sDB.QueryStr(t, `SELECT count(*) FROM system.sql_instances`)
 	require.NotEmpty(t, finalCount)
-	// This assertion will fail, demonstrating the bug.
-	// The count should remain the same since we only dropped from userdb, not system
+	// The count should remain the same since we only dropped from userdb, not system.
 	require.Equal(t, initialCount[0][0], finalCount[0][0],
 		"sql_instances count should not change when dropping region from user database")
 }
