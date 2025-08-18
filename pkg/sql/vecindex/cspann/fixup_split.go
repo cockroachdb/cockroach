@@ -22,8 +22,8 @@ import (
 // splitPartition starts or continues a split of the given partition. This is
 // performed as a series of atomic steps that incrementally update the index.
 // After each step, the overall index is in a well-defined state that still
-// updateMetadata searches, inserts, and deletes. However, depending on their
-// state, individual partitions can disallow inserts and deletes.
+// allows searches, inserts, and deletes. However, depending on their state,
+// individual partitions can disallow inserts and deletes.
 //
 // Here is the flow for splitting a non-root partition:
 //

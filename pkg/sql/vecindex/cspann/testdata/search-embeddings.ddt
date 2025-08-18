@@ -236,7 +236,7 @@ vec109: 0.1273
 new-index dataset=fashion-784d-1k.gob train-count=1000 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 1000 vectors with 784 dimensions.
-3 levels, 245 partitions.
+3 levels, 251 partitions.
 CV stats:
   level 2 - mean: 0.0000, stdev: 0.0000
   level 3 - mean: 0.0000, stdev: 0.0000
@@ -257,22 +257,22 @@ vec312: -14063724
 vec197: -14040257
 vec476: -13816669
 vec311: -13589641
-1000 leaf vectors, 1125 vectors, 21 full vectors, 126 partitions
+1000 leaf vectors, 1117 vectors, 18 full vectors, 118 partitions
 
 # Now use lower beam size.
 search max-results=10 use-dataset=999 beam-size=8
 ----
+vec773: -14979871
+vec7: -14608286
 vec109: -14526173
 vec811: -14265605
+vec216: -14251070
+vec312: -14063724
 vec660: -13573067
 vec984: -13534513
 vec610: -13491291
-vec226: -13364679
-vec144: -13148124
-vec968: -13060514
-vec999: -12779612
-vec853: -12163027
-64 leaf vectors, 115 vectors, 10 full vectors, 13 partitions
+vec461: -13344030
+82 leaf vectors, 133 vectors, 12 full vectors, 13 partitions
 
 # ----------------------------------------------------------------------
 # Load 950 1536-dimension image embeddings and search them using Cosine

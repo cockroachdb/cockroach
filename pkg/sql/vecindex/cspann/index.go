@@ -795,13 +795,12 @@ func (vi *Index) searchForUpdateHelper(
 	}
 
 	// Do an inconsistent scan of the partition to see if it might be ready to
-	// split or merge. This is necessary because the search does not scan leaf
-	// partitions. Unless we do this, we may never realize the partition is
-	// oversized or undersized.
+	// split. This is necessary because the search does not scan leaf partitions.
+	// Unless we do this, we may never realize the partition is oversized.
 	// NOTE: The scan is not performed in the scope of the current transaction,
 	// so it will not reflect the effects of this operation. That's OK, since it's
-	// not necessary to split or merge at exactly the point where the partition
-	// becomes oversized or undersized.
+	// not necessary to split at exactly the point where the partition becomes
+	// oversized.
 	partitionKey := result.ChildKey.PartitionKey
 	count, err := vi.store.EstimatePartitionCount(ctx, idxCtx.treeKey, partitionKey)
 	if err != nil {
@@ -862,9 +861,12 @@ func (vi *Index) fallbackOnTargets(
 		// The partition is ready for deletion; its target partitions have already
 		// been built and may themselves been split or deleted, so don't use them.
 		return nil
+
+	case MergingState:
+		// Merging state does not have targets, so nothing to do.
+		return nil
 	}
 
-	// TODO(andyk): Add support for DrainingForMergeState.
 	return errors.AssertionFailedf(
 		"expected state that disallows updates, not %s", state.String())
 }

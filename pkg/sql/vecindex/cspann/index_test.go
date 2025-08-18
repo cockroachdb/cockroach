@@ -934,11 +934,11 @@ func TestIndexConcurrency(t *testing.T) {
 	// Load dataset.
 	dataset := testutils.LoadDataset(t, testutils.ImagesDataset)
 
-	// Trim dataset count from 10k to 128 and dataset dimensions from 512 to 64,
+	// Trim dataset count from 10k to 256 and dataset dimensions from 512 to 32,
 	// in order to make the test run faster and hit more interesting concurrency
 	// combinations.
-	const vectorCount = 128
-	const dims = 64
+	const vectorCount = 256
+	const dims = 32
 	vectors := vector.MakeSet(dims)
 
 	primaryKeys := make([]cspann.KeyBytes, vectorCount)
@@ -990,7 +990,7 @@ func TestIndexConcurrency(t *testing.T) {
 				keySubset := primaryKeys[start:end]
 				deletedKeySubset := buildIndex(ctx, t, store, index, vectorSubset, keySubset)
 
-				// Add any keys that were deleted into the shared map.
+				// Add any keys that were not deleted into the shared map.
 				for i := range keySubset {
 					key := string(keySubset[i])
 					if !deletedKeySubset.Contains(key) {
@@ -1035,16 +1035,26 @@ func buildIndex(
 		}
 	}
 
-	deleteVector := func(idxCtx *cspann.Context, vec vector.T, key cspann.KeyBytes) {
-		commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
-			idxCtx.Init(txn)
-			deleted, err := index.Delete(ctx, idxCtx, nil /* treeKey */, vec, key)
-			require.NoError(t, err)
-			if deleted {
-				store.DeleteVector(key)
-				deletedKeys.Add(string(key))
+	// Delete a random subset of vectors.
+	deleteRandomVectors := func(idxCtx *cspann.Context, start, end int) {
+		for i := start; i < end; i++ {
+			// 50% chance of deleting a vector.
+			if rand.Int()%2 == 0 {
+				continue
 			}
-		})
+
+			vec := vectors.At(i)
+			key := primaryKeys[i]
+			commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
+				idxCtx.Init(txn)
+				deleted, err := index.Delete(ctx, idxCtx, nil /* treeKey */, vec, key)
+				require.NoError(t, err)
+				if deleted {
+					store.DeleteVector(key)
+					deletedKeys.Add(string(key))
+				}
+			})
+		}
 	}
 
 	// Insert vectors into the store on multiple goroutines. Delete the first
@@ -1063,8 +1073,9 @@ func buildIndex(
 			// block of vectors. Run any pending fixups after each block.
 			var idxCtx cspann.Context
 			for j := start; j < end; j += blockSize {
-				insertVectors(&idxCtx, j, min(j+blockSize, end))
-				deleteVector(&idxCtx, vectors.At(j), primaryKeys[j])
+				jEnd := min(j+blockSize, end)
+				insertVectors(&idxCtx, j, jEnd)
+				deleteRandomVectors(&idxCtx, j, jEnd)
 				require.NoError(t, index.ProcessFixups(ctx))
 			}
 		}(i, end)
