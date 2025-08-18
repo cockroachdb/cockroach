@@ -11,6 +11,7 @@ CREATE TABLE xyz (
 statement ok
 ALTER TABLE xyz SPLIT AT VALUES (2), (4), (6), (7)
 
+retry
 statement ok
 ALTER TABLE xyz EXPERIMENTAL_RELOCATE VALUES
   (ARRAY[1], 0),
