@@ -92,6 +92,9 @@ func (s *Smither) makePLpgSQLStatements(scope plpgsqlBlockScope, maxCount int) [
 			stmt, ok := s.plpgsqlStmtSampler.Next()(s, scope)
 			if ok {
 				stmts = append(stmts, stmt)
+				if isTerminalInBlock(stmt) {
+					return stmts
+				}
 				break
 			}
 		}
@@ -418,4 +421,22 @@ func (s *plpgsqlBlockScope) addVariable(name string, typ *types.T, constant bool
 	if constant {
 		s.constants[name] = struct{}{}
 	}
+}
+
+// isTerminalInBlock reports whether executing stmt guarantees that no subsequent
+// statements in the *same* block execute in the current control-flow path.
+// If the sampler picked a terminal statement, it will be the last statement
+// of the result statement set.
+func isTerminalInBlock(stmt ast.Statement) bool {
+	switch s := stmt.(type) {
+	case *ast.Return:
+		return true
+	case *ast.Exit:
+		return s.Condition == nil // or provenTrue(s.When)
+
+	case *ast.Continue:
+		return s.Condition == nil
+	}
+
+	return false
 }
