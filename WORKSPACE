@@ -167,15 +167,15 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.23.11.darwin-amd64.tar.gz", "544af98bd4d0505429620a60db344a7f9bb96c22f0f0a4f67440d9f6d6441bb7"),
-        "darwin_arm64": ("go1.23.11.darwin-arm64.tar.gz", "d7913a30a4471f3679ea0eb90a2df70f3bbc73bd60eec11857b2a484d4b3a10f"),
-        "linux_amd64": ("go1.23.11.linux-amd64.tar.gz", "ed798bdf894bee6be23303081aeb5138833d5e21a156f982b7a19ce2ef311253"),
-        "linux_arm64": ("go1.23.11.linux-arm64.tar.gz", "dee3062b776da0c24eb87ebe62bcd4d4ada8f5e4f4d84c5b9cdde460dffa2f4f"),
-        "linux_s390x": ("go1.23.11.linux-s390x.tar.gz", "80afb0fe27b1c98c5702274d4f59fe1389d79107f763d2272725881652876453"),
-        "windows_amd64": ("go1.23.11.windows-amd64.tar.gz", "5e379bf7a86330bbed89cba69ef91466d75507999abe6b6546a2142c48770a1e"),
+        "darwin_amd64": ("go1.23.12.darwin-amd64.tar.gz", "34457131f14281e21e25493d68e7519ccf26342d176dac36a4fc5dbf5ef122d9"),
+        "darwin_arm64": ("go1.23.12.darwin-arm64.tar.gz", "30e0735ab9ccda203946536d24afe895abd1a1d3f35ad199f9768ccbdd5d60bc"),
+        "linux_amd64": ("go1.23.12.linux-amd64.tar.gz", "0cac0ac930ecb9458b8a0a7969cbf735c5884d24c879c97eb28a8997eca986fa"),
+        "linux_arm64": ("go1.23.12.linux-arm64.tar.gz", "528601fc8fb2c7e5ce8b7ae7651fd4fce2450bbef687beb96616edc5a9effa41"),
+        "linux_s390x": ("go1.23.12.linux-s390x.tar.gz", "f3f11bbb731da6716776d1c29a2db3d1063fa0a9f8c00636e6a77793ba79e2e3"),
+        "windows_amd64": ("go1.23.12.windows-amd64.tar.gz", "71b5b5b86b3a5ff9f124e21984abd874a6bfeb438f368de2eee7c60a25a19c94"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250729-160610/{}"],
-    version = "1.23.11",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250818-202337/{}"],
+    version = "1.23.12",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -659,8 +659,8 @@ go_download_sdk(
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
     sdks = {
-        "linux_amd64": ("go1.23.11fips.linux-amd64.tar.gz", "8ab9a4b4df05741c965c3059947c0b94aaf4b714a8fb00bbb2efecfdbe8946a3"),
+        "linux_amd64": ("go1.23.12fips.linux-amd64.tar.gz", "9c58fd7137b4c9d387a5c37fd2e728bc5d39357c7f8ba3358bcae513704c2983"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250729-160610/{}"],
-    version = "1.23.11fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250818-202337/{}"],
+    version = "1.23.12fips",
 )
