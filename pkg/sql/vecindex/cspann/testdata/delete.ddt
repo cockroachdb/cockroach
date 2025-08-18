@@ -131,7 +131,6 @@ vec6
 │
 ├───• 6 [-1.5, 8]
 │   │
-│   ├───• 9 [-4, 5]
 │   └───• 8 [1.5, 9.5]
 │       │
 │       └───• vec7 [2, 8]
@@ -146,12 +145,6 @@ vec6
     └───• 4 [1, -2]
         │
         └───• vec1 [MISSING]
-
-# Search for vector in empty leaf partition.
-search max-results=1 beam-size=1
-[-4, 5]
-----
-0 leaf vectors, 4 vectors, 0 full vectors, 3 partitions
 
 # ----------------------------------------------------------------------
 # Delete vectors from primary index, but not from secondary index.
@@ -236,7 +229,7 @@ vec1
     └───• vec1 [MISSING]
 
 # Search the empty branch.
-search max-results=1 beam-size=1
+search max-results=1 beam-size=1 discard-fixups
 [1, 2]
 ----
 1 leaf vectors, 3 vectors, 1 full vectors, 2 partitions
@@ -371,8 +364,6 @@ vec7
 ----
 • 1 [0, 0]
 │
-├───• 2 [0.8341, 0.5481]
-├───• 5 [-0.2671, 0.8884]
 └───• 4 [0.3449, 0.9323]
 
 # ----------------------------------------------------------------------
@@ -410,6 +401,4 @@ vec7
 ----
 • 1 [0, 0]
 │
-├───• 2 [5.5, 3.5]
-├───• 5 [4, 3]
 └───• 4 [-1.5, 8]

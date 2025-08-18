@@ -49,9 +49,7 @@ func (c *queryVector) Clear() {
 // InitOriginal stores the original query vector as well as its randomized and
 // possibly normalized form.
 func (c *queryVector) InitOriginal(
-	distanceMetric vecpb.DistanceMetric,
-	original vector.T,
-	rot *RandomOrthoTransformer,
+	distanceMetric vecpb.DistanceMetric, original vector.T, rot *RandomOrthoTransformer,
 ) {
 	c.original = original
 	c.allocTransformed(original)
