@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "build_boring.go",  # keep
         "build_noboring.go",
-        "consts.go",
     ],
     cgo = True,
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl/fipscclbase",
