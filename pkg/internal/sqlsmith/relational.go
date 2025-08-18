@@ -110,9 +110,11 @@ var (
 		{1, makeImport},
 		{1, makeCreateStats},
 		{1, makeSetSessionCharacteristics},
+		{5, makeDoBlock},
 	}
 	nonMutatingStatements = []statementWeight{
 		{10, makeSelect},
+		{2, makeDoBlock},
 	}
 	allStatements = append(mutatingStatements, nonMutatingStatements...)
 
@@ -915,6 +917,10 @@ func makeCreateFunc(s *Smither) (tree.Statement, bool) {
 		return nil, false
 	}
 	return s.makeCreateFunc()
+}
+
+func makeDoBlock(s *Smither) (tree.Statement, bool) {
+	return s.makeDoBlockTreeStmt()
 }
 
 func makeDropFunc(s *Smither) (tree.Statement, bool) {
