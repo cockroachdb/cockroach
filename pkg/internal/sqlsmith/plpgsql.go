@@ -32,8 +32,8 @@ func (s *Smither) makePLpgSQLBlock(scope plpgsqlBlockScope) *ast.Block {
 	const maxStmts = 11
 	decls, newScope := s.makePLpgSQLDeclarations(scope)
 	body := s.makePLpgSQLStatements(newScope, maxStmts)
-	// TODO(#106368): optionally add a label.
 	return &ast.Block{
+		Label: scope.generateLoopLabel(s, scope.blockLabels),
 		Decls: decls,
 		Body:  body,
 	}
@@ -101,7 +101,6 @@ func (s *Smither) makePLpgSQLStatements(scope plpgsqlBlockScope, maxCount int) [
 
 func (s *Smither) makePLpgSQLIf(scope plpgsqlBlockScope) *ast.If {
 	const maxBranchStmts = 3
-	scope.scopeMetas = append(scope.scopeMetas, scopeMeta{typ: ifScope})
 	ifStmt := &ast.If{
 		Condition: s.makePLpgSQLCond(scope),
 		ThenBody:  s.makePLpgSQLStatements(scope, maxBranchStmts),
@@ -235,7 +234,7 @@ func makePLpgSQLExit(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement, o
 		return nil, false
 	}
 	res := &ast.Exit{
-		// TODO(#106368): optionally add a label.
+		Label:     scope.getAnyExistingLoopLabel(s),
 		Condition: s.makePLpgSQLCond(scope),
 	}
 	return res, true
@@ -247,7 +246,7 @@ func makePLpgSQLContinue(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statemen
 		return nil, false
 	}
 	res := &ast.Continue{
-		// TODO(#106368): optionally add a label.
+		Label:     scope.getAnyExistingLoopLabel(s),
 		Condition: s.makePLpgSQLCond(scope),
 	}
 	return res, true
@@ -266,10 +265,10 @@ func makePLpgSQLForLoop(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement
 	newScope := scope.makeChild(1 /* numNewVars */)
 	loopVarName := s.makePLpgSQLVarName("loop", newScope)
 	newScope.addVariable(string(loopVarName), types.Int, false /* constant */)
-	newScope.scopeMetas = append(newScope.scopeMetas, scopeMeta{typ: loopScope, name: string(loopVarName)})
+	label := newScope.generateLoopLabel(s, scope.loopLabels)
 	const maxLoopStmts = 3
 	return &ast.ForLoop{
-		// TODO(#106368): optionally add a label.
+		Label:   label,
 		Target:  []ast.Variable{loopVarName},
 		Control: &control,
 		Body:    s.makePLpgSQLStatements(newScope, maxLoopStmts),
@@ -278,32 +277,13 @@ func makePLpgSQLForLoop(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement
 
 func makePLpgSQLWhile(s *Smither, scope plpgsqlBlockScope) (stmt ast.Statement, ok bool) {
 	newScope := scope.makeChild(1 /* numNewVars */)
-	loopVarName := s.makePLpgSQLVarName("loop", newScope)
-	newScope.scopeMetas = append(newScope.scopeMetas, scopeMeta{typ: loopScope, name: string(loopVarName)})
+	label := newScope.generateLoopLabel(s, scope.loopLabels)
 	const maxLoopStmts = 3
 	return &ast.While{
-		// TODO(#106368): optionally add a label.
+		Label:     label,
 		Condition: s.makePLpgSQLCond(newScope),
 		Body:      s.makePLpgSQLStatements(newScope, maxLoopStmts),
 	}, true
-}
-
-// scopeType is a type that represents the type of scope that the current block
-// is nested within.
-type scopeType int
-
-const (
-	loopScope scopeType = iota
-	ifScope
-)
-
-// scopeMeta is a name-tagged scopeType. It is used to determine if certain
-// statements are allowed in the current scope, such as EXIT and CONTINUE,
-// which can only be used within loops.
-type scopeMeta struct {
-	typ scopeType
-	// // TODO(#106368): propagate `name` with the loop label.
-	name string
 }
 
 // plpgsqlBlockScope holds the information needed to ensure that generated
@@ -319,11 +299,13 @@ type plpgsqlBlockScope struct {
 	// current block.
 	vars []string
 
-	// scopeMetas tracks the nested scopes of the current block. For example,
-	// entering a FOR loop adds a loopScope with the loop label name, while
-	// entering an IF statement adds an ifScope without a name. Used to validate
-	// statements like EXIT and CONTINUE, which are only allowed in loops.
-	scopeMetas []scopeMeta
+	// loopLabels stores the labels of all loops that are in scope for the
+	// current scope.
+	loopLabels map[string]struct{}
+
+	// blockLabels stores the labels of all blocks that are in scope for the
+	// current scope.
+	blockLabels map[string]struct{}
 
 	// refs is the list of colRefs for every variable in the current scope. It
 	// could be rebuilt from the vars and varTypes fields, but is kept up-to-date
@@ -360,18 +342,60 @@ func (s *plpgsqlBlockScope) makeChild(numNewVars int) plpgsqlBlockScope {
 	}
 	newScope.vars = append(newScope.vars, s.vars...)
 	newScope.refs = append(newScope.refs, s.refs...)
-	newScope.scopeMetas = append(newScope.scopeMetas, s.scopeMetas...)
+	newScope.loopLabels = make(map[string]struct{})
+	for l := range s.loopLabels {
+		newScope.loopLabels[l] = struct{}{}
+	}
+	newScope.blockLabels = make(map[string]struct{})
+	for l := range s.blockLabels {
+		newScope.blockLabels[l] = struct{}{}
+	}
 	return newScope
 }
 
 // inLoop returns true if the current scope is within a for/while loop.
 func (s *plpgsqlBlockScope) inLoop() bool {
-	for _, m := range s.scopeMetas {
-		if m.typ == loopScope {
-			return true
+	return len(s.loopLabels) > 0
+}
+
+// generateLoopLabel generates a random label of length in range 3 - 9 for
+// a loop or block, ensuring that it does not collide with any existing
+// labels.
+func (s *plpgsqlBlockScope) generateLoopLabel(
+	smith *Smither,
+	existingLabels map[string]struct{},
+) string {
+	for {
+		var length int
+		for length < 3 {
+			length = smith.rnd.Intn(10)
+		}
+
+		b := make([]byte, length)
+		for i := range b {
+			b[i] = byte('a' + smith.rnd.Intn(26))
+		}
+
+		_, ok := existingLabels[string(b)]
+		if !ok {
+			existingLabels[string(b)] = struct{}{}
+			return string(b)
 		}
 	}
-	return false
+}
+
+// getAnyExistingLoopLabel randomly returns one of the existing loop or
+// block labels.
+func (s *plpgsqlBlockScope) getAnyExistingLoopLabel(smither *Smither) string {
+	loopNames := make([]string, 0)
+	for label := range s.loopLabels {
+		loopNames = append(loopNames, label)
+	}
+
+	if len(loopNames) == 0 {
+		return ""
+	}
+	return loopNames[smither.rnd.Intn(len(loopNames))]
 }
 
 func (s *plpgsqlBlockScope) hasVariable(name string) bool {
