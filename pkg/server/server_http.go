@@ -154,6 +154,7 @@ func (s *httpServer) setupRoutes(
 	handleDebugUnauthenticated http.Handler,
 	handleInspectzUnauthenticated http.Handler,
 	apiServer http.Handler,
+	restStatusServer http.Handler,
 	flags serverpb.FeatureFlags,
 ) error {
 	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
@@ -231,6 +232,16 @@ func (s *httpServer) setupRoutes(
 	if apiServer != nil {
 		// The new "v2" HTTP API tree.
 		s.mux.Handle(apiconstants.APIV2Path, apiServer)
+	}
+
+	if restStatusServer != nil {
+		// REST API that directly calls RPC methods (bypassing gRPC gateway)
+		authenticatedRestHandler := restStatusServer
+		if !s.cfg.InsecureWebAccess() {
+			authenticatedRestHandler = authserver.NewMux(
+				authnServer, authenticatedRestHandler, false /* allowAnonymous */)
+		}
+		s.mux.Handle("/drpc/_status/", authenticatedRestHandler)
 	}
 
 	// Register debugging endpoints.

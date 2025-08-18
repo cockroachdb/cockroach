@@ -5,6 +5,7 @@ go_library(
     name = "server",
     srcs = [
         "admin.go",
+        "api_rest_status.go",
         "api_v2.go",
         "api_v2_constants.go",
         "api_v2_databases_metadata.go",
