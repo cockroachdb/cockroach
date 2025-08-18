@@ -547,7 +547,7 @@ func drain(ctx context.Context, ts1 serverutils.TestServerInterface, t *testing.
 	timeoutCtx, cancel := context.WithTimeout(ctx, testutils.SucceedsSoonDuration())
 	defer cancel()
 
-	err := ts1.DrainClientsWithoutLeakCheck(ctx)
+	err := ts1.DrainClients(ctx)
 	require.NoError(t, err)
 
 	for timeoutCtx.Err() == nil {

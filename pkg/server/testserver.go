@@ -1242,11 +1242,6 @@ func (t *testTenant) DrainClients(ctx context.Context) error {
 	return t.drain.drainClients(ctx, nil /* reporter */)
 }
 
-// DrainClients exports the drainClientsInternal() method for use by tests.
-func (t *testTenant) DrainClientsWithoutLeakCheck(ctx context.Context) error {
-	return t.drain.drainClientsInternal(ctx, nil /* reporter */, false)
-}
-
 // Readiness is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) Readiness(ctx context.Context) error {
 	return t.t.admin.checkReadinessForHealthCheck(ctx)
@@ -1946,13 +1941,6 @@ func (ts *testServer) SQLAddr() string {
 // DrainClients exports the drainClients() method for use by tests.
 func (ts *testServer) DrainClients(ctx context.Context) error {
 	return ts.drain.drainClients(ctx, nil /* reporter */)
-}
-
-// DrainClientsWithoutLeakCheck exports the drainClients() method for use by tests
-// with descriptor leak checking disabled. This is useful for tests that focus on
-// restart safety logic rather than lease management correctness.
-func (ts *testServer) DrainClientsWithoutLeakCheck(ctx context.Context) error {
-	return ts.drain.drainClientsInternal(ctx, nil, false /* assertOnLeakedDescriptor */)
 }
 
 // Readiness is part of the serverutils.ApplicationLayerInterface.
