@@ -777,6 +777,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
 			SELECT DISTINCT ON ("tableID") "tableID", "rowCount"
 			FROM system.table_statistics
 			AS OF SYSTEM TIME '%s'
+			WHERE "partialPredicate" IS NULL
 			ORDER BY "tableID", "createdAt" DESC, "rowCount" DESC`,
 			statsAsOfTimeClusterMode.String(&p.ExecCfg().Settings.SV))
 		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalDB.Executor().QueryBufferedEx(
