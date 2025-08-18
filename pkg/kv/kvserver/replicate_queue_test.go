@@ -2481,12 +2481,20 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 			var value int64
 
 			switch metricType {
-			case "attempts":
-				value = store.Metrics().DecommissioningNudgerEnqueueAttempts.Count()
-			case "success", "enqueued":
+			case "decommissioning_ranges":
+				value = store.Metrics().DecommissioningRangeCount.Value()
+			case "enqueued":
 				value = store.Metrics().DecommissioningNudgerEnqueueEnqueued.Count()
 			case "failure":
 				value = store.Metrics().DecommissioningNudgerEnqueueFailure.Count()
+			case "not_leaseholder":
+				value = store.Metrics().DecommissioningNudgerNotLeaseholder.Count()
+			case "invalid_lease":
+				value = store.Metrics().DecommissioningNudgerInvalidLease.Count()
+			case "rate_limited":
+				value = store.Metrics().DecommissioningNudgerRateLimited.Count()
+			case "setting_disabled":
+				value = store.Metrics().DecommissioningNudgerSettingDisabled.Count()
 			default:
 				t.Fatalf("unknown metric type: %s", metricType)
 			}
@@ -2496,7 +2504,7 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 		return total
 	}
 
-	initialAttempts := getDecommissioningNudgerMetricValue(t, tc, "attempts")
+	initialDecommissioningRanges := getDecommissioningNudgerMetricValue(t, tc, "decommissioning_ranges")
 
 	// Now add a replica to the decommissioning node and then enable the
 	// replicate queue. We expect that the replica will be removed after the
@@ -2507,12 +2515,12 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 
 	// Wait for the enqueue logic to trigger and validate metrics were updated.
 	testutils.SucceedsSoon(t, func() error {
-		afterAttempts := getDecommissioningNudgerMetricValue(t, tc, "attempts")
+		afterDecommissioningRanges := getDecommissioningNudgerMetricValue(t, tc, "decommissioning_ranges")
 		afterFailures := getDecommissioningNudgerMetricValue(t, tc, "failure")
 		afterEnqueued := getDecommissioningNudgerMetricValue(t, tc, "enqueued")
 
-		if afterAttempts <= initialAttempts {
-			return errors.New("expected DecommissioningNudgerEnqueueAttempts to increase")
+		if afterDecommissioningRanges <= initialDecommissioningRanges {
+			return errors.New("expected DecommissioningRangeCount to increase")
 		}
 		if afterFailures != 0 {
 			return errors.New("expected DecommissioningNudgerEnqueueFailure to be 0")

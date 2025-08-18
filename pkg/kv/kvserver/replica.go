@@ -2926,23 +2926,24 @@ func (r *Replica) maybeEnqueueProblemRange(
 	ctx context.Context, now time.Time, leaseValid, isLeaseholder bool,
 ) {
 
-	// Increment attempts metric for every call.
-	if r.store.metrics.DecommissioningNudgerEnqueueAttempts != nil {
-		r.store.metrics.DecommissioningNudgerEnqueueAttempts.Inc(1)
-	}
-
 	// The method expects the caller to provide whether the lease is valid and
 	// the replica is the leaseholder for the range, so that it can avoid
 	// unnecessary work. We expect this method to be called in the context of
 	// updating metrics.
 	if !isLeaseholder || !leaseValid {
 		// The replicate queue will not process the replica without a valid lease.
-		// Nothing to do.
+		// Track when we skip enqueuing for these reasons.
 		if !isLeaseholder {
 			log.KvDistribution.VInfof(ctx, 1, "not enqueuing replica %s because it is not the leaseholder", r.Desc())
+			if r.store.metrics.DecommissioningNudgerNotLeaseholder != nil {
+				r.store.metrics.DecommissioningNudgerNotLeaseholder.Inc(1)
+			}
 			return
 		}
 		log.KvDistribution.VInfof(ctx, 1, "not enqueuing replica %s because the lease is not valid", r.Desc())
+		if r.store.metrics.DecommissioningNudgerInvalidLease != nil {
+			r.store.metrics.DecommissioningNudgerInvalidLease.Inc(1)
+		}
 		return
 	}
 
@@ -2951,6 +2952,9 @@ func (r *Replica) maybeEnqueueProblemRange(
 		// The setting is disabled.
 		if problemRangeLogLimiter.ShouldLog() {
 			log.KvDistribution.VInfof(ctx, 1, "not enqueuing replica %s because the setting is disabled", r.Desc())
+		}
+		if r.store.metrics.DecommissioningNudgerSettingDisabled != nil {
+			r.store.metrics.DecommissioningNudgerSettingDisabled.Inc(1)
 		}
 		return
 	}
@@ -2966,12 +2970,10 @@ func (r *Replica) maybeEnqueueProblemRange(
 	// expect a race, however if the value changed underneath us we won't enqueue
 	// the replica as we lost the race.
 	if !r.lastProblemRangeReplicateEnqueueTime.CompareAndSwap(lastTime, now) {
+		// This race condition is expected to be rare.
 		log.KvDistribution.VInfof(ctx, 1, "not enqueuing replica %s because the last time the replica was enqueued is less than the interval ago", r.Desc())
-		// Note: This metric is rarely incremented, as maybeEnqueueProblemRange
-		// is expected to be single-threaded.
-		// It is kept for completeness, but may not be useful in practice.
-		if r.store.metrics.DecommissioningNudgerEnqueueFailure != nil {
-			r.store.metrics.DecommissioningNudgerEnqueueFailure.Inc(1)
+		if r.store.metrics.DecommissioningNudgerRateLimited != nil {
+			r.store.metrics.DecommissioningNudgerRateLimited.Inc(1)
 		}
 		return
 	}
