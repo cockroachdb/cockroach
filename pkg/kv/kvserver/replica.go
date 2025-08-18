@@ -2981,6 +2981,7 @@ func (r *Replica) maybeEnqueueProblemRange(
 	// (other logs have a verbosity of 1 which).
 	log.KvDistribution.Infof(ctx, "decommissioning nudger enqueuing replica %s with priority %f", r.Desc(), allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
 	r.store.metrics.DecommissioningNudgerEnqueueEnqueued.Inc(1)
+	ctx = context.WithValue(ctx, isDecommissioningNudgerEnqueueContextKey, true)
 	r.store.replicateQueue.AddAsync(ctx, r,
 		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
 }
