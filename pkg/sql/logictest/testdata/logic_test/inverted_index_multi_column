@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 # Tests for multi-column inverted indexes.
 
 # Err if the last column is not an invertable type.

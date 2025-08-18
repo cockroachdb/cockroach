@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 subtest encrypt_decrypt_aes_128
 
 query T

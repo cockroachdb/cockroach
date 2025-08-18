@@ -1,3 +1,4 @@
+# LogicTest: !local-prepared
 # Regression test for incorrectly handling projection on top of the EXPORT
 # (#101733).
 statement ok

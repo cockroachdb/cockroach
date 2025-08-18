@@ -1,3 +1,4 @@
+# LogicTest: !local-prepared
 subtest alter_procedure_name
 
 statement ok
