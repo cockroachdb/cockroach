@@ -648,6 +648,25 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 		return nil, err
 	}
 
+	// Restore per-table resolved timestamps if we have them.
+	if ca.spec.ResolvedTables != nil {
+		for tableID, ts := range ca.spec.ResolvedTables.Tables {
+			if ts.IsEmpty() {
+				continue
+			}
+			if ts.Less(initialHighWater) {
+				return nil, errors.AssertionFailedf(
+					"table %d resolved timestamp %s is less than initial high water %s",
+					tableID, ts, initialHighWater)
+			}
+			// Create a span covering the entire table and forward it to the timestamp.
+			tableSpan := ca.FlowCtx.Codec().TableSpan(uint32(tableID))
+			if _, err := ca.frontier.Forward(tableSpan, ts); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// Checkpointed spans are spans that were above the highwater mark, and we
 	// must preserve that information in the frontier for future checkpointing.
 	if err := checkpoint.Restore(ca.frontier, ca.spec.SpanLevelCheckpoint); err != nil {
@@ -1463,6 +1482,32 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		log.Dev.Warningf(cf.Ctx(), "moving to draining due to error setting up frontier: %v", err)
 		cf.MoveToDraining(err)
 		return
+	}
+
+	// Restore per-table resolved timestamps if we have them.
+	if cf.spec.ResolvedTables != nil {
+		for tableID, ts := range cf.spec.ResolvedTables.Tables {
+			if ts.IsEmpty() {
+				continue
+			}
+			if ts.Less(initialHighwater) {
+				err := errors.AssertionFailedf(
+					"table %d resolved timestamp %s is less than initial high water %s",
+					tableID, ts, initialHighwater)
+				log.Dev.Warningf(cf.Ctx(),
+					"moving to draining due to error restoring per-table resolved timestamps: %v", err)
+				cf.MoveToDraining(err)
+				return
+			}
+			// Create a span covering the entire table and forward it to the timestamp.
+			tableSpan := cf.FlowCtx.Codec().TableSpan(uint32(tableID))
+			if _, err := cf.frontier.Forward(tableSpan, ts); err != nil {
+				log.Dev.Warningf(cf.Ctx(),
+					"moving to draining due to error restoring per-table resolved timestamps: %v", err)
+				cf.MoveToDraining(err)
+				return
+			}
+		}
 	}
 
 	if err := checkpoint.Restore(cf.frontier, cf.spec.SpanLevelCheckpoint); err != nil {

@@ -91,6 +91,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/changefeedccl/progresspb:progresspb_proto",
         "//pkg/cloud/cloudpb:cloudpb_proto",
         "//pkg/jobs/jobspb:jobspb_proto",
         "//pkg/kv/kvpb:kvpb_proto",
@@ -123,6 +124,7 @@ go_proto_library(
     proto = ":execinfrapb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/changefeedccl/progresspb",
         "//pkg/cloud/cloudpb",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvpb",
