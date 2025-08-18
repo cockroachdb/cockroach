@@ -9,12 +9,12 @@
 set -xeuo pipefail
 
 # When updating to a new Go version, update all of these variables.
-GOVERS=1.23.11
+GOVERS=1.23.12
 GOCOMMIT=$(grep -v ^# /bootstrap/commit.txt | head -n1)
 # We use this for bootstrapping (this is NOT re-published). Note the version
 # matches the version we're publishing, although it doesn't technically have to.
 GOLINUXLINK=https://go.dev/dl/go$GOVERS.linux-amd64.tar.gz
-LINUXSHASUM=80899df77459e0b551d2eb8800ad6eb47023b99cccbf8129e7b5786770b948c5
+LINUXSHASUM=d3847fef834e9db11bf64e3fb34db9c04db14e068eeb064f49af747010454f90
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
