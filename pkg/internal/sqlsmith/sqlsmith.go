@@ -118,7 +118,11 @@ type Smither struct {
 	// disableUDFCreation indicates whether we're not allowed to create UDFs.
 	// It follows that if we haven't created any UDFs, we have no UDFs to invoke
 	// too.
-	disableUDFCreation     bool
+	disableUDFCreation bool
+	// disableDoBlock indicates whether we're not allowed to create DO blocks,
+	// both as top level statements and inside plpgsql function body
+	// definition.
+	disableDoBlock         bool
 	disableIsolationChange bool
 
 	bulkSrv     *httptest.Server
@@ -610,6 +614,11 @@ var DisableOIDs = simpleOption("disable OIDs", func(s *Smither) {
 // DisableUDFs causes the Smither to disable user-defined functions.
 var DisableUDFs = simpleOption("disable udfs", func(s *Smither) {
 	s.disableUDFCreation = true
+})
+
+// DisableDoBlocks causes the Smither to disable DO blocks.
+var DisableDoBlocks = simpleOption("disable do block", func(s *Smither) {
+	s.disableDoBlock = true
 })
 
 // DisableIsolationChange causes the Smither to disable stmts that modify the
