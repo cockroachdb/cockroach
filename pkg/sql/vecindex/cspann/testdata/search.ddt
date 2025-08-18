@@ -343,3 +343,31 @@ search max-results=2 beam-size=2
 vec5: -43
 vec8: -34
 4 leaf vectors, 9 vectors, 3 full vectors, 4 partitions
+
+# ----------------------------------------------------------------------
+# Search empty partition.
+# ----------------------------------------------------------------------
+load-index min-partition-size=1 max-partition-size=4 beam-size=2
+• 1 [0, 0]
+│
+└───• 9 [3.25, 0.75]
+    │
+    ├───• 4 [1, -2]
+    ├───• 11 [2, 3]
+    │   │
+    │   ├───• vec10 [0, 3]
+    │   └───• vec3 [4, 3]
+    │
+    └───• 10 [6, 4]
+        │
+        ├───• vec12 [5, 4]
+        ├───• vec2 [7, 4]
+        └───• vec13 [6, 2]
+----
+Loaded 5 vectors.
+
+# Search for vector in empty leaf partition.
+search max-results=1 beam-size=1
+[1, -2]
+----
+0 leaf vectors, 4 vectors, 0 full vectors, 3 partitions
