@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 subtest lost_table_data
 
 # This test will intentionally corrupt descriptors, so the initial version

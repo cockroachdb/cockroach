@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 # SELECT with no table.
 
 query I

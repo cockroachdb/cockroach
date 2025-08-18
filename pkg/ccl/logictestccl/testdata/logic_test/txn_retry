@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 # Test that automatic transaction retries and automatic statement retries are
 # counted separately.
 

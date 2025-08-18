@@ -1,3 +1,4 @@
+# LogicTest: !local-prepared
 subtest automatic_retry
 
 statement ok

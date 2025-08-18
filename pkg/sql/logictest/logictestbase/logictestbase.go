@@ -93,6 +93,8 @@ type TestClusterConfig struct {
 	// DisableSchemaLockedByDefault prevents tables from being created
 	// with schema_locked by default.
 	DisableSchemaLockedByDefault bool
+	// PrepareQueries executes queries and statements with Prepare and Execute.
+	PrepareQueries bool
 }
 
 // TenantMode is the type of the UseSecondaryTenant field in TestClusterConfig.
@@ -358,6 +360,12 @@ var LogicTestConfigs = []TestClusterConfig{
 		SkipShort:           true,
 	},
 	{
+		Name:                "local-prepared",
+		NumNodes:            1,
+		OverrideDistSQLMode: "off",
+		PrepareQueries:      true,
+	},
+	{
 		// 3node-tenant is a config that runs the test as a SQL tenant. This config
 		// can only be run with a CCL binary, so is a noop if run through the normal
 		// logictest command.
@@ -603,6 +611,7 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"local-vec-off",
 		"local-read-committed",
 		"local-repeatable-read",
+		"local-prepared",
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",

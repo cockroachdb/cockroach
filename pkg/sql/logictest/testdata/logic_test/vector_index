@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.2 !local-schema-locked
+# LogicTest: !local-mixed-25.2 !local-schema-locked !local-prepared
 # TODO(andyk): Remove this once 25.3 is our minimum supported version.
 
 # ------------------------------------------------------------------------------
