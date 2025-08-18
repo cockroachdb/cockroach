@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -40,7 +39,6 @@ const (
 	UploadStatusPartialSuccess = "Partial Success"
 	UploadStatusFailure        = "Failed"
 	nodeKey                    = "node_id"
-	processDeltaEnvVar         = "COCKROACH_TSDUMP_DELTA"
 )
 
 var (
@@ -277,7 +275,7 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 		previousTimestamp = currentTimestamp
 	}
 
-	if envutil.EnvOrDefaultInt(processDeltaEnvVar, 0) == 1 {
+	if !debugTimeSeriesDumpOpts.disableDeltaProcessing {
 		if err := d.cumulativeToDeltaProcessor.processCounterMetric(series, isSorted); err != nil {
 			return nil, err
 		}

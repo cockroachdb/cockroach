@@ -56,13 +56,15 @@ var debugTimeSeriesDumpOpts = struct {
 	dryRun                 bool
 	noOfUploadWorkers      int
 	retryFailedRequests    bool
+	disableDeltaProcessing bool
 }{
-	format:              tsDumpText,
-	from:                timestampValue{},
-	to:                  timestampValue(timeutil.Now().Add(24 * time.Hour)),
-	clusterLabel:        "",
-	yaml:                "/tmp/tsdump.yaml",
-	retryFailedRequests: false,
+	format:                 tsDumpText,
+	from:                   timestampValue{},
+	to:                     timestampValue(timeutil.Now().Add(24 * time.Hour)),
+	clusterLabel:           "",
+	yaml:                   "/tmp/tsdump.yaml",
+	retryFailedRequests:    false,
+	disableDeltaProcessing: false, // delta processing enabled by default
 }
 
 // hostNameOverride is used to override the hostname for testing purpose.
