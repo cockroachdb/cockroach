@@ -451,13 +451,13 @@ type procState int
 func (i procState) SafeFormat(s interfaces.SafePrinter, verb rune) {
 	switch i {
 	case StateRunning:
-		s.Print("StateRunning")
+		s.SafeString("StateRunning")
 	case StateDraining:
-		s.Print("StateDraining")
+		s.SafeString("StateDraining")
 	case StateTrailingMeta:
-		s.Print("StateTrailingMeta")
+		s.SafeString("StateTrailingMeta")
 	case StateExhausted:
-		s.Print("StateExhausted")
+		s.SafeString("StateExhausted")
 	}
 }
 
