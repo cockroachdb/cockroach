@@ -104,7 +104,7 @@ SELECT
   database.name AS database_name
 FROM
   crdb_internal.jobs
-  INNER JOIN targets ON job_id = targets.id
+  LEFT JOIN targets ON job_id = targets.id
   INNER JOIN payload ON job_id = payload.id
   LEFT JOIN database ON job_id = database.id
 `

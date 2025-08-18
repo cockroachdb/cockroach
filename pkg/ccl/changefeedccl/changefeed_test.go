@@ -13084,3 +13084,154 @@ func TestDatabaseLevelChangefeedWithInitialScanOptions(t *testing.T) {
 		})
 	}
 }
+
+// TestDatabaseLevelChangefeedEmptyTableset tests that a database-level changefeed
+// hibernates while there are no tables in the database.
+func TestDatabaseLevelChangefeedEmptyTableset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFnNoWait := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE db`)
+		sqlDB.Exec(t, `GRANT CHANGEFEED ON DATABASE db TO enterprisefeeduser`)
+		dbcf := feed(t, f, `CREATE CHANGEFEED FOR DATABASE db`)
+		defer closeFeed(t, dbcf)
+
+		// create a table
+		sqlDB.Exec(t, `CREATE TABLE db.foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO db.foo VALUES (0, 'initial')`)
+
+		assertPayloads(t, dbcf, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
+		})
+	}
+	cdcTest(t, testFnNoWait, feedTestEnterpriseSinks)
+
+	testFnWait := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE db`)
+		sqlDB.Exec(t, `GRANT CHANGEFEED ON DATABASE db TO enterprisefeeduser`)
+		dbcf := feed(t, f, `CREATE CHANGEFEED FOR DATABASE db`)
+		defer closeFeed(t, dbcf)
+
+		time.Sleep(5 * time.Second)
+
+		// create a table
+		sqlDB.Exec(t, `CREATE TABLE db.foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO db.foo VALUES (0, 'initial')`)
+
+		assertPayloads(t, dbcf, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
+		})
+	}
+	cdcTest(t, testFnWait, feedTestEnterpriseSinks)
+}
+
+// TestDatabaseLevelChangefeedFiltersHibernation tests that a database-level changefeed
+// with include/exclude filters correctly handles hibernation:
+//   - With EXCLUDE filter: creating an excluded table should not wake the changefeed,
+//     but creating a non-excluded table should wake it.
+//   - With INCLUDE filter: creating a non-included table should not wake the changefeed,
+//     but creating an included table should wake it.
+func TestDatabaseLevelChangefeedFiltersHibernation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	full_filter := map[string]string{
+		"include": "EXCLUDE TABLES excluded_table",
+		"exclude": "INCLUDE TABLES included_table",
+	}
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory, filterType string) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE db`)
+		sqlDB.Exec(t, `GRANT CHANGEFEED ON DATABASE db TO enterprisefeeduser`)
+
+		// Create changefeed with exclude filter - should hibernate since no tables exist
+		createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR DATABASE db %s`, full_filter[filterType])
+		dbcf := feed(t, f, createStmt)
+		defer closeFeed(t, dbcf)
+
+		var jobID jobspb.JobID
+		if ef, ok := dbcf.(cdctest.EnterpriseTestFeed); ok {
+			jobID = ef.JobID()
+		} else {
+			t.Fatal("expected EnterpriseTestFeed")
+		}
+
+		// Get initial diagram count (should be 0 when hibernating, as no diagram is written yet)
+		getDiagramCount := func() int {
+			var count int
+			sqlDB.QueryRow(t,
+				`SELECT count(*) FROM system.job_info WHERE job_id = $1 AND info_key LIKE '~dsp-diag-url-%'`,
+				jobID,
+			).Scan(&count)
+			return count
+		}
+
+		testutils.SucceedsSoon(t, func() error {
+			var count int
+			sqlDB.QueryRow(t,
+				`SELECT count(*) FROM [SHOW CHANGEFEED JOB $1] WHERE running_status = 'running'`,
+				jobID,
+			).Scan(&count)
+			return nil
+		})
+		require.Equal(t, 0, getDiagramCount(), "changefeed should be hibernating (no diagram written)")
+		time.Sleep(20 * time.Second)
+		require.Equal(t, 0, getDiagramCount(), "changefeed should stay hibernating (no diagram written)")
+
+		// Create a table that is excluded - changefeed should stay hibernating
+		sqlDB.Exec(t, `CREATE TABLE db.excluded_table (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO db.excluded_table VALUES (0, 'excluded')`)
+
+		// // Verify changefeed stays hibernating (no new diagram written)
+		time.Sleep(20 * time.Second)
+		require.Equal(t, 0, getDiagramCount(), "changefeed should stay hibernating (no new diagram written)")
+
+		// Create a table that is NOT excluded - changefeed should wake up
+		sqlDB.Exec(t, `CREATE TABLE db.included_table (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO db.included_table VALUES (0, 'included')`)
+
+		// Wait for a new diagram to be written (indicating changefeed woke up)
+		time.Sleep(20 * time.Second)
+		require.Equal(t, 1, getDiagramCount(), "changefeed should wake up (new diagram written)")
+
+		// Should only receive events from the included table
+		assertPayloads(t, dbcf, []string{
+			`included_table: [0]->{"after": {"a": 0, "b": "included"}}`,
+		})
+	}
+	testutils.RunValues(t, "filterType", []string{"include", "exclude"}, func(t *testing.T, filterType string) {
+		runTestFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			testFn(t, s, f, filterType)
+		}
+		cdcTest(t, runTestFn, feedTestEnterpriseSinks)
+	})
+}
+
+// TestChangefeedWatcherCleanupOnStop verifies that the watcher context is properly
+// cleaned up when a changefeed is stopped before receiving any table diffs.
+func TestChangefeedWatcherCleanupOnStop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE DATABASE db`)
+		sqlDB.Exec(t, `GRANT CHANGEFEED ON DATABASE db TO enterprisefeeduser`)
+
+		feed, err := f.Feed(`CREATE CHANGEFEED FOR DATABASE db`)
+		require.NoError(t, err)
+		enterpriseFeed := feed.(cdctest.EnterpriseTestFeed)
+		waitForJobState(sqlDB, t, enterpriseFeed.JobID(), jobs.StateRunning)
+
+		sqlDB.Exec(t, `CANCEL JOB $1`, enterpriseFeed.JobID())
+		waitForJobState(sqlDB, t, enterpriseFeed.JobID(), jobs.StateCanceled)
+
+		require.NoError(t, feed.Close())
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
