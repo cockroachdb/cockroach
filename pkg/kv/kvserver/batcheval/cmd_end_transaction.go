@@ -305,7 +305,7 @@ func EndTxn(
 		// and various timestamps). We must be careful to update it with the
 		// supplied ba.Txn if we return it with an error which might be
 		// retried, as for example to avoid client-side serializable restart.
-		reply.Txn = &existingTxn
+		reply.Txn = existingTxn.Clone()
 
 		// Verify that we can either commit it or abort it (according
 		// to args.Commit), and also that the Timestamp and Epoch have
@@ -498,7 +498,16 @@ func EndTxn(
 		// committed. Doing so is only possible if we can guarantee that under no
 		// circumstances can an implicitly committed transaction be rolled back.
 		if reply.Txn.Status == roachpb.STAGING {
-			err := kvpb.NewIndeterminateCommitError(*reply.Txn)
+			// In the case of an abort after the failure of a a retried EndTxn, our
+			// current transaction record is newer than the record that was on disk,
+			// but it is only the record that is on disk that can be implicitly
+			// committed, so that is the transaction we want to use for transaction
+			// recovery.
+			txnForErr := existingTxn
+			if !recordAlreadyExisted {
+				txnForErr = *reply.Txn
+			}
+			err := kvpb.NewIndeterminateCommitError(txnForErr)
 			log.VEventf(ctx, 1, "%v", err)
 			return result.Result{}, err
 		}
