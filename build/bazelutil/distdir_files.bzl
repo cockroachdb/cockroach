@@ -591,6 +591,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/gorilla/css/com_github_gorilla_css-v1.0.0.zip": "d854362b9d723daf613b26aae0254723a4ed1bff680683c3e2a01aeb398168e5",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/gorilla/handlers/com_github_gorilla_handlers-v1.4.2.zip": "9e47491112a46d32e372be827899e8678a881f6407f290564c63e8725b5e9a19",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/gorilla/mux/com_github_gorilla_mux-v1.8.0.zip": "7641911e00af9c91f089868333067c9cb9a58702d2c9ea821ee374940091c385",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/gorilla/schema/com_github_gorilla_schema-v1.4.1.zip": "63885f95be210851d623d464698326a202274e191f53f7b7905a150e9cf04494",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/gorilla/securecookie/com_github_gorilla_securecookie-v1.1.1.zip": "dd83a4230e11568159756bbea4d343c88df0cd1415bbbc7cd5badad6cd2ed903",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/gorilla/sessions/com_github_gorilla_sessions-v1.2.1.zip": "2c6aeebfef8062537fd7778067e5e99d4c13f79ac63114e905c97040a6e6b523",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/gorilla/websocket/com_github_gorilla_websocket-v1.4.2.zip": "d0d1728deaa06dac190bf4964c9c6395923403eae337cb3305d6dda18ef07337",

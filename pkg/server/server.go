@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/apiinternal"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
@@ -2128,6 +2129,13 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		}
 	}
 
+	// Pass our own node ID to connect to local RPC servers
+	apiInternalServer, err := apiinternal.NewAPIInternalServer(
+		ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get())
+	if err != nil {
+		return err
+	}
+
 	// Connect the HTTP endpoints. This also wraps the privileged HTTP
 	// endpoints served by gwMux by the HTTP cookie authentication
 	// check.
@@ -2150,6 +2158,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			sqlServer:        s.sqlServer,
 			db:               s.db,
 		}), /* apiServer */
+		apiInternalServer,
 		serverpb.FeatureFlags{
 			CanViewKvMetricDashboards:   s.rpcContext.TenantID.Equal(roachpb.SystemTenantID),
 			DisableKvLevelAdvancedDebug: false,
