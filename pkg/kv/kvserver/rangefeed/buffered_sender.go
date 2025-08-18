@@ -131,10 +131,10 @@ func (bs *BufferedSender) run(
 		case <-bs.notifyDataC:
 			for {
 				e, success := bs.popFront()
-				bs.metrics.BufferedSenderQueueSize.Dec(1)
 				if !success {
 					break
 				}
+				bs.metrics.BufferedSenderQueueSize.Dec(1)
 				err := bs.sender.Send(e.ev)
 				e.alloc.Release(ctx)
 				if e.ev.Error != nil {
