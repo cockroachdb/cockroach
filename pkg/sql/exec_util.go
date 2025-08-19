@@ -1441,7 +1441,7 @@ var (
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
-
+	
 	MetaRoutineSelectExecuted = metric.Metadata{
 		Name:         "sql.routine.select.count",
 		Help:         "Number of SQL SELECT statements successfully executed within routine invocation",
@@ -1604,10 +1604,14 @@ type ExecutorConfig struct {
 	QueryCache         *querycache.C
 	VecIndexManager    *vecindex.Manager
 
-	SchemaChangerMetrics *SchemaChangerMetrics
-	FeatureFlagMetrics   *featureflag.DenialMetrics
-	RowMetrics           *rowinfra.Metrics
-	InternalRowMetrics   *rowinfra.Metrics
+	SchemaChangerMetrics              *SchemaChangerMetrics
+	FeatureFlagMetrics                *featureflag.DenialMetrics
+	RowMetrics                        *rowinfra.Metrics
+	InternalRowMetrics                *rowinfra.Metrics
+	InternalRoutineStmtMetrics        *eval.RoutineStatementCounters
+	RoutineStmtMetrics                *eval.RoutineStatementCounters
+	RoutineStartedStmtMetrics         *eval.RoutineStatementCounters
+	InternalRoutineStartedStmtMetrics *eval.RoutineStatementCounters
 
 	TestingKnobs                         ExecutorTestingKnobs
 	UpgradeTestingKnobs                  *upgradebase.TestingKnobs

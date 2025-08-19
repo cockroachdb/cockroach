@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"math"
 	"math/rand"
 	"regexp"
@@ -821,6 +822,10 @@ func (txn *wrappedInternalTxn) GetSystemSchemaVersion(
 	ctx context.Context,
 ) (roachpb.Version, error) {
 	return txn.wrapped.GetSystemSchemaVersion(ctx)
+}
+
+func (txn *wrappedInternalTxn) RoutineStmtCounters() [2]eval.RoutineStatementCounters {
+	return txn.wrapped.RoutineStmtCounters()
 }
 
 func wrapTxn(txn isql.Txn, errFunc func(statement string) error) *wrappedInternalTxn {

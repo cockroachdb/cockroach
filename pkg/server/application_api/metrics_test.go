@@ -333,8 +333,9 @@ func TestStoreProcedureCallStatementMetrics(t *testing.T) {
 		expectedUpdateCount        = 0
 		expectedStartedDeleteCount = 0
 		expectedDeleteCount        = 0
-		expectedStartedSelectCount = 0
-		expectedSelectCount        = 0
+		// The underlying `crdb_internal.create_tenant` invoke a select.
+		expectedStartedSelectCount = 1
+		expectedSelectCount        = 1
 	)
 
 	_, err := db.Exec(`		

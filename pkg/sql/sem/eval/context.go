@@ -7,6 +7,7 @@ package eval
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"math"
 	"math/rand"
 	"time"
@@ -316,26 +317,27 @@ type Context struct {
 	// StartedRoutineStatementCounters contains metrics for statements initiated by
 	// users when calling a UDF/SP. These metrics count user-initiated
 	// operations, regardless of success
-	StartedRoutineStatementCounters RoutineStatementCounters
+	StartedRoutineStatementCounters *RoutineStatementCounters
 	// ExecutedStatementCounters contains metrics for successfully executed
 	// statements defined within the body of a UDF/SP.
-	ExecutedRoutineStatementCounters RoutineStatementCounters
+	ExecutedRoutineStatementCounters *RoutineStatementCounters
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution
 // of different statement types defined within the body of a UDF or stored
 // procedure (SP).
 type RoutineStatementCounters struct {
-	// QueryCount includes all statements, and it is therefore the sum of
-	// all the below metrics.
-	QueryCount *telemetry.CounterWithMetric
-
 	// Basic CRUD statements.
-	SelectCount *telemetry.CounterWithAggMetric
-	UpdateCount *telemetry.CounterWithAggMetric
-	InsertCount *telemetry.CounterWithAggMetric
-	DeleteCount *telemetry.CounterWithAggMetric
+	SelectCount telemetry.CounterWithAggMetric
+	UpdateCount telemetry.CounterWithAggMetric
+	InsertCount telemetry.CounterWithAggMetric
+	DeleteCount telemetry.CounterWithAggMetric
 }
+
+// MetricStruct makes SchemaChangerMetrics a metric.Struct.
+func (s *RoutineStatementCounters) MetricStruct() {}
+
+var _ metric.Struct = (*RoutineStatementCounters)(nil)
 
 // RNGFactory is a simple wrapper to preserve the RNG throughout the session.
 type RNGFactory struct {

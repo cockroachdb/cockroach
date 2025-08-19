@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/redact"
@@ -50,6 +51,12 @@ type Txn interface {
 
 	// GetSystemSchemaVersion exposes the schema version from the system db desc.
 	GetSystemSchemaVersion(context.Context) (roachpb.Version, error)
+
+	// RoutineStmtCounters returns metrics for statements executed inside a routine.
+	// Since these statements’ types are only determined at runtime, their counters
+	// cannot be tracked by the standard connection executor and require
+	// special handling.
+	RoutineStmtCounters() [2]eval.RoutineStatementCounters
 
 	// Executor allows the user to execute transactional SQL statements.
 	Executor

@@ -3838,8 +3838,8 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			RNGFactory:                       &ex.rng.external,
 			ULIDEntropyFactory:               &ex.rng.ulidEntropy,
 			CidrLookup:                       p.execCfg.CidrLookup,
-			StartedRoutineStatementCounters:  ex.metrics.StartedStatementCounters.toRoutineStmtCounters(),
-			ExecutedRoutineStatementCounters: ex.metrics.ExecutedStatementCounters.toRoutineStmtCounters(),
+			StartedRoutineStatementCounters:  p.execCfg.RoutineStartedStmtMetrics,
+			ExecutedRoutineStatementCounters: p.execCfg.RoutineStmtMetrics,
 		},
 		Tracing:              &ex.sessionTracing,
 		MemMetrics:           &ex.memMetrics,
@@ -4611,10 +4611,10 @@ type StatementCounters struct {
 	CRUDQueryCount telemetry.CounterWithAggMetric
 
 	// Basic CRUD statements within the UDF/SP body.
-	RoutineSelectCount telemetry.CounterWithAggMetric
-	RoutineUpdateCount telemetry.CounterWithAggMetric
-	RoutineInsertCount telemetry.CounterWithAggMetric
-	RoutineDeleteCount telemetry.CounterWithAggMetric
+	//RoutineSelectCount telemetry.CounterWithAggMetric
+	//RoutineUpdateCount telemetry.CounterWithAggMetric
+	//RoutineInsertCount telemetry.CounterWithAggMetric
+	//RoutineDeleteCount telemetry.CounterWithAggMetric
 
 	// Transaction operations.
 	TxnBeginCount    telemetry.CounterWithAggMetric
@@ -4694,14 +4694,6 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaInsertStarted, internal)),
 		DeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaDeleteStarted, internal)),
-		RoutineSelectCount: telemetry.NewCounterWithAggMetric(
-			getMetricMeta(MetaRoutineSelectStarted, internal)),
-		RoutineUpdateCount: telemetry.NewCounterWithAggMetric(
-			getMetricMeta(MetaRoutineUpdateStarted, internal)),
-		RoutineInsertCount: telemetry.NewCounterWithAggMetric(
-			getMetricMeta(MetaRoutineInsertStarted, internal)),
-		RoutineDeleteCount: telemetry.NewCounterWithAggMetric(
-			getMetricMeta(MetaRoutineDeleteStarted, internal)),
 		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDStarted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
@@ -4755,14 +4747,6 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaInsertExecuted, internal)),
 		DeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaDeleteExecuted, internal)),
-		RoutineSelectCount: telemetry.NewCounterWithAggMetric(
-			getMetricMeta(MetaRoutineSelectExecuted, internal)),
-		RoutineUpdateCount: telemetry.NewCounterWithAggMetric(
-			getMetricMeta(MetaRoutineUpdateExecuted, internal)),
-		RoutineInsertCount: telemetry.NewCounterWithAggMetric(
-			getMetricMeta(MetaRoutineInsertExecuted, internal)),
-		RoutineDeleteCount: telemetry.NewCounterWithAggMetric(
-			getMetricMeta(MetaRoutineDeleteExecuted, internal)),
 		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDExecuted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
@@ -4854,10 +4838,43 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 // import cycle.
 func (sc *StatementCounters) toRoutineStmtCounters() eval.RoutineStatementCounters {
 	return eval.RoutineStatementCounters{
-		SelectCount: &sc.RoutineSelectCount,
-		UpdateCount: &sc.RoutineUpdateCount,
-		InsertCount: &sc.RoutineInsertCount,
-		DeleteCount: &sc.RoutineDeleteCount,
+		//SelectCount: sc.RoutineSelectCount,
+		//UpdateCount: sc.RoutineUpdateCount,
+		//InsertCount: sc.RoutineInsertCount,
+		//DeleteCount: sc.RoutineDeleteCount,
+	}
+}
+
+func NewRoutineMetrics(
+	internal bool,
+	executed bool,
+) *eval.RoutineStatementCounters {
+	var selectCount, updateCount, insertCount, deleteCount telemetry.CounterWithAggMetric
+	if executed {
+		selectCount = telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineSelectExecuted, internal))
+		updateCount = telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineUpdateExecuted, internal))
+		insertCount = telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineInsertExecuted, internal))
+		deleteCount = telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDeleteExecuted, internal))
+	} else {
+		selectCount = telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineSelectStarted, internal))
+		updateCount = telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineUpdateStarted, internal))
+		insertCount = telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineInsertStarted, internal))
+		deleteCount = telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDeleteStarted, internal))
+	}
+
+	return &eval.RoutineStatementCounters{
+		SelectCount: selectCount,
+		UpdateCount: updateCount,
+		DeleteCount: deleteCount,
+		InsertCount: insertCount,
 	}
 }
 

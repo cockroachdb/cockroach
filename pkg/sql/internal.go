@@ -1846,6 +1846,17 @@ func (txn *internalTxn) GetSystemSchemaVersion(ctx context.Context) (roachpb.Ver
 	return *v, nil
 }
 
+func (txn *internalTxn) RoutineStmtCounters() [2]eval.RoutineStatementCounters {
+	if txn == nil || txn.internalExecutor.s == nil {
+		return [2]eval.RoutineStatementCounters{}
+	}
+	ms := txn.internalExecutor.s.Metrics
+	return [2]eval.RoutineStatementCounters{
+		ms.StartedStatementCounters.toRoutineStmtCounters(),
+		ms.ExecutedStatementCounters.toRoutineStmtCounters(),
+	}
+}
+
 type internalExecutor struct {
 	InternalExecutor
 }
