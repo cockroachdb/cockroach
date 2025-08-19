@@ -285,3 +285,23 @@ END
 $$;
 
 subtest end
+
+subtest regression_151848
+
+statement error pgcode 42704 type \"bar\" does not exist
+DO $$
+DECLARE
+  foo bar;
+BEGIN
+END;
+$$;
+
+statement error pgcode 42704 type \"_\" does not exist
+DO $$
+DECLARE
+  foo _[];
+BEGIN
+END;
+$$;
+
+subtest end
