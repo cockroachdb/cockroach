@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -155,11 +157,20 @@ type expectedSampleQueryEvent struct {
 }
 
 type telemetrySpy struct {
-	t *testing.T
+	t  *testing.T
+	sv *settings.Values
 
 	sampledQueries    []eventpb.SampledQuery
 	sampledQueriesRaw []logpb.Entry
 	recoveryEvents    []eventpb.RecoveryEvent
+}
+
+func (l *telemetrySpy) channelsToIntercept() []log.Channel {
+	if log.ShouldMigrateEvent(l.sv) {
+		return []log.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC}
+	}
+
+	return []log.Channel{logpb.Channel_TELEMETRY}
 }
 
 func (l *telemetrySpy) Intercept(entry []byte) {
@@ -168,7 +179,7 @@ func (l *telemetrySpy) Intercept(entry []byte) {
 		l.t.Errorf("failed unmarshaling %s: %s", entry, err)
 	}
 
-	if rawLog.Channel != logpb.Channel_TELEMETRY {
+	if !slices.Contains(l.channelsToIntercept(), rawLog.Channel) {
 		return
 	}
 
@@ -204,12 +215,6 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 
 	ctx := context.Background()
 
-	spy := &telemetrySpy{
-		t: t,
-	}
-	cleanup := log.InterceptWith(ctx, spy)
-	defer cleanup()
-
 	st := logtestutils.StubTime{}
 	sqm := logtestutils.StubQueryStats{}
 	sts := logtestutils.StubTracingStatus{}
@@ -229,6 +234,15 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 			ExternalIODir: dir,
 		},
 	})
+
+	spy := &telemetrySpy{
+		t:  t,
+		sv: &testCluster.Server(0).ClusterSettings().SV,
+	}
+
+	cleanup := log.InterceptWith(ctx, spy)
+	defer cleanup()
+
 	sqlDB := testCluster.ServerConn(0)
 	defer func() {
 		testCluster.Stopper().Stop(context.Background())

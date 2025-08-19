@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-configs
+# LogicTest: cockroach-go-testserver-25.2
 
 # Test version gating of op classes in vector index
 

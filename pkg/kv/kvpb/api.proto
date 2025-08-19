@@ -740,6 +740,9 @@ message ExciseResponse {
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
 // start and end keys for a descending scan of [start,end) and the maximum
 // number of results (unbounded if zero).
+//
+// NB: ReverseScans cannot be put into the same batch as forward requests like
+// Scans. IsReverse must be set on the batch header as well.
 message ReverseScanRequest {
   reserved 2, 3;
 
@@ -3010,9 +3013,13 @@ message Header {
   // the server.
   bool has_buffered_all_preceding_writes = 37;
 
+  // IsReverse, if set, indicates that the requests in the batch should be
+  // evaluated in descending range order.
+  bool is_reverse = 38;
+
   reserved 7, 10, 12, 14, 20, 24;
 
-  // Next ID: 38
+  // Next ID: 39
 }
 
 message WriteOptions {

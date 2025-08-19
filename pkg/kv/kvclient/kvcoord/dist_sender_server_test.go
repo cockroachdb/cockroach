@@ -809,11 +809,10 @@ func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := &kv.Batch{}
-	b.Header.MaxSpanRequestKeys = 100
 	b.Scan("a", "b")
 	b.ReverseScan("a", "b")
 	if err := db.Run(ctx, b); !testutils.IsError(
-		err, "batch with limit contains both forward and reverse scans",
+		err, "batch contains both forward and reverse requests",
 	) {
 		t.Fatal(err)
 	}
@@ -4545,6 +4544,9 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 func TestBatchPutScanReverseScanWithFailedPutReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// TODO(yuzefovich): figure out whether we should just delete this test.
+	skip.IgnoreLint(t, "this test constructs no longer valid scenario")
 
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")

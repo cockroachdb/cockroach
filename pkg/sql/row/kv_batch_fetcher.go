@@ -602,6 +602,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.DeadlockTimeout = f.deadlockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
+	ba.Header.IsReverse = f.reverse
 	if buildutil.CrdbTestBuild {
 		if f.scanFormat == kvpb.COL_BATCH_RESPONSE && f.indexFetchSpec == nil {
 			return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")

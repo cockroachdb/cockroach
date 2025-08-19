@@ -974,3 +974,34 @@ query I
 SELECT c FROM t102864 WHERE c IN (0, 862827606027206657::INT8);
 ----
 0
+
+# Regression test for ignoring the reverse direction of the scan in the batch
+# with Gets (#146637).
+statement ok
+CREATE TABLE t146637 (
+    a INT NOT NULL,
+    b TEXT NOT NULL,
+    c TEXT NOT NULL,
+    PRIMARY KEY (a, b),
+    FAMILY (a, b, c)
+);
+
+statement ok
+INSERT INTO t146637 VALUES
+    (0, 'foo', 'bar'),
+    (0, 'foo2', 'bar2'),
+    (0, 'foo3', 'bar3'),
+    (100, 'foo', 'bar'),
+    (100, 'foo2', 'bar2'),
+    (100, 'foo3', 'bar3'),
+    (2, 'foo4', 'bar4'),
+    (2, 'foo5', 'bar5');
+
+retry
+statement ok
+ALTER TABLE t146637 SPLIT AT VALUES (1), (2), (3);
+
+query ITT
+SELECT * FROM t146637 WHERE (a = 0 OR a = 100) AND b = 'foo' ORDER BY a DESC LIMIT 1;
+----
+100  foo  bar
