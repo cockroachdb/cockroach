@@ -183,10 +183,9 @@ func (s *Declaration) WalkStmt(visitor StatementVisitor) Statement {
 
 type CursorDeclaration struct {
 	StatementImpl
-	Name        Variable
-	Scroll      tree.CursorScrollOption
-	Query       tree.Statement
-	Annotations *tree.Annotations
+	Name   Variable
+	Scroll tree.CursorScrollOption
+	Query  tree.Statement
 }
 
 func (s *CursorDeclaration) CopyNode() *CursorDeclaration {
@@ -195,18 +194,16 @@ func (s *CursorDeclaration) CopyNode() *CursorDeclaration {
 }
 
 func (s *CursorDeclaration) Format(ctx *tree.FmtCtx) {
-	ctx.WithAnnotations(s.Annotations, func() {
-		ctx.FormatNode(&s.Name)
-		switch s.Scroll {
-		case tree.Scroll:
-			ctx.WriteString(" SCROLL")
-		case tree.NoScroll:
-			ctx.WriteString(" NO SCROLL")
-		}
-		ctx.WriteString(" CURSOR FOR ")
-		ctx.FormatNode(s.Query)
-		ctx.WriteString(";\n")
-	})
+	ctx.FormatNode(&s.Name)
+	switch s.Scroll {
+	case tree.Scroll:
+		ctx.WriteString(" SCROLL")
+	case tree.NoScroll:
+		ctx.WriteString(" NO SCROLL")
+	}
+	ctx.WriteString(" CURSOR FOR ")
+	ctx.FormatNode(s.Query)
+	ctx.WriteString(";\n")
 }
 
 func (s *CursorDeclaration) PlpgSQLStatementTag() string {
@@ -865,14 +862,12 @@ func (s *ReturnQuery) CopyNode() *ReturnQuery {
 }
 
 func (s *ReturnQuery) Format(ctx *tree.FmtCtx) {
-	ctx.WithAnnotations(s.Annotations, func() {
-		ctx.WriteString("RETURN QUERY")
-		if s.SqlStmt != nil {
-			ctx.WriteByte(' ')
-			ctx.FormatNode(s.SqlStmt)
-		}
-		ctx.WriteString(";\n")
-	})
+	ctx.WriteString("RETURN QUERY")
+	if s.SqlStmt != nil {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(s.SqlStmt)
+	}
+	ctx.WriteString(";\n")
 }
 
 func (s *ReturnQuery) PlpgSQLStatementTag() string {
@@ -996,22 +991,20 @@ func (s *Execute) CopyNode() *Execute {
 }
 
 func (s *Execute) Format(ctx *tree.FmtCtx) {
-	ctx.WithAnnotations(s.Annotations, func() {
-		ctx.FormatNode(s.SqlStmt)
-		if s.Target != nil {
-			ctx.WriteString(" INTO ")
-			if s.Strict {
-				ctx.WriteString("STRICT ")
-			}
-			for i := range s.Target {
-				if i > 0 {
-					ctx.WriteString(", ")
-				}
-				ctx.FormatNode(&s.Target[i])
-			}
+	ctx.FormatNode(s.SqlStmt)
+	if s.Target != nil {
+		ctx.WriteString(" INTO ")
+		if s.Strict {
+			ctx.WriteString("STRICT ")
 		}
-		ctx.WriteString(";\n")
-	})
+		for i := range s.Target {
+			if i > 0 {
+				ctx.WriteString(", ")
+			}
+			ctx.FormatNode(&s.Target[i])
+		}
+	}
+	ctx.WriteString(";\n")
 }
 
 func (s *Execute) PlpgSQLStatementTag() string {
@@ -1113,26 +1106,33 @@ type DoBlock struct {
 
 	// Block is the code block that defines the logic of the DO statement.
 	Block *Block
+
+	// Annotations is allocated during initial parsing of user input, and then
+	// each annotation is set by the optbuilder when the optimizer processes
+	// the DO block statements.
+	Annotations tree.Annotations
 }
 
 var _ Statement = (*DoBlock)(nil)
 var _ tree.DoBlockBody = (*DoBlock)(nil)
 
 func (s *DoBlock) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString("DO ")
+	ctx.WithAnnotations(&s.Annotations, func() {
+		ctx.WriteString("DO ")
 
-	// Format the body of the DO block separately so that FormatStringDollarQuotes
-	// can examine the resulting string and determine how to quote the block.
-	bodyCtx := ctx.Clone()
-	bodyCtx.FormatNode(s.Block)
-	bodyStr := "\n" + bodyCtx.CloseAndGetString()
+		// Format the body of the DO block separately so that FormatStringDollarQuotes
+		// can examine the resulting string and determine how to quote the block.
+		bodyCtx := ctx.Clone()
+		bodyCtx.FormatNode(s.Block)
+		bodyStr := "\n" + bodyCtx.CloseAndGetString()
 
-	// Avoid replacing the entire formatted string with '_' if any redaction flags
-	// are set. They will have already been applied when the body was formatted.
-	ctx.WithoutConstantRedaction(func() {
-		ctx.FormatStringDollarQuotes(bodyStr)
+		// Avoid replacing the entire formatted string with '_' if any redaction flags
+		// are set. They will have already been applied when the body was formatted.
+		ctx.WithoutConstantRedaction(func() {
+			ctx.FormatStringDollarQuotes(bodyStr)
+		})
+		ctx.WriteString(";\n")
 	})
-	ctx.WriteString(";\n")
 }
 
 func (s *DoBlock) IsDoBlockBody() {}
@@ -1227,21 +1227,19 @@ func (s *Open) CopyNode() *Open {
 }
 
 func (s *Open) Format(ctx *tree.FmtCtx) {
-	ctx.WithAnnotations(s.Annotations, func() {
-		ctx.WriteString("OPEN ")
-		ctx.FormatNode(&s.CurVar)
-		switch s.Scroll {
-		case tree.Scroll:
-			ctx.WriteString(" SCROLL")
-		case tree.NoScroll:
-			ctx.WriteString(" NO SCROLL")
-		}
-		if s.Query != nil {
-			ctx.WriteString(" FOR ")
-			ctx.FormatNode(s.Query)
-		}
-		ctx.WriteString(";\n")
-	})
+	ctx.WriteString("OPEN ")
+	ctx.FormatNode(&s.CurVar)
+	switch s.Scroll {
+	case tree.Scroll:
+		ctx.WriteString(" SCROLL")
+	case tree.NoScroll:
+		ctx.WriteString(" NO SCROLL")
+	}
+	if s.Query != nil {
+		ctx.WriteString(" FOR ")
+		ctx.FormatNode(s.Query)
+	}
+	ctx.WriteString(";\n")
 }
 
 func (s *Open) PlpgSQLStatementTag() string {
@@ -1257,40 +1255,37 @@ func (s *Open) WalkStmt(visitor StatementVisitor) Statement {
 // stmt_move (where IsMove = true)
 type Fetch struct {
 	StatementImpl
-	Cursor      tree.CursorStmt
-	Target      []Variable
-	IsMove      bool
-	Annotations *tree.Annotations
+	Cursor tree.CursorStmt
+	Target []Variable
+	IsMove bool
 }
 
 func (s *Fetch) Format(ctx *tree.FmtCtx) {
-	ctx.WithAnnotations(s.Annotations, func() {
-		if s.IsMove {
-			ctx.WriteString("MOVE ")
-		} else {
-			ctx.WriteString("FETCH ")
-		}
-		if dir := s.Cursor.FetchType.String(); dir != "" {
-			ctx.WriteString(dir)
-			ctx.WriteString(" ")
-		}
-		if s.Cursor.FetchType.HasCount() {
-			ctx.WriteString(strconv.Itoa(int(s.Cursor.Count)))
-			ctx.WriteString(" ")
-		}
-		ctx.WriteString("FROM ")
-		ctx.FormatName(string(s.Cursor.Name))
-		if s.Target != nil {
-			ctx.WriteString(" INTO ")
-			for i := range s.Target {
-				if i > 0 {
-					ctx.WriteString(", ")
-				}
-				ctx.FormatNode(&s.Target[i])
+	if s.IsMove {
+		ctx.WriteString("MOVE ")
+	} else {
+		ctx.WriteString("FETCH ")
+	}
+	if dir := s.Cursor.FetchType.String(); dir != "" {
+		ctx.WriteString(dir)
+		ctx.WriteString(" ")
+	}
+	if s.Cursor.FetchType.HasCount() {
+		ctx.WriteString(strconv.Itoa(int(s.Cursor.Count)))
+		ctx.WriteString(" ")
+	}
+	ctx.WriteString("FROM ")
+	ctx.FormatName(string(s.Cursor.Name))
+	if s.Target != nil {
+		ctx.WriteString(" INTO ")
+		for i := range s.Target {
+			if i > 0 {
+				ctx.WriteString(", ")
 			}
+			ctx.FormatNode(&s.Target[i])
 		}
-		ctx.WriteString(";\n")
-	})
+	}
+	ctx.WriteString(";\n")
 }
 
 func (s *Fetch) PlpgSQLStatementTag() string {

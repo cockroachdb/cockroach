@@ -133,6 +133,8 @@ func (p *Parser) parse(
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
+// TODO(yuzefovich): audit the callers to ensure that NumAnnotations is
+// consulted wherever applicable.
 func Parse(sql string) (statements.PLpgStatement, error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
