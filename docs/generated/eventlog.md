@@ -2771,6 +2771,11 @@ Note: these events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
+In version 26.1, these events will be moved to the `SQL_EXEC` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `SQL_EXEC` instead of `SQL_PERF`.
+
 Events in this category are logged to the `SQL_PERF` channel.
 
 
@@ -2900,6 +2905,11 @@ SQL statements.
 Note: these events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
+
+In version 26.1, these events will be moved to the `SQL_EXEC` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `SQL_EXEC` instead of `SQL_INTERNAL_PERF`.
 
 Events in this category are logged to the `SQL_INTERNAL_PERF` channel.
 
