@@ -677,20 +677,16 @@ func resolveBackupSubdir(
 
 // resolveBackupDirs resolves the sub-directory, base backup directory, and
 // incremental backup directories for a backup collection. incrementalURIs may
-// be empty if an incremental location is not specified. subdir can be a resolved
-// sub-directory or the string "LATEST" to resolve the latest sub-directory.
+// be empty if an incremental location is not specified. subdir must be a
+// resolved subdirectory and not `LATEST`.
 func resolveBackupDirs(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
 	collectionURIs []string,
 	incrementalURIs []string,
-	subdir string,
+	resolvedSubdir string,
 ) ([]string, []string, string, error) {
-	resolvedSubdir, err := resolveBackupSubdir(ctx, execCfg, user, collectionURIs[0], subdir)
-	if err != nil {
-		return nil, nil, "", err
-	}
 	resolvedBaseDirs, err := backuputils.AppendPaths(collectionURIs[:], resolvedSubdir)
 	if err != nil {
 		return nil, nil, "", err
@@ -721,8 +717,18 @@ func getBackupChain(
 	map[int]*backupinfo.IterFactory,
 	error,
 ) {
+	defaultCollectionURI, _, err := backupdest.GetURIsByLocalityKV(dest.To, "")
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	resolvedSubdir, err := resolveBackupSubdir(
+		ctx, execCfg, user, defaultCollectionURI, dest.Subdir,
+	)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 	resolvedBaseDirs, resolvedIncDirs, _, err := resolveBackupDirs(
-		ctx, execCfg, user, dest.To, dest.IncrementalStorage, dest.Subdir,
+		ctx, execCfg, user, dest.To, dest.IncrementalStorage, resolvedSubdir,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -764,8 +770,8 @@ func getBackupChain(
 	defer mem.Close(ctx)
 
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
-		ctx, &mem, baseStores, incStores, mkStore, resolvedBaseDirs,
-		resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
+		ctx, execCfg, &mem, defaultCollectionURI, baseStores, incStores, mkStore, resolvedSubdir,
+		resolvedBaseDirs, resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
 		user, false /*includeSkipped */, true, /*includeCompacted */
 	)
 	if err != nil {

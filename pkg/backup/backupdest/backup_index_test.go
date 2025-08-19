@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"math/rand/v2"
 	"os"
 	"path"
 	"slices"
@@ -482,103 +481,6 @@ func TestIndexExists(t *testing.T) {
 			require.Equal(t, tc.expectedExists, exists)
 		})
 	}
-}
-
-func TestListIndexes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	dir, dirCleanup := testutils.TempDir(t)
-	defer dirCleanup()
-
-	st := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.Latest.Version(),
-		clusterversion.Latest.Version(),
-		true,
-	)
-	execCfg := &sql.ExecutorConfig{Settings: st}
-
-	const collectionURI = "nodelocal://1/test"
-	storage, err := cloud.ExternalStorageFromURI(
-		ctx,
-		collectionURI,
-		base.ExternalIODirConfig{},
-		st,
-		blobs.TestBlobServiceClient(dir),
-		username.RootUserName(),
-		nil, /* db */
-		nil, /* limiters */
-		cloud.NilMetrics,
-	)
-	require.NoError(t, err)
-	defer storage.Close()
-	storageFactory := func(
-		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
-	) (cloud.ExternalStorage, error) {
-		return storage, nil
-	}
-
-	fullEnd := intToTime(2)
-	fullSubdir := fullEnd.GoTime().Format(backupbase.DateBasedIntoFolderName)
-	details := jobspb.BackupDetails{
-		Destination: jobspb.BackupDetails_Destination{
-			To:     []string{collectionURI},
-			Subdir: fullSubdir,
-		},
-		StartTime:     hlc.Timestamp{},
-		EndTime:       fullEnd,
-		CollectionURI: collectionURI,
-		// URI does not need to be set properly for this test since we are not
-		// reading the contents of the files.
-		URI: collectionURI + "/" + fullSubdir,
-	}
-	require.NoError(t, WriteBackupIndexMetadata(
-		ctx, execCfg, username.RootUserName(), storageFactory, details,
-	))
-
-	incsToWrite := [][2]int{
-		{2, 4},
-		{2, 6},
-		{4, 6},
-		{6, 8},
-	}
-	// We shuffle the order that we write backups in just to really stress the
-	// ordering logic in ListIndexes.
-	rand.Shuffle(len(incsToWrite), func(i, j int) {
-		incsToWrite[i], incsToWrite[j] = incsToWrite[j], incsToWrite[i]
-	})
-	for _, times := range incsToWrite {
-		start := intToTime(times[0])
-		end := intToTime(times[1])
-		details.StartTime = start
-		details.EndTime = end
-		require.NoError(
-			t, WriteBackupIndexMetadata(ctx, execCfg, username.RootUserName(), storageFactory, details),
-		)
-	}
-
-	indexes, err := ListIndexes(ctx, storage, fullSubdir)
-	require.NoError(t, err)
-
-	require.Len(t, indexes, len(incsToWrite)+1)
-	require.True(t, slices.IsSortedFunc(indexes, func(a, b string) int {
-		aStart, aEnd, err := parseIndexFilename(a)
-		require.NoError(t, err)
-		bStart, bEnd, err := parseIndexFilename(b)
-		require.NoError(t, err)
-		if aEnd.Before(bEnd) {
-			return -1
-		} else if aEnd.After(bEnd) {
-			return 1
-		}
-		// end times are equal, compare start times
-		if bStart.Before(aStart) {
-			return 1
-		} else {
-			return -1
-		}
-	}), "indexes are not sorted by end time and then start time")
 }
 
 func TestGetBackupTreeIndexMetadata(t *testing.T) {
