@@ -2479,12 +2479,55 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 		return nil
 	})
 
+	getDecommissioningNudgerMetricValue := func(t *testing.T, tc *testcluster.TestCluster, metricType string,
+	) int64 {
+		var total int64
+
+		for i := 0; i < tc.NumServers(); i++ {
+			store := tc.GetFirstStoreFromServer(t, i)
+			var value int64
+
+			switch metricType {
+			case "decommissioning_ranges":
+				value = store.Metrics().DecommissioningRangeCount.Value()
+			case "enqueue":
+				value = store.Metrics().DecommissioningNudgerEnqueue.Count()
+			case "not_leaseholder_or_invalid_lease":
+				value = store.Metrics().DecommissioningNudgerNotLeaseholderOrInvalidLease.Count()
+			default:
+				t.Fatalf("unknown metric type: %s", metricType)
+			}
+
+			total += value
+		}
+		return total
+	}
+
+	initialDecommissioningRanges := getDecommissioningNudgerMetricValue(t, tc, "decommissioning_ranges")
+
 	// Now add a replica to the decommissioning node and then enable the
 	// replicate queue. We expect that the replica will be removed after the
 	// decommissioning replica is noticed via maybeEnqueueProblemRange.
 	scratchKey := tc.ScratchRange(t)
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decommissioningSrvIdx))
 	tc.ToggleReplicateQueues(true /* active */)
+
+	// Wait for the enqueue logic to trigger and validate metrics were updated.
+	testutils.SucceedsSoon(t, func() error {
+		afterDecommissioningRanges := getDecommissioningNudgerMetricValue(t, tc, "decommissioning_ranges")
+		afterEnqueued := getDecommissioningNudgerMetricValue(t, tc, "enqueue")
+
+		if afterDecommissioningRanges <= initialDecommissioningRanges {
+			return errors.New("expected DecommissioningRangeCount to increase")
+		}
+		if afterEnqueued <= 0 {
+			return errors.New("expected DecommissioningNudgerEnqueueEnqueued to be greater than 0")
+		}
+
+		return nil
+	})
+
+	// Verify that the decommissioning node has no replicas left.
 	testutils.SucceedsSoon(t, func() error {
 		var descs []*roachpb.RangeDescriptor
 		tc.GetFirstStoreFromServer(t, decommissioningSrvIdx).VisitReplicas(func(r *kvserver.Replica) bool {
