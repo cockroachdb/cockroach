@@ -19,8 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -246,6 +251,114 @@ func BenchmarkEventStoreIntake(b *testing.B) {
 
 			run(b, store, numOfConcurrentWriter)
 		})
+	}
+}
+
+func TestLogResolvedEvents(t *testing.T) {
+	ctx := context.Background()
+
+	// Set up log interception to capture structured AggregatedContentionInfo events
+	spy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_SQL_EXEC},
+		[]string{"aggregated_contention_info"},
+		logtestutils.FromLogEntry[eventpb.AggregatedContentionInfo],
+	)
+	cleanup := log.InterceptWith(ctx, spy)
+	defer cleanup()
+
+	fingerprintIDToHex := func(id uint64) string {
+		return "‹\\x" + sqlstatsutil.EncodeStmtFingerprintIDToString(appstatspb.StmtFingerprintID(id)) + "›"
+	}
+	txnFingerprintIDToHex := func(id uint64) string {
+		return "‹\\x" + sqlstatsutil.EncodeTxnFingerprintIDToString(appstatspb.TransactionFingerprintID(id)) + "›"
+	}
+
+	// Create test contention events
+	events := []contentionpb.ExtendedContentionEvent{
+		// Two events with same waiting (stmt, txn), blocking txn and key
+		// These should aggregate.
+		{
+			WaitingStmtFingerprintID: 123,
+			WaitingTxnFingerprintID:  456,
+			BlockingTxnFingerprintID: 789,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:      []byte("test-key-1"),
+				Duration: 100 * time.Millisecond,
+			},
+		},
+		{
+			WaitingStmtFingerprintID: 123,
+			WaitingTxnFingerprintID:  456,
+			BlockingTxnFingerprintID: 789,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:      []byte("test-key-1"),
+				Duration: 200 * time.Millisecond,
+			},
+		},
+		// Key changes.
+		// New combination.
+		{
+			WaitingStmtFingerprintID: 123,
+			WaitingTxnFingerprintID:  456,
+			BlockingTxnFingerprintID: 789,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:      []byte("test-key-2"),
+				Duration: 100 * time.Millisecond,
+			},
+		},
+		// test-key-1 again, but different waiting stmt.
+		// New combination.
+		{
+			WaitingStmtFingerprintID: 321,
+			WaitingTxnFingerprintID:  456,
+			BlockingTxnFingerprintID: 789,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:      []byte("test-key-1"),
+				Duration: 50 * time.Millisecond,
+			},
+		},
+		// test-key-1 again, same waiting stmt and txn, but different blocking txn.
+		// New combination.
+		{
+			WaitingStmtFingerprintID: 123,
+			WaitingTxnFingerprintID:  456,
+			BlockingTxnFingerprintID: 888,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:      []byte("test-key-1"),
+				Duration: 20 * time.Millisecond,
+			},
+		},
+	}
+
+	logResolvedEvents(ctx, events)
+	contentionLogs := spy.GetLogs(logpb.Channel_SQL_EXEC)
+	require.Len(t, contentionLogs, 4)
+	for _, log := range contentionLogs {
+		if log.Duration == 300000000 {
+			require.Equal(t, fingerprintIDToHex(123), log.WaitingStmtFingerprintId)
+			require.Equal(t, txnFingerprintIDToHex(456), log.WaitingTxnFingerprintId)
+			require.Equal(t, txnFingerprintIDToHex(789), log.BlockingTxnFingerprintId)
+			require.Equal(t, "‹test-key-1›", log.ContendedKey)
+		}
+		if log.Duration == 100000000 {
+			require.Equal(t, fingerprintIDToHex(123), log.WaitingStmtFingerprintId)
+			require.Equal(t, txnFingerprintIDToHex(456), log.WaitingTxnFingerprintId)
+			require.Equal(t, txnFingerprintIDToHex(789), log.BlockingTxnFingerprintId)
+			require.Equal(t, "‹test-key-2›", log.ContendedKey)
+		}
+		if log.Duration == 50000000 {
+			require.Equal(t, fingerprintIDToHex(321), log.WaitingStmtFingerprintId)
+			require.Equal(t, txnFingerprintIDToHex(456), log.WaitingTxnFingerprintId)
+			require.Equal(t, txnFingerprintIDToHex(789), log.BlockingTxnFingerprintId)
+			require.Equal(t, "‹test-key-1›", log.ContendedKey)
+		}
+		if log.Duration == 20000000 {
+			require.Equal(t, fingerprintIDToHex(123), log.WaitingStmtFingerprintId)
+			require.Equal(t, txnFingerprintIDToHex(456), log.WaitingTxnFingerprintId)
+			require.Equal(t, txnFingerprintIDToHex(888), log.BlockingTxnFingerprintId)
+			require.Equal(t, "‹test-key-1›", log.ContendedKey)
+		}
 	}
 }
 
