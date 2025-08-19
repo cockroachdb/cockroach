@@ -115,6 +115,20 @@ func (l *lexer) Lex(lval *plpgsqlSymType) int {
 	return int(lval.id)
 }
 
+func (l *lexer) parseOptions() parser.ParseOptions {
+	return parser.DefaultParseOptions.WithNumAnnotations(l.numAnnotations)
+}
+
+// parseOne parses a single SQL statement updating numAnnotations accordingly.
+func (l *lexer) parseOne(sql string) (tree.Statement, error) {
+	sqlStmt, err := parser.ParseOneWithOptions(sql, l.parseOptions())
+	if err != nil {
+		return nil, err
+	}
+	l.numAnnotations = sqlStmt.NumAnnotations
+	return sqlStmt.AST, nil
+}
+
 // MakeExecSqlStmt makes an Execute node.
 func (l *lexer) MakeExecSqlStmt() (*plpgsqltree.Execute, error) {
 	if l.parser.Lookahead() != -1 {
@@ -169,7 +183,7 @@ func (l *lexer) MakeExecSqlStmt() (*plpgsqltree.Execute, error) {
 	} else {
 		sql = l.getStr(startPos, endPos)
 	}
-	sqlStmt, err := parser.ParseOne(sql)
+	sqlStmt, err := l.parseOne(sql)
 	if err != nil {
 		return nil, err
 	}
@@ -178,15 +192,13 @@ func (l *lexer) MakeExecSqlStmt() (*plpgsqltree.Execute, error) {
 	// a SELECT or a mutation with RETURNING. It is difficult to determine this
 	// for all possible statements, and execution is able to handle it, so we
 	// allow SQL statements that return rows.
-	if target != nil && sqlStmt.AST.StatementReturnType() != tree.Rows {
+	if target != nil && sqlStmt.StatementReturnType() != tree.Rows {
 		return nil, pgerror.New(pgcode.Syntax, "INTO used with a command that cannot return data")
 	}
-	ann := tree.MakeAnnotations(sqlStmt.NumAnnotations)
 	return &plpgsqltree.Execute{
-		SqlStmt:     sqlStmt.AST,
-		Strict:      haveStrict,
-		Target:      target,
-		Annotations: &ann,
+		SqlStmt: sqlStmt,
+		Strict:  haveStrict,
+		Target:  target,
 	}, nil
 }
 
@@ -259,12 +271,12 @@ func (l *lexer) MakeFetchOrMoveStmt(isMove bool) (plpgsqltree.Statement, error) 
 		return nil, err
 	}
 	sqlStr = prefix + sqlStr
-	sqlStmt, err := parser.ParseOne(sqlStr)
+	sqlStmt, err := l.parseOne(sqlStr)
 	if err != nil {
 		return nil, err
 	}
 	var cursor tree.CursorStmt
-	switch t := sqlStmt.AST.(type) {
+	switch t := sqlStmt.(type) {
 	case *tree.FetchCursor:
 		cursor = t.CursorStmt
 	case *tree.MoveCursor:
@@ -297,12 +309,10 @@ func (l *lexer) MakeFetchOrMoveStmt(isMove bool) (plpgsqltree.Statement, error) 
 	}
 	// Move past the semicolon.
 	l.lastPos++
-	ann := tree.MakeAnnotations(sqlStmt.NumAnnotations)
 	return &plpgsqltree.Fetch{
-		Cursor:      cursor,
-		Target:      target,
-		IsMove:      isMove,
-		Annotations: &ann,
+		Cursor: cursor,
+		Target: target,
+		IsMove: isMove,
 	}, nil
 }
 
@@ -374,7 +384,12 @@ func makeDoStmt(options tree.DoBlockOptions) (*plpgsqltree.DoBlock, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &plpgsqltree.DoBlock{Block: parsedStmt.AST}, nil
+	return &plpgsqltree.DoBlock{
+		Block: parsedStmt.AST,
+		// Note that here we only initialize the annotations container, and the
+		// annotations will be set during the optbuild.
+		Annotations: tree.MakeAnnotations(parsedStmt.NumAnnotations),
+	}, nil
 }
 
 // ParseReturnExpr handles reading and parsing the expression for a RETURN or
@@ -396,14 +411,12 @@ func (l *lexer) ParseReturnQuery() (plpgsqltree.Statement, error) {
 		return nil, err
 	}
 	queryStr := l.getStr(startPos, endPos)
-	stmt, err := parser.ParseOne(queryStr)
+	sqlStmt, err := l.parseOne(queryStr)
 	if err != nil {
 		return nil, err
 	}
-	ann := tree.MakeAnnotations(stmt.NumAnnotations)
 	return &plpgsqltree.ReturnQuery{
-		SqlStmt:     stmt.AST,
-		Annotations: &ann,
+		SqlStmt: sqlStmt,
 	}, nil
 }
 
@@ -626,13 +639,14 @@ func (l *lexer) Unimplemented(feature string) {
 func (l *lexer) ParseExpr(sqlStr string) (plpgsqltree.Expr, error) {
 	// Use ParseExprs instead of ParseExpr in order to correctly handle the case
 	// when multiple expressions are incorrectly passed.
-	exprs, err := parser.ParseExprs([]string{sqlStr})
+	exprs, numAnnotations, err := parser.ParseExprsWithOptions([]string{sqlStr}, l.parseOptions())
 	if err != nil {
 		return nil, err
 	}
 	if len(exprs) != 1 {
 		return nil, pgerror.Newf(pgcode.Syntax, "query returned %d columns", len(exprs))
 	}
+	l.numAnnotations = numAnnotations
 	return exprs[0], nil
 }
 
