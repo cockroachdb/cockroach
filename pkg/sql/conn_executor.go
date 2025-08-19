@@ -3810,34 +3810,36 @@ func bufferedWritesIsAllowedForIsolationLevel(
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
 	*evalCtx = extendedEvalContext{
 		Context: eval.Context{
-			Planner:                        p,
-			StreamManagerFactory:           p,
-			PrivilegedAccessor:             p,
-			SessionAccessor:                p,
-			JobExecContext:                 p,
-			ClientNoticeSender:             p,
-			Sequence:                       p,
-			Tenant:                         p,
-			Regions:                        p,
-			Gossip:                         p,
-			PreparedStatementState:         &ex.extraTxnState.prepStmtsNamespace,
-			SessionDataStack:               ex.sessionDataStack,
-			ReCache:                        ex.server.reCache,
-			ToCharFormatCache:              ex.server.toCharFormatCache,
-			SQLStatsController:             ex.server.persistedSQLStats,
-			SchemaTelemetryController:      ex.server.schemaTelemetryController,
-			IndexUsageStatsController:      ex.server.indexUsageStatsController,
-			ConsistencyChecker:             p.execCfg.ConsistencyChecker,
-			RangeProber:                    p.execCfg.RangeProber,
-			StmtDiagnosticsRequestInserter: ex.server.cfg.StmtDiagnosticsRecorder.InsertRequest,
-			CatalogBuiltins:                &p.evalCatalogBuiltins,
-			QueryCancelKey:                 ex.queryCancelKey,
-			DescIDGenerator:                ex.getDescIDGenerator(),
-			RangeStatsFetcher:              p.execCfg.RangeStatsFetcher,
-			JobsProfiler:                   p,
-			RNGFactory:                     &ex.rng.external,
-			ULIDEntropyFactory:             &ex.rng.ulidEntropy,
-			CidrLookup:                     p.execCfg.CidrLookup,
+			Planner:                          p,
+			StreamManagerFactory:             p,
+			PrivilegedAccessor:               p,
+			SessionAccessor:                  p,
+			JobExecContext:                   p,
+			ClientNoticeSender:               p,
+			Sequence:                         p,
+			Tenant:                           p,
+			Regions:                          p,
+			Gossip:                           p,
+			PreparedStatementState:           &ex.extraTxnState.prepStmtsNamespace,
+			SessionDataStack:                 ex.sessionDataStack,
+			ReCache:                          ex.server.reCache,
+			ToCharFormatCache:                ex.server.toCharFormatCache,
+			SQLStatsController:               ex.server.persistedSQLStats,
+			SchemaTelemetryController:        ex.server.schemaTelemetryController,
+			IndexUsageStatsController:        ex.server.indexUsageStatsController,
+			ConsistencyChecker:               p.execCfg.ConsistencyChecker,
+			RangeProber:                      p.execCfg.RangeProber,
+			StmtDiagnosticsRequestInserter:   ex.server.cfg.StmtDiagnosticsRecorder.InsertRequest,
+			CatalogBuiltins:                  &p.evalCatalogBuiltins,
+			QueryCancelKey:                   ex.queryCancelKey,
+			DescIDGenerator:                  ex.getDescIDGenerator(),
+			RangeStatsFetcher:                p.execCfg.RangeStatsFetcher,
+			JobsProfiler:                     p,
+			RNGFactory:                       &ex.rng.external,
+			ULIDEntropyFactory:               &ex.rng.ulidEntropy,
+			CidrLookup:                       p.execCfg.CidrLookup,
+			StartedRoutineStatementCounters:  ex.metrics.StartedStatementCounters.toRoutineStmtCounters(),
+			ExecutedRoutineStatementCounters: ex.metrics.ExecutedStatementCounters.toRoutineStmtCounters(),
 		},
 		Tracing:              &ex.sessionTracing,
 		MemMetrics:           &ex.memMetrics,
@@ -4604,8 +4606,15 @@ type StatementCounters struct {
 	UpdateCount telemetry.CounterWithAggMetric
 	InsertCount telemetry.CounterWithAggMetric
 	DeleteCount telemetry.CounterWithAggMetric
+
 	// CRUDQueryCount includes all 4 CRUD statements above.
 	CRUDQueryCount telemetry.CounterWithAggMetric
+
+	// Basic CRUD statements within the UDF/SP body.
+	RoutineSelectCount telemetry.CounterWithAggMetric
+	RoutineUpdateCount telemetry.CounterWithAggMetric
+	RoutineInsertCount telemetry.CounterWithAggMetric
+	RoutineDeleteCount telemetry.CounterWithAggMetric
 
 	// Transaction operations.
 	TxnBeginCount    telemetry.CounterWithAggMetric
@@ -4685,6 +4694,14 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaInsertStarted, internal)),
 		DeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaDeleteStarted, internal)),
+		RoutineSelectCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineSelectStarted, internal)),
+		RoutineUpdateCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineUpdateStarted, internal)),
+		RoutineInsertCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineInsertStarted, internal)),
+		RoutineDeleteCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDeleteStarted, internal)),
 		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDStarted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
@@ -4738,6 +4755,14 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaInsertExecuted, internal)),
 		DeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaDeleteExecuted, internal)),
+		RoutineSelectCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineSelectExecuted, internal)),
+		RoutineUpdateCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineUpdateExecuted, internal)),
+		RoutineInsertCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineInsertExecuted, internal)),
+		RoutineDeleteCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDeleteExecuted, internal)),
 		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDExecuted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
@@ -4821,6 +4846,18 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 		} else {
 			sc.MiscCount.Inc()
 		}
+	}
+}
+
+// toRoutineStmtCounters converts the StatementCounters to a RoutineStatementCounters
+// so that it can be passed along eval ctx to the opt layer, avoiding
+// import cycle.
+func (sc *StatementCounters) toRoutineStmtCounters() eval.RoutineStatementCounters {
+	return eval.RoutineStatementCounters{
+		SelectCount: &sc.RoutineSelectCount,
+		UpdateCount: &sc.RoutineUpdateCount,
+		InsertCount: &sc.RoutineInsertCount,
+		DeleteCount: &sc.RoutineDeleteCount,
 	}
 }
 
