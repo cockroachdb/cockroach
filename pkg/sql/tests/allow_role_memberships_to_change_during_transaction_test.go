@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -24,6 +23,8 @@ import (
 // corresponding session variable is set for all sessions using cached
 // role memberships, performing new grants do not need to wait for open
 // transactions to complete.
+// FIXME(152094): make these tests make sense with the new cache invalidation
+// behavior
 func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -41,10 +42,9 @@ func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 	}
 
 	// Create three users: foo, bar, and baz.
-	// Use one of these users to hold open a transaction which uses a lease
-	// on the role_memberships table. Ensure that initially granting does
-	// wait on that transaction. Then set the session variable and ensure
-	// that it does not.
+	// Use one of these users to hold open a transaction which uses a lease on
+	// the role_memberships table. Ensure that initially granting succeeds. Then
+	// set the session variable and ensure that it also succeeds.
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	tdb.Exec(t, "CREATE USER foo PASSWORD 'foo'")
 	tdb.Exec(t, "CREATE USER bar")
@@ -56,31 +56,21 @@ func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 	fooDB, cleanupFoo := openUser("foo", "db2")
 	defer cleanupFoo()
 
-	// In this first test, we want to make sure that the query cannot proceed
-	// until the outer transaction commits. We launch the grant while the
-	// transaction is open, wait a tad, make sure it hasn't made progress,
-	// then we commit the relevant transaction and ensure that it does finish.
-	t.Run("normal path waits", func(t *testing.T) {
+	// In this first test, we make sure that the query proceeds without the
+	// variable set.
+	t.Run("normal path isn't blocked", func(t *testing.T) {
 		fooTx, err := fooDB.BeginTx(ctx, nil)
 		require.NoError(t, err)
+		defer func() { _ = fooTx.Rollback() }()
 		var count int
 		require.NoError(t,
 			fooTx.QueryRow("SELECT count(*) FROM t").Scan(&count))
 		require.Equal(t, 0, count)
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := sqlDB.Exec("GRANT bar TO baz;")
-			errCh <- err
-		}()
-		select {
-		case <-time.After(10 * time.Millisecond):
-			// Wait a tad and make sure nothing happens. This test will be
-			// flaky if we mess up the leasing.
-		case err := <-errCh:
-			t.Fatalf("expected transaction to block, got err: %v", err)
-		}
+
+		_, err = sqlDB.Exec("GRANT bar TO baz;")
+		require.NoError(t, err)
+
 		require.NoError(t, fooTx.Commit())
-		require.NoError(t, <-errCh)
 	})
 
 	// In this test we ensure that we can perform role grant and revoke

@@ -3167,6 +3167,8 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	// TODO(152094): update messaging around allow_role_memberships_to_change_during_transaction in
+	// light of the new cache invalidation behavior
 	`allow_role_memberships_to_change_during_transaction`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`allow_role_memberships_to_change_during_transaction`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
