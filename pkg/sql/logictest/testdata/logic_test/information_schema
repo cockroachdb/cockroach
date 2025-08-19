@@ -3949,7 +3949,6 @@ ORDER BY variable
 variable                                                         value
 allow_create_trigger_function_with_argv_references               off
 allow_ordinal_column_references                                  off
-allow_role_memberships_to_change_during_transaction              off
 allow_unsafe_internals                                           on
 alter_primary_region_super_region_override                       off
 always_distribute_full_scans                                     off

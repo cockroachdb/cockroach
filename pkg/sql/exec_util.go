@@ -4128,10 +4128,6 @@ func (m *sessionDataMutator) SetEnableCreateStatsUsingExtremesBoolEnum(val bool)
 	m.data.EnableCreateStatsUsingExtremesBoolEnum = val
 }
 
-func (m *sessionDataMutator) SetAllowRoleMembershipsToChangeDuringTransaction(val bool) {
-	m.data.AllowRoleMembershipsToChangeDuringTransaction = val
-}
-
 func (m *sessionDataMutator) SetDefaultTextSearchConfig(val string) {
 	m.data.DefaultTextSearchConfig = val
 }
