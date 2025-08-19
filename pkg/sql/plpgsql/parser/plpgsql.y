@@ -6,7 +6,6 @@ import (
 
   "github.com/cockroachdb/cockroach/pkg/build"
   "github.com/cockroachdb/cockroach/pkg/sql/parser"
-  "github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
@@ -174,11 +173,7 @@ func (u *plpgsqlSymUnion) cursorScrollOption() tree.CursorScrollOption {
 }
 
 func (u *plpgsqlSymUnion) sqlStatement() tree.Statement {
-    return u.val.(statements.Statement[tree.Statement]).AST
-}
-
-func (u *plpgsqlSymUnion) numAnnotations() tree.AnnotationIdx {
-    return u.val.(statements.Statement[tree.Statement]).NumAnnotations
+    return u.val.(tree.Statement)
 }
 
 func (u *plpgsqlSymUnion) variables() []plpgsqltree.Variable {
@@ -484,12 +479,10 @@ decl_statement: decl_varname decl_const decl_datatype decl_collate decl_notnull 
   }
 | decl_varname opt_scrollable CURSOR decl_cursor_args decl_is_for decl_cursor_query
   {
-    ann := tree.MakeAnnotations($6.numAnnotations())
     $$.val = &plpgsqltree.CursorDeclaration{
       Name: plpgsqltree.Variable($1),
       Scroll: $2.cursorScrollOption(),
       Query: $6.sqlStatement(),
-      Annotations: &ann,
     }
   }
 ;
@@ -517,7 +510,7 @@ decl_cursor_query: stmt_until_semi ';'
     if len(stmts) != 1 {
       return setErr(plpgsqllex, errors.New("expected exactly one SQL statement for cursor"))
     }
-    $$.val = stmts[0]
+    $$.val = stmts[0].AST
   }
 ;
 
@@ -1419,12 +1412,10 @@ stmt_open: OPEN IDENT ';'
     if len(stmts) != 1 {
       return setErr(plpgsqllex, errors.New("expected exactly one SQL statement for cursor"))
     }
-    ann := tree.MakeAnnotations(stmts[0].NumAnnotations)
     $$.val = &plpgsqltree.Open{
       CurVar: plpgsqltree.Variable($2),
       Scroll: $3.cursorScrollOption(),
       Query: stmts[0].AST,
-      Annotations: &ann,
     }
   }
 ;
