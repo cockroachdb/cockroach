@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math/rand/v2"
 	"os"
 	"path"
 	"slices"
@@ -22,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -481,6 +484,311 @@ func TestIndexExists(t *testing.T) {
 	}
 }
 
+func TestListIndexes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanup := testutils.TempDir(t)
+	defer dirCleanup()
+
+	st := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.Latest.Version(),
+		clusterversion.Latest.Version(),
+		true,
+	)
+	execCfg := &sql.ExecutorConfig{Settings: st}
+
+	const collectionURI = "nodelocal://1/test"
+	storage, err := cloud.ExternalStorageFromURI(
+		ctx,
+		collectionURI,
+		base.ExternalIODirConfig{},
+		st,
+		blobs.TestBlobServiceClient(dir),
+		username.RootUserName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+	require.NoError(t, err)
+	defer storage.Close()
+	storageFactory := func(
+		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
+	) (cloud.ExternalStorage, error) {
+		return storage, nil
+	}
+
+	fullEnd := intToTime(2)
+	fullSubdir := fullEnd.GoTime().Format(backupbase.DateBasedIntoFolderName)
+	details := jobspb.BackupDetails{
+		Destination: jobspb.BackupDetails_Destination{
+			To:     []string{collectionURI},
+			Subdir: fullSubdir,
+		},
+		StartTime:     hlc.Timestamp{},
+		EndTime:       fullEnd,
+		CollectionURI: collectionURI,
+		// URI does not need to be set properly for this test since we are not
+		// reading the contents of the files.
+		URI: collectionURI + "/" + fullSubdir,
+	}
+	require.NoError(t, WriteBackupIndexMetadata(
+		ctx, execCfg, username.RootUserName(), storageFactory, details,
+	))
+
+	incsToWrite := [][2]int{
+		{2, 4},
+		{2, 6},
+		{4, 6},
+		{6, 8},
+	}
+	// We shuffle the order that we write backups in just to really stress the
+	// ordering logic in ListIndexes.
+	rand.Shuffle(len(incsToWrite), func(i, j int) {
+		incsToWrite[i], incsToWrite[j] = incsToWrite[j], incsToWrite[i]
+	})
+	for _, times := range incsToWrite {
+		start := intToTime(times[0])
+		end := intToTime(times[1])
+		details.StartTime = start
+		details.EndTime = end
+		require.NoError(
+			t, WriteBackupIndexMetadata(ctx, execCfg, username.RootUserName(), storageFactory, details),
+		)
+	}
+
+	indexes, err := ListIndexes(ctx, storage, fullSubdir)
+	require.NoError(t, err)
+
+	require.Len(t, indexes, len(incsToWrite)+1)
+	require.True(t, slices.IsSortedFunc(indexes, func(a, b string) int {
+		aStart, aEnd, err := parseIndexFilename(a)
+		require.NoError(t, err)
+		bStart, bEnd, err := parseIndexFilename(b)
+		require.NoError(t, err)
+		if aEnd.Before(bEnd) {
+			return -1
+		} else if aEnd.After(bEnd) {
+			return 1
+		}
+		// end times are equal, compare start times
+		if bStart.Before(aStart) {
+			return 1
+		} else {
+			return -1
+		}
+	}), "indexes are not sorted by end time and then start time")
+}
+
+func TestGetBackupTreeIndexMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.Latest.Version(),
+		clusterversion.Latest.Version(),
+		true,
+	)
+	execCfg := &sql.ExecutorConfig{Settings: st}
+
+	const collectionURI = "nodelocal://1/backup"
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	externalStorage, err := cloud.ExternalStorageFromURI(
+		ctx,
+		collectionURI,
+		base.ExternalIODirConfig{},
+		st,
+		blobs.TestBlobServiceClient(dir),
+		username.RootUserName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+	require.NoError(t, err)
+	storageFactory := func(
+		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
+	) (cloud.ExternalStorage, error) {
+		return externalStorage, nil
+	}
+
+	writeIndex := func(
+		t *testing.T, subdirEnd, start, end int,
+	) {
+		t.Helper()
+		subdirTS := intToTime(subdirEnd).GoTime()
+		startTS := intToTime(start)
+		endTS := intToTime(end)
+		subdir := subdirTS.Format(backupbase.DateBasedIntoFolderName)
+
+		details := jobspb.BackupDetails{
+			Destination: jobspb.BackupDetails_Destination{
+				To:     []string{collectionURI},
+				Subdir: subdir,
+			},
+			StartTime:     startTS,
+			EndTime:       endTS,
+			CollectionURI: collectionURI,
+			// This test doesn't look at the URI stored in the index metadata, so it
+			// doesn't need to be accurate to the exact path differences between full
+			// and incremental backups. We can just set URI to something that looks
+			// valid.
+			URI: collectionURI + subdir,
+		}
+		require.NoError(t, WriteBackupIndexMetadata(
+			ctx, execCfg, username.RootUserName(), storageFactory, details,
+		))
+	}
+
+	type chain = [][2]int
+	simpleChain := chain{{0, 2}, {2, 4}, {4, 6}, {6, 8}}
+	compactedChain := chain{{0, 10}, {10, 11}, {10, 12}, {11, 12}, {12, 14}, {14, 16}}
+	doubleCompactedChain := chain{{0, 18}, {18, 20}, {18, 22}, {20, 22}, {22, 24}, {18, 26}, {24, 26}}
+	fullOnly := chain{{0, 28}}
+
+	indexes := []chain{
+		simpleChain,
+		compactedChain,
+		doubleCompactedChain,
+		fullOnly,
+	}
+	for _, index := range indexes {
+		for _, time := range index {
+			writeIndex(t, index[0][1], time[0], time[1])
+		}
+	}
+
+	testcases := []struct {
+		name  string
+		chain chain
+		// endTime filter. Set to 0 for no filter.
+		endTime int
+		error   string
+		// expectedIndexTimes should be sorted in ascending order by end time, with
+		// ties broken by ascending start time.
+		expectedIndexTimes chain
+	}{
+		{
+			name:               "fetch all indexes from subdir",
+			chain:              simpleChain,
+			expectedIndexTimes: [][2]int{{0, 2}, {2, 4}, {4, 6}, {6, 8}},
+		},
+		{
+			name:               "exact end time match",
+			chain:              simpleChain,
+			endTime:            6,
+			expectedIndexTimes: [][2]int{{0, 2}, {2, 4}, {4, 6}},
+		},
+		{
+			name:               "end time between an incremental",
+			chain:              simpleChain,
+			endTime:            5,
+			expectedIndexTimes: [][2]int{{0, 2}, {2, 4}, {4, 6}},
+		},
+		{
+			name:               "end time before full backup end",
+			chain:              simpleChain,
+			endTime:            1,
+			expectedIndexTimes: chain{{0, 2}},
+		},
+		{
+			name:    "end time after the chain",
+			chain:   simpleChain,
+			endTime: 10,
+			error:   "do not cover end time",
+		},
+		{
+			name:               "fetch all indexes from tree with compacted backups",
+			chain:              compactedChain,
+			expectedIndexTimes: chain{{0, 10}, {10, 11}, {10, 12}, {11, 12}, {12, 14}, {14, 16}},
+		},
+		{
+			name:               "end time of compacted backup",
+			chain:              compactedChain,
+			endTime:            12,
+			expectedIndexTimes: chain{{0, 10}, {10, 11}, {10, 12}, {11, 12}},
+		},
+		{
+			name:               "end time between incremental after compacted backup",
+			chain:              compactedChain,
+			endTime:            13,
+			expectedIndexTimes: chain{{0, 10}, {10, 11}, {10, 12}, {11, 12}, {12, 14}},
+		},
+		{
+			name:               "end time between compacted backup",
+			chain:              compactedChain,
+			endTime:            11,
+			expectedIndexTimes: chain{{0, 10}, {10, 11}},
+		},
+		{
+			name:               "end time before compacted backup",
+			chain:              compactedChain,
+			endTime:            11,
+			expectedIndexTimes: chain{{0, 10}, {10, 11}},
+		},
+		{
+			name:  "fetch all indexes from tree with double compacted backups",
+			chain: doubleCompactedChain,
+			expectedIndexTimes: chain{
+				{0, 18}, {18, 20}, {18, 22}, {20, 22}, {22, 24}, {18, 26}, {24, 26},
+			},
+		},
+		{
+			name:    "end time before second compacted backup but after first",
+			chain:   doubleCompactedChain,
+			endTime: 24,
+			expectedIndexTimes: chain{
+				{0, 18}, {18, 20}, {18, 22}, {20, 22}, {22, 24},
+			},
+		},
+		{
+			name:    "end time of second compacted backup",
+			chain:   doubleCompactedChain,
+			endTime: 26,
+			expectedIndexTimes: chain{
+				{0, 18}, {18, 20}, {18, 22}, {20, 22}, {22, 24}, {18, 26}, {24, 26},
+			},
+		},
+		{
+			name:               "index only contains a full backup",
+			chain:              fullOnly,
+			expectedIndexTimes: chain{{0, 28}},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			subdirTS := intToTime(tc.chain[0][1]).GoTime()
+			subdir := subdirTS.Format(backupbase.DateBasedIntoFolderName)
+			end := intToTime(tc.endTime)
+
+			metadatas, err := GetBackupTreeIndexMetadata(ctx, externalStorage, subdir, end)
+			if tc.error != "" {
+				require.ErrorContains(t, err, tc.error)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, metadatas, len(tc.expectedIndexTimes))
+
+			// Using [2]int64 makes test outputs in event of failure more readable.
+			expectedIndexTimes := util.Map(tc.expectedIndexTimes, func(t [2]int) [2]int64 {
+				return [...]int64{
+					intToTime(t[0]).WallTime,
+					intToTime(t[1]).WallTime,
+				}
+			})
+			actualIndexTimes := util.Map(metadatas, func(m backuppb.BackupIndexMetadata) [2]int64 {
+				return [...]int64{m.StartTime.WallTime, m.EndTime.WallTime}
+			})
+
+			require.Equal(t, expectedIndexTimes, actualIndexTimes)
+		})
+	}
+}
+
 type fakeExternalStorage struct {
 	cloud.ExternalStorage
 	files map[string]*closableBytesWriter
@@ -492,6 +800,10 @@ func newFakeExternalStorage() *fakeExternalStorage {
 	return &fakeExternalStorage{
 		files: make(map[string]*closableBytesWriter),
 	}
+}
+
+func (f *fakeExternalStorage) Close() error {
+	return nil
 }
 
 func (f *fakeExternalStorage) Conf() cloudpb.ExternalStorage {
@@ -580,4 +892,12 @@ func (f *fakeExternalStorage) List(
 		}
 	}
 	return nil
+}
+
+// intToTime converts the integer time an easy to read hlc.Timestamp (i.e. XX00000000000...).
+// We use ints to more easily write times for test cases.
+func intToTime(t int) hlc.Timestamp {
+	// Value needs to be large enough to be represented in milliseconds and be
+	// larger than GoTime zero.
+	return hlc.Timestamp{WallTime: int64(t) * 1e9}
 }
