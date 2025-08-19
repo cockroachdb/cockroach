@@ -1146,23 +1146,31 @@ func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequ
 // request.
 var errNo1PCTxn = kvpb.NewErrorf("cannot send 1PC txn to multiple ranges")
 
-// splitBatchAndCheckForRefreshSpans splits the batch according to the
-// canSplitET parameter and checks whether the batch can forward its
-// read timestamp. If the batch has its CanForwardReadTimestamp flag
-// set but is being split across multiple sub-batches then the flag in
-// the batch header is unset.
-func splitBatchAndCheckForRefreshSpans(
+// splitBatchAndCheckForIncompatibilities splits the batch according to the
+// canSplitET parameter and checks whether the batch has settings incompatible
+// with being split.
+//
+// - If the batch has its CanForwardReadTimestamp flag set but is being split
+// across multiple sub-batches then the flag in the batch header is unset.
+//
+// - If the batch has AsyncConsensus set to true but is being split, then the
+// flag in the batch header is unset.
+func splitBatchAndCheckForIncompatibilities(
 	ba *kvpb.BatchRequest, canSplitET bool,
 ) [][]kvpb.RequestUnion {
 	parts := ba.Split(canSplitET)
 
-	// If the batch is split and the header has its CanForwardReadTimestamp flag
-	// set then we much check whether any request would need to be refreshed in
-	// the event that the one of the partial batches was to forward its read
-	// timestamp during a server-side refresh. If any such request exists then
-	// we unset the CanForwardReadTimestamp flag.
 	if len(parts) > 1 {
+		// If the batch is split and the header has its CanForwardReadTimestamp flag
+		// set then we much check whether any request would need to be refreshed in
+		// the event that the one of the partial batches was to forward its read
+		// timestamp during a server-side refresh. If any such request exists then
+		// we unset the CanForwardReadTimestamp flag.
 		unsetCanForwardReadTimestampFlag(ba)
+		// If the batch is split and the header has AsyncConsensus, we
+		// unconditionally unset it because it may be unsafe if the write needs to
+		// be observed by different reads that have been split.
+		unsetAsyncConsensus(ba)
 	}
 
 	return parts
@@ -1188,6 +1196,17 @@ func unsetCanForwardReadTimestampFlag(ba *kvpb.BatchRequest) {
 			return
 		}
 	}
+}
+
+// unsetAsyncConsensus ensures that if a batch that has been split because of
+// incompatible request flags, AsyncConsensus is not set.
+//
+// NOTE(ssd): We could be "smarter" here and only unset this flag if we have a
+// pipeline-able write that intersects requests in two different splits. But,
+// batches that require splitting are uncommon and thus aren't worth unnecessary
+// complexity.
+func unsetAsyncConsensus(ba *kvpb.BatchRequest) {
+	ba.AsyncConsensus = false
 }
 
 // Send implements the batch.Sender interface. It subdivides the Batch
@@ -1230,7 +1249,7 @@ func (ds *DistSender) Send(
 	if ba.Txn != nil && ba.Txn.Epoch > 0 && !require1PC {
 		splitET = true
 	}
-	parts := splitBatchAndCheckForRefreshSpans(ba, splitET)
+	parts := splitBatchAndCheckForIncompatibilities(ba, splitET)
 	var singleRplChunk [1]*kvpb.BatchResponse
 	rplChunks := singleRplChunk[:0:1]
 
@@ -1276,7 +1295,7 @@ func (ds *DistSender) Send(
 			} else if require1PC {
 				log.Fatalf(ctx, "required 1PC transaction cannot be split: %s", ba)
 			}
-			parts = splitBatchAndCheckForRefreshSpans(ba, true /* split ET */)
+			parts = splitBatchAndCheckForIncompatibilities(ba, true /* split ET */)
 			onePart = false
 			// Restart transaction of the last chunk as multiple parts with
 			// EndTxn in the last part.
@@ -1901,7 +1920,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	}()
 
 	canParallelize := ba.Header.MaxSpanRequestKeys == 0 && ba.Header.TargetBytes == 0 &&
-		!ba.Header.ReturnOnRangeBoundary &&
 		!ba.Header.ReturnElasticCPUResumeSpans
 	if ba.IsSingleCheckConsistencyRequest() {
 		// Don't parallelize full checksum requests as they have to touch the
@@ -2006,7 +2024,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				ba.UpdateTxn(resp.reply.Txn)
 			}
 
-			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0 || ba.ReturnOnRangeBoundary || ba.ReturnElasticCPUResumeSpans
+			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0 || ba.ReturnElasticCPUResumeSpans
 			// Check whether we've received enough responses to exit query loop.
 			if mightStopEarly {
 				var replyKeys int64
@@ -2039,13 +2057,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 						resumeReason = kvpb.RESUME_BYTE_LIMIT
 						return
 					}
-				}
-				// If we hit a range boundary, return a partial result if requested. We
-				// do this after checking the limits, so that they take precedence.
-				if ba.Header.ReturnOnRangeBoundary && replyKeys > 0 && !lastRange {
-					couldHaveSkippedResponses = true
-					resumeReason = kvpb.RESUME_RANGE_BOUNDARY
-					return
 				}
 			}
 		}
