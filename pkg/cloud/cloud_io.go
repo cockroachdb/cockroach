@@ -98,7 +98,7 @@ func MakeHTTPClient(
 	if err != nil {
 		return nil, err
 	}
-	return MakeHTTPClientForTransport(t)
+	return MakeHTTPClientForTransport(maybeAddLogging(t))
 }
 
 // MakeHTTPClientForTransport creates a new http.Client with the given
