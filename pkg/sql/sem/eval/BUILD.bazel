@@ -87,6 +87,7 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/json",
+        "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/randutil",
         "//pkg/util/rangedesc",

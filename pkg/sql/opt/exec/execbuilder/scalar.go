@@ -1337,25 +1337,21 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 // TODO(janexing): should i move it into a separate file?
 func incrementRoutineStmtCounter(
-	counters eval.RoutineStatementCounters, dbName string, appName string, stmtTag string,
+	counters *eval.RoutineStatementCounters, dbName string, appName string, stmtTag string,
 ) {
+	if counters == nil {
+		// TODO(janexing): should i error it?
+		return
+	}
 	switch stmtTag {
 	case "INSERT":
-		if counters.InsertCount != nil {
-			counters.InsertCount.Inc(dbName, appName)
-		}
+		counters.InsertCount.Inc(dbName, appName)
 	case "UPDATE":
-		if counters.UpdateCount != nil {
-			counters.UpdateCount.Inc(dbName, appName)
-		}
+		counters.UpdateCount.Inc(dbName, appName)
 	case "SELECT":
-		if counters.SelectCount != nil {
-			counters.SelectCount.Inc(dbName, appName)
-		}
+		counters.SelectCount.Inc(dbName, appName)
 	case "DELETE":
-		if counters.DeleteCount != nil {
-			counters.DeleteCount.Inc(dbName, appName)
-		}
+		counters.DeleteCount.Inc(dbName, appName)
 	}
 }
 
