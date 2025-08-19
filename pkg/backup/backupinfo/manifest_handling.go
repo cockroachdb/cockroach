@@ -1079,8 +1079,6 @@ func elideSkippedLayers(backupEntries []BackupTreeEntry) []BackupTreeEntry {
 //
 // Note: This assumes that the provided backups are sorted in increasing order
 // by end time, and then sorted in increasing order by start time to break ties.
-// This is the case for backups being returned by storage clients due to us
-// encoding backup paths in a way that ensures this order.
 func elideDuplicateEndTimes(backupEntries []BackupTreeEntry) []BackupTreeEntry {
 	for i := range len(backupEntries) - 1 {
 		j := i + 1

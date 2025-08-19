@@ -78,15 +78,24 @@ func JoinURLPath(args ...string) string {
 func AppendPaths(uris []string, tailDir ...string) ([]string, error) {
 	retval := make([]string, len(uris))
 	for i, uri := range uris {
-		parsed, err := url.Parse(uri)
+		appended, err := AppendPath(uri, tailDir...)
 		if err != nil {
 			return nil, err
 		}
-		joinArgs := append([]string{parsed.Path}, tailDir...)
-		parsed.Path = JoinURLPath(joinArgs...)
-		retval[i] = parsed.String()
+		retval[i] = appended
 	}
 	return retval, nil
+}
+
+// AppendPath appends the tailDir to the `path` of the passed in uri.
+func AppendPath(uri string, tailDir ...string) (string, error) {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return "", err
+	}
+	joinArgs := append([]string{parsed.Path}, tailDir...)
+	parsed.Path = JoinURLPath(joinArgs...)
+	return parsed.String(), nil
 }
 
 // EncodeDescendingTS encodes a time.Time in a way such that later timestamps
@@ -131,7 +140,6 @@ func AbsoluteBackupPathInCollectionURI(collectionURI string, backupURI string) (
 	if collectionPath == "." {
 		collectionPath = ""
 	}
-
 	backupPath := path.Clean(backupURL.Path)
 	if backupPath == "." {
 		backupPath = ""

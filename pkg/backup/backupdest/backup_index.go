@@ -21,12 +21,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+)
+
+var (
+	ReadBackupIndexEnabled = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		"backup.index.read.enabled",
+		"if true, the backup index will be read when reading from a backup collection",
+		false,
+	)
 )
 
 // WriteBackupIndexMetadata writes an index file for the backup described by the
@@ -68,7 +78,7 @@ func WriteBackupIndexMetadata(
 
 	path, err := backuputils.AbsoluteBackupPathInCollectionURI(details.CollectionURI, details.URI)
 	if err != nil {
-		return errors.Wrapf(err, "get relative backup path")
+		return err
 	}
 	metadata := &backuppb.BackupIndexMetadata{
 		StartTime: details.StartTime,
@@ -260,6 +270,28 @@ func GetBackupTreeIndexMetadata(
 		}
 	}
 	return indexes[:coveringIdx], nil
+}
+
+// ParseBackupFilePathFromIndexFileName parses the path to a backup given the
+// basename of its index file and its subdirectory. For full backups, the
+// returned path is relative to the root of the backup. For incremental
+// backups, the path is relative to the incremental storage location starting
+// from the subdir (e.g. 20250730/130000.00-20250730-120000.00). It expects
+// that subdir is resolved and not `LATEST`.
+//
+// Note: While the path is stored in the index file, we can take a shortcut here
+// and derive it from the filename solely because backup paths are
+// millisecond-precise and so are the timestamps encoded in the filename.
+func parseBackupFilePathFromIndexFileName(subdir, basename string) (string, error) {
+	start, end, err := parseIndexFilename(basename)
+	if err != nil {
+		return "", err
+	}
+	if start.IsZero() {
+		return subdir, nil
+	}
+
+	return ConstructDateBasedIncrementalFolderName(start, end), nil
 }
 
 // ParseIndexFilename parses the start and end timestamps from the index
