@@ -7,6 +7,7 @@ package install
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
@@ -109,7 +110,7 @@ func (o ComplexSecureOption) overrideBasedOnClusterSettings(c *SyncedCluster) er
 		// we make it insecure by default. This is to avoid dealing with certificates
 		// for ephemeral engineering test clusters.
 		if len(c.Clouds()) == 1 && c.Clouds()[0] == fmt.Sprintf("%s:%s", gce.ProviderName, gce.DefaultProjectID) {
-			fmt.Printf("WARN: cluster %s defaults to insecure, because it is in project %s\n",
+			fmt.Fprintf(os.Stderr, "WARN: cluster %s defaults to insecure, because it is in project %s\n",
 				c.Name,
 				gce.DefaultProjectID,
 			)
