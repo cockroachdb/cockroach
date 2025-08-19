@@ -54,36 +54,12 @@ const (
 	changeFrontierProcName   = `changefntr`
 )
 
-// distChangefeedFlow plans and runs a distributed changefeed.
-//
-// One or more ChangeAggregator processors watch table data for changes. These
-// transform the changed kvs into changed rows and either emit them to a sink
-// (such as kafka) or, if there is no sink, forward them in columns 1,2,3 (where
-// they will be eventually returned directly via pgwire). In either case,
-// periodically a span will become resolved as of some timestamp, meaning that
-// no new rows will ever be emitted at or below that timestamp. These span-level
-// resolved timestamps are emitted as a marshaled `jobspb.ResolvedSpan` proto in
-// column 0.
-//
-// The flow will always have exactly one ChangeFrontier processor which all the
-// ChangeAggregators feed into. It collects all span-level resolved timestamps
-// and aggregates them into a changefeed-level resolved timestamp, which is the
-// minimum of the span-level resolved timestamps. This changefeed-level resolved
-// timestamp is emitted into the changefeed sink (or returned to the gateway if
-// there is no sink) whenever it advances. ChangeFrontier also updates the
-// progress of the changefeed's corresponding system job.
-func distChangefeedFlow(
+func getTimestamps(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
-	description string,
 	localState *cachedState,
-	resultsCh chan<- tree.Datums,
-	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
-	targets changefeedbase.Targets,
-	schemaTSOverride hlc.Timestamp,
-) error {
+) (hlc.Timestamp, hlc.Timestamp, error) {
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	progress := localState.progress
 
@@ -99,7 +75,7 @@ func distChangefeedFlow(
 		// cursor but we have a request to not have an initial scan.
 		initialScanType, err := opts.GetInitialScanType()
 		if err != nil {
-			return err
+			return hlc.Timestamp{}, hlc.Timestamp{}, err
 		}
 		if noHighWater && initialScanType == changefeedbase.NoInitialScan {
 			// If there is a cursor, the statement time has already been set to it.
@@ -135,14 +111,46 @@ func distChangefeedFlow(
 			knobs.StartDistChangefeedInitialHighwater(ctx, initialHighWater)
 		}
 	}
-	// This isn't fixing current error (flowErr: fetching table descriptor 114: relation "[114]" does not exist)
-	// but I think it's necessary to have it.
-	if !schemaTSOverride.IsEmpty() {
-		schemaTS = schemaTSOverride
-		initialHighWater = schemaTSOverride
-		fmt.Printf("overriding schemaTS to %s from %s\n", schemaTSOverride, schemaTS)
-	}
 
+	// if !schemaTSOverride.IsEmpty() {
+	// 	schemaTS = schemaTSOverride
+	// 	initialHighWater = schemaTSOverride
+	// 	fmt.Printf("overriding schemaTS to %s from %s\n", schemaTSOverride, schemaTS)
+	// }
+	return schemaTS, initialHighWater, nil
+}
+
+// distChangefeedFlow plans and runs a distributed changefeed.
+//
+// One or more ChangeAggregator processors watch table data for changes. These
+// transform the changed kvs into changed rows and either emit them to a sink
+// (such as kafka) or, if there is no sink, forward them in columns 1,2,3 (where
+// they will be eventually returned directly via pgwire). In either case,
+// periodically a span will become resolved as of some timestamp, meaning that
+// no new rows will ever be emitted at or below that timestamp. These span-level
+// resolved timestamps are emitted as a marshaled `jobspb.ResolvedSpan` proto in
+// column 0.
+//
+// The flow will always have exactly one ChangeFrontier processor which all the
+// ChangeAggregators feed into. It collects all span-level resolved timestamps
+// and aggregates them into a changefeed-level resolved timestamp, which is the
+// minimum of the span-level resolved timestamps. This changefeed-level resolved
+// timestamp is emitted into the changefeed sink (or returned to the gateway if
+// there is no sink) whenever it advances. ChangeFrontier also updates the
+// progress of the changefeed's corresponding system job.
+func distChangefeedFlow(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	jobID jobspb.JobID,
+	details jobspb.ChangefeedDetails,
+	description string,
+	localState *cachedState,
+	resultsCh chan<- tree.Datums,
+	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
+	targets changefeedbase.Targets,
+	schemaTS hlc.Timestamp,
+	initialHighWater hlc.Timestamp,
+) error {
 	return startDistChangefeed(
 		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh, onTracingEvent, targets)
 }
@@ -162,17 +170,17 @@ func fetchTableDescriptors(
 		if err := txn.KV().SetFixedTimestamp(ctx, ts); err != nil {
 			return errors.Wrapf(err, "setting timestamp for table descriptor fetch")
 		}
+		fmt.Printf("2. set fixed timestamp to %s\n", ts)
 		// Note that all targets are currently guaranteed to have a Table ID
 		// and lie within the primary index span. Deduplication is important
 		// here as requesting the same span twice will deadlock.
 		return targets.EachTableID(func(id catid.DescID) error {
-			fmt.Printf("fetching table descriptor %d at timestamp %s\n", id, ts)
-			// tableDesc, err := descriptors.ByIDWithLeased(txn.KV()).Get().Table(ctx, id)
+			// fmt.Printf("2. fetching table descriptor %d at timestamp %s\n", id, ts)
 			tableDesc, err := descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
 			if err != nil {
-				return errors.Wrapf(err, "fetching table descriptor %d", id)
+				return errors.Wrapf(err, "2. fetching table descriptor %d at timestamp %s", id, ts)
 			}
-			fmt.Printf("fetched table descriptor %d at timestamp %s\n", id, ts)
+			// fmt.Printf("2. fetched table descriptor %d at timestamp %s\n", id, ts)
 			targetDescs = append(targetDescs, tableDesc)
 			return nil
 		})

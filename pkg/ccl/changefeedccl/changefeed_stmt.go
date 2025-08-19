@@ -443,7 +443,12 @@ func coreChangefeed(
 			knobs.BeforeDistChangefeed()
 		}
 
-		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, description, localState, resultsCh, nil, targets, hlc.Timestamp{})
+		// TODO: we should set the schemaTS and initialHighWater here
+		schemaTS, initialHighWater, err := getTimestamps(ctx, p, details, localState)
+		if err != nil {
+			return err
+		}
+		err = distChangefeedFlow(ctx, p, 0 /* jobID */, details, description, localState, resultsCh, nil, targets, schemaTS, initialHighWater)
 		if err == nil {
 			log.Infof(ctx, "core changefeed completed with no error")
 			return nil
@@ -1574,14 +1579,15 @@ func (b *changefeedResumer) resumeWithRetries(
 
 			runningChangefeedChan := make(chan struct{})
 			g := ctxgroup.WithContext(ctx)
-			// For a DB-level changefeed (TargetSpecification.Type == jobspb.ChangefeedTargetSpecification_DATABASE),
-			// 	AllTargets gets all of the tables in the database.
-			fmt.Printf("details.StatementTime: %s\n", details.StatementTime)
-			targets, err := AllTargets(ctx, details, execCfg)
-			fmt.Printf("targets: %v\n", targets)
-			// TODO: Verify the code I added to AllTargets to make sure it's executing at the correct timestamp.
-			//   What is the correct timestamp? First time through, it is the statement time.
-			//   After that, I'm not going to be using AllTargets.
+
+			schemaTS, _, err := getTimestamps(ctx, jobExec, details, localState)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("1. calling RealAllTargets with schemaTS %s\n", schemaTS)
+			targets, err := RealAllTargets(ctx, details, execCfg, schemaTS)
+			fmt.Printf("1. RealAllTargets returned targets: %v\n", targets)
 			if err != nil {
 				return err
 			}
@@ -1665,13 +1671,12 @@ func (b *changefeedResumer) resumeWithRetries(
 							}
 						}
 					}
-					// Can't query the tables in the database (call AllTargets), because there may be a time where the tableset was not empty.
-					// How is the hlc timestamp that the changefeed starts from determined? Where is it set or checked?
 				}
-				// Only for an initial scan will this call return. Otherwise, it will continue to run, until something stops the changefeed.
-				// For an initial scan, what do we want to do if the tableset is empty? Just return?
-				// Else, when it returns, we won't need the watcher anymore either. So close it before this call.
-				return distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh, onTracingEvent, targets, schemaTSOverride)
+				schemaTS, initialHighWater, err := getTimestamps(ctx, jobExec, details, localState)
+				if err != nil {
+					return err
+				}
+				return distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh, onTracingEvent, targets, schemaTS, initialHighWater)
 				// Does targets need to be sorted? Not actually needed for show changefeed jobs, since not cutting off list.
 				// TODO: we're passing this targets. Need to update it after the watcher returns a diff.
 			})

@@ -58,11 +58,8 @@ func makeChangefeedConfigFromJobDetails(
 	}, nil
 }
 
-// AllTargets gets all the targets listed in a ChangefeedDetails,
-// from the statement time name map in old protos
-// or the TargetSpecifications in new ones.
-func AllTargets(
-	ctx context.Context, cd jobspb.ChangefeedDetails, execCfg *sql.ExecutorConfig,
+func RealAllTargets(
+	ctx context.Context, cd jobspb.ChangefeedDetails, execCfg *sql.ExecutorConfig, schemaTS hlc.Timestamp,
 ) (changefeedbase.Targets, error) {
 	targets := changefeedbase.Targets{}
 	var err error
@@ -77,7 +74,8 @@ func AllTargets(
 						return changefeedbase.Targets{}, errors.New("database-level changefeed is not supported with multiple targets")
 					}
 					// note: I added cd.StatementTime here. It's not using it currently.
-					targets, err = getTargetsFromDatabaseSpec(ctx, ts, execCfg, cd.StatementTime)
+					// targets, err = getTargetsFromDatabaseSpec(ctx, ts, execCfg, cd.StatementTime)
+					targets, err = getTargetsFromDatabaseSpec(ctx, ts, execCfg, schemaTS)
 					if err != nil {
 						return changefeedbase.Targets{}, err
 					}
@@ -108,18 +106,34 @@ func AllTargets(
 		}
 	}
 	return targets, err
+
+}
+
+// AllTargets gets all the targets listed in a ChangefeedDetails,
+// from the statement time name map in old protos
+// or the TargetSpecifications in new ones.
+func AllTargets(
+	ctx context.Context, cd jobspb.ChangefeedDetails, execCfg *sql.ExecutorConfig,
+) (changefeedbase.Targets, error) {
+	return RealAllTargets(ctx, cd, execCfg, hlc.Timestamp{})
 }
 
 func getTargetsFromDatabaseSpec(
-	ctx context.Context, ts jobspb.ChangefeedTargetSpecification, execCfg *sql.ExecutorConfig, statementTime hlc.Timestamp,
+	ctx context.Context, ts jobspb.ChangefeedTargetSpecification, execCfg *sql.ExecutorConfig, schemaTS hlc.Timestamp,
 ) (targets changefeedbase.Targets, err error) {
 	err = sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descs *descs.Collection) error {
-		// txn.KV().SetFixedTimestamp(ctx, statementTime)
-		// databaseDescriptor, err := descs.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, ts.DescID)
+		// if !schemaTS.IsEmpty() {
+		// 	if err := txn.KV().SetFixedTimestamp(ctx, schemaTS); err != nil {
+		// 		return errors.Wrap(err, "setting fixed timestamp to get targets from database spec")
+		// 	}
+		// 	fmt.Printf("1. set fixed timestamp to %s\n", schemaTS)
+		// }
+		// fmt.Printf("1. fetching database descriptor %d at timestamp %s\n", ts.DescID, schemaTS)
 		databaseDescriptor, err := descs.ByIDWithLeased(txn.KV()).Get().Database(ctx, ts.DescID)
 		if err != nil {
 			return err
 		}
+		// fmt.Printf("1. fetched database descriptor %d at timestamp %s\n", ts.DescID, schemaTS)
 		tables, err := descs.GetAllTablesInDatabase(ctx, txn.KV(), databaseDescriptor)
 		if err != nil {
 			return err
@@ -139,21 +153,20 @@ func getTargetsFromDatabaseSpec(
 			} else {
 				tableType = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
 			}
-
+			// fmt.Printf("1. adding table %d\n", desc.GetID())
+			_, err = descs.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, desc.GetID())
+			// if err != nil {
+			// fmt.Printf("1. error fetching table %d: %v\n", desc.GetID(), err)
+			// }
 			targets.Add(changefeedbase.Target{
 				Type:              tableType,
 				DescID:            desc.GetID(),
 				StatementTimeName: changefeedbase.StatementTimeName(desc.GetName()),
 			})
+			// fmt.Printf("1. added table %d\n", desc.GetID())
 		}
 		return nil
 	})
-	// otherTargets, err := fetchTableDescriptors(ctx, execCfg, targets, statementTime)
-	// if err != nil {
-	// 	return targets, err
-	// }
-	// fmt.Printf("targets: %v\n", targets)
-	// fmt.Printf("otherTargets: %v\n", otherTargets)
 	return targets, err
 }
 
