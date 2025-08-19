@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
@@ -45,6 +46,7 @@ func WriteBackupIndexMetadata(
 	if err != nil {
 		return errors.Wrapf(err, "creating external storage")
 	}
+	defer indexStore.Close()
 
 	if shouldWrite, err := shouldWriteIndex(
 		ctx, execCfg, indexStore, details,
@@ -120,10 +122,9 @@ func WriteBackupIndexMetadata(
 // words, we can remove these checks in v26.2+.
 func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string) (bool, error) {
 	var indexExists bool
-	indexSubdir := path.Join(backupbase.BackupIndexDirectoryPath, flattenSubdirForIndex(subdir))
 	if err := store.List(
 		ctx,
-		indexSubdir,
+		indexSubdir(subdir),
 		"/",
 		func(file string) error {
 			indexExists = true
@@ -136,6 +137,84 @@ func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string
 		return false, errors.Wrapf(err, "checking index exists in %s", subdir)
 	}
 	return indexExists, nil
+}
+
+// ListIndexes lists all the index files for a backup chain rooted by the full
+// backup indicated by the subdir. The store should be rooted at the default
+// collection URI (the one that contains the `index/` directory). It returns
+// the basenames of the listed index files. It assumes that the subdir is
+// resolved and not `LATEST`.
+//
+// The indexes are returned in reverse chronological order, i.e. the most recent
+// index is first in the list.
+func ListIndexes(
+	ctx context.Context, store cloud.ExternalStorage, subdir string,
+) ([]string, error) {
+	var indexBasenames []string
+	if err := store.List(
+		ctx,
+		indexSubdir(subdir)+"/",
+		"",
+		func(file string) error {
+			indexBasenames = append(indexBasenames, path.Base(file))
+			return nil
+		},
+	); err != nil {
+		return nil, errors.Wrapf(err, "listing indexes in %s", subdir)
+	}
+	return indexBasenames, nil
+}
+
+// ParseIndexFilename parses the start and end timestamps from the index
+// filename.
+//
+// Note: The timestamps are only millisecond-precise and so do not represent the
+// exact nano-specific times in the corresponding backup manifest.
+func parseIndexFilename(basename string) (start time.Time, end time.Time, err error) {
+	invalidFmtErr := errors.Newf("invalid index filename format: %s", basename)
+
+	if !strings.HasSuffix(basename, "_metadata.pb") {
+		return time.Time{}, time.Time{}, invalidFmtErr
+	}
+	parts := strings.Split(basename, "_")
+	if len(parts) != 4 {
+		return time.Time{}, time.Time{}, invalidFmtErr
+	}
+
+	if parts[1] != "0" {
+		start, err = time.Parse(backupbase.BackupIndexFilenameTimestampFormat, parts[1])
+		if err != nil {
+			return time.Time{}, time.Time{}, errors.Join(invalidFmtErr, err)
+		}
+	}
+	end, err = time.Parse(backupbase.BackupIndexFilenameTimestampFormat, parts[2])
+	if err != nil {
+		return time.Time{}, time.Time{}, errors.Join(invalidFmtErr, err)
+	}
+
+	return start, end, nil
+}
+
+// ParseBackupFilePathFromIndexFileName parses the path to a backup given the
+// basename of its index file and its subdirectory. For full backups, the
+// returned path is relative to the root of the backup. For incremental
+// backups, the path is relative to the incremental storage location starting
+// from the subdir (e.g. 20250730/130000.00-20250730-120000.00). It expects
+// that subdir is resolved and not `LATEST`.
+//
+// Note: While the path is stored in the index file, we can take a shortcut here
+// and derive it from the filename solely because backup paths are
+// millisecond-precise and so are the timestamps encoded in the filename.
+func parseBackupFilePathFromIndexFileName(subdir, basename string) (string, error) {
+	start, end, err := parseIndexFilename(basename)
+	if err != nil {
+		return "", err
+	}
+	if start.IsZero() {
+		return subdir, nil
+	}
+
+	return ConstructDateBasedIncrementalFolderName(start, end), nil
 }
 
 // shouldWriteIndex determines if a backup index file should be written for a
@@ -185,8 +264,7 @@ func getBackupIndexFilePath(subdir string, startTime, endTime hlc.Timestamp) (st
 		return "", errors.AssertionFailedf("expected subdir to be resolved and not be 'LATEST'")
 	}
 	return backuputils.JoinURLPath(
-		backupbase.BackupIndexDirectoryPath,
-		flattenSubdirForIndex(subdir),
+		indexSubdir(subdir),
 		getBackupIndexFileName(startTime, endTime),
 	), nil
 }
@@ -205,6 +283,14 @@ func getBackupIndexFileName(startTime, endTime hlc.Timestamp) string {
 		"%s_%s_%s_metadata.pb",
 		descEndTs, formattedStartTime, formattedEndTime,
 	)
+}
+
+// indexSubdir is a convenient helper function to get the corresponding index
+// path for a given full backup subdir. The path is relative to the root of the
+// collection URI and does not contain a trailing slash. It assumes that subdir
+// has been resolved and is not `LATEST`.
+func indexSubdir(subdir string) string {
+	return path.Join(backupbase.BackupIndexDirectoryPath, flattenSubdirForIndex(subdir))
 }
 
 // flattenSubdirForIndex flattens a full backup subdirectory to be used in the
