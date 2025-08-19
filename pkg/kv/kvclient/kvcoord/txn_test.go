@@ -1786,6 +1786,31 @@ func TestTxnBasicBufferedWrites(t *testing.T) {
 	})
 }
 
+// TestSetBufferedWritesEnabled sanity-checks the contract of
+// SetBufferedWritesEnabled.
+func TestSetBufferedWritesEnabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	ctx := context.Background()
+	root := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+	// We're allowed to both enable and disable buffered writes on the root.
+	root.SetBufferedWritesEnabled(true /* enabled */)
+	root.SetBufferedWritesEnabled(false /* enabled */)
+
+	tis, err := root.GetLeafTxnInputState(ctx, nil /* readsTree */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, tis, nil /* header */)
+	// On the leaf we're only allowed to disable and an attempt to enable
+	// buffered writes panics.
+	require.Panics(t, func() { leaf.SetBufferedWritesEnabled(true /* enabled */) })
+	leaf.SetBufferedWritesEnabled(false /* enabled */)
+}
+
 // TestTxnBufferedWritesOverlappingScan verifies that a transaction that buffers
 // its writes on the client, and then performs scans that overlap with some part
 // of the buffer, correctly observe read-your-own-writes semantics.

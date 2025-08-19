@@ -444,8 +444,8 @@ func (txn *Txn) debugNameLocked() string {
 }
 
 func (txn *Txn) SetBufferedWritesEnabled(enabled bool) {
-	if txn.typ != RootTxn {
-		panic(errors.AssertionFailedf("SetBufferedWritesEnabled() called on leaf txn"))
+	if enabled && txn.typ != RootTxn {
+		panic(errors.AssertionFailedf("SetBufferedWritesEnabled(true) called on leaf txn"))
 	}
 
 	txn.mu.Lock()

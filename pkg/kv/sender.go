@@ -134,10 +134,13 @@ type TxnSender interface {
 	SetOmitInRangefeeds()
 
 	// SetBufferedWritesEnabled toggles whether the writes are buffered on the
-	// gateway node until the commit time. Only allowed on the RootTxn. Buffered
-	// writes cannot be enabled on a txn that performed any requests. When
-	// disabling buffered writes, if there are any writes in the buffer, they
-	// are flushed with the next BatchRequest.
+	// gateway node until the commit time. Buffered writes cannot be enabled on
+	// a txn that performed any requests. When disabling buffered writes, if
+	// there are any writes in the buffer, they are flushed with the next
+	// BatchRequest.
+	//
+	// Disabling buffered writes is allowed on both the RootTxn and the LeafTxn
+	// whereas enabling them is only allowed on the RootTxn.
 	SetBufferedWritesEnabled(bool)
 
 	// BufferedWritesEnabled returns whether the buffered writes are enabled.
