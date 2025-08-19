@@ -430,22 +430,21 @@ done
 	}
 
 	if !zipCtx.includeRunningJobTraces {
-		zr.info("NOTE: Omitted traces of running jobs from this debug zip bundle." +
-			" Use the --" + cliflags.ZipIncludeRunningJobTraces.Name + " flag to enable the fetching of this" +
-			" data.")
+		zr.info("NOTE: Omitted traces of running jobs from this debug zip bundle."+
+			" Use the --%s flag to enable the fetching of this"+
+			" data.", cliflags.ZipIncludeRunningJobTraces.Name)
 	}
 
 	if !zipCtx.includeStacks {
-		zr.info("NOTE: Omitted node-level goroutine stack dumps from this debug zip bundle." +
-			" Use the --" + cliflags.ZipIncludeGoroutineStacks.Name + " flag to enable the fetching of this" +
-			" data.")
+		zr.info("NOTE: Omitted node-level goroutine stack dumps from this debug zip bundle."+
+			" Use the --%s flag to enable the fetching of this"+
+			" data.", cliflags.ZipIncludeGoroutineStacks.Name)
 	}
 
 	// TODO(obs-infra): remove deprecation warning once process completed in v23.2.
 	if zipCtx.redactLogs {
-		zr.info("WARNING: The --" + cliflags.ZipRedactLogs.Name +
-			" flag has been deprecated in favor of the --" + cliflags.ZipRedact.Name + " flag. " +
-			"The flag has been interpreted as --" + cliflags.ZipRedact.Name + " instead.")
+		zr.info("WARNING: The --%s flag has been deprecated in favor of the --%s flag. "+
+			"The flag has been interpreted as --%s instead.", cliflags.ZipRedactLogs.Name, cliflags.ZipRedact.Name, cliflags.ZipRedact.Name)
 	}
 
 	return nil

@@ -55,7 +55,7 @@ var (
 		"us1-fed": "ddog-gov.com",
 	}
 
-	datadogDashboardURLFormat = "https://us5.datadoghq.com/dashboard/bif-kwe-gx2/self-hosted-db-console-tsdump?" +
+	datadogDashboardURLFormat = "https://us5.datadoghq.com/dashboard/zx7-9yt-dz9?" +
 		"tpl_var_cluster=%s&tpl_var_upload_id=%s&tpl_var_upload_day=%d&tpl_var_upload_month=%d&tpl_var_upload_year=%d&from_ts=%d&to_ts=%d"
 	zipFileSignature            = []byte{0x50, 0x4B, 0x03, 0x04}
 	logMessageFormat            = "tsdump upload to datadog is partially failed for metric: %s"
@@ -177,7 +177,7 @@ func makeDatadogWriter(
 		apiKey:                          apiKey,
 		uploadID:                        newTsdumpUploadID(currentTime),
 		init:                            init,
-		namePrefix:                      "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
+		namePrefix:                      "cockroachdb.",
 		threshold:                       threshold,
 		uploadTime:                      currentTime,
 		storeToNodeMap:                  make(map[string]string),
