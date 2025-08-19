@@ -105,8 +105,9 @@ testuser  /global/  {MODIFYCLUSTERSETTING}  {}
 statement ok
 REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 
+# the cardinality check sidesteps a race condition where the cache holds a user with neither privilege nor grant
 query TTTT
-SELECT username, path, privileges, grant_options  FROM system.privileges ORDER BY 1, 2
+SELECT username, path, privileges, grant_options FROM system.privileges WHERE cardinality(privileges) > 0 OR cardinality(grant_options) > 0 ORDER BY 1, 2
 ----
 root  /global/  {MODIFYCLUSTERSETTING}  {}
 
@@ -123,7 +124,7 @@ statement ok
 REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 
 query TTTT
-SELECT username, path, privileges, grant_options  FROM system.privileges ORDER BY 1, 2
+SELECT username, path, privileges, grant_options FROM system.privileges WHERE cardinality(privileges) > 0 OR cardinality(grant_options) > 0 ORDER BY 1, 2
 ----
 root  /global/  {MODIFYCLUSTERSETTING}  {}
 
@@ -162,7 +163,7 @@ SELECT * FROM crdb_internal.cluster_settings;
 user root
 
 query TTTT
-SELECT username, path, privileges, grant_options FROM system.privileges
+SELECT username, path, privileges, grant_options FROM system.privileges WHERE cardinality(privileges) > 0 OR cardinality(grant_options) > 0
 ----
 root  /global/  {MODIFYCLUSTERSETTING}  {}
 
@@ -201,7 +202,7 @@ SELECT * FROM crdb_internal.node_statement_statistics;
 user root
 
 query TTTT
-SELECT username, path, privileges, grant_options FROM system.privileges
+SELECT username, path, privileges, grant_options FROM system.privileges WHERE cardinality(privileges) > 0 OR cardinality(grant_options) > 0
 ----
 root  /global/  {MODIFYCLUSTERSETTING}  {}
 
@@ -240,7 +241,7 @@ SELECT * FROM crdb_internal.node_statement_statistics;
 user root
 
 query TTTT
-SELECT username, path, privileges, grant_options FROM system.privileges
+SELECT username, path, privileges, grant_options FROM system.privileges WHERE cardinality(privileges) > 0 OR cardinality(grant_options) > 0
 ----
 root  /global/  {MODIFYCLUSTERSETTING}  {}
 

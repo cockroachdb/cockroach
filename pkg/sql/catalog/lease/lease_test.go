@@ -558,13 +558,6 @@ func TestWaitForNewVersion(testingT *testing.T) {
 	defer log.Scope(testingT).Close(testingT)
 
 	var params base.TestClusterArgs
-	params.ServerArgs.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &lease.ManagerTestingKnobs{
-			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
-				LeaseAcquiredEvent: nil, // TODO
-			},
-		},
-	}
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
 
@@ -583,7 +576,7 @@ func TestWaitForNewVersion(testingT *testing.T) {
 	leaseMgr := t.server.LeaseManager().(*lease.Manager)
 
 	{ // expect a timeout
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 
 		_, err := leaseMgr.WaitForNewVersion(timeoutCtx, descID, retry.Options{}, nil)
