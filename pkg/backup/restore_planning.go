@@ -1686,9 +1686,14 @@ func doRestorePlan(
 
 	var fullyResolvedSubdir string
 
+	defaultCollectionURI, _, err := backupdest.GetURIsByLocalityKV(from, "")
+	if err != nil {
+		return err
+	}
+
 	if strings.EqualFold(subdir, backupbase.LatestFileName) {
 		// set subdir to content of latest file
-		latest, err := backupdest.ReadLatestFile(ctx, from[0],
+		latest, err := backupdest.ReadLatestFile(ctx, defaultCollectionURI,
 			p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
 		if err != nil {
 			return err
@@ -1800,9 +1805,9 @@ func doRestorePlan(
 	// directories, return the URIs and manifests of all backup layers in all
 	// localities. Incrementals will be searched for automatically.
 	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
-		ctx, &mem, baseStores, incStores, mkStore, fullyResolvedBaseDirectory,
-		fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv,
-		p.User(), false, includeCompacted,
+		ctx, p.ExecCfg(), &mem, defaultCollectionURI, baseStores, incStores, mkStore, fullyResolvedSubdir,
+		fullyResolvedBaseDirectory, fullyResolvedIncrementalsDirectory, endTime, encryption,
+		&kmsEnv, p.User(), false, includeCompacted,
 	)
 	if err != nil {
 		return err

@@ -219,7 +219,14 @@ func ResolveDest(
 	}
 	defer incrementalStore.Close()
 
-	priors, err := FindPriorBackups(ctx, incrementalStore, OmitManifest)
+	rootStore, err := makeCloudStorage(ctx, collectionURI, user)
+	if err != nil {
+		return ResolvedDestination{}, err
+	}
+	defer rootStore.Close()
+	priors, err := FindAllIncrementalPaths(
+		ctx, execCfg, incrementalStore, rootStore, chosenSuffix, OmitManifest,
+	)
 	if err != nil {
 		return ResolvedDestination{}, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
 	}
@@ -537,10 +544,13 @@ func ListFullBackupsInCollection(
 // included in the result, otherwise they are filtered out.
 func ResolveBackupManifests(
 	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
 	mem *mon.BoundAccount,
+	defaultCollectionURI string,
 	baseStores []cloud.ExternalStorage,
 	incStores []cloud.ExternalStorage,
 	mkStore cloud.ExternalStorageFromURIFactory,
+	resolvedSubdir string,
 	fullyResolvedBaseDirectory []string,
 	fullyResolvedIncrementalsDirectory []string,
 	endTime hlc.Timestamp,
@@ -575,7 +585,14 @@ func ResolveBackupManifests(
 
 	var incrementalBackups []string
 	if len(incStores) > 0 {
-		incrementalBackups, err = FindPriorBackups(ctx, incStores[0], includeManifest)
+		rootStore, err := mkStore(ctx, defaultCollectionURI, user)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		defer rootStore.Close()
+		incrementalBackups, err = FindAllIncrementalPaths(
+			ctx, execCfg, incStores[0], rootStore, resolvedSubdir, includeManifest,
+		)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}

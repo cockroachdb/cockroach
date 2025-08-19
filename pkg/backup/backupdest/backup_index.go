@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -28,6 +29,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+)
+
+var (
+	ReadBackupIndexEnabled = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		"backup.index.read.enabled",
+		"if true, the backup index will be read when reading from a backup collection",
+		false,
+	)
 )
 
 // WriteBackupIndexMetadata writes an index file for the backup described by the
@@ -67,22 +77,7 @@ func WriteBackupIndexMetadata(
 		return errors.AssertionFailedf("incremental backup details missing a start time")
 	}
 
-	var backupCollectionURI string
-	// Find the root of the collection URI that the backup is being written to so
-	// that we can determine the relative path of the backup.
-	if details.StartTime.IsEmpty() {
-		backupCollectionURI = details.CollectionURI
-	} else {
-		var err error
-		backupCollectionURI, err = ResolveDefaultBaseIncrementalStorageLocation(
-			details.Destination.To, details.Destination.IncrementalStorage,
-		)
-		if err != nil {
-			return errors.Wrapf(err, "get incremental backup collection URI")
-		}
-	}
-
-	path, err := backuputils.RelativeBackupPathInCollectionURI(backupCollectionURI, details.URI)
+	path, err := backuputils.RelativeBackupPathInCollectionURI(details.CollectionURI, details.URI)
 	if err != nil {
 		return errors.Wrapf(err, "get relative backup path")
 	}

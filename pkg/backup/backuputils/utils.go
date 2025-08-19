@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 // URLSeparator represents the standard separator used in backup URLs.
@@ -76,15 +77,24 @@ func JoinURLPath(args ...string) string {
 func AppendPaths(uris []string, tailDir ...string) ([]string, error) {
 	retval := make([]string, len(uris))
 	for i, uri := range uris {
-		parsed, err := url.Parse(uri)
+		appended, err := AppendPath(uri, tailDir...)
 		if err != nil {
 			return nil, err
 		}
-		joinArgs := append([]string{parsed.Path}, tailDir...)
-		parsed.Path = JoinURLPath(joinArgs...)
-		retval[i] = parsed.String()
+		retval[i] = appended
 	}
 	return retval, nil
+}
+
+// AppendPath appends the tailDir to the `path` of the passed in uri.
+func AppendPath(uri string, tailDir ...string) (string, error) {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return "", err
+	}
+	joinArgs := append([]string{parsed.Path}, tailDir...)
+	parsed.Path = JoinURLPath(joinArgs...)
+	return parsed.String(), nil
 }
 
 // EncodeDescendingTS encodes a time.Time in a way such that later timestamps
@@ -102,13 +112,15 @@ func EncodeDescendingTS(ts time.Time) string {
 
 // RelativeBackupPathInCollectionURI returns the relative path of a backup
 // within a collection URI. Backup URI represents the URI that points to the
-// directory containing the backup manifest of the backup.
+// directory containing the backup manifest of the backup. The returned path
+// will never start with a slash and will only end with a slash if the provied
+// backup URI ends in a slash.
 //
 // Example:
 //
 //	collectionURI: "nodelocal://1/collection"
-//	backupURI: "nodelocal://1/collection/backup1/"
-//	returns: "backup1/"
+//	backupURI: "nodelocal://1/collection/subdir/inc/"
+//	returns: "subdir/inc/"
 func RelativeBackupPathInCollectionURI(collectionURI string, backupURI string) (string, error) {
 	backupURL, err := url.Parse(backupURI)
 	if err != nil {
@@ -118,7 +130,11 @@ func RelativeBackupPathInCollectionURI(collectionURI string, backupURI string) (
 	if err != nil {
 		return "", err
 	}
+	relPath, found := strings.CutPrefix(path.Clean(backupURL.Path), path.Clean(collectionURL.Path))
+	if !found {
+		return "", errors.New("backup URI is not a subpath of collection URI")
+	}
 
-	relPath := strings.TrimPrefix(path.Clean(backupURL.Path), path.Clean(collectionURL.Path))
-	return relPath, nil
+	cleaned := strings.TrimPrefix(relPath, string(URLSeparator))
+	return cleaned, nil
 }
