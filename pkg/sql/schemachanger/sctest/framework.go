@@ -653,6 +653,7 @@ func cumulativeTestForEachPostCommitStage(
 	t *testing.T,
 	relTestCaseDir string,
 	factory TestServerFactory,
+	prepFn func(t *testing.T, spec CumulativeTestSpec, dbName string),
 	tf func(t *testing.T, spec CumulativeTestCaseSpec),
 ) {
 	testFunc := func(t *testing.T, spec CumulativeTestSpec) {
@@ -716,6 +717,9 @@ func cumulativeTestForEachPostCommitStage(
 			})
 		}
 		var hasFailed bool
+		if prepFn != nil {
+			prepFn(t, spec, dbName)
+		}
 		for _, tc := range testCases {
 			fn := func(t *testing.T) {
 				tf(t, tc)
