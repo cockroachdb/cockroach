@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -554,6 +555,44 @@ hosts file.
 					for _, e := range errors {
 						fmt.Printf("%s: %s\n", e, collated[e].Names())
 					}
+				}
+			}
+
+			// Optionally, export an SSH client config file for the clusters.
+			// Only export if a pattern is specified or if the --mine flag is set.
+			if exportSSHConfig != "" && (listPattern != "" || listMine) {
+				hostTemplate := `Host %[1]s
+    HostName %[2]s
+    User %[3]s
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+%[4]s
+`
+				var allKeys strings.Builder
+				paths := make([]string, len(config.DefaultPubKeyNames))
+				for idx, name := range config.DefaultPubKeyNames {
+					paths[idx] = filepath.Join(config.SSHDirectory, name)
+				}
+				for _, p := range paths {
+					if _, notFoundErr := os.Stat(p); notFoundErr == nil {
+						allKeys.WriteString(fmt.Sprintf("    IdentityFile %s\n", p))
+					}
+				}
+
+				var configBuf strings.Builder
+				for _, c := range filteredCloud.Clusters {
+					for _, cVM := range c.VMs {
+						if cVM.PublicIP == "" {
+							continue
+						}
+						configBuf.WriteString(
+							fmt.Sprintf(hostTemplate, cVM.Name, cVM.PublicIP, config.SharedUser, allKeys.String()),
+						)
+					}
+				}
+				err = os.WriteFile(filepath.Join(exportSSHConfig), []byte(configBuf.String()), 0600)
+				if err != nil {
+					return errors.Wrapf(err, "failed to write SSH config file to %s", exportSSHConfig)
 				}
 			}
 			return nil
