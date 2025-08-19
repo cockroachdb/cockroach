@@ -1327,6 +1327,21 @@ CREATE TABLE system.prepared_transactions (
   CONSTRAINT "primary" PRIMARY KEY (global_id),
   FAMILY "primary" (global_id, transaction_id, transaction_key, prepared, owner, database, heuristic)
 );`
+
+	InspectErrorsTableSchema = `
+CREATE TABLE public.inspect_errors (
+    error_id UUID DEFAULT gen_random_uuid(),
+    job_id INT8 NOT NULL,
+    error_type STRING NOT NULL,
+    database_id OID NULL,
+    schema_id OID NULL,
+    id OID NOT NULL,
+    primary_key STRING NULL,
+    details STRING NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (error_id ASC),
+    INDEX object_idx (id ASC),
+	FAMILY "primary" (error_id, job_id, error_type, database_id, schema_id, id, primary_key, details)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1371,7 +1386,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_4_Start.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_4_InspectErrorsTable.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1568,6 +1583,7 @@ func MakeSystemTables() []SystemTable {
 		SystemJobStatusTable,
 		SystemJobMessageTable,
 		PreparedTransactionsTable,
+		InspectErrorsTable,
 	}
 }
 
@@ -5209,6 +5225,50 @@ var (
 				},
 			},
 			pk("global_id"),
+		),
+	)
+
+	InspectErrorsTable = makeSystemTable(
+		InspectErrorsTableSchema,
+		systemTable(
+			catconstants.InspectErrorsTableName,
+			descpb.InvalidID, // dynamically assigned table ID
+			[]descpb.ColumnDescriptor{
+				{Name: "error_id", ID: 1, Type: types.Uuid, DefaultExpr: &genRandomUUIDString},
+				{Name: "job_id", ID: 2, Type: types.Int},
+				{Name: "error_type", ID: 3, Type: types.String},
+				{Name: "database_id", ID: 4, Type: types.Oid, Nullable: true},
+				{Name: "schema_id", ID: 5, Type: types.Oid, Nullable: true},
+				{Name: "id", ID: 6, Type: types.Oid},
+				{Name: "primary_key", ID: 7, Type: types.String, Nullable: true},
+				{Name: "details", ID: 8, Type: types.String},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+
+					Name:        "primary",
+					ColumnNames: []string{"error_id", "job_id", "error_type", "database_id", "schema_id", "id", "primary_key", "details"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  catconstants.NamespaceTablePrimaryIndexID,
+				Unique:              true,
+				KeyColumnNames:      []string{"error_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1},
+			},
+			descpb.IndexDescriptor{
+				Name:                "object_idx",
+				ID:                  2,
+				Unique:              false,
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames:      []string{"id"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        []descpb.ColumnID{6},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+			},
 		),
 	)
 )

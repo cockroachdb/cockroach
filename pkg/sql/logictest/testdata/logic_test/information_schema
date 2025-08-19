@@ -1279,6 +1279,8 @@ NULL                   NULL                  UTF8                UCS            
 NULL                   NULL                  UTF8                UCS                   UTF8         test                     NULL                    NULL
 
 
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -1564,6 +1566,11 @@ system              public             29_72_2_not_null                         
 system              public             29_72_4_not_null                                                                                                prepared IS NOT NULL
 system              public             29_72_5_not_null                                                                                                owner IS NOT NULL
 system              public             29_72_6_not_null                                                                                                database IS NOT NULL
+system              public             29_73_1_not_null                                                                                                error_id IS NOT NULL
+system              public             29_73_2_not_null                                                                                                job_id IS NOT NULL
+system              public             29_73_3_not_null                                                                                                error_type IS NOT NULL
+system              public             29_73_6_not_null                                                                                                id IS NOT NULL
+system              public             29_73_8_not_null                                                                                                details IS NOT NULL
 system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
@@ -1598,6 +1605,8 @@ table_catalog  table_schema  table_name  column_name    constraint_catalog  cons
 system         public        locations   localityKey    system              public             primary
 system         public        locations   localityValue  system              public             primary
 
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -1883,6 +1892,11 @@ system              public             29_72_2_not_null                         
 system              public             29_72_4_not_null                                                                                                prepared IS NOT NULL
 system              public             29_72_5_not_null                                                                                                owner IS NOT NULL
 system              public             29_72_6_not_null                                                                                                database IS NOT NULL
+system              public             29_73_1_not_null                                                                                                error_id IS NOT NULL
+system              public             29_73_2_not_null                                                                                                job_id IS NOT NULL
+system              public             29_73_3_not_null                                                                                                error_type IS NOT NULL
+system              public             29_73_6_not_null                                                                                                id IS NOT NULL
+system              public             29_73_8_not_null                                                                                                details IS NOT NULL
 system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL

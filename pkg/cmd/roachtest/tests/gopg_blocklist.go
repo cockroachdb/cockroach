@@ -54,4 +54,7 @@ var gopgIgnoreList = blocklist{
 	`v10.TestColumnReuse`: "unknown",
 	// This test is flaky sometimes due to the use of temp tables.
 	`pg | soft delete with int column nil model ForceDelete | deletes the model`: "unknown",
+	// This test is sometimes flaky due to a small delta in the expected soft
+	// deletion timestamp (i.e. the test allows up to one seconds worth of difference).
+	`pg | soft delete with int column model | ForceDelete deletes the model`: "unknown",
 }
