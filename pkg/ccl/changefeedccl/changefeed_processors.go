@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -562,6 +563,16 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		return kvfeed.Config{}, err
 	}
 
+	// Create the initial span-timestamp pairs from the frontier
+	// (which already has checkpoint info restored).
+	var initialSpanTimePairs []kvcoord.SpanTimePair
+	for sp, ts := range ca.frontier.Entries() {
+		initialSpanTimePairs = append(initialSpanTimePairs, kvcoord.SpanTimePair{
+			Span:       sp,
+			StartAfter: ts,
+		})
+	}
+
 	return kvfeed.Config{
 		Writer:               buf,
 		Settings:             cfg.Settings,
@@ -569,11 +580,11 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		Codec:                cfg.Codec,
 		Clock:                cfg.DB.KV().Clock(),
 		Spans:                spans,
-		SpanLevelCheckpoint:  ca.spec.SpanLevelCheckpoint,
 		Targets:              ca.targets,
 		Metrics:              &ca.metrics.KVFeedMetrics,
 		MM:                   memMon,
 		InitialHighWater:     initialHighWater,
+		InitialSpanTimePairs: initialSpanTimePairs,
 		EndTime:              config.EndTime,
 		WithDiff:             filters.WithDiff,
 		WithFiltering:        filters.WithFiltering,
