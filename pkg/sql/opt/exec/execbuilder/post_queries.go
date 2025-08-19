@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // postQueryBuilder is a helper that fills in exec.PostQuery metadata; it
@@ -162,7 +163,7 @@ func (cb *postQueryBuilder) setupCascade(cascade *memo.FKCascade) exec.PostQuery
 			numBufferedRows int,
 			allowAutoCommit bool,
 		) (exec.Plan, error) {
-			const actionName = "cascade"
+			const actionName redact.SafeString = "cascade"
 			return cb.planPostQuery(
 				ctx, semaCtx, evalCtx, execFactory, bufferRef, numBufferedRows, allowAutoCommit,
 				cascade.Builder, actionName,
@@ -185,7 +186,7 @@ func (cb *postQueryBuilder) setupTriggers(triggers *memo.AfterTriggers) exec.Pos
 			numBufferedRows int,
 			allowAutoCommit bool,
 		) (exec.Plan, error) {
-			const actionName = "trigger"
+			const actionName redact.SafeString = "trigger"
 			return cb.planPostQuery(
 				ctx, semaCtx, evalCtx, execFactory, bufferRef, numBufferedRows, allowAutoCommit,
 				triggers.Builder, actionName,
@@ -209,7 +210,7 @@ func (cb *postQueryBuilder) planPostQuery(
 	numBufferedRows int,
 	allowAutoCommit bool,
 	builder memo.PostQueryBuilder,
-	actionName string,
+	actionName redact.SafeString,
 ) (exec.Plan, error) {
 	// 1. Set up a brand new memo in which to plan the cascading query.
 	var err error
