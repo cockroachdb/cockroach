@@ -57,6 +57,7 @@ ANALYZE json_tab
 statement ok
 ALTER TABLE json_tab SPLIT AT VALUES (10), (20)
 
+retry
 statement ok
 ALTER TABLE json_tab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 10), (ARRAY[3], 20)
 
@@ -166,6 +167,7 @@ ANALYZE array_tab
 statement ok
 ALTER TABLE array_tab SPLIT AT VALUES (3), (3)
 
+retry
 statement ok
 ALTER TABLE array_tab EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 3), (ARRAY[3], 5)
 

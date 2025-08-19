@@ -18,6 +18,7 @@ statement ok
 ALTER TABLE NumToStr SPLIT AT SELECT (i * 100 * 100 / 5)::int FROM generate_series(1, 4) AS g(i)
 
 # Relocate the five parts to the five nodes.
+retry
 statement ok
 ALTER TABLE NumToStr EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i+1], (i * 100 * 100 / 5)::int FROM generate_series(0, 4) AS g(i)
