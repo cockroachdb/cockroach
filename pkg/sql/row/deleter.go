@@ -25,13 +25,13 @@ import (
 )
 
 // TODO(yuzefovich): we can probably increase this value.
-const defaultDeleteRangeChunkSize = 600
+const defaultDeleteRangeChunkSize = 1
 
 var deleteRangeChunkSize = metamorphic.ConstantWithTestRange(
 	"row-delete-range-chunk-size",
 	defaultDeleteRangeChunkSize,
 	1,
-	32,
+	1,
 )
 
 // DeleteRangeChunkSize returns the maximum number of keys deleted per chunk via
