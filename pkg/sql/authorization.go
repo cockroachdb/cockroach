@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/errors"
 )
 
@@ -119,6 +120,16 @@ func (p *planner) HasPrivilege(
 	// with an invalid API usage.
 	if p.txn == nil {
 		return false, errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
+	}
+
+	// Check for system table access restrictions before any admin bypasses
+	if d, ok := privilegeObject.(catalog.TableDescriptor); ok {
+		// Check for system table access restrictions before any admin bypasses
+		if catalog.IsSystemDescriptor(d) {
+			if err := unsafesql.CheckInternalsAccess(p.SessionData()); err != nil {
+				return false, err
+			}
+		}
 	}
 
 	// root, admin and node user should always have privileges, except NOSQLLOGIN.

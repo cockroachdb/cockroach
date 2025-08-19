@@ -8,6 +8,7 @@ package sql_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,13 +17,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -288,4 +293,85 @@ func TestEnsureUserOnlyBelongsToRoles(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, getRoles(testUser))
 	})
+}
+
+func checkUnsafeErr(t *testing.T, err error) {
+	var pqErr *pq.Error
+
+	if errors.Is(err, sqlerrors.ErrUnsafeTableAccess) {
+		return
+	}
+
+	if errors.As(err, &pqErr) &&
+		pqErr.Code == "42501" &&
+		strings.Contains(pqErr.Message, "Access to crdb_internal and system is restricted") {
+		return
+	}
+
+	t.Fatal("expected unsafe access error, got", err)
+}
+
+func TestCheckUnsafeInternalsAccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	q := "SELECT * FROM system.namespace"
+
+	t.Run("as an external querier", func(t *testing.T) {
+		for _, test := range []struct {
+			AllowUnsafeInternals bool
+			Passes               bool
+		}{
+			{AllowUnsafeInternals: false, Passes: false},
+			{AllowUnsafeInternals: true, Passes: true},
+		} {
+			t.Run(fmt.Sprintf("%t", test), func(t *testing.T) {
+				conn := s.SQLConn(t)
+				_, err := conn.Exec("SET allow_unsafe_internals = $1", test.AllowUnsafeInternals)
+				require.NoError(t, err)
+
+				_, err = conn.Query(q)
+				if test.Passes {
+					require.NoError(t, err)
+				} else {
+					checkUnsafeErr(t, err)
+				}
+			})
+		}
+	})
+
+	t.Run("as an internal querier", func(t *testing.T) {
+		for _, test := range []struct {
+			AllowUnsafeInternals bool
+			Passes               bool
+		}{
+			{AllowUnsafeInternals: false, Passes: true},
+			{AllowUnsafeInternals: true, Passes: true},
+		} {
+			t.Run(fmt.Sprintf("%t", test), func(t *testing.T) {
+				idb := s.InternalDB().(isql.DB)
+				err := idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					txn.SessionData().LocalOnlySessionData.AllowUnsafeInternals = test.AllowUnsafeInternals
+
+					_, err := txn.QueryBuffered(ctx, "internal-query", txn.KV(), q)
+					return err
+				})
+
+				require.NoError(t, err)
+
+				if test.Passes {
+					require.NoError(t, err)
+				} else {
+					checkUnsafeErr(t, err)
+				}
+			})
+		}
+	})
+
 }
