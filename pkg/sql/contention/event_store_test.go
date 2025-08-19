@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -247,6 +249,84 @@ func BenchmarkEventStoreIntake(b *testing.B) {
 			run(b, store, numOfConcurrentWriter)
 		})
 	}
+}
+
+func TestLogResolvedEvents(t *testing.T) {
+	ctx := context.Background()
+
+	// Set up log interception
+	spy := logtestutils.NewLogSpy(t, logtestutils.MatchesF("contention time observed"))
+	cleanup := log.InterceptWith(ctx, spy)
+	defer cleanup()
+
+	// Create test contention events
+	events := []contentionpb.ExtendedContentionEvent{
+		// Two events with same waiting (stmt, txn), blocking txn and key
+		// These should aggregate.
+		{
+			WaitingStmtFingerprintID: 123,
+			WaitingTxnFingerprintID:  456,
+			BlockingTxnFingerprintID: 789,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:      []byte("test-key-1"),
+				Duration: 100 * time.Millisecond,
+			},
+		},
+		{
+			WaitingStmtFingerprintID: 123,
+			WaitingTxnFingerprintID:  456,
+			BlockingTxnFingerprintID: 789,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:      []byte("test-key-1"),
+				Duration: 200 * time.Millisecond,
+			},
+		},
+		// Key changes.
+		// New combination.
+		{
+			WaitingStmtFingerprintID: 123,
+			WaitingTxnFingerprintID:  456,
+			BlockingTxnFingerprintID: 789,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:      []byte("test-key-2"),
+				Duration: 100 * time.Millisecond,
+			},
+		},
+		// test-key-1 again, but different waiting stmt.
+		// New combination.
+		{
+			WaitingStmtFingerprintID: 321,
+			WaitingTxnFingerprintID:  456,
+			BlockingTxnFingerprintID: 789,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:      []byte("test-key-1"),
+				Duration: 50 * time.Millisecond,
+			},
+		},
+		// test-key-1 again, same waiting stmt and txn, but different blocking txn.
+		// New combination.
+		{
+			WaitingStmtFingerprintID: 123,
+			WaitingTxnFingerprintID:  456,
+			BlockingTxnFingerprintID: 888,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:      []byte("test-key-1"),
+				Duration: 20 * time.Millisecond,
+			},
+		},
+	}
+
+	logResolvedEvents(ctx, events)
+	log1 := fmt.Sprintf("300ms contention time observed for waiting stmt ‹%d› in waiting txn ‹%d› blocked by txn ‹%d› on key ‹\"%s\"›", 123, 456, 789, "test-key-1")
+	log2 := fmt.Sprintf("100ms contention time observed for waiting stmt ‹%d› in waiting txn ‹%d› blocked by txn ‹%d› on key ‹\"%s\"›", 123, 456, 789, "test-key-2")
+	log3 := fmt.Sprintf("50ms contention time observed for waiting stmt ‹%d› in waiting txn ‹%d› blocked by txn ‹%d› on key ‹\"%s\"›", 321, 456, 789, "test-key-1")
+	log4 := fmt.Sprintf("20ms contention time observed for waiting stmt ‹%d› in waiting txn ‹%d› blocked by txn ‹%d› on key ‹\"%s\"›", 123, 456, 888, "test-key-1")
+	require.True(t, spy.Has(logtestutils.MatchesF(log1)))
+	require.True(t, spy.Has(logtestutils.MatchesF(log2)))
+	require.True(t, spy.Has(logtestutils.MatchesF(log3)))
+	require.True(t, spy.Has(logtestutils.MatchesF(log4)))
+	entries := spy.ReadAll()
+	require.Len(t, entries, 4)
 }
 
 func eventSliceToMap(

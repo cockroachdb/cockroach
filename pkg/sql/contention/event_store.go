@@ -7,7 +7,9 @@ package contention
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -296,14 +298,14 @@ func (s *eventStore) getEventByEventHash(
 }
 
 // flushAndResolve is the main method called by the resolver goroutine each
-// time the timer fires. This method does two things:
+// time the timer fires. This method does three things:
 //  1. it triggers the batching buffer to flush its content into the intake
 //     goroutine. This is to ensure that in the case where we have very low
 //     rate of contentions, the contention events won't be permanently trapped
 //     in the batching buffer.
 //  2. it invokes the dequeue() method on the resolverQueue. This cause the
 //     resolver to perform txnID resolution. See inline comments on the method
-//     for details.
+//  3. Lastly, it logs the resolved events.
 func (s *eventStore) flushAndResolve(ctx context.Context) error {
 	// This forces the write-buffer flushes its batch into the intake goroutine.
 	// The intake goroutine will asynchronously add all events in the batch
@@ -319,6 +321,9 @@ func (s *eventStore) flushAndResolve(ctx context.Context) error {
 	// Ensure that all the resolved contention events are added to the store
 	// before we bubble up the error.
 	s.upsertBatch(result)
+
+	// Aggregate the resolved event information for logging.
+	logResolvedEvents(ctx, result)
 
 	return err
 }
@@ -346,6 +351,27 @@ func (s *eventStore) resolutionIntervalWithJitter() time.Duration {
 	frac := 1 + (2*rand.Float64()-1)*0.15
 	jitteredInterval := time.Duration(frac * float64(baseInterval.Nanoseconds()))
 	return jitteredInterval
+}
+
+func logResolvedEvents(ctx context.Context, events []contentionpb.ExtendedContentionEvent) {
+	eventsAggregated := make(map[string]time.Duration)
+	for i := range events {
+		event := events[i]
+		// Create a composite key string
+		key := fmt.Sprintf("%d:%d:%d:%s",
+			event.WaitingStmtFingerprintID,
+			event.WaitingTxnFingerprintID,
+			event.BlockingTxnFingerprintID,
+			event.BlockingEvent.Key)
+		// Add the contention time to the existing total for this key combination
+		eventsAggregated[key] += event.BlockingEvent.Duration
+	}
+
+	for k := range eventsAggregated {
+		keySplit := strings.Split(k, ":")
+		log.Infof(ctx, "%v contention time observed for waiting stmt %s in waiting txn %s "+
+			"blocked by txn %s on key %s", eventsAggregated[k], keySplit[0], keySplit[1], keySplit[2], keySplit[3])
+	}
 }
 
 func entryBytes(event *contentionpb.ExtendedContentionEvent) int {
