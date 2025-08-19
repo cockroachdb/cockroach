@@ -700,9 +700,6 @@ type restoreSpecs struct {
 
 	setUpStmts []string
 
-	// extraArgs are passed to the cockroach binary at startup.
-	extraArgs []string
-
 	// skip, if non-empty, skips the test with the given reason.
 	skip string
 
@@ -790,7 +787,7 @@ func (rd *restoreDriver) defaultClusterSettings() []install.ClusterSettingOption
 
 func (rd *restoreDriver) roachprodOpts() option.StartOpts {
 	opts := option.NewStartOpts(option.NoBackupSchedule)
-	opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs, rd.sp.extraArgs...)
+	opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs, "--vmodule=cloud_logging_transport=1")
 	if rd.c.Spec().SSDs > 1 && !rd.c.Spec().RAID0 {
 		opts.RoachprodOpts.StoreCount = rd.c.Spec().SSDs
 	}
