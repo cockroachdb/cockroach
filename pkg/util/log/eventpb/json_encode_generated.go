@@ -28,6 +28,62 @@ func (m *AdminQuery) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *AggregatedContentionInfo) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.WaitingStmtFingerprintId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"WaitingStmtFingerprintId\":"...)
+		b = strconv.AppendUint(b, uint64(m.WaitingStmtFingerprintId), 10)
+	}
+
+	if m.WaitingTxnFingerprintId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"WaitingTxnFingerprintId\":"...)
+		b = strconv.AppendUint(b, uint64(m.WaitingTxnFingerprintId), 10)
+	}
+
+	if m.BlockingTxnFingerprintId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"BlockingTxnFingerprintId\":"...)
+		b = strconv.AppendUint(b, uint64(m.BlockingTxnFingerprintId), 10)
+	}
+
+	if m.ContendedKey != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ContendedKey\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.ContendedKey)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.Duration != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Duration\":"...)
+		b = strconv.AppendInt(b, int64(m.Duration), 10)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *AlterChangefeed) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonChangefeedEventDetails.AppendJSONFields(printComma, b)
