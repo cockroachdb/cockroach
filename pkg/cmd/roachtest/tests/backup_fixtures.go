@@ -180,8 +180,12 @@ type backupDriver struct {
 }
 
 func (bd *backupDriver) prepareCluster(ctx context.Context) {
+	startOptions := option.NewStartOpts(option.NoBackupSchedule)
+	startOptions.RoachprodOpts.ExtraArgs = append(
+		startOptions.RoachprodOpts.ExtraArgs,
+		"--vmodule=cloud_logging_transport=1")
 	bd.c.Start(
-		ctx, bd.t.L(), option.NewStartOpts(option.NoBackupSchedule),
+		ctx, bd.t.L(), startOptions,
 		install.MakeClusterSettings(
 			install.ClusterSettingsOption{
 				// Large imports can run into a death spiral where splits fail because

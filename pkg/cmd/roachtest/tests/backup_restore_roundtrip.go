@@ -141,7 +141,7 @@ func backupRestoreRoundTrip(
 	})
 
 	startOpts := roachtestutil.MaybeUseMemoryBudget(t, 50)
-	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=split_queue=3"}
+	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=split_queue=3,cloud_logging_transport=1"}
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(envOption), c.CRDBNodes())
 	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
