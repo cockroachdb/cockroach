@@ -86,7 +86,7 @@ func TestPCRPrivs(t *testing.T) {
 	c.DestSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser))
 
 	// Ensure the source user has the REPLICATION privilege.
-	testuser.ExpectErr(t, "user testuser2 does not have REPLICATIONSOURCE system privilege", streamReplStmt)
+	testuser.ExpectErr(t, "user testuser2 does not have either REPLICATIONSOURCE or VIEWSYSTEMTABLE system privilege", streamReplStmt)
 	sourcePriv := "REPLICATIONSOURCE"
 	if c.Rng.Intn(3) == 0 {
 		// Test deprecated privilege name.

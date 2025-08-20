@@ -475,14 +475,28 @@ func (r *replicationStreamManagerImpl) AuthorizeViaReplicationPriv(
 		}
 
 		// Fallback to legacy REPLICATION priv.
-		if fallbackErr := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
+		fallbackErr := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
 			syntheticprivilege.GlobalPrivilegeObject,
-			privilege.REPLICATION); fallbackErr != nil {
-			// We want to return the original error which relates to authorizing with
-			// the REPLICATIONSOURCE priv instead of the error from authorizing with
-			// the deprecated REPLICATION priv.
+			privilege.REPLICATION)
+
+		if fallbackErr == nil {
+			return nil
+		} else if pgerror.GetPGCode(fallbackErr) != pgcode.InsufficientPrivilege {
 			return err
 		}
+
+		// validate VIEWSYSTEMTABLE privilege. This check is used
+		// in debug.zip generation flow as we are going to rely on
+		// restricted privilege access.
+		if fallbackErr = r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
+			syntheticprivilege.GlobalPrivilegeObject,
+			privilege.VIEWSYSTEMTABLE); fallbackErr != nil {
+
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"user %s does not have either %s or %s system privilege",
+				r.evalCtx.SessionData().User(), privilege.REPLICATIONSOURCE, privilege.VIEWSYSTEMTABLE)
+		}
+
 		return nil
 	}
 
