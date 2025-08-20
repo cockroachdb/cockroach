@@ -163,7 +163,7 @@ func (f *keyFormat) Type() string {
 // engine, they should manually open it using storage.Open. The returned Env has
 // 1 reference and the caller must ensure it's closed.
 func OpenFilesystemEnv(dir string, rw fs.RWMode) (*fs.Env, error) {
-	envConfig := fs.EnvConfig{RW: rw}
+	envConfig := fs.EnvConfig{RW: rw, Version: serverCfg.Settings.Version}
 	if err := fillEncryptionOptionsForStore(dir, &envConfig); err != nil {
 		return nil, err
 	}
@@ -1744,7 +1744,9 @@ func pebbleCryptoInitializer(ctx context.Context) {
 		encryptedPaths = append(encryptedPaths, spec.Path)
 	}
 	resolveFn := func(dir string) (*fs.Env, error) {
-		var envConfig fs.EnvConfig
+		envConfig := fs.EnvConfig{
+			Version: serverCfg.Settings.Version,
+		}
 		if err := fillEncryptionOptionsForStore(dir, &envConfig); err != nil {
 			return nil, err
 		}

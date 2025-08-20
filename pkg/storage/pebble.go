@@ -1075,54 +1075,25 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			cfg.opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: logCtx, factory: cfg.remoteStorageFactory}
 		}
 	}
+	// If the store cluster version is not empty, it means that we initialized
+	// the env using a min-version file. We can use that to determine if the
+	// store should already exist or not.
+	initFromMinVersionFile := cfg.env.StoreClusterVersion != (roachpb.Version{})
 
-	// Read the current store cluster version.
-	storeClusterVersion, minVerFileExists, err := getMinVersion(p.cfg.env.UnencryptedFS, cfg.env.Dir)
-	if err != nil {
-		return nil, err
+	if !initFromMinVersionFile && (cfg.opts.ErrorIfNotExists || cfg.opts.ReadOnly) {
+		filename := p.cfg.env.UnencryptedFS.PathJoin(cfg.env.Dir, fs.MinVersionFilename)
+		return nil, errors.Errorf(
+			"pebble: database %q does not exist (missing required file %q)",
+			cfg.env.Dir, filename,
+		)
 	}
-	if minVerFileExists {
-		// Avoid running a binary too new for this store. This is what you'd catch
-		// if, say, you restarted directly from v21.2 into v22.2 (bumping the min
-		// version) without going through v22.1 first.
-		//
-		// Note that "going through" above means that v22.1 successfully upgrades
-		// all existing stores. If v22.1 crashes half-way through the startup
-		// sequence (so now some stores have v21.2, but others v22.1) you are
-		// expected to run v22.1 again (hopefully without the crash this time) which
-		// would then rewrite all the stores.
-		if v := cfg.settings.Version; storeClusterVersion.Less(v.MinSupportedVersion()) {
-			if storeClusterVersion.Major < clusterversion.DevOffset && v.LatestVersion().Major >= clusterversion.DevOffset {
-				return nil, errors.Errorf(
-					"store last used with cockroach non-development version v%s "+
-						"cannot be opened by development version v%s",
-					storeClusterVersion, v.LatestVersion(),
-				)
-			}
-			return nil, errors.Errorf(
-				"store last used with cockroach version v%s "+
-					"is too old for running version v%s (which requires data from v%s or later)",
-				storeClusterVersion, v.LatestVersion(), v.MinSupportedVersion(),
-			)
-		}
-		cfg.opts.ErrorIfNotExists = true
-	} else {
-		if cfg.opts.ErrorIfNotExists || cfg.opts.ReadOnly {
-			// Make sure the message is not confusing if the store does exist but
-			// there is no min version file.
-			filename := p.cfg.env.UnencryptedFS.PathJoin(cfg.env.Dir, MinVersionFilename)
-			return nil, errors.Errorf(
-				"pebble: database %q does not exist (missing required file %q)",
-				cfg.env.Dir, filename,
-			)
-		}
-		// If there is no min version file, there should be no store. If there is
-		// one, it's either 1) a store from a very old version (which we don't want
-		// to open) or 2) an empty store that was created from a previous bootstrap
-		// attempt that failed right before writing out the min version file. We set
-		// a flag to disallow the open in case 1.
-		cfg.opts.ErrorIfNotPristine = true
-	}
+	cfg.opts.ErrorIfNotExists = cfg.opts.ErrorIfNotExists || initFromMinVersionFile
+	// If there is no min version file, there should be no store. If there is
+	// one, it's either 1) a store from a very old version (which we don't want
+	// to open) or 2) an empty store that was created from a previous bootstrap
+	// attempt that failed right before writing out the min version file. We set
+	// a flag to disallow the open in case 1.
+	cfg.opts.ErrorIfNotPristine = !initFromMinVersionFile
 
 	if WorkloadCollectorEnabled {
 		p.replayer.Attach(cfg.opts)
@@ -1131,10 +1102,10 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	db, err := pebble.Open(cfg.env.Dir, cfg.opts)
 	if err != nil {
 		// Decorate the errors caused by the flags we set above.
-		if minVerFileExists && errors.Is(err, pebble.ErrDBDoesNotExist) {
+		if initFromMinVersionFile && errors.Is(err, pebble.ErrDBDoesNotExist) {
 			err = errors.Wrap(err, "min version file exists but store doesn't")
 		}
-		if !minVerFileExists && errors.Is(err, pebble.ErrDBNotPristine) {
+		if !initFromMinVersionFile && errors.Is(err, pebble.ErrDBNotPristine) {
 			err = errors.Wrap(err, "store has no min-version file; this can "+
 				"happen if the store was created by an old CockroachDB version that is no "+
 				"longer supported")
@@ -1143,7 +1114,8 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 	p.db = db
 
-	if !minVerFileExists {
+	storeClusterVersion := cfg.env.StoreClusterVersion
+	if storeClusterVersion == (roachpb.Version{}) {
 		storeClusterVersion = cfg.settings.Version.ActiveVersionOrEmpty(ctx).Version
 		if storeClusterVersion == (roachpb.Version{}) {
 			// If there is no active version, use the minimum supported version.
@@ -2301,7 +2273,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 
 	// TODO(#90543, cockroachdb/pebble#2285): move spans info to Pebble manifest.
 	if len(spans) > 0 {
-		if err := safeWriteToUnencryptedFile(
+		if err := fs.SafeWriteToUnencryptedFile(
 			p.cfg.env.UnencryptedFS, dir, p.cfg.env.PathJoin(dir, "checkpoint.txt"),
 			checkpointSpansNote(spans),
 			fs.UnspecifiedWriteCategory,

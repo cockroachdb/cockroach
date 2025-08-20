@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl/fipscclbase"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -44,7 +43,7 @@ type sqlConn struct {
 	conn         *pgx.Conn
 	reconnecting bool
 
-	// passwordMissing is true if the url is missing a password.
+	// passwordMissing is true iff the url is missing a password.
 	passwordMissing bool
 
 	// alwaysInferResultTypes is true iff the client should always use the
@@ -183,10 +182,6 @@ func (c *sqlConn) EnsureConn(ctx context.Context) error {
 	base, err := pgx.ParseConfig(c.url)
 	if err != nil {
 		return wrapConnError(err)
-	}
-	// Under FIPS 140-3 mode, the password must be at least 14 characters long.
-	if fipscclbase.IsFIPSReady() && !c.passwordMissing && len(base.Password) < fipscclbase.FIPSMinPasswordLength {
-		return errors.Newf("password must be at least %d characters long", fipscclbase.FIPSMinPasswordLength)
 	}
 	// Add a notice handler - re-use the cliOutputError function in this case.
 	base.OnNotice = func(_ *pgconn.PgConn, notice *pgconn.Notice) {
@@ -773,10 +768,6 @@ func (c *sqlConn) fillPassword() error {
 	pwd, err := pprompt.PromptForPassword("" /* prompt */)
 	if err != nil {
 		return err
-	}
-	// Under FIPS 140-3 mode, the password must be at least 14 characters long.
-	if fipscclbase.IsFIPSReady() && len(pwd) < fipscclbase.FIPSMinPasswordLength {
-		return errors.Newf("password must be at least %d characters long", fipscclbase.FIPSMinPasswordLength)
 	}
 	connURL.User = url.UserPassword(connURL.User.Username(), pwd)
 	c.url = connURL.String()

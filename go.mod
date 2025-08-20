@@ -1,6 +1,6 @@
 module github.com/cockroachdb/cockroach
 
-go 1.24.5
+go 1.23.7
 
 // golang.org/x/* packages are maintained and curated by the go project, just
 // without the backwards compatibility promises the standard library, and thus
@@ -126,20 +126,27 @@ require (
 	github.com/bazelbuild/rules_go v0.26.0
 	github.com/biogo/store v0.0.0-20160505134755-913427a1d5e8
 	github.com/blevesearch/snowballstem v0.9.0
+	github.com/buchgr/bazel-remote v1.3.3
+	github.com/bufbuild/buf v0.56.0
 	github.com/charmbracelet/bubbles v0.15.1-0.20230123181021-a6a12c4a31eb
+	github.com/client9/misspell v0.3.4
 	github.com/cockroachdb/apd/v3 v3.2.1
-	github.com/cockroachdb/changefeedpb v0.0.0-20250807205816-647db5c731b8
+	github.com/cockroachdb/changefeedpb v0.0.0-20250818184245-aab9e65dff20
 	github.com/cockroachdb/cmux v0.0.0-20250514152509-914d3bf9ec58
 	github.com/cockroachdb/cockroach-go/v2 v2.4.1
+	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548
 	github.com/cockroachdb/crlib v0.0.0-20250718215705-7ff5051265b9
 	github.com/cockroachdb/datadriven v1.0.3-0.20250407164829-2945557346d5
 	github.com/cockroachdb/errors v1.12.0
+	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20250813233102-eaca9d0cc5ea
+	github.com/cockroachdb/pebble v0.0.0-20250818192107-5d018b93e914
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
+	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb
+	github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40
 	github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8
 	github.com/cockroachdb/version v0.0.0-20250509181251-54dac3003410
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
@@ -172,6 +179,7 @@ require (
 	github.com/google/skylark v0.0.0-20181101142754-a5f7082aabed
 	github.com/googleapis/gax-go/v2 v2.7.1
 	github.com/gorilla/mux v1.8.0
+	github.com/goware/modvendor v0.5.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20240215164046-eb0e60d27cb7
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/guptarohit/asciigraph v0.7.3
@@ -181,6 +189,7 @@ require (
 	github.com/jaegertracing/jaeger v1.18.1
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
 	github.com/jordanlewis/gcassert v0.0.0-20240401195008-3141cbd028c0
+	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.8.0
 	github.com/kisielk/gotool v1.0.0
 	github.com/klauspost/compress v1.17.11
@@ -198,8 +207,11 @@ require (
 	github.com/maruel/panicparse/v2 v2.2.2
 	github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2
 	github.com/mattn/go-isatty v0.0.20
+	github.com/mattn/goveralls v0.0.2
+	github.com/mibk/dupl v1.0.0
 	github.com/mitchellh/reflectwalk v1.0.0
 	github.com/mkungla/bexp/v3 v3.0.1
+	github.com/mmatczuk/go_generics v0.0.0-20181212143635-0aaa050f9bab
 	github.com/montanaflynn/stats v0.7.1
 	github.com/mozillazg/go-slugify v0.2.0
 	github.com/nightlyone/lockfile v1.0.0
@@ -217,6 +229,7 @@ require (
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.42.0
 	github.com/prometheus/prometheus v1.8.2-0.20210914090109-37468d88dce8
+	github.com/pseudomuto/protoc-gen-doc v1.3.2
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529
@@ -231,6 +244,7 @@ require (
 	github.com/twmb/franz-go v1.18.0
 	github.com/twmb/franz-go/pkg/kadm v1.11.0
 	github.com/twpayne/go-geom v1.4.2
+	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/xdg-go/pbkdf2 v1.0.0
 	github.com/xdg-go/scram v1.1.2
 	github.com/xdg-go/stringprep v1.0.4
@@ -244,6 +258,7 @@ require (
 	go.opentelemetry.io/proto/otlp v0.11.0
 	golang.org/x/perf v0.0.0-20230113213139-801c7ef9e5c5
 	golang.org/x/term v0.30.0
+	golang.org/x/tools/go/vcs v0.1.0-deprecated
 	gonum.org/v1/gonum v0.15.1
 	google.golang.org/genproto/googleapis/api v0.0.0-20230525234035-dd9d682886f9
 	gopkg.in/yaml.v2 v2.4.0
@@ -297,18 +312,12 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
 	github.com/bits-and-blooms/bitset v1.4.0 // indirect
-	github.com/buchgr/bazel-remote v1.3.3 // indirect
-	github.com/bufbuild/buf v0.56.0 // indirect
 	github.com/campoy/embedmd v1.0.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
-	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548 // indirect
-	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 // indirect
-	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b // indirect
 	github.com/cockroachdb/swiss v0.0.0-20250624142022-d6e517c1d961 // indirect
-	github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40 // indirect
 	github.com/danieljoos/wincred v1.1.2 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/deepmap/oapi-codegen v1.6.0 // indirect
@@ -355,7 +364,6 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
-	github.com/goware/modvendor v0.5.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
@@ -380,7 +388,6 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kamstrup/intmap v0.5.1 // indirect
-	github.com/kevinburke/go-bindata v3.13.0+incompatible // indirect
 	github.com/klauspost/asmfmt v1.3.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
@@ -404,7 +411,6 @@ require (
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
-	github.com/mmatczuk/go_generics v0.0.0-20181212143635-0aaa050f9bab // indirect
 	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
@@ -423,7 +429,6 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/pquerna/cachecontrol v0.0.0-20200921180117-858c6e7e6b7e // indirect
 	github.com/prometheus/procfs v0.10.1 // indirect
-	github.com/pseudomuto/protoc-gen-doc v1.3.2 // indirect
 	github.com/pseudomuto/protokit v0.2.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
@@ -440,7 +445,6 @@ require (
 	github.com/twmb/franz-go/pkg/kmsg v1.9.0 // indirect
 	github.com/twpayne/go-kml v1.5.2 // indirect
 	github.com/urfave/cli/v2 v2.3.0 // indirect
-	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	github.com/zeebo/errs v1.2.2 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
@@ -456,7 +460,6 @@ require (
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.19.0 // indirect
 	golang.org/x/image v0.21.0 // indirect
-	golang.org/x/tools/go/vcs v0.1.0-deprecated // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gonum.org/v1/plot v0.14.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
@@ -483,30 +486,6 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.3.0
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-)
-
-tool (
-	github.com/buchgr/bazel-remote
-	github.com/bufbuild/buf/cmd/buf
-	github.com/cockroachdb/crlfmt
-	github.com/cockroachdb/go-test-teamcity
-	github.com/cockroachdb/gostdlib/cmd/gofmt
-	github.com/cockroachdb/gostdlib/x/tools/cmd/goimports
-	github.com/cockroachdb/stress
-	github.com/cockroachdb/tools/cmd/stringer
-	github.com/golang/mock/mockgen
-	github.com/goware/modvendor
-	github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
-	github.com/kevinburke/go-bindata/go-bindata
-	github.com/kisielk/errcheck
-	github.com/mmatczuk/go_generics/cmd/go_generics
-	github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc
-	github.com/wadey/gocovmerge
-	golang.org/x/perf/cmd/benchstat
-	golang.org/x/tools/cmd/goyacc
-	golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow
-	golang.org/x/tools/go/vcs
-	honnef.co/go/tools/cmd/staticcheck
 )
 
 // Until this PR is merged: https://github.com/charmbracelet/bubbletea/pull/397

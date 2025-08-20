@@ -1730,10 +1730,10 @@ def go_deps():
         ],
         build_file_proto_mode = "default",
         importpath = "github.com/cockroachdb/changefeedpb",
-        sha256 = "64915c79d12f6979066a3ea8208c418daa02b89a4421e888fc1b832397fa4a55",
-        strip_prefix = "github.com/cockroachdb/changefeedpb@v0.0.0-20250807205816-647db5c731b8",
+        sha256 = "8ff68266653f6e8394c5ef53571e7bcf576c797c41b7defdf88784bcb5584d32",
+        strip_prefix = "github.com/cockroachdb/changefeedpb@v0.0.0-20250818184245-aab9e65dff20",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/changefeedpb/com_github_cockroachdb_changefeedpb-v0.0.0-20250807205816-647db5c731b8.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/changefeedpb/com_github_cockroachdb_changefeedpb-v0.0.0-20250818184245-aab9e65dff20.zip",
         ],
     )
     go_repository(
@@ -1850,10 +1850,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "2a9f6fbb608f3db62bdce84934a7707cddb3ba1191dcb6978a8c78395c0ec0db",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20250813233102-eaca9d0cc5ea",
+        sha256 = "ac6456517ee2d4fb8a8cb56d8d55efa064d7f4c12891a360740285bd07709fb2",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20250818192107-5d018b93e914",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20250813233102-eaca9d0cc5ea.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20250818192107-5d018b93e914.zip",
         ],
     )
     go_repository(
@@ -6298,6 +6298,16 @@ def go_deps():
         strip_prefix = "github.com/mgutz/ansi@v0.0.0-20200706080929-d51e80ef957d",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mgutz/ansi/com_github_mgutz_ansi-v0.0.0-20200706080929-d51e80ef957d.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_mibk_dupl",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/mibk/dupl",
+        sha256 = "73f61090c1cbee024b771fc60804cbedc5c2861f232bd34eff719afd9ac6e098",
+        strip_prefix = "github.com/mibk/dupl@v1.0.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mibk/dupl/com_github_mibk_dupl-v1.0.0.zip",
         ],
     )
     go_repository(
