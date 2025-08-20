@@ -326,7 +326,15 @@ func (twb *txnWriteBuffer) validateRequests(ba *kvpb.BatchRequest) error {
 			if t.OriginTimestamp.IsSet() {
 				return unsupportedOptionError(t.Method(), "OriginTimestamp")
 			}
+			assertTrue(ba.MaxSpanRequestKeys == 0 && ba.TargetBytes == 0, "unexpectedly found CPut in a BatchRequest with a limit")
 		case *kvpb.PutRequest:
+			// TODO(yuzefovich): the DistSender allows Puts to be in batches
+			// with limits, which can happen when we're forced to flush the
+			// buffered Puts, and the batch we piggy-back on has a limit set.
+			// However, SQL never constructs such a batch on its own, so we're
+			// asserting the expectations from SQL. Figure out how to reconcile
+			// this with more permissive DistSender-level checks.
+			assertTrue(ba.MaxSpanRequestKeys == 0 && ba.TargetBytes == 0, "unexpectedly found Put in a BatchRequest with a limit")
 		case *kvpb.DeleteRequest:
 		case *kvpb.GetRequest:
 			// ReturnRawMVCCValues is unsupported because we don't know how to serve
@@ -1058,6 +1066,11 @@ func (rr requestRecord) toResp(
 			// We only use the response from KV if there wasn't already a
 			// buffered value for this key that our transaction wrote
 			// previously.
+			// TODO(yuzefovich): for completeness, we should check whether
+			// ResumeSpan is non-nil, in which case the response from KV is
+			// incomplete. This can happen when MaxSpanRequestKeys and/or
+			// TargetBytes limits are set on the batch, and SQL currently
+			// doesn't do that for batches with CPuts.
 			val = br.GetInner().(*kvpb.GetResponse).Value
 		}
 
@@ -1078,17 +1091,22 @@ func (rr requestRecord) toResp(
 		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq)
 
 	case *kvpb.PutRequest:
+		// TODO(yuzefovich): for completeness, we should check whether
+		// ResumeSpan is non-nil if we transformed the request, in which case
+		// the response from KV is incomplete. This can happen when
+		// MaxSpanRequestKeys and/or TargetBytes limits are set on the batch,
+		// and SQL currently doesn't do that for batches with Puts.
 		ru.MustSetInner(&kvpb.PutResponse{})
 		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq)
 
 	case *kvpb.DeleteRequest:
 		// To correctly populate FoundKey in the response, we must prefer any
 		// buffered values (if they exist).
-		var foundKey bool
+		var resp kvpb.DeleteResponse
 		val, served := twb.maybeServeRead(req.Key, req.Sequence)
 		if served {
 			log.VEventf(ctx, 2, "serving read portion of %s on key %s from the buffer", req.Method(), req.Key)
-			foundKey = val.IsPresent()
+			resp.FoundKey = val.IsPresent()
 		} else if req.MustAcquireExclusiveLock {
 			// We sent a GetRequest to the KV layer to acquire an exclusive lock
 			// on the key, regardless of whether the key already exists or not.
@@ -1097,7 +1115,8 @@ func (rr requestRecord) toResp(
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.Eventf(ctx, "synthesizing DeleteResponse from GetResponse: %#v", getResp)
 			}
-			foundKey = getResp.Value.IsPresent()
+			resp.FoundKey = getResp.Value.IsPresent()
+			resp.ResumeSpan = getResp.ResumeSpan
 		} else {
 			// NB: If MustAcquireExclusiveLock wasn't set by the client then we
 			// eschew sending a Get request to the KV layer just to populate
@@ -1109,16 +1128,26 @@ func (rr requestRecord) toResp(
 			// TODO(arul): improve the FoundKey semantics to have callers opt
 			// into whether the care about the key being found. Alternatively,
 			// clarify the behaviour on DeleteRequest.
-			foundKey = false
+			resp.FoundKey = false
 		}
-		ru.MustSetInner(&kvpb.DeleteResponse{
-			FoundKey: foundKey,
-		})
+
+		ru.MustSetInner(&resp)
+		if resp.ResumeSpan != nil {
+			// When the Get was incomplete, we haven't actually processed this
+			// Del, so we cannot buffer the write.
+			break
+		}
+
 		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq)
 
 	case *kvpb.GetRequest:
 		val, served := twb.maybeServeRead(req.Key, req.Sequence)
 		if served {
+			// TODO(yuzefovich): we're effectively ignoring the limits of
+			// BatchRequest when serving the Get from the buffer. We should
+			// consider setting the ResumeSpan if a limit has already been
+			// reached by this point. This will force us to set ResumeSpan on
+			// all remaining requests in the batch.
 			getResp := &kvpb.GetResponse{}
 			if val.IsPresent() {
 				getResp.Value = val
@@ -1612,8 +1641,6 @@ func (s *respIter) startKey() roachpb.Key {
 	// For ReverseScans, the EndKey of the ResumeSpan is updated to indicate the
 	// start key for the "next" page, which is exactly the last key that was
 	// reverse-scanned for the current response.
-	// TODO(yuzefovich): we should have some unit tests that exercise the
-	// ResumeSpan case.
 	if s.resumeSpan != nil {
 		return s.resumeSpan.EndKey
 	}
@@ -1684,6 +1711,11 @@ func makeRespSizeHelper(it *respIter) respSizeHelper {
 }
 
 func (h *respSizeHelper) acceptBuffer(key roachpb.Key, value *roachpb.Value) {
+	// TODO(yuzefovich): we're effectively ignoring the limits of BatchRequest
+	// when serving the reads from the buffer. We should consider checking how
+	// many keys and bytes have already been included to see whether we've
+	// reached a limit, and set the ResumeSpan if so (which can result in some
+	// wasted work by the server).
 	h.numKeys++
 	lenKV, _ := encKVLength(key, value)
 	h.numBytes += int64(lenKV)
