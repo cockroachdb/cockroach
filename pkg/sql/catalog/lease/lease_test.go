@@ -522,8 +522,8 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 		// starts draining.
 		l1RemovalTracker := leaseRemovalTracker.TrackRemoval(l1.Underlying())
 
-		t.node(1).SetDraining(ctx, true, nil /* reporter */, false)
-		t.node(2).SetDraining(ctx, true, nil /* reporter */, false)
+		t.node(1).SetDraining(ctx, true, nil /* reporter */)
+		t.node(2).SetDraining(ctx, true, nil)
 
 		// Leases cannot be acquired when in draining mode.
 		if _, err := t.acquire(1, descID); !testutils.IsError(err, "cannot acquire lease when draining") {
@@ -546,7 +546,7 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 	{
 		// Check that leases with a refcount of 0 are correctly kept in the
 		// store once the drain mode has been exited.
-		t.node(1).SetDraining(ctx, false, nil /* reporter */, false /* assertOnLeakedDescriptor */)
+		t.node(1).SetDraining(ctx, false, nil)
 		l1 := t.mustAcquire(1, descID)
 		t.mustRelease(1, l1, nil)
 		t.expectLeases(descID, "/1/1")

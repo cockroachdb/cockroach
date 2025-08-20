@@ -405,11 +405,6 @@ type ApplicationLayerInterface interface {
 	// DrainClients shuts down client connections.
 	DrainClients(ctx context.Context) error
 
-	// DrainClientsWithoutLeakCheck shuts down client connections but will
-	// skip the assertion that checks for descriptor leaks. This is meant
-	// to enable specific tests that may drain unsafely.
-	DrainClientsWithoutLeakCheck(ctx context.Context) error
-
 	// SystemConfigProvider provides access to the system config.
 	SystemConfigProvider() config.SystemConfigProvider
 

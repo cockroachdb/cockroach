@@ -1267,7 +1267,7 @@ type Manager struct {
 	// that we have all the updates for.
 	closeTimestamp atomic.Value
 
-	draining atomic.Value
+	draining atomic.Bool
 
 	// names is a cache for name -> id mappings. A mapping for the cache
 	// should only be used if we currently have an active lease on the respective
@@ -1417,6 +1417,7 @@ func NewLeaseManager(
 	lm.storage.regionPrefix.Store(enum.One)
 	lm.storage.writer = newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher)
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
+	lm.stopper.AddCloser(stop.CloserFn(lm.AssertAllLeasesAreReleasedAfterDrain))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
 	lm.waitForInit = make(chan struct{})
 	// We are going to start the range feed later when StartRefreshLeasesTask
@@ -1731,7 +1732,7 @@ func (m *Manager) removeOnceDereferenced() bool {
 
 // IsDraining returns true if this node's lease manager is draining.
 func (m *Manager) IsDraining() bool {
-	return m.draining.Load().(bool)
+	return m.draining.Load()
 }
 
 // SetDraining (when called with 'true') removes all inactive leases. Any leases
@@ -1742,10 +1743,7 @@ func (m *Manager) IsDraining() bool {
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
 func (m *Manager) SetDraining(
-	ctx context.Context,
-	drain bool,
-	reporter func(int, redact.SafeString),
-	assertOnLeakedDescriptor bool,
+	ctx context.Context, drain bool, reporter func(int, redact.SafeString),
 ) {
 	m.draining.Store(drain)
 	if !drain {
@@ -1759,15 +1757,6 @@ func (m *Manager) SetDraining(
 			t.mu.Lock()
 			defer t.mu.Unlock()
 			leasesToRelease := t.removeInactiveVersions(ctx)
-			// Ensure that all leases are released at this time. Ignore any descriptors
-			// that have acquisitions in progress.
-			if buildutil.CrdbTestBuild &&
-				assertOnLeakedDescriptor &&
-				len(t.mu.active.data) > 0 &&
-				t.mu.acquisitionsInProgress == 0 {
-				// Panic that a descriptor may have leaked.
-				panic(errors.AssertionFailedf("descriptor leak was detected for: %d (%s)", t.id, t.mu.active))
-			}
 			return leasesToRelease
 		}()
 		for _, l := range leases {
@@ -1777,6 +1766,45 @@ func (m *Manager) SetDraining(
 			// Report progress through the Drain RPC.
 			reporter(len(leases), "descriptor leases")
 		}
+	}
+}
+
+// AssertAllLeasesAreReleasedAfterDrain asserts that all leases are released after
+// draining.
+func (m *Manager) AssertAllLeasesAreReleasedAfterDrain() {
+	if !buildutil.CrdbTestBuild || !m.draining.Load() {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, t := range m.mu.descriptors {
+		func() {
+			descriptorStr := strings.Builder{}
+			panicWithErr := false
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			// Ensure that all leases are released at this time.
+			if len(t.mu.active.data) > 0 {
+				// Check if any of these have a non-zero ref count indicating some type of
+				// leak. It may be possible for the entry to exist if we were interrupted
+				// mid-acquisition by the draining process. But the reference count should
+				// *never* be non-zero.
+				for _, l := range t.mu.active.data {
+					if l.refcount.Load() == 0 {
+						continue
+					}
+					panicWithErr = true
+					if descriptorStr.Len() > 0 {
+						descriptorStr.WriteString(",")
+					}
+					descriptorStr.WriteString(fmt.Sprintf("{%s}", l.String()))
+				}
+				if panicWithErr {
+					panic(errors.AssertionFailedf("descriptor leak was detected for ID: %d, "+
+						"with versions [%s]", t.id, descriptorStr.String()))
+				}
+			}
+		}()
 	}
 }
 

@@ -465,10 +465,14 @@ func MakeTestingEvalContext(st *cluster.Settings) Context {
 // MemoryMonitor. Ownership of the memory monitor is transferred to the
 // EvalContext so do not start or close the memory monitor.
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) Context {
+	sessionData := &sessiondata.SessionData{}
+	// Set defaults that match what the session variables system expects.
+	// allow_unsafe_internals defaults to true.
+	sessionData.AllowUnsafeInternals = true
 	ctx := Context{
 		Codec:            keys.SystemSQLCodec,
 		Txn:              &kv.Txn{},
-		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+		SessionDataStack: sessiondata.NewStack(sessionData),
 		Settings:         st,
 		NodeID:           base.TestingIDContainer,
 	}

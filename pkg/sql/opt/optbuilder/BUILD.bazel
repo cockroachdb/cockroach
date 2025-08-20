@@ -101,6 +101,7 @@ go_library(
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
+        "//pkg/sql/unsafesql",
         "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/errorutil",
