@@ -741,6 +741,9 @@ message ExciseResponse {
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
 // start and end keys for a descending scan of [start,end) and the maximum
 // number of results (unbounded if zero).
+//
+// NB: ReverseScans cannot be put into the same batch as forward requests like
+// Scans. IsReverse must be set on the batch header as well.
 message ReverseScanRequest {
   reserved 2, 3;
 
@@ -3028,7 +3031,13 @@ message Header {
   google.protobuf.Duration deadlock_timeout = 36 [(gogoproto.nullable) = false,
     (gogoproto.stdduration) = true];
 
-  // Next ID: 37
+  // 37 is HasBufferedAllPrecedingWrites
+
+  // IsReverse, if set, indicates that the requests in the batch should be
+  // evaluated in descending range order.
+  bool is_reverse = 38;
+
+  // Next ID: 39
 }
 
 message WriteOptions {

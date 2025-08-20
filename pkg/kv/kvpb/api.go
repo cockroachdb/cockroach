@@ -57,7 +57,6 @@ const (
 	isLocking                                                 // locking cmds acquire locks for their transaction
 	isIntentWrite                                             // intent write cmds leave intents when they succeed
 	isRange                                                   // range commands may span multiple keys
-	isReverse                                                 // reverse commands traverse ranges in descending direction
 	isAlone                                                   // requests which must be alone in a batch
 	isPrefix                                                  // requests which, in a batch, must not be split from the following request
 	isUnsplittable                                            // range command that must not be split during sending
@@ -2026,7 +2025,7 @@ func (sr *ScanRequest) flags() flag {
 func (rsr *ReverseScanRequest) flags() flag {
 	maybeLocking := flagForLockStrength(rsr.KeyLockingStrength)
 	maybeWrite := flagForLockDurability(rsr.KeyLockingDurability)
-	return isRead | maybeWrite | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
+	return isRead | maybeWrite | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 // EndTxn updates the timestamp cache to prevent replays.
