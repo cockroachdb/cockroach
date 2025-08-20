@@ -69,15 +69,15 @@ func (s *MutationSearcher) SearchForInsert(
 	}
 
 	// NOTE: The insert partition's centroid vector is already randomized, so
-	// only need to get the randomized input vector.
+	// only need to get the randomized (and normalized) input vector.
 	partitionKey := res.ChildKey.PartitionKey
 	s.partitionKey = tree.NewDInt(tree.DInt(partitionKey))
 	centroid := res.Vector
-	randomizedVec := s.idxCtx.RandomizedVector()
+	queryVec := s.idxCtx.TransformedVector()
 
 	// Quantize and encode the input vector with respect to the insert partition's
 	// centroid.
-	quantizedVec, err := s.txn.QuantizeAndEncode(partitionKey, centroid, randomizedVec)
+	quantizedVec, err := s.txn.QuantizeAndEncode(partitionKey, centroid, queryVec)
 	if err != nil {
 		return err
 	}

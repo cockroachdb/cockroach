@@ -371,10 +371,11 @@ func (ss *SearchSet) PopResults() SearchResults {
 	return popped
 }
 
-// PopBestResult removes the best result from the set and returns it. This
-// method may be called repeatedly to get additional results that may be cached
-// in the set. As long as the Add methods are not called between calls to Pop
-// methods, duplicates will never be returned.
+// PopBestResult removes the best result from the set and returns it, or nil if
+// there are no more results. This method may be called repeatedly to get
+// additional results that may be cached in the set. As long as the Add methods
+// are not called between calls to Pop methods, duplicates will never be
+// returned.
 func (ss *SearchSet) PopBestResult() *SearchResult {
 	count, dups := ss.findBestCandidates(1, 0)
 	if count == 0 {

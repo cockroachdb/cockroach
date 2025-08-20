@@ -135,6 +135,10 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 			}
 
 		case mergeFixup:
+			err = fw.mergePartition(ctx, next.ParentPartitionKey, next.PartitionKey)
+			if err != nil {
+				err = errors.Wrapf(err, "merging partition %d", next.PartitionKey)
+			}
 
 		case vectorDeleteFixup:
 			err = fw.deleteVector(ctx, next.PartitionKey, next.VectorKey)
@@ -157,6 +161,36 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 		// failed, in order to avoid looping over the same fixup.
 		fw.fp.removeFixup(ctx, next)
 	}
+}
+
+// removeFromPartition removes the given child from the given partition, so long
+// as the partition's metadata matches the expected value. If another agent has
+// modified the partition, the attempt to remove the child aborts.
+func (fw *fixupWorker) removeFromPartition(
+	ctx context.Context, partitionKey PartitionKey, childKey ChildKey, expected PartitionMetadata,
+) error {
+	// Remove the partition from its parent.
+	fw.tempChildKey[0] = childKey
+	removed, err := fw.index.store.TryRemoveFromPartition(
+		ctx, fw.treeKey, partitionKey, fw.tempChildKey[:1], expected)
+	if err != nil {
+		_, err = suppressRaceErrors(err)
+		if err == nil {
+			// Another worker raced and updated the metadata, so abort.
+			return errFixupAborted
+		}
+		return errors.Wrapf(err, "removing child from partition %d", partitionKey)
+	}
+
+	if removed {
+		log.VEventf(ctx, 2, "removed child from partition %d", partitionKey)
+
+		if fw.singleStep {
+			return errFixupAborted
+		}
+	}
+
+	return nil
 }
 
 // deleteVector deletes a vector from the store that has had its primary key
@@ -253,22 +287,22 @@ func (fw *fixupWorker) getFullVectorsForPartition(
 
 // transformFullVector ensures that the full vector fetched from a partition at
 // the given level has been properly randomized and normalized. It copies the
-// randomized, normalized vector into "randomized", which must be allocated by
+// randomized, normalized vector into "transformed", which must be allocated by
 // the caller with the same length as the input vector.
-func (fw *fixupWorker) transformFullVector(level Level, vec, randomized vector.T) {
+func (fw *fixupWorker) transformFullVector(level Level, vec, transformed vector.T) {
 	if level == LeafLevel {
 		// Leaf vectors from the primary index need to be randomized and possibly
 		// normalized.
-		fw.index.TransformVector(vec, randomized)
+		fw.index.TransformVector(vec, transformed)
 	} else {
 		// This is an interior level, which means the vector is a partition
-		// centroid that's already normalized. However, it's a mean centroid, and
+		// centroid that's already randomized. However, it's a mean centroid, and
 		// needs to be converted into a spherical centroid for the Cosine and
 		// InnerProduct distance metrics.
-		copy(randomized, vec)
+		copy(transformed, vec)
 		switch fw.index.quantizer.GetDistanceMetric() {
 		case vecpb.CosineDistance, vecpb.InnerProductDistance:
-			num32.Normalize(randomized)
+			num32.Normalize(transformed)
 		}
 	}
 }
