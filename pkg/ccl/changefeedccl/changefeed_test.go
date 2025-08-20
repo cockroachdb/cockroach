@@ -1620,7 +1620,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 
 	}
 
-	cdcTest(t, testFn, feedTestForceSink(`kafka`))
+	cdcTest(t, testFn, feedTestForceSink(`kafka`), withAllowChangefeedErr("changefeed may have parsing failure on some queries"))
 }
 
 // getWhereClause extracts the predicate from a randomly generated SQL statement.
