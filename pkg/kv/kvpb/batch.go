@@ -200,11 +200,6 @@ func (ba *BatchRequest) IsReadOnly() bool {
 	return len(ba.Requests) > 0 && !ba.hasFlag(isWrite|isAdmin)
 }
 
-// IsReverse returns true iff the BatchRequest contains a reverse request.
-func (ba *BatchRequest) IsReverse() bool {
-	return ba.hasFlag(isReverse)
-}
-
 // IsTransactional returns true iff the BatchRequest contains requests that can
 // be part of a transaction.
 func (ba *BatchRequest) IsTransactional() bool {
@@ -765,6 +760,9 @@ func (ba *BatchRequest) Add(requests ...Request) {
 	for _, args := range requests {
 		ba.Requests = append(ba.Requests, RequestUnion{})
 		ba.Requests[len(ba.Requests)-1].MustSetInner(args)
+		if _, isReverse := args.(*ReverseScanRequest); isReverse {
+			ba.IsReverse = true
+		}
 	}
 }
 
@@ -815,22 +813,7 @@ func (ba *BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 		// enforcing are that a batch can't mix non-writes with writes.
 		// Checking isRead would cause ConditionalPut and Put to conflict,
 		// which is not what we want.
-		mask := isWrite | isAdmin
-		if (exFlags&isRange) != 0 && (newFlags&isRange) != 0 {
-			// The directions of requests in a batch need to be the same because
-			// the DistSender (in divideAndSendBatchToRanges) will perform a
-			// single traversal of all requests while advancing the
-			// RangeIterator. If we were to have requests with different
-			// directions in a single batch, the DistSender wouldn't know how to
-			// route the requests (without incurring a noticeable performance
-			// hit).
-			//
-			// At the same time, non-ranged operations are not directional, so
-			// we need to require the same value for isReverse flag iff the
-			// existing and the new requests are ranged. For example, this
-			// allows us to have Gets and ReverseScans in a single batch.
-			mask |= isReverse
-		}
+		const mask = isWrite | isAdmin
 		return (mask & exFlags) == (mask & newFlags)
 	}
 	reqs := ba.Requests
