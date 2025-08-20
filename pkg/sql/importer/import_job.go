@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -35,7 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -53,6 +56,7 @@ type importTestingKnobs struct {
 	afterImport            func(summary roachpb.RowCount) error
 	beforeRunDSP           func() error
 	onSetupFinish          func(flowinfra.Flow)
+	rowCountValidation     chan error
 	alwaysFlushJobProgress bool
 }
 
@@ -107,15 +111,102 @@ var performConstraintValidation = settings.RegisterBoolSetting(
 	settings.WithUnsafe,
 )
 
+var importRowCountValidation = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.import.row_count_validation.enabled",
+	"should import perform row count validation after data load. "+
+		"NOTE: this setting could result in latency increase for import jobs",
+	true,
+	settings.WithPublic,
+)
+
+// expectedRowCountWithSignal coordinates between goroutines that count rows
+// before and after import to validate the expected number of rows were imported.
+type expectedRowCountWithSignal struct {
+	ready            chan struct{}
+	expectedRowCount int64
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
+	newHistoricalInternalExecByTime := func(now hlc.Timestamp) descs.HistoricalInternalExecTxnRunner {
+		return descs.NewHistoricalInternalExecTxnRunner(p.ExecCfg().Clock.Now(), func(ctx context.Context, fn descs.InternalExecFn) error {
+			return p.ExecCfg().InternalDB.DescsTxn(ctx, func(
+				ctx context.Context, txn descs.Txn,
+			) error {
+				if err := txn.KV().SetFixedTimestamp(ctx, now); err != nil {
+					return err
+				}
+				return fn(ctx, txn)
+			})
+		})
+	}
 
 	details := r.job.Details().(jobspb.ImportDetails)
 	files := details.URIs
 	format := details.Format
 
 	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
+	rowCountValidation := importRowCountValidation.Get(&p.ExecCfg().Settings.SV)
+
+	grp := ctxgroup.WithContext(ctx)
+	// expectedRowCountReadyByIndex maps from a BulkOpSummaryID defined by
+	// the table id and the index id.
+	// TODO(janexing): Using a map here could cause a data race but is it
+	// acceptable? Sync.map maybe? but would it overkill?
+	expectedRowCountReadyByIndex := make(map[uint64]*expectedRowCountWithSignal)
+	pendingPreCountTasks := atomic.Int64{}
+	if rowCountValidation {
+		for i := range details.Tables {
+			tblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
+			for _, idx := range tblDesc.AllIndexes() {
+				idx := idx
+				tableTag := kvpb.BulkOpSummaryID(uint64(tblDesc.GetID()), uint64(idx.GetID()))
+				expectedRowCountReadyByIndex[tableTag] = &expectedRowCountWithSignal{
+					ready: make(chan struct{}),
+				}
+				pendingPreCountTasks.Add(1)
+				grp.GoCtx(func(ctx context.Context) error {
+					preImportIdxLen, err := sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx, false, newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()), sessiondata.NoSessionDataOverride)
+					pendingPreCountTasks.Add(-1)
+					if err != nil {
+						return errors.Wrapf(err, "counting rows in index %q of table %q before import", idx.GetName(), tblDesc.GetName())
+					}
+
+					select {
+					case <-expectedRowCountReadyByIndex[tableTag].ready:
+						expectedCount := expectedRowCountReadyByIndex[tableTag].expectedRowCount
+						postImportIdxLen, err :=
+							sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx,
+								false, /* withFirstMutationPublic */
+								newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()),
+								sessiondata.NoSessionDataOverride)
+						if err != nil {
+							return errors.Wrapf(err, "counting rows in index %q of table %q after import", idx.GetName(), tblDesc.GetName())
+						}
+						if diff := postImportIdxLen - preImportIdxLen; diff != expectedCount {
+							return errors.AssertionFailedf("row count validation failed for index %q of table %q: expected %d rows imported, got %d",
+								idx.GetName(), tblDesc.GetName(), expectedCount, diff)
+						}
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+					return nil
+				})
+			}
+		}
+	}
+
+	if rowCountValidation {
+		// We want to wait for all the pre-counts to finish before bringing
+		// the table offline.
+		// TODO(janexing): more graceful shutdown of pre-counts.
+		for pendingPreCountTasks.Load() > 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+
 	if details.Tables != nil {
 		// Skip prepare stage on job resumption, if it has already been completed.
 		if !details.PrepareComplete {
@@ -253,6 +344,28 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			r.res.Rows += count
 		} else {
 			r.res.IndexEntries += count
+		}
+
+		// Signal row count validation goroutines with the expected count
+		// from import.
+		if expected, ok := expectedRowCountReadyByIndex[id]; ok {
+			expected.expectedRowCount = count
+			close(expected.ready)
+		}
+	}
+
+	rowCountValidationTestingKnob := r.testingKnobs.rowCountValidation
+	if rowCountValidation {
+		// TODO(janexing): shall we wait with timeout?
+		if err := grp.Wait(); err != nil {
+			if rowCountValidationTestingKnob != nil {
+				rowCountValidationTestingKnob <- err
+			}
+			return errors.Wrapf(err, "row count validation failed")
+		}
+		log.Event(ctx, "row count validation completed successfully")
+		if rowCountValidationTestingKnob != nil {
+			close(rowCountValidationTestingKnob)
 		}
 	}
 
