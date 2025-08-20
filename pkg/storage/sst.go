@@ -537,20 +537,20 @@ func CheckSSTConflicts(
 		UpperBound: keys.MaxKey,
 	})
 	if err != nil {
-		rkIter.Close()
 		return enginepb.MVCCStats{}, err
 	}
 	rkIter.SeekGE(NilKey)
 
-	if ok, err := rkIter.Valid(); err != nil {
-		rkIter.Close()
+	ok, err := rkIter.Valid()
+	rkIter.Close()
+	if err != nil {
 		return enginepb.MVCCStats{}, err
-	} else if ok {
+	}
+	if ok {
 		// If the incoming SST contains range tombstones, we cannot use prefix
 		// iteration.
 		usePrefixSeek = false
 	}
-	rkIter.Close()
 
 	rkIter, err = reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
 		UpperBound:   rightPeekBound,
@@ -563,16 +563,17 @@ func CheckSSTConflicts(
 	rkIter.SeekGE(start)
 
 	var engineHasRangeKeys bool
-	if ok, err := rkIter.Valid(); err != nil {
-		rkIter.Close()
+	ok, err = rkIter.Valid()
+	rkIter.Close()
+	if err != nil {
 		return enginepb.MVCCStats{}, err
-	} else if ok {
+	}
+	if ok {
 		// If the engine contains range tombstones in this span, we cannot use prefix
 		// iteration.
 		usePrefixSeek = false
 		engineHasRangeKeys = true
 	}
-	rkIter.Close()
 
 	if usePrefixSeek {
 		// Prefix iteration and range key masking don't work together. See the

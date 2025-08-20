@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -130,16 +131,16 @@ func TestProcess(t *testing.T) {
 		var counter atomic.Int32
 		fp.AddSplit(ctx, nil /* treeKey */, 1, 2, false /* singleStep */)
 		go func() {
-			require.NoError(t, fp.Process(ctx))
+			assert.NoError(t, fp.Process(ctx))
 			// counter should already have been incremented by the foreground
 			// goroutine.
-			require.Greater(t, counter.Add(1), int32(1))
+			assert.Greater(t, counter.Add(1), int32(1))
 		}()
 		go func() {
-			require.NoError(t, fp.Process(ctx))
+			assert.NoError(t, fp.Process(ctx))
 			// counter should already have been incremented by the foreground
 			// goroutine.
-			require.Greater(t, counter.Add(1), int32(1))
+			assert.Greater(t, counter.Add(1), int32(1))
 		}()
 
 		// Small delay to allow background goroutines to run.
