@@ -682,7 +682,7 @@ func TestWaitForLeaseAppliedIndex(t *testing.T) {
 		defer tc.repl.readOnlyCmdMu.Unlock()
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
-		tc.repl.mu.destroyStatus.Set(destroyErr, destroyReasonRemoved)
+		tc.repl.shMu.destroyStatus.Set(destroyErr, destroyReasonRemoved)
 	}()
 
 	_, err = tc.repl.WaitForLeaseAppliedIndex(ctx, maxLAI)

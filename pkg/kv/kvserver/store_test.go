@@ -776,7 +776,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	require.Equal(t, errRemoved, err)
 
 	repl1.mu.RLock()
-	expErr := repl1.mu.destroyStatus.err
+	expErr := repl1.shMu.destroyStatus.err
 	repl1.mu.RUnlock()
 
 	if expErr == nil {

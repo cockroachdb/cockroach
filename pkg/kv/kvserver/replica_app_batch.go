@@ -353,7 +353,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// commits by handleMergeResult() to finish the removal.
 		rhsRepl.readOnlyCmdMu.Lock()
 		rhsRepl.mu.Lock()
-		rhsRepl.mu.destroyStatus.Set(
+		rhsRepl.shMu.destroyStatus.Set(
 			kvpb.NewRangeNotFoundError(rhsRepl.RangeID, rhsRepl.store.StoreID()),
 			destroyReasonRemoved)
 		rhsRepl.mu.Unlock()
@@ -443,7 +443,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// application.
 		b.r.readOnlyCmdMu.Lock()
 		b.r.mu.Lock()
-		b.r.mu.destroyStatus.Set(
+		b.r.shMu.destroyStatus.Set(
 			kvpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
 			destroyReasonRemoved)
 		span := b.r.descRLocked().RSpan()

@@ -43,7 +43,7 @@ func (r *Replica) setCorruptRaftMuLocked(
 
 	log.Dev.ErrorfDepth(ctx, 1, "stalling replica due to: %s", cErr.ErrorMsg)
 	cErr.Processed = true
-	r.mu.destroyStatus.Set(cErr, destroyReasonRemoved)
+	r.shMu.destroyStatus.Set(cErr, destroyReasonRemoved)
 
 	auxDir := r.store.TODOEngine().GetAuxiliaryDir()
 	_ = r.store.TODOEngine().Env().MkdirAll(auxDir, os.ModePerm)

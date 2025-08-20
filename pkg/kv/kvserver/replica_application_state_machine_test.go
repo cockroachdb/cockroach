@@ -153,7 +153,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		defer r.readOnlyCmdMu.Unlock()
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		r.mu.destroyStatus.Set(errors.New("test done"), destroyReasonRemoved)
+		r.shMu.destroyStatus.Set(errors.New("test done"), destroyReasonRemoved)
 	})
 }
 
@@ -241,7 +241,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 			r.readOnlyCmdMu.Lock()
 			r.mu.Lock()
 			defer r.mu.Unlock()
-			r.mu.destroyStatus.Set(errors.New("test done"), destroyReasonRemoved)
+			r.shMu.destroyStatus.Set(errors.New("test done"), destroyReasonRemoved)
 			r.readOnlyCmdMu.Unlock()
 
 			require.Equal(t, raftAppliedIndex+1, r.shMu.state.RaftAppliedIndex)
@@ -436,7 +436,7 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 		defer r.readOnlyCmdMu.Unlock()
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		r.mu.destroyStatus.Set(errors.New("boom"), destroyReasonRemoved)
+		r.shMu.destroyStatus.Set(errors.New("boom"), destroyReasonRemoved)
 	}()
 
 	sm := r.getStateMachine()

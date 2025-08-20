@@ -95,7 +95,7 @@ func (s *Store) tryGetReplica(
 	repl.mu.RLock()
 
 	// The current replica is removed, go back around.
-	if repl.mu.destroyStatus.Removed() {
+	if repl.shMu.destroyStatus.Removed() {
 		repl.mu.RUnlock()
 		repl.raftMu.Unlock()
 		return nil, errRetry

@@ -167,7 +167,7 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 		p.finishApplication(ctx, makeProposalResultErr(kvpb.NewAmbiguousResultError(apply.ErrRemoved)))
 	}
 
-	if !r.mu.destroyStatus.Removed() {
+	if !r.shMu.destroyStatus.Removed() {
 		log.Dev.Fatalf(ctx, "removing raft group before destroying replica %s", r)
 	}
 	r.mu.internalRaftGroup = nil

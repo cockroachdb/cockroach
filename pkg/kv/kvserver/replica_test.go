@@ -13786,7 +13786,7 @@ func TestAdminScatterDestroyedReplica(t *testing.T) {
 		defer tc.repl.readOnlyCmdMu.Unlock()
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
-		tc.repl.mu.destroyStatus.Set(errBoom, destroyReasonMergePending)
+		tc.repl.shMu.destroyStatus.Set(errBoom, destroyReasonMergePending)
 	}()
 
 	desc := tc.repl.Desc()
