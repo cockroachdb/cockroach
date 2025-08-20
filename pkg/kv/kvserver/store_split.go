@@ -46,12 +46,14 @@ func splitPreApply(
 			r.StoreID(), split)
 	}
 
-	// Check on the RHS, we need to ensure that it exists and has a minReplicaID
-	// less than or equal to the replica we're about to initialize.
+	// Obtain the RHS replica. In the common case, it exists and its ReplicaID
+	// matches the one in the split trigger. It is the uninitialized replica that
+	// has just been created or obtained in Replica.acquireSplitLock, and its
+	// raftMu is locked.
 	//
-	// The right hand side of the split was already created (and its raftMu
-	// acquired) in Replica.acquireSplitLock. It must be present here if it hasn't
-	// been removed in the meantime (handled below).
+	// In the less common case, the ReplicaID is already removed from this Store,
+	// and rightRepl is either nil or an uninitialized replica with a higher
+	// ReplicaID. Its raftMu is not locked.
 	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
 	// Check to see if we know that the RHS has already been removed from this
 	// store at the replica ID implied by the split.
@@ -99,19 +101,17 @@ func splitPreApply(
 			ClearReplicatedByRangeID: true,
 			// See the HardState write-back dance above and below.
 			//
-			// TODO(tbg): we don't actually want to touch the raft state of the right
-			// hand side replica since it's absent or a more recent replica than the
-			// split. Now that we have a boolean targeting the unreplicated
-			// RangeID-based keyspace, we can set this to false and remove the
-			// HardState+ReplicaID write-back. (The WriteBatch does not contain
-			// any writes to the unreplicated RangeID keyspace for the RHS, see
-			// splitTriggerHelper[^1]).
+			// TODO(tbg): we don't actually want to touch the raft state of the RHS
+			// replica since it's absent or a more recent one than in the split. Now
+			// that we have a bool targeting unreplicated RangeID-local keys, we can
+			// set it to false and remove the HardState+ReplicaID write-back. However,
+			// there can be historical split proposals with the RaftTruncatedState key
+			// set in splitTriggerHelper[^1]. We must first make sure that such
+			// proposals no longer exist, e.g. with a below-raft migration.
 			//
 			// [^1]: https://github.com/cockroachdb/cockroach/blob/f263a765d750e41f2701da0a923a6e92d09159fa/pkg/kv/kvserver/batcheval/cmd_end_transaction.go#L1109-L1149
 			//
-			// See also:
-			//
-			// https://github.com/cockroachdb/cockroach/issues/94933
+			// See also: https://github.com/cockroachdb/cockroach/issues/94933
 			ClearUnreplicatedByRangeID: true,
 		}); err != nil {
 			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
