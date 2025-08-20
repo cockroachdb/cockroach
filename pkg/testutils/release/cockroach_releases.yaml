@@ -39,7 +39,7 @@
   latest: 25.2.4
   predecessor: "25.1"
 "25.3":
-  latest: 25.3.0-rc.1
+  latest: 25.3.0
   predecessor: "25.2"
 "25.4":
   predecessor: "25.3"
