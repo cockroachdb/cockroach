@@ -305,6 +305,10 @@ type planner struct {
 	// statement. It's similar to autoRetryCounter / txnState.mu.autoRetryCounter
 	// but for statement retries.
 	autoRetryStmtCounter int
+
+	// skipUnsafeInternalsCheck is used to skip the check that the
+	// planner is not used for unsafe internal statements.
+	skipUnsafeInternalsCheck bool
 }
 
 // hasFlowForPausablePortal returns true if the planner is for re-executing a

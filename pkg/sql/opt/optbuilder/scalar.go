@@ -890,6 +890,10 @@ func (b *Builder) constructUnary(
 func (b *Builder) isUnsafeBuiltin(
 	overload *tree.Overload, def *tree.ResolvedFunctionDefinition,
 ) bool {
+	if b.skipUnsafeInternalsCheck {
+		return false
+
+	}
 	if overload.Type != tree.BuiltinRoutine {
 		return false
 	}
