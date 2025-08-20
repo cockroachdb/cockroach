@@ -82,6 +82,7 @@ var MultiRegionSystemDatabaseEnabled = settings.RegisterBoolSetting(
 	"sql.multiregion.system_database_multiregion.enabled",
 	"enable option to set up system database as multi-region",
 	false,
+	settings.WithPublic,
 )
 
 // RequireSystemTenantOrClusterSetting returns a setting disabled error if
