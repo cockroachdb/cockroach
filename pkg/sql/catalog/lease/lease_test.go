@@ -581,12 +581,16 @@ func TestWaitForNewVersion(testingT *testing.T) {
 	t.expectLeases(descID, "/1/1 /1/2 /2/1")
 
 	leaseMgr := t.server.LeaseManager().(*lease.Manager)
+	prevIDVersion := lease.IDVersion{
+		ID:      descID,
+		Version: 1,
+	}
 
 	{ // expect a timeout
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		_, err := leaseMgr.WaitForNewVersion(timeoutCtx, descID, retry.Options{}, nil)
+		err := leaseMgr.WaitForNewVersion(timeoutCtx, prevIDVersion, retry.Options{}, nil)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	}
 
@@ -597,9 +601,8 @@ func TestWaitForNewVersion(testingT *testing.T) {
 		require.NoError(t, t.node(2).AcquireFreshestFromStore(ctx, descID))
 		t.expectLeases(descID, "/1/1 /1/2 /2/1 /2/2 /2/3")
 
-		desc, err := leaseMgr.WaitForNewVersion(context.Background(), descID, retry.Options{}, nil)
+		err := leaseMgr.WaitForNewVersion(context.Background(), prevIDVersion, retry.Options{}, nil)
 		require.NoError(t, err)
-		require.Equal(t, desc.GetVersion(), descpb.DescriptorVersion(2))
 	}
 }
 

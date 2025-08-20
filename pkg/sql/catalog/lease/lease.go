@@ -268,7 +268,7 @@ SELECT DISTINCT session_id FROM system.lease WHERE desc_id=%d AND crdb_internal.
 // countSessionsHoldingStaleDescriptor finds sessionIDs that are holding a lease
 // on the previous version of desc but not the current version.
 func countSessionsHoldingStaleDescriptor(
-	ctx context.Context, txn isql.Txn, desc catalog.Descriptor, region string,
+	ctx context.Context, txn isql.Txn, prevIDVersion IDVersion, region string,
 ) (int, error) {
 	b := strings.Builder{}
 
@@ -277,14 +277,14 @@ func countSessionsHoldingStaleDescriptor(
 		SELECT count(DISTINCT l1.session_id)
 		FROM system.lease l1 
 		WHERE l1.desc_id = %d 
-		AND l1.version < %d 
+		AND l1.version = %d 
 		AND crdb_internal.sql_liveness_is_alive(l1.session_id)
 		AND NOT EXISTS (
 			SELECT 1 FROM system.lease l2 
 			WHERE l2.desc_id = l1.desc_id 
 			AND l2.session_id = l1.session_id 
-			AND l2.version = %d
-		`, desc.GetID(), desc.GetVersion(), desc.GetVersion()))
+			AND l2.version > %d
+		`, prevIDVersion.ID, prevIDVersion.Version, prevIDVersion.Version))
 	if region != "" {
 		b.WriteString(fmt.Sprintf(" AND l2.crdb_region='%s'", region))
 	}
@@ -293,7 +293,8 @@ func countSessionsHoldingStaleDescriptor(
 		b.WriteString(fmt.Sprintf(" AND l1.crdb_region='%s'", region))
 	}
 
-	rows, err := txn.QueryBuffered(ctx, "count-sessions-holding-stale-descriptor", txn.KV(), b.String())
+	s := b.String()
+	rows, err := txn.QueryBuffered(ctx, "count-sessions-holding-stale-descriptor", txn.KV(), s)
 	if err != nil {
 		return 0, err
 	}
@@ -557,18 +558,16 @@ func (m *Manager) WaitForOneVersion(
 // The MaxRetries and MaxDuration in retryOpts should not be set.
 func (m *Manager) WaitForNewVersion(
 	ctx context.Context,
-	descriptorId descpb.ID,
+	prevIDVersion IDVersion,
 	retryOpts retry.Options,
 	regions regionliveness.CachedDatabaseRegions,
-) (catalog.Descriptor, error) {
+) error {
 	if retryOpts.MaxRetries != 0 {
-		return nil, errors.New("The MaxRetries option shouldn't be set in WaitForNewVersion")
+		return errors.New("The MaxRetries option shouldn't be set in WaitForNewVersion")
 	}
 	if retryOpts.MaxDuration != 0 {
-		return nil, errors.New("The MaxDuration option shouldn't be set in WaitForNewVersion")
+		return errors.New("The MaxDuration option shouldn't be set in WaitForNewVersion")
 	}
-
-	var desc catalog.Descriptor
 
 	var success bool
 	// Block until each leaseholder on the previous version of the descriptor
@@ -576,12 +575,6 @@ func (m *Manager) WaitForNewVersion(
 	// session: (session in Prev => session in Curr)` for the set theory
 	// enjoyers).
 	for r := retry.Start(retryOpts); r.Next(); {
-		var err error
-		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, descriptorId, true)
-		if err != nil {
-			return nil, err
-		}
-
 		db := m.storage.db
 
 		// Get the sessions with leases in each region.
@@ -603,11 +596,11 @@ func (m *Manager) WaitForNewVersion(
 				var err error
 				if hasTimeout, timeout := prober.GetProbeTimeout(); hasTimeout {
 					err = timeutil.RunWithTimeout(ctx, "count-sessions-holding-stale-descriptor-by-region", timeout, func(ctx context.Context) (countErr error) {
-						regionStaleSessionCount, countErr = countSessionsHoldingStaleDescriptor(ctx, txn, desc, region)
+						regionStaleSessionCount, countErr = countSessionsHoldingStaleDescriptor(ctx, txn, prevIDVersion, region)
 						return countErr
 					})
 				} else {
-					regionStaleSessionCount, err = countSessionsHoldingStaleDescriptor(ctx, txn, desc, region)
+					regionStaleSessionCount, err = countSessionsHoldingStaleDescriptor(ctx, txn, prevIDVersion, region)
 				}
 				if err != nil {
 					return handleRegionLivenessErrors(ctx, prober, region, err)
@@ -631,7 +624,7 @@ func (m *Manager) WaitForNewVersion(
 
 			return nil
 		}); err != nil {
-			return nil, err
+			return err
 		}
 
 		if success {
@@ -639,10 +632,10 @@ func (m *Manager) WaitForNewVersion(
 		}
 	}
 	if !success {
-		return nil, errors.New("Exited lease acquisition loop before success")
+		return errors.New("Exited lease acquisition loop before success")
 	}
 
-	return desc, nil
+	return nil
 }
 
 // IDVersion represents a descriptor ID, version pair that are

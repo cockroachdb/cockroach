@@ -72,19 +72,23 @@ func (ex *connExecutor) waitForNewVersionPropagation(
 	if err != nil {
 		return err
 	}
+	// The Version is the original's previous version; want the original version.
+	for i := range withNewVersion {
+		withNewVersion[i].Version++
+	}
 	// If no schema change occurred, then nothing needs to be done here.
 	if len(withNewVersion) == 0 {
 		return nil
 	}
-	for _, idVersion := range withNewVersion {
-		if descIDsInJobs.Contains(idVersion.ID) {
+	for _, prevIdVersion := range withNewVersion {
+		if descIDsInJobs.Contains(prevIdVersion.ID) {
 			continue
 		}
-		if !ex.extraTxnState.descCollection.IsVersionBumpOfUncommittedDescriptor(idVersion.ID) {
+		if !ex.extraTxnState.descCollection.IsVersionBumpOfUncommittedDescriptor(prevIdVersion.ID) {
 			continue
 		}
 
-		if _, err := ex.planner.LeaseMgr().WaitForNewVersion(ex.Ctx(), idVersion.ID, retry.Options{
+		if err := ex.planner.LeaseMgr().WaitForNewVersion(ex.Ctx(), prevIdVersion, retry.Options{
 			InitialBackoff: time.Millisecond,
 			MaxBackoff:     time.Second,
 			Multiplier:     1.5,
