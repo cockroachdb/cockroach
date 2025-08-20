@@ -1359,15 +1359,36 @@ func (og *operationGenerator) createType(
 	})
 
 	const letters = "abcdefghijklmnopqrstuvwxyz"
-	var statement tree.Statement
+	var statement *tree.CreateType
 
 	if isEnum {
 		statement = randgen.RandCreateEnumType(og.params.rng, typName.Object(), letters)
 	} else {
 		statement = randgen.RandCreateCompositeType(og.params.rng, typName.Object(), letters)
+
+		hasTypeWithPrefix := func(typePrefix string) bool {
+			for _, field := range statement.CompositeTypeList {
+				if strings.HasPrefix(field.Type.SQLString(), typePrefix) {
+					return true
+				}
+			}
+			return false
+		}
+
+		// Check for references to any types that are not supported in mixed version
+		// clusters.
+		ltreeNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_4.Version())
+		if err != nil {
+			return nil, err
+		}
+		hasLtreeType := hasTypeWithPrefix("LTREE")
+		opStmt.potentialExecErrors.addAll(codesWithConditions{
+			{code: pgcode.UndefinedObject, condition: hasLtreeType && ltreeNotSupported},
+			{code: pgcode.Syntax, condition: hasLtreeType && ltreeNotSupported},
+		})
 	}
 
-	statement.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
+	statement.TypeName = typName.ToUnresolvedObjectName()
 	opStmt.sql = tree.Serialize(statement)
 	return opStmt, nil
 }

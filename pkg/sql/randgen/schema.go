@@ -40,7 +40,7 @@ func MakeSchemaName(ifNotExists bool, schema string, authRole tree.RoleSpec) *tr
 // RandCreateEnumType creates a random CREATE TYPE <type_name> AS ENUM statement.
 // The resulting type's name will be name, the enum members will
 // be random strings generated from alphabet.
-func RandCreateEnumType(rng *rand.Rand, name, alphabet string) tree.Statement {
+func RandCreateEnumType(rng *rand.Rand, name, alphabet string) *tree.CreateType {
 	numLabels := rng.Intn(6) + 1
 	labels := make(tree.EnumValueList, numLabels)
 	labelsMap := make(map[string]struct{})
@@ -66,7 +66,7 @@ func RandCreateEnumType(rng *rand.Rand, name, alphabet string) tree.Statement {
 }
 
 // RandCreateCompositeType creates a random composite type statement.
-func RandCreateCompositeType(rng *rand.Rand, name, alphabet string) tree.Statement {
+func RandCreateCompositeType(rng *rand.Rand, name, alphabet string) *tree.CreateType {
 	var compositeTypeList []tree.CompositeTypeElem
 
 	numTypes := rng.Intn(6) + 1
