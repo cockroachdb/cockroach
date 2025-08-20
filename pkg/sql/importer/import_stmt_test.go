@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
+	"github.com/lib/pq"
 	"github.com/linkedin/goavro/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -3873,6 +3874,25 @@ func TestImportDefaultWithResume(t *testing.T) {
 			defer fmt.Sprintf(`DROP SEQUENCE IF EXISTS %s`, test.sequence)
 			defer sqlDB.Exec(t, `DROP TABLE t`)
 
+			// TODO(janexing): pending issues #152543 and #152519.
+			disableValidationStmt := "SET CLUSTER SETTING bulkio.import.row_count_validation.unsafe.enabled=false"
+			_, err := db.Exec(disableValidationStmt)
+			require.Error(t, err)
+
+			getKey := func(err error) string {
+				require.Contains(t, err.Error(), "may cause cluster instability")
+				var pqErr *pq.Error
+				ok := errors.As(err, &pqErr)
+				require.True(t, ok)
+				require.True(t, strings.HasPrefix(pqErr.Detail, "key:"), pqErr.Detail)
+				return strings.TrimPrefix(pqErr.Detail, "key: ")
+			}
+			key := getKey(err)
+
+			// Now set the key and try again. We're not expecting an error any more.
+			sqlDB.Exec(t, "SET unsafe_setting_interlock_key = $1", key)
+			sqlDB.Exec(t, disableValidationStmt)
+
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE SEQUENCE %s`, test.sequence))
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
 
@@ -5622,4 +5642,146 @@ CREATE TABLE t (
 			{"check_crdb_internal_x_shard_16", "true"}, {"t_pkey", "true"},
 		})
 	})
+}
+
+func TestImportRowCountValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type testCase struct {
+		desc               string
+		schemaPreparations []string
+	}
+	// Prepare the import server with to-be-ingested data.
+	data := "1,1\n2,2\n3,3\n4,4\n5,5\n6,6\n7,7\n8,8\n9,9\n10,10"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+	importStmt := fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ('%s')`, srv.URL)
+
+	tcs := []testCase{
+		{
+			desc: "no-pk-no-idx-no-existing-rows",
+			schemaPreparations: []string{
+				`CREATE TABLE t (a INT, b INT)`,
+			},
+		},
+		{
+			desc: "no-pk-no-idx-existing-rows",
+			schemaPreparations: []string{
+				`CREATE TABLE t (a INT, b INT)`,
+				`INSERT INTO t VALUES (100, 100), (200, 200)`,
+			},
+		},
+		{
+			desc: "pk-only-no-existing-rows",
+			schemaPreparations: []string{
+				`CREATE TABLE t (a INT PRIMARY KEY, b INT)`,
+			},
+		},
+		{
+			desc: "pk-only-existing-rows",
+			schemaPreparations: []string{
+				`CREATE TABLE t (a INT PRIMARY KEY, b INT)`,
+				`INSERT INTO t VALUES (100, 100), (200, 200)`,
+			},
+		},
+		{
+			desc: "pk-plus-indexes-no-existing-rows",
+			schemaPreparations: []string{
+				`CREATE TABLE t (a INT PRIMARY KEY, b INT)`,
+				`CREATE INDEX idx_b ON t (b)`,
+				`CREATE INDEX idx_ab ON t (a, b)`,
+				`CREATE INDEX idx_ba ON t (b, a)`,
+			},
+		},
+		{
+			desc: "pk-plus-indexes-existing-rows",
+			schemaPreparations: []string{
+				`CREATE TABLE t (a INT PRIMARY KEY, b INT)`,
+				`CREATE INDEX idx_b ON t (b)`,
+				`CREATE INDEX idx_ab ON t (a, b)`,
+				`CREATE INDEX idx_ba ON t (b, a)`,
+				`INSERT INTO t VALUES (100, 100), (200, 200)`,
+			},
+		},
+		{
+			desc: "partial-index-no-existing-rows",
+			schemaPreparations: []string{
+				`CREATE TABLE t (a INT PRIMARY KEY, b INT)`,
+				`CREATE INDEX idx_partial ON t (b) WHERE b > 5`,
+			},
+		},
+		{
+			desc: "partial-index-existing-rows",
+			schemaPreparations: []string{
+				`CREATE TABLE t (a INT PRIMARY KEY, b INT)`,
+				`CREATE INDEX idx_partial ON t (b) WHERE b > 5`,
+				`INSERT INTO t VALUES (100, 100), (200, 200)`,
+			},
+		},
+		{
+			desc: "more-partial-index-existing-rows",
+			schemaPreparations: []string{
+				`CREATE TABLE t (a INT PRIMARY KEY, b INT)`,
+				`CREATE INDEX idx_partial ON t (b) WHERE b > 5`,
+				`CREATE INDEX idx_partial1 ON t (b) WHERE b < 3`,
+				`CREATE INDEX idx_partial2 ON t (a) WHERE a > 5`,
+				`INSERT INTO t VALUES (100, 100), (200, 200)`,
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.desc, func(t *testing.T) {
+			ctx := context.Background()
+			baseDir := filepath.Join("testdata", "avro")
+			args := base.TestServerArgs{ExternalIODir: baseDir}
+			testCluster := serverutils.StartCluster(
+				t, 1, base.TestClusterArgs{ServerArgs: args})
+
+			rowCountValidationErrChan := make(chan error)
+
+			for i := 0; i < testCluster.NumServers(); i++ {
+				testCluster.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+					jobspb.TypeImport,
+					func(raw jobs.Resumer) jobs.Resumer {
+						r := raw.(*importResumer)
+						r.testingKnobs.rowCountValidation = rowCountValidationErrChan
+						return r
+					})
+			}
+
+			defer testCluster.Stopper().Stop(ctx)
+			conn := testCluster.ServerConn(0)
+			sqlDB := sqlutils.MakeSQLRunner(conn)
+
+			for _, prep := range tc.schemaPreparations {
+				sqlDB.Exec(t, prep)
+			}
+
+			grp := ctxgroup.WithContext(ctx)
+
+			grp.Go(func() error {
+				select {
+				case err := <-rowCountValidationErrChan:
+					return err
+				case <-time.After(testutils.DefaultSucceedsSoonDuration):
+					return errors.AssertionFailedf("timed out waiting for row count validation result")
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			})
+
+			t.Logf("import starts")
+			sqlDB.Exec(t, importStmt)
+			t.Logf("import finished")
+			require.NoError(t, grp.Wait())
+
+		})
+	}
+
 }

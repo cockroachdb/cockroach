@@ -35,13 +35,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -53,6 +56,7 @@ type importTestingKnobs struct {
 	afterImport            func(summary roachpb.RowCount) error
 	beforeRunDSP           func() error
 	onSetupFinish          func(flowinfra.Flow)
+	rowCountValidation     chan error
 	alwaysFlushJobProgress bool
 }
 
@@ -107,15 +111,161 @@ var performConstraintValidation = settings.RegisterBoolSetting(
 	settings.WithUnsafe,
 )
 
+var importRowCountValidation = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.import.row_count_validation.unsafe.enabled",
+	"should import perform row count validation after data load. "+
+		"NOTE: this setting should not be used on production clusters, as disabling it could result in "+
+		"undetected data corruption if the import process fails to import the expected number of rows.",
+	true,
+	settings.WithUnsafe,
+	settings.WithPublic,
+)
+
+// indexWithTag stores an index along with its corresponding BulkOpSummaryID tag.
+type indexWithTag struct {
+	idx catalog.Index
+	tag uint64
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
+	newHistoricalInternalExecByTime := func(now hlc.Timestamp) descs.HistoricalInternalExecTxnRunner {
+		return descs.NewHistoricalInternalExecTxnRunner(now, func(ctx context.Context, fn descs.InternalExecFn) error {
+			return p.ExecCfg().InternalDB.DescsTxn(ctx, func(
+				ctx context.Context, txn descs.Txn,
+			) error {
+				if err := txn.KV().SetFixedTimestamp(ctx, now); err != nil {
+					return err
+				}
+				return fn(ctx, txn)
+			})
+		})
+	}
 
 	details := r.job.Details().(jobspb.ImportDetails)
+	if details.PreImportRowCount == nil {
+		details.PreImportRowCount = make(map[uint64]int64)
+	}
 	files := details.URIs
 	format := details.Format
 
 	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
+	rowCountValidation := importRowCountValidation.Get(&p.ExecCfg().Settings.SV)
+
+	preImportCountGrp := ctxgroup.WithContext(ctx)
+	// expectedRowCountReadyByIndex maps from a BulkOpSummaryID defined by
+	// the table id and the index id.
+	expectedRowCountReadyByIndex := make(map[uint64]chan int64)
+	// preImportRowCountMu protects concurrent access to details.PreImportRowCount.
+	// We need this mutex because PreImportRowCount is hung on to details, and details
+	// is defined in a proto file which only accepts generic types as fields, so we
+	// can't use a thread-safe map type like syncutil.Map directly in the proto.
+	var preImportRowCountMu syncutil.Mutex
+	indexesWithTag := make([]indexWithTag, 0)
+	if rowCountValidation {
+		// TODO(janexing): simplify this once the details.Tables is changed
+		// to a single table rather than a list.
+		for i := range details.Tables {
+			tblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
+			for _, idx := range tblDesc.AllIndexes() {
+				idx := idx
+				indexTag := kvpb.BulkOpSummaryID(uint64(tblDesc.GetID()), uint64(idx.GetID()))
+				indexesWithTag = append(indexesWithTag, indexWithTag{idx: idx, tag: indexTag})
+				expectedCntChan := make(chan int64)
+				expectedRowCountReadyByIndex[indexTag] = expectedCntChan
+				preImportCountGrp.GoCtx(func(ctx context.Context) error {
+					var preImportIdxLen int64
+					var err error
+					// Skip pre-import row counting when resuming a paused job, as the counts
+					// were already captured during the initial run. Additionally, attempting
+					// to re-execute row count queries on an offline table descriptor would
+					// fail during job resumption.
+					preImportRowCountMu.Lock()
+					_, ok := details.PreImportRowCount[indexTag]
+					preImportRowCountMu.Unlock()
+					if !ok {
+						preImportIdxLen, err =
+							sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx,
+								false, /* withFirstMutationPublic */
+								newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()),
+								sessiondata.NoSessionDataOverride)
+						if err != nil {
+							return errors.Wrapf(err, "counting rows in index %q of table %q before import", idx.GetName(), tblDesc.GetName())
+						}
+						preImportRowCountMu.Lock()
+						details.PreImportRowCount[indexTag] = preImportIdxLen
+						preImportRowCountMu.Unlock()
+					}
+					return nil
+				})
+			}
+		}
+	}
+
+	var postImportCountGrp ctxgroup.Group
+	if rowCountValidation {
+		// Wait for all the pre-counts to finish before bringing the table offline,
+		// but respect context cancellation.
+		if err := preImportCountGrp.Wait(); err != nil {
+			return errors.Wrapf(err, "pre-import row count failed")
+		}
+		log.Eventf(ctx, "finished pre-import row counts for all indexes of table %q", details.Tables[0].Desc.Name)
+
+		postImportCountGrp = ctxgroup.WithContext(ctx)
+		for _, idxWithTag := range indexesWithTag {
+			idxWithTag := idxWithTag
+			postImportCountGrp.GoCtx(func(ctx context.Context) error {
+				expectedRowCountChan, ok := expectedRowCountReadyByIndex[idxWithTag.tag]
+				if !ok {
+					// This should never happen.
+					return errors.AssertionFailedf("expected count chan not found for index %d", idxWithTag.idx.GetID())
+				}
+				select {
+				case expectedCount := <-expectedRowCountChan:
+					// We reach here only after the table has been published, hence it has been
+					// changed to PUBLIC from OFFLINE. We need to retrieve the freshest descriptor
+					// for the post-import row count query to be run successfully.
+					var newTblDesc catalog.TableDescriptor
+					if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
+						ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+					) error {
+						freshMutableTblDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, details.Tables[0].Desc.ID)
+						if err != nil {
+							return err
+						}
+						newTblDesc = freshMutableTblDesc.ImmutableCopy().(catalog.TableDescriptor)
+						return nil
+					}); err != nil {
+						return errors.Wrapf(err, "failed to get fresh table descriptor for table %s during post-import row count validation", details.Tables[0].Desc.Name)
+					}
+					postImportIdxLen, err :=
+						sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, newTblDesc, idxWithTag.idx,
+							false, /* withFirstMutationPublic */
+							newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()),
+							sessiondata.NoSessionDataOverride)
+					if err != nil {
+						return errors.Wrapf(err, "counting rows in index %q of table %q after import", idxWithTag.idx.GetName(), details.Tables[0].Desc.Name)
+					}
+					preImportRowCountMu.Lock()
+					preImportIdxLen, ok := details.PreImportRowCount[idxWithTag.tag]
+					if !ok {
+						return errors.AssertionFailedf("expected count chan not found for index %s", idxWithTag.idx.GetName())
+					}
+					preImportRowCountMu.Unlock()
+					if diff := postImportIdxLen - preImportIdxLen; diff != expectedCount {
+						return errors.AssertionFailedf("row count validation failed for index %q of table %q: expected %d rows imported, got %d",
+							idxWithTag.idx, details.Tables[0].Desc.Name, expectedCount, diff)
+					}
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+				return nil
+			})
+		}
+	}
+
 	if details.Tables != nil {
 		// Skip prepare stage on job resumption, if it has already been completed.
 		if !details.PrepareComplete {
@@ -248,6 +398,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		pkIDs[kvpb.BulkOpSummaryID(uint64(t.Desc.ID), uint64(t.Desc.PrimaryIndex.ID))] = struct{}{}
 	}
 	r.res.DataSize = res.DataSize
+	// NOTE: The following loop to update r.res cannot be integrated with the
+	// later loop that signals expectedRowCountReadyByIndex for two reasons:
+	// 1. The expectedRowCountReadyByIndex signal must happen after the table has been
+	//    brought online via publishTables, otherwise the post-import row count query will fail.
+	// 2. The update of r.res must happen before r.testingKnobs.afterImport because
+	//    TestImportJobEventLogging expects the changed number of rows to be recorded
+	//    prior to executing testingKnobs.afterImport so that it can test resuming
+	//    interrupted import processes (such as TestCSVImportCanBeResumed).
 	for id, count := range res.EntryCounts {
 		if _, ok := pkIDs[id]; ok {
 			r.res.Rows += count
@@ -281,6 +439,51 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	if err := r.publishTables(ctx, p.ExecCfg(), res); err != nil {
 		return err
+	}
+
+	if rowCountValidation {
+		// Now that the table descriptor is marked as PUBLIC, signal the row count
+		// validation goroutines to continue with post-import row count checks.
+		for id, count := range res.EntryCounts {
+			// Signal row count validation goroutines with the expected count
+			// from import.
+			if expected, ok := expectedRowCountReadyByIndex[id]; ok {
+				select {
+				case expected <- count:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+		}
+
+		// The special case where it is an empty import file, or resume from fully
+		// processed files.
+		if len(res.EntryCounts) == 0 {
+			for _, expectedRowCountReadyChan := range expectedRowCountReadyByIndex {
+				select {
+				case expectedRowCountReadyChan <- 0:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+		}
+		rowCountValidationTestingKnob := r.testingKnobs.rowCountValidation
+		// Wait for all row count validation goroutines to complete.
+		// Since grp was created with ctxgroup.WithContext(ctx), grp.Wait() will
+		// automatically return ctx.Err() immediately if the context is canceled,
+		// without blocking. This eliminates the need for a separate select statement
+		// to handle context cancellation - the ctxgroup package handles this for us.
+		if err := postImportCountGrp.Wait(); err != nil {
+			if rowCountValidationTestingKnob != nil {
+				rowCountValidationTestingKnob <- err
+				close(rowCountValidationTestingKnob)
+			}
+			return errors.Wrapf(err, "row count validation failed")
+		}
+		log.Event(ctx, "row count validation completed successfully")
+		if rowCountValidationTestingKnob != nil {
+			close(rowCountValidationTestingKnob)
+		}
 	}
 
 	emitImportJobEvent(ctx, p, jobs.StateSucceeded, r.job)
@@ -441,7 +644,6 @@ func (r *importResumer) publishTables(
 				return err
 			}
 			newTableDesc.SetPublic()
-
 			// NB: This is not using AllNonDropIndexes or directly mutating the
 			// constraints returned by the other usual helpers because we need to
 			// replace the `OutboundFKs` and `Checks` slices of newTableDesc with copies

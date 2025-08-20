@@ -714,9 +714,15 @@ message ImportDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"
   ];
 
+  // PreImportRowCount stores the number of rows for each index of the to-import
+  // table before the import. We need to preserve it so that if an import job
+  // is resumed after having counted the rows in the previous attempt, we
+  // don't need to re-count them.
+  map<uint64, int64> pre_import_row_count = 28;
+
   reserved 4, 7, 8, 9, 10, 11, 14, 22, 23, 24, 25;
 
-  // next val: 28
+  // next val: 29
 }
 
 // SequenceValChunks represents a single chunk of sequence values allocated
