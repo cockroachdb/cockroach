@@ -184,13 +184,13 @@ CREATE USER user5 NOLOGIN
 
 user root
 
-query TTTO rowsort
+query TTT rowsort
 SELECT * FROM system.role_options
 ----
-testuser  CREATEROLE  NULL  100
-user4     CREATEROLE  NULL  108
-user4     NOLOGIN     NULL  108
-user5     NOLOGIN     NULL  109
+testuser  CREATEROLE  NULL
+user4     CREATEROLE  NULL
+user4     NOLOGIN     NULL
+user5     NOLOGIN     NULL
 
 user testuser
 
