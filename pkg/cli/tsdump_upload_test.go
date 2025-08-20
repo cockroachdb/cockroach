@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -556,7 +555,6 @@ func generateMockJSONFromInput(t *testing.T, inputData string) string {
 func TestDeltaCalculationForCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer envutil.TestSetEnv(t, processDeltaEnvVar, "1")()
 
 	// Create a datadogWriter with cumulative to delta processor
 	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
@@ -625,7 +623,6 @@ func TestDeltaCalculationForCounters(t *testing.T) {
 func TestDeltaCalculationResetDetection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer envutil.TestSetEnv(t, processDeltaEnvVar, "1")()
 
 	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
 	require.NoError(t, err)
@@ -668,7 +665,6 @@ func TestDeltaCalculationResetDetection(t *testing.T) {
 func TestDeltaCalculationCrossBatchPersistence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer envutil.TestSetEnv(t, processDeltaEnvVar, "1")()
 
 	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
 	require.NoError(t, err)
@@ -711,7 +707,6 @@ func TestDeltaCalculationCrossBatchPersistence(t *testing.T) {
 func TestDeltaCalculationWithUnsortedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer envutil.TestSetEnv(t, processDeltaEnvVar, "1")()
 
 	processor := NewCumulativeToDeltaProcessor()
 

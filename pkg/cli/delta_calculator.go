@@ -7,6 +7,7 @@ package cli
 
 import (
 	"hash/fnv"
+	"math"
 	"sort"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
@@ -14,6 +15,10 @@ import (
 )
 
 var hashDelimiter = []byte{'|'}
+
+// floatPrecisionMultiplier is used to round floating-point calculations to 9 decimal places
+// to eliminate binary representation errors in IEEE-754 floating-point arithmetic.
+const floatPrecisionMultiplier = 1e9 // 9 decimal places
 
 type metricState struct {
 	previousValue float64
@@ -89,8 +94,12 @@ func (dc *CumulativeToDeltaProcessor) processCounterMetric(
 			continue
 		}
 
-		// calculate delta
-		*point.Value = currentValue - state.previousValue
+		// Calculate delta.
+		// Round the difference using floatPrecisionMultiplier. Floats in Go (IEEE-754) can't represent most
+		// decimals exactly (e.g. 1.8 becomes 1.799999...). Without rounding, small binary errors
+		// can leak into downstream representations. We normalize here to the precision defined
+		// by floatPrecisionMultiplier.
+		*point.Value = math.Round((currentValue-state.previousValue)*floatPrecisionMultiplier) / floatPrecisionMultiplier
 		if currentValue < state.previousValue {
 			// if counter reset detected (e.g., process restart)
 			// use the current value as the delta since last reset
