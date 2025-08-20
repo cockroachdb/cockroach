@@ -1409,6 +1409,7 @@ func (w *workerCoordinator) performRequestAsync(
 			ba.Header.TargetBytes = targetBytes
 			ba.Header.AllowEmpty = !headOfLine
 			ba.Header.WholeRowsOfSize = w.s.maxKeysPerRow
+			ba.Header.IsReverse = w.s.reverse
 			// TODO(yuzefovich): consider setting MaxSpanRequestKeys whenever
 			// applicable (#67885).
 			ba.AdmissionHeader = w.requestAdmissionHeader

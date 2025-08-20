@@ -370,6 +370,8 @@ func (b *Batch) AddRawRequest(reqs ...kvpb.Request) {
 			*kvpb.IncrementRequest,
 			*kvpb.DeleteRequest:
 			numRows = 1
+		case *kvpb.ReverseScanRequest:
+			b.Header.IsReverse = true
 		}
 		b.appendReqs(args)
 		b.initResult(1 /* calls */, numRows, raw, nil)
@@ -740,6 +742,7 @@ func (b *Batch) scan(
 	str kvpb.KeyLockingStrengthType,
 	dur kvpb.KeyLockingDurabilityType,
 ) {
+	b.Header.IsReverse = isReverse
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
