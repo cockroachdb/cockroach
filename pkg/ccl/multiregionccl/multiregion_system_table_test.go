@@ -598,3 +598,45 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 		{"ALTER PARTITION \"us-east3\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east3]',\n\tlease_preferences = '[[+region=us-east3]]'"},
 	})
 }
+
+// TestDropRegionFromUserDatabaseCleansUpSystemTables verifies that
+// dropping a region from a user database doesn't remove  rows
+// from the system.sql_instances table.
+func TestDropRegionFromUserDatabaseCleansUpSystemTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	makeSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettings()
+		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		return cs
+	}
+
+	_, systemSQL, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3,
+		base.TestingKnobs{},
+		multiregionccltestutils.WithSettings(makeSettings()))
+	defer cleanup()
+
+	sDB := sqlutils.MakeSQLRunner(systemSQL)
+
+	// Create a user database with multiple regions
+	sDB.Exec(t, `CREATE DATABASE userdb PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE ZONE FAILURE`)
+
+	// Verify sql_instances has data before the operation
+	initialCount := sDB.QueryStr(t, `SELECT count(*) FROM system.sql_instances`)
+	require.NotEmpty(t, initialCount)
+	require.Equal(t, "13", initialCount[0][0], "sql_instances should have data initially")
+
+	// Drop a region from the USER database (not system database)
+	sDB.Exec(t, `ALTER DATABASE userdb DROP REGION "us-east2"`)
+
+	// Verify that dropping a region from a user database doesn't affect system.sql_instances.
+	// The region still exists in the system database, so instances should remain unchanged.
+	finalCount := sDB.QueryStr(t, `SELECT count(*) FROM system.sql_instances`)
+	require.NotEmpty(t, finalCount)
+	// The count should remain the same since we only dropped from userdb, not system.
+	require.Equal(t, initialCount[0][0], finalCount[0][0],
+		"sql_instances count should not change when dropping region from user database")
+}
