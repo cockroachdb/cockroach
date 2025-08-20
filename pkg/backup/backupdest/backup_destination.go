@@ -509,8 +509,12 @@ func GetURIsByLocalityKV(
 // ListFullBackupsInCollection lists full backup paths in the collection
 // of an export store
 func ListFullBackupsInCollection(
-	ctx context.Context, store cloud.ExternalStorage,
+	ctx context.Context, store cloud.ExternalStorage, useIndex bool,
 ) ([]string, error) {
+	if useIndex {
+		return ListSubdirsFromIndex(ctx, store)
+	}
+
 	var backupPaths []string
 	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(f string) error {
 		if backupPathRE.MatchString(f) {

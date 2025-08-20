@@ -1444,7 +1444,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list source_replication_options source_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list opt_with_show_backups_options show_backups_options
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -3839,7 +3839,7 @@ alter_external_connection_stmt:
 				 ConnectionLabelSpec: *($4.labelSpec()),
 		     As: $6.expr(),
 		}
-	} 
+	}
 | ALTER EXTERNAL CONNECTION IF EXISTS /*$6=*/label_spec AS /*$8=*/string_or_placeholder
 	{
 		   $$.val = &tree.AlterExternalConnection{
@@ -4911,11 +4911,11 @@ logical_replication_create_table_options:
   }
 | UNIDIRECTIONAL
   {
-   $$.val = &tree.LogicalReplicationOptions{Unidirectional: tree.MakeDBool(true)} 
+   $$.val = &tree.LogicalReplicationOptions{Unidirectional: tree.MakeDBool(true)}
   }
 | BIDIRECTIONAL ON string_or_placeholder
   {
-   $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()} 
+   $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()}
   }
 
 
@@ -8771,10 +8771,11 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUPS IN string_or_placeholder_opt_list
+  SHOW BACKUPS IN string_or_placeholder_opt_list opt_with_show_backups_options
  {
     $$.val = &tree.ShowBackup{
       InCollection:    $4.stringOrPlaceholderOptList(),
+      Options: *$5.showBackupOptions(),
     }
   }
 | SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
@@ -8856,6 +8857,22 @@ show_backup_details:
     /* SKIP DOC */
 	$$.val = tree.BackupValidateDetails
 	}
+
+opt_with_show_backups_options:
+  WITH show_backups_options
+  {
+    $$.val = $2.showBackupOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.ShowBackupOptions{}
+  }
+
+show_backups_options:
+ INDEX
+ {
+    $$.val = &tree.ShowBackupOptions{Index: true}
+ }
 
 opt_with_show_backup_options:
   WITH show_backup_options_list

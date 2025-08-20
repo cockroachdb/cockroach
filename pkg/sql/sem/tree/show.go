@@ -144,6 +144,7 @@ type ShowBackupOptions struct {
 	EncryptionPassphrase Expr
 	Privileges           bool
 	SkipSize             bool
+	Index                bool
 
 	// EncryptionInfoDir is a hidden option used when the user wants to run the deprecated
 	//

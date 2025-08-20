@@ -138,6 +138,26 @@ func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string
 	return indexExists, nil
 }
 
+// ListSubdirsFromIndex lists the paths of all full backup subdirectories that
+// have an entry in the index. The store should be rooted at the default
+// collection URI. The subdirs are returned in chronological order.
+func ListSubdirsFromIndex(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
+	var subdirs []string
+	if err := store.List(
+		ctx,
+		backupbase.BackupIndexDirectoryPath,
+		"/",
+		func(indexSubdir string) error {
+			subdir := unflattenIndexSubdir(indexSubdir)
+			subdirs = append(subdirs, subdir)
+			return nil
+		},
+	); err != nil {
+		return nil, errors.Wrapf(err, "listing index subdirs")
+	}
+	return subdirs, nil
+}
+
 // shouldWriteIndex determines if a backup index file should be written for a
 // given backup. The rule is:
 //  1. An index should only be written on a v25.4+ cluster.
@@ -231,4 +251,20 @@ func flattenSubdirForIndex(subdir string) string {
 		strings.TrimSuffix(strings.TrimPrefix(subdir, "/"), "/"),
 		"/", "-",
 	)
+}
+
+// unflattenIndexSubdir is the inverse of flattenSubdirForIndex. It converts a
+// flattened index subdir back to the original full backup subdir.
+func unflattenIndexSubdir(flattened string) string {
+	unflattened := strings.ReplaceAll(flattened, "-", "/")
+	// We normalize the output to ensure that it always starts with a `/` and does
+	// not end with a "/". This has two benefits:
+	// 1. The returned subdir is intended to be the original full subdir path,
+	// which is rooted at the collection URI, so it should always start with a `/`.
+	// 2. We trim the trailing `/` so that the output matches the legacy `SHOW
+	// BACKUPS IN` output from before the index was introduced..`
+	if !strings.HasPrefix(unflattened, "/") {
+		unflattened = "/" + unflattened
+	}
+	return strings.TrimSuffix(unflattened, "/")
 }
