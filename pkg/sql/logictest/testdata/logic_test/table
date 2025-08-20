@@ -674,3 +674,23 @@ pr_check    CHECK ((price > 0))     true
 
 statement ok
 COMMIT;
+
+subtest end
+
+# Test that partial statistics are filtered out from table_row_statistics
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t SELECT generate_series(0, 9)
+
+statement ok
+ANALYZE t
+
+statement ok
+CREATE STATISTICS partial FROM t USING EXTREMES
+
+query I
+SELECT estimated_row_count FROM crdb_internal.table_row_statistics WHERE table_name = 't'
+----
+10

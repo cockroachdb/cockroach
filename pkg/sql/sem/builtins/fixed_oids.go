@@ -2796,6 +2796,7 @@ var builtinOidsArray = []string{
 	2841: `lead(val: ltree, n: int, default: ltree) -> ltree`,
 	2842: `last_value(val: ltree) -> ltree`,
 	2843: `crdb_internal.process_vector_index_fixups(table_id: int, index_id: int) -> void`,
+	2844: `crdb_internal.unsafe_delete_comment(object_id: int) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

@@ -556,6 +556,8 @@ go_test(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/contention",
+        "//pkg/sql/contentionpb",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
         "//pkg/sql/pgwire",

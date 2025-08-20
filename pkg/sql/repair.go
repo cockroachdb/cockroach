@@ -851,3 +851,19 @@ func (p *planner) UpsertDroppedRelationGCTTL(
 	}
 	return p.txn.Run(ctx, b)
 }
+
+// UnsafeDeleteComment deletes all comments under a given object_id.
+func (p *planner) UnsafeDeleteComment(ctx context.Context, objectID int64) error {
+	// Privilege check.
+	const method = "crdb_internal.unsafe_delete_comment()"
+	err := checkPlannerStateForRepairFunctions(ctx, p, method)
+	if err != nil {
+		return err
+	}
+	_, err = p.InternalSQLTxn().Exec(ctx,
+		"delete-comment",
+		p.txn,
+		"DELETE FROM system.comments WHERE object_id = $1",
+		objectID)
+	return err
+}

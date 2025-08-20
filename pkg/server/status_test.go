@@ -25,7 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -34,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -519,6 +523,49 @@ func TestListExecutionInsightsWhileEvictingInsights(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+// TestLocalExecutionInsights tests the helper functions used by localExecutionInsights
+func TestLocalExecutionInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("validContentionInsights", func(t *testing.T) {
+		id1 := uuid.MakeV4()
+		id2 := uuid.MakeV4()
+		id3 := uuid.MakeV4()
+		insights := map[uuid.UUID]insights.Insight{
+			id1: {},
+			id2: {},
+			id3: {},
+		}
+		// id1 insight has no contention events.
+		// id2 insight has a contention event that is not resolved.
+		// id3 insight has multiple contention events, one of them is resolved.
+		events := []contentionpb.ExtendedContentionEvent{
+			{
+				WaitingTxnID: id2,
+			},
+			{
+				WaitingTxnID: id3,
+			},
+			{
+				WaitingTxnID:             id3,
+				BlockingTxnFingerprintID: 1234,
+			},
+		}
+
+		st := cluster.MakeTestingClusterSettings()
+		m := contention.NewMetrics()
+		registry := contention.NewRegistry(st, nil, &m)
+		registry.AddEventsForTest(events)
+		valid, err := validContentionInsights(registry, insights)
+		require.NoError(t, err)
+		// Only id3 should be returned.
+		require.Equal(t, 1, len(valid))
+		_, exists := valid[id3]
+		require.True(t, exists)
+	})
 }
 
 // TestStatusUpdateTableMetadataCache tests that signalling the update

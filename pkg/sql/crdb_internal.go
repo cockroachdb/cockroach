@@ -776,6 +776,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
 			SELECT DISTINCT ON ("tableID") "tableID", "rowCount"
 			FROM system.table_statistics
 			AS OF SYSTEM TIME '%s'
+			WHERE "partialPredicate" IS NULL
 			ORDER BY "tableID", "createdAt" DESC, "rowCount" DESC`,
 			statsAsOfTimeClusterMode.String(&p.ExecCfg().Settings.SV))
 		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalDB.Executor().QueryBufferedEx(
@@ -6665,10 +6666,23 @@ CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
 				FROM
 					system.namespace AS ns FULL JOIN system.descriptor AS d ON ns.id = d.id
 			),
+		orphaned_comments
+				AS (
+					SELECT
+						0 AS parent_id,
+						0 AS parent_schema_id,
+						'' AS name,
+						object_id AS id,
+						'comment' AS corruption
+					FROM
+						system.comments
+					WHERE
+						object_id NOT IN (SELECT id FROM system.descriptor)
+        ),
 		diag
 			AS (
 				SELECT
-					*,
+					parent_id, parent_schema_id, name, id,
 					CASE
 					WHEN descriptor IS NULL AND id != 29 THEN 'namespace'
 					WHEN updated_descriptor != repaired_descriptor THEN 'descriptor'
@@ -6677,6 +6691,8 @@ CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
 						AS corruption
 				FROM
 					data
+				UNION
+				SELECT * FROM orphaned_comments
 			)
 	SELECT
 		parent_id, parent_schema_id, name, id, corruption
