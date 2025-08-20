@@ -311,7 +311,7 @@ func checkUnsafeErr(t *testing.T, err error) {
 	t.Fatal("expected unsafe access error, got", err)
 }
 
-func TestCheckUnsafeInternalsAccess(t *testing.T) {
+func TestCheckUnsafeSystemAccess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -374,4 +374,39 @@ func TestCheckUnsafeInternalsAccess(t *testing.T) {
 		}
 	})
 
+}
+
+func TestCheckUnsafeCRDBInternalAccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Test that with allow_unsafe_internals = false:
+	// - Supported tables (zones) are allowed
+	// - Unsupported tables (gossip_alerts) are denied
+
+	t.Run("supported table allowed", func(t *testing.T) {
+		conn := s.SQLConn(t)
+		_, err := conn.Exec("SET allow_unsafe_internals = false")
+		require.NoError(t, err)
+
+		// Supported crdb_internal tables should be allowed even when allow_unsafe_internals = false
+		_, err = conn.Query("SELECT * FROM crdb_internal.zones")
+		require.NoError(t, err, "supported crdb_internal table (zones) should be accessible when allow_unsafe_internals = false")
+	})
+
+	t.Run("unsupported table denied", func(t *testing.T) {
+		conn := s.SQLConn(t)
+		_, err := conn.Exec("SET allow_unsafe_internals = false")
+		require.NoError(t, err)
+
+		// Unsupported crdb_internal tables should be denied when allow_unsafe_internals = false
+		_, err = conn.Query("SELECT * FROM crdb_internal.gossip_alerts")
+		checkUnsafeErr(t, err)
+	})
 }
