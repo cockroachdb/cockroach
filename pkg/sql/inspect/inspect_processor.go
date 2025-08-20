@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -170,10 +171,19 @@ func getProcessorConcurrency(flowCtx *execinfra.FlowCtx) int {
 func getInspectLogger(flowCtx *execinfra.FlowCtx) inspectLogger {
 	knobs := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).InspectTestingKnobs
 	if knobs == nil || knobs.InspectIssueLogger == nil {
-		// TODO(148301): Implement a proper logger that writes to system.inspect_errors.
+		// TODO(#148301): Implement a proper logger that writes to system.inspect_errors.
 		return &logSink{}
 	}
 	return knobs.InspectIssueLogger.(inspectLogger)
+}
+
+// getInspectTableLogger returns a logger used to report inspect issues to the
+// system.inspect_errors table.
+func getInspectTableLogger(db descs.DB, jobID jobspb.JobID) *tableSink {
+	return &tableSink{
+		db:    db,
+		jobID: jobID,
+	}
 }
 
 // processSpan executes all configured inspect checks against a single span.
@@ -222,6 +232,11 @@ func newInspectProcessor(
 	if err != nil {
 		return nil, err
 	}
+
+	logger := inspectLoggers{
+		getInspectLogger(flowCtx),
+		getInspectTableLogger(flowCtx.Cfg.DB, spec.JobID),
+	}
 	return &inspectProcessor{
 		spec:           spec,
 		processorID:    processorID,
@@ -229,7 +244,7 @@ func newInspectProcessor(
 		checkFactories: checkFactories,
 		cfg:            flowCtx.Cfg,
 		spanSrc:        newSliceSpanSource(spec.Spans),
-		logger:         getInspectLogger(flowCtx),
+		logger:         logger,
 		concurrency:    getProcessorConcurrency(flowCtx),
 	}, nil
 }
