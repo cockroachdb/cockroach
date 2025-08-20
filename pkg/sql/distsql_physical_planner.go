@@ -461,6 +461,9 @@ var (
 	cannotDistributeVectorSearchErr = newQueryNotSupportedError(
 		"vector search operation cannot be distributed",
 	)
+	cannotDistributeSystemColumnsAndBufferedWrites = newQueryNotSupportedError(
+		"system column is requested when writes have been buffered",
+	)
 )
 
 // mustWrapNode returns true if a node has no DistSQL-processor equivalent.
@@ -546,6 +549,7 @@ func checkSupportForPlanNode(
 	node planNode,
 	distSQLVisitor *distSQLExprCheckVisitor,
 	sd *sessiondata.SessionData,
+	txnHasBufferedWrites bool,
 ) (retRec distRecommendation, retErr error) {
 	if buildutil.CrdbTestBuild {
 		defer func() {
@@ -563,19 +567,19 @@ func checkSupportForPlanNode(
 		return shouldDistribute, nil
 
 	case *distinctNode:
-		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 
 	case *exportNode:
-		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 
 	case *filterNode:
 		if err := checkExprForDistSQL(n.filter, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 
 	case *groupNode:
-		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -604,10 +608,17 @@ func checkSupportForPlanNode(
 			// TODO(nvanbenschoten): lift this restriction.
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
-		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		if txnHasBufferedWrites {
+			for _, col := range n.fetch.catalogCols {
+				if execinfra.ColumnIDRequiresMVCCDecoding(col.GetID()) {
+					return cannotDistribute, cannotDistributeSystemColumnsAndBufferedWrites
+				}
+			}
+		}
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 
 	case *invertedFilterNode:
-		return checkSupportForInvertedFilterNode(ctx, n, distSQLVisitor, sd)
+		return checkSupportForInvertedFilterNode(ctx, n, distSQLVisitor, sd, txnHasBufferedWrites)
 
 	case *invertedJoinNode:
 		if n.fetch.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
@@ -617,10 +628,17 @@ func checkSupportForPlanNode(
 			// TODO(nvanbenschoten): lift this restriction.
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
+		if txnHasBufferedWrites {
+			for _, col := range n.fetch.catalogCols {
+				if execinfra.ColumnIDRequiresMVCCDecoding(col.GetID()) {
+					return cannotDistribute, cannotDistributeSystemColumnsAndBufferedWrites
+				}
+			}
+		}
 		if err := checkExprForDistSQL(n.onExpr, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -633,11 +651,11 @@ func checkSupportForPlanNode(
 		if err := checkExprForDistSQL(n.pred.onCond, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		recLeft, err := checkSupportForPlanNode(ctx, n.left, distSQLVisitor, sd)
+		recLeft, err := checkSupportForPlanNode(ctx, n.left, distSQLVisitor, sd, txnHasBufferedWrites)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := checkSupportForPlanNode(ctx, n.right, distSQLVisitor, sd)
+		recRight, err := checkSupportForPlanNode(ctx, n.right, distSQLVisitor, sd, txnHasBufferedWrites)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -658,7 +676,7 @@ func checkSupportForPlanNode(
 		// Note that we don't need to check whether we support distribution of
 		// n.countExpr or n.offsetExpr because those expressions are evaluated
 		// locally, during the physical planning.
-		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 
 	case *lookupJoinNode:
 		if n.remoteLookupExpr != nil || n.remoteOnlyLookups {
@@ -672,7 +690,13 @@ func checkSupportForPlanNode(
 			// TODO(nvanbenschoten): lift this restriction.
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
-
+		if txnHasBufferedWrites {
+			for _, col := range n.fetch.catalogCols {
+				if execinfra.ColumnIDRequiresMVCCDecoding(col.GetID()) {
+					return cannotDistribute, cannotDistributeSystemColumnsAndBufferedWrites
+				}
+			}
+		}
 		if err := checkExprForDistSQL(n.lookupExpr, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
@@ -682,7 +706,7 @@ func checkSupportForPlanNode(
 		if err := checkExprForDistSQL(n.onCond, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -699,7 +723,7 @@ func checkSupportForPlanNode(
 				return cannotDistribute, err
 			}
 		}
-		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 
 	case *renderNode:
 		for _, e := range n.render {
@@ -707,7 +731,7 @@ func checkSupportForPlanNode(
 				return cannotDistribute, err
 			}
 		}
-		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 
 	case *scanNode:
 		if n.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
@@ -717,10 +741,16 @@ func checkSupportForPlanNode(
 			// TODO(nvanbenschoten): lift this restriction.
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
-
 		if n.localityOptimized {
 			// This is a locality optimized scan.
 			return cannotDistribute, localityOptimizedOpNotDistributableErr
+		}
+		if txnHasBufferedWrites {
+			for _, col := range n.catalogCols {
+				if execinfra.ColumnIDRequiresMVCCDecoding(col.GetID()) {
+					return cannotDistribute, cannotDistributeSystemColumnsAndBufferedWrites
+				}
+			}
 		}
 		// TODO(yuzefovich): consider using the soft limit in making a decision
 		// here.
@@ -738,7 +768,7 @@ func checkSupportForPlanNode(
 		return scanRec, nil
 
 	case *sortNode:
-		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -755,7 +785,7 @@ func checkSupportForPlanNode(
 		return rec.compose(sortRec), nil
 
 	case *topKNode:
-		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -775,11 +805,11 @@ func checkSupportForPlanNode(
 		return canDistribute, nil
 
 	case *unionNode:
-		recLeft, err := checkSupportForPlanNode(ctx, n.left, distSQLVisitor, sd)
+		recLeft, err := checkSupportForPlanNode(ctx, n.left, distSQLVisitor, sd, txnHasBufferedWrites)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := checkSupportForPlanNode(ctx, n.right, distSQLVisitor, sd)
+		recRight, err := checkSupportForPlanNode(ctx, n.right, distSQLVisitor, sd, txnHasBufferedWrites)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -809,7 +839,7 @@ func checkSupportForPlanNode(
 		return cannotDistribute, cannotDistributeVectorSearchErr
 
 	case *windowNode:
-		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -835,6 +865,13 @@ func checkSupportForPlanNode(
 				// TODO(nvanbenschoten): lift this restriction.
 				return cannotDistribute, cannotDistributeRowLevelLockingErr
 			}
+			if txnHasBufferedWrites {
+				for _, col := range side.fetch.catalogCols {
+					if execinfra.ColumnIDRequiresMVCCDecoding(col.GetID()) {
+						return cannotDistribute, cannotDistributeSystemColumnsAndBufferedWrites
+					}
+				}
+			}
 		}
 		if err := checkExprForDistSQL(n.onCond, distSQLVisitor); err != nil {
 			return cannotDistribute, err
@@ -854,8 +891,9 @@ func checkSupportForInvertedFilterNode(
 	n *invertedFilterNode,
 	distSQLVisitor *distSQLExprCheckVisitor,
 	sd *sessiondata.SessionData,
+	txnHasBufferedWrites bool,
 ) (distRecommendation, error) {
-	rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
+	rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
 	if err != nil {
 		return cannotDistribute, err
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -268,6 +269,10 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	columnIDs := make([]descpb.ColumnID, len(cols))
 	for i := range cols {
 		columnIDs[i] = cols[i].GetID()
+		if execinfra.ColumnIDRequiresMVCCDecoding(columnIDs[i]) {
+			// TODO(#144166): relax this.
+			recommendation = cannotDistribute
+		}
 	}
 
 	p.ResultColumns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols)
@@ -878,6 +883,14 @@ func (e *distSQLSpecExecFactory) ConstructIndexJoin(
 		recommendation = cannotDistribute
 		physPlan.EnsureSingleStreamOnGateway(e.ctx, nil /* finalizeLastStageCb */)
 	}
+	// TODO: think about MustUseLeafTxn case.
+	for _, colID := range fetch.catalogCols {
+		if execinfra.ColumnIDRequiresMVCCDecoding(colID.GetID()) {
+			// TODO(#144166): relax this.
+			recommendation = cannotDistribute
+			break
+		}
+	}
 	planCtx := e.getPlanCtx(recommendation)
 	if err := e.dsp.planIndexJoin(e.ctx, planCtx, planInfo, physPlan); err != nil {
 		return nil, err
@@ -959,6 +972,14 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 			planInfo.onCond = onCond
 		}
 
+		var mvccDecodingRequired bool
+		for _, colID := range fetch.catalogCols {
+			if execinfra.ColumnIDRequiresMVCCDecoding(colID.GetID()) {
+				mvccDecodingRequired = true
+				break
+			}
+		}
+
 		recommendation := e.checkExprsAndMaybeMergeLastStage([]tree.TypedExpr{lookupExpr, onCond}, physPlan)
 		if locking.Strength != tree.ForNone {
 			// Lookup joins that are performing row-level locking cannot currently be
@@ -970,6 +991,10 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 		} else if remoteLookupExpr != nil || remoteOnlyLookups {
 			// Do not distribute locality-optimized joins, since it would defeat the
 			// purpose of the optimization.
+			recommendation = cannotDistribute
+			physPlan.EnsureSingleStreamOnGateway(e.ctx, nil /* finalizeLastStageCb */)
+		} else if mvccDecodingRequired {
+			// TODO(#144166): relax this.
 			recommendation = cannotDistribute
 			physPlan.EnsureSingleStreamOnGateway(e.ctx, nil /* finalizeLastStageCb */)
 		}

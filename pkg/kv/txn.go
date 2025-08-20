@@ -1862,6 +1862,14 @@ func (txn *Txn) HasPerformedWrites() bool {
 	return txn.mu.sender.HasPerformedWrites()
 }
 
+// HasBufferedWrites returns true if a write has been buffered for the
+// transaction's current epoch.
+func (txn *Txn) HasBufferedWrites() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.HasBufferedWrites()
+}
+
 // AdmissionHeader returns the admission header for work done in the context
 // of this transaction.
 func (txn *Txn) AdmissionHeader() kvpb.AdmissionHeader {

@@ -1,0 +1,71 @@
+# LogicTest: 5node
+
+# TODO: add a test where crdb_internal_mvcc_timestamp is fetched by the lookup
+# join.
+
+# TODO: probably remove this.
+statement ok
+SET kv_transaction_buffered_writes_enabled=true
+
+subtest regression_151325
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+INSERT INTO kv VALUES (1, 1), (2, 2);
+
+statement ok
+ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1, 2) AS g(i)
+
+retry
+statement ok
+ALTER TABLE kv EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i+1], i FROM generate_series(0, 2) AS g(i)
+
+# First txn performs a write that is buffered and then a stmt for which we
+# should disable DistSQL.
+
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO kv VALUES (3, 3);
+
+query T
+SELECT info FROM [EXPLAIN SELECT crdb_internal_mvcc_timestamp FROM kv] WHERE info LIKE 'distribution%'
+----
+distribution: local
+
+statement count 3
+SELECT crdb_internal_mvcc_timestamp FROM kv;
+
+statement ok
+COMMIT;
+
+# Try another txn where the subquery in the first stmt buffers a write and
+# DistSQL is disabled for the main query, but then the next stmt should
+# encounter an error.
+
+statement ok
+BEGIN;
+
+statement count 3
+SELECT
+  crdb_internal_mvcc_timestamp
+FROM
+  [
+    INSERT INTO kv VALUES (4, 4) RETURNING NULL
+  ],
+  kv;
+
+statement error duplicate key value violates unique constraint \"kv_pkey\"
+INSERT INTO kv VALUES (4, 4);
+
+statement ok
+ROLLBACK;
+
+query I
+SELECT count(*) FROM kv;
+----
+3
+
+subtest end

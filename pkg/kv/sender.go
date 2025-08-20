@@ -379,6 +379,10 @@ type TxnSender interface {
 	// transaction's current epoch.
 	HasPerformedWrites() bool
 
+	// HasBufferedWrites returns true if a write has been buffered for the
+	// transaction's current epoch.
+	HasBufferedWrites() bool
+
 	// TestingShouldRetry returns true if transaction retry errors should be
 	// randomly returned to callers. Note that it is the responsibility of
 	// (*kv.DB).Txn() to return the retries. This lives here since the

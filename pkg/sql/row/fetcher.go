@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -409,11 +410,13 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 		}
 	}
 
-	// Disable buffered writes if any system columns are needed that require
-	// MVCC decoding.
-	if rf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
-		if rf.args.Txn != nil && rf.args.Txn.BufferedWritesEnabled() {
-			rf.args.Txn.SetBufferedWritesEnabled(false /* enabled */)
+	// Double check that if any system columns are needed that require MVCC
+	// decoding, we have access to the RootTxn.
+	if buildutil.CrdbTestBuild {
+		if rf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
+			if rf.args.Txn != nil && rf.args.Txn.Type() == kv.LeafTxn {
+				return errors.AssertionFailedf("got LeafTxn when MVCC decoding is required")
+			}
 		}
 	}
 
@@ -536,11 +539,13 @@ func (rf *Fetcher) SetTxn(txn *kv.Txn) error {
 // setTxnAndSendFn peeks inside of the KVFetcher to update the underlying
 // txnKVFetcher with the new txn and sendFn.
 func (rf *Fetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) error {
-	// Disable buffered writes if any system columns are needed that require
-	// MVCC decoding.
-	if rf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
-		if txn != nil && txn.BufferedWritesEnabled() {
-			txn.SetBufferedWritesEnabled(false /* enabled */)
+	// Double check that if any system columns are needed that require MVCC
+	// decoding, we have access to the RootTxn.
+	if buildutil.CrdbTestBuild {
+		if rf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
+			if txn != nil && txn.Type() == kv.LeafTxn {
+				return errors.AssertionFailedf("got LeafTxn when MVCC decoding is required")
+			}
 		}
 	}
 

@@ -282,6 +282,11 @@ func (m *MockTransactionalSender) HasPerformedWrites() bool {
 	panic("unimplemented")
 }
 
+// HasBufferedWrites is part of TxnSenderFactory.
+func (m *MockTransactionalSender) HasBufferedWrites() bool {
+	panic("unimplemented")
+}
+
 // TestingShouldRetry is part of TxnSenderFactory.
 func (m *MockTransactionalSender) TestingShouldRetry() bool {
 	return false

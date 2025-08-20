@@ -80,12 +80,7 @@ type fetchPlanningInfo struct {
 	index catalog.Index
 
 	colCfg scanColumnsConfig
-	// The table columns, possibly including ones currently in schema changes.
-	// TODO(radu/knz): currently we always load the entire row from KV and only
-	// skip unnecessary decodes to Datum. Investigate whether performance is to
-	// be gained (e.g. for tables with wide rows) by reading only certain
-	// columns from KV using point lookups instead of a single range lookup for
-	// the entire row.
+	// catalogCols contains only the columns that need to be fetched.
 	catalogCols []catalog.Column
 	// There is a 1-1 correspondence between catalogCols and columns.
 	columns colinfo.ResultColumns

@@ -2201,12 +2201,8 @@ func shouldDistributeGivenRecAndMode(
 // remote node to the gateway.
 // TODO(yuzefovich): this will be easy to solve once the DistSQL spec factory is
 // completed but is quite annoying to do at the moment.
-func getPlanDistribution(
-	ctx context.Context,
-	txnHasUncommittedTypes bool,
-	sd *sessiondata.SessionData,
-	plan planMaybePhysical,
-	distSQLVisitor *distSQLExprCheckVisitor,
+func (p *planner) getPlanDistribution(
+	ctx context.Context, plan planMaybePhysical,
 ) (_ physicalplan.PlanDistribution, distSQLProhibitedErr error) {
 	if plan.isPhysicalPlan() {
 		// TODO(#47473): store the distSQLProhibitedErr for DistSQL spec factory
@@ -2217,10 +2213,11 @@ func getPlanDistribution(
 	// If this transaction has modified or created any types, it is not safe to
 	// distribute due to limitations around leasing descriptors modified in the
 	// current transaction.
-	if txnHasUncommittedTypes {
+	if p.Descriptors().HasUncommittedDescriptors() {
 		return physicalplan.LocalPlan, nil
 	}
 
+	sd := p.SessionData()
 	if sd.DistSQLMode == sessiondatapb.DistSQLOff {
 		return physicalplan.LocalPlan, nil
 	}
@@ -2230,7 +2227,14 @@ func getPlanDistribution(
 		return physicalplan.LocalPlan, nil
 	}
 
-	rec, err := checkSupportForPlanNode(ctx, plan.planNode, distSQLVisitor, sd)
+	// TODO: add comments.
+	txnHasBufferedWrites := p.txn.HasBufferedWrites()
+	if sd.BufferedWritesEnabled && p.curPlan.main == plan {
+		if p.curPlan.flags.IsSet(planFlagContainsMutation) && len(p.curPlan.subqueryPlans) > 0 {
+			txnHasBufferedWrites = true
+		}
+	}
+	rec, err := checkSupportForPlanNode(ctx, plan.planNode, &p.distSQLVisitor, sd, txnHasBufferedWrites)
 	if err != nil {
 		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)

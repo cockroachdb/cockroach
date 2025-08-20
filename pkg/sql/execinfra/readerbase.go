@@ -15,6 +15,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -257,4 +260,22 @@ func GetIndexJoinBatchSize(sd *sessiondata.SessionData) int64 {
 		return joinReaderIndexJoinStrategyBatchSizeDefault
 	}
 	return sd.JoinReaderIndexJoinStrategyBatchSize
+}
+
+// ColumnIDRequiresMVCCDecoding returns whether the given columnID corresponds
+// to a system column that requires MVCC decoding to be populated.
+func ColumnIDRequiresMVCCDecoding(columnID descpb.ColumnID) bool {
+	if !colinfo.IsColIDSystemColumn(columnID) {
+		return false
+	}
+	switch colinfo.GetSystemColumnKindFromColumnID(columnID) {
+	case catpb.SystemColumnKind_MVCCTIMESTAMP,
+		catpb.SystemColumnKind_ORIGINID,
+		catpb.SystemColumnKind_ORIGINTIMESTAMP:
+		return true
+	case catpb.SystemColumnKind_TABLEOID:
+		return false
+	default:
+		panic(errors.AssertionFailedf("unexpected system column: %d", columnID))
+	}
 }

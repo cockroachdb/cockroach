@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -456,11 +457,13 @@ func (cf *cFetcher) Init(
 		}
 	}
 
-	// Disable buffered writes if any system columns are needed that require
-	// MVCC decoding.
-	if cf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
-		if cf.txn != nil && cf.txn.BufferedWritesEnabled() {
-			cf.txn.SetBufferedWritesEnabled(false /* enabled */)
+	// Double check that if any system columns are needed that require MVCC
+	// decoding, we have access to the RootTxn.
+	if buildutil.CrdbTestBuild {
+		if cf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
+			if cf.txn != nil && cf.txn.Type() == kv.LeafTxn {
+				return errors.AssertionFailedf("got LeafTxn when MVCC decoding is required")
+			}
 		}
 	}
 
