@@ -14,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -114,11 +116,34 @@ type probeRangeGenerator struct {
 func makeProbeRangeGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	if err := evalCtx.SessionAccessor.CheckPrivilege(
+	err := evalCtx.SessionAccessor.CheckPrivilege(
 		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
-	); err != nil {
-		return nil, err
+	)
+
+	if err != nil {
+		if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+			return nil, err
+		}
+
+		// validate VIEWSYSTEMTABLE privilege. This check is used
+		// in debug.zip generation flow as we are going to rely on
+		// restricted privilege access.
+		err = evalCtx.SessionAccessor.CheckPrivilege(ctx,
+			syntheticprivilege.GlobalPrivilegeObject,
+			privilege.VIEWSYSTEMTABLE)
+
+		if err != nil {
+			if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+				return nil, err
+			}
+
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"user %s does not have either %s or %s system privilege",
+				evalCtx.SessionData().User(), privilege.REPAIRCLUSTER, privilege.VIEWSYSTEMTABLE)
+		}
+
 	}
+
 	// Trace the query to meta2. Return it as part of the error string if the query fails.
 	// This improves observability into a meta2 outage. We expect crdb_internal.probe_range
 	// to be available, unless meta2 is down.
