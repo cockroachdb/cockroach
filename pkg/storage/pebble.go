@@ -455,7 +455,7 @@ var (
 			"bytes that trigger blob-file rewrite compactions; 100 disables these compactions",
 		int64(metamorphic.ConstantWithTestRange("storage.value_separation.compaction_garbage_threshold",
 			10, /* default */
-			1 /* min */, 80 /* max */)),
+			1   /* min */, 80 /* max */)),
 		settings.IntInRange(1, 100),
 	)
 )
