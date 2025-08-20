@@ -571,6 +571,14 @@ type Replica struct {
 	//
 	// TODO(pav-kv): audit all other fields and include here.
 	shMu struct {
+		// The destroyed status of a replica indicating if it's alive, corrupt,
+		// scheduled for destruction or has been GCed. destroyStatus should only be
+		// set while also holding the raftMu and readOnlyCmdMu.
+		//
+		// When this replica is being removed, the destroyStatus is updated and
+		// RangeTombstone is written in the same raftMu critical section.
+		destroyStatus
+
 		// The state of the Raft state machine.
 		// Invariant: state.TruncatedState == nil. The field is being phased out in
 		// favour of the one contained in logStorage.
@@ -587,14 +595,6 @@ type Replica struct {
 	mu struct {
 		// Protects all fields in the mu struct.
 		ReplicaMutex
-		// The destroyed status of a replica indicating if it's alive, corrupt,
-		// scheduled for destruction or has been GCed.
-		// destroyStatus should only be set while also holding the raftMu and
-		// readOnlyCmdMu.
-		//
-		// When this replica is being removed, the destroyStatus is updated and
-		// RangeTombstone is written in the same raftMu critical section.
-		destroyStatus
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
 		//
@@ -1250,7 +1250,7 @@ func (r *Replica) IsDestroyed() (DestroyReason, error) {
 }
 
 func (r *Replica) isDestroyedRLocked() (DestroyReason, error) {
-	return r.mu.destroyStatus.reason, r.mu.destroyStatus.err
+	return r.shMu.destroyStatus.reason, r.shMu.destroyStatus.err
 }
 
 // IsQuiescent returns whether the replica is quiescent or not.
@@ -2672,11 +2672,11 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		r.raftMu.Lock()
 		r.readOnlyCmdMu.Lock()
 		r.mu.Lock()
-		if mergeCommitted && r.mu.destroyStatus.IsAlive() {
+		if mergeCommitted && r.shMu.destroyStatus.IsAlive() {
 			// The merge committed but the left-hand replica on this store hasn't
 			// subsumed this replica yet. Mark this replica as destroyed so it
 			// doesn't serve requests when we close the mergeCompleteCh below.
-			r.mu.destroyStatus.Set(kvpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()), destroyReasonMergePending)
+			r.shMu.destroyStatus.Set(kvpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()), destroyReasonMergePending)
 		}
 		// Unblock pending requests. If the merge committed, the requests will
 		// notice that the replica has been destroyed and return an appropriate

@@ -1116,7 +1116,7 @@ func (rp *replicaProposer) getReplicaID() roachpb.ReplicaID {
 }
 
 func (rp *replicaProposer) destroyed() destroyStatus {
-	return rp.mu.destroyStatus
+	return rp.shMu.destroyStatus
 }
 
 func (rp *replicaProposer) leaseAppliedIndex() kvpb.LeaseAppliedIndex {

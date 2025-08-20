@@ -620,7 +620,7 @@ func (s *Store) HandleRaftResponse(
 				// that case, we don't want to add it to the replicaGCQueue.
 				// If the replica is not alive then we also should ignore this error.
 				if tErr.ReplicaID != repl.replicaID ||
-					!repl.mu.destroyStatus.IsAlive() ||
+					!repl.shMu.destroyStatus.IsAlive() ||
 					// Ignore if we want to test the replicaGC queue.
 					s.TestingKnobs().DisableEagerReplicaRemoval {
 					repl.mu.Unlock()

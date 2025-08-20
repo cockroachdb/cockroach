@@ -1648,7 +1648,7 @@ func (r *Replica) refreshProposalsLocked(
 	}
 
 	r.mu.slowProposalCount = slowProposalCount
-	destroyed := r.mu.destroyStatus.Removed()
+	destroyed := r.shMu.destroyStatus.Removed()
 
 	// If the breaker isn't tripped yet but we've detected commands that have
 	// taken too long to replicate, and the replica is not destroyed, trip the
@@ -2222,7 +2222,7 @@ func (s pendingCmdSlice) Less(i, j int) bool {
 func (r *Replica) withRaftGroupLocked(
 	f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
-	if r.mu.destroyStatus.Removed() {
+	if r.shMu.destroyStatus.Removed() {
 		// Callers know to detect errRemoved as non-fatal.
 		return errRemoved
 	}

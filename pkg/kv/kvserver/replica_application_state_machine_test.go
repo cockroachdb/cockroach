@@ -151,7 +151,8 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		// log index that we pulled out of thin air above.
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		r.mu.destroyStatus.Set(errors.New("test done"), destroyReasonRemoved)
+		// FIXME: should lock readOnlyCmdMu?
+		r.shMu.destroyStatus.Set(errors.New("test done"), destroyReasonRemoved)
 	})
 }
 
@@ -238,7 +239,8 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 			// should there be a command in the raft log (i.e. some errant lease request
 			// or whatnot) this will fire assertions because it will conflict with the
 			// log index that we pulled out of thin air above.
-			r.mu.destroyStatus.Set(errors.New("test done"), destroyReasonRemoved)
+			// FIXME: should lock readOnlyCmdMu?
+			r.shMu.destroyStatus.Set(errors.New("test done"), destroyReasonRemoved)
 
 			require.Equal(t, raftAppliedIndex+1, r.shMu.state.RaftAppliedIndex)
 			require.Equal(t, truncatedIndex+1, ls.shMu.trunc.Index)
@@ -427,7 +429,8 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 	defer r.raftMu.Unlock()
 	// Avoid additional raft processing after we're done with this replica because
 	// we've applied entries that aren't in the log.
-	defer r.mu.destroyStatus.Set(errors.New("boom"), destroyReasonRemoved)
+	// FIXME: should lock readOnlyCmdMu?
+	defer r.shMu.destroyStatus.Set(errors.New("boom"), destroyReasonRemoved)
 
 	sm := r.getStateMachine()
 

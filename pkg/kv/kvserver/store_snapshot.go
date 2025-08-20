@@ -349,7 +349,7 @@ func (s *Store) canAcceptSnapshotLocked(
 	existingRepl.mu.RLock()
 	existingDesc := existingRepl.shMu.state.Desc
 	existingIsInitialized := existingDesc.IsInitialized()
-	existingDestroyStatus := existingRepl.mu.destroyStatus
+	existingDestroyStatus := existingRepl.shMu.destroyStatus
 	existingRepl.mu.RUnlock()
 
 	if existingIsInitialized {

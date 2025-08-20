@@ -678,7 +678,8 @@ func TestWaitForLeaseAppliedIndex(t *testing.T) {
 
 	destroyErr := errors.New("destroyed")
 	tc.repl.mu.Lock()
-	tc.repl.mu.destroyStatus.Set(destroyErr, destroyReasonRemoved)
+	// FIXME: should lock readOnlyCmdMu?
+	tc.repl.shMu.destroyStatus.Set(destroyErr, destroyReasonRemoved)
 	tc.repl.mu.Unlock()
 
 	_, err = tc.repl.WaitForLeaseAppliedIndex(ctx, maxLAI)

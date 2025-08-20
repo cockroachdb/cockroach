@@ -13782,7 +13782,8 @@ func TestAdminScatterDestroyedReplica(t *testing.T) {
 
 	errBoom := errors.New("boom")
 	tc.repl.mu.Lock()
-	tc.repl.mu.destroyStatus.Set(errBoom, destroyReasonMergePending)
+	// FIXME: should lock readOnlyCmdMu?
+	tc.repl.shMu.destroyStatus.Set(errBoom, destroyReasonMergePending)
 	tc.repl.mu.Unlock()
 
 	desc := tc.repl.Desc()
