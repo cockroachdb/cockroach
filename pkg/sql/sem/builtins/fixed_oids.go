@@ -2796,6 +2796,11 @@ var builtinOidsArray = []string{
 	2841: `lead(val: ltree, n: int, default: ltree) -> ltree`,
 	2842: `last_value(val: ltree) -> ltree`,
 	2843: `crdb_internal.process_vector_index_fixups(table_id: int, index_id: int) -> void`,
+	2844: `st_asmvt(arg1: tuple) -> bytes`,
+	2845: `st_asmvt(arg1: tuple, arg2: string) -> bytes`,
+	2846: `st_asmvt(arg1: tuple, arg2: string, arg3: int) -> bytes`,
+	2847: `st_asmvt(arg1: tuple, arg2: string, arg3: int, arg4: string) -> bytes`,
+	2848: `st_asmvt(arg1: tuple, arg2: string, arg3: int, arg4: string, arg5: string) -> bytes`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

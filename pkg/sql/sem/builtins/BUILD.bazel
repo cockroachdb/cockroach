@@ -45,6 +45,7 @@ go_library(
         "//pkg/geo/geoprojbase",
         "//pkg/geo/geos",
         "//pkg/geo/geotransform",
+        "//pkg/geo/mvt",
         "//pkg/geo/twkb",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
