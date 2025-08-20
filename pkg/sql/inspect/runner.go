@@ -42,16 +42,6 @@ type inspectCheck interface {
 	Close(ctx context.Context) error
 }
 
-// inspectLogger records issues found by inspect checks. Implementations of this
-// interface define how inspectIssue results are handled.
-type inspectLogger interface {
-	// logIssue records an inspectIssue found by a check.
-	logIssue(ctx context.Context, issue *inspectIssue) error
-
-	// hasIssues returns true if any issues have been logged.
-	hasIssues() bool
-}
-
 // inspectRunner coordinates the execution of a set of inspectChecks.
 //
 // It manages the lifecycle of each check, including initialization,

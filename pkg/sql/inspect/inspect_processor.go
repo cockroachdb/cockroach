@@ -167,13 +167,21 @@ func getProcessorConcurrency(flowCtx *execinfra.FlowCtx) int {
 }
 
 // getInspectLogger returns a logger for the inspect processor.
-func getInspectLogger(flowCtx *execinfra.FlowCtx) inspectLogger {
-	knobs := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).InspectTestingKnobs
-	if knobs == nil || knobs.InspectIssueLogger == nil {
-		// TODO(148301): Implement a proper logger that writes to system.inspect_errors.
-		return &logSink{}
+func getInspectLogger(flowCtx *execinfra.FlowCtx, jobID jobspb.JobID) inspectLogger {
+	loggers := inspectLoggers{
+		&logSink{},
+		&tableSink{
+			db:    flowCtx.Cfg.DB,
+			jobID: jobID,
+		},
 	}
-	return knobs.InspectIssueLogger.(inspectLogger)
+
+	knobs := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).InspectTestingKnobs
+	if knobs != nil && knobs.InspectIssueLogger != nil {
+		loggers = append(loggers, knobs.InspectIssueLogger.(inspectLogger))
+	}
+
+	return loggers
 }
 
 // processSpan executes all configured inspect checks against a single span.
@@ -225,6 +233,7 @@ func newInspectProcessor(
 	if err != nil {
 		return nil, err
 	}
+
 	return &inspectProcessor{
 		spec:           spec,
 		processorID:    processorID,
@@ -232,7 +241,7 @@ func newInspectProcessor(
 		checkFactories: checkFactories,
 		cfg:            flowCtx.Cfg,
 		spanSrc:        newSliceSpanSource(spec.Spans),
-		logger:         getInspectLogger(flowCtx),
+		logger:         getInspectLogger(flowCtx, spec.JobID),
 		concurrency:    getProcessorConcurrency(flowCtx),
 	}, nil
 }
