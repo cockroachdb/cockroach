@@ -1624,6 +1624,13 @@ func (n *Node) batchInternal(
 	var rangeTenantIDForAC roachpb.TenantID
 	// The computation of rangeTenantIDForAC fails open in case of error.
 	if len(args.Requests) > 0 {
+		// TODO: remove this panic.
+		//
+		// r1 should really start at LocalMax but it starts "officially" at KeyMin
+		// which is not addressable.
+		if len(args.Requests[0].GetInner().Header().Key) == 0 && args.Header.RangeID != 1 {
+			panic(errors.AssertionFailedf("missing header key in %s", args.String()))
+		}
 		k, err := keys.Addr(args.Requests[0].GetInner().Header().Key)
 		if err == nil {
 			_, tid, err := keys.DecodeTenantPrefix(roachpb.Key(k))
