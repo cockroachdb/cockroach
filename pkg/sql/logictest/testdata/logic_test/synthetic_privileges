@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 # test MODIFYCLUSTERSETTING
 user testuser
 

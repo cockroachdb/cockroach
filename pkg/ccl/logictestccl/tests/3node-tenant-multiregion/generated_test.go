@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 11
+const configIdx = 12
 
 var logicTestDir string
 var cclLogicTestDir string

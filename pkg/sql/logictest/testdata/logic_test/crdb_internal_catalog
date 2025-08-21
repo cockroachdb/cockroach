@@ -1,7 +1,7 @@
 # Legacy schema changer is skipped because test results depend on
 # declarative schema changer behavior.
 #
-# LogicTest: !3node-tenant-default-configs !local-legacy-schema-changer
+# LogicTest: !3node-tenant-default-configs !local-legacy-schema-changer !local-prepared
 
 statement ok
 CREATE DATABASE db

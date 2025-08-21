@@ -325,6 +325,8 @@ type (
 	ConcatStringOp struct{}
 	// ConcatVarBitOp is a BinaryEvalOp.
 	ConcatVarBitOp struct{}
+	// ConcatLTreeOp is a BinaryEvalOp.
+	ConcatLTreeOp struct{}
 )
 
 type (
@@ -392,8 +394,26 @@ type ContainsArrayOp struct{}
 // ContainsJsonbOp is a BinaryEvalOp.
 type ContainsJsonbOp struct{}
 
+// ContainsLTreeOp is a BinaryEvalOp.
+type ContainsLTreeOp struct{}
+
+// ContainsLTreeArrayOp is a BinaryEvalOp.
+type ContainsLTreeArrayOp struct{}
+
 // ContainedByArrayOp is a BinaryEvalOp.
 type ContainedByArrayOp struct{}
 
 // ContainedByJsonbOp is a BinaryEvalOp.
 type ContainedByJsonbOp struct{}
+
+// ContainedByLTreeOp is a BinaryEvalOp.
+type ContainedByLTreeOp struct{}
+
+// ContainedByLTreeArrayOp is a BinaryEvalOp.
+type ContainedByLTreeArrayOp struct{}
+
+// FirstContainsLTreeOp is a BinaryEvalOp.
+type FirstContainsLTreeOp struct{}
+
+// FirstContainedByLTreeOp is a BinaryEvalOp.
+type FirstContainedByLTreeOp struct{}
