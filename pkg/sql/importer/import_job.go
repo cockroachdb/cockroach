@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"math"
 	"sync/atomic"
 	"time"
@@ -155,7 +156,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// the table id and the index id.
 	// TODO(janexing): Using a map here could cause a data race but is it
 	// acceptable? Sync.map maybe? but would it overkill?
-	expectedRowCountReadyByIndex := make(map[uint64]*expectedRowCountWithSignal)
+	expectedRowCountReadyByIndex := syncutil.Map[uint64, expectedRowCountWithSignal]{}
 	pendingPreCountTasks := atomic.Int64{}
 	if rowCountValidation {
 		for i := range details.Tables {
@@ -163,9 +164,9 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			for _, idx := range tblDesc.AllIndexes() {
 				idx := idx
 				tableTag := kvpb.BulkOpSummaryID(uint64(tblDesc.GetID()), uint64(idx.GetID()))
-				expectedRowCountReadyByIndex[tableTag] = &expectedRowCountWithSignal{
+				expectedRowCountReadyByIndex.Store(tableTag, &expectedRowCountWithSignal{
 					ready: make(chan struct{}),
-				}
+				})
 				pendingPreCountTasks.Add(1)
 				grp.GoCtx(func(ctx context.Context) error {
 					preImportIdxLen, err := sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx, false, newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()), sessiondata.NoSessionDataOverride)
@@ -174,9 +175,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 						return errors.Wrapf(err, "counting rows in index %q of table %q before import", idx.GetName(), tblDesc.GetName())
 					}
 
+					expectedRowCountWithSig, _ := expectedRowCountReadyByIndex.Load(tableTag)
 					select {
-					case <-expectedRowCountReadyByIndex[tableTag].ready:
-						expectedCount := expectedRowCountReadyByIndex[tableTag].expectedRowCount
+					case <-expectedRowCountWithSig.ready:
+						expectedCount := expectedRowCountWithSig.expectedRowCount
 						postImportIdxLen, err :=
 							sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx,
 								false, /* withFirstMutationPublic */
@@ -348,7 +350,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 		// Signal row count validation goroutines with the expected count
 		// from import.
-		if expected, ok := expectedRowCountReadyByIndex[id]; ok {
+		if expected, ok := expectedRowCountReadyByIndex.Load(id); ok {
 			expected.expectedRowCount = count
 			close(expected.ready)
 		}
