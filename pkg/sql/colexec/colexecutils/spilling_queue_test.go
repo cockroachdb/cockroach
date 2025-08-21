@@ -224,7 +224,7 @@ func TestSpillingQueue(t *testing.T) {
 				}
 
 				if rewindable {
-					require.NoError(t, q.Rewind(ctx))
+					q.Rewind(ctx)
 					numAlreadyDequeuedTuples = numDequeuedTuplesBeforeReading
 					dequeuedBatches = dequeuedBatches[:numDequeuedBatchesBeforeReading]
 					dequeuedBatchLengths = dequeuedBatchLengths[:numDequeuedBatchesBeforeReading]
@@ -232,7 +232,7 @@ func TestSpillingQueue(t *testing.T) {
 			}
 
 			// Close queue.
-			require.NoError(t, q.Close(ctx))
+			q.Close(ctx)
 
 			// Verify no directories are left over.
 			directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
@@ -309,7 +309,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	require.False(t, q.Spilled())
 
 	// Close queue.
-	require.NoError(t, q.Close(ctx))
+	q.Close(ctx)
 
 	// Verify no directories are left over.
 	directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
@@ -409,7 +409,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 
 			// Some sanity checks.
 			require.False(t, q.Spilled())
-			require.NoError(t, q.Close(ctx))
+			q.Close(ctx)
 			directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
 			require.NoError(t, err)
 			require.Equal(t, 0, len(directories))
@@ -516,7 +516,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 		require.Equal(t, batchCount, numInputBatches+numExtraInputBatches)
 
 		// Some sanity checks.
-		require.NoError(t, q.Close(ctx))
+		q.Close(ctx)
 		directories, err := queueCfg.FS.List(queueCfg.GetPather.GetPath(ctx))
 		require.NoError(t, err)
 		require.Equal(t, 0, len(directories))
