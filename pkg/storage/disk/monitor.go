@@ -195,6 +195,11 @@ type monitoredDisk struct {
 	refCount int
 }
 
+// Adding lint:ignore U1000 to suppress the unused error thrown by linter, as
+// this function is used in pkg/storage/disk/linux_parse.go which
+// has //go:build linux constraint.
+//
+//lint:ignore U1000
 func (m *monitoredDisk) recordStats(t time.Time, stats Stats) {
 	m.tracer.RecordEvent(traceEvent{
 		time:  t,
