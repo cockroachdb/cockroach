@@ -3418,7 +3418,7 @@ SELECT crdb_internal.check_password_hash_format(('CRDB-BCRYPT$'||'3a$'||'10$'||'
 query error pgcode 42601 too short to be a bcrypted password
 SELECT crdb_internal.check_password_hash_format(('CRDB-BCRYPT$'||'2a$'||'10$'||'vcmoIBvgeHjgScVHWRMWI.Z3v0')::bytes)
 
-query error pgcode 42601 cost 1 is outside allowed range \(4,31\)
+query error pgcode 42601 cost 1 is outside allowed inclusive range 4..31
 SELECT crdb_internal.check_password_hash_format(('CRDB-BCRYPT$'||'2a$'||'01$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq')::bytes)
 
 query T
