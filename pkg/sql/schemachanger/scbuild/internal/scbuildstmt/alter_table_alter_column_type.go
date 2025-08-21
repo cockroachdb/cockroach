@@ -93,7 +93,7 @@ func alterTableAlterColumnType(
 		case *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr:
 			panic(sqlerrors.NewAlterDependsOnPolicyExprError(op, objType, t.Column.String()))
 		}
-	})
+	}, false)
 
 	var err error
 	newColType.Type, err = schemachange.ValidateAlterColumnTypeChecks(
@@ -309,7 +309,7 @@ func handleGeneralColumnConversion(
 		case *scpb.SecondaryIndex:
 			panic(sqlerrors.NewAlterColumnTypeColInIndexNotSupportedErr())
 		}
-	})
+	}, false)
 
 	// This code path should never be reached for virtual columns, as their values
 	// are always computed dynamically on access and are never stored on disk.
@@ -505,7 +505,7 @@ func maybeWriteNoticeForFKColTypeMismatch(b BuildCtx, col *scpb.Column, colType 
 		case *scpb.ForeignKeyConstraintUnvalidated:
 			writeNoticeHelper(e.ColumnIDs, e.ReferencedColumnIDs, e.ReferencedTableID)
 		}
-	})
+	}, false)
 }
 
 func getComputeExpressionForBackfill(

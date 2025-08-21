@@ -1149,7 +1149,7 @@ func checkIfColumnCanBeDropped(b BuildCtx, columnToDrop *scpb.Column) bool {
 				canBeDropped = false
 			}
 		}
-	})
+	}, false)
 	return canBeDropped
 }
 

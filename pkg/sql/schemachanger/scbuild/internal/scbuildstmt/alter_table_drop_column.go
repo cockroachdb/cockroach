@@ -266,7 +266,7 @@ func dropColumn(
 		default:
 			b.Drop(e)
 		}
-	})
+	}, false)
 	// TODO(ajwerner): Track the undropped backrefs to populate a detail
 	// message like postgres does. For example:
 	//  SET serial_normalization = sql_sequence;
@@ -289,9 +289,7 @@ func dropColumn(
 	assertAllColumnElementsAreDropped(colElts)
 }
 
-func walkColumnDependencies(
-	b BuildCtx, col *scpb.Column, op, objType string, fn func(e scpb.Element, op, objType string),
-) {
+func walkColumnDependencies(b BuildCtx, col *scpb.Column, op string, objType string, fn func(e scpb.Element, op string, objType string), allowPredicateRef bool) {
 	var sequenceDeps catalog.DescriptorIDSet
 	var indexDeps catid.IndexSet
 	var columnDeps catalog.TableColSet
@@ -300,7 +298,9 @@ func walkColumnDependencies(
 	// Panic if `col` is referenced in a predicate of an index or
 	// unique without index constraint.
 	// TODO (xiang): Remove this restriction when #97813 is fixed.
-	panicIfColReferencedInPredicate(b, col, tblElts, op, objType)
+	if !allowPredicateRef {
+		panicIfColReferencedInPredicate(b, col, tblElts, op, objType)
+	}
 
 	tblElts.
 		Filter(referencesColumnIDFilter(col.ColumnID)).

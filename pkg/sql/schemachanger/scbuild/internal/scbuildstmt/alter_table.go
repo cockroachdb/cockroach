@@ -31,17 +31,18 @@ type supportedAlterTableCommand = supportedStatement
 // only be with the use_declarative_schema_changer session variable.
 var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):          {fn: alterTableAddColumn, on: true, checks: nil},
-	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):         {fn: alterTableDropColumn, on: true, checks: nil},
-	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)):    {fn: alterTableAlterPrimaryKey, on: true, checks: nil},
-	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):         {fn: alterTableSetNotNull, on: true, checks: nil},
 	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)):      {fn: alterTableAddConstraint, on: true, checks: nil},
-	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {fn: alterTableDropConstraint, on: true, checks: nil},
-	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {fn: alterTableValidateConstraint, on: true, checks: nil},
-	reflect.TypeOf((*tree.AlterTableSetDefault)(nil)):         {fn: alterTableSetDefault, on: true, checks: nil},
-	reflect.TypeOf((*tree.AlterTableSetOnUpdate)(nil)):        {fn: alterTableSetOnUpdate, on: true, checks: isV254Active},
 	reflect.TypeOf((*tree.AlterTableAlterColumnType)(nil)):    {fn: alterTableAlterColumnType, on: true, checks: nil},
-	reflect.TypeOf((*tree.AlterTableSetRLSMode)(nil)):         {fn: alterTableSetRLSMode, on: true, checks: isV252Active},
+	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)):    {fn: alterTableAlterPrimaryKey, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):         {fn: alterTableDropColumn, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {fn: alterTableDropConstraint, on: true, checks: nil},
 	reflect.TypeOf((*tree.AlterTableDropNotNull)(nil)):        {fn: alterTableDropNotNull, on: true, checks: isV253Active},
+	reflect.TypeOf((*tree.AlterTableSetDefault)(nil)):         {fn: alterTableSetDefault, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):         {fn: alterTableSetNotNull, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableSetOnUpdate)(nil)):        {fn: alterTableSetOnUpdate, on: true, checks: isV254Active},
+	reflect.TypeOf((*tree.AlterTableSetRLSMode)(nil)):         {fn: alterTableSetRLSMode, on: true, checks: isV252Active},
+	reflect.TypeOf((*tree.AlterTableRenameColumn)(nil)):       {fn: alterTableRenameColumn, on: true, checks: isV254Active},
+	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {fn: alterTableValidateConstraint, on: true, checks: nil},
 }
 
 func init() {
