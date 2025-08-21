@@ -435,7 +435,11 @@ func (ju *JobUpdater) PauseRequestedWithFunc(
 	ju.UpdateState(StatePauseRequested)
 	md.Payload.PauseReason = reason
 	ju.UpdatePayload(md.Payload)
-	log.Infof(ctx, "job %d: pause requested recorded with reason %s", md.ID, reason)
+	if reason == "" {
+		log.Infof(ctx, "job %d: pause requested recorded", md.ID)
+	} else {
+		log.Infof(ctx, "job %d: pause requested recorded with reason: %s", md.ID, reason)
+	}
 	return nil
 }
 
@@ -485,6 +489,7 @@ func (ju *JobUpdater) CancelRequestedWithReason(
 		ju.UpdatePayload(md.Payload)
 	}
 	ju.UpdateState(StateCancelRequested)
+	log.Infof(ctx, "job %d: cancel requested recorded with reason: %v", md.ID, reason)
 	return nil
 }
 
