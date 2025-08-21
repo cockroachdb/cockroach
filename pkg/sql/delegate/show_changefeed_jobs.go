@@ -29,6 +29,57 @@ WITH payload AS (
   FROM
   crdb_internal.system_jobs
   WHERE job_type = 'CHANGEFEED'%s
+),
+descriptor_id AS (
+  SELECT
+    id,
+    CAST(json_array_elements(changefeed_details->'target_specifications')->>'descriptor_id' as INT) as descriptor_id
+  FROM payload
+),
+full_targets AS (
+  SELECT
+    id,
+    ARRAY (
+      SELECT
+        concat(
+          database_name, '.', schema_name, '.',
+          name
+        )
+      FROM
+        crdb_internal.tables
+      WHERE
+        table_id = ANY (SELECT key::INT FROM json_each(changefeed_details->'tables'))
+    ) AS names
+  FROM payload
+),
+partial_targets AS (
+  SELECT
+    id,
+    ARRAY (
+      SELECT
+        concat(
+          database_name, '.', schema_name, '.',
+          name
+        )
+      FROM
+        crdb_internal.tables
+      WHERE
+        table_id = ANY (SELECT key::INT FROM json_each(changefeed_details->'tables'))
+      LIMIT 5
+    ) AS names
+  FROM payload
+),
+num_targets AS (
+  SELECT
+    id,
+    (
+      SELECT count(*)
+      FROM
+        crdb_internal.tables t
+      WHERE
+        t.table_id = ANY (SELECT key::INT FROM json_each(p.changefeed_details->'tables'))
+    ) as count
+  FROM payload p
 )
 SELECT
   job_id,
@@ -47,24 +98,43 @@ SELECT
     changefeed_details->>'sink_uri',
     '\u0026', '&'
   ) AS sink_uri,
-  ARRAY (
-    SELECT
-      concat(
-        database_name, '.', schema_name, '.',
-        name
-      )
-    FROM
-      crdb_internal.tables
-    WHERE
-      table_id = ANY (SELECT key::INT FROM json_each(changefeed_details->'tables'))
-  ) AS full_table_names,
+  -- CASE
+    -- WHEN (description ~ '^CREATE DATABASE CHANGEFEED FOR .*' OR description ~ '^CREATE SCHEMA CHANGEFEED FOR .*') AND NOT %t THEN ARRAY[regexp_extract(description, 'CREATE CHANGEFEED FOR (?:DATABASE|SCHEMA) (\S+)')]
+    -- ELSE full_targets.names
+  -- END AS full_table_names,
+  CASE
+    WHEN EXISTS (
+      SELECT 1
+      FROM json_array_elements(changefeed_details->'target_specifications') AS spec
+      WHERE spec ? 'type' AND spec->>'type' = 'schema'
+    )
+    THEN ARRAY[concat(parent_namespace.name, '.', namespace.name)]
+    WHEN EXISTS (
+      SELECT 1
+      FROM json_array_elements(changefeed_details->'target_specifications') AS spec
+      WHERE spec ? 'type' AND spec->>'type' = 'database'
+    )
+    THEN ARRAY[parent_namespace.name]
+    ELSE full_targets.names
+  END AS full_table_names,
   changefeed_details->'opts'->>'topics' AS topics,
   COALESCE(changefeed_details->'opts'->>'format','json') AS format
 FROM
   crdb_internal.jobs
-  INNER JOIN payload ON id = job_id`
+  INNER JOIN payload ON id = job_id
+  INNER JOIN full_targets on payload.id = full_targets.id
+  INNER JOIN partial_targets on payload.id = partial_targets.id
+  INNER JOIN num_targets on payload.id = num_targets.id
+  INNER JOIN descriptor_id on descriptor_id.id = job_id
+  INNER JOIN system.namespace namespace on namespace.id = descriptor_id.descriptor_id
+  LEFT JOIN system.namespace parent_namespace on parent_namespace.id = namespace."parentID"
+  LEFT JOIN system.namespace schema_namespace on schema_namespace.id = namespace."parentSchemaID"
+`
 	)
 
+	// select the changefeed details of a changefeed job
+
+	// WHEN (description ~ '^CREATE DATABASE CHANGEFEED FOR .*' OR description ~ '^CREATE SCHEMA CHANGEFEED FOR .*') AND NOT %t THEN ARRAY_APPEND(partial_targets.names, '...(' || num_targets.count || ')')
 	var whereClause, innerWhereClause, orderbyClause string
 	if n.Jobs == nil {
 		// The query intends to present:
@@ -80,8 +150,9 @@ FROM
 		innerWhereClause = fmt.Sprintf(` AND id in (%s)`, n.Jobs.String())
 	}
 
-	selectClause := fmt.Sprintf(baseSelectClause, innerWhereClause)
+	selectClause := fmt.Sprintf(baseSelectClause, innerWhereClause, n.FullTables)
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
+	fmt.Println(sqlStmt)
 
 	return d.parse(sqlStmt)
 }

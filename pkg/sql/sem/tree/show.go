@@ -545,6 +545,10 @@ var _ NodeFormatter = &ShowJobOptions{}
 type ShowChangefeedJobs struct {
 	// If non-nil, a select statement that provides the job ids to be shown.
 	Jobs *Select
+
+	// If true, include full table names in the output.
+	FullTables bool
+	// todo: only care about this for a db-level changefeed. need to do additional check when this bool is used. (is not a db-level changefeed or full_tables).
 }
 
 // Format implements the NodeFormatter interface.
@@ -553,6 +557,9 @@ func (node *ShowChangefeedJobs) Format(ctx *FmtCtx) {
 	if node.Jobs != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(node.Jobs)
+	}
+	if node.FullTables {
+		ctx.WriteString(" WITH FULL_TABLES")
 	}
 }
 
