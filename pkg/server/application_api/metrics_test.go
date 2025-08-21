@@ -333,6 +333,7 @@ func TestStoreProcedureCallStatementMetrics(t *testing.T) {
 		expectedUpdateCount        = 0
 		expectedStartedDeleteCount = 0
 		expectedDeleteCount        = 0
+		// The underlying `crdb_internal.create_tenant` invoke a select.
 		expectedStartedSelectCount = 0
 		expectedSelectCount        = 0
 	)
@@ -749,5 +750,26 @@ func TestUDFStatementMetrics(t *testing.T) {
 	expectedInsertCount += 1
 	expectedSelectCount += 1
 	confirmMetricCount(t, db, "sql.routine.insert.count", expectedInsertCount)
+	confirmMetricCount(t, db, "sql.routine.select.count", expectedSelectCount)
+
+	// Test with materialized views that call UDFs.
+	_, err = db.Exec(`
+	CREATE TABLE xy (x INT, y INT);
+	INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6), (7, 8), (9, 10);
+	CREATE FUNCTION f_scalar() RETURNS INT LANGUAGE SQL AS $$ SELECT count(*) FROM xy $$;
+	CREATE FUNCTION f_setof() RETURNS SETOF xy LANGUAGE SQL AS $$ SELECT * FROM xy $$;
+	CREATE MATERIALIZED VIEW mv1 AS SELECT x, y FROM f_setof();
+`)
+	require.NoError(t, err)
+
+	expectedSelectCount += 2
+	confirmMetricCount(t, db, "sql.routine.select.count", expectedSelectCount)
+
+	_, err = db.Exec(`
+	CREATE MATERIALIZED VIEW mv2 AS SELECT x, y, f_scalar() FROM xy;
+`)
+	require.NoError(t, err)
+
+	expectedSelectCount += 5
 	confirmMetricCount(t, db, "sql.routine.select.count", expectedSelectCount)
 }

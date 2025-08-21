@@ -1082,6 +1082,19 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	execCfg.SchemaChangerMetrics = sql.NewSchemaChangerMetrics()
 	cfg.registry.AddMetricStruct(execCfg.SchemaChangerMetrics)
 
+	// TODO(janexing): make it prettier.
+	execCfg.RoutineStmtMetrics = sql.NewRoutineMetrics(false, true)
+	cfg.registry.AddMetricStruct(execCfg.RoutineStmtMetrics)
+
+	execCfg.InternalRoutineStmtMetrics = sql.NewRoutineMetrics(true, true)
+	cfg.registry.AddMetricStruct(execCfg.InternalRoutineStmtMetrics)
+
+	execCfg.RoutineStartedStmtMetrics = sql.NewRoutineMetrics(false, false)
+	cfg.registry.AddMetricStruct(execCfg.RoutineStartedStmtMetrics)
+
+	execCfg.InternalRoutineStartedStmtMetrics = sql.NewRoutineMetrics(true, false)
+	cfg.registry.AddMetricStruct(execCfg.InternalRoutineStartedStmtMetrics)
+
 	execCfg.FeatureFlagMetrics = featureflag.NewFeatureFlagMetrics()
 	cfg.registry.AddMetricStruct(execCfg.FeatureFlagMetrics)
 
