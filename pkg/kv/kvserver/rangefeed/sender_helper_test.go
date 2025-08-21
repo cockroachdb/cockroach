@@ -11,10 +11,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,6 +37,10 @@ type testServerStream struct {
 	eventsSent int
 	// streamEvents is a map of streamID to a list of events sent to that stream.
 	streamEvents map[int64][]*kvpb.MuxRangeFeedEvent
+	// latencies is a map of streamID to a list of latencies of the events sent
+	// to that stream. It is calculated as the difference between the send time
+	// and the MVCC timestamp.
+	latencies map[int64][]time.Duration
 }
 
 var _ ServerStreamSender = &testServerStream{}
@@ -42,6 +48,7 @@ var _ ServerStreamSender = &testServerStream{}
 func newTestServerStream() *testServerStream {
 	return &testServerStream{
 		streamEvents: make(map[int64][]*kvpb.MuxRangeFeedEvent),
+		latencies:    make(map[int64][]time.Duration),
 	}
 }
 
@@ -123,6 +130,9 @@ func (s *testServerStream) SendIsThreadSafe() {}
 func (s *testServerStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	s.Lock()
 	defer s.Unlock()
+	latency := timeutil.Since(e.Val.Value.Timestamp.GoTime())
+	s.latencies[e.StreamID] = append(s.latencies[e.StreamID], latency)
+
 	s.eventsSent++
 	s.streamEvents[e.StreamID] = append(s.streamEvents[e.StreamID], e)
 	return nil
@@ -144,6 +154,7 @@ func (s *testServerStream) reset() {
 	defer s.Unlock()
 	s.eventsSent = 0
 	s.streamEvents = make(map[int64][]*kvpb.MuxRangeFeedEvent)
+	s.latencies = make(map[int64][]time.Duration)
 }
 
 func (s *testServerStream) totalEventsFilterBy(f func(e *kvpb.MuxRangeFeedEvent) bool) int {
