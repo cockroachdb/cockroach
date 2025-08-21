@@ -727,6 +727,10 @@ message LocalOnlySessionData {
   // during query optimization. The names of the rules can be found in the
   // opt/rule_name.og.go file.
   repeated string disable_optimizer_rules = 184;
+  // UseSoftLimitForDistributeScan, if set, means that we'll use the soft limit
+  // hint - if available - when comparing against
+  // DistributeScanRowCountThreshold.
+  bool use_soft_limit_for_distribute_scan = 185;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
