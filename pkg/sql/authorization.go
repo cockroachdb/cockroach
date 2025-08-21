@@ -958,7 +958,7 @@ func (p *planner) objectIsUnsafe(ctx context.Context, privilegeObject privilege.
 
 	d, ok := privilegeObject.(catalog.TableDescriptor)
 	if !ok {
-		return true
+		return false
 	}
 
 	// All system descriptors are considered unsafe.

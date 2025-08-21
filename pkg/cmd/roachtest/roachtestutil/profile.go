@@ -10,8 +10,10 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -344,22 +346,37 @@ func getProfileWithTimeout(
 
 		var buf bytes.Buffer
 		_, err = io.Copy(&buf, resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			latestError = err
-			resp.Body.Close()
 			continue
 		}
-
+		// Helper to preview the raw payload to help with debugging.
+		maxPreview := 80
+		payloadPreview := func(payload []byte) string {
+			truncated := len(payload) > maxPreview
+			if truncated {
+				payload = payload[:maxPreview]
+			}
+			hexStr := hex.EncodeToString(payload)
+			if truncated {
+				hexStr += "..."
+			}
+			return hexStr
+		}
+		// If the response status code is not OK, the payload isn't valid.
+		if resp.StatusCode != http.StatusOK {
+			latestError = fmt.Errorf("pprof HTTP (status: %d): (bytes: %s)", resp.StatusCode, payloadPreview(buf.Bytes()))
+			continue
+		}
 		// Parse the profile data. This ensures that the data is valid and not
 		// corrupt.
 		prof, err := profile.ParseData(buf.Bytes())
 		if err != nil {
-			latestError = err
-			resp.Body.Close()
+			latestError = fmt.Errorf("bad pprof payload: %w (bytes: %s)", err, payloadPreview(buf.Bytes()))
 			continue
 		}
 
-		resp.Body.Close()
 		return prof, nil
 	}
 }

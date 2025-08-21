@@ -102,6 +102,9 @@ func TestAccessCheckServer(t *testing.T) {
 	pool := s.SQLConn(t)
 	defer pool.Close()
 
+	_, err := pool.Exec("CREATE TABLE foo (id INT PRIMARY KEY)")
+	require.NoError(t, err)
+
 	// helper func for setting a safe connection.
 	safeConn := func(t *testing.T) *gosql.Conn {
 		conn, err := pool.Conn(ctx)
@@ -110,6 +113,12 @@ func TestAccessCheckServer(t *testing.T) {
 		require.NoError(t, err)
 		return conn
 	}
+
+	t.Run("regular user activity is unaffected", func(t *testing.T) {
+		conn := safeConn(t)
+		_, err := conn.QueryContext(ctx, "SELECT * FROM foo")
+		require.NoError(t, err)
+	})
 
 	t.Run("accessing the system database", func(t *testing.T) {
 		q := "SELECT * FROM system.namespace"

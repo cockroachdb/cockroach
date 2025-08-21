@@ -3333,7 +3333,7 @@ func createRoutinePopulate(
 			}
 		}
 
-		fnDescs, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Descs(ctx, fnIDs)
+		fnDescs, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Descs(ctx, fnIDs)
 		if err != nil {
 			return err
 		}
@@ -3411,7 +3411,7 @@ func createRoutinePopulateByFnIndex(
 	// `crdb_internal.create_function_statements` and `crdb_internal.create_procedure_statements`, helping
 	// optimize the queries for the create statements output in `SHOW CREATE ALL ROUTINES`.
 	fnID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
-	fnDesc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Function(ctx, fnID)
+	fnDesc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Function(ctx, fnID)
 	if err != nil || fnDesc == nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) || fnDesc == nil {
 			return false, nil
@@ -3419,7 +3419,7 @@ func createRoutinePopulateByFnIndex(
 		return false, err
 	}
 	scID := fnDesc.GetParentSchemaID()
-	sc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, scID)
+	sc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, scID)
 	if err != nil || sc == nil {
 		return false, err
 	}
