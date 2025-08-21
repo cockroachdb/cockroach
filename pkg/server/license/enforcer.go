@@ -503,7 +503,7 @@ func (e *Enforcer) RefreshForLicenseChange(
 // This function updates the expiry if the current license is changing and is a trial.
 func (e *Enforcer) UpdateTrialLicenseExpiry(
 	ctx context.Context, currentLicense LicType, isLicenseChange bool, expiry int64,
-) (curExpiry int64, err error) {
+) (int64, error) {
 	// If we aren't setting a new trial license, return the cached copy. The e.db
 	// check is necessary as that's needed to read/write to the KV. This will be
 	// set for the system tenant, which is where the license can ever be set anyway.
@@ -511,7 +511,7 @@ func (e *Enforcer) UpdateTrialLicenseExpiry(
 		return e.trialUsageExpiry.Load(), nil
 	}
 
-	err = e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// We only allow a single trial license to be installed. If one is
 		// already set in the KV, exit and return that expiry value.
 		oldVal, err := txn.KV().Get(ctx, keys.TrialLicenseExpiry)
@@ -530,11 +530,11 @@ func (e *Enforcer) UpdateTrialLicenseExpiry(
 		return nil
 	})
 	if err != nil {
-		return
+		return 0, err
 	}
-	curExpiry = e.trialUsageExpiry.Load()
+	curExpiry := e.trialUsageExpiry.Load()
 	log.Infof(ctx, "trial license expiry timestamp is %s", timeutil.Unix(curExpiry, 0))
-	return
+	return curExpiry, nil
 }
 
 // TestingResetTrialUsage is an API to clear the license expiry in the KV. This is only used

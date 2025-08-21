@@ -179,7 +179,7 @@ func (m *movrWorker) startRide(id uuid.UUID, city string) error {
 		return err
 	}
 	m.activeRides = append(m.activeRides, rideInfo{id.String(), city})
-	return err
+	return nil
 }
 
 func (m *movrWorker) endRide(id uuid.UUID, city string) error {

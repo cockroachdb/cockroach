@@ -87,7 +87,7 @@ func stringifyProtobinFile(filename string, fileContents []byte) ([]byte, error)
 	if !ok {
 		return nil, errors.Newf("protobuf in file %s is not a ProtobinExecutionDetailFile", filename)
 	}
-	return f.ToText(), err
+	return f.ToText(), nil
 }
 
 // ReadExecutionDetailFile will stitch together all the chunks corresponding to the

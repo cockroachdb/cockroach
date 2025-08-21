@@ -279,7 +279,7 @@ func resolveUDTsUsedByImportInto(
 			}
 			typeDescs = append(typeDescs, immutDesc)
 		}
-		return err
+		return nil
 	})
 	return typeDescs, err
 }

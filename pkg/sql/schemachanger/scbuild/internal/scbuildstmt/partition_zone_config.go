@@ -404,7 +404,7 @@ func (pzo *partitionZoneConfigObj) applyZoneConfig(
 		return nil, err
 	}
 	pzo.setZoneConfigToWrite(partialZone)
-	return oldZone, err
+	return oldZone, nil
 }
 
 // panicIfNoPartitionExistsOnIdx panics if the partition referenced in a

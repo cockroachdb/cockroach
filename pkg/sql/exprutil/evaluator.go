@@ -146,7 +146,7 @@ func (e Evaluator) LazyStringOrNull(
 		if d == tree.DNull {
 			return true, "", nil
 		}
-		return false, string(tree.MustBeDString(d)), err
+		return false, string(tree.MustBeDString(d)), nil
 	}, nil
 }
 

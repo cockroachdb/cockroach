@@ -239,7 +239,7 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 		tdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 
-	return err
+	return nil
 }
 
 // StripDanglingBackReferences implements the catalog.DescriptorBuilder
@@ -1194,7 +1194,7 @@ func maybeUpgradeSequenceReferenceForView(
 		}
 
 		hasUpgraded = hasUpgraded || hasUpgradedInExpr
-		return false, newExpr, err
+		return false, newExpr, nil
 	}
 
 	stmt, err := parser.ParseOne(viewDesc.GetViewQuery())
@@ -1209,7 +1209,7 @@ func maybeUpgradeSequenceReferenceForView(
 
 	viewDesc.ViewQuery = newStmt.String()
 
-	return hasUpgraded, err
+	return hasUpgraded, nil
 }
 
 // Attempt to fully resolve table names for `ids` from a list of descriptors.

@@ -191,7 +191,7 @@ func PlanReplicas(
 		ClusterID:               clusterInfo.ClusterID,
 		StaleLeaseholderNodeIDs: staleLeaseholderNodes,
 		Version:                 clusterInfo.Version,
-	}, report, err
+	}, report, nil
 }
 
 func planReplicasWithMeta(

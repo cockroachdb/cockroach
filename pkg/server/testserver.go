@@ -1492,7 +1492,7 @@ func (ts *testServer) StartSharedProcessTenant(
 	if err != nil {
 		return nil, nil, err
 	}
-	return tt, sqlDB, err
+	return tt, sqlDB, nil
 }
 
 // DisableStartTenant is part of the serverutils.TenantControlInterface.
@@ -1864,7 +1864,7 @@ func (ts *testServer) StartTenant(
 		drain:          sw.drainServer,
 		pgL:            sw.loopbackPgL,
 		deploymentMode: serverutils.ExternalProcess,
-	}, err
+	}, nil
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should

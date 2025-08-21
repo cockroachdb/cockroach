@@ -119,7 +119,7 @@ func (h *httpStorage) openStreamAt(
 	for attempt, retries := 0, retry.StartWithCtx(ctx, cloud.HTTPRetryOptions); retries.Next(); attempt++ {
 		resp, err := h.req(ctx, "GET", url, nil, headers)
 		if err == nil {
-			return resp, err
+			return resp, nil
 		}
 
 		log.Errorf(ctx, "HTTP:Req error: err=%s (attempt %d)", err, attempt)
@@ -160,7 +160,7 @@ func (h *httpStorage) ReadFile(
 			if err != nil {
 				return nil, 0, err
 			}
-			return s.Body, size, err
+			return s.Body, size, nil
 		}
 		return cloud.NewResumingReader(ctx, opener, stream.Body, opts.Offset, size, basename,
 			cloud.ResumingReaderRetryOnErrFnForSettings(ctx, h.settings), nil), size, nil

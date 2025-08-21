@@ -183,7 +183,7 @@ func newEventConsumer(
 		if err != nil {
 			return nil, nil, err
 		}
-		return c, sink, err
+		return c, sink, nil
 	}
 
 	c := &parallelEventConsumer{

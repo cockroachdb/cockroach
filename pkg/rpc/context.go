@@ -1454,7 +1454,7 @@ func (rpcCtx *Context) dialOptsLocal() ([]grpc.DialOption, error) {
 			return rpcCtx.loopbackDialFn(ctx)
 		}))
 
-	return dialOpts, err
+	return dialOpts, nil
 }
 
 // GetBreakerForAddr looks up a breaker for the matching (NodeID,Class,Addr).

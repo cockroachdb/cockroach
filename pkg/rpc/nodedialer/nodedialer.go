@@ -97,7 +97,7 @@ func (n *Dialer) Dial(
 	if err != nil {
 		return gc, errors.Wrapf(err, "gRPC")
 	}
-	return gc, err
+	return gc, nil
 }
 
 // DRPCDial returns a drpc connection to the given node. It logs whenever the
@@ -113,7 +113,7 @@ func (n *Dialer) DRPCDial(
 	if err != nil {
 		return nil, errors.Wrapf(err, "DRPC")
 	}
-	return dc, err
+	return dc, nil
 }
 
 // DialNoBreaker is like Dial, but will not check the circuit breaker before
@@ -129,7 +129,7 @@ func (n *Dialer) DialNoBreaker(
 	if err != nil {
 		return nil, errors.Wrapf(err, "gRPC")
 	}
-	return gc, err
+	return gc, nil
 }
 
 // DRPCDialNoBreaker is like DRPCDial, but will not check the circuit breaker
@@ -145,7 +145,7 @@ func (n *Dialer) DRPCDialNoBreaker(
 	if err != nil {
 		return nil, errors.Wrapf(err, "DRPC")
 	}
-	return dc, err
+	return dc, nil
 }
 
 // DialInternalClient is a specialization of DialClass for callers that
@@ -275,7 +275,7 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpcbase.ConnectionClass
 func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpcbase.ConnectionClass) error {
 	err := n.ConnHealth(nodeID, class)
 	if err == nil {
-		return err
+		return nil
 	}
 	addr, locality, err := n.resolver(nodeID)
 	if err != nil {

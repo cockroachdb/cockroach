@@ -1521,7 +1521,7 @@ func (r *Replica) TestingRemoveLearner(
 	if err != nil {
 		return nil, errors.Wrapf(err, `removing learners from %s`, beforeDesc)
 	}
-	return desc, err
+	return desc, nil
 }
 
 // errCannotRemoveLearnerWhileSnapshotInFlight is returned when we cannot remove

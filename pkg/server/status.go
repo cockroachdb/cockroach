@@ -831,7 +831,7 @@ func (s *systemStatusServer) Gossip(
 		gossipData = s.redactGossipResponse(gossipData)
 	}
 
-	return gossipData, err
+	return gossipData, nil
 }
 
 // TODO: Enhance with redaction middleware, refer: https://github.com/cockroachdb/cockroach/issues/109594
@@ -1275,7 +1275,7 @@ func (s *statusServer) Details(
 			detailsResponse = s.redactDetailsResponse(detailsResponse)
 		}
 
-		return detailsResponse, err
+		return detailsResponse, nil
 	}
 
 	remoteNodeID := roachpb.NodeID(s.serverIterator.getID())

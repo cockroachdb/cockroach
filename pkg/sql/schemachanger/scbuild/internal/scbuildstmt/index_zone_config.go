@@ -394,7 +394,7 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 		return nil, err
 	}
 	izo.setZoneConfigToWrite(partialZone)
-	return oldZone, err
+	return oldZone, nil
 }
 
 // fillIndexFromZoneSpecifier fills out the index id in the zone

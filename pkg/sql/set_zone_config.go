@@ -1092,7 +1092,7 @@ func writeZoneConfigUpdate(
 	if len(r.Keys) > 0 {
 		numAffected = 1
 	}
-	return numAffected, err
+	return numAffected, nil
 }
 
 // RemoveIndexZoneConfigs removes the zone configurations for some

@@ -394,7 +394,7 @@ func createPartitioning(
 	if err != nil {
 		return nil, catpb.PartitioningDescriptor{}, err
 	}
-	return newImplicitCols, newPartitioning, err
+	return newImplicitCols, newPartitioning, nil
 }
 
 func init() {

@@ -237,7 +237,7 @@ func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent
 	} else if !ok {
 		return roachpb.StoreIdent{}, &NotBootstrappedError{}
 	}
-	return ident, err
+	return ident, nil
 }
 
 // IterateRangeDescriptorsFromDisk discovers the initialized replicas and calls

@@ -94,7 +94,7 @@ func (p *planner) alterDefaultPrivileges(
 		n:           n,
 		dbDesc:      dbDesc,
 		schemaDescs: schemaDescs,
-	}, err
+	}, nil
 }
 
 func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
