@@ -558,8 +558,8 @@ func (m *Manager) WaitForOneVersion(
 func (m *Manager) WaitForNewVersion(
 	ctx context.Context,
 	descriptorId descpb.ID,
-	retryOpts retry.Options,
 	regions regionliveness.CachedDatabaseRegions,
+	retryOpts retry.Options,
 ) (catalog.Descriptor, error) {
 	if retryOpts.MaxRetries != 0 {
 		return nil, errors.New("The MaxRetries option shouldn't be set in WaitForNewVersion")

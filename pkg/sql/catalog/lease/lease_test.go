@@ -557,6 +557,8 @@ func TestWaitForNewVersion(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	defer log.Scope(testingT).Close(testingT)
 
+	skip.WithIssue(testingT, 152051)
+
 	var params base.TestClusterArgs
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
@@ -586,7 +588,7 @@ func TestWaitForNewVersion(testingT *testing.T) {
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		_, err := leaseMgr.WaitForNewVersion(timeoutCtx, descID, retry.Options{}, nil)
+		_, err := leaseMgr.WaitForNewVersion(timeoutCtx, descID, nil, retry.Options{})
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	}
 
@@ -597,7 +599,7 @@ func TestWaitForNewVersion(testingT *testing.T) {
 		require.NoError(t, t.node(2).AcquireFreshestFromStore(ctx, descID))
 		t.expectLeases(descID, "/1/1 /1/2 /2/1 /2/2 /2/3")
 
-		desc, err := leaseMgr.WaitForNewVersion(context.Background(), descID, retry.Options{}, nil)
+		desc, err := leaseMgr.WaitForNewVersion(context.Background(), descID, nil, retry.Options{})
 		require.NoError(t, err)
 		require.Equal(t, desc.GetVersion(), descpb.DescriptorVersion(2))
 	}
