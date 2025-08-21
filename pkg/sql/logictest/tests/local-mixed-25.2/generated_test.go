@@ -1228,13 +1228,6 @@ func TestLogic_lookup_join_spans(
 	runLogicTest(t, "lookup_join_spans")
 }
 
-func TestLogic_ltree(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "ltree")
-}
-
 func TestLogic_manual_retry(
 	t *testing.T,
 ) {
