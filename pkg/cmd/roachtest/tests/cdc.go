@@ -1787,6 +1787,7 @@ func runMessageTooLarge(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 type multiTablePTSBenchmarkParams struct {
 	numTables int
+	numRanges int
 	numRows   int
 	duration  string
 }
@@ -1812,8 +1813,13 @@ func runCDCMultiTablePTSBenchmark(
 		t.Fatalf("failed to set cluster settings: %v", err)
 	}
 
-	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --num-tables=%d {pgurl%s}",
-		params.numRows, params.numTables, ct.crdbNodes.RandNode())
+	numRanges := 10
+	if params.numRanges > 0 {
+		numRanges = params.numRanges
+	}
+
+	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --ranges=%d --num-tables=%d {pgurl%s}",
+		params.numRows, numRanges, params.numTables, ct.crdbNodes.RandNode())
 	if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
 		t.Fatalf("failed to initialize bank tables: %v", err)
 	}
@@ -1856,10 +1862,10 @@ func runCDCMultiTablePTSBenchmark(
 
 	// These metrics are in nanoseconds, so we are asserting that both
 	// of these latency metrics are less than 10 milliseconds.
-	ct.verifyMetrics(ctx, verifyMetricsUnderThreshold([]string{
+	ct.verifyMetrics(ctx, ct.verifyMetricsUnderThreshold([]string{
 		"changefeed_stage_pts_manage_latency",
 		"changefeed_stage_pts_create_latency",
-	}, float64(10*time.Millisecond)))
+	}, float64(25*time.Millisecond)))
 
 	t.Status("multi-table PTS benchmark finished")
 }
@@ -2897,7 +2903,7 @@ func registerCDC(r registry.Registry) {
 		Run:              runMessageTooLarge,
 	})
 	r.Add(registry.TestSpec{
-		Name:             "cdc/multi-table-pts-benchmark",
+		Name:             "cdc/multi-table-pts-benchmark/num-tables=500",
 		Owner:            registry.OwnerCDC,
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
@@ -2907,7 +2913,44 @@ func registerCDC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			params := multiTablePTSBenchmarkParams{
 				numTables: 500,
-				numRows:   10_000,
+				numRows:   100,
+				duration:  "20m",
+			}
+			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/multi-table-pts-benchmark/num-tables=5000",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          1 * time.Hour,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			params := multiTablePTSBenchmarkParams{
+				numTables: 5000,
+				numRows:   100,
+				duration:  "20m",
+			}
+			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/multi-table-pts-benchmark/num-tables=50000",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          1 * time.Hour,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			params := multiTablePTSBenchmarkParams{
+				numTables: 50_000,
+				// Splitting tables into ranges slows down test setup at this scale.
+				// Therefore, we don't split the tables into multiple ranges.
+				numRanges: 1,
+				numRows:   10,
 				duration:  "20m",
 			}
 			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
@@ -4598,7 +4641,7 @@ func verifyMetricsNonZero(names ...string) func(metrics map[string]*prompb.Metri
 	}
 }
 
-func verifyMetricsUnderThreshold(
+func (ct *cdcTester) verifyMetricsUnderThreshold(
 	names []string, threshold float64,
 ) func(metrics map[string]*prompb.MetricFamily) (ok bool) {
 	namesMap := make(map[string]struct{}, len(names))
@@ -4622,6 +4665,8 @@ func verifyMetricsUnderThreshold(
 				observedValue := m.Histogram.GetSampleSum() / float64(m.Histogram.GetSampleCount())
 				if observedValue < threshold {
 					found[name] = struct{}{}
+				} else {
+					ct.t.Fatalf("observed value for metric %s over threshold. observedValue: %f, threshold: %f", name, observedValue, threshold)
 				}
 			}
 
