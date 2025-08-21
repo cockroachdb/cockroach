@@ -477,7 +477,6 @@ func TestPutS3Endpoint(t *testing.T) {
 		clientFactory := blobs.TestBlobServiceClient("")
 		// Force to fail quickly.
 
-		maxRetries.Override(ctx, &testSettings.SV, 1)
 		storage, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
 			nil, nil, cloud.NilMetrics)
 		if err != nil {
