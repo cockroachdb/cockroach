@@ -71,6 +71,9 @@ var bankMeta = workload.Meta{
 		g.flags.IntVar(&g.numTables, `num-tables`, defaultNumTables, `Number of bank tables to create.`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
+		// Because this workload can create a large number of objects, the import
+		// concurrent may need to be limited.
+		g.flags.Int(workload.ImportDataLoaderConcurrencyFlag, 32, workload.ImportDataLoaderConcurrencyFlagDescription)
 		return g
 	},
 }
