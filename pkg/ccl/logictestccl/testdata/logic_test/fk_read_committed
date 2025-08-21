@@ -140,6 +140,9 @@ WITH sleep AS (SELECT pg_sleep(1)) DELETE FROM parent_150282@parent_150282_i_idx
 user testuser
 
 statement ok
+SET enable_implicit_fk_locking_for_serializable = on;
+SET enable_shared_locking_for_serializable = on;
+SET enable_durable_locking_for_serializable = on;
 INSERT INTO child_150282 VALUES (4, 1);
 
 user root
@@ -176,6 +179,9 @@ WITH sleep AS (SELECT pg_sleep(1)) UPDATE parent_150282 SET p = 4 WHERE i = 2;
 user testuser
 
 statement ok
+SET enable_implicit_fk_locking_for_serializable = on;
+SET enable_shared_locking_for_serializable = on;
+SET enable_durable_locking_for_serializable = on;
 INSERT INTO child_150282 VALUES (4, 1);
 
 user root
@@ -219,6 +225,9 @@ WITH sleep AS (SELECT pg_sleep(1)) DELETE FROM parent_150282 WHERE p = 1;
 user testuser
 
 statement ok
+SET enable_implicit_fk_locking_for_serializable = on;
+SET enable_shared_locking_for_serializable = on;
+SET enable_durable_locking_for_serializable = on;
 INSERT INTO child_150282 VALUES (4, 1);
 
 user root
@@ -235,5 +244,14 @@ SELECT * FROM parent_150282;
 query II
 SELECT * FROM child_150282;
 ----
+
+user testuser
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable;
+RESET enable_shared_locking_for_serializable;
+RESET enable_durable_locking_for_serializable
+
+user root
 
 subtest end
