@@ -199,3 +199,34 @@ query II
 SELECT j, k FROM foo;
 ----
 1  2
+
+# Test that mixed-case column names are handled correctly for rename operations.
+statement ok
+CREATE TABLE mixed_case_table (
+    "CamelCase" INT PRIMARY KEY,
+    "snake_case" TEXT,
+    "UPPERCASE" DECIMAL
+);
+
+statement error column "UPPERCASE" of relation "mixed_case_table" already exists
+ALTER TABLE mixed_case_table RENAME COLUMN "CamelCase" TO "UPPERCASE";
+
+statement ok
+ALTER TABLE mixed_case_table RENAME COLUMN "CamelCase" TO "CamelCase";
+
+statement ok
+ALTER TABLE mixed_case_table RENAME COLUMN "CamelCase" TO "NewCamelCase";
+
+statement ok
+ALTER TABLE mixed_case_table RENAME COLUMN "snake_case" TO "SnakeCase";
+
+statement ok
+ALTER TABLE mixed_case_table RENAME COLUMN "UPPERCASE" TO "decimal_value";
+
+query T colnames
+SELECT column_name FROM [SHOW COLUMNS FROM mixed_case_table] ORDER BY column_name;
+----
+column_name
+NewCamelCase
+SnakeCase
+decimal_value

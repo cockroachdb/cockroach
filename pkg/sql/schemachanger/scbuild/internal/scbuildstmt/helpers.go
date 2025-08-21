@@ -2108,3 +2108,36 @@ func hasSubzonesForIndex(b BuildCtx, tableID descpb.ID, indexID catid.IndexID) b
 		}).Size()
 	return numIdxSubzones > 0 || numPartSubzones > 0
 }
+
+// isShardColumn checks if the given column is a shard column by examining
+// all indexes on the table to see if any sharded index uses this column name.
+func isShardColumn(b BuildCtx, col *scpb.Column) bool {
+	// Get the column name.
+	colNameElt := b.QueryByID(col.TableID).FilterColumnName().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) bool {
+			return e.ColumnID == col.ColumnID
+		}).MustGetZeroOrOneElement()
+
+	if colNameElt == nil {
+		return false
+	}
+
+	colName := colNameElt.Name
+
+	// Check all indexes on this table.
+	found := false
+	b.QueryByID(col.TableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		switch idx := e.(type) {
+		case *scpb.PrimaryIndex:
+			if idx.Sharding != nil && idx.Sharding.IsSharded && idx.Sharding.Name == colName {
+				found = true
+			}
+		case *scpb.SecondaryIndex:
+			if idx.Sharding != nil && idx.Sharding.IsSharded && idx.Sharding.Name == colName {
+				found = true
+			}
+		}
+	})
+
+	return found
+}

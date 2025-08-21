@@ -804,7 +804,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				tableDesc.GetRowLevelTTL().HasDurationExpr() {
 				return pgerror.Newf(
 					pgcode.InvalidTableDefinition,
-					`cannot rename column %s while ttl_expire_after is set`,
+					`cannot alter column %s while ttl_expire_after is set`,
 					columnName,
 				)
 			}
