@@ -58,5 +58,11 @@ func (tc *unsupportedTypeChecker) CheckType(ctx context.Context, typ *types.T) e
 			"%s not supported until version 25.3", typ.String(),
 		)
 	}
+	if (typ.Family() == types.LTreeFamily) &&
+		!tc.version.IsActive(ctx, clusterversion.V25_4) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"%s not supported until version 25.4", typ.String(),
+		)
+	}
 	return nil
 }
