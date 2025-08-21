@@ -347,6 +347,10 @@ func TestKVNemesisMultiNode_BufferedWrites(t *testing.T) {
 		bufferedWriteProb:            0.70,
 		testSettings: func(ctx context.Context, st *cluster.Settings) {
 			kvcoord.BufferedWritesEnabled.Override(ctx, &st.SV, true)
+			// Read transforms are disabled on release-25.3 because of known issues
+			// such as #150239 which are only fixed in 25.4+.
+			kvcoord.BufferedWritesGetTransformEnabled.Override(ctx, &st.SV, false)
+			kvcoord.BufferedWritesScanTransformEnabled.Override(ctx, &st.SV, false)
 			concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(ctx, &st.SV, true)
 			concurrency.UnreplicatedLockReliabilityMerge.Override(ctx, &st.SV, true)
 			concurrency.UnreplicatedLockReliabilitySplit.Override(ctx, &st.SV, true)
@@ -372,6 +376,10 @@ func TestKVNemesisMultiNode_BufferedWritesNoPipelining(t *testing.T) {
 		testSettings: func(ctx context.Context, st *cluster.Settings) {
 			kvcoord.BufferedWritesEnabled.Override(ctx, &st.SV, true)
 			kvcoord.PipelinedWritesEnabled.Override(ctx, &st.SV, false)
+			// Read transforms are disabled on release-25.3 because of known issues
+			// such as #150239 which are only fixed in 25.4+.
+			kvcoord.BufferedWritesGetTransformEnabled.Override(ctx, &st.SV, false)
+			kvcoord.BufferedWritesScanTransformEnabled.Override(ctx, &st.SV, false)
 			concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(ctx, &st.SV, true)
 			concurrency.UnreplicatedLockReliabilityMerge.Override(ctx, &st.SV, true)
 			concurrency.UnreplicatedLockReliabilitySplit.Override(ctx, &st.SV, true)

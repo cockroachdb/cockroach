@@ -46,7 +46,7 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 
 var unsupportedInProductionBuildErr = errors.New("this option is not supported in production builds")
 
-var bufferedWritesScanTransformEnabled = settings.RegisterBoolSetting(
+var BufferedWritesScanTransformEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.transformations.scans.enabled",
 	"if enabled, locking scans and reverse scans with replicated durability are transformed to unreplicated durability",
@@ -59,7 +59,7 @@ var bufferedWritesScanTransformEnabled = settings.RegisterBoolSetting(
 	}),
 )
 
-var bufferedWritesGetTransformEnabled = settings.RegisterBoolSetting(
+var BufferedWritesGetTransformEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.transformations.get.enabled",
 	"if enabled, locking get requests with replicated durability are transformed to unreplicated durability",
@@ -294,8 +294,8 @@ func (twb *txnWriteBuffer) SendLocked(
 	// We check if scan transforms are enabled once and use that answer until the
 	// end of SendLocked.
 	cfg := transformConfig{
-		transformScans: bufferedWritesScanTransformEnabled.Get(&twb.st.SV),
-		transformGets:  bufferedWritesGetTransformEnabled.Get(&twb.st.SV),
+		transformScans: BufferedWritesScanTransformEnabled.Get(&twb.st.SV),
+		transformGets:  BufferedWritesGetTransformEnabled.Get(&twb.st.SV),
 	}
 
 	if twb.batchRequiresFlush(ctx, ba, cfg) {
