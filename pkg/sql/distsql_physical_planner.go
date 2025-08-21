@@ -725,9 +725,17 @@ func checkSupportForPlanNode(
 		// TODO(yuzefovich): consider using the soft limit in making a decision
 		// here.
 		scanRec := canDistribute
-		if n.estimatedRowCount != 0 && n.estimatedRowCount >= sd.DistributeScanRowCountThreshold {
-			log.VEventf(ctx, 2, "large scan recommends plan distribution")
-			scanRec = shouldDistribute
+		if n.estimatedRowCount != 0 {
+			var suffix string
+			estimate := n.estimatedRowCount
+			if n.softLimit != 0 {
+				estimate = uint64(n.softLimit)
+				suffix = " (using soft limit)"
+			}
+			if estimate >= sd.DistributeScanRowCountThreshold {
+				log.VEventf(ctx, 2, "large scan recommends plan distribution"+suffix)
+				scanRec = shouldDistribute
+			}
 		}
 		if n.isFull && (n.estimatedRowCount == 0 || sd.AlwaysDistributeFullScans) {
 			// In the absence of table stats, we default to always distributing
