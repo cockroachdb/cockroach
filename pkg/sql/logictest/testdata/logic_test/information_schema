@@ -3257,6 +3257,7 @@ admin    test           CREATE             NULL
 admin    test           DELETE             NULL
 admin    test           DROP               NULL
 admin    test           INSERT             NULL
+admin    test           INSPECT            NULL
 admin    test           REPLICATIONDEST    NULL
 admin    test           REPLICATIONSOURCE  NULL
 admin    test           SELECT             NULL
@@ -3270,6 +3271,7 @@ root     test           CREATE             NULL
 root     test           DELETE             NULL
 root     test           DROP               NULL
 root     test           INSERT             NULL
+root     test           INSPECT            NULL
 root     test           REPLICATIONDEST    NULL
 root     test           REPLICATIONSOURCE  NULL
 root     test           SELECT             NULL
