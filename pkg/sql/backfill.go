@@ -2144,7 +2144,7 @@ func CountIndexRowsAndMaybeCheckUniqueness(
 					desc.GetPrimaryIndexID(), /* indexIDForValidation */
 					txn,
 					username.NodeUserName(),
-					false, /* preExisting */
+					true, /* preExisting */
 				); err != nil {
 					return err
 				}

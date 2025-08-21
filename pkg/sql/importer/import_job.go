@@ -354,21 +354,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	rowCountValidationTestingKnob := r.testingKnobs.rowCountValidation
-	if rowCountValidation {
-		// TODO(janexing): shall we wait with timeout?
-		if err := grp.Wait(); err != nil {
-			if rowCountValidationTestingKnob != nil {
-				rowCountValidationTestingKnob <- err
-			}
-			return errors.Wrapf(err, "row count validation failed")
-		}
-		log.Event(ctx, "row count validation completed successfully")
-		if rowCountValidationTestingKnob != nil {
-			close(rowCountValidationTestingKnob)
-		}
-	}
-
 	if r.testingKnobs.afterImport != nil {
 		if err := r.testingKnobs.afterImport(r.res); err != nil {
 			return err
@@ -394,6 +379,21 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	if err := r.publishTables(ctx, p.ExecCfg(), res); err != nil {
 		return err
+	}
+
+	rowCountValidationTestingKnob := r.testingKnobs.rowCountValidation
+	if rowCountValidation {
+		// TODO(janexing): shall we wait with timeout?
+		if err := grp.Wait(); err != nil {
+			if rowCountValidationTestingKnob != nil {
+				rowCountValidationTestingKnob <- err
+			}
+			return errors.Wrapf(err, "row count validation failed")
+		}
+		log.Event(ctx, "row count validation completed successfully")
+		if rowCountValidationTestingKnob != nil {
+			close(rowCountValidationTestingKnob)
+		}
 	}
 
 	emitImportJobEvent(ctx, p, jobs.StateSucceeded, r.job)

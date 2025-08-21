@@ -103,16 +103,17 @@ func TestImportMultiRegion(t *testing.T) {
 
 	t.Run("avro", func(t *testing.T) {
 		tests := []struct {
-			name      string
-			db        string
-			table     string
-			sql       string
-			create    string
-			unsafe    string
-			args      []interface{}
-			errString string
-			data      string
-			during    string
+			name         string
+			db           string
+			noValidation bool
+			table        string
+			sql          string
+			create       string
+			unsafe       string
+			args         []interface{}
+			errString    string
+			data         string
+			during       string
 		}{
 			{
 				name:   "import-create-using-multi-region-regional-by-table-to-multi-region-database",
@@ -151,9 +152,10 @@ func TestImportMultiRegion(t *testing.T) {
 				errString: `failed to validate unique constraint`,
 			},
 			{
-				name:  "import-into-multi-region-regional-by-row-dupes-no-validate",
-				db:    "multi_region",
-				table: "mr_regional_by_row",
+				name:         "import-into-multi-region-regional-by-row-dupes-no-validate",
+				db:           "multi_region",
+				noValidation: true,
+				table:        "mr_regional_by_row",
 				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY) LOCALITY REGIONAL BY ROW;" +
 					"INSERT INTO mr_regional_by_row (i, crdb_region) VALUES (1, 'us-east2')",
 				unsafe: "SET CLUSTER SETTING bulkio.import.constraint_validation.unsafe.enabled=false",
@@ -232,6 +234,13 @@ CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s typ, b bytea) LOCALITY RE
 				}
 				tdb.Exec(t, fmt.Sprintf(`SET DATABASE = %q`, test.db))
 				tdb.Exec(t, fmt.Sprintf("DROP TABLE IF EXISTS %q CASCADE", test.table))
+
+				if test.noValidation {
+					tdb.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.enabled = false`)
+					defer func() {
+						tdb.Exec(t, `RESET CLUSTER SETTING bulkio.import.row_count_validation.enabled`)
+					}()
+				}
 
 				if test.unsafe != "" {
 					// We need to first try and set the cluster setting, and
