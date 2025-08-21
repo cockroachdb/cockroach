@@ -132,6 +132,9 @@ statement async fk_delete
 WITH sleep AS (SELECT pg_sleep(1)) DELETE FROM parent_150282@parent_150282_i_idx WHERE i = 2;
 
 statement ok
+SET enable_implicit_fk_locking_for_serializable = on;
+SET enable_shared_locking_for_serializable = on;
+SET enable_durable_locking_for_serializable = on;
 INSERT INTO child_150282 VALUES (4, 1);
 
 awaitstatement fk_delete
@@ -160,6 +163,9 @@ statement async fk_update
 WITH sleep AS (SELECT pg_sleep(1)) UPDATE parent_150282 SET p = 4 WHERE i = 2;
 
 statement ok
+SET enable_implicit_fk_locking_for_serializable = on;
+SET enable_shared_locking_for_serializable = on;
+SET enable_durable_locking_for_serializable = on;
 INSERT INTO child_150282 VALUES (4, 1);
 
 awaitstatement fk_update
