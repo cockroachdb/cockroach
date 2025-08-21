@@ -195,14 +195,6 @@ type monitoredDisk struct {
 	refCount int
 }
 
-func (m *monitoredDisk) recordStats(t time.Time, stats Stats) {
-	m.tracer.RecordEvent(traceEvent{
-		time:  t,
-		stats: stats,
-		err:   nil,
-	})
-}
-
 // StatsWindow is a wrapper around a rolling window of disk stats, used to
 // apply common rudimentary computations or custom aggregation functions.
 type StatsWindow struct {
