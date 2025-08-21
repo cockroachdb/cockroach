@@ -15,18 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/rangekey"
 )
-
-func configureForSharedStorage(opts *pebble.Options, remoteStorage remote.Storage) error {
-	opts.Experimental.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
-		"": remoteStorage,
-	})
-	opts.Experimental.CreateOnShared = remote.CreateOnSharedLower
-	opts.Experimental.CreateOnSharedLocator = ""
-	return nil
-}
 
 // iterateReplicaKeySpansShared iterates over the range's user key span,
 // skipping any keys present in shared files. It calls the appropriate visitor
@@ -75,6 +65,5 @@ func iterateReplicaKeySpansShared(
 }
 
 func init() {
-	storage.ConfigureForSharedStorage = configureForSharedStorage
 	rditer.IterateReplicaKeySpansShared = iterateReplicaKeySpansShared
 }

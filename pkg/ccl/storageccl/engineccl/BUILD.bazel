@@ -26,7 +26,6 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//:pebble",
-        "@com_github_cockroachdb_pebble//objstorage/remote",
         "@com_github_cockroachdb_pebble//rangekey",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_pebble//vfs/atomicfs",
