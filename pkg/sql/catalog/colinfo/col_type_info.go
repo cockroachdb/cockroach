@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -110,13 +111,20 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
 		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily,
-		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily,
-		types.LTreeFamily:
+		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily:
 	// These types are OK.
 
 	case types.JsonpathFamily:
 		return unimplemented.NewWithIssueDetailf(144910, t.String(),
 			"jsonpath unsupported as column type")
+
+	case types.LTreeFamily:
+		if !st.Version.IsActive(ctx, clusterversion.V25_4) {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"ltree not supported until version 25.4",
+			)
+		}
 
 	case types.TupleFamily:
 		if !t.UserDefined() {
