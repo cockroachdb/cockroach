@@ -835,7 +835,7 @@ func (r *Replica) AdminMerge(
 		}
 		updatedLeftDesc.IncrementGeneration()
 		updatedLeftDesc.EndKey = rightDesc.EndKey
-		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
+		log.Dev.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
 		// Log the merge into the range event log.
 		if err := r.store.logMerge(ctx, txn, updatedLeftDesc, rightDesc, true /* logAsync */); err != nil {
@@ -1303,7 +1303,7 @@ func (r *Replica) changeReplicasImpl(
 			// Don't leave a learner replica lying around if we didn't succeed in
 			// promoting it to a voter.
 			if adds := targets.VoterAdditions; len(adds) > 0 {
-				log.Infof(ctx, "could not promote %v to voter, rolling back: %v", adds, err)
+				log.Dev.Infof(ctx, "could not promote %v to voter, rolling back: %v", adds, err)
 				for _, target := range adds {
 					r.tryRollbackRaftLearner(ctx, r.Desc(), target, reason, details)
 				}
@@ -1920,7 +1920,7 @@ func (r *Replica) initializeRaftLearners(
 	// them all back.
 	defer func() {
 		if err != nil {
-			log.Infof(
+			log.Dev.Infof(
 				ctx,
 				"could not successfully add and upreplicate %s replica(s) on %s, rolling back: %v",
 				replicaType,
@@ -2188,7 +2188,7 @@ func (r *Replica) tryRollbackRaftLearner(
 	if err := timeutil.RunWithTimeout(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {
-		log.Infof(
+		log.Dev.Infof(
 			ctx,
 			"failed to rollback %s %s, abandoning it for the replicate queue: %v",
 			repDesc.Type,
@@ -2197,7 +2197,7 @@ func (r *Replica) tryRollbackRaftLearner(
 		)
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	} else {
-		log.Infof(ctx, "rolled back %s %s in %s", repDesc.Type, target, rangeDesc)
+		log.Dev.Infof(ctx, "rolled back %s %s in %s", repDesc.Type, target, rangeDesc)
 	}
 }
 
@@ -2462,7 +2462,7 @@ func execChangeReplicasTxn(
 				// race than other operations. So we verify that the descriptor fetched
 				// from kv is indeed in a joint config, and hint to the caller that it
 				// can no-op this replication change.
-				log.Infof(
+				log.Dev.Infof(
 					ctx, "we were trying to exit a joint config but found that we are no longer in one; skipping",
 				)
 				return false /* matched */, true /* skip */
@@ -2478,7 +2478,7 @@ func execChangeReplicasTxn(
 					}
 				}
 				if learnerAlreadyRemoved {
-					log.Infof(ctx, "skipping learner removal because it was already removed")
+					log.Dev.Infof(ctx, "skipping learner removal because it was already removed")
 					return false /* matched */, true /* skip */
 				}
 			}
@@ -3158,7 +3158,7 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// send an additional one. This check attempts to minimize the change of the
 	// double snapshot being sent.
 	if replTerm < req.Term {
-		log.Infof(
+		log.Dev.Infof(
 			ctx,
 			"sender: %v is not fit to send snapshot for %v; sender term: %v coordinator term: %v",
 			req.DelegatedSender, req.CoordinatorReplica, replTerm, req.Term,
@@ -3175,7 +3175,7 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// possible that we can enforce strictly lesser than if etcd does not require
 	// previous raft log entries for appending.
 	if replIdx <= req.FirstIndex {
-		log.Infof(
+		log.Dev.Infof(
 			ctx, "sender: %v is not fit to send snapshot;"+
 				" sender first index: %v, "+
 				"coordinator log truncation constraint: %v", req.DelegatedSender, replIdx, req.FirstIndex,
@@ -3259,7 +3259,7 @@ func (r *Replica) followerSendSnapshot(
 			if sendThreshold > 0 && sendDur > sendThreshold {
 				// Note that log lines larger than 65k are truncated in the debug zip (see
 				// #50166).
-				log.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s",
+				log.Dev.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s",
 					"snapshot", sendDur, sendThreshold, sp.GetConfiguredRecording())
 			}
 			sp.Finish()
@@ -3683,7 +3683,7 @@ func (r *Replica) relocateReplicas(
 						return rangeDesc, returnErr
 					}
 					if every.ShouldLog() {
-						log.Infof(ctx, "%v", returnErr)
+						log.Dev.Infof(ctx, "%v", returnErr)
 					}
 					success = false
 					break
@@ -4212,7 +4212,7 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 	// currentAttempt, but no backoff between different attempts.
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
-			log.Infof(ctx, "stopped scattering after hitting max %d attempts", maxAttempts)
+			log.Dev.Infof(ctx, "stopped scattering after hitting max %d attempts", maxAttempts)
 			break
 		}
 		desc, conf := r.DescAndSpanConfig()

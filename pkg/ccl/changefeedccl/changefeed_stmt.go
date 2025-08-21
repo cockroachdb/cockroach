@@ -437,7 +437,7 @@ func coreChangefeed(
 	for r := getRetry(ctx, maxBackoff, backoffReset); ; {
 		if !r.Next() {
 			// Retry loop exits when context is canceled.
-			log.Infof(ctx, "core changefeed retry loop exiting: %s", ctx.Err())
+			log.Dev.Infof(ctx, "core changefeed retry loop exiting: %s", ctx.Err())
 			return ctx.Err()
 		}
 
@@ -447,7 +447,7 @@ func coreChangefeed(
 
 		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, description, localState, resultsCh, nil, targets)
 		if err == nil {
-			log.Infof(ctx, "core changefeed completed with no error")
+			log.Dev.Infof(ctx, "core changefeed completed with no error")
 			return nil
 		}
 
@@ -456,13 +456,13 @@ func coreChangefeed(
 		}
 
 		if err := changefeedbase.AsTerminalError(ctx, p.ExecCfg().LeaseManager, err); err != nil {
-			log.Infof(ctx, "core changefeed failed due to error: %s", err)
+			log.Dev.Infof(ctx, "core changefeed failed due to error: %s", err)
 			return err
 		}
 
 		// All other errors retry; but we'll use an up-to-date progress
 		// information which is saved in the localState.
-		log.Infof(ctx, "core changefeed retrying due to transient error: %s", err)
+		log.Dev.Infof(ctx, "core changefeed retrying due to transient error: %s", err)
 	}
 }
 
@@ -1418,7 +1418,7 @@ func (b *changefeedResumer) maybeRelocateJobExecution(
 			return err
 		}
 		if ok, missedTier := current.Locality.Matches(locality); !ok {
-			log.Infof(ctx,
+			log.Dev.Infof(ctx,
 				"CHANGEFEED job %d initially adopted on instance %d but it does not match locality filter %s, finding a new coordinator",
 				b.job.ID(), current.NodeID, missedTier.String(),
 			)
@@ -1602,7 +1602,7 @@ func (b *changefeedResumer) resumeWithRetries(
 			}
 
 			if errors.Is(flowErr, replanErr) {
-				log.Infof(ctx, "restarting changefeed due to updated configuration")
+				log.Dev.Infof(ctx, "restarting changefeed due to updated configuration")
 				continue
 			}
 
@@ -1613,7 +1613,7 @@ func (b *changefeedResumer) resumeWithRetries(
 
 		// Terminate changefeed if needed.
 		if err := changefeedbase.AsTerminalError(ctx, jobExec.ExecCfg().LeaseManager, flowErr); err != nil {
-			log.Infof(ctx, "CHANGEFEED %d shutting down (cause: %v)", jobID, err)
+			log.Dev.Infof(ctx, "CHANGEFEED %d shutting down (cause: %v)", jobID, err)
 			// Best effort -- update job status to make it clear why changefeed shut down.
 			// This won't always work if this node is being shutdown/drained.
 			if ctx.Err() == nil {
@@ -1758,7 +1758,7 @@ func reconcileJobStateWithLocalState(
 		}
 		localState.SetCheckpoint(checkpoint)
 		if log.V(1) {
-			log.Infof(ctx, "Applying checkpoint to job record:  hw=%v, cf=%v",
+			log.Dev.Infof(ctx, "Applying checkpoint to job record:  hw=%v, cf=%v",
 				localState.progress.GetHighWater(), localState.progress.GetChangefeed())
 		}
 		return reloadedJob.NoTxn().Update(ctx,

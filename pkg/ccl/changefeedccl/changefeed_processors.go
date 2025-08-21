@@ -345,7 +345,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	spans, err := ca.setupSpansAndFrontier()
 	if err != nil {
 		if log.V(2) {
-			log.Infof(ca.Ctx(), "change aggregator moving to draining due to error setting up spans and frontier: %v", err)
+			log.Dev.Infof(ca.Ctx(), "change aggregator moving to draining due to error setting up spans and frontier: %v", err)
 		}
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -380,7 +380,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sliMetrics, err = ca.metrics.getSLIMetrics(scope)
 	if err != nil {
 		if log.V(2) {
-			log.Infof(ca.Ctx(), "change aggregator moving to draining due to error getting sli metrics: %v", err)
+			log.Dev.Infof(ca.Ctx(), "change aggregator moving to draining due to error getting sli metrics: %v", err)
 		}
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -402,7 +402,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	if err != nil {
 		if log.V(2) {
-			log.Infof(ca.Ctx(), "change aggregator moving to draining due to error wrapping metrics controller: %v", err)
+			log.Dev.Infof(ca.Ctx(), "change aggregator moving to draining due to error wrapping metrics controller: %v", err)
 		}
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -413,7 +413,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
 		if log.V(2) {
-			log.Infof(ca.Ctx(), "change aggregator moving to draining due to error getting sink: %v", err)
+			log.Dev.Infof(ca.Ctx(), "change aggregator moving to draining due to error getting sink: %v", err)
 		}
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -447,7 +447,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.eventProducer, ca.kvFeedDoneCh, ca.errCh, err = ca.startKVFeed(ctx, spans, kvFeedHighWater, needsInitialScan, feed, pool, limit, opts)
 	if err != nil {
 		if log.V(2) {
-			log.Infof(ca.Ctx(), "change aggregator moving to draining due to error starting kv feed: %v", err)
+			log.Dev.Infof(ca.Ctx(), "change aggregator moving to draining due to error starting kv feed: %v", err)
 		}
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -459,7 +459,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.sink, ca.metrics, ca.sliMetrics, ca.knobs)
 	if err != nil {
 		if log.V(2) {
-			log.Infof(ca.Ctx(), "change aggregator moving to draining due to error creating event consumer: %v", err)
+			log.Dev.Infof(ca.Ctx(), "change aggregator moving to draining due to error creating event consumer: %v", err)
 		}
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -767,7 +767,7 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 			// to drain state so that the trailing metadata callback
 			// has a chance to produce shutdown checkpoint.
 			if log.V(2) {
-				log.Infof(ca.Ctx(), "change aggregator moving to draining due to error while checking for node drain: %v", err)
+				log.Dev.Infof(ca.Ctx(), "change aggregator moving to draining due to error while checking for node drain: %v", err)
 			}
 			ca.MoveToDraining(err)
 			break
@@ -800,7 +800,7 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 			// Shut down the poller if it wasn't already.
 			ca.cancel()
 			if log.V(2) {
-				log.Infof(ca.Ctx(), "change aggregator moving to draining due to error from tick: %v", err)
+				log.Dev.Infof(ca.Ctx(), "change aggregator moving to draining due to error from tick: %v", err)
 			}
 			ca.MoveToDraining(err)
 			break
@@ -897,7 +897,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (retu
 	defer sp.Finish()
 
 	if log.V(2) {
-		log.Infof(ca.Ctx(), "resolved span from kv feed: %#v", resolved)
+		log.Dev.Infof(ca.Ctx(), "resolved span from kv feed: %#v", resolved)
 	}
 
 	if resolved.Timestamp.IsEmpty() {
@@ -985,7 +985,7 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 		},
 	}
 	if log.V(2) {
-		log.Infof(ca.Ctx(), "progress update to be sent to change frontier: %#v", progressUpdate)
+		log.Dev.Infof(ca.Ctx(), "progress update to be sent to change frontier: %#v", progressUpdate)
 	}
 	updateBytes, err := protoutil.Marshal(&progressUpdate)
 	if err != nil {
@@ -1368,7 +1368,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	sli, err := cf.metrics.getSLIMetrics(scope)
 	if err != nil {
 		if log.V(2) {
-			log.Infof(cf.Ctx(), "change frontier moving to draining due to error getting sli metrics: %v", err)
+			log.Dev.Infof(cf.Ctx(), "change frontier moving to draining due to error getting sli metrics: %v", err)
 		}
 		cf.MoveToDraining(err)
 		return
@@ -1379,7 +1379,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
 		if log.V(2) {
-			log.Infof(cf.Ctx(), "change frontier moving to draining due to error getting sink: %v", err)
+			log.Dev.Infof(cf.Ctx(), "change frontier moving to draining due to error getting sink: %v", err)
 		}
 		cf.MoveToDraining(err)
 		return
@@ -1394,7 +1394,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
 	if cf.evalCtx.ChangefeedState == nil {
 		if log.V(2) {
-			log.Infof(cf.Ctx(), "change frontier moving to draining due to missing changefeed state")
+			log.Dev.Infof(cf.Ctx(), "change frontier moving to draining due to missing changefeed state")
 		}
 		cf.MoveToDraining(errors.AssertionFailedf("expected initialized local state"))
 		return
@@ -1408,7 +1408,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		job, err := cf.FlowCtx.Cfg.JobRegistry.LoadClaimedJob(ctx, cf.spec.JobID)
 		if err != nil {
 			if log.V(2) {
-				log.Infof(cf.Ctx(), "change frontier moving to draining due to error loading claimed job: %v", err)
+				log.Dev.Infof(cf.Ctx(), "change frontier moving to draining due to error loading claimed job: %v", err)
 			}
 			cf.MoveToDraining(err)
 			return
@@ -1461,14 +1461,14 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		perTableTracking,
 		cf.spec.TrackedSpans...)
 	if err != nil {
-		log.Infof(cf.Ctx(), "change frontier moving to draining due to error setting up frontier: %v", err)
+		log.Dev.Infof(cf.Ctx(), "change frontier moving to draining due to error setting up frontier: %v", err)
 		cf.MoveToDraining(err)
 		return
 	}
 
 	if err := checkpoint.Restore(cf.frontier, cf.spec.SpanLevelCheckpoint); err != nil {
 		if log.V(2) {
-			log.Infof(cf.Ctx(), "change frontier encountered error on checkpoint restore: %v", err)
+			log.Dev.Infof(cf.Ctx(), "change frontier encountered error on checkpoint restore: %v", err)
 		}
 	}
 
@@ -1627,7 +1627,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			}
 
 			if log.V(2) {
-				log.Infof(cf.Ctx(),
+				log.Dev.Infof(cf.Ctx(),
 					"change frontier moving to draining after reaching resolved span boundary (%s): %v",
 					boundaryType, err)
 			}
@@ -1639,7 +1639,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 		if meta != nil {
 			if meta.Err != nil {
 				if log.V(2) {
-					log.Infof(cf.Ctx(), "change frontier moving to draining after getting error from aggregator: %v", meta.Err)
+					log.Dev.Infof(cf.Ctx(), "change frontier moving to draining after getting error from aggregator: %v", meta.Err)
 				}
 				cf.MoveToDraining(nil /* err */)
 			}
@@ -1649,7 +1649,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 				// draining so that the remaining aggregators will shut down and
 				// transmit their up-to-date frontier.
 				if log.V(2) {
-					log.Infof(cf.Ctx(), "change frontier moving to draining due to aggregator shutdown: %s", meta.Changefeed)
+					log.Dev.Infof(cf.Ctx(), "change frontier moving to draining due to aggregator shutdown: %s", meta.Changefeed)
 				}
 				cf.MoveToDraining(changefeedbase.ErrNodeDraining)
 			}
@@ -1657,7 +1657,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 		}
 		if row == nil {
 			if log.V(2) {
-				log.Infof(cf.Ctx(), "change frontier moving to draining after getting nil row from aggregator")
+				log.Dev.Infof(cf.Ctx(), "change frontier moving to draining after getting nil row from aggregator")
 			}
 			cf.MoveToDraining(nil /* err */)
 			break
@@ -1674,7 +1674,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 
 		if err := cf.noteAggregatorProgress(cf.Ctx(), row[0]); err != nil {
 			if log.V(2) {
-				log.Infof(cf.Ctx(), "change frontier moving to draining after error while processing aggregator progress: %v", err)
+				log.Dev.Infof(cf.Ctx(), "change frontier moving to draining after error while processing aggregator progress: %v", err)
 			}
 			cf.MoveToDraining(err)
 			break
@@ -1701,7 +1701,7 @@ func (cf *changeFrontier) noteAggregatorProgress(ctx context.Context, d rowenc.E
 			`unmarshalling aggregator progress update: %x`, raw)
 	}
 	if log.V(2) {
-		log.Infof(ctx, "progress update from aggregator: %#v", resolvedSpans)
+		log.Dev.Infof(ctx, "progress update from aggregator: %#v", resolvedSpans)
 	}
 
 	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
@@ -1900,7 +1900,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 			cf.lastProtectedTimestampUpdate = timeutil.Now()
 		}
 		if log.V(2) {
-			log.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s",
+			log.Dev.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s",
 				frontier, spanLevelCheckpoint)
 		}
 	}
@@ -2077,13 +2077,13 @@ func maybeLogBehindSpan(
 	resolvedBehind := now.Sub(frontierTS.GoTime())
 
 	if frontierChanged && slowLogEveryN.ShouldProcess(now) {
-		log.Infof(ctx, "%s new resolved timestamp %s is behind by %s",
+		log.Dev.Infof(ctx, "%s new resolved timestamp %s is behind by %s",
 			description, frontierTS, resolvedBehind)
 	}
 
 	if slowLogEveryN.ShouldProcess(now) {
 		s := frontier.PeekFrontierSpan()
-		log.Infof(ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
+		log.Dev.Infof(ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
 	}
 }
 

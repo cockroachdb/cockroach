@@ -235,7 +235,7 @@ func (sf *streamIngestionFrontier) Next() (
 }
 
 func (sf *streamIngestionFrontier) MoveToDrainingAndLogError(err error) {
-	log.Infof(sf.Ctx(), "gracefully draining with error %s", err)
+	log.Dev.Infof(sf.Ctx(), "gracefully draining with error %s", err)
 	sf.MoveToDraining(err)
 }
 
@@ -327,7 +327,7 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 
 	replicatedTime := f.Frontier()
 	sf.lastPartitionUpdate = timeutil.Now()
-	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime)
+	log.Dev.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime)
 	if err := registry.UpdateJobWithTxn(ctx, jobID, nil /* txn */, func(
 		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
@@ -477,7 +477,7 @@ func (sf *streamIngestionFrontier) handleLaggingNodeError(ctx context.Context, e
 	case !errors.Is(err, ErrNodeLagging):
 		return err
 	case sf.replicatedTimeAtLastPositiveLagNodeCheck.Less(sf.persistedReplicatedTime):
-		log.Infof(ctx, "detected a lagging node: %s. Don't forward error because replicated time at last check %s is less than current replicated time %s", err, sf.replicatedTimeAtLastPositiveLagNodeCheck, sf.persistedReplicatedTime)
+		log.Dev.Infof(ctx, "detected a lagging node: %s. Don't forward error because replicated time at last check %s is less than current replicated time %s", err, sf.replicatedTimeAtLastPositiveLagNodeCheck, sf.persistedReplicatedTime)
 		sf.replicatedTimeAtLastPositiveLagNodeCheck = sf.persistedReplicatedTime
 		return nil
 	case sf.replicatedTimeAtLastPositiveLagNodeCheck.Equal(sf.persistedReplicatedTime):

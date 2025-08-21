@@ -266,7 +266,7 @@ func (k *kafkaSinkClientV2) maybeUpdateTopicPartitions(
 		return nil
 	}
 
-	log.Infof(ctx, `updating kafka metadata for topics: %+v`, topics)
+	log.Dev.Infof(ctx, `updating kafka metadata for topics: %+v`, topics)
 
 	topicDetails, err := k.adminClient.ListTopics(ctx, topics...)
 	if err != nil {
@@ -481,7 +481,7 @@ func buildKgoConfig(
 			return nil, err
 		}
 		opts = append(opts, authOpts...)
-		log.VInfof(ctx, 2, "applied kafka auth mechanism: %+#v\n", dialConfig.authMechanism)
+		log.Dev.VInfof(ctx, 2, "applied kafka auth mechanism: %+#v\n", dialConfig.authMechanism)
 	}
 
 	// Apply some statement level overrides. The flush related ones (Messages, MaxMessages, Bytes) are not applied here, but on the sinkBatchConfig instead.
@@ -604,7 +604,7 @@ func (k kgoLogAdapter) Log(level kgo.LogLevel, msg string, keyvals ...any) {
 	for i := 0; i < len(keyvals); i += 2 {
 		format += ` %s=%v`
 	}
-	log.InfofDepth(k.ctx, 1, format, append([]any{redact.SafeString(level.String()), redact.SafeString(msg)}, keyvals...)...) //nolint:fmtsafe
+	log.Dev.InfofDepth(k.ctx, 1, format, append([]any{redact.SafeString(level.String()), redact.SafeString(msg)}, keyvals...)...) //nolint:fmtsafe
 }
 
 var _ kgo.Logger = kgoLogAdapter{}

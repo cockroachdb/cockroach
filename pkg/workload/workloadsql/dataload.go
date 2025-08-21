@@ -174,7 +174,7 @@ func (l InsertsDataLoader) InitialDataLoad(
 			return 0, err
 		}
 		tableRows := int(tableRowsAtomic.Load())
-		log.Infof(ctx, `imported %s (%s, %d rows)`,
+		log.Dev.Infof(ctx, `imported %s (%s, %d rows)`,
 			table.Name, timeutil.Since(tableStart).Round(time.Second), tableRows,
 		)
 	}

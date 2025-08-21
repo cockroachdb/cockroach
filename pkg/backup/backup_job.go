@@ -796,7 +796,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			// If we made decent progress with the BACKUP, reset the last
 			// progress state.
 			if madeProgress := curProgress - lastProgress; madeProgress >= 0.01 {
-				log.Infof(ctx, "backport made %d%% progress, resetting retry duration", int(math.Round(float64(100*madeProgress))))
+				log.Dev.Infof(ctx, "backport made %d%% progress, resetting retry duration", int(math.Round(float64(100*madeProgress))))
 				lastProgress = curProgress
 				r.Reset()
 			}
@@ -1364,7 +1364,7 @@ func maybeRelocateJobExecution(
 			return err
 		}
 		if ok, missedTier := current.Locality.Matches(locality); !ok {
-			log.Infof(ctx,
+			log.Dev.Infof(ctx,
 				"%s job %d initially adopted on instance %d but it does not match locality filter %s, finding a new coordinator",
 				jobDesc, jobID, current.NodeID, missedTier.String(),
 			)

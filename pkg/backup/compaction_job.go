@@ -185,7 +185,7 @@ func maybeStartCompactionJob(
 		return scheduledJob.Update(ctx, backupSchedule)
 	})
 	if err == nil {
-		log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
+		log.Dev.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
 	}
 	return jobID, err
 }

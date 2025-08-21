@@ -149,7 +149,7 @@ func newTenantServerInternal(
 	newCtx := ambientCtx.AnnotateCtx(context.Background())
 
 	// Inform the logs we're starting a new server.
-	log.Infof(newCtx, "creating tenant server")
+	log.Dev.Infof(newCtx, "creating tenant server")
 
 	// Now instantiate the tenant server proper.
 	return newSharedProcessTenantServer(newCtx, stopper, baseCfg, sqlCfg, tenantNameContainer, elastic)

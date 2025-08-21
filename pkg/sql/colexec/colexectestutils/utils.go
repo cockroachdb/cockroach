@@ -364,7 +364,7 @@ func RunTestsWithOrderedCols(
 		ctx := context.Background()
 		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(ctx)
-		log.Info(ctx, "allNullsInjection")
+		log.Dev.Info(ctx, "allNullsInjection")
 		// This test replaces all values in the input tuples with nulls and ensures
 		// that the output is different from the "original" output (i.e. from the
 		// one that is returned without nulls injection).
@@ -522,7 +522,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			errorHandler(err)
 		}
 		if isOperatorChainResettable(op) {
-			log.Info(ctx, "reusing after reset")
+			log.Dev.Info(ctx, "reusing after reset")
 			out.Reset(ctx)
 			if err := verifyFn(out); err != nil {
 				errorHandler(err)
@@ -531,7 +531,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 	})
 
 	if !skipVerifySelAndNullsResets {
-		log.Info(ctx, "verifySelAndNullResets")
+		log.Dev.Info(ctx, "verifySelAndNullResets")
 		// This test ensures that operators that "own their own batches", such as
 		// any operator that has to reshape its output, are not affected by
 		// downstream modification of batches.
@@ -612,7 +612,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 	}
 
 	if !skipRandomNullsInjection {
-		log.Info(ctx, "randomNullsInjection")
+		log.Dev.Info(ctx, "randomNullsInjection")
 		// This test randomly injects nulls in the input tuples and ensures that
 		// the operator doesn't panic.
 		inputSources := make([]colexecop.Operator, len(tups))
@@ -672,7 +672,7 @@ func RunTestsWithFn(
 
 	for _, batchSize := range batchSizes {
 		for _, useSel := range []bool{false, true} {
-			log.Infof(context.Background(), "batchSize=%d/sel=%t", batchSize, useSel)
+			log.Dev.Infof(context.Background(), "batchSize=%d/sel=%t", batchSize, useSel)
 			inputSources := make([]colexecop.Operator, len(tups))
 			var inputTypes []*types.T
 			if useSel {
@@ -710,7 +710,7 @@ func RunTestsWithFixedSel(
 	test func(t *testing.T, inputs []colexecop.Operator),
 ) {
 	for _, batchSize := range []int{1, 2, 3, 16, 1024} {
-		log.Infof(context.Background(), "batchSize=%d/fixedSel", batchSize)
+		log.Dev.Infof(context.Background(), "batchSize=%d/fixedSel", batchSize)
 		inputSources := make([]colexecop.Operator, len(tups))
 		for i, tup := range tups {
 			inputSources[i] = NewOpFixedSelTestInput(allocator, sel, batchSize, tup, typs)

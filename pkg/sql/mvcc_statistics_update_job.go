@@ -60,7 +60,7 @@ var _ jobs.Resumer = (*mvccStatisticsUpdateJob)(nil)
 
 // Resume implements the jobs.Resumer interface.
 func (j *mvccStatisticsUpdateJob) Resume(ctx context.Context, execCtxI interface{}) error {
-	log.Infof(ctx, "starting mvcc statistics update job")
+	log.Dev.Infof(ctx, "starting mvcc statistics update job")
 
 	// This job is a forever running background job, and it is always safe to
 	// terminate the SQL pod whenever the job is running, so mark it as idle.

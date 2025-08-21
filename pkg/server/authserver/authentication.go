@@ -197,11 +197,11 @@ func (s *authenticationServer) UserLogin(
 	authMethod, hbaEntry, err := s.lookupAuthenticationMethodUsingRules(hba.ConnHostSSL, hbaConf, username, originIP)
 	if err != nil {
 		if log.V(1) {
-			log.Infof(ctx, "invalid retrieval of HBA entry: error: %v", err)
+			log.Dev.Infof(ctx, "invalid retrieval of HBA entry: error: %v", err)
 		}
 	} else if authMethod.String() == "ldap" {
 		if log.V(1) {
-			log.Infof(ctx, "retrieved LDAP HBA entry successfully: authMethod: %s, hbaEntry: %v", authMethod.String(), hbaEntry)
+			log.Dev.Infof(ctx, "retrieved LDAP HBA entry successfully: authMethod: %s, hbaEntry: %v", authMethod.String(), hbaEntry)
 		}
 		execCfg := s.sqlServer.ExecutorConfig()
 		ldapManager.Do(func() {
@@ -212,13 +212,13 @@ func (s *authenticationServer) UserLogin(
 		ldapUserDN, detailedErrors, authError := ldapManager.m.FetchLDAPUserDN(ctx, execCfg.Settings, username, hbaEntry, identMap)
 		if authError != nil {
 			if log.V(1) {
-				log.Infof(ctx, "ldap search response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
+				log.Dev.Infof(ctx, "ldap search response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
 			}
 		} else {
 			detailedErrors, authError = ldapManager.m.ValidateLDAPLogin(ctx, execCfg.Settings, ldapUserDN, username, req.Password, hbaEntry, identMap)
 			if authError != nil {
 				if log.V(1) {
-					log.Infof(ctx, "ldap bind response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
+					log.Dev.Infof(ctx, "ldap bind response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
 				}
 			} else {
 				ldapAuthSuccess = true
@@ -419,7 +419,7 @@ func (s *authenticationServer) UserLogout(
 		err := status.Errorf(
 			codes.InvalidArgument,
 			"session with id %d nonexistent", sessionID)
-		log.Infof(ctx, "%v", err)
+		log.Dev.Infof(ctx, "%v", err)
 		return nil, err
 	}
 
@@ -775,7 +775,7 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 
 	if !am.allowAnonymous && (werr != nil && jerr != nil) {
 		if log.V(1) {
-			log.Infof(req.Context(), "session error: %v; jwt error: %v", werr, jerr)
+			log.Dev.Infof(req.Context(), "session error: %v; jwt error: %v", werr, jerr)
 		}
 		http.Error(w, "a valid authentication cookie or JWT is required", http.StatusUnauthorized)
 		return

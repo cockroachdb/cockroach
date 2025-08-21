@@ -949,7 +949,7 @@ func TestIndexConcurrency(t *testing.T) {
 	}
 
 	for i := range 10 {
-		log.Infof(ctx, "iteration %d", i)
+		log.Dev.Infof(ctx, "iteration %d", i)
 
 		// Construct store. Multiple index instances running on different goroutines
 		// will use this store.

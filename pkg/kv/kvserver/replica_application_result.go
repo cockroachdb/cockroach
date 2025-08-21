@@ -220,7 +220,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				//
 				// For proposed simplifications, see:
 				// https://github.com/cockroachdb/cockroach/issues/97633
-				log.Infof(ctx, "failed to repropose %s at idx %d with new lease index: %s", cmd.ID, cmd.Index(), pErr)
+				log.Dev.Infof(ctx, "failed to repropose %s at idx %d with new lease index: %s", cmd.ID, cmd.Index(), pErr)
 				// TODO(repl): we're replacing an error (illegal LAI) here with another error.
 				// A pattern where the error is assigned exactly once would be simpler to
 				// reason about. In particular, we want to make sure we never replace an
@@ -677,7 +677,7 @@ func (r *Replica) handleChangeReplicasResult(
 	// removal pending at this point then we know that this command must be
 	// responsible.
 	if log.V(1) {
-		log.Infof(ctx, "removing replica due to ChangeReplicasTrigger: %v", chng)
+		log.Dev.Infof(ctx, "removing replica due to ChangeReplicasTrigger: %v", chng)
 	}
 
 	// This is currently executed before the conf change is applied to the Raft

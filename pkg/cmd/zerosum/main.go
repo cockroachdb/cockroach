@@ -444,7 +444,7 @@ func main() {
 
 	go func() {
 		s := <-signalCh
-		log.Infof(context.Background(), "signal received: %v", s)
+		log.Dev.Infof(context.Background(), "signal received: %v", s)
 		c.Close()
 		os.Exit(1)
 	}()

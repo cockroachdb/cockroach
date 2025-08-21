@@ -823,7 +823,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		for idx, test := range tests {
 			t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
 				if testing.Verbose() || log.V(1) {
-					log.Infof(context.Background(), "query: %s", query)
+					log.Dev.Infof(context.Background(), "query: %s", query)
 				}
 				rows, err := queryFunc(test.qargs...)
 				if err != nil {
@@ -1231,7 +1231,7 @@ func TestPGPreparedExec(t *testing.T) {
 		for idx, test := range tests {
 			t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
 				if testing.Verbose() || log.V(1) {
-					log.Infof(context.Background(), "exec: %s", query)
+					log.Dev.Infof(context.Background(), "exec: %s", query)
 				}
 				if result, err := execFunc(test.qargs...); err != nil {
 					if test.error == "" {
@@ -1265,7 +1265,7 @@ func TestPGPreparedExec(t *testing.T) {
 		for _, execTest := range execTests {
 			t.Run(execTest.query, func(t *testing.T) {
 				if testing.Verbose() || log.V(1) {
-					log.Infof(context.Background(), "prepare: %s", execTest.query)
+					log.Dev.Infof(context.Background(), "prepare: %s", execTest.query)
 				}
 				if stmt, err := db.Prepare(execTest.query); err != nil {
 					t.Errorf("%s: prepare error: %s", execTest.query, err)
@@ -1810,7 +1810,7 @@ type pgxTestLogger struct{}
 func (l pgxTestLogger) Log(
 	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
 ) {
-	log.Infof(ctx, "pgx log [%s] %s - %s", level, msg, data)
+	log.Dev.Infof(ctx, "pgx log [%s] %s - %s", level, msg, data)
 }
 
 // pgxTestLogger implements pgx.Logger.

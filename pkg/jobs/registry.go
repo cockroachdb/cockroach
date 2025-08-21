@@ -1557,15 +1557,15 @@ func (r *Registry) stepThroughStateMachine(
 	if jobErr != nil {
 		isExpectedError := pgerror.HasCandidateCode(jobErr) || HasErrJobCanceled(jobErr)
 		if isExpectedError {
-			log.Infof(ctx, "%s job %d: stepping through state %s with error: %v", jobType, job.ID(), state, jobErr)
+			log.Dev.Infof(ctx, "%s job %d: stepping through state %s with error: %v", jobType, job.ID(), state, jobErr)
 		} else {
 			log.Errorf(ctx, "%s job %d: stepping through state %s with unexpected error: %+v", jobType, job.ID(), state, jobErr)
 		}
 	} else {
 		if jobType == jobspb.TypeAutoCreateStats || jobType == jobspb.TypeAutoCreatePartialStats {
-			log.VInfof(ctx, 1, "%s job %d: stepping through state %s", jobType, job.ID(), state)
+			log.Dev.VInfof(ctx, 1, "%s job %d: stepping through state %s", jobType, job.ID(), state)
 		} else {
-			log.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), state)
+			log.Dev.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), state)
 		}
 	}
 	jm := r.metrics.JobMetrics[jobType]
@@ -1944,8 +1944,8 @@ func (r *Registry) IsDraining() bool {
 
 // WaitForRegistryShutdown waits for all background job registry tasks to complete.
 func (r *Registry) WaitForRegistryShutdown(ctx context.Context) {
-	log.Infof(ctx, "starting to wait for job registry to shut down")
-	defer log.Infof(ctx, "job registry tasks successfully shut down")
+	log.Dev.Infof(ctx, "starting to wait for job registry to shut down")
+	defer log.Dev.Infof(ctx, "job registry tasks successfully shut down")
 	r.startedControllerTasksWG.Wait()
 }
 

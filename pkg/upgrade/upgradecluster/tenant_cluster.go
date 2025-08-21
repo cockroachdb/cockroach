@@ -211,7 +211,7 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 	// nodes at the storage cluster level.
 	const quotaCapacity = 25
 	qp := quotapool.NewIntPool("every-sql-server", quotaCapacity)
-	log.Infof(ctx, "executing %s on nodes %v", redact.Safe(op), instances)
+	log.Dev.Infof(ctx, "executing %s on nodes %v", redact.Safe(op), instances)
 	grp := ctxgroup.WithContext(ctx)
 
 	for i := range instances {
@@ -295,11 +295,11 @@ func (t *TenantCluster) UntilClusterStable(
 			return nil
 		}
 		if len(instances) != len(curInstances) {
-			log.Infof(ctx,
+			log.Dev.Infof(ctx,
 				"number of SQL servers has changed (pre: %d, post: %d), retrying",
 				len(instances), len(curInstances))
 		} else {
-			log.Infof(ctx, "different set of SQL servers running (pre: %v, post: %v), retrying", instances, curInstances)
+			log.Dev.Infof(ctx, "different set of SQL servers running (pre: %v, post: %v), retrying", instances, curInstances)
 		}
 		instances = curInstances
 	}

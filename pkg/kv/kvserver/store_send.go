@@ -340,7 +340,7 @@ func (s *Store) maybeThrottleBatch(
 		s.metrics.AddSSTableProposalTotalDelay.Inc(waited.Nanoseconds())
 		s.metrics.AddSSTableProposalEngineDelay.Inc(waitedEngine.Nanoseconds())
 		if waited > time.Second {
-			log.Infof(ctx, "SST ingestion was delayed by %v (%v for storage engine back-pressure)",
+			log.Dev.Infof(ctx, "SST ingestion was delayed by %v (%v for storage engine back-pressure)",
 				waited, waitedEngine)
 		}
 		return res, nil

@@ -168,7 +168,7 @@ func emitResolvedTimestamp(
 		return err
 	}
 	if log.V(2) {
-		log.Infof(ctx, `resolved %s`, resolved)
+		log.Dev.Infof(ctx, `resolved %s`, resolved)
 	}
 	return nil
 }

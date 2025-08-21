@@ -280,7 +280,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 
 	if raftStatus == nil {
 		if log.V(6) {
-			log.Infof(ctx, "the raft group doesn't exist for r%d", rangeID)
+			log.Dev.Infof(ctx, "the raft group doesn't exist for r%d", rangeID)
 		}
 		return truncateDecision{}, nil
 	}
@@ -688,7 +688,7 @@ func (rlq *raftLogQueue) process(
 	}
 
 	if n := decision.NumNewRaftSnapshots(); log.V(1) || n > 0 && rlq.logSnapshots.ShouldProcess(timeutil.Now()) {
-		log.Infof(ctx, "%v", redact.Safe(decision.String()))
+		log.Dev.Infof(ctx, "%v", redact.Safe(decision.String()))
 	} else {
 		log.VEventf(ctx, 1, "%v", redact.Safe(decision.String()))
 	}

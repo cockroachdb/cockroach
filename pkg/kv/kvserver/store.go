@@ -1923,7 +1923,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 						// transferAllAway() traverses all stores/replicas without
 						// checking for the timeout otherwise.
 						if verbose || log.V(1) {
-							log.Infof(ctx, "lease transfer aborted due to exceeded timeout")
+							log.Dev.Infof(ctx, "lease transfer aborted due to exceeded timeout")
 						}
 						return
 					default:
@@ -1979,7 +1979,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 						desc := r.Desc()
 						if verbose || log.V(1) {
 							// This logging is useful to troubleshoot incomplete drains.
-							log.Infof(ctx, "attempting to acquire proscribed lease %v for range %s",
+							log.Dev.Infof(ctx, "attempting to acquire proscribed lease %v for range %s",
 								drainingLeaseStatus.Lease, desc)
 						}
 
@@ -2011,7 +2011,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 
 					if verbose || log.V(1) {
 						// This logging is useful to troubleshoot incomplete drains.
-						log.Infof(ctx, "attempting to transfer lease %v for range %s", drainingLeaseStatus.Lease, desc)
+						log.Dev.Infof(ctx, "attempting to transfer lease %v for range %s", drainingLeaseStatus.Lease, desc)
 					}
 
 					start := timeutil.Now()
@@ -2098,7 +2098,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					}
 					err = errors.Errorf("waiting for %d replicas to transfer their lease away", numRemaining)
 					if everySecond.ShouldLog() {
-						log.Infof(ctx, "%v", err)
+						log.Dev.Infof(ctx, "%v", err)
 					}
 				}
 				if err == nil {
@@ -2317,7 +2317,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// Log progress regularly, but not for the first replica (we only want to
 		// log when this is slow). The last replica is logged after iteration.
 		if logEvery.ShouldLog() && i > 0 {
-			log.Infof(ctx, "initialized %d/%d replicas", i, len(repls))
+			log.Dev.Infof(ctx, "initialized %d/%d replicas", i, len(repls))
 		}
 
 		if repl.Desc == nil {
@@ -2373,7 +2373,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			rep.maybeUnquiesce(ctx, true /* wakeLeader */, true /* mayCampaign */)
 		}
 	}
-	log.Infof(ctx, "initialized %d/%d replicas", len(repls), len(repls))
+	log.Dev.Infof(ctx, "initialized %d/%d replicas", len(repls), len(repls))
 
 	// Register a callback to unquiesce any ranges with replicas on a
 	// node transitioning from non-live to live.

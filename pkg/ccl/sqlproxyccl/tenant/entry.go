@@ -89,7 +89,7 @@ func (e *tenantEntry) Initialize(ctx context.Context, client RPCDirectoryClient)
 		return initErr
 	}
 
-	log.Infof(ctx, "refreshing tenant %d metadata", e.TenantID)
+	log.Dev.Infof(ctx, "refreshing tenant %d metadata", e.TenantID)
 
 	tenantResp, err := client.GetTenant(ctx, &GetTenantRequest{TenantID: e.TenantID.ToUint64()})
 	if err != nil {
@@ -124,7 +124,7 @@ func (e *tenantEntry) RefreshPods(ctx context.Context, client RPCDirectoryClient
 		return nil
 	}
 
-	log.Infof(ctx, "refreshing tenant %d pods", e.TenantID)
+	log.Dev.Infof(ctx, "refreshing tenant %d pods", e.TenantID)
 
 	_, err := e.fetchPodsLocked(ctx, client)
 	return err
@@ -217,7 +217,7 @@ func (e *tenantEntry) EnsureTenantPod(
 			return nil, err
 		}
 		if hasRunningPod(pods) {
-			log.Infof(ctx, "resumed tenant %d", e.TenantID)
+			log.Dev.Infof(ctx, "resumed tenant %d", e.TenantID)
 			break
 		}
 
@@ -301,7 +301,7 @@ func (e *tenantEntry) fetchPodsLocked(
 	e.mu.pods = list.Pods
 
 	if len(e.mu.pods) != 0 {
-		log.Infof(ctx, "fetched IP addresses: %v", e.mu.pods)
+		log.Dev.Infof(ctx, "fetched IP addresses: %v", e.mu.pods)
 	}
 
 	return e.mu.pods, nil

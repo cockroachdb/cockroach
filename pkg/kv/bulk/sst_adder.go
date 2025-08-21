@@ -229,7 +229,7 @@ func (a *sstAdder) AddSSTable(
 						return err
 					}
 					split := mr.Desc.EndKey.AsRawKey()
-					log.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
+					log.Dev.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
 					left, right, err := createSplitSSTable(ctx, item.start, split, iter, a.settings)
 					if err != nil {
 						return err

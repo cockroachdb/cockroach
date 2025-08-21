@@ -135,7 +135,7 @@ func (m *Manager) WaitForNoVersion(
 		if detail.count != lastCount {
 			lastCount = detail.count
 			wsTracker.updateProgress(detail)
-			log.Infof(ctx, "waiting for %d leases to expire: desc=%d", detail.count, id)
+			log.Dev.Infof(ctx, "waiting for %d leases to expire: desc=%d", detail.count, id)
 		}
 		if lastCount == 0 {
 			break
@@ -487,7 +487,7 @@ func (m *Manager) WaitForInitialVersion(
 			break
 		}
 		if totalCount != lastCount {
-			log.Infof(ctx, "waiting for descriptors %v to appear on %d nodes. Last count was %d", ids.Ordered(), totalExpectedCount, totalCount)
+			log.Dev.Infof(ctx, "waiting for descriptors %v to appear on %d nodes. Last count was %d", ids.Ordered(), totalExpectedCount, totalCount)
 			wsTracker.updateProgress(countDetail{
 				count:       totalCount,
 				targetCount: totalExpectedCount,
@@ -538,13 +538,13 @@ func (m *Manager) WaitForOneVersion(
 			return nil, err
 		}
 		if detail.count == 0 {
-			log.Infof(ctx, "all leases have expired at %v: desc=%v", now, descs)
+			log.Dev.Infof(ctx, "all leases have expired at %v: desc=%v", now, descs)
 			break
 		}
 		if detail.count != lastCount {
 			lastCount = detail.count
 			wsTracker.updateProgress(detail)
-			log.Infof(ctx, "waiting for %d leases to expire: desc=%v", detail.count, descs)
+			log.Dev.Infof(ctx, "waiting for %d leases to expire: desc=%v", detail.count, descs)
 		}
 	}
 
@@ -1881,7 +1881,7 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 
 				if evFunc := m.testingKnobs.TestingDescriptorUpdateEvent; evFunc != nil {
 					if err := evFunc(desc.DescriptorProto()); err != nil {
-						log.Infof(ctx, "skipping update of %v due to knob: %v",
+						log.Dev.Infof(ctx, "skipping update of %v due to knob: %v",
 							desc, err)
 						continue
 					}
@@ -1995,7 +1995,7 @@ func (m *Manager) closeRangeFeedLocked() {
 // updates.
 func (m *Manager) watchForUpdates(ctx context.Context) {
 	if log.V(1) {
-		log.Infof(ctx, "using rangefeeds for lease manager updates")
+		log.Dev.Infof(ctx, "using rangefeeds for lease manager updates")
 	}
 	descriptorTableStart := m.Codec().TablePrefix(keys.DescriptorTableID)
 	descriptorTableSpan := roachpb.Span{
@@ -2012,7 +2012,7 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		if len(ev.Value.RawBytes) == 0 {
 			id, err := m.Codec().DecodeDescMetadataID(ev.Key)
 			if err != nil {
-				log.Infof(ctx, "unable to decode metadata key %v", ev.Key)
+				log.Dev.Infof(ctx, "unable to decode metadata key %v", ev.Key)
 				return
 			}
 			select {
@@ -2031,7 +2031,7 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		}
 		mut := b.BuildCreatedMutable()
 		if log.V(2) {
-			log.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
+			log.Dev.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
 				ev.Key, mut.GetID(), mut.GetName(), mut.GetVersion())
 		}
 		select {
@@ -2287,7 +2287,7 @@ func (m *Manager) cleanupExpiredSessionLeases(ctx context.Context) {
 
 			}
 		}); err != nil {
-			log.Infof(ctx, "unable to delete leases from storage %s", err)
+			log.Dev.Infof(ctx, "unable to delete leases from storage %s", err)
 		}
 	}
 }
@@ -2338,7 +2338,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, refreshAndPurgeAllDescr
 
 				if evFunc := m.testingKnobs.TestingBeforeAcquireLeaseDuringRefresh; evFunc != nil {
 					if err := evFunc(id); err != nil {
-						log.Infof(ctx, "knob failed for desc (%v): %v", id, err)
+						log.Dev.Infof(ctx, "knob failed for desc (%v): %v", id, err)
 						return
 					}
 				}
@@ -2370,7 +2370,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, refreshAndPurgeAllDescr
 					}
 				}
 			}); err != nil {
-			log.Infof(ctx, "didnt refresh descriptor: %d lease: %s", id, err)
+			log.Dev.Infof(ctx, "didnt refresh descriptor: %d lease: %s", id, err)
 			wg.Done()
 		}
 	}
@@ -2620,7 +2620,7 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 		region = locality.Tiers[0].Value
 	}
 
-	log.Infof(ctx, "starting orphaned lease cleanup from stale sessions in region %s", region)
+	log.Dev.Infof(ctx, "starting orphaned lease cleanup from stale sessions in region %s", region)
 
 	var distinctSessions []tree.Datums
 	aostTime := hlc.Timestamp{WallTime: initialTimestamp}
@@ -2653,7 +2653,7 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 		}
 
 		if len(distinctSessions) > 0 {
-			log.Infof(ctx, "found %d dead sessions from which to clean up orphaned leases", len(distinctSessions))
+			log.Dev.Infof(ctx, "found %d dead sessions from which to clean up orphaned leases", len(distinctSessions))
 		}
 
 		// Delete rows in our lease table with orphaned sessions.
@@ -2665,20 +2665,20 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 				break
 			}
 			totalLeasesDeleted += sessionLeasesDeleted
-			log.Infof(ctx, "deleted %d orphaned leases for dead session %s", sessionLeasesDeleted, sessionID)
+			log.Dev.Infof(ctx, "deleted %d orphaned leases for dead session %s", sessionLeasesDeleted, sessionID)
 		}
 
 		totalSessionsProcessed += len(distinctSessions)
 
 		// No more dead sessions to clean up.
 		if len(distinctSessions) < limit {
-			log.Infof(ctx, "completed orphaned lease cleanup for region %s: %d sessions processed, %d leases deleted",
+			log.Dev.Infof(ctx, "completed orphaned lease cleanup for region %s: %d sessions processed, %d leases deleted",
 				region, totalSessionsProcessed, totalLeasesDeleted)
 			return
 		}
 
 		// Log progress for large cleanup operations.
-		log.Infof(ctx, "orphaned lease cleanup progress for region %s: %d sessions processed, %d leases deleted so far",
+		log.Dev.Infof(ctx, "orphaned lease cleanup progress for region %s: %d sessions processed, %d leases deleted so far",
 			region, totalSessionsProcessed, totalLeasesDeleted)
 
 		// Advance our aostTime timstamp so that our query to detect leases with
@@ -2762,7 +2762,7 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 	}
 
 	totalLeases := len(rows)
-	log.Infof(ctx, "found %d orphaned leases to clean up for instance ID %d", totalLeases, instanceID)
+	log.Dev.Infof(ctx, "found %d orphaned leases to clean up for instance ID %d", totalLeases, instanceID)
 	if totalLeases == 0 {
 		return
 	}
@@ -2796,11 +2796,11 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 				defer wg.Done()
 				m.storage.release(ctx, m.stopper, lease)
 				released := releasedCount.Add(1)
-				log.Infof(ctx, "released orphaned lease: %+v", lease)
+				log.Dev.Infof(ctx, "released orphaned lease: %+v", lease)
 
 				// Log progress every 100 leases for large cleanup operations.
 				if released%100 == 0 || released == int64(totalLeases) {
-					log.Infof(ctx, "orphaned lease cleanup progress for instance ID %d: %d/%d leases released",
+					log.Dev.Infof(ctx, "orphaned lease cleanup progress for instance ID %d: %d/%d leases released",
 						instanceID, released, totalLeases)
 				}
 			}); err != nil {
@@ -2810,7 +2810,7 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 	}
 
 	wg.Wait()
-	log.Infof(ctx, "completed orphaned lease cleanup for instance ID %d: %d/%d leases released",
+	log.Dev.Infof(ctx, "completed orphaned lease cleanup for instance ID %d: %d/%d leases released",
 		instanceID, releasedCount.Load(), totalLeases)
 }
 

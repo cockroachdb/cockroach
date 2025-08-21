@@ -109,7 +109,7 @@ func (e *schedulerLatencyListener) SchedulerLatency(p99, period time.Duration) {
 			(params.adjustmentDelta * params.multiplicativeFactorOnDecrease)
 		newUtilizationLimit = clamp(params.minUtilization, params.maxUtilization, newUtilizationLimit)
 		if log.V(1) {
-			log.Infof(e.ctx, "clamp(%0.2f%% - %0.2f%%) => %0.2f%%",
+			log.Dev.Infof(e.ctx, "clamp(%0.2f%% - %0.2f%%) => %0.2f%%",
 				100*oldUtilizationLimit, 100*params.adjustmentDelta*params.multiplicativeFactorOnDecrease,
 				100*newUtilizationLimit)
 		}
@@ -118,7 +118,7 @@ func (e *schedulerLatencyListener) SchedulerLatency(p99, period time.Duration) {
 			newUtilizationLimit = oldUtilizationLimit + params.adjustmentDelta
 			newUtilizationLimit = clamp(params.minUtilization, params.maxUtilization, newUtilizationLimit)
 			if log.V(1) {
-				log.Infof(e.ctx, "clamp(%0.2f%% + %0.2f%%) => %0.2f%%",
+				log.Dev.Infof(e.ctx, "clamp(%0.2f%% + %0.2f%%) => %0.2f%%",
 					100*oldUtilizationLimit, 100*params.adjustmentDelta,
 					100*newUtilizationLimit)
 			}
@@ -130,7 +130,7 @@ func (e *schedulerLatencyListener) SchedulerLatency(p99, period time.Duration) {
 					(params.adjustmentDelta * params.multiplicativeFactorOnInactiveDecrease)
 				newUtilizationLimit = clamp(inactiveUtilizationLimit, params.maxUtilization, newUtilizationLimit)
 				if log.V(1) {
-					log.Infof(e.ctx, "clamp(%0.2f%% - %0.2f%%) => %0.2f%% (inactive)",
+					log.Dev.Infof(e.ctx, "clamp(%0.2f%% - %0.2f%%) => %0.2f%% (inactive)",
 						100*oldUtilizationLimit, 100*params.adjustmentDelta*params.multiplicativeFactorOnInactiveDecrease,
 						100*newUtilizationLimit)
 				}

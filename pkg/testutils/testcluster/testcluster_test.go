@@ -102,7 +102,7 @@ func TestManualReplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Infof(context.Background(), "After split got ranges: %+v and %+v.", leftRangeDesc, tableRangeDesc)
+	log.Dev.Infof(context.Background(), "After split got ranges: %+v and %+v.", leftRangeDesc, tableRangeDesc)
 	if len(tableRangeDesc.InternalReplicas) == 0 {
 		t.Fatalf(
 			"expected replica on node 1, got no replicas: %+v", tableRangeDesc.InternalReplicas)

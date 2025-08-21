@@ -204,7 +204,7 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 		for range bp.progCh {
 		}
 	}
-	log.Infof(ctx, "starting backup data")
+	log.Dev.Infof(ctx, "starting backup data")
 	if err := bp.FlowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
 		TaskName: "backupDataProcessor.runBackupProcessor",
 		SpanOpt:  stop.ChildSpan,
@@ -354,7 +354,7 @@ func runBackupProcessor(
 		return err
 	}
 
-	log.Infof(ctx, "backup processor is assigned %d spans covering %d ranges", totalSpans, len(requestSpans))
+	log.Dev.Infof(ctx, "backup processor is assigned %d spans covering %d ranges", totalSpans, len(requestSpans))
 
 	destURI := spec.DefaultURI
 	var destLocalityKV string
@@ -372,7 +372,7 @@ func runBackupProcessor(
 			}
 		}
 		if localitySinkURI != "" {
-			log.Infof(ctx, "backing up %d spans to destination specified by locality %s", totalSpans, destLocalityKV)
+			log.Dev.Infof(ctx, "backing up %d spans to destination specified by locality %s", totalSpans, destLocalityKV)
 			destURI = localitySinkURI
 		} else {
 			nodeLocalities := make([]string, 0, len(flowCtx.EvalCtx.Locality.Tiers))
@@ -383,7 +383,7 @@ func runBackupProcessor(
 			for i := range spec.URIsByLocalityKV {
 				backupLocalities = append(backupLocalities, i)
 			}
-			log.Infof(ctx, "backing up %d spans to default locality because backup localities %s have no match in node's localities %s", totalSpans, backupLocalities, nodeLocalities)
+			log.Dev.Infof(ctx, "backing up %d spans to default locality because backup localities %s have no match in node's localities %s", totalSpans, backupLocalities, nodeLocalities)
 		}
 	}
 	if testingDiscardBackupData {
@@ -421,7 +421,7 @@ func runBackupProcessor(
 	if err != nil {
 		return err
 	}
-	log.Infof(ctx, "starting %d backup export workers", numSenders)
+	log.Dev.Infof(ctx, "starting %d backup export workers", numSenders)
 	defer release()
 
 	todo := make(chan []spanAndTime, len(requestSpans))
@@ -503,7 +503,7 @@ func runBackupProcessor(
 							// a similar or later time anyway.
 							if delay := delayPerAttempt.Get(&clusterSettings.SV) - timeutil.Since(span.lastTried); delay > 0 {
 								timer.Reset(delay)
-								log.Infof(ctx, "waiting %s to start attempt %d of remaining spans", delay, span.attempts+1)
+								log.Dev.Infof(ctx, "waiting %s to start attempt %d of remaining spans", delay, span.attempts+1)
 								select {
 								case <-ctxDone:
 									return ctx.Err()

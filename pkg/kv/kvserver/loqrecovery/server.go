@@ -159,7 +159,7 @@ func (s Server) ServeClusterReplicas(
 	var descriptors, nodes, replicas atomic.Int64
 	defer func() {
 		if err == nil {
-			log.Infof(ctx, "streamed info: range descriptors %d, nodes %d, replica infos %d",
+			log.Dev.Infof(ctx, "streamed info: range descriptors %d, nodes %d, replica infos %d",
 				descriptors.Load(), nodes.Load(), replicas.Load())
 		}
 	}()
@@ -183,7 +183,7 @@ func (s Server) ServeClusterReplicas(
 				return err
 			}
 			defer func() { _ = txn.Rollback(txnCtx) }()
-			log.Infof(txnCtx, "serving recovery range descriptors for all ranges")
+			log.Dev.Infof(txnCtx, "serving recovery range descriptors for all ranges")
 			return txn.Iterate(txnCtx, keys.Meta2Prefix, keys.MetaMax, rangeMetadataScanChunkSize,
 				func(kvs []kv.KeyValue) error {
 					for _, rangeDescKV := range kvs {
@@ -211,7 +211,7 @@ func (s Server) ServeClusterReplicas(
 		if outStream.Context().Err() != nil {
 			return err
 		}
-		log.Infof(ctx, "failed to iterate all descriptors: %s", err)
+		log.Dev.Infof(ctx, "failed to iterate all descriptors: %s", err)
 	}
 
 	// Stream local replica info from all nodes wrapping them in response stream.
@@ -231,7 +231,7 @@ func serveClusterReplicasParallelFn(
 	replicas, nodes *atomic.Int64,
 ) visitNodeAdminFn {
 	return func(nodeID roachpb.NodeID, client serverpb.RPCAdminClient) error {
-		log.Infof(ctx, "trying to get info from node n%d", nodeID)
+		log.Dev.Infof(ctx, "trying to get info from node n%d", nodeID)
 		var nodeReplicas int64
 		inStream, err := client.RecoveryCollectLocalReplicaInfo(ctx,
 			&serverpb.RecoveryCollectLocalReplicaInfoRequest{})
@@ -363,7 +363,7 @@ func (s Server) StagePlan(
 		return &serverpb.RecoveryStagePlanResponse{Errors: nodeErrors.Clone()}, nil
 	}
 
-	log.Infof(ctx, "attempting to stage loss of quorum recovery plan")
+	log.Dev.Infof(ctx, "attempting to stage loss of quorum recovery plan")
 
 	responseFromError := func(err error) (*serverpb.RecoveryStagePlanResponse, error) {
 		return &serverpb.RecoveryStagePlanResponse{
@@ -766,7 +766,7 @@ func visitNodeWithRetry(
 	var err error
 	var ac serverpb.RPCAdminClient
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		log.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
+		log.Dev.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
 		// Note that we use ConnectNoBreaker here to avoid any race with probe
 		// running on current node and target node restarting. Errors from circuit
 		// breaker probes could confuse us and present node as unavailable.
@@ -775,7 +775,7 @@ func visitNodeWithRetry(
 		// them and let caller handle incomplete info.
 		if err != nil {
 			if grpcutil.IsConnectionUnavailable(err) {
-				log.Infof(ctx, "rejecting node n%d because of suspected un-retryable error: %s",
+				log.Dev.Infof(ctx, "rejecting node n%d because of suspected un-retryable error: %s",
 					node.NodeID, err)
 				return nil
 			}
@@ -787,7 +787,7 @@ func visitNodeWithRetry(
 		if err == nil {
 			return nil
 		}
-		log.Infof(ctx, "failed calling a visitor for node n%d: %s", node.NodeID, err)
+		log.Dev.Infof(ctx, "failed calling a visitor for node n%d: %s", node.NodeID, err)
 		if !IsRetryableError(err) {
 			return err
 		}
@@ -815,14 +815,14 @@ func makeVisitNode(nd rpcbase.NodeDialerNoBreaker) visitNodeStatusFn {
 		var client serverpb.RPCStatusClient
 
 		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-			log.Infof(ctx, "visiting node n%d, attempt %d", nodeID, r.CurrentAttempt())
+			log.Dev.Infof(ctx, "visiting node n%d, attempt %d", nodeID, r.CurrentAttempt())
 			// Note that we use ConnectNoBreaker here to avoid any race with probe
 			// running on current node and target node restarting. Errors from circuit
 			// breaker probes could confuse us and present node as unavailable.
 			client, err = serverpb.DialStatusClientNoBreaker(nd, ctx, nodeID, rpcbase.DefaultClass)
 			if err != nil {
 				if grpcutil.IsClosedConnection(err) {
-					log.Infof(ctx, "can't dial node n%d because connection is permanently closed: %s",
+					log.Dev.Infof(ctx, "can't dial node n%d because connection is permanently closed: %s",
 						nodeID, err)
 					return err
 				}
@@ -833,7 +833,7 @@ func makeVisitNode(nd rpcbase.NodeDialerNoBreaker) visitNodeStatusFn {
 			if err == nil {
 				return nil
 			}
-			log.Infof(ctx, "failed calling a visitor for node n%d: %s", nodeID, err)
+			log.Dev.Infof(ctx, "failed calling a visitor for node n%d: %s", nodeID, err)
 			if !IsRetryableError(err) {
 				return err
 			}

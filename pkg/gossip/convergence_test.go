@@ -98,7 +98,7 @@ func TestNetworkReachesEquilibrium(t *testing.T) {
 			cyclesWithoutChange++
 		}
 		if cycle%5 == 0 {
-			log.Infof(context.Background(), "cycle: %d, cyclesWithoutChange: %d, fullyConnected: %v",
+			log.Dev.Infof(context.Background(), "cycle: %d, cyclesWithoutChange: %d, fullyConnected: %v",
 				cycle, cyclesWithoutChange, network.IsNetworkConnected())
 		}
 		return cyclesWithoutChange < 5

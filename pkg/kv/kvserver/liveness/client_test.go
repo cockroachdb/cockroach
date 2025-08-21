@@ -156,46 +156,46 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	ctx = logtags.AddTag(ctx, "in test", nil)
 
-	log.Infof(ctx, "setting zone config to disable replication")
+	log.Dev.Infof(ctx, "setting zone config to disable replication")
 	if _, err := tc.Conns[0].Exec(`ALTER RANGE meta CONFIGURE ZONE using num_replicas = 1`); err != nil {
 		t.Fatal(err)
 	}
 
-	log.Infof(ctx, "starting 3 more nodes")
+	log.Dev.Infof(ctx, "starting 3 more nodes")
 	tc.AddAndStartServer(t, serverArgs)
 	tc.AddAndStartServer(t, serverArgs)
 	tc.AddAndStartServer(t, serverArgs)
 
-	log.Infof(ctx, "waiting for node statuses")
+	log.Dev.Infof(ctx, "waiting for node statuses")
 	tc.WaitForNodeStatuses(t)
 	tc.WaitForNodeLiveness(t)
-	log.Infof(ctx, "waiting done")
+	log.Dev.Infof(ctx, "waiting done")
 
 	firstServer := tc.Server(0)
 
 	liveNodeID := firstServer.NodeID()
 
 	deadNodeID := tc.Server(1).NodeID()
-	log.Infof(ctx, "shutting down node %d", deadNodeID)
+	log.Dev.Infof(ctx, "shutting down node %d", deadNodeID)
 	tc.StopServer(1)
-	log.Infof(ctx, "done shutting down node %d", deadNodeID)
+	log.Dev.Infof(ctx, "done shutting down node %d", deadNodeID)
 
 	decommissioningNodeID := tc.Server(2).NodeID()
-	log.Infof(ctx, "marking node %d as decommissioning", decommissioningNodeID)
+	log.Dev.Infof(ctx, "marking node %d as decommissioning", decommissioningNodeID)
 	if err := firstServer.Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{decommissioningNodeID}); err != nil {
 		t.Fatal(err)
 	}
-	log.Infof(ctx, "marked node %d as decommissioning", decommissioningNodeID)
+	log.Dev.Infof(ctx, "marked node %d as decommissioning", decommissioningNodeID)
 
 	removedNodeID := tc.Server(3).NodeID()
-	log.Infof(ctx, "marking node %d as decommissioning and shutting it down", removedNodeID)
+	log.Dev.Infof(ctx, "marking node %d as decommissioning and shutting it down", removedNodeID)
 	if err := firstServer.Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{removedNodeID}); err != nil {
 		t.Fatal(err)
 	}
 	tc.StopServer(3)
-	log.Infof(ctx, "done removing node %d", removedNodeID)
+	log.Dev.Infof(ctx, "done removing node %d", removedNodeID)
 
-	log.Infof(ctx, "checking status map")
+	log.Dev.Infof(ctx, "checking status map")
 
 	// See what comes up in the status.
 	admin := tc.GetAdminClient(t, 0)
@@ -228,7 +228,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 				// We do this in every SucceedsSoon attempt, so we'll be good.
 				liveness.TimeUntilNodeDead.Override(ctx, &firstServer.ClusterSettings().SV, liveness.TestTimeUntilNodeDead)
 
-				log.Infof(ctx, "checking expected status (%s) for node %d", expectedStatus, nodeID)
+				log.Dev.Infof(ctx, "checking expected status (%s) for node %d", expectedStatus, nodeID)
 				resp, err := admin.Liveness(ctx, &serverpb.LivenessRequest{})
 				require.NoError(t, err)
 				nodeStatuses := resp.Statuses

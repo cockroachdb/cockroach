@@ -111,7 +111,7 @@ func (s *Store) tryGetReplica(
 	// The current replica needs to be removed, remove it and go back around.
 	if toTooOld := repl.replicaID < id.ReplicaID; toTooOld {
 		if shouldLog := log.V(1); shouldLog {
-			log.Infof(ctx, "found message for replica ID %d which is newer than %v",
+			log.Dev.Infof(ctx, "found message for replica ID %d which is newer than %v",
 				id.ReplicaID, repl)
 		}
 

@@ -423,7 +423,7 @@ func (a *Authorizer) getMode(
 		if !found {
 			// No data from the rangefeed yet. Assume caps are still
 			// unavailable.
-			log.VInfof(ctx, 2,
+			log.Dev.VInfof(ctx, 2,
 				"no capability information for tenant %s; requests that require capabilities may be denied",
 				tid)
 			selectedMode = authorizerModeV222

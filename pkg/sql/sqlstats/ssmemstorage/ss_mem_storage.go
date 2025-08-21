@@ -492,7 +492,7 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 		}
 		fmt.Fprintf(&buf, "%q: %s\n", key.fingerprintID, json)
 	}
-	log.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
+	log.Dev.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
 }
 
 // DrainStats returns all collected statement and transaction stats in memory to the caller and clears SQL stats

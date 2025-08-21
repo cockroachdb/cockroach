@@ -161,7 +161,7 @@ func BenchmarkIteratorMemory(b *testing.B) {
 							sz, err := store.Size(ctx, filename)
 							require.NoError(b, err)
 
-							log.Infof(ctx, "Benchmarking using file of size %s", humanizeutil.IBytes(sz))
+							log.Dev.Infof(ctx, "Benchmarking using file of size %s", humanizeutil.IBytes(sz))
 							fileStores := make([]storageccl.StoreFile, fileCount)
 							for i := 0; i < fileCount; i++ {
 								fileStores[i].Store = store

@@ -8630,7 +8630,7 @@ func TestManifestBitFlip(t *testing.T) {
 func flipBitInManifests(t *testing.T, rawDir string) {
 	foundManifest := false
 	err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
-		log.Infof(context.Background(), "visiting %s", path)
+		log.Dev.Infof(context.Background(), "visiting %s", path)
 		if filepath.Base(path) == backupbase.BackupMetadataName {
 			foundManifest = true
 			data, err := os.ReadFile(path)

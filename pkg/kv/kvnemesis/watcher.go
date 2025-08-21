@@ -84,7 +84,7 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 			ds := dss[i]
 			err := ds.RangeFeed(ctx, []kvcoord.SpanTimePair{{Span: dataSpan, StartAfter: ts}}, eventC, kvcoord.WithDiff())
 			if isRetryableRangeFeedErr(err) {
-				log.Infof(ctx, "got retryable RangeFeed error: %+v", err)
+				log.Dev.Infof(ctx, "got retryable RangeFeed error: %+v", err)
 				continue
 			}
 			return err
@@ -131,7 +131,7 @@ func (w *Watcher) Finish() *Engine {
 // WaitForFrontier blocks until all kv changes <= the given timestamp are
 // guaranteed to have been ingested.
 func (w *Watcher) WaitForFrontier(ctx context.Context, ts hlc.Timestamp) (retErr error) {
-	log.Infof(ctx, `watcher waiting for %s`, ts)
+	log.Dev.Infof(ctx, `watcher waiting for %s`, ts)
 	if err := w.env.SetClosedTimestampInterval(ctx, 1*time.Millisecond); err != nil {
 		return err
 	}
@@ -257,7 +257,7 @@ func (w *Watcher) handleValueLocked(
 		}
 
 		if prevValueMismatch {
-			log.Infof(ctx, "rangefeed mismatch\n%s", engineContents)
+			log.Dev.Infof(ctx, "rangefeed mismatch\n%s", engineContents)
 			s := mustGetStringValue(getPrevV.RawBytes)
 			fmt.Println(s)
 			return errors.Errorf(
@@ -280,13 +280,13 @@ func (w *Watcher) handleCheckpoint(
 	}
 	if frontierAdvanced {
 		frontier := w.mu.frontier.Frontier()
-		log.Infof(ctx, `watcher reached frontier %s lagging by %s`,
+		log.Dev.Infof(ctx, `watcher reached frontier %s lagging by %s`,
 			frontier, timeutil.Since(frontier.GoTime()))
 		for ts, chs := range w.mu.frontierWaiters {
 			if frontier.Less(ts) {
 				continue
 			}
-			log.Infof(ctx, `watcher notifying %s`, ts)
+			log.Dev.Infof(ctx, `watcher notifying %s`, ts)
 			delete(w.mu.frontierWaiters, ts)
 			for _, ch := range chs {
 				ch <- nil
@@ -359,7 +359,7 @@ func (w *Watcher) handleSSTable(ctx context.Context, data []byte) error {
 		if err := w.handleValueLocked(ctx, roachpb.Span{Key: key.Key}, mvccValue.Value, nil); err != nil {
 			return err
 		}
-		log.Infof(ctx, `rangefeed AddSSTable %s %s -> %s`,
+		log.Dev.Infof(ctx, `rangefeed AddSSTable %s %s -> %s`,
 			key.Key, key.Timestamp, mvccValue.Value.PrettyPrint())
 	}
 }

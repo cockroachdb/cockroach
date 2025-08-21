@@ -101,7 +101,7 @@ func TestExternalHashAggregator(t *testing.T) {
 				// aggregator in the fallback strategy.
 				continue
 			}
-			log.Infof(ctx, "diskSpillingEnabled=%t/spillForced=%t/memoryLimitBytes=%d/numRepartitions=%d/%s", cfg.diskSpillingEnabled, cfg.spillForced, cfg.memoryLimitBytes, numForcedRepartitions, tc.name)
+			log.Dev.Infof(ctx, "diskSpillingEnabled=%t/spillForced=%t/memoryLimitBytes=%d/numRepartitions=%d/%s", cfg.diskSpillingEnabled, cfg.spillForced, cfg.memoryLimitBytes, numForcedRepartitions, tc.name)
 			constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 				ctx, &evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 			)

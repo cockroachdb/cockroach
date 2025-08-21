@@ -556,7 +556,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		if !applyAsIngest {
 			appliedAsWriteStr = "as write "
 		}
-		log.Infof(ctx, "applied %s %s(%s)", inSnap, appliedAsWriteStr, logDetails)
+		log.Dev.Infof(ctx, "applied %s %s(%s)", inSnap, appliedAsWriteStr, logDetails)
 	}(timeutil.Now())
 
 	// Clear the raft state and reset it. The log starts from the applied entry ID

@@ -373,7 +373,7 @@ func TestColumnConversions(t *testing.T) {
 						var a, expr string
 						lookFor := fmt.Sprintf("a %s NULL,", colType.SQLString())
 						sqlDB.QueryRow(t, "SHOW CREATE d.t").Scan(&a, &expr)
-						log.Infof(context.Background(), "TestColumnConversions: %s %s", lookFor, expr)
+						log.Dev.Infof(context.Background(), "TestColumnConversions: %s %s", lookFor, expr)
 						return strings.Contains(expr, lookFor)
 					}
 

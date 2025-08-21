@@ -36,10 +36,10 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 		if k := s.cfg.TestingKnobs.Server; k != nil {
 			upgradeTestingKnobs := k.(*TestingKnobs)
 			if disableCh := upgradeTestingKnobs.DisableAutomaticVersionUpgrade; disableCh != nil {
-				log.Infof(ctx, "auto upgrade disabled by testing")
+				log.Dev.Infof(ctx, "auto upgrade disabled by testing")
 				select {
 				case <-disableCh:
-					log.Infof(ctx, "auto upgrade no longer disabled by testing")
+					log.Dev.Infof(ctx, "auto upgrade no longer disabled by testing")
 				case <-s.stopper.ShouldQuiesce():
 					return
 				}
@@ -61,24 +61,24 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 				log.Errorf(ctx, "failed attempt to upgrade cluster version, error: %v", err)
 				continue
 			case UpgradeBlockedDueToMixedVersions:
-				log.Infof(ctx, "failed attempt to upgrade cluster version: %v", err)
+				log.Dev.Infof(ctx, "failed attempt to upgrade cluster version: %v", err)
 				continue
 			case UpgradeDisabledByConfigurationToPreserveDowngrade:
-				log.Infof(ctx, "auto upgrade is disabled by preserve_downgrade_option")
+				log.Dev.Infof(ctx, "auto upgrade is disabled by preserve_downgrade_option")
 				// Note: we do 'continue' here (and not 'return') so that the
 				// auto-upgrade gets a chance to continue/complete if the
 				// operator resets `preserve_downgrade_option` after the node
 				// has started up already.
 				continue
 			case UpgradeDisabledByConfiguration:
-				log.Infof(ctx, "auto upgrade is disabled by cluster.auto_upgrade.enabled")
+				log.Dev.Infof(ctx, "auto upgrade is disabled by cluster.auto_upgrade.enabled")
 				// Note: we do 'continue' here (and not 'return') so that the
 				// auto-upgrade gets a chance to continue/complete if the
 				// operator resets `auto_upgrade.enabled` after the node
 				// has started up already.
 				continue
 			case UpgradeAlreadyCompleted:
-				log.Info(ctx, "no need to upgrade, cluster already at the newest version")
+				log.Dev.Info(ctx, "no need to upgrade, cluster already at the newest version")
 				return
 			case UpgradeAllowed:
 				// Fall out of the select below.
@@ -103,7 +103,7 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 				); err != nil {
 					log.Errorf(ctx, "error when finalizing cluster version upgrade: %v", err)
 				} else {
-					log.Info(ctx, "successfully upgraded cluster version")
+					log.Dev.Info(ctx, "successfully upgraded cluster version")
 					return
 				}
 			}

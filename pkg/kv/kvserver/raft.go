@@ -56,25 +56,25 @@ type raftLogger struct {
 
 func (r *raftLogger) Debug(v ...interface{}) {
 	if log.V(3) {
-		log.InfofDepth(r.ctx, 1, "", v...)
+		log.Dev.InfofDepth(r.ctx, 1, "", v...)
 	}
 }
 
 func (r *raftLogger) Debugf(format string, v ...interface{}) {
 	if log.V(3) {
-		log.InfofDepth(r.ctx, 1, format, v...)
+		log.Dev.InfofDepth(r.ctx, 1, format, v...)
 	}
 }
 
 func (r *raftLogger) Info(v ...interface{}) {
 	if log.V(2) {
-		log.InfofDepth(r.ctx, 1, "", v...)
+		log.Dev.InfofDepth(r.ctx, 1, "", v...)
 	}
 }
 
 func (r *raftLogger) Infof(format string, v ...interface{}) {
 	if log.V(2) {
-		log.InfofDepth(r.ctx, 1, format, v...)
+		log.Dev.InfofDepth(r.ctx, 1, format, v...)
 	}
 }
 
@@ -183,7 +183,7 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 		fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
 			i, raft.DescribeMessage(m, raftEntryFormatter))
 	}
-	log.Infof(ctx, "raft ready\n%s", buf.String())
+	log.Dev.Infof(ctx, "raft ready\n%s", buf.String())
 }
 
 func raftEntryFormatter(data []byte) string {

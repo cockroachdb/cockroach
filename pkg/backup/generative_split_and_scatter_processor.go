@@ -168,7 +168,7 @@ func (s dbSplitAndScatterer) split(
 	}
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		if err = s.db.AdminSplit(ctx, newSplitKey, expirationTime); err != nil {
-			log.VInfof(
+			log.Dev.VInfof(
 				ctx, 1, "attempt %d failed to split at key %s: %v", r.CurrentAttempt(), newSplitKey, err,
 			)
 			continue
@@ -468,7 +468,7 @@ func runGenerativeSplitAndScatter(
 	doneScatterCh chan<- entryNode,
 	cache *routingDatumCache,
 ) error {
-	log.Infof(ctx, "Running generative split and scatter with %d total spans, %d chunk size, %d nodes",
+	log.Dev.Infof(ctx, "Running generative split and scatter with %d total spans, %d chunk size, %d nodes",
 		spec.NumEntries, spec.ChunkSize, spec.NumNodes)
 	g := ctxgroup.WithContext(ctx)
 
@@ -670,7 +670,7 @@ func runGenerativeSplitAndScatter(
 				for i, importEntry := range importSpanChunk.entries {
 					nextChunkIdx := i + 1
 
-					log.VInfof(ctx, 2, "processing a span [%s,%s)", importEntry.Span.Key, importEntry.Span.EndKey)
+					log.Dev.VInfof(ctx, 2, "processing a span [%s,%s)", importEntry.Span.Key, importEntry.Span.EndKey)
 					var splitKey roachpb.Key
 					if nextChunkIdx < len(importSpanChunk.entries) {
 						// Split at the next entry.

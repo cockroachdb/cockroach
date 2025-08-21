@@ -711,7 +711,7 @@ func (vi *Index) searchForUpdateHelper(
 			remainingAttempts--
 			ok, err := idxCtx.search.Next(ctx)
 			if err != nil {
-				log.Infof(ctx, "error during update: %v", err)
+				log.Dev.Infof(ctx, "error during update: %v", err)
 				return nil, errors.Wrapf(err, "searching for partition to update")
 			}
 			if !ok {

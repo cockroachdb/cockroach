@@ -272,7 +272,7 @@ func (o *oidcManager) ExchangeVerifyGetTokenInfo(
 		// the message is useful for troubleshooting but not an operator-actionable error.
 		parsedToken, err := jwt.ParseInsecure([]byte(*tokenInfo.rawToken))
 		if err != nil {
-			log.VInfof(ctx, 1, "OIDC: could not parse %s as JWT (this is expected for opaque tokens): %v", tokenInfo.name, err)
+			log.Dev.VInfof(ctx, 1, "OIDC: could not parse %s as JWT (this is expected for opaque tokens): %v", tokenInfo.name, err)
 			continue // Not a JWT, so we can't get claims from it.
 		}
 
@@ -451,7 +451,7 @@ func reloadConfigLocked(
 	if err != nil {
 		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
-			log.Infof(ctx, "check redirect URL OIDC cluster setting: "+OIDCRedirectURLSettingName)
+			log.Dev.Infof(ctx, "check redirect URL OIDC cluster setting: "+OIDCRedirectURLSettingName)
 		}
 		return
 	}
@@ -460,14 +460,14 @@ func reloadConfigLocked(
 	if err != nil {
 		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
-			log.Infof(ctx, "check provider URL OIDC cluster setting: "+OIDCProviderURLSettingName)
+			log.Dev.Infof(ctx, "check provider URL OIDC cluster setting: "+OIDCProviderURLSettingName)
 		}
 		return
 	}
 
 	oidcAuthServer.manager = manager
 	oidcAuthServer.initialized = true
-	log.Infof(ctx, "initialized OIDC server")
+	log.Dev.Infof(ctx, "initialized OIDC server")
 }
 
 // getRegionSpecificRedirectURL will query the localities and see if we have
@@ -592,7 +592,7 @@ var ConfigureOIDC = func(
 		}
 
 		if log.V(1) {
-			log.Infof(
+			log.Dev.Infof(
 				ctx,
 				"attempting to extract SQL username from the payload using the claim key %s and regex %s",
 				oidcAuthentication.conf.claimJSONKey,
@@ -722,7 +722,7 @@ var ConfigureOIDC = func(
 		claim := jwtauthccl.JWTAuthClaim.Get(&st.SV)
 
 		if log.V(1) {
-			log.Infof(
+			log.Dev.Infof(
 				ctx,
 				"attempting to extract SQL username from the payload using the claim key %s, issuer %s, and %s",
 				claim,
@@ -756,13 +756,13 @@ var ConfigureOIDC = func(
 				targetClaim, ok := claims[claim]
 				if !ok {
 					log.Errorf(ctx, "OIDC: failed to complete authentication: invalid JSON claim key: %s", claim)
-					log.Infof(ctx, "token payload includes the following claims: %s", strings.Join(claimKeys, ", "))
+					log.Dev.Infof(ctx, "token payload includes the following claims: %s", strings.Join(claimKeys, ", "))
 					http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 					return
 				}
 				if err := json.Unmarshal(targetClaim, &principal); err != nil {
 					if log.V(1) {
-						log.Infof(ctx, "failed parsing claim as string; attempting to parse as a list")
+						log.Dev.Infof(ctx, "failed parsing claim as string; attempting to parse as a list")
 					}
 					if err := json.Unmarshal(targetClaim, &tokenPrincipals); err != nil {
 						log.Errorf(ctx, "OIDC: failed to complete authentication: failed to parse value for the claim %s: %v", claim, err)
@@ -803,7 +803,7 @@ var ConfigureOIDC = func(
 						acceptedUsernames = append(acceptedUsernames, username.Normalized())
 					}
 				} else {
-					log.Infof(ctx, "OIDC: no identity map found for issuer %s; using %s without mapping", token.Issuer, tokenPrincipal)
+					log.Dev.Infof(ctx, "OIDC: no identity map found for issuer %s; using %s without mapping", token.Issuer, tokenPrincipal)
 					// N.B. err is elided when using secuser.PurposeValidation.
 					username, _ := secuser.MakeSQLUsernameFromUserInput(tokenPrincipal, secuser.PurposeValidation)
 					acceptedUsernames = append(acceptedUsernames, username.Normalized())

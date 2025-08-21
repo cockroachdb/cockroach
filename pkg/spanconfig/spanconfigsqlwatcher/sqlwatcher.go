@@ -238,7 +238,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		return nil, err
 	}
 
-	log.Infof(ctx, "established range feed over system.descriptors starting at time %s", startTS)
+	log.Dev.Infof(ctx, "established range feed over system.descriptors starting at time %s", startTS)
 	return rf, nil
 }
 
@@ -297,7 +297,7 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 		return nil, err
 	}
 
-	log.Infof(ctx, "established range feed over system.zones starting at time %s", startTS)
+	log.Dev.Infof(ctx, "established range feed over system.zones starting at time %s", startTS)
 
 	if s.knobs != nil && s.knobs.OnWatchForZoneConfigUpdatesEstablished != nil {
 		s.knobs.OnWatchForZoneConfigUpdatesEstablished()
@@ -398,6 +398,6 @@ func (s *SQLWatcher) watchForProtectedTimestampUpdates(
 		return nil, err
 	}
 
-	log.Infof(ctx, "established range feed over system.protected_ts_records starting at time %s", startTS)
+	log.Dev.Infof(ctx, "established range feed over system.protected_ts_records starting at time %s", startTS)
 	return rf, nil
 }

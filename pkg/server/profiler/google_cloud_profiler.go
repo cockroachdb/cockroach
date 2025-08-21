@@ -23,7 +23,7 @@ func InitGoogleProfiler(ctx context.Context) {
 	// Detect cloud provider as profiler is only supported on GCP.
 	provider, _ := cloudinfo.GetInstanceRegion(ctx)
 	if provider != "gcp" {
-		log.Infof(ctx, "Google Cloud Profiler disabled (detected cloud: %s)", provider)
+		log.Dev.Infof(ctx, "Google Cloud Profiler disabled (detected cloud: %s)", provider)
 		return
 	}
 
@@ -34,6 +34,6 @@ func InitGoogleProfiler(ctx context.Context) {
 	if err := gcprofiler.Start(cfg); err != nil {
 		log.Warningf(ctx, "failed to start google profiler: %v", err)
 	} else {
-		log.Infof(ctx, "Google Cloud Profiler started successfully on %s", provider)
+		log.Dev.Infof(ctx, "Google Cloud Profiler started successfully on %s", provider)
 	}
 }

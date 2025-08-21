@@ -224,7 +224,7 @@ func (s *statusServer) drainSqlStatsLocal(
 	ctx = s.AnnotateCtx(ctx)
 	statsProvider := s.sqlServer.pgServer.SQLServer.GetLocalSQLStatsProvider()
 	stmtStats, txnstats, fpCount := statsProvider.DrainStats(ctx)
-	log.VInfof(ctx,
+	log.Dev.VInfof(ctx,
 		1,
 		"drainSqlStatsLocal: %d statement stats, %d txn stats, %d fingerprint count",
 		len(stmtStats),

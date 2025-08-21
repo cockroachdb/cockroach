@@ -490,10 +490,10 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 
 	if log.V(3) {
 		for _, intent := range et.LockSpans {
-			log.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
+			log.Dev.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
 		}
 		for _, write := range et.InFlightWrites {
-			log.Infof(ctx, "in-flight: %d:%s (%s)", write.Sequence, write.Key, write.Strength)
+			log.Dev.Infof(ctx, "in-flight: %d:%s (%s)", write.Sequence, write.Key, write.Strength)
 		}
 	}
 	return ba, nil

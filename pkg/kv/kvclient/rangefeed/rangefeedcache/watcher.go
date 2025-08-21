@@ -338,7 +338,7 @@ func (s *Watcher[E]) Run(ctx context.Context) error {
 		fn()
 	}
 
-	log.Infof(ctx, "%s: established range feed cache", s.name)
+	log.Dev.Infof(ctx, "%s: established range feed cache", s.name)
 
 	for {
 		select {

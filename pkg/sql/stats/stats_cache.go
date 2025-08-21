@@ -424,7 +424,7 @@ func (sc *TableStatisticsCache) lookupStatsLocked(
 	} else {
 		// This is the expected "fast" path; don't emit an event.
 		if log.V(2) {
-			log.Infof(ctx, "statistics for table %d found in cache", tableID)
+			log.Dev.Infof(ctx, "statistics for table %d found in cache", tableID)
 		}
 	}
 	return true, e

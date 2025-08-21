@@ -63,7 +63,7 @@ func constructLogicalReplicationWriterSpecs(
 		destID := matcher.FindMatch(candidate.ClosestDestIDs)
 		partition := candidate.Partition
 
-		log.VInfof(ctx, 2, "logical replication src-dst pair candidate: %s (locality %s) - %d ("+
+		log.Dev.VInfof(ctx, 2, "logical replication src-dst pair candidate: %s (locality %s) - %d ("+
 			"locality %s)",
 			partition.ID,
 			partition.SrcLocality,
@@ -121,7 +121,7 @@ func constructOfflineInitialScanSpecs(
 		destID := matcher.FindMatch(candidate.ClosestDestIDs)
 		partition := candidate.Partition
 
-		log.VInfof(ctx, 2, "logical replication src-dst pair candidate: %s (locality %s) - %d ("+
+		log.Dev.VInfof(ctx, 2, "logical replication src-dst pair candidate: %s (locality %s) - %d ("+
 			"locality %s)",
 			partition.ID,
 			partition.SrcLocality,

@@ -244,7 +244,7 @@ func PushTxn(
 		if !pusherWins {
 			s = "failed to push"
 		}
-		log.Infof(ctx, "%s %s (push type=%s) %s: %s (pushee last active: %s)",
+		log.Dev.Infof(ctx, "%s %s (push type=%s) %s: %s (pushee last active: %s)",
 			args.PusherTxn.Short(), redact.Safe(s),
 			redact.Safe(pushType),
 			args.PusheeTxn.Short(),

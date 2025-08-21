@@ -106,7 +106,7 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 		}
 		r.metrics.ClaimedJobs.Inc(int64(numRows))
 		if log.ExpensiveLogEnabled(ctx, 1) || numRows > 0 {
-			log.Infof(ctx, "claimed %d jobs", numRows)
+			log.Dev.Infof(ctx, "claimed %d jobs", numRows)
 		}
 		return nil
 	})
@@ -225,7 +225,7 @@ func (r *Registry) resumeJob(
 	ctx context.Context, jobID jobspb.JobID, s sqlliveness.Session,
 ) (retErr error) {
 	ctx = logtags.AddTag(ctx, "job", jobID)
-	log.Infof(ctx, "job %d: resuming execution", jobID)
+	log.Dev.Infof(ctx, "job %d: resuming execution", jobID)
 
 	job, err := r.loadJobForResume(ctx, jobID, s)
 	if err != nil {
@@ -516,7 +516,7 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 						StatePauseRequested,
 						StatePaused)
 				})
-				log.Infof(ctx, "job %d, session %s: paused", id, s.ID())
+				log.Dev.Infof(ctx, "job %d, session %s: paused", id, s.ID())
 			case StateReverting:
 				if err := job.WithTxn(txn).Update(ctx, func(
 					txn isql.Txn, md JobMetadata, ju *JobUpdater,
@@ -551,7 +551,7 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 				}); err != nil {
 					return errors.Wrapf(err, "job %d: tried to cancel but could not mark as reverting", id)
 				}
-				log.Infof(ctx, "job %d, session id: %s canceled: the job is now reverting",
+				log.Dev.Infof(ctx, "job %d, session id: %s canceled: the job is now reverting",
 					id, s.ID())
 			default:
 				return errors.AssertionFailedf("unexpected job state %s: %v", stateString, job)

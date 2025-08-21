@@ -258,7 +258,7 @@ func (e *familyEvaluator) planAndRun(ctx context.Context) (err error) {
 	if log.V(1) {
 		start := timeutil.Now()
 		defer func() {
-			log.Infof(ctx, "Planning for CDC expression %s (v=%d) took %s (err=%v)",
+			log.Dev.Infof(ctx, "Planning for CDC expression %s (v=%d) took %s (err=%v)",
 				tree.AsString(e.norm), e.norm.desc.Version, timeutil.Since(start), err)
 		}()
 	}

@@ -127,7 +127,7 @@ func bumpTenantClusterVersion(
 	instanceID base.SQLInstanceID,
 ) error {
 	activeCV := tenantCV.ActiveVersion(ctx)
-	log.Infof(ctx, "bumping cluster version from %v to %v on instance %s", activeCV, newCV, instanceID.String())
+	log.Dev.Infof(ctx, "bumping cluster version from %v to %v on instance %s", activeCV, newCV, instanceID.String())
 	if !activeCV.Less(newCV.Version) {
 		// Nothing to do.
 		return nil
@@ -159,7 +159,7 @@ func bumpTenantClusterVersion(
 	if err := tenantCV.SetActiveVersion(ctx, newCV); err != nil {
 		return err
 	}
-	log.Infof(ctx, "active cluster version setting is now %s (up from %s)",
+	log.Dev.Infof(ctx, "active cluster version setting is now %s (up from %s)",
 		newCV.PrettyPrint(), activeCV.PrettyPrint())
 	return nil
 }

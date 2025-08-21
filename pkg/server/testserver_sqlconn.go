@@ -122,7 +122,7 @@ func openTestSQLConn(
 	stopper.AddCloser(stop.CloserFn(func() {
 		err := goDB.Close()
 		if log.V(2) {
-			log.Infof(context.Background(), "closing test SQL connection: %v", err)
+			log.Dev.Infof(context.Background(), "closing test SQL connection: %v", err)
 		}
 		cleanupFn()
 	}))

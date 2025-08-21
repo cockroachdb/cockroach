@@ -39,7 +39,7 @@ type noticeSender interface {
 // BufferClientNotice implements the eval.ClientNoticeSender interface.
 func (p *planner) BufferClientNotice(ctx context.Context, notice pgnotice.Notice) {
 	if log.V(2) {
-		log.Infof(ctx, "buffered notice: %+v", notice)
+		log.Dev.Infof(ctx, "buffered notice: %+v", notice)
 	}
 	if !p.checkNoticeSeverity(notice) {
 		return
@@ -52,7 +52,7 @@ func (p *planner) SendClientNotice(
 	ctx context.Context, notice pgnotice.Notice, immediateFlush bool,
 ) error {
 	if log.V(2) {
-		log.Infof(ctx, "sending notice: %+v", notice)
+		log.Dev.Infof(ctx, "sending notice: %+v", notice)
 	}
 	if !p.checkNoticeSeverity(notice) {
 		return nil

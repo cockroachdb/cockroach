@@ -494,7 +494,7 @@ func (f *FlowBase) StartInternal(
 	}
 
 	if log.V(1) {
-		log.Infof(ctx, "registered flow %s", f.ID.Short())
+		log.Dev.Infof(ctx, "registered flow %s", f.ID.Short())
 	}
 	for _, s := range f.startables {
 		// Note that it is safe to pass the context cancellation function
@@ -715,7 +715,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		}
 	}
 	if log.V(1) {
-		log.Infof(ctx, "cleaning up")
+		log.Dev.Infof(ctx, "cleaning up")
 	}
 	// Local flows do not get registered.
 	if !f.IsLocal() && f.Started() {

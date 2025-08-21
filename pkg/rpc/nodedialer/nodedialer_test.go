@@ -297,7 +297,7 @@ func newTestServer(
 	}
 	if err := stopper.RunAsyncTask(ctx, "localServer", func(ctx context.Context) {
 		if err := s.Serve(il); err != nil {
-			log.Infof(ctx, "server stopped: %v", err)
+			log.Dev.Infof(ctx, "server stopped: %v", err)
 		}
 	}); err != nil {
 		t.Fatalf("failed to run test server: %v", err)

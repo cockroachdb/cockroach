@@ -407,7 +407,7 @@ func (s *sampleAggregator) maybeDecreaseSamples(
 	if capacity, err := row[s.numRowsCol].GetInt(); err == nil {
 		prevCapacity := sr.Cap()
 		if sr.MaybeResize(ctx, int(capacity)) {
-			log.Infof(
+			log.Dev.Infof(
 				ctx, "histogram samples reduced from %d to %d to match sampler processor",
 				prevCapacity, sr.Cap(),
 			)
@@ -426,10 +426,10 @@ func (s *sampleAggregator) sampleRow(
 		// We hit an out of memory error. Clear the sample reservoir and
 		// disable histogram sample collection.
 		sr.Disable()
-		log.Info(ctx, "disabling histogram collection due to excessive memory utilization")
+		log.Dev.Info(ctx, "disabling histogram collection due to excessive memory utilization")
 		telemetry.Inc(sqltelemetry.StatsHistogramOOMCounter)
 	} else if sr.Cap() != prevCapacity {
-		log.Infof(
+		log.Dev.Infof(
 			ctx, "histogram samples reduced from %d to %d due to excessive memory utilization",
 			prevCapacity, sr.Cap(),
 		)
@@ -654,7 +654,7 @@ func (s *sampleAggregator) generateHistogram(
 	}
 
 	if sr.Cap() != prevCapacity {
-		log.Infof(
+		log.Dev.Infof(
 			ctx, "histogram samples reduced from %d to %d due to excessive memory utilization",
 			prevCapacity, sr.Cap(),
 		)

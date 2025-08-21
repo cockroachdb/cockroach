@@ -708,7 +708,7 @@ func NewRangeController(
 	ctx context.Context, o RangeControllerOptions, init RangeControllerInitState,
 ) *rangeController {
 	if log.V(1) {
-		log.VInfof(ctx, 1, "r%v creating range controller", o.RangeID)
+		log.Dev.VInfof(ctx, 1, "r%v creating range controller", o.RangeID)
 	}
 	if o.RaftMaxInflightBytes == 0 {
 		o.RaftMaxInflightBytes = math.MaxUint64
@@ -1563,7 +1563,7 @@ func (rc *rangeController) SetLeaseholderRaftMuLocked(
 		return
 	}
 	if log.V(1) {
-		log.VInfof(ctx, 1, "r%v setting range leaseholder replica_id=%v", rc.opts.RangeID, replica)
+		log.Dev.VInfof(ctx, 1, "r%v setting range leaseholder replica_id=%v", rc.opts.RangeID, replica)
 	}
 	rc.leaseholder = replica
 	rc.updateWaiterSetsRaftMuLocked()
@@ -1582,7 +1582,7 @@ func (rc *rangeController) ForceFlushIndexChangedLocked(ctx context.Context, ind
 func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 	rc.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	if log.V(1) {
-		log.VInfof(ctx, 1, "r%v closing range controller", rc.opts.RangeID)
+		log.Dev.VInfof(ctx, 1, "r%v closing range controller", rc.opts.RangeID)
 	}
 	func() {
 		rc.mu.Lock()
@@ -2273,7 +2273,7 @@ func (rss *replicaSendStream) admitRaftMuLocked(ctx context.Context, av Admitted
 			}
 			printReturned("send", returnedSend)
 			printReturned(" eval", returnedEval)
-			log.VInfof(ctx, 2, "r%v:%v stream %v admit %v returned %s",
+			log.Dev.VInfof(ctx, 2, "r%v:%v stream %v admit %v returned %s",
 				rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream, av,
 				redact.SafeString(b.String()))
 		}

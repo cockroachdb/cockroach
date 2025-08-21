@@ -381,7 +381,7 @@ func (mq *mergeQueue) process(
 	}
 	for i := range rightRepls {
 		if typ := rightRepls[i].Type; !(typ == roachpb.VOTER_FULL || typ == roachpb.NON_VOTER) {
-			log.Infof(ctx, "RHS Type: %s", typ)
+			log.Dev.Infof(ctx, "RHS Type: %s", typ)
 			return false,
 				errors.AssertionFailedf(
 					`cannot merge because rhs is either in a joint state or has learner replicas: %v`,
@@ -406,7 +406,7 @@ func (mq *mergeQueue) process(
 		// attempts because merges can race with other descriptor modifications.
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be merged.
-		log.Infof(ctx, "merge saw concurrent descriptor modification; maybe retrying")
+		log.Dev.Infof(ctx, "merge saw concurrent descriptor modification; maybe retrying")
 		mq.MaybeAddAsync(ctx, lhsRepl, now)
 		return false, nil
 	} else if err != nil {

@@ -163,9 +163,9 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if isChangefeedCompleted {
-		log.Info(ctx, "stopping kv feed: changefeed completed")
+		log.Dev.Info(ctx, "stopping kv feed: changefeed completed")
 	} else {
-		log.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
+		log.Dev.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
 	}
 
 	// Drain the writer before we close it so that all events emitted prior to schema change
@@ -330,11 +330,11 @@ var errChangefeedCompleted = errors.New("changefeed completed")
 func (f *kvFeed) run(ctx context.Context) (err error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.kvfeed.run")
 	defer sp.Finish()
-	log.Infof(ctx, "kv feed run starting")
+	log.Dev.Infof(ctx, "kv feed run starting")
 
 	emitResolved := func(ts hlc.Timestamp, boundary jobspb.ResolvedSpan_BoundaryType) error {
 		if log.V(2) {
-			log.Infof(ctx, "emitting resolved spans at time %s with boundary %s for spans: %s", ts, boundary, f.spans)
+			log.Dev.Infof(ctx, "emitting resolved spans at time %s with boundary %s for spans: %s", ts, boundary, f.spans)
 		}
 		for _, sp := range f.spans {
 			if err := f.writer.Add(ctx, kvevent.NewBackfillResolvedEvent(sp, ts, boundary)); err != nil {
@@ -401,14 +401,14 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 			return err
 		}
 		if log.V(2) {
-			log.Infof(ctx, "kv feed encountered table events at or before %s: %#v", schemaChangeTS, events)
+			log.Dev.Infof(ctx, "kv feed encountered table events at or before %s: %#v", schemaChangeTS, events)
 		}
 		var tables []redact.RedactableString
 		for _, event := range events {
 			tables = append(tables, redact.Sprintf("table %q (id %d, version %d -> %d)",
 				redact.Safe(event.Before.GetName()), event.Before.GetID(), event.Before.GetVersion(), event.After.GetVersion()))
 		}
-		log.Infof(ctx, "kv feed encountered schema change(s) at or before %s: %s",
+		log.Dev.Infof(ctx, "kv feed encountered schema change(s) at or before %s: %s",
 			schemaChangeTS, redact.Join(", ", tables))
 
 		// Detect whether the event corresponds to a primary index change. Also
@@ -440,11 +440,11 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 
 		// Exit if the policy says we should.
 		if boundaryType == jobspb.ResolvedSpan_RESTART || boundaryType == jobspb.ResolvedSpan_EXIT {
-			log.Infof(ctx, "kv feed run loop exiting due to schema change at %s and boundary type %s", schemaChangeTS, boundaryType)
+			log.Dev.Infof(ctx, "kv feed run loop exiting due to schema change at %s and boundary type %s", schemaChangeTS, boundaryType)
 			return schemaChangeDetectedError{ts: schemaChangeTS}
 		}
 
-		log.Infof(ctx, "kv feed run loop restarting because of schema change at %s and boundary type %s", schemaChangeTS, boundaryType)
+		log.Dev.Infof(ctx, "kv feed run loop restarting because of schema change at %s and boundary type %s", schemaChangeTS, boundaryType)
 	}
 }
 

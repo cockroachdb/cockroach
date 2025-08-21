@@ -672,11 +672,11 @@ func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*kv.DB) roachpb.R
 		sender := dbs[dbIdx].NonTransactionalSender()
 		descs, _, err := kv.RangeLookup(ctx, sender, key, kvpb.CONSISTENT, 0, false)
 		if err != nil {
-			log.Infof(ctx, "looking up descriptor for %s: %+v", key, err)
+			log.Dev.Infof(ctx, "looking up descriptor for %s: %+v", key, err)
 			continue
 		}
 		if len(descs) != 1 {
-			log.Infof(ctx, "unexpected number of descriptors for %s: %d", key, len(descs))
+			log.Dev.Infof(ctx, "unexpected number of descriptors for %s: %d", key, len(descs))
 			continue
 		}
 		return descs[0]

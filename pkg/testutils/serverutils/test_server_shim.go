@@ -479,7 +479,7 @@ func GetJSONProtoWithAdminOption(
 	}
 	u := ts.AdminURL()
 	fullURL := u.WithPath(path).String()
-	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	log.Dev.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
 	return httputil.GetJSON(httpClient, fullURL, response)
 }
 
@@ -499,8 +499,8 @@ func GetJSONProtoWithAdminAndTimeoutOption(
 	httpClient.Timeout += additionalTimeout
 	u := ts.AdminURL()
 	fullURL := u.WithPath(path).String()
-	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
-	log.Infof(context.Background(), "set HTTP client timeout to: %s", httpClient.Timeout)
+	log.Dev.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	log.Dev.Infof(context.Background(), "set HTTP client timeout to: %s", httpClient.Timeout)
 	return httputil.GetJSON(httpClient, fullURL, response)
 }
 
@@ -523,7 +523,7 @@ func PostJSONProtoWithAdminOption(
 		return err
 	}
 	fullURL := ts.AdminURL().WithPath(path).String()
-	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	log.Dev.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
 	return httputil.PostJSON(httpClient, fullURL, request, response)
 }
 

@@ -153,7 +153,7 @@ func (s *Store) startGossip() {
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if err := gossipFn.fn(annotatedCtx, repl); err != nil {
 							if cannotGossipEvery.ShouldLog() {
-								log.Infof(annotatedCtx, "could not gossip %s: %v", gossipFn.description, err)
+								log.Dev.Infof(annotatedCtx, "could not gossip %s: %v", gossipFn.description, err)
 							}
 							if !errors.Is(err, errPeriodicGossipsDisabled) {
 								continue
@@ -192,7 +192,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		// get the first system config, then periodically in the background
 		// (managed by the Node).
 		if err := s.ComputeMetrics(ctx); err != nil {
-			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
+			log.Dev.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
 		}
 		log.Event(ctx, "computed initial metrics")
 	})

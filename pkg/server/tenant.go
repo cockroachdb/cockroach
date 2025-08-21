@@ -1397,7 +1397,7 @@ func makeNextLiveInstanceIDFn(
 	return func(ctx context.Context) base.SQLInstanceID {
 		instances, err := sqlInstanceProvider.GetAllInstances(ctx)
 		if err != nil {
-			log.Infof(ctx, "GetAllInstances failed: %v", err)
+			log.Dev.Infof(ctx, "GetAllInstances failed: %v", err)
 			return 0
 		}
 		if len(instances) == 0 {

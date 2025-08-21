@@ -70,7 +70,7 @@ func LogSlowAcquisition(ctx context.Context, poolName string, r Request, start t
 	log.Warningf(ctx, "have been waiting %s attempting to acquire %s quota",
 		timeutil.Since(start), redact.Safe(poolName))
 	return func() {
-		log.Infof(ctx, "acquired %s quota after %s",
+		log.Dev.Infof(ctx, "acquired %s quota after %s",
 			redact.Safe(poolName), timeutil.Since(start))
 	}
 }

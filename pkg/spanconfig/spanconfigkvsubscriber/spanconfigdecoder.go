@@ -112,7 +112,7 @@ func (sd *SpanConfigDecoder) TranslateEvent(
 	}
 
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.Infof(ctx, "received span configuration update for %s (deleted=%t)",
+		log.Dev.Infof(ctx, "received span configuration update for %s (deleted=%t)",
 			record.GetTarget(), deleted)
 	}
 

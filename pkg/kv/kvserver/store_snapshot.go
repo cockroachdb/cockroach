@@ -296,7 +296,7 @@ func (s *Store) throttleSnapshot(
 	// NB: this log message is skipped in test builds as many tests do not mock
 	// all of the objects being logged.
 	if elapsed > snapshotReservationWaitWarnThreshold && !buildutil.CrdbTestBuild {
-		log.Infof(
+		log.Dev.Infof(
 			ctx,
 			"waited for %.1fs to acquire snapshot reservation to r%d",
 			elapsed.Seconds(),
@@ -531,7 +531,7 @@ func (s *Store) receiveSnapshot(
 			}
 			return nil
 		}); pErr != nil {
-		log.Infof(ctx, "cannot accept snapshot: %s", pErr)
+		log.Dev.Infof(ctx, "cannot accept snapshot: %s", pErr)
 		return sendSnapshotError(ctx, s, stream, pErr.GoError())
 	}
 
@@ -563,7 +563,7 @@ func (s *Store) receiveSnapshot(
 		return err
 	}
 	if log.V(2) {
-		log.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
+		log.Dev.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
 	}
 
 	comparisonResult := s.getLocalityComparison(header.RaftMessageRequest.FromReplica.NodeID,

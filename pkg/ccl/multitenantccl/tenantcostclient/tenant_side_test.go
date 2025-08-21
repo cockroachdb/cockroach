@@ -445,7 +445,7 @@ func (ts *testState) advance(t *testing.T, d *datadriven.TestData, args cmdArgs)
 		d.Fatalf(t, "failed to parse input as duration: %v", err)
 	}
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.Infof(ctx, "Advance %v", dur)
+		log.Dev.Infof(ctx, "Advance %v", dur)
 	}
 	ts.timeSrc.Advance(dur)
 	if args.wait {
@@ -698,7 +698,7 @@ func (ew *eventWaiter) Event(now time.Time, typ tenantcostclient.TestEventType) 
 	select {
 	case ew.ch <- ev:
 		if testing.Verbose() {
-			log.Infof(context.Background(), "event %s at %s\n",
+			log.Dev.Infof(context.Background(), "event %s at %s\n",
 				eventTypeStr[typ], now.Format(timeFormat))
 		}
 	default:

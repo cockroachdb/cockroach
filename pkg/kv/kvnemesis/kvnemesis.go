@@ -47,7 +47,7 @@ func (l *logLogger) WriteFile(basename string, contents string) string {
 func (l *logLogger) Helper() { /* no-op */ }
 
 func (l *logLogger) Logf(format string, args ...interface{}) {
-	log.InfofDepth(context.Background(), 2, format, args...)
+	log.Dev.InfofDepth(context.Background(), 2, format, args...)
 }
 
 func l(ctx context.Context, basename string, format string, args ...interface{}) (optFile string) {

@@ -713,7 +713,7 @@ func addSSTablePreApply(
 	tBegin := timeutil.Now()
 	defer func() {
 		if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
-			log.Infof(ctx,
+			log.Dev.Infof(ctx,
 				"ingesting SST of size %s at index %d took %.2fs",
 				humanizeutil.IBytes(int64(len(sst.Data))), index, dur.Seconds(),
 			)
@@ -755,7 +755,7 @@ func linkExternalSStablePreApply(
 	index kvpb.RaftIndex,
 	sst kvserverpb.ReplicatedEvalResult_LinkExternalSSTable,
 ) {
-	log.VInfof(ctx, 1,
+	log.Dev.VInfof(ctx, 1,
 		"linking external sstable %s (size %d, span %s) from %s (size %d) at rewrite ts %s, synth prefix %s",
 		sst.RemoteFilePath,
 		sst.ApproximatePhysicalSize,
@@ -799,7 +799,7 @@ func linkExternalSStablePreApply(
 	tBegin := timeutil.Now()
 	defer func() {
 		if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
-			log.Infof(ctx,
+			log.Dev.Infof(ctx,
 				"ingesting External SST at index %d took %.2fs", index, dur.Seconds(),
 			)
 		}
@@ -900,13 +900,13 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 				hasLease, pErr := r.getLeaseForGossip(ctx)
 
 				if pErr != nil {
-					log.Infof(ctx, "unable to gossip first range; hasLease=%t, err=%s", hasLease, pErr)
+					log.Dev.Infof(ctx, "unable to gossip first range; hasLease=%t, err=%s", hasLease, pErr)
 				} else if !hasLease {
 					return
 				}
 				r.gossipFirstRange(ctx)
 			}); err != nil {
-			log.Infof(ctx, "unable to gossip first range: %s", err)
+			log.Dev.Infof(ctx, "unable to gossip first range: %s", err)
 		}
 		lResult.GossipFirstRange = false
 	}

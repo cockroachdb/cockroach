@@ -112,7 +112,7 @@ func (authManager *ldapAuthManager) reloadConfigLocked(ctx context.Context, st *
 		telemetry.Inc(enableUseCounter)
 	}
 	authManager.mu.enabled = true
-	log.Infof(ctx, "initialized LDAP authManager")
+	log.Dev.Infof(ctx, "initialized LDAP authManager")
 }
 
 // setLDAPConfigOptions extracts hba conf parameters required for connecting and

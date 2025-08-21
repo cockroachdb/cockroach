@@ -282,7 +282,7 @@ func (w *Watcher) handleRangefeedCacheEvent(
 ) {
 	switch u.Type {
 	case rangefeedcache.CompleteUpdate:
-		log.Info(ctx, "received results of a full table scan for tenant capabilities")
+		log.Dev.Info(ctx, "received results of a full table scan for tenant capabilities")
 		if !w.initialScan.done {
 			w.initialScan.done = true
 			close(w.initialScan.ch)
@@ -362,7 +362,7 @@ func (w *Watcher) handleIncrementalUpdate(
 		w.removeEntryForTenantIDLocked(ctx, tid)
 	} else {
 		if log.V(2) {
-			log.Infof(ctx, "adding tenant entry to cache: %+v", update.Entry)
+			log.Dev.Infof(ctx, "adding tenant entry to cache: %+v", update.Entry)
 		}
 		w.mu.store[update.TenantID] = &watcherEntry{
 			Entry:    &update.Entry,
@@ -393,7 +393,7 @@ func (w *Watcher) removeEntriesBeforeTimestamp(ctx context.Context, ts hlc.Times
 
 func (w *Watcher) removeEntryForTenantIDLocked(ctx context.Context, tid roachpb.TenantID) {
 	if log.V(2) {
-		log.Infof(ctx, "removing tenant entry %d from cache", tid)
+		log.Dev.Infof(ctx, "removing tenant entry %d from cache", tid)
 	}
 	// Not finding the ID in the store is expected if we see a
 	// duplicate delete.

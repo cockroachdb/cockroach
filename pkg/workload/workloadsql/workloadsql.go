@@ -117,7 +117,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 
 	// Check to see if we're on a tenant;
 
-	log.Infof(ctx, `starting %d splits`, len(splitPoints))
+	log.Dev.Infof(ctx, `starting %d splits`, len(splitPoints))
 	g := ctxgroup.WithContext(ctx)
 	// Rate limit splitting to prevent replica imbalance.
 	r := rate.NewLimiter(128, 1)
@@ -191,7 +191,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 			case <-doneCh:
 				finished++
 				if finished%1000 == 0 {
-					log.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
+					log.Dev.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
 				}
 			case <-ctx.Done():
 				return ctx.Err()

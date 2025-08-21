@@ -1167,7 +1167,7 @@ func (db *DB) sendUsingSender(
 	br, pErr := sender.Send(ctx, ba)
 	if pErr != nil {
 		if log.V(1) {
-			log.Infof(ctx, "failed batch: %s", pErr)
+			log.Dev.Infof(ctx, "failed batch: %s", pErr)
 		}
 		return nil, pErr
 	}

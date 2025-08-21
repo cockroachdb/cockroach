@@ -1674,11 +1674,11 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	if s.cfg.TestingKnobs.Server != nil {
 		knobs := s.cfg.TestingKnobs.Server.(*TestingKnobs)
 		if knobs.SignalAfterGettingRPCAddress != nil {
-			log.Infof(ctx, "signaling caller that RPC address is ready")
+			log.Dev.Infof(ctx, "signaling caller that RPC address is ready")
 			close(knobs.SignalAfterGettingRPCAddress)
 		}
 		if knobs.PauseAfterGettingRPCAddress != nil {
-			log.Infof(ctx, "waiting for signal from caller to proceed with initialization")
+			log.Dev.Infof(ctx, "waiting for signal from caller to proceed with initialization")
 			select {
 			case <-knobs.PauseAfterGettingRPCAddress:
 				// Normal case. Just continue below.
@@ -1693,7 +1693,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 				// starting up.
 				return errors.New("server stopping prematurely")
 			}
-			log.Infof(ctx, "caller is letting us proceed with initialization")
+			log.Dev.Infof(ctx, "caller is letting us proceed with initialization")
 		}
 	}
 

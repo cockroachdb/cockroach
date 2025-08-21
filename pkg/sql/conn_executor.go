@@ -3879,7 +3879,7 @@ func (ex *connExecutor) initPCRReaderCatalog(ctx context.Context) {
 			return nil
 		})
 	if err != nil {
-		log.Infof(ctx, "unable to lease system database to determine if PCR reader is in use: %s", err)
+		log.Dev.Infof(ctx, "unable to lease system database to determine if PCR reader is in use: %s", err)
 	}
 }
 

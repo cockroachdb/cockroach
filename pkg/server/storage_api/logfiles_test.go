@@ -105,7 +105,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	time.Sleep(sleepBuffer)
 	log.Warningf(logCtx, "%s", redact.Safe(spy.MsgWarn))
 	time.Sleep(sleepBuffer)
-	log.Infof(logCtx, "%s", redact.Safe(spy.MsgInf))
+	log.Dev.Infof(logCtx, "%s", redact.Safe(spy.MsgInf))
 	time.Sleep(sleepBuffer)
 
 	// Ensure all log lines above are written to disk.
@@ -271,9 +271,9 @@ func TestStatusLocalLogsTenantFilter(t *testing.T) {
 	time.Sleep(sleepBuffer)
 	log.Warningf(ctxAppTenant, "app tenant msg 2")
 	time.Sleep(sleepBuffer)
-	log.Infof(ctxSysTenant, "system tenant msg 3")
+	log.Dev.Infof(ctxSysTenant, "system tenant msg 3")
 	time.Sleep(sleepBuffer)
-	log.Infof(ctxAppTenant, "app tenant msg 3")
+	log.Dev.Infof(ctxAppTenant, "app tenant msg 3")
 	timestampEnd := timeutil.Now().UnixNano()
 
 	var listFilesResp serverpb.LogFilesListResponse
@@ -384,7 +384,7 @@ func TestStatusLogRedaction(t *testing.T) {
 
 			// Log something.
 			logCtx := ts.AnnotateCtx(context.Background())
-			log.Infof(logCtx, "THISISSAFE %s", "THISISUNSAFE")
+			log.Dev.Infof(logCtx, "THISISSAFE %s", "THISISUNSAFE")
 
 			// Determine the log file name.
 			var wrapper serverpb.LogFilesListResponse

@@ -194,13 +194,13 @@ func title(s string) string {
 func init() {
 	for _, sev := range logpb.Severity_name {
 		capsev := title(strings.ToLower(sev))
-		// log.Infof, log.Warningf etc.
+		// log.Dev.Infof, log.Warningf etc.
 		requireConstFmt["github.com/cockroachdb/cockroach/pkg/util/log."+capsev+"f"] = true
-		// log.VInfof, log.VWarningf etc.
+		// log.Dev.VInfof, log.VWarningf etc.
 		requireConstFmt["github.com/cockroachdb/cockroach/pkg/util/log.V"+capsev+"f"] = true
-		// log.InfofDepth, log.WarningfDepth, etc.
+		// log.Dev.InfofDepth, log.WarningfDepth, etc.
 		requireConstFmt["github.com/cockroachdb/cockroach/pkg/util/log."+capsev+"fDepth"] = true
-		// log.Info, log.Warning, etc.
+		// log.Dev.Info, log.Warning, etc.
 		requireConstMsg["github.com/cockroachdb/cockroach/pkg/util/log."+capsev] = true
 
 		for _, ch := range logpb.Channel_name {

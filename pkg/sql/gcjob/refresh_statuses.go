@@ -189,19 +189,19 @@ func updateTableStatus(
 			return maxDeadline
 		}
 		if isProtected {
-			log.Infof(ctx, "a timestamp protection delayed GC of table %d", t.ID)
+			log.Dev.Infof(ctx, "a timestamp protection delayed GC of table %d", t.ID)
 			return maxDeadline
 		}
 
 		lifetime := timeutil.Until(deadline)
 		if lifetime < 0 {
 			if log.V(2) {
-				log.Infof(ctx, "detected expired table %d", t.ID)
+				log.Dev.Infof(ctx, "detected expired table %d", t.ID)
 			}
 			droppedTable.Status = jobspb.SchemaChangeGCProgress_CLEARING
 		} else {
 			if log.V(2) {
-				log.Infof(ctx, "table %d still has %+v until GC", t.ID, lifetime)
+				log.Dev.Infof(ctx, "table %d still has %+v until GC", t.ID, lifetime)
 			}
 		}
 		break
@@ -253,19 +253,19 @@ func updateIndexesStatus(
 			continue
 		}
 		if isProtected {
-			log.Infof(ctx, "a timestamp protection delayed GC of index %d from table %d", idxProgress.IndexID, table.GetID())
+			log.Dev.Infof(ctx, "a timestamp protection delayed GC of index %d from table %d", idxProgress.IndexID, table.GetID())
 			continue
 		}
 		lifetime := time.Until(deadline)
 		if lifetime > 0 {
 			if log.V(2) {
-				log.Infof(ctx, "index %d from table %d still has %+v until GC", idxProgress.IndexID, table.GetID(), lifetime)
+				log.Dev.Infof(ctx, "index %d from table %d still has %+v until GC", idxProgress.IndexID, table.GetID(), lifetime)
 			}
 		}
 		if lifetime < 0 {
 			expired = true
 			if log.V(2) {
-				log.Infof(ctx, "detected expired index %d from table %d", idxProgress.IndexID, table.GetID())
+				log.Dev.Infof(ctx, "detected expired index %d from table %d", idxProgress.IndexID, table.GetID())
 			}
 			idxProgress.Status = jobspb.SchemaChangeGCProgress_CLEARING
 		} else if deadline.Before(soonestDeadline) {
@@ -479,7 +479,7 @@ func refreshTenant(
 		}
 
 		if isProtected {
-			log.Infof(ctx, "GC TTL for dropped tenant %d has expired, but protected timestamp "+
+			log.Dev.Infof(ctx, "GC TTL for dropped tenant %d has expired, but protected timestamp "+
 				"record(s) on the tenant keyspace are preventing GC", tenID)
 			return false, deadlineUnix, nil
 		}

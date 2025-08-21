@@ -926,7 +926,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	//        x      x
 	//      [1]<---->[2]
 	//
-	log.Infof(ctx, "test: partitioning n1 from n2, n3")
+	log.Dev.Infof(ctx, "test: partitioning n1 from n2, n3")
 	desc, err := tc.LookupRange(key)
 	require.NoError(t, err)
 	dropRaftMessagesFrom(t, tc.Servers[1], desc, []roachpb.ReplicaID{1}, nil)
@@ -937,7 +937,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// not succeed before their context is canceled, but they will be appended
 	// to the partitioned replica's Raft log because it is currently the Raft
 	// leader.
-	log.Infof(ctx, "test: sending writes to partitioned replica")
+	log.Dev.Infof(ctx, "test: sending writes to partitioned replica")
 	g := ctxgroup.WithContext(ctx)
 	otherKeys := make([]roachpb.Key, 32)
 	otherKeys[0] = key.Next()
@@ -968,7 +968,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// leader. Either one can, and when one does, it'll be able to acquire the
 	// lease. We'll first wait for a new leader to be established, have it acquire
 	// the lease, and service a write request.
-	log.Infof(ctx, "test: establishing new leader/leaseholder and sending writes")
+	log.Dev.Infof(ctx, "test: establishing new leader/leaseholder and sending writes")
 
 	const otherStoreIdx = 1
 	otherStore := tc.GetFirstStoreFromServer(t, otherStoreIdx)
@@ -1004,15 +1004,15 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 		return nil
 	})
 
-	log.Infof(ctx, "test: waiting for values...")
+	log.Dev.Infof(ctx, "test: waiting for values...")
 	tc.WaitForValues(t, key, []int64{incA, incAB, incAB})
-	log.Infof(ctx, "test: waiting for values... done")
+	log.Dev.Infof(ctx, "test: waiting for values... done")
 
 	index := newLeaderRepl.GetLastIndex()
 
 	// Truncate the log at index+1 (log entries < N are removed, so this
 	// includes the increment).
-	log.Infof(ctx, "test: truncating log")
+	log.Dev.Infof(ctx, "test: truncating log")
 	truncArgs := truncateLogArgs(index+1, partRepl.RangeID)
 	truncArgs.Key = partRepl.Desc().StartKey.AsRawKey()
 	testutils.SucceedsSoon(t, func() error {
@@ -1031,7 +1031,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	snapsBefore := snapsMetric.Count()
 
 	// Remove the partition. Snapshot should follow.
-	log.Infof(ctx, "test: removing the partition")
+	log.Dev.Infof(ctx, "test: removing the partition")
 	for _, s := range []int{0, 1, 2} {
 		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, &unreliableRaftHandler{
 			rangeID:                    partRepl.RangeID,
@@ -1127,9 +1127,9 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 			// we can increment it again later.
 			_, err := tc.Server(0).DB().Inc(ctx, key, 1)
 			require.NoError(t, err)
-			log.Infof(ctx, "test: waiting for initial values...")
+			log.Dev.Infof(ctx, "test: waiting for initial values...")
 			tc.WaitForValues(t, key, []int64{1, 1, 1})
-			log.Infof(ctx, "test: waiting for initial values... done")
+			log.Dev.Infof(ctx, "test: waiting for initial values... done")
 		}
 
 		// Partition the original leader from its followers. We do this by
@@ -1145,7 +1145,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		//        x      x                x       x
 		//      [1]<---->[2]            [1]<----->[2]
 		//
-		log.Infof(ctx, "test: partitioning node")
+		log.Dev.Infof(ctx, "test: partitioning node")
 		const partitionNodeIdx = 0
 		partitionStore := tc.GetFirstStoreFromServer(t, partitionNodeIdx)
 		partitionedStoreSender := partitionStore.TestSender()
@@ -1163,7 +1163,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		leaderReplicaID := waitForPartitionedLeaderStepDownAndNewLeaderToStepUp(
 			t, tc, rngDesc, partitionNodeIdx, otherStoreIdx,
 		)
-		log.Infof(ctx, "test: the leader is replica ID %d", leaderReplicaID)
+		log.Dev.Infof(ctx, "test: the leader is replica ID %d", leaderReplicaID)
 		if leaderReplicaID != 2 && leaderReplicaID != 3 {
 			t.Fatalf("expected leader to be 1 or 2, was: %d", leaderReplicaID)
 		}
@@ -1173,7 +1173,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		require.NoError(t, err)
 
 		// Now that the leadership has transferred, the lease should've expired too.
-		log.Infof(ctx, "test: ensuring the lease expired")
+		log.Dev.Infof(ctx, "test: ensuring the lease expired")
 		partitionedReplica, err := partitionStore.GetReplica(rngDesc.RangeID)
 		require.NoError(t, err)
 		status := partitionedReplica.CurrentLeaseStatus(ctx)
@@ -1182,12 +1182,12 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		require.True(t,
 			status.Lease.OwnedBy(partitionStore.StoreID()), "someone else got the lease: %s", status)
 		require.True(t, status.IsExpired())
-		log.Infof(ctx, "test: lease expired")
+		log.Dev.Infof(ctx, "test: lease expired")
 
 		{
 			// Write something to generate some Raft log entries and then truncate the
 			// log.
-			log.Infof(ctx, "test: incrementing")
+			log.Dev.Infof(ctx, "test: incrementing")
 			incArgs := incrementArgs(key, 1)
 			sender := leaderStore.TestSender()
 			_, pErr := kv.SendWrapped(ctx, sender, incArgs)
@@ -1200,7 +1200,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		// Truncate the log at index+1 (log entries < N are removed, so this includes
 		// the increment). This means that the partitioned replica will need a
 		// snapshot to catch up.
-		log.Infof(ctx, "test: truncating log...")
+		log.Dev.Infof(ctx, "test: truncating log...")
 		truncArgs := &kvpb.TruncateLogRequest{
 			RequestHeader: kvpb.RequestHeader{
 				Key: key,
@@ -1221,7 +1221,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		// NotLeaseholderError (with an empty leaseholder).
 		//
 		// NB: This relies on RejectLeaseOnLeaderUnknown being set to true.
-		log.Infof(ctx, "test: sending request to partitioned replica")
+		log.Dev.Infof(ctx, "test: sending request to partitioned replica")
 		getRequest := getArgs(key)
 		_, pErr := kv.SendWrapped(timeoutCtx, partitionedStoreSender, getRequest)
 		require.Error(t, pErr.GoError(), "unexpected success")
@@ -1243,7 +1243,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		// prevent the respective replica from catching up and becoming eligible to
 		// become the leader/leaseholder. The point of resolving the partition is to
 		// allow the replica in question to figure out who the new leader is.
-		log.Infof(ctx, "test: removing partition")
+		log.Dev.Infof(ctx, "test: removing partition")
 		slowSnapHandler := &slowSnapRaftHandler{
 			rangeID:                    rngDesc.RangeID,
 			waitCh:                     make(chan struct{}),
@@ -1276,7 +1276,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		// Now we're going to send a request to the behind replica, and we expect it
 		// to not block; we expect a redirection to the leader (once it's learned of
 		// the leader).
-		log.Infof(ctx, "test: sending request after partition has healed")
+		log.Dev.Infof(ctx, "test: sending request after partition has healed")
 		for {
 			getRequest := getArgs(key)
 			_, pErr := kv.SendWrapped(timeoutCtx, partitionedStoreSender, getRequest)
@@ -1385,9 +1385,9 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 		// can increment it again later.
 		_, err := tc.Server(0).DB().Inc(ctx, key, 1)
 		require.NoError(t, err)
-		log.Infof(ctx, "test: waiting for initial values...")
+		log.Dev.Infof(ctx, "test: waiting for initial values...")
 		tc.WaitForValues(t, key, []int64{1, 1, 1, 0})
-		log.Infof(ctx, "test: waiting for initial values... done")
+		log.Dev.Infof(ctx, "test: waiting for initial values... done")
 	}
 
 	// Begin dropping all node liveness heartbeats from the original raft leader
@@ -1410,11 +1410,11 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 	//           v
 	//          [3]       liveness range
 	//
-	log.Infof(ctx, "test: partitioning node")
+	log.Dev.Infof(ctx, "test: partitioning node")
 	atomic.StoreInt32(&installPartition, 1)
 
 	// Wait until the lease expires.
-	log.Infof(ctx, "test: waiting for lease expiration on r%d", store0Repl.RangeID)
+	log.Dev.Infof(ctx, "test: waiting for lease expiration on r%d", store0Repl.RangeID)
 	testutils.SucceedsSoon(t, func() error {
 		dur, _ := store0.GetStoreConfig().NodeLivenessDurations()
 		manualClock.Increment(dur.Nanoseconds())
@@ -1431,7 +1431,7 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 		}
 		return nil
 	})
-	log.Infof(ctx, "test: lease expired")
+	log.Dev.Infof(ctx, "test: lease expired")
 
 	{
 		tBegin := timeutil.Now()
@@ -1439,11 +1439,11 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 		// get there, the request will need to trigger a lease request on a follower
 		// replica, which will call a Raft election, acquire Raft leadership, then
 		// acquire the range lease.
-		log.Infof(ctx, "test: waiting for new lease...")
+		log.Dev.Infof(ctx, "test: waiting for new lease...")
 		_, err := tc.Server(0).DB().Inc(ctx, key, 1)
 		require.NoError(t, err)
 		tc.WaitForValues(t, key, []int64{2, 2, 2, 0})
-		log.Infof(ctx, "test: waiting for new lease... done [%.2fs]", timeutil.Since(tBegin).Seconds())
+		log.Dev.Infof(ctx, "test: waiting for new lease... done [%.2fs]", timeutil.Since(tBegin).Seconds())
 	}
 
 	// Store 0 no longer holds the lease.
@@ -5344,7 +5344,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 					var err error
 					*partRange, err = basePartition.extend(tc, split.RightDesc.RangeID, replDesc.ReplicaID,
 						0 /* partitionedNode */, true /* activated */, unreliableRaftHandlerFuncs{})
-					log.Infof(ctx, "partition installed before proposing split: %s", *partRange)
+					log.Dev.Infof(ctx, "partition installed before proposing split: %s", *partRange)
 					require.NoError(t, err)
 					proposalFilter.Store(noopProposalFilter)
 				})
@@ -5437,7 +5437,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Make sure everybody knows about that transfer.
 			increment(t, db, keyA, 1)
 			tc.WaitForValues(t, keyA, []int64{6, 6, 6})
-			log.Infof(ctx, "activating LHS partition: %s", lhsPartition)
+			log.Dev.Infof(ctx, "activating LHS partition: %s", lhsPartition)
 			lhsPartition.activate()
 
 			increment(t, db, keyA, 1)
@@ -5474,7 +5474,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
 			target := tc.Target(0)
-			log.Infof(ctx, "removing voter: %v", target)
+			log.Dev.Infof(ctx, "removing voter: %v", target)
 			tc.RemoveVotersOrFatal(t, keyB, target)
 			// Unsuccessful because the RHS will not accept the learner snapshot
 			// and will be rolled back. Nevertheless it will have learned that it
@@ -5491,12 +5491,12 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// it will find out about its new replica ID and write a tombstone for the
 			// old one.
 			waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).StateEngine(), rhsID)
-			log.Infof(ctx, "deactivating LHS partition: %s", lhsPartition)
+			log.Dev.Infof(ctx, "deactivating LHS partition: %s", lhsPartition)
 			lhsPartition.deactivate()
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
 			require.Equal(t, uint64(0), hs.Commit)
-			log.Infof(ctx, "adding voter: %v", target)
+			log.Dev.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
 				_, err := tc.AddVoters(keyB, target)
 				return err
@@ -5530,7 +5530,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
 			target := tc.Target(0)
-			log.Infof(ctx, "removing voter: %v", target)
+			log.Dev.Infof(ctx, "removing voter: %v", target)
 			tc.RemoveVotersOrFatal(t, keyB, target)
 			// Unsuccessfuly because the RHS will not accept the learner snapshot
 			// and will be rolled back. Nevertheless it will have learned that it
@@ -5561,17 +5561,17 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			}
 
 			// Restart store 0 so that it forgets about the newer replicaID.
-			log.Infof(ctx, "stopping server 0")
+			log.Dev.Infof(ctx, "stopping server 0")
 			tc.StopServer(0)
-			log.Infof(ctx, "deactivating LHS partition: %s", lhsPartition)
+			log.Dev.Infof(ctx, "deactivating LHS partition: %s", lhsPartition)
 			lhsPartition.deactivate()
-			log.Infof(ctx, "starting server 0")
+			log.Dev.Infof(ctx, "starting server 0")
 			require.NoError(t, tc.RestartServer(0))
 
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
 			require.Equal(t, uint64(0), hs.Commit)
-			log.Infof(ctx, "adding voter: %v", target)
+			log.Dev.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
 				_, err := tc.AddVoters(keyB, target)
 				return err
@@ -5609,7 +5609,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
 			target := tc.Target(0)
-			log.Infof(ctx, "removing voter: %v", target)
+			log.Dev.Infof(ctx, "removing voter: %v", target)
 			tc.RemoveVotersOrFatal(t, keyB, target)
 			// Unsuccessful because the RHS will not accept the learner snapshot and
 			// will be rolled back. Nevertheless it will have learned that it has been
@@ -5626,13 +5626,13 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, repl.ReplicaID(), rhsInfo.Desc.NextReplicaID)
 			rhsPartition.addReplica(rhsInfo.Desc.NextReplicaID)
-			log.Infof(ctx, "added %d to RHS partition %s", rhsInfo.Desc.NextReplicaID, rhsPartition)
+			log.Dev.Infof(ctx, "added %d to RHS partition %s", rhsInfo.Desc.NextReplicaID, rhsPartition)
 			// Ensure that there's no tombstone.
 			// The RHS on store 0 never should have heard about its original ID.
 			ensureNoTombstone(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
-			log.Infof(ctx, "deactivating LHS partition: %s", lhsPartition)
+			log.Dev.Infof(ctx, "deactivating LHS partition: %s", lhsPartition)
 			lhsPartition.deactivate()
-			log.Infof(ctx, "deactivating RHS partition: %s", rhsPartition)
+			log.Dev.Infof(ctx, "deactivating RHS partition: %s", rhsPartition)
 			rhsPartition.deactivate()
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
@@ -5640,7 +5640,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Now succeed in adding the RHS. Use SucceedsSoon because in rare cases
 			// the learner snapshot can fail due to a race with a raft snapshot from
 			// a raft leader on a different node.
-			log.Infof(ctx, "adding voter: %v", target)
+			log.Dev.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
 				_, err := tc.AddVoters(keyB, target)
 				return err
@@ -5689,7 +5689,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
 			target := tc.Target(0)
-			log.Infof(ctx, "removing voter: %v", target)
+			log.Dev.Infof(ctx, "removing voter: %v", target)
 			tc.RemoveVotersOrFatal(t, keyB, target)
 			// Unsuccessfuly because the RHS will not accept the learner snapshot
 			// and will be rolled back. Nevertheless it will have learned that it
@@ -5709,7 +5709,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Now, before we deactivate the LHS partition, partition the newer replica
 			// on the RHS too.
 			rhsPartition.addReplica(rhsInfo.Desc.NextReplicaID)
-			log.Infof(ctx, "added %d to RHS partition: %s", rhsInfo.Desc.NextReplicaID, rhsPartition)
+			log.Dev.Infof(ctx, "added %d to RHS partition: %s", rhsInfo.Desc.NextReplicaID, rhsPartition)
 
 			// We do all of this incrementing to ensure that nobody will ever
 			// succeed in sending a message the new RHS replica after we restart
@@ -5723,11 +5723,11 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 				tc.WaitForValues(t, keyB, []int64{0, curB, curB})
 			}
 
-			log.Infof(ctx, "stopping server 0")
+			log.Dev.Infof(ctx, "stopping server 0")
 			tc.StopServer(0)
-			log.Infof(ctx, "deactivate LHS partition: %s", lhsPartition)
+			log.Dev.Infof(ctx, "deactivate LHS partition: %s", lhsPartition)
 			lhsPartition.deactivate()
-			log.Infof(ctx, "restarting server 0")
+			log.Dev.Infof(ctx, "restarting server 0")
 			require.NoError(t, tc.RestartServer(0))
 
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
@@ -5742,9 +5742,9 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 				}
 				return nil
 			})
-			log.Infof(ctx, "deactivate RHS partition: %s", rhsPartition)
+			log.Dev.Infof(ctx, "deactivate RHS partition: %s", rhsPartition)
 			rhsPartition.deactivate()
-			log.Infof(ctx, "adding voter: %v", target)
+			log.Dev.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
 				_, err := tc.AddVoters(keyB, tc.Target(0))
 				return err

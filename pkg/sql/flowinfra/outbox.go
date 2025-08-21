@@ -239,7 +239,7 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 			return err
 		}
 		if log.V(2) {
-			log.Infof(ctx, "outbox: calling FlowStream")
+			log.Dev.Infof(ctx, "outbox: calling FlowStream")
 		}
 		m.stream, err = client.FlowStream(ctx)
 		if err != nil {
@@ -254,7 +254,7 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 		return err
 	}
 	if log.V(2) {
-		log.Infof(ctx, "outbox: FlowStream returned")
+		log.Dev.Infof(ctx, "outbox: FlowStream returned")
 	}
 
 	// Make sure to always close the stream if it is still usable (if not, then

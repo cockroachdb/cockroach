@@ -116,7 +116,7 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 
 	defer func() {
 		if err := it.Close(); err != nil {
-			log.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
+			log.Dev.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
 		}
 	}()
 
@@ -370,7 +370,7 @@ func (p *storage) deprecatedProtect(ctx context.Context, r *ptpb.Record, meta []
 	}
 	row := it.Cur()
 	if err := it.Close(); err != nil {
-		log.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
+		log.Dev.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
 	}
 	if failed := *row[0].(*tree.DBool); failed {
 		curNumSpans := int64(*row[1].(*tree.DInt))

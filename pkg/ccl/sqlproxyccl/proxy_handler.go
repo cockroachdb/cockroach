@@ -546,7 +546,7 @@ func (handler *proxyHandler) handle(
 	// the session logs.
 	connBegin := timeutil.Now()
 	defer func() {
-		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
+		log.Dev.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
 
 	// Wrap the client connection with an error annotater. WARNING: The TLS

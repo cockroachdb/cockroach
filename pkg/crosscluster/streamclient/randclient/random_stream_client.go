@@ -433,7 +433,7 @@ func (m *RandomStreamClient) PlanPhysicalReplication(
 		SourceTenantID: m.config.tenantID,
 	}
 	tenantSpan := keys.MakeTenantSpan(m.config.tenantID)
-	log.Infof(ctx, "planning random stream for tenant %d", m.config.tenantID)
+	log.Dev.Infof(ctx, "planning random stream for tenant %d", m.config.tenantID)
 
 	// Allocate table IDs and return one per partition uri in the topology.
 	srcCodec := keys.MakeSQLCodec(m.config.tenantID)
@@ -445,7 +445,7 @@ func (m *RandomStreamClient) PlanPhysicalReplication(
 		}
 
 		partitionURI := m.config.URL(tableID, i == 0, i == m.config.numPartitions-1)
-		log.Infof(ctx, "planning random stream partition %d for tenant %d: %q", i, m.config.tenantID, partitionURI.Serialize())
+		log.Dev.Infof(ctx, "planning random stream partition %d for tenant %d: %q", i, m.config.tenantID, partitionURI.Serialize())
 
 		topology.Partitions = append(topology.Partitions,
 			streamclient.PartitionInfo{
@@ -465,7 +465,7 @@ func (m *RandomStreamClient) PlanPhysicalReplication(
 func (m *RandomStreamClient) CreateForTenant(
 	ctx context.Context, tenantName roachpb.TenantName, _ streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
-	log.Infof(ctx, "creating random stream for tenant %s", tenantName)
+	log.Dev.Infof(ctx, "creating random stream for tenant %s", tenantName)
 	return streampb.ReplicationProducerSpec{
 		StreamID:             streampb.StreamID(1),
 		ReplicationStartTime: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
@@ -582,16 +582,16 @@ func (m *RandomStreamClient) Subscribe(
 		for {
 			var event crosscluster.Event
 			if lastEventCopy != nil && rng.Float64() < config.dupProbability {
-				log.VInfof(ctx, 2, "sending duplicate event")
+				log.Dev.VInfof(ctx, 2, "sending duplicate event")
 				event = duplicateEvent(lastEventCopy)
 			} else {
 				var err error
 				event, err = reg.generateNewEvent()
 				if err != nil {
-					log.VInfof(ctx, 2, "sending error: %v", err)
+					log.Dev.VInfof(ctx, 2, "sending error: %v", err)
 					return err
 				}
-				log.VInfof(ctx, 2, "sending event: %v", event.Type())
+				log.Dev.VInfof(ctx, 2, "sending event: %v", event.Type())
 			}
 			lastEventCopy = duplicateEvent(event)
 

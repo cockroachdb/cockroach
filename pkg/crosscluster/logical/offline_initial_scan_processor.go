@@ -204,7 +204,7 @@ func (o *offlineInitialScanProcessor) Start(ctx context.Context) {
 		return
 	}
 
-	log.Infof(ctx, "starting offline initial scan writer for partition %s", o.spec.PartitionSpec.PartitionID)
+	log.Dev.Infof(ctx, "starting offline initial scan writer for partition %s", o.spec.PartitionSpec.PartitionID)
 
 	// We use a different context for the subscription here so
 	// that we can explicitly cancel it.
@@ -213,7 +213,7 @@ func (o *offlineInitialScanProcessor) Start(ctx context.Context) {
 	o.workerGroup = ctxgroup.WithContext(o.Ctx())
 	o.workerGroup.GoCtx(func(_ context.Context) error {
 		if err := o.subscription.Subscribe(subscriptionCtx); err != nil {
-			log.Infof(o.Ctx(), "subscription completed. Error: %s", err)
+			log.Dev.Infof(o.Ctx(), "subscription completed. Error: %s", err)
 			o.sendError(errors.Wrap(err, "subscription"))
 		}
 		return nil
@@ -223,7 +223,7 @@ func (o *offlineInitialScanProcessor) Start(ctx context.Context) {
 		pprof.Do(ctx, pprof.Labels("proc", fmt.Sprintf("%d", o.ProcessorID)), func(ctx context.Context) {
 			for event := range o.subscription.Events() {
 				if err := o.handleEvent(ctx, event); err != nil {
-					log.Infof(o.Ctx(), "consumer completed. Error: %s", err)
+					log.Dev.Infof(o.Ctx(), "consumer completed. Error: %s", err)
 					o.sendError(errors.Wrap(err, "consume events"))
 				}
 			}
@@ -281,7 +281,7 @@ func (o *offlineInitialScanProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.P
 
 func (o *offlineInitialScanProcessor) MoveToDrainingAndLogError(err error) {
 	if err != nil {
-		log.Infof(o.Ctx(), "gracefully draining with error: %s", err)
+		log.Dev.Infof(o.Ctx(), "gracefully draining with error: %s", err)
 	}
 	o.MoveToDraining(err)
 }
@@ -332,7 +332,7 @@ func (o *offlineInitialScanProcessor) sendError(err error) {
 	select {
 	case o.errCh <- err:
 	default:
-		log.VInfof(o.Ctx(), 2, "dropping additional error: %s", err)
+		log.Dev.VInfof(o.Ctx(), 2, "dropping additional error: %s", err)
 	}
 }
 
@@ -351,7 +351,7 @@ func (o *offlineInitialScanProcessor) handleEvent(
 	case crosscluster.SSTableEvent, crosscluster.DeleteRangeEvent:
 		return errors.AssertionFailedf("unexpected event for offline initial scan: %v", event)
 	case crosscluster.SplitEvent:
-		log.Infof(o.Ctx(), "SplitEvent received on logical replication stream")
+		log.Dev.Infof(o.Ctx(), "SplitEvent received on logical replication stream")
 	default:
 		return errors.Newf("unknown streaming event type %v", event.Type())
 	}

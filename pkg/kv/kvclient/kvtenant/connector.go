@@ -366,19 +366,19 @@ func (c *connector) internalStart(ctx context.Context) error {
 	for gossipStartupCh != nil || settingsStartupCh != nil {
 		select {
 		case <-gossipStartupCh:
-			log.Infof(ctx, "kv connector gossip subscription started")
+			log.Dev.Infof(ctx, "kv connector gossip subscription started")
 			gossipStartupCh = nil
 		case err := <-settingsStartupCh:
 			settingsStartupCh = nil
 			if err != nil {
-				log.Infof(ctx, "kv connector initialization error: %v", err)
+				log.Dev.Infof(ctx, "kv connector initialization error: %v", err)
 				return err
 			}
-			log.Infof(ctx, "kv connector tenant settings started")
+			log.Dev.Infof(ctx, "kv connector tenant settings started")
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-c.rpcContext.Stopper.ShouldQuiesce():
-			log.Infof(ctx, "kv connector asked to shut down before full start")
+			log.Dev.Infof(ctx, "kv connector asked to shut down before full start")
 			return errors.New("request to shut down early")
 		}
 	}

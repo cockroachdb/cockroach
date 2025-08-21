@@ -299,7 +299,7 @@ func (rgcq *replicaGCQueue) process(
 			// snapshot for *each* of them. This typically happens for the last
 			// range:
 			// [n1,replicaGC,s1,r33/1:/{Table/53/1/3…-Max}] removing replica [...]
-			log.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
+			log.Dev.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
 		}
 
 		rgcq.metrics.RemoveReplicaCount.Inc(1)

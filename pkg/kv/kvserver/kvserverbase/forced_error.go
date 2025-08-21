@@ -84,7 +84,7 @@ func CheckForcedErr(
 			if isLeaseRequest {
 				op = "request"
 			}
-			log.Infof(ctx, "rejected lease %s %s; current lease %s; err: %s",
+			log.Dev.Infof(ctx, "rejected lease %s %s; current lease %s; err: %s",
 				op, raftCmd.ReplicatedEvalResult.State.Lease, replicaState.Lease, res.ForcedError)
 		}
 	}()

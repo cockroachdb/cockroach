@@ -103,7 +103,7 @@ func (s *SpanStatsCollector) Start(ctx context.Context, stopper *stop.Stopper) {
 				}
 			}
 		}); err != nil {
-		log.Infof(ctx, "error starting span stats collector: %v", err)
+		log.Dev.Infof(ctx, "error starting span stats collector: %v", err)
 	}
 }
 

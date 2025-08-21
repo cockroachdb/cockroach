@@ -69,7 +69,7 @@ func logPendingLossOfQuorumRecoveryEvents(ctx context.Context, stores *kvserver.
 				return false, nil
 			})
 		if eventCount > 0 {
-			log.Infof(
+			log.Dev.Infof(
 				ctx, "registered %d loss of quorum replica recovery events for s%d",
 				eventCount, s.Ident.StoreID)
 		}
@@ -137,7 +137,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 		return nil
 	})
 	if err := iterutil.Map(err); err != nil {
-		log.Infof(ctx, "failed to iterate node stores while searching for loq recovery cleanup info: %s", err)
+		log.Dev.Infof(ctx, "failed to iterate node stores while searching for loq recovery cleanup info: %s", err)
 		return
 	}
 	if len(cleanup.DecommissionedNodeIDs) == 0 {
@@ -146,7 +146,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	decomCtx, decomCancel := stopper.WithCancelOnQuiesce(ctx)
 	_ = stopper.RunAsyncTask(decomCtx, "maybe-mark-nodes-as-decommissioned", func(ctx context.Context) {
 		defer decomCancel()
-		log.Infof(ctx, "loss of quorum recovery decommissioning removed nodes %s",
+		log.Dev.Infof(ctx, "loss of quorum recovery decommissioning removed nodes %s",
 			strutil.JoinIDs("n", cleanup.DecommissionedNodeIDs))
 		retryOpts := retry.Options{
 			InitialBackoff: 10 * time.Second,
@@ -167,22 +167,22 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 			err := server.Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING,
 				cleanup.DecommissionedNodeIDs)
 			if err != nil {
-				log.Infof(ctx,
+				log.Dev.Infof(ctx,
 					"loss of quorum recovery cleanup failed to decommissioning dead nodes, this is ok as cluster might not be healed yet: %s", err)
 				continue
 			}
 			err = server.Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONED,
 				cleanup.DecommissionedNodeIDs)
 			if err != nil {
-				log.Infof(ctx,
+				log.Dev.Infof(ctx,
 					"loss of quorum recovery cleanup failed to decommissioning dead nodes, this is ok as cluster might not be healed yet: %s", err)
 				continue
 			}
 			if err = loqrecovery.RemoveCleanupActionsInfo(ctx, actionsSource); err != nil {
-				log.Infof(ctx, "failed to remove ")
+				log.Dev.Infof(ctx, "failed to remove ")
 			}
 			break
 		}
-		log.Infof(ctx, "loss of quorum recovery cleanup finished decommissioning removed nodes")
+		log.Dev.Infof(ctx, "loss of quorum recovery cleanup finished decommissioning removed nodes")
 	})
 }

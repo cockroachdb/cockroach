@@ -334,7 +334,7 @@ func evaluateBatch(
 				if pErr.GetTxn() == nil {
 					pErr.SetTxn(baHeader.Txn)
 				}
-				log.Infof(ctx, "test injecting error: %s", pErr)
+				log.Dev.Infof(ctx, "test injecting error: %s", pErr)
 				return nil, result.Result{}, pErr
 			}
 		}
@@ -375,7 +375,7 @@ func evaluateBatch(
 				if pErr.GetTxn() == nil {
 					pErr.SetTxn(baHeader.Txn)
 				}
-				log.Infof(ctx, "test injecting error: %s", pErr)
+				log.Dev.Infof(ctx, "test injecting error: %s", pErr)
 				return nil, result.Result{}, pErr
 			}
 		}

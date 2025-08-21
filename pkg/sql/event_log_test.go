@@ -779,7 +779,7 @@ func TestPerfLogging(t *testing.T) {
 			}
 		}
 		for _, l := range entries {
-			log.Infof(context.Background(), "%s", l.Message)
+			log.Dev.Infof(context.Background(), "%s", l.Message)
 		}
 
 		if (len(entries) > 0) != tc.logExpected {

@@ -30,7 +30,7 @@ func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 	var rLimit rlimit
 	if err := getRlimitNoFile(&rLimit); err != nil {
 		if log.V(1) {
-			log.Infof(context.TODO(), "could not get rlimit; setting maxOpenFiles to the recommended value %d - %s", storage.RecommendedMaxOpenFiles, err)
+			log.Dev.Infof(context.TODO(), "could not get rlimit; setting maxOpenFiles to the recommended value %d - %s", storage.RecommendedMaxOpenFiles, err)
 		}
 		return storage.RecommendedMaxOpenFiles, nil
 	}
@@ -53,7 +53,7 @@ func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 	}
 	if rLimit.Cur < newCurrent {
 		if log.V(1) {
-			log.Infof(context.TODO(), "setting the soft limit for open file descriptors from %d to %d",
+			log.Dev.Infof(context.TODO(), "setting the soft limit for open file descriptors from %d to %d",
 				rLimit.Cur, newCurrent)
 		}
 		oldCurrent := rLimit.Cur
@@ -89,7 +89,7 @@ func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 			return 0, errors.Wrap(err, "getting updated soft limit for open file descriptors")
 		}
 		if log.V(1) {
-			log.Infof(context.TODO(), "soft open file descriptor limit is now %d", rLimit.Cur)
+			log.Dev.Infof(context.TODO(), "soft open file descriptor limit is now %d", rLimit.Cur)
 		}
 	}
 

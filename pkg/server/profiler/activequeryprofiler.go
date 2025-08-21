@@ -85,7 +85,7 @@ func NewActiveQueryProfiler(
 		log.Warningf(ctx, "warning when reading cgroup memory limit: %s", log.SafeManaged(warn))
 	}
 
-	log.Infof(ctx, "writing go query profiles to %s", log.SafeManaged(dir))
+	log.Dev.Infof(ctx, "writing go query profiles to %s", log.SafeManaged(dir))
 	qp := &ActiveQueryProfiler{
 		profiler: makeProfiler(
 			newProfileStore(dumpStore, QueryFileNamePrefix, QueryFileNameSuffix, st),

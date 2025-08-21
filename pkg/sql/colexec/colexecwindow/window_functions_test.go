@@ -1034,7 +1034,7 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 		} {
-			log.Infof(ctx, "spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String())
+			log.Dev.Infof(ctx, "spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String())
 			var semsToCheck []semaphore.Semaphore
 			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.UnorderedVerifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 				tc.init()

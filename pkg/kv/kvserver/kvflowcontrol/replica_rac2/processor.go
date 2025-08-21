@@ -891,7 +891,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 
 		if log.V(1) {
 			if isV2Encoding {
-				log.Infof(ctx,
+				log.Dev.Infof(ctx,
 					"decoded v2 raft admission meta below-raft: pri=%v create-time=%d "+
 						"proposer=n%v receiver=[n%d,s%v] tenant=t%d tokens≈%v "+
 						"sideloaded=%t raft-entry=%d/%d",
@@ -907,7 +907,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 					entry.Index,
 				)
 			} else {
-				log.Infof(ctx,
+				log.Dev.Infof(ctx,
 					"decoded v1 raft admission meta below-raft: pri=%v create-time=%d "+
 						"proposer=n%v receiver=[n%d,s%v] tenant=t%d tokens≈%v "+
 						"sideloaded=%t raft-entry=%d/%d",

@@ -142,7 +142,7 @@ func RunIdempotentWithRetryEx[T any](
 			break
 		}
 		if every.ShouldLog() {
-			log.Infof(ctx, "failed %s during node startup, retrying %s", opName, err)
+			log.Dev.Infof(ctx, "failed %s during node startup, retrying %s", opName, err)
 		}
 	}
 	return result, err

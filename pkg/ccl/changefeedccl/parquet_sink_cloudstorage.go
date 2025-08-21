@@ -165,7 +165,7 @@ func (parquetSink *parquetCloudStorageSink) EmitResolvedTimestamp(
 	part := resolved.GoTime().Format(parquetSink.wrapped.partitionFormat)
 	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
 	if log.V(1) {
-		log.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
+		log.Dev.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
 	}
 	return cloud.WriteFile(ctx, parquetSink.wrapped.es, filepath.Join(part, filename), &buf)
 }
@@ -232,7 +232,7 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	file.adjustBytesToTarget(ctx, newAllocSize)
 
 	if log.V(1) && parquetSink.everyN.ShouldLog() {
-		log.Infof(ctx, "topic: %d/%d, written: %d, buffered %d, new alloc: %d, old alloc: %d",
+		log.Dev.Infof(ctx, "topic: %d/%d, written: %d, buffered %d, new alloc: %d, old alloc: %d",
 			topic.GetTopicIdentifier().TableID, topic.GetTopicIdentifier().FamilyID, int64(file.buf.Len()),
 			bufferedBytesEstimate, prevAllocSize, newAllocSize)
 	}

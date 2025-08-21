@@ -1544,7 +1544,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 	// lastKey maintains the EndKey of the last piece of `span`.
 	lastKey := rSpan.Key
 	if log.V(1) {
-		log.Infof(ctx, "partitioning span %s", span)
+		log.Dev.Infof(ctx, "partitioning span %s", span)
 	}
 	// We break up rSpan into its individual ranges (which may or may not be on
 	// separate nodes). We then create "partitioned spans" using the end keys of
@@ -1561,7 +1561,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 		desc := it.Desc()
 		if log.V(1) {
 			descCpy := desc // don't let desc escape
-			log.Infof(ctx, "lastKey: %s desc: %s", lastKey, &descCpy)
+			log.Dev.Infof(ctx, "lastKey: %s desc: %s", lastKey, &descCpy)
 		}
 
 		if !desc.ContainsKey(lastKey) {
@@ -1682,7 +1682,7 @@ func (dsp *DistSQLPlanner) partitionSpans(
 			if safeKey, err := keys.EnsureSafeSplitKey(span.Key); err == nil && len(safeKey) > 0 {
 				if safeKey.Equal(lastKey) {
 					if log.V(1) {
-						log.Infof(ctx, "stitching span %s into the previous span partition", span)
+						log.Dev.Infof(ctx, "stitching span %s into the previous span partition", span)
 					}
 					// TODO(yuzefovich): we're not updating
 					// SpanPartition.numRanges as well as spanPartitionState

@@ -179,7 +179,7 @@ func (m *Manager) PublishMultiple(
 					// The version changed out from under us. Someone else must be
 					// performing a schema change operation.
 					if log.V(3) {
-						log.Infof(ctx, "publish %d (version changed): %d != %d", id, expectedVersions[id], desc.GetVersion())
+						log.Dev.Infof(ctx, "publish %d (version changed): %d != %d", id, expectedVersions[id], desc.GetVersion())
 					}
 					return errLeaseVersionChanged
 				}

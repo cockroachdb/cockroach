@@ -97,7 +97,7 @@ func (r *Registry) AddMetric(metric Iterable) {
 	defer r.Unlock()
 	r.tracked[metric.GetName(false /* useStaticLabels */)] = metric
 	if log.V(2) {
-		log.Infof(context.TODO(), "added metric: %s (%T)", metric.GetName(false /* useStaticLabels */), metric)
+		log.Dev.Infof(context.TODO(), "added metric: %s (%T)", metric.GetName(false /* useStaticLabels */), metric)
 	}
 }
 
@@ -122,7 +122,7 @@ func (r *Registry) RemoveMetric(metric Iterable) {
 	defer r.Unlock()
 	delete(r.tracked, metric.GetName(false /* useStaticLabels */))
 	if log.V(2) {
-		log.Infof(context.TODO(), "removed metric: %s (%T)", metric.GetName(false /* useStaticLabels */), metric)
+		log.Dev.Infof(context.TODO(), "removed metric: %s (%T)", metric.GetName(false /* useStaticLabels */), metric)
 	}
 }
 
@@ -178,7 +178,7 @@ func (r *Registry) addMetricValue(
 	if val.Kind() == reflect.Ptr && val.IsNil() {
 		if skipNil {
 			if log.V(2) {
-				log.Infof(ctx, "skipping nil metric field %s", name)
+				log.Dev.Infof(ctx, "skipping nil metric field %s", name)
 			}
 		} else {
 			log.Fatalf(ctx, "found nil metric field %s", name)
@@ -302,7 +302,7 @@ func checkFieldCanBeSkipped(
 ) {
 	if !buildutil.CrdbTestBuild {
 		if log.V(2) {
-			log.Infof(context.Background(), "skipping %s field %s", skipReason, fieldName)
+			log.Dev.Infof(context.Background(), "skipping %s field %s", skipReason, fieldName)
 		}
 		return
 	}

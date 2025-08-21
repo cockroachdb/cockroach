@@ -108,7 +108,7 @@ func evalExport(
 		return result.Result{}, err
 	}
 	if excludeFromBackup {
-		log.Infof(ctx, "[%s, %s) is part of a table excluded from backup, returning empty ExportResponse", args.Key, args.EndKey)
+		log.Dev.Infof(ctx, "[%s, %s) is part of a table excluded from backup, returning empty ExportResponse", args.Key, args.EndKey)
 		return result.Result{}, nil
 	}
 

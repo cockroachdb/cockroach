@@ -525,8 +525,8 @@ func (r *Refresher) getTableDescriptor(
 
 // WaitForAutoStatsShutdown waits for all auto-stats tasks to shut down.
 func (r *Refresher) WaitForAutoStatsShutdown(ctx context.Context) {
-	log.Infof(ctx, "starting to wait for auto-stats tasks to shut down")
-	defer log.Infof(ctx, "auto-stats tasks successfully shut down")
+	log.Dev.Infof(ctx, "starting to wait for auto-stats tasks to shut down")
+	defer log.Dev.Infof(ctx, "auto-stats tasks successfully shut down")
 	r.startedTasksWG.Wait()
 }
 
@@ -711,7 +711,7 @@ func (r *Refresher) Start(
 				r.settingOverrides[clusterSettingOverride.tableID] = clusterSettingOverride.settings
 
 			case <-r.drainAutoStats:
-				log.Infof(ctx, "draining auto stats refresher")
+				log.Dev.Infof(ctx, "draining auto stats refresher")
 				return
 			case <-ctx.Done():
 				return
@@ -750,10 +750,10 @@ func (r *Refresher) Start(
 				case <-intervalChangedCh:
 					continue
 				case <-r.drainAutoStats:
-					log.Infof(ctx, "draining stats garbage collector")
+					log.Dev.Infof(ctx, "draining stats garbage collector")
 					return
 				case <-stopper.ShouldQuiesce():
-					log.Infof(ctx, "quiescing stats garbage collector")
+					log.Dev.Infof(ctx, "quiescing stats garbage collector")
 					return
 				}
 			}
@@ -762,10 +762,10 @@ func (r *Refresher) Start(
 			case <-intervalChangedCh:
 				continue
 			case <-r.drainAutoStats:
-				log.Infof(ctx, "draining stats garbage collector")
+				log.Dev.Infof(ctx, "draining stats garbage collector")
 				return
 			case <-stopper.ShouldQuiesce():
-				log.Infof(ctx, "quiescing stats garbage collector")
+				log.Dev.Infof(ctx, "quiescing stats garbage collector")
 				return
 			}
 			if err := deleteStatsForDroppedTables(ctx, r.internalDB, statsGarbageCollectionLimit.Get(&r.st.SV)); err != nil {
@@ -1058,7 +1058,7 @@ func (r *Refresher) refreshStats(
 	)
 
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.Infof(ctx, "automatically executing %q", stmt)
+		log.Dev.Infof(ctx, "automatically executing %q", stmt)
 	}
 	_ /* rows */, err := r.internalDB.Executor().Exec(
 		ctx,

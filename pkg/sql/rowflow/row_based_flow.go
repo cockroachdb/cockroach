@@ -382,7 +382,7 @@ func (f *rowBasedFlow) setupInboundStream(
 			return err
 		}
 		if log.V(2) {
-			log.Infof(ctx, "set up inbound stream %d", sid)
+			log.Dev.Infof(ctx, "set up inbound stream %d", sid)
 		}
 		f.AddRemoteStream(sid, flowinfra.NewInboundStreamInfo(
 			flowinfra.RowInboundStreamHandler{

@@ -1329,7 +1329,7 @@ func getSummedNetStats(ctx context.Context) (netCounters, error) {
 	}
 
 	if log.V(3) {
-		log.Infof(ctx, "tcp stats: Tcp: %+v TcpExt: %+v", mTCP, mTCPExt)
+		log.Dev.Infof(ctx, "tcp stats: Tcp: %+v TcpExt: %+v", mTCP, mTCPExt)
 	}
 
 	return netCounters{

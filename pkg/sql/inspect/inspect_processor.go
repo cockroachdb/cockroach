@@ -87,7 +87,7 @@ func (p *inspectProcessor) Run(ctx context.Context, output execinfra.RowReceiver
 // Each span is read from a buffered channel and passed to processSpan.
 // The function blocks until all spans are processed or an error occurs.
 func (p *inspectProcessor) runInspect(ctx context.Context, output execinfra.RowReceiver) error {
-	log.Infof(ctx, "INSPECT processor started processorID=%d concurrency=%d", p.processorID, p.concurrency)
+	log.Dev.Infof(ctx, "INSPECT processor started processorID=%d concurrency=%d", p.processorID, p.concurrency)
 
 	group := ctxgroup.WithContext(ctx)
 

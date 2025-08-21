@@ -226,7 +226,7 @@ func (sq *splitQueue) process(
 		// attempts because splits can race with other descriptor modifications.
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be split.
-		log.Infof(ctx, "split saw concurrent descriptor modification; maybe retrying; err: %v", err)
+		log.Dev.Infof(ctx, "split saw concurrent descriptor modification; maybe retrying; err: %v", err)
 		sq.MaybeAddAsync(ctx, r, sq.store.Clock().NowAsClockTimestamp())
 		return false, nil
 	}
@@ -266,9 +266,9 @@ func (sq *splitQueue) processAttemptWithTracing(
 		}
 	}
 	if err != nil {
-		log.Infof(ctx, "error during range split: %v%s", err, traceOutput)
+		log.Dev.Infof(ctx, "error during range split: %v%s", err, traceOutput)
 	} else if exceededDuration {
-		log.Infof(ctx, "range split took %s, exceeding threshold of %s%s",
+		log.Dev.Infof(ctx, "range split took %s, exceeding threshold of %s%s",
 			processDuration, sq.logTracesThreshold, traceOutput)
 	}
 

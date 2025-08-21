@@ -151,7 +151,7 @@ func createTypeChangeJobFromDesc(
 	if _, err := jr.CreateJobWithTxn(ctx, record, jobID, txn); err != nil {
 		return err
 	}
-	log.Infof(ctx, "queued new type schema change job %d for type %d", jobID, typ.GetID())
+	log.Dev.Infof(ctx, "queued new type schema change job %d for type %d", jobID, typ.GetID())
 	return nil
 }
 
@@ -224,7 +224,7 @@ func createSchemaChangeJobsFromMutations(
 		}
 		mutationJobs = append(mutationJobs, newMutationJob)
 
-		log.Infof(ctx, "queued new schema change job %d for table %d, mutation %d",
+		log.Dev.Infof(ctx, "queued new schema change job %d for table %d, mutation %d",
 			jobID, tableDesc.ID, mutationID)
 	}
 	tableDesc.MutationJobs = mutationJobs

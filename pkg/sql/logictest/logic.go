@@ -1208,7 +1208,7 @@ func (t *logicTest) outf(format string, args ...interface{}) {
 	if !t.verbose {
 		return
 	}
-	log.Infof(context.Background(), format, args...)
+	log.Dev.Infof(context.Background(), format, args...)
 	msg := fmt.Sprintf(format, args...)
 	now := timeutil.Now().Format("15:04:05")
 	fmt.Printf("[%s] %s\n", now, msg)
@@ -2418,7 +2418,7 @@ func (t *logicTest) maybeBackupRestore(
 		t.setSessionUser(oldUser, oldNodeIdx, false /* newSession */)
 	}()
 
-	log.Info(context.Background(), "Running cluster backup and restore")
+	log.Dev.Info(context.Background(), "Running cluster backup and restore")
 
 	// To restore the same state in for the logic test, we need to restore the
 	// data and the session state. The session state includes things like session
@@ -2514,12 +2514,12 @@ func (t *logicTest) maybeBackupRestore(
 					// First try setting the cluster setting as a string.
 					if _, err := t.db.Exec(fmt.Sprintf("SET %s='%s'", key, value)); err != nil {
 						// If it fails, try setting the value as an int.
-						log.Infof(context.Background(), "setting session variable as string failed (err: %v), trying as int", pretty.Formatter(err))
+						log.Dev.Infof(context.Background(), "setting session variable as string failed (err: %v), trying as int", pretty.Formatter(err))
 						if _, err := t.db.Exec(fmt.Sprintf("SET %s=%s", key, value)); err != nil {
 							// Some cluster settings can't be set at all, so ignore these errors.
 							// If a setting that we needed could not be restored, we expect the
 							// logic test to fail and let us know.
-							log.Infof(context.Background(), "setting session variable as int failed: %v (continuing anyway)", pretty.Formatter(err))
+							log.Dev.Infof(context.Background(), "setting session variable as int failed: %v (continuing anyway)", pretty.Formatter(err))
 							continue
 						}
 					}
@@ -3617,7 +3617,7 @@ func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (b
 		var changed bool
 		execSQL, changed = randgen.ApplyString(t.rng, execSQL, randgen.ColumnFamilyMutator)
 		if changed {
-			log.Infof(context.Background(), "Rewrote test statement:\n%s", execSQL)
+			log.Dev.Infof(context.Background(), "Rewrote test statement:\n%s", execSQL)
 			if *showSQL {
 				t.outf("rewrote:\n%s\n", execSQL)
 			}

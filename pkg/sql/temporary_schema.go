@@ -450,7 +450,7 @@ func makeTemporaryObjectCleanerMetrics() *temporaryObjectCleanerMetrics {
 func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	ctx context.Context, closerCh <-chan struct{},
 ) error {
-	defer log.Infof(ctx, "completed temporary object cleanup job")
+	defer log.Dev.Infof(ctx, "completed temporary object cleanup job")
 	// Wrap the retry functionality with the default arguments.
 	retryFunc := func(ctx context.Context, do func() error) error {
 		return retry.WithMaxAttempts(
@@ -485,7 +485,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		// For the system tenant we will check if the lease is held. For tenants
 		// every single POD will try to execute this clean up logic.
 		if !isLeaseHolder {
-			log.Infof(ctx, "skipping temporary object cleanup run as it is not the leaseholder")
+			log.Dev.Infof(ctx, "skipping temporary object cleanup run as it is not the leaseholder")
 			return nil
 		}
 	}
@@ -503,7 +503,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	c.metrics.ActiveCleaners.Inc(1)
 	defer c.metrics.ActiveCleaners.Dec(1)
 
-	log.Infof(ctx, "running temporary object cleanup background job")
+	log.Dev.Infof(ctx, "running temporary object cleanup background job")
 	var sessionIDs map[clusterunique.ID]struct{}
 	if err := c.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		sessionIDs = make(map[clusterunique.ID]struct{})
@@ -553,10 +553,10 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		return err
 	}
 
-	log.Infof(ctx, "found %d temporary schemas", len(sessionIDs))
+	log.Dev.Infof(ctx, "found %d temporary schemas", len(sessionIDs))
 
 	if len(sessionIDs) == 0 {
-		log.Infof(ctx, "early exiting temporary schema cleaner as no temporary schemas were found")
+		log.Dev.Infof(ctx, "early exiting temporary schema cleaner as no temporary schemas were found")
 		return nil
 	}
 
@@ -638,7 +638,7 @@ func (c *TemporaryObjectCleaner) Start(ctx context.Context, stopper *stop.Stoppe
 				c.testingKnobs.OnTempObjectsCleanupDone()
 			}
 			nextTick = nextTick.Add(TempObjectCleanupInterval.Get(&c.settings.SV))
-			log.Infof(ctx, "temporary object cleaner next scheduled to run at %s", nextTick)
+			log.Dev.Infof(ctx, "temporary object cleaner next scheduled to run at %s", nextTick)
 		}
 	})
 }

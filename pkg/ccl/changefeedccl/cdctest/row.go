@@ -95,10 +95,10 @@ func MakeRangeFeedValueReaderExtended(
 			case r := <-rows:
 				rowKey := r.Key.String() + r.Value.String()
 				if _, isDup := dups[rowKey]; isDup {
-					log.Infof(context.Background(), "Skip duplicate %s", roachpb.PrettyPrintKey(nil, r.Key))
+					log.Dev.Infof(context.Background(), "Skip duplicate %s", roachpb.PrettyPrintKey(nil, r.Key))
 					continue
 				}
-				log.Infof(context.Background(), "Read row %s", roachpb.PrettyPrintKey(nil, r.Key))
+				log.Dev.Infof(context.Background(), "Read row %s", roachpb.PrettyPrintKey(nil, r.Key))
 				dups[rowKey] = struct{}{}
 				return r, nil
 			case d := <-deleteRangeC:

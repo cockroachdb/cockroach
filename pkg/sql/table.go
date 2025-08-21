@@ -87,7 +87,7 @@ func (p *planner) createDropDatabaseJob(
 		NonCancelable: true,
 	}
 	jobID := p.extendedEvalCtx.QueueJob(jobRecord)
-	log.Infof(ctx, "queued new drop database job %d for database %d", jobID, databaseID)
+	log.Dev.Infof(ctx, "queued new drop database job %d for database %d", jobID, databaseID)
 	return nil
 }
 
@@ -114,7 +114,7 @@ func (p *planner) createNonDropDatabaseChangeJob(
 		NonCancelable: true,
 	}
 	jobID := p.extendedEvalCtx.QueueJob(jobRecord)
-	log.Infof(ctx, "queued new database schema change job %d for database %d", jobID, databaseID)
+	log.Dev.Infof(ctx, "queued new database schema change job %d for database %d", jobID, databaseID)
 	return nil
 }
 
@@ -201,7 +201,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		if mutationID != descpb.InvalidMutationID {
 			tableDesc.MutationJobs = append(tableDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
 				MutationID: mutationID, JobID: newRecord.JobID})
-			log.Infof(ctx, "queued new schema-change job %d for table %d, mutation %d",
+			log.Dev.Infof(ctx, "queued new schema-change job %d for table %d, mutation %d",
 				newRecord.JobID, tableDesc.ID, mutationID)
 		}
 		return nil
@@ -244,7 +244,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	if record.Description != jobDesc {
 		record.AppendDescription(jobDesc)
 	}
-	log.Infof(ctx, "job %d: updated with schema change for table %d, mutation %d",
+	log.Dev.Infof(ctx, "job %d: updated with schema change for table %d, mutation %d",
 		record.JobID, tableDesc.ID, mutationID)
 	return nil
 }

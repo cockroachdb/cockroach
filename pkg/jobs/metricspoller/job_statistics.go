@@ -182,7 +182,7 @@ func manageProtectedTimestamps(ctx context.Context, execCtx sql.JobExecContext) 
 			// If we fail to process one record, we should still try to process
 			// subsequent records, therefore, just log the error instead of returning
 			// early.
-			log.Infof(ctx, "could not process pts record id %d: %s", scannedRec.ID, err.Error())
+			log.Dev.Infof(ctx, "could not process pts record id %d: %s", scannedRec.ID, err.Error())
 		}
 	}
 

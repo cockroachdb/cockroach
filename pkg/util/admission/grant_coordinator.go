@@ -295,7 +295,7 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 	if log.V(1) {
 		if coord.lastCPULoadSamplePeriod != 0 && coord.lastCPULoadSamplePeriod != samplePeriod &&
 			KVAdmissionControlEnabled.Get(&coord.settings.SV) {
-			log.Infof(ctx, "CPULoad switching to period %s", samplePeriod.String())
+			log.Dev.Infof(ctx, "CPULoad switching to period %s", samplePeriod.String())
 		}
 	}
 	coord.lastCPULoadSamplePeriod = samplePeriod

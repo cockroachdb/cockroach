@@ -6058,7 +6058,7 @@ SELECT
 					return nil, errors.Newf("expected string value, got %T", args[0])
 				}
 				msg := string(s)
-				log.Infof(ctx, "crdb_internal.log(): %s", msg)
+				log.Dev.Infof(ctx, "crdb_internal.log(): %s", msg)
 				return tree.DVoidDatum, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
@@ -7480,7 +7480,7 @@ Parameters:` + randgencfg.ConfigDoc,
 				if ek, ok := storage.DecodeEngineKey(endKey); !ok || ek.Validate() != nil {
 					endKey = storage.EncodeMVCCKey(storage.MVCCKey{Key: endKey})
 				}
-				log.Infof(ctx, "crdb_internal.compact_engine_span called for nodeID=%d, storeID=%d, range[startKey=%s, endKey=%s]", nodeID, storeID, startKey, endKey)
+				log.Dev.Infof(ctx, "crdb_internal.compact_engine_span called for nodeID=%d, storeID=%d, range[startKey=%s, endKey=%s]", nodeID, storeID, startKey, endKey)
 				if err := evalCtx.CompactEngineSpan(
 					ctx, nodeID, storeID, startKey, endKey); err != nil {
 					return nil, err

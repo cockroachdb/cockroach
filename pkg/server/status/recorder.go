@@ -731,7 +731,7 @@ func (mr *MetricsRecorder) WriteNodeStatus(
 		if err != nil {
 			log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
 		}
-		log.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
+		log.Dev.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
 	}
 	return nil
 }
@@ -881,7 +881,7 @@ func GetTotalMemory(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	if warning != "" {
-		log.Infof(ctx, "%s", warning)
+		log.Dev.Infof(ctx, "%s", warning)
 	}
 	return memory, nil
 }

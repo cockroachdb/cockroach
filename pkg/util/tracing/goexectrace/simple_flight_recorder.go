@@ -152,7 +152,7 @@ func (sfr *SimpleFlightRecorder) Start(ctx context.Context, stopper *stop.Stoppe
 							log.Warningf(ctx, "error while stopping flight recorder: %v", err)
 						}
 						sfr.enabled.Store(false)
-						log.Infof(ctx, "flight recorder stopped")
+						log.Dev.Infof(ctx, "flight recorder stopped")
 					}
 					// Disabled. Check again soon.
 					t.Reset(sfr.enabledCheckInterval)
@@ -168,7 +168,7 @@ func (sfr *SimpleFlightRecorder) Start(ctx context.Context, stopper *stop.Stoppe
 						continue
 					}
 					sfr.enabled.Store(true)
-					log.Infof(ctx, "flight recorder started")
+					log.Dev.Infof(ctx, "flight recorder started")
 				}
 				filename := sfr.TimestampedFilename()
 				destFile, err := os.Create(filename)

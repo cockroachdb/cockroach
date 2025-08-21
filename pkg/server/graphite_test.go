@@ -44,10 +44,10 @@ func TestGraphite(t *testing.T) {
 			t.Fatal("failed to open port", err)
 		}
 		p := lis.Addr().String()
-		log.Infof(ctx, "Open port %s and listening", p)
+		log.Dev.Infof(ctx, "Open port %s and listening", p)
 
 		defer func() {
-			log.Infof(ctx, "Close port %s", p)
+			log.Dev.Infof(ctx, "Close port %s", p)
 			if err := lis.Close(); err != nil {
 				t.Fatal("failed to close port", err)
 			}
@@ -57,12 +57,12 @@ func TestGraphite(t *testing.T) {
 		if _, e := lis.Accept(); e != nil {
 			t.Fatal("failed to receive connection", e)
 		} else {
-			log.Info(ctx, "received connection")
+			log.Dev.Info(ctx, "received connection")
 		}
 	}
 
 	listen()
-	log.Info(ctx, "Make sure things don't fall apart when endpoint goes away.")
+	log.Dev.Info(ctx, "Make sure things don't fall apart when endpoint goes away.")
 	time.Sleep(5 * interval)
 	listen()
 }

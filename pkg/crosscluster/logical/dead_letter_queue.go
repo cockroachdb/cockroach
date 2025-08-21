@@ -120,7 +120,7 @@ func (dlq *noopDeadLetterQueueClient) Log(
 		return errors.Wrap(err, "failed to marshal kv event")
 	}
 
-	log.Infof(ctx, `ingestion_job_id: %d,  
+	log.Dev.Infof(ctx, `ingestion_job_id: %d,  
 		table_id: %d, 
 		dlq_reason: (%s) %s,
 		mutation_type: %s,  

@@ -523,10 +523,10 @@ func main() {
 		var exitStatus int
 		select {
 		case s := <-signalCh:
-			log.Infof(context.Background(), "signal received: %v", s)
+			log.Dev.Infof(context.Background(), "signal received: %v", s)
 			exitStatus = 1
 		case <-time.After(*duration):
-			log.Infof(context.Background(), "finished run of: %s", *duration)
+			log.Dev.Infof(context.Background(), "finished run of: %s", *duration)
 		}
 		c.Close()
 		a.finalStatus()

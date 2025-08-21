@@ -509,10 +509,10 @@ func loadSummaryForDimension(
 	defer func() {
 		if log.V(2) {
 			if storeID == 0 {
-				log.Infof(context.Background(), "n%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
+				log.Dev.Infof(context.Background(), "n%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
 					nodeID, dim, load, meanLoad, fractionAbove, summary)
 			} else {
-				log.Infof(context.Background(), "s%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
+				log.Dev.Infof(context.Background(), "s%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
 					storeID, dim, load, meanLoad, fractionAbove, summary)
 			}
 		}

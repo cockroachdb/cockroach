@@ -507,7 +507,7 @@ func insertEventRecords(
 			// The VDepth() call ensures that we are matching the vmodule
 			// setting to where the depth is equal to 1 in the caller stack.
 			for i := range entries {
-				log.InfofDepth(ctx, depth, "SQL event: payload %+v", entries[i])
+				log.Dev.InfofDepth(ctx, depth, "SQL event: payload %+v", entries[i])
 			}
 		}
 	}

@@ -454,7 +454,7 @@ func (i InfoStorage) doWrite(
 			return err
 		}
 	} else {
-		log.VInfof(ctx, 1, "job %d: writing to the system.job_info with no session ID", j.ID())
+		log.Dev.VInfof(ctx, 1, "job %d: writing to the system.job_info with no session ID", j.ID())
 	}
 
 	return fn(ctx, j, i.txn)

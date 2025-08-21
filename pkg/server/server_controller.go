@@ -273,7 +273,7 @@ func (c *serverController) startMissingServers(
 
 		name := t.Name
 		if _, ok := c.mu.servers[name]; !ok {
-			log.Infof(ctx, "tenant %q has changed service mode, should now start", name)
+			log.Dev.Infof(ctx, "tenant %q has changed service mode, should now start", name)
 			// Mark the server for async creation.
 			if _, err := c.createServerEntryLocked(ctx, name); err != nil {
 				return err
@@ -409,7 +409,7 @@ func (c *serverController) newServerForOrchestrator(
 // Close implements the stop.Closer interface.
 func (c *serverController) Close() {
 	ctx := c.AnnotateCtx(context.Background())
-	log.Infof(ctx, "server controller shutting down")
+	log.Dev.Infof(ctx, "server controller shutting down")
 	entries := c.getAllEntries()
 	// Request immediate shutdown. This is probably not needed; the
 	// server should already be sensitive to the parent stopper
@@ -418,7 +418,7 @@ func (c *serverController) Close() {
 		e.requestImmediateShutdown(ctx)
 	}
 
-	log.Infof(ctx, "waiting for tenant servers to report stopped")
+	log.Dev.Infof(ctx, "waiting for tenant servers to report stopped")
 	for _, e := range entries {
 		<-e.stopped()
 	}
@@ -437,7 +437,7 @@ func (c *serverController) drain(ctx context.Context) (stillRunning int) {
 		select {
 		case <-e.stopped():
 		default:
-			log.Infof(ctx, "server for tenant %q still running", e.nameContainer())
+			log.Dev.Infof(ctx, "server for tenant %q still running", e.nameContainer())
 			notStopped++
 		}
 	}

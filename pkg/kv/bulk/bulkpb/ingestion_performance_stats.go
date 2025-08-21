@@ -318,7 +318,7 @@ func timeString(b *strings.Builder, key string, time time.Duration) {
 
 // LogTimings logs the timing ingestion stats.
 func (s *IngestionPerformanceStats) LogTimings(ctx context.Context, name, action string) {
-	log.Infof(ctx,
+	log.Dev.Infof(ctx,
 		"%s adder %s; ingested %s: %s filling; %v sorting; %v / %v flushing; %v sending; %v splitting; %d; %v scattering, %d, %v; %v commit-wait",
 		name,
 		redact.Safe(action),
@@ -341,7 +341,7 @@ func (s *IngestionPerformanceStats) LogTimings(ctx context.Context, name, action
 func (s *IngestionPerformanceStats) LogFlushes(
 	ctx context.Context, name, action string, bufSize int64, span roachpb.Span,
 ) {
-	log.Infof(ctx,
+	log.Dev.Infof(ctx,
 		"%s adder %s; flushed into %s %d times, %d due to buffer size (%s); flushing chunked into %d files (%d for ranges, %d for sst size) +%d split-retries",
 		name,
 		redact.Safe(action),
@@ -378,7 +378,7 @@ func (s *IngestionPerformanceStats) LogPerStoreTimings(ctx context.Context, name
 		fmt.Fprintf(&sb, "%d: %s;", id, timing(s.SendWaitByStore[id]))
 
 	}
-	log.Infof(ctx, "%s waited on sending to: %s", name, redact.Safe(sb.String()))
+	log.Dev.Infof(ctx, "%s waited on sending to: %s", name, redact.Safe(sb.String()))
 }
 
 type sz int64

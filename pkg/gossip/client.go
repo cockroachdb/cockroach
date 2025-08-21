@@ -124,7 +124,7 @@ func (c *client) startLocked(
 		}
 
 		// Start gossiping.
-		log.Infof(ctx, "started gossip client to n%d (%s)", c.peerID, c.addr)
+		log.Dev.Infof(ctx, "started gossip client to n%d (%s)", c.peerID, c.addr)
 		if err := c.gossip(ctx, g, stream, stopper, &wg); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
 				peerID, addr := func() (roachpb.NodeID, net.Addr) {
@@ -133,9 +133,9 @@ func (c *client) startLocked(
 					return c.peerID, c.addr
 				}()
 				if peerID != 0 {
-					log.Infof(ctx, "closing client to n%d (%s): %s", peerID, addr, err)
+					log.Dev.Infof(ctx, "closing client to n%d (%s): %s", peerID, addr, err)
 				} else {
-					log.Infof(ctx, "closing client to %s: %s", addr, err)
+					log.Dev.Infof(ctx, "closing client to %s: %s", addr, err)
 				}
 			}
 		}
@@ -218,9 +218,9 @@ func (c *client) sendGossip(g *Gossip, stream RPCGossip_GossipClient, firstReq b
 		if log.V(1) {
 			ctx := c.AnnotateCtx(stream.Context())
 			if c.peerID != 0 {
-				log.Infof(ctx, "sending %s to n%d (%s)", extractKeys(args.Delta), c.peerID, c.addr)
+				log.Dev.Infof(ctx, "sending %s to n%d (%s)", extractKeys(args.Delta), c.peerID, c.addr)
 			} else {
-				log.Infof(ctx, "sending %s to %s", extractKeys(args.Delta), c.addr)
+				log.Dev.Infof(ctx, "sending %s to %s", extractKeys(args.Delta), c.addr)
 			}
 		}
 		g.mu.Unlock()
@@ -253,7 +253,7 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 		}
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof(ctx, "received %s from n%d (%d fresh)", extractKeys(reply.Delta), reply.NodeID, freshCount)
+				log.Dev.Infof(ctx, "received %s from n%d (%d fresh)", extractKeys(reply.Delta), reply.NodeID, freshCount)
 			}
 		}
 		g.maybeTightenLocked()
@@ -409,7 +409,7 @@ func (c *client) dial(ctx context.Context, rpcCtx *rpc.Context) (*grpc.ClientCon
 	} else {
 		// TODO(baptist): Use this as a temporary connection for getting
 		// onto gossip and then replace with a validated connection.
-		log.Infof(ctx, "unvalidated bootstrap gossip dial to %s", c.addr)
+		log.Dev.Infof(ctx, "unvalidated bootstrap gossip dial to %s", c.addr)
 		conn = rpcCtx.GRPCUnvalidatedDial(c.addr.String(), c.locality)
 	}
 
@@ -424,7 +424,7 @@ func (c *client) drpcDial(ctx context.Context, rpcCtx *rpc.Context) (drpc.Conn, 
 	} else {
 		// TODO(baptist): Use this as a temporary connection for getting
 		// onto gossip and then replace with a validated connection.
-		log.Infof(ctx, "unvalidated bootstrap gossip dial to %s", c.addr)
+		log.Dev.Infof(ctx, "unvalidated bootstrap gossip dial to %s", c.addr)
 		conn = rpcCtx.DRPCUnvalidatedDial(c.addr.String(), c.locality)
 	}
 

@@ -108,7 +108,7 @@ func (sa SteadyStateAssertion) Assert(
 	m := h.Recorded
 	ticks := len(m)
 	if sa.Ticks > ticks {
-		log.VInfof(ctx, 2,
+		log.Dev.VInfof(ctx, 2,
 			"The history to run assertions against (%d) is shorter than "+
 				"the assertion duration (%d)", ticks, sa.Ticks)
 		return true, ""
@@ -195,7 +195,7 @@ func (ba BalanceAssertion) Assert(
 	m := h.Recorded
 	ticks := len(m)
 	if ba.Ticks > ticks {
-		log.VInfof(ctx, 2,
+		log.Dev.VInfof(ctx, 2,
 			"The history to run assertions against (%d) is shorter than "+
 				"the assertion duration (%d)", ticks, ba.Ticks)
 		return true, ""
@@ -217,7 +217,7 @@ func (ba BalanceAssertion) Assert(
 		max, _ := stats.Max(tickStats)
 		maxMeanRatio := max / mean
 
-		log.VInfof(ctx, 2,
+		log.Dev.VInfof(ctx, 2,
 			"Balance assertion: stat=%s, max/mean=%.2f, threshold=%+v raw=%v",
 			ba.Stat, maxMeanRatio, ba.Threshold, tickStats)
 		if ba.Threshold.isViolated(maxMeanRatio) {
@@ -258,7 +258,7 @@ func (sa StoreStatAssertion) Assert(
 	m := h.Recorded
 	ticks := len(m)
 	if sa.Ticks > ticks {
-		log.VInfof(ctx, 2,
+		log.Dev.VInfof(ctx, 2,
 			"The history to run assertions against (%d) is shorter than "+
 				"the assertion duration (%d)", ticks, sa.Ticks)
 		return true, ""

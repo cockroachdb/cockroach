@@ -602,7 +602,7 @@ func (r *replicaGCer) send(ctx context.Context, req kvpb.GCRequest) error {
 	b.AdmissionHeader = gcAdmissionHeader(r.repl.ClusterSettings())
 
 	if err := r.repl.store.cfg.DB.Run(ctx, &b); err != nil {
-		log.Infof(ctx, "%s", err)
+		log.Dev.Infof(ctx, "%s", err)
 		return err
 	}
 	return nil
@@ -783,9 +783,9 @@ func (mgcq *mvccGCQueue) process(
 	if scoreAfter.ShouldQueue {
 		// The scores are very long, so splitting into multiple lines manually for
 		// readability.
-		log.Infof(ctx, "GC still needed following GC, recomputing MVCC stats")
-		log.Infof(ctx, "old score %s", r)
-		log.Infof(ctx, "new score %s", scoreAfter)
+		log.Dev.Infof(ctx, "GC still needed following GC, recomputing MVCC stats")
+		log.Dev.Infof(ctx, "old score %s", r)
+		log.Dev.Infof(ctx, "new score %s", scoreAfter)
 		req := kvpb.RecomputeStatsRequest{
 			RequestHeader: kvpb.RequestHeader{Key: desc.StartKey.AsRawKey()},
 		}
@@ -835,7 +835,7 @@ func (mgcq *mvccGCQueue) postProcessScheduled(
 			mgcq.scanReplicasForHiPriGCHints(ctx, processedReplica.GetRangeID())
 			return ctx.Err()
 		}); err != nil {
-			log.Infof(ctx, "failed to start mvcc gc scan for range delete hints, error: %s", err)
+			log.Dev.Infof(ctx, "failed to start mvcc gc scan for range delete hints, error: %s", err)
 		}
 		// Set flag indicating that we are already collecting high priority to avoid
 		// rescanning and re-enqueueing ranges multiple times.
@@ -887,7 +887,7 @@ func (mgcq *mvccGCQueue) scanReplicasForHiPriGCHints(
 		}
 		return true
 	})
-	log.Infof(ctx, "mvcc gc scan for range delete hints found %d replicas", foundReplicas)
+	log.Dev.Infof(ctx, "mvcc gc scan for range delete hints found %d replicas", foundReplicas)
 }
 
 // timer returns a constant duration to space out GC processing

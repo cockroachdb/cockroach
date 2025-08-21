@@ -282,9 +282,9 @@ func TestVecIndexConcurrency(t *testing.T) {
 	info := log.Every(time.Second)
 	metrics := mgr.Metrics().(*vecindex.Metrics)
 	logProgress := func() {
-		log.Infof(ctx, "%d vectors inserted", insertCount.Load())
-		log.Infof(ctx, "%d successful splits", metrics.SuccessfulSplits.Count())
-		log.Infof(ctx, "%d pending splits/merges", metrics.PendingSplitsMerges.Value())
+		log.Dev.Infof(ctx, "%d vectors inserted", insertCount.Load())
+		log.Dev.Infof(ctx, "%d successful splits", metrics.SuccessfulSplits.Count())
+		log.Dev.Infof(ctx, "%d pending splits/merges", metrics.PendingSplitsMerges.Value())
 	}
 
 	vecOffset := 0

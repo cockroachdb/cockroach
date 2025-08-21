@@ -715,7 +715,7 @@ func ingestWithRetry(
 			// progress state.
 			curProgress := getFractionCompleted(job)
 			if madeProgress := curProgress - lastProgress; madeProgress >= 0.01 {
-				log.Infof(ctx, "import made %d%% progress, resetting retry duration", int(math.Round(100*madeProgress)))
+				log.Dev.Infof(ctx, "import made %d%% progress, resetting retry duration", int(math.Round(100*madeProgress)))
 				lastProgress = curProgress
 				lastProgressChange = timeutil.Now()
 				r.Reset()
@@ -834,12 +834,12 @@ func (r *importResumer) OnFailOrCancel(
 	// If the import completed preparation and started writing, verify it has
 	// stopped writing before proceeding to revert it.
 	if details.PrepareComplete {
-		log.Infof(ctx, "need to verify that no nodes are still importing since job had started writing...")
+		log.Dev.Infof(ctx, "need to verify that no nodes are still importing since job had started writing...")
 		const maxWait = time.Minute * 5
 		if err := ingeststopped.WaitForNoIngestingNodes(ctx, p, r.job, maxWait); err != nil {
 			log.Errorf(ctx, "unable to verify that attempted IMPORT job %d had stopped writing before reverting after %s: %v", r.job.ID(), maxWait, err)
 		} else {
-			log.Infof(ctx, "verified no nodes still ingesting on behalf of job %d", r.job.ID())
+			log.Dev.Infof(ctx, "verified no nodes still ingesting on behalf of job %d", r.job.ID())
 		}
 
 	}

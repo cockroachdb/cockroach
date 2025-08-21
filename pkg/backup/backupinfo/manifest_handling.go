@@ -167,7 +167,7 @@ func ReadBackupManifestFromStore(
 		// If we did not find `BACKUP_METADATA` we look for the
 		// `BACKUP_MANIFEST` file as it is possible the backup was created by a
 		// pre-23.1 node.
-		log.VInfof(ctx, 2, "could not find BACKUP_METADATA, falling back to BACKUP_MANIFEST")
+		log.Dev.VInfof(ctx, 2, "could not find BACKUP_METADATA, falling back to BACKUP_MANIFEST")
 		backupManifest, backupManifestMemSize, backupManifestErr := ReadBackupManifest(ctx, mem, exportStore,
 			backupbase.BackupManifestName, encryption, kmsEnv)
 		if backupManifestErr != nil {
@@ -180,12 +180,12 @@ func ReadBackupManifestFromStore(
 			//
 			// TODO(adityamaru): Remove this logic once we disallow restores beyond
 			// the binary upgrade compatibility window.
-			log.VInfof(ctx, 2, "could not find BACKUP_MANIFEST, falling back to BACKUP")
+			log.Dev.VInfof(ctx, 2, "could not find BACKUP_MANIFEST, falling back to BACKUP")
 			oldBackupManifest, oldBackupManifestMemSize, oldBackupManifestErr := ReadBackupManifest(ctx, mem, exportStore,
 				backupbase.BackupOldManifestName, encryption, kmsEnv)
 			if oldBackupManifestErr != nil {
 				if errors.Is(oldBackupManifestErr, cloud.ErrFileDoesNotExist) {
-					log.VInfof(ctx, 2, "could not find any of the supported backup metadata files")
+					log.Dev.VInfof(ctx, 2, "could not find any of the supported backup metadata files")
 					return backuppb.BackupManifest{}, 0,
 						errors.Wrapf(oldBackupManifestErr, "could not find BACKUP manifest file in any of the known locations: %s, %s, %s",
 							backupbase.BackupMetadataName, backupbase.BackupManifestName, backupbase.BackupOldManifestName)

@@ -167,7 +167,7 @@ func TestLockfreeTrackerRandomStress(t *testing.T) {
 	// hours of stressrace on GCE worker (and it failed once on CI stress too).
 	// Figure out why.
 	maxToleratedErrorMillis := 3 * c.maxEvaluationTime.Milliseconds()
-	log.Infof(ctx, "maximum lower bound error: %dms. maximum request evaluation time: %s",
+	log.Dev.Infof(ctx, "maximum lower bound error: %dms. maximum request evaluation time: %s",
 		maxOvershotMillis, c.maxEvaluationTime)
 	require.Lessf(t, maxOvershotMillis, maxToleratedErrorMillis,
 		"maximum tracker lowerbound error was %dms, above maximum tolerated %dms",
@@ -446,7 +446,7 @@ func (c *trackerChecker) run(ctx context.Context) error {
 		if c.maxOvershotNanos < overshotNanos {
 			c.maxOvershotNanos = overshotNanos
 		}
-		log.VInfof(ctx, 1, "lower bound error: %dms", overshotNanos/1000000)
+		log.Dev.VInfof(ctx, 1, "lower bound error: %dms", overshotNanos/1000000)
 	}
 }
 
@@ -517,7 +517,7 @@ func benchmarkTracker(ctx context.Context, b *testing.B, t Tracker) {
 				toks[i] = toks[i][:0]
 			}
 			mu.Unlock()
-			log.VInfof(ctx, 1, "cleared %d reqs", n)
+			log.Dev.VInfof(ctx, 1, "cleared %d reqs", n)
 		}
 	}()
 

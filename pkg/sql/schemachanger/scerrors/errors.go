@@ -40,7 +40,7 @@ func StartEventf(
 	// Use depth=1 since we want to log as the caller of StartEventf.
 	const depth = 1
 	if log.VDepth(level, depth) {
-		log.InfofDepth(ctx, depth, "%s", msg)
+		log.Dev.InfofDepth(ctx, depth, "%s", msg)
 	}
 	return EventLogger{
 		msg:   msg,
@@ -73,7 +73,7 @@ func (el EventLogger) HandlePanicAndLogError(ctx context.Context, err *error) {
 	switch {
 	case *err == nil:
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.InfofDepth(ctx, depth, "done %s in %s", el.msg, redact.Safe(timeutil.Since(el.start)))
+			log.Dev.InfofDepth(ctx, depth, "done %s in %s", el.msg, redact.Safe(timeutil.Since(el.start)))
 		}
 	case HasNotImplemented(*err):
 		log.VEventfDepth(ctx, depth, 1, "declarative schema changer does not support %s: %v", el.msg, *err)

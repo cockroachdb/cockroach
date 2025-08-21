@@ -594,7 +594,7 @@ func (n *nullSink) EmitRow(
 		return err
 	}
 	if log.V(2) {
-		log.Infof(ctx, "emitting row %s@%s", key, updated.String())
+		log.Dev.Infof(ctx, "emitting row %s@%s", key, updated.String())
 	}
 	return nil
 }
@@ -608,7 +608,7 @@ func (n *nullSink) EmitResolvedTimestamp(
 		return err
 	}
 	if log.V(2) {
-		log.Infof(ctx, "emitting resolved %s", resolved.String())
+		log.Dev.Infof(ctx, "emitting resolved %s", resolved.String())
 	}
 
 	return nil
@@ -618,7 +618,7 @@ func (n *nullSink) EmitResolvedTimestamp(
 func (n *nullSink) Flush(ctx context.Context) error {
 	defer n.metrics.recordFlushRequestCallback()()
 	if log.V(2) {
-		log.Info(ctx, "flushing")
+		log.Dev.Info(ctx, "flushing")
 	}
 
 	return nil

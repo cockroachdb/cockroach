@@ -82,7 +82,7 @@ func maybeLogRangeLogEvent(ctx context.Context, event kvserverpb.RangeLogEvent) 
 	if event.Info != nil {
 		info = event.Info.String()
 	}
-	log.Infof(ctx, "Range Event: %q, range: %d, info: %s",
+	log.Dev.Infof(ctx, "Range Event: %q, range: %d, info: %s",
 		event.EventType, event.RangeID, info)
 }
 

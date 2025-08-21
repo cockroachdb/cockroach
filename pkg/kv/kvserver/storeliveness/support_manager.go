@@ -144,11 +144,11 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 		// uses a map to avoid duplicates, and the requesterStateHandler's
 		// addStore checks if the store exists before adding it.
 		sm.storesToAdd.addStore(id)
-		log.VInfof(context.TODO(), 2, "store %+v is not heartbeating store %+v yet", sm.storeID, id)
+		log.Dev.VInfof(context.TODO(), 2, "store %+v is not heartbeating store %+v yet", sm.storeID, id)
 		return 0, hlc.Timestamp{}
 	}
 	if wasIdle {
-		log.Infof(
+		log.Dev.Infof(
 			context.TODO(), "store %+v is starting to heartbeat store %+v (after being idle)",
 			sm.storeID, id,
 		)
@@ -290,7 +290,7 @@ func (sm *SupportManager) maybeAddStores(ctx context.Context) {
 	sta := sm.storesToAdd.drainStoresToAdd()
 	for _, store := range sta {
 		if sm.requesterStateHandler.addStore(store) {
-			log.Infof(ctx, "starting to heartbeat store %+v", store)
+			log.Dev.Infof(ctx, "starting to heartbeat store %+v", store)
 			sm.metrics.SupportFromStores.Inc(1)
 		}
 	}
@@ -331,7 +331,7 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	}
 	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
 	sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats) - successes))
-	log.VInfof(ctx, 2, "sent heartbeats to %d stores", successes)
+	log.Dev.VInfof(ctx, 2, "sent heartbeats to %d stores", successes)
 }
 
 // withdrawSupport delegates support withdrawal to supporterStateHandler.
@@ -363,7 +363,7 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 		return
 	}
 	sm.supporterStateHandler.checkInUpdate(ssfu)
-	log.Infof(ctx, "withdrew support from %d stores", numWithdrawn)
+	log.Dev.Infof(ctx, "withdrew support from %d stores", numWithdrawn)
 	sm.metrics.SupportWithdrawSuccesses.Inc(int64(numWithdrawn))
 	if sm.withdrawalCallback != nil {
 		beforeProcess := timeutil.Now()
@@ -373,7 +373,7 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 		if processDur > minCallbackDurationToRecord {
 			sm.metrics.CallbacksProcessingDuration.RecordValue(processDur.Nanoseconds())
 		}
-		log.Infof(ctx, "invoked callback for %d stores", numWithdrawn)
+		log.Dev.Infof(ctx, "invoked callback for %d stores", numWithdrawn)
 	}
 }
 
@@ -381,7 +381,7 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 // to either the requesterStateHandler or supporterStateHandler. It then writes
 // all updates to disk in a single batch, and sends any responses via Transport.
 func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Message) {
-	log.VInfof(ctx, 2, "drained receive queue of size %d", len(msgs))
+	log.Dev.VInfof(ctx, 2, "drained receive queue of size %d", len(msgs))
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
 	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	ssfu := sm.supporterStateHandler.checkOutUpdate()
@@ -426,7 +426,7 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	for _, response := range responses {
 		_ = sm.sender.SendAsync(ctx, response)
 	}
-	log.VInfof(ctx, 2, "sent %d heartbeat responses", len(responses))
+	log.Dev.VInfof(ctx, 2, "sent %d heartbeat responses", len(responses))
 }
 
 // maxReceiveQueueSize is the maximum number of messages the receive queue can

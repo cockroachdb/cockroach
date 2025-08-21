@@ -97,7 +97,7 @@ func (r *registry) buildGraph(
 		if err != nil || !log.ExpensiveLogEnabled(ctx, 2) {
 			return
 		}
-		log.Infof(ctx, "operation graph generation took %v", timeutil.Since(start))
+		log.Dev.Infof(ctx, "operation graph generation took %v", timeutil.Since(start))
 	}()
 	g, err := scgraph.New(cs)
 	if err != nil {

@@ -498,7 +498,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 			prevOnSetc(id)
 		}
 		if log.V(2) {
-			log.Infof(ctx, "ClusterID set to %s", id)
+			log.Dev.Infof(ctx, "ClusterID set to %s", id)
 		}
 	}
 	prevOnSetn := opts.NodeID.OnSet
@@ -507,7 +507,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 			prevOnSetn(id)
 		}
 		if log.V(2) {
-			log.Infof(ctx, "NodeID set to %s", id)
+			log.Dev.Infof(ctx, "NodeID set to %s", id)
 		}
 	}
 
@@ -2306,7 +2306,7 @@ func VerifyDialback(
 			_ = conn.Close() // nolint:grpcconnclose
 		}
 		if err != nil {
-			log.Infof(ctx, "blocking dialback connection failed to %s, n%d, %v", target, request.OriginNodeID, err)
+			log.Dev.Infof(ctx, "blocking dialback connection failed to %s, n%d, %v", target, request.OriginNodeID, err)
 			return err
 		}
 		log.VEventf(ctx, 2, "blocking dialback connection to n%d succeeded", request.OriginNodeID)

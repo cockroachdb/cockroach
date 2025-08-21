@@ -132,7 +132,7 @@ func (m *Manager) run(ctx context.Context) {
 			log.Errorf(ctx, "error starting auto span config reconciliation job: %v", err)
 		}
 		if started {
-			log.Infof(ctx, "started auto span config reconciliation job")
+			log.Dev.Infof(ctx, "started auto span config reconciliation job")
 		}
 	}
 

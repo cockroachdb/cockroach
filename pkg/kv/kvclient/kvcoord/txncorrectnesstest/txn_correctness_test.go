@@ -110,14 +110,14 @@ func (c *cmd) clone() *cmd {
 func (c *cmd) execute(txn *kv.Txn, t *testing.T) (string, error) {
 	if c.prev != nil {
 		if log.V(2) {
-			log.Infof(context.Background(), "%s waiting on %s", c, c.prev)
+			log.Dev.Infof(context.Background(), "%s waiting on %s", c, c.prev)
 		}
 		if err := <-c.prev.ch; err != nil {
 			return "", err
 		}
 	}
 	if log.V(2) {
-		log.Infof(context.Background(), "executing %s", c)
+		log.Dev.Infof(context.Background(), "executing %s", c)
 	}
 	err := c.fn(context.Background(), c, txn)
 	if err == nil {
@@ -599,7 +599,7 @@ func TestEnumerateHistoriesAfterRetry(t *testing.T) {
 	enum := enumerateHistories(txns, false)
 	for i, e := range enum {
 		if log.V(1) {
-			log.Infof(context.Background(), "enum(%d): %s", i, historyString(e))
+			log.Dev.Infof(context.Background(), "enum(%d): %s", i, historyString(e))
 		}
 	}
 	testCases := []struct {
@@ -700,7 +700,7 @@ func newHistoryVerifier(
 }
 
 func (hv *historyVerifier) run(isoLevels []isolation.Level, db *kv.DB, t *testing.T) {
-	log.Infof(context.Background(), "verifying all possible histories for the %q anomaly", hv.name)
+	log.Dev.Infof(context.Background(), "verifying all possible histories for the %q anomaly", hv.name)
 	enumIso := enumerateIsolations(len(hv.txns), isoLevels)
 	enumPri := enumeratePriorities(len(hv.txns), []enginepb.TxnPriority{1, enginepb.MaxTxnPriority})
 	enumHis := enumerateHistories(hv.txns, hv.equal)
@@ -734,7 +734,7 @@ func (hv *historyVerifier) runHistoryWithRetry(
 ) error {
 	if err := hv.runHistory(isoLevels, priorities, cmds, db, t); err != nil {
 		if log.V(1) {
-			log.Infof(context.Background(), "got an error running history %s: %s", historyString(cmds), err)
+			log.Dev.Infof(context.Background(), "got an error running history %s: %s", historyString(cmds), err)
 		}
 		var retry *retryError
 		if !errors.As(err, &retry) {
@@ -743,7 +743,7 @@ func (hv *historyVerifier) runHistoryWithRetry(
 
 		if _, hasRetried := hv.retriedTxns[retry.txnIdx]; hasRetried {
 			if log.V(1) {
-				log.Infof(context.Background(), "retried txn %d twice; skipping history", retry.txnIdx+1)
+				log.Dev.Infof(context.Background(), "retried txn %d twice; skipping history", retry.txnIdx+1)
 			}
 			return nil
 		}
@@ -753,7 +753,7 @@ func (hv *historyVerifier) runHistoryWithRetry(
 		enumHis := sampleHistories(enumerateHistoriesAfterRetry(retry, cmds), 0.05)
 		for i, h := range enumHis {
 			if log.V(1) {
-				log.Infof(context.Background(), "after retry, running alternate history %d of %d", i, len(enumHis))
+				log.Dev.Infof(context.Background(), "after retry, running alternate history %d of %d", i, len(enumHis))
 			}
 			if err := hv.runHistoryWithRetry(isoLevels, priorities, h, db, t); err != nil {
 				return err
@@ -784,7 +784,7 @@ func (hv *historyVerifier) runHistory(
 	plannedStr := historyString(cmds)
 
 	if log.V(1) {
-		log.Infof(context.Background(), "iso=%s pri=%d history=%s", isoLevels, priorities, plannedStr)
+		log.Dev.Infof(context.Background(), "iso=%s pri=%d history=%s", isoLevels, priorities, plannedStr)
 	}
 
 	hv.mu.actual = []string{}
@@ -846,7 +846,7 @@ func (hv *historyVerifier) runHistory(
 	err = hv.verify.checkFn(verifyEnv)
 	if err == nil {
 		if log.V(1) {
-			log.Infof(context.Background(), "PASSED: iso=%s pri=%d, history=%q", isoLevels, priorities, actualStr)
+			log.Dev.Infof(context.Background(), "PASSED: iso=%s pri=%d, history=%q", isoLevels, priorities, actualStr)
 		}
 	}
 	if err != nil {
@@ -924,7 +924,7 @@ func (hv *historyVerifier) runTxn(
 			_, err := hv.runCmd(txn, txnIdx, retry, cmds[cmdIdx], t)
 			if err != nil {
 				if log.V(1) {
-					log.Infof(context.Background(), "%s: failed running %s: %s", txnName, cmds[cmdIdx], err)
+					log.Dev.Infof(context.Background(), "%s: failed running %s: %s", txnName, cmds[cmdIdx], err)
 				}
 				return err
 			}

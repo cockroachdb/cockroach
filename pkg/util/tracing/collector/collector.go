@@ -146,7 +146,7 @@ func (i *Iterator) Value() (base.SQLInstanceID, tracingpb.Recording) {
 func (t *TraceCollector) getTraceSpanRecordingsForInstance(
 	ctx context.Context, traceID tracingpb.TraceID, instanceID base.SQLInstanceID,
 ) []tracingpb.Recording {
-	log.Infof(ctx, "getting span recordings from instance %s", instanceID)
+	log.Dev.Infof(ctx, "getting span recordings from instance %s", instanceID)
 	traceClient, err := tracingservicepb.DialTracingClient(t.dialer, ctx, roachpb.NodeID(instanceID), rpcbase.DefaultClass)
 	if err != nil {
 		log.Warningf(ctx, "failed to dial instance %s: %v", instanceID, err)

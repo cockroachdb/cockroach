@@ -159,7 +159,7 @@ func (ef *ExprFactory) Make(expr tree.TypedExpr) (execinfrapb.Expression, error)
 	fmtCtx := exprFmtCtxBase(ef.ctx, evalCtx)
 	fmtCtx.FormatNode(expr)
 	if log.V(1) {
-		log.Infof(ef.ctx, "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(expr))
+		log.Dev.Infof(ef.ctx, "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(expr))
 	}
 	expression.Expr = fmtCtx.CloseAndGetString()
 	return expression, nil

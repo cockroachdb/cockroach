@@ -1104,7 +1104,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 				TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 					for _, req := range ba.Requests {
 						if req.GetInner().Header().Key.Equal(startKey) {
-							log.Infof(ctx, "intercepting request %+v", req.GetInner())
+							log.Dev.Infof(ctx, "intercepting request %+v", req.GetInner())
 						}
 					}
 					return nil
@@ -1505,7 +1505,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 					if ba.IsSingleRequestLeaseRequest() && (nudged == 1) {
 						return nil
 					}
-					log.Infof(ctx, "test rejecting request: %s", ba)
+					log.Dev.Infof(ctx, "test rejecting request: %s", ba)
 					return kvpb.NewErrorf("test injected error")
 				},
 				StoreLivenessKnobs: &storeliveness.TestingKnobs{
@@ -1601,7 +1601,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	if firstLease.Type() == roachpb.LeaseEpoch {
 		// Expire the lease. Given that the Raft leadership is on n2, only n2 will be
 		// eligible to acquire a new lease.
-		log.Infof(ctx, "test expiring lease")
+		log.Dev.Infof(ctx, "test expiring lease")
 		nl2 := n2.NodeLiveness().(*liveness.NodeLiveness)
 		resumeHeartbeats := nl2.PauseAllHeartbeatsForTest()
 		n2Liveness, ok := nl2.Self()
@@ -1649,7 +1649,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	}
 
 	// Wait for another RangeFeed checkpoint after the lease expired.
-	log.Infof(ctx, "test waiting for another checkpoint")
+	log.Dev.Infof(ctx, "test waiting for another checkpoint")
 	ts2 := n1.Clock().Now()
 	waitForCheckpoint(ts2)
 	testutils.SucceedsSoon(t, func() error {
@@ -1745,14 +1745,14 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 							timeoutSimulated = true
 							return kvpb.NewError(mockTimeout)
 						}
-						log.Infof(ctx, "lease succeeds this time")
+						log.Dev.Infof(ctx, "lease succeeds this time")
 						return nil
 					}
 					nudged := atomic.LoadInt64(&nudgeSeen)
 					if ba.IsSingleRequestLeaseRequest() && (nudged == 1) {
 						return nil
 					}
-					log.Infof(ctx, "test rejecting request: %s", ba)
+					log.Dev.Infof(ctx, "test rejecting request: %s", ba)
 					return kvpb.NewErrorf("test injected error")
 				},
 			},
@@ -1823,7 +1823,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 
 	// Expire the lease. Given that the Raft leadership is on n2, only n2 will be
 	// eligible to acquire a new lease.
-	log.Infof(ctx, "test expiring lease")
+	log.Dev.Infof(ctx, "test expiring lease")
 	nl2 := n2.NodeLiveness().(*liveness.NodeLiveness)
 	resumeHeartbeats := nl2.PauseAllHeartbeatsForTest()
 	n2Liveness, ok := nl2.Self()
@@ -1849,7 +1849,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 	go startRangefeed()
 
 	// Wait for a RangeFeed checkpoint after the lease expired.
-	log.Infof(ctx, "test waiting for another checkpoint")
+	log.Dev.Infof(ctx, "test waiting for another checkpoint")
 	ts2 := n1.Clock().Now()
 	waitForCheckpoint(ts2)
 	nudged := atomic.LoadInt64(&nudgeSeen)

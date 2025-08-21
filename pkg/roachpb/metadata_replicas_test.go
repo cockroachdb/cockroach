@@ -368,7 +368,7 @@ func TestReplicaDescriptorsCanMakeProgressRandom(t *testing.T) {
 			noProgress++
 		}
 	}
-	log.Infof(ctx, "progress: %d cases. no progress: %d cases. skipped: %d cases.",
+	log.Dev.Infof(ctx, "progress: %d cases. no progress: %d cases. skipped: %d cases.",
 		progress, noProgress, skipped)
 }
 

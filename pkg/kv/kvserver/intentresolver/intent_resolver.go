@@ -421,7 +421,7 @@ func (ir *IntentResolver) MaybePushTransactions(
 			// Another goroutine is working on this transaction so we can
 			// skip it.
 			if log.V(1) {
-				log.Infof(ctx, "skipping PushTxn for %s; attempt already in flight", txnID)
+				log.Dev.Infof(ctx, "skipping PushTxn for %s; attempt already in flight", txnID)
 			}
 			delete(pushTxns, txnID)
 		} else {

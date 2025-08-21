@@ -775,7 +775,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	// want to know what happened in that interval.
 	if prevDoLogFlush || io.aux.doLogFlush || io.diskBandwidthLimiter.state.diskBWUtil > 0.8 ||
 		log.V(1) {
-		log.Infof(ctx, "IO overload: %s; %s", io.adjustTokensResult, io.diskBandwidthLimiter)
+		log.Dev.Infof(ctx, "IO overload: %s; %s", io.adjustTokensResult, io.diskBandwidthLimiter)
 	}
 }
 

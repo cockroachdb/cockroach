@@ -764,7 +764,7 @@ func logSlowCatchupScanAcquisition(loggingMinInterval time.Duration) quotapool.S
 
 		return func() {
 			if shouldLog {
-				log.Infof(ctx, "acquired catchup quota after %s", timeutil.Since(start))
+				log.Dev.Infof(ctx, "acquired catchup quota after %s", timeutil.Since(start))
 			}
 		}
 	}

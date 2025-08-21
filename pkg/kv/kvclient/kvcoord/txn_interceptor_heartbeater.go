@@ -317,7 +317,7 @@ func (h *txnHeartbeater) closeLocked() {
 // startHeartbeatLoopLocked starts a heartbeat loop in a different goroutine.
 func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) {
 	if h.loopInterval < 0 {
-		log.Infof(ctx, "coordinator heartbeat loop disabled")
+		log.Dev.Infof(ctx, "coordinator heartbeat loop disabled")
 		return
 	}
 	if h.mu.loopStarted {

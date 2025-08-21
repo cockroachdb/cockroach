@@ -115,10 +115,10 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	}
 
 	if sourceTenantID.IsSet() {
-		log.Infof(ctx, "starting physical replication event stream: tenant=%s initial_scan_timestamp=%s previous_replicated_time=%s",
+		log.Dev.Infof(ctx, "starting physical replication event stream: tenant=%s initial_scan_timestamp=%s previous_replicated_time=%s",
 			sourceTenantID, s.spec.InitialScanTimestamp, s.spec.PreviousReplicatedTimestamp)
 	} else {
-		log.Infof(ctx, "starting logical replication event stream: initial_scan_timestamp=%s previous_replicated_time=%s",
+		log.Dev.Infof(ctx, "starting logical replication event stream: initial_scan_timestamp=%s previous_replicated_time=%s",
 			s.spec.InitialScanTimestamp, s.spec.PreviousReplicatedTimestamp)
 	}
 
@@ -174,7 +174,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		}
 	}
 	if s.spec.PreviousReplicatedTimestamp.IsEmpty() {
-		log.Infof(ctx, "starting event stream with initial scan at %s", initialTimestamp)
+		log.Dev.Infof(ctx, "starting event stream with initial scan at %s", initialTimestamp)
 		opts = append(opts,
 			rangefeed.WithInitialScan(s.onInitialScanDone),
 			rangefeed.WithRowTimestampInInitialScan(true),
@@ -182,7 +182,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	} else {
 		initialTimestamp = s.spec.PreviousReplicatedTimestamp
 		// When resuming from cursor, advance frontier to the cursor position.
-		log.Infof(ctx, "resuming event stream (no initial scan) from %s", initialTimestamp)
+		log.Dev.Infof(ctx, "resuming event stream (no initial scan) from %s", initialTimestamp)
 	}
 
 	s.stats = startStatsPoller(ctx, time.Minute, s.spec.Spans, s.frontier, s.execCfg.RangeDescIteratorFactory)
@@ -267,7 +267,7 @@ func (s *eventStream) Close(ctx context.Context) {
 }
 
 func (s *eventStream) onInitialScanDone(ctx context.Context) {
-	log.VInfof(ctx, 2, "initial scan completed")
+	log.Dev.VInfof(ctx, 2, "initial scan completed")
 }
 
 func (s *eventStream) onValues(ctx context.Context, values []kv.KeyValue) {
@@ -306,7 +306,7 @@ func (s *eventStream) onDeleteRange(ctx context.Context, delRange *kvpb.RangeFee
 	s.setErr(s.maybeFlushBatch(ctx))
 }
 func (s *eventStream) onMetadata(ctx context.Context, metadata *kvpb.RangeFeedMetadata) {
-	log.VInfof(ctx, 2, "received metadata event: %s, fromManualSplit: %t, parent start key %s", metadata.Span, metadata.FromManualSplit, metadata.ParentStartKey)
+	log.Dev.VInfof(ctx, 2, "received metadata event: %s, fromManualSplit: %t, parent start key %s", metadata.Span, metadata.FromManualSplit, metadata.ParentStartKey)
 	if metadata.FromManualSplit && !metadata.Span.Key.Equal(metadata.ParentStartKey) {
 		// Only send new manual split keys (i.e. a child rangefeed start key that
 		// differs from the parent start key)

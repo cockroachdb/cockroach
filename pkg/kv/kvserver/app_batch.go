@@ -84,7 +84,7 @@ func (b *appBatch) assertAndCheckCommand(
 	ctx context.Context, cmd *raftlog.ReplicatedCmd, state *kvserverpb.ReplicaState, isLocal bool,
 ) (kvserverbase.ForcedErrResult, error) {
 	if log.V(4) {
-		log.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
+		log.Dev.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
 			cmd.ID, cmd.Index(), cmd.Cmd.MaxLeaseIndex, cmd.Cmd.ClosedTimestamp)
 	}
 

@@ -191,7 +191,7 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 			}
 			b.sink.mu.totalStats.LogFlushes(ctx, b.name, "closing", b.memAcc.Used(), b.sink.span)
 		} else {
-			log.Infof(ctx, "%s adder closing; ingested nothing", b.name)
+			log.Dev.Infof(ctx, "%s adder closing; ingested nothing", b.name)
 		}
 		b.sink.mu.Unlock()
 	}
@@ -369,7 +369,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		dueToSplits := afterStats.BatchesDueToRange - before.BatchesDueToRange
 		dueToSize := afterStats.BatchesDueToSize - before.BatchesDueToSize
 
-		log.Infof(ctx,
+		log.Dev.Infof(ctx,
 			"%s adder flushing %s (%s buffered/%0.2gx) wrote %d SSTs (avg: %s) with %d for splits, %d for size, took %v",
 			b.name,
 			b.curBuf.KVSize(),
@@ -408,7 +408,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 }
 
 func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
-	log.Infof(ctx, "%s adder creating up to %d initial splits from %d KVs in %s buffer",
+	log.Dev.Infof(ctx, "%s adder creating up to %d initial splits from %d KVs in %s buffer",
 		b.name, b.initialSplits, b.curBuf.Len(), b.curBuf.KVSize())
 
 	// First make all the splits, then go back and scatter them, so that those
@@ -470,7 +470,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 
 	beforeScatters := timeutil.Now()
 	splitsWait := beforeScatters.Sub(beforeSplits)
-	log.Infof(ctx, "%s adder created %d initial splits in %v from %d keys in %s buffer",
+	log.Dev.Infof(ctx, "%s adder created %d initial splits in %v from %d keys in %s buffer",
 		b.name, len(toScatter), timing(splitsWait), b.curBuf.Len(), b.curBuf.MemSize())
 	b.sink.batch.stats.Splits += int64(len(toScatter))
 	b.sink.batch.stats.SplitWait += splitsWait
@@ -490,7 +490,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	}
 	scattersWait := timeutil.Since(beforeScatters)
 	b.sink.batch.stats.ScatterWait += scattersWait
-	log.Infof(ctx, "%s adder scattered %d initial split spans in %v",
+	log.Dev.Infof(ctx, "%s adder scattered %d initial split spans in %v",
 		b.name, len(toScatter), timing(scattersWait))
 
 	return nil

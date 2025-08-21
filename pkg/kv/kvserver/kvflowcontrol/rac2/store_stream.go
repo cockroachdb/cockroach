@@ -321,9 +321,9 @@ func (b *blockedStreamLogger) observeStream(
 		}
 		deductionKindFunc("regular", regularStats)
 		deductionKindFunc("elastic", elasticStats)
-		log.Infof(context.Background(), "%s", redact.SafeString(bb.String()))
+		log.Dev.Infof(context.Background(), "%s", redact.SafeString(bb.String()))
 	} else if b.blockedCount == streamStatsCountCap+1 {
-		log.Infof(context.Background(), "skipped logging some streams that were blocked")
+		log.Dev.Infof(context.Background(), "skipped logging some streams that were blocked")
 	}
 }
 
@@ -567,7 +567,7 @@ func (w *sendStreamTokenWatcher) run(_ context.Context) {
 		// unblocked and confirmed that there are tokens available. Notify the next
 		// handle in line.
 		if grant, found := w.nextGrant(); found {
-			log.VInfof(ctx, 4,
+			log.Dev.VInfof(ctx, 4,
 				"notifying %v of available tokens for stream %v", grant, w.tc.stream)
 			grant.Notify(ctx)
 		}

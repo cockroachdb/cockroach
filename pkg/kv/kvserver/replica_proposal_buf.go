@@ -242,7 +242,7 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 	}
 
 	if log.V(4) {
-		log.Infof(p.Context(), "submitting proposal %x", p.idKey)
+		log.Dev.Infof(p.Context(), "submitting proposal %x", p.idKey)
 	}
 
 	// Insert the proposal into the buffer's array. The buffer now takes ownership
@@ -649,7 +649,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 				const format = "campaigning because Raft leader (id=%d) not live in node liveness map"
 				lead := raftGroup.BasicStatus().Lead
 				if logCampaignOnRejectLease.ShouldLog() {
-					log.Infof(ctx, format, lead)
+					log.Dev.Infof(ctx, format, lead)
 				} else {
 					log.VEventf(ctx, 2, format, lead)
 				}
