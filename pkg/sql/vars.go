@@ -726,6 +726,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`use_soft_limit_for_distribute_scan`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_soft_limit_for_distribute_scan`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_soft_limit_for_distribute_scan", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseSoftLimitForDistributeScan(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseSoftLimitForDistributeScan), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`distribute_join_row_count_threshold`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return strconv.FormatUint(evalCtx.SessionData().DistributeJoinRowCountThreshold, 10), nil
