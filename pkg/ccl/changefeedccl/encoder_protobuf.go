@@ -400,6 +400,7 @@ func datumToProtoValue(
 					Value: &changefeedpb.Value_StringValue{StringValue: v.Time.Format(time.RFC3339Nano)},
 				}, nil
 			}
+			return nil, err
 		}
 		return &changefeedpb.Value{
 			Value: &changefeedpb.Value_TimestampValue{
