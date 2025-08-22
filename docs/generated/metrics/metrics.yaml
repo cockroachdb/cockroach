@@ -1136,6 +1136,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: auth.ldap.conn.latency.internal
+      exported_name: auth_ldap_conn_latency_internal
+      description: Internal Auth Latency to establish and authenticate a SQL connection using LDAP(excludes external LDAP calls)
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: auth.password.conn.latency
       exported_name: auth_password_conn_latency
       description: Latency to establish and authenticate a SQL connection using password

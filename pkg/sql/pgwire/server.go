@@ -224,6 +224,12 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	AuthLDAPConnLatencyInternal = metric.Metadata{
+		Name:        "auth.ldap.conn.latency.internal",
+		Help:        "Internal Auth Latency to establish and authenticate a SQL connection using LDAP(excludes external LDAP calls)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 const (
@@ -377,6 +383,7 @@ type tenantSpecificMetrics struct {
 	AuthLDAPConnLatency         metric.IHistogram
 	AuthGSSConnLatency          metric.IHistogram
 	AuthScramConnLatency        metric.IHistogram
+	AuthLDAPConnLatencyInternal metric.IHistogram
 }
 
 func newTenantSpecificMetrics(
@@ -411,6 +418,8 @@ func newTenantSpecificMetrics(
 			getHistogramOptionsForIOLatency(AuthGSSConnLatency, histogramWindow)),
 		AuthScramConnLatency: metric.NewHistogram(
 			getHistogramOptionsForIOLatency(AuthScramConnLatency, histogramWindow)),
+		AuthLDAPConnLatencyInternal: metric.NewHistogram(
+			getHistogramOptionsForIOLatency(AuthLDAPConnLatencyInternal, histogramWindow)),
 	}
 }
 

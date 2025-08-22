@@ -281,6 +281,17 @@ func (c *conn) handleAuthentication(
 	duration := timeutil.Since(authStartTime).Nanoseconds()
 	c.publishConnLatencyMetric(duration, hbaEntry.Method.String())
 
+	// Get the external auth duration which is time spent on external service by
+	// the AuthMethod.
+	externalDuration := behaviors.GetTotalExternalAuthTime().Nanoseconds()
+
+	// Compute the internal authentication latency needed to serve a SQL query.
+	// The internal latency is the time spent on the connection for the actual
+	// auth time (authentication +provisioning + authorization) time. We will get
+	// the RTT times to the IDP server and subtract it from the total auth time.
+	// The metric published is based on the authentication type.
+	c.publishConnLatencyInternalMetric(duration-externalDuration, hbaEntry.Method.String())
+
 	server.lastLoginUpdater.updateLastLoginTime(ctx, dbUser)
 
 	return connClose, nil
@@ -302,6 +313,15 @@ func (c *conn) publishConnLatencyMetric(duration int64, authMethod string) {
 		c.metrics.AuthGSSConnLatency.RecordValue(duration)
 	case scramSHA256HBAEntry.string():
 		c.metrics.AuthScramConnLatency.RecordValue(duration)
+	}
+}
+
+// publishConnLatencyInternalMetric publishes the internal latency of the
+// connection based on the authentication method.
+func (c *conn) publishConnLatencyInternalMetric(internalDuration int64, authMethod string) {
+	switch authMethod {
+	case ldapHBAEntry.string():
+		c.metrics.AuthLDAPConnLatencyInternal.RecordValue(internalDuration)
 	}
 }
 

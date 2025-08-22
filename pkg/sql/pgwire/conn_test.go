@@ -2303,6 +2303,8 @@ func TestPublishConnLatencyMetric(t *testing.T) {
 				getHistogramOptionsForIOLatency(AuthGSSConnLatency, time.Hour)),
 			AuthScramConnLatency: metric.NewHistogram(
 				getHistogramOptionsForIOLatency(AuthScramConnLatency, time.Hour)),
+			AuthLDAPConnLatencyInternal: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthLDAPConnLatencyInternal, time.Hour)),
 		},
 	}
 
@@ -2401,4 +2403,54 @@ func TestPublishConnLatencyMetric(t *testing.T) {
 	count, sum = w.Total()
 	require.Equal(t, int64(2), count)
 	require.Equal(t, float64(9), sum)
+}
+
+// write unit tests for the function publishConnLatencyInternalMetric
+func TestPublishConnLatencyInternalMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := conn{
+		metrics: &tenantSpecificMetrics{
+			AuthLDAPConnLatency: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthLDAPConnLatency, time.Hour)),
+			AuthLDAPConnLatencyInternal: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthLDAPConnLatencyInternal, time.Hour)),
+		},
+	}
+
+	// LDAP
+	ldapDuration := int64(5)
+	ldapInternalDuration := int64(4)
+	c.publishConnLatencyMetric(ldapDuration, ldapHBAEntry.string())
+	c.publishConnLatencyInternalMetric(ldapInternalDuration, ldapHBAEntry.string())
+	w := c.metrics.AuthLDAPConnLatency.WindowedSnapshot()
+	count, sum := w.Total()
+	require.Equal(t, int64(1), count)
+	require.Equal(t, float64(5), sum)
+
+	wI := c.metrics.AuthLDAPConnLatencyInternal.WindowedSnapshot()
+	countI, sumI := wI.Total()
+	require.Equal(t, int64(1), countI)
+	require.Equal(t, float64(4), sumI)
+
+	// internal latency must be less than total latency.
+	require.Less(t, sumI, sum)
+
+	// republish on LDAP
+	ldapDuration = int64(2)
+	ldapInternalDuration = int64(1)
+	c.publishConnLatencyMetric(ldapDuration, ldapHBAEntry.string())
+	c.publishConnLatencyInternalMetric(ldapInternalDuration, ldapHBAEntry.string())
+	w = c.metrics.AuthLDAPConnLatency.WindowedSnapshot()
+	count, sum = w.Total()
+	require.Equal(t, int64(2), count)
+	require.Equal(t, float64(7), sum)
+
+	wI = c.metrics.AuthLDAPConnLatencyInternal.WindowedSnapshot()
+	countI, sumI = wI.Total()
+	require.Equal(t, int64(2), countI)
+	require.Equal(t, float64(5), sumI)
+
+	// internal latency must be less than total latency.
+	require.Less(t, sumI, sum)
 }
