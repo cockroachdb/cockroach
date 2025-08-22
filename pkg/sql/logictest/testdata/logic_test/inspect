@@ -57,6 +57,10 @@ subtest end
 # inspect and scrub are converging so for now tests on INSPECT live here
 subtest inspect
 
+onlyif config local-mixed-25.2 local-mixed-25.3
+statement error pq: SHOW INSPECT ERRORS requires the cluster to be upgraded to v25.4
+SHOW INSPECT ERRORS
+
 statement ok
 CREATE TABLE foo (c1 INT);
 
