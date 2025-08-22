@@ -2952,6 +2952,7 @@ default_with_oids                                          off                 N
 descriptor_validation                                      on                  NULL      NULL        NULL        string
 disable_changefeed_replication                             off                 NULL      NULL        NULL        string
 disable_hoist_projection_in_join_limitation                off                 NULL      NULL        NULL        string
+disable_optimizer_rules                                    ·                   NULL      NULL        NULL        string
 disable_partially_distributed_plans                        off                 NULL      NULL        NULL        string
 disable_plan_gists                                         off                 NULL      NULL        NULL        string
 disable_vec_union_eager_cancellation                       off                 NULL      NULL        NULL        string
@@ -3175,6 +3176,7 @@ default_with_oids                                          off                 N
 descriptor_validation                                      on                  NULL  user     NULL      on                  on
 disable_changefeed_replication                             off                 NULL  user     NULL      off                 off
 disable_hoist_projection_in_join_limitation                off                 NULL  user     NULL      off                 off
+disable_optimizer_rules                                    ·                   NULL  user     NULL      ·                   ·
 disable_partially_distributed_plans                        off                 NULL  user     NULL      off                 off
 disable_plan_gists                                         off                 NULL  user     NULL      off                 off
 disable_vec_union_eager_cancellation                       off                 NULL  user     NULL      off                 off
@@ -3394,6 +3396,7 @@ descriptor_validation                                      NULL    NULL     NULL
 direct_columnar_scans_enabled                              NULL    NULL     NULL     NULL        NULL
 disable_changefeed_replication                             NULL    NULL     NULL     NULL        NULL
 disable_hoist_projection_in_join_limitation                NULL    NULL     NULL     NULL        NULL
+disable_optimizer_rules                                    NULL    NULL     NULL     NULL        NULL
 disable_partially_distributed_plans                        NULL    NULL     NULL     NULL        NULL
 disable_plan_gists                                         NULL    NULL     NULL     NULL        NULL
 disable_vec_union_eager_cancellation                       NULL    NULL     NULL     NULL        NULL
