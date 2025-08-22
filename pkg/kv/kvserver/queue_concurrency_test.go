@@ -140,7 +140,7 @@ func (fakeQueueImpl) shouldQueue(
 }
 
 func (fq fakeQueueImpl) process(
-	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader, _ float64,
 ) (bool, error) {
 	return fq.pr(ctx, repl, confReader)
 }
