@@ -4057,15 +4057,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: jobs.auto_create_partial_stats.expired_pts_records
-      exported_name: jobs_auto_create_partial_stats_expired_pts_records
-      labeled_name: 'jobs.expired_pts_records{type: auto_create_partial_stats}'
-      description: Number of expired protected timestamp records owned by auto_create_partial_stats jobs
-      y_axis_label: records
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_partial_stats.fail_or_cancel_completed
       exported_name: jobs_auto_create_partial_stats_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: auto_create_partial_stats, status: completed}'
@@ -4084,24 +4075,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_create_partial_stats.protected_age_sec
-      exported_name: jobs_auto_create_partial_stats_protected_age_sec
-      labeled_name: 'jobs.protected_age_sec{type: auto_create_partial_stats}'
-      description: The age of the oldest PTS record protected by auto_create_partial_stats jobs
-      y_axis_label: seconds
-      type: GAUGE
-      unit: SECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: jobs.auto_create_partial_stats.protected_record_count
-      exported_name: jobs_auto_create_partial_stats_protected_record_count
-      labeled_name: 'jobs.protected_record_count{type: auto_create_partial_stats}'
-      description: Number of protected timestamp records held by auto_create_partial_stats jobs
-      y_axis_label: records
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
     - name: jobs.auto_create_partial_stats.resume_completed
       exported_name: jobs_auto_create_partial_stats_resume_completed
       labeled_name: 'jobs.resume{name: auto_create_partial_stats, status: completed}'
@@ -4129,15 +4102,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: jobs.auto_create_stats.expired_pts_records
-      exported_name: jobs_auto_create_stats_expired_pts_records
-      labeled_name: 'jobs.expired_pts_records{type: auto_create_stats}'
-      description: Number of expired protected timestamp records owned by auto_create_stats jobs
-      y_axis_label: records
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_stats.fail_or_cancel_completed
       exported_name: jobs_auto_create_stats_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: auto_create_stats, status: completed}'
@@ -4156,24 +4120,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_create_stats.protected_age_sec
-      exported_name: jobs_auto_create_stats_protected_age_sec
-      labeled_name: 'jobs.protected_age_sec{type: auto_create_stats}'
-      description: The age of the oldest PTS record protected by auto_create_stats jobs
-      y_axis_label: seconds
-      type: GAUGE
-      unit: SECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: jobs.auto_create_stats.protected_record_count
-      exported_name: jobs_auto_create_stats_protected_record_count
-      labeled_name: 'jobs.protected_record_count{type: auto_create_stats}'
-      description: Number of protected timestamp records held by auto_create_stats jobs
-      y_axis_label: records
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
     - name: jobs.auto_create_stats.resume_completed
       exported_name: jobs_auto_create_stats_resume_completed
       labeled_name: 'jobs.resume{name: auto_create_stats, status: completed}'
@@ -4776,15 +4722,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: jobs.create_stats.expired_pts_records
-      exported_name: jobs_create_stats_expired_pts_records
-      labeled_name: 'jobs.expired_pts_records{type: create_stats}'
-      description: Number of expired protected timestamp records owned by create_stats jobs
-      y_axis_label: records
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.create_stats.fail_or_cancel_completed
       exported_name: jobs_create_stats_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: create_stats, status: completed}'
@@ -4803,24 +4740,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.create_stats.protected_age_sec
-      exported_name: jobs_create_stats_protected_age_sec
-      labeled_name: 'jobs.protected_age_sec{type: create_stats}'
-      description: The age of the oldest PTS record protected by create_stats jobs
-      y_axis_label: seconds
-      type: GAUGE
-      unit: SECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: jobs.create_stats.protected_record_count
-      exported_name: jobs_create_stats_protected_record_count
-      labeled_name: 'jobs.protected_record_count{type: create_stats}'
-      description: Number of protected timestamp records held by create_stats jobs
-      y_axis_label: records
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
     - name: jobs.create_stats.resume_completed
       exported_name: jobs_create_stats_resume_completed
       labeled_name: 'jobs.resume{name: create_stats, status: completed}'
@@ -5172,15 +5091,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: jobs.import_rollback.expired_pts_records
-      exported_name: jobs_import_rollback_expired_pts_records
-      labeled_name: 'jobs.expired_pts_records{type: import_rollback}'
-      description: Number of expired protected timestamp records owned by import_rollback jobs
-      y_axis_label: records
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import_rollback.fail_or_cancel_completed
       exported_name: jobs_import_rollback_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: import_rollback, status: completed}'
@@ -5199,24 +5109,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.import_rollback.protected_age_sec
-      exported_name: jobs_import_rollback_protected_age_sec
-      labeled_name: 'jobs.protected_age_sec{type: import_rollback}'
-      description: The age of the oldest PTS record protected by import_rollback jobs
-      y_axis_label: seconds
-      type: GAUGE
-      unit: SECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: jobs.import_rollback.protected_record_count
-      exported_name: jobs_import_rollback_protected_record_count
-      labeled_name: 'jobs.protected_record_count{type: import_rollback}'
-      description: Number of protected timestamp records held by import_rollback jobs
-      y_axis_label: records
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
     - name: jobs.import_rollback.resume_completed
       exported_name: jobs_import_rollback_resume_completed
       labeled_name: 'jobs.resume{name: import_rollback, status: completed}'
