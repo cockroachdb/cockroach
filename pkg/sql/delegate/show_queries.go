@@ -25,7 +25,8 @@ SELECT
   application_name,
   distributed,
   full_scan,
-  phase
+  phase,
+  isolation_level
 FROM crdb_internal.`
 	table := `node_queries`
 	if n.Cluster {

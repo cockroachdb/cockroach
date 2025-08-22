@@ -680,3 +680,74 @@ read committed
 
 statement ok
 COMMIT
+
+subtest show
+
+# Test isolation level column in SHOW TRANSACTIONS, SHOW QUERIES, SHOW SESSIONS.
+
+user testuser2
+
+statement ok
+SET default_transaction_isolation = 'READ COMMITTED'
+
+user testuser
+
+statement ok
+SET default_transaction_isolation = 'READ COMMITTED'
+
+query T rowsort
+SELECT isolation_level FROM [SHOW TRANSACTIONS]
+----
+READ COMMITTED
+
+query T rowsort
+SELECT isolation_level || ' '  || query FROM [SHOW QUERIES]
+----
+READ COMMITTED SELECT (isolation_level || ' ') || query FROM [SHOW CLUSTER STATEMENTS]
+
+query T rowsort
+SELECT DISTINCT isolation_level || ' '  || user_name || ' '  || active_queries FROM [SHOW SESSIONS]
+----
+SERIALIZABLE root
+READ COMMITTED testuser SELECT DISTINCT (((isolation_level || ' ') || user_name) || ' ') || active_queries FROM [SHOW CLUSTER SESSIONS]
+READ COMMITTED testuser2
+
+statement ok
+SET default_transaction_isolation = 'SERIALIZABLE'
+
+query T rowsort
+SELECT isolation_level || ' ' || query FROM [SHOW QUERIES]
+----
+SERIALIZABLE SELECT (isolation_level || ' ') || query FROM [SHOW CLUSTER STATEMENTS]
+
+# If there is no active query for a session, use the default transaction
+# isolation level. Otherwise, use the isolation level of the active query.
+query T rowsort
+SELECT DISTINCT isolation_level || ' '  || user_name || ' '  || active_queries FROM [SHOW SESSIONS]
+----
+SERIALIZABLE root
+SERIALIZABLE testuser SELECT DISTINCT (((isolation_level || ' ') || user_name) || ' ') || active_queries FROM [SHOW CLUSTER SESSIONS]
+READ COMMITTED testuser2
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+query T rowsort
+SELECT DISTINCT isolation_level || ' '  || user_name || ' '  || active_queries FROM [SHOW SESSIONS];
+----
+SERIALIZABLE root
+READ COMMITTED testuser SELECT DISTINCT (((isolation_level || ' ') || user_name) || ' ') || active_queries FROM [SHOW CLUSTER SESSIONS]
+READ COMMITTED testuser2
+
+statement ok
+COMMIT
+
+statement ok
+RESET default_transaction_isolation
+
+user testuser2
+
+statement ok
+RESET default_transaction_isolation
+
+subtest end

@@ -2315,6 +2315,7 @@ Session represents one SQL session.
 | trace_id | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | The ID of the session's active trace. It will be 0 if tracing is off. | [reserved](#support-status) |
 | goroutine_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | The ID of the session's goroutine. | [reserved](#support-status) |
 | authentication_method | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
+| default_isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The session's default transaction isolation level. | [reserved](#support-status) |
 
 
 
@@ -2465,6 +2466,7 @@ Session represents one SQL session.
 | trace_id | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | The ID of the session's active trace. It will be 0 if tracing is off. | [reserved](#support-status) |
 | goroutine_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | The ID of the session's goroutine. | [reserved](#support-status) |
 | authentication_method | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
+| default_isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The session's default transaction isolation level. | [reserved](#support-status) |
 
 
 
