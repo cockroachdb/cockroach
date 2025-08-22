@@ -203,7 +203,7 @@ func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
 	ctx := repl.AnnotateCtx(context.Background())
-	_, err := q.process(ctx, repl, cfg)
+	_, err := q.process(ctx, repl, cfg, -1 /*priorityAtEnqueue*/)
 	return err
 }
 

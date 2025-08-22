@@ -912,7 +912,7 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 
 	// Process through a scan queue.
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, cfg)
+	processed, err := mgcq.process(ctx, tc.repl, cfg, -1 /* priorityAtEnqueue */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1163,7 +1163,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	processed, err := mgcq.process(ctx, tc.repl, cfg)
+	processed, err := mgcq.process(ctx, tc.repl, cfg, -1 /* priorityAtEnqueue */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1180,7 +1180,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if expGC := (sp.newStatus == -1); expGC {
+			if expGC := (sp.newStatus == -1 /* priorityAtEnqueue */); expGC {
 				if expGC != !ok {
 					return fmt.Errorf("%s: expected gc: %t, but found %s\n%s", strKey, expGC, txn, roachpb.Key(strKey))
 				}
@@ -1297,7 +1297,7 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 		t.Fatal(err)
 	}
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
+	processed, err := mgcq.process(ctx, tc.repl, confReader, -1 /* priorityAtEnqueue */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1362,7 +1362,7 @@ func TestMVCCGCQueueLastProcessedTimestamps(t *testing.T) {
 
 	// Process through a scan queue.
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
+	processed, err := mgcq.process(ctx, tc.repl, confReader, -1 /* priorityAtEnqueue */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1470,7 +1470,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	}
 	tc.manualClock.Advance(conf.TTL() + 1)
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
+	processed, err := mgcq.process(ctx, tc.repl, confReader, -1 /* priorityAtEnqueue */)
 	if err != nil {
 		t.Fatal(err)
 	}
