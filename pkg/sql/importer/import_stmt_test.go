@@ -5632,11 +5632,6 @@ func TestImportRowCountValidation(t *testing.T) {
 		desc               string
 		schemaPreparations []string
 	}
-
-	const (
-		enableRowCountValidationStmt = `SET CLUSTER SETTING bulkio.import.row_count_validation.enabled = true`
-	)
-
 	// Prepare the import server with to-be-ingested data.
 	data := "1,1\n2,2\n3,3\n4,4\n5,5\n6,6\n7,7\n8,8\n9,9\n10,10"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5744,7 +5739,6 @@ func TestImportRowCountValidation(t *testing.T) {
 			conn := testCluster.ServerConn(0)
 			sqlDB := sqlutils.MakeSQLRunner(conn)
 
-			sqlDB.Exec(t, enableRowCountValidationStmt)
 			for _, prep := range tc.schemaPreparations {
 				sqlDB.Exec(t, prep)
 			}
@@ -5755,7 +5749,7 @@ func TestImportRowCountValidation(t *testing.T) {
 				select {
 				case err := <-rowCountValidationErrChan:
 					return err
-				case <-time.After(5 * time.Second):
+				case <-time.After(testutils.DefaultSucceedsSoonDuration):
 					return errors.AssertionFailedf("timed out waiting for row count validation result")
 				case <-ctx.Done():
 					return ctx.Err()

@@ -2041,7 +2041,7 @@ func populateExpectedCounts(
 	return tableRowCount, nil
 }
 
-// CountIndexRowsAndMaybeCheckUniqueness returns the number of rows of
+// CountIndexRowsAndMaybeCheckUniqueness returns the number of rows in
 // the given index of the given table.
 func CountIndexRowsAndMaybeCheckUniqueness(
 	ctx context.Context,

@@ -9,7 +9,6 @@ bulkio.backup.deprecated_full_backup_with_subdir.enabled	boolean	false	when true
 bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP	application
 bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail	application
 bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads	application
-bulkio.import.row_count_validation.enabled	boolean	true	should import perform row count validation after data load. NOTE: this setting could result in latency increase for import jobs	application
 changefeed.aggregator.flush_jitter	float	0.1	jitter aggregator flushes as a fraction of min_checkpoint_frequency. This setting has no effect if min_checkpoint_frequency is set to 0.	application
 changefeed.backfill.concurrent_scan_requests	integer	0	number of concurrent scan requests per node issued during a backfill	application
 changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request	application
