@@ -255,3 +255,191 @@ RESET enable_durable_locking_for_serializable
 user root
 
 subtest end
+
+subtest fk_cascade_race_151663
+
+statement ok
+CREATE TABLE parent_151663 (
+  p INT PRIMARY KEY,
+  q INT
+);
+
+statement ok
+CREATE TABLE child_151663 (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_151663 (p),
+  INDEX (p),
+  FAMILY (c, p)
+);
+
+statement ok
+CREATE USER testuser2;
+CREATE USER testuser3
+
+statement ok
+GRANT ALL ON TABLE parent_151663 TO testuser;
+GRANT ALL ON TABLE parent_151663 TO testuser2;
+GRANT ALL ON TABLE parent_151663 TO testuser3;
+GRANT ALL ON TABLE child_151663 TO testuser3
+
+statement ok
+INSERT INTO parent_151663 VALUES (1, 0), (2, 0), (3, 0)
+
+# The timeline of this test is:
+#
+#  testuser        testuser2        testuser3        root
+#  --------        ---------        ---------        ----
+#  begin
+#  update p=2
+#                  begin
+#                  lock p=3
+#                                   begin RC
+#                                   start DELETE
+#                                   wait on p=3
+#                                                    begin SSI
+#                                                    start INSERT
+#                                                    wait on p=2
+#  rollback
+#                                                    lock p=1, p=2
+#                  rollback
+#                                   wait on p=1
+#                                                    insert c=10, c=20
+#                                                    finish INSERT
+#                                                    commit
+#                                   delete p=1
+#                                   FK check child
+#                                   finish DELETE
+#                                   commit
+#
+# The transactions run by testuser3 and root are the important part. testuser
+# and testuser2 only exist to control the timing of the transactions run by
+# testuser3 and root.
+#
+# The transactions run by testuser3 and root conflict with each other. To
+# prevent a FK violation they need to either run serially, or one transaction
+# needs to fail.
+#
+# This test demonstrates that we need locking during both the parent FK check
+# and the child FK check to prevent a FK violation.
+#
+# The parent FK check is performed by the Serializable INSERT run by
+# root. Without locking during this check, the two transactions are not
+# guaranteed to detect the conflict with each other. For example, without this
+# locking, the Read Committed DELETE could finish after the INSERT's FK check
+# but before its insert. The INSERT could then write a phantom child row and
+# have a successful read refresh, and both transactions could commit. Locking
+# during the parent FK check avoids this by forcing the transactions to
+# coordinate on the parent row.
+#
+# The child FK check is performed by the Read Committed DELETE run by
+# testuser3. Without locking during this check, the Read Committed DELETE could
+# perform a stale read for its child FK check, missing a newer child row. For
+# example, it could miss the row written by the Serializable INSERT and
+# successfully commit. (Serializable isolation does not have this same risk of
+# stale reads and thus does not need locking during child FK checks.)
+#
+# For more discussion of this and other scenarios please see #151663.
+
+user testuser
+
+statement ok
+BEGIN
+
+# Use an update on p=2 to block the future insert by root.
+statement ok
+UPDATE parent_151663 SET q = q + 1 WHERE p = 2
+
+user testuser2
+
+statement ok
+BEGIN
+
+# Use a lock on p=3 to block the future delete by testuser3.
+statement ok
+SELECT * FROM parent_151663 WHERE p = 3 FOR UPDATE
+
+user testuser3
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SELECT 1
+
+statement async fkdelete error pgcode 23503 delete on table "parent_151663" violates foreign key constraint "child_151663_p_fkey" on table "child_151663"\nDETAIL: Key \(p\)=\(1\) is still referenced from table "child_151663"\.
+DELETE FROM parent_151663 WHERE p = (SELECT 1 FROM parent_151663 WHERE p = 3 FOR UPDATE)
+
+user root
+
+# Give the delete a moment to wait on the p=3 lock by testuser2.
+statement ok
+SELECT pg_sleep(1)
+
+# The serializable insert needs this locking to properly sychronize with the
+# read committed delete.
+statement ok
+SET enable_implicit_fk_locking_for_serializable = on;
+SET enable_shared_locking_for_serializable = on;
+SET enable_durable_locking_for_serializable = on
+
+statement ok
+BEGIN ISOLATION LEVEL SERIALIZABLE
+
+statement async fkinsert
+INSERT INTO child_151663 VALUES (10, 1), (20, 2)
+
+user testuser
+
+# Give the insert a moment to wait on the p=2 update by testuser.
+statement ok
+SELECT pg_sleep(1)
+
+statement ok
+ROLLBACK
+
+user testuser2
+
+# Give the insert a moment to lock p=1.
+statement ok
+SELECT pg_sleep(1)
+
+statement ok
+ROLLBACK
+
+user root
+
+awaitstatement fkinsert
+
+statement ok
+COMMIT
+
+user testuser3
+
+awaitstatement fkdelete
+
+statement ok
+COMMIT
+
+user root
+
+# Check that there are no orphan children.
+
+query II
+SELECT * FROM parent_151663 ORDER BY p
+----
+1  0
+2  0
+3  0
+
+query II
+SELECT * FROM child_151663 ORDER BY c
+----
+10  1
+20  2
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable;
+RESET enable_shared_locking_for_serializable;
+RESET enable_durable_locking_for_serializable
+
+subtest end
