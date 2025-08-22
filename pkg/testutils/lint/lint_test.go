@@ -1579,6 +1579,7 @@ func TestLint(t *testing.T) {
 			":!sql/plpgsql/plpgsql_error.go",
 			":!sql/protoreflect/redact.go",
 			":!sql/colexecerror/error.go",
+			":!sql/schemachanger/scerrors/errors.go",
 			":!util/timeutil/timeout_error.go",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
