@@ -175,6 +175,22 @@ var enableMultiLevelWriteAmpHeuristic = settings.RegisterBoolSetting(
 	true,
 )
 
+// useDeprecatedCompensatedScore is a temporary setting that provides a
+// mechanism for reverting Pebble's compaction picking heuristic to the previous
+// (25.3 and earlier) behavior for deciding when a level is eligible for
+// compaction. See the pebble.Options Experimental UseDeprecatedCompensatedScore
+// setting for details.
+//
+// We anticipate not needing to use this setting, but it's provided as an escape
+// hatch in case the heuristic change has an unforeseen impact on some
+// workloads.
+var useDeprecatedCompensatedScore = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"storage.use_deprecated_compensated_score",
+	"If enabled, this setting revert's the storage engine's compaction picking heuristic",
+	false,
+)
+
 // SSTableCompressionProfile is an enumeration of compression algorithms
 // available for compressing SSTables (e.g. for backup or transport).
 type SSTableCompressionProfile int64
@@ -892,6 +908,11 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	if cfg.opts.MaxConcurrentDownloads == nil {
 		cfg.opts.MaxConcurrentDownloads = func() int {
 			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
+		}
+	}
+	if cfg.opts.Experimental.UseDeprecatedCompensatedScore == nil {
+		cfg.opts.Experimental.UseDeprecatedCompensatedScore = func() bool {
+			return useDeprecatedCompensatedScore.Get(&cfg.settings.SV)
 		}
 	}
 
