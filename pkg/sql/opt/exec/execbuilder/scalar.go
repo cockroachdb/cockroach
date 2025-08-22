@@ -1335,7 +1335,6 @@ func (b *Builder) buildRoutinePlanGenerator(
 	return planGen
 }
 
-// TODO(janexing): should i move it into a separate file?
 func incrementRoutineStmtCounter(
 	counters eval.RoutineStatementCounters, dbName string, appName string, stmtTag string,
 ) {

@@ -601,7 +601,6 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
     - name: sql.routine.delete.started.count.internal
       exported_name: sql_routine_delete_started_count_internal
       labeled_name: 'sql.count{query_type: routine-started-delete, query_internal: true}'
@@ -641,7 +640,6 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
     - name: sql.routine.insert.started.count.internal
       exported_name: sql_routine_insert_started_count_internal
       labeled_name: 'sql.count{query_type: routine-started-insert, query_internal: true}'
@@ -681,7 +679,6 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
     - name: sql.routine.select.started.count.internal
       exported_name: sql_routine_select_started_count_internal
       labeled_name: 'sql.count{query_type: routine-started-select, query_internal: true}'
@@ -721,7 +718,6 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
     - name: sql.routine.update.started.count.internal
       exported_name: sql_routine_update_started_count_internal
       labeled_name: 'sql.count{query_type: routine-started-update, query_internal: true}'
