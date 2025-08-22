@@ -988,6 +988,137 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 	require.NotRegexp(t, traceRegexp, stringifiedSpans)
 }
 
+func TestRedactionErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(
+		t, 3, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	// Add a replica to the second and third nodes, and then decommission the
+	// second node. Since there are only 3 nodes in the cluster, the
+	// decommissioning replica cannot be rebalanced, which should trigger the
+	// "likely not enough nodes in cluster" message.
+	const decomNodeIdx = 1
+	const decomNodeID = 2
+	scratchKey := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx))
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx+1))
+	adminSrv := tc.Server(decomNodeIdx)
+	adminClient := adminSrv.GetAdminClient(t)
+	_, err := adminClient.Decommission(
+		ctx, &serverpb.DecommissionRequest{
+			NodeIDs:          []roachpb.NodeID{decomNodeID},
+			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+		},
+	)
+	require.NoError(t, err)
+
+	// Attempt to rebalance the decommissioning replica away. This should fail
+	// because there are not enough nodes in the cluster.
+	store := tc.GetFirstStoreFromServer(t, 0)
+	repl, err := store.GetReplica(tc.LookupRangeOrFatal(t, scratchKey).RangeID)
+	require.NoError(t, err)
+
+	testStartTs := timeutil.Now()
+	processErr, enqueueErr := store.Enqueue(
+		ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+	)
+	require.NoError(t, enqueueErr)
+	// We expect an error because there are not enough nodes to rebalance to
+	require.Error(t, processErr, "expected processing error")
+
+	// Flush logs and get log messages from replicate_queue.go
+	log.FlushFiles()
+	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
+		math.MaxInt64, 100, regexp.MustCompile(`replicate_queue\.go`), log.WithMarkedSensitiveData)
+	require.NoError(t, err)
+
+	// Look for the log entry that contains the "likely not enough nodes in cluster" message
+	foundEntry := false
+	var entry logpb.Entry
+	fmt.Println("Printing entries below ---")
+	for _, entry = range entries {
+		fmt.Printf(" @@@ Entry: %+v\n", entry)
+		if strings.Contains(entry.Message, "likely not enough nodes in cluster") {
+			foundEntry = true
+			break
+		}
+	}
+	require.True(t, foundEntry, "expected to find log entry with 'likely not enough nodes in cluster' message")
+
+	// Validate that the message is not redacted - it should contain the full text
+	require.Contains(t, entry.Message, "likely not enough nodes in cluster")
+
+	// Validate that the error message contains the expected format
+	require.Regexp(t, `error processing replica:.*likely not enough nodes in cluster`, entry.Message)
+}
+
+// TestRedactionErrorsLargerCluster tests that "likely not enough nodes in cluster"
+// message is not redacted in a larger cluster scenario where multiple nodes are decommissioned.
+func TestRedactionErrorsLargerCluster(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := log.Scope(t)
+	defer s.Close(t)
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(
+		t, 5, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	// Add replicas to all nodes for a range
+	scratchKey := tc.ScratchRange(t)
+	for i := 1; i < 5; i++ {
+		tc.AddVotersOrFatal(t, scratchKey, tc.Target(i))
+	}
+
+	// Decommission 3 nodes, leaving only 2 nodes available
+	adminSrv := tc.Server(0)
+	adminClient := adminSrv.GetAdminClient(t)
+	_, err := adminClient.Decommission(
+		ctx, &serverpb.DecommissionRequest{
+			NodeIDs:          []roachpb.NodeID{2, 3, 4},
+			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+		},
+	)
+	require.NoError(t, err)
+
+	// Try to rebalance - should fail due to insufficient nodes
+	store := tc.GetFirstStoreFromServer(t, 0)
+	repl, err := store.GetReplica(tc.LookupRangeOrFatal(t, scratchKey).RangeID)
+	require.NoError(t, err)
+	testStartTs := timeutil.Now()
+	processErr, enqueueErr := store.Enqueue(
+		ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+	)
+	require.NoError(t, enqueueErr)
+	require.Error(t, processErr, "expected processing error")
+
+	// Verify the error message is not redacted
+	log.FlushFiles()
+	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
+		math.MaxInt64, 100, regexp.MustCompile(`replicate_queue\.go`), log.WithMarkedSensitiveData)
+	require.NoError(t, err)
+
+	foundEntry := false
+	for _, entry := range entries {
+		if strings.Contains(entry.Message, "likely not enough nodes in cluster") {
+			foundEntry = true
+			require.Contains(t, entry.Message, "likely not enough nodes in cluster")
+			break
+		}
+	}
+	require.True(t, foundEntry, "expected to find log entry with 'likely not enough nodes in cluster' message")
+}
+
 // TestReplicateQueueDecommissionPurgatoryError tests that failure to move a
 // decommissioning replica puts it in the replicate queue purgatory.
 func TestReplicateQueueDecommissionPurgatoryError(t *testing.T) {
