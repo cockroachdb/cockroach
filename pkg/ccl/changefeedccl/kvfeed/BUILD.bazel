@@ -12,7 +12,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
-        "//pkg/ccl/changefeedccl/checkpoint",
         "//pkg/ccl/changefeedccl/kvevent",
         "//pkg/ccl/changefeedccl/schemafeed",
         "//pkg/ccl/changefeedccl/timers",

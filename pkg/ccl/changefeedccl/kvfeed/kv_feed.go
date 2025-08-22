@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
@@ -55,21 +54,20 @@ type MonitoringConfig struct {
 
 // Config configures a kvfeed.
 type Config struct {
-	Settings            *cluster.Settings
-	DB                  *kv.DB
-	Codec               keys.SQLCodec
-	Clock               *hlc.Clock
-	Spans               []roachpb.Span
-	SpanLevelCheckpoint *jobspb.TimestampSpansMap
-	Targets             changefeedbase.Targets
-	Writer              kvevent.Writer
-	Metrics             *kvevent.Metrics
-	MonitoringCfg       MonitoringConfig
-	MM                  *mon.BytesMonitor
-	WithDiff            bool
-	SchemaChangeEvents  changefeedbase.SchemaChangeEventClass
-	SchemaChangePolicy  changefeedbase.SchemaChangePolicy
-	SchemaFeed          schemafeed.SchemaFeed
+	Settings           *cluster.Settings
+	DB                 *kv.DB
+	Codec              keys.SQLCodec
+	Clock              *hlc.Clock
+	Spans              []roachpb.Span
+	Targets            changefeedbase.Targets
+	Writer             kvevent.Writer
+	Metrics            *kvevent.Metrics
+	MonitoringCfg      MonitoringConfig
+	MM                 *mon.BytesMonitor
+	WithDiff           bool
+	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
+	SchemaChangePolicy changefeedbase.SchemaChangePolicy
+	SchemaFeed         schemafeed.SchemaFeed
 
 	// If true, the feed will begin with a dump of data at exactly the
 	// InitialHighWater. This is a peculiar behavior. In general the
@@ -78,8 +76,13 @@ type Config struct {
 	NeedsInitialScan bool
 
 	// InitialHighWater is the timestamp after which new events are guaranteed to
-	// be produced.
+	// be produced. For initial scans, this is the scan time.
 	InitialHighWater hlc.Timestamp
+
+	// InitialSpanTimePairs contains pairs of spans and their initial resolved
+	// timestamps. The timestamps could be lower than InitialHighWater if the
+	// initial scan has not yet been completed.
+	InitialSpanTimePairs []kvcoord.SpanTimePair
 
 	// If the end time is set, the changefeed will run until the frontier
 	// progresses past the end time. Once the frontier has progressed past the end
@@ -130,12 +133,12 @@ func Run(ctx context.Context, cfg Config) error {
 
 	g := ctxgroup.WithContext(ctx)
 	f := newKVFeed(
-		cfg.Writer, cfg.Spans, cfg.SpanLevelCheckpoint,
+		cfg.Writer, cfg.Spans,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering,
 		cfg.WithFrontierQuantize,
 		cfg.ConsumerID,
-		cfg.InitialHighWater, cfg.EndTime,
+		cfg.InitialHighWater, cfg.InitialSpanTimePairs, cfg.EndTime,
 		cfg.Codec,
 		cfg.SchemaFeed,
 		sc, pff, bf, cfg.Targets, cfg.ScopedTimers, cfg.Knobs)
@@ -253,13 +256,13 @@ func (e schemaChangeDetectedError) Error() string {
 
 type kvFeed struct {
 	spans                []roachpb.Span
-	spanLevelCheckpoint  *jobspb.TimestampSpansMap
 	withFrontierQuantize time.Duration
 	withDiff             bool
 	withFiltering        bool
 	withInitialBackfill  bool
 	consumerID           int64
 	initialHighWater     hlc.Timestamp
+	initialSpanTimePairs []kvcoord.SpanTimePair
 	endTime              hlc.Timestamp
 	writer               kvevent.Writer
 	codec                keys.SQLCodec
@@ -284,13 +287,13 @@ type kvFeed struct {
 func newKVFeed(
 	writer kvevent.Writer,
 	spans []roachpb.Span,
-	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
 	withInitialBackfill, withDiff, withFiltering bool,
 	withFrontierQuantize time.Duration,
 	consumerID int64,
 	initialHighWater hlc.Timestamp,
+	initialSpanTimePairs []kvcoord.SpanTimePair,
 	endTime hlc.Timestamp,
 	codec keys.SQLCodec,
 	tf schemafeed.SchemaFeed,
@@ -304,7 +307,7 @@ func newKVFeed(
 	return &kvFeed{
 		writer:               writer,
 		spans:                spans,
-		spanLevelCheckpoint:  spanLevelCheckpoint,
+		initialSpanTimePairs: initialSpanTimePairs,
 		withInitialBackfill:  withInitialBackfill,
 		withDiff:             withDiff,
 		withFiltering:        withFiltering,
@@ -344,12 +347,19 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		return nil
 	}
 
-	// Frontier initialized to initialHighwater timestamp which
-	// represents the point in time at or before which we know
-	// we've seen all events or is the initial starting time of the feed.
-	rangeFeedResumeFrontier, err := span.MakeFrontierAt(f.initialHighWater, f.spans...)
+	// Use the initial span-time pairs to restore progress.
+	rangeFeedResumeFrontier, err := span.MakeFrontier(f.spans...)
 	if err != nil {
 		return err
+	}
+	for _, stp := range f.initialSpanTimePairs {
+		if stp.StartAfter.IsSet() && stp.StartAfter.Compare(f.initialHighWater) < 0 {
+			return errors.AssertionFailedf("initial span time pair with non-empty timestamp "+
+				"earlier than initial highwater %v: %v", f.initialHighWater, stp)
+		}
+		if _, err := rangeFeedResumeFrontier.Forward(stp.Span, stp.StartAfter); err != nil {
+			return err
+		}
 	}
 	rangeFeedResumeFrontier = span.MakeConcurrentFrontier(rangeFeedResumeFrontier)
 	defer rangeFeedResumeFrontier.Release()
@@ -358,7 +368,7 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		initialScan := i == 0
 		initialScanOnly := f.endTime == f.initialHighWater
 
-		scannedSpans, scannedTS, err := f.scanIfShould(ctx, initialScan, initialScanOnly, rangeFeedResumeFrontier.Frontier())
+		scannedSpans, scannedTS, err := f.scanIfShould(ctx, initialScan, initialScanOnly, rangeFeedResumeFrontier)
 		if err != nil {
 			return err
 		}
@@ -386,11 +396,6 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 				return errChangefeedCompleted
 			}
 			return err
-		}
-
-		// Clear out checkpoint after the initial scan or rangefeed.
-		if initialScan {
-			f.spanLevelCheckpoint = nil
 		}
 
 		boundaryTS := rangeFeedResumeFrontier.Frontier()
@@ -461,19 +466,6 @@ func isPrimaryKeyChange(
 	return isPrimaryIndexChange, isPrimaryIndexChange && hasNoColumnChanges
 }
 
-// filterCheckpointSpans filters spans which have already been completed,
-// and returns the list of spans that still need to be done.
-func filterCheckpointSpans(
-	spans []roachpb.Span, checkpoint *jobspb.TimestampSpansMap,
-) []roachpb.Span {
-	var sg roachpb.SpanGroup
-	sg.Add(spans...)
-	for _, sp := range checkpoint.All() {
-		sg.Sub(sp...)
-	}
-	return sg.Slice()
-}
-
 // scanIfShould performs a scan of KV pairs in watched span if
 // - this is the initial scan, or
 // - table schema is changed (a column is added/dropped) and a re-scan is needed.
@@ -486,12 +478,18 @@ func filterCheckpointSpans(
 // `highWater` is the largest timestamp at or below which we know all events in
 // watched span have been seen (i.e. frontier.smallestTS).
 func (f *kvFeed) scanIfShould(
-	ctx context.Context, initialScan bool, initialScanOnly bool, highWater hlc.Timestamp,
+	ctx context.Context, initialScan bool, initialScanOnly bool, resumeFrontier span.Frontier,
 ) ([]roachpb.Span, hlc.Timestamp, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.kvfeed.scan_if_should")
 	defer sp.Finish()
 
-	scanTime := highWater.Next()
+	highWater := resumeFrontier.Frontier()
+	scanTime := func() hlc.Timestamp {
+		if highWater.IsEmpty() {
+			return f.initialHighWater
+		}
+		return highWater.Next()
+	}()
 
 	events, err := f.tableFeed.Peek(ctx, scanTime)
 	if err != nil {
@@ -504,7 +502,6 @@ func (f *kvFeed) scanIfShould(
 	isInitialScan := initialScan && f.withInitialBackfill
 	var spansToScan []roachpb.Span
 	if isInitialScan {
-		scanTime = highWater
 		spansToScan = f.spans
 	} else if len(events) > 0 {
 		// Only backfill for the tables which have events which may not be all
@@ -547,10 +544,17 @@ func (f *kvFeed) scanIfShould(
 		return spansToScan, scanTime, nil
 	}
 
-	// If we have initial checkpoint information specified, filter out
-	// spans which we no longer need to scan.
-	spansToBackfill := filterCheckpointSpans(spansToScan, f.spanLevelCheckpoint)
-	if len(spansToBackfill) == 0 {
+	// Filter out any spans that have already been backfilled.
+	var spansToBackfill roachpb.SpanGroup
+	spansToBackfill.Add(spansToScan...)
+	for sp, ts := range resumeFrontier.Entries() {
+		if scanTime.LessEq(ts) {
+			spansToBackfill.Sub(sp)
+		}
+	}
+
+	// Skip scan if there are no spans to scan.
+	if spansToBackfill.Len() == 0 {
 		return spansToScan, scanTime, nil
 	}
 
@@ -563,7 +567,7 @@ func (f *kvFeed) scanIfShould(
 		boundaryType = jobspb.ResolvedSpan_EXIT
 	}
 	if err := f.scanner.Scan(ctx, f.writer, scanConfig{
-		Spans:     spansToBackfill,
+		Spans:     spansToBackfill.Slice(),
 		Timestamp: scanTime,
 		WithDiff:  !isInitialScan && f.withDiff,
 		Knobs:     f.knobs,
@@ -598,13 +602,6 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 	defer func() {
 		err = errors.CombineErrors(err, memBuf.CloseWithReason(ctx, err))
 	}()
-
-	// We have catchup scan checkpoint.  Advance frontier.
-	if f.spanLevelCheckpoint != nil {
-		if err := checkpoint.Restore(resumeFrontier, f.spanLevelCheckpoint); err != nil {
-			return err
-		}
-	}
 
 	var stps []kvcoord.SpanTimePair
 	for s, ts := range resumeFrontier.Entries() {
