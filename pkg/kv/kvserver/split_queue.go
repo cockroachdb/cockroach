@@ -219,7 +219,7 @@ var _ PurgatoryError = unsplittableRangeError{}
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(
-	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, r *Replica, confReader spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	processed, err = sq.processAttemptWithTracing(ctx, r, confReader)
 	if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
