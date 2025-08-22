@@ -1155,6 +1155,7 @@ func (bq *baseQueue) finishProcessingReplica(
 	processing := item.processing
 	callbacks := item.callbacks
 	requeue := item.requeue
+	priority := item.priority
 	item.callbacks = nil
 	bq.removeFromReplicaSetLocked(repl.GetRangeID())
 	item = nil // prevent accidental use below
@@ -1185,7 +1186,7 @@ func (bq *baseQueue) finishProcessingReplica(
 		// purgatory.
 		if purgErr, ok := IsPurgatoryError(err); ok {
 			bq.mu.Lock()
-			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr)
+			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr, priority /*priorityAtEnqueue*/)
 			bq.mu.Unlock()
 			return
 		}
@@ -1205,7 +1206,11 @@ func (bq *baseQueue) finishProcessingReplica(
 // addToPurgatoryLocked adds the specified replica to the purgatory queue, which
 // holds replicas which have failed processing.
 func (bq *baseQueue) addToPurgatoryLocked(
-	ctx context.Context, stopper *stop.Stopper, repl replicaInQueue, purgErr PurgatoryError,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	repl replicaInQueue,
+	purgErr PurgatoryError,
+	priorityAtEnqueue float64,
 ) {
 	bq.mu.AssertHeld()
 
@@ -1229,7 +1234,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 		return
 	}
 
-	item := &replicaItem{rangeID: repl.GetRangeID(), replicaID: repl.ReplicaID(), index: -1}
+	item := &replicaItem{rangeID: repl.GetRangeID(), replicaID: repl.ReplicaID(), index: -1, priority: priorityAtEnqueue}
 	bq.mu.replicas[repl.GetRangeID()] = item
 
 	defer func() {
@@ -1318,7 +1323,7 @@ func (bq *baseQueue) processReplicasInPurgatory(
 					if _, err := bq.replicaCanBeProcessed(ctx, repl, false); err != nil {
 						bq.finishProcessingReplica(ctx, stopper, repl, err)
 					} else {
-						err = bq.processReplica(ctx, repl, -1 /*priorityAtEnqueue*/)
+						err = bq.processReplica(ctx, repl, item.priority /*priorityAtEnqueue*/)
 						bq.finishProcessingReplica(ctx, stopper, repl, err)
 					}
 				},
