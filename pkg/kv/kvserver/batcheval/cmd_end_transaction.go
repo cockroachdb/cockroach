@@ -434,6 +434,10 @@ func EndTxn(
 		if retry, reason, extraMsg := IsEndTxnTriggeringRetryError(reply.Txn, args.Deadline); retry {
 			return result.Result{}, kvpb.NewTransactionRetryError(reason, extraMsg)
 		}
+		if args.DisallowTimestampBump && h.Txn.WriteTimestamp.Less(reply.Txn.WriteTimestamp) {
+			// TODO(drewk): Consider adding a new error type for this case.
+			return result.Result{}, kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "")
+		}
 
 		// If the transaction is being prepared to commit, mark it as such. Do not
 		// proceed to release locks or resolve intents.

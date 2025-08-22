@@ -9,11 +9,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -142,6 +144,15 @@ type txnSpanRefresher struct {
 	// spans to get out of sync. See assertRefreshSpansAtInvalidTimestamp.
 	refreshedTimestamp hlc.Timestamp
 
+	// lockingReadFootprint contains key spans from locking reads in
+	// read-committed transactions. These spans are tracked separately because
+	// they need to be refreshed up to the write timestamp (not just read
+	// timestamp) and persist for the entire transaction duration.
+	lockingReadFootprint condensableSpanSet
+	// lockingReadInvalid is set if locking read spans have not been collected,
+	// similar to refreshInvalid.
+	lockingReadInvalid bool
+
 	// canAutoRetry is set if the txnSpanRefresher is allowed to auto-retry.
 	canAutoRetry bool
 }
@@ -153,6 +164,24 @@ func (sr *txnSpanRefresher) SendLocked(
 	// Set the batch's CanForwardReadTimestamp flag.
 	ba.CanForwardReadTimestamp = sr.canForwardReadTimestampWithoutRefresh(ba.Txn)
 
+	if ba.Txn.IsoLevel != isolation.Serializable && sr.hasLockingReadSpans() {
+		// We cannot allow a non-serializable transaction with locking reads to
+		// commit later than the provisional commit timestamp, because the locked
+		// spans have only been refreshed up to the provisional commit timestamp.
+		// If we allowed this, another transaction could have written between the
+		// provisional commit timestamp and the final commit timestamp, which
+		// would invalidate the locking reads.
+		//
+		// Setting DisallowTimestampBump will cause the EndTxn request to return a
+		// retryable error if it discovers that the transaction was pushed. At this
+		// point, the txnSpanRefresher will attempt to refresh the locked spans.
+		rArgs, hasET := ba.GetArg(kvpb.EndTxn)
+		if hasET {
+			et := rArgs.(*kvpb.EndTxnRequest)
+			et.DisallowTimestampBump = true
+		}
+	}
+
 	// Attempt a refresh before sending the batch.
 	ba, pErr := sr.maybeRefreshPreemptively(ctx, ba)
 	if pErr != nil {
@@ -161,6 +190,14 @@ func (sr *txnSpanRefresher) SendLocked(
 
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	br, pErr := sr.sendLockedWithRefreshAttempts(ctx, ba, sr.maxRefreshAttempts())
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	// For read-committed transactions with locking reads, refresh the locked
+	// spans between the transaction's read and write timestamps if they have
+	// diverged.
+	ba, pErr = sr.maybeRefreshForLockingReads(ctx, ba)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -176,7 +213,8 @@ func (sr *txnSpanRefresher) SendLocked(
 	if err := sr.assertRefreshSpansAtInvalidTimestamp(br.Txn.ReadTimestamp); err != nil {
 		return nil, kvpb.NewError(err)
 	}
-	if !sr.refreshInvalid {
+	if !sr.refreshInvalid ||
+		(br.Txn != nil && br.Txn.IsoLevel != isolation.Serializable && !sr.lockingReadInvalid) {
 		if err := sr.appendRefreshSpans(ctx, ba, br); err != nil {
 			return nil, kvpb.NewError(err)
 		}
@@ -195,26 +233,36 @@ func (sr *txnSpanRefresher) maybeCondenseRefreshSpans(
 	ctx context.Context, txn *roachpb.Transaction,
 ) {
 	maxBytes := MaxTxnRefreshSpansBytes.Get(&sr.st.SV)
-	if sr.refreshFootprint.bytes >= maxBytes {
-		condensedBefore := sr.refreshFootprint.condensed
+	totalBytes := sr.refreshFootprint.bytes + sr.lockingReadFootprint.bytes
+
+	if totalBytes >= maxBytes {
+		condensedBefore := sr.refreshFootprint.condensed || sr.lockingReadFootprint.condensed
 		var condensedSufficient bool
 		if sr.knobs.CondenseRefreshSpansFilter == nil || sr.knobs.CondenseRefreshSpansFilter() {
 			sr.refreshFootprint.maybeCondense(ctx, sr.riGen, maxBytes)
-			condensedSufficient = sr.refreshFootprint.bytes < maxBytes
+			sr.lockingReadFootprint.maybeCondense(ctx, sr.riGen, maxBytes)
+			totalBytesAfterCondense := sr.refreshFootprint.bytes + sr.lockingReadFootprint.bytes
+			condensedSufficient = totalBytesAfterCondense < maxBytes
 		}
 		if condensedSufficient {
 			log.VEventf(ctx, 2, "condensed refresh spans for txn %s to %d bytes",
-				txn, sr.refreshFootprint.bytes)
+				txn, sr.refreshFootprint.bytes+sr.lockingReadFootprint.bytes)
 		} else {
 			// Condensing was not enough. Giving up on tracking reads. Refreshes
 			// will not be possible.
 			log.VEventf(ctx, 2, "condensed refresh spans didn't save enough memory. txn %s. "+
 				"refresh spans after condense: %d bytes",
-				txn, sr.refreshFootprint.bytes)
+				txn, sr.refreshFootprint.bytes+sr.lockingReadFootprint.bytes)
 			sr.refreshInvalid = true
 			sr.refreshFootprint.clear()
+			if sr.lockingReadFootprint.bytes > maxBytes {
+				// Only discard the locking read spans if they exceed the budget on
+				// their own.
+				sr.lockingReadInvalid = true
+				sr.lockingReadFootprint.clear()
+			}
 		}
-		if sr.refreshFootprint.condensed && !condensedBefore {
+		if !condensedBefore && (sr.refreshFootprint.condensed || sr.lockingReadFootprint.condensed) {
 			sr.metrics.ClientRefreshMemoryLimitExceeded.Inc(1)
 		}
 	}
@@ -453,8 +501,9 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptively(
 		// necessary, even if its write timestamp has been bumped. Transactions run
 		// at weak isolation levels may refresh in response to WriteTooOld errors or
 		// ReadWithinUncertaintyInterval errors returned by requests, but they do
-		// not need to refresh preemptively ahead of an EndTxn request.
-		!ba.Txn.IsoLevel.ToleratesWriteSkew()
+		// not need to refresh preemptively ahead of an EndTxn request unless they
+		// have taken locks.
+		(!ba.Txn.IsoLevel.ToleratesWriteSkew() || sr.hasLockingReadSpans())
 
 	// If neither condition is true, defer the refresh.
 	if !refreshFree && !refreshInevitable {
@@ -526,16 +575,16 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 			sr.metrics.ClientRefreshSuccess.Inc(1)
 		} else {
 			sr.metrics.ClientRefreshFail.Inc(1)
-			if sr.refreshFootprint.condensed {
+			if sr.refreshFootprint.condensed || sr.lockingReadFootprint.condensed {
 				sr.metrics.ClientRefreshFailWithCondensedSpans.Inc(1)
 			}
 		}
 	}()
 
-	if sr.refreshInvalid {
+	if sr.refreshInvalid || sr.lockingReadInvalid {
 		log.VEvent(ctx, 2, "can't refresh txn spans; not valid")
 		return kvpb.NewError(errors.AssertionFailedf("can't refresh txn spans; not valid"))
-	} else if sr.refreshFootprint.empty() {
+	} else if sr.refreshFootprint.empty() && !sr.hasLockingReadSpans() {
 		log.VEvent(ctx, 2, "there are no txn spans to refresh")
 		sr.forwardRefreshTimestampOnRefresh(refreshToTxn)
 		return nil
@@ -551,7 +600,7 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 	// encountered a committed value) or a WriteIntentError (if it encountered
 	// an intent). These errors are handled in maybeRefreshPreemptively.
 	refreshSpanBa.WaitPolicy = lock.WaitPolicy_Error
-	addRefreshes := func(refreshes *condensableSpanSet) {
+	addRefreshes := func(refreshes *condensableSpanSet, refreshToWriteTimestamp bool) {
 		// We're going to check writes between the previous refreshed timestamp, if
 		// any, and the timestamp we want to bump the transaction to. Note that if
 		// we've already refreshed the transaction before, we don't need to check
@@ -567,13 +616,15 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 			var req kvpb.Request
 			if len(u.EndKey) == 0 {
 				req = &kvpb.RefreshRequest{
-					RequestHeader: kvpb.RequestHeaderFromSpan(u),
-					RefreshFrom:   refreshFrom,
+					RequestHeader:           kvpb.RequestHeaderFromSpan(u),
+					RefreshFrom:             refreshFrom,
+					RefreshToWriteTimestamp: refreshToWriteTimestamp,
 				}
 			} else {
 				req = &kvpb.RefreshRangeRequest{
-					RequestHeader: kvpb.RequestHeaderFromSpan(u),
-					RefreshFrom:   refreshFrom,
+					RequestHeader:           kvpb.RequestHeaderFromSpan(u),
+					RefreshFrom:             refreshFrom,
+					RefreshToWriteTimestamp: refreshToWriteTimestamp,
 				}
 			}
 			refreshSpanBa.Add(req)
@@ -581,7 +632,19 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 				req.Header().Span(), refreshFrom, refreshToTxn.WriteTimestamp)
 		}
 	}
-	addRefreshes(&sr.refreshFootprint)
+	addRefreshes(&sr.refreshFootprint, false /* refreshToWriteTimeStamp */)
+
+	// For read-committed transactions, also refresh locking read spans. These
+	// need to be refreshed up to the write timestamp.
+	if sr.hasLockingReadSpans() {
+		if buildutil.CrdbTestBuild {
+			if refreshToTxn.IsoLevel == isolation.Serializable {
+				return kvpb.NewError(errors.AssertionFailedf(
+					"serializable transactions should not separately refresh locking reads"))
+			}
+		}
+		addRefreshes(&sr.lockingReadFootprint, true /* refreshToWriteTimeStamp */)
+	}
 
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	if _, batchErr := sr.wrapped.SendLocked(ctx, refreshSpanBa); batchErr != nil {
@@ -599,11 +662,18 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
 ) error {
 	expLogEnabled := log.ExpensiveLogEnabled(ctx, 3)
-	return ba.RefreshSpanIterate(br, func(span roachpb.Span) {
+
+	isReadCommitted := ba.Txn != nil && ba.Txn.IsoLevel == isolation.ReadCommitted
+	return ba.RefreshSpanIterate(br, func(span roachpb.Span, isLocking bool) {
 		if expLogEnabled {
 			log.VEventf(ctx, 3, "recording span to refresh: %s", span.String())
 		}
-		sr.refreshFootprint.insert(span)
+		if isReadCommitted && isLocking && !sr.lockingReadInvalid {
+			// Locking reads in read-committed transactions are tracked separately.
+			sr.lockingReadFootprint.insert(span)
+		} else if !sr.refreshInvalid {
+			sr.refreshFootprint.insert(span)
+		}
 	})
 }
 
@@ -615,6 +685,11 @@ func (sr *txnSpanRefresher) resetRefreshSpansLocked() {
 	sr.refreshFootprint.clear()
 	sr.refreshInvalid = false
 	sr.refreshedTimestamp.Reset()
+}
+
+func (sr *txnSpanRefresher) resetLockSpansLocked() {
+	sr.lockingReadFootprint.clear()
+	sr.lockingReadInvalid = false
 }
 
 // canForwardReadTimestampWithoutRefresh returns whether the transaction can
@@ -639,7 +714,8 @@ func (sr *txnSpanRefresher) canForwardReadTimestamp(txn *roachpb.Transaction) bo
 // Note that when deciding whether a transaction can be bumped to a particular
 // timestamp, the transaction's deadline must also be taken into account.
 func (sr *txnSpanRefresher) canForwardReadTimestampWithoutRefresh(txn *roachpb.Transaction) bool {
-	return sr.canForwardReadTimestamp(txn) && !sr.refreshInvalid && sr.refreshFootprint.empty()
+	return sr.canForwardReadTimestamp(txn) && !sr.refreshInvalid &&
+		sr.refreshFootprint.empty() && !sr.hasLockingReadSpans()
 }
 
 // forwardRefreshTimestampOnRefresh updates the refresher's tracked
@@ -752,6 +828,7 @@ func (sr *txnSpanRefresher) importLeafFinalState(
 // epochBumpedLocked implements the txnInterceptor interface.
 func (sr *txnSpanRefresher) epochBumpedLocked() {
 	sr.resetRefreshSpansLocked()
+	sr.resetLockSpansLocked()
 }
 
 // createSavepointLocked is part of the txnInterceptor interface.
@@ -765,6 +842,11 @@ func (sr *txnSpanRefresher) createSavepointLocked(ctx context.Context, s *savepo
 	s.refreshSpans = make([]roachpb.Span, len(sr.refreshFootprint.asSlice()))
 	copy(s.refreshSpans, sr.refreshFootprint.asSlice())
 	s.refreshInvalid = sr.refreshInvalid
+
+	// Also save locking read spans for read-committed transactions.
+	s.lockingReadSpans = make([]roachpb.Span, len(sr.lockingReadFootprint.asSlice()))
+	copy(s.lockingReadSpans, sr.lockingReadFootprint.asSlice())
+	s.lockingReadInvalid = sr.lockingReadInvalid
 }
 
 // releaseSavepointLocked is part of the txnInterceptor interface.
@@ -776,8 +858,91 @@ func (sr *txnSpanRefresher) rollbackToSavepointLocked(ctx context.Context, s sav
 		sr.refreshFootprint.clear()
 		sr.refreshFootprint.insert(s.refreshSpans...)
 		sr.refreshInvalid = s.refreshInvalid
+
+		// Also restore locking read spans for read-committed transactions.
+		sr.lockingReadFootprint.clear()
+		sr.lockingReadFootprint.insert(s.lockingReadSpans...)
+		sr.lockingReadInvalid = s.lockingReadInvalid
 	}
 }
 
+func (sr *txnSpanRefresher) hasLockingReadSpans() bool {
+	return !sr.lockingReadInvalid && !sr.lockingReadFootprint.empty()
+}
+
+// maybeRefreshForLockingReads sends a separate refresh batch before the
+// original batch for read-committed transactions when the write timestamp has
+// diverged from the read timestamp and the batch contains locking reads. This
+// ensures that guaranteed-durability locks properly detect timestamp conflicts.
+func (sr *txnSpanRefresher) maybeRefreshForLockingReads(
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchRequest, *kvpb.Error) {
+	// Only applies to read-committed transactions.
+	if ba.Txn == nil || ba.Txn.IsoLevel != isolation.ReadCommitted {
+		return ba, nil
+	}
+
+	// Check if there's timestamp divergence.
+	if !ba.Txn.ReadTimestamp.Less(ba.Txn.WriteTimestamp) {
+		return ba, nil
+	}
+
+	// Check if there are any locking reads in the batch.
+	var lockingSpans []roachpb.Span
+	for _, union := range ba.Requests {
+		req := union.GetInner()
+		if kvpb.IsLocking(req) && !kvpb.IsIntentWrite(req) {
+			lockingSpans = append(lockingSpans, req.Header().Span())
+		}
+	}
+
+	if len(lockingSpans) == 0 {
+		return ba, nil
+	}
+
+	// Create a separate refresh batch to send before the original batch.
+	refreshBa := &kvpb.BatchRequest{}
+	refreshBa.Txn = ba.Txn
+
+	// Add refresh requests for each locking span.
+	for _, span := range lockingSpans {
+		var refreshReq kvpb.Request
+		if len(span.EndKey) == 0 {
+			refreshReq = &kvpb.RefreshRequest{
+				RequestHeader:           kvpb.RequestHeaderFromSpan(span),
+				RefreshFrom:             ba.Txn.ReadTimestamp,
+				RefreshToWriteTimestamp: true,
+			}
+		} else {
+			refreshReq = &kvpb.RefreshRangeRequest{
+				RequestHeader:           kvpb.RequestHeaderFromSpan(span),
+				RefreshFrom:             ba.Txn.ReadTimestamp,
+				RefreshToWriteTimestamp: true,
+			}
+		}
+		refreshBa.Add(refreshReq)
+	}
+
+	log.VEventf(ctx, 2, "sending %d refresh requests for locking reads in read-committed "+
+		"transaction with timestamp divergence (%s -> %s)",
+		len(lockingSpans), ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
+
+	// Send the refresh batch first. If it fails, return the error.
+	refreshResponse, refreshErr := sr.wrapped.SendLocked(ctx, refreshBa)
+	if refreshErr != nil {
+		// TODO(drewk): consider using a different error type than SERIALIZABLE.
+		log.Eventf(ctx, "refresh for non-serializable locking failed; propagating retry error")
+		return nil, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn, refreshErr)
+	}
+
+	// Refresh succeeded, proceed with the original batch.
+	ba.UpdateTxn(refreshResponse.Txn)
+	return ba, nil
+}
+
 // closeLocked implements the txnInterceptor interface.
-func (*txnSpanRefresher) closeLocked() {}
+func (sr *txnSpanRefresher) closeLocked() {
+	// Clean up all tracking when the transaction is done.
+	sr.refreshFootprint.clear()
+	sr.lockingReadFootprint.clear()
+}

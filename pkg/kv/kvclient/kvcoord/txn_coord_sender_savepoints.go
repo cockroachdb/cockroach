@@ -40,9 +40,11 @@ type savepoint struct {
 	// txnSpanRefresher fields.
 	// TODO(mira): after we remove
 	// kv.transaction.keep_refresh_spans_on_savepoint_rollback.enabled, we won't
-	// need these two fields anymore.
-	refreshSpans   []roachpb.Span
-	refreshInvalid bool
+	// need these fields anymore.
+	refreshSpans       []roachpb.Span
+	refreshInvalid     bool
+	lockingReadSpans   []roachpb.Span
+	lockingReadInvalid bool
 }
 
 var _ kv.SavepointToken = (*savepoint)(nil)

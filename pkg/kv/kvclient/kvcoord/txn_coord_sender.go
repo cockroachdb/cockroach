@@ -1648,6 +1648,10 @@ func (tc *TxnCoordSender) maybeAutoStepReadTimestampLocked() {
 func (tc *TxnCoordSender) stepReadTimestampLocked() {
 	now := tc.clock.Now()
 	tc.mu.txn.BumpReadTimestamp(now)
+
+	// We do not reset the spans tracked for locked reads under read-committed
+	// isolation, since doing so would allow the reads performed while taking
+	// those locks to be invalidated by concurrent writing transactions.
 	tc.interceptorAlloc.txnSpanRefresher.resetRefreshSpansLocked()
 }
 
