@@ -1118,6 +1118,9 @@ message Session {
   string authentication_method = 22 [
     (gogoproto.casttype) = "github.com/cockroachdb/redact.SafeString"
   ];
+
+  // The session's default transaction isolation level.
+  string default_isolation_level = 23;
 }
 
 // An error wrapper object for ListSessionsResponse.
