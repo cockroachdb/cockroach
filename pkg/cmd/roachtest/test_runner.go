@@ -1492,12 +1492,20 @@ func (r *testRunner) runTest(
 	}
 
 	l.Printf("running test teardown (test-teardown.log)")
-	// From now on, most logging goes to test-teardown.log to give a clear separation between
+	// From now on, all logging goes to test-teardown.log to give a clear separation between
 	// operations originating from the test vs the harness. The only error that can originate here
 	// is from artifact collection, which is best effort and for which we do not fail the test.
+	// TODO(wchoe): improve log destination consistency, above comment doesn't take deferred calls into account
+	// testRunner.runTest's deferred calls write to the original test.log, not test-teardown.log
+	// and the deferred calls aren't necessarily related to test teardown so the
+	// correct log to write to is ambiguous
 	replaceLogger("test-teardown")
-	if err := r.teardownTest(ctx, t, c, timedOut, l); err != nil {
+	if err := r.teardownTest(ctx, t, c, timedOut); err != nil {
 		l.PrintfCtx(ctx, "error during test teardown: %v; see test-teardown.log for details", err)
+	}
+	if err := r.inspectArtifacts(ctx, t, l, timedOut); err != nil {
+		// inspect artifacts and potentially add helpful triage information for failed tests
+		l.PrintfCtx(ctx, "error during artifact inspection: %v", err)
 	}
 }
 
@@ -1667,7 +1675,7 @@ func (r *testRunner) postTestAssertions(
 // teardownTest is best effort and should not fail a test.
 // Errors during artifact collection will be propagated up.
 func (r *testRunner) teardownTest(
-	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool, test_logger *logger.Logger,
+	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) error {
 	// Check for rare conditions (such as storage durability crashes) at this
 	// point. This may still mark the test as failed (so that we enter artifacts
@@ -1679,7 +1687,6 @@ func (r *testRunner) teardownTest(
 		if err != nil {
 			t.L().Printf("error collecting artifacts: %v", err)
 		}
-		var errMonitor registry.FatalMonitorError
 		if timedOut {
 			// Shut down the cluster. We only do this on timeout to help the test terminate;
 			// for regular failures, if the --debug flag is used, we want the cluster to stay
@@ -1694,40 +1701,6 @@ func (r *testRunner) teardownTest(
 
 			// Cancel tasks to ensure that any stray tasks are cleaned up.
 			t.taskManager.Cancel()
-
-		} else if failuresMatchingError(t.failures(), &errMonitor) {
-			t.L().Printf("Test has failed due to fatal error observed by the monitor")
-			t.L().Printf("Attempting to gather node fatal level logs for triage")
-
-			pattern := `^F[0-9]{6}`
-			// *unredacted captures patterns for single node and multi-node clusters
-			// e.g. unredacted, 1.unredacted
-			joinedFilePath := filepath.Join(t.ArtifactsDir(), "logs/*unredacted/cockroach*.log")
-			targetFiles, err := filepath.Glob(joinedFilePath)
-			if err != nil {
-				return err
-			} else if len(targetFiles) == 0 {
-				return errors.New("No matching log files found")
-			}
-			args := append([]string{"-E", "-m", "10", pattern}, targetFiles...)
-			command := "grep"
-			// Note: need to wrap the regex in quotes if you want to copy this command from the logs and
-			// use directly
-			t.L().Printf("Gathering fatal level logs with command: %s %s", command, strings.Join(args, " "))
-			cmd := exec.Command("grep", args...)
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				var ee *exec.ExitError
-				if errors.As(err, &ee) && ee.ExitCode() == 1 {
-					t.L().Printf("No fatal level logs found.")
-					return nil
-				}
-			} else {
-				msg := fmt.Sprintf("CockroachDB contains Fatal level logs. Up to the first 10 "+
-					"will be shown here. See node logs in artifacts for more details.\n%s", string(out))
-				test_logger.PrintfCtx(ctx, msg)
-				t.appendGithubMessage(msg)
-			}
 		}
 		return err
 	}
@@ -1760,6 +1733,79 @@ func (r *testRunner) teardownTest(
 		getCpuProfileArtifacts(ctx, c, t)
 	}
 	return nil
+}
+
+// inspectArtifacts inspects node logs and attempts to write helpful triage
+// information to the test log and testRunner.githubMessage
+// This method is best effort and should not fail a test.
+func (r *testRunner) inspectArtifacts(
+	ctx context.Context, t *testImpl, testLogger *logger.Logger, timedOut bool,
+) error {
+
+	if timedOut {
+		testLogger.Printf("Test timed out. Do not attempt to inspect artifacts.")
+		return nil
+	}
+
+	var errMonitor registry.FatalMonitorError
+	if !failuresMatchingError(t.failures(), &errMonitor) {
+		return nil
+	}
+
+	testLogger.Printf("Test has failed due to fatal error observed by the monitor. " +
+		"Attempting to gather node fatal level logs for triage.")
+	out, err := gatherFatalNodeLogs(t, testLogger)
+	if err != nil {
+		return err
+	}
+
+	msg := fmt.Sprintf("CockroachDB contains Fatal level logs. Up to the first 10 "+
+		"will be shown here. See node logs in artifacts for more details.\n%s", out)
+	testLogger.PrintfCtx(ctx, msg)
+	t.appendGithubMessage(msg)
+
+	return nil
+}
+
+// gatherFatalNodeLogs attempts to gather fatal level node logs to help with
+// triage
+func gatherFatalNodeLogs(t *testImpl, testLogger *logger.Logger) (string, error) {
+	logPattern := `^F[0-9]{6}`
+	filePattern := "logs/*unredacted/cockroach*.log"
+	// *unredacted captures patterns for single node and multi-node clusters
+	// e.g. unredacted, 1.unredacted
+	joinedFilePath := filepath.Join(t.ArtifactsDir(), filePattern)
+	targetFiles, err := filepath.Glob(joinedFilePath)
+	if err != nil {
+		return "", err
+	} else if len(targetFiles) == 0 {
+		return "", errors.Newf("No matching log files found for log pattern: %s and file pattern: %s",
+			logPattern, filePattern)
+	}
+	args := append([]string{"-E", "-m", "10", logPattern}, targetFiles...)
+	command := "grep"
+	// Note: need to wrap the regex in quotes if you want to copy this command from the logs and
+	// use directly
+	t.L().Printf("Gathering fatal level logs with command: %s %s", command, strings.Join(args, " "))
+	cmd := exec.Command("grep", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && ee.ExitCode() == 1 {
+			testLogger.Printf("No fatal level logs found.")
+			// Not finding files isn't necessarily an error so don't return an error
+			return "", nil
+		}
+		return "", err
+	}
+	// trim file path from output for readability
+	lines := strings.Split(string(out), "\n")
+	for i, line := range lines {
+		if idx := strings.IndexByte(line, ':'); idx >= 0 {
+			lines[i] = strings.TrimLeft(line[idx+1:], " \t")
+		}
+	}
+	return strings.Join(lines, "\n"), err
 }
 
 // maybeSaveClusterDueToInvariantProblems detects rare conditions (such as

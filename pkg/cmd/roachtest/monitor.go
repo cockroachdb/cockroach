@@ -117,11 +117,11 @@ type monitorImpl struct {
 func newMonitor(
 	ctx context.Context,
 	t interface {
-		Fatal(...interface{})
-		Failed() bool
-		WorkerStatus(...interface{})
-		L() *logger.Logger
-	},
+	Fatal(...interface{})
+	Failed() bool
+	WorkerStatus(...interface{})
+	L() *logger.Logger
+},
 	c cluster.Cluster,
 	expectExactProcessDeath bool,
 	opts ...option.Option,
@@ -226,10 +226,7 @@ func (m *monitorImpl) Go(fn func(context.Context) error) {
 			// Note that `t.Fatal` calls `panic(err)`, so this mechanism primarily
 			// enables that use case. But it also offers protection against accidental
 			// panics (NPEs and such) which should not bubble up to the runtime.
-			//
-			// Also we wrap the error to later attempt to extract fatal level logs to
-			// assist with triage
-			err = registry.FatalMonitor(rErr)
+			err = errors.Wrap(errors.WithStack(rErr), "monitor user task failed")
 		}()
 		// Automatically clear the worker status message when the goroutine exits.
 		defer m.t.WorkerStatus()
@@ -340,7 +337,11 @@ func (m *monitorImpl) startNodeMonitor() {
 // to unexpected node deaths are returned.
 func (m *monitorImpl) WaitForNodeDeath() error {
 	m.startNodeMonitor()
-	return m.monitorGroup.Wait()
+	err := m.monitorGroup.Wait()
+	if err != nil {
+		return registry.FatalMonitor(err)
+	}
+	return err
 }
 
 func (m *monitorImpl) wait() error {
@@ -354,5 +355,5 @@ func (m *monitorImpl) wait() error {
 	// goroutines after wait() returns.
 	monitorErr := m.WaitForNodeDeath()
 
-	return errors.Join(userErr, monitorErr)
+	return registry.FatalMonitor(errors.Join(userErr, monitorErr))
 }
