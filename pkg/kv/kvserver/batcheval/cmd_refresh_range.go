@@ -40,14 +40,18 @@ func RefreshRange(
 		return result.Result{}, errors.AssertionFailedf("no transaction specified to %s", args.Method())
 	}
 
-	// We're going to refresh up to the transaction's read timestamp.
-	if h.Timestamp != h.Txn.WriteTimestamp {
+	// We're going to refresh up to the transaction's read timestamp, or write
+	// timestamp if RefreshToWriteTimestamp is set (e.g. for read-committed
+	// transactions with locking reads).
+	refreshTo := h.Timestamp
+	if args.RefreshToWriteTimestamp {
+		refreshTo = h.Txn.WriteTimestamp
+	} else if h.Timestamp != h.Txn.WriteTimestamp {
 		// We're expecting the read and write timestamp to have converged before the
 		// Refresh request was sent.
 		log.Fatalf(ctx, "expected provisional commit ts %s == read ts %s. txn: %s", h.Timestamp,
 			h.Txn.WriteTimestamp, h.Txn)
 	}
-	refreshTo := h.Timestamp
 
 	refreshFrom := args.RefreshFrom
 	if refreshFrom.IsEmpty() {

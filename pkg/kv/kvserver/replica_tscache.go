@@ -362,6 +362,26 @@ func (r *Replica) updateTimestampCache(
 			if !releasedTs.IsEmpty() {
 				addToTSCache(start, end, releasedTs, txnID)
 			}
+		case *kvpb.RefreshRequest:
+			// Refresh requests can read up to the transaction's write timestamp in
+			// order to verify correct behavior for locks taken in weaker isolation
+			// levels. In this case, the timestamp cache must be updated at the
+			// write timestamp.
+			refreshTS := ts
+			if t.RefreshToWriteTimestamp {
+				refreshTS = ba.WriteTimestamp()
+			}
+			addToTSCache(start, end, refreshTS, txnID)
+		case *kvpb.RefreshRangeRequest:
+			// Refresh requests can read up to the transaction's write timestamp in
+			// order to verify correct behavior for locks taken in weaker isolation
+			// levels. In this case, the timestamp cache must be updated at the
+			// write timestamp.
+			refreshTS := ts
+			if t.RefreshToWriteTimestamp {
+				refreshTS = ba.WriteTimestamp()
+			}
+			addToTSCache(start, end, refreshTS, txnID)
 		default:
 			addToTSCache(start, end, ts, txnID)
 		}
