@@ -1,41 +1,142 @@
+onlyif config local-mixed-25.2 local-mixed-25.3
+statement error pq: SHOW INSPECT ERRORS requires the cluster to be upgraded to v25.4
+SHOW INSPECT ERRORS
+
 user testuser
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
+skipif config local-mixed-25.2 local-mixed-25.3
 statement error pq: user testuser does not have INSPECT system privilege
 SHOW INSPECT ERRORS
 
 user root
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
+statement ok
+GRANT SYSTEM INSPECT TO testuser;
+
+skipif config local-mixed-25.2 local-mixed-25.3
 statement error relation "bad_table" does not exist
 SHOW INSPECT ERRORS FOR TABLE bad_table
 
 statement ok
-CREATE TABLE foo (a INT)
+CREATE TABLE foo (a INT);
+CREATE TABLE bar (b INT);
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
+let $foo_table_id
+SELECT 'foo'::regclass::oid
+
+let $bar_table_id
+SELECT 'bar'::regclass::oid
+
+let $database_id
+SELECT id FROM system.namespace WHERE name = current_database() AND "parentID" = 0
+
+let $schema_id
+SELECT current_schema()::regnamespace::oid
+
+let $aost
+SELECT '2025-09-23-11:02:14-04:00'::timestamp
+
+# the job_info insert addresses the `crdb_internal.system_jobs` inner join
 statement ok
+INSERT INTO system.jobs (id, owner, status, job_type)
+VALUES (555, 'testuser', 'failed', 'INSPECT');
+INSERT INTO system.job_info (job_id, info_key)
+VALUES (555, 'legacy_payload');
+
+skipif config local-mixed-25.2 local-mixed-25.3
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, aost, database_id, schema_id, id, details)
+VALUES 
+  (555, '555_foo', '$aost', $database_id, $schema_id, $foo_table_id, '{"detail":"555\"foo"}'),
+  (555, '555_bar', '$aost', $database_id, $schema_id, $bar_table_id, '{"detail":"555\"bar"}');
+
+statement ok
+INSERT INTO system.jobs (id, owner, status, job_type)
+VALUES (666, 'testuser', 'failed', 'INSPECT');
+INSERT INTO system.job_info (job_id, info_key)
+VALUES (666, 'legacy_payload');
+
+skipif config local-mixed-25.2 local-mixed-25.3
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, aost, database_id, schema_id, id, details)
+VALUES (666, '666_foo', '$aost', $database_id, $schema_id, $foo_table_id, '{"detail1":"\u2603 666_foo_1","detail2":"\n666_foo_2"}');
+
+statement ok
+INSERT INTO system.jobs (id, owner, status, job_type)
+VALUES (777, 'testuser', 'running', 'INSPECT');
+INSERT INTO system.job_info (job_id, info_key)
+VALUES (777, 'legacy_payload');
+
+skipif config local-mixed-25.2 local-mixed-25.3
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, aost, database_id, schema_id, id, details)
+VALUES (777, '777_foo', '$aost', $database_id, $schema_id, $foo_table_id, '{"detail":"777 foo"}');
+
+user testuser
+
+# no options should show most records from the recent completed job
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTIT colnames
 SHOW INSPECT ERRORS
+----
+error_type  database_name  schema_name  table_name  primary_key  job_id  aost
+666_foo     test           public       foo         NULL         666     2025-09-23 04:00:00.000000
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
-statement ok
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTITT colnames
 SHOW INSPECT ERRORS WITH DETAILS
+----
+error_type  database_name  schema_name  table_name  primary_key  job_id  aost                        details
+666_foo     test           public       foo         NULL         666     2025-09-23 04:00:00.000000  {
+                                                                                                         "detail1": "☃ 666_foo_1",
+                                                                                                         "detail2": "\n666_foo_2"
+                                                                                                     }
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
-statement ok
-SHOW INSPECT ERRORS FOR JOB 666
+# specifying a job shows results regardless of status
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTIT
+SHOW INSPECT ERRORS FOR JOB 777
+----
+777_foo  test  public  foo  NULL  777  2025-09-23 04:00:00.000000
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
-statement ok
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTIT nosort
+SHOW INSPECT ERRORS FOR JOB 555
+----
+555_bar  test  public  bar  NULL  555  2025-09-23 04:00:00.000000
+555_foo  test  public  foo  NULL  555  2025-09-23 04:00:00.000000
+
+# query by table shows records from the most recent completed job that reported errors on that table
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTIT
 SHOW INSPECT ERRORS FOR TABLE foo
+----
+666_foo  test  public  foo  NULL  666  2025-09-23 04:00:00.000000
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
-statement ok
-SHOW INSPECT ERRORS FOR TABLE foo FOR JOB 666 WITH DETAILS
+# and query by table only shows records for that given table
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE bar
+----
+555_bar  test  public  bar  NULL  555  2025-09-23 04:00:00.000000
+
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE public.bar
+----
+555_bar  test  public  bar  NULL  555  2025-09-23 04:00:00.000000
+
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE test.public.bar
+----
+555_bar  test  public  bar  NULL  555  2025-09-23 04:00:00.000000
+
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTITT colnames
+SHOW INSPECT ERRORS FOR TABLE foo FOR JOB 555 WITH DETAILS
+----
+error_type  database_name  schema_name  table_name  primary_key  job_id  aost                        details
+555_foo     test           public       foo         NULL         555     2025-09-23 04:00:00.000000  {
+                                                                                                         "detail": "555\"foo"
+                                                                                                     }

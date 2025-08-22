@@ -8,6 +8,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -23,6 +26,14 @@ type inspectNode struct {
 // Inspect checks the database.
 // Privileges: INSPECT.
 func (p *planner) Inspect(ctx context.Context, n *tree.Inspect) (planNode, error) {
+	if !p.extendedEvalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "SHOW INSPECT ERRORS requires the cluster to be upgraded to v25.4")
+	}
+
+	if err := p.CheckGlobalPrivilegeOrRoleOption(ctx, privilege.INSPECT); err != nil {
+		return nil, err
+	}
+
 	switch n.Typ {
 	case tree.InspectTable:
 		tableName := n.Table.ToTableName()
@@ -37,10 +48,6 @@ func (p *planner) Inspect(ctx context.Context, n *tree.Inspect) (planNode, error
 		}
 	default:
 		return nil, errors.AssertionFailedf("unexpected INSPECT type received, got: %v", n.Typ)
-	}
-
-	if err := p.CheckGlobalPrivilegeOrRoleOption(ctx, privilege.INSPECT); err != nil {
-		return nil, err
 	}
 
 	return &inspectNode{n: n}, nil
