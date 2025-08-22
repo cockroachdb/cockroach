@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -337,6 +338,35 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 				c.makeStringPrefixSpan(offset, prefix, out)
 				return complete
 			}
+		}
+
+	case opt.ContainsOp:
+		if l, ok := datum.(*tree.DLTree); ok {
+			var spans constraint.Spans
+			// We need to create an equality span for each subtree of the LTree that
+			// is rooted from the root, including the empty ltree.
+			spans.Alloc(l.LTree.Len() + 1)
+			keyCtx := &c.keyCtx[offset]
+			for i := 0; i <= l.LTree.Len(); i++ {
+				var subLTree ltree.T
+				if l.LTree.Compare(ltree.Empty) != 0 {
+					var err error
+					subLTree, err = l.LTree.SubPath(0 /* offset */, i /* length */)
+					if err != nil {
+						panic(err)
+					}
+				} else {
+					// SubPath is not graceful with empty ltree, thus we handle it here.
+					subLTree = ltree.Empty
+				}
+				key := constraint.MakeKey(tree.NewDLTree(subLTree))
+				var sp constraint.Span
+				sp.Init(key, includeBoundary, key, includeBoundary)
+				spans.Append(&sp)
+			}
+			spans.SortAndMerge(keyCtx)
+			out.Init(keyCtx, &spans)
+			return true
 		}
 	}
 	c.unconstrained(offset, out)
