@@ -2249,7 +2249,8 @@ CREATE TABLE crdb_internal.%s (
   phase            STRING,         -- the current execution phase
   full_scan        BOOL,           -- whether the query contains a full table or index scan
   plan_gist        STRING,         -- Compressed logical plan.
-  database         STRING          -- the database the statement was executed on
+  database         STRING,         -- the database the statement was executed on
+  isolation_level  STRING          -- the isolation level of the query's transaction
 )`
 
 func (p *planner) makeSessionsRequest(
@@ -2414,6 +2415,16 @@ func populateQueriesTable(
 			if shouldRedactOtherUserQuery && session.Username != p.SessionData().User().Normalized() {
 				sql = query.SqlNoConstants
 			}
+
+			// Get isolation level from session's active transaction, or fall back to
+			// default.
+			var isolationLevelDatum tree.Datum = tree.DNull
+			if session.ActiveTxn != nil {
+				isolationLevelDatum = tree.NewDString(session.ActiveTxn.IsolationLevel)
+			} else if session.DefaultIsolationLevel != "" {
+				isolationLevelDatum = tree.NewDString(session.DefaultIsolationLevel)
+			}
+
 			if err := addRow(
 				tree.NewDString(query.ID),
 				txnID,
@@ -2429,6 +2440,7 @@ func populateQueriesTable(
 				isFullScanDatum,
 				planGistDatum,
 				tree.NewDString(query.Database),
+				isolationLevelDatum,
 			); err != nil {
 				return err
 			}
@@ -2455,6 +2467,7 @@ func populateQueriesTable(
 				tree.DNull,                             // full_scan
 				tree.DNull,                             // plan_gist
 				tree.DNull,                             // database
+				tree.DNull,                             // isolation_level
 			); err != nil {
 				return err
 			}
@@ -2510,7 +2523,8 @@ CREATE TABLE crdb_internal.%s (
   pg_backend_pid     INT,            -- the numerical ID attached to the session which is used to mimic a Postgres backend PID
   trace_id           INT,            -- the ID of the trace of the session
   goroutine_id       INT,            -- the ID of the goroutine of the session
-  authentication_method STRING       -- the method used to authenticate the session
+  authentication_method STRING,      -- the method used to authenticate the session
+  isolation_level       STRING       -- the isolation level of the session's active transaction
 )
 `
 
@@ -2634,6 +2648,16 @@ func populateSessionsTable(
 				return err
 			}
 		}
+
+		// Get isolation level from session's active transaction, or fall back to
+		// default.
+		var isolationLevelDatum tree.Datum = tree.DNull
+		if session.ActiveTxn != nil {
+			isolationLevelDatum = tree.NewDString(session.ActiveTxn.IsolationLevel)
+		} else if session.DefaultIsolationLevel != "" {
+			isolationLevelDatum = tree.NewDString(session.DefaultIsolationLevel)
+		}
+
 		if err := addRow(
 			tree.NewDInt(tree.DInt(session.NodeID)),
 			sessionID,
@@ -2654,6 +2678,7 @@ func populateSessionsTable(
 			tree.NewDInt(tree.DInt(session.TraceID)),
 			tree.NewDInt(tree.DInt(session.GoroutineID)),
 			tree.NewDString(string(session.AuthenticationMethod)),
+			isolationLevelDatum,
 		); err != nil {
 			return err
 		}
@@ -2684,6 +2709,7 @@ func populateSessionsTable(
 				tree.DNull,                             // trace_id
 				tree.DNull,                             // goroutine_id
 				tree.DNull,                             // authentication_method
+				tree.DNull,                             // isolation_level
 			); err != nil {
 				return err
 			}
