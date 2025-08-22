@@ -147,7 +147,13 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	files := details.URIs
 	format := details.Format
 
-	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
+	if len(details.Tables) != 1 {
+		return errors.AssertionFailedf("import job is expected to have one and only one table")
+	}
+
+	tblFromJobDetail := details.Tables[0]
+
+	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, 1)
 	rowCountValidation := importRowCountValidation.Get(&p.ExecCfg().Settings.SV)
 
 	grp := ctxgroup.WithContext(ctx)
@@ -164,79 +170,84 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// can't use a thread-safe map type like syncutil.Map directly in the proto.
 	var preImportRowCountMu syncutil.Mutex
 	if rowCountValidation {
-		// TODO(janexing): simplify this once the details.Tables is changed
-		// to a single table rather than a list.
-		for i := range details.Tables {
-			tblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
-			for _, idx := range tblDesc.AllIndexes() {
-				idx := idx
-				tableTag := kvpb.BulkOpSummaryID(uint64(tblDesc.GetID()), uint64(idx.GetID()))
-				expectedCntChan := make(chan int64)
-				expectedRowCountReadyByIndex.Store(tableTag, &expectedCntChan)
-				preCountWaitGroup.Add(1)
-				grp.GoCtx(func(ctx context.Context) error {
-					var preImportIdxLen int64
-					var err error
-					// Skip pre-import row counting when resuming a paused job, as the counts
-					// were already captured during the initial run. Additionally, attempting
-					// to re-execute row count queries on an offline table descriptor would
-					// fail during job resumption.
+		tblDesc := tabledesc.NewBuilder(tblFromJobDetail.Desc).BuildImmutableTable()
+		for _, idx := range tblDesc.AllIndexes() {
+			idx := idx
+			// indexTag is defined to be aligned with how key is defined in
+			// BulkOpSummary.EntryCounts.
+			indexTag := kvpb.BulkOpSummaryID(uint64(tblDesc.GetID()), uint64(idx.GetID()))
+			expectedCntChan := make(chan int64)
+			expectedRowCountReadyByIndex.Store(indexTag, &expectedCntChan)
+			preCountWaitGroup.Add(1)
+			grp.GoCtx(func(ctx context.Context) error {
+				var preImportIdxLen int64
+				var err error
+				// Skip pre-import row counting when resuming a paused job, as the counts
+				// were already captured during the initial run. Additionally, attempting
+				// to re-execute row count queries on an offline table descriptor would
+				// fail during job resumption.
+				preImportRowCountMu.Lock()
+				cnt, ok := details.PreImportRowCount[indexTag]
+				preImportRowCountMu.Unlock()
+				if ok {
+					preImportIdxLen = cnt
+				} else {
+					preImportIdxLen, err = sql.CountIndexRowsAndMaybeCheckUniqueness(
+						ctx,
+						tblDesc,
+						idx,
+						false, /* withFirstMutationPublic */
+						newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()),
+						sessiondata.NoSessionDataOverride,
+					)
+					if err != nil {
+						preCountWaitGroup.Done()
+						return errors.Wrapf(err, "counting rows in index %q of table %q before import", idx.GetName(), tblDesc.GetName())
+					}
 					preImportRowCountMu.Lock()
-					cnt, ok := details.PreImportRowCount[tableTag]
+					details.PreImportRowCount[indexTag] = preImportIdxLen
 					preImportRowCountMu.Unlock()
-					if ok {
-						preImportIdxLen = cnt
-					} else {
-						preImportIdxLen, err = sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx, false /* withFirstMutationPublic */, newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()), sessiondata.NoSessionDataOverride)
-						if err != nil {
-							preCountWaitGroup.Done()
-							return errors.Wrapf(err, "counting rows in index %q of table %q before import", idx.GetName(), tblDesc.GetName())
-						}
-						preImportRowCountMu.Lock()
-						details.PreImportRowCount[tableTag] = preImportIdxLen
-						preImportRowCountMu.Unlock()
-					}
+				}
 
-					// Pre-count is now complete, signal the wait group that the table
-					// can now be brought offline.
-					preCountWaitGroup.Done()
-					expectedRowCountChan, _ := expectedRowCountReadyByIndex.Load(tableTag)
-					select {
-					case expectedCount := <-*expectedRowCountChan:
-						// We reach here only after the table has been published, hence it has been
-						// changed to PUBLIC from OFFLINE. We need to retrieve the freshest descriptor
-						// for the post-import row count query to be run successfully.
-						var newTblDesc catalog.TableDescriptor
-						if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-							ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
-						) error {
-							freshMutableTblDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, tblDesc.GetID())
-							if err != nil {
-								return err
-							}
-							newTblDesc = freshMutableTblDesc.ImmutableCopy().(catalog.TableDescriptor)
-							return nil
-						}); err != nil {
-							return errors.Wrapf(err, "failed to get fresh table descriptor for table %s during post-import row count validation", tblDesc.GetName())
-						}
-						postImportIdxLen, err :=
-							sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, newTblDesc, idx,
-								false, /* withFirstMutationPublic */
-								newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()),
-								sessiondata.NoSessionDataOverride)
+				// Pre-count is now complete, signal the wait group that the table
+				// can now be brought offline.
+				preCountWaitGroup.Done()
+				expectedRowCountChan, _ := expectedRowCountReadyByIndex.Load(indexTag)
+				select {
+				case expectedCount := <-*expectedRowCountChan:
+					// We reach here only after the table has been published, hence it has been
+					// changed to PUBLIC from OFFLINE. We need to retrieve the freshest descriptor
+					// for the post-import row count query to be run successfully.
+					var newTblDesc catalog.TableDescriptor
+					if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
+						ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+					) error {
+						freshMutableTblDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, tblDesc.GetID())
 						if err != nil {
-							return errors.Wrapf(err, "counting rows in index %q of table %q after import", idx.GetName(), tblDesc.GetName())
+							return err
 						}
-						if diff := postImportIdxLen - preImportIdxLen; diff != expectedCount {
-							return errors.AssertionFailedf("row count validation failed for index %q of table %q: expected %d rows imported, got %d",
-								idx.GetName(), newTblDesc.GetName(), expectedCount, diff)
-						}
-					case <-ctx.Done():
-						return ctx.Err()
+						newTblDesc = freshMutableTblDesc.ImmutableCopy().(catalog.TableDescriptor)
+						return nil
+					}); err != nil {
+						return errors.Wrapf(err, "failed to get fresh table descriptor for table %s during post-import row count validation", tblDesc.GetName())
 					}
-					return nil
-				})
-			}
+					postImportIdxLen, err :=
+						sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, newTblDesc, idx,
+							false, /* withFirstMutationPublic */
+							newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()),
+							sessiondata.NoSessionDataOverride)
+					if err != nil {
+						return errors.Wrapf(err, "counting rows in index %q of table %q after import", idx.GetName(), tblDesc.GetName())
+					}
+					if diff := postImportIdxLen - preImportIdxLen; diff != expectedCount {
+						return errors.AssertionFailedf("row count validation failed for index %q of table %q: expected %d rows imported, got %d",
+							idx.GetName(), newTblDesc.GetName(), expectedCount, diff)
+					}
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+				return nil
+			})
 		}
 	}
 
@@ -255,79 +266,78 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+
+		log.Eventf(ctx, "finished pre-import row counts for all indexes of table %q", tblFromJobDetail.Desc.Name)
 	}
 
-	if details.Tables != nil {
-		// Skip prepare stage on job resumption, if it has already been completed.
-		if !details.PrepareComplete {
-			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-				ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
-			) error {
-				var preparedDetails jobspb.ImportDetails
-				var err error
-				curDetails := details
+	// Skip prepare stage on job resumption, if it has already been completed.
+	if !details.PrepareComplete {
+		if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
+			ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+		) error {
+			var preparedDetails jobspb.ImportDetails
+			var err error
+			curDetails := details
 
-				preparedDetails, err = r.prepareTablesForIngestion(ctx, p, curDetails, txn.KV(), descsCol)
-				if err != nil {
-					return err
-				}
-
-				// Telemetry for multi-region.
-				for _, table := range preparedDetails.Tables {
-					dbDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, table.Desc.GetParentID())
-					if err != nil {
-						return err
-					}
-					if dbDesc.IsMultiRegion() {
-						telemetry.Inc(sqltelemetry.ImportIntoMultiRegionDatabaseCounter)
-					}
-				}
-
-				// Update the job details now that the schemas and table descs have
-				// been "prepared".
-				return r.job.WithTxn(txn).Update(ctx, func(
-					txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
-				) error {
-					pl := md.Payload
-					*pl.GetImport() = preparedDetails
-
-					// Update the set of descriptors for later observability.
-					// TODO(ajwerner): Do we need this idempotence test?
-					prev := md.Payload.DescriptorIDs
-					if prev == nil {
-						var descriptorIDs []descpb.ID
-						for _, table := range preparedDetails.Tables {
-							descriptorIDs = append(descriptorIDs, table.Desc.GetID())
-						}
-						pl.DescriptorIDs = descriptorIDs
-					}
-					ju.UpdatePayload(pl)
-					return nil
-				})
-			}); err != nil {
+			preparedDetails, err = r.prepareTablesForIngestion(ctx, p, curDetails, txn.KV(), descsCol)
+			if err != nil {
 				return err
 			}
 
-			// Re-initialize details after prepare step.
-			details = r.job.Details().(jobspb.ImportDetails)
-			emitImportJobEvent(ctx, p, jobs.StateRunning, r.job)
-		}
-
-		for _, i := range details.Tables {
-			var tableName string
-			if i.Name != "" {
-				tableName = i.Name
-			} else if i.Desc != nil {
-				tableName = i.Desc.Name
-			} else {
-				return errors.New("invalid table specification")
+			// Telemetry for multi-region.
+			for _, table := range preparedDetails.Tables {
+				dbDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, table.Desc.GetParentID())
+				if err != nil {
+					return err
+				}
+				if dbDesc.IsMultiRegion() {
+					telemetry.Inc(sqltelemetry.ImportIntoMultiRegionDatabaseCounter)
+				}
 			}
 
-			tables[tableName] = &execinfrapb.ReadImportDataSpec_ImportTable{
-				Desc:       i.Desc,
-				TargetCols: i.TargetCols,
-			}
+			// Update the job details now that the schemas and table descs have
+			// been "prepared".
+			return r.job.WithTxn(txn).Update(ctx, func(
+				txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+			) error {
+				pl := md.Payload
+				*pl.GetImport() = preparedDetails
+
+				// Update the set of descriptors for later observability.
+				// TODO(ajwerner): Do we need this idempotence test?
+				prev := md.Payload.DescriptorIDs
+				if prev == nil {
+					var descriptorIDs []descpb.ID
+					for _, table := range preparedDetails.Tables {
+						descriptorIDs = append(descriptorIDs, table.Desc.GetID())
+					}
+					pl.DescriptorIDs = descriptorIDs
+				}
+				ju.UpdatePayload(pl)
+				return nil
+			})
+		}); err != nil {
+			return err
 		}
+
+		// Re-initialize details after prepare step.
+		details = r.job.Details().(jobspb.ImportDetails)
+		tblFromJobDetail = details.Tables[0]
+		emitImportJobEvent(ctx, p, jobs.StateRunning, r.job)
+	}
+
+	var tableName string
+	if tblFromJobDetail.Name != "" {
+		tableName = tblFromJobDetail.Name
+	} else if tblFromJobDetail.Desc != nil {
+		tableName = tblFromJobDetail.Desc.Name
+	} else {
+		return errors.New("invalid table specification")
+	}
+
+	tables[tableName] = &execinfrapb.ReadImportDataSpec_ImportTable{
+		Desc:       tblFromJobDetail.Desc,
+		TargetCols: tblFromJobDetail.TargetCols,
 	}
 
 	typeDescs := make([]*descpb.TypeDescriptor, len(details.Types))
@@ -351,21 +361,19 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// we can cheaply clear-range instead of revert-range to cleanup (or if the
 		// cluster has finalized to 22.1, use DeleteRange without predicate
 		// filtering).
-		for i := range details.Tables {
-			tblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
-			tblSpan := tblDesc.TableSpan(p.ExecCfg().Codec)
-			res, err := p.ExecCfg().DB.Scan(ctx, tblSpan.Key, tblSpan.EndKey, 1 /* maxRows */)
-			if err != nil {
-				return errors.Wrap(err, "checking if existing table is empty")
-			}
-			details.Tables[i].WasEmpty = len(res) == 0
+		tblDesc := tabledesc.NewBuilder(tblFromJobDetail.Desc).BuildImmutableTable()
+		tblSpan := tblDesc.TableSpan(p.ExecCfg().Codec)
+		res, err := p.ExecCfg().DB.Scan(ctx, tblSpan.Key, tblSpan.EndKey, 1 /* maxRows */)
+		if err != nil {
+			return errors.Wrap(err, "checking if existing table is empty")
+		}
+		tblFromJobDetail.WasEmpty = len(res) == 0
 
-			// Update the descriptor in the job record and in the database
-			details.Tables[i].Desc.ImportStartWallTime = details.Walltime
+		// Update the descriptor in the job record and in the database
+		tblFromJobDetail.Desc.ImportStartWallTime = details.Walltime
 
-			if err := bindTableDescImportProperties(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
-				return err
-			}
+		if err := bindTableDescImportProperties(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
+			return err
 		}
 
 		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
@@ -384,10 +392,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	pkIDs := make(map[uint64]struct{}, len(details.Tables))
-	for _, t := range details.Tables {
-		pkIDs[kvpb.BulkOpSummaryID(uint64(t.Desc.ID), uint64(t.Desc.PrimaryIndex.ID))] = struct{}{}
-	}
+	pkID := kvpb.BulkOpSummaryID(uint64(tblFromJobDetail.Desc.ID), uint64(tblFromJobDetail.Desc.PrimaryIndex.ID))
 	r.res.DataSize = res.DataSize
 	// NOTE: The following loop to update r.res cannot be integrated with the
 	// later loop that signals expectedRowCountReadyByIndex for two reasons:
@@ -398,7 +403,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	//    prior to executing testingKnobs.afterImport so that it can test resuming
 	//    interrupted import processes (such as TestCSVImportCanBeResumed).
 	for id, count := range res.EntryCounts {
-		if _, ok := pkIDs[id]; ok {
+		if id == pkID {
 			r.res.Rows += count
 		} else {
 			r.res.IndexEntries += count
