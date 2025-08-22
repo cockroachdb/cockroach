@@ -145,6 +145,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}
 
 	details := r.job.Details().(jobspb.ImportDetails)
+	if details.PreImportRowCount == nil {
+		// TODO(janexing): is here even the right place to initialize this field?
+		details.PreImportRowCount = make(map[uint64]int64)
+	}
 	files := details.URIs
 	format := details.Format
 
@@ -164,17 +168,25 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			tblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
 			for _, idx := range tblDesc.AllIndexes() {
 				idx := idx
+				i := i
 				tableTag := kvpb.BulkOpSummaryID(uint64(tblDesc.GetID()), uint64(idx.GetID()))
 				expectedRowCountReadyByIndex.Store(tableTag, &expectedRowCountWithSignal{
 					ready: make(chan struct{}),
 				})
 				pendingPreCountTasks.Add(1)
 				grp.GoCtx(func(ctx context.Context) error {
-					preImportIdxLen, err := sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx, false, newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()), sessiondata.NoSessionDataOverride)
-					pendingPreCountTasks.Add(-1)
-					if err != nil {
-						return errors.Wrapf(err, "counting rows in index %q of table %q before import", idx.GetName(), tblDesc.GetName())
+					var preImportIdxLen int64
+					var err error
+					if cnt, ok := details.PreImportRowCount[tableTag]; ok {
+						preImportIdxLen = cnt
+					} else {
+						preImportIdxLen, err = sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx, false, newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()), sessiondata.NoSessionDataOverride)
+						if err != nil {
+							return errors.Wrapf(err, "counting rows in index %q of table %q before import", idx.GetName(), tblDesc.GetName())
+						}
+						details.PreImportRowCount[tableTag] = preImportIdxLen
 					}
+					pendingPreCountTasks.Add(-1)
 
 					expectedRowCountWithSig, _ := expectedRowCountReadyByIndex.Load(tableTag)
 					select {
@@ -207,6 +219,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// the table offline.
 		// TODO(janexing): more graceful shutdown of pre-counts.
 		for pendingPreCountTasks.Load() > 0 {
+			fmt.Println("sleeping")
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
