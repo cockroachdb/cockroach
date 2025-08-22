@@ -1080,20 +1080,23 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	// store should already exist or not.
 	initFromMinVersionFile := cfg.env.StoreClusterVersion != (roachpb.Version{})
 
-	if !initFromMinVersionFile && (cfg.opts.ErrorIfNotExists || cfg.opts.ReadOnly) {
-		filename := p.cfg.env.UnencryptedFS.PathJoin(cfg.env.Dir, fs.MinVersionFilename)
-		return nil, errors.Errorf(
-			"pebble: database %q does not exist (missing required file %q)",
-			cfg.env.Dir, filename,
-		)
+	if !initFromMinVersionFile {
+		if cfg.opts.ErrorIfNotExists || cfg.opts.ReadOnly {
+			filename := p.cfg.env.UnencryptedFS.PathJoin(cfg.env.Dir, fs.MinVersionFilename)
+			return nil, errors.Errorf(
+				"pebble: database %q does not exist (missing required file %q)",
+				cfg.env.Dir, filename,
+			)
+		}
+		// If there is no min version file, there should be no store. If there is
+		// one, it's either 1) a store from a very old version (which we don't want
+		// to open) or 2) an empty store that was created from a previous bootstrap
+		// attempt that failed right before writing out the min version file. We set
+		// a flag to disallow the open in case 1.
+		cfg.opts.ErrorIfNotPristine = true
+	} else {
+		cfg.opts.ErrorIfNotExists = true
 	}
-	cfg.opts.ErrorIfNotExists = cfg.opts.ErrorIfNotExists || initFromMinVersionFile
-	// If there is no min version file, there should be no store. If there is
-	// one, it's either 1) a store from a very old version (which we don't want
-	// to open) or 2) an empty store that was created from a previous bootstrap
-	// attempt that failed right before writing out the min version file. We set
-	// a flag to disallow the open in case 1.
-	cfg.opts.ErrorIfNotPristine = !initFromMinVersionFile
 
 	if WorkloadCollectorEnabled {
 		p.replayer.Attach(cfg.opts)
