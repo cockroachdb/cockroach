@@ -64,9 +64,6 @@ type JobTypeMetrics struct {
 	ResumeFailed           *metric.Counter
 	FailOrCancelCompleted  *metric.Counter
 	FailOrCancelRetryError *metric.Counter
-	// TODO (sajjad): FailOrCancelFailed metric is not updated after the modification
-	// of retrying all reverting jobs. Remove this metric in v22.1.
-	FailOrCancelFailed *metric.Counter
 
 	NumJobsWithPTS *metric.Gauge
 	ExpiredPTS     *metric.Counter
@@ -278,24 +275,6 @@ func makeMetaFailOrCancelRetryError(jt jobspb.Type) metric.Metadata {
 	}
 }
 
-func makeMetaFailOrCancelFailed(jt jobspb.Type) metric.Metadata {
-	typeStr := typeToString(jt)
-	return metric.Metadata{
-		Name: fmt.Sprintf("jobs.%s.fail_or_cancel_failed", typeStr),
-		Help: fmt.Sprintf("Number of %s jobs which failed with a "+
-			"non-retriable error on their failure or cancelation process",
-			typeStr),
-		Measurement: "jobs",
-		Unit:        metric.Unit_COUNT,
-		MetricType:  io_prometheus_client.MetricType_COUNTER,
-		LabeledName: "jobs.fail_or_cancel",
-		StaticLabels: metric.MakeLabelPairs(
-			metric.LabelName, typeStr,
-			metric.LabelStatus, "failed",
-		),
-	}
-}
-
 func makeMetaProtectedCount(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
 	return metric.Metadata{
@@ -422,7 +401,6 @@ func (m *Metrics) init(histogramWindowInterval time.Duration, lookup *cidr.Looku
 			ResumeFailed:           metric.NewCounter(makeMetaResumeFailed(jt)),
 			FailOrCancelCompleted:  metric.NewCounter(makeMetaFailOrCancelCompeted(jt)),
 			FailOrCancelRetryError: metric.NewCounter(makeMetaFailOrCancelRetryError(jt)),
-			FailOrCancelFailed:     metric.NewCounter(makeMetaFailOrCancelFailed(jt)),
 			NumJobsWithPTS:         metric.NewGauge(makeMetaProtectedCount(jt)),
 			ExpiredPTS:             metric.NewCounter(makeMetaExpiredPTS(jt)),
 			ProtectedAge:           metric.NewGauge(makeMetaProtectedAge(jt)),
