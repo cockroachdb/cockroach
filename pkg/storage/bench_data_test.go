@@ -107,6 +107,11 @@ func getInitialStateEngine(
 	require.NoError(b, err)
 	require.True(b, ok)
 
+	// Validate and set the minversion for the env after copy.
+	settings := cluster.MakeClusterSettings()
+	env.StoreClusterVersion, err = fs.ValidateMinVersionFile(env.UnencryptedFS, env.Dir, settings.Version)
+	require.NoError(b, err)
+
 	if !inMemory {
 		// Load all the files into the OS buffer cache for better determinism.
 		testutils.ReadAllFiles(filepath.Join(env.Dir, "*"))

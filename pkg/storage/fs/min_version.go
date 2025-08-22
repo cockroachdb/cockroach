@@ -8,6 +8,7 @@ package fs
 import (
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -65,4 +66,58 @@ func GetMinVersion(atomicRenameFS vfs.FS, dir string) (_ roachpb.Version, ok boo
 		return roachpb.Version{}, false, err
 	}
 	return version, true, nil
+}
+
+// ValidateMinVersionFile validates the store cluster version found
+// in the min-version file in against the provided cluster version.
+func ValidateMinVersionFile(
+	fs vfs.FS, dir string, clusterVersion clusterversion.Handle,
+) (roachpb.Version, error) {
+	// Read the current store cluster version.
+	storeClusterVersion, minVerFileExists, err := GetMinVersion(fs, dir)
+	if !minVerFileExists || err != nil {
+		return storeClusterVersion, err
+	}
+
+	v := clusterVersion
+	if v == nil {
+		return storeClusterVersion, errors.New("cluster version must be provided if min version file exists")
+	}
+
+	// Avoid running a binary too new for this store. This is what you'd catch
+	// if, say, you restarted directly from v21.2 into v22.2 (bumping the min
+	// version) without going through v22.1 first.
+	//
+	// Note that "going through" above means that v22.1 successfully upgrades
+	// all existing stores. If v22.1 crashes half-way through the startup
+	// sequence (so now some stores have v21.2, but others v22.1) you are
+	// expected to run v22.1 again (hopefully without the crash this time) which
+	// would then rewrite all the stores.
+	if storeClusterVersion.Less(v.MinSupportedVersion()) {
+		if storeClusterVersion.Major < clusterversion.DevOffset && v.LatestVersion().Major >= clusterversion.DevOffset {
+			return storeClusterVersion, errors.Errorf(
+				"store last used with cockroach non-development version v%s "+
+					"cannot be opened by development version v%s",
+				storeClusterVersion, v.LatestVersion(),
+			)
+		}
+		return storeClusterVersion, errors.Errorf(
+			"store last used with cockroach version v%s "+
+				"is too old for running version v%s (which requires data from v%s or later)",
+			storeClusterVersion, v.LatestVersion(), v.MinSupportedVersion(),
+		)
+	}
+
+	// Avoid running a binary too old for this store. This protects against
+	// scenarios where an older binary attempts to open a store created by
+	// a newer version that may have incompatible data structures or formats.
+	if v.LatestVersion().Less(storeClusterVersion) {
+		return storeClusterVersion, errors.Errorf(
+			"store last used with cockroach version v%s is too high for running "+
+				"version v%s",
+			storeClusterVersion, v.LatestVersion(),
+		)
+	}
+
+	return storeClusterVersion, nil
 }
