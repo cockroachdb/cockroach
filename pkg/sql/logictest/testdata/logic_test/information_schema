@@ -4008,6 +4008,7 @@ enable_implicit_fk_locking_for_serializable                      off
 enable_implicit_select_for_update                                on
 enable_implicit_transaction_for_batch_statements                 on
 enable_insert_fast_path                                          on
+enable_inspect_command                                           off
 enable_multiple_modifications_of_table                           off
 enable_multiregion_placement_policy                              off
 enable_scrub_job                                                 off

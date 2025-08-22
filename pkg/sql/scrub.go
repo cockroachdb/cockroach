@@ -156,7 +156,7 @@ func (n *scrubNode) Close(ctx context.Context) {
 // the database. Views are skipped without errors.
 func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
 	if p.extendedEvalCtx.SessionData().EnableScrubJob {
-		return errors.Errorf("SCRUB DATABASE not supported with enable_scrub_job")
+		return errors.New("SCRUB DATABASE not supported with enable_scrub_job")
 	}
 
 	// Check that the database exists.
