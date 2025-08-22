@@ -7581,6 +7581,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: server.startup-test.last-updated
+      exported_name: server_startup_test_last_updated
+      description: Unix timestamp of when the startup test metric was set during server startup
+      y_axis_label: Timestamp
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
     - name: sql.bytesin
       exported_name: sql_bytesin
       description: Number of SQL bytes received
