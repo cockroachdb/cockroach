@@ -877,6 +877,16 @@ func (rq *replicateQueue) processOneChange(
 ) (requeue bool, _ error) {
 	change, err := rq.planner.PlanOneChange(
 		ctx, repl, desc, conf, plan.PlannerOptions{Scatter: scatter})
+
+	if priority != -1 {
+		if change.Action == allocatorimpl.AllocatorConsiderRebalance &&
+			priority > allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority() {
+			log.Infof(ctx,
+				"high priority at enqueue but rebalancing at process: action=%s, priority=%v, enqueuePriority=%v",
+				change.Action, change.Action.Priority(), priority)
+		}
+	}
+
 	// When there is an error planning a change, return the error immediately
 	// and do not requeue. It is unlikely that the range or storepool state
 	// will change quickly enough in order to not get the same error and
