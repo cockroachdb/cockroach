@@ -9,19 +9,90 @@ statement error relation "bad_table" does not exist
 SHOW INSPECT ERRORS FOR TABLE bad_table
 
 statement ok
-CREATE TABLE foo (a INT)
+CREATE TABLE foo (a INT);
+CREATE TABLE bar (b INT);
+
+let $foo_table_id
+SELECT 'foo'::regclass::oid
+
+let $bar_table_id
+SELECT 'bar'::regclass::oid
+
+let $database_id
+SELECT id FROM system.namespace WHERE name = current_database() AND "parentID" = 0
+
+let $schema_id
+SELECT current_schema()::regnamespace::oid
 
 statement ok
+INSERT INTO system.jobs (id, status, job_type)
+VALUES (555, 'succeeded', 'INSPECT');
+
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, database_id, schema_id, id, details, aost)
+VALUES 
+  (555, '555 foo', $database_id, $schema_id, $foo_table_id, '{"detail": "555 foo"}'::JSONB, now()),
+  (555, '555 bar', $database_id, $schema_id, $bar_table_id, '{"detail": "555 bar"}'::JSONB, now());
+
+statement ok
+INSERT INTO system.jobs (id, status, job_type)
+VALUES (666, 'succeeded', 'INSPECT');
+
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, database_id, schema_id, id, details, aost)
+VALUES (666, '666 foo', $database_id, $schema_id, $foo_table_id, '{"detail": "666 foo"}'::JSONB, now());
+
+statement ok
+INSERT INTO system.jobs (id, status, job_type)
+VALUES (777, 'running', 'INSPECT');
+
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, database_id, schema_id, id, details, aost)
+VALUES (777, '777foo', $database_id, $schema_id, $foo_table_id, '{"detail": "777 foo"}'::JSONB, now());
+
+# no options should show most records from the recent successful job
+query ITTTT colnames,rowsort
 SHOW INSPECT ERRORS
+----
+job_id  error_type  database_name  schema_name  table_name
+666     666 foo     test           public       foo
 
-statement ok
+query ITTTTT colnames,rowsort
 SHOW INSPECT ERRORS WITH DETAILS
+----
+job_id  error_type  database_name  schema_name  table_name  details
+666     666 foo     test           public       foo         {"detail": "666 foo"}
 
-statement ok
-SHOW INSPECT ERRORS FOR JOB 666
+# only successful jobs show rows
+query ITTTT colnames,rowsort
+SHOW INSPECT ERRORS FOR JOB 777
+----
+job_id  error_type  database_name  schema_name  table_name
 
-statement ok
+# query by job ID shows records from that job if successful
+query ITTTT colnames,rowsort
+SHOW INSPECT ERRORS FOR JOB 555
+----
+job_id  error_type  database_name  schema_name  table_name
+555     555 bar     test           public       bar
+555     555 foo     test           public       foo
+
+# query by table shows records from the most recent successful job that reported errors on that table
+query ITTTT colnames,rowsort
 SHOW INSPECT ERRORS FOR TABLE foo
+----
+job_id  error_type  database_name  schema_name  table_name
+666     666 foo     test           public       foo
 
-statement ok
-SHOW INSPECT ERRORS FOR TABLE foo FOR JOB 666 WITH DETAILS
+# and query by table only shows records for that given table
+query ITTTT colnames,rowsort
+SHOW INSPECT ERRORS FOR TABLE bar
+----
+job_id  error_type  database_name  schema_name  table_name
+555     555 bar     test           public       bar
+
+query ITTTTT colnames,rowsort
+SHOW INSPECT ERRORS FOR TABLE foo FOR JOB 555 WITH DETAILS
+----
+job_id  error_type  database_name  schema_name  table_name  details
+555     555 foo     test           public       foo         {"detail": "555 foo"}
