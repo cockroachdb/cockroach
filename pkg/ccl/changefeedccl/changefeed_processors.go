@@ -1479,8 +1479,11 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 
 	if err := checkpoint.Restore(cf.frontier, cf.spec.SpanLevelCheckpoint); err != nil {
 		if log.V(2) {
-			log.Dev.Infof(cf.Ctx(), "change frontier encountered error on checkpoint restore: %v", err)
+			log.Dev.Infof(cf.Ctx(),
+				"change frontier moving to draining due to error restoring span-level checkpoint: %v", err)
 		}
+		cf.MoveToDraining(err)
+		return
 	}
 
 	if cf.knobs.AfterCoordinatorFrontierRestore != nil {
