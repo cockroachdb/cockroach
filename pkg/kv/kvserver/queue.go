@@ -137,7 +137,6 @@ type replicaItem struct {
 
 // setProcessing moves the item from an enqueued state to a processing state.
 func (i *replicaItem) setProcessing() {
-	i.priority = 0
 	if i.index >= 0 {
 		log.Fatalf(context.Background(),
 			"r%d marked as processing but appears in prioQ", i.rangeID,
