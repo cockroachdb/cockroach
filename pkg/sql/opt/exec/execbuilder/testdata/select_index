@@ -1904,3 +1904,26 @@ vectorized: true
   missing stats
   table: t4@t4_pkey
   spans: [/1/1 - /1/1] [/1/5 - /1/5] [/5/1 - /5/1] [/5/5 - /5/5]
+
+# ------------------------------------------------------------------------------
+# Tests for index acceleration on ancestry operators (@> and <@) using
+# LTREE columns
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE t5 (a LTREE)
+
+statement ok
+CREATE INDEX t5_a_idx ON t5 (a)
+
+query T
+EXPLAIN SELECT a FROM t5 WHERE a @> 'A.B.C'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t5@t5_a_idx
+  spans: [/'' - /''] [/'A' - /'A'] [/'A.B' - /'A.B'] [/'A.B.C' - /'A.B.C']
+
