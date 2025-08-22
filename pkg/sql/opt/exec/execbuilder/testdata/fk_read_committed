@@ -190,7 +190,9 @@ vectorized: true
                       estimated row count: 1 (missing stats)
                       label: buffer 1
 
-# Foreign key checks of the child do not require locking.
+# Foreign key checks of the child do not require locking under serializable
+# isolation, but do require locking under read committed isolation to avoid
+# stale reads.
 query T
 EXPLAIN (OPT) UPDATE jars SET j = j + 4
 ----
@@ -208,6 +210,7 @@ update jars
                      │    └── with-scan &1
                      ├── distinct-on
                      │    └── scan cookies
+                     │         └── locking: for-share,durability-guaranteed
                      └── filters
                           └── j = cookies.j
 
@@ -358,6 +361,8 @@ vectorized: true
                           estimated row count: 1,000 (missing stats)
                           table: cookies@cookies_pkey
                           spans: FULL SCAN
+                          locking strength: for share
+                          locking durability: guaranteed
 
 query T
 EXPLAIN (OPT) DELETE FROM jars WHERE j = 1
@@ -370,6 +375,7 @@ delete jars
            └── semi-join (hash)
                 ├── with-scan &1
                 ├── scan cookies
+                │    └── locking: for-share,durability-guaranteed
                 └── filters
                      └── j = cookies.j
 
@@ -437,6 +443,8 @@ vectorized: true
             │     estimated row count: 1,000 (missing stats)
             │     table: cookies@cookies_pkey
             │     spans: FULL SCAN
+            │     locking strength: for share
+            │     locking durability: guaranteed
             │
             └── • scan buffer
                   columns: (j)
