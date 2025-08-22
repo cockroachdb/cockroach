@@ -1,8 +1,41 @@
-statement ok
+query ITTTT colnames,rowsort
 SHOW INSPECT ERRORS;
+----
+job_id  error_type  database_name  schema_name  table_name
+
+statement error specifying both TABLE and JOB is not supported
+SHOW INSPECT ERRORS FOR TABLE foo FOR JOB 44;
 
 statement ok
-SHOW INSPECT ERRORS FOR TABLE foo WITH DETAILS;
+CREATE TABLE t (a INT);
 
 statement ok
-SHOW INSPECT ERRORS FOR JOB 14 WITH DETAILS;
+INSERT INTO system.inspect_errors (job_id, error_type, database_id, schema_id, id, details)
+SELECT 14, 'foo', ns."parentID", ns."parentSchemaID", ns.id, 'bar'
+FROM system.namespace ns
+WHERE ns.name = 't';
+
+statement ok
+INSERT INTO system.jobs (id, status, job_type)
+VALUES (14, 'succeeded', 'INSPECT');
+
+statement ok
+INSERT INTO system.jobs (id, status, job_type)
+VALUES (15, 'running', 'INSPECT');
+
+query ITTTT colnames,rowsort
+SHOW INSPECT ERRORS;
+----
+job_id  error_type  database_name  schema_name  table_name
+14      foo         test           public       t
+
+query ITTTT colnames,rowsort
+SHOW INSPECT ERRORS FOR JOB 14;
+----
+job_id  error_type  database_name  schema_name  table_name
+14      foo         test           public       t
+
+query ITTTT colnames,rowsort
+SHOW INSPECT ERRORS FOR JOB 15;
+----
+job_id  error_type  database_name  schema_name  table_name

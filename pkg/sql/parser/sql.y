@@ -7925,7 +7925,11 @@ inspect_option:
 // %Category: Misc
 // %Text:
 // SHOW INSPECT ERRORS [FOR TABLE <name> | FOR JOB <ID>]
-//                       [WITH DETAILS]
+//                     [WITH DETAILS]
+//
+// Setting TABLE will show errors for the most recent completed job on that
+// table. Setting JOB will show any errors from that job. If neither, the most
+// recent completed job across all tables will be shown.
 // %SeeAlso: INSPECT
 show_inspect_errors_stmt:
   SHOW INSPECT ERRORS opt_for_table_clause opt_for_job_clause opt_with_details
