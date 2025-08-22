@@ -155,20 +155,19 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
 	rowCountValidation := importRowCountValidation.Get(&p.ExecCfg().Settings.SV)
 
-	validationCtx, cancelValidationCtx := context.WithCancel(ctx)
-	grp := ctxgroup.WithContext(validationCtx)
+	grp := ctxgroup.WithContext(ctx)
 	// expectedRowCountReadyByIndex maps from a BulkOpSummaryID defined by
-	// the table id and the index id.
-	// TODO(janexing): Using a map here could cause a data race but is it
-	// acceptable? Sync.map maybe? but would it overkill?
+	// the table id and the index id. syncutil.Map is used to avoid data race.
 	expectedRowCountReadyByIndex := syncutil.Map[uint64, expectedRowCountWithSignal]{}
+	// pendingPreCountTasks tracks the number of indexes that have not completed
+	// pre-import row counting. The table should only be taken offline after all
+	// index row counts have finished.
 	pendingPreCountTasks := atomic.Int64{}
 	if rowCountValidation {
 		for i := range details.Tables {
 			tblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
 			for _, idx := range tblDesc.AllIndexes() {
 				idx := idx
-				i := i
 				tableTag := kvpb.BulkOpSummaryID(uint64(tblDesc.GetID()), uint64(idx.GetID()))
 				expectedRowCountReadyByIndex.Store(tableTag, &expectedRowCountWithSignal{
 					ready: make(chan struct{}),
@@ -177,10 +176,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				grp.GoCtx(func(ctx context.Context) error {
 					var preImportIdxLen int64
 					var err error
+					// Skip pre-import row counting when resuming a paused job, as the counts
+					// were already captured during the initial run. Additionally, attempting
+					// to re-execute row count queries on an offline table descriptor would
+					// fail during job resumption.
 					if cnt, ok := details.PreImportRowCount[tableTag]; ok {
 						preImportIdxLen = cnt
 					} else {
-						preImportIdxLen, err = sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx, false, newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()), sessiondata.NoSessionDataOverride)
+						preImportIdxLen, err = sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx, false /* withFirstMutationPublic */, newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()), sessiondata.NoSessionDataOverride)
 						if err != nil {
 							return errors.Wrapf(err, "counting rows in index %q of table %q before import", idx.GetName(), tblDesc.GetName())
 						}
@@ -191,9 +194,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					expectedRowCountWithSig, _ := expectedRowCountReadyByIndex.Load(tableTag)
 					select {
 					case <-expectedRowCountWithSig.ready:
+						// The expected row count becomes available only after the table descriptor
+						// transitions from OFFLINE back to PUBLIC state. We must reconstruct the
+						// table descriptor with the updated state to enable the post-import row
+						// count validation query to execute successfully.
+						newTblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
 						expectedCount := expectedRowCountWithSig.expectedRowCount
 						postImportIdxLen, err :=
-							sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx,
+							sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, newTblDesc, idx,
 								false, /* withFirstMutationPublic */
 								newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()),
 								sessiondata.NoSessionDataOverride)
@@ -202,7 +210,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 						}
 						if diff := postImportIdxLen - preImportIdxLen; diff != expectedCount {
 							return errors.AssertionFailedf("row count validation failed for index %q of table %q: expected %d rows imported, got %d",
-								idx.GetName(), tblDesc.GetName(), expectedCount, diff)
+								idx.GetName(), newTblDesc.GetName(), expectedCount, diff)
 						}
 					case <-ctx.Done():
 						return ctx.Err()
@@ -211,7 +219,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				})
 			}
 		}
-		defer cancelValidationCtx()
 	}
 
 	if rowCountValidation {
@@ -572,7 +579,10 @@ func (r *importResumer) publishTables(
 				return err
 			}
 			newTableDesc.SetPublic()
-
+			// This is needed for the post import validation of the table. Otherwise
+			// the table will be in the OFFLINE state and the internal query via
+			// table index will fail.
+			tbl.Desc.State = descpb.DescriptorState_PUBLIC
 			// NB: This is not using AllNonDropIndexes or directly mutating the
 			// constraints returned by the other usual helpers because we need to
 			// replace the `OutboundFKs` and `Checks` slices of newTableDesc with copies
