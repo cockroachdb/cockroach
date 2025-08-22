@@ -114,6 +114,7 @@ type s3Storage struct {
 	bucket         *string
 	conf           *cloudpb.ExternalStorage_S3
 	ioConf         base.ExternalIODirConfig
+	middleware     cloud.HttpMiddleware
 	settings       *cluster.Settings
 	prefix         string
 	metrics        *cloud.Metrics
@@ -514,6 +515,7 @@ func MakeS3Storage(
 		bucket:         aws.String(conf.Bucket),
 		conf:           conf,
 		ioConf:         args.IOConf,
+		middleware:     args.HttpMiddleware,
 		prefix:         conf.Prefix,
 		metrics:        args.MetricsRecorder,
 		settings:       args.Settings,
@@ -611,6 +613,7 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 			Client:             s.storageOptions.ClientName,
 			Cloud:              "aws",
 			InsecureSkipVerify: s.opts.skipTLSVerify,
+			HttpMiddleware:     s.middleware,
 		})
 	if err != nil {
 		return s3Client{}, "", err

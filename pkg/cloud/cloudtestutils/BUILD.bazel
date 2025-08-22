@@ -2,7 +2,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "cloudtestutils",
-    srcs = ["cloud_test_helpers.go"],
+    srcs = [
+        "cloud_nemesis.go",
+        "cloud_test_helpers.go",
+        "http_middleware.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils",
     visibility = ["//visibility:public"],
     deps = [
@@ -16,8 +20,11 @@ go_library(
         "//pkg/testutils",
         "//pkg/util/ioctx",
         "//pkg/util/randutil",
+        "//pkg/util/syncutil",
         "//pkg/util/sysutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
     ],
 )
