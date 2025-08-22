@@ -1326,22 +1326,17 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 	if recovered != nil {
 		panicErr := logcrash.PanicAsError(1, recovered)
 
-		// If there's a statement currently being executed, we'll report
-		// on it.
 		if ex.curStmtAST != nil {
 			// A warning header guaranteed to go to stderr.
 			log.SqlExec.Shoutf(ctx, severity.ERROR,
 				"a SQL panic has occurred while executing the following statement:\n%s",
 				// For the log message, the statement is not anonymized.
 				truncateStatementStringForTelemetry(ex.curStmtAST.String()))
-
-			// Embed the statement in the error object for the telemetry
-			// report below. The statement gets anonymized.
-			vt := ex.planner.extendedEvalCtx.VirtualSchemas
-			panicErr = WithAnonymizedStatement(panicErr, ex.curStmtAST, vt, nil)
 		}
 
-		// Report the panic to telemetry in any case.
+		// Report the panic to telemetry, annotating the error with the (anonymized)
+		// currently executed statement and its plan gist, if available.
+		panicErr = ex.WithAnonymizedStatementAndGist(panicErr)
 		logcrash.ReportPanic(ctx, &ex.server.cfg.Settings.SV, panicErr, 1 /* depth */)
 
 		// Close the executor before propagating the panic further.
@@ -1845,8 +1840,12 @@ type connExecutor struct {
 	}
 
 	// curStmtAST is the statement that's currently being prepared or executed, if
-	// any. This is printed by high-level panic recovery.
+	// any. This is printed by high-level panic recovery and sentry reports.
 	curStmtAST tree.Statement
+
+	// curStmtPlanGist is the plan gist of the statement that's currently being
+	// prepared or executed, if any. This is included in sentry reports.
+	curStmtPlanGist redact.SafeString
 
 	// queryCancelKey is a 64-bit identifier for the session used by the
 	// pgwire cancellation protocol.
@@ -2277,6 +2276,7 @@ func (ex *connExecutor) run(
 
 	for {
 		ex.curStmtAST = nil
+		ex.curStmtPlanGist = ""
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -2668,8 +2668,16 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		if ok {
 			ex.sessionEventf(ctx, "execution error: %s", pe.errorCause())
 			if resErr == nil {
-				res.SetError(pe.errorCause())
+				resErr = pe.errorCause()
+				res.SetError(resErr)
 			}
+		}
+		if resErr != nil &&
+			(pgerror.GetPGCode(resErr) == pgcode.Internal || errors.HasAssertionFailure(resErr)) {
+			// This is an assertion failure / crash that will lead to a sentry report.
+			// Attempt to annotate the error with the currently executing statement
+			// and its plan gist.
+			res.SetError(ex.WithAnonymizedStatementAndGist(resErr))
 		}
 		// For a pausable portal, we don't log the affected rows until we close the
 		// portal. However, we update the result for each execution. Thus, we need
@@ -4112,7 +4120,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				errors.Safe(advInfo.txnEvent.eventType.String()),
 				res.Err())
 			log.Errorf(ex.Ctx(), "%v", err)
-			sentryutil.SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV, err)
+			sentryErr := ex.WithAnonymizedStatementAndGist(err)
+			sentryutil.SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV, sentryErr)
 			return advanceInfo{}, err
 		}
 
@@ -4900,6 +4909,22 @@ func (ps connExPrepStmtsAccessor) DeleteAll(ctx context.Context) {
 	ps.ex.extraTxnState.prepStmtsNamespace.clear(
 		ctx, &ps.ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
+}
+
+// WithAnonymizedStatementAndGist attaches the anonymized form of the currently
+// executing statement and its query plan gist to an error object, if available.
+// It can only be called from the same thread that runs the connExecutor.
+func (ex *connExecutor) WithAnonymizedStatementAndGist(err error) error {
+	if ex.curStmtAST != nil {
+		vt := ex.planner.extendedEvalCtx.VirtualSchemas
+		anonStmtStr := anonymizeStmtAndConstants(ex.curStmtAST, vt)
+		anonStmtStr = truncateStatementStringForTelemetry(anonStmtStr)
+		err = errors.WithSafeDetails(err, "while executing: %s", errors.Safe(anonStmtStr))
+	}
+	if ex.curStmtPlanGist != "" {
+		err = errors.WithSafeDetails(err, "plan gist: %s", ex.curStmtPlanGist)
+	}
+	return err
 }
 
 var contextPlanGistKey = ctxutil.RegisterFastValueKey()

@@ -2785,33 +2785,20 @@ func hideNonVirtualTableNameFunc(
 	return reformatFn
 }
 
-func anonymizeStmtAndConstants(
-	stmt tree.Statement, vt VirtualTabler, ns eval.ClientNoticeSender,
-) string {
+func anonymizeStmtAndConstants(stmt tree.Statement, vt VirtualTabler) string {
 	// Re-format to remove most names.
 	fmtFlags := tree.FmtAnonymize | tree.FmtHideConstants
 	var f *tree.FmtCtx
 	if vt != nil {
 		f = tree.NewFmtCtx(
 			fmtFlags,
-			tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt, ns)),
+			tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt, nil)),
 		)
 	} else {
 		f = tree.NewFmtCtx(fmtFlags)
 	}
 	f.FormatNode(stmt)
 	return f.CloseAndGetString()
-}
-
-// WithAnonymizedStatement attaches the anonymized form of a statement
-// to an error object.
-func WithAnonymizedStatement(
-	err error, stmt tree.Statement, vt VirtualTabler, ns eval.ClientNoticeSender,
-) error {
-	anonStmtStr := anonymizeStmtAndConstants(stmt, vt, ns)
-	anonStmtStr = truncateStatementStringForTelemetry(anonStmtStr)
-	return errors.WithSafeDetails(err,
-		"while executing: %s", errors.Safe(anonStmtStr))
 }
 
 // SessionTracing holds the state used by SET TRACING statements in the context
