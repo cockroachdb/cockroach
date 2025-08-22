@@ -643,8 +643,8 @@ func (h *fkCheckHelper) buildOtherTableScan(parent bool) (outScope *scope, tabMe
 	// violating the FK constraint. Deletion-side checks don't need to lock
 	// because they can rely on the deletion intent conflicting with locks from
 	// any concurrent inserts or updates of the child.
-	if parent && (h.mb.b.evalCtx.TxnIsoLevel != isolation.Serializable ||
-		h.mb.b.evalCtx.SessionData().ImplicitFKLockingForSerializable) {
+	if h.mb.b.evalCtx.TxnIsoLevel != isolation.Serializable ||
+		(parent && h.mb.b.evalCtx.SessionData().ImplicitFKLockingForSerializable) {
 		locking = lockingSpec{
 			&lockingItem{
 				item: &tree.LockingItem{
