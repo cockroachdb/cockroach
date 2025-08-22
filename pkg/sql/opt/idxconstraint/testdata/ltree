@@ -21,3 +21,24 @@ index-constraints vars=(a ltree) index=a
 a @> NULL
 ----
 
+
+index-constraints vars=(a ltree) index=a
+a <@ 'A.B.C'
+----
+[/'A.B.C' - /'A.B.D')
+
+index-constraints vars=(a ltree) index=a
+a <@ 'z'
+----
+[/'z' - /'z-')
+
+index-constraints vars=(a ltree) index=a
+a <@ ''
+----
+[ - ]
+Remaining filter: a <@ ''
+
+index-constraints vars=(a ltree) index=a
+a <@ NULL
+----
+

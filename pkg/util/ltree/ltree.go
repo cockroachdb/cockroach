@@ -275,3 +275,46 @@ func LCA(ltrees []T) (_ T, isNull bool) { // lint: uppercase function OK
 
 	return T{path: ltrees[0].path[:i:i]}, false
 }
+
+// NextSibling returns a LTree with a lexicographically incremented last label.
+// This is different from the next lexicographic LTree. This is mainly used for
+// defining a key-encoded span for ancestry operators.
+// Note that this could produce a LTREE with more labels than the maximum
+// allowed.
+// Example: 'A.B' -> 'A.C'
+func (lt T) NextSibling() T {
+	if lt.Len() == 0 {
+		return Empty
+	}
+	lastLabel := lt.path[len(lt.path)-1]
+	nextLabel := incrementLabel(lastLabel)
+
+	newLTree := lt.Copy()
+	newLTree.path[newLTree.Len()-1] = nextLabel
+	return newLTree
+}
+
+var nextCharMap = map[byte]byte{
+	'-': '0',
+	'9': 'A',
+	'Z': '_',
+	'_': 'a',
+	'z': 0,
+}
+
+func incrementLabel(label string) string {
+	nextLabel := []byte(label)
+	nextChar, ok := nextCharMap[nextLabel[len(nextLabel)-1]]
+
+	if ok && nextChar == 0 {
+		// Technically, this could mean exceeding the length of the label.
+		return string(append(nextLabel, '-'))
+	}
+
+	if !ok {
+		nextChar = nextLabel[len(nextLabel)-1] + 1
+	}
+
+	nextLabel[len(nextLabel)-1] = nextChar
+	return string(nextLabel)
+}

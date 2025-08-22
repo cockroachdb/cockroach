@@ -1927,3 +1927,13 @@ vectorized: true
   table: t5@t5_a_idx
   spans: [/'' - /''] [/'A' - /'A'] [/'A.B' - /'A.B'] [/'A.B.C' - /'A.B.C']
 
+query T
+EXPLAIN SELECT a FROM t5 WHERE a <@ 'A.B.C'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t5@t5_a_idx
+  spans: [/'A.B.C' - /'A.B.D']

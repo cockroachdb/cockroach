@@ -368,6 +368,22 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 			out.Init(keyCtx, &spans)
 			return true
 		}
+
+	case opt.ContainedByOp:
+		if l, ok := datum.(*tree.DLTree); ok {
+			if l.LTree.Compare(ltree.Empty) == 0 {
+				// Empty LTree cannot be constrained.
+				break
+			}
+			startKey := constraint.MakeKey(l)
+			endKey := constraint.MakeKey(tree.NewDLTree(l.LTree.NextSibling()))
+			c.singleSpan(
+				offset, startKey, includeBoundary, endKey, excludeBoundary,
+				c.columns[offset].Descending(),
+				out,
+			)
+			return true
+		}
 	}
 	c.unconstrained(offset, out)
 	return false
