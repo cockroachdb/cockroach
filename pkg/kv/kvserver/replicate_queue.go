@@ -633,7 +633,7 @@ func (rq *replicateQueue) shouldQueue(
 }
 
 func (rq *replicateQueue) process(
-	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader, priorityAtEnqueue float64,
 ) (processed bool, err error) {
 	if tokenErr := repl.allocatorToken.TryAcquire(ctx, rq.name); tokenErr != nil {
 		log.KvDistribution.VEventf(ctx,
@@ -659,7 +659,7 @@ func (rq *replicateQueue) process(
 	// usually signaling that a rebalancing reservation could not be made with the
 	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		requeue, err := rq.processOneChangeWithTracing(ctx, repl, desc, &conf)
+		requeue, err := rq.processOneChangeWithTracing(ctx, repl, desc, &conf, priorityAtEnqueue)
 		if isSnapshotError(err) {
 			// If ChangeReplicas failed because the snapshot failed, we attempt to
 			// retry the operation. The most likely causes of the snapshot failing
@@ -684,7 +684,7 @@ func (rq *replicateQueue) process(
 		}
 
 		if testingAggressiveConsistencyChecks {
-			if _, err := rq.store.consistencyQueue.process(ctx, repl, confReader); err != nil {
+			if _, err := rq.store.consistencyQueue.process(ctx, repl, confReader, -1 /*priorityAtEnqueue*/); err != nil {
 				log.KvDistribution.Warningf(ctx, "%v", err)
 			}
 		}
@@ -743,7 +743,11 @@ func filterTracingSpans(rec tracingpb.Recording, opNamesToFilter ...string) trac
 // logging the resulting traces to the DEV channel in the case of errors or
 // when the configured log traces threshold is exceeded.
 func (rq *replicateQueue) processOneChangeWithTracing(
-	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf *roachpb.SpanConfig,
+	ctx context.Context,
+	repl *Replica,
+	desc *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
+	priorityAtEnqueue float64,
 ) (requeue bool, _ error) {
 	processStart := timeutil.Now()
 	startTracing := log.ExpensiveLogEnabled(ctx, 1)
@@ -758,7 +762,7 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 	defer sp.Finish()
 
 	requeue, err := rq.processOneChange(ctx, repl, desc, conf,
-		false /* scatter */, false, /* dryRun */
+		false /* scatter */, false /* dryRun */, priorityAtEnqueue,
 	)
 	processDuration := timeutil.Since(processStart)
 	loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
@@ -865,6 +869,7 @@ func (rq *replicateQueue) processOneChange(
 	desc *roachpb.RangeDescriptor,
 	conf *roachpb.SpanConfig,
 	scatter, dryRun bool,
+	priorityAtEnqueue float64,
 ) (requeue bool, _ error) {
 	change, err := rq.planner.PlanOneChange(
 		ctx, repl, desc, conf, plan.PlannerOptions{Scatter: scatter})

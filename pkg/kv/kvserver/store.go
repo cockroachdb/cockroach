@@ -3895,7 +3895,7 @@ func (s *Store) ReplicateQueueDryRun(
 		return collectAndFinish(), nil
 	}
 	_, err = s.replicateQueue.processOneChange(
-		ctx, repl, desc, conf, false /* scatter */, true, /* dryRun */
+		ctx, repl, desc, conf, false /* scatter */, true /* dryRun */, -1, /*priorityAtEnqueue*/
 	)
 	if err != nil {
 		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
@@ -4074,7 +4074,7 @@ func (s *Store) Enqueue(
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	processed, processErr := qImpl.process(ctx, repl, confReader)
+	processed, processErr := qImpl.process(ctx, repl, confReader, -1 /*priorityAtEnqueue*/)
 	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
 	return processErr, nil
 }
@@ -4111,7 +4111,7 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 		g.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			processed, err := s.replicaGCQueue.process(ctx, repl, nil)
+			processed, err := s.replicaGCQueue.process(ctx, repl, nil, -1 /*priorityAtEnqueue*/)
 			if err != nil {
 				return errors.Wrapf(err, "on %s", repl.Desc())
 			}

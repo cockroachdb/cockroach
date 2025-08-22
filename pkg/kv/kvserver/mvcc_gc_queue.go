@@ -660,7 +660,7 @@ func (r *replicaGCer) GC(
 //  7. push these transactions (again, recreating txn entries).
 //  8. send a GCRequest.
 func (mgcq *mvccGCQueue) process(
-	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, _ spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.

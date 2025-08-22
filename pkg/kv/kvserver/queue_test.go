@@ -58,7 +58,7 @@ func (tq *testQueueImpl) shouldQueue(
 }
 
 func (tq *testQueueImpl) process(
-	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
+	_ context.Context, _ *Replica, _ spanconfig.StoreReader, _ float64,
 ) (bool, error) {
 	defer atomic.AddInt32(&tq.processed, 1)
 	if tq.err != nil {
@@ -990,7 +990,7 @@ type processTimeoutQueueImpl struct {
 var _ queueImpl = &processTimeoutQueueImpl{}
 
 func (pq *processTimeoutQueueImpl) process(
-	ctx context.Context, r *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, r *Replica, _ spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
@@ -1120,7 +1120,7 @@ type processTimeQueueImpl struct {
 var _ queueImpl = &processTimeQueueImpl{}
 
 func (pq *processTimeQueueImpl) process(
-	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
+	_ context.Context, _ *Replica, _ spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	time.Sleep(5 * time.Millisecond)
 	return true, nil
@@ -1344,13 +1344,13 @@ type parallelQueueImpl struct {
 var _ queueImpl = &parallelQueueImpl{}
 
 func (pq *parallelQueueImpl) process(
-	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader, priority float64,
 ) (processed bool, err error) {
 	atomic.AddInt32(&pq.processing, 1)
 	if pq.processBlocker != nil {
 		<-pq.processBlocker
 	}
-	processed, err = pq.testQueueImpl.process(ctx, repl, confReader)
+	processed, err = pq.testQueueImpl.process(ctx, repl, confReader, priority)
 	atomic.AddInt32(&pq.processing, -1)
 	return processed, err
 }

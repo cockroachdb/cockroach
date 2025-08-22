@@ -123,7 +123,9 @@ type replicaItem struct {
 	replicaID roachpb.ReplicaID
 	seq       int // enforce FIFO order for equal priorities
 
-	// fields used when a replicaItem is enqueued in a priority queue.
+	// fields used when a replicaItem is enqueued in a priority queue. This field
+	// is preserved for purgatory queue as well since baseQueue.processReplica
+	// requies it.
 	priority float64
 	index    int // The index of the item in the heap, maintained by the heap.Interface methods
 
@@ -260,7 +262,7 @@ type queueImpl interface {
 	// queue-specific work on it. The Replica is guaranteed to be initialized.
 	// We return a boolean to indicate if the Replica was processed successfully
 	// (vs. it being a no-op or an error).
-	process(context.Context, *Replica, spanconfig.StoreReader) (processed bool, err error)
+	process(context.Context, *Replica, spanconfig.StoreReader, float64) (processed bool, err error)
 
 	// processScheduled is called after async task was created to run process.
 	// This function is called by the process loop synchronously. This method is
@@ -876,10 +878,10 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 					// Acquire from the process semaphore.
 					bq.processSem <- struct{}{}
 
-					repl, priority := bq.pop()
+					repl, priorityAtEnqueue := bq.pop()
 					if repl != nil {
-						bq.processOneAsyncAndReleaseSem(ctx, repl, stopper)
-						bq.impl.postProcessScheduled(ctx, repl, priority)
+						bq.processOneAsyncAndReleaseSem(ctx, repl, stopper, priorityAtEnqueue)
+						bq.impl.postProcessScheduled(ctx, repl, priorityAtEnqueue)
 					} else {
 						// Release semaphore if no replicas were available.
 						<-bq.processSem
@@ -907,7 +909,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 // processOneAsyncAndReleaseSem processes a replica if possible and releases the
 // processSem when the processing is complete.
 func (bq *baseQueue) processOneAsyncAndReleaseSem(
-	ctx context.Context, repl replicaInQueue, stopper *stop.Stopper,
+	ctx context.Context, repl replicaInQueue, stopper *stop.Stopper, priorityAtEnqueue float64,
 ) {
 	ctx = repl.AnnotateCtx(ctx)
 	taskName := bq.processOpName() + " [outer]"
@@ -923,7 +925,7 @@ func (bq *baseQueue) processOneAsyncAndReleaseSem(
 			// Release semaphore when finished processing.
 			defer func() { <-bq.processSem }()
 			start := timeutil.Now()
-			err := bq.processReplica(ctx, repl)
+			err := bq.processReplica(ctx, repl, priorityAtEnqueue)
 			bq.recordProcessDuration(ctx, timeutil.Since(start))
 			bq.finishProcessingReplica(ctx, stopper, repl, err)
 		}); err != nil {
@@ -956,7 +958,9 @@ func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duratio
 //
 // ctx should already be annotated by both bq.AnnotateCtx() and
 // repl.AnnotateCtx().
-func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) error {
+func (bq *baseQueue) processReplica(
+	ctx context.Context, repl replicaInQueue, priorityAtEnqueue float64,
+) error {
 
 	ctx, span := tracing.EnsureChildSpan(ctx, bq.Tracer, bq.processOpName())
 	defer span.Finish()
@@ -980,7 +984,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 			// it may not be and shouldQueue will be passed a nil realRepl. These tests
 			// know what they're getting into so that's fine.
 			realRepl, _ := repl.(*Replica)
-			processed, err := bq.impl.process(ctx, realRepl, conf)
+			processed, err := bq.impl.process(ctx, realRepl, conf, priorityAtEnqueue)
 			if err != nil {
 				return err
 			}
@@ -1321,7 +1325,7 @@ func (bq *baseQueue) processReplicasInPurgatory(
 					if _, err := bq.replicaCanBeProcessed(ctx, repl, false); err != nil {
 						bq.finishProcessingReplica(ctx, stopper, repl, err)
 					} else {
-						err = bq.processReplica(ctx, repl)
+						err = bq.processReplica(ctx, repl, -1 /*priorityAtEnqueue*/)
 						bq.finishProcessingReplica(ctx, stopper, repl, err)
 					}
 				},
@@ -1448,7 +1452,7 @@ func (bq *baseQueue) DrainQueue(ctx context.Context, stopper *stop.Stopper) {
 		if _, err := bq.replicaCanBeProcessed(annotatedCtx, repl, false); err != nil {
 			bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
 		} else {
-			err = bq.processReplica(annotatedCtx, repl)
+			err = bq.processReplica(annotatedCtx, repl, -1 /*priorityAtEnqueue*/)
 			bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
 		}
 	}
