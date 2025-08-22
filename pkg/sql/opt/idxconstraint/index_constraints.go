@@ -360,6 +360,18 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 			out.Init(keyCtx, &spans)
 			return true
 		}
+
+	case opt.ContainedByOp:
+		if l, ok := datum.(*tree.DLTree); ok {
+			startKey := constraint.MakeKey(l)
+			endKey := constraint.MakeKey(tree.NewDLTree(l.LTree.Next()))
+			c.singleSpan(
+				offset, startKey, includeBoundary, endKey, includeBoundary,
+				c.columns[offset].Descending(),
+				out,
+			)
+			return true
+		}
 	}
 	c.unconstrained(offset, out)
 	return false

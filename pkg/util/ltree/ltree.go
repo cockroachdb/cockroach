@@ -275,3 +275,45 @@ func LCA(ltrees []T) (_ T, isNull bool) { // lint: uppercase function OK
 
 	return T{path: ltrees[0].path[:i:i]}, false
 }
+
+// Next returns a LTree with the next lexicographically incremented last
+// label. This is not the same as the next lexicographic LTree.
+// Example: 'A.B' -> 'A.C'
+// Note that this could produce a LTree with a label that exceeds the
+// maximum length of a label.
+func (lt T) Next() T {
+	if lt.Len() == 0 {
+		return Empty
+	}
+	lastLabel := lt.path[len(lt.path)-1]
+	nextLabel := incrementLabel(lastLabel)
+
+	newLTree := lt.Copy()
+	newLTree.path[newLTree.Len()-1] = nextLabel
+	return newLTree
+}
+
+var nextCharMap = map[byte]byte{
+	'-': '0',
+	'9': 'A',
+	'Z': '_',
+	'_': 'a',
+	'z': 0,
+}
+
+func incrementLabel(label string) string {
+	runes := []rune(label)
+	nextChar, ok := nextCharMap[byte(runes[len(runes)-1])]
+
+	if ok && nextChar == 0 {
+		// Technically, this could mean exceeding the length of the label
+		return string(append(runes, '-'))
+	}
+
+	if ok {
+		runes[len(runes)-1] = rune(nextChar)
+		return string(runes)
+	}
+	runes[len(runes)-1] += 1
+	return string(runes)
+}
