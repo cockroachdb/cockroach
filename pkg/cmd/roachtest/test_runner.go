@@ -1687,6 +1687,7 @@ func (r *testRunner) teardownTest(
 		if err != nil {
 			t.L().Printf("error collecting artifacts: %v", err)
 		}
+
 		if timedOut {
 			// Shut down the cluster. We only do this on timeout to help the test terminate;
 			// for regular failures, if the --debug flag is used, we want the cluster to stay
