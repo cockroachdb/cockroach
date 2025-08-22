@@ -7942,7 +7942,13 @@ inspect_option:
 // %Help: SHOW INSPECT ERRORS - show inspect entries for a database
 // %Category: Misc
 // %Text:
-// SHOW INSPECT ERRORS [FOR TABLE <name>] [FOR JOB <id>] [WITH DETAILS]
+// SHOW INSPECT ERRORS
+//                     [FOR TABLE <name>]
+//                     [FOR JOB <id>]
+//                     [WITH DETAILS]
+// 
+// When table is specified errors will be filtered to that table. When job is
+// not set the most recent, completed job with errors is reported on. 
 // %SeeAlso: INSPECT
 show_inspect_errors_stmt:
   SHOW INSPECT ERRORS opt_for_table_clause opt_for_job_clause opt_with_details
