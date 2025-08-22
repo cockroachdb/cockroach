@@ -789,10 +789,12 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 		}
 	}
 	if err != nil {
-		log.KvDistribution.Infof(ctx, "error processing replica: %v%s", err, traceOutput)
+		log.KvDistribution.Infof(ctx, "error processing replica: %v%s (priority at enqueue: %v)",
+			err, traceOutput, priority)
 	} else if exceededDuration {
-		log.KvDistribution.Infof(ctx, "processing replica took %s, exceeding threshold of %s%s",
-			processDuration, loggingThreshold, traceOutput)
+		log.KvDistribution.Infof(ctx,
+			"processing replica took %s, exceeding threshold of %s%s (priority at enqueue: %v)",
+			processDuration, loggingThreshold, traceOutput, priority)
 	}
 
 	return requeue, err
@@ -882,8 +884,9 @@ func (rq *replicateQueue) processOneChange(
 		if change.Action == allocatorimpl.AllocatorConsiderRebalance &&
 			priority > allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority() {
 			log.Infof(ctx,
-				"high priority at enqueue but rebalancing at process: action=%s, priority=%v, enqueuePriority=%v",
+				"requeuing due to priority inversion during process: action=%s, priority=%v, enqueuePriority=%v",
 				change.Action, change.Action.Priority(), priority)
+			return true, nil
 		}
 	}
 
