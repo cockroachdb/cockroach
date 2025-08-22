@@ -151,7 +151,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
 	rowCountValidation := importRowCountValidation.Get(&p.ExecCfg().Settings.SV)
 
-	grp := ctxgroup.WithContext(ctx)
+	validationCtx, cancelValidationCtx := context.WithCancel(ctx)
+	grp := ctxgroup.WithContext(validationCtx)
 	// expectedRowCountReadyByIndex maps from a BulkOpSummaryID defined by
 	// the table id and the index id.
 	// TODO(janexing): Using a map here could cause a data race but is it
@@ -198,6 +199,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				})
 			}
 		}
+		defer cancelValidationCtx()
 	}
 
 	if rowCountValidation {
@@ -341,20 +343,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		pkIDs[kvpb.BulkOpSummaryID(uint64(t.Desc.ID), uint64(t.Desc.PrimaryIndex.ID))] = struct{}{}
 	}
 	r.res.DataSize = res.DataSize
-	for id, count := range res.EntryCounts {
-		if _, ok := pkIDs[id]; ok {
-			r.res.Rows += count
-		} else {
-			r.res.IndexEntries += count
-		}
-
-		// Signal row count validation goroutines with the expected count
-		// from import.
-		if expected, ok := expectedRowCountReadyByIndex.Load(id); ok {
-			expected.expectedRowCount = count
-			close(expected.ready)
-		}
-	}
 
 	if r.testingKnobs.afterImport != nil {
 		if err := r.testingKnobs.afterImport(r.res); err != nil {
@@ -381,6 +369,21 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	if err := r.publishTables(ctx, p.ExecCfg(), res); err != nil {
 		return err
+	}
+
+	for id, count := range res.EntryCounts {
+		if _, ok := pkIDs[id]; ok {
+			r.res.Rows += count
+		} else {
+			r.res.IndexEntries += count
+		}
+
+		// Signal row count validation goroutines with the expected count
+		// from import.
+		if expected, ok := expectedRowCountReadyByIndex.Load(id); ok {
+			expected.expectedRowCount = count
+			close(expected.ready)
+		}
 	}
 
 	rowCountValidationTestingKnob := r.testingKnobs.rowCountValidation
