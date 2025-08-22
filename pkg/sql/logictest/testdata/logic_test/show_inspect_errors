@@ -13,29 +13,110 @@ statement error relation "bad_table" does not exist
 SHOW INSPECT ERRORS FOR TABLE bad_table
 
 statement ok
-CREATE TABLE foo (a INT)
+CREATE TABLE foo (a INT);
+CREATE TABLE bar (b INT);
+
+let $foo_table_id
+SELECT 'foo'::regclass::oid
+
+let $bar_table_id
+SELECT 'bar'::regclass::oid
+
+let $database_id
+SELECT id FROM system.namespace WHERE name = current_database() AND "parentID" = 0
+
+let $schema_id
+SELECT current_schema()::regnamespace::oid
+
+statement ok
+INSERT INTO system.jobs (id, status, job_type)
+VALUES (555, 'succeeded', 'INSPECT');
 
 skipif config local-mixed-25.2
 skipif config local-mixed-25.3
 statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, database_id, schema_id, id, details, aost)
+VALUES 
+  (555, '555_foo', $database_id, $schema_id, $foo_table_id, '{"detail": "555_foo"}'::JSONB, now()),
+  (555, '555_bar', $database_id, $schema_id, $bar_table_id, '{"detail": "555_bar"}'::JSONB, now());
+
+statement ok
+INSERT INTO system.jobs (id, status, job_type)
+VALUES (666, 'succeeded', 'INSPECT');
+
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, database_id, schema_id, id, details, aost)
+VALUES (666, '666_foo', $database_id, $schema_id, $foo_table_id, '{"detail": "666_foo"}'::JSONB, now());
+
+statement ok
+INSERT INTO system.jobs (id, status, job_type)
+VALUES (777, 'running', 'INSPECT');
+
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, database_id, schema_id, id, details, aost)
+VALUES (777, '777_foo', $database_id, $schema_id, $foo_table_id, '{"detail": "777_foo"}'::JSONB, now());
+
+# no options should show most records from the recent successful job
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+query ITTTT colnames,rowsort
 SHOW INSPECT ERRORS
+----
+job_id  error_type  database_name  schema_name  table_name
+666     666_foo     test           public       foo
 
 skipif config local-mixed-25.2
 skipif config local-mixed-25.3
-statement ok
+query ITTTTB colnames,rowsort
 SHOW INSPECT ERRORS WITH DETAILS
+----
+job_id  error_type  database_name  schema_name  table_name  details
+666     666_foo     test           public       foo         {"detail": "666_foo"}
 
+# only successful jobs show rows
 skipif config local-mixed-25.2
 skipif config local-mixed-25.3
-statement ok
-SHOW INSPECT ERRORS FOR JOB 666
+query ITTTT colnames,rowsort
+SHOW INSPECT ERRORS FOR JOB 777
+----
+job_id  error_type  database_name  schema_name  table_name
 
+# query by job ID shows records from that job if successful
 skipif config local-mixed-25.2
 skipif config local-mixed-25.3
-statement ok
+query ITTTT colnames,rowsort
+SHOW INSPECT ERRORS FOR JOB 555
+----
+job_id  error_type  database_name  schema_name  table_name
+555     555_bar     test           public       bar
+555     555_foo     test           public       foo
+
+# query by table shows records from the most recent successful job that reported errors on that table
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+query ITTTT colnames,rowsort
 SHOW INSPECT ERRORS FOR TABLE foo
+----
+job_id  error_type  database_name  schema_name  table_name
+666     666_foo     test           public       foo
+
+# and query by table only shows records for that given table
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+query ITTTT colnames,rowsort
+SHOW INSPECT ERRORS FOR TABLE bar
+----
+job_id  error_type  database_name  schema_name  table_name
+555     555_bar     test           public       bar
 
 skipif config local-mixed-25.2
 skipif config local-mixed-25.3
-statement ok
-SHOW INSPECT ERRORS FOR TABLE foo FOR JOB 666 WITH DETAILS
+query ITTTTB colnames,rowsort
+SHOW INSPECT ERRORS FOR TABLE foo FOR JOB 555 WITH DETAILS
+----
+job_id  error_type  database_name  schema_name  table_name  details
+555     555_foo     test           public       foo         {"detail": "555_foo"}
