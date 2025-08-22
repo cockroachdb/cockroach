@@ -338,6 +338,28 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 				return complete
 			}
 		}
+
+	case opt.ContainsOp:
+		if l, ok := datum.(*tree.DLTree); ok {
+			var spans constraint.Spans
+			// We need to create an equality span for each subtree of the LTree that
+			// is rooted from the root, including the empty ltree.
+			spans.Alloc(l.LTree.Len() + 1)
+			keyCtx := &c.keyCtx[offset]
+			for i := 0; i <= l.LTree.Len(); i++ {
+				var sp constraint.Span
+				subLTree, err := l.LTree.SubPath(0 /* offset */, i /* length */)
+				if err != nil {
+					panic(err)
+				}
+				key := constraint.MakeKey(tree.NewDLTree(subLTree))
+				sp.Init(key, includeBoundary, key, includeBoundary)
+				spans.Append(&sp)
+			}
+			spans.SortAndMerge(keyCtx)
+			out.Init(keyCtx, &spans)
+			return true
+		}
 	}
 	c.unconstrained(offset, out)
 	return false
