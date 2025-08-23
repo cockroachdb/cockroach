@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 )
 
 type unsupportedTypeChecker struct {
@@ -57,6 +58,18 @@ func (tc *unsupportedTypeChecker) CheckType(ctx context.Context, typ *types.T) e
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"%s not supported until version 25.3", typ.String(),
 		)
+	}
+	if (typ.Oid() == oidext.T_ltree || typ.Oid() == oidext.T__ltree) &&
+		!tc.version.IsActive(ctx, clusterversion.V25_4) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"%s not supported until version 25.4", typ.String(),
+		)
+	}
+	if buildutil.CrdbTestBuild {
+		latestTypeFamily := types.LTreeFamily
+		if typ.Family() > latestTypeFamily && typ.Family() != types.AnyFamily {
+			panic("mark the new type as unsupported above for previous versions and advance the latest type family")
+		}
 	}
 	return nil
 }
