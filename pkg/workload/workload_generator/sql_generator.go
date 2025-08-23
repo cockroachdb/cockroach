@@ -22,8 +22,8 @@ import (
 // placeholderRewriter handles both simple comparisons and IN-lists.
 // It is the visitor interface implementation for walking the AST.
 type placeholderRewriter struct {
-	schemas   map[string]*TableSchema
-	tableName string
+	schemas    map[string]*TableSchema
+	tableNames []string
 }
 
 // generateWorkload extracts and organizes SQL workload from CockroachDB debug logs.
@@ -215,26 +215,40 @@ func replacePlaceholders(rawSQL string, allSchemas map[string]*TableSchema) (str
 func buildPlaceholderRewriter(
 	stmt statements.Statement[tree.Statement], allSchemas map[string]*TableSchema,
 ) *placeholderRewriter {
-	var tableName string
+	var tables []string
 	switch stmt := stmt.AST.(type) {
 	case *tree.Insert:
 		// ins.Table is a TableName or AliasedTableExpr
-		tableName = extractTableName(stmt.Table)
+		tables = []string{extractTableName(stmt.Table)}
 	case *tree.Update:
-		tableName = extractTableName(stmt.Table)
+		tables = []string{extractTableName(stmt.Table)}
 	case *tree.Delete:
-		tableName = extractTableName(stmt.Table)
+		tables = []string{extractTableName(stmt.Table)}
 	case *tree.Select:
-		// Pulling from the first FROM table (skip joins/withs)
+		// Pulling from all FROM tables and simple joins
 		if sc, ok := stmt.Select.(*tree.SelectClause); ok {
-			if len(sc.From.Tables) > 0 {
-				tableName = extractTableName(sc.From.Tables[0])
+			for _, tblExpr := range sc.From.Tables {
+				// Top-level tables and simple joins are first handled.
+				switch t := tblExpr.(type) {
+				case *tree.TableName, *tree.AliasedTableExpr:
+					if name := extractTableName(tblExpr); name != "" {
+						tables = append(tables, name)
+					}
+				case *tree.JoinTableExpr:
+					// Handling both sides of the join.
+					if left := t.Left; extractTableName(left) != "" {
+						tables = append(tables, extractTableName(left))
+					}
+					if right := t.Right; extractTableName(right) != "" {
+						tables = append(tables, extractTableName(right))
+					}
+				}
 			}
 		}
 	}
 	// Expression-level rewrites (WHERE, IN, BETWEEN, comparisons) are handled using this visitor.
 	return &placeholderRewriter{
-		schemas:   allSchemas,
-		tableName: tableName,
+		schemas:    allSchemas,
+		tableNames: tables,
 	}
 }
