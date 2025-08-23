@@ -31,8 +31,8 @@ func makeMockTxnWriteBuffer(
 ) (txnWriteBuffer, *mockLockedSender, *cluster.Settings) {
 	metrics := MakeTxnMetrics(time.Hour)
 	st := cluster.MakeClusterSettings()
-	bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
-	bufferedWritesGetTransformEnabled.Override(ctx, &st.SV, true)
+	BufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
+	BufferedWritesGetTransformEnabled.Override(ctx, &st.SV, true)
 	BufferedWritesMaxBufferSize.Override(ctx, &st.SV, defaultBufferSize)
 
 	mockSender := &mockLockedSender{}
@@ -1733,7 +1733,7 @@ func TestTxnWriteBufferLimitsSizeOfScans(t *testing.T) {
 				txn := makeTxnProto()
 				txn.Sequence = 10
 
-				bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
+				BufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
 				BufferedWritesMaxBufferSize.Override(ctx, &st.SV, tc.bufferSize)
 
 				ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}

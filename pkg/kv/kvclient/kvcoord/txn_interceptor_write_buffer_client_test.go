@@ -61,7 +61,7 @@ func TestTxnCoordSenderWriteBufferingDisablesPipelining(t *testing.T) {
 	// buffered.
 	require.NoError(t, db.Put(ctx, "test-key-a", "hello"))
 
-	bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, false)
+	BufferedWritesScanTransformEnabled.Override(ctx, &st.SV, false)
 	BufferedWritesMaxBufferSize.Override(ctx, &st.SV, defaultBufferSize)
 
 	// Without write buffering
@@ -144,7 +144,7 @@ func TestTxnWriteBufferFlushedWithMaxKeysOnBatch(t *testing.T) {
 
 	// The bug requires that we transform Gets. Here, we disable it to prove that
 	// this tets passes.
-	bufferedWritesGetTransformEnabled.Override(ctx, &st.SV, false)
+	BufferedWritesGetTransformEnabled.Override(ctx, &st.SV, false)
 
 	// The locks need to actually be taken, so let's write to every key we are
 	// going to lock.
