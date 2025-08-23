@@ -87,7 +87,7 @@ func MakeBaseMemMetrics(endpoint string, histogramWindow time.Duration) BaseMemo
 	MetaMemMaxBytes := makeMemMetricMetadata(prefix+".max", "Memory usage per sql statement for "+endpoint)
 	MetaMemCurBytes := makeMemMetricMetadata(prefix+".current", "Current sql statement memory usage for "+endpoint)
 
-	// Add Essential flag and category if this is the 'root' endpoint
+	// Add Essential flag and category if this is the 'root' endpoint.
 	if endpoint == "root" {
 		MetaMemCurBytes.Essential = true
 		MetaMemCurBytes.Category = metric.Metadata_SQL
