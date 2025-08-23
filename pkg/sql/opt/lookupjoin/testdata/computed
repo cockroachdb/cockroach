@@ -175,7 +175,11 @@ lookup expression:
 lookup-constraints left=(a regclass, b int) right=(x oid, v string not null as (x::string) stored) index=(v, x)
 x = a
 ----
-lookup join not possible
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a::OID::STRING [type=STRING]
 
 # Computed columns cannot be remapped if the expression is composite-sensitive.
 lookup-constraints left=(a decimal, b int) right=(x decimal, v int not null as (x::int) stored) index=(v, x)
