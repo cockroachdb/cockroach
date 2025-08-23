@@ -22,6 +22,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/oidext",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/catconstants",

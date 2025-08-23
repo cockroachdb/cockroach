@@ -94,6 +94,13 @@ func TestLogic_mixed_version_can_login(
 	runLogicTest(t, "mixed_version_can_login")
 }
 
+func TestLogic_mixed_version_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_citext")
+}
+
 func TestLogic_mixed_version_ltree(
 	t *testing.T,
 ) {

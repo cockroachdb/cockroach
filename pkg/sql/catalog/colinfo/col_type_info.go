@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
@@ -72,6 +73,14 @@ func (ti ColTypeInfo) Type(idx int) *types.T {
 func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T) error {
 	switch t.Family() {
 	case types.StringFamily, types.CollatedStringFamily:
+		if t.Oid() == oidext.T_citext {
+			if !st.Version.IsActive(ctx, clusterversion.V25_3) {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"citext not supported until version 25.3",
+				)
+			}
+		}
 		if t.Family() == types.CollatedStringFamily {
 			if _, err := language.Parse(t.Locale()); err != nil {
 				return pgerror.Newf(pgcode.Syntax, `invalid locale %s`, t.Locale())
