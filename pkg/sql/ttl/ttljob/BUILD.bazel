@@ -100,6 +100,7 @@ go_test(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
+        "//pkg/sql/oidext",
         "//pkg/sql/parser",
         "//pkg/sql/physicalplan",
         "//pkg/sql/randgen",
