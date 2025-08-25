@@ -923,17 +923,10 @@ func (rq *replicateQueue) processOneChange(
 }
 
 func maybeAnnotateDecommissionErr(err error, action allocatorimpl.AllocatorAction) error {
-	if err != nil && isDecommissionAction(action) {
+	if err != nil && action.Decommissioning() {
 		err = decommissionPurgatoryError{err}
 	}
 	return err
-}
-
-func isDecommissionAction(action allocatorimpl.AllocatorAction) bool {
-	return action == allocatorimpl.AllocatorRemoveDecommissioningVoter ||
-		action == allocatorimpl.AllocatorRemoveDecommissioningNonVoter ||
-		action == allocatorimpl.AllocatorReplaceDecommissioningVoter ||
-		action == allocatorimpl.AllocatorReplaceDecommissioningNonVoter
 }
 
 // shedLease takes in a leaseholder replica, looks for a target for transferring
