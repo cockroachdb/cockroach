@@ -1264,6 +1264,15 @@ message CreateStatsDetails {
 
   // If true, will collect partial table statistics at extreme values.
   bool using_extremes = 9;
+
+  // WHERE clause for partial statistics collection. This field is only used
+  // to populate the predicate in the system.table_statistics table and to
+  // determine if this is a constrained stats collection. The actual constrained
+  // scan is done over the spans in the where_spans field.
+  string where_clause = 10;
+
+  // Spans over which to collect partial statistics with a WHERE clause.
+  repeated roachpb.Span where_spans = 11 [(gogoproto.nullable) = false];
 }
 
 message CreateStatsProgress {
