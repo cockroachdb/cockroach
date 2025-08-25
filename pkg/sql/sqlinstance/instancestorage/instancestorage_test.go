@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -90,12 +91,15 @@ func TestStorage(t *testing.T) {
 		locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}, {Key: "az", Value: "a"}}}
 		binaryVersion := roachpb.Version{Major: 28, Minor: 4}
 		const expiration = time.Minute
+		localityAddresses := getTestLocalityAddresses()
+
 		{
 			session.StartTS = clock.Now()
 			session.ExpTS = session.StartTS.Add(expiration.Nanoseconds(), 0)
-			instance, err := storage.CreateInstance(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion)
+			instance, err := storage.CreateInstance(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion, localityAddresses)
 			require.NoError(t, err)
 			require.Equal(t, id, instance.InstanceID)
+			require.Equal(t, localityAddresses, instance.LocalityAddresses)
 		}
 	})
 
@@ -116,6 +120,18 @@ func TestStorage(t *testing.T) {
 				SessionID:       makeSession().ID(),
 				Locality:        roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: fmt.Sprintf("region-%d", id)}}},
 				BinaryVersion:   roachpb.Version{Major: 22, Minor: int32(id)},
+				LocalityAddresses: []roachpb.LocalityAddress{
+					{
+						Address: util.UnresolvedAddr{
+							NetworkField: "tcp",
+							AddressField: fmt.Sprintf("127.0.0.1:%d", 8000+id),
+						},
+						LocalityTier: roachpb.Tier{
+							Key:   "zone",
+							Value: fmt.Sprintf("us-west-1b-%d", id),
+						},
+					},
+				},
 			}
 		}
 
@@ -131,7 +147,15 @@ func TestStorage(t *testing.T) {
 			session := &sqllivenesstestutils.FakeSession{SessionID: instance.SessionID,
 				StartTS: sessionStart,
 				ExpTS:   sessionExpiry}
-			created, err := storage.CreateInstance(ctx, session, instance.InstanceRPCAddr, instance.InstanceSQLAddr, instance.Locality, instance.BinaryVersion)
+			created, err := storage.CreateInstance(
+				ctx,
+				session,
+				instance.InstanceRPCAddr,
+				instance.InstanceSQLAddr,
+				instance.Locality,
+				instance.BinaryVersion,
+				instance.LocalityAddresses,
+			)
 			require.NoError(t, err)
 
 			require.Equal(t, instance, created)
@@ -145,6 +169,7 @@ func TestStorage(t *testing.T) {
 			require.Equal(t, expect.Locality, actual.Locality)
 			require.Equal(t, expect.BinaryVersion, actual.BinaryVersion)
 			require.Equal(t, expect.IsDraining, actual.IsDraining)
+			require.Equal(t, expect.LocalityAddresses, actual.LocalityAddresses)
 		}
 
 		isAvailable := func(t *testing.T, instance sqlinstance.InstanceInfo, id base.SQLInstanceID) {
@@ -240,6 +265,21 @@ func TestStorage(t *testing.T) {
 	})
 }
 
+func getTestLocalityAddresses() []roachpb.LocalityAddress {
+	return []roachpb.LocalityAddress{
+		{
+			Address: util.UnresolvedAddr{
+				NetworkField: "tcp",
+				AddressField: "127.0.0.1:8080",
+			},
+			LocalityTier: roachpb.Tier{
+				Key:   "region",
+				Value: "us-east",
+			},
+		},
+	}
+}
+
 // TestSQLAccess verifies that the sql_instances table is accessible
 // through SQL API.
 func TestSQLAccess(t *testing.T) {
@@ -262,14 +302,18 @@ func TestSQLAccess(t *testing.T) {
 	f := s.RangeFeedFactory().(*rangefeed.Factory)
 	storage := instancestorage.NewTestingStorage(
 		kvDB, s.Codec(), table, slstorage.NewFakeStorage(), s.ClusterSettings(), s.Clock(), f, s.SettingsWatcher().(*settingswatcher.SettingsWatcher))
+	storage.TestingKnobs.ShouldEncodeLocalityAddressesFn = func() (bool, error) {
+		return true, nil
+	}
 	const (
 		tierStr         = "region=test1,zone=test2"
 		expiration      = time.Minute
-		expectedNumCols = 5
+		expectedNumCols = 6
 	)
 	var locality roachpb.Locality
 	var binaryVersion roachpb.Version
 	require.NoError(t, locality.Set(tierStr))
+	localityAddresses := getTestLocalityAddresses()
 	session := makeSession()
 	session.StartTS = clock.Now()
 	session.ExpTS = session.StartTS.Add(expiration.Nanoseconds(), 0)
@@ -280,11 +324,12 @@ func TestSQLAccess(t *testing.T) {
 		"sqlAddr",
 		locality,
 		binaryVersion,
+		localityAddresses,
 	)
 	require.NoError(t, err)
 
 	// Query the table through SQL and verify the query completes successfully.
-	rows := tDB.Query(t, fmt.Sprintf("SELECT id, addr, sql_addr, session_id, locality FROM \"%s\".sql_instances", dbName))
+	rows := tDB.Query(t, fmt.Sprintf("SELECT id, addr, sql_addr, session_id, locality, locality_addresses FROM \"%s\".sql_instances", dbName))
 	defer rows.Close()
 	columns, err := rows.Columns()
 	require.NoError(t, err)
@@ -294,28 +339,31 @@ func TestSQLAccess(t *testing.T) {
 	var parsedAddr gosql.NullString
 	var parsedSqlAddr gosql.NullString
 	var parsedLocality gosql.NullString
+	var parsedLocalityAddresses gosql.NullString
 	if !assert.True(t, rows.Next()) {
 		require.NoError(t, rows.Err())
 		require.NoError(t, rows.Close())
 	}
-	err = rows.Scan(&parsedInstanceID, &parsedAddr, &parsedSqlAddr, &parsedSessionID, &parsedLocality)
+	err = rows.Scan(&parsedInstanceID, &parsedAddr, &parsedSqlAddr, &parsedSessionID, &parsedLocality, &parsedLocalityAddresses)
 	require.NoError(t, err)
 	require.Equal(t, instance.InstanceID, parsedInstanceID)
 	require.Equal(t, instance.SessionID, sqlliveness.SessionID(parsedSessionID.String))
 	require.Equal(t, instance.InstanceRPCAddr, parsedAddr.String)
 	require.Equal(t, instance.InstanceSQLAddr, parsedSqlAddr.String)
 	require.Equal(t, instance.Locality, locality)
+	require.Equal(t, instance.LocalityAddresses, localityAddresses)
 
 	// Verify that the remaining entries are preallocated ones.
 	i := 2
 	for rows.Next() {
-		err = rows.Scan(&parsedInstanceID, &parsedAddr, &parsedSqlAddr, &parsedSessionID, &parsedLocality)
+		err = rows.Scan(&parsedInstanceID, &parsedAddr, &parsedSqlAddr, &parsedSessionID, &parsedLocality, &parsedLocalityAddresses)
 		require.NoError(t, err)
 		require.Equal(t, base.SQLInstanceID(i), parsedInstanceID)
 		require.Empty(t, parsedSessionID.String)
 		require.Empty(t, parsedAddr.String)
 		require.Empty(t, parsedSqlAddr.String)
 		require.Empty(t, parsedLocality.String)
+		require.Empty(t, parsedLocalityAddresses.String)
 		i++
 	}
 	require.NoError(t, rows.Err())
@@ -435,7 +483,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			instance, err := storage.CreateInstance(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion)
+			instance, err := storage.CreateInstance(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion, []roachpb.LocalityAddress{})
 			require.NoError(t, err)
 			if len(state.freeInstances) > 0 {
 				_, free := state.freeInstances[instance.InstanceID]
@@ -627,6 +675,7 @@ func TestReclaimLoop(t *testing.T) {
 	binaryVersions := []roachpb.Version{
 		{Major: 22, Minor: 2}, {Major: 23, Minor: 1},
 	}
+	localityAddresses := [][]roachpb.LocalityAddress{getTestLocalityAddresses(), getTestLocalityAddresses()}
 
 	for i, id := range instanceIDs {
 		require.NoError(t, slStorage.Insert(ctx, sessionIDs[i].ID(), sessionExpiry))
@@ -640,8 +689,9 @@ func TestReclaimLoop(t *testing.T) {
 			sessionExpiry,
 			localities[i],
 			binaryVersions[i],
-			/* encodeIsDraining */ true,
-			/* isDraining */ false,
+			false,
+			true,
+			localityAddresses[i],
 		))
 	}
 
@@ -677,12 +727,14 @@ func TestReclaimLoop(t *testing.T) {
 			require.Equal(t, sessionIDs[i].ID(), instance.SessionID)
 			require.Equal(t, localities[i], instance.Locality)
 			require.Equal(t, binaryVersions[i], instance.BinaryVersion)
+			require.Equal(t, localityAddresses[i], instance.LocalityAddresses)
 		default:
 			require.Empty(t, instance.InstanceRPCAddr)
 			require.Empty(t, instance.InstanceSQLAddr)
 			require.Empty(t, instance.SessionID)
 			require.Empty(t, instance.Locality)
 			require.Empty(t, instance.BinaryVersion)
+			require.Empty(t, instance.LocalityAddresses)
 		}
 	}
 }
