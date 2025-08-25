@@ -13,7 +13,7 @@ import (
 	"io"
 	"math"
 	"runtime"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -6335,10 +6335,10 @@ func MVCCGarbageCollect(
 
 	// Sort the slice to both determine the bounds and ensure that we're seeking
 	// in increasing order.
-	sort.Slice(keys, func(i, j int) bool {
-		iKey := MVCCKey{Key: keys[i].Key, Timestamp: keys[i].Timestamp}
-		jKey := MVCCKey{Key: keys[j].Key, Timestamp: keys[j].Timestamp}
-		return iKey.Less(jKey)
+	slices.SortFunc(keys, func(a, b kvpb.GCRequest_GCKey) int {
+		aKey := MVCCKey{Key: a.Key, Timestamp: a.Timestamp}
+		bKey := MVCCKey{Key: b.Key, Timestamp: b.Timestamp}
+		return aKey.Compare(bKey)
 	})
 
 	// Bound the iterator appropriately for the set of keys we'll be garbage
@@ -6649,8 +6649,8 @@ func MVCCGarbageCollectRangeKeys(
 		}
 	}
 
-	sort.Slice(rks, func(i, j int) bool {
-		return rks[i].Compare(rks[j].MVCCRangeKey) < 0
+	slices.SortFunc(rks, func(i, j CollectableGCRangeKey) int {
+		return i.MVCCRangeKey.Compare(j.MVCCRangeKey)
 	})
 
 	// Validate that keys are non-overlapping.

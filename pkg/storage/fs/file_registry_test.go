@@ -7,11 +7,12 @@ package fs
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -392,8 +393,8 @@ func TestFileRegistry(t *testing.T) {
 					entry: entry,
 				})
 			}
-			sort.Slice(fileEntries, func(i, j int) bool {
-				return fileEntries[i].name < fileEntries[j].name
+			slices.SortFunc(fileEntries, func(a, b fileEntry) int {
+				return cmp.Compare(a.name, b.name)
 			})
 			var b bytes.Buffer
 			for _, fe := range fileEntries {
