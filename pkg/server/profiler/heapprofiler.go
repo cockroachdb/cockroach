@@ -88,12 +88,12 @@ func takeHeapProfile(ctx context.Context, path string, _ ...interface{}) (succes
 	// Try writing a go heap profile.
 	f, err := os.Create(path)
 	if err != nil {
-		log.Warningf(ctx, "error creating go heap profile %s: %v", path, err)
+		log.Dev.Warningf(ctx, "error creating go heap profile %s: %v", path, err)
 		return false
 	}
 	defer f.Close()
 	if err = pprof.WriteHeapProfile(f); err != nil {
-		log.Warningf(ctx, "error writing go heap profile %s: %v", path, err)
+		log.Dev.Warningf(ctx, "error writing go heap profile %s: %v", path, err)
 		return false
 	}
 	return true

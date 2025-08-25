@@ -212,7 +212,7 @@ func (s *statusServer) DrainSqlStats(
 	// don't return it. This will allow the caller to still receive the
 	// drained sql stats from the other nodes.
 	if fanOutError != nil {
-		log.Warningf(ctx, "error draining SQL stats from node: %s", fanOutError)
+		log.Dev.Warningf(ctx, "error draining SQL stats from node: %s", fanOutError)
 	}
 	return respBuilder.Build(), nil
 }

@@ -36,7 +36,7 @@ func (ss *SQLStats) DrainStats(
 ) {
 	resp, err := ss.statusServer.DrainSqlStats(ctx, &serverpb.DrainSqlStatsRequest{})
 	if err != nil {
-		log.Warningf(ctx, "Error calling statusServer.DrainSqlStats. err=%s", err.Error())
+		log.Dev.Warningf(ctx, "Error calling statusServer.DrainSqlStats. err=%s", err.Error())
 		return nil, nil, 0
 	}
 	return resp.Statements, resp.Transactions, resp.FingerprintCount

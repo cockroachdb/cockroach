@@ -292,7 +292,7 @@ func evalExport(
 							return result.Result{}, errors.AssertionFailedf("ExportRequest exited without " +
 								"exporting any data for an unknown reason; programming error")
 						} else {
-							log.Warningf(ctx, "unexpected resume span from ExportRequest without exporting any data for an unknown reason: %v", resumeInfo)
+							log.Dev.Warningf(ctx, "unexpected resume span from ExportRequest without exporting any data for an unknown reason: %v", resumeInfo)
 						}
 					}
 					start = resumeInfo.ResumeKey.Key

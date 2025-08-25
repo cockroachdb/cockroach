@@ -275,7 +275,7 @@ func ResolveLBRebalancingObjective(
 	// disallows any other store using the cpu balancing objective.
 	for _, desc := range descs {
 		if desc.Capacity.CPUPerSecond == -1 {
-			log.Warningf(ctx,
+			log.Dev.Warningf(ctx,
 				"cpu timekeeping unavailable on node %d but available locally, reverting to qps balance objective",
 				desc.Node.NodeID)
 			return LBRebalancingQueries

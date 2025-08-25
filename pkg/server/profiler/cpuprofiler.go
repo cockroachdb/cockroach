@@ -114,7 +114,7 @@ func (cp *CPUProfiler) takeCPUProfile(
 		// Try writing a CPU profile.
 		f, err := os.Create(path)
 		if err != nil {
-			log.Warningf(ctx, "error creating go cpu profile %s: %v", path, err)
+			log.Dev.Warningf(ctx, "error creating go cpu profile %s: %v", path, err)
 			return err
 		}
 		defer f.Close()

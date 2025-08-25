@@ -393,7 +393,7 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		s.metrics.RaftRcvdDropped.Inc(1)
 		s.metrics.RaftRcvdDroppedBytes.Inc(size)
 		if logRaftRecvQueueFullEvery.ShouldLog() {
-			log.Warningf(ctx, "raft receive queue for r%d is full", req.RangeID)
+			log.Dev.Warningf(ctx, "raft receive queue for r%d is full", req.RangeID)
 		}
 		return false
 	}
@@ -655,7 +655,7 @@ func (s *Store) HandleRaftResponse(
 				// proper check.
 				s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityDefault)
 			case *kvpb.StoreNotFoundError:
-				log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
+				log.Dev.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
 					resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
 				// This error is expected if the remote node restarted with fewer stores
 				// (before rebalancing off that now dead store is complete).
@@ -665,11 +665,11 @@ func (s *Store) HandleRaftResponse(
 				// NB: as of v25.2, receivers no longer return this error in this situation
 				// and eventually, this case can be removed.
 			default:
-				log.Warningf(ctx, "got error from r%d, replica %s: %s",
+				log.Dev.Warningf(ctx, "got error from r%d, replica %s: %s",
 					resp.RangeID, resp.FromReplica, val)
 			}
 		default:
-			log.Warningf(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
+			log.Dev.Warningf(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
 		}
 		return nil
 	})

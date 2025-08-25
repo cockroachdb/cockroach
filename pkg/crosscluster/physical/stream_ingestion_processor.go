@@ -1053,10 +1053,10 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 				if left != nil && right != nil {
 					work = append([]*rangeKeySST{left, right}, work...)
 				} else if left != nil {
-					log.Warningf(ctx, "RHS of split point %s was unexpectedly empty", split)
+					log.Dev.Warningf(ctx, "RHS of split point %s was unexpectedly empty", split)
 					work = append([]*rangeKeySST{left}, work...)
 				} else if right != nil {
-					log.Warningf(ctx, "LHS of split point %s was unexpectedly empty", split)
+					log.Dev.Warningf(ctx, "LHS of split point %s was unexpectedly empty", split)
 					work = append([]*rangeKeySST{right}, work...)
 				}
 			} else {
@@ -1090,7 +1090,7 @@ func (r *rangeKeyBatcher) recomputeStats(ctx context.Context, rangekeySpans roac
 		})
 	}
 	if err := r.db.Run(ctx, &b); err != nil {
-		log.Warningf(ctx, "recomputes stats bath failed with error: %v", err)
+		log.Dev.Warningf(ctx, "recomputes stats bath failed with error: %v", err)
 	}
 }
 
@@ -1103,7 +1103,7 @@ func getRangeStartkeys(
 	for i := range rangeKeySpans {
 		iter, err := rangeDescIterFactory.NewLazyIterator(ctx, rangeKeySpans[i], 100)
 		if err != nil {
-			log.Warningf(ctx, "could not create range descriptor iterator for %s: %v", rangeKeySpans[i], err)
+			log.Dev.Warningf(ctx, "could not create range descriptor iterator for %s: %v", rangeKeySpans[i], err)
 			continue
 		}
 		for ; iter.Valid(); iter.Next() {
@@ -1115,7 +1115,7 @@ func getRangeStartkeys(
 			}
 		}
 		if err := iter.Error(); err != nil {
-			log.Warningf(ctx, "error iterating range descriptors for %s: %v", rangeKeySpans[i], err)
+			log.Dev.Warningf(ctx, "error iterating range descriptors for %s: %v", rangeKeySpans[i], err)
 		}
 	}
 	return rangeStartKeys
@@ -1360,7 +1360,7 @@ func (sip *streamIngestionProcessor) flushBuffer(
 	// Now process the range KVs.
 	if len(b.buffer.curRangeKVBatch) > 0 {
 		if err := sip.rangeBatcher.flush(ctx, b.buffer.curRangeKVBatch); err != nil {
-			log.Warningf(ctx, "flush error: %v", err)
+			log.Dev.Warningf(ctx, "flush error: %v", err)
 			return nil, errors.Wrap(err, "flushing range key sst")
 		}
 	}
@@ -1396,7 +1396,7 @@ func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, erro
 		return false, err
 	}
 	if ingestionProgress == nil {
-		log.Warningf(ctx, "no legacy job progress recorded yet")
+		log.Dev.Warningf(ctx, "no legacy job progress recorded yet")
 		return false, nil
 	}
 

@@ -5912,7 +5912,7 @@ func MVCCResolveWriteIntentRange(
 			replLocksReleased = replLocksReleased || outcome != lockNoop
 		}
 		if err != nil {
-			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", lastResolvedKey, err)
+			log.Dev.Warningf(ctx, "failed to resolve intent for key %q: %+v", lastResolvedKey, err)
 		}
 		if outcome != lockNoop && !lastResolvedKeyOk {
 			// We only count the first successfully resolved lock/intent on a

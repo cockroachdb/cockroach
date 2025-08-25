@@ -146,7 +146,7 @@ func (mq *mergeQueue) shouldQueue(
 
 	needsSplit, err := confReader.NeedsSplit(ctx, desc.StartKey, desc.EndKey.Next())
 	if err != nil {
-		log.Warningf(
+		log.Dev.Warningf(
 			ctx,
 			"could not compute if extending range would result in a split (err=%v); skipping merge for range %s",
 			err,
@@ -415,12 +415,12 @@ func (mq *mergeQueue) process(
 		//
 		// TODO(aayush): Merges are indeed stable now, we can be smarter here about
 		// which errors should be marked as purgatory-worthy.
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		return false, rangeMergePurgatoryError{err}
 	}
 	if testingAggressiveConsistencyChecks {
 		if _, err := mq.store.consistencyQueue.process(ctx, lhsRepl, confReader); err != nil {
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 	}
 

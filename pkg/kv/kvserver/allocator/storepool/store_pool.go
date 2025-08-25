@@ -1282,7 +1282,7 @@ func (sp *StorePool) Throttle(reason ThrottleReason, why string, storeID roachpb
 				why, storeID, timeout, detail.ThrottledUntil)
 		}
 	default:
-		log.Warningf(sp.AnnotateCtx(context.TODO()), "unknown throttle reason %v", reason)
+		log.Dev.Warningf(sp.AnnotateCtx(context.TODO()), "unknown throttle reason %v", reason)
 	}
 }
 

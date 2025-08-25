@@ -2230,7 +2230,7 @@ func (ds *DistSender) sendPartialBatch(
 			{
 				var s redact.StringBuilder
 				slowRangeRPCWarningStr(&s, ba, dur, attempts, routingTok.Desc(), err, reply)
-				log.Warningf(ctx, "slow range RPC: %v", &s)
+				log.Dev.Warningf(ctx, "slow range RPC: %v", &s)
 			}
 			// If the RPC wasn't successful, defer the logging of a message once the
 			// RPC is not retried any more.
@@ -2242,7 +2242,7 @@ func (ds *DistSender) sendPartialBatch(
 					ds.metrics.SlowRPCs.Dec(1)
 					var s redact.StringBuilder
 					slowRangeRPCReturnWarningStr(&s, tBegin.Elapsed(), attempts)
-					log.Warningf(ctx, "slow RPC response: %v", &s)
+					log.Dev.Warningf(ctx, "slow RPC response: %v", &s)
 				}(tBegin, attempts)
 			}
 			tBegin = 0 // prevent reentering branch for this RPC
@@ -2786,7 +2786,7 @@ func (ds *DistSender) sendToReplicas(
 				if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
 					// Note that these RPC may or may not have succeeded. Errors are counted separately below.
 					ds.metrics.SlowReplicaRPCs.Inc(1)
-					log.Warningf(ctx, "slow replica RPC: %v", &s)
+					log.Dev.Warningf(ctx, "slow replica RPC: %v", &s)
 				} else {
 					log.Eventf(ctx, "slow replica RPC: %v", &s)
 				}

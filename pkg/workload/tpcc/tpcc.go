@@ -863,7 +863,7 @@ func (w *tpcc) Ops(
 
 	if duration, err := w.flags.GetDuration("duration"); err == nil {
 		if duration == 0 || duration >= longDurationWorkloadThreshold {
-			log.Warningf(ctx,
+			log.Dev.Warningf(ctx,
 				"Warning: this workload is being used with a long or indefinite duration."+
 					" This could cause it to deviate from the TPCC spec in subtle ways and is not meant for benchmarking. "+
 					"Consistency checks might be disabled",
@@ -871,7 +871,7 @@ func (w *tpcc) Ops(
 			w.isLongDurationWorkload = true
 		}
 	} else {
-		log.Warningf(ctx, "Couldn't get duration of the tpcc workload run for disabling consistency checks %v", err)
+		log.Dev.Warningf(ctx, "Couldn't get duration of the tpcc workload run for disabling consistency checks %v", err)
 	}
 
 	// Need idempotency - Ops might be invoked multiple times with the same
@@ -1081,18 +1081,18 @@ func (w *tpcc) Ops(
 	ql.Close = func(_ context.Context) error {
 		for _, conn := range conns {
 			if err := conn.Close(ctx); err != nil {
-				log.Warningf(ctx, "%v", err)
+				log.Dev.Warningf(ctx, "%v", err)
 			}
 		}
 		if tracer != nil {
 			if err := tracer.Close(); err != nil {
-				log.Warningf(ctx, "%v", err)
+				log.Dev.Warningf(ctx, "%v", err)
 			}
 		}
 
 		w.resetTableCancelFn()
 		if err := w.resetTableGrp.Wait(); err != nil && !errors.Is(err, context.Canceled) {
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 		return nil
 	}

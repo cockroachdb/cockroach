@@ -521,7 +521,7 @@ INNER JOIN latestprogress ON j.id = latestprogress.job_id;`,
 			inflightTraceZipper := tracezipper.MakeSQLConnInflightTraceZipper(zc.firstNodeSQLConn.GetDriverConn())
 			jobZip, err := inflightTraceZipper.Zip(ctx, int64(jobTrace.traceID))
 			if err != nil {
-				log.Warningf(ctx, "failed to collect inflight trace zip for job %d: %v", jobTrace.jobID, err)
+				log.Dev.Warningf(ctx, "failed to collect inflight trace zip for job %d: %v", jobTrace.jobID, err)
 				continue
 			}
 
@@ -529,7 +529,7 @@ INNER JOIN latestprogress ON j.id = latestprogress.job_id;`,
 			name := fmt.Sprintf("%s/jobs/%d/%s/trace.zip", zc.prefix, jobTrace.jobID, ts)
 			s := zc.clusterPrinter.start(redact.Sprintf("requesting traces for job %d", jobTrace.jobID))
 			if err := zc.z.createRaw(s, name, jobZip); err != nil {
-				log.Warningf(ctx, "failed to write inflight trace zip for job %d to file %s: %v",
+				log.Dev.Warningf(ctx, "failed to write inflight trace zip for job %d to file %s: %v",
 					jobTrace.jobID, name, err)
 				continue
 			}

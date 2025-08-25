@@ -190,7 +190,7 @@ func setupHTTPClient(baseURL *url.URL, s *schemaRegistryParams) (*httputil.Clien
 	httpClient.Timeout = s.timeout
 
 	if baseURL.Scheme == "http" {
-		log.Warningf(context.Background(), "TLS configuration provided but schema registry %s uses HTTP", baseURL)
+		log.Dev.Warningf(context.Background(), "TLS configuration provided but schema registry %s uses HTTP", baseURL)
 	}
 	return httpClient, nil
 }

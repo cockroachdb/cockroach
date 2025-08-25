@@ -383,7 +383,7 @@ func (sf *syncCancelFunc) withCancelOnDisabled(
 		sf.CancelFunc = cancel
 
 		if !schedulerEnabledSetting.Get(sv) {
-			log.Warning(ctx, "scheduled job system disabled by setting, cancelling execution")
+			log.Dev.Warning(ctx, "scheduled job system disabled by setting, cancelling execution")
 			cancel()
 		}
 
@@ -419,7 +419,7 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 				return
 			case <-timer.C:
 				if !schedulerEnabledSetting.Get(&s.Settings.SV) {
-					log.Warning(ctx, "scheduled job system disabled by setting")
+					log.Dev.Warning(ctx, "scheduled job system disabled by setting")
 					continue
 				}
 
@@ -498,7 +498,7 @@ func getWaitPeriod(
 	pace := schedulerPaceSetting.Get(sv)
 	if pace < minPacePeriod {
 		if warnIfPaceTooLow.ShouldLog() {
-			log.Warningf(ctx,
+			log.Dev.Warningf(ctx,
 				"job.scheduler.pace setting too low (%s < %s)", pace, minPacePeriod)
 		}
 		pace = minPacePeriod

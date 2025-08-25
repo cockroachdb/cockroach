@@ -615,7 +615,7 @@ func asyncWriteToOtelAndSystemEventsTable(
 			// background context here.
 			err = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected stopper error")
 		}
-		log.Warningf(ctx, "failed to start task to save %d events in eventlog: %v", len(entries), err)
+		log.Dev.Warningf(ctx, "failed to start task to save %d events in eventlog: %v", len(entries), err)
 	}
 }
 

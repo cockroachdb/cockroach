@@ -672,7 +672,7 @@ func (c *CustomFuncs) FoldFunction(
 			context.Background(), tree.MakeUnresolvedFunctionName(&unresolved),
 			&c.f.evalCtx.SessionData().SearchPath)
 		if err != nil {
-			log.Warningf(c.f.ctx, "function %s() not defined: %v", redact.Safe(private.Name), err)
+			log.Dev.Warningf(c.f.ctx, "function %s() not defined: %v", redact.Safe(private.Name), err)
 			return nil, false
 		}
 		funcRef = tree.ResolvableFunctionReference{FunctionReference: def}

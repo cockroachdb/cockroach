@@ -167,13 +167,13 @@ func (m *MonitorManager) monitorDisks(ctx context.Context, collector statsCollec
 				}
 			} else if countCollected != len(disks) && every.ShouldLog() {
 				// Log a warning if we collected fewer disk stats than expected.
-				log.Warningf(ctx, "collected %d disk stats, expected %d", countCollected, len(disks))
+				log.Dev.Warningf(ctx, "collected %d disk stats, expected %d", countCollected, len(disks))
 				cutoff := now.Add(-10 * time.Second)
 				for i := range disks {
 					if lastEventTime := disks[i].tracer.LastEventTime(); lastEventTime.IsZero() {
-						log.Warningf(ctx, "disk %s has not recorded any stats", disks[i].deviceID)
+						log.Dev.Warningf(ctx, "disk %s has not recorded any stats", disks[i].deviceID)
 					} else if lastEventTime.Before(cutoff) {
-						log.Warningf(ctx, "disk %s has not recorded any stats since %s",
+						log.Dev.Warningf(ctx, "disk %s has not recorded any stats since %s",
 							disks[i].deviceID, lastEventTime)
 					}
 				}

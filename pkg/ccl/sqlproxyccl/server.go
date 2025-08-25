@@ -175,7 +175,7 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		if retErr != nil {
 			// Lots of noise from this log indicates that somebody is spamming
 			// fake cancel requests.
-			log.Warningf(
+			log.Dev.Warningf(
 				r.Context(), "could not handle cancel request from client %s: %v",
 				r.RemoteAddr, retErr,
 			)

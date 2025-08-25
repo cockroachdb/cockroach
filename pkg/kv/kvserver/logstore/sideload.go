@@ -102,7 +102,7 @@ func MaybeSideloadEntries(
 			// Still no AddSSTable; someone must've proposed a v2 command
 			// but not because it contains an inlined SSTable. Strange, but
 			// let's be future proof.
-			log.Warning(ctx, "encountered sideloaded Raft command without inlined payload")
+			log.Dev.Warning(ctx, "encountered sideloaded Raft command without inlined payload")
 			continue
 		}
 

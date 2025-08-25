@@ -257,7 +257,7 @@ func PhysicalPlanChangeChecker(
 				dsp := execCtx.DistSQLPlanner()
 				p, _, err := fn(ctx, dsp)
 				if err != nil {
-					log.Warningf(ctx, "job replanning check failed to generate plan: %v", err)
+					log.Dev.Warningf(ctx, "job replanning check failed to generate plan: %v", err)
 					continue
 				}
 				if decider(ctx, initial, p) {

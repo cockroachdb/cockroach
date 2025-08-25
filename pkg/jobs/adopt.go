@@ -85,7 +85,7 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 	if err := r.db.Txn(dumpCtx, func(ctx context.Context, txn isql.Txn) error {
 		return WriteProtobinExecutionDetailFile(dumpCtx, resumerTraceFilename, &td, txn, jobID)
 	}); err != nil {
-		log.Warningf(dumpCtx, "failed to write trace on resumer trace file: %v", err)
+		log.Dev.Warningf(dumpCtx, "failed to write trace on resumer trace file: %v", err)
 	}
 }
 
@@ -150,7 +150,7 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 		row := it.Cur()
 		id := jobspb.JobID(*row[0].(*tree.DInt))
 		if _, skip := testingIgnoreIDs[id]; skip {
-			log.Warningf(ctx, "skipping execution of job %d as it is ignored by testing knob", id)
+			log.Dev.Warningf(ctx, "skipping execution of job %d as it is ignored by testing knob", id)
 			continue
 		}
 		claimedToResume[id] = struct{}{}
@@ -207,7 +207,7 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 	// Process all current adopted jobs in our in-memory jobs map.
 	for id, aj := range r.mu.adoptedJobs {
 		if aj.session.ID() != s.ID() {
-			log.Warningf(ctx, "job %d: running without having a live claim; canceling", id)
+			log.Dev.Warningf(ctx, "job %d: running without having a live claim; canceling", id)
 			aj.cancel()
 			delete(r.mu.adoptedJobs, id)
 		} else {
@@ -455,7 +455,7 @@ func (r *Registry) clearLeaseForJobID(jobID jobspb.JobID, ex isql.Executor, txn 
 			sessiondata.NodeUserSessionDataOverride,
 			clearClaimQuery, jobID, s.ID().UnsafeBytes(), r.ID())
 		if err != nil {
-			log.Warningf(ctx, "could not clear job claim: %s", err.Error())
+			log.Dev.Warningf(ctx, "could not clear job claim: %s", err.Error())
 			return
 		}
 		log.VEventf(ctx, 2, "cleared leases for %d jobs", n)

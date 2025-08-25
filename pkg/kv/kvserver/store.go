@@ -1675,7 +1675,7 @@ func NewStore(
 	// common case and do something more effective.
 	s.sstSnapshotStorage = snaprecv.NewSSTSnapshotStorage(s.TODOEngine(), s.limiters.BulkIOWriteRate)
 	if err := s.sstSnapshotStorage.Clear(); err != nil {
-		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
+		log.Dev.Warningf(ctx, "failed to clear snapshot storage: %v", err)
 	}
 	s.protectedtsReader = cfg.ProtectedTimestampReader
 
@@ -2114,11 +2114,11 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 			// You expect this message when shutting down a server in an unhealthy
 			// cluster, or when draining all nodes with replicas for some range at the
 			// same time. If we see it on healthy ones, there's likely something to fix.
-			log.Warningf(ctx, "unable to drain cleanly within %s (cluster setting %s), "+
+			log.Dev.Warningf(ctx, "unable to drain cleanly within %s (cluster setting %s), "+
 				"service might briefly deteriorate if the node is terminated: %s",
 				transferTimeout, LeaseTransferPerIterationTimeout.Name(), tErr.Cause())
 		} else {
-			log.Warningf(ctx, "drain error: %+v", err)
+			log.Dev.Warningf(ctx, "drain error: %+v", err)
 		}
 	}
 }
@@ -4176,7 +4176,7 @@ func (s *Store) WaitForSpanConfigSubscription(ctx context.Context) error {
 			return nil
 		}
 
-		log.Warningf(ctx, "waiting for span config subscription...")
+		log.Dev.Warningf(ctx, "waiting for span config subscription...")
 		continue
 	}
 

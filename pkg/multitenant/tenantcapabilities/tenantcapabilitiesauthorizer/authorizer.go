@@ -413,7 +413,7 @@ func (a *Authorizer) getMode(
 		// The server has started but the reader hasn't started/bound
 		// yet. Block requests that would need specific capabilities.
 		if a.logEvery.ShouldLog() {
-			log.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming capability is unavailable", tid)
+			log.Dev.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming capability is unavailable", tid)
 		}
 		selectedMode = authorizerModeV222
 	} else {

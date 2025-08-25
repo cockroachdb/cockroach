@@ -216,7 +216,7 @@ func ResumingReaderRetryOnErrFnForSettings(
 
 		retryTimeouts := retryConnectionTimedOut.Get(&st.SV)
 		if retryTimeouts && sysutil.IsErrTimedOut(err) {
-			log.Warningf(ctx, "retrying connection timed out because %s = true", retryConnectionTimedOut.Name())
+			log.Dev.Warningf(ctx, "retrying connection timed out because %s = true", retryConnectionTimedOut.Name())
 			return true
 		}
 		return false
@@ -269,7 +269,7 @@ func NewResumingReader(
 		ErrFn:        errFn,
 	}
 	if r.RetryOnErrFn == nil {
-		log.Warning(ctx, "no RetryOnErrFn specified when configuring ResumingReader, setting to default value")
+		log.Dev.Warning(ctx, "no RetryOnErrFn specified when configuring ResumingReader, setting to default value")
 		r.RetryOnErrFn = sysutil.IsErrConnectionReset
 	}
 	return r
@@ -316,7 +316,7 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 				return read, readErr
 			}
 			if r.Size > 0 && r.Pos == r.Size {
-				log.Warningf(ctx, "read %s ignoring read error received after completed read (%d): %v", r.Filename, r.Pos, readErr)
+				log.Dev.Warningf(ctx, "read %s ignoring read error received after completed read (%d): %v", r.Filename, r.Pos, readErr)
 				return read, io.EOF
 			}
 			lastErr = errors.Wrapf(readErr, "read %s", r.Filename)

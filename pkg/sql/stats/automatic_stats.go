@@ -719,7 +719,7 @@ func (r *Refresher) Start(
 		}
 	}); err != nil {
 		r.startedTasksWG.Done()
-		log.Warningf(ctx, "refresher task failed to start: %v", err)
+		log.Dev.Warningf(ctx, "refresher task failed to start: %v", err)
 	}
 	// Start another task that will periodically run an internal query to delete
 	// stats for dropped tables.
@@ -769,12 +769,12 @@ func (r *Refresher) Start(
 				return
 			}
 			if err := deleteStatsForDroppedTables(ctx, r.internalDB, statsGarbageCollectionLimit.Get(&r.st.SV)); err != nil {
-				log.Warningf(ctx, "stats-garbage-collector encountered an error when deleting stats: %v", err)
+				log.Dev.Warningf(ctx, "stats-garbage-collector encountered an error when deleting stats: %v", err)
 			}
 		}
 	}); err != nil {
 		r.startedTasksWG.Done()
-		log.Warningf(ctx, "stats-garbage-collector task failed to start: %v", err)
+		log.Dev.Warningf(ctx, "stats-garbage-collector task failed to start: %v", err)
 	}
 	return nil
 }
@@ -868,7 +868,7 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 		default:
 			// Don't block if there is no room in the buffered channel.
 			if bufferedChanFullLogLimiter.ShouldLog() {
-				log.Warningf(context.TODO(),
+				log.Dev.Warningf(context.TODO(),
 					"buffered channel is full. Unable to update settings for table %q (%d) during auto stats refreshing",
 					table.GetName(), table.GetID())
 			}
@@ -886,7 +886,7 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 	default:
 		// Don't block if there is no room in the buffered channel.
 		if bufferedChanFullLogLimiter.ShouldLog() {
-			log.Warningf(context.TODO(),
+			log.Dev.Warningf(context.TODO(),
 				"buffered channel is full. Unable to refresh stats for table %q (%d) with %d rows affected",
 				table.GetName(), table.GetID(), rowsAffected)
 		}
@@ -1033,7 +1033,7 @@ func (r *Refresher) maybeRefreshStats(
 
 		// Log other errors but don't automatically reschedule the refresh, since
 		// that could lead to endless retries.
-		log.Warningf(ctx, "failed to create statistics on table %d: %v", tableID, err)
+		log.Dev.Warningf(ctx, "failed to create statistics on table %d: %v", tableID, err)
 		return
 	}
 }

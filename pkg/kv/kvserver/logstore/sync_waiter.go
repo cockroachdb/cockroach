@@ -120,7 +120,7 @@ func (w *SyncWaiterLoop) enqueue(ctx context.Context, wg syncWaiter, cb syncWait
 			// with enough capacity to hold more in-progress sync operations than
 			// Pebble allows (pebble/record.SyncConcurrency). However, we can still
 			// see this in cases where consumption from the queue is delayed.
-			log.VWarningf(ctx, 1, "SyncWaiterLoop.enqueue blocking due to insufficient channel capacity")
+			log.Dev.VWarningf(ctx, 1, "SyncWaiterLoop.enqueue blocking due to insufficient channel capacity")
 		}
 		select {
 		case w.q <- b:

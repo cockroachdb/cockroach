@@ -450,7 +450,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 		}
 		splitKey, err := keys.EnsureSafeSplitKey(b.curBuf.Key(splitAt))
 		if err != nil {
-			log.Warningf(ctx, "failed to generate pre-split key for key %s", b.curBuf.Key(splitAt))
+			log.Dev.Warningf(ctx, "failed to generate pre-split key for key %s", b.curBuf.Key(splitAt))
 			continue
 		}
 		predicateKey := b.curBuf.Key(predicateAt)
@@ -461,7 +461,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 				log.VEventf(ctx, 1, "%s adder split at %s rejected, had previously split and no longer included %s",
 					b.name, splitKey, predicateKey)
 			} else {
-				log.Warningf(ctx, "failed to create initial split %s: %s", splitKey, err)
+				log.Dev.Warningf(ctx, "failed to create initial split %s: %s", splitKey, err)
 			}
 			continue
 		}
@@ -478,7 +478,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	for _, splitKey := range toScatter {
 		resp, err := b.sink.db.AdminScatter(ctx, splitKey, 0 /* maxSize */)
 		if err != nil {
-			log.Warningf(ctx, "failed to scatter: %v", err)
+			log.Dev.Warningf(ctx, "failed to scatter: %v", err)
 			continue
 		}
 		b.sink.batch.stats.Scatters++

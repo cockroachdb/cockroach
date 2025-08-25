@@ -392,7 +392,7 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	if errors.Is(err, errSpanConfigsUnavailable) {
 		// This could be before the span config subscription was ever
 		// established.
-		log.Warningf(ctx, "unable to retrieve conf reader, cannot determine range MaxBytes")
+		log.Dev.Warningf(ctx, "unable to retrieve conf reader, cannot determine range MaxBytes")
 		return nil
 	}
 	if err != nil {

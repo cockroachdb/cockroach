@@ -66,7 +66,7 @@ func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 			// want to fail hard if setrlimit fails. Instead we log a warning and
 			// carry on. If the rlimit is really too low, we'll bail out later in this
 			// function.
-			log.Warningf(context.TODO(), "adjusting the limit for open file descriptors to %d failed: %s",
+			log.Dev.Warningf(context.TODO(), "adjusting the limit for open file descriptors to %d failed: %s",
 				rLimit.Cur, err)
 
 			// Setting the limit to our "recommended" level failed. This may
@@ -77,7 +77,7 @@ func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 			if oldCurrent < minimumOpenFileLimit {
 				rLimit.Cur = minimumOpenFileLimit
 				if err := setRlimitNoFile(&rLimit); err != nil {
-					log.Warningf(context.TODO(), "adjusting the limit for open file descriptors to %d failed: %s",
+					log.Dev.Warningf(context.TODO(), "adjusting the limit for open file descriptors to %d failed: %s",
 						rLimit.Cur, err)
 				}
 			}
@@ -104,7 +104,7 @@ func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 	if rLimit.Cur < recommendedOpenFileLimit {
 		// We're still below the recommended amount, we should always show a
 		// warning.
-		log.Warningf(context.TODO(), "soft open file descriptor limit %d is under the recommended limit %d; this may decrease performance\n%s",
+		log.Dev.Warningf(context.TODO(), "soft open file descriptor limit %d is under the recommended limit %d; this may decrease performance\n%s",
 			rLimit.Cur,
 			recommendedOpenFileLimit,
 			productionSettingsWebpage)

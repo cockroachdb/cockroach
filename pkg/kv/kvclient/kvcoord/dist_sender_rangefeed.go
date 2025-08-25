@@ -758,7 +758,7 @@ func logSlowCatchupScanAcquisition(loggingMinInterval time.Duration) quotapool.S
 	return func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) func() {
 		shouldLog := logSlowAcquire.ShouldLog()
 		if shouldLog {
-			log.Warningf(ctx, "have been waiting %s attempting to acquire catchup scan quota",
+			log.Dev.Warningf(ctx, "have been waiting %s attempting to acquire catchup scan quota",
 				timeutil.Since(start))
 		}
 

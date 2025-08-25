@@ -864,7 +864,7 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 				}
 				if err := r.stream.Send(msg); err != nil {
 					if err != io.EOF && everyN.ShouldLog() {
-						log.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
+						log.Dev.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
 							r.lastSent, r.nodeID, err)
 					}
 					// Keep track of the fact that we need a new connection.

@@ -52,7 +52,7 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 	if targetCV.Less(versionSetting.MinSupportedVersion()) {
 		msg := fmt.Sprintf("target cluster version %s less than binary's min supported version %s",
 			targetCV, versionSetting.MinSupportedVersion())
-		log.Warningf(ctx, "%s", msg)
+		log.Dev.Warningf(ctx, "%s", msg)
 		return nil, errors.Newf("%s", redact.Safe(msg))
 	}
 
@@ -71,7 +71,7 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 	if versionSetting.LatestVersion().Less(targetCV.Version) {
 		msg := fmt.Sprintf("binary version %s less than target cluster version %s",
 			versionSetting.LatestVersion(), targetCV)
-		log.Warningf(ctx, "%s", msg)
+		log.Dev.Warningf(ctx, "%s", msg)
 		return nil, errors.Newf("%s", redact.Safe(msg))
 	}
 

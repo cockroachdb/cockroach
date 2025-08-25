@@ -354,12 +354,12 @@ func (s *SettingsWatcher) handleKV(
 
 	setting, ok := settings.LookupForLocalAccessByKey(settingKey, s.codec.ForSystemTenant())
 	if !ok {
-		log.Warningf(ctx, "unknown setting %s, skipping update", settingKey)
+		log.Dev.Warningf(ctx, "unknown setting %s, skipping update", settingKey)
 		return nil, false
 	}
 	if !s.codec.ForSystemTenant() {
 		if setting.Class() != settings.ApplicationLevel {
-			log.Warningf(ctx, "ignoring read-only setting %s", settingKey)
+			log.Dev.Warningf(ctx, "ignoring read-only setting %s", settingKey)
 			return nil, false
 		}
 	}
@@ -449,7 +449,7 @@ func (s *SettingsWatcher) setLocked(
 		var newVersion clusterversion.ClusterVersion
 		oldVersion := s.settings.Version.ActiveVersionOrEmpty(ctx)
 		if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
-			log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
+			log.Dev.Warningf(ctx, "failed to set cluster version: %s", err.Error())
 		} else if newVersion.LessEq(oldVersion.Version) {
 			// Nothing to do.
 		} else {
@@ -463,7 +463,7 @@ func (s *SettingsWatcher) setLocked(
 				}
 			}
 			if err := s.settings.Version.SetActiveVersion(ctx, newVersion); err != nil {
-				log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
+				log.Dev.Warningf(ctx, "failed to set cluster version: %s", err.Error())
 			} else {
 				log.Dev.Infof(ctx, "set cluster version from %v to: %v", oldVersion, newVersion)
 			}
@@ -472,14 +472,14 @@ func (s *SettingsWatcher) setLocked(
 	}
 
 	if err := s.mu.updater.SetFromStorage(ctx, key, val, origin); err != nil {
-		log.Warningf(ctx, "failed to set setting %s to %s: %v", key, val.Value, err)
+		log.Dev.Warningf(ctx, "failed to set setting %s to %s: %v", key, val.Value, err)
 	}
 }
 
 // setDefaultLocked sets a setting to its default value.
 func (s *SettingsWatcher) setDefaultLocked(ctx context.Context, key settings.InternalKey) {
 	if err := s.mu.updater.SetToDefault(ctx, key); err != nil {
-		log.Warningf(ctx, "failed to set setting %s to default: %v", key, err)
+		log.Dev.Warningf(ctx, "failed to set setting %s to default: %v", key, err)
 	}
 }
 
@@ -496,7 +496,7 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) (updateCh <-chan 
 		if key == clusterversion.KeyVersionSetting {
 			var newVersion clusterversion.ClusterVersion
 			if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
-				log.Warningf(ctx, "ignoring invalid cluster version: %s - %v\n"+
+				log.Dev.Warningf(ctx, "ignoring invalid cluster version: %s - %v\n"+
 					"Note: the lack of a refreshed storage cluster version in a secondary tenant may prevent tenant upgrade.",
 					newVersion, err)
 			} else {

@@ -221,7 +221,7 @@ func jemallocMaybePurge(
 	// C.jemalloc_stats_print_abbreviated()
 	res, err := C.jemalloc_purge()
 	if err != nil || res != 0 {
-		log.Warningf(ctx, "jemalloc purging failed: %v (res=%d)", err, int(res))
+		log.Dev.Warningf(ctx, "jemalloc purging failed: %v (res=%d)", err, int(res))
 	} else {
 		log.Dev.Infof(ctx, "jemalloc arenas purged (took %s)", thisPurge.Elapsed())
 	}

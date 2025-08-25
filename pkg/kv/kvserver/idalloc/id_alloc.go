@@ -112,7 +112,7 @@ func (ia *Allocator) start() {
 					break
 				}
 
-				log.Warningf(
+				log.Dev.Warningf(
 					ctx,
 					"unable to allocate %d ids from %s: %+v",
 					ia.opts.BlockSize,

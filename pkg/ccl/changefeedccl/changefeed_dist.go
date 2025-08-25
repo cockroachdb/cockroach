@@ -537,9 +537,9 @@ func makePlan(
 			flowSpecs,
 			execinfrapb.DiagramFlags{},
 		); err != nil {
-			log.Warningf(ctx, "failed to generate changefeed plan diagram: %s", err)
+			log.Dev.Warningf(ctx, "failed to generate changefeed plan diagram: %s", err)
 		} else if diagURL := diagURL.String(); len(diagURL) > maxLenDiagURL {
-			log.Warningf(ctx, "changefeed plan diagram length is too large to be logged: %d", len(diagURL))
+			log.Dev.Warningf(ctx, "changefeed plan diagram length is too large to be logged: %d", len(diagURL))
 		} else {
 			log.Dev.Infof(ctx, "changefeed plan diagram: %s", diagURL)
 		}
@@ -650,7 +650,7 @@ func rebalanceSpanPartitions(
 		nRanges, ok := p.NumRanges()
 		// We cannot rebalance if we're missing range information.
 		if !ok {
-			log.Warning(ctx, "skipping rebalance due to missing range info")
+			log.Dev.Warning(ctx, "skipping rebalance due to missing range info")
 			return partitions, nil
 		}
 		builders[i].numRanges = nRanges

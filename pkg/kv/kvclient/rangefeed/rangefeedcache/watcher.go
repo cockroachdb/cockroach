@@ -211,7 +211,7 @@ func Start[E rangefeedbuffer.Event](
 					r.Reset()
 				}
 
-				log.Warningf(ctx, "%s: failed with %v, retrying...", c.name, err)
+				log.Dev.Warningf(ctx, "%s: failed with %v, retrying...", c.name, err)
 				continue
 			}
 

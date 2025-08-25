@@ -60,7 +60,7 @@ A file preventing this node from restarting was placed at:
 `, r, path)
 
 	if err := fs.WriteFile(r.store.TODOEngine().Env(), path, []byte(preventStartupMsg), fs.UnspecifiedWriteCategory); err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 	}
 
 	log.FatalfDepth(ctx, 1, "replica is corrupted: %s", cErr)

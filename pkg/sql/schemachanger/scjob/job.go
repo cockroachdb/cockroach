@@ -66,7 +66,7 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 	// from here. Only if the status is reverting will these be
 	// treated as fatal.
 	if jobs.IsPermanentJobError(err) && n.job.State() == jobs.StateReverting {
-		log.Warningf(ctx, "schema change will not rollback; permanent error detected: %v", err)
+		log.Dev.Warningf(ctx, "schema change will not rollback; permanent error detected: %v", err)
 		return nil
 	}
 	n.rollbackCause = err
@@ -74,7 +74,7 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 	// Clean up any protected timestamps as a last resort, in case the job
 	// execution never did itself.
 	if err := execCfg.ProtectedTimestampManager.Unprotect(ctx, n.job); err != nil {
-		log.Warningf(ctx, "unable to revert protected timestamp %v", err)
+		log.Dev.Warningf(ctx, "unable to revert protected timestamp %v", err)
 	}
 	return n.run(ctx, execCtx)
 }

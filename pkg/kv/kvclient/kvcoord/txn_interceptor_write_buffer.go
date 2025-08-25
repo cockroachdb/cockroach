@@ -601,7 +601,7 @@ func (twb *txnWriteBuffer) adjustError(
 				// For requests that were not transformed, attributing an error to them
 				// shouldn't confuse the client.
 				if baIdx == pErr.Index.Index && record.transformed {
-					log.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
+					log.Dev.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
 					pErr.Index = nil
 					return pErr
 				} else if baIdx == pErr.Index.Index {
@@ -626,7 +626,7 @@ func (twb *txnWriteBuffer) adjustErrorUponFlush(
 		if pErr.Index.Index < int32(numBuffered) {
 			// If the error belongs to a request because part of the buffer flush, nil
 			// out the index.
-			log.Warningf(ctx, "error index %d is part of the buffer flush", pErr.Index.Index)
+			log.Dev.Warningf(ctx, "error index %d is part of the buffer flush", pErr.Index.Index)
 			pErr.Index = nil
 		} else {
 			// Otherwise, adjust the error index to hide the impact of any flushed

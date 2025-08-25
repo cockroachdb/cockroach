@@ -137,7 +137,7 @@ func protectTenantSpanWithSession(
 			pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
 			return pts.Release(ctx, ptsRecordID)
 		}); err != nil {
-			log.Warningf(ctx, "failed to release protected timestamp %s: %v", ptsRecordID, err)
+			log.Dev.Warningf(ctx, "failed to release protected timestamp %s: %v", ptsRecordID, err)
 		}
 	}
 	return releasePTS, nil

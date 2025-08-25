@@ -52,7 +52,7 @@ func TestingCreateAndStartJob(
 	}); err != nil {
 		if rj != nil {
 			if cleanupErr := rj.CleanupOnRollback(ctx); cleanupErr != nil {
-				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
+				log.Dev.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 			}
 		}
 		return nil, err

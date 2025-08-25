@@ -566,14 +566,14 @@ func loadRangeDescriptor(
 		}
 		v, err := storage.DecodeMVCCValue(kv.Value)
 		if err != nil {
-			log.Warningf(context.Background(), "ignoring range descriptor due to error %s: %+v", err, kv)
+			log.Dev.Warningf(context.Background(), "ignoring range descriptor due to error %s: %+v", err, kv)
 		}
 		if v.IsTombstone() {
 			// RangeDescriptor was deleted (range merged away).
 			return nil
 		}
 		if err := v.Value.GetProto(&desc); err != nil {
-			log.Warningf(context.Background(), "ignoring range descriptor due to error %s: %+v", err, kv)
+			log.Dev.Warningf(context.Background(), "ignoring range descriptor due to error %s: %+v", err, kv)
 			return nil
 		}
 		if desc.RangeID == rangeID {

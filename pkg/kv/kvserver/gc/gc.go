@@ -379,7 +379,7 @@ func Run(
 		if errors.Is(err, ctx.Err()) {
 			return Info{}, err
 		}
-		log.Warningf(ctx, "while gc'ing local key range: %s", err)
+		log.Dev.Warningf(ctx, "while gc'ing local key range: %s", err)
 	}
 
 	// Clean up the AbortSpan.
@@ -388,7 +388,7 @@ func Run(
 		if errors.Is(err, ctx.Err()) {
 			return Info{}, err
 		}
-		log.Warningf(ctx, "while gc'ing abort span: %s", err)
+		log.Dev.Warningf(ctx, "while gc'ing abort span: %s", err)
 	}
 
 	log.Eventf(ctx, "GC'ed keys; stats %+v", info)
@@ -445,7 +445,7 @@ func processReplicatedKeyRange(
 				excludeUserKeySpan = true
 				info.ClearRangeSpanOperations++
 			} else {
-				log.Warningf(ctx, "failed to perform GC clear range operation on range %s: %s",
+				log.Dev.Warningf(ctx, "failed to perform GC clear range operation on range %s: %s",
 					desc.String(), err)
 				info.ClearRangeSpanFailures++
 			}
@@ -580,7 +580,7 @@ func processReplicatedLocks(
 					if errors.Is(err, ctx.Err()) {
 						return err
 					}
-					log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
+					log.Dev.Warningf(ctx, "failed to cleanup intents batch: %v", err)
 				}
 			}
 		}
@@ -606,7 +606,7 @@ func processReplicatedLocks(
 		if errors.Is(err, ctx.Err()) {
 			return err
 		}
-		log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
+		log.Dev.Warningf(ctx, "failed to cleanup intents batch: %v", err)
 	}
 	return nil
 }
@@ -934,7 +934,7 @@ func (b *gcKeyBatcher) maybeFlushPendingBatches(ctx context.Context) (err error)
 			// safe to continue because we bumped the GC
 			// thresholds. We may leave some inconsistent history
 			// behind, but nobody can read it.
-			log.Warningf(ctx, "failed to GC keys with clear range: %v", err)
+			log.Dev.Warningf(ctx, "failed to GC keys with clear range: %v", err)
 			b.info.ClearRangeSpanFailures++
 		}
 		b.clearRangeCounters.updateGcInfo(b.info)
@@ -981,7 +981,7 @@ func (b *gcKeyBatcher) flushPointsBatch(ctx context.Context, batch *pointsBatch)
 		// safe to continue because we bumped the GC
 		// thresholds. We may leave some inconsistent history
 		// behind, but nobody can read it.
-		log.Warningf(ctx, "failed to GC a batch of keys: %v", err)
+		log.Dev.Warningf(ctx, "failed to GC a batch of keys: %v", err)
 	}
 	batch.gcBatchCounters.updateGcInfo(b.info)
 	b.totalMemUsed -= batch.gcBatchCounters.memUsed
@@ -1194,7 +1194,7 @@ func processLocalKeyRange(
 	gcer PureGCer,
 ) error {
 	b := makeBatchingInlineGCer(gcer, func(err error) {
-		log.Warningf(ctx, "failed to GC from local key range: %s", err)
+		log.Dev.Warningf(ctx, "failed to GC from local key range: %s", err)
 	})
 	defer b.Flush(ctx)
 
@@ -1286,7 +1286,7 @@ func processAbortSpan(
 	gcer PureGCer,
 ) error {
 	b := makeBatchingInlineGCer(gcer, func(err error) {
-		log.Warningf(ctx, "unable to GC from abort span: %s", err)
+		log.Dev.Warningf(ctx, "unable to GC from abort span: %s", err)
 	})
 	defer b.Flush(ctx)
 	abortSpan := abortspan.New(rangeID)

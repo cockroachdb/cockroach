@@ -214,7 +214,7 @@ func (k *kafkaSinkClientV2) FlushResolvedPayload(
 			msgs = make([]*kgo.Record, 0, len(k.metadataMu.allTopicPartitions))
 			return forEachTopic(func(topic string) error {
 				if _, ok := k.metadataMu.allTopicPartitions[topic]; !ok {
-					log.Warningf(ctx, `cannot flush resolved timestamp for unknown topic %s`, topic)
+					log.Dev.Warningf(ctx, `cannot flush resolved timestamp for unknown topic %s`, topic)
 				}
 				for _, partition := range k.metadataMu.allTopicPartitions[topic] {
 					msgs = append(msgs, &kgo.Record{

@@ -330,6 +330,39 @@ layers:
       essential: true
   - name: SQL
     metrics:
+    - name: jobs.auto_create_partial_stats.currently_paused
+      exported_name: jobs_auto_create_partial_stats_currently_paused
+      labeled_name: 'jobs{name: auto_create_partial_stats, status: currently_paused}'
+      description: Number of auto_create_partial_stats jobs currently considered Paused
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric is a high-level indicator that automatically generated partial statistics jobs are paused which can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.
+      essential: true
+    - name: jobs.auto_create_partial_stats.currently_running
+      exported_name: jobs_auto_create_partial_stats_currently_running
+      labeled_name: 'jobs{type: auto_create_partial_stats, status: currently_running}'
+      description: Number of auto_create_partial_stats jobs currently running in Resume or OnFailOrCancel state
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric tracks the number of active automatically generated partial statistics jobs that could also be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.
+      essential: true
+    - name: jobs.auto_create_partial_stats.resume_failed
+      exported_name: jobs_auto_create_partial_stats_resume_failed
+      labeled_name: 'jobs.resume{name: auto_create_partial_stats, status: failed}'
+      description: Number of auto_create_partial_stats jobs which failed with a non-retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric is a high-level indicator that automatically generated partial table statistics is failing. Failed statistic creation can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.
+      essential: true
     - name: jobs.auto_create_stats.currently_paused
       exported_name: jobs_auto_create_stats_currently_paused
       labeled_name: 'jobs{name: auto_create_stats, status: currently_paused}'
@@ -394,7 +427,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-      how_to_use: This metric tracks the number of active create statistics jobs that may be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.
+      how_to_use: This metric tracks the number of active create statistics jobs that could also be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.
       essential: true
     - name: schedules.BACKUP.failed
       exported_name: schedules_BACKUP_failed
@@ -4055,24 +4088,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: jobs.auto_create_partial_stats.currently_paused
-      exported_name: jobs_auto_create_partial_stats_currently_paused
-      labeled_name: 'jobs{name: auto_create_partial_stats, status: currently_paused}'
-      description: Number of auto_create_partial_stats jobs currently considered Paused
-      y_axis_label: jobs
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: jobs.auto_create_partial_stats.currently_running
-      exported_name: jobs_auto_create_partial_stats_currently_running
-      labeled_name: 'jobs{type: auto_create_partial_stats, status: currently_running}'
-      description: Number of auto_create_partial_stats jobs currently running in Resume or OnFailOrCancel state
-      y_axis_label: jobs
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
     - name: jobs.auto_create_partial_stats.expired_pts_records
       exported_name: jobs_auto_create_partial_stats_expired_pts_records
       labeled_name: 'jobs.expired_pts_records{type: auto_create_partial_stats}'
@@ -4131,15 +4146,6 @@ layers:
       exported_name: jobs_auto_create_partial_stats_resume_completed
       labeled_name: 'jobs.resume{name: auto_create_partial_stats, status: completed}'
       description: Number of auto_create_partial_stats jobs which successfully resumed to completion
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_create_partial_stats.resume_failed
-      exported_name: jobs_auto_create_partial_stats_resume_failed
-      labeled_name: 'jobs.resume{name: auto_create_partial_stats, status: failed}'
-      description: Number of auto_create_partial_stats jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT

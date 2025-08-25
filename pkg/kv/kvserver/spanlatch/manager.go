@@ -607,7 +607,7 @@ func (m *Manager) waitForSignal(
 				return errors.Errorf("unsupported poison.Policy %d", pp)
 			}
 		case <-t.C:
-			log.Warningf(ctx, "have been waiting %s to acquire %s latch %s, held by %s latch %s",
+			log.Dev.Warningf(ctx, "have been waiting %s to acquire %s latch %s, held by %s latch %s",
 				base.SlowRequestThreshold, waitType, wait, heldType, held)
 			if m.slowReqs != nil {
 				m.slowReqs.Inc(1)
@@ -674,7 +674,7 @@ func (m *Manager) Release(ctx context.Context, lg *Guard) {
 		const msg = "%s has held latch for %s. Some possible causes are " +
 			"slow disk reads, slow raft replication, and expensive request processing."
 		if m.everySecondLogger.ShouldLog() {
-			log.Warningf(ctx, msg, lg.ba, humanizeutil.Duration(held))
+			log.Dev.Warningf(ctx, msg, lg.ba, humanizeutil.Duration(held))
 		} else {
 			log.VEventf(ctx, 2, msg, lg.ba, humanizeutil.Duration(held))
 		}

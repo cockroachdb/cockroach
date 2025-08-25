@@ -130,7 +130,7 @@ func (p *compactBackupsProcessor) constructProgressProducerMeta(
 
 	progDetails := backuppb.BackupManifest_Progress{}
 	if err := gogotypes.UnmarshalAny(&prog.ProgressDetails, &progDetails); err != nil {
-		log.Warningf(p.Ctx(), "failed to unmarshal progress details: %v", err)
+		log.Dev.Warningf(p.Ctx(), "failed to unmarshal progress details: %v", err)
 	} else {
 		p.completedSpans += progDetails.CompletedSpans
 	}
@@ -347,7 +347,7 @@ func openSSTs(
 	cleanupDirs := func() {
 		for _, dir := range dirs {
 			if err := dir.Close(); err != nil {
-				log.Warningf(ctx, "close export storage failed: %v", err)
+				log.Dev.Warningf(ctx, "close export storage failed: %v", err)
 			}
 		}
 	}

@@ -315,7 +315,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 	case <-l.drain:
 		log.Dev.Infof(ctx, "draining heartbeat loop")
 	default:
-		log.Warningf(ctx, "exiting heartbeat loop with error: %v", l.mu.stopErr)
+		log.Dev.Warningf(ctx, "exiting heartbeat loop with error: %v", l.mu.stopErr)
 		if l.mu.s != nil {
 			_ = l.clearSessionLocked(ctx)
 		}
@@ -328,7 +328,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 
 func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
 	defer func() {
-		log.Warning(ctx, "exiting heartbeat loop")
+		log.Dev.Warning(ctx, "exiting heartbeat loop")
 	}()
 	// Operations below retry endlessly after the stopper started quiescing if we
 	// don't cancel their ctx.

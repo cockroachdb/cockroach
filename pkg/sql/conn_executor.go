@@ -1245,7 +1245,7 @@ func (s *Server) newConnExecutor(
 				displayLevel = tree.RepeatableReadIsolation
 			}
 			if logIsolationLevelLimiter.ShouldLog() {
-				log.Warningf(ctx, msgFmt, displayLevel)
+				log.Dev.Warningf(ctx, msgFmt, displayLevel)
 			}
 			ex.planner.BufferClientNotice(ctx, pgnotice.Newf(msgFmt, displayLevel))
 		}
@@ -1372,7 +1372,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForExplicitClose); err != nil {
-		log.Warningf(ctx, "error closing cursors: %v", err)
+		log.Dev.Warningf(ctx, "error closing cursors: %v", err)
 	}
 
 	// Free any memory used by the stats collector.
@@ -1386,7 +1386,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		payloadErr = connExecutorNormalCloseErr
 		payload := eventNonRetryableErrPayload{err: payloadErr}
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
-			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
+			log.Dev.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 		}
 		switch t := ex.machine.CurState().(type) {
 		case stateNoTxn:
@@ -1437,7 +1437,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	if ex.sessionTracing.Enabled() {
 		if err := ex.sessionTracing.StopTracing(); err != nil {
-			log.Warningf(ctx, "error stopping tracing: %s", err)
+			log.Dev.Warningf(ctx, "error stopping tracing: %s", err)
 		}
 	}
 
@@ -2138,7 +2138,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 		closeReason = cursorCloseForTxnRollback
 	}
 	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, closeReason); err != nil {
-		log.Warningf(ctx, "error closing cursors: %v", err)
+		log.Dev.Warningf(ctx, "error closing cursors: %v", err)
 	}
 
 	switch ev.eventType {
@@ -2617,7 +2617,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 			// pausable portals hasn't been cleared yet.
 			ex.extraTxnState.prepStmtsNamespace.closeAllPausablePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 			if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForTxnRollback); err != nil {
-				log.Warningf(ctx, "error closing cursors: %v", err)
+				log.Dev.Warningf(ctx, "error closing cursors: %v", err)
 			}
 		}
 		advInfo, err = ex.txnStateTransitionsApplyWrapper(ev, payload, res, pos)
@@ -4166,7 +4166,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if ex.extraTxnState.descCollection.HasUncommittedNewOrDroppedDescriptors() {
 			execCfg := ex.planner.ExecCfg()
 			if err := UpdateDescriptorCount(ex.Ctx(), execCfg, execCfg.SchemaChangerMetrics); err != nil {
-				log.Warningf(ex.Ctx(), "failed to scan descriptor table: %v", err)
+				log.Dev.Warningf(ex.Ctx(), "failed to scan descriptor table: %v", err)
 			}
 		}
 		fallthrough
@@ -4429,7 +4429,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			// This shouldn't happen, but might as well not completely give up if we
 			// fail to parse a parseable sql for some reason. We unfortunately can't
 			// just log the SQL either as it could contain sensitive information.
-			log.Warningf(ex.Ctx(), "failed to re-parse sql during session "+
+			log.Dev.Warningf(ex.Ctx(), "failed to re-parse sql during session "+
 				"serialization")
 			continue
 		}

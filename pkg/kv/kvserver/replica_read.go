@@ -228,7 +228,7 @@ func (r *Replica) executeReadOnlyBatch(
 			intents,
 			allowSyncProcessing,
 		); err != nil {
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 	}
 

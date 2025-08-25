@@ -262,7 +262,7 @@ func (ex *connExecutor) prepare(
 			f := tree.NewFmtCtx(tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction | tree.FmtSimple)
 			f.FormatNode(stmt.AST)
 			redactableStmt := redact.RedactableString(f.CloseAndGetString())
-			log.Warningf(ctx, "could not prepare statement during session migration (%s): %v", redactableStmt, err)
+			log.Dev.Warningf(ctx, "could not prepare statement during session migration (%s): %v", redactableStmt, err)
 		}
 	}
 

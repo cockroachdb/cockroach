@@ -431,7 +431,7 @@ func logSlowRangefeedRegistration(ctx context.Context) func() {
 	return func() {
 		elapsed := timeutil.Since(start)
 		if elapsed >= slowRaftMuWarnThreshold {
-			log.Warningf(ctx, "rangefeed registration took %s", elapsed)
+			log.Dev.Warningf(ctx, "rangefeed registration took %s", elapsed)
 		}
 	}
 }

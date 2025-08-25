@@ -1595,7 +1595,7 @@ func (l *leaseTransferTest) sendRead(t *testing.T, storeIdx int) *kvpb.Error {
 		getArgs(l.leftKey),
 	)
 	if pErr != nil {
-		log.Warningf(context.Background(), "%v", pErr)
+		log.Dev.Warningf(context.Background(), "%v", pErr)
 	}
 	return pErr
 }

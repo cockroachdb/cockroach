@@ -543,10 +543,10 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 	if !b.batch.flushKeyChecked && b.rc != nil {
 		b.batch.flushKeyChecked = true
 		if k, err := keys.Addr(nextKey); err != nil {
-			log.Warningf(ctx, "failed to get RKey for flush key lookup: %v", err)
+			log.Dev.Warningf(ctx, "failed to get RKey for flush key lookup: %v", err)
 		} else {
 			if r, err := b.rc.Lookup(ctx, k); err != nil {
-				log.Warningf(ctx, "failed to lookup range cache entry for key %v: %v", k, err)
+				log.Dev.Warningf(ctx, "failed to lookup range cache entry for key %v: %v", k, err)
 			} else {
 				k := r.Desc.EndKey.AsRawKey()
 				b.batch.flushKey = k
@@ -752,13 +752,13 @@ func (b *SSTBatcher) startFlush(ctx context.Context, reason int) {
 
 			splitAbove, err := keys.EnsureSafeSplitKey(nextKey)
 			if err != nil {
-				log.Warningf(ctx, "%s failed to generate split-above key: %v", b.name, err)
+				log.Dev.Warningf(ctx, "%s failed to generate split-above key: %v", b.name, err)
 			} else {
 				beforeSplit := timeutil.Now()
 				err := b.db.AdminSplit(ctx, splitAbove, expire)
 				b.batch.stats.SplitWait += timeutil.Since(beforeSplit)
 				if err != nil {
-					log.Warningf(ctx, "%s failed to split-above: %v", b.name, err)
+					log.Dev.Warningf(ctx, "%s failed to split-above: %v", b.name, err)
 				} else {
 					b.batch.stats.Splits++
 				}
@@ -767,13 +767,13 @@ func (b *SSTBatcher) startFlush(ctx context.Context, reason int) {
 
 		splitAt, err := keys.EnsureSafeSplitKey(start)
 		if err != nil {
-			log.Warningf(ctx, "%s failed to generate split key: %v", b.name, err)
+			log.Dev.Warningf(ctx, "%s failed to generate split key: %v", b.name, err)
 		} else {
 			beforeSplit := timeutil.Now()
 			err := b.db.AdminSplit(ctx, splitAt, expire)
 			b.batch.stats.SplitWait += timeutil.Since(beforeSplit)
 			if err != nil {
-				log.Warningf(ctx, "%s failed to split: %v", b.name, err)
+				log.Dev.Warningf(ctx, "%s failed to split: %v", b.name, err)
 			} else {
 				b.batch.stats.Splits++
 
@@ -788,7 +788,7 @@ func (b *SSTBatcher) startFlush(ctx context.Context, reason int) {
 						if strings.Contains(err.Error(), "existing range size") {
 							log.VEventf(ctx, 1, "%s scattered non-empty range rejected: %v", b.name, err)
 						} else {
-							log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
+							log.Dev.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
 						}
 					} else {
 						b.batch.stats.Scatters++
@@ -946,7 +946,7 @@ func (b *SSTBatcher) Close(ctx context.Context) {
 		b.cancelFlush()
 	}
 	if err := b.syncFlush(); err != nil {
-		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
+		log.Dev.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
 	}
 	b.pacer.Close()
 	b.mem.Close(ctx)

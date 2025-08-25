@@ -268,7 +268,7 @@ func persistProgress(
 			return nil
 		})
 	}); err != nil {
-		log.Warningf(ctx, "failed to update job's progress payload or running status err: %+v", err)
+		log.Dev.Warningf(ctx, "failed to update job's progress payload or running status err: %+v", err)
 	}
 	log.Dev.Infof(ctx, "updated progress status: %s, payload: %+v", status, progress)
 }

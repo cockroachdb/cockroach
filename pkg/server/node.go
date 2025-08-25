@@ -1020,7 +1020,7 @@ func (n *Node) initializeAdditionalStores(ctx context.Context, engines []storage
 			// Done regularly in Node.startGossiping, but this cuts down the time
 			// until this store is used for range allocations.
 			if err := s.GossipStore(ctx, false /* useCached */); err != nil {
-				log.Warningf(ctx, "error doing initial gossiping: %s", err)
+				log.Dev.Warningf(ctx, "error doing initial gossiping: %s", err)
 			}
 
 			sIdent.StoreID++
@@ -1030,7 +1030,7 @@ func (n *Node) initializeAdditionalStores(ctx context.Context, engines []storage
 	// Write a new status summary after all stores have been initialized; this
 	// helps the UI remain responsive when new nodes are added.
 	if err := n.writeNodeStatus(ctx, false /* mustExist */); err != nil {
-		log.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
+		log.Dev.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
 	}
 
 	return nil
@@ -1073,7 +1073,7 @@ func (n *Node) startGossiping(ctx context.Context, stopper *stop.Stopper) {
 				n.gossipStores(ctx)
 			case <-nodeTicker.C:
 				if err := n.storeCfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
-					log.Warningf(ctx, "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
+					log.Dev.Warningf(ctx, "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 				}
 			case <-stopper.ShouldQuiesce():
 				return
@@ -1087,7 +1087,7 @@ func (n *Node) gossipStores(ctx context.Context) {
 	if err := n.stores.VisitStores(func(s *kvserver.Store) error {
 		return s.GossipStore(ctx, false /* useCached */)
 	}); err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 	}
 }
 
@@ -1216,7 +1216,7 @@ func (n *Node) computeMetricsPeriodically(
 ) error {
 	err := n.stores.VisitStores(func(store *kvserver.Store) error {
 		if newMetrics, err := store.ComputeMetricsPeriodically(ctx, storeToMetrics[store], tick); err != nil {
-			log.Warningf(ctx, "%s: unable to compute metrics: %s", store, err)
+			log.Dev.Warningf(ctx, "%s: unable to compute metrics: %s", store, err)
 		} else {
 			if storeToMetrics[store] == nil {
 				storeToMetrics[store] = &storage.MetricsForInterval{
@@ -1361,7 +1361,7 @@ func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetric
 		&pmp.n.storeCfg.Settings.SV)
 	storeIDToDiskStats, err := pmp.diskStatsMap.tryPopulateAdmissionDiskStats(clusterProvisionedBandwidth)
 	if err != nil {
-		log.Warningf(context.Background(), "%v",
+		log.Dev.Warningf(context.Background(), "%v",
 			errors.Wrapf(err, "unable to populate disk stats"))
 	}
 	var metrics []admission.StoreMetrics
@@ -1484,7 +1484,7 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 					// the status entry after the decommissioner has removed it.
 					// See Server.Decommission().
 					if err := n.writeNodeStatus(ctx, true /* mustExist */); err != nil {
-						log.Warningf(ctx, "error recording status summaries: %s", err)
+						log.Dev.Warningf(ctx, "error recording status summaries: %s", err)
 					}
 				case <-n.stopper.ShouldQuiesce():
 					return
@@ -1514,16 +1514,16 @@ func (n *Node) writeNodeStatus(ctx context.Context, mustExist bool) error {
 				numNodes++
 				return nil
 			}); err != nil {
-				log.Warningf(ctx, "%v", err)
+				log.Dev.Warningf(ctx, "%v", err)
 			}
 			if numNodes > 1 {
 				// Avoid this warning on single-node clusters, which require special UX.
-				log.Warningf(ctx, "health alerts detected: %s", result)
+				log.Dev.Warningf(ctx, "health alerts detected: %s", result)
 			}
 			if err := n.storeCfg.Gossip.AddInfoProto(
 				gossip.MakeNodeHealthAlertKey(n.Descriptor.NodeID), &result, 2*base.DefaultMetricsSampleInterval, /* ttl */
 			); err != nil {
-				log.Warningf(ctx, "unable to gossip health alerts: %+v", result)
+				log.Dev.Warningf(ctx, "unable to gossip health alerts: %+v", result)
 			}
 
 			// TODO(tschottdorf): add a metric that we increment every time there are
@@ -2275,7 +2275,7 @@ func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error
 					consumerID = req.ConsumerID
 				}
 				if req.ConsumerID != 0 && consumerID != req.ConsumerID {
-					log.Warningf(ctx, "ignoring previously unseen consumer ID %d, using %d",
+					log.Dev.Warningf(ctx, "ignoring previously unseen consumer ID %d, using %d",
 						req.ConsumerID, consumerID)
 				}
 
@@ -2474,7 +2474,7 @@ func (n *Node) gossipSubscription(
 				// The consumer was not keeping up with gossip updates, so its
 				// subscription was terminated to avoid blocking gossip.
 				err := kvpb.NewErrorf("subscription terminated due to slow consumption")
-				log.Warningf(ctx, "%v", err)
+				log.Dev.Warningf(ctx, "%v", err)
 				e = &kvpb.GossipSubscriptionEvent{Error: err}
 			}
 			if err := stream.Send(e); err != nil {

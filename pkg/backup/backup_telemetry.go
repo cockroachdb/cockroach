@@ -119,12 +119,12 @@ func createBackupRecoveryEvent(
 	storageTypes := make(map[string]struct{})
 	defaultURI, urisByLocalityKV, err := backupdest.GetURIsByLocalityKV(initialDetails.Destination.To, "")
 	if err != nil {
-		log.Warningf(ctx, "failed to get URIs by locality: %v", err)
+		log.Dev.Warningf(ctx, "failed to get URIs by locality: %v", err)
 	}
 
 	if defaultURI != "" {
 		if storageType, authType, err := parseStorageAndAuth(defaultURI); err != nil {
-			log.Warningf(ctx, "failed to parse backup default URI: %v", err)
+			log.Dev.Warningf(ctx, "failed to parse backup default URI: %v", err)
 		} else {
 			storageTypes[storageType] = struct{}{}
 			authTypes[authType] = struct{}{}
@@ -133,7 +133,7 @@ func createBackupRecoveryEvent(
 
 	for _, uri := range urisByLocalityKV {
 		if storageType, authType, err := parseStorageAndAuth(uri); err != nil {
-			log.Warningf(ctx, "failed to parse locality URI: %v", err)
+			log.Dev.Warningf(ctx, "failed to parse locality URI: %v", err)
 		} else {
 			storageTypes[storageType] = struct{}{}
 			authTypes[authType] = struct{}{}
@@ -218,7 +218,7 @@ func getPassphraseAndKMS(
 			if enc.KMSInfo != nil {
 				parsedKMSURI, err := url.ParseRequestURI(enc.KMSInfo.Uri)
 				if err != nil {
-					log.Warningf(ctx, "failed to parse KMS URI %s: %v", enc.KMSInfo.Uri, err)
+					log.Dev.Warningf(ctx, "failed to parse KMS URI %s: %v", enc.KMSInfo.Uri, err)
 				} else {
 					kms = parsedKMSURI.Scheme
 				}
@@ -348,7 +348,7 @@ func logRestoreTelemetry(
 
 	for _, uri := range details.URIs {
 		if storage, auth, err := parseStorageAndAuth(uri); err != nil {
-			log.Warningf(ctx, "failed to parse URI: %v", err)
+			log.Dev.Warningf(ctx, "failed to parse URI: %v", err)
 		} else {
 			authTypes[auth] = struct{}{}
 			storageTypes[storage] = struct{}{}
@@ -362,7 +362,7 @@ func logRestoreTelemetry(
 
 		for _, uri := range localityInfo.URIsByOriginalLocalityKV {
 			if storage, auth, err := parseStorageAndAuth(uri); err != nil {
-				log.Warningf(ctx, "failed to parse URI: %v", err)
+				log.Dev.Warningf(ctx, "failed to parse URI: %v", err)
 			} else {
 				authTypes[auth] = struct{}{}
 				storageTypes[storage] = struct{}{}

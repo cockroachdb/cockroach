@@ -153,7 +153,7 @@ func shouldSplitRange(
 ) (shouldQ bool, priority float64) {
 	needsSplit, err := confReader.NeedsSplit(ctx, desc.StartKey, desc.EndKey)
 	if err != nil {
-		log.Warningf(ctx, "unable to compute NeedsSpilt (%v); skipping range %s", err, desc.RangeID)
+		log.Dev.Warningf(ctx, "unable to compute NeedsSpilt (%v); skipping range %s", err, desc.RangeID)
 		return false, 0
 	}
 	if needsSplit {

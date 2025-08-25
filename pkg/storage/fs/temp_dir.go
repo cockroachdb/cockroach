@@ -123,7 +123,7 @@ func CleanupTempDirs(recordPath string) error {
 
 		// Check if the temporary directory exists; if it does not, skip over it.
 		if _, err := os.Stat(path); oserror.IsNotExist(err) {
-			log.Warningf(context.Background(), "could not locate previous temporary directory %s, might require manual cleanup, or might have already been cleaned up.", path)
+			log.Dev.Warningf(context.Background(), "could not locate previous temporary directory %s, might require manual cleanup, or might have already been cleaned up.", path)
 			continue
 		}
 

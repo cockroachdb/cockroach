@@ -1659,7 +1659,7 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 	// above.
 	require.Eventually(t, func() bool {
 		if err := forceScanOnAllReplicationQueues(tc); err != nil {
-			log.Warningf(ctx, "received error while forcing a replicateQueue scan: %s", err)
+			log.Dev.Warningf(ctx, "received error while forcing a replicateQueue scan: %s", err)
 			return false
 		}
 		scratchRange := tc.LookupRangeOrFatal(t, scratchStartKey)

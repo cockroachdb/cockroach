@@ -1916,7 +1916,7 @@ func ValidateForwardIndexes(
 					// Resolve the table index descriptor name.
 					indexName, err := catalog.FindTargetIndexNameByID(tableDesc, idx.GetID())
 					if err != nil {
-						log.Warningf(ctx,
+						log.Dev.Warningf(ctx,
 							"unable to find index by ID for ValidateForwardIndexes: %d",
 							idx.GetID())
 						indexName = idx.GetName()

@@ -2369,14 +2369,14 @@ func (t *logicTest) hasOpenTxns(ctx context.Context) bool {
 			if err != nil {
 				// If we are unable to see transaction priority assume we're in the middle
 				// of an explicit txn.
-				log.Warningf(ctx, "failed to check txn priority with %v", err)
+				log.Dev.Warningf(ctx, "failed to check txn priority with %v", err)
 				return true
 			}
 			if _, err := user.Exec("SET TRANSACTION PRIORITY NORMAL;"); !testutils.IsError(err, "there is no transaction in progress") {
 				// Reset the txn priority to what it was before we checked for open txns.
 				_, err := user.Exec(fmt.Sprintf(`SET TRANSACTION PRIORITY %s`, existingTxnPriority))
 				if err != nil {
-					log.Warningf(ctx, "failed to reset txn priority with %v", err)
+					log.Dev.Warningf(ctx, "failed to reset txn priority with %v", err)
 				}
 				return true
 			}
@@ -2444,7 +2444,7 @@ func (t *logicTest) maybeBackupRestore(
 				userToHexSession[user][nodeIdx] = userSession
 				continue
 			}
-			log.Warningf(context.Background(), "failed to serialize session: %+v", err)
+			log.Dev.Warningf(context.Background(), "failed to serialize session: %+v", err)
 
 			// If we failed to serialize the session variables, lets save the output of
 			// `SHOW ALL`. This usually happens if the session contains prepared

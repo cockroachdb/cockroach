@@ -308,7 +308,7 @@ func (cl *CertificateLoader) Load() error {
 		// Build the info struct from the filename.
 		ci, err := CertInfoFromFilename(filename)
 		if err != nil {
-			log.Warningf(context.Background(), "bad filename %s: %v", fullPath, err)
+			log.Dev.Warningf(context.Background(), "bad filename %s: %v", fullPath, err)
 			continue
 		}
 
@@ -316,17 +316,17 @@ func (cl *CertificateLoader) Load() error {
 		fullCertPath := filepath.Join(cl.certsDir, filename)
 		certPEMBlock, err := securityassets.GetLoader().ReadFile(fullCertPath)
 		if err != nil {
-			log.Warningf(context.Background(), "could not read certificate file %s: %v", fullPath, err)
+			log.Dev.Warningf(context.Background(), "could not read certificate file %s: %v", fullPath, err)
 		}
 		ci.FileContents = certPEMBlock
 
 		// Parse certificate, then look for the private key.
 		// Errors are persisted for better visibility later.
 		if err := parseCertificate(ci); err != nil {
-			log.Warningf(context.Background(), "could not parse certificate for %s: %v", fullPath, err)
+			log.Dev.Warningf(context.Background(), "could not parse certificate for %s: %v", fullPath, err)
 			ci.Error = err
 		} else if err := cl.findKey(ci); err != nil {
-			log.Warningf(context.Background(), "error finding key for %s: %v", fullPath, err)
+			log.Dev.Warningf(context.Background(), "error finding key for %s: %v", fullPath, err)
 			ci.Error = err
 		} else if log.V(3) {
 			log.Dev.Infof(context.Background(), "found certificate %s", ci.Filename)

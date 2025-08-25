@@ -200,7 +200,7 @@ func (bundle *diagnosticsBundle) insert(
 		bundle.collectionErr,
 	)
 	if err != nil {
-		log.Warningf(ctx, "failed to report statement diagnostics: %s", err)
+		log.Dev.Warningf(ctx, "failed to report statement diagnostics: %s", err)
 		if bundle.collectionErr != nil {
 			bundle.collectionErr = err
 		}

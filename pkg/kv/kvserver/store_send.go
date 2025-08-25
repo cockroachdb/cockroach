@@ -247,7 +247,7 @@ func (s *Store) SendWithWriteBytes(
 			}); err != nil {
 				// Errors here should not be possible, but if there is one, it is ignored
 				// as attaching RangeInfo is optional.
-				log.Warningf(ctx, "unexpected error visiting replicas: %s", err)
+				log.Dev.Warningf(ctx, "unexpected error visiting replicas: %s", err)
 				ris = nil // just to be safe
 			}
 

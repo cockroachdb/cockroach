@@ -439,7 +439,7 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 	}
 	for _, id := range toCheck {
 		if err := checkSession(id); err != nil {
-			log.Warningf(ctx, "failed to check on expired session %v: %v", id, err)
+			log.Dev.Warningf(ctx, "failed to check on expired session %v: %v", id, err)
 		}
 	}
 	s.metrics.SessionDeletionsRuns.Inc(1)
@@ -465,13 +465,13 @@ func (s *Storage) fetchExpiredSessionIDs(ctx context.Context) ([]sqlliveness.Ses
 			for i := range rows {
 				exp, err := decodeValue(rows[i])
 				if err != nil {
-					log.Warningf(ctx, "failed to decode row %s expiration: %v", rows[i].Key.String(), err)
+					log.Dev.Warningf(ctx, "failed to decode row %s expiration: %v", rows[i].Key.String(), err)
 					continue
 				}
 				if exp.Less(now) {
 					id, err := keyCodec.decode(rows[i].Key)
 					if err != nil {
-						log.Warningf(ctx, "failed to decode row %s session: %v", rows[i].Key.String(), err)
+						log.Dev.Warningf(ctx, "failed to decode row %s session: %v", rows[i].Key.String(), err)
 					}
 					toCheck = append(toCheck, id)
 				}

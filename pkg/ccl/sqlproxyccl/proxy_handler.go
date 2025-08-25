@@ -360,7 +360,7 @@ func (handler *proxyHandler) handle(
 		if err := handler.handleCancelRequest(cr, true /* allowForward */); err != nil {
 			// Lots of noise from this log indicates that somebody is spamming
 			// fake cancel requests.
-			log.Warningf(
+			log.Dev.Warningf(
 				ctx, "could not handle cancel request from client %s: %v",
 				incomingConn.RemoteAddr().String(), err,
 			)

@@ -249,7 +249,7 @@ func RangeLookup(
 		if rc == kvpb.INCONSISTENT {
 			return nil, nil, nil
 		}
-		log.Warningf(ctx, "range lookup of key %s found only non-matching ranges %v; retrying",
+		log.Dev.Warningf(ctx, "range lookup of key %s found only non-matching ranges %v; retrying",
 			key, prefetchedRanges)
 	}
 

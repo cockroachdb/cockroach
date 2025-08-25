@@ -249,7 +249,7 @@ func restoreWithRetry(
 			return roachpb.RowCount{}, jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
 		}
 
-		log.Warningf(ctx, "encountered retryable error: %+v", err)
+		log.Dev.Warningf(ctx, "encountered retryable error: %+v", err)
 
 		if logThrottler.ShouldProcess(timeutil.Now()) {
 			// We throttle the logging of errors to the jobs messages table to avoid
@@ -396,7 +396,7 @@ func restore(
 			linkPhaseComplete = ok
 			return err
 		}); err != nil {
-			log.Warningf(restoreCtx, "failed to get checkpoint for link phase %v", err)
+			log.Dev.Warningf(restoreCtx, "failed to get checkpoint for link phase %v", err)
 		}
 		if linkPhaseComplete {
 			return emptyRowCount, nil
@@ -611,7 +611,7 @@ func restore(
 
 	runRestore := func(ctx context.Context) error {
 		if details.OnlineImpl() {
-			log.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
+			log.Dev.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
 			approxRows, approxDataSize, err := sendAddRemoteSSTs(
 				ctx,
 				execCtx,
@@ -853,7 +853,7 @@ func remapAndFilterRelevantStatistics(
 	// backup.
 	for _, desc := range tableDescs {
 		if _, ok := tableHasStatsInBackup[desc.GetID()]; !ok {
-			log.Warningf(ctx, "statistics for table: %s, table ID: %d not found in the backup. "+
+			log.Dev.Warningf(ctx, "statistics for table: %s, table ID: %d not found in the backup. "+
 				"Query performance on this table could suffer until statistics are recomputed.",
 				desc.GetName(), desc.GetID())
 		}
@@ -1962,7 +1962,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// We don't want to fail the restore if we are unable to resolve statistics
 		// from the backup, since they can be recomputed after the restore has
 		// completed.
-		log.Warningf(ctx, "failed to resolve table statistics from backup during restore: %+v",
+		log.Dev.Warningf(ctx, "failed to resolve table statistics from backup during restore: %+v",
 			err.Error())
 	}
 
@@ -1970,7 +1970,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// We have no tables to restore (we are restoring an empty DB).
 		// Since we have already created any new databases that we needed,
 		// we can return without importing any data.
-		log.Warning(ctx, "nothing to restore")
+		log.Dev.Warning(ctx, "nothing to restore")
 		// The database was created in the offline state and needs to be made
 		// public.
 		// TODO (lucy): Ideally we'd just create the database in the public state in
@@ -2103,7 +2103,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			jobInfo := jobs.InfoStorageForJob(txn, r.job.ID())
 			return jobInfo.Write(ctx, linkCompleteKey, []byte{})
 		}); err != nil {
-			log.Warningf(ctx, "failed to checkpoint link flow %v", err)
+			log.Dev.Warningf(ctx, "failed to checkpoint link flow %v", err)
 		}
 	}
 
@@ -2737,7 +2737,7 @@ func emitRestoreJobEvent(
 		return sql.LogEventForJobs(ctx, p.ExecCfg(), txn, &restoreEvent, int64(job.ID()),
 			job.Payload(), p.User(), state)
 	}); err != nil {
-		log.Warningf(ctx, "failed to log event: %v", err)
+		log.Dev.Warningf(ctx, "failed to log event: %v", err)
 	}
 }
 
@@ -2767,7 +2767,7 @@ func (r *restoreResumer) OnFailOrCancel(
 	if err := r.execCfg.ProtectedTimestampManager.Unprotect(ctx, r.job); errors.Is(err, protectedts.ErrNotExists) {
 		// No reason to return an error which might cause problems if it doesn't
 		// seem to exist.
-		log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+		log.Dev.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
 		err = nil
 	} else if err != nil {
 		return err
@@ -2925,7 +2925,7 @@ func (r *restoreResumer) dropDescriptors(
 			if err := externalcatalog.SetGCTTLForDroppingTable(
 				ctx, txn, descsCol, tableToDrop,
 			); err != nil {
-				log.Warningf(ctx, "setting low GC TTL for table %q failed: %s", tableToDrop.GetName(), err.Error())
+				log.Dev.Warningf(ctx, "setting low GC TTL for table %q failed: %s", tableToDrop.GetName(), err.Error())
 			}
 		} else {
 			log.Dev.Infof(ctx, "cannot lower GC TTL for table %q", tableToDrop.GetName())
@@ -3042,7 +3042,7 @@ func (r *restoreResumer) dropDescriptors(
 		}
 
 		if !isSchemaEmpty {
-			log.Warningf(ctx, "preserving schema %s on restore failure because it contains new child objects", schemaDesc.GetName())
+			log.Dev.Warningf(ctx, "preserving schema %s on restore failure because it contains new child objects", schemaDesc.GetName())
 			continue
 		}
 
@@ -3083,10 +3083,10 @@ func (r *restoreResumer) dropDescriptors(
 
 		// Remove the back-reference to the deleted schema in the parent database.
 		if schemaInfo, ok := entry.db.Schemas[schemaDesc.GetName()]; !ok {
-			log.Warningf(ctx, "unexpected missing schema entry for %s from db %d; skipping deletion",
+			log.Dev.Warningf(ctx, "unexpected missing schema entry for %s from db %d; skipping deletion",
 				schemaDesc.GetName(), entry.db.GetID())
 		} else if schemaInfo.ID != schemaDesc.GetID() {
-			log.Warningf(ctx, "unexpected schema entry %d for %s from db %d, expecting %d; skipping deletion",
+			log.Dev.Warningf(ctx, "unexpected schema entry %d for %s from db %d, expecting %d; skipping deletion",
 				schemaInfo.ID, schemaDesc.GetName(), entry.db.GetID(), schemaDesc.GetID())
 		} else {
 			delete(entry.db.Schemas, schemaDesc.GetName())
@@ -3127,7 +3127,7 @@ func (r *restoreResumer) dropDescriptors(
 			return errors.Wrapf(err, "checking if database %s is empty during restore cleanup", dbDesc.GetName())
 		}
 		if !isDBEmpty {
-			log.Warningf(ctx, "preserving database %s on restore failure because it contains new child objects or schemas", dbDesc.GetName())
+			log.Dev.Warningf(ctx, "preserving database %s on restore failure because it contains new child objects or schemas", dbDesc.GetName())
 			continue
 		}
 
@@ -3386,7 +3386,7 @@ func (r *restoreResumer) restoreSystemTables(
 
 		config, ok := systemTableBackupConfiguration[systemTableName]
 		if !ok {
-			log.Warningf(ctx, "no configuration specified for table %s... skipping restoration",
+			log.Dev.Warningf(ctx, "no configuration specified for table %s... skipping restoration",
 				systemTableName)
 		}
 		systemTablesToRestore = append(systemTablesToRestore, systemTableNameWithConfig{

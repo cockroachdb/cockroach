@@ -135,14 +135,14 @@ func updateStatusForGCElements(
 		return nil
 	}); err != nil {
 		if isMissingDescriptorError(err) {
-			log.Warningf(ctx, "table %d not found, marking as GC'd", tableID)
+			log.Dev.Warningf(ctx, "table %d not found, marking as GC'd", tableID)
 			markTableGCed(ctx, tableID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 			for indexID := range indexDropTimes {
 				markIndexGCed(ctx, indexID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 			}
 			return false, true, maxDeadline
 		}
-		log.Warningf(ctx, "error while calculating GC time for table %d, err: %+v", tableID, err)
+		log.Dev.Warningf(ctx, "error while calculating GC time for table %d, err: %+v", tableID, err)
 		return false, false, maxDeadline
 	}
 

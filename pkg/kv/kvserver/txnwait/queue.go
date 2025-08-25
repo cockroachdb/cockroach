@@ -698,7 +698,7 @@ func (q *Queue) waitForPush(
 		select {
 		case <-slowTimer.C:
 			metrics.PusherSlow.Inc(1)
-			log.Warningf(ctx, "pusher %s: have been waiting %.2fs for pushee %s",
+			log.Dev.Warningf(ctx, "pusher %s: have been waiting %.2fs for pushee %s",
 				req.PusherTxn.ID.Short(),
 				timeutil.Since(tBegin).Seconds(),
 				req.PusheeTxn.ID.Short(),
@@ -706,7 +706,7 @@ func (q *Queue) waitForPush(
 			//nolint:deferloop
 			defer func() {
 				metrics.PusherSlow.Dec(1)
-				log.Warningf(ctx, "pusher %s: finished waiting after %.2fs for pushee %s",
+				log.Dev.Warningf(ctx, "pusher %s: finished waiting after %.2fs for pushee %s",
 					req.PusherTxn.ID.Short(),
 					timeutil.Since(tBegin).Seconds(),
 					req.PusheeTxn.ID.Short(),

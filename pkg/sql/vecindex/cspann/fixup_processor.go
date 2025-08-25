@@ -421,7 +421,7 @@ func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	if len(fp.mu.pendingFixups) >= maxFixups {
 		// Don't enqueue the fixup.
 		if fp.fixupsLimitHit.ShouldLog() {
-			log.Warning(ctx, "reached limit of unprocessed fixups")
+			log.Dev.Warning(ctx, "reached limit of unprocessed fixups")
 		}
 		return
 	}

@@ -227,7 +227,7 @@ func makeSharedProcessTenantServerConfig(
 		}
 		stopper.AddCloser(stop.CloserFn(func() {
 			if err := os.RemoveAll(storeDir); err != nil {
-				log.Warningf(context.Background(), "unable to delete tenant directory: %v", err)
+				log.Dev.Warningf(context.Background(), "unable to delete tenant directory: %v", err)
 			}
 		}))
 		storeSpec.Path = storeDir

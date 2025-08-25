@@ -398,7 +398,7 @@ func (c *connector) runGossipSubscription(ctx context.Context, startupCh chan st
 			Patterns: gossipSubsPatterns,
 		})
 		if err != nil {
-			log.Warningf(ctx, "error issuing GossipSubscription RPC: %v", err)
+			log.Dev.Warningf(ctx, "error issuing GossipSubscription RPC: %v", err)
 			c.tryForgetClient(ctx, client)
 			continue
 		}
@@ -409,7 +409,7 @@ func (c *connector) runGossipSubscription(ctx context.Context, startupCh chan st
 					break
 				}
 				// Soft RPC error. Drop client and retry.
-				log.Warningf(ctx, "error consuming GossipSubscription RPC: %v", err)
+				log.Dev.Warningf(ctx, "error consuming GossipSubscription RPC: %v", err)
 				c.tryForgetClient(ctx, client)
 				break
 			}
@@ -555,7 +555,7 @@ func (c *connector) RangeLookup(
 			PrefetchReverse: useReverseScan,
 		})
 		if err != nil {
-			log.Warningf(ctx, "error issuing RangeLookup RPC: %v", err)
+			log.Dev.Warningf(ctx, "error issuing RangeLookup RPC: %v", err)
 			if grpcutil.IsAuthError(err) {
 				// Authentication or authorization error. Propagate.
 				return nil, nil, err
@@ -678,7 +678,7 @@ func (c *connector) getRangeDescs(
 			// for example, it doesn't make much sense to retry the request if it fails
 			// the keybounds check.
 			// Soft RPC error. Drop client and retry.
-			log.Warningf(ctx, "error issuing GetRangeDescriptors RPC: %v", err)
+			log.Dev.Warningf(ctx, "error issuing GetRangeDescriptors RPC: %v", err)
 			c.tryForgetClient(ctx, client)
 			continue
 		}
@@ -689,7 +689,7 @@ func (c *connector) getRangeDescs(
 				if err == io.EOF {
 					return rangeDescriptors, nil
 				}
-				log.Warningf(ctx, "error consuming GetRangeDescriptors RPC: %v", err)
+				log.Dev.Warningf(ctx, "error consuming GetRangeDescriptors RPC: %v", err)
 				if grpcutil.IsAuthError(err) {
 					// Authentication or authorization error. Propagate.
 					return nil, err
@@ -731,7 +731,7 @@ func (c *connector) TokenBucket(
 		}
 		resp, err := client.TokenBucket(ctx, in)
 		if err != nil {
-			log.Warningf(ctx, "error issuing TokenBucket RPC: %v", err)
+			log.Dev.Warningf(ctx, "error issuing TokenBucket RPC: %v", err)
 			if grpcutil.IsAuthError(err) {
 				// Authentication or authorization error. Propagate.
 				return nil, err
@@ -867,7 +867,7 @@ func (c *connector) HotRangesV2(
 	// Force to assign tenant ID in request to be the same as requested tenant
 	if len(req.TenantID) == 0 {
 		r.TenantID = c.tenantID.String()
-		log.Warningf(ctx, "tenant ID is set to %s", c.tenantID)
+		log.Dev.Warningf(ctx, "tenant ID is set to %s", c.tenantID)
 	} else if c.tenantID.String() != req.TenantID {
 		return nil, status.Error(codes.PermissionDenied, "cannot request hot ranges for another tenant")
 	}
@@ -982,7 +982,7 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 			if !rpcbase.TODODRPC {
 				conn, err := c.dialAddr(ctx, addr)
 				if err != nil {
-					log.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
+					log.Dev.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
 					continue
 				}
 				return &client{
@@ -996,7 +996,7 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 			}
 			conn, err := c.drpcDialAddr(ctx, addr)
 			if err != nil {
-				log.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
+				log.Dev.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
 				continue
 			}
 			return &client{

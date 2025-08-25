@@ -163,7 +163,7 @@ func (e *executionDetailsBuilder) addClusterWideTraces(ctx context.Context) {
 	z := zipper.MakeInternalExecutorInflightTraceZipper(e.db.Executor())
 	traceID, err := jobs.GetJobTraceID(ctx, e.db, e.jobID)
 	if err != nil {
-		log.Warningf(ctx, "failed to fetch job trace ID: %+v", err.Error())
+		log.Dev.Warningf(ctx, "failed to fetch job trace ID: %+v", err.Error())
 		return
 	}
 	zippedTrace, err := z.Zip(ctx, int64(traceID))

@@ -118,7 +118,7 @@ func (c *client) startLocked(
 		}()
 		if err != nil {
 			if logFailedStartEvery.ShouldLog() {
-				log.Warningf(ctx, "failed to start gossip client to %s: %s", c.addr, err)
+				log.Dev.Warningf(ctx, "failed to start gossip client to %s: %s", c.addr, err)
 			}
 			return
 		}
@@ -249,7 +249,7 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 	if reply.Delta != nil {
 		freshCount, err := g.mu.is.combine(reply.Delta, reply.NodeID)
 		if err != nil {
-			log.Warningf(ctx, "failed to fully combine delta from n%d: %s", reply.NodeID, err)
+			log.Dev.Warningf(ctx, "failed to fully combine delta from n%d: %s", reply.NodeID, err)
 		}
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {

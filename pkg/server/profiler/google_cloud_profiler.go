@@ -32,7 +32,7 @@ func InitGoogleProfiler(ctx context.Context) {
 		ServiceVersion: build.BinaryVersion(),
 	}
 	if err := gcprofiler.Start(cfg); err != nil {
-		log.Warningf(ctx, "failed to start google profiler: %v", err)
+		log.Dev.Warningf(ctx, "failed to start google profiler: %v", err)
 	} else {
 		log.Dev.Infof(ctx, "Google Cloud Profiler started successfully on %s", provider)
 	}

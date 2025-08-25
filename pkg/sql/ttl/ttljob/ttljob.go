@@ -350,7 +350,7 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		if knobs.ReturnStatsError {
 			return err
 		}
-		log.Warningf(ctx, "failed to get statistics for table id %d: %v", details.TableID, err)
+		log.Dev.Warningf(ctx, "failed to get statistics for table id %d: %v", details.TableID, err)
 	}
 	return nil
 }

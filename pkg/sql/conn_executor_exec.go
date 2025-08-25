@@ -2518,7 +2518,7 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	}
 	if isKVTxnOpen {
 		if err := ex.state.mu.txn.Rollback(ctx); err != nil {
-			log.Warningf(ctx, "txn rollback failed: %s", err)
+			log.Dev.Warningf(ctx, "txn rollback failed: %s", err)
 		}
 	}
 	if err := ex.reportSessionDataChanges(func() error {
@@ -3831,7 +3831,7 @@ func (ex *connExecutor) runShowCompletions(
 	ctx context.Context, n *tree.ShowCompletions, res RestrictedCommandResult,
 ) error {
 	res.SetColumns(ctx, colinfo.ShowCompletionsColumns)
-	log.Warningf(ctx, "COMPLETION GENERATOR FOR: %+v", *n)
+	log.Dev.Warningf(ctx, "COMPLETION GENERATOR FOR: %+v", *n)
 	sd := ex.planner.SessionData()
 	override := sessiondata.InternalExecutorOverride{
 		SearchPath: &sd.SearchPath,
@@ -3858,7 +3858,7 @@ func (ex *connExecutor) runShowCompletions(
 
 	completions, err := newCompletionsGenerator(queryIterFn, n)
 	if err != nil {
-		log.Warningf(ctx, "COMPLETION GENERATOR FAILED: %v", err)
+		log.Dev.Warningf(ctx, "COMPLETION GENERATOR FAILED: %v", err)
 		return err
 	}
 
@@ -3867,12 +3867,12 @@ func (ex *connExecutor) runShowCompletions(
 		row := completions.Values()
 		err = res.AddRow(ctx, row)
 		if err != nil {
-			log.Warningf(ctx, "COMPLETION ADDROW FAILED: %v", err)
+			log.Dev.Warningf(ctx, "COMPLETION ADDROW FAILED: %v", err)
 			return err
 		}
 	}
 	if err != nil {
-		log.Warningf(ctx, "COMPLETION GENERATOR NEXT FAILED: %v", err)
+		log.Dev.Warningf(ctx, "COMPLETION GENERATOR NEXT FAILED: %v", err)
 	}
 	return err
 }
@@ -4103,7 +4103,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 		err := ex.txnFingerprintIDCache.Add(ctx, transactionFingerprintID)
 		if err != nil {
 			if log.V(1) {
-				log.Warningf(ctx, "failed to enqueue transactionFingerprintID = %d: %s", transactionFingerprintID, err)
+				log.Dev.Warningf(ctx, "failed to enqueue transactionFingerprintID = %d: %s", transactionFingerprintID, err)
 			}
 		}
 
@@ -4119,7 +4119,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 		err = ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart, txnErr)
 		if err != nil {
 			if log.V(1) {
-				log.Warningf(ctx, "failed to record transaction stats: %s", err)
+				log.Dev.Warningf(ctx, "failed to record transaction stats: %s", err)
 			}
 			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 		}
@@ -4356,14 +4356,14 @@ func logTraceAboveThreshold(
 	outputJaegerJSON bool,
 ) {
 	if r == nil {
-		log.Warning(ctx, "missing trace when threshold tracing was enabled")
+		log.Dev.Warning(ctx, "missing trace when threshold tracing was enabled")
 	}
 	output := ""
 	var err error
 	if outputJaegerJSON {
 		output, err = r.ToJaegerJSON("unknown stmt", "no comment", "unknown node", false /* indent */)
 		if err != nil {
-			log.Warningf(ctx, "trace could not be converted to jaeger JSON: %s", err.Error())
+			log.Dev.Warningf(ctx, "trace could not be converted to jaeger JSON: %s", err.Error())
 			output = r.String()
 		}
 	} else {

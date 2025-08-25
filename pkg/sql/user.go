@@ -197,7 +197,7 @@ func GetUserSessionInitInfo(
 			return nil
 		})
 	}); err != nil {
-		log.Warningf(ctx, "user membership lookup for %q failed: %v", user, err)
+		log.Dev.Warningf(ctx, "user membership lookup for %q failed: %v", user, err)
 		err = errors.Wrap(errors.Handled(err), "internal error while retrieving user account memberships")
 	}
 
@@ -279,7 +279,7 @@ func retrieveSessionInitInfoWithCache(
 		return errors.Wrap(retErr, "get default settings error")
 	}(); err != nil {
 		// Failed to retrieve the user account. Report in logs for later investigation.
-		log.Warningf(ctx, "user lookup for %q failed: %v", userName, err)
+		log.Dev.Warningf(ctx, "user lookup for %q failed: %v", userName, err)
 		err = errors.Wrap(errors.Handled(err), "internal error while retrieving user account")
 	}
 	return aInfo, settingsEntries, err
@@ -726,7 +726,7 @@ func MaybeConvertStoredPasswordHash(
 		// session just because a password conversion failed.
 		//
 		// Simply explain what happened in logs for troubleshooting.
-		log.Warningf(ctx, "password hash conversion failed: %+v", err)
+		log.Dev.Warningf(ctx, "password hash conversion failed: %+v", err)
 		return
 	} else if !converted {
 		// No conversion happening. Nothing to do.
@@ -739,7 +739,7 @@ func MaybeConvertStoredPasswordHash(
 		// point authentication succeeded.
 		//
 		// Simply explain what happened in logs for troubleshooting.
-		log.Warningf(ctx, "storing the new password hash after conversion failed: %+v", err)
+		log.Dev.Warningf(ctx, "storing the new password hash after conversion failed: %+v", err)
 	} else {
 		// Inform the security audit log that the hash was upgraded.
 		log.StructuredEvent(ctx, severity.INFO, &eventpb.PasswordHashConverted{

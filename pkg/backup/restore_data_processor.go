@@ -208,7 +208,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	// setting to take effect.
 	numWorkers, err := reserveRestoreWorkerMemory(ctx, rd.FlowCtx.Cfg.Settings, rd.qp)
 	if err != nil {
-		log.Warningf(ctx, "cannot reserve restore worker memory: %v", err)
+		log.Dev.Warningf(ctx, "cannot reserve restore worker memory: %v", err)
 		rd.MoveToDraining(err)
 		return
 	}
@@ -319,7 +319,7 @@ func (rd *restoreDataProcessor) openSSTs(
 	defer func() {
 		for _, dir := range dirs {
 			if err := dir.Close(); err != nil {
-				log.Warningf(ctx, "close export storage failed %v", err)
+				log.Dev.Warningf(ctx, "close export storage failed %v", err)
 			}
 		}
 	}()
@@ -335,7 +335,7 @@ func (rd *restoreDataProcessor) openSSTs(
 
 			for _, dir := range dirsToSend {
 				if err := dir.Close(); err != nil {
-					log.Warningf(ctx, "close export storage failed %v", err)
+					log.Dev.Warningf(ctx, "close export storage failed %v", err)
 				}
 			}
 		}

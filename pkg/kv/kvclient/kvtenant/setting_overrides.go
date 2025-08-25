@@ -36,7 +36,7 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 			TenantID: c.tenantID,
 		})
 		if err != nil {
-			log.Warningf(ctx, "error issuing TenantSettings RPC: %v", err)
+			log.Dev.Warningf(ctx, "error issuing TenantSettings RPC: %v", err)
 			c.tryForgetClient(ctx, client)
 			continue
 		}
@@ -62,7 +62,7 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 					break
 				}
 				// Soft RPC error. Drop client and retry.
-				log.Warningf(ctx, "error consuming TenantSettings RPC: %v", err)
+				log.Dev.Warningf(ctx, "error consuming TenantSettings RPC: %v", err)
 				c.tryForgetClient(ctx, client)
 				break
 			}

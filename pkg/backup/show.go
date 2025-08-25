@@ -323,7 +323,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			if errors.Is(err, cloud.ErrListingUnsupported) {
 				// We can proceed with base backups here just fine, so log a warning and move on.
 				// Note that actually _writing_ an incremental backup to this location would fail loudly.
-				log.Warningf(
+				log.Dev.Warningf(
 					ctx, "storage sink %v does not support listing, only showing the base backup", explicitIncPaths)
 			} else {
 				return err
@@ -349,7 +349,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		}
 		defer func() {
 			if err := cleanupFn(); err != nil {
-				log.Warningf(ctx, "failed to close incremental store: %+v", err)
+				log.Dev.Warningf(ctx, "failed to close incremental store: %+v", err)
 			}
 		}()
 
@@ -470,11 +470,11 @@ func checkBackupFiles(
 
 		defer func() {
 			if err := defaultStore.Close(); err != nil {
-				log.Warningf(ctx, "close export storage failed %v", err)
+				log.Dev.Warningf(ctx, "close export storage failed %v", err)
 			}
 			for _, store := range localityStores {
 				if err := store.Close(); err != nil {
-					log.Warningf(ctx, "close export storage failed %v", err)
+					log.Dev.Warningf(ctx, "close export storage failed %v", err)
 				}
 			}
 		}()

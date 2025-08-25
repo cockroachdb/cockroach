@@ -314,7 +314,7 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	livenessInterval := sm.options.SupportDuration
 	heartbeats := rsfu.getHeartbeatsToSend(sm.storeID, sm.clock.Now(), livenessInterval)
 	if err := rsfu.write(ctx, sm.engine); err != nil {
-		log.Warningf(ctx, "failed to write requester meta: %v", err)
+		log.Dev.Warningf(ctx, "failed to write requester meta: %v", err)
 		sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats)))
 		return
 	}
@@ -326,7 +326,7 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 		if sent := sm.sender.SendAsync(ctx, msg); sent {
 			successes++
 		} else {
-			log.Warningf(ctx, "failed to send heartbeat to store %+v", msg.To)
+			log.Dev.Warningf(ctx, "failed to send heartbeat to store %+v", msg.To)
 		}
 	}
 	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
@@ -353,12 +353,12 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 	batch := sm.engine.NewBatch()
 	defer batch.Close()
 	if err := ssfu.write(ctx, batch); err != nil {
-		log.Warningf(ctx, "failed to write supporter meta and state: %v", err)
+		log.Dev.Warningf(ctx, "failed to write supporter meta and state: %v", err)
 		sm.metrics.SupportWithdrawFailures.Inc(int64(numWithdrawn))
 		return
 	}
 	if err := batch.Commit(true /* sync */); err != nil {
-		log.Warningf(ctx, "failed to commit supporter meta and state: %v", err)
+		log.Dev.Warningf(ctx, "failed to commit supporter meta and state: %v", err)
 		sm.metrics.SupportWithdrawFailures.Inc(int64(numWithdrawn))
 		return
 	}
@@ -403,17 +403,17 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	batch := sm.engine.NewBatch()
 	defer batch.Close()
 	if err := rsfu.write(ctx, batch); err != nil {
-		log.Warningf(ctx, "failed to write requester meta: %v", err)
+		log.Dev.Warningf(ctx, "failed to write requester meta: %v", err)
 		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
 		return
 	}
 	if err := ssfu.write(ctx, batch); err != nil {
-		log.Warningf(ctx, "failed to write supporter meta: %v", err)
+		log.Dev.Warningf(ctx, "failed to write supporter meta: %v", err)
 		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
 		return
 	}
 	if err := batch.Commit(true /* sync */); err != nil {
-		log.Warningf(ctx, "failed to sync supporter and requester state: %v", err)
+		log.Dev.Warningf(ctx, "failed to sync supporter and requester state: %v", err)
 		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
 		return
 	}

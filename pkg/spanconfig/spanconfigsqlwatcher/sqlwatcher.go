@@ -125,7 +125,7 @@ func (s *SQLWatcher) watch(
 			return buf.add(event)
 		}()
 		if err != nil {
-			log.Warningf(ctx, "error adding event %v: %v", event, err)
+			log.Dev.Warningf(ctx, "error adding event %v: %v", event, err)
 			select {
 			case <-ctx.Done():
 				// The context is canceled when the rangefeed is being closed, which

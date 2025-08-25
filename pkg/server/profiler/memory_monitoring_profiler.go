@@ -97,12 +97,12 @@ func takeMemoryMonitoringDump(
 	}
 	f, err := os.Create(path)
 	if err != nil {
-		log.Warningf(ctx, "error creating memory monitoring dump %s: %v", path, err)
+		log.Dev.Warningf(ctx, "error creating memory monitoring dump %s: %v", path, err)
 		return false
 	}
 	defer f.Close()
 	if err = root.TraverseTree(getMonitorStateCb(f)); err != nil {
-		log.Warningf(ctx, "error traversing memory monitoring tree for dump %s: %v", path, err)
+		log.Dev.Warningf(ctx, "error traversing memory monitoring tree for dump %s: %v", path, err)
 		return false
 	}
 	return true

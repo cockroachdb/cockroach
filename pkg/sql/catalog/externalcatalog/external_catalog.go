@@ -228,7 +228,7 @@ func DropIngestedExternalCatalog(
 			if err := SetGCTTLForDroppingTable(
 				ctx, txn, descsCol, tableToDrop,
 			); err != nil {
-				log.Warningf(ctx, "setting low GC TTL for table %q failed: %s", tableToDrop.GetName(), err.Error())
+				log.Dev.Warningf(ctx, "setting low GC TTL for table %q failed: %s", tableToDrop.GetName(), err.Error())
 			}
 		} else {
 			log.Dev.Infof(ctx, "cannot lower GC TTL for table %q", tableToDrop.GetName())

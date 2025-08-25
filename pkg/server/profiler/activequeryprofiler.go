@@ -82,7 +82,7 @@ func NewActiveQueryProfiler(
 		return nil, errors.Wrap(err, "failed to detect cgroup memory limit")
 	}
 	if warn != "" {
-		log.Warningf(ctx, "warning when reading cgroup memory limit: %s", log.SafeManaged(warn))
+		log.Dev.Warningf(ctx, "warning when reading cgroup memory limit: %s", log.SafeManaged(warn))
 	}
 
 	log.Dev.Infof(ctx, "writing go query profiles to %s", log.SafeManaged(dir))

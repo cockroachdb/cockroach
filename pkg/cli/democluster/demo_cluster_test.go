@@ -180,7 +180,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		demoDir:           certsDir,
 		stickyVFSRegistry: fs.NewStickyRegistry(),
 		infoLog:           log.Dev.Infof,
-		warnLog:           log.Warningf,
+		warnLog:           log.Dev.Warningf,
 		shoutLog:          log.Ops.Shoutf,
 	}
 
@@ -292,7 +292,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		demoDir:           certsDir,
 		stickyVFSRegistry: fs.NewStickyRegistry(),
 		infoLog:           log.Dev.Infof,
-		warnLog:           log.Warningf,
+		warnLog:           log.Dev.Warningf,
 		shoutLog:          log.Ops.Shoutf,
 	}
 	// Stop the cluster when the test exits, including when it fails.
@@ -356,7 +356,7 @@ func TestTenantCapabilities(t *testing.T) {
 		demoDir:           certsDir,
 		stickyVFSRegistry: fs.NewStickyRegistry(),
 		infoLog:           log.Dev.Infof,
-		warnLog:           log.Warningf,
+		warnLog:           log.Dev.Warningf,
 		shoutLog:          log.Ops.Shoutf,
 	}
 	// Stop the cluster when the test exits, including when it fails.

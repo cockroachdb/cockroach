@@ -145,7 +145,7 @@ func (c *conn) handleAuthentication(
 	// Delegate to the AuthMethod's MapRole to verify that the
 	// client-provided username matches one of the mappings.
 	if err := c.checkClientUsernameMatchesMapping(ctx, ac, behaviors.MapRole, systemIdentity); err != nil {
-		log.Warningf(ctx, "unable to map incoming identity %q to any database user: %+v", systemIdentity, err)
+		log.Dev.Warningf(ctx, "unable to map incoming identity %q to any database user: %+v", systemIdentity, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, err)
 		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
@@ -164,7 +164,7 @@ func (c *conn) handleAuthentication(
 			c.sessionArgs.SessionDefaults["database"],
 		)
 	if err != nil {
-		log.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
+		log.Dev.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
 		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
@@ -174,7 +174,7 @@ func (c *conn) handleAuthentication(
 			behaviors.IsProvisioningEnabled(execCfg.Settings, hbaEntry.Method.String()) {
 			err := behaviors.MaybeProvisionUser(ctx, execCfg.Settings, hbaEntry.Method.String())
 			if err != nil {
-				log.Warningf(ctx, "user provisioning failed for user=%q: %+v", dbUser, err)
+				log.Dev.Warningf(ctx, "user provisioning failed for user=%q: %+v", dbUser, err)
 				ac.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
 				return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 			}
@@ -186,7 +186,7 @@ func (c *conn) handleAuthentication(
 					c.sessionArgs.SessionDefaults["database"],
 				)
 			if err != nil {
-				log.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
+				log.Dev.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
 				ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
 				return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 			}

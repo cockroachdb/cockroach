@@ -80,7 +80,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 	// Sanity check: backup should be detached.
 	if backupStmt.Options.Detached != tree.DBoolTrue {
 		backupStmt.Options.Detached = tree.DBoolTrue
-		log.Warningf(ctx, "force setting detached option for backup schedule %d",
+		log.Dev.Warningf(ctx, "force setting detached option for backup schedule %d",
 			sj.ScheduleID())
 	}
 
@@ -376,7 +376,7 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	s, err := txn.Load(ctx, env, args.UnpauseOnSuccess)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
-			log.Warningf(ctx, "cannot find schedule %d to unpause; it may have been dropped",
+			log.Dev.Warningf(ctx, "cannot find schedule %d to unpause; it may have been dropped",
 				args.UnpauseOnSuccess)
 			return nil
 		}
@@ -461,7 +461,7 @@ func unlinkOrDropDependentSchedule(
 	)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
-			log.Warningf(ctx, "failed to resolve dependent schedule %d", args.DependentScheduleID)
+			log.Dev.Warningf(ctx, "failed to resolve dependent schedule %d", args.DependentScheduleID)
 			return 0, nil
 		}
 		return 0, errors.Wrapf(err, "failed to resolve dependent schedule %d", args.DependentScheduleID)
@@ -563,7 +563,7 @@ func getBackupFnTelemetry(
 
 	initialDetails, err := getInitialDetails()
 	if err != nil {
-		log.Warningf(ctx, "error collecting telemetry from dry-run backup during schedule creation: %v", err)
+		log.Dev.Warningf(ctx, "error collecting telemetry from dry-run backup during schedule creation: %v", err)
 		return eventpb.RecoveryEvent{}
 	}
 	return createBackupRecoveryEvent(ctx, initialDetails, 0)

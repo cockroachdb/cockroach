@@ -501,7 +501,7 @@ func (ss *schedulerShard) processEvents(ctx context.Context) {
 
 		if e&Stopped != 0 {
 			if remaining != 0 {
-				log.VWarningf(ctx, 5,
+				log.Dev.VWarningf(ctx, 5,
 					"rangefeed processor %d didn't process all events on close", entry.id)
 			}
 			// We'll keep Stopped state to avoid calling stopped processor again

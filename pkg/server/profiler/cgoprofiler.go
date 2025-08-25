@@ -81,7 +81,7 @@ func takeJemallocProfile(ctx context.Context, path string, _ ...interface{}) (su
 		return true
 	}
 	if err := jemallocHeapDump(path); err != nil {
-		log.Warningf(ctx, "error writing jemalloc heap %s: %v", path, err)
+		log.Dev.Warningf(ctx, "error writing jemalloc heap %s: %v", path, err)
 		return false
 	}
 	return true

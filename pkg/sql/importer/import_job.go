@@ -707,7 +707,7 @@ func ingestWithRetry(
 			if ctx.Err() != nil {
 				return res, ctx.Err()
 			}
-			log.Warningf(ctx, "IMPORT job %d could not reload job progress when retrying: %+v",
+			log.Dev.Warningf(ctx, "IMPORT job %d could not reload job progress when retrying: %+v",
 				job.ID(), reloadErr)
 		} else {
 			job = reloadedJob
@@ -724,10 +724,10 @@ func ingestWithRetry(
 
 		maxRetryDuration := retryDuration.Get(&execCtx.ExecCfg().Settings.SV)
 		if timeutil.Since(lastProgressChange) > maxRetryDuration {
-			log.Warningf(ctx, "encountered retryable error but exceeded retry duration, stopping: %+v", err)
+			log.Dev.Warningf(ctx, "encountered retryable error but exceeded retry duration, stopping: %+v", err)
 			break
 		} else {
-			log.Warningf(ctx, "encountered retryable error: %+v", err)
+			log.Dev.Warningf(ctx, "encountered retryable error: %+v", err)
 		}
 	}
 
@@ -752,7 +752,7 @@ func emitImportJobEvent(
 		return sql.LogEventForJobs(ctx, p.ExecCfg(), txn, &importEvent, int64(job.ID()),
 			job.Payload(), p.User(), status)
 	}); err != nil {
-		log.Warningf(ctx, "failed to log event: %v", err)
+		log.Dev.Warningf(ctx, "failed to log event: %v", err)
 	}
 }
 

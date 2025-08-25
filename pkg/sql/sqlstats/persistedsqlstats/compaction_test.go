@@ -433,7 +433,7 @@ func (k *kvScanInterceptor) intercept(ctx context.Context, ba *kvpb.BatchRequest
 
 	_, tableID, err := k.codec.DecodeTablePrefix(req.(*kvpb.ScanRequest).Key)
 	if err != nil {
-		log.Warningf(ctx, "unable to decode prefix: %v", err)
+		log.Dev.Warningf(ctx, "unable to decode prefix: %v", err)
 	}
 
 	// Ensure the request is for one of the sql stats tables.

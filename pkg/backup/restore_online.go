@@ -104,20 +104,20 @@ func splitAndScatter(
 			// which was just split in the previous iteration.
 			if !lastSplit.Equal(sp.Key) {
 				if err := sendSplitAt(ctx, execCtx, sp.Key, false /* forRecovery */); err != nil {
-					log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+					log.Dev.Warningf(ctx, "failed to split during experimental restore: %v", err)
 				}
 			}
 			// Split at the end of the chunk so that anything which happens to the
 			// right of this chunk's span, including splitting other chunks, does not
 			// interact with this span's scatter, ingests or additional splits.
 			if err := sendSplitAt(ctx, execCtx, sp.EndKey, false /* forRecovery */); err != nil {
-				log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+				log.Dev.Warningf(ctx, "failed to split during experimental restore: %v", err)
 			}
 			lastSplit = append(lastSplit[:0], sp.EndKey...)
 
 			// Scatter the chunk's span now that it is is split at both sides.
 			if err := sendAdminScatter(ctx, execCtx, sp.Key); err != nil {
-				log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
+				log.Dev.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
 			}
 
 			toSplit <- entry
@@ -141,7 +141,7 @@ func splitAndScatter(
 						return errors.Wrapf(err, "span start key %s was not rewritten", fileStart)
 					}
 					if err := sendSplitAt(ctx, execCtx, start, false /* forRecovery */); err != nil {
-						log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+						log.Dev.Warningf(ctx, "failed to split during experimental restore: %v", err)
 					}
 					rangeSize = 0
 				}
@@ -821,7 +821,7 @@ func (r *restoreResumer) doDownloadFilesWithRetry(
 		if err == nil {
 			return nil
 		}
-		log.Warningf(ctx, "failed attempt to download files: %v", err)
+		log.Dev.Warningf(ctx, "failed attempt to download files: %v", err)
 		if lastProgress != r.downloadJobProg {
 			lastProgress = r.downloadJobProg
 			rt.Reset()
@@ -891,7 +891,7 @@ func (r *restoreResumer) cleanupAfterDownload(
 		}); err != nil {
 			// Re-enabling stats is best effort. The user may have dropped the table
 			// since it came online.
-			log.Warningf(ctx, "failed to re-enable auto stats on table %d", id)
+			log.Dev.Warningf(ctx, "failed to re-enable auto stats on table %d", id)
 		}
 	}
 	return unstickRestoreSpans(ctx, r.execCfg, details.DownloadSpans)

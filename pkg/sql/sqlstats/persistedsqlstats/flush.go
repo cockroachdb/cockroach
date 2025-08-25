@@ -68,7 +68,7 @@ func (s *PersistedSQLStats) MaybeFlushWithDrainer(
 	if !enabled && allowDiscardWhenDisabled {
 		defer func() {
 			if err := ssDrainer.Reset(ctx); err != nil {
-				log.Warningf(ctx, "fail to reset SQL Stats: %s", err)
+				log.Dev.Warningf(ctx, "fail to reset SQL Stats: %s", err)
 			}
 		}()
 	}
@@ -199,7 +199,7 @@ func (s *PersistedSQLStats) flush(
 		s.flushStmtStatsInBatches(ctx, stmtStats, flushBucket)
 	})
 	if err != nil {
-		log.Warningf(ctx, "failed to execute sql-stmt-stats-flush task, %s", err.Error())
+		log.Dev.Warningf(ctx, "failed to execute sql-stmt-stats-flush task, %s", err.Error())
 		wg.Done()
 		return
 	}
@@ -212,7 +212,7 @@ func (s *PersistedSQLStats) flush(
 		s.flushTxnStatsInBatches(ctx, txnStats, flushBucket)
 	})
 	if err != nil {
-		log.Warningf(ctx, "failed to execute sql-txn-stats-flush task, %s", err.Error())
+		log.Dev.Warningf(ctx, "failed to execute sql-txn-stats-flush task, %s", err.Error())
 		wg.Done()
 		return
 	}
@@ -232,7 +232,7 @@ func (s *PersistedSQLStats) flushTxnStatsInBatches(
 		batch := stats[i:end]
 		if err := doFlushTxnStats(ctx, batch, flushBucket, s.cfg.DB); err != nil {
 			s.cfg.FlushesFailed.Inc(1)
-			log.Warningf(ctx, "failed to flush transaction statistics: %s", err)
+			log.Dev.Warningf(ctx, "failed to flush transaction statistics: %s", err)
 		} else {
 			s.cfg.FlushesSuccessful.Inc(1)
 		}
@@ -251,7 +251,7 @@ func (s *PersistedSQLStats) flushStmtStatsInBatches(
 		batch := stats[i:end]
 		if err := doFlushStmtStats(ctx, batch, flushBucket, s.cfg.DB); err != nil {
 			s.cfg.FlushesFailed.Inc(1)
-			log.Warningf(ctx, "failed to flush statement statistics: %s", err)
+			log.Dev.Warningf(ctx, "failed to flush statement statistics: %s", err)
 		} else {
 			s.cfg.FlushesSuccessful.Inc(1)
 		}

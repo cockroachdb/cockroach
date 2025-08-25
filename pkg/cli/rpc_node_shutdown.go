@@ -32,17 +32,17 @@ func drainAndShutdown(
 	}
 
 	if remainingWork {
-		log.Warningf(ctx, "graceful shutdown may not have completed successfully; check the node's logs for details.")
+		log.Dev.Warningf(ctx, "graceful shutdown may not have completed successfully; check the node's logs for details.")
 	}
 
 	if err != nil {
-		log.Warningf(ctx, "drain did not complete successfully; hard shutdown may cause disruption")
+		log.Dev.Warningf(ctx, "drain did not complete successfully; hard shutdown may cause disruption")
 	}
 	// We have already performed the drain above, so now go straight to
 	// shutdown. We try twice just in case there is a transient error.
 	hardErr, err := doShutdown(ctx, c, targetNode)
 	if err != nil && !hardErr {
-		log.Warningf(ctx, "hard shutdown attempt failed, retrying: %v", err)
+		log.Dev.Warningf(ctx, "hard shutdown attempt failed, retrying: %v", err)
 		_, err = doShutdown(ctx, c, targetNode)
 	}
 	return errors.Wrap(err, "hard shutdown failed")

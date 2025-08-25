@@ -462,7 +462,7 @@ func (h *sysTableHelper) checkInvariants(txn isql.Txn) error {
 	)
 	if err != nil {
 		if h.ctx.Err() == nil {
-			log.Warningf(h.ctx, "checkInvariants query failed: %v", err)
+			log.Dev.Warningf(h.ctx, "checkInvariants query failed: %v", err)
 		}
 		// We don't want to cause a panic for a query error (which is expected
 		// during shutdown).

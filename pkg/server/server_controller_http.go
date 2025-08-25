@@ -119,7 +119,7 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
+		log.Dev.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 		// Clear session and tenant cookies since it appears they reference invalid state.
 		http.SetCookie(w, authserver.CreateEmptySessionCookieWithImmediateExpiry(!c.disableTLSForHTTP))
 		http.SetCookie(w, authserver.CreateEmptyTenantSelectCookieWithImmediateExpiry(!c.disableTLSForHTTP))
@@ -135,12 +135,12 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 				// This could get triggered often if a customer has the default
 				// tenant set up but not active yet. Every DB Console HTTP
 				// request will go through this branch in that scenario.
-				log.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
+				log.Dev.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
 			}
 			sys, _, errSystem := c.getServer(ctx, catconstants.SystemTenantName)
 			if errSystem != nil {
-				log.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
-				log.Warningf(ctx, "unable to find server for system tenant: %v", errSystem)
+				log.Dev.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
+				log.Dev.Warningf(ctx, "unable to find server for system tenant: %v", errSystem)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -195,7 +195,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 		// The request body needs to be cloned since r.Clone() does not do it.
 		clonedBody, err := io.ReadAll(r.Body)
 		if err != nil {
-			log.Warning(ctx, "unable to write body")
+			log.Dev.Warning(ctx, "unable to write body")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -213,7 +213,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 					// This is OK. Just skip over it.
 					continue
 				}
-				log.Warningf(ctx, "looking up server for tenant %q: %v", name, err)
+				log.Dev.Warningf(ctx, "looking up server for tenant %q: %v", name, err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -231,7 +231,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 			setCookieHeader := sw.Header().Get("set-cookie")
 			if len(setCookieHeader) == 0 {
 				collectedErrors[i] = sw.buf.String()
-				log.Warningf(ctx, "unable to find session cookie for tenant %q: HTTP %d - %s", name, sw.code, &sw.buf)
+				log.Dev.Warningf(ctx, "unable to find session cookie for tenant %q: HTTP %d - %s", name, sw.code, &sw.buf)
 			} else {
 				tenantNameToSetCookieSlice = append(tenantNameToSetCookieSlice, authserver.MakeSessionCookieValue(
 					string(name),
@@ -274,7 +274,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 				w.Header().Add(ContentTypeHeader, JSONContentType)
 				_, err = w.Write([]byte("{}"))
 				if err != nil {
-					log.Warningf(ctx, "unable to write empty response :%q", err)
+					log.Dev.Warningf(ctx, "unable to write empty response :%q", err)
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
@@ -288,7 +288,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 			w.WriteHeader(http.StatusUnauthorized)
 			_, err := w.Write([]byte(strings.Join(collectedErrors, "\n")))
 			if err != nil {
-				log.Warningf(ctx, "unable to write error to http request :%q", err)
+				log.Dev.Warningf(ctx, "unable to write error to http request :%q", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -306,7 +306,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 		// The request body needs to be cloned since r.Clone() does not do it.
 		clonedBody, err := io.ReadAll(r.Body)
 		if err != nil {
-			log.Warning(ctx, "unable to write body")
+			log.Dev.Warning(ctx, "unable to write body")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -314,13 +314,13 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 		if errors.Is(err, http.ErrNoCookie) {
 			sessionCookie, err = r.Cookie(authserver.SessionCookieName)
 			if err != nil {
-				log.Warningf(ctx, "unable to find session cookie: %v", err)
+				log.Dev.Warningf(ctx, "unable to find session cookie: %v", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 		}
 		if err != nil {
-			log.Warningf(ctx, "unable to find multi-tenant session cookie: %v", err)
+			log.Dev.Warningf(ctx, "unable to find multi-tenant session cookie: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -333,7 +333,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 					// is OK. Just skip over it.
 					continue
 				}
-				log.Warningf(ctx, "looking up server for tenant %q: %v", name, err)
+				log.Dev.Warningf(ctx, "looking up server for tenant %q: %v", name, err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -356,7 +356,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			// server. This may be because that particular server is in the
 			// process of shutting down.
 			if sw.Header().Get("Set-Cookie") == "" {
-				log.Warningf(ctx, "logout for tenant %q failed: HTTP %d - %s", name, sw.code, &sw.buf)
+				log.Dev.Warningf(ctx, "logout for tenant %q failed: HTTP %d - %s", name, sw.code, &sw.buf)
 			}
 		}
 		// Clear session and tenant cookies after all logouts have completed.
@@ -367,7 +367,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			w.Header().Add(ContentTypeHeader, JSONContentType)
 			_, err = w.Write([]byte("{}"))
 			if err != nil {
-				log.Warningf(ctx, "unable to write empty response :%q", err)
+				log.Dev.Warningf(ctx, "unable to write empty response :%q", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -237,41 +236,40 @@ func ResolveDest(
 	}
 	prevBackupURIs = append([]string{plannedBackupDefaultURI}, prevBackupURIs...)
 
-	// Within the chosenSuffix dir, differentiate incremental backups with partName.
-	partName := endTime.GoTime().Format(backupbase.DateBasedIncFolderName)
-	if execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
-		if startTime.IsEmpty() {
-			baseEncryptionOptions, err := backupencryption.GetEncryptionFromBase(
-				ctx, user, execCfg.DistSQLSrv.ExternalStorageFromURI, prevBackupURIs[0],
-				encryption, kmsEnv,
-			)
-			if err != nil {
-				return ResolvedDestination{}, err
-			}
-
-			// TODO (kev-cao): Once we have completed the backup directory index work, we
-			// can remove the need to read an entire backup manifest just to fetch the
-			// start time. We can instead read the metadata protobuf.
-			mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
-			defer mem.Close(ctx)
-			precedingBackupManifest, size, err := backupinfo.ReadBackupManifestFromURI(
-				ctx, &mem, prevBackupURIs[len(prevBackupURIs)-1], user,
-				execCfg.DistSQLSrv.ExternalStorageFromURI, baseEncryptionOptions, kmsEnv,
-			)
-			if err != nil {
-				return ResolvedDestination{}, err
-			}
-			if err := mem.Grow(ctx, size); err != nil {
-				return ResolvedDestination{}, err
-			}
-			defer mem.Shrink(ctx, size)
-			startTime = precedingBackupManifest.EndTime
-			if startTime.IsEmpty() {
-				return ResolvedDestination{}, errors.Errorf("empty end time in prior backup manifest")
-			}
+	// If startTime is not already set, we will find it via the previous backup
+	// manifest.
+	if startTime.IsEmpty() {
+		baseEncryptionOptions, err := backupencryption.GetEncryptionFromBase(
+			ctx, user, execCfg.DistSQLSrv.ExternalStorageFromURI, prevBackupURIs[0],
+			encryption, kmsEnv,
+		)
+		if err != nil {
+			return ResolvedDestination{}, err
 		}
-		partName = partName + "-" + startTime.GoTime().Format(backupbase.DateBasedIncFolderNameSuffix)
+
+		// TODO (kev-cao): Once we have completed the backup directory index work, we
+		// can remove the need to read an entire backup manifest just to fetch the
+		// start time. We can instead read the metadata protobuf.
+		mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
+		defer mem.Close(ctx)
+		precedingBackupManifest, size, err := backupinfo.ReadBackupManifestFromURI(
+			ctx, &mem, prevBackupURIs[len(prevBackupURIs)-1], user,
+			execCfg.DistSQLSrv.ExternalStorageFromURI, baseEncryptionOptions, kmsEnv,
+		)
+		if err != nil {
+			return ResolvedDestination{}, err
+		}
+		if err := mem.Grow(ctx, size); err != nil {
+			return ResolvedDestination{}, err
+		}
+		defer mem.Shrink(ctx, size)
+		startTime = precedingBackupManifest.EndTime
+		if startTime.IsEmpty() {
+			return ResolvedDestination{}, errors.Errorf("empty end time in prior backup manifest")
+		}
 	}
+
+	partName := ConstructDateBasedIncrementalFolderName(startTime.GoTime(), endTime.GoTime())
 	defaultIncrementalsURI, urisByLocalityKV, err := GetURIsByLocalityKV(fullyResolvedIncrementalsLocation, partName)
 	if err != nil {
 		return ResolvedDestination{}, err

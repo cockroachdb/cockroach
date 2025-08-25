@@ -597,17 +597,17 @@ func runGenerativeSplitAndScatter(
 							if len(cachedNodeIDs) > 0 {
 								hash.Reset()
 								if _, err := hash.Write(scatterKey); err != nil {
-									log.Warningf(ctx, "scatter returned node 0. Route span starting at %s to current node %v because of hash error: %v",
+									log.Dev.Warningf(ctx, "scatter returned node 0. Route span starting at %s to current node %v because of hash error: %v",
 										scatterKey, nodeID, err)
 								} else {
 									hashedKey := int(hash.Sum32())
 									nodeID = cachedNodeIDs[hashedKey%len(cachedNodeIDs)]
 								}
 
-								log.Warningf(ctx, "scatter returned node 0. "+
+								log.Dev.Warningf(ctx, "scatter returned node 0. "+
 									"Random route span starting at %s node %v", scatterKey, nodeID)
 							} else {
-								log.Warningf(ctx, "scatter returned node 0. "+
+								log.Dev.Warningf(ctx, "scatter returned node 0. "+
 									"Route span starting at %s to current node %v", scatterKey, nodeID)
 							}
 							chunkDestination = nodeID
@@ -615,7 +615,7 @@ func runGenerativeSplitAndScatter(
 							// TODO(rui): OptionalNodeID only returns a node if the sql server runs
 							// in the same process as the kv server (e.g., not serverless). Figure
 							// out how to handle this error in serverless restore.
-							log.Warningf(ctx, "scatter returned node 0. "+
+							log.Dev.Warningf(ctx, "scatter returned node 0. "+
 								"Route span starting at %s to default stream", scatterKey)
 						}
 					}

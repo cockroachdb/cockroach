@@ -291,7 +291,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 			} else if dropped {
 				diff = TableDiff{Dropped: prevTable, AsOf: kv.Value.Timestamp}
 			} else {
-				log.Warningf(ctx, "onValue: unexpected table state: table=%s, prev=%s", table, prevTable)
+				log.Dev.Warningf(ctx, "onValue: unexpected table state: table=%s, prev=%s", table, prevTable)
 				return nil
 			}
 			select {
@@ -358,11 +358,11 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 	case err := <-errCh:
 		cancel(err)
 		err = errors.Join(err, eg.Wait())
-		log.Warningf(ctx, "watcher %d shutting down due to error: %v (%s)", w.id, err, context.Cause(ctx))
+		log.Dev.Warningf(ctx, "watcher %d shutting down due to error: %v (%s)", w.id, err, context.Cause(ctx))
 		return err
 	case <-ctx.Done():
 		err = errors.Join(ctx.Err(), eg.Wait())
-		log.Warningf(ctx, "watcher %d shutting down due to context cancellation: %v (%s)", w.id, err, context.Cause(ctx))
+		log.Dev.Warningf(ctx, "watcher %d shutting down due to context cancellation: %v (%s)", w.id, err, context.Cause(ctx))
 		return err
 	}
 }

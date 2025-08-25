@@ -147,7 +147,7 @@ func (s *Receiver) onRecvErr(ctx context.Context, nodeID roachpb.NodeID, err err
 	defer s.mu.Unlock()
 
 	if err != io.EOF {
-		log.Warningf(ctx, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
+		log.Dev.Warningf(ctx, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
 	} else {
 		log.VEventf(ctx, 2, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
 	}
@@ -328,7 +328,7 @@ func (r *incomingStream) Run(
 				r.nodeID = msg.NodeID
 
 				if err := r.server.onFirstMsg(ctx, r, r.nodeID); err != nil {
-					log.Warningf(ctx, "%s", err.Error())
+					log.Dev.Warningf(ctx, "%s", err.Error())
 					return
 				} else if ch := r.testingKnobs.onFirstMsg; ch != nil {
 					ch <- struct{}{}

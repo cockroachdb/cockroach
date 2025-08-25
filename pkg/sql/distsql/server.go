@@ -129,7 +129,7 @@ func (ds *ServerImpl) Drain(
 	ctx context.Context, flowDrainWait time.Duration, reporter func(int, redact.SafeString),
 ) {
 	if err := ds.setDraining(true); err != nil {
-		log.Warningf(ctx, "unable to gossip distsql draining state: %v", err)
+		log.Dev.Warningf(ctx, "unable to gossip distsql draining state: %v", err)
 	}
 
 	flowWait := flowDrainWait
@@ -230,7 +230,7 @@ func (ds *ServerImpl) setupFlow(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
 			req.Version, execversion.MinAccepted, execversion.Latest,
 		)
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		return ctx, nil, nil, err
 	}
 	ctx = execversion.WithVersion(ctx, req.Version)
@@ -626,7 +626,7 @@ func (ds *ServerImpl) setupSpanForIncomingRPC(
 	// gRPC metadata, we use it.
 	remoteParent, err := grpcinterceptor.ExtractSpanMetaFromGRPCCtx(ctx, tr)
 	if err != nil {
-		log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
+		log.Dev.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
 	}
 	return tr.StartSpanCtx(ctx, tracingutil.SetupFlowMethodName,
 		tracing.WithRemoteParentFromSpanMeta(remoteParent),

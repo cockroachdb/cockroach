@@ -135,7 +135,7 @@ func (s *fdCountingSemaphore) Acquire(ctx context.Context, n int) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	log.Warning(ctx, "acquiring of file descriptors for disk-spilling timed out")
+	log.Dev.Warning(ctx, "acquiring of file descriptors for disk-spilling timed out")
 	return errAcquireTimeout
 }
 
@@ -391,7 +391,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 		if err := f.Cfg.TempFS.RemoveAll(f.GetPath(ctx)); err != nil {
 			// Log error as a Warning but keep on going to close the memory
 			// infrastructure.
-			log.Warningf(
+			log.Dev.Warningf(
 				ctx,
 				"unable to remove flow %s's temporary directory at %s, files may be left over: %v",
 				f.GetID().Short(),

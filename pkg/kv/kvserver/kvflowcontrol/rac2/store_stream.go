@@ -238,11 +238,11 @@ func (b *blockedStreamLogger) willLog() bool {
 
 func (b *blockedStreamLogger) flushLogs() {
 	if b.blockedRegularCount > 0 {
-		log.Warningf(context.Background(), "%d blocked %s regular replication stream(s): %s",
+		log.Dev.Warningf(context.Background(), "%d blocked %s regular replication stream(s): %s",
 			b.blockedRegularCount, b.metricType, redact.SafeString(b.regBuf.String()))
 	}
 	if b.blockedElasticCount > 0 {
-		log.Warningf(context.Background(), "%d blocked %s elastic replication stream(s): %s",
+		log.Dev.Warningf(context.Background(), "%d blocked %s elastic replication stream(s): %s",
 			b.blockedElasticCount, b.metricType, redact.SafeString(b.elaBuf.String()))
 	}
 	b.elaBuf.Reset()
@@ -487,7 +487,7 @@ func (w *sendStreamTokenWatcher) add(
 			"flow-control-send-stream-token-watcher", w.run); err == nil {
 			w.mu.started = true
 		} else {
-			log.Warningf(ctx, "failed to start send stream token watcher: %v", err)
+			log.Dev.Warningf(ctx, "failed to start send stream token watcher: %v", err)
 		}
 	}
 

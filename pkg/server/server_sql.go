@@ -501,7 +501,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 			nodeID, _ := r.cfg.nodeIDContainer.OptionalNodeID()
 			s, err := r.cfg.sqlLivenessProvider.Session(ctx)
 			if err != nil {
-				log.Warningf(ctx, "failed to get new liveness session ID: %v", err)
+				log.Dev.Warningf(ctx, "failed to get new liveness session ID: %v", err)
 				continue
 			}
 			if _, err := r.cfg.sqlInstanceStorage.CreateNodeInstance(
@@ -513,7 +513,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 				r.cfg.Settings.Version.LatestVersion(),
 				nodeID,
 			); err != nil {
-				log.Warningf(ctx, "failed to update instance with new session ID: %v", err)
+				log.Dev.Warningf(ctx, "failed to update instance with new session ID: %v", err)
 				continue
 			}
 			return
@@ -1394,7 +1394,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			if log.GetVModule() != s {
 				log.Dev.Infof(ctx, "updating vmodule from cluster setting to %s", s)
 				if err := log.SetVModule(s); err != nil {
-					log.Warningf(ctx, "failed to apply vmodule cluster setting: %v", err)
+					log.Dev.Warningf(ctx, "failed to apply vmodule cluster setting: %v", err)
 				}
 			}
 		}
@@ -1793,7 +1793,7 @@ func (s *SQLServer) preStart(
 				log.Fatalf(warnCtx, "drain required but not performed")
 			}
 
-			log.Warningf(warnCtx, "server shutdown without a prior graceful drain")
+			log.Dev.Warningf(warnCtx, "server shutdown without a prior graceful drain")
 		}
 
 		if sk != nil && sk.DrainReportCh != nil {
@@ -1947,7 +1947,7 @@ func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.Testing
 	// This is not a critical component. If it fails to start, we log a warning
 	// rather than prevent the entire server from starting.
 	if err != nil {
-		log.Warningf(ctx, "failed to start the license enforcer: %v", err)
+		log.Dev.Warningf(ctx, "failed to start the license enforcer: %v", err)
 	}
 }
 
