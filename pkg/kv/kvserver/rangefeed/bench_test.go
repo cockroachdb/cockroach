@@ -105,7 +105,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 		streams[i] = &noopStream{ctx: ctx, done: make(chan *kvpb.Error, 1)}
 		ok, _, _ := p.Register(ctx, span, hlc.MinTimestamp, nil,
 			withDiff, withFiltering, false /* withOmitRemote */, noBulkDelivery,
-			streams[i])
+			streams[i], 0, 0)
 		require.True(b, ok)
 	}
 

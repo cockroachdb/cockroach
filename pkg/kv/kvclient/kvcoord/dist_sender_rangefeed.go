@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -192,11 +193,18 @@ func (ds *DistSender) RangeFeed(
 	for _, opt := range opts {
 		opt.set(&cfg)
 	}
+	// consumerID is typically the JobID of a changefeed job.
+	// System rangefeeds don't have an associated changefeed JobID, so we
+	// generate a unique consumerID for them.
+	if cfg.consumerID == 0 {
+		// JobIDs are generated with the same mechanism, so we won't have a collision
+		cfg.consumerID = unique.GenerateUniqueInt(unique.ProcessUniqueID(ds.nodeIDGetter()))
+	}
 	ctx = ds.AnnotateCtx(ctx)
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
 	defer sp.Finish()
 
-	rr := newRangeFeedRegistry(ctx, cfg.withDiff)
+	rr := newRangeFeedRegistry(ctx, cfg.withDiff, cfg.consumerID)
 	ds.activeRangeFeeds.Add(rr)
 	defer ds.activeRangeFeeds.Remove(rr)
 	if cfg.rangeObserver != nil {
@@ -241,8 +249,9 @@ func divideAllSpansOnRangeBoundaries(
 // RangeFeedContext is the structure containing arguments passed to
 // RangeFeed call.  It functions as a kind of key for an active range feed.
 type RangeFeedContext struct {
-	ID      int64  // unique ID identifying range feed.
-	CtxTags string // context tags
+	ID         int64  // unique ID identifying range feed.
+	ConsumerID int64  // configured ID identifying rangefeed consumer.
+	CtxTags    string // context tags
 
 	// WithDiff options passed to RangeFeed call. StartFrom hlc.Timestamp
 	WithDiff bool
@@ -256,6 +265,7 @@ type PartialRangeFeed struct {
 	StartAfter              hlc.Timestamp // exclusive
 	CreatedTime             time.Time
 	ParentRangefeedMetadata parentRangeFeedMetadata
+	StreamID                int64
 
 	// Fields below are mutable.
 	NodeID            roachpb.NodeID
@@ -380,9 +390,9 @@ type rangeFeedRegistry struct {
 	ranges syncutil.Set[*activeRangeFeed]
 }
 
-func newRangeFeedRegistry(ctx context.Context, withDiff bool) *rangeFeedRegistry {
+func newRangeFeedRegistry(ctx context.Context, withDiff bool, consumerID int64) *rangeFeedRegistry {
 	rr := &rangeFeedRegistry{
-		RangeFeedContext: RangeFeedContext{WithDiff: withDiff},
+		RangeFeedContext: RangeFeedContext{WithDiff: withDiff, ConsumerID: consumerID},
 	}
 	rr.ID = *(*int64)(unsafe.Pointer(&rr))
 

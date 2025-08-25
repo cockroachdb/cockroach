@@ -200,6 +200,7 @@ const (
 	CrdbInternalRegionsTable
 	CrdbInternalDefaultPrivilegesTable
 	CrdbInternalActiveRangeFeedsTable
+	CrdbInternalServerActiveRangeFeedsTable
 	CrdbInternalTenantUsageDetailsViewID
 	CrdbInternalPgCatalogTableIsImplementedTableID
 	CrdbInternalSuperRegions
