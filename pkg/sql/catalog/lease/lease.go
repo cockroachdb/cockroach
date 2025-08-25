@@ -1119,13 +1119,8 @@ func releaseLease(ctx context.Context, lease *storedLease, m *Manager) (released
 // which will cause existing in-use leases to be eagerly released once
 // they're not in use any more.
 // If t has no active leases, nothing is done.
-func purgeOldVersions(
-	ctx context.Context,
-	db *kv.DB,
-	id descpb.ID,
-	dropped bool,
-	minVersion descpb.DescriptorVersion,
-	m *Manager,
+func (m *Manager) purgeOldVersions(
+	ctx context.Context, db *kv.DB, id descpb.ID, dropped bool, minVersion descpb.DescriptorVersion,
 ) error {
 	t := m.findDescriptorState(id, false /*create*/)
 	if t == nil {
@@ -1193,10 +1188,40 @@ func purgeOldVersions(
 		return err
 	}
 
-	// Acquire a refcount on the descriptor on the latest version to maintain an
-	// active lease, so that it doesn't get released when removeInactives()
-	// is called below. Release this lease after calling removeInactives().
-	desc, _, err := t.findForTimestamp(ctx, m.storage.clock.Now())
+	var err error
+	var desc *descriptorVersionState
+	for r := retry.StartWithCtx(ctx,
+		retry.Options{
+			MaxDuration: time.Second * 30}); r.Next(); {
+		// Acquire a refcount on the descriptor on the latest version to maintain an
+		// active lease, so that it doesn't get released when removeInactives()
+		// is called below. Release this lease after calling removeInactives().
+		desc, _, err = t.findForTimestamp(ctx, m.storage.clock.Now())
+		if err == nil || !errors.Is(err, errRenewLease) {
+			break
+		}
+		// We encountered an error telling us to renew the lease.
+		newest := m.findNewest(id)
+		// Assert this should never happen due to a fixed expiration, since the range
+		// feed is responsible for purging old versions and acquiring new versions.
+		if newest.hasFixedExpiration() {
+			return errors.AssertionFailedf("the latest version of the descriptor has" +
+				"a fixed expiration, this should never happen")
+		}
+		// Otherwise, we ran into some type of transient issue, where the sqllivness
+		// session was expired. This could happen if the sqlliveness range is slow
+		// for some reason.
+		log.Infof(ctx, "unable to acquire lease on latest descriptor "+
+			"version of ID: %d, retrying...", id)
+	}
+	// As a last resort, we will release all versions of the descriptor. This is
+	// suboptimal, but the safest option.
+	if errors.Is(err, errRenewLease) {
+		log.Warningf(ctx, "unable to acquire lease on latest descriptor "+
+			"version of ID: %d, cleaning up all versions from storage.", id)
+		err = nil
+	}
+
 	if isInactive := catalog.HasInactiveDescriptorError(err); err == nil || isInactive {
 		removeInactives(isInactive)
 		if desc != nil {
@@ -1866,7 +1891,7 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 					defer m.leaseGeneration.Add(1)
 					state := m.findNewest(id)
 					if state != nil {
-						if err := purgeOldVersions(ctx, db, id, true /* dropped */, state.GetVersion(), m); err != nil {
+						if err := m.purgeOldVersions(ctx, db, id, true /* dropped */, state.GetVersion()); err != nil {
 							log.Warningf(ctx, "error purging leases for deleted descriptor %d",
 								id)
 						}
@@ -1926,7 +1951,7 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 					// descriptor versions, which could have been acquired concurrently.
 					// For example the range feed sees version 2 and a query concurrently
 					// acquires version 1.
-					if err := purgeOldVersions(ctx, db, desc.GetID(), dropped, desc.GetVersion(), m); err != nil {
+					if err := m.purgeOldVersions(ctx, db, desc.GetID(), dropped, desc.GetVersion()); err != nil {
 						log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
 							desc.GetID(), desc.GetName(), err)
 					}
@@ -2347,8 +2372,8 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, refreshAndPurgeAllDescr
 
 					if errors.Is(err, catalog.ErrDescriptorNotFound) || errors.Is(err, catalog.ErrDescriptorDropped) {
 						// Lease renewal failed due to removed descriptor; Remove this descriptor from cache.
-						if err := purgeOldVersions(
-							ctx, m.storage.db.KV(), id, true /* dropped */, 0 /* minVersion */, m,
+						if err := m.purgeOldVersions(
+							ctx, m.storage.db.KV(), id, true /* dropped */, 0, /* minVersion */
 						); err != nil {
 							log.Warningf(ctx, "error purging leases for descriptor %d: %v",
 								id, err)
@@ -2363,7 +2388,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, refreshAndPurgeAllDescr
 				if refreshAndPurgeAllDescriptors {
 					// If we are refreshing all descriptors, then we want to purge older versions as
 					// we are doing this operation.
-					err := purgeOldVersions(ctx, m.storage.db.KV(), id, false /* dropped */, 0 /* minVersion */, m)
+					err := m.purgeOldVersions(ctx, m.storage.db.KV(), id, false /* dropped */, 0 /* minVersion */)
 					if err != nil {
 						log.Warningf(ctx, "error purging leases for descriptor %d: %v",
 							id, err)

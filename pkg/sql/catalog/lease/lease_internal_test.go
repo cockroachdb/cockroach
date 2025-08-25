@@ -208,8 +208,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
 	ctx := context.Background()
-	if err := purgeOldVersions(
-		ctx, kvDB, tableDesc.GetID(), false, 2 /* minVersion */, leaseManager); err != nil {
+	if err := leaseManager.purgeOldVersions(
+		ctx, kvDB, tableDesc.GetID(), false, 2 /* minVersion */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -241,8 +241,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if numLeases := getNumVersions(ts); numLeases != 2 {
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
-	if err := purgeOldVersions(
-		context.Background(), kvDB, tableDesc.GetID(), false, 2 /* minVersion */, leaseManager); err != nil {
+	if err := leaseManager.purgeOldVersions(
+		context.Background(), kvDB, tableDesc.GetID(), false, 2 /* minVersion */); err != nil {
 		t.Fatal(err)
 	}
 	if numLeases := getNumVersions(ts); numLeases != 1 {
@@ -347,7 +347,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Purge old versions and make sure that the newest lease survives the
 	// purge.
-	if err := purgeOldVersions(ctx, kvDB, tableDesc.GetID(), false, 2 /* minVersion */, leaseManager); err != nil {
+	if err := leaseManager.purgeOldVersions(ctx, kvDB, tableDesc.GetID(), false, 2 /* minVersion */); err != nil {
 		t.Fatal(err)
 	}
 	if numLeases := getNumVersions(ts); numLeases != 1 {
