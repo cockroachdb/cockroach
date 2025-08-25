@@ -2523,11 +2523,14 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 			paramNames := make([]string, len(placeholderTypes))
 
 			for i, placeholderType := range placeholderTypes {
+				// TODO(yuzefovich): we're including INT8 into array containing
+				// REGTYPE. Figure it out.
 				paramTypes.Array[i] = tree.NewDOidWithTypeAndName(
 					placeholderType.Oid(),
 					placeholderType,
 					placeholderType.SQLStandardName(),
 				)
+				paramTypes.SetHasNonNulls(true /* hasNonNulls */)
 				paramNames[i] = placeholderType.Name()
 			}
 
@@ -2624,7 +2627,7 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 		}
 
 		getVariadicStringArray := func() tree.Datum {
-			return &tree.DArray{ParamTyp: types.String, Array: tree.Datums{proArgModeVariadic}}
+			return tree.NewDArrayFromDatums(types.String, tree.Datums{proArgModeVariadic})
 		}
 
 		var argmodes tree.Datum

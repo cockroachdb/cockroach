@@ -857,13 +857,17 @@ func ensureExpectedType(exp *types.T, d tree.Datum) error {
 	return nil
 }
 
-// arrayOfType returns a fresh DArray of the input type.
-func arrayOfType(typ *types.T) (*tree.DArray, error) {
+// arrayOfType returns a fresh tree.DArray of the input type. 'elements'
+// argument is optional.
+func arrayOfType(typ *types.T, elements tree.Datums) (*tree.DArray, error) {
 	if typ.Family() != types.ArrayFamily {
 		return nil, errors.AssertionFailedf("array node type (%v) is not types.TArray", typ)
 	}
 	if err := types.CheckArrayElementType(typ.ArrayContents()); err != nil {
 		return nil, err
+	}
+	if elements != nil {
+		return tree.NewDArrayFromDatums(typ.ArrayContents(), elements), nil
 	}
 	return tree.NewDArray(typ.ArrayContents()), nil
 }

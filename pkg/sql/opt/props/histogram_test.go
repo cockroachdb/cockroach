@@ -1178,10 +1178,9 @@ func BenchmarkHistogram(b *testing.B) {
 		case types.StringFamily:
 			return tree.NewDString(strconv.Itoa(i * 2))
 		case types.ArrayFamily:
-			arr := tree.NewDArray(t.ArrayContents())
-			arr.Array = make(tree.Datums, 1)
-			arr.HasNonNulls = true
-			arr.Array[0] = makeDatum(t.ArrayContents(), i)
+			arr := tree.NewDArrayFromDatums(
+				t.ArrayContents(), tree.Datums{makeDatum(t.ArrayContents(), i)},
+			)
 			return arr
 		}
 		panic(errors.AssertionFailedf("unsupported type"))

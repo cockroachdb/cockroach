@@ -96,11 +96,9 @@ func TestDeserializeExpressionConstantEval(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expected := &tree.DArray{
-		ParamTyp:    types.Int,
-		Array:       tree.Datums{tree.NewDInt(1), tree.NewDInt(2)},
-		HasNonNulls: true,
-	}
+	expected := tree.NewDArrayFromDatums(
+		types.Int, tree.Datums{tree.NewDInt(1), tree.NewDInt(2)},
+	)
 	if !reflect.DeepEqual(expr, expected) {
 		t.Errorf("invalid expr '%v', expected '%v'", expr, expected)
 	}
