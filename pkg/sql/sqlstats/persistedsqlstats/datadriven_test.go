@@ -76,6 +76,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	knobs.StubTimeNow = stubTime.Now
 	knobs.OnStmtStatsFlushFinished = injector.invokePostStmtStatsFlushCallback
 	knobs.OnTxnStatsFlushFinished = injector.invokePostTxnStatsFlushCallback
+	knobs.SynchronousSQLStats = true
 	params.Knobs.SQLStatsKnobs = knobs
 
 	cluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
