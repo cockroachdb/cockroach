@@ -447,7 +447,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range testCases {
 		t.Run(tc.desc, tc.capture(func(t *testing.T, tc testCase) {
-			t.Parallel() // SAFE FOR TESTING
 			if issue := tc.skipIssue; issue != 0 {
 				skip.WithIssue(t, issue)
 			}
