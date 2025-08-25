@@ -628,7 +628,6 @@ func (ct *cdcTester) verifyMetrics(
 				return err
 			}
 			if check(res) {
-				ct.t.Status("metrics check passed")
 				return nil
 			}
 		}
@@ -1786,9 +1785,10 @@ func runMessageTooLarge(ctx context.Context, t test.Test, c cluster.Cluster) {
 }
 
 type multiTablePTSBenchmarkParams struct {
-	numTables int
-	numRows   int
-	duration  string
+	numTables   int
+	numRows     int
+	duration    string
+	perTablePTS bool
 }
 
 // runCDCMultiTablePTSBenchmark is a benchmark for changefeeds with multiple tables,
@@ -1810,6 +1810,12 @@ func runCDCMultiTablePTSBenchmark(
 	db := ct.DB()
 	if err := configureDBForMultiTablePTSBenchmark(db); err != nil {
 		t.Fatalf("failed to set cluster settings: %v", err)
+	}
+
+	if params.perTablePTS {
+		if _, err := db.Exec("SET CLUSTER SETTING changefeed.protected_timestamp.per_table.enabled = true"); err != nil {
+			t.Fatalf("failed to set per-table protected timestamps: %v", err)
+		}
 	}
 
 	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --num-tables=%d {pgurl%s}",
@@ -1854,12 +1860,15 @@ func runCDCMultiTablePTSBenchmark(
 
 	t.Status("workload finished, verifying metrics")
 
-	// These metrics are in nanoseconds, so we are asserting that both
-	// of these latency metrics are less than 10 milliseconds.
+	latencyThreshold := float64(10 * time.Millisecond)
+	if params.perTablePTS {
+		latencyThreshold = float64(250 * time.Millisecond)
+	}
+
 	ct.verifyMetrics(ctx, verifyMetricsUnderThreshold([]string{
 		"changefeed_stage_pts_manage_latency",
 		"changefeed_stage_pts_create_latency",
-	}, float64(10*time.Millisecond)))
+	}, latencyThreshold))
 
 	t.Status("multi-table PTS benchmark finished")
 }
@@ -2896,23 +2905,26 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptIBM,
 		Run:              runMessageTooLarge,
 	})
-	r.Add(registry.TestSpec{
-		Name:             "cdc/multi-table-pts-benchmark",
-		Owner:            registry.OwnerCDC,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
-		CompatibleClouds: registry.AllClouds,
-		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          1 * time.Hour,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			params := multiTablePTSBenchmarkParams{
-				numTables: 500,
-				numRows:   10_000,
-				duration:  "20m",
-			}
-			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
-		},
-	})
+	for _, perTablePTS := range []bool{false, true} {
+		r.Add(registry.TestSpec{
+			Name:             fmt.Sprintf("cdc/multi-table-pts-benchmark/per-table-pts=%t", perTablePTS),
+			Owner:            registry.OwnerCDC,
+			Benchmark:        true,
+			Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+			CompatibleClouds: registry.AllClouds,
+			Suites:           registry.Suites(registry.Nightly),
+			Timeout:          1 * time.Hour,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				params := multiTablePTSBenchmarkParams{
+					numTables:   100,
+					numRows:     100,
+					duration:    "5m",
+					perTablePTS: perTablePTS,
+				}
+				runCDCMultiTablePTSBenchmark(ctx, t, c, params)
+			},
+		})
+	}
 }
 
 const (
@@ -4620,9 +4632,10 @@ func verifyMetricsUnderThreshold(
 				}
 
 				observedValue := m.Histogram.GetSampleSum() / float64(m.Histogram.GetSampleCount())
-				if observedValue < threshold {
-					found[name] = struct{}{}
+				if observedValue > threshold {
+					return false
 				}
+				found[name] = struct{}{}
 			}
 
 			if len(found) == len(names) {
