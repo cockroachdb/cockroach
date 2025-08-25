@@ -558,6 +558,15 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			},
 			schemaChange: "DROP INDEX idx CASCADE",
 		},
+		{
+			desc: "drop a uwi constraint and a column referenced in the constraint predicate",
+			setup: []string{
+				"SET experimental_enable_unique_without_index_constraints = true",
+				"ALTER TABLE tbl ADD COLUMN i INT DEFAULT 11",
+				"ALTER TABLE tbl ADD CONSTRAINT c UNIQUE WITHOUT INDEX (insert_phase_ordinal, operation_phase_ordinal, operation, i) WHERE i IS NOT NULL",
+			},
+			schemaChange: "ALTER TABLE tbl DROP CONSTRAINT c, DROP COLUMN i",
+		},
 	}
 
 	ctx := context.Background()
