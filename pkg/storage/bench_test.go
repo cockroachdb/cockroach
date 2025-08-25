@@ -13,7 +13,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -2421,14 +2421,14 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		sort.Slice(kvPairs, func(i, j int) bool {
-			cmp := EngineComparer.Compare(kvPairs[i].key, kvPairs[j].key)
-			if cmp == 0 {
+		slices.SortFunc(kvPairs, func(i, j kvPair) int {
+			v := EngineComparer.Compare(i.key, j.key)
+			if v == 0 {
 				// Should not happen since we resolve in a different batch from the
 				// one where we wrote the intent.
-				b.Fatalf("found equal user keys in same batch")
+				b.Fatal("found equal user keys in same batch")
 			}
-			return cmp < 0
+			return v
 		})
 		sstFileName := fmt.Sprintf("tmp-ingest-%d", i)
 		sstFile, err := eng.Env().Create(sstFileName, fs.UnspecifiedWriteCategory)

@@ -13,7 +13,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -2325,7 +2325,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 		reverts[i] = rand.Intn(randTimeRange)
 	}
 	reverts[0] = swathTime - 1
-	sort.Ints(reverts)
+	slices.Sort(reverts)
 	const byteLimit = 1000
 	const keyLimit = 100
 	const clearRangeThreshold = 64
@@ -3906,8 +3906,8 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 		}
 		puts = append(puts, put)
 	}
-	sort.Slice(puts, func(i, j int) bool {
-		return puts[i].key.Compare(puts[j].key) < 0
+	slices.SortFunc(puts, func(i, j putState) int {
+		return i.key.Compare(j.key)
 	})
 	// Do the puts to the engines.
 	for i := range engs {
@@ -4028,8 +4028,8 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 		}
 		puts = append(puts, put)
 	}
-	sort.Slice(puts, func(i, j int) bool {
-		return puts[i].key.Compare(puts[j].key) < 0
+	slices.SortFunc(puts, func(i, j putState) int {
+		return i.key.Compare(j.key)
 	})
 	txn := *txn1
 	txn.ReadTimestamp = timestamps[0]

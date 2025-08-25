@@ -9,8 +9,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -301,12 +303,7 @@ func TestMVCCHistories(t *testing.T) {
 
 			// Unreplicated locks.
 			if len(e.unreplLocks) > 0 {
-				var ks []string
-				for k := range e.unreplLocks {
-					ks = append(ks, k)
-				}
-				sort.Strings(ks)
-				for _, k := range ks {
+				for _, k := range slices.Sorted(maps.Keys(e.unreplLocks)) {
 					info := e.unreplLocks[k]
 					buf.Printf("lock (%s): %v/%s -> %+v\n",
 						lock.Unreplicated, k, info.str, info.txn)
