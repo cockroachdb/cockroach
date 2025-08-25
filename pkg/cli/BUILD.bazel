@@ -2,6 +2,14 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
+# Copy the committed metrics.yaml source file to this package for go:embed
+genrule(
+    name = "copy_metrics",
+    srcs = ["//docs/generated/metrics:metrics.yaml"],
+    outs = ["metrics.yaml"],
+    cmd = "cp $< $@",
+)
+
 go_library(
     name = "cli",
     srcs = [
@@ -19,6 +27,7 @@ go_library(
         "debug_job_trace.go",
         "debug_list_files.go",
         "debug_logconfig.go",
+        "debug_mcp.go",
         "debug_merge_logs.go",
         "debug_recover_loss_of_quorum.go",
         "debug_reset_quorum.go",
@@ -97,6 +106,7 @@ go_library(
     cppopts = [
         "-DJEMALLOC_NO_DEMANGLE",
     ],
+    embedsrcs = glob(["*.md"]) + [":copy_metrics"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cli",
     visibility = ["//visibility:public"],
     deps = [
@@ -346,6 +356,7 @@ go_test(
         "debug_check_store_test.go",
         "debug_job_trace_test.go",
         "debug_list_files_test.go",
+        "debug_mcp_test.go",
         "debug_merge_logs_test.go",
         "debug_recover_loss_of_quorum_test.go",
         "debug_send_kv_batch_test.go",
