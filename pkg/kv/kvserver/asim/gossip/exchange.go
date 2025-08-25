@@ -38,11 +38,11 @@ func (u *fixedDelayExchange) put(tick time.Time, descs ...roachpb.StoreDescripto
 
 // updates returns back exchanged infos, wrapped as store details that have
 // completed between the last tick update was called and the tick given.
-func (u *fixedDelayExchange) updates(tick time.Time) []*storepool.StoreDetail {
+func (u *fixedDelayExchange) updates(tick time.Time) []*storepool.StoreDetailMu {
 	slices.SortStableFunc(u.pending, func(a, b exchangeInfo) int {
 		return a.created.Compare(b.created)
 	})
-	var ready []*storepool.StoreDetail
+	var ready []*storepool.StoreDetailMu
 	i := 0
 	for ; i < len(u.pending) && !tick.Before(u.pending[i].created.Add(u.settings.StateExchangeDelay)); i++ {
 		ready = append(ready, makeStoreDetail(&u.pending[i].desc, u.pending[i].created))
@@ -51,10 +51,10 @@ func (u *fixedDelayExchange) updates(tick time.Time) []*storepool.StoreDetail {
 	return ready
 }
 
-// makeStoreDetail wraps a store descriptor into a storepool StoreDetail at the
+// makeStoreDetail wraps a store descriptor into a storepool StoreDetailMu at the
 // given tick.
-func makeStoreDetail(desc *roachpb.StoreDescriptor, tick time.Time) *storepool.StoreDetail {
-	return &storepool.StoreDetail{
+func makeStoreDetail(desc *roachpb.StoreDescriptor, tick time.Time) *storepool.StoreDetailMu {
+	return &storepool.StoreDetailMu{
 		Desc:            desc,
 		LastUpdatedTime: hlc.Timestamp{WallTime: tick.UnixNano()},
 	}
