@@ -2,35 +2,35 @@ exec
 dev bench pkg/spanconfig/...
 ----
 echo $HOME/.cache
-bazel test pkg/spanconfig/...:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=. --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.benchmem --crdb_test_off --test_env COCKROACH_TEST_FIXTURES_DIR=crdb-mock-test-fixtures/crdb-test-fixtures --sandbox_writable_path=crdb-mock-test-fixtures/crdb-test-fixtures --test_output streamed
+bazel test pkg/spanconfig/...:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=. --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.benchmem --crdb_test_off --crdb_bench --test_env COCKROACH_TEST_FIXTURES_DIR=crdb-mock-test-fixtures/crdb-test-fixtures --sandbox_writable_path=crdb-mock-test-fixtures/crdb-test-fixtures --test_output streamed
 
 exec
 dev bench pkg/sql/parser --filter=BenchmarkParse
 ----
 echo $HOME/.cache
-bazel test pkg/sql/parser:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=BenchmarkParse --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.benchmem --crdb_test_off --test_env COCKROACH_TEST_FIXTURES_DIR=crdb-mock-test-fixtures/crdb-test-fixtures --sandbox_writable_path=crdb-mock-test-fixtures/crdb-test-fixtures --test_output streamed
+bazel test pkg/sql/parser:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=BenchmarkParse --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.benchmem --crdb_test_off --crdb_bench --test_env COCKROACH_TEST_FIXTURES_DIR=crdb-mock-test-fixtures/crdb-test-fixtures --sandbox_writable_path=crdb-mock-test-fixtures/crdb-test-fixtures --test_output streamed
 
 exec
 dev bench pkg/sql/parser --filter=BenchmarkParse --stream-output=false
 ----
 echo $HOME/.cache
-bazel test pkg/sql/parser:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=BenchmarkParse --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.benchmem --crdb_test_off --test_env COCKROACH_TEST_FIXTURES_DIR=crdb-mock-test-fixtures/crdb-test-fixtures --sandbox_writable_path=crdb-mock-test-fixtures/crdb-test-fixtures --test_output errors
+bazel test pkg/sql/parser:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=BenchmarkParse --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.benchmem --crdb_test_off --crdb_bench --test_env COCKROACH_TEST_FIXTURES_DIR=crdb-mock-test-fixtures/crdb-test-fixtures --sandbox_writable_path=crdb-mock-test-fixtures/crdb-test-fixtures --test_output errors
 
 exec
 dev bench pkg/bench -f=BenchmarkTracing/1node/scan/trace=off --count=2 --bench-time=10x --bench-mem=false
 ----
 echo $HOME/.cache
-bazel test pkg/bench:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=BenchmarkTracing/1node/scan/trace=off --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.count=2 --test_arg -test.benchtime=10x --crdb_test_off --test_env COCKROACH_TEST_FIXTURES_DIR=crdb-mock-test-fixtures/crdb-test-fixtures --sandbox_writable_path=crdb-mock-test-fixtures/crdb-test-fixtures --test_output streamed
+bazel test pkg/bench:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=BenchmarkTracing/1node/scan/trace=off --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.count=2 --test_arg -test.benchtime=10x --crdb_test_off --crdb_bench --test_env COCKROACH_TEST_FIXTURES_DIR=crdb-mock-test-fixtures/crdb-test-fixtures --sandbox_writable_path=crdb-mock-test-fixtures/crdb-test-fixtures --test_output streamed
 
 exec
 dev bench pkg/spanconfig/spanconfigkvsubscriber -f=BenchmarkSpanConfigDecoder --cpus=10 --ignore-cache=false -v --timeout=50s
 ----
 echo $HOME/.cache
-bazel test --local_cpu_resources=10 --test_timeout=50 pkg/spanconfig/spanconfigkvsubscriber:all --test_arg -test.run=- --test_arg -test.bench=BenchmarkSpanConfigDecoder --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.v --test_arg -test.benchmem --crdb_test_off --test_env COCKROACH_TEST_FIXTURES_DIR=crdb-mock-test-fixtures/crdb-test-fixtures --sandbox_writable_path=crdb-mock-test-fixtures/crdb-test-fixtures --test_output streamed
+bazel test --local_cpu_resources=10 --test_timeout=50 pkg/spanconfig/spanconfigkvsubscriber:all --test_arg -test.run=- --test_arg -test.bench=BenchmarkSpanConfigDecoder --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.v --test_arg -test.benchmem --crdb_test_off --crdb_bench --test_env COCKROACH_TEST_FIXTURES_DIR=crdb-mock-test-fixtures/crdb-test-fixtures --sandbox_writable_path=crdb-mock-test-fixtures/crdb-test-fixtures --test_output streamed
 
 exec
 dev bench pkg/bench -f='BenchmarkTracing/1node/scan/trace=off' --test-args '-test.memprofile=mem.out -test.cpuprofile=cpu.out'
 ----
 bazel info workspace --color=no
 echo $HOME/.cache
-bazel test pkg/bench:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=BenchmarkTracing/1node/scan/trace=off --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.benchmem --crdb_test_off --test_arg -test.outputdir=crdb-checkout --sandbox_writable_path=crdb-checkout --test_arg -test.memprofile=mem.out --test_arg -test.cpuprofile=cpu.out --test_env COCKROACH_TEST_FIXTURES_DIR=crdb-mock-test-fixtures/crdb-test-fixtures --sandbox_writable_path=crdb-mock-test-fixtures/crdb-test-fixtures --test_output streamed
+bazel test pkg/bench:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=BenchmarkTracing/1node/scan/trace=off --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.benchmem --crdb_test_off --crdb_bench --test_arg -test.outputdir=crdb-checkout --sandbox_writable_path=crdb-checkout --test_arg -test.memprofile=mem.out --test_arg -test.cpuprofile=cpu.out --test_env COCKROACH_TEST_FIXTURES_DIR=crdb-mock-test-fixtures/crdb-test-fixtures --sandbox_writable_path=crdb-mock-test-fixtures/crdb-test-fixtures --test_output streamed
