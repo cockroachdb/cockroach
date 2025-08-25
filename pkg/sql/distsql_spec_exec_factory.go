@@ -1707,7 +1707,7 @@ func (e *distSQLSpecExecFactory) ConstructCancelSessions(
 }
 
 func (e *distSQLSpecExecFactory) ConstructCreateStatistics(
-	cs *tree.CreateStats,
+	cs *tree.CreateStats, table cat.Table, index cat.Index, whereConstraint *constraint.Constraint,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create statistics")
 }

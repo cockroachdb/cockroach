@@ -2472,8 +2472,10 @@ func (ef *execFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (
 	}, nil
 }
 
-// ConstructCreateStatistics is part of the exec.Factory interface.
-func (ef *execFactory) ConstructCreateStatistics(cs *tree.CreateStats) (exec.Node, error) {
+// ConstructCreateStatistics is part of the exec.Factory interface
+func (ef *execFactory) ConstructCreateStatistics(
+	cs *tree.CreateStats, table cat.Table, index cat.Index, whereConstraint *constraint.Constraint,
+) (exec.Node, error) {
 	if err := featureflag.CheckEnabled(
 		ef.ctx,
 		ef.planner.ExecCfg(),
@@ -2482,14 +2484,36 @@ func (ef *execFactory) ConstructCreateStatistics(cs *tree.CreateStats) (exec.Nod
 	); err != nil {
 		return nil, err
 	}
+
+	var whereSpans roachpb.Spans
+	var whereIndexID descpb.IndexID
+	if whereConstraint != nil {
+		tabDesc := table.(*optTable).desc
+		idx := index.(*optIndex).idx
+		whereIndexID = idx.GetID()
+
+		var sb span.Builder
+		sb.InitAllowingExternalRowData(
+			ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, idx,
+		)
+		spans, err := sb.SpansFromConstraint(whereConstraint, span.NoopSplitter())
+		if err != nil {
+			return nil, err
+		}
+
+		whereSpans = spans
+	}
+
 	// Don't run as a job if we are inside an EXPLAIN / EXPLAIN ANALYZE. That will
 	// allow us to get insight into the actual execution.
 	runAsJob := !ef.isExplain && ef.planner.instrumentation.ShouldUseJobForCreateStats()
 
 	return &createStatsNode{
-		CreateStats: *cs,
-		p:           ef.planner,
-		runAsJob:    runAsJob,
+		CreateStats:  *cs,
+		p:            ef.planner,
+		runAsJob:     runAsJob,
+		whereSpans:   whereSpans,
+		whereIndexID: whereIndexID,
 	}, nil
 }
 
