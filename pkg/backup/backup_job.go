@@ -9,8 +9,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"net/url"
-	"path"
 	"reflect"
 	"sort"
 	"strconv"
@@ -842,16 +840,10 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// potentially expensive listing of a giant backup collection to find the most
 	// recent completed entry.
 	if backupManifest.StartTime.IsEmpty() && details.CollectionURI != "" {
-		backupURI, err := url.Parse(details.URI)
+		suffix, err := backuputils.AbsoluteBackupPathInCollectionURI(details.CollectionURI, details.URI)
 		if err != nil {
 			return err
 		}
-		collectionURI, err := url.Parse(details.CollectionURI)
-		if err != nil {
-			return err
-		}
-
-		suffix := strings.TrimPrefix(path.Clean(backupURI.Path), path.Clean(collectionURI.Path))
 
 		c, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, details.CollectionURI, p.User())
 		if err != nil {
