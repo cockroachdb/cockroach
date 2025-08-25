@@ -1049,8 +1049,8 @@ explain(gist):
 gist-explain-roundtrip
 CREATE STATISTICS s1 FROM foo
 ----
-hash: 590681868797177008
-plan-gist: Ajc=
+hash: 17953548722684387642
+plan-gist: AjdqAg==
 explain(shape):
 • create statistics
 explain(gist):
