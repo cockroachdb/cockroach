@@ -346,4 +346,6 @@ SELECT lca(''::LTREE, 'A.B.C'::LTREE)
 ----
 NULL
 
+query error array must not contain nulls
+SELECT lca(ARRAY['A.B.C', NULL]::LTREE[]);
 

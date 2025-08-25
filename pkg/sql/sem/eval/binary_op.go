@@ -350,6 +350,9 @@ func (e *evaluator) EvalFirstContainedByLTreeOp(
 	elem := tree.MustBeDLTree(b)
 
 	for _, d := range array.Array {
+		if d == tree.DNull {
+			return nil, pgerror.New(pgcode.NullValueNotAllowed, "array must not contain nulls")
+		}
 		if elem.LTree.Contains(tree.MustBeDLTree(d).LTree) {
 			return tree.MustBeDLTree(d), nil
 		}
@@ -409,6 +412,9 @@ func (e *evaluator) EvalFirstContainsLTreeOp(
 	elem := tree.MustBeDLTree(b)
 
 	for _, d := range array.Array {
+		if d == tree.DNull {
+			return nil, pgerror.New(pgcode.NullValueNotAllowed, "array must not contain nulls")
+		}
 		if tree.MustBeDLTree(d).LTree.Contains(elem.LTree) {
 			return tree.MustBeDLTree(d), nil
 		}
