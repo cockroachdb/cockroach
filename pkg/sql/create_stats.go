@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -139,6 +140,9 @@ type createStatsNode struct {
 	// If it is false, the flow for create statistics is planned directly; this
 	// is used when the statement is under EXPLAIN or EXPLAIN ANALYZE.
 	runAsJob bool
+
+	// whereSpans are the spans corresponding to the WHERE clause, if any.
+	whereSpans roachpb.Spans
 }
 
 func (n *createStatsNode) startExec(params runParams) error {
@@ -280,11 +284,13 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		return nil, errors.Errorf(`creating partial statistics at extremes is disabled`)
 	}
 
-	// TODO(93998): Add support for WHERE.
+	var whereClause string
 	if n.Options.Where != nil {
-		return nil, pgerror.New(pgcode.FeatureNotSupported,
-			"creating partial statistics with a WHERE clause is not yet supported",
-		)
+		if n.whereSpans == nil {
+			return nil, errors.AssertionFailedf(
+				"expected whereSpans to be set for statistics with a WHERE clause")
+		}
+		whereClause = tree.AsString(n.Options.Where.Expr)
 	}
 
 	if err := n.p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
@@ -409,6 +415,8 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			MaxFractionIdle:  n.Options.Throttling,
 			DeleteOtherStats: deleteOtherStats,
 			UsingExtremes:    n.Options.UsingExtremes,
+			WhereClause:      whereClause,
+			WhereSpans:       n.whereSpans,
 		},
 		Progress: jobspb.CreateStatsProgress{},
 	}, nil
