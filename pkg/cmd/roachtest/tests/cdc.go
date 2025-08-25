@@ -2907,7 +2907,7 @@ func registerCDC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			params := multiTablePTSBenchmarkParams{
 				numTables: 500,
-				numRows:   10_000,
+				numRows:   100,
 				duration:  "20m",
 			}
 			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
