@@ -4535,8 +4535,8 @@ func (*DLTree) ResolvedType() *types.T {
 // Compare implements the Datum interface.
 func (d *DLTree) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1, nil
+		// NULL is greater than any non-NULL value.
+		return -1, nil
 	}
 	v, ok := cmpCtx.UnwrapDatum(ctx, other).(*DLTree)
 	if !ok {
@@ -5022,7 +5022,14 @@ func (d dNull) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) 
 	if other == DNull {
 		return 0, nil
 	}
-	return -1, nil
+
+	switch other.(type) {
+	case *DLTree:
+		// NULL is greater than any non-NULL value for these types.
+		return 1, nil
+	default:
+		return -1, nil
+	}
 }
 
 // Prev implements the Datum interface.
