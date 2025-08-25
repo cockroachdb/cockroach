@@ -163,6 +163,15 @@ func (a AllocatorAction) Remove() bool {
 		a == AllocatorRemoveDecommissioningNonVoter
 }
 
+// Decommissioning indicates an action replacing or removing a decommissioning
+// replicas.
+func (a AllocatorAction) Decommissioning() bool {
+	return a == AllocatorRemoveDecommissioningVoter ||
+		a == AllocatorRemoveDecommissioningNonVoter ||
+		a == AllocatorReplaceDecommissioningVoter ||
+		a == AllocatorReplaceDecommissioningNonVoter
+}
+
 // TargetReplicaType returns that the action is for a voter or non-voter replica.
 func (a AllocatorAction) TargetReplicaType() TargetReplicaType {
 	var t TargetReplicaType
