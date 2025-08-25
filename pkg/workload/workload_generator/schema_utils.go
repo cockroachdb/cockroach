@@ -68,7 +68,7 @@ var (
 )
 
 // Schema is the map of TableBlocks, one per table, which is used by all data generators
-type Schema map[string][]TableBlock
+type Schema map[string]*TableBlock
 
 // buildInitialBlocks creates one TableBlock per table and collects FK seeds.
 func buildInitialBlocks(
@@ -78,9 +78,9 @@ func buildInitialBlocks(
 	fkSeed := make(map[[2]string]int, fkSeedMapSize)
 
 	for tblName, schema := range allSchemas {
-		block := TableBlock{
+		block := &TableBlock{
 			Count:         baseRowCount, // This is the initial row count, which will be adjusted later.
-			Columns:       make(map[string]ColumnMeta, len(schema.Columns)),
+			Columns:       make(map[string]*ColumnMeta, len(schema.Columns)),
 			PK:            schema.PrimaryKeys,
 			SortBy:        make([]string, 0),
 			Unique:        schema.UniqueConstraints,
@@ -98,14 +98,14 @@ func buildInitialBlocks(
 			}
 		}
 
-		out[tblName] = []TableBlock{block}
+		out[tblName] = block
 	}
 
 	return out, fkSeed
 }
 
 // makeColumnMeta maps a Column into ColumnMeta, returning any FK-seed if present.
-func buildColumnMeta(tblName, dbName string, col *Column, rng *rand.Rand) (ColumnMeta, int, bool) {
+func buildColumnMeta(tblName, dbName string, col *Column, rng *rand.Rand) (*ColumnMeta, int, bool) {
 	args, colMeta := identifyTypeAndMapArgs(col, rng)
 
 	// Default value probability
@@ -126,11 +126,11 @@ func buildColumnMeta(tblName, dbName string, col *Column, rng *rand.Rand) (Colum
 // identifyTypeAndMapArgs determines the SQL type of column and maps it to
 // the corresponding workload generator type and arguments. It also sets
 // the nullability and primary key properties in the ColumnMeta.
-func identifyTypeAndMapArgs(col *Column, rng *rand.Rand) (map[string]any, ColumnMeta) {
+func identifyTypeAndMapArgs(col *Column, rng *rand.Rand) (map[string]any, *ColumnMeta) {
 	typ, args := mapSQLType(col.ColType, col, rng)
 
 	// Base ColumnMeta
-	cm := ColumnMeta{
+	cm := &ColumnMeta{
 		Type:          typ,
 		Args:          args,
 		IsPrimaryKey:  col.IsPrimaryKey,
@@ -166,7 +166,7 @@ func wireForeignKeys(
 	blocks Schema, allSchemas map[string]*TableSchema, fkSeed map[[2]string]int, rng *rand.Rand,
 ) {
 	for tblName, tblSchema := range allSchemas {
-		block := &blocks[tblName][0]
+		block := blocks[tblName]
 		for _, fk := range tblSchema.ForeignKeys {
 			locals := fk[0].([]string)
 			parentTbl := fk[1].(string)
@@ -195,8 +195,7 @@ func wireForeignKeys(
 
 // adjustFanoutForPureFKPKs drops fanout to 1 if all PKs are foreign keys.
 func adjustFanoutForPureFKPKs(blocks Schema) {
-	for _, tblBlocks := range blocks {
-		blk := &tblBlocks[0]
+	for _, blk := range blocks {
 		allPKsAreFK := true
 		for _, pk := range blk.PK {
 			if !blk.Columns[pk].HasForeignKey {
@@ -217,8 +216,7 @@ func adjustFanoutForPureFKPKs(blocks Schema) {
 
 // computeRowCounts adjusts each block.Count by the smallest FK fanout product.
 func computeRowCounts(blocks Schema, baseRowCount int) {
-	for _, tblBlocks := range blocks {
-		blk := &tblBlocks[0]
+	for _, blk := range blocks {
 		// gather products for FK columns
 		prods := make([]int, 0)
 		for _, cm := range blk.Columns {
@@ -259,7 +257,7 @@ func parseFK(fk string) (string, string) {
 }
 
 // fanoutProduct computes the cascaded fanout product following the FK chain.
-func fanoutProduct(col ColumnMeta, schema Schema) int {
+func fanoutProduct(col *ColumnMeta, schema Schema) int {
 	prod := 1
 	curr := col
 	for curr.HasForeignKey {
@@ -268,11 +266,11 @@ func fanoutProduct(col ColumnMeta, schema Schema) int {
 		// collapse namespaced table to base name
 		tblParts := strings.Split(rawTbl, seedKeyDelimiter)
 		simpleTbl := tblParts[len(tblParts)-1]
-		blocks, ok := schema[simpleTbl]
-		if !ok || len(blocks) == 0 {
+		block, ok := schema[simpleTbl]
+		if !ok || block == nil {
 			break
 		}
-		curr = blocks[0].Columns[parentCol]
+		curr = block.Columns[parentCol]
 	}
 	return prod
 }
@@ -318,40 +316,37 @@ func bumpTimestampISO(s string) string {
 // raw CheckConstraints from allSchemas and sets min/max/start/end
 // arguments in-place before data generation
 func applyCheckConstraints(blocks Schema, allSchemas map[string]*TableSchema) {
-	for tbl, blks := range blocks {
+	for tbl, block := range blocks {
 		schema := allSchemas[tbl]
-		for i := range blks {
-			block := &blks[i]
-			// Iterating over each column in the current TableBlock.
-			for colName, cm := range block.Columns {
-				// Columns that are not integer, float, or timestamp are skipped.
-				switch cm.Type {
-				case GenTypeInteger, GenTypeFloat, GenTypeTimestamp:
-				default:
-					continue
-				}
-				// Examining each raw CHECK expression for supported patterns.
-				for _, chk := range schema.CheckConstraints {
-					chk = strings.TrimSpace(chk)
-					// col > val
-					applyGreaterThanCheck(chk, colName, cm)
-					// col >= val
-					applyGreaterThanEqualsCheck(chk, colName, cm)
-					// col < val
-					applyLessThanCheck(chk, colName, cm)
-					// col <= val
-					applyLessThanEqualsCheck(chk, colName, cm)
-				}
-				// The updated ColumnMeta is written back.
-				block.Columns[colName] = cm
+		// Iterating over each column in the current TableBlock.
+		for colName, cm := range block.Columns {
+			// Columns that are not integer, float, or timestamp are skipped.
+			switch cm.Type {
+			case GenTypeInteger, GenTypeFloat, GenTypeTimestamp:
+			default:
+				continue
 			}
+			// Examining each raw CHECK expression for supported patterns.
+			for _, chk := range schema.CheckConstraints {
+				chk = strings.TrimSpace(chk)
+				// col > val
+				applyGreaterThanCheck(chk, colName, cm)
+				// col >= val
+				applyGreaterThanEqualsCheck(chk, colName, cm)
+				// col < val
+				applyLessThanCheck(chk, colName, cm)
+				// col <= val
+				applyLessThanEqualsCheck(chk, colName, cm)
+			}
+			// The updated ColumnMeta is written back.
+			block.Columns[colName] = cm
 		}
 	}
 }
 
 // applyLessThanEqualsCheck checks if the given check constraint
 // is a "col <= val" expression and updates the ColumnMeta accordingly.
-func applyLessThanEqualsCheck(chk string, colName string, cm ColumnMeta) {
+func applyLessThanEqualsCheck(chk string, colName string, cm *ColumnMeta) {
 	if m := lteRe.FindStringSubmatch(chk); m != nil && m[1] == colName {
 		lit := stripCast(m[2])
 		switch cm.Type {
@@ -371,7 +366,7 @@ func applyLessThanEqualsCheck(chk string, colName string, cm ColumnMeta) {
 
 // applyLessThanCheck checks if the given check constraint
 // is a "col < val" expression and updates the ColumnMeta accordingly.
-func applyLessThanCheck(chk string, colName string, cm ColumnMeta) {
+func applyLessThanCheck(chk string, colName string, cm *ColumnMeta) {
 	if m := ltRe.FindStringSubmatch(chk); m != nil && m[1] == colName {
 		lit := stripCast(m[2])
 		switch cm.Type {
@@ -394,7 +389,7 @@ func applyLessThanCheck(chk string, colName string, cm ColumnMeta) {
 
 // applyLessThanEqualsCheck checks if the given check constraint
 // is a "col <= val" expression and updates the ColumnMeta accordingly.
-func applyGreaterThanEqualsCheck(chk string, colName string, cm ColumnMeta) {
+func applyGreaterThanEqualsCheck(chk string, colName string, cm *ColumnMeta) {
 	if m := gteRe.FindStringSubmatch(chk); m != nil && m[1] == colName {
 		lit := stripCast(m[2])
 		switch cm.Type {
@@ -414,7 +409,7 @@ func applyGreaterThanEqualsCheck(chk string, colName string, cm ColumnMeta) {
 
 // applyGreaterThanCheck checks if the given check constraint
 // is a "col > val" expression and updates the ColumnMeta accordingly.
-func applyGreaterThanCheck(chk string, colName string, cm ColumnMeta) {
+func applyGreaterThanCheck(chk string, colName string, cm *ColumnMeta) {
 	if m := gtRe.FindStringSubmatch(chk); m != nil && m[1] == colName {
 		lit := stripCast(m[2])
 		switch cm.Type {

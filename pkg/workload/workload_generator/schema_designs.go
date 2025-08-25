@@ -188,16 +188,20 @@ type ColumnMeta struct {
 
 	Default     string  `yaml:"default,omitempty"`
 	DefaultProb float64 `yaml:"default_prob,omitempty"`
+
+	// LastValue is used for sequence columns to store the last value generated.
+	// This is useful when the workload is restarted.
+	LastValue string `yaml:"last_value,omitempty"`
 }
 
 // TableBlock stores extra information at table level that is used by the per batch generator.
 type TableBlock struct {
-	Count         int                   `yaml:"count"`
-	Columns       map[string]ColumnMeta `yaml:"columns"`
-	PK            []string              `yaml:"pk"`
-	SortBy        []string              `yaml:"sort-by"`
-	Unique        [][]string            `yaml:"unique,omitempty"`
-	OriginalTable string                `yaml:"original_table"`
-	ColumnOrder   []string              `yaml:"column_order"`
-	TableNumber   int                   `yaml:"table_number"`
+	Count         int                    `yaml:"count"`
+	Columns       map[string]*ColumnMeta `yaml:"columns"`
+	PK            []string               `yaml:"pk"`
+	SortBy        []string               `yaml:"sort-by"`
+	Unique        [][]string             `yaml:"unique,omitempty"`
+	OriginalTable string                 `yaml:"original_table"`
+	ColumnOrder   []string               `yaml:"column_order"`
+	TableNumber   int                    `yaml:"table_number"`
 }
