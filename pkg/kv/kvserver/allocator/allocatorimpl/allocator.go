@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"sync"
 	"time"
 
@@ -287,6 +288,44 @@ func (a AllocatorAction) Priority() float64 {
 		panic(fmt.Sprintf("unknown AllocatorAction: %s", a))
 	}
 }
+
+// AllocatorActionPriorities contains all allocator actions ordered by priority
+// from highest to lowest. The index of each action in this slice corresponds to
+// its enum value minus 1 (since AllocatorAction starts at 0 and the first
+// element is invalid).
+var (
+	AllocatorActionPriorities, AllocatorActionToIdx = func() ([]AllocatorAction, map[AllocatorAction]int) {
+		actions := []AllocatorAction{
+			AllocatorFinalizeAtomicReplicationChange,
+			AllocatorRemoveLearner,
+			AllocatorReplaceDeadVoter,
+			AllocatorAddVoter,
+			AllocatorReplaceDecommissioningVoter,
+			AllocatorRemoveDeadVoter,
+			AllocatorRemoveDecommissioningVoter,
+			AllocatorRemoveVoter,
+			AllocatorReplaceDeadNonVoter,
+			AllocatorAddNonVoter,
+			AllocatorReplaceDecommissioningNonVoter,
+			AllocatorRemoveDeadNonVoter,
+			AllocatorRemoveDecommissioningNonVoter,
+			AllocatorRemoveNonVoter,
+			AllocatorConsiderRebalance,
+			AllocatorRangeUnavailable,
+			AllocatorNoop,
+		}
+		// Sort actions by priority in descending order.
+		sort.Slice(actions, func(i, j int) bool {
+			return actions[i].Priority() > actions[j].Priority()
+		})
+		// Create index map.
+		actionToIdx := make(map[AllocatorAction]int, len(actions))
+		for i, action := range actions {
+			actionToIdx[action] = i
+		}
+		return actions, actionToIdx
+	}()
+)
 
 // GetAllocatorActionFromPriority returns an AllocatorAction that approximately matches
 // the given priority value. Since priorities may be adjusted, it finds the closest match

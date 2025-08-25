@@ -312,6 +312,7 @@ func (e *quorumError) Error() string {
 func (*quorumError) PurgatoryErrorMarker() {}
 
 // ReplicateQueueMetrics is the set of metrics for the replicate queue.
+// TODO(wenyihu6): metrics initialization could be cleaned up by using a map.
 type ReplicateQueueMetrics struct {
 	AddReplicaCount                           *metric.Counter
 	AddVoterReplicaCount                      *metric.Counter
@@ -349,6 +350,24 @@ type ReplicateQueueMetrics struct {
 	// TODO(sarkesian): Consider adding metrics for AllocatorRemoveLearner,
 	// AllocatorConsiderRebalance, and AllocatorFinalizeAtomicReplicationChange
 	// allocator actions.
+
+	// Priority Inversion. Not tracked for AllocatorNoop,
+	// AllocatorRangeUnavailable, AllocatorConsiderRebalance since they are the
+	// lowest priority actions and cannot be inverted.
+	PriorityInversionForRemoveVoterCount                     *metric.Counter
+	PriorityInversionForRemoveNonVoterCount                  *metric.Counter
+	PriorityInversionForAddVoterCount                        *metric.Counter
+	PriorityInversionForAddNonVoterCount                     *metric.Counter
+	PriorityInversionForReplaceDeadVoterCount                *metric.Counter
+	PriorityInversionForReplaceDeadNonVoterCount             *metric.Counter
+	PriorityInversionForRemoveDeadVoterCount                 *metric.Counter
+	PriorityInversionForRemoveDeadNonVoterCount              *metric.Counter
+	PriorityInversionForReplaceDecommissioningVoterCount     *metric.Counter
+	PriorityInversionForReplaceDecommissioningNonVoterCount  *metric.Counter
+	PriorityInversionForRemoveDecommissioningVoterCount      *metric.Counter
+	PriorityInversionForRemoveDecommissioningNonVoterCount   *metric.Counter
+	PriorityInversionForRemoveLearnerCount                   *metric.Counter
+	PriorityInversionForFinalizeAtomicReplicationChangeCount *metric.Counter
 }
 
 func makeReplicateQueueMetrics() ReplicateQueueMetrics {
@@ -506,6 +525,58 @@ func (metrics *ReplicateQueueMetrics) trackErrorByAllocatorAction(
 		log.Errorf(ctx, "AllocatorAction %v unsupported in metrics tracking", action)
 	}
 
+}
+
+// This inversion matters for the priority [actionPlannedAtEnqueueTime,
+// actionComputedAtProcessTime) in the priority queue since they should go
+// before that.
+func (metrics *ReplicateQueueMetrics) trackPriorityInversion(
+	ctx context.Context,
+	actionPlannedAtEnqueueTime allocatorimpl.AllocatorAction,
+	actionComputedAtProcessTime allocatorimpl.AllocatorAction,
+) {
+	plannedIdx := allocatorimpl.AllocatorActionToIdx[actionPlannedAtEnqueueTime]
+	computedIdx := allocatorimpl.AllocatorActionToIdx[actionComputedAtProcessTime]
+	for i := plannedIdx; i < computedIdx; i++ {
+		action := allocatorimpl.AllocatorActionPriorities[i]
+		if action.IsDecommissioning() {
+			log.Infof(ctx,
+				"priority inversion during process for decommissioning: action=%s, priority=%v, enqueuePriority=%v",
+				actionComputedAtProcessTime, actionComputedAtProcessTime.Priority(), actionPlannedAtEnqueueTime)
+		}
+		switch action {
+		case allocatorimpl.AllocatorRemoveVoter:
+			metrics.PriorityInversionForRemoveVoterCount.Inc(1)
+		case allocatorimpl.AllocatorRemoveNonVoter:
+			metrics.PriorityInversionForRemoveNonVoterCount.Inc(1)
+		case allocatorimpl.AllocatorAddVoter:
+			metrics.PriorityInversionForAddVoterCount.Inc(1)
+		case allocatorimpl.AllocatorAddNonVoter:
+			metrics.PriorityInversionForAddNonVoterCount.Inc(1)
+		case allocatorimpl.AllocatorReplaceDeadVoter:
+			metrics.PriorityInversionForReplaceDeadVoterCount.Inc(1)
+		case allocatorimpl.AllocatorReplaceDeadNonVoter:
+			metrics.PriorityInversionForReplaceDeadNonVoterCount.Inc(1)
+		case allocatorimpl.AllocatorRemoveDeadVoter:
+			metrics.PriorityInversionForRemoveDeadVoterCount.Inc(1)
+		case allocatorimpl.AllocatorRemoveDeadNonVoter:
+			metrics.PriorityInversionForRemoveDeadNonVoterCount.Inc(1)
+		case allocatorimpl.AllocatorReplaceDecommissioningVoter:
+			metrics.PriorityInversionForReplaceDecommissioningVoterCount.Inc(1)
+		case allocatorimpl.AllocatorReplaceDecommissioningNonVoter:
+			metrics.PriorityInversionForReplaceDecommissioningNonVoterCount.Inc(1)
+		case allocatorimpl.AllocatorRemoveDecommissioningVoter:
+			metrics.PriorityInversionForRemoveDecommissioningVoterCount.Inc(1)
+		case allocatorimpl.AllocatorRemoveDecommissioningNonVoter:
+			metrics.PriorityInversionForRemoveDecommissioningNonVoterCount.Inc(1)
+		case allocatorimpl.AllocatorRemoveLearner:
+			metrics.PriorityInversionForRemoveLearnerCount.Inc(1)
+		case allocatorimpl.AllocatorFinalizeAtomicReplicationChange:
+			metrics.PriorityInversionForFinalizeAtomicReplicationChangeCount.Inc(1)
+		default:
+			panic("unhandled default case")
+		}
+	}
 }
 
 // trackProcessResult increases the corresponding success/error count metric for
@@ -875,17 +946,20 @@ func (rq *replicateQueue) processOneChange(
 	desc *roachpb.RangeDescriptor,
 	conf *roachpb.SpanConfig,
 	scatter, dryRun bool,
-	priority float64,
+	priorityAtEnqueue float64,
 ) (requeue bool, _ error) {
 	change, err := rq.planner.PlanOneChange(
 		ctx, repl, desc, conf, plan.PlannerOptions{Scatter: scatter})
 
-	if priority != -1 {
-		if change.Action == allocatorimpl.AllocatorConsiderRebalance &&
-			priority > allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority() {
-			log.Infof(ctx,
-				"requeuing due to priority inversion during process: action=%s, priority=%v, enqueuePriority=%v",
-				change.Action, change.Action.Priority(), priority)
+	if priorityAtEnqueue != -1 {
+		actionPlannedAtEnqueue := allocatorimpl.GetAllocatorActionFromPriority(ctx, priorityAtEnqueue)
+		actionComputedAtProcess := change.Action
+		rq.metrics.trackPriorityInversion(ctx, actionPlannedAtEnqueue, actionComputedAtProcess)
+		if actionPlannedAtEnqueue.Priority() < change.Action.Priority() {
+
+		}
+		decommissionPriority := allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority()
+		if actionPlannedAtEnqueue.Priority() >= decommissionPriority && change.Action.Priority() < decommissionPriority {
 			return true, nil
 		}
 	}
