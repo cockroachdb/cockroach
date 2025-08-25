@@ -339,10 +339,7 @@ message LocalOnlySessionData {
   // transaction to return a transaction retry error just before transcation commit.
   // It is intended for developers to test their app's retry logic.
   bool inject_retry_errors_on_commit_enabled = 92;
-  // EnforceHomeRegionFollowerReadsEnabled, when true, allows the use of
-  // follower reads to dynamically detect and report a query's home region
-  // when the enforce_home_region session setting is also true.
-  bool enforce_home_region_follower_reads_enabled = 93;
+  reserved 93;
   // OptimizerAlwaysUseHistograms, when true, ensures that the optimizer
   // always uses histograms to calculate statistics if available.
   bool optimizer_always_use_histograms = 94;
