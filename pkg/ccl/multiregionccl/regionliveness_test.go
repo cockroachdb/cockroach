@@ -76,7 +76,6 @@ func TestRegionLivenessProber(t *testing.T) {
 	// multi-region. and enable region liveness for testing.
 	makeSettings := func() *cluster.Settings {
 		cs := cluster.MakeTestingClusterSettings()
-		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
 		regionliveness.RegionLivenessEnabled.Override(ctx, &cs.SV, true)
 		return cs
 	}
@@ -239,7 +238,6 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	// multi-region. and enable region liveness for testing.
 	makeSettings := func() *cluster.Settings {
 		cs := cluster.MakeTestingClusterSettings()
-		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
 		regionliveness.RegionLivenessEnabled.Override(ctx, &cs.SV, true)
 		return cs
 	}
@@ -484,7 +482,6 @@ func TestRegionLivenessProberForSQLInstances(t *testing.T) {
 	// multi-region. and enable region liveness for testing.
 	makeSettings := func() *cluster.Settings {
 		cs := cluster.MakeTestingClusterSettings()
-		//	instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
 		regionliveness.RegionLivenessEnabled.Override(ctx, &cs.SV, true)
 		instancestorage.PreallocatedCount.Override(ctx, &cs.SV, 1)
 		return cs
