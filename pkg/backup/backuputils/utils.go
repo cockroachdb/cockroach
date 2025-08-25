@@ -9,11 +9,13 @@ import (
 	"encoding/hex"
 	"net/url"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 // URLSeparator represents the standard separator used in backup URLs.
@@ -100,16 +102,18 @@ func EncodeDescendingTS(ts time.Time) string {
 	return hex.EncodeToString(buffer)
 }
 
-// RelativeBackupPathInCollectionURI returns the relative path of a backup
-// within a collection URI. Backup URI represents the URI that points to the
-// directory containing the backup manifest of the backup.
+// AbsoluteBackupPathInCollectionURI returns the absolute path of a backup
+// assuming the root is the collection URI. Backup URI represents the URI that
+// points to the directory containing the backup manifest of the backup. Since
+// this is an absolute path, it always starts with `/`. Any trailing slash is
+// also removed.
 //
 // Example:
 //
 //	collectionURI: "nodelocal://1/collection"
-//	backupURI: "nodelocal://1/collection/backup1/"
-//	returns: "backup1/"
-func RelativeBackupPathInCollectionURI(collectionURI string, backupURI string) (string, error) {
+//	backupURI: "nodelocal://1/collection/path/to/backup"
+//	returns: "/path/to/backup"
+func AbsoluteBackupPathInCollectionURI(collectionURI string, backupURI string) (string, error) {
 	backupURL, err := url.Parse(backupURI)
 	if err != nil {
 		return "", err
@@ -119,6 +123,44 @@ func RelativeBackupPathInCollectionURI(collectionURI string, backupURI string) (
 		return "", err
 	}
 
-	relPath := strings.TrimPrefix(path.Clean(backupURL.Path), path.Clean(collectionURL.Path))
+	if backupURL.Scheme != collectionURL.Scheme || backupURL.Host != collectionURL.Host {
+		return "", errors.New("backup URI does not share the same scheme and host as collection URI")
+	}
+
+	collectionPath := path.Clean(collectionURL.Path)
+	if collectionPath == "." {
+		collectionPath = ""
+	}
+
+	backupPath := path.Clean(backupURL.Path)
+	if backupPath == "." {
+		backupPath = ""
+	}
+
+	relPath, found := strings.CutPrefix(backupPath, collectionPath)
+	if !found {
+		return "", errors.New("backup URI not contained within collection URI")
+	}
+
+	relPath = strings.TrimSuffix(relPath, string(URLSeparator))
+	if len(relPath) == 0 || relPath[0] != URLSeparator {
+		relPath = string(URLSeparator) + relPath
+	}
 	return relPath, nil
+}
+
+// NormalizeSubdir takes a provided full backup subdirectory and normalizes it
+// to the form /YYYY/MM/DD-HHMMSS.SS with a leading slash and no trailing slash.
+func NormalizeSubdir(subdir string) (string, error) {
+	subdirPattern := regexp.MustCompile(`\/?\d{4}\/\d{2}\/\d{2}-\d{6}\.\d{2}\/?`)
+	if !subdirPattern.Match([]byte(subdir)) {
+		return "", errors.Newf(
+			`provided subdir "%s" does not match expected format YYYY/MM/DD-HHMMSS.SS`, subdir,
+		)
+	}
+	normalized := strings.TrimSuffix(subdir, string(URLSeparator))
+	if normalized[0] != URLSeparator {
+		normalized = string(URLSeparator) + normalized
+	}
+	return normalized, nil
 }

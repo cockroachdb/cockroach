@@ -726,8 +726,15 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 		"BACKUP INTO LATEST IN $4 WITH incremental_location=($1, $2, $3)",
 		append(incrementals, collections[0])...)
 
-	sqlDB.ExpectErr(t, "No full backup exists in \"/subdir\" to append an incremental backup to. To take a full backup, remove the subdirectory from the backup command",
-		"BACKUP INTO $4 IN ($1, $2, $3)", append(collections, "subdir")...)
+	nonExistentFullDir := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).Format(backupbase.DateBasedIntoFolderName)
+	sqlDB.ExpectErr(
+		t,
+		fmt.Sprintf(
+			`No full backup exists in "%s" to append an incremental backup to. To take a full backup, remove the subdirectory from the backup command`,
+			nonExistentFullDir,
+		),
+		"BACKUP INTO $4 IN ($1, $2, $3)", append(collections, nonExistentFullDir)...,
+	)
 
 	time.Sleep(time.Second + 2)
 	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3) AS OF SYSTEM TIME '-1s'", collections...)
@@ -757,7 +764,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 		},
 	)
 	sqlDB.CheckQueryResults(t, "SELECT description FROM crdb_internal.jobs WHERE job_type = 'BACKUP' AND status = 'failed'",
-		[][]string{{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", "/subdir", collections[0],
+		[][]string{{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", nonExistentFullDir, collections[0],
 			collections[1], collections[2])}})
 
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
