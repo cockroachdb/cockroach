@@ -27,6 +27,10 @@ ARRAY['']::LTREE[] ?@> ''
 ----
 ''
 
+eval
+ARRAY['A.B.C', NULL]::LTREE[] ?@> 'A.B'
+----
+
 
 eval
 ARRAY['A', 'A.B', 'A.B.C']::LTREE[] ?@> ''

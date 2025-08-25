@@ -345,5 +345,3 @@ query T
 SELECT lca(''::LTREE, 'A.B.C'::LTREE)
 ----
 NULL
-
-
