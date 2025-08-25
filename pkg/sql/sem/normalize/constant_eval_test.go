@@ -49,10 +49,10 @@ func TestConstantEvalArrayComparison(t *testing.T) {
 		ColumnName: "a",
 	}
 	right := tree.DArray{
-		ParamTyp:    types.Int,
-		Array:       tree.Datums{tree.NewDInt(1), tree.NewDInt(2)},
-		HasNonNulls: true,
+		ParamTyp: types.Int,
+		Array:    tree.Datums{tree.NewDInt(1), tree.NewDInt(2)},
 	}
+	right.SetHasNonNulls(true /* hasNonNulls */)
 	expected := tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(treecmp.EQ), &left, &right)
 	if !reflect.DeepEqual(expr, expected) {
 		t.Errorf("invalid expr '%v', expected '%v'", expr, expected)

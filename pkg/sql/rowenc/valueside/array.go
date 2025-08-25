@@ -28,7 +28,7 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 		return nil, err
 	}
 	header := arrayHeader{
-		hasNulls: d.HasNulls,
+		hasNulls: d.HasNulls(),
 		// TODO(justin): support multiple dimensions.
 		numDimensions: 1,
 		elementType:   elementType,
@@ -41,14 +41,14 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 		return nil, err
 	}
 	nullBitmapStart := len(scratch)
-	if d.HasNulls {
+	if d.HasNulls() {
 		for i := 0; i < numBytesInBitArray(d.Len()); i++ {
 			scratch = append(scratch, 0)
 		}
 	}
 	for i, e := range d.Array {
 		var err error
-		if d.HasNulls && e == tree.DNull {
+		if d.HasNulls() && e == tree.DNull {
 			setBit(scratch[nullBitmapStart:], i)
 		} else {
 			scratch, err = encodeArrayElement(scratch, e)
@@ -85,9 +85,9 @@ func decodeArrayWithHeader(
 	for i := uint64(0); i < header.length; i++ {
 		if header.isNull(i) {
 			result.Array[i] = tree.DNull
-			result.HasNulls = true
+			result.SetHasNulls(true /* hasNulls */)
 		} else {
-			result.HasNonNulls = true
+			result.SetHasNonNulls(true /* hasNonNulls */)
 			val, b, err = DecodeUntaggedDatum(a, elementType, b)
 			if err != nil {
 				return nil, b, err

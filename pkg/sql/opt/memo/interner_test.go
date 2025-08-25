@@ -70,14 +70,19 @@ func TestInterner(t *testing.T) {
 
 	arr1 := tree.NewDArray(tupTyp1)
 	arr1.Array = tree.Datums{tup1, tup2}
+	arr1.TestingFixUpNulls()
 	arr2 := tree.NewDArray(tupTyp2)
 	arr2.Array = tree.Datums{tup2, tup1}
+	arr2.TestingFixUpNulls()
 	arr3 := tree.NewDArray(tupTyp3)
 	arr3.Array = tree.Datums{tup2, tup3}
+	arr3.TestingFixUpNulls()
 	arr4 := tree.NewDArray(types.Int)
 	arr4.Array = tree.Datums{tree.DNull}
+	arr4.TestingFixUpNulls()
 	arr5 := tree.NewDArray(types.String)
 	arr5.Array = tree.Datums{tree.DNull}
+	arr5.TestingFixUpNulls()
 	arr6 := tree.NewDArray(types.Int)
 	arr6.Array = tree.Datums{}
 	arr7 := tree.NewDArray(types.String)

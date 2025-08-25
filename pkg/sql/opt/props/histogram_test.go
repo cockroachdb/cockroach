@@ -1180,7 +1180,7 @@ func BenchmarkHistogram(b *testing.B) {
 		case types.ArrayFamily:
 			arr := tree.NewDArray(t.ArrayContents())
 			arr.Array = make(tree.Datums, 1)
-			arr.HasNonNulls = true
+			arr.SetHasNonNulls(true /* hasNonNulls */)
 			arr.Array[0] = makeDatum(t.ArrayContents(), i)
 			return arr
 		}

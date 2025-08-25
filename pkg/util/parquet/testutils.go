@@ -310,6 +310,7 @@ func readRowGroup[T parquetDatatypes](
 			// Deflevel 2 represents a null value in an array.
 			if defLevels[0] == 2 {
 				currentArrayDatum.Array = append(currentArrayDatum.Array, tree.DNull)
+				currentArrayDatum.SetHasNulls(true /* hasNulls */)
 				continue
 			}
 			// Deflevel 3 represents a non-null datum in an array.
@@ -318,6 +319,7 @@ func readRowGroup[T parquetDatatypes](
 				return nil, err
 			}
 			currentArrayDatum.Array = append(currentArrayDatum.Array, d)
+			currentArrayDatum.SetHasNonNulls(true /* hasNonNulls */)
 		} else if isTuple {
 			// Deflevel 0 represents a null tuple.
 			// Deflevel 1 represents a null value in a non null tuple.

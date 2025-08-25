@@ -843,7 +843,7 @@ func writeBinaryDatumNotNull(
 		}
 		b.putInt32(ndims)
 		hasNulls := 0
-		if v.HasNulls {
+		if v.HasNulls() {
 			hasNulls = 1
 		}
 		oid := v.ParamTyp.Oid()

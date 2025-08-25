@@ -476,6 +476,9 @@ func TestInvertedIndexKey(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("TestInvertedIndexKey %d", i), func(t *testing.T) {
+			if arr, ok := test.value.(*tree.DArray); ok {
+				arr.TestingFixUpNulls()
+			}
 			runTest(test.value, test.expectedKeys, descpb.EmptyArraysInInvertedIndexesVersion)
 			runTest(test.value, test.expectedKeysExcludingEmptyArray, descpb.SecondaryIndexFamilyFormatVersion)
 		})
@@ -985,8 +988,8 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 
 		rightArr, _ := right.(*tree.DArray)
 		// An inverted expression can only be generated if the value array is
-		// non-empty or contains atleast one non-NULL element.
-		ok := rightArr.Len() > 0 && rightArr.HasNonNulls
+		// non-empty or contains at least one non-NULL element.
+		ok := rightArr.Len() > 0 && rightArr.HasNonNulls()
 		// A unique span expression can be guaranteed when the input is of
 		// the form:
 		// Array A && Array containing one or more entries of same non-null

@@ -95,6 +95,16 @@ func (e *evaluator) EvalArrayFlatten(
 		return nil, errors.AssertionFailedf("array subquery result (%v) is not DTuple", d)
 	}
 	array.Array = tuple.D
+	var hasNulls, hasNonNulls bool
+	for _, elem := range array.Array {
+		if elem == tree.DNull {
+			hasNulls = true
+		} else {
+			hasNonNulls = true
+		}
+	}
+	array.SetHasNulls(hasNulls)
+	array.SetHasNonNulls(hasNonNulls)
 	return array, nil
 }
 

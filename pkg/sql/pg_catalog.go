@@ -2513,6 +2513,7 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 					placeholderType,
 					placeholderType.SQLStandardName(),
 				)
+				paramTypes.SetHasNonNulls(true /* hasNonNulls */)
 				paramNames[i] = placeholderType.Name()
 			}
 
@@ -2609,7 +2610,9 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 		}
 
 		getVariadicStringArray := func() tree.Datum {
-			return &tree.DArray{ParamTyp: types.String, Array: tree.Datums{proArgModeVariadic}}
+			arr := &tree.DArray{ParamTyp: types.String, Array: tree.Datums{proArgModeVariadic}}
+			arr.SetHasNonNulls(true /* hasNonNulls */)
+			return arr
 		}
 
 		var argmodes tree.Datum

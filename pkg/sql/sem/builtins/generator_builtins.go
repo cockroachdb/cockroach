@@ -1582,8 +1582,10 @@ func NullGenerator(typ *types.T) (eval.ValueGenerator, error) {
 	}
 	arrs := make([]*tree.DArray, len(typ.TupleContents()))
 	for i := range typ.TupleContents() {
-		arrs[i] = &tree.DArray{}
-		arrs[i].Array = tree.Datums{tree.DNull}
+		arrs[i] = &tree.DArray{
+			Array: tree.Datums{tree.DNull},
+		}
+		arrs[i].SetHasNulls(true /* hasNulls */)
 	}
 	return &multipleArrayValueGenerator{arrays: arrs}, nil
 }

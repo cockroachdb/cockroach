@@ -308,6 +308,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 						break
 					}
 					colNames.Array[i] = tree.NewDString(colName)
+					colNames.SetHasNonNulls(true /* hasNonNulls */)
 				}
 				if ignoreStatsRowWithDroppedColumn {
 					continue

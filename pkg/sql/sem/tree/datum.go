@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -5073,17 +5074,17 @@ func (d dNull) Size() uintptr {
 	return unsafe.Sizeof(d)
 }
 
-// DArray is the array Datum. Any Datum inserted into a DArray are treated as
-// text during serialization.
+// DArray is the array Datum.
 type DArray struct {
 	ParamTyp *types.T
-	Array    Datums
-	// HasNulls is set to true if any of the datums within the array are null.
-	// This is used in the binary array serialization format.
-	HasNulls bool
-	// HasNonNulls is set to true if any of the datums within the are non-null.
-	// This is used in expression serialization (FmtParsable).
-	HasNonNulls bool
+	// Array gives access to the underlying array. Using Append is preferrable
+	// for adding new elements, but modifying the slice is also allowed - just
+	// be sure to update NULL-related flags via Set* methods accordingly.
+	Array Datums
+	// hasNulls is set to true if any of the datums within the array are null.
+	hasNulls bool
+	// hasNonNulls is set to true if any of the datums within the are non-null.
+	hasNonNulls bool
 
 	// customOid, if non-0, is the oid of this array datum.
 	customOid oid.Oid
@@ -5116,6 +5117,48 @@ func MustBeDArray(e Expr) *DArray {
 		panic(errors.AssertionFailedf("expected *DArray, found %T", e))
 	}
 	return i
+}
+
+func (d *DArray) HasNulls() bool {
+	if buildutil.CrdbTestBuild {
+		if err := d.Validate(); err != nil {
+			panic(err)
+		}
+	}
+	return d.hasNulls
+}
+
+func (d *DArray) SetHasNulls(hasNulls bool) {
+	d.hasNulls = hasNulls
+}
+
+func (d *DArray) HasNonNulls() bool {
+	if buildutil.CrdbTestBuild {
+		if err := d.Validate(); err != nil {
+			panic(err)
+		}
+	}
+	return d.hasNonNulls
+}
+
+func (d *DArray) SetHasNonNulls(hasNonNulls bool) {
+	d.hasNonNulls = hasNonNulls
+}
+
+// TestingFixUpNulls is a helper method that should only be used in tests to
+// update hasNulls and hasNonNulls flags according to the current contents of
+// the array.
+func (d *DArray) TestingFixUpNulls() {
+	var hasNulls, hasNonNulls bool
+	for _, elem := range d.Array {
+		if elem == DNull {
+			hasNulls = true
+		} else {
+			hasNonNulls = true
+		}
+	}
+	d.hasNulls = hasNulls
+	d.hasNonNulls = hasNonNulls
 }
 
 // MaybeSetCustomOid checks whether t has a special oid that we want to set into
@@ -5209,6 +5252,13 @@ func (d *DArray) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) 
 	a := DArray{ParamTyp: d.ParamTyp, Array: make(Datums, d.Len()+1)}
 	copy(a.Array, d.Array)
 	a.Array[len(a.Array)-1] = DNull
+	a.hasNulls = true
+	for _, elem := range a.Array {
+		if elem != DNull {
+			a.hasNonNulls = true
+			break
+		}
+	}
 	return &a, true
 }
 
@@ -5242,7 +5292,7 @@ func (d *DArray) AmbiguousFormat() bool {
 		// a valid type. So an array of unknown type is (paradoxically) unambiguous.
 		return false
 	}
-	return !d.HasNonNulls
+	return !d.HasNonNulls()
 }
 
 // Format implements the NodeFormatter interface.
@@ -5277,11 +5327,33 @@ const maxArrayLength = math.MaxInt32
 
 var errArrayTooLongError = errors.New("ARRAYs can be at most 2^31-1 elements long")
 
-// Validate checks that the given array is valid,
-// for example, that it's not too big.
+// Validate checks that the given array is valid, for example, that it's not too
+// big.
 func (d *DArray) Validate() error {
 	if d.Len() > maxArrayLength {
 		return errors.WithStack(errArrayTooLongError)
+	}
+	if buildutil.CrdbTestBuild {
+		// Additionally, in test builds ensure that NULL-related flags are set
+		// correctly.
+		var hasNulls, hasNonNulls bool
+		for _, elem := range d.Array {
+			if elem == DNull {
+				hasNulls = true
+			} else {
+				hasNonNulls = true
+			}
+		}
+		if hasNulls != d.hasNulls {
+			return errors.AssertionFailedf(
+				"found DArray with incorrect HasNulls (expected %t)", hasNulls,
+			)
+		}
+		if hasNonNulls != d.hasNonNulls {
+			return errors.AssertionFailedf(
+				"found DArray with incorrect HasNonNulls (expected %t)", hasNonNulls,
+			)
+		}
 	}
 	return nil
 }
@@ -5333,9 +5405,9 @@ func (d *DArray) Append(v Datum) error {
 		}
 	}
 	if v == DNull {
-		d.HasNulls = true
+		d.hasNulls = true
 	} else {
-		d.HasNonNulls = true
+		d.hasNonNulls = true
 	}
 	d.Array = append(d.Array, v)
 	return d.Validate()

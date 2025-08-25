@@ -187,9 +187,9 @@ func (c *CustomFuncs) FoldArray(elems memo.ScalarListExpr, typ *types.T) opt.Sca
 	for i := range a.Array {
 		a.Array[i] = memo.ExtractConstDatum(elems[i])
 		if a.Array[i] == tree.DNull {
-			a.HasNulls = true
+			a.SetHasNulls(true /* hasNulls */)
 		} else {
-			a.HasNonNulls = true
+			a.SetHasNonNulls(true /* hasNonNulls */)
 		}
 	}
 	return c.f.ConstructConst(a, typ)

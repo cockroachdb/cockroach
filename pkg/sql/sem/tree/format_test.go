@@ -355,6 +355,12 @@ func TestFormatExpr2(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	arrayWithNulls := &tree.DArray{
+		ParamTyp: types.Int,
+		Array:    tree.Datums{tree.DNull, tree.DNull},
+	}
+	arrayWithNulls.SetHasNulls(true /* hasNulls */)
+
 	// This tests formatting from an stmt AST. Suitable for use if your input
 	// isn't easily creatable from a string without running an Eval.
 	testData := []struct {
@@ -389,11 +395,7 @@ func TestFormatExpr2(t *testing.T) {
 			tree.FmtParsable,
 			`(NULL, 'foo':::STRING)`,
 		},
-		{&tree.DArray{
-			ParamTyp: types.Int,
-			Array:    tree.Datums{tree.DNull, tree.DNull},
-			HasNulls: true,
-		},
+		{arrayWithNulls,
 			tree.FmtParsable,
 			`ARRAY[NULL,NULL]:::INT8[]`,
 		},

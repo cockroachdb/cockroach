@@ -208,6 +208,7 @@ func TestInvertedJoiner(t *testing.T) {
 	bFn := func(row int) tree.Datum {
 		arr := tree.NewDArray(types.Int)
 		arr.Array = tree.Datums{tree.NewDInt(tree.DInt(row / 10)), tree.NewDInt(tree.DInt(row % 10))}
+		arr.SetHasNonNulls(true /* hasNonNulls */)
 		return arr
 	}
 	cFn := func(row int) tree.Datum {
@@ -751,6 +752,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 	bFn := func(row int) tree.Datum {
 		arr := tree.NewDArray(types.Int)
 		arr.Array = tree.Datums{tree.NewDInt(tree.DInt(row / 10)), tree.NewDInt(tree.DInt(row % 10))}
+		arr.SetHasNonNulls(true /* hasNonNulls */)
 		return arr
 	}
 	sqlutils.CreateTable(t, sqlDB, "t",
