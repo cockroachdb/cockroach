@@ -636,7 +636,7 @@ func backupPlanHook(
 			initialDetails.Destination.Subdir = backupbase.LatestFileName
 			initialDetails.Destination.Exists = true
 		} else if subdir != "" {
-			initialDetails.Destination.Subdir = "/" + strings.TrimPrefix(subdir, "/")
+			initialDetails.Destination.Subdir = "/" + strings.TrimSuffix(strings.TrimPrefix(subdir, "/"), "/")
 			initialDetails.Destination.Exists = true
 		} else {
 			initialDetails.Destination.Subdir = endTime.GoTime().Format(backupbase.DateBasedIntoFolderName)

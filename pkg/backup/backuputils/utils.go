@@ -9,11 +9,12 @@ import (
 	"encoding/hex"
 	"net/url"
 	"path"
-	"strings"
+	"path/filepath"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 // URLSeparator represents the standard separator used in backup URLs.
@@ -100,16 +101,17 @@ func EncodeDescendingTS(ts time.Time) string {
 	return hex.EncodeToString(buffer)
 }
 
-// RelativeBackupPathInCollectionURI returns the relative path of a backup
-// within a collection URI. Backup URI represents the URI that points to the
-// directory containing the backup manifest of the backup.
+// AbsoluteBackupPathInCollectionURI returns the absolute path of a backup
+// assuming the root is the collection URI. Backup URI represents the URI that
+// points to the directory containing the backup manifest of the backup. Since
+// this is an absolute path, it always starts with `/`.
 //
 // Example:
 //
 //	collectionURI: "nodelocal://1/collection"
-//	backupURI: "nodelocal://1/collection/backup1/"
-//	returns: "backup1/"
-func RelativeBackupPathInCollectionURI(collectionURI string, backupURI string) (string, error) {
+//	backupURI: "nodelocal://1/collection/path/to/backup"
+//	returns: "/path/to/backup"
+func AbsoluteBackupPathInCollectionURI(collectionURI string, backupURI string) (string, error) {
 	backupURL, err := url.Parse(backupURI)
 	if err != nil {
 		return "", err
@@ -119,6 +121,20 @@ func RelativeBackupPathInCollectionURI(collectionURI string, backupURI string) (
 		return "", err
 	}
 
-	relPath := strings.TrimPrefix(path.Clean(backupURL.Path), path.Clean(collectionURL.Path))
-	return relPath, nil
+	collectionPath := path.Clean(collectionURL.Path)
+	if collectionPath == "." {
+		collectionPath = string(URLSeparator)
+	}
+
+	backupPath := path.Clean(backupURL.Path)
+	if backupPath == "." {
+		backupPath = string(URLSeparator)
+	}
+
+	relPath, err := filepath.Rel(collectionPath, backupPath)
+	if err != nil {
+		return "", errors.Wrap(err, "backup URI does not lie within collection URI")
+	}
+	// filepath.Rel will never start with a slash, so we need to add it back.
+	return string(URLSeparator) + relPath, nil
 }

@@ -62,22 +62,7 @@ func WriteBackupIndexMetadata(
 		return errors.AssertionFailedf("incremental backup details missing a start time")
 	}
 
-	var backupCollectionURI string
-	// Find the root of the collection URI that the backup is being written to so
-	// that we can determine the relative path of the backup.
-	if details.StartTime.IsEmpty() {
-		backupCollectionURI = details.CollectionURI
-	} else {
-		var err error
-		backupCollectionURI, err = ResolveDefaultBaseIncrementalStorageLocation(
-			details.Destination.To, details.Destination.IncrementalStorage,
-		)
-		if err != nil {
-			return errors.Wrapf(err, "get incremental backup collection URI")
-		}
-	}
-
-	path, err := backuputils.RelativeBackupPathInCollectionURI(backupCollectionURI, details.URI)
+	path, err := backuputils.AbsoluteBackupPathInCollectionURI(details.CollectionURI, details.URI)
 	if err != nil {
 		return errors.Wrapf(err, "get relative backup path")
 	}
