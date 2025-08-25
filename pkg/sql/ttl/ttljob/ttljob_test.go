@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
@@ -702,9 +701,17 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 		// causes parsing errors.
 		case types.CollatedStringFamily:
 			if typ.Oid() != oidext.T_citext && typ.Oid() != oidext.T__citext {
-				// TODO(foundations): CITEXT should only be prohibited when
-				// running with mixed 25.2 version where the type is not
-				// supported.
+				if int(clusterversion.MinSupported) >= int(clusterversion.V25_3) {
+					// CITEXT is only supported in 25.3+, so if we happen to run
+					// the test in the mixed version variant, we can't use the
+					// type.
+					indexableTyps = append(indexableTyps, typ)
+				}
+			}
+		case types.LTreeFamily:
+			if int(clusterversion.MinSupported) >= int(clusterversion.V25_4) {
+				// LTREE is only supported in 25.4+, so if we happen to run the
+				// test in the mixed version variant, we can't use the type.
 				indexableTyps = append(indexableTyps, typ)
 			}
 		default:
@@ -956,7 +963,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			runAtMixedClusterVersion := rand.Intn(2) == 0
+			runAtMixedClusterVersion := rng.Intn(2) == 0
 			// Log to make it slightly easier to reproduce a random config.
 			t.Logf("test case (runAtMixedClusterVersion=%t): %#v", runAtMixedClusterVersion, tc)
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
