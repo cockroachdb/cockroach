@@ -1058,3 +1058,85 @@ func TestServerSendsHighStampsDiff(t *testing.T) {
 		return nil
 	})
 }
+
+// TestGossipBatching verifies that both server and client gossip updates are
+// batched.
+func TestGossipBatching(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t, "might be flaky since it relies on some upper-bound timing")
+	skip.UnderRace(t, "might be flaky since it relies on some upper-bound timing")
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	// Shared cluster ID by all gossipers
+	clusterID := uuid.MakeV4()
+
+	local, localCtx := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
+	remote, remoteCtx := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
+	remote.mu.Lock()
+	rAddr := remote.mu.is.NodeAddr
+	remote.mu.Unlock()
+	local.manage(localCtx)
+	remote.manage(remoteCtx)
+
+	// Start a client connection to the remote node
+	local.mu.Lock()
+	local.startClientLocked(rAddr, roachpb.Locality{}, localCtx)
+	local.mu.Unlock()
+
+	// Wait for connection to be established
+	var c *client
+	testutils.SucceedsSoon(t, func() error {
+		c = local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() })
+		if c == nil {
+			return fmt.Errorf("client not found")
+		}
+		return nil
+	})
+
+	// Prepare 10,000 keys to gossip. This is a large enough number to allow
+	// batching to kick in.
+	numKeys := 10_000
+	localKeys := make([]string, numKeys)
+	remoteKeys := make([]string, numKeys)
+	for i := 0; i < numKeys; i++ {
+		localKeys[i] = fmt.Sprintf("local-key-%d", i)
+		remoteKeys[i] = fmt.Sprintf("remote-key-%d", i)
+	}
+
+	// Gossip the keys to both local and remote nodes.
+	for i := range numKeys {
+		require.NoError(t, local.AddInfo(localKeys[i], []byte("value"), time.Hour))
+		require.NoError(t, remote.AddInfo(remoteKeys[i], []byte("value"), time.Hour))
+	}
+
+	// Wait for updates to propagate
+	testutils.SucceedsSoon(t, func() error {
+		for i := range numKeys {
+			if _, err := local.GetInfo(remoteKeys[i]); err != nil {
+				return err
+			}
+			if _, err := remote.GetInfo(localKeys[i]); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	// Record the number of messages both the client and the server sent, and
+	// assert that it's within the expected bounds.
+	serverMessagesSentCount := remote.serverMetrics.MessagesSent.Count()
+	clientMessagesSentCount := local.serverMetrics.MessagesSent.Count()
+
+	fmt.Printf("client msgs sent: %+v\n", clientMessagesSentCount)
+	fmt.Printf("server msgs sent: %+v\n", serverMessagesSentCount)
+
+	// upperBoundMessages is the maximum number of sent messages we expect to see.
+	// Note that in reality with batching, we see 3-10 messages sent in this test,
+	// However, in order to avoid flakiness, we set a very high number here. The
+	// test would fail even with this high number if we don't have batching.
+	upperBoundMessages := int64(500)
+	require.LessOrEqual(t, serverMessagesSentCount, upperBoundMessages)
+	require.LessOrEqual(t, clientMessagesSentCount, upperBoundMessages)
+}
