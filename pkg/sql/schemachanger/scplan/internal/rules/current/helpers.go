@@ -193,6 +193,16 @@ func getExpression(element scpb.Element) (*scpb.Expression, error) {
 			return nil, nil
 		}
 		return &e.Expression, nil
+	case *scpb.UniqueWithoutIndexConstraintUnvalidated:
+		if e == nil {
+			return nil, nil
+		}
+		return e.Predicate, nil
+	case *scpb.UniqueWithoutIndexConstraint:
+		if e == nil {
+			return nil, nil
+		}
+		return e.Predicate, nil
 	}
 	return nil, errors.AssertionFailedf("element %T does not have an embedded scpb.Expression", element)
 }
