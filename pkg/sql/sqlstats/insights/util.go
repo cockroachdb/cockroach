@@ -11,10 +11,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insightspb"
 	"github.com/cockroachdb/redact"
 )
 
-func makeTxnInsight(value *sqlstats.RecordedTxnStats) *Transaction {
+func makeTxnInsight(value *sqlstats.RecordedTxnStats) *insightspb.Transaction {
 	var retryReason string
 	if value.AutoRetryReason != nil {
 		retryReason = value.AutoRetryReason.Error()
@@ -32,12 +33,12 @@ func makeTxnInsight(value *sqlstats.RecordedTxnStats) *Transaction {
 		errorMsg = redact.Sprint(value.TxnErr)
 	}
 
-	status := Transaction_Failed
+	status := insightspb.Transaction_Failed
 	if value.Committed {
-		status = Transaction_Completed
+		status = insightspb.Transaction_Completed
 	}
 
-	insight := &Transaction{
+	insight := &insightspb.Transaction{
 		ID:              value.TransactionID,
 		FingerprintID:   value.FingerprintID,
 		UserPriority:    value.Priority.String(),
@@ -60,7 +61,7 @@ func makeTxnInsight(value *sqlstats.RecordedTxnStats) *Transaction {
 	return insight
 }
 
-func makeStmtInsight(value *sqlstats.RecordedStmtStats) *Statement {
+func makeStmtInsight(value *sqlstats.RecordedStmtStats) *insightspb.Statement {
 	var autoRetryReason string
 	if value.AutoRetryReason != nil {
 		autoRetryReason = value.AutoRetryReason.Error()
@@ -80,7 +81,7 @@ func makeStmtInsight(value *sqlstats.RecordedStmtStats) *Statement {
 		errorMsg = redact.Sprint(value.StatementError)
 	}
 
-	insight := &Statement{
+	insight := &insightspb.Statement{
 		ID:                   value.StatementID,
 		FingerprintID:        value.FingerprintID,
 		LatencyInSeconds:     value.ServiceLatencySec,
@@ -108,18 +109,18 @@ func makeStmtInsight(value *sqlstats.RecordedStmtStats) *Statement {
 	return insight
 }
 
-func getInsightStatus(statementError error) Statement_Status {
+func getInsightStatus(statementError error) insightspb.Statement_Status {
 	if statementError == nil {
-		return Statement_Completed
+		return insightspb.Statement_Completed
 	}
 
-	return Statement_Failed
+	return insightspb.Statement_Failed
 }
 
-func toSqlCommentTags(sqlCommentsTags []sqlcommenter.QueryTag) []*QueryTag {
-	commenterTags := make([]*QueryTag, 0, len(sqlCommentsTags))
+func toSqlCommentTags(sqlCommentsTags []sqlcommenter.QueryTag) []*insightspb.QueryTag {
+	commenterTags := make([]*insightspb.QueryTag, 0, len(sqlCommentsTags))
 	for _, tag := range sqlCommentsTags {
-		commenterTags = append(commenterTags, &QueryTag{
+		commenterTags = append(commenterTags, &insightspb.QueryTag{
 			Name:  tag.Key,
 			Value: string(tag.Value),
 		})

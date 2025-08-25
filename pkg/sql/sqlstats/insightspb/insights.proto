@@ -5,7 +5,7 @@
 
 syntax = "proto3";
 package cockroach.sql.insights;
-option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insightspb";
 
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";

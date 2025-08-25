@@ -74,7 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insightspb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -395,18 +395,18 @@ func (b *baseStatusServer) localExecutionInsights(
 ) (*serverpb.ListExecutionInsightsResponse, error) {
 	var response serverpb.ListExecutionInsightsResponse
 
-	highContentionInsights := make(map[uuid.UUID]insights.Insight, 0)
+	highContentionInsights := make(map[uuid.UUID]insightspb.Insight, 0)
 	reader := b.sqlServer.pgServer.SQLServer.GetInsightsReader()
-	reader.IterateInsights(ctx, func(ctx context.Context, insight *insights.Insight) {
+	reader.IterateInsights(ctx, func(ctx context.Context, insight *insightspb.Insight) {
 		if insight == nil {
 			return
 		}
 
 		// Copy statements slice - these insights objects can be read concurrently.
 		insightsCopy := *insight
-		insightsCopy.Statements = make([]*insights.Statement, len(insight.Statements))
+		insightsCopy.Statements = make([]*insightspb.Statement, len(insight.Statements))
 		copy(insightsCopy.Statements, insight.Statements)
-		if insight.Transaction != nil && slices.Contains(insight.Transaction.Causes, insights.Cause_HighContention) {
+		if insight.Transaction != nil && slices.Contains(insight.Transaction.Causes, insightspb.Cause_HighContention) {
 			// Collect high contention insights seperately, they need additional validation / filtering.
 			// If it is valid we will add it to the response later.
 			highContentionInsights[insightsCopy.Transaction.ID] = insightsCopy
@@ -437,7 +437,7 @@ func (b *baseStatusServer) localExecutionInsights(
 // events that are related to the passed in (contention) insights. The insights that have
 // valid (resolved BlockingTxnFingerprintID) contention events are returned.
 func validContentionInsights(
-	registry *contention.Registry, contentionInsights map[uuid.UUID]insights.Insight,
+	registry *contention.Registry, contentionInsights map[uuid.UUID]insightspb.Insight,
 ) (map[uuid.UUID]bool, error) {
 	valid := make(map[uuid.UUID]bool, len(contentionInsights))
 	err := registry.ForEachEvent(func(event *contentionpb.ExtendedContentionEvent) error {

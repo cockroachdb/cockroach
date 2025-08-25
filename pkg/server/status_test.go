@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insightspb"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -534,7 +535,7 @@ func TestLocalExecutionInsights(t *testing.T) {
 		id1 := uuid.MakeV4()
 		id2 := uuid.MakeV4()
 		id3 := uuid.MakeV4()
-		insights := map[uuid.UUID]insights.Insight{
+		insights := map[uuid.UUID]insightspb.Insight{
 			id1: {},
 			id2: {},
 			id3: {},
