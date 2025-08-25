@@ -109,6 +109,7 @@ FROM system.jobs AS j
 INNER JOIN latestpayload AS payload ON j.id = payload.job_id
 LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
 WHERE id = $1
+FOR UPDATE
 `
 	row, err := u.txn.QueryRowEx(
 		ctx, "select-job", u.txn.KV(),
