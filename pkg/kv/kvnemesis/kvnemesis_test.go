@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"math/rand"
 	"os"
+	"path"
 	"testing"
 	"time"
 
@@ -48,6 +49,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 	ctx context.Context, tr *SeqTracker,
 ) base.TestClusterArgs {
 	storeKnobs := &kvserver.StoreTestingKnobs{
+		DisableRaftLogQueue:                   true,
 		AllowUnsynchronizedReplicationChanges: true,
 		// Drop the clock MaxOffset to reduce commit-wait time for
 		// transactions that write to global_read ranges.
@@ -535,7 +537,7 @@ func dumpRaftLogsOnFailure(t testing.TB, dir string, srvs []serverutils.TestServ
 	if !t.Failed() {
 		return
 	}
-	d := kvtestutils.RaftLogDumper{Dir: dir}
+	d := kvtestutils.RaftLogDumper{Dir: path.Join(dir, "raftlogs")}
 	for _, srv := range srvs {
 		require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 			s.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
