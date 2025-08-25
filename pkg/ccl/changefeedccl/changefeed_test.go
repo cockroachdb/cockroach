@@ -12164,7 +12164,9 @@ func TestChangefeedProtectedTimestampUpdateForMultipleTables(t *testing.T) {
 				return err
 			}
 
-			require.Equal(t, 0, ptsEntries.Size())
+			require.Equal(t, 0, len(ptsEntries.LaggingTablesRecords))
+			require.Equal(t, uuid.Nil, ptsEntries.SystemTablesRecord)
+			require.Equal(t, uuid.Nil, ptsEntries.PrimaryRecord)
 			return nil
 		})
 
@@ -12318,8 +12320,8 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 					if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID()); err != nil {
 						return err
 					}
-					if len(ptsEntries.ProtectedTimestampRecords) != expectedCount {
-						return errors.Newf("expected %d per-table PTS records, got %d", expectedCount, len(ptsEntries.ProtectedTimestampRecords))
+					if len(ptsEntries.LaggingTablesRecords) != expectedCount {
+						return errors.Newf("expected %d per-table PTS records, got %d", expectedCount, len(ptsEntries.LaggingTablesRecords))
 					}
 					return nil
 				})
@@ -12335,10 +12337,10 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 						return err
 					}
 					for tableID, shouldExist := range expectedTables {
-						if shouldExist && ptsEntries.ProtectedTimestampRecords[tableID] == nil {
+						if shouldExist && ptsEntries.LaggingTablesRecords[tableID] == nil {
 							return errors.Newf("expected PTS record for table %d", tableID)
 						}
-						if !shouldExist && ptsEntries.ProtectedTimestampRecords[tableID] != nil {
+						if !shouldExist && ptsEntries.LaggingTablesRecords[tableID] != nil {
 							return errors.Newf("expected no PTS record for table %d", tableID)
 						}
 					}
@@ -12348,7 +12350,7 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 		}
 
 		// Helper to assert feed-level PTS record exists
-		assertFeedLevelPTS := func() {
+		assertNoFeedLevelPTS := func() {
 			testutils.SucceedsSoon(t, func() error {
 				hwm, err := eFeed.HighWaterMark()
 				if err != nil {
@@ -12363,15 +12365,15 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 						return err
 					}
 					if progress.ProtectedTimestampRecord.Equal(uuid.UUID{}) {
-						return errors.New("expected feed-level PTS record to be set")
+						return nil
 					}
-					return nil
+					return errors.New("expected feed-level PTS record to be set")
 				})
 			})
 		}
 
 		// Initially verify feed-level PTS and 0 per-table records
-		assertFeedLevelPTS()
+		assertNoFeedLevelPTS()
 		assertPerTablePTSCount(0)
 
 		// Make table1 start lagging - should see 1 table-level record
@@ -12397,7 +12399,7 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 		delete(laggingTables, table1ID)
 		delete(laggingTables, table2ID)
 		assertPerTablePTSCount(0)
-		assertFeedLevelPTS()
+		assertNoFeedLevelPTS()
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
