@@ -1157,6 +1157,16 @@ matching via flags. If the filter regexp contains captures, such as
 	RunE: runDebugMergeLogs,
 }
 
+var debugMCPCmd = &cobra.Command{
+	Use:   "mcp",
+	Short: "debug MCP server functionality",
+	Long: `
+Debug command for MCP (Model Context Protocol) server functionality.
+Provides utilities for testing and debugging MCP server operations.
+`,
+	RunE: runDebugMCP,
+}
+
 // filePattern matches log file paths. Redeclared here from the log package
 // due to significant test breakage when adding the fpath named capture group.
 const logFilePattern = "^(?:(?P<fpath>.*)/)?" + log.FileNamePattern + "$"
@@ -1345,6 +1355,7 @@ var debugCmds = []*cobra.Command{
 	debugGCCmd,
 	debugIntentCount,
 	debugKeysCmd,
+	debugMCPCmd,
 	debugRaftLogCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,

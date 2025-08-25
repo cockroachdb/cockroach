@@ -3,6 +3,7 @@
 MISC_SRCS = [
     "//pkg/backup:data_driven_generated_test.go",
     "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl:generated_test.go",
+    "//pkg/cli:metrics.yaml",
     "//pkg/internal/team:TEAMS.yaml",
     "//pkg/kv/kvclient/kvcoord:bufferedwrite_interval_btree.go",
     "//pkg/kv/kvclient/kvcoord:bufferedwrite_interval_btree_test.go",

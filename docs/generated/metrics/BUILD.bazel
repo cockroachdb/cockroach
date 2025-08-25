@@ -1,6 +1,6 @@
 genrule(
     name = "metrics",
-    outs = ["metrics.yaml"],
+    outs = ["metrics_generated.yaml"],
     cmd = "$(location //pkg/cmd/cockroach-short) gen metric-list --logtostderr=NONE > $@",
     tools = ["//pkg/cmd/cockroach-short"],
     visibility = [
@@ -8,4 +8,10 @@ genrule(
         "//pkg/gen:__pkg__",
         "//pkg/roachprod/agents/opentelemetry:__pkg__",
     ],
+)
+
+# Expose the committed metrics.yaml source file
+exports_files(
+    ["metrics.yaml"],
+    visibility = ["//pkg/cli:__pkg__"],
 )
