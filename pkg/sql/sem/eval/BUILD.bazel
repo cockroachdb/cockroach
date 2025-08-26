@@ -57,7 +57,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/lex",
         "//pkg/sql/oidext",
-        "//pkg/sql/parser",
+        "//pkg/sql/parser/statements",
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -170,5 +170,6 @@ disallowed_imports_test(
     src = "eval",
     disallowed_list = [
         "//pkg/sql/catalog",
+        "//pkg/sql/parser",
     ],
 )

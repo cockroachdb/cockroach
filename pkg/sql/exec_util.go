@@ -144,6 +144,13 @@ func init() {
 		ie := evalCtx.JobExecContext.(JobExecContext).ExecCfg().InternalDB.Executor()
 		return ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
 	}
+	DoParserInjection()
+}
+
+// DoParserInjection performs all the necessary sql/parser injections within the
+// sql directory.
+func DoParserInjection() {
+	eval.ParseOne = parser.ParseOne
 }
 
 // ClusterOrganization is the organization name.

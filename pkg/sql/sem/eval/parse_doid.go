@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -27,6 +27,12 @@ import (
 // name of the function into group 1.
 // e.g. function(a, b, c) or function( a )
 var pgSignatureRegexp = regexp.MustCompile(`^\s*([\w\."]+)\s*\((?:(?:\s*[\w"]+\s*,)*\s*[\w"]+)?\s*\)\s*$`)
+
+// ParseOne is the same as sql/parser.ParseOne but is injected to avoid a
+// dependency on the parser package.
+var ParseOne = func(sql string) (statements.Statement[tree.Statement], error) {
+	return statements.Statement[tree.Statement]{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
 
 // ParseDOid parses and returns an Oid family datum.
 func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tree.DOid, error) {
@@ -93,7 +99,7 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 		// function signature syntax is sane from grammar perspective. We may
 		// match postgres' implementation of `parseNameAndArgTypes` to return
 		// more detailed errors like "expected a left parenthesis".
-		stmt, err := parser.ParseOne("ALTER FUNCTION " + strings.TrimSpace(s) + " IMMUTABLE")
+		stmt, err := ParseOne("ALTER FUNCTION " + strings.TrimSpace(s) + " IMMUTABLE")
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid function signature: %s", s)
 		}
