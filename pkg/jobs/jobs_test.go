@@ -377,7 +377,7 @@ func (rts *registryTestSuite) checkStateChangeLog(
 				jobEventsLog.PreviousStatus == string(expectedPrevState) &&
 				jobEventsLog.NewStatus == string(expectedNewState) &&
 				strings.Contains(jobEventsLog.Error, expectedError) {
-				rts.statusChangeLogSpy.SetLastNLogsAsUnread(logpb.Channel_OPS, len(logs)-i+1)
+				rts.statusChangeLogSpy.SetLastNLogsAsUnread(logpb.Channel_OPS, len(logs)-i)
 				return nil
 			}
 		}
