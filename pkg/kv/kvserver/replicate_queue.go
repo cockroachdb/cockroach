@@ -368,6 +368,7 @@ type ReplicateQueueMetrics struct {
 	PriorityInversionForRemoveDecommissioningNonVoterCount   *metric.Counter
 	PriorityInversionForRemoveLearnerCount                   *metric.Counter
 	PriorityInversionForFinalizeAtomicReplicationChangeCount *metric.Counter
+	PriorityInversionTotal                                   *metric.Counter
 }
 
 func makeReplicateQueueMetrics() ReplicateQueueMetrics {
@@ -536,6 +537,9 @@ func (metrics *ReplicateQueueMetrics) trackPriorityInversion(
 ) (unfairToDecommissioning bool) {
 	plannedIdx := allocatorimpl.AllocatorActionToIdx[actionPlannedAtEnqueueTime]
 	computedIdx := allocatorimpl.AllocatorActionToIdx[actionComputedAtProcessTime]
+	if plannedIdx < computedIdx {
+		metrics.PriorityInversionTotal.Inc(1)
+	}
 	for i := plannedIdx; i < computedIdx; i++ {
 		action := allocatorimpl.AllocatorActionPriorities[i]
 		if action.IsDecommissioning() {
