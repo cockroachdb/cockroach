@@ -111,6 +111,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 
 	ctx := params.ctx
 	log.VEvent(ctx, 2, "fast delete: skipping scan")
+	// TODO(yuzefovich): why are we making a copy of spans?
 	spans := make([]roachpb.Span, len(d.spans))
 	copy(spans, d.spans)
 	if !d.autoCommitEnabled {
@@ -198,6 +199,18 @@ func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roach
 func (d *deleteRangeNode) processResults(
 	results []kv.Result, resumeSpans []roachpb.Span,
 ) (roachpb.Spans, error) {
+	if !d.autoCommitEnabled {
+		defer func() {
+			// Make a copy of curRowPrefix to avoid referencing the memory from
+			// the now-old BatchRequest.
+			//
+			// When auto-commit is enabled, we expect to see any resume spans,
+			// so we won't need to access d.curRowPrefix later.
+			curRowPrefix := make([]byte, len(d.curRowPrefix))
+			copy(curRowPrefix, d.curRowPrefix)
+			d.curRowPrefix = curRowPrefix
+		}()
+	}
 	for _, r := range results {
 		// TODO(yuzefovich): when the table has 1 column family, we don't need
 		// to compare the key prefixes since each deleted key corresponds to a
