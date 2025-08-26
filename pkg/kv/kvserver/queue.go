@@ -766,10 +766,16 @@ func (bq *baseQueue) addInternal(
 	item = &replicaItem{rangeID: desc.RangeID, replicaID: replicaID, priority: priority}
 	bq.addLocked(item)
 
-	// If adding this replica has pushed the queue past its maximum size,
-	// remove the lowest priority element.
+	// If adding this replica has pushed the queue past its maximum size, remove
+	// an element. Note that it might not be the lowest priority since heap is not
+	// guaranteed to be globally ordered. Ideally, we would remove the lowest
+	// priority element, but it would require additional bookkeeping or a linear
+	// scan.
 	if pqLen := bq.mu.priorityQ.Len(); pqLen > bq.maxSize {
-		bq.removeLocked(bq.mu.priorityQ.sl[pqLen-1])
+		replicaItemToDrop := bq.mu.priorityQ.sl[pqLen-1]
+		log.Dev.VInfof(ctx, 1, "dropping due to exceeding queue max size: priority=%0.3f, replica=%v",
+			priority, replicaItemToDrop.replicaID)
+		bq.removeLocked(replicaItemToDrop)
 	}
 	// Signal the processLoop that a replica has been added.
 	select {
