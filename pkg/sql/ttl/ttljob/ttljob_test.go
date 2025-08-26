@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -605,11 +606,24 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	collatedStringType := types.MakeCollatedString(types.String, "en" /* locale */)
 	var indexableTyps []*types.T
 	for _, typ := range append(types.Scalar, collatedStringType) {
+		if !colinfo.ColumnTypeIsIndexable(typ) {
+			continue
+		}
+		switch typ.Family() {
+		case types.DateFamily:
 		// TODO(#76419): DateFamily has a broken `-infinity` case.
-		// TODO(#99432): JsonFamily has broken cases. This is because the test is wrapping JSON
-		//   objects in multiple single quotes which causes parsing errors.
-		if colinfo.ColumnTypeIsIndexable(typ) && typ.Family() != types.DateFamily &&
-			typ.Family() != types.JsonFamily {
+		case types.JsonFamily:
+		// TODO(#99432): JsonFamily has broken cases. This is because the
+		// test is wrapping JSON objects in multiple single quotes which
+		// causes parsing errors.
+		case types.CollatedStringFamily:
+			if typ.Oid() != oidext.T_citext && typ.Oid() != oidext.T__citext {
+				// TODO(foundations): CITEXT should only be prohibited when
+				// running with mixed 25.2 version where the type is not
+				// supported.
+				indexableTyps = append(indexableTyps, typ)
+			}
+		default:
 			indexableTyps = append(indexableTyps, typ)
 		}
 	}
