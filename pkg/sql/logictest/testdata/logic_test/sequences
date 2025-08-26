@@ -1093,7 +1093,7 @@ FROM   pg_class AS seqclass
               AND attrib.attrelid = dep.refobjid
 WHERE seqclass.relkind = 'S';
 ----
-owned_seq owner owner_col
+owned_seq  owner  owner_col
 
 # Sequence owner can be removed
 

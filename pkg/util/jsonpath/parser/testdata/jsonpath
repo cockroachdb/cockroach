@@ -134,7 +134,7 @@ word $
 error
 $.1e
 ----
-at or near "invalid floating point literal": syntax error
+lexical error: invalid floating point literal
 DETAIL: source SQL:
 $.1e
   ^
@@ -162,7 +162,7 @@ $."2e"
 error
 $.2e
 ----
-at or near "invalid floating point literal": syntax error
+lexical error: invalid floating point literal
 DETAIL: source SQL:
 $.2e
   ^
