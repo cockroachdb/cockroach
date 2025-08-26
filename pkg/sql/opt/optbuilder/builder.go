@@ -504,7 +504,7 @@ func (b *Builder) buildStmt(
 			// invalidation). We don't care about caching plans for these statements.
 			b.DisableMemoReuse = true
 			// It's considered acceptable when we delegate to unsafe internals.
-			defer b.disableUnsafeInternalCheck()()
+			defer b.DisableUnsafeInternalCheck()()
 			return b.buildStmt(newStmt, desiredTypes, inScope)
 		}
 
@@ -590,15 +590,20 @@ func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
 	}
 }
 
-// disableUnsafeInternalCheck is used to disable the check that the
+// DisableUnsafeInternalCheck is used to disable the check that the
 // prevents external users from accessing unsafe internals.
-func (b *Builder) disableUnsafeInternalCheck() func() {
+func (b *Builder) DisableUnsafeInternalCheck() func() {
 	b.skipUnsafeInternalsCheck = true
-	cleanup := b.catalog.DisableUnsafeInternalCheck()
+	var cleanup func()
+	if b.catalog != nil {
+		cleanup = b.catalog.DisableUnsafeInternalCheck()
+	}
 
 	return func() {
 		b.skipUnsafeInternalsCheck = false
-		cleanup()
+		if cleanup != nil {
+			cleanup()
+		}
 	}
 }
 
