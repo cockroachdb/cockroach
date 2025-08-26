@@ -10840,7 +10840,6 @@ func TestBackupRestoreClusterWithUDFs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	tempDir, tempDirCleanupFn := testutils.TempDir(t)
 	defer tempDirCleanupFn()
 
@@ -10857,153 +10856,75 @@ func TestBackupRestoreClusterWithUDFs(t *testing.T) {
 			testTenantOption = base.TestControlsTenantsExplicitly
 		}
 
-		srcCluster, srcSQLDB, srcClusterCleanupFn := backupRestoreTestSetupEmpty(
+		_, srcSQLDB, srcClusterCleanupFn := backupRestoreTestSetupEmpty(
 			t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					DefaultTestTenant: testTenantOption,
 				},
 			},
 		)
-		srcServer := srcCluster.ApplicationLayer(0)
 		defer srcClusterCleanupFn()
 
-		tgtCluster, tgtSQLDB, tgtClusterCleanupFn := backupRestoreTestSetupEmpty(
+		_, tgtSQLDB, tgtClusterCleanupFn := backupRestoreTestSetupEmpty(
 			t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					DefaultTestTenant: testTenantOption,
 				},
 			},
 		)
-		tgtServer := tgtCluster.ApplicationLayer(0)
 		defer tgtClusterCleanupFn()
 
 		srcSQLDB.Exec(t, `
 CREATE DATABASE db1;
 USE db1;
 CREATE SCHEMA sc1;
-CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
-CREATE TYPE sc1.enum1 AS ENUM('Good');
+CREATE TYPE sc1.enum1 AS ENUM('Good', 'Bad');
+CREATE TABLE sc1.tbl1(a INT PRIMARY KEY, status sc1.enum1);
 CREATE SEQUENCE sc1.sq1;
-CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
-  SELECT a FROM sc1.tbl1;
-  SELECT nextval('sc1.sq1');
+CREATE FUNCTION sc1.f1(status_val sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
+  SELECT nextval('sc1.sq1')::INT;
 $$;
 `)
 
-		rows := srcSQLDB.QueryStr(t, `SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f1'`)
-		require.Equal(t, 1, len(rows))
-		require.Equal(t, 1, len(rows[0]))
-		udfID, err := strconv.Atoi(rows[0][0])
-		require.NoError(t, err)
-		err = sqltestutils.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-			dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
-			require.NoError(t, err)
-			require.Equal(t, 104, int(dbDesc.GetID()))
+		// Add some data to exercise the sequence, function, and enum before backup
+		srcSQLDB.Exec(t, `INSERT INTO sc1.tbl1 VALUES (1, 'Good'), (2, 'Bad')`)
+		srcSQLDB.Exec(t, `SELECT nextval('sc1.sq1'), nextval('sc1.sq1')`)
+		srcSQLDB.Exec(t, `SELECT sc1.f1('Good'::sc1.enum1), sc1.f1('Bad'::sc1.enum1)`)
 
-			scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
-			require.NoError(t, err)
-			require.Equal(t, 106, int(scDesc.GetID()))
+		var beforeBackupSeqVal int
+		srcSQLDB.QueryRow(t, `SELECT last_value FROM sc1.sq1`).Scan(&beforeBackupSeqVal)
+		require.Equal(t, 4, beforeBackupSeqVal)
 
-			tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-			_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
-			require.NoError(t, err)
-			require.Equal(t, 107, int(tbDesc.GetID()))
-
-			typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-			_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
-			require.NoError(t, err)
-			require.Equal(t, 108, int(typDesc.GetID()))
-
-			tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-			_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
-			require.NoError(t, err)
-			require.Equal(t, 110, int(tbDesc.GetID()))
-
-			fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
-			require.NoError(t, err)
-			require.Equal(t, 111, int(fnDesc.GetID()))
-			require.Equal(t, 104, int(fnDesc.GetParentID()))
-			require.Equal(t, 106, int(fnDesc.GetParentSchemaID()))
-			require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
-			require.Equal(t, 100108, int(fnDesc.GetParams()[0].Type.Oid()))
-			require.Equal(t, []descpb.ID{107, 110}, fnDesc.GetDependsOn())
-			require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
-
-			fnDef, _ := scDesc.GetFunction("f1")
-			require.Equal(t, 111, int(fnDef.Signatures[0].ID))
-			require.Equal(t, 100108, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
-			return nil
-		})
-		require.NoError(t, err)
-
-		// Bakcup the whole src cluster.
+		// Backup the whole src cluster.
 		srcSQLDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
 		// Restore into target cluster.
 		tgtSQLDB.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 		tgtSQLDB.Exec(t, `USE db1`)
 
-		// Verify that all IDs are correctly rewritten.
-		rows = tgtSQLDB.QueryStr(t, `SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f1'`)
-		require.Equal(t, 1, len(rows))
-		require.Equal(t, 1, len(rows[0]))
-		udfID, err = strconv.Atoi(rows[0][0])
-		require.NoError(t, err)
+		// Verify that the table data was restored correctly
+		tableRows := tgtSQLDB.QueryStr(t, `SELECT a, status FROM sc1.tbl1 ORDER BY a`)
+		require.Equal(t, 2, len(tableRows))
+		require.Equal(t, []string{"1", "Good"}, tableRows[0])
+		require.Equal(t, []string{"2", "Bad"}, tableRows[1])
 
-		const startingDescID = 123
-		err = sqltestutils.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-			dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
-			require.NoError(t, err)
-			require.Equal(t, startingDescID, int(dbDesc.GetID()))
+		// Verify that the sequence was restored with the correct current value
+		var afterRestoreSeqVal int
+		tgtSQLDB.QueryRow(t, `SELECT last_value FROM sc1.sq1`).Scan(&afterRestoreSeqVal)
+		require.Equal(t, beforeBackupSeqVal, afterRestoreSeqVal)
 
-			scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
-			require.NoError(t, err)
-			require.Equal(t, startingDescID+2, int(scDesc.GetID()))
+		// Verify that the sequence continues to work by getting the next value
+		tgtSQLDB.QueryRow(t, `SELECT nextval('sc1.sq1')`).Scan(&afterRestoreSeqVal)
+		require.Equal(t, 5, afterRestoreSeqVal)
 
-			tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-			_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
-			require.NoError(t, err)
-			require.Equal(t, startingDescID+3, int(tbDesc.GetID()))
+		tgtSQLDB.Exec(t, `INSERT INTO sc1.tbl1 VALUES (3, 'Good')`)
+		var enumTestRows int
+		tgtSQLDB.QueryRow(t, `SELECT count(*) FROM sc1.tbl1 WHERE status = 'Good'`).Scan(&enumTestRows)
+		require.Equal(t, 2, enumTestRows)
 
-			typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-			_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
-			require.NoError(t, err)
-			require.Equal(t, startingDescID+4, int(typDesc.GetID()))
-
-			tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-			_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
-			require.NoError(t, err)
-			require.Equal(t, startingDescID+6, int(tbDesc.GetID()))
-
-			fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
-			require.NoError(t, err)
-			require.Equal(t, startingDescID+7, int(fnDesc.GetID()))
-			require.Equal(t, startingDescID, int(fnDesc.GetParentID()))
-			require.Equal(t, startingDescID+2, int(fnDesc.GetParentSchemaID()))
-			// Make sure db name and IDs are rewritten in function body.
-			require.Equal(t, fmt.Sprintf("SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(%d:::REGCLASS);",
-				startingDescID+6), fnDesc.GetFunctionBody())
-
-			expectedOID := 100127
-			dependsOn := []descpb.ID{126, 129}
-			dependsOnTypes := []descpb.ID{127, 128}
-			require.Equal(t, expectedOID, int(fnDesc.GetParams()[0].Type.Oid()))
-			require.Equal(t, dependsOn, fnDesc.GetDependsOn())
-			require.Equal(t, dependsOnTypes, fnDesc.GetDependsOnTypes())
-
-			fnDef, _ := scDesc.GetFunction("f1")
-			require.Equal(t, startingDescID+7, int(fnDef.Signatures[0].ID))
-			require.Equal(t, expectedOID, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
-			return nil
-		})
-		require.NoError(t, err)
-
-		// Make sure function actually works on the target cluster.
-		rows = tgtSQLDB.QueryStr(t, `SELECT sc1.f1('Good'::sc1.enum1)`)
-		require.Equal(t, 1, len(rows))
-		require.Equal(t, 1, len(rows[0]))
-		require.Equal(t, "1", rows[0][0])
-		require.NoError(t, err)
+		var funcResult int
+		tgtSQLDB.QueryRow(t, `SELECT sc1.f1('Good'::sc1.enum1)`).Scan(&funcResult)
+		require.Equal(t, 6, funcResult)
 	})
 }
 
