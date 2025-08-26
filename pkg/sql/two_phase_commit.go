@@ -161,7 +161,7 @@ func (ex *connExecutor) cleanupAfterFailedPrepareTransaction(ctx context.Context
 		return
 	}
 	if txnRecord.Status != roachpb.ABORTED {
-		log.Errorf(ctx, "prepared transaction %s not aborted after rollback: %v", globalID, txnRecord)
+		log.Dev.Errorf(ctx, "prepared transaction %s not aborted after rollback: %v", globalID, txnRecord)
 		return
 	}
 

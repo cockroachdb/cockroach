@@ -37,7 +37,7 @@ type tempEngine struct {
 // Close implements the diskmap.Factory interface.
 func (r *tempEngine) Close() {
 	if err := r.db.Close(); err != nil {
-		log.Fatalf(context.TODO(), "%v", err)
+		log.Dev.Fatalf(context.TODO(), "%v", err)
 	}
 	r.env.Close()
 }

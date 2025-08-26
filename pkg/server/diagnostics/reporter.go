@@ -166,7 +166,7 @@ func shouldReportDiagnostics(ctx context.Context, st *cluster.Settings) bool {
 	license, err := utilccl.GetLicense(st)
 	// If we cannot fetch the license, we do not send the report.
 	if err != nil {
-		log.Errorf(ctx, "error fetching license in shouldReportDiagnostics: %s", err)
+		log.Dev.Errorf(ctx, "error fetching license in shouldReportDiagnostics: %s", err)
 		return false
 	}
 	if license == nil {
@@ -503,7 +503,7 @@ func (r *Reporter) buildReportingURL(
 func getLicenseType(ctx context.Context, settings *cluster.Settings) string {
 	licenseType, err := base.LicenseType(settings)
 	if err != nil {
-		log.Errorf(ctx, "error retrieving license type: %s", err)
+		log.Dev.Errorf(ctx, "error retrieving license type: %s", err)
 		return ""
 	}
 	return licenseType

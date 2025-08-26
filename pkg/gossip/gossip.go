@@ -374,7 +374,7 @@ func (g *drpcGossip) Gossip(stream DRPCGossip_GossipStream) error {
 // AssertNotStarted fatals if the Gossip instance was already started.
 func (g *Gossip) AssertNotStarted(ctx context.Context) {
 	if g.started {
-		log.Fatalf(ctx, "gossip instance was already started")
+		log.Dev.Fatalf(ctx, "gossip instance was already started")
 	}
 }
 
@@ -393,7 +393,7 @@ func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Dev.VInfof(ctx, 1, "NodeDescriptor set to %+v", desc)
 	if desc.Address.IsEmpty() {
-		log.Fatalf(ctx, "n%d address is empty", desc.NodeID)
+		log.Dev.Fatalf(ctx, "n%d address is empty", desc.NodeID)
 	}
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, NodeDescriptorTTL); err != nil {
 		return errors.Wrapf(err, "n%d: couldn't gossip descriptor", desc.NodeID)
@@ -461,7 +461,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	// Persist merged addresses.
 	if numAddrs := len(g.bootstrapInfo.Addresses); numAddrs > len(storedBI.Addresses) {
 		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 		}
 	}
 
@@ -712,12 +712,12 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 		}
 		return nil
 	}, true /* deleteExpired */); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		return
 	}
 
 	if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 	}
 }
 
@@ -760,7 +760,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value, _ int64) {
 	ctx := g.AnnotateCtx(context.TODO())
 	var desc roachpb.NodeDescriptor
 	if err := content.GetProto(&desc); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		return
 	}
 
@@ -814,7 +814,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value, _ int64) {
 	added := g.maybeAddBootstrapAddressLocked(desc.Address, desc.NodeID)
 	if added && g.storage != nil {
 		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 		}
 	}
 }
@@ -829,7 +829,7 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value, _ int64) {
 	ctx := g.AnnotateCtx(context.TODO())
 	var desc roachpb.StoreDescriptor
 	if err := content.GetProto(&desc); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		return
 	}
 
@@ -867,7 +867,7 @@ func (g *Gossip) getNodeDescriptor(
 ) (*roachpb.NodeDescriptor, error) {
 	if desc, ok := g.nodeDescs.Load(nodeID); ok {
 		if desc.Address.IsEmpty() {
-			log.Fatalf(g.AnnotateCtx(context.Background()), "n%d has an empty address", nodeID)
+			log.Dev.Fatalf(g.AnnotateCtx(context.Background()), "n%d has an empty address", nodeID)
 		}
 		return desc, nil
 	}
@@ -1245,7 +1245,7 @@ func (g *Gossip) hasOutgoingLocked(nodeID roachpb.NodeID) bool {
 		// If we don't have the address, fall back to using the outgoing nodeSet
 		// since at least it's better than nothing.
 		ctx := g.AnnotateCtx(context.TODO())
-		log.Errorf(ctx, "unable to get address for n%d: %s", nodeID, err)
+		log.Dev.Errorf(ctx, "unable to get address for n%d: %s", nodeID, err)
 		return g.outgoing.hasNode(nodeID)
 	}
 	c := g.findClient(func(c *client) bool {
@@ -1662,7 +1662,7 @@ func (g *Gossip) OnFirstRangeChanged(cb func(*roachpb.RangeDescriptor)) {
 		ctx := context.Background()
 		desc := &roachpb.RangeDescriptor{}
 		if err := value.GetProto(desc); err != nil {
-			log.Errorf(ctx, "unable to parse gossiped first range descriptor: %s", err)
+			log.Dev.Errorf(ctx, "unable to parse gossiped first range descriptor: %s", err)
 		} else {
 			cb(desc)
 		}

@@ -3716,7 +3716,7 @@ func (d errorChannelTestHandler) HandleRaftResponse(
 	case *kvpb.Error:
 		d <- val
 	default:
-		log.Fatalf(ctx, "unexpected response type %T", val)
+		log.Dev.Fatalf(ctx, "unexpected response type %T", val)
 	}
 	return nil
 }

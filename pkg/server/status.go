@@ -2474,7 +2474,7 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
 	err := h.metricSource.PrintAsText(w, contentType, h.useStaticLabels)
 	if err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 

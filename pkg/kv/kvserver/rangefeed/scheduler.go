@@ -493,7 +493,7 @@ func (ss *schedulerShard) processEvents(ctx context.Context) {
 
 		if remaining != 0 && buildutil.CrdbTestBuild {
 			if (remaining^procEventType)&remaining != 0 {
-				log.Fatalf(ctx,
+				log.Dev.Fatalf(ctx,
 					"rangefeed processor attempted to reschedule event type %s that was not present in original event set %s",
 					procEventType, remaining)
 			}

@@ -782,7 +782,7 @@ func backupShowerDefault(
 							if err != nil {
 								// We expect that we might get an error here due to X-DB
 								// references, which were possible on 20.2 betas and rcs.
-								log.Errorf(ctx, "error while generating create statement: %+v", err)
+								log.Dev.Errorf(ctx, "error while generating create statement: %+v", err)
 							}
 							createStmtDatum = nullIfEmpty(createStmt)
 						}

@@ -69,7 +69,7 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 			if e.Error != (errorspb.EncodedError{}) {
 				// Hard logical error.
 				err := errors.DecodeError(ctx, e.Error)
-				log.Errorf(ctx, "error consuming TenantSettings RPC: %v", err)
+				log.Dev.Errorf(ctx, "error consuming TenantSettings RPC: %v", err)
 				if startupCh != nil && errors.Is(err, &kvpb.MissingRecordError{}) && c.earlyShutdownIfMissingTenantRecord {
 					select {
 					case startupCh <- err:
@@ -111,14 +111,14 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 			case kvpb.TenantSettingsEvent_METADATA_EVENT:
 				err := c.processMetadataEvent(ctx, e)
 				if err != nil {
-					log.Errorf(ctx, "error processing tenant settings event: %v", err)
+					log.Dev.Errorf(ctx, "error processing tenant settings event: %v", err)
 					reconnect = true
 				}
 
 			case kvpb.TenantSettingsEvent_SETTING_EVENT:
 				settingsReady, err := c.processSettingsEvent(ctx, e)
 				if err != nil {
-					log.Errorf(ctx, "error processing tenant settings event: %v", err)
+					log.Dev.Errorf(ctx, "error processing tenant settings event: %v", err)
 					reconnect = true
 					break
 				}

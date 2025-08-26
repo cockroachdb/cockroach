@@ -37,7 +37,7 @@ func extractUsernameFromClaims(
 
 	targetClaim, ok := claims[claimKey]
 	if !ok {
-		log.Errorf(
+		log.Dev.Errorf(
 			ctx, "OIDC: failed to complete authentication: invalid JSON claim key: %s", claimKey,
 		)
 		log.Dev.Infof(ctx, "token payload includes the following claims: %s", strings.Join(claimKeys, ", "))
@@ -51,7 +51,7 @@ func extractUsernameFromClaims(
 			)
 		}
 		if err = json.Unmarshal(targetClaim, &principals); err != nil {
-			log.Errorf(ctx,
+			log.Dev.Errorf(ctx,
 				"OIDC: failed to complete authentication: failed to parse value for the claim %s: %v",
 				claimKey, err,
 			)
@@ -81,7 +81,7 @@ func extractUsernameFromClaims(
 
 	// Error when there is not a match.
 	err := errors.Newf("expected one group in regexp")
-	log.Errorf(ctx, "OIDC: failed to complete authentication: %v", err)
+	log.Dev.Errorf(ctx, "OIDC: failed to complete authentication: %v", err)
 	if log.V(1) {
 		log.Dev.Infof(ctx,
 			"token payload includes the following claims: %s\n"+

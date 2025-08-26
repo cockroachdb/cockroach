@@ -288,7 +288,7 @@ func PushTxn(
 	// if initiated by a PUSH_TIMESTAMP.
 	if pusheeStaging && pusherWins && pushType == kvpb.PUSH_TIMESTAMP {
 		if !pusheeStagingFailed && !build.IsRelease() {
-			log.Fatalf(ctx, "parallel commit must be known to have failed for push to succeed")
+			log.Dev.Fatalf(ctx, "parallel commit must be known to have failed for push to succeed")
 		}
 		pushType = kvpb.PUSH_ABORT
 	}

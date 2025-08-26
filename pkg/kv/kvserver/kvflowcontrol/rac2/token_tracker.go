@@ -79,7 +79,7 @@ func (t *Tracker) Track(
 		// span the leader losing leadership and regaining it. So the entry IDs must
 		// advance.
 		if id.index <= last.index || id.term < last.term {
-			log.Fatalf(ctx, "expected in order tracked log entries: last=%+v, entry=%+v", last, id)
+			log.Dev.Fatalf(ctx, "expected in order tracked log entries: last=%+v, entry=%+v", last, id)
 			return false
 		}
 	}

@@ -54,7 +54,7 @@ func (s *Store) getOrCreateReplica(
 	ctx context.Context, id roachpb.FullReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	if id.ReplicaID == 0 {
-		log.Fatalf(ctx, "cannot construct a Replica for range %d with 0 id", id.RangeID)
+		log.Dev.Fatalf(ctx, "cannot construct a Replica for range %d with 0 id", id.RangeID)
 	}
 	// We need a retry loop as the replica we find in the map may be in the
 	// process of being removed or may need to be removed. Retries in the loop
@@ -119,7 +119,7 @@ func (s *Store) tryGetReplica(
 		if err := s.removeReplicaRaftMuLocked(
 			ctx, repl, id.ReplicaID, "superseded by newer Replica",
 		); err != nil {
-			log.Fatalf(ctx, "failed to remove replica: %v", err)
+			log.Dev.Fatalf(ctx, "failed to remove replica: %v", err)
 		}
 		repl.raftMu.Unlock()
 		return nil, errRetry
@@ -135,7 +135,7 @@ func (s *Store) tryGetReplica(
 	}
 	if repl.replicaID != id.ReplicaID {
 		// This case should have been caught by handleToReplicaTooOld.
-		log.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
+		log.Dev.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
 			id.ReplicaID, repl)
 	}
 	return repl, nil

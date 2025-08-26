@@ -2366,7 +2366,7 @@ type entryFCState struct {
 func getEntryFCStateOrFatal(ctx context.Context, entry raftpb.Entry) entryFCState {
 	enc, pri, err := raftlog.EncodingOf(entry)
 	if err != nil {
-		log.Fatalf(ctx, "error getting encoding of entry: %v", err)
+		log.Dev.Fatalf(ctx, "error getting encoding of entry: %v", err)
 	}
 
 	if enc == raftlog.EntryEncodingStandardWithAC || enc == raftlog.EntryEncodingSideloadedWithAC {

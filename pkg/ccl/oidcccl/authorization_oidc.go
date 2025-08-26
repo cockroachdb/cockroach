@@ -57,7 +57,7 @@ func (oidcAuthentication *oidcAuthenticationServer) authorize(
 
 	// When cluster-level authorization is enabled we require an access token.
 	if rawAccessToken == "" {
-		log.Errorf(ctx, "OIDC: access_token missing while authorization is enabled")
+		log.Dev.Errorf(ctx, "OIDC: access_token missing while authorization is enabled")
 		return errors.New("OIDC: required access_token missing from credentials")
 	}
 
@@ -107,14 +107,14 @@ func (oidcAuthentication *oidcAuthenticationServer) authorize(
 		oauthTok := &oauth2.Token{AccessToken: rawAccessToken}
 		userinfo, err := oidcAuthentication.manager.UserInfo(ctx, oauth2.StaticTokenSource(oauthTok))
 		if err != nil {
-			log.VErrorf(ctx, 1, "OIDC: failed to get userinfo for authorization: %v", err)
+			log.Dev.VErrorf(ctx, 1, "OIDC: failed to get userinfo for authorization: %v", err)
 		} else {
 			var userinfoJSON map[string]any
 			if err := userinfo.Claims(&userinfoJSON); err == nil {
 				if raw, ok := userinfoJSON[oidcAuthentication.conf.userinfoGroupKey]; ok {
 					synthetic := jwt.New()
 					if err := synthetic.Set(oidcAuthentication.conf.userinfoGroupKey, raw); err != nil {
-						log.VErrorf(ctx, 1, "OIDC: failed to set synthetic claim for authorization: %v", err)
+						log.Dev.VErrorf(ctx, 1, "OIDC: failed to set synthetic claim for authorization: %v", err)
 					}
 					groups, err = jwthelper.ParseGroupsClaim(
 						synthetic,
@@ -159,7 +159,7 @@ func (oidcAuthentication *oidcAuthenticationServer) authorize(
 	// this is an authorization failure and the login must be denied
 	// after all roles are revoked
 	if groups == nil {
-		log.Errorf(ctx, "OIDC: unable to locate any groups claim for user %s", username)
+		log.Dev.Errorf(ctx, "OIDC: unable to locate any groups claim for user %s", username)
 		return errors.Newf("OIDC: unable to complete authentication: no groups claim found for %s", username)
 	}
 
@@ -167,7 +167,7 @@ func (oidcAuthentication *oidcAuthenticationServer) authorize(
 	// an authorization failure and the login must be denied
 	// after all roles are revoked
 	if len(groups) == 0 {
-		log.Errorf(ctx, "OIDC: found empty list of groups for user %s", username)
+		log.Dev.Errorf(ctx, "OIDC: found empty list of groups for user %s", username)
 		return errors.Newf("OIDC: unable to complete authentication: groups list was empty for %s", username)
 	}
 

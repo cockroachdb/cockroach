@@ -105,7 +105,7 @@ func (s *scheduledChangefeedExecutor) NotifyJobTermination(
 	err := errors.Errorf(
 		"changefeed job %d scheduled by %d failed with status %s",
 		jobID, schedule.ScheduleID(), jobState)
-	log.Errorf(ctx, "changefeed error: %v	", err)
+	log.Dev.Errorf(ctx, "changefeed error: %v	", err)
 	jobs.DefaultHandleFailedRun(schedule, "changefeed job %d failed with err=%v", jobID, err)
 	return nil
 }

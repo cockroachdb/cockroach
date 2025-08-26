@@ -1055,7 +1055,7 @@ func TestSideTransportLeaseholder(t *testing.T) {
 			case <-time.After(10 * time.Millisecond):
 				pArgs := putArgs(scratchKey, []byte("value"))
 				if _, pErr := kv.SendWrapped(ctx, store.DB().NonTransactionalSender(), pArgs); pErr != nil {
-					log.Errorf(ctx, "failed to put value: %s", pErr)
+					log.Dev.Errorf(ctx, "failed to put value: %s", pErr)
 				}
 			case <-tc.Stopper().ShouldQuiesce():
 				return

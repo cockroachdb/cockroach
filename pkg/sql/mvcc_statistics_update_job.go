@@ -138,7 +138,7 @@ func (j *mvccStatisticsUpdateJob) runTenantGlobalMetricsExporter(
 			return ctx.Err()
 		case <-timer.C:
 			if err := runTask(); err != nil {
-				log.Errorf(ctx, "mvcc statistics update job error: %v", err)
+				log.Dev.Errorf(ctx, "mvcc statistics update job error: %v", err)
 			}
 			timer.Reset(TenantGlobalMetricsExporterInterval.Get(&execCtx.ExecCfg().Settings.SV))
 		}
@@ -153,7 +153,7 @@ func (j *mvccStatisticsUpdateJob) OnFailOrCancel(
 		err := errors.NewAssertionErrorWithWrappedErrf(
 			jobErr, "mvcc statistics update job is not cancelable",
 		)
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 	}
 	return nil
 }

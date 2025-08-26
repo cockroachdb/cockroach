@@ -159,7 +159,7 @@ func Run(ctx context.Context, cfg Config) error {
 	var scErr schemaChangeDetectedError
 	isChangefeedCompleted := errors.Is(err, errChangefeedCompleted)
 	if !isChangefeedCompleted && !errors.As(err, &scErr) {
-		log.Errorf(ctx, "stopping kv feed due to error: %s", err)
+		log.Dev.Errorf(ctx, "stopping kv feed due to error: %s", err)
 		// Regardless of whether we exited KV feed with or without an error, that error
 		// is not a schema change; so, close the writer and return.
 		return errors.CombineErrors(err, f.writer.CloseWithReason(ctx, err))

@@ -224,7 +224,7 @@ func (rts *resolvedTimestamp) consumeLogicalOp(
 		return rts.intentQ.Del(t.TxnID)
 
 	default:
-		log.Fatalf(ctx, "unknown logical op %T", t)
+		log.Dev.Fatalf(ctx, "unknown logical op %T", t)
 		return false
 	}
 }
@@ -237,7 +237,7 @@ func (rts *resolvedTimestamp) recompute(ctx context.Context) bool {
 		return false
 	}
 	if rts.closedTS.Less(rts.resolvedTS) {
-		log.Fatalf(ctx, "closed timestamp below resolved timestamp: %s < %s",
+		log.Dev.Fatalf(ctx, "closed timestamp below resolved timestamp: %s < %s",
 			rts.closedTS, rts.resolvedTS)
 	}
 	newTS := rts.closedTS
@@ -246,7 +246,7 @@ func (rts *resolvedTimestamp) recompute(ctx context.Context) bool {
 	// timestamps cannot be resolved yet.
 	if txn := rts.intentQ.Oldest(); txn != nil {
 		if txn.timestamp.LessEq(rts.resolvedTS) {
-			log.Fatalf(ctx, "unresolved txn equal to or below resolved timestamp: %s <= %s",
+			log.Dev.Fatalf(ctx, "unresolved txn equal to or below resolved timestamp: %s <= %s",
 				txn.timestamp, rts.resolvedTS)
 		}
 		// txn.timestamp cannot be resolved, so the resolved timestamp must be Prev.
@@ -258,7 +258,7 @@ func (rts *resolvedTimestamp) recompute(ctx context.Context) bool {
 	newTS.Logical = 0
 
 	if newTS.Less(rts.resolvedTS) {
-		log.Fatalf(ctx, "resolved timestamp regression, was %s, recomputed as %s",
+		log.Dev.Fatalf(ctx, "resolved timestamp regression, was %s, recomputed as %s",
 			rts.resolvedTS, newTS)
 	}
 	return rts.resolvedTS.Forward(newTS)
@@ -271,7 +271,7 @@ func (rts *resolvedTimestamp) assertNoChange(ctx context.Context) {
 	before := rts.resolvedTS
 	changed := rts.recompute(ctx)
 	if changed || before != rts.resolvedTS {
-		log.Fatalf(ctx, "unexpected resolved timestamp change on recomputation, "+
+		log.Dev.Fatalf(ctx, "unexpected resolved timestamp change on recomputation, "+
 			"was %s, recomputed as %s", before, rts.resolvedTS)
 	}
 }
@@ -289,9 +289,9 @@ func (rts *resolvedTimestamp) assertOpAboveRTS(
 		err := errors.AssertionFailedf(
 			"resolved timestamp %s equal to or above timestamp of operation %v", rts.resolvedTS, &op)
 		if fatal {
-			log.Fatalf(ctx, "%v", err)
+			log.Dev.Fatalf(ctx, "%v", err)
 		} else {
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 		}
 	}
 }

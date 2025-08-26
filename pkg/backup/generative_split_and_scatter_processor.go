@@ -226,7 +226,7 @@ func (s dbSplitAndScatterer) scatter(
 			// this could break entirely and not start failing the tests,
 			// but on the bright side, it doesn't affect correctness, only
 			// throughput.
-			log.Errorf(ctx, "failed to scatter span [%s,%s): %+v",
+			log.Dev.Errorf(ctx, "failed to scatter span [%s,%s): %+v",
 				newScatterKey, newScatterKey.Next(), pErr.GoError())
 		}
 		return 0, nil

@@ -230,7 +230,7 @@ func Start[E rangefeedbuffer.Event](
 // re-run the watcher.
 func (s *Watcher[E]) Run(ctx context.Context) error {
 	if !atomic.CompareAndSwapInt32(&s.started, 0, 1) {
-		log.Fatal(ctx, "currently started: only allowed once at any point in time")
+		log.Dev.Fatal(ctx, "currently started: only allowed once at any point in time")
 	}
 	if fn := s.knobs.PreExit; fn != nil {
 		defer fn()
@@ -281,7 +281,7 @@ func (s *Watcher[E]) Run(ctx context.Context) error {
 
 	initialScanTS := s.clock.Now()
 	if initialScanTS.Less(s.lastFrontierTS) {
-		log.Fatalf(ctx, "%s: initial scan timestamp (%s) regressed from last recorded frontier (%s)", s.name, initialScanTS, s.lastFrontierTS)
+		log.Dev.Fatalf(ctx, "%s: initial scan timestamp (%s) regressed from last recorded frontier (%s)", s.name, initialScanTS, s.lastFrontierTS)
 	}
 
 	rangeFeed := s.rangefeedFactory.New(string(s.name), initialScanTS,

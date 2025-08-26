@@ -458,7 +458,7 @@ func (s *SettingsWatcher) setLocked(
 			if oldVersion.Version.Equal(roachpb.Version{}) {
 				// Cluster version setting not initialized.
 				if err := clusterversion.Initialize(ctx, newVersion.Version, &s.settings.SV); err != nil {
-					log.Fatalf(ctx, "failed to initialize cluster version setting: %s", err.Error())
+					log.Dev.Fatalf(ctx, "failed to initialize cluster version setting: %s", err.Error())
 					return
 				}
 			}

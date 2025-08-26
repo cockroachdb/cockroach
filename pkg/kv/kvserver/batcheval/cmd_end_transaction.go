@@ -956,7 +956,7 @@ func RunCommitTrigger(
 		return res, nil
 	}
 
-	log.Fatalf(ctx, "unknown commit trigger: %+v", ct)
+	log.Dev.Fatalf(ctx, "unknown commit trigger: %+v", ct)
 	return result.Result{}, nil
 }
 
@@ -1400,7 +1400,7 @@ func splitTriggerHelper(
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load lease")
 		}
 		if leftLease.Empty() {
-			log.Fatalf(ctx, "LHS of split has no lease")
+			log.Dev.Fatalf(ctx, "LHS of split has no lease")
 		}
 
 		// Copy the lease from the left-hand side of the split over to the

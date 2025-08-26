@@ -88,7 +88,7 @@ func (w *SyncWaiterLoop) waitLoop(ctx context.Context, stopper *stop.Stopper) {
 		select {
 		case w := <-w.q:
 			if err := w.wg.SyncWait(); err != nil {
-				log.Fatalf(ctx, "SyncWait error: %+v", err)
+				log.Dev.Fatalf(ctx, "SyncWait error: %+v", err)
 			}
 			w.cb.run()
 			w.wg.Close()

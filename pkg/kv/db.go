@@ -218,7 +218,7 @@ func (s *CrossRangeTxnWrapperSender) Send(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
 	if ba.Txn != nil {
-		log.Fatalf(ctx, "CrossRangeTxnWrapperSender can't handle transactional requests")
+		log.Dev.Fatalf(ctx, "CrossRangeTxnWrapperSender can't handle transactional requests")
 	}
 
 	br, pErr := s.wrapped.Send(ctx, ba)

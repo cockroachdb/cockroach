@@ -1195,7 +1195,7 @@ func MVCCBlindPutInlineWithPrev(
 			return err
 		}
 		if ok != prev.IsPresent() || metaKeySize != origMetaKeySize || metaValSize != origMetaValSize {
-			log.Fatalf(ctx,
+			log.Dev.Fatalf(ctx,
 				"MVCCBlindPutInlineWithPrev IsPresent=%t (%t) origMetaKeySize=%d (%d) origMetaValSize=%d (%d)",
 				prev.IsPresent(), ok, origMetaKeySize, metaKeySize, origMetaValSize, metaValSize)
 		}
@@ -1204,7 +1204,7 @@ func MVCCBlindPutInlineWithPrev(
 	// ClearUnversioned sets ClearOptions.ValueSize[Known].
 	acq, err := MVCCBlindPut(ctx, rw, key, hlc.Timestamp{}, value, MVCCWriteOptions{Stats: ms})
 	if !acq.Empty() {
-		log.Fatal(ctx, "inline write should not be within a transaction; lock acquisition found")
+		log.Dev.Fatal(ctx, "inline write should not be within a transaction; lock acquisition found")
 	}
 	return err
 }
@@ -3930,7 +3930,7 @@ func MVCCPredicateDeleteRange(
 					return err
 				}
 				if !acq.Empty() {
-					log.Fatal(ctx, "expected empty lock acquisition for non-transactional point delete")
+					log.Dev.Fatal(ctx, "expected empty lock acquisition for non-transactional point delete")
 				}
 			}
 			batchByteSize += runByteSize
@@ -4988,7 +4988,7 @@ func MVCCPaginate(
 		addedKeys, addedBytes, resumeReason, err := f(maxKeys, targetBytes)
 		if err != nil {
 			if addedKeys != 0 || addedBytes != 0 || resumeReason != 0 {
-				log.Fatalf(ctx,
+				log.Dev.Fatalf(ctx,
 					"addedKeys, addedBytes, and resumeReason should all be 0, but got addedKeys=%d, addedBytes=%d, resumeReason=%d",
 					addedKeys, addedBytes, resumeReason)
 			}
@@ -4999,7 +4999,7 @@ func MVCCPaginate(
 		numBytes += addedBytes
 		if maxKeys > 0 {
 			if addedKeys > maxKeys {
-				log.Fatalf(ctx, "added %d keys, which exceeds the max key limit %d", addedKeys, maxKeys)
+				log.Dev.Fatalf(ctx, "added %d keys, which exceeds the max key limit %d", addedKeys, maxKeys)
 			} else if addedKeys < maxKeys {
 				maxKeys -= addedKeys
 			} else {
@@ -5016,16 +5016,16 @@ func MVCCPaginate(
 		switch resumeReason {
 		case kvpb.RESUME_KEY_LIMIT:
 			if maxKeys >= 0 {
-				log.Fatalf(ctx, "Resume reason RESUME_KEY_LIMIT, but key limit = %d has not been hit", maxKeys)
+				log.Dev.Fatalf(ctx, "Resume reason RESUME_KEY_LIMIT, but key limit = %d has not been hit", maxKeys)
 			}
 		case kvpb.RESUME_BYTE_LIMIT:
 			if !allowEmpty && targetBytes >= 0 {
-				log.Fatalf(ctx, "Resume reason RESUME_BYTE_LIMIT, but byte limit = %d has not been hit", targetBytes)
+				log.Dev.Fatalf(ctx, "Resume reason RESUME_BYTE_LIMIT, but byte limit = %d has not been hit", targetBytes)
 			}
 			targetBytes = -1
 		case 0:
 		default:
-			log.Fatalf(ctx, "Resume reason must be RESUME_KEY_LIMIT, RESUME_BYTE_LIMIT, or 0, got resumeReason = %d", resumeReason)
+			log.Dev.Fatalf(ctx, "Resume reason must be RESUME_KEY_LIMIT, RESUME_BYTE_LIMIT, or 0, got resumeReason = %d", resumeReason)
 		}
 	}
 }
@@ -7903,7 +7903,7 @@ func mvccExportToWriter(
 				stats := iter.Stats()
 				elapsed := timeutil.Since(startTime)
 				preWorkCPUTime, workCPUTime := elasticCPUHandle.RunningTime()
-				log.Errorf(ctx,
+				log.Dev.Errorf(ctx,
 					"export exceeded deadline work wall: %v, cpu: %v, pre-work-cpu: %v, stats: %v",
 					elapsed, workCPUTime, preWorkCPUTime, &stats.Stats)
 			default:

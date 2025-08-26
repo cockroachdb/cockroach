@@ -518,7 +518,7 @@ func (r *Refresher) getTableDescriptor(
 		}
 		return err
 	}); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 	}
 	return desc
 }
@@ -689,7 +689,7 @@ func (r *Refresher) Start(
 						timer.Reset(refreshInterval)
 					}); err != nil {
 					r.startedTasksWG.Done()
-					log.Errorf(ctx, "failed to start async stats task: %v", err)
+					log.Dev.Errorf(ctx, "failed to start async stats task: %v", err)
 				}
 				// This clears out any tables that may have been added to the
 				// mutationCounts map by ensureAllTables and any mutation counts that
@@ -823,7 +823,7 @@ func (r *Refresher) getApplicableTables(
 		// r.mutationCounts for some of the tables and operation of adding an
 		// entry is idempotent (i.e. we didn't mess up anything for the next
 		// call to this method).
-		log.Errorf(ctx, "failed to get tables for automatic stats: %v", err)
+		log.Dev.Errorf(ctx, "failed to get tables for automatic stats: %v", err)
 	}
 }
 
@@ -913,7 +913,7 @@ func (r *Refresher) maybeRefreshStats(
 	var forecast *bool
 	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */)
 	if err != nil {
-		log.Errorf(ctx, "failed to get table statistics: %v", err)
+		log.Dev.Errorf(ctx, "failed to get table statistics: %v", err)
 		return
 	}
 

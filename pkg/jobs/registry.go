@@ -799,7 +799,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 	alreadyInitialized := *sj != nil
 	if alreadyInitialized {
 		if jobID != (*sj).Job.ID() {
-			log.Fatalf(ctx,
+			log.Dev.Fatalf(ctx,
 				"attempted to rewrite startable job for ID %d with unexpected ID %d",
 				(*sj).Job.ID(), jobID,
 			)
@@ -823,7 +823,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 		resumerCtx, cancel = r.makeCtx()
 
 		if alreadyAdopted := r.addAdoptedJob(jobID, j.session, cancel, resumer); alreadyAdopted {
-			log.Fatalf(
+			log.Dev.Fatalf(
 				ctx,
 				"job %d: was just created but found in registered adopted jobs",
 				jobID,
@@ -915,7 +915,7 @@ func (r *Registry) withSession(ctx context.Context, f withSessionFunc) {
 	if err != nil {
 		if log.ExpensiveLogEnabled(ctx, 2) ||
 			(ctx.Err() == nil && r.withSessionEvery.ShouldLog()) {
-			log.Errorf(ctx, "error getting live session: %s", err)
+			log.Dev.Errorf(ctx, "error getting live session: %s", err)
 		}
 		return
 	}
@@ -959,7 +959,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			)
 			return err
 		}); err != nil {
-			log.Errorf(ctx, "error expiring job sessions: %s", err)
+			log.Dev.Errorf(ctx, "error expiring job sessions: %s", err)
 		}
 	}
 	// servePauseAndCancelRequests queries tho pause-requested and cancel-requested
@@ -967,7 +967,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// respectively, and then stops the execution of those jobs.
 	servePauseAndCancelRequests := func(ctx context.Context, s sqlliveness.Session) {
 		if err := r.servePauseAndCancelRequests(ctx, s); err != nil {
-			log.Errorf(ctx, "failed to serve pause and cancel requests: %v", err)
+			log.Dev.Errorf(ctx, "failed to serve pause and cancel requests: %v", err)
 		}
 	}
 	cancelLoopTask := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
@@ -987,7 +987,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		}
 		r.metrics.AdoptIterations.Inc(1)
 		if err := r.claimJobs(ctx, s); err != nil {
-			log.Errorf(ctx, "error claiming jobs: %s", err)
+			log.Dev.Errorf(ctx, "error claiming jobs: %s", err)
 		}
 	})
 	// removeClaimsFromJobs queries the jobs table for non-terminal jobs and
@@ -1007,7 +1007,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			)
 			return err
 		}); err != nil {
-			log.Errorf(ctx, "error expiring job sessions: %s", err)
+			log.Dev.Errorf(ctx, "error expiring job sessions: %s", err)
 		}
 	}
 	// processClaimedJobs iterates the jobs claimed by the current node that
@@ -1027,7 +1027,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			return
 		}
 		if err := r.processClaimedJobs(ctx, s); err != nil {
-			log.Errorf(ctx, "error processing claimed jobs: %s", err)
+			log.Dev.Errorf(ctx, "error processing claimed jobs: %s", err)
 		}
 	})
 
@@ -1559,7 +1559,7 @@ func (r *Registry) stepThroughStateMachine(
 		if isExpectedError {
 			log.Dev.Infof(ctx, "%s job %d: stepping through state %s with error: %v", jobType, job.ID(), state, jobErr)
 		} else {
-			log.Errorf(ctx, "%s job %d: stepping through state %s with unexpected error: %+v", jobType, job.ID(), state, jobErr)
+			log.Dev.Errorf(ctx, "%s job %d: stepping through state %s with unexpected error: %+v", jobType, job.ID(), state, jobErr)
 		}
 	} else {
 		if jobType == jobspb.TypeAutoCreateStats || jobType == jobspb.TypeAutoCreatePartialStats {
@@ -1570,7 +1570,7 @@ func (r *Registry) stepThroughStateMachine(
 	}
 	jm := r.metrics.JobMetrics[jobType]
 	onExecutionFailed := func(cause error) error {
-		log.ErrorfDepth(
+		log.Dev.ErrorfDepth(
 			ctx, 1,
 			"job %d: %s execution encountered retriable error: %+v",
 			job.ID(), state, cause,

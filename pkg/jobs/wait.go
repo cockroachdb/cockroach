@@ -279,7 +279,7 @@ func (r *Registry) installWaitingSet(
 			set, ok := r.mu.waiting[id]
 			if !ok {
 				// This should never happen and indicates a programming error.
-				log.Errorf(
+				log.Dev.Errorf(
 					r.ac.AnnotateCtx(context.Background()),
 					"corruption detected in waiting set for id %d", id,
 				)

@@ -995,7 +995,7 @@ func (tc *TestCluster) waitForNewReplicas(
 			// snapshot has been transferred and the descriptor initialized.
 			store, err := tc.findMemberStore(target.StoreID)
 			if err != nil {
-				log.Errorf(context.TODO(), "unexpected error: %s", err)
+				log.Dev.Errorf(context.TODO(), "unexpected error: %s", err)
 				return err
 			}
 			repl := store.LookupReplica(rKey)
@@ -1793,7 +1793,7 @@ func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 			} else {
 				results[i], err = valRes.Value.GetInt()
 				if err != nil {
-					log.Errorf(context.Background(), "store %d: error decoding %s from key %s: %+v", s.StoreID(), valRes.Value, key, err)
+					log.Dev.Errorf(context.Background(), "store %d: error decoding %s from key %s: %+v", s.StoreID(), valRes.Value, key, err)
 				}
 			}
 			return nil

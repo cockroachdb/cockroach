@@ -487,7 +487,7 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 			return json.Marshal(stats.mu.data)
 		}()
 		if err != nil {
-			log.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key.fingerprintID, err)
+			log.Dev.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key.fingerprintID, err)
 			continue
 		}
 		fmt.Fprintf(&buf, "%q: %s\n", key.fingerprintID, json)

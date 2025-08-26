@@ -216,7 +216,7 @@ func (w *windower) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 		case windowerEmittingRows:
 			w.runningState, row, meta = w.emitRow()
 		default:
-			log.Fatalf(w.Ctx(), "unsupported state: %d", w.runningState)
+			log.Dev.Fatalf(w.Ctx(), "unsupported state: %d", w.runningState)
 		}
 
 		if row == nil && meta == nil {

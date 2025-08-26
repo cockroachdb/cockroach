@@ -126,7 +126,7 @@ func (s *spanConfigEventStream) startStreamProcessor(ctx context.Context) {
 		return func(ctx context.Context) error {
 			err := fn(ctx)
 			if err != nil {
-				log.Errorf(ctx, "span config event stream terminating with error %v", err)
+				log.Dev.Errorf(ctx, "span config event stream terminating with error %v", err)
 				s.maybeSetError(err)
 			}
 			return err
@@ -177,7 +177,7 @@ func (s *spanConfigEventStream) Close(ctx context.Context) {
 	close(s.doneChan)
 	if err := s.streamGroup.Wait(); err != nil {
 		// Note: error in close is normal; we expect to be terminated with context canceled.
-		log.Errorf(ctx, "span config stream terminated with error %v", err)
+		log.Dev.Errorf(ctx, "span config stream terminated with error %v", err)
 	}
 	s.sp.Finish()
 }

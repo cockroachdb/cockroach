@@ -540,7 +540,7 @@ func (s *Store) receiveSnapshot(
 			// Remove the placeholder, if it's still there. Most of the time it will
 			// have been filled and this is a no-op.
 			if _, err := s.removePlaceholder(ctx, placeholder, removePlaceholderFailed); err != nil {
-				log.Fatalf(ctx, "unable to remove placeholder: %s", err)
+				log.Dev.Fatalf(ctx, "unable to remove placeholder: %s", err)
 			}
 		}
 	}()

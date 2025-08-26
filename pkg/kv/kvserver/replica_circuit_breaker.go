@@ -157,10 +157,10 @@ func (r replicaCircuitBreakerLogger) OnTrip(b *circuit.Breaker, prev, cur error)
 	if prev == nil {
 		r.onTrip()
 	}
-	// Log directly from this method via log.Errorf.
+	// Log directly from this method via log.Dev.Errorf.
 	var buf redact.StringBuilder
 	circuit.EventFormatter{}.OnTrip(b, prev, cur, &buf)
-	log.Errorf(r.ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
+	log.Dev.Errorf(r.ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
 }
 
 func (r replicaCircuitBreakerLogger) OnReset(br *circuit.Breaker, prev error) {

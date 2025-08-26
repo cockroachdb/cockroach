@@ -1049,7 +1049,7 @@ func (ds *DistSender) getRoutingInfo(
 			containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
 		}
 		if !containsFn(returnToken.Desc(), descKey) {
-			log.Fatalf(ctx, "programming error: range resolution returning non-matching descriptor: "+
+			log.Dev.Fatalf(ctx, "programming error: range resolution returning non-matching descriptor: "+
 				"desc: %s, key: %s, reverse: %t", returnToken.Desc(), descKey, redact.Safe(useReverseScan))
 		}
 	}
@@ -1284,7 +1284,7 @@ func (ds *DistSender) Send(
 			if len(parts) != 1 {
 				panic("EndTxn not in last chunk of batch")
 			} else if require1PC {
-				log.Fatalf(ctx, "required 1PC transaction cannot be split: %s", ba)
+				log.Dev.Fatalf(ctx, "required 1PC transaction cannot be split: %s", ba)
 			}
 			parts = splitBatchAndCheckForRefreshSpans(ba, true /* split ET */)
 			onePart = false
@@ -2335,7 +2335,7 @@ func (ds *DistSender) sendPartialBatch(
 	}
 
 	if pErr == nil {
-		log.Fatal(ctx, "exited retry loop without an error or early exit")
+		log.Dev.Fatal(ctx, "exited retry loop without an error or early exit")
 	}
 
 	return response{pErr: pErr}
@@ -2569,7 +2569,7 @@ func (ds *DistSender) sendToReplicas(
 	case kvpb.RoutingPolicy_NEAREST:
 		replicaFilter = AllExtantReplicas
 	default:
-		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
+		log.Dev.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
 	}
 	desc := routing.Desc()
 	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, routing.Leaseholder(), replicaFilter)
@@ -2609,7 +2609,7 @@ func (ds *DistSender) sendToReplicas(
 		log.VEventf(ctx, 2, "routing to nearest replica; leaseholder not required order=%v", replicas)
 
 	default:
-		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
+		log.Dev.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
 	}
 
 	// NB: upgrade the connection class to SYSTEM, for critical ranges. Set it to
@@ -2743,7 +2743,7 @@ func (ds *DistSender) sendToReplicas(
 		} else if routing.Leaseholder() == nil {
 			// NB: Normally we don't have both routeToLeaseholder and a nil
 			// leaseholder. This could be changed to an assertion.
-			log.Errorf(ctx, "attempting %v to route to leaseholder, but the leaseholder is unknown %v", ba, routing)
+			log.Dev.Errorf(ctx, "attempting %v to route to leaseholder, but the leaseholder is unknown %v", ba, routing)
 		} else if ba.Replica.NodeID == routing.Leaseholder().NodeID {
 			// We are sending this request to the leaseholder, so it doesn't
 			// make sense to attempt to proxy it.

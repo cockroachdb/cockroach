@@ -103,7 +103,7 @@ func NewReplicaEvalContext(
 	ah kvpb.AdmissionHeader,
 ) (rec batcheval.EvalContext) {
 	if ss == nil {
-		log.Fatalf(r.AnnotateCtx(context.Background()), "can't create a ReplicaEvalContext with assertions but no SpanSet")
+		log.Dev.Fatalf(r.AnnotateCtx(context.Background()), "can't create a ReplicaEvalContext with assertions but no SpanSet")
 	}
 
 	rec = newEvalContextImpl(ctx, r, requiresClosedTSOlderThanStorageSnap, ah)

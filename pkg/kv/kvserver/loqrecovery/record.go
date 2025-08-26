@@ -195,7 +195,7 @@ func readNodeRecoveryStatusInfo(
 	ok, err := storage.MVCCGetProto(ctx, reader, keys.StoreLossOfQuorumRecoveryStatusKey(),
 		hlc.Timestamp{}, &result, storage.MVCCGetOptions{})
 	if err != nil {
-		log.Error(ctx, "failed to read loss of quorum recovery plan application status")
+		log.Dev.Error(ctx, "failed to read loss of quorum recovery plan application status")
 		return loqrecoverypb.PlanApplicationResult{}, false, err
 	}
 	return result, ok, nil
@@ -210,7 +210,7 @@ func ReadCleanupActionsInfo(
 	exists, err := storage.MVCCGetProto(ctx, writer, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
 		hlc.Timestamp{}, &result, storage.MVCCGetOptions{})
 	if err != nil {
-		log.Errorf(ctx, "failed to read loss of quorum cleanup actions key: %s", err)
+		log.Dev.Errorf(ctx, "failed to read loss of quorum cleanup actions key: %s", err)
 		return loqrecoverypb.DeferredRecoveryActions{}, false, err
 	}
 	return result, exists, nil

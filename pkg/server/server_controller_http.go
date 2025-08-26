@@ -70,7 +70,7 @@ func (c *serverController) insecureVirtualClusterList(w http.ResponseWriter, r *
 		return
 	}
 	if _, err := w.Write(respBytes); err != nil {
-		log.Errorf(r.Context(), "unable to write virtual clusters response: %s", err.Error())
+		log.Dev.Errorf(r.Context(), "unable to write virtual clusters response: %s", err.Error())
 	}
 }
 

@@ -474,7 +474,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	if ops := cmd.Cmd.LogicalOpLog; cmd.Cmd.WriteBatch != nil {
 		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
 	} else if ops != nil {
-		log.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
+		log.Dev.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
 	}
 
 	return nil

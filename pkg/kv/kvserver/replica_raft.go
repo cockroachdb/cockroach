@@ -262,7 +262,7 @@ func (r *Replica) evalAndPropose(
 		// Perform a sanity check that the lease is owned by this replica. This must
 		// have been ascertained by the callers in
 		// checkExecutionCanProceedBeforeStorageSnapshot.
-		log.Fatalf(ctx, "cannot propose %s on follower with remotely owned lease %s", ba, st.Lease)
+		log.Dev.Fatalf(ctx, "cannot propose %s on follower with remotely owned lease %s", ba, st.Lease)
 	} else {
 		proposal.command.ProposerLeaseSequence = st.Lease.Sequence
 	}
@@ -415,7 +415,7 @@ func (r *Replica) propose(
 
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		if err := checkReplicationChangeAllowed(p.command, r.Desc(), r.StoreID()); err != nil {
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 			return kvpb.NewError(err)
 		}
 		log.KvDistribution.Infof(p.Context(), "proposing %s", crt)
@@ -1137,15 +1137,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				return stats, errors.Wrap(err, "invalid snapshot id")
 			}
 			if inSnap.SnapUUID == (uuid.UUID{}) {
-				log.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
+				log.Dev.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
 			}
 			if snapUUID != inSnap.SnapUUID {
-				log.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", snapUUID, inSnap.SnapUUID)
+				log.Dev.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", snapUUID, inSnap.SnapUUID)
 			}
 
 			snap := *app.Snapshot
 			if len(app.Entries) != 0 {
-				log.Fatalf(ctx, "found Entries in MsgStorageAppend with non-empty Snapshot")
+				log.Dev.Fatalf(ctx, "found Entries in MsgStorageAppend with non-empty Snapshot")
 			}
 
 			// Applying this snapshot may require us to subsume one or more of our right
@@ -1196,7 +1196,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		} else {
 			// TODO(pavelkalinnikov): find a way to move it to storeEntries.
 			if app.Commit != 0 && !r.IsInitialized() {
-				log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s", r)
+				log.Dev.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s", r)
 			}
 			// TODO(pav-kv): make this branch unconditional.
 			if r.IsInitialized() && r.store.cfg.KVAdmissionController != nil {
@@ -1367,7 +1367,7 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, err error) (removed bool) {
 	case errors.Is(err, apply.ErrRemoved):
 		return true
 	default:
-		log.FatalfDepth(ctx, 1, "%+v", err)
+		log.Dev.FatalfDepth(ctx, 1, "%+v", err)
 		panic("unreachable")
 	}
 }
@@ -1586,7 +1586,7 @@ func (r *Replica) refreshProposalsLocked(
 	ctx context.Context, refreshAtDelta int64, reason refreshRaftReason,
 ) {
 	if refreshAtDelta != 0 && reason != reasonTicks {
-		log.Fatalf(ctx, "refreshAtDelta specified for reason %s != reasonTicks", reason)
+		log.Dev.Fatalf(ctx, "refreshAtDelta specified for reason %s != reasonTicks", reason)
 	}
 
 	var maxSlowProposalDurationRequest *kvpb.BatchRequest
@@ -1839,14 +1839,14 @@ func (r *Replica) sendRaftMessages(
 					logstore.AssertSideloadedRaftCommandInlined(ctx, ent)
 
 					if prevIndex+1 != ent.Index {
-						log.Fatalf(ctx,
+						log.Dev.Fatalf(ctx,
 							"index gap in outgoing MsgApp: idx %d followed by %d",
 							prevIndex, ent.Index,
 						)
 					}
 					prevIndex = ent.Index
 					if prevTerm > ent.Term {
-						log.Fatalf(ctx,
+						log.Dev.Fatalf(ctx,
 							"term regression in outgoing MsgApp: idx %d at term=%d "+
 								"appended with logterm=%d",
 							ent.Index, ent.Term, message.LogTerm,
@@ -2078,7 +2078,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 		raftGroup.ReportSnapshot(raftpb.PeerID(to), snapStatus)
 		return true, nil
 	}); err != nil && !errors.Is(err, errRemoved) {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 }
 
@@ -2787,7 +2787,7 @@ func (r *Replica) maybeAcquireSnapshotMergeLock(
 	for endKey.Less(inSnap.Desc.EndKey) {
 		sRepl := r.store.LookupReplica(endKey)
 		if sRepl == nil || !endKey.Equal(sRepl.Desc().StartKey) {
-			log.Fatalf(ctx, "snapshot widens existing replica, but no replica exists for subsumed key %s", endKey)
+			log.Dev.Fatalf(ctx, "snapshot widens existing replica, but no replica exists for subsumed key %s", endKey)
 		}
 		sRepl.raftMu.Lock()
 		subsumedRepls = append(subsumedRepls, sRepl)

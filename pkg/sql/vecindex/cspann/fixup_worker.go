@@ -154,7 +154,7 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 			// This is a background goroutine, so just log error and continue.
 			// TODO(andyk): Create a backoff mechanism so that bugs don't cause
 			// rapid retries.
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 		}
 
 		// Delete already-processed fixup from its pending map, even if the fixup

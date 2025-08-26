@@ -197,7 +197,7 @@ func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) erro
 
 		err = fn(&tx)
 		if err != nil {
-			log.Errorf(ctx, "error in RunTransaction: %v", err)
+			log.Dev.Errorf(ctx, "error in RunTransaction: %v", err)
 			return err
 		}
 

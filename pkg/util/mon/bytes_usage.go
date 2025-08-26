@@ -1063,7 +1063,7 @@ func (mm *BytesMonitor) TransferAccount(
 // allocation.
 func (b *BoundAccount) Init(ctx context.Context, mon *BytesMonitor) {
 	if *b != (BoundAccount{}) {
-		log.Fatalf(ctx, "trying to re-initialize non-empty account")
+		log.Dev.Fatalf(ctx, "trying to re-initialize non-empty account")
 	}
 	b.mon = mon
 }

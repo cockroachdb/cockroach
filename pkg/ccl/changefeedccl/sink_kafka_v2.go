@@ -93,7 +93,7 @@ func newKafkaSinkClientV2(
 		// This detects unavoidable data loss due to kafka cluster issues, and we may as well log it if it happens.
 		// See #127246 for further work we can do here.
 		kgo.ProducerOnDataLossDetected(func(topic string, part int32) {
-			log.Errorf(ctx, `kafka sink detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
+			log.Dev.Errorf(ctx, `kafka sink detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
 		}),
 	}
 

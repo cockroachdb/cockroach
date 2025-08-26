@@ -176,7 +176,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 					}
 					notify <- struct{}{}
 					if err != nil {
-						log.Errorf(context.Background(), "error on non-txn request: %s", err)
+						log.Dev.Errorf(context.Background(), "error on non-txn request: %s", err)
 					}
 					doneCall <- errors.Wrapf(
 						err, "%d: expected success on non-txn call to %s",

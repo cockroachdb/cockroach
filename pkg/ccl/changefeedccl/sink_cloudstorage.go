@@ -879,7 +879,7 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 			flushDone()
 
 			if err != nil {
-				log.Errorf(ctx, "error flushing file to storage: %s", err)
+				log.Dev.Errorf(ctx, "error flushing file to storage: %s", err)
 				s.asyncFlushErr = err
 				return err
 			}

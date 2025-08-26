@@ -896,7 +896,7 @@ func (t *RaftTransport) startProcessNewQueue(
 	worker := func(ctx context.Context) {
 		q, existingQueue := t.getQueue(toNodeID, class)
 		if !existingQueue {
-			log.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
+			log.Dev.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
 		}
 		defer func() {
 			if fn := t.knobs.OnWorkerTeardown; fn != nil {

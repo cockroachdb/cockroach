@@ -34,7 +34,7 @@ func (r *sqlActivityFlushJob) OnFailOrCancel(
 	if jobs.HasErrJobCanceled(jobErr) {
 		err := errors.NewAssertionErrorWithWrappedErrf(jobErr,
 			"sql activity is not cancelable")
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 	}
 	return nil
 }

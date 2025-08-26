@@ -1313,7 +1313,7 @@ func (twb *txnWriteBuffer) mergeResponseWithRequestRecords(
 	ctx context.Context, rr requestRecords, br *kvpb.BatchResponse,
 ) (_ *kvpb.BatchResponse, pErr *kvpb.Error) {
 	if rr.Empty() && br == nil {
-		log.Fatal(ctx, "unexpectedly found no transformations and no batch response")
+		log.Dev.Fatal(ctx, "unexpectedly found no transformations and no batch response")
 	} else if rr.Empty() {
 		return br, nil
 	}
@@ -1325,7 +1325,7 @@ func (twb *txnWriteBuffer) mergeResponseWithRequestRecords(
 		brResp := kvpb.ResponseUnion{}
 		if !record.stripped {
 			if len(br.Responses) == 0 {
-				log.Fatal(ctx, "unexpectedly found a non-stripped request and no batch response")
+				log.Dev.Fatal(ctx, "unexpectedly found a non-stripped request and no batch response")
 			}
 			// If the request wasn't stripped from the batch we sent to KV, we
 			// received a response for it, which then needs to be combined with

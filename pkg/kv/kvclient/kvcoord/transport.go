@@ -224,7 +224,7 @@ func (gt *grpcTransport) sendBatch(
 				for i := range reply.Responses {
 					err = reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner())
 					if err != nil {
-						log.Errorf(ctx, "verification of response for %s failed: %v", ba.Requests[i].GetInner(), err)
+						log.Dev.Errorf(ctx, "verification of response for %s failed: %v", ba.Requests[i].GetInner(), err)
 						break
 					}
 				}

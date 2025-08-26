@@ -674,7 +674,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -711,7 +711,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			if !ok {
@@ -834,7 +834,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -1118,7 +1118,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -1164,7 +1164,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			if !ok {
@@ -1259,7 +1259,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -1321,7 +1321,7 @@ func TestReplicateQueueMetrics(t *testing.T) {
 			&scratchRange, 3 /* voterCount */, 0, /* nonVoterCount */
 		)
 		if err != nil {
-			log.Errorf(ctx, "error checking replica count: %s", err)
+			log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 			return false
 		}
 		return ok
@@ -1347,7 +1347,7 @@ func TestReplicateQueueMetrics(t *testing.T) {
 				ctx, tc.(*testcluster.TestCluster), &scratchRange, 1, 0,
 			)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -1393,7 +1393,7 @@ func TestReplicateQueueMetrics(t *testing.T) {
 			ctx, tc.(*testcluster.TestCluster), &scratchRange, 3, 0,
 		)
 		if err != nil {
-			log.Errorf(ctx, "error checking replica count: %s", err)
+			log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 			return false
 		}
 		return ok
@@ -1442,7 +1442,7 @@ func getAggregateMetricCounts(
 		if storeId, exists := voterMap[s.NodeID()]; exists {
 			store, err := s.GetStores().(*kvserver.Stores).GetStore(storeId)
 			if err != nil {
-				log.Errorf(ctx, "error finding store: %s", err)
+				log.Dev.Errorf(ctx, "error finding store: %s", err)
 				continue
 			}
 			if add {
@@ -1702,11 +1702,11 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 		)
 		recording := rec()
 		if err != nil {
-			log.Errorf(ctx, "err: %s", err.Error())
+			log.Dev.Errorf(ctx, "err: %s", err.Error())
 			return false
 		}
 		if processErr != nil {
-			log.Errorf(ctx, "processErr: %s", processErr.Error())
+			log.Dev.Errorf(ctx, "processErr: %s", processErr.Error())
 			return false
 		}
 		if matched, err := regexp.Match(matchString,

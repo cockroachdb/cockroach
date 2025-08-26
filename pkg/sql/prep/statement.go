@@ -118,7 +118,7 @@ func (p *Statement) MemoryEstimate() int64 {
 
 func (p *Statement) DecRef(ctx context.Context) {
 	if p.refCount <= 0 {
-		log.Fatal(ctx, "corrupt PreparedStatement refcount")
+		log.Dev.Fatal(ctx, "corrupt PreparedStatement refcount")
 	}
 	p.refCount--
 	if p.refCount == 0 {
@@ -128,7 +128,7 @@ func (p *Statement) DecRef(ctx context.Context) {
 
 func (p *Statement) IncRef(ctx context.Context) {
 	if p.refCount <= 0 {
-		log.Fatal(ctx, "corrupt PreparedStatement refcount")
+		log.Dev.Fatal(ctx, "corrupt PreparedStatement refcount")
 	}
 	p.refCount++
 }

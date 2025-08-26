@@ -56,7 +56,7 @@ func ListenAndServeInMemGRPC(
 // isClosedConnection instead.
 func fatalIfUnexpected(err error) {
 	if err != nil && !isClosedConnection(err) && !errors.Is(err, stop.ErrUnavailable) {
-		log.Fatalf(context.TODO(), "%+v", err)
+		log.Dev.Fatalf(context.TODO(), "%+v", err)
 	}
 }
 

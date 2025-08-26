@@ -108,7 +108,7 @@ func (ls *Stores) AddStore(s *Store) {
 	if !ls.mu.biLatestTS.IsEmpty() {
 		if err := ls.updateBootstrapInfoLocked(ls.mu.latestBI); err != nil {
 			ctx := ls.AnnotateCtx(context.TODO())
-			log.Errorf(ctx, "failed to update bootstrap info on newly added store: %+v", err)
+			log.Dev.Errorf(ctx, "failed to update bootstrap info on newly added store: %+v", err)
 		}
 	}
 }
@@ -130,7 +130,7 @@ func (ls *Stores) ForwardSideTransportClosedTimestampForRange(
 		}
 		return nil
 	}); err != nil {
-		log.Fatalf(ctx, "unexpected error: %s", err)
+		log.Dev.Fatalf(ctx, "unexpected error: %s", err)
 	}
 }
 
@@ -164,7 +164,7 @@ func (ls *Stores) GetReplicaForRangeID(
 		}
 		return nil
 	}); err != nil {
-		log.Fatalf(ctx, "unexpected error: %s", err)
+		log.Dev.Fatalf(ctx, "unexpected error: %s", err)
 	}
 	if replica == nil {
 		return nil, nil, kvpb.NewRangeNotFoundError(rangeID, 0)
@@ -213,9 +213,9 @@ func (ls *Stores) RangeFeed(
 	perConsumerCatchupLimiter *limit.ConcurrentRequestLimiter,
 ) (rangefeed.Disconnector, error) {
 	if args.RangeID == 0 {
-		log.Fatal(streamCtx, "rangefeed request missing range ID")
+		log.Dev.Fatal(streamCtx, "rangefeed request missing range ID")
 	} else if args.Replica.StoreID == 0 {
-		log.Fatal(streamCtx, "rangefeed request missing store ID")
+		log.Dev.Fatal(streamCtx, "rangefeed request missing store ID")
 	}
 
 	store, err := ls.GetStore(args.Replica.StoreID)

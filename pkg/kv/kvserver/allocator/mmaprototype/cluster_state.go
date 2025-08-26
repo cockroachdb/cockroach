@@ -353,7 +353,7 @@ func makeRebalanceReplicaChanges(
 		}
 	}
 	if remove == (StoreIDAndReplicaState{}) {
-		log.Fatalf(context.Background(), "remove target %s not in existing replicas", removeTarget)
+		log.Dev.Fatalf(context.Background(), "remove target %s not in existing replicas", removeTarget)
 	}
 
 	addState := ReplicaState{

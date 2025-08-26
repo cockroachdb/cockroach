@@ -844,7 +844,7 @@ func processProgress(
 	for progress := range progCh {
 		var progDetails backuppb.BackupManifest_Progress
 		if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
-			log.Errorf(ctx, "unable to unmarshal backup progress details: %+v", err)
+			log.Dev.Errorf(ctx, "unable to unmarshal backup progress details: %+v", err)
 			return err
 		}
 		for _, file := range progDetails.Files {
@@ -857,7 +857,7 @@ func processProgress(
 		if wroteCheckpoint, err := maybeWriteBackupCheckpoint(
 			ctx, execCtx, details, manifest, lastCheckpointTime, kmsEnv,
 		); err != nil {
-			log.Errorf(ctx, "unable to checkpoint compaction: %+v", err)
+			log.Dev.Errorf(ctx, "unable to checkpoint compaction: %+v", err)
 		} else if wroteCheckpoint {
 			lastCheckpointTime = timeutil.Now()
 			if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("backup_compaction.after.write_checkpoint"); err != nil {

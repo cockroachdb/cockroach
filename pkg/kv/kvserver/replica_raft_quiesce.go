@@ -509,7 +509,7 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 		}
 
 		if !r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, quiesce, curLagging) {
-			log.Fatalf(ctx, "failed to coalesce known heartbeat: %v", msg)
+			log.Dev.Fatalf(ctx, "failed to coalesce known heartbeat: %v", msg)
 		}
 	}
 	return true

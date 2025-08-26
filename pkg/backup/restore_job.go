@@ -2199,7 +2199,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	if err := r.execCfg.ProtectedTimestampManager.Unprotect(ctx, r.job); err != nil {
-		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
+		log.Dev.Errorf(ctx, "failed to release protected timestamp: %v", err)
 	}
 	if !details.OnlineImpl() {
 		r.notifyStatsRefresherOfNewTables()
@@ -2874,7 +2874,7 @@ func (r *restoreResumer) dropDescriptors(
 	// about so we only do this check if they have not been published.
 	if !details.DescriptorsPublished {
 		if err := checkRestoredTableDescriptorVersions(details, mutableTables); err != nil {
-			log.Errorf(ctx, "table version mismatch during drop: %v", err)
+			log.Dev.Errorf(ctx, "table version mismatch during drop: %v", err)
 		}
 	}
 
@@ -3474,7 +3474,7 @@ func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
 	// system tables.
 	gcTTLQuery := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING gc.ttlseconds=1", restoreTempSystemDB)
 	if _, err := executor.Exec(ctx, "altering-gc-ttl-temp-system" /* opName */, nil /* txn */, gcTTLQuery); err != nil {
-		log.Errorf(ctx, "failed to update the GC TTL of %q: %+v", restoreTempSystemDB, err)
+		log.Dev.Errorf(ctx, "failed to update the GC TTL of %q: %+v", restoreTempSystemDB, err)
 	}
 	dropTableQuery := fmt.Sprintf("DROP DATABASE %s CASCADE", restoreTempSystemDB)
 	if _, err := executor.Exec(ctx, "drop-temp-system-db" /* opName */, nil /* txn */, dropTableQuery); err != nil {

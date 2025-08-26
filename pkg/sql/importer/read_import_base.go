@@ -448,7 +448,7 @@ type importFileContext struct {
 // handleCorruptRow reports an error encountered while processing a row
 // in an input file.
 func handleCorruptRow(ctx context.Context, fileCtx *importFileContext, err error) error {
-	log.Errorf(ctx, "%+v", err)
+	log.Dev.Errorf(ctx, "%+v", err)
 
 	if rowErr := (*importRowError)(nil); errors.As(err, &rowErr) && fileCtx.rejected != nil {
 		fileCtx.rejected <- rowErr.row + "\n"

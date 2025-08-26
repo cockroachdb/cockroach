@@ -323,7 +323,7 @@ func (s *initServer) Bootstrap(
 
 	state, err := bootstrapCluster(ctx, s.inspectedDiskState.uninitializedEngines, s.config)
 	if err != nil {
-		log.Errorf(ctx, "bootstrap: %v", err)
+		log.Dev.Errorf(ctx, "bootstrap: %v", err)
 		s.mu.rejectErr = errInternalBootstrapError
 		return nil, s.mu.rejectErr
 	}
@@ -634,7 +634,7 @@ func newInitServerConfig(
 		}
 	}
 	if latestVersion.Less(minSupportedVersion) {
-		log.Fatalf(ctx, "binary version (%s) less than min supported version (%s)",
+		log.Dev.Fatalf(ctx, "binary version (%s) less than min supported version (%s)",
 			latestVersion, minSupportedVersion)
 	}
 

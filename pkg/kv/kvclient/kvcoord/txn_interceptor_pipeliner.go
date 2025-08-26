@@ -878,7 +878,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 					// Record any writes that were performed asynchronously. We'll
 					// need to prove that these succeeded sometime before we commit.
 					if span.EndKey != nil {
-						log.Fatalf(ctx, "unexpected multi-key intent pipelined")
+						log.Dev.Fatalf(ctx, "unexpected multi-key intent pipelined")
 					}
 					tp.ifWrites.insert(span.Key, seq, str)
 				} else {

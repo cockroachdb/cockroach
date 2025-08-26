@@ -87,31 +87,31 @@ func (r *raftLogger) Warningf(format string, v ...interface{}) {
 }
 
 func (r *raftLogger) Error(v ...interface{}) {
-	log.ErrorfDepth(r.ctx, 1, "", v...)
+	log.Dev.ErrorfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Errorf(format string, v ...interface{}) {
-	log.ErrorfDepth(r.ctx, 1, format, v...)
+	log.Dev.ErrorfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Fatal(v ...interface{}) {
 	wrapNumbersAsSafe(v)
-	log.FatalfDepth(r.ctx, 1, "", v...)
+	log.Dev.FatalfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Fatalf(format string, v ...interface{}) {
 	wrapNumbersAsSafe(v)
-	log.FatalfDepth(r.ctx, 1, format, v...)
+	log.Dev.FatalfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Panic(v ...interface{}) {
 	wrapNumbersAsSafe(v)
-	log.FatalfDepth(r.ctx, 1, "", v...)
+	log.Dev.FatalfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Panicf(format string, v ...interface{}) {
 	wrapNumbersAsSafe(v)
-	log.FatalfDepth(r.ctx, 1, format, v...)
+	log.Dev.FatalfDepth(r.ctx, 1, format, v...)
 }
 
 func wrapNumbersAsSafe(v ...interface{}) {

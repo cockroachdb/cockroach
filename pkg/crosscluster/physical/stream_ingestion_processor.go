@@ -590,14 +590,14 @@ func (sip *streamIngestionProcessor) close() {
 	// and stopCh close above should result in exit signals being
 	// sent to all relevant goroutines.
 	if err := sip.workerGroup.Wait(); err != nil {
-		log.Errorf(sip.Ctx(), "error on close(): %s", err)
+		log.Dev.Errorf(sip.Ctx(), "error on close(): %s", err)
 	}
 
 	if sip.subscriptionCancel != nil {
 		sip.subscriptionCancel()
 	}
 	if err := sip.subscriptionGroup.Wait(); err != nil {
-		log.Errorf(sip.Ctx(), "error on close(): %s", err)
+		log.Dev.Errorf(sip.Ctx(), "error on close(): %s", err)
 	}
 
 	if sip.batcher != nil {

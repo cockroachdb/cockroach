@@ -428,7 +428,7 @@ func (ds *ServerImpl) setupFlow(
 	var err error
 	ctx, opChains, err = f.Setup(ctx, &req.Flow, opt)
 	if err != nil {
-		log.Errorf(ctx, "error setting up flow: %s", err)
+		log.Dev.Errorf(ctx, "error setting up flow: %s", err)
 		return ctx, nil, nil, err
 	}
 	if isVectorized {

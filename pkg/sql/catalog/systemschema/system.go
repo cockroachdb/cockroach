@@ -1500,7 +1500,7 @@ func makeSystemTable(
 		}
 		privs := catprivilege.SystemSuperuserPrivileges(nameInfo)
 		if privs == nil {
-			log.Fatalf(ctx, "no superuser privileges found when building descriptor of system table %q", tbl.Name)
+			log.Dev.Fatalf(ctx, "no superuser privileges found when building descriptor of system table %q", tbl.Name)
 		}
 		tbl.Privileges = catpb.NewCustomSuperuserPrivilegeDescriptor(privs, username.NodeUserName())
 	}

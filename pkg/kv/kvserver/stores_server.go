@@ -105,7 +105,7 @@ func (is Server) WaitForApplication(
 			}
 		}
 		if ctx.Err() == nil {
-			log.Fatal(ctx, "infinite retry loop exited but context has no error")
+			log.Dev.Fatal(ctx, "infinite retry loop exited but context has no error")
 		}
 		return ctx.Err()
 	})
@@ -130,7 +130,7 @@ func (is Server) WaitForReplicaInit(
 			}
 		}
 		if ctx.Err() == nil {
-			log.Fatal(ctx, "infinite retry loop exited but context has no error")
+			log.Dev.Fatal(ctx, "infinite retry loop exited but context has no error")
 		}
 		return ctx.Err()
 	})

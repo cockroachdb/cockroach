@@ -47,7 +47,7 @@ func (s *SQLServer) startTenantAutoUpgradeLoop(ctx context.Context) error {
 				if storageClusterVersion.Equal(clusterversion.Latest.Version()) {
 					upgradeCompleted, err := s.startAttemptTenantUpgrade(ctx)
 					if err != nil {
-						log.Errorf(ctx, "failed to start an upgrade attempt: %v", err)
+						log.Dev.Errorf(ctx, "failed to start an upgrade attempt: %v", err)
 					}
 
 					if upgradeCompleted {

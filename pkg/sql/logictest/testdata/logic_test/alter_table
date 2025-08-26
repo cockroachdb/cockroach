@@ -5236,3 +5236,32 @@ statement ok
 RESET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled;
 
 subtest end
+
+# Previously, we had a bug where schema changes dropping a column and cleaning
+# up a unique without index constraint did not properly order operations. This
+# could lead to the schema change failing.
+subtest validate_unique_without_constraint_expr
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true;
+
+statement ok
+CREATE TABLE tbl_with_unique_without_index (i INT DEFAULT 11, j INT);
+
+statement ok
+ALTER TABLE tbl_with_unique_without_index ADD CONSTRAINT c UNIQUE WITHOUT INDEX (i, j) WHERE i IS NOT NULL;
+
+skipif config local-mixed-25.3
+skipif config local-mixed-25.2
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE tbl_with_unique_without_index DROP CONSTRAINT c, DROP COLUMN i;
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 42P10 cannot drop column \"i\" because it is referenced by partial unique constraint \"c\"
+ALTER TABLE tbl_with_unique_without_index DROP CONSTRAINT c, DROP COLUMN i;
+
+statement ok
+RESET experimental_enable_unique_without_index_constraints
+
+subtest end

@@ -415,12 +415,12 @@ func (c *connector) runGossipSubscription(ctx context.Context, startupCh chan st
 			}
 			if e.Error != nil {
 				// Hard logical error. We expect io.EOF next.
-				log.Errorf(ctx, "error consuming GossipSubscription RPC: %v", e.Error)
+				log.Dev.Errorf(ctx, "error consuming GossipSubscription RPC: %v", e.Error)
 				continue
 			}
 			handler, ok := gossipSubsHandlers[e.PatternMatched]
 			if !ok {
-				log.Errorf(ctx, "unknown GossipSubscription pattern: %q", e.PatternMatched)
+				log.Dev.Errorf(ctx, "unknown GossipSubscription pattern: %q", e.PatternMatched)
 				continue
 			}
 			handler(c, ctx, e.Key, e.Content)
@@ -458,12 +458,12 @@ var gossipSubsPatterns = func() []string {
 func (c *connector) updateClusterID(ctx context.Context, key string, content roachpb.Value) {
 	bytes, err := content.GetBytes()
 	if err != nil {
-		log.Errorf(ctx, "invalid ClusterID value: %v", content.RawBytes)
+		log.Dev.Errorf(ctx, "invalid ClusterID value: %v", content.RawBytes)
 		return
 	}
 	clusterID, err := uuid.FromBytes(bytes)
 	if err != nil {
-		log.Errorf(ctx, "invalid ClusterID value: %v", content.RawBytes)
+		log.Dev.Errorf(ctx, "invalid ClusterID value: %v", content.RawBytes)
 		return
 	}
 	c.rpcContext.StorageClusterID.Set(ctx, clusterID)
@@ -474,7 +474,7 @@ func (c *connector) updateClusterID(ctx context.Context, key string, content roa
 func (c *connector) updateNodeAddress(ctx context.Context, key string, content roachpb.Value) {
 	desc := new(roachpb.NodeDescriptor)
 	if err := content.GetProto(desc); err != nil {
-		log.Errorf(ctx, "could not unmarshal node descriptor: %v", err)
+		log.Dev.Errorf(ctx, "could not unmarshal node descriptor: %v", err)
 		return
 	}
 
@@ -494,7 +494,7 @@ func (c *connector) updateNodeAddress(ctx context.Context, key string, content r
 func (c *connector) updateStoreMap(ctx context.Context, key string, content roachpb.Value) {
 	desc := new(roachpb.StoreDescriptor)
 	if err := content.GetProto(desc); err != nil {
-		log.Errorf(ctx, "could not unmarshal store descriptor: %v", err)
+		log.Dev.Errorf(ctx, "could not unmarshal store descriptor: %v", err)
 		return
 	}
 

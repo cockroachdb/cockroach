@@ -96,7 +96,7 @@ func (t *decommissioningNodeMap) makeOnNodeDecommissioningCallback(
 			return nil
 		}); err != nil {
 			// We're swallowing any errors above, so this shouldn't ever happen.
-			log.Fatalf(
+			log.Dev.Fatalf(
 				ctx, "error while nudging replicas for decommissioning node n%d", decommissioningNodeID,
 			)
 		}
@@ -352,7 +352,7 @@ func (s *topLevelServer) Decommission(
 			if errors.Is(err, liveness.ErrMissingRecord) {
 				return grpcstatus.Error(codes.NotFound, liveness.ErrMissingRecord.Error())
 			}
-			log.Errorf(ctx, "%+s", err)
+			log.Dev.Errorf(ctx, "%+s", err)
 			return grpcstatus.Error(codes.Internal, err.Error())
 		}
 		if statusChanged {
@@ -383,7 +383,7 @@ func (s *topLevelServer) Decommission(
 		// decommissioning the node again.
 		if targetStatus.Decommissioned() {
 			if err := s.db.PutInline(ctx, keys.NodeStatusKey(nodeID), nil); err != nil {
-				log.Errorf(ctx, "unable to clean up node status data for node %d: %s", nodeID, err)
+				log.Dev.Errorf(ctx, "unable to clean up node status data for node %d: %s", nodeID, err)
 			}
 		}
 	}

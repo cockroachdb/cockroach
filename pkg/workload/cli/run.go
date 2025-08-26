@@ -378,7 +378,7 @@ func startPProfEndPoint(ctx context.Context) {
 	go func() {
 		err := http.ListenAndServe(":"+strconv.Itoa(*pprofport), nil)
 		if err != nil {
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 		}
 	}()
 }
@@ -455,7 +455,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			fmt.Sprintf(":%d", *prometheusPort),
 			promhttp.HandlerFor(reg.Gatherer(), promhttp.HandlerOpts{}),
 		); err != nil {
-			log.Errorf(context.Background(), "error serving prometheus: %v", err)
+			log.Dev.Errorf(context.Background(), "error serving prometheus: %v", err)
 		}
 	}()
 
@@ -495,7 +495,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		if ctx.Err() != nil {
 			// Don't retry endlessly. Note that this retry loop is not under the
 			// control of --duration, so we're avoiding retrying endlessly.
-			log.Errorf(ctx, "Attempt to create load generator failed. "+
+			log.Dev.Errorf(ctx, "Attempt to create load generator failed. "+
 				"It's been more than %s since we started trying to create the load generator "+
 				"so we're giving up. Last failure: %s\nStacks:\n%s", prepareTimeout, err, <-stacksCh)
 		}
@@ -582,12 +582,12 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			formatter.outputError(err)
 			if *tolerateErrors {
 				if everySecond.ShouldLog() {
-					log.Errorf(ctx, "%v", err)
+					log.Dev.Errorf(ctx, "%v", err)
 				}
 				continue
 			}
 			// Log the error with %+v so we get the stack trace.
-			log.Errorf(ctx, "workload run error: %+v", err)
+			log.Dev.Errorf(ctx, "workload run error: %+v", err)
 			return err
 
 		case <-ticker.C:

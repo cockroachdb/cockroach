@@ -446,7 +446,7 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 	// worker group. The client close and stopCh close above should result
 	// in exit signals being sent to all relevant goroutines.
 	if err := lrw.workerGroup.Wait(); err != nil {
-		log.Errorf(lrw.Ctx(), "error on close(): %s", err)
+		log.Dev.Errorf(lrw.Ctx(), "error on close(): %s", err)
 	}
 
 	for _, b := range lrw.bh {

@@ -438,7 +438,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	// as a no-op and return success instead of throwing an error.
 	if desc.StartKey.Equal(splitKey) {
 		if len(args.SplitKey) == 0 {
-			log.Fatal(ctx, "MVCCFindSplitKey returned start key of range")
+			log.Dev.Fatal(ctx, "MVCCFindSplitKey returned start key of range")
 		}
 		log.Event(ctx, "range already split")
 		// Even if the range is already split, we should still update the sticky
@@ -1902,7 +1902,7 @@ func (r *Replica) initializeRaftLearners(
 	case roachpb.NON_VOTER:
 		iChangeType = internalChangeTypeAddNonVoter
 	default:
-		log.Fatalf(ctx, "unexpected replicaType %s", replicaType)
+		log.Dev.Fatalf(ctx, "unexpected replicaType %s", replicaType)
 	}
 
 	// Lock learner snapshots even before we run the ConfChange txn to add them
@@ -4233,7 +4233,7 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 			// issued, in which case the scatter may fail due to the range split
 			// updating the descriptor while processing.
 			if IsRetriableReplicationChangeError(err) {
-				log.Errorf(ctx, "retrying scatter process for range %v after retryable error: %v", desc, err)
+				log.Dev.Errorf(ctx, "retrying scatter process for range %v after retryable error: %v", desc, err)
 				continue
 			}
 			log.Dev.Warningf(ctx, "failed to process range (%v) due to %v at attempt %d",

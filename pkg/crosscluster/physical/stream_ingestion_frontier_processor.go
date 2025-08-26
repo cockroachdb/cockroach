@@ -197,13 +197,13 @@ func (sf *streamIngestionFrontier) Next() (
 		}
 
 		if err := sf.maybeUpdateProgress(); err != nil {
-			log.Errorf(sf.Ctx(), "failed to update progress: %+v", err)
+			log.Dev.Errorf(sf.Ctx(), "failed to update progress: %+v", err)
 			sf.MoveToDrainingAndLogError(err)
 			break
 		}
 
 		if err := sf.maybePersistFrontierEntries(); err != nil {
-			log.Errorf(sf.Ctx(), "failed to persist frontier entries: %+v", err)
+			log.Dev.Errorf(sf.Ctx(), "failed to persist frontier entries: %+v", err)
 		}
 
 		if err := sf.maybeCheckForLaggingNodes(); err != nil {
@@ -225,7 +225,7 @@ func (sf *streamIngestionFrontier) Next() (
 		case <-sf.heartbeatSender.StoppedChan:
 			err := sf.heartbeatSender.Wait()
 			if err != nil {
-				log.Errorf(sf.Ctx(), "heartbeat sender exited with error: %s", err)
+				log.Dev.Errorf(sf.Ctx(), "heartbeat sender exited with error: %s", err)
 			}
 			sf.MoveToDrainingAndLogError(err)
 			return nil, sf.DrainHelper()
@@ -246,10 +246,10 @@ func (sf *streamIngestionFrontier) close() {
 	defer sf.frontier.Release()
 
 	if err := sf.heartbeatSender.Stop(); err != nil {
-		log.Errorf(sf.Ctx(), "heartbeat sender exited with error: %s", err)
+		log.Dev.Errorf(sf.Ctx(), "heartbeat sender exited with error: %s", err)
 	}
 	if err := sf.client.Close(sf.Ctx()); err != nil {
-		log.Errorf(sf.Ctx(), "client exited with error: %s", err)
+		log.Dev.Errorf(sf.Ctx(), "client exited with error: %s", err)
 	}
 	if sf.InternalClose() {
 		sf.metrics.RunningCount.Dec(1)

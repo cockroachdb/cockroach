@@ -42,7 +42,7 @@ func splitPreApply(
 	_, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	_, hasLeftDesc := split.LeftDesc.GetReplicaDescriptor(r.StoreID())
 	if !hasRightDesc || !hasLeftDesc {
-		log.Fatalf(ctx, "cannot process split on s%s which does not exist in the split: %+v",
+		log.Dev.Fatalf(ctx, "cannot process split on s%s which does not exist in the split: %+v",
 			r.StoreID(), split)
 	}
 
@@ -86,12 +86,12 @@ func splitPreApply(
 			// the data of the RHS of the split; we cannot have already accepted a
 			// snapshot to initialize this newer RHS.
 			if rightRepl.IsInitialized() {
-				log.Fatalf(ctx, "unexpectedly found initialized newer RHS of split: %v", rightRepl.Desc())
+				log.Dev.Fatalf(ctx, "unexpectedly found initialized newer RHS of split: %v", rightRepl.Desc())
 			}
 			var err error
 			hs, err = rightRepl.raftMu.stateLoader.LoadHardState(ctx, readWriter)
 			if err != nil {
-				log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
+				log.Dev.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
 			}
 		}
 		// TODO(#152199): the rightRepl == nil condition is flaky. There can be a
@@ -120,18 +120,18 @@ func splitPreApply(
 			// See also: https://github.com/cockroachdb/cockroach/issues/94933
 			ClearUnreplicatedByRangeID: true,
 		}); err != nil {
-			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
+			log.Dev.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
 		if rightRepl != nil {
 			// Cleared the HardState and RaftReplicaID, so rewrite them to the current
 			// values. NB: rightRepl.raftMu is still locked since HardState was read,
 			// so it can't have been rewritten in the meantime (fixed in #75918).
 			if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
-				log.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
+				log.Dev.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
 			}
 			if err := rightRepl.raftMu.stateLoader.SetRaftReplicaID(
 				ctx, readWriter, rightRepl.ReplicaID()); err != nil {
-				log.Fatalf(ctx, "failed to set RaftReplicaID for removed rhs: %v", err)
+				log.Dev.Fatalf(ctx, "failed to set RaftReplicaID for removed rhs: %v", err)
 			}
 		}
 		return
@@ -148,13 +148,13 @@ func splitPreApply(
 	// can't load the default Term and Vote values.
 	rsl := stateloader.Make(split.RightDesc.RangeID)
 	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 	if err := rsl.SetRaftTruncatedState(ctx, readWriter, &kvserverpb.RaftTruncatedState{
 		Index: stateloader.RaftInitialLogIndex,
 		Term:  stateloader.RaftInitialLogTerm,
 	}); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 	// Persist the closed timestamp.
 	//
@@ -169,7 +169,7 @@ func splitPreApply(
 	}
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
 	if err := rsl.SetClosedTimestamp(ctx, readWriter, *initClosedTS); err != nil {
-		log.Fatalf(ctx, "%s", err)
+		log.Dev.Fatalf(ctx, "%s", err)
 	}
 }
 
@@ -189,7 +189,7 @@ func splitPostApply(
 	// to the store's replica map.
 	if err := r.store.SplitRange(ctx, r, rightReplOrNil, split); err != nil {
 		// Our in-memory state has diverged from the on-disk state.
-		log.Fatalf(ctx, "%s: failed to update Store after split: %+v", r, err)
+		log.Dev.Fatalf(ctx, "%s: failed to update Store after split: %+v", r, err)
 	}
 
 	// Update store stats with difference in stats before and after split.
@@ -253,7 +253,7 @@ func prepareRightReplicaForSplit(
 	state, err := kvstorage.LoadReplicaState(
 		ctx, r.store.TODOEngine(), r.StoreID(), &split.RightDesc, rightRepl.replicaID)
 	if err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 
 	// Already holding raftMu, see above.
@@ -262,7 +262,7 @@ func prepareRightReplicaForSplit(
 	if err := rightRepl.initRaftMuLockedReplicaMuLocked(
 		state, false, /* waitForPrevLeaseToExpire */
 	); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 
 	// Copy the minLeaseProposedTS from the LHS. loadRaftMuLockedReplicaMuLocked

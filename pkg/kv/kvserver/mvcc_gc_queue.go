@@ -485,7 +485,7 @@ func makeMVCCGCQueueScoreImpl(
 	isGCScoreMet := func(score float64, minThreshold, maxThreshold float64, cooldown time.Duration) bool {
 		if minThreshold > maxThreshold {
 			if util.RaceEnabled {
-				log.Fatalf(ctx,
+				log.Dev.Fatalf(ctx,
 					"invalid cooldown score thresholds. min (%f) must be less or equal to max (%f)",
 					minThreshold, maxThreshold)
 			}
@@ -793,7 +793,7 @@ func (mgcq *mvccGCQueue) process(
 		b.AddRawRequest(&req)
 		err := repl.store.db.Run(ctx, &b)
 		if err != nil {
-			log.Errorf(ctx, "failed to recompute stats with error=%s", err)
+			log.Dev.Errorf(ctx, "failed to recompute stats with error=%s", err)
 		}
 	}
 

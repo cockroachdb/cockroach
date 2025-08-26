@@ -911,7 +911,7 @@ func (s *Server) SetupConn(
 		}
 		return nil
 	}); err != nil {
-		log.Errorf(ctx, "error setting up client session: %s", err)
+		log.Dev.Errorf(ctx, "error setting up client session: %s", err)
 		return ConnectionHandler{}, err
 	}
 
@@ -1024,12 +1024,12 @@ func (h ConnectionHandler) GetParamStatus(ctx context.Context, varName string) s
 	name := strings.ToLower(varName)
 	v, ok := varGen[name]
 	if !ok {
-		log.Fatalf(ctx, "programming error: status param %q must be defined session var", varName)
+		log.Dev.Fatalf(ctx, "programming error: status param %q must be defined session var", varName)
 		return ""
 	}
 	hasDefault, defVal := getSessionVarDefaultString(name, v, h.ex.dataMutatorIterator.sessionDataMutatorBase)
 	if !hasDefault {
-		log.Fatalf(ctx, "programming error: status param %q must have a default value", varName)
+		log.Dev.Fatalf(ctx, "programming error: status param %q must have a default value", varName)
 		return ""
 	}
 	return defVal
@@ -1417,7 +1417,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ex.planner.extendedEvalCtx.SessionID,
 		)
 		if err != nil {
-			log.Errorf(
+			log.Dev.Errorf(
 				ctx,
 				"error deleting temporary objects at session close, "+
 					"the temp tables deletion job will retry periodically: %s",
@@ -3689,7 +3689,7 @@ func txnPriorityToProto(mode tree.UserPriority) roachpb.UserPriority {
 	case tree.High:
 		pri = roachpb.MaxUserPriority
 	default:
-		log.Fatalf(context.Background(), "unknown user priority: %s", mode)
+		log.Dev.Fatalf(context.Background(), "unknown user priority: %s", mode)
 	}
 	return pri
 }
@@ -4086,7 +4086,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				"programming error: non-error event %s generated even though res.Err() has been set to: %s",
 				errors.Safe(advInfo.txnEvent.eventType.String()),
 				res.Err())
-			log.Errorf(ex.Ctx(), "%v", err)
+			log.Dev.Errorf(ex.Ctx(), "%v", err)
 			sentryutil.SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV, err)
 			return advanceInfo{}, err
 		}

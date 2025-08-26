@@ -180,7 +180,7 @@ func MakeTestingClusterSettingsWithVersions(
 	if initializeVersion {
 		// Initialize cluster version to specified latestVersion.
 		if err := clusterversion.Initialize(context.TODO(), latestVersion, &s.SV); err != nil {
-			log.Fatalf(context.TODO(), "unable to initialize version: %s", err)
+			log.Dev.Fatalf(context.TODO(), "unable to initialize version: %s", err)
 		}
 	}
 	return s

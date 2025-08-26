@@ -181,7 +181,7 @@ func (r *Registry) addMetricValue(
 				log.Dev.Infof(ctx, "skipping nil metric field %s", name)
 			}
 		} else {
-			log.Fatalf(ctx, "found nil metric field %s", name)
+			log.Dev.Fatalf(ctx, "found nil metric field %s", name)
 		}
 		return
 	}
@@ -288,11 +288,11 @@ func exportedLabel(name string) string {
 	return prometheusLabelReplaceRE.ReplaceAllString(name, "_")
 }
 
-var panicHandler = log.Fatalf
+var panicHandler = log.Dev.Fatalf
 
 func testingSetPanicHandler(h func(ctx context.Context, msg string, args ...interface{})) func() {
 	panicHandler = h
-	return func() { panicHandler = log.Fatalf }
+	return func() { panicHandler = log.Dev.Fatalf }
 }
 
 // checkFieldCanBeSkipped detects common mis-use patterns with metrics registry

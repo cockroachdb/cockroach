@@ -1370,7 +1370,7 @@ var logRangeAndNodeEventsEnabled = settings.RegisterBoolSetting(
 // behavior of the consistency checker for tests.
 type ConsistencyTestingKnobs struct {
 	// If non-nil, OnBadChecksumFatal is called on a replica with a mismatching
-	// checksum, instead of log.Fatal.
+	// checksum, instead of log.Dev.Fatal.
 	OnBadChecksumFatal func(roachpb.StoreIdent)
 
 	ConsistencyQueueResultHook func(response kvpb.CheckConsistencyResponse)
@@ -1478,7 +1478,7 @@ func NewStore(
 	ctx context.Context, cfg StoreConfig, eng storage.Engine, nodeDesc *roachpb.NodeDescriptor,
 ) *Store {
 	if !cfg.Valid() {
-		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
+		log.Dev.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
 	iot := ioThresholds{}
 	iot.Replace(nil, 1.0) // init as empty
@@ -1719,7 +1719,7 @@ func NewStore(
 		authorizer = cfg.RPCContext.TenantRPCAuthorizer
 	}
 	if authorizer == nil {
-		log.Fatalf(ctx, "programming error: missing authorizer from config")
+		log.Dev.Fatalf(ctx, "programming error: missing authorizer from config")
 	}
 
 	s.tenantRateLimiters = tenantrate.NewLimiterFactory(&cfg.Settings.SV, &cfg.TestingKnobs.TenantRateKnobs, authorizer)
@@ -2048,7 +2048,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					}
 				}); err != nil {
 				if verbose || log.V(1) {
-					log.Errorf(ctx, "error running draining task: %+v", err)
+					log.Dev.Errorf(ctx, "error running draining task: %+v", err)
 				}
 				wg.Done()
 				return false
@@ -2710,7 +2710,7 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 	sp, err := keys.SpanAddr(updated)
 	if err != nil {
-		log.Errorf(ctx, "skipped applying update (%s), unexpected error resolving span address: %v",
+		log.Dev.Errorf(ctx, "skipped applying update (%s), unexpected error resolving span address: %v",
 			updated, err)
 		return
 	}
@@ -2746,7 +2746,7 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 
 				conf, sp, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, startKey)
 				if err != nil {
-					log.Errorf(replCtx, "skipped applying update, unexpected error reading from subscriber: %v", err)
+					log.Dev.Errorf(replCtx, "skipped applying update, unexpected error reading from subscriber: %v", err)
 					return err
 				}
 				changed = repl.SetSpanConfig(conf, sp)
@@ -2758,7 +2758,7 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 		},
 	); err != nil {
 		// Errors here should not be possible, but if there is one, log loudly.
-		log.Errorf(ctx, "unexpected error visiting replicas: %v", err)
+		log.Dev.Errorf(ctx, "unexpected error visiting replicas: %v", err)
 	}
 }
 
@@ -2771,7 +2771,7 @@ func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
 		key := repl.Desc().StartKey
 		conf, confSpan, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, key)
 		if err != nil {
-			log.Errorf(ctx, "skipped applying config update, unexpected error reading from subscriber: %v", err)
+			log.Dev.Errorf(ctx, "skipped applying config update, unexpected error reading from subscriber: %v", err)
 			return true // more
 		}
 
@@ -3072,7 +3072,7 @@ func (s *Store) getOverlappingKeyRangeLocked(
 			it = iit
 			return iterutil.StopIteration()
 		}); err != nil {
-		log.Fatalf(context.Background(), "%v", err)
+		log.Dev.Fatalf(context.Background(), "%v", err)
 	}
 
 	return it

@@ -191,7 +191,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		// heartbeat the NodeLiveness record to prevent tests from flaking.
 		err = retry.ForDuration(200*time.Second, c.Server.HeartbeatNodeLiveness)
 		if err != nil {
-			log.Fatalf(context.Background(), "Couldn't heartbeat node liveness: %s", err)
+			log.Dev.Fatalf(context.Background(), "Couldn't heartbeat node liveness: %s", err)
 		}
 	}
 

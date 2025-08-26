@@ -2156,7 +2156,7 @@ func doRestorePlan(
 				return
 			}
 			if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
-				log.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
+				log.Dev.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
 			}
 		}()
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()

@@ -76,7 +76,7 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 		rng:     rng,
 	}
 	if err := l.processTestFile(path, logictest.TestClusterConfig{}); err != nil {
-		log.Errorf(context.Background(), "error processing %s: %s", path, err)
+		log.Dev.Errorf(context.Background(), "error processing %s: %s", path, err)
 		t.Error(err)
 	}
 }

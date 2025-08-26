@@ -158,7 +158,7 @@ func (s *condensableSpanSet) maybeCondense(
 				// If we didn't fatal here then we would need to ensure that the
 				// spans were restored or a transaction could lose part of its
 				// lock footprint.
-				log.Fatalf(ctx, "failed to condense lock spans: "+
+				log.Dev.Fatalf(ctx, "failed to condense lock spans: "+
 					"combining span %s yielded invalid result", s)
 			}
 		}

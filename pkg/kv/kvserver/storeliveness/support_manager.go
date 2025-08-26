@@ -396,7 +396,7 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 		case slpb.MsgHeartbeatResp:
 			rsfu.handleHeartbeatResponse(ctx, msg)
 		default:
-			log.Errorf(ctx, "unexpected message type: %v", msg.Type)
+			log.Dev.Errorf(ctx, "unexpected message type: %v", msg.Type)
 		}
 	}
 

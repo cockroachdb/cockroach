@@ -125,7 +125,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 	}
 
 	errorFn := func(nodeID roachpb.NodeID, err error) {
-		log.Errorf(ctx, nodeErrorMsgPlaceholder, nodeID, err)
+		log.Dev.Errorf(ctx, nodeErrorMsgPlaceholder, nodeID, err)
 		errorMessage := fmt.Sprintf("%v", err)
 		res.Errors = append(res.Errors, errorMessage)
 	}
@@ -171,7 +171,7 @@ func collectSpanStatsResponses(
 		// See #108779.
 		for spanStr, spanStats := range nodeResponse.SpanToStats {
 			if spanStats == nil {
-				log.Errorf(ctx, "Span stats for %s from node response is nil", spanStr)
+				log.Dev.Errorf(ctx, "Span stats for %s from node response is nil", spanStr)
 				continue
 			}
 

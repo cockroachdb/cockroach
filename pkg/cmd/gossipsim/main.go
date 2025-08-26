@@ -137,7 +137,7 @@ func outputDotFile(
 ) (string, bool) {
 	f, err := os.Create(dotFN)
 	if err != nil {
-		log.Fatalf(context.TODO(), "unable to create temp file: %s", err)
+		log.Dev.Fatalf(context.TODO(), "unable to create temp file: %s", err)
 	}
 	defer f.Close()
 
@@ -175,7 +175,7 @@ func outputDotFile(
 		quiescent = false
 		nodeID, err := strconv.Atoi(strings.Split(key, ":")[0])
 		if err != nil {
-			log.Fatalf(context.TODO(), "%v", err)
+			log.Dev.Fatalf(context.TODO(), "%v", err)
 		}
 		outgoingMap.addEdge(roachpb.NodeID(nodeID), e)
 		delete(edgeSet, key)
@@ -199,7 +199,7 @@ func outputDotFile(
 			} else {
 				_, val, err := encoding.DecodeUint64Ascending(info)
 				if err != nil {
-					log.Fatalf(context.TODO(), "bad decode of node info cycle: %s", err)
+					log.Dev.Fatalf(context.TODO(), "bad decode of node info cycle: %s", err)
 				}
 				totalAge += int64(cycle) - int64(val)
 			}
@@ -213,7 +213,7 @@ func outputDotFile(
 		} else {
 			_, val, err := encoding.DecodeUint64Ascending(info)
 			if err != nil {
-				log.Fatalf(context.TODO(), "bad decode of sentinel cycle: %s", err)
+				log.Dev.Fatalf(context.TODO(), "bad decode of sentinel cycle: %s", err)
 			}
 			sentinelAge = int64(cycle) - int64(val)
 		}
@@ -267,7 +267,7 @@ func main() {
 
 	dirName, err := os.MkdirTemp("", "gossip-simulation-")
 	if err != nil {
-		log.Fatalf(context.TODO(), "could not create temporary directory for gossip simulation output: %s", err)
+		log.Dev.Fatalf(context.TODO(), "could not create temporary directory for gossip simulation output: %s", err)
 	}
 
 	// Simulation callbacks to run the simulation for cycleCount
@@ -288,7 +288,7 @@ func main() {
 	case "ginormous":
 		nodeCount = 250
 	default:
-		log.Fatalf(context.TODO(), "unknown simulation size: %s", *size)
+		log.Dev.Fatalf(context.TODO(), "unknown simulation size: %s", *size)
 	}
 
 	edgeSet := make(map[string]edge)

@@ -306,7 +306,7 @@ func (t *Transport) startProcessNewQueue(
 	worker := func(ctx context.Context) {
 		q, existingQueue := t.getQueue(toNodeID)
 		if !existingQueue {
-			log.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
+			log.Dev.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
 		}
 		defer cleanup()
 		client, err := slpb.DialStoreLivenessClient(t.dialer, ctx, toNodeID, connClass)

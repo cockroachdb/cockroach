@@ -143,7 +143,7 @@ func Handler(cfg Config) http.Handler {
 		// Only compute hashes for UI-enabled builds
 		err := httputil.ComputeEtags(Assets, etags)
 		if err != nil {
-			log.Errorf(context.Background(), "Unable to compute asset hashes: %+v", err)
+			log.Dev.Errorf(context.Background(), "Unable to compute asset hashes: %+v", err)
 		}
 	}
 
@@ -158,7 +158,7 @@ func Handler(cfg Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		licenseType, err := base.LicenseType(cfg.Settings)
 		if err != nil {
-			log.Errorf(context.Background(), "unable to get license type: %+v", err)
+			log.Dev.Errorf(context.Background(), "unable to get license type: %+v", err)
 		}
 		licenseTTL := base.GetLicenseTTL(r.Context(), cfg.Settings, timeutil.DefaultTimeSource{})
 		oidcConf := cfg.OIDC.GetOIDCConf()
@@ -187,13 +187,13 @@ func Handler(cfg Config) http.Handler {
 		if uiConfigPath.MatchString(r.URL.Path) {
 			argBytes, err := json.Marshal(args)
 			if err != nil {
-				log.Errorf(r.Context(), "unable to deserialize ui config args: %v", err)
+				log.Dev.Errorf(r.Context(), "unable to deserialize ui config args: %v", err)
 				http.Error(w, err.Error(), 500)
 				return
 			}
 			_, err = w.Write(argBytes)
 			if err != nil {
-				log.Errorf(r.Context(), "unable to write ui config args: %v", err)
+				log.Dev.Errorf(r.Context(), "unable to write ui config args: %v", err)
 				http.Error(w, err.Error(), 500)
 				return
 			}

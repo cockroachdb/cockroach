@@ -8620,7 +8620,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 								errors.Newf("synthetic fatal error from node %d", nodeToFail),
 								pgcode.Io, "something happened with IO")),
 						"while doing something")
-					log.Errorf(ctx, "BeforeEmitRow returning error %s", err)
+					log.Dev.Errorf(ctx, "BeforeEmitRow returning error %s", err)
 					return err
 				}
 				return nil
@@ -8646,7 +8646,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 		for feedErr == nil {
 			_, feedErr = feed.Next()
 		}
-		log.Errorf(context.Background(), "feedErr=%s", feedErr)
+		log.Dev.Errorf(context.Background(), "feedErr=%s", feedErr)
 		require.Regexp(t, "synthetic fatal error", feedErr)
 
 		// enterprise feeds should also have the job marked failed.

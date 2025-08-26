@@ -236,7 +236,7 @@ func (p *storage) getRecords(ctx context.Context) ([]ptpb.Record, error) {
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		var record ptpb.Record
 		if err := rowToRecord(it.Cur(), &record, false /* isDeprecatedRow */); err != nil {
-			log.Errorf(ctx, "failed to parse row as record: %v", err)
+			log.Dev.Errorf(ctx, "failed to parse row as record: %v", err)
 		}
 		records = append(records, record)
 	}
@@ -423,7 +423,7 @@ func (p *storage) deprecatedGetRecords(ctx context.Context) ([]ptpb.Record, erro
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		var record ptpb.Record
 		if err := rowToRecord(it.Cur(), &record, true /* isDeprecatedRow */); err != nil {
-			log.Errorf(ctx, "failed to parse row as record: %v", err)
+			log.Dev.Errorf(ctx, "failed to parse row as record: %v", err)
 		}
 		records = append(records, record)
 	}

@@ -537,7 +537,7 @@ func (p *processorImpl) InitRaftLocked(
 	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	p.opts.ReplicaMutexAsserter.ReplicaMuAssertHeld()
 	if p.desc.replicas != nil {
-		log.Fatalf(ctx, "initializing RaftNode after replica is initialized")
+		log.Dev.Fatalf(ctx, "initializing RaftNode after replica is initialized")
 	}
 	p.raftInterface = rn
 	p.logTracker.init(logMark)
@@ -623,7 +623,7 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 	ctx context.Context, state RaftNodeBasicState,
 ) {
 	if state.Term < p.term {
-		log.Fatalf(ctx, "term regressed from %d to %d", p.term, state.Term)
+		log.Dev.Fatalf(ctx, "term regressed from %d to %d", p.term, state.Term)
 	}
 	termChanged := state.Term > p.term
 	if termChanged {
@@ -666,7 +666,7 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 				// Is leader, but not in the set of replicas. We expect this should not
 				// be happening anymore, due to raft.Config.StepDownOnRemoval being set
 				// to true. But we tolerate it.
-				log.Errorf(ctx, "leader=%d is not in the set of replicas=%v",
+				log.Dev.Errorf(ctx, "leader=%d is not in the set of replicas=%v",
 					state.Leader, p.desc.replicas)
 				p.leaderNodeID = p.opts.NodeID
 				p.leaderStoreID = p.opts.StoreID
@@ -695,7 +695,7 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 	// Existing RangeController.
 	if replicasChanged {
 		if err := p.leader.rc.SetReplicasRaftMuLocked(ctx, p.desc.replicas); err != nil {
-			log.Errorf(ctx, "error setting replicas: %v", err)
+			log.Dev.Errorf(ctx, "error setting replicas: %v", err)
 		}
 	}
 	p.leader.rc.SetLeaseholderRaftMuLocked(ctx, state.Leaseholder)
@@ -767,7 +767,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(
 		return
 	}
 	if p.raftInterface == nil {
-		log.Fatal(ctx, "RaftInterface is not initialized")
+		log.Dev.Fatal(ctx, "RaftInterface is not initialized")
 		return
 	}
 
@@ -783,7 +783,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(
 		if knobs := p.opts.Knobs; knobs == nil || !knobs.UseOnlyForScratchRanges ||
 			p.opts.ReplicaForTesting.IsScratchRange() {
 			if err := rc.HandleRaftEventRaftMuLocked(ctx, e); err != nil {
-				log.Errorf(ctx, "error handling raft event: %v", err)
+				log.Dev.Errorf(ctx, "error handling raft event: %v", err)
 			}
 		}
 	}
@@ -937,7 +937,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 			raftPri = raftpb.LowPri
 			if admissionpb.WorkClassFromPri(admissionpb.WorkPriority(meta.AdmissionPriority)) ==
 				admissionpb.RegularWorkClass && p.v1EncodingPriorityMismatch.ShouldLog() {
-				log.Errorf(ctx,
+				log.Dev.Errorf(ctx,
 					"do not use RACv1 encoding for pri %s, which is regular work",
 					admissionpb.WorkPriority(meta.AdmissionPriority))
 			}

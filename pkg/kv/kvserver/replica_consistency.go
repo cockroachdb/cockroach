@@ -130,7 +130,7 @@ func (r *Replica) checkConsistencyImpl(
 		}
 
 		if isQueue {
-			log.Errorf(ctx, "%v", &buf)
+			log.Dev.Errorf(ctx, "%v", &buf)
 		}
 		res.Detail += buf.String()
 	} else {
@@ -221,7 +221,7 @@ func (r *Replica) checkConsistencyImpl(
 		// A checkpoint/termination request has already been sent. Return because
 		// all the code below will do is request another consistency check, with
 		// instructions to make a checkpoint and to terminate the minority nodes.
-		log.Errorf(ctx, "consistency check failed")
+		log.Dev.Errorf(ctx, "consistency check failed")
 		return resp, nil
 	}
 
@@ -240,7 +240,7 @@ func (r *Replica) checkConsistencyImpl(
 	// TODO(knz): clean up after https://github.com/cockroachdb/redact/issues/5.
 	{
 		var tmp redact.SafeFormatter = roachpb.MakeReplicaSet(args.Terminate)
-		log.Errorf(ctx, "consistency check failed; fetching details and shutting down minority %v", tmp)
+		log.Dev.Errorf(ctx, "consistency check failed; fetching details and shutting down minority %v", tmp)
 	}
 
 	// We've noticed in practice that if the snapshot diff is large, the
@@ -253,7 +253,7 @@ func (r *Replica) checkConsistencyImpl(
 	defer log.TemporarilyDisableFileGCForMainLogger()()
 
 	if _, pErr := r.checkConsistencyImpl(ctx, args); pErr != nil {
-		log.Errorf(ctx, "replica inconsistency detected; second round failed: %s", pErr)
+		log.Dev.Errorf(ctx, "replica inconsistency detected; second round failed: %s", pErr)
 	}
 
 	return resp, nil
@@ -742,11 +742,11 @@ func (r *Replica) computeChecksumPostApply(
 				}
 			},
 		); err != nil {
-			log.Errorf(ctx, "checksum collection did not join: %v", err)
+			log.Dev.Errorf(ctx, "checksum collection did not join: %v", err)
 		} else {
 			result, err := CalcReplicaDigest(ctx, desc, snap, cc.Mode, r.store.consistencyLimiter, r.ClusterSettings())
 			if err != nil {
-				log.Errorf(ctx, "checksum computation failed: %v", err)
+				log.Dev.Errorf(ctx, "checksum computation failed: %v", err)
 				result = nil
 			}
 			r.computeChecksumDone(c, result)
@@ -819,7 +819,7 @@ creation. These directories should be deleted, or inspected with caution.
 			p(*r.store.Ident)
 		} else {
 			time.Sleep(10 * time.Second)
-			log.Fatalf(r.AnnotateCtx(context.Background()), attentionFmt, attentionArgs...)
+			log.Dev.Fatalf(r.AnnotateCtx(context.Background()), attentionFmt, attentionArgs...)
 		}
 	}); err != nil {
 		taskCancel()

@@ -239,7 +239,7 @@ func (s *jobScheduler) executeCandidateSchedule(
 			return nil
 		}
 		s.metrics.NumMalformedSchedules.Inc(1)
-		log.Errorf(ctx, "error parsing schedule %d: %s", candidate, err)
+		log.Dev.Errorf(ctx, "error parsing schedule %d: %s", candidate, err)
 		return err
 	}
 
@@ -273,7 +273,7 @@ func (s *jobScheduler) executeCandidateSchedule(
 
 		// Failed to process schedule.
 		s.metrics.NumErrSchedules.Inc(1)
-		log.Errorf(ctx,
+		log.Dev.Errorf(ctx,
 			"error processing schedule %d: %+v", schedule.ScheduleID(), processErr)
 
 		// Try updating schedule record to indicate schedule execution error.
@@ -300,7 +300,7 @@ func (s *jobScheduler) executeCandidateSchedule(
 				return errors.Wrapf(err,
 					"savepoint error for schedule %d", schedule.ScheduleID())
 			}
-			log.Errorf(ctx, "error recording processing error for schedule %d: %+v",
+			log.Dev.Errorf(ctx, "error recording processing error for schedule %d: %+v",
 				schedule.ScheduleID(), err)
 		}
 	}
@@ -342,7 +342,7 @@ func (s *jobScheduler) executeSchedules(ctx context.Context, maxSchedules int64)
 		if err := s.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return s.executeCandidateSchedule(ctx, candidateID, txn)
 		}); err != nil {
-			log.Errorf(ctx, "error executing candidate schedule %d: %s", candidateID, err)
+			log.Dev.Errorf(ctx, "error executing candidate schedule %d: %s", candidateID, err)
 		}
 	}
 
@@ -407,7 +407,7 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 		log.Dev.Infof(ctx, "waiting %v before scheduled jobs daemon start", initialDelay)
 
 		if err := RegisterExecutorsMetrics(s.registry); err != nil {
-			log.Errorf(ctx, "error registering executor metrics: %+v", err)
+			log.Dev.Errorf(ctx, "error registering executor metrics: %+v", err)
 		}
 
 		whenDisabled := newCancelWhenDisabled(&s.Settings.SV)
@@ -427,7 +427,7 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 				if err := whenDisabled.withCancelOnDisabled(ctx, &s.Settings.SV, func(ctx context.Context) error {
 					return s.executeSchedules(ctx, maxSchedules)
 				}); err != nil {
-					log.Errorf(ctx, "error executing schedules: %v", err)
+					log.Dev.Errorf(ctx, "error executing schedules: %v", err)
 				}
 			}
 		}

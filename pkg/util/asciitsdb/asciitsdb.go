@@ -137,7 +137,7 @@ func (t *TSDB) Scrape(ctx context.Context) {
 				t.mu.points[name] = append(t.mu.points[name], *m.Counter.Value)
 			}
 		default:
-			log.Fatalf(ctx, "cannot extract value for type %T", mtr)
+			log.Dev.Fatalf(ctx, "cannot extract value for type %T", mtr)
 		}
 	})
 }

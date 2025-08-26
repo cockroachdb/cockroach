@@ -133,7 +133,7 @@ func (c *Lookup) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 		}
 	}); err != nil {
-		log.Errorf(ctx, "unable to start CIDR lookup refresh task: %v", err)
+		log.Dev.Errorf(ctx, "unable to start CIDR lookup refresh task: %v", err)
 		return err
 	}
 	return nil
@@ -158,7 +158,7 @@ func (c *Lookup) refresh(ctx context.Context) {
 	if c.isUpdated(ctx, url) {
 		// Set the URL
 		if err := c.setURL(ctx, url); err != nil {
-			log.Errorf(ctx, "error setting CIDR URL to '%s': %v", url, err)
+			log.Dev.Errorf(ctx, "error setting CIDR URL to '%s': %v", url, err)
 		}
 	}
 }

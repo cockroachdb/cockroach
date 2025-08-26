@@ -186,7 +186,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 				continue
 			}
 
-			log.Errorf(ctx, "reconciler failed with %v, retrying...", err)
+			log.Dev.Errorf(ctx, "reconciler failed with %v, retrying...", err)
 			continue
 		}
 		return nil // we're done here (the stopper was stopped, Reconcile exited cleanly)

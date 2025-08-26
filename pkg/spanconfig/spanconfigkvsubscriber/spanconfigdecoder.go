@@ -108,7 +108,7 @@ func (sd *SpanConfigDecoder) TranslateEvent(
 		Value: value,
 	})
 	if err != nil {
-		log.Fatalf(ctx, "failed to decode row: %v", err) // non-retryable error; just fatal
+		log.Dev.Fatalf(ctx, "failed to decode row: %v", err) // non-retryable error; just fatal
 	}
 
 	if log.ExpensiveLogEnabled(ctx, 1) {
@@ -120,7 +120,7 @@ func (sd *SpanConfigDecoder) TranslateEvent(
 	if deleted {
 		update, err = spanconfig.Deletion(record.GetTarget())
 		if err != nil {
-			log.Fatalf(ctx, "failed to construct Deletion: %+v", err)
+			log.Dev.Fatalf(ctx, "failed to construct Deletion: %+v", err)
 		}
 	} else {
 		update = spanconfig.Update(record)

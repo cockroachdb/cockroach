@@ -1729,7 +1729,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				if err := s.Stopper().RunAsyncTask(ctx, "force split", func(_ context.Context) {
 					store.TestingSetSplitQueueActive(true)
 					if err := store.ForceSplitScanAndProcess(); err != nil {
-						log.Fatalf(ctx, "%v", err)
+						log.Dev.Fatalf(ctx, "%v", err)
 					}
 				}); err != nil {
 					t.Fatal(err)

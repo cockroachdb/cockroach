@@ -169,7 +169,7 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 		// don't), or that we're applying a snapshot for another range (we don't do
 		// that either). Something is severely wrong for this to happen.
 		if totalKeySpans[i].Key.Compare(keySpans[i].Key) < 0 {
-			log.Fatalf(ctx, "subsuming replica to our left; key span: %v; total key span %v",
+			log.Dev.Fatalf(ctx, "subsuming replica to our left; key span: %v; total key span %v",
 				keySpans[i], totalKeySpans[i])
 		}
 

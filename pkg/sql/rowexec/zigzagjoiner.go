@@ -803,7 +803,7 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 			zigzagJoinerBatchSize,
 		)
 		if err != nil {
-			log.Errorf(z.Ctx(), "scan error: %s", err)
+			log.Dev.Errorf(z.Ctx(), "scan error: %s", err)
 			return err
 		}
 		fetchedRow, err := z.fetchRow(z.Ctx())

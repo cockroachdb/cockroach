@@ -248,7 +248,7 @@ type SharedBudgetAllocation struct {
 func (a *SharedBudgetAllocation) Use(ctx context.Context) {
 	if a != nil {
 		if atomic.AddInt32(&a.refCount, 1) == 1 {
-			log.Fatalf(ctx, "unexpected shared memory allocation usage increase after free")
+			log.Dev.Fatalf(ctx, "unexpected shared memory allocation usage increase after free")
 		}
 	}
 }

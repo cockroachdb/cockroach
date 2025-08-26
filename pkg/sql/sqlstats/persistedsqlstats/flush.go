@@ -93,7 +93,7 @@ func (s *PersistedSQLStats) MaybeFlushWithDrainer(
 	}
 
 	if err != nil {
-		log.Errorf(ctx, "encountered an error at flush, checking for statement statistics size limit: %v", err)
+		log.Dev.Errorf(ctx, "encountered an error at flush, checking for statement statistics size limit: %v", err)
 	}
 	if limitReached {
 		log.Dev.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
