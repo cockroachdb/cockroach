@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/url"
 	"testing"
-	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
@@ -217,16 +216,9 @@ INSERT INTO a VALUES (1);
 `)
 
 		waitForPollerJobToStartDest(t, c, ingestionJobID)
-		if cutoverToLatest {
-			observeValueInReaderTenant(t, c.ReaderTenantSQL)
-			c.Cutover(ctx, producerJobID, ingestionJobID, time.Time{}, false)
-			jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-			observeValueInReaderTenant(t, c.ReaderTenantSQL)
-		} else {
-			c.Cutover(ctx, producerJobID, ingestionJobID, c.SrcCluster.Server(0).Clock().Now().GoTime(), false)
-			waitToRemoveTenant(t, c.DestSysSQL, readerTenantName)
-			jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-		}
+		c.Cutover(ctx, producerJobID, ingestionJobID, c.SrcCluster.Server(0).Clock().Now().GoTime(), false)
+		waitToRemoveTenant(t, c.DestSysSQL, readerTenantName)
+		jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 	})
 }
 
