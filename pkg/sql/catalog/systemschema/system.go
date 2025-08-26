@@ -1338,7 +1338,7 @@ CREATE TABLE public.inspect_errors (
     id OID NOT NULL,
     primary_key STRING NULL,
     details STRING NOT NULL,
-    crdb_internal_expiration TIMESTAMPTZ NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL,
+    crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL,
     CONSTRAINT "primary" PRIMARY KEY (error_id ASC),
     INDEX object_idx (id ASC),
 	FAMILY "primary" (error_id, job_id, error_type, database_id, schema_id, id, primary_key, details, crdb_internal_expiration)
@@ -5245,7 +5245,7 @@ var (
 				{Name: "id", ID: 6, Type: types.Oid},
 				{Name: "primary_key", ID: 7, Type: types.String, Nullable: true},
 				{Name: "details", ID: 8, Type: types.String},
-				{Name: "crdb_internal_expiration", ID: 9, Type: types.TimestampTZ, DefaultExpr: &inspectErrorsExpirationString, OnUpdateExpr: &inspectErrorsExpirationString},
+				{Name: "crdb_internal_expiration", ID: 9, Type: types.TimestampTZ, DefaultExpr: &inspectErrorsExpirationString, OnUpdateExpr: &inspectErrorsExpirationString, Hidden: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
