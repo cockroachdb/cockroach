@@ -142,7 +142,11 @@ func generateDDLFromReader(
 	// collect raw statements
 	tableStatements := make(map[string]string)
 	order := make([]string, 0)
-	seen := map[string]bool{}
+	// seen is maintained to ensure that a table is processed only once.
+	// There is a possibility that the table was re-created multiple times.
+	seen := make(map[string]struct{})
+	// schemaReCache is maintained to avoid recompiling regexes for each schema name
+	// encountered in the TSV file.
 	schemaReCache := map[string]*regexp.Regexp{}
 
 	for {
@@ -159,16 +163,30 @@ func generateDDLFromReader(
 		if len(rec) == 0 {
 			break
 		}
+		// 1) Quick filter
+		if rec[colIndex[databaseName]] != dbName ||
+			rec[colIndex[descriptorType]] != "table" ||
+			rec[colIndex[constSchemaName]] != "public" {
+			continue
+		}
 
-		processDDLRecord(
-			rec,
-			colIndex,
-			dbName,
-			schemaReCache,
-			seen,
-			&order,
-			tableStatements,
-		)
+		schemaName := rec[colIndex[constSchemaName]]
+		_, ok := schemaReCache[schemaName]
+		if !ok {
+			schemaReCache[schemaName] = regexp.MustCompile(`\b` + regexp.QuoteMeta(schemaName) + `\.`)
+		}
+
+		// 2) Build identifiers
+		fullTableName, statement := processDDLRecord(dbName, schemaName,
+			rec[colIndex[descriptorName]],  // table name
+			rec[colIndex[createStatement]], // statement
+			schemaReCache[schemaName])
+		if _, ok := seen[fullTableName]; !ok && fullTableName != "" {
+			// 5) Record ordering & statement
+			tableStatements[fullTableName] = statement
+			order = append(order, fullTableName)
+			seen[fullTableName] = struct{}{}
+		}
 	}
 	return buildSchemas(order, tableStatements), buildCreateStmts(tableStatements), nil
 }
@@ -486,34 +504,11 @@ func openCreateStatementsTSV(zipDir string) (*os.File, error) {
 
 // processDDLRecord inspects one TSV row and, if it represents a public table
 // in dbName, normalizes its CREATE TABLE stmt and appends it to order/statements.
+// It returns the fully qualified table name and table statements.
 func processDDLRecord(
-	rec []string,
-	colIndex map[string]int,
-	dbName string,
-	schemaReCache map[string]*regexp.Regexp,
-	seen map[string]bool,
-	order *[]string,
-	tableStatements map[string]string,
-) {
-	// 1) Quick filter
-	if rec[colIndex[databaseName]] != dbName ||
-		rec[colIndex[descriptorType]] != "table" ||
-		rec[colIndex[constSchemaName]] != "public" {
-		return
-	}
-
-	// 2) Build identifiers
-	schemaName := rec[colIndex[constSchemaName]]
-	stmt := rec[colIndex[createStatement]]
-	tableName := rec[colIndex[descriptorName]]
-	fullTable := fmt.Sprintf("%s.%s.%s", dbName, schemaName, tableName)
-
+	dbName, schemaName, tableName, stmt string, pattern *regexp.Regexp,
+) (string, string) {
 	// 3) Normalize schema-qualified references
-	pattern, ok := schemaReCache[schemaName]
-	if !ok {
-		pattern = regexp.MustCompile(`\b` + regexp.QuoteMeta(schemaName) + `\.`)
-		schemaReCache[schemaName] = pattern
-	}
 	stmt = pattern.ReplaceAllString(stmt, dbName+"."+schemaName+".")
 
 	// 4) Ensure IF NOT EXISTS
@@ -521,12 +516,7 @@ func processDDLRecord(
 		stmt = createTableRe.ReplaceAllString(stmt, "${1}IF NOT EXISTS ")
 	}
 
-	// 5) Record ordering & statement
-	if !seen[fullTable] {
-		*order = append(*order, fullTable)
-		seen[fullTable] = true
-	}
-	tableStatements[fullTable] = stmt
+	return fmt.Sprintf("%s.%s.%s", dbName, schemaName, tableName), stmt
 }
 
 // buildWorkloadSchema constructs the complete workload schema used for data generation.
