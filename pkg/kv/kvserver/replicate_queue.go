@@ -644,14 +644,14 @@ func (metrics *ReplicateQueueMetrics) trackPriorityInversion(
 	plannedIdx := allocatorimpl.AllocatorActionToIdx[actionPlannedAtEnqueueTime]
 	computedIdx := allocatorimpl.AllocatorActionToIdx[actionComputedAtProcessTime]
 	if plannedIdx < computedIdx {
+		log.Infof(ctx,
+			"priority inversion: action=%s, priority=%v, enqueuePriority=%v",
+			actionComputedAtProcessTime, actionComputedAtProcessTime.Priority(), actionPlannedAtEnqueueTime)
 		metrics.PriorityInversionTotal.Inc(1)
 	}
 	for i := plannedIdx; i < computedIdx; i++ {
 		action := allocatorimpl.AllocatorActionPriorities[i]
 		if action.IsDecommissioning() {
-			log.Infof(ctx,
-				"requeueing due to priority inversion which was unfair to decommissioning: action=%s, priority=%v, enqueuePriority=%v",
-				actionComputedAtProcessTime, actionComputedAtProcessTime.Priority(), actionPlannedAtEnqueueTime)
 			unfairToDecommissioning = true
 		}
 		switch action {

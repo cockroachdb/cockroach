@@ -202,10 +202,10 @@ func (pq *priorityQueue) update(item *replicaItem, priority float64) {
 }
 
 // VPrintTopRanges prints the top 50 ranges in the queue based on priority.
-func (bq *baseQueue) VPrintTopRanges(ctx context.Context) {
-	bq.mu.Lock()
-	defer bq.mu.Unlock()
-
+func (bq *baseQueue) VPrintTopRangesLocked(ctx context.Context) {
+	if !log.V(5) {
+		return
+	}
 	// Create a copy of the priority queue to avoid modifying the original
 	tmp := priorityQueue{
 		sl: make([]*replicaItem, len(bq.mu.priorityQ.sl)),
@@ -795,7 +795,7 @@ func (bq *baseQueue) addInternal(
 	log.Dev.VEventf(ctx, 3, "adding: priority=%0.3f", priority)
 	item = &replicaItem{rangeID: desc.RangeID, replicaID: replicaID, priority: priority}
 	bq.addLocked(item)
-	bq.VPrintTopRanges(ctx)
+	bq.VPrintTopRangesLocked(ctx)
 
 	// If adding this replica has pushed the queue past its maximum size, remove
 	// an element. Note that it might not be the lowest priority since heap is not
