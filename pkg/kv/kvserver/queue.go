@@ -201,8 +201,8 @@ func (pq *priorityQueue) update(item *replicaItem, priority float64) {
 	heap.Fix(pq, item.index)
 }
 
-// PrintTopRanges prints the top 50 ranges in the queue based on priority.
-func (bq *baseQueue) PrintTopRanges(ctx context.Context) {
+// VPrintTopRanges prints the top 50 ranges in the queue based on priority.
+func (bq *baseQueue) VPrintTopRanges(ctx context.Context) {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 
@@ -213,12 +213,12 @@ func (bq *baseQueue) PrintTopRanges(ctx context.Context) {
 	copy(tmp.sl, bq.mu.priorityQ.sl)
 	heap.Init(&tmp)
 
-	numItems := min(50, tmp.Len())
-
-	log.Infof(ctx, "Top %d ranges in %s queue:", numItems, bq.name)
+	numItems := min(25, tmp.Len())
+	log.VEventf(ctx, 5, "top %d ranges in %s queue:", numItems, bq.name)
 	for i := 0; i < numItems; i++ {
 		item := heap.Pop(&tmp).(*replicaItem)
-		log.Infof(ctx, "Range %d: priority %.2f", item.rangeID, item.priority)
+		log.VEventf(ctx, 5, "r%d(replica %d): priority %.2f",
+			item.rangeID, item.replicaID, item.priority)
 	}
 }
 
@@ -795,6 +795,7 @@ func (bq *baseQueue) addInternal(
 	log.Dev.VEventf(ctx, 3, "adding: priority=%0.3f", priority)
 	item = &replicaItem{rangeID: desc.RangeID, replicaID: replicaID, priority: priority}
 	bq.addLocked(item)
+	bq.VPrintTopRanges(ctx)
 
 	// If adding this replica has pushed the queue past its maximum size, remove
 	// an element. Note that it might not be the lowest priority since heap is not
