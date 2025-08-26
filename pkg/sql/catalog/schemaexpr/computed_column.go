@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -176,7 +176,7 @@ func ValidateColumnHasNoDependents(desc catalog.TableDescriptor, col catalog.Col
 			continue
 		}
 
-		expr, err := parser.ParseExpr(c.GetComputeExpr())
+		expr, err := funcdesc.ParseExpr(c.GetComputeExpr())
 		if err != nil {
 			// At this point, we should be able to parse the computed expression.
 			return errors.WithAssertionFailure(err)
@@ -193,6 +193,12 @@ func ValidateColumnHasNoDependents(desc catalog.TableDescriptor, col catalog.Col
 		}
 	}
 	return nil
+}
+
+// ParseExprs is the same as sql/parser.ParseExprs but is injected to avoid a
+// dependency on the parser package.
+var ParseExprs = func(exprs []string) (tree.Exprs, error) {
+	return nil, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
 }
 
 // MakeComputedExprs returns a slice of the computed expressions for the
@@ -237,7 +243,7 @@ func MakeComputedExprs(
 		}
 	}
 
-	exprs, err := parser.ParseExprs(exprStrings)
+	exprs, err := ParseExprs(exprStrings)
 	if err != nil {
 		return nil, catalog.TableColSet{}, err
 	}

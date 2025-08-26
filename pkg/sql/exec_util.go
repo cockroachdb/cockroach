@@ -156,6 +156,7 @@ func DoParserInjection() {
 	eval.ParseOne = parser.ParseOne
 	funcdesc.ParseExpr = parser.ParseExpr
 	rowenc.ParseExpr = parser.ParseExpr
+	schemaexpr.ParseExprs = parser.ParseExprs
 }
 
 // ClusterOrganization is the organization name.

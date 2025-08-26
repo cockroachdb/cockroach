@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,4 +54,16 @@ func PopulateErrorDetails(
 	// Output a caret indicating where the last token starts.
 	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", int(lastTokPos)-j))
 	return errors.WithDetail(retErr, buf.String())
+}
+
+// NakedIntTypeFromDefaultIntSize given the size in bits or bytes (preferred)
+// of how a "naked" INT type should be parsed returns the corresponding integer
+// type.
+func NakedIntTypeFromDefaultIntSize(defaultIntSize int32) *types.T {
+	switch defaultIntSize {
+	case 4, 32:
+		return types.Int4
+	default:
+		return types.Int
+	}
 }

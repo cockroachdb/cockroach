@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -184,7 +184,7 @@ func makePartialIndexHelper(
 func (pi partialIndexHelper) makePartialIndexExpr(
 	ctx context.Context, idx catalog.Index,
 ) (tree.TypedExpr, catalog.TableColSet, error) {
-	expr, err := parser.ParseExpr(idx.GetPredicate())
+	expr, err := funcdesc.ParseExpr(idx.GetPredicate())
 	if err != nil {
 		return nil, catalog.TableColSet{}, err
 	}

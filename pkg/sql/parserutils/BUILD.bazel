@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

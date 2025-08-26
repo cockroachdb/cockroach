@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
@@ -152,7 +152,7 @@ func FormatColumnForDisplay(
 // RenameColumn replaces any occurrence of the column from in expr with to, and
 // returns a string representation of the new expression.
 func RenameColumn(expr string, from tree.Name, to tree.Name) (string, error) {
-	parsed, err := parser.ParseExpr(expr)
+	parsed, err := funcdesc.ParseExpr(expr)
 	if err != nil {
 		return "", err
 	}
