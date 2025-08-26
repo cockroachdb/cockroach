@@ -524,7 +524,6 @@ func (metrics *ReplicateQueueMetrics) trackErrorByAllocatorAction(
 	default:
 		log.Errorf(ctx, "AllocatorAction %v unsupported in metrics tracking", action)
 	}
-
 }
 
 // This inversion matters for the priority [actionPlannedAtEnqueueTime,
@@ -534,15 +533,16 @@ func (metrics *ReplicateQueueMetrics) trackPriorityInversion(
 	ctx context.Context,
 	actionPlannedAtEnqueueTime allocatorimpl.AllocatorAction,
 	actionComputedAtProcessTime allocatorimpl.AllocatorAction,
-) {
+) (unfairToDecommissioning bool) {
 	plannedIdx := allocatorimpl.AllocatorActionToIdx[actionPlannedAtEnqueueTime]
 	computedIdx := allocatorimpl.AllocatorActionToIdx[actionComputedAtProcessTime]
 	for i := plannedIdx; i < computedIdx; i++ {
 		action := allocatorimpl.AllocatorActionPriorities[i]
 		if action.IsDecommissioning() {
 			log.Infof(ctx,
-				"priority inversion during process for decommissioning: action=%s, priority=%v, enqueuePriority=%v",
+				"requeueing due to priority inversion which was unfair to decommissioning: action=%s, priority=%v, enqueuePriority=%v",
 				actionComputedAtProcessTime, actionComputedAtProcessTime.Priority(), actionPlannedAtEnqueueTime)
+			unfairToDecommissioning = true
 		}
 		switch action {
 		case allocatorimpl.AllocatorRemoveVoter:
@@ -577,6 +577,7 @@ func (metrics *ReplicateQueueMetrics) trackPriorityInversion(
 			panic("unhandled default case")
 		}
 	}
+	return unfairToDecommissioning
 }
 
 // trackProcessResult increases the corresponding success/error count metric for
@@ -821,7 +822,7 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 	repl *Replica,
 	desc *roachpb.RangeDescriptor,
 	conf *roachpb.SpanConfig,
-	priority float64,
+	priorityAtEnqueue float64,
 ) (requeue bool, _ error) {
 	processStart := timeutil.Now()
 	startTracing := log.ExpensiveLogEnabled(ctx, 1)
@@ -835,15 +836,17 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica", opts...)
 	defer sp.Finish()
 
+	actionPlannedAtEnqueue := allocatorimpl.GetAllocatorActionFromPriority(ctx, priorityAtEnqueue)
+	isDecommissioning := actionPlannedAtEnqueue.IsDecommissioning()
 	requeue, err := rq.processOneChange(ctx, repl, desc, conf,
-		false /* scatter */, false /* dryRun */, priority,
+		false /* scatter */, false /* dryRun */, priorityAtEnqueue,
 	)
 	processDuration := timeutil.Since(processStart)
 	loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
 	exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
 
 	var traceOutput redact.RedactableString
-	if startTracing {
+	if startTracing || isDecommissioning {
 		// Utilize a new background context (properly annotated) to avoid writing
 		// traces from a child context into its parent.
 		ctx = repl.AnnotateCtx(rq.AnnotateCtx(context.Background()))
@@ -861,11 +864,15 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 	}
 	if err != nil {
 		log.KvDistribution.Infof(ctx, "error processing replica: %v%s (priority at enqueue: %v)",
-			err, traceOutput, priority)
+			err, traceOutput, priorityAtEnqueue)
 	} else if exceededDuration {
 		log.KvDistribution.Infof(ctx,
 			"processing replica took %s, exceeding threshold of %s%s (priority at enqueue: %v)",
-			processDuration, loggingThreshold, traceOutput, priority)
+			processDuration, loggingThreshold, traceOutput, priorityAtEnqueue)
+	} else if isDecommissioning {
+		log.KvDistribution.Infof(ctx,
+			"decommissioning range enqueued %s (priority at enqueue: %v)",
+			traceOutput, priorityAtEnqueue)
 	}
 
 	return requeue, err
@@ -954,12 +961,10 @@ func (rq *replicateQueue) processOneChange(
 	if priorityAtEnqueue != -1 {
 		actionPlannedAtEnqueue := allocatorimpl.GetAllocatorActionFromPriority(ctx, priorityAtEnqueue)
 		actionComputedAtProcess := change.Action
-		rq.metrics.trackPriorityInversion(ctx, actionPlannedAtEnqueue, actionComputedAtProcess)
-		if actionPlannedAtEnqueue.Priority() < change.Action.Priority() {
-
-		}
-		decommissionPriority := allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority()
-		if actionPlannedAtEnqueue.Priority() >= decommissionPriority && change.Action.Priority() < decommissionPriority {
+		unfairToDecommissioning := rq.metrics.trackPriorityInversion(ctx, actionPlannedAtEnqueue, actionComputedAtProcess)
+		if unfairToDecommissioning && kvserverbase.DecommissioningPriorityInversionEnqueue.Get(&rq.baseQueue.store.ClusterSettings().SV) {
+			// TODO(wenyihu6): what if we end up in a loop of requeueing? should we do
+			// this if things are not decommissioning
 			return true, nil
 		}
 	}

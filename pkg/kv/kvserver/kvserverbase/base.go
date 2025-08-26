@@ -114,6 +114,20 @@ var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+var DecommissioningPriorityInversionEnqueue = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.server.priority_inversion_requeue.enabled",
+	"whether to requeue replicas when their priority is inverted with respect to decommissioning actions",
+	false,
+)
+
+var DecommissioningPriorityHighest = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.server.decommissioning.highest_priority",
+	"whether to process decommissioning replicas at highest priority in replication queues",
+	false,
+)
+
 // LoadBasedRebalancingMode controls whether range rebalancing takes
 // additional variables such as write load and disk usage into account.
 // If disabled, rebalancing is done purely based on replica count.

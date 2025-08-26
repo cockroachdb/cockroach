@@ -591,9 +591,8 @@ func (h baseQueueHelper) MaybeAdd(
 }
 
 func (h baseQueueHelper) Add(ctx context.Context, repl replicaInQueue, prio float64) {
-	_, err := h.bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), prio)
-	if err != nil && log.V(1) {
-		log.Dev.Infof(ctx, "during Add: %s", err)
+	if _, err := h.bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), prio); err != nil {
+		log.Dev.VEventf(ctx, 1, "during Add: %s", err)
 	}
 }
 
@@ -644,6 +643,16 @@ func (bq *baseQueue) MaybeAddAsync(
 ) {
 	bq.Async(ctx, "MaybeAdd", false /* wait */, func(ctx context.Context, h queueHelper) {
 		h.MaybeAdd(ctx, repl, now)
+	})
+}
+
+func (bq *baseQueue) AddAsyncWithTracing(ctx context.Context, repl replicaInQueue, prio float64) {
+	bq.Async(ctx, "Add", true /* wait */, func(ctx context.Context, h queueHelper) {
+		ctx, finishAndGetRecording := tracing.ContextWithRecordingSpan(ctx,
+			bq.store.cfg.Tracer(), fmt.Sprintf("add-async(%s): %v", bq.name, repl.Desc()),
+		)
+		h.Add(ctx, repl, prio)
+		log.KvDistribution.Infof(ctx, "%s", redact.Sprintf("\ntrace:\n%s", finishAndGetRecording()))
 	})
 }
 
@@ -765,6 +774,8 @@ func (bq *baseQueue) addInternal(
 		if item.processing {
 			wasRequeued := item.requeue
 			item.requeue = true
+			log.VEventf(ctx, 1,
+				"requeueing since replica is already processing %v", item)
 			return !wasRequeued, nil
 		}
 
@@ -772,17 +783,16 @@ func (bq *baseQueue) addInternal(
 		// Don't lower it since the previous queuer may have known more than this
 		// one does.
 		if priority > item.priority {
-			if log.V(1) {
-				log.Dev.Infof(ctx, "updating priority: %0.3f -> %0.3f", item.priority, priority)
-			}
+			log.Dev.VEventf(ctx, 1,
+				"updating priority: %0.3f -> %0.3f", item.priority, priority)
 			bq.mu.priorityQ.update(item, priority)
 		}
+		log.Dev.VEventf(ctx, 1, "already queued: r%v(replica=%v) at priority %.2f",
+			item.rangeID, item.replicaID, item.priority)
 		return false, nil
 	}
 
-	if log.V(3) {
-		log.Dev.Infof(ctx, "adding: priority=%0.3f", priority)
-	}
+	log.Dev.VEventf(ctx, 3, "adding: priority=%0.3f", priority)
 	item = &replicaItem{rangeID: desc.RangeID, replicaID: replicaID, priority: priority}
 	bq.addLocked(item)
 

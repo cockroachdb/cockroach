@@ -2962,10 +2962,14 @@ func (r *Replica) maybeEnqueueProblemRange(
 		"with priority %f", r.Desc(),
 		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
 	r.store.metrics.DecommissioningNudgerEnqueue.Inc(1)
-	// TODO(dodeca12): Figure out a better way to track the
-	// decommissioning nudger enqueue failures/errors.
-	r.store.replicateQueue.AddAsync(ctx, r,
-		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
+	if kvserverbase.DecommissioningPriorityHighest.Get(&r.store.ClusterSettings().SV) {
+		r.store.EnqueueWithTracing(ctx, "replicate", r)
+	} else {
+		// TODO(dodeca12): Figure out a better way to track the
+		// decommissioning nudger enqueue failures/errors.
+		r.store.replicateQueue.AddAsyncWithTracing(ctx, r,
+			allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
+	}
 }
 
 // SendStreamStats sets the stats for the replica send streams that belong to

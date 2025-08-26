@@ -338,6 +338,8 @@ func GetAllocatorActionFromPriority(ctx context.Context, priority float64) Alloc
 		return diff <= tolerance
 	}
 	switch priority {
+	case 1e5:
+		return AllocatorReplaceDecommissioningVoter
 	case 12002:
 		return AllocatorFinalizeAtomicReplicationChange
 	case 12001:

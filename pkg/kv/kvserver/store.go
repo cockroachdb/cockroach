@@ -8,6 +8,7 @@ package kvserver
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -4023,6 +4024,22 @@ func (s *Store) AllocatorCheckRange(
 	}
 
 	return action, target, sp.FinishAndGetConfiguredRecording(), err
+}
+
+func (s *Store) EnqueueWithTracing(ctx context.Context, queueName string, repl *Replica) {
+	ctx, finishAndGetRecording := tracing.ContextWithRecordingSpan(ctx,
+		s.cfg.Tracer(), fmt.Sprintf("add-async(%s): %v", queueName, repl.Desc()),
+	)
+	processErr, enqueueErr := s.Enqueue(
+		ctx, queueName, repl, true /* skipShouldQueue */, true, /* async */
+	)
+	if processErr != nil || enqueueErr != nil {
+		log.KvDistribution.Infof(
+			ctx, "error when enqueuing replica asynchronously: processErr=%v, enqueueErr=%v",
+			processErr, enqueueErr,
+		)
+	}
+	log.KvDistribution.Infof(ctx, "%s", redact.Sprintf("\ntrace:\n%s", finishAndGetRecording()))
 }
 
 // Enqueue runs the given replica through the requested queue. If `async` is
