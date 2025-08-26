@@ -456,12 +456,11 @@ func maybeRevertToCutoverTimestamp(
 	// existed in the record at the point of the update rather the
 	// value that may be in the job record before the update.
 	var (
-		shouldRevertToCutover   bool
-		cutoverTimestamp        hlc.Timestamp
-		originalSpanToRevert    roachpb.Span
-		remainingSpansToRevert  roachpb.Spans
-		replicatedTimeAtCutover hlc.Timestamp
-		readerTenantID          roachpb.TenantID
+		shouldRevertToCutover  bool
+		cutoverTimestamp       hlc.Timestamp
+		originalSpanToRevert   roachpb.Span
+		remainingSpansToRevert roachpb.Spans
+		readerTenantID         roachpb.TenantID
 	)
 	if err := ingestionJob.NoTxn().Update(ctx,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
@@ -478,7 +477,6 @@ func maybeRevertToCutoverTimestamp(
 			}
 
 			cutoverTimestamp = streamIngestionProgress.CutoverTime
-			replicatedTimeAtCutover = streamIngestionProgress.ReplicatedTimeAtCutover
 			readerTenantID = streamIngestionDetails.ReadTenantID
 			originalSpanToRevert = streamIngestionDetails.Span
 			remainingSpansToRevert = streamIngestionProgress.RemainingCutoverSpans
@@ -500,9 +498,7 @@ func maybeRevertToCutoverTimestamp(
 	if !shouldRevertToCutover {
 		return cutoverTimestamp, false, nil
 	}
-	// Identical cutoverTimestamp and replicatedTimeAtCutover implies that
-	// CUTOVER TO LATEST command was run. Destroy reader tenant if not CUTOVER TO LATEST.
-	if !cutoverTimestamp.Equal(replicatedTimeAtCutover) && readerTenantID.IsSet() {
+	if readerTenantID.IsSet() {
 		if err := stopTenant(ctx, p.ExecCfg(), readerTenantID); err != nil {
 			return cutoverTimestamp, false, errors.Wrapf(err, "failed to stop reader tenant")
 		}
