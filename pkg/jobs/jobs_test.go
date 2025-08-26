@@ -869,10 +869,17 @@ func TestRegistryLifecycle(t *testing.T) {
 		defer rts.setUp(t)()
 		defer rts.tearDown()
 
+		// Pick an ID so we know which job to mess with.
+		id := rts.registry.MakeJobID()
+		rts.mockJob.JobID = id
+
 		// Inject an error in the update to move the job to "succeeded" one time.
 		var failed atomic.Value
 		failed.Store(false)
 		rts.beforeUpdate = func(orig, updated jobs.JobMetadata) error {
+			if orig.ID != id {
+				return nil
+			}
 			if updated.State == jobs.StateSucceeded && !failed.Load().(bool) {
 				failed.Store(true)
 				return errors.New("boom")
