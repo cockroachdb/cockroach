@@ -276,6 +276,14 @@ func (sgc *StoreGrantCoordinators) TryGetSnapshotQueueForStore(storeID roachpb.S
 func (sgc *StoreGrantCoordinators) close() {
 	// closeCh can be nil in tests that never called SetPebbleMetricsProvider.
 	if sgc.closeCh != nil {
+		// Ensure that the goroutine has observed the close and will no longer
+		// call GetPebbleMetrics, since the engines will be closed soon after this
+		// method returns, and calling GetPebbleMetrics on closed engines is not
+		// permitted.
+		sgc.closeCh <- struct{}{}
+		// Close the channel, so that if close gets called twice due to a bug,
+		// sending on the closed channel will panic instead of the send being
+		// blocked forever.
 		close(sgc.closeCh)
 	}
 
