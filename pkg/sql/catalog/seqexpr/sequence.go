@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
@@ -24,6 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
+
+// ParseQualifiedTableName is the same as sql/parser.ParseQualifiedTableName but
+// is injected to avoid a dependency on the parser package.
+var ParseQualifiedTableName = func(sql string) (*tree.TableName, error) {
+	return nil, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
 
 // SeqIdentifier wraps together different ways of identifying a sequence.
 // The sequence can either be identified via either its name, or its ID.
@@ -235,7 +240,7 @@ func UpgradeSequenceReferenceInExpr(
 
 	// With this "reverse" mapping, we can simply replace each by-name
 	// seq reference in `expr` with the sequence's ID.
-	parsedExpr, err := parser.ParseExpr(*expr)
+	parsedExpr, err := funcdesc.ParseExpr(*expr)
 	if err != nil {
 		return false, err
 	}
@@ -270,7 +275,7 @@ func UpgradeSequenceReferenceInExpr(
 func seqNameToIDMappingInExpr(
 	expr string, seqIDToNameMapping map[descpb.ID]*tree.TableName,
 ) (map[string]descpb.ID, error) {
-	parsedExpr, err := parser.ParseExpr(expr)
+	parsedExpr, err := funcdesc.ParseExpr(expr)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +291,7 @@ func seqNameToIDMappingInExpr(
 			continue
 		}
 
-		parsedSeqName, err := parser.ParseQualifiedTableName(seqIdentifier.SeqName)
+		parsedSeqName, err := ParseQualifiedTableName(seqIdentifier.SeqName)
 		if err != nil {
 			return nil, err
 		}

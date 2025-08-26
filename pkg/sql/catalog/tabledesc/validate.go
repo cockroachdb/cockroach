@@ -16,15 +16,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -35,6 +36,12 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
+
+// PLpgSQLParse is the same as sql/plpgsql/parser.Parse but is injected to avoid
+// a dependency on the PLpgSQL parser package.
+var PLpgSQLParse = func(sql string) (statements.PLpgStatement, error) {
+	return statements.PLpgStatement{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
 
 // ValidateTxnCommit performs pre-transaction-commit checks.
 func (desc *wrapper) ValidateTxnCommit(
@@ -95,7 +102,7 @@ func (desc *wrapper) GetReferencedDescIDs(
 			// Skip trigger function bodies - they are handled below.
 			return nil
 		}
-		if parsedExpr, err := parser.ParseExpr(*expr); err == nil {
+		if parsedExpr, err := funcdesc.ParseExpr(*expr); err == nil {
 			// ignore errors
 			tree.WalkExpr(visitor, parsedExpr)
 		}
@@ -282,11 +289,11 @@ func (desc *wrapper) ValidateBackReferences(
 	_ = ForEachExprStringInTableDesc(desc, func(expr *string, typ catalog.DescExprType) (err error) {
 		switch typ {
 		case catalog.SQLExpr:
-			_, err = parser.ParseExpr(*expr)
+			_, err = funcdesc.ParseExpr(*expr)
 		case catalog.SQLStmt:
-			_, err = parser.Parse(*expr)
+			_, err = eval.Parse(*expr)
 		case catalog.PLpgSQLStmt:
-			_, err = plpgsqlparser.Parse(*expr)
+			_, err = PLpgSQLParse(*expr)
 		}
 		vea.Report(err)
 		return nil
@@ -1263,7 +1270,7 @@ func (desc *wrapper) validateColumns() error {
 
 		if column.IsComputed() {
 			// Verify that the computed column expression is valid.
-			expr, err := parser.ParseExpr(column.GetComputeExpr())
+			expr, err := funcdesc.ParseExpr(column.GetComputeExpr())
 			if err != nil {
 				return err
 			}
@@ -1479,12 +1486,12 @@ func (desc *wrapper) validateTriggers() error {
 
 		// Verify that the WHEN expression and function body statements are valid.
 		if trigger.WhenExpr != "" {
-			_, err := parser.ParseExpr(trigger.WhenExpr)
+			_, err := funcdesc.ParseExpr(trigger.WhenExpr)
 			if err != nil {
 				return err
 			}
 		}
-		_, err := plpgsqlparser.Parse(trigger.FuncBody)
+		_, err := PLpgSQLParse(trigger.FuncBody)
 		if err != nil {
 			return err
 		}
@@ -1551,7 +1558,7 @@ func (desc *wrapper) validateCheckConstraints(
 		}
 
 		// Verify that the check's expression is valid.
-		expr, err := parser.ParseExpr(chk.GetExpr())
+		expr, err := funcdesc.ParseExpr(chk.GetExpr())
 		if err != nil {
 			return err
 		}
@@ -1605,7 +1612,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 		}
 
 		if c.IsPartial() {
-			expr, err := parser.ParseExpr(c.GetPredicate())
+			expr, err := funcdesc.ParseExpr(c.GetPredicate())
 			if err != nil {
 				return err
 			}
@@ -1773,7 +1780,7 @@ func (desc *wrapper) validateTableIndexes(
 			}
 		}
 		if idx.IsPartial() {
-			expr, err := parser.ParseExpr(idx.GetPredicate())
+			expr, err := funcdesc.ParseExpr(idx.GetPredicate())
 			if err != nil {
 				return err
 			}
@@ -2235,13 +2242,13 @@ func (desc *wrapper) validatePolicyRoles(p *descpb.PolicyDescriptor) error {
 // validatePolicyExprs will validate the expressions within the policy.
 func (desc *wrapper) validatePolicyExprs(p *descpb.PolicyDescriptor) error {
 	if p.WithCheckExpr != "" {
-		_, err := parser.ParseExpr(p.WithCheckExpr)
+		_, err := funcdesc.ParseExpr(p.WithCheckExpr)
 		if err != nil {
 			return errors.Wrapf(err, "WITH CHECK expression %q is invalid", p.WithCheckExpr)
 		}
 	}
 	if p.UsingExpr != "" {
-		_, err := parser.ParseExpr(p.UsingExpr)
+		_, err := funcdesc.ParseExpr(p.UsingExpr)
 		if err != nil {
 			return errors.Wrapf(err, "USING expression %q is invalid", p.UsingExpr)
 		}
@@ -2393,7 +2400,7 @@ func ValidateRBRTableUsingConstraint(
 		if !col.IsComputed() {
 			continue
 		}
-		expr, err := parser.ParseExpr(col.GetComputeExpr())
+		expr, err := funcdesc.ParseExpr(col.GetComputeExpr())
 		if err != nil {
 			// At this point, we should be able to parse the computed expression.
 			return errors.WithAssertionFailure(err)

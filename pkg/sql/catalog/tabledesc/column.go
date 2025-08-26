@@ -14,8 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -111,7 +111,7 @@ func (w column) HasNullDefault() bool {
 	// that the default expressions is not parsable. Somebody with a context
 	// who needs to use it will be in a better place to log it. If it is not
 	// parsable, it is not NULL.
-	defaultExpr, _ := parser.ParseExpr(w.GetDefaultExpr())
+	defaultExpr, _ := funcdesc.ParseExpr(w.GetDefaultExpr())
 	return defaultExpr == tree.DNull
 }
 
