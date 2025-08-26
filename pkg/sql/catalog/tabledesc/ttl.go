@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
@@ -72,7 +72,7 @@ func ValidateTTLExpirationExpr(desc catalog.TableDescriptor) error {
 	if expirationExpr == "" {
 		return nil
 	}
-	exprs, err := parser.ParseExprs([]string{string(expirationExpr)})
+	exprs, err := parserutils.ParseExprs([]string{string(expirationExpr)})
 	if err != nil {
 		return errors.Wrapf(err, "ttl_expiration_expression %q must be a valid expression", expirationExpr)
 	} else if len(exprs) != 1 {

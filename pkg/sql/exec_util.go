@@ -81,6 +81,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rolemembershipcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -156,6 +157,7 @@ func DoParserInjection() {
 	parserutils.ParseExprs = parser.ParseExprs
 	parserutils.ParseOne = parser.ParseOne
 	parserutils.ParseQualifiedTableName = parser.ParseQualifiedTableName
+	parserutils.PLpgSQLParse = plpgsqlparser.Parse
 }
 
 // ClusterOrganization is the organization name.

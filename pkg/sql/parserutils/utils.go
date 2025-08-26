@@ -99,3 +99,9 @@ var ParseOne = func(sql string) (statements.Statement[tree.Statement], error) {
 var ParseQualifiedTableName = func(sql string) (*tree.TableName, error) {
 	return nil, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
 }
+
+// PLpgSQLParse is the same as sql/plpgsql/parser.Parse but is injected to avoid
+// a dependency on the PLpgSQL parser package.
+var PLpgSQLParse = func(sql string) (statements.PLpgStatement, error) {
+	return statements.PLpgStatement{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
