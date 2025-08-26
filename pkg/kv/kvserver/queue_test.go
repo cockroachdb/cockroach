@@ -1553,3 +1553,48 @@ func TestBaseQueueRequeue(t *testing.T) {
 	assertShouldQueueCount(6)
 	assertProcessedAndProcessing(2, 0)
 }
+
+// TestBaseQueuePrintTopRanges verifies that PrintTopRanges doesn't modify the queue.
+// TODO(wenyihu6): make this an echo test
+func TestBaseQueuePrintTopRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	// Create a few replicas
+	repls := createReplicas(t, &tc, 3)
+
+	queueImpl := &testQueueImpl{
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+			return true, float64(r.GetRangeID())
+		},
+	}
+
+	bq := makeTestBaseQueue("test", queueImpl, tc.store, queueConfig{})
+	bq.Start(stopper)
+
+	// Add replicas to the queue
+	for _, repl := range repls {
+		bq.maybeAdd(ctx, repl, hlc.ClockTimestamp{})
+	}
+
+	// Wait for processing
+	time.Sleep(10 * time.Millisecond)
+
+	// Check queue length before
+	lengthBefore := bq.Length()
+
+	// Call PrintTopRanges
+	bq.PrintTopRanges(ctx)
+
+	// Check queue length after - should be the same
+	lengthAfter := bq.Length()
+
+	if lengthBefore != lengthAfter {
+		t.Errorf("PrintTopRanges modified queue length: was %d, now %d", lengthBefore, lengthAfter)
+	}
+}
