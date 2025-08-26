@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -57,6 +58,18 @@ func PopulateErrorDetails(
 	return errors.WithDetail(retErr, buf.String())
 }
 
+// NakedIntTypeFromDefaultIntSize given the size in bits or bytes (preferred)
+// of how a "naked" INT type should be parsed returns the corresponding integer
+// type.
+func NakedIntTypeFromDefaultIntSize(defaultIntSize int32) *types.T {
+	switch defaultIntSize {
+	case 4, 32:
+		return types.Int4
+	default:
+		return types.Int
+	}
+}
+
 // Parse is the same as sql/parser.Parse but is injected to avoid a dependency
 // on the parser package.
 var Parse = func(sql string) (statements.Statements, error) {
@@ -66,6 +79,12 @@ var Parse = func(sql string) (statements.Statements, error) {
 // ParseExpr is the same as sql/parser.ParseExpr but is injected to avoid a
 // dependency on the parser package.
 var ParseExpr = func(sql string) (tree.Expr, error) {
+	return nil, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
+
+// ParseExprs is the same as sql/parser.ParseExprs but is injected to avoid a
+// dependency on the parser package.
+var ParseExprs = func(exprs []string) (tree.Exprs, error) {
 	return nil, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
 }
 

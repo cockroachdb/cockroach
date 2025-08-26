@@ -153,6 +153,7 @@ func init() {
 func DoParserInjection() {
 	parserutils.Parse = parser.Parse
 	parserutils.ParseExpr = parser.ParseExpr
+	parserutils.ParseExprs = parser.ParseExprs
 	parserutils.ParseOne = parser.ParseOne
 	parserutils.ParseQualifiedTableName = parser.ParseQualifiedTableName
 }

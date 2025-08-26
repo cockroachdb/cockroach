@@ -70,18 +70,6 @@ func (po ParseOptions) WithIntType(t *types.T) ParseOptions {
 // INT := INT4 will simply use INT4 in any resulting code.
 var defaultNakedIntType = types.Int
 
-// NakedIntTypeFromDefaultIntSize given the size in bits or bytes (preferred)
-// of how a "naked" INT type should be parsed returns the corresponding integer
-// type.
-func NakedIntTypeFromDefaultIntSize(defaultIntSize int32) *types.T {
-	switch defaultIntSize {
-	case 4, 32:
-		return types.Int4
-	default:
-		return types.Int
-	}
-}
-
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (statements.Statements, error) {
 	return p.parseWithDepth(1, sql, DefaultParseOptions)
