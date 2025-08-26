@@ -1248,6 +1248,12 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 		Returning: tree.AbsentReturningClause,
 	}
 
+	// Initialize annotations for the statement. This is required for proper
+	// error handling and logging during plan optimization. Since this is a
+	// synthetic INSERT statement, we provide an empty annotations array.
+	c.p.semaCtx.Annotations = tree.MakeAnnotations(0)
+	c.p.extendedEvalCtx.Annotations = &c.p.semaCtx.Annotations
+
 	// TODO(cucaroach): We shouldn't need to do this for every batch.
 	if err := c.p.makeOptimizerPlan(ctx); err != nil {
 		return err

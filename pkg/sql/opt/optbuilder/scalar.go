@@ -550,7 +550,7 @@ func (b *Builder) buildFunction(
 		return b.buildUDF(f, def, inScope, outScope, outCol, colRefs)
 	}
 	if b.isUnsafeBuiltin(overload, def) {
-		if err := unsafesql.CheckInternalsAccess(b.evalCtx.SessionData()); err != nil {
+		if err := unsafesql.CheckInternalsAccess(b.ctx, b.evalCtx.SessionData(), b.stmt, b.evalCtx.Annotations, &b.evalCtx.Settings.SV); err != nil {
 			panic(err)
 		}
 	}
