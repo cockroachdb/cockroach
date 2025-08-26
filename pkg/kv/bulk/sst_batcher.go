@@ -70,7 +70,7 @@ var (
 		settings.ApplicationLevel,
 		"bulkio.ingest.compute_stats_diff_in_stream_batcher.enabled",
 		"if set, kvserver will compute an accurate stats diff for every addsstable request",
-		metamorphic.ConstantWithTestBool("computeStatsDiffInStreamBatcher", true),
+		metamorphic.ConstantWithTestBool("computeStatsDiffInStreamBatcher", false),
 	)
 
 	sstBatcherElasticCPUControlEnabled = settings.RegisterBoolSetting(
