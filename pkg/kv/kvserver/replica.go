@@ -2912,15 +2912,8 @@ func (r *Replica) maybeEnqueueProblemRange(
 	if !isLeaseholder || !leaseValid {
 		// The replicate queue will not process the replica without a valid lease.
 		// Track when we skip enqueuing for these reasons.
-		boolToInt := func(b bool) int {
-			if b {
-				return 1
-			}
-			return 0
-		}
-		reasons := []string{"is not the leaseholder", "the lease is not valid"}
-		reason := reasons[boolToInt(isLeaseholder)]
-		log.KvDistribution.VInfof(ctx, 1, "not enqueuing replica %s because %s", r.Desc(), reason)
+		log.KvDistribution.Infof(ctx, "not enqueuing replica %s because isLeaseholder=%t, leaseValid=%t",
+			r.Desc(), isLeaseholder, leaseValid)
 		r.store.metrics.DecommissioningNudgerNotLeaseholderOrInvalidLease.Inc(1)
 		return
 	}
