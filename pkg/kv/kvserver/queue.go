@@ -691,7 +691,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		// replication, however still require specific range(s) to be processed
 		// through the queue.
 		bypassDisabled := bq.store.TestingKnobs().BaseQueueDisabledBypassFilter
-		if bypassDisabled == nil || !bypassDisabled(repl.GetRangeID()) {
+		if bypassDisabled == nil || !bypassDisabled(bq.store.StoreID(), repl.GetRangeID()) {
 			return
 		}
 	}
@@ -755,7 +755,7 @@ func (bq *baseQueue) addInternal(
 		// replication, however still require specific range(s) to be processed
 		// through the queue.
 		bypassDisabled := bq.store.TestingKnobs().BaseQueueDisabledBypassFilter
-		if bypassDisabled == nil || !bypassDisabled(desc.RangeID) {
+		if bypassDisabled == nil || !bypassDisabled(bq.store.StoreID(), desc.RangeID) {
 			if log.V(3) {
 				log.Dev.Infof(ctx, "queue disabled")
 			}

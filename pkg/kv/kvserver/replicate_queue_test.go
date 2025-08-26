@@ -1087,7 +1087,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
-							BaseQueueDisabledBypassFilter: func(rangeID roachpb.RangeID) bool {
+							BaseQueueDisabledBypassFilter: func(_ roachpb.StoreID, rangeID roachpb.RangeID) bool {
 								return rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID))
 							},
 						},

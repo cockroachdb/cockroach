@@ -1589,7 +1589,7 @@ func TestBaseQueuePrintTopRanges(t *testing.T) {
 	lengthBefore := bq.Length()
 
 	// Call PrintTopRanges
-	bq.PrintTopRanges(ctx)
+	bq.VPrintTopRanges(ctx)
 
 	// Check queue length after - should be the same
 	lengthAfter := bq.Length()
