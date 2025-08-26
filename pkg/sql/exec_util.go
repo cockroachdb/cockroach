@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -144,6 +145,13 @@ func init() {
 		ie := evalCtx.JobExecContext.(JobExecContext).ExecCfg().InternalDB.Executor()
 		return ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
 	}
+	DoParserInjection()
+}
+
+// DoParserInjection performs all the necessary sql/parser injections within the
+// sql directory.
+func DoParserInjection() {
+	parserutils.ParseOne = parser.ParseOne
 }
 
 // ClusterOrganization is the organization name.

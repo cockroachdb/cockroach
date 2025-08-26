@@ -10,8 +10,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,4 +55,10 @@ func PopulateErrorDetails(
 	// Output a caret indicating where the last token starts.
 	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", int(lastTokPos)-j))
 	return errors.WithDetail(retErr, buf.String())
+}
+
+// ParseOne is the same as sql/parser.ParseOne but is injected to avoid a
+// dependency on the parser package.
+var ParseOne = func(sql string) (statements.Statement[tree.Statement], error) {
+	return statements.Statement[tree.Statement]{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
 }
