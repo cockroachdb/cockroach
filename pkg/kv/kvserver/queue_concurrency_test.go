@@ -112,7 +112,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 			})
 		}
 		g.Go(func() error {
-			bq.assertInvariants()
+			bq.assertInvariants(func(item *replicaItem) {})
 			return nil
 		})
 	}
