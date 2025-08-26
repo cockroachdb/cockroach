@@ -290,6 +290,96 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaReplicateQueuePriorityInversionForRemoveVoterCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.removevoter",
+		Help:        "Number of priority inversions with respect to voter replica removals in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForRemoveNonVoterCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.removenonvoter",
+		Help:        "Number of priority inversions with respect to non-voter replica removals in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForAddVoterCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.addvoter",
+		Help:        "Number of priority inversions with respect to voter replica additions in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForAddNonVoterCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.addnonvoter",
+		Help:        "Number of priority inversions with respect to non-voter replica additions in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForReplaceDeadVoterCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.replacedeadvoter",
+		Help:        "Number of priority inversions with respect to dead voter replica replacements in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForReplaceDeadNonVoterCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.replacedeadnonvoter",
+		Help:        "Number of priority inversions with respect to dead non-voter replica replacements in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForRemoveDeadVoterCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.removedeadvoter",
+		Help:        "Number of priority inversions with respect to dead voter replica removals in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForRemoveDeadNonVoterCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.removedeadnonvoter",
+		Help:        "Number of priority inversions with respect to dead non-voter replica removals in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForReplaceDecommissioningVoterCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.replacedecommissioningvoter",
+		Help:        "Number of priority inversions with respect to decommissioning voter replica replacements in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForReplaceDecommissioningNonVoterCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.replacedecommissioningnonvoter",
+		Help:        "Number of priority inversions with respect to decommissioning non-voter replica replacements in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForRemoveDecommissioningVoterCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.removedecommissioningvoter",
+		Help:        "Number of priority inversions with respect to decommissioning voter replica removals in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForRemoveDecommissioningNonVoterCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.removedecommissioningnonvoter",
+		Help:        "Number of priority inversions with respect to decommissioning non-voter replica removals in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForRemoveLearnerCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.removelearner",
+		Help:        "Number of priority inversions with respect to learner replica removals in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionForFinalizeAtomicReplicationChangeCount = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.finalize_atomic_replication_change",
+		Help:        "Number of priority inversions with respect to finalizing atomic replication changes in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionTotal = metric.Metadata{
+		Name:        "queue.replicate.priority_inversion.total",
+		Help:        "Total number of priority inversions in the replicate queue",
+		Measurement: "Priority Inversions",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // quorumError indicates a retryable error condition which sends replicas being
@@ -405,6 +495,22 @@ func makeReplicateQueueMetrics() ReplicateQueueMetrics {
 		ReplaceDecommissioningReplicaErrorCount:   metric.NewCounter(metaReplicateQueueReplaceDecommissioningReplicaErrorCount),
 		RemoveDecommissioningReplicaSuccessCount:  metric.NewCounter(metaReplicateQueueRemoveDecommissioningReplicaSuccessCount),
 		RemoveDecommissioningReplicaErrorCount:    metric.NewCounter(metaReplicateQueueRemoveDecommissioningReplicaErrorCount),
+
+		PriorityInversionForRemoveVoterCount:                     metric.NewCounter(metaReplicateQueuePriorityInversionForRemoveVoterCount),
+		PriorityInversionForRemoveNonVoterCount:                  metric.NewCounter(metaReplicateQueuePriorityInversionForRemoveNonVoterCount),
+		PriorityInversionForAddVoterCount:                        metric.NewCounter(metaReplicateQueuePriorityInversionForAddVoterCount),
+		PriorityInversionForAddNonVoterCount:                     metric.NewCounter(metaReplicateQueuePriorityInversionForAddNonVoterCount),
+		PriorityInversionForReplaceDeadVoterCount:                metric.NewCounter(metaReplicateQueuePriorityInversionForReplaceDeadVoterCount),
+		PriorityInversionForReplaceDeadNonVoterCount:             metric.NewCounter(metaReplicateQueuePriorityInversionForReplaceDeadNonVoterCount),
+		PriorityInversionForRemoveDeadVoterCount:                 metric.NewCounter(metaReplicateQueuePriorityInversionForRemoveDeadVoterCount),
+		PriorityInversionForRemoveDeadNonVoterCount:              metric.NewCounter(metaReplicateQueuePriorityInversionForRemoveDeadNonVoterCount),
+		PriorityInversionForReplaceDecommissioningVoterCount:     metric.NewCounter(metaReplicateQueuePriorityInversionForReplaceDecommissioningVoterCount),
+		PriorityInversionForReplaceDecommissioningNonVoterCount:  metric.NewCounter(metaReplicateQueuePriorityInversionForReplaceDecommissioningNonVoterCount),
+		PriorityInversionForRemoveDecommissioningVoterCount:      metric.NewCounter(metaReplicateQueuePriorityInversionForRemoveDecommissioningVoterCount),
+		PriorityInversionForRemoveDecommissioningNonVoterCount:   metric.NewCounter(metaReplicateQueuePriorityInversionForRemoveDecommissioningNonVoterCount),
+		PriorityInversionForRemoveLearnerCount:                   metric.NewCounter(metaReplicateQueuePriorityInversionForRemoveLearnerCount),
+		PriorityInversionForFinalizeAtomicReplicationChangeCount: metric.NewCounter(metaReplicateQueuePriorityInversionForFinalizeAtomicReplicationChangeCount),
+		PriorityInversionTotal:                                   metric.NewCounter(metaReplicateQueuePriorityInversionTotal),
 	}
 }
 
