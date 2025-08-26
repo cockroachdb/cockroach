@@ -957,7 +957,7 @@ func (a *Allocator) ComputeAction(
 	// priority inversion. If the priority is not -1, the range might be re-queued
 	// to be processed with the correct priority.
 	if priority == -1 && buildutil.CrdbTestBuild {
-		log.Fatalf(ctx, fmt.Sprintf("allocator returned -1 priority for range %s: %v", desc, action))
+		log.Fatalf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
 	}
 	return action, priority
 }
