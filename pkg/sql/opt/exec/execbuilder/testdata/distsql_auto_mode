@@ -280,3 +280,83 @@ query T
 SELECT info FROM [EXPLAIN SELECT a FROM abc INNER LOOKUP JOIN kv ON b = k] WHERE info LIKE 'distribution%'
 ----
 distribution: full
+
+subtest regression_152295
+
+statement ok
+CREATE TABLE a (
+  i INT PRIMARY KEY,
+  j INT
+)
+
+statement ok
+CREATE TABLE b (
+  k INT PRIMARY KEY
+)
+
+statement ok
+ALTER TABLE a SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+retry
+statement ok
+ALTER TABLE a EXPERIMENTAL_RELOCATE SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+statement ok
+ALTER TABLE b SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+retry
+statement ok
+ALTER TABLE b EXPERIMENTAL_RELOCATE SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+statement ok
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+
+statement ok
+SET use_soft_limit_for_distribute_scan = true
+
+# We choose to not distribute this query since the constrained scan has a soft
+# limit hint of 100 that is below the distribute scan threshold of 10k (even
+# though the "estimated row count" is 33,334).
+query T retry
+SELECT info FROM [EXPLAIN SELECT * FROM a INNER LOOKUP JOIN b ON k = j AND i < 10000 LIMIT 1]
+  WHERE info LIKE 'distribution%' OR info LIKE '%estimated row count%'
+----
+distribution: local
+          estimated row count: 100 - 33,334 (33% of the table; stats collected <hidden> ago)
+
+statement ok
+SET distribute_scan_row_count_threshold = 10
+
+# But now the soft limit hint exceeds the threshold - we should distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM a INNER LOOKUP JOIN b ON k = j AND i < 10000 LIMIT 1]
+  WHERE info LIKE 'distribution%' OR info LIKE '%estimated row count%'
+----
+distribution: full
+          estimated row count: 100 - 33,334 (33% of the table; stats collected <hidden> ago)
+
+statement ok
+RESET distribute_scan_row_count_threshold
+
+statement ok
+SET use_soft_limit_for_distribute_scan = false
+
+# Now we don't look at the soft limit hint - we should distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM a INNER LOOKUP JOIN b ON k = j AND i < 10000 LIMIT 1]
+  WHERE info LIKE 'distribution%' OR info LIKE '%estimated row count%'
+----
+distribution: full
+          estimated row count: 100 - 33,334 (33% of the table; stats collected <hidden> ago)
+
+statement ok
+RESET use_soft_limit_for_distribute_scan;
+
+subtest end
