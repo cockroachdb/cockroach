@@ -1,0 +1,26 @@
+echo
+----
+A "basically" monotonic sequence that has a small hiccup near the
+beginning. Sadly this currently results in the bulk of the sequence registering
+as thrashing, which is not desired in any allocator-related use cases.
+Two improvements come to mind:
+- epsilon-hysteresis: small changes that are reversed quickly don't count, but
+  it's hard to determine what "small" means.
+- trend-based: if there is an overall trend, count only total variation
+  in the direction opposing the trend. For example, we can count the number
+  of upward and downward deltas, and if one direction is dominant, count only
+  variation in the other direction.
+TODO(tbg): try out and implement trend-based thrashing detection.
+input: [100 90 91 85 80 70 60 50 40 30 20 10 0]
+ 100.00 ┼─╮
+  90.00 ┤ ╰───────╮
+  80.00 ┤         ╰────╮
+  70.00 ┤              ╰──╮
+  60.00 ┤                 ╰───╮
+  50.00 ┤                     ╰──╮
+  40.00 ┤                        ╰──╮
+  30.00 ┤                           ╰──╮
+  20.00 ┤                              ╰───╮
+  10.00 ┤                                  ╰──╮
+   0.00 ┤                                     ╰─
+tv=92.00% (92.0) runs=3
