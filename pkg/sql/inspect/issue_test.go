@@ -7,6 +7,7 @@ package inspect
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -59,6 +60,15 @@ func TestIssueRedaction(t *testing.T) {
 			},
 			redactable: "{type=testing_system_error pk=‹\"\"› details=map[field1:redactable string]}",
 			redacted:   "{type=testing_system_error pk=‹×› details=map[field1:redactable string]}",
+		},
+		{
+			desc: "aost",
+			issue: &inspectIssue{
+				ErrorType: "aost_error",
+				AOST:      time.Date(2023, 1, 1, 9, 30, 0, 0, time.UTC),
+			},
+			redactable: "{type=aost_error aost=\"2023-01-01 09:30:00\" pk=‹\"\"›}",
+			redacted:   "{type=aost_error aost=\"2023-01-01 09:30:00\" pk=‹×›}",
 		},
 	}
 	for _, c := range testCases {

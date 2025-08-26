@@ -45,7 +45,33 @@ type inspectCheck interface {
 // inspectLogger records issues found by inspect checks. Implementations of this
 // interface define how inspectIssue results are handled.
 type inspectLogger interface {
+	// logIssue records an inspectIssue found by a check.
 	logIssue(ctx context.Context, issue *inspectIssue) error
+
+	// hasIssues returns true if any issues have been logged.
+	hasIssues() bool
+}
+
+type inspectLoggers []inspectLogger
+
+var _ inspectLogger = inspectLoggers{}
+
+func (l inspectLoggers) logIssue(ctx context.Context, issue *inspectIssue) error {
+	for _, logger := range l {
+		if err := logger.logIssue(ctx, issue); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l inspectLoggers) hasIssues() bool {
+	for _, logger := range l {
+		if logger.hasIssues() {
+			return true
+		}
+	}
+	return false
 }
 
 // inspectRunner coordinates the execution of a set of inspectChecks.
@@ -64,6 +90,9 @@ type inspectRunner struct {
 
 	// logger records issues reported by the checks.
 	logger inspectLogger
+
+	// foundIssue indicates whether any issues were found.
+	foundIssue bool
 }
 
 // Step advances execution by processing one result from the current inspectCheck.
@@ -91,6 +120,7 @@ func (c *inspectRunner) Step(
 				return false, err
 			}
 			if issue != nil {
+				c.foundIssue = true
 				err = c.logger.logIssue(ctx, issue)
 				if err != nil {
 					return false, errors.Wrapf(err, "error logging inspect issue")
@@ -105,4 +135,17 @@ func (c *inspectRunner) Step(
 		c.checks = c.checks[1:]
 	}
 	return false, nil
+}
+
+// Close cleans up all checks in the runner. It will attempt to close each check,
+// even if errors occur during closing. If multiple checks fail to close, then
+// a combined error is returned.
+func (c *inspectRunner) Close(ctx context.Context) error {
+	var retErr error
+	for _, check := range c.checks {
+		if err := check.Close(ctx); err != nil {
+			retErr = errors.CombineErrors(retErr, err)
+		}
+	}
+	return retErr
 }
