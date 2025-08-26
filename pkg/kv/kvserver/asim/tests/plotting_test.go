@@ -75,6 +75,8 @@ func printStatsAndGenerateJSON(
 			}
 			if ok0 || ok {
 				_, _ = fmt.Fprintf(buf, "%s#%d: last:  %s\n", stat, sample, s)
+				thrashing := h.Thrashing(stat)
+				_, _ = fmt.Fprintf(buf, "%s#%d: thrash_pct: %s\n", stat, sample, thrashing)
 			}
 		}
 	}

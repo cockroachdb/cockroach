@@ -32,14 +32,18 @@ eval duration=5m samples=2 seed=42 metrics=(replicas) cfgs=(sma-count,mma-only)
 ----
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
+replicas#1: thrash_pct: [s1=0%]  (sum=0%)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
+replicas#2: thrash_pct: [s1=0%]  (sum=0%)
 artifacts[sma-count]: 62ac1b2595570a64
 ==========================
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
+replicas#1: thrash_pct: [s1=0%]  (sum=0%)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
+replicas#2: thrash_pct: [s1=0%]  (sum=0%)
 artifacts[mma-only]: 7f8cb11357cb8494
 ==========================
 
@@ -55,13 +59,17 @@ eval duration=5m samples=2 seed=42 metrics=(replicas) cfgs=(sma-count,mma-only)
 ----
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
+replicas#1: thrash_pct: [s1=0%]  (sum=0%)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
+replicas#2: thrash_pct: [s1=0%]  (sum=0%)
 artifacts[sma-count]: fcc6171fb20aaf96
 ==========================
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=10] (stddev=0.00, mean=10.00, sum=10)
+replicas#1: thrash_pct: [s1=0%]  (sum=0%)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
+replicas#2: thrash_pct: [s1=0%]  (sum=0%)
 artifacts[mma-only]: 78253b79ec7c7d5a
 ==========================

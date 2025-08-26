@@ -1,0 +1,17 @@
+# The first half doesn't count, but the second half adds total variation
+# since it starts a second run.
+echo
+----
+input: [1 2 4 8 10 8 4 2 1]
+ 9.79 ┤                 ╭───╮
+ 8.92 ┤               ╭─╯   ╰─╮
+ 8.04 ┤             ╭─╯       ╰─╮
+ 7.16 ┤            ╭╯           ╰╮
+ 6.28 ┤           ╭╯             ╰╮
+ 5.40 ┤          ╭╯               ╰╮
+ 4.52 ┤         ╭╯                 ╰╮
+ 3.64 ┤       ╭─╯                   ╰─╮
+ 2.76 ┤     ╭─╯                       ╰─╮
+ 1.88 ┤ ╭───╯                           ╰───╮
+ 1.00 ┼─╯                                   ╰─
+tv=100.00% (9.0) runs=2
