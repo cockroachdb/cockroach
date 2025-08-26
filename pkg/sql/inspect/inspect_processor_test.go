@@ -18,30 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
-
-// testInspectLogger is a test implementation of inspectLogger that collects issues in memory.
-type testInspectLogger struct {
-	mu     syncutil.Mutex
-	issues []*inspectIssue
-}
-
-// logIssue implements the inspectLogger interface.
-func (l *testInspectLogger) logIssue(_ context.Context, issue *inspectIssue) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.issues = append(l.issues, issue)
-	return nil
-}
-
-// getIssues returns the issues that have been emitted to the logger.
-func (l *testInspectLogger) getIssues() []*inspectIssue {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return append([]*inspectIssue(nil), l.issues...)
-}
 
 // testingSpanSourceMode defines behavior for test only span sources.
 // It is used to simulate producer-side edge cases.
@@ -243,9 +221,9 @@ func runProcessorAndWait(t *testing.T, proc *inspectProcessor, expectErr bool) {
 // makeProcessor will create an inspect processor for test.
 func makeProcessor(
 	t *testing.T, checkFactory inspectCheckFactory, src spanSource, concurrency int,
-) (*inspectProcessor, *testInspectLogger) {
+) (*inspectProcessor, *testIssueCollector) {
 	t.Helper()
-	logger := &testInspectLogger{}
+	logger := &testIssueCollector{}
 	proc := &inspectProcessor{
 		spec:           execinfrapb.InspectSpec{},
 		checkFactories: []inspectCheckFactory{checkFactory},
@@ -366,7 +344,7 @@ func TestInspectProcessor_EmitIssues(t *testing.T) {
 	}
 	proc, logger := makeProcessor(t, factory, spanSrc, 1)
 
-	runProcessorAndWait(t, proc, false)
+	runProcessorAndWait(t, proc, true /* expectErr */)
 
-	require.Len(t, logger.getIssues(), 2)
+	require.Equal(t, 2, logger.numIssuesFound())
 }
