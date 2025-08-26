@@ -1003,7 +1003,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 			return errors.Errorf("expected %d processed replicas; got %d", beforeProcessCount+1, pc)
 		}
 		bq.assertInvariants(func(item *replicaItem) {
-			require.Equal(t, item.rangeID, item.priority)
+			require.Equal(t, float64(item.rangeID), item.priority)
 		})
 		if v := bq.successes.Count(); v != beforeSuccessCount+1 {
 			return errors.Errorf("expected %d processed replicas; got %d", beforeSuccessCount+1, v)
@@ -1460,7 +1460,7 @@ func TestBaseQueueProcessConcurrently(t *testing.T) {
 	pQueue.processBlocker <- struct{}{}
 	assertProcessedAndProcessing(3, 0)
 	bq.assertInvariants(func(item *replicaItem) {
-		require.Equal(t, testPriority, item.priority)
+		require.Equal(t, float64(testPriority), item.priority)
 	})
 }
 
