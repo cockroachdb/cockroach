@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"sync"
 	"time"
 
@@ -163,6 +164,15 @@ func (a AllocatorAction) Remove() bool {
 		a == AllocatorRemoveDecommissioningNonVoter
 }
 
+// Decommissioning indicates an action replacing or removing a decommissioning
+// replicas.
+func (a AllocatorAction) Decommissioning() bool {
+	return a == AllocatorRemoveDecommissioningVoter ||
+		a == AllocatorRemoveDecommissioningNonVoter ||
+		a == AllocatorReplaceDecommissioningVoter ||
+		a == AllocatorReplaceDecommissioningNonVoter
+}
+
 // TargetReplicaType returns that the action is for a voter or non-voter replica.
 func (a AllocatorAction) TargetReplicaType() TargetReplicaType {
 	var t TargetReplicaType
@@ -277,6 +287,107 @@ func (a AllocatorAction) Priority() float64 {
 	default:
 		panic(fmt.Sprintf("unknown AllocatorAction: %s", a))
 	}
+}
+
+// AllocatorActionPriorities contains all allocator actions ordered by priority
+// from highest to lowest. The index of each action in this slice corresponds to
+// its enum value minus 1 (since AllocatorAction starts at 0 and the first
+// element is invalid).
+var (
+	AllocatorActionPriorities, AllocatorActionToIdx = func() ([]AllocatorAction, map[AllocatorAction]int) {
+		actions := []AllocatorAction{
+			AllocatorFinalizeAtomicReplicationChange,
+			AllocatorRemoveLearner,
+			AllocatorReplaceDeadVoter,
+			AllocatorAddVoter,
+			AllocatorReplaceDecommissioningVoter,
+			AllocatorRemoveDeadVoter,
+			AllocatorRemoveDecommissioningVoter,
+			AllocatorRemoveVoter,
+			AllocatorReplaceDeadNonVoter,
+			AllocatorAddNonVoter,
+			AllocatorReplaceDecommissioningNonVoter,
+			AllocatorRemoveDeadNonVoter,
+			AllocatorRemoveDecommissioningNonVoter,
+			AllocatorRemoveNonVoter,
+			AllocatorConsiderRebalance,
+			AllocatorRangeUnavailable,
+			AllocatorNoop,
+		}
+		// Sort actions by priority in descending order.
+		sort.Slice(actions, func(i, j int) bool {
+			return actions[i].Priority() > actions[j].Priority()
+		})
+		// Create index map.
+		actionToIdx := make(map[AllocatorAction]int, len(actions))
+		for i, action := range actions {
+			actionToIdx[action] = i
+		}
+		return actions, actionToIdx
+	}()
+)
+
+// GetAllocatorActionFromPriority returns an AllocatorAction that approximately matches
+// the given priority value. Since priorities may be adjusted, it finds the closest match
+// within a tolerance of 100.
+func GetAllocatorActionFromPriority(ctx context.Context, priority float64) AllocatorAction {
+	// Define a helper function to check if a value is within tolerance
+	withinTolerance := func(a, b float64) bool {
+		tolerance := 100.0
+		diff := math.Abs(a - b)
+		return diff <= tolerance
+	}
+	switch priority {
+	case 1e5:
+		return AllocatorReplaceDecommissioningVoter
+	case 12002:
+		return AllocatorFinalizeAtomicReplicationChange
+	case 12001:
+		return AllocatorRemoveLearner
+	case 12000:
+		return AllocatorReplaceDeadVoter
+	case 10000:
+		return AllocatorAddVoter
+	case 5000:
+		return AllocatorReplaceDecommissioningVoter
+	case 1000:
+		return AllocatorRemoveDeadVoter
+	case 900:
+		return AllocatorRemoveDecommissioningVoter
+	case 800:
+		return AllocatorRemoveVoter
+	case 700:
+		return AllocatorReplaceDeadNonVoter
+	case 600:
+		return AllocatorAddNonVoter
+	case 500:
+		return AllocatorReplaceDecommissioningNonVoter
+	case 400:
+		return AllocatorRemoveDeadNonVoter
+	case 300:
+		return AllocatorRemoveDecommissioningNonVoter
+	case 200:
+		return AllocatorRemoveNonVoter
+	case 0:
+		return AllocatorConsiderRebalance
+	default:
+		// For these three actions, priority might be adjusted and differ from
+		// action.Priority. Thus, we need to check the priority of the actions and
+		// return the closest match. Even though the priority is adjusted, they
+		// shouldn't jump to another action's priority category. Read
+		// allocator.computeAction for more details.
+		for _, action := range []AllocatorAction{
+			AllocatorAddVoter,
+			AllocatorRemoveDeadVoter,
+			AllocatorRemoveVoter,
+		} {
+			if withinTolerance(action.Priority(), priority) {
+				return action
+			}
+		}
+	}
+	log.Errorf(ctx, "unable to find action for priority: %f", priority)
+	return AllocatorNoop
 }
 
 // TargetReplicaType indicates whether the target replica is a voter or

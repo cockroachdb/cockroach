@@ -8,6 +8,7 @@ package kvserver
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -3925,7 +3926,7 @@ func (s *Store) ReplicateQueueDryRun(
 		return collectAndFinish(), nil
 	}
 	_, err = s.replicateQueue.processOneChange(
-		ctx, repl, desc, conf, false /* scatter */, true, /* dryRun */
+		ctx, repl, desc, conf, false /* scatter */, true /* dryRun */, -1, /*priority*/
 	)
 	if err != nil {
 		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
@@ -4025,6 +4026,22 @@ func (s *Store) AllocatorCheckRange(
 	return action, target, sp.FinishAndGetConfiguredRecording(), err
 }
 
+func (s *Store) EnqueueWithTracing(ctx context.Context, queueName string, repl *Replica) {
+	ctx, finishAndGetRecording := tracing.ContextWithRecordingSpan(ctx,
+		s.cfg.Tracer(), fmt.Sprintf("add-async(%s): %v", queueName, repl.Desc()),
+	)
+	processErr, enqueueErr := s.Enqueue(
+		ctx, queueName, repl, true /* skipShouldQueue */, true, /* async */
+	)
+	if processErr != nil || enqueueErr != nil {
+		log.KvDistribution.Infof(
+			ctx, "error when enqueuing replica asynchronously: processErr=%v, enqueueErr=%v",
+			processErr, enqueueErr,
+		)
+	}
+	log.KvDistribution.Infof(ctx, "%s", redact.Sprintf("\ntrace:\n%s", finishAndGetRecording()))
+}
+
 // Enqueue runs the given replica through the requested queue. If `async` is
 // specified, the replica is enqueued into the requested queue for asynchronous
 // processing and this method returns nothing. Otherwise, it returns all trace
@@ -4104,7 +4121,7 @@ func (s *Store) Enqueue(
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	processed, processErr := qImpl.process(ctx, repl, confReader)
+	processed, processErr := qImpl.process(ctx, repl, confReader, -1 /*priority*/)
 	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
 	return processErr, nil
 }
@@ -4141,7 +4158,7 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 		g.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			processed, err := s.replicaGCQueue.process(ctx, repl, nil)
+			processed, err := s.replicaGCQueue.process(ctx, repl, nil, -1 /*priority*/)
 			if err != nil {
 				return errors.Wrapf(err, "on %s", repl.Desc())
 			}

@@ -58,7 +58,7 @@ func (tq *testQueueImpl) shouldQueue(
 }
 
 func (tq *testQueueImpl) process(
-	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
+	_ context.Context, _ *Replica, _ spanconfig.StoreReader, _ float64,
 ) (bool, error) {
 	defer atomic.AddInt32(&tq.processed, 1)
 	if tq.err != nil {
@@ -984,7 +984,7 @@ type processTimeoutQueueImpl struct {
 var _ queueImpl = &processTimeoutQueueImpl{}
 
 func (pq *processTimeoutQueueImpl) process(
-	ctx context.Context, r *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, r *Replica, _ spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
@@ -1114,7 +1114,7 @@ type processTimeQueueImpl struct {
 var _ queueImpl = &processTimeQueueImpl{}
 
 func (pq *processTimeQueueImpl) process(
-	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
+	_ context.Context, _ *Replica, _ spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	time.Sleep(5 * time.Millisecond)
 	return true, nil
@@ -1338,13 +1338,13 @@ type parallelQueueImpl struct {
 var _ queueImpl = &parallelQueueImpl{}
 
 func (pq *parallelQueueImpl) process(
-	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader, priority float64,
 ) (processed bool, err error) {
 	atomic.AddInt32(&pq.processing, 1)
 	if pq.processBlocker != nil {
 		<-pq.processBlocker
 	}
-	processed, err = pq.testQueueImpl.process(ctx, repl, confReader)
+	processed, err = pq.testQueueImpl.process(ctx, repl, confReader, priority)
 	atomic.AddInt32(&pq.processing, -1)
 	return processed, err
 }
@@ -1552,4 +1552,49 @@ func TestBaseQueueRequeue(t *testing.T) {
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	assertShouldQueueCount(6)
 	assertProcessedAndProcessing(2, 0)
+}
+
+// TestBaseQueuePrintTopRanges verifies that PrintTopRanges doesn't modify the queue.
+// TODO(wenyihu6): make this an echo test
+func TestBaseQueuePrintTopRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	// Create a few replicas
+	repls := createReplicas(t, &tc, 3)
+
+	queueImpl := &testQueueImpl{
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
+			return true, float64(r.GetRangeID())
+		},
+	}
+
+	bq := makeTestBaseQueue("test", queueImpl, tc.store, queueConfig{})
+	bq.Start(stopper)
+
+	// Add replicas to the queue
+	for _, repl := range repls {
+		bq.maybeAdd(ctx, repl, hlc.ClockTimestamp{})
+	}
+
+	// Wait for processing
+	time.Sleep(10 * time.Millisecond)
+
+	// Check queue length before
+	lengthBefore := bq.Length()
+
+	// Call PrintTopRanges
+	bq.VPrintTopRangesLocked(ctx)
+
+	// Check queue length after - should be the same
+	lengthAfter := bq.Length()
+
+	if lengthBefore != lengthAfter {
+		t.Errorf("PrintTopRanges modified queue length: was %d, now %d", lengthBefore, lengthAfter)
+	}
 }

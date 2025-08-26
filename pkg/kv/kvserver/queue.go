@@ -135,7 +135,6 @@ type replicaItem struct {
 
 // setProcessing moves the item from an enqueued state to a processing state.
 func (i *replicaItem) setProcessing() {
-	i.priority = 0
 	if i.index >= 0 {
 		log.Dev.Fatalf(context.Background(),
 			"r%d marked as processing but appears in prioQ", i.rangeID,
@@ -202,6 +201,27 @@ func (pq *priorityQueue) update(item *replicaItem, priority float64) {
 	heap.Fix(pq, item.index)
 }
 
+// VPrintTopRanges prints the top 50 ranges in the queue based on priority.
+func (bq *baseQueue) VPrintTopRangesLocked(ctx context.Context) {
+	if !log.V(5) {
+		return
+	}
+	// Create a copy of the priority queue to avoid modifying the original
+	tmp := priorityQueue{
+		sl: make([]*replicaItem, len(bq.mu.priorityQ.sl)),
+	}
+	copy(tmp.sl, bq.mu.priorityQ.sl)
+	heap.Init(&tmp)
+
+	numItems := min(25, tmp.Len())
+	log.VEventf(ctx, 5, "top %d ranges in %s queue:", numItems, bq.name)
+	for i := 0; i < numItems; i++ {
+		item := heap.Pop(&tmp).(*replicaItem)
+		log.VEventf(ctx, 5, "r%d(replica %d): priority %.2f",
+			item.rangeID, item.replicaID, item.priority)
+	}
+}
+
 var (
 	errQueueDisabled = errors.New("queue disabled")
 	errQueueStopped  = errors.New("queue stopped")
@@ -260,7 +280,7 @@ type queueImpl interface {
 	// queue-specific work on it. The Replica is guaranteed to be initialized.
 	// We return a boolean to indicate if the Replica was processed successfully
 	// (vs. it being a no-op or an error).
-	process(context.Context, *Replica, spanconfig.StoreReader) (processed bool, err error)
+	process(context.Context, *Replica, spanconfig.StoreReader, float64) (processed bool, err error)
 
 	// processScheduled is called after async task was created to run process.
 	// This function is called by the process loop synchronously. This method is
@@ -571,9 +591,8 @@ func (h baseQueueHelper) MaybeAdd(
 }
 
 func (h baseQueueHelper) Add(ctx context.Context, repl replicaInQueue, prio float64) {
-	_, err := h.bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), prio)
-	if err != nil && log.V(1) {
-		log.Dev.Infof(ctx, "during Add: %s", err)
+	if _, err := h.bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), prio); err != nil {
+		log.Dev.VEventf(ctx, 1, "during Add: %s", err)
 	}
 }
 
@@ -627,6 +646,16 @@ func (bq *baseQueue) MaybeAddAsync(
 	})
 }
 
+func (bq *baseQueue) AddAsyncWithTracing(ctx context.Context, repl replicaInQueue, prio float64) {
+	bq.Async(ctx, "Add", true /* wait */, func(ctx context.Context, h queueHelper) {
+		ctx, finishAndGetRecording := tracing.ContextWithRecordingSpan(ctx,
+			bq.store.cfg.Tracer(), fmt.Sprintf("add-async(%s): %v", bq.name, repl.Desc()),
+		)
+		h.Add(ctx, repl, prio)
+		log.KvDistribution.Infof(ctx, "%s", redact.Sprintf("\ntrace:\n%s", finishAndGetRecording()))
+	})
+}
+
 // AddAsync adds the replica to the queue. Unlike MaybeAddAsync, it will wait
 // for other operations to finish instead of turning into a noop (because
 // unlikely MaybeAdd, Add is not subject to being called opportunistically).
@@ -662,7 +691,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		// replication, however still require specific range(s) to be processed
 		// through the queue.
 		bypassDisabled := bq.store.TestingKnobs().BaseQueueDisabledBypassFilter
-		if bypassDisabled == nil || !bypassDisabled(repl.GetRangeID()) {
+		if bypassDisabled == nil || !bypassDisabled(bq.store.StoreID(), repl.GetRangeID()) {
 			return
 		}
 	}
@@ -726,7 +755,7 @@ func (bq *baseQueue) addInternal(
 		// replication, however still require specific range(s) to be processed
 		// through the queue.
 		bypassDisabled := bq.store.TestingKnobs().BaseQueueDisabledBypassFilter
-		if bypassDisabled == nil || !bypassDisabled(desc.RangeID) {
+		if bypassDisabled == nil || !bypassDisabled(bq.store.StoreID(), desc.RangeID) {
 			if log.V(3) {
 				log.Dev.Infof(ctx, "queue disabled")
 			}
@@ -745,6 +774,8 @@ func (bq *baseQueue) addInternal(
 		if item.processing {
 			wasRequeued := item.requeue
 			item.requeue = true
+			log.VEventf(ctx, 1,
+				"requeueing since replica is already processing %v", item)
 			return !wasRequeued, nil
 		}
 
@@ -752,30 +783,39 @@ func (bq *baseQueue) addInternal(
 		// Don't lower it since the previous queuer may have known more than this
 		// one does.
 		if priority > item.priority {
-			if log.V(1) {
-				log.Dev.Infof(ctx, "updating priority: %0.3f -> %0.3f", item.priority, priority)
-			}
+			log.Dev.VEventf(ctx, 1,
+				"updating priority: %0.3f -> %0.3f", item.priority, priority)
 			bq.mu.priorityQ.update(item, priority)
 		}
+		log.Dev.VEventf(ctx, 1, "already queued: r%v(replica=%v) at priority %.2f",
+			item.rangeID, item.replicaID, item.priority)
 		return false, nil
 	}
 
-	if log.V(3) {
-		log.Dev.Infof(ctx, "adding: priority=%0.3f", priority)
-	}
+	log.Dev.VEventf(ctx, 3, "adding: priority=%0.3f", priority)
 	item = &replicaItem{rangeID: desc.RangeID, replicaID: replicaID, priority: priority}
 	bq.addLocked(item)
+	bq.VPrintTopRangesLocked(ctx)
 
-	// If adding this replica has pushed the queue past its maximum size,
-	// remove the lowest priority element.
+	// If adding this replica has pushed the queue past its maximum size, remove
+	// an element. Note that it might not be the lowest priority since heap is not
+	// guaranteed to be globally ordered. Ideally, we would remove the lowest
+	// priority element, but it would require additional bookkeeping or a linear
+	// scan.
 	if pqLen := bq.mu.priorityQ.Len(); pqLen > bq.maxSize {
-		bq.removeLocked(bq.mu.priorityQ.sl[pqLen-1])
+		replicaItemToDrop := bq.mu.priorityQ.sl[pqLen-1]
+		log.Dev.VInfof(ctx, 1, "dropping due to exceeding queue max size: priority=%0.3f, replica=%v",
+			priority, replicaItemToDrop.replicaID)
+		bq.removeLocked(replicaItemToDrop)
 	}
 	// Signal the processLoop that a replica has been added.
 	select {
 	case bq.incoming <- struct{}{}:
 	default:
 		// No need to signal again.
+	}
+	if postEnqueueInterceptor := bq.store.TestingKnobs().BaseQueuePostEnqueueInterceptor; postEnqueueInterceptor != nil {
+		postEnqueueInterceptor(bq.store.StoreID(), desc.RangeID)
 	}
 	return true, nil
 }
@@ -872,7 +912,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 
 					repl, priority := bq.pop()
 					if repl != nil {
-						bq.processOneAsyncAndReleaseSem(ctx, repl, stopper)
+						bq.processOneAsyncAndReleaseSem(ctx, repl, stopper, priority)
 						bq.impl.postProcessScheduled(ctx, repl, priority)
 					} else {
 						// Release semaphore if no replicas were available.
@@ -901,7 +941,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 // processOneAsyncAndReleaseSem processes a replica if possible and releases the
 // processSem when the processing is complete.
 func (bq *baseQueue) processOneAsyncAndReleaseSem(
-	ctx context.Context, repl replicaInQueue, stopper *stop.Stopper,
+	ctx context.Context, repl replicaInQueue, stopper *stop.Stopper, priority float64,
 ) {
 	ctx = repl.AnnotateCtx(ctx)
 	taskName := bq.processOpName() + " [outer]"
@@ -917,7 +957,7 @@ func (bq *baseQueue) processOneAsyncAndReleaseSem(
 			// Release semaphore when finished processing.
 			defer func() { <-bq.processSem }()
 			start := timeutil.Now()
-			err := bq.processReplica(ctx, repl)
+			err := bq.processReplica(ctx, repl, priority)
 			bq.recordProcessDuration(ctx, timeutil.Since(start))
 			bq.finishProcessingReplica(ctx, stopper, repl, err)
 		}); err != nil {
@@ -950,7 +990,9 @@ func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duratio
 //
 // ctx should already be annotated by both bq.AnnotateCtx() and
 // repl.AnnotateCtx().
-func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) error {
+func (bq *baseQueue) processReplica(
+	ctx context.Context, repl replicaInQueue, priority float64,
+) error {
 
 	ctx, span := tracing.EnsureChildSpan(ctx, bq.Tracer, bq.processOpName())
 	defer span.Finish()
@@ -959,11 +1001,11 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 
 	// Load the system config if it's needed.
 	conf, err := bq.replicaCanBeProcessed(ctx, repl, true /* acquireLeaseIfNeeded */)
+	log.VErrEventf(ctx, 2, "replica can not be processed now: %s", err)
 	if err != nil {
 		if errors.Is(err, errMarkNotAcquirableLease) {
 			return nil
 		}
-		log.VErrEventf(ctx, 2, "replica can not be processed now: %s", err)
 		return err
 	}
 
@@ -974,7 +1016,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 			// it may not be and shouldQueue will be passed a nil realRepl. These tests
 			// know what they're getting into so that's fine.
 			realRepl, _ := repl.(*Replica)
-			processed, err := bq.impl.process(ctx, realRepl, conf)
+			processed, err := bq.impl.process(ctx, realRepl, conf, priority)
 			if err != nil {
 				return err
 			}
@@ -1145,21 +1187,25 @@ func (bq *baseQueue) assertInvariants() {
 func (bq *baseQueue) finishProcessingReplica(
 	ctx context.Context, stopper *stop.Stopper, repl replicaInQueue, err error,
 ) {
+	rangeID := repl.GetRangeID()
 	bq.mu.Lock()
 	// Remove item from replica set completely. We may add it
 	// back in down below.
-	item := bq.mu.replicas[repl.GetRangeID()]
+	item := bq.mu.replicas[rangeID]
 	processing := item.processing
 	callbacks := item.callbacks
 	requeue := item.requeue
+	priority := item.priority
 	item.callbacks = nil
-	bq.removeFromReplicaSetLocked(repl.GetRangeID())
+	bq.removeFromReplicaSetLocked(rangeID)
 	item = nil // prevent accidental use below
 	bq.mu.Unlock()
 
 	if !processing {
 		log.Dev.Fatalf(ctx, "%s: attempt to remove non-processing replica %v", bq.name, repl)
 	}
+	log.Dev.VEventf(ctx, 2, "finish processing: r%v at priority %.2f requeuing=%t",
+		repl.Desc(), priority, requeue)
 
 	// Call any registered callbacks.
 	for _, cb := range callbacks {
@@ -1182,8 +1228,9 @@ func (bq *baseQueue) finishProcessingReplica(
 		// purgatory.
 		if purgErr, ok := IsPurgatoryError(err); ok {
 			bq.mu.Lock()
-			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr)
+			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr, priority)
 			bq.mu.Unlock()
+			log.Dev.VEventf(ctx, 0, "adding to purgatory: r%v", repl.GetRangeID())
 			return
 		}
 
@@ -1202,7 +1249,11 @@ func (bq *baseQueue) finishProcessingReplica(
 // addToPurgatoryLocked adds the specified replica to the purgatory queue, which
 // holds replicas which have failed processing.
 func (bq *baseQueue) addToPurgatoryLocked(
-	ctx context.Context, stopper *stop.Stopper, repl replicaInQueue, purgErr PurgatoryError,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	repl replicaInQueue,
+	purgErr PurgatoryError,
+	priority float64,
 ) {
 	bq.mu.AssertHeld()
 
@@ -1226,7 +1277,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 		return
 	}
 
-	item := &replicaItem{rangeID: repl.GetRangeID(), replicaID: repl.ReplicaID(), index: -1}
+	item := &replicaItem{rangeID: repl.GetRangeID(), replicaID: repl.ReplicaID(), index: -1, priority: priority}
 	bq.mu.replicas[repl.GetRangeID()] = item
 
 	defer func() {
@@ -1304,6 +1355,7 @@ func (bq *baseQueue) processReplicasInPurgatory(
 		for _, item := range ranges {
 			repl, err := bq.getReplica(item.rangeID)
 			if err != nil || item.replicaID != repl.ReplicaID() {
+				log.Dev.VEventf(ctx, 0, "removing from replica due to changed id: r%d", item.rangeID)
 				bq.mu.Lock()
 				bq.removeFromReplicaSetLocked(item.rangeID)
 				bq.mu.Unlock()
@@ -1315,7 +1367,7 @@ func (bq *baseQueue) processReplicasInPurgatory(
 					if _, err := bq.replicaCanBeProcessed(ctx, repl, false); err != nil {
 						bq.finishProcessingReplica(ctx, stopper, repl, err)
 					} else {
-						err = bq.processReplica(ctx, repl)
+						err = bq.processReplica(ctx, repl, item.priority /*priority*/)
 						bq.finishProcessingReplica(ctx, stopper, repl, err)
 					}
 				},
@@ -1356,7 +1408,7 @@ func (bq *baseQueue) pop() (replicaInQueue, float64) {
 		if item.processing {
 			log.Dev.Fatalf(bq.AnnotateCtx(context.Background()), "%s pulled processing item from heap: %v", bq.name, item)
 		}
-		// We are saving priority because the state is reset by setProcessing()
+		// We are saving pr	iority because the state is reset by setProcessing()
 		priority := item.priority
 		item.setProcessing()
 		bq.pending.Update(int64(bq.mu.priorityQ.Len()))
@@ -1437,12 +1489,12 @@ func (bq *baseQueue) DrainQueue(ctx context.Context, stopper *stop.Stopper) {
 	defer bq.lockProcessing()()
 
 	ctx = bq.AnnotateCtx(ctx)
-	for repl, _ := bq.pop(); repl != nil; repl, _ = bq.pop() {
+	for repl, priority := bq.pop(); repl != nil; repl, _ = bq.pop() {
 		annotatedCtx := repl.AnnotateCtx(ctx)
 		if _, err := bq.replicaCanBeProcessed(annotatedCtx, repl, false); err != nil {
 			bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
 		} else {
-			err = bq.processReplica(annotatedCtx, repl)
+			err = bq.processReplica(annotatedCtx, repl, priority /*priority*/)
 			bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
 		}
 	}

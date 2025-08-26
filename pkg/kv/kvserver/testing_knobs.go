@@ -533,7 +533,9 @@ type StoreTestingKnobs struct {
 
 	// BaseQueueDisabledBypassFilter checks whether the replica for the given
 	// rangeID should ignore the queue being disabled, and be processed anyway.
-	BaseQueueDisabledBypassFilter func(rangeID roachpb.RangeID) bool
+	BaseQueueDisabledBypassFilter func(storeID roachpb.StoreID, rangeID roachpb.RangeID) bool
+
+	BaseQueuePostEnqueueInterceptor func(storeID roachpb.StoreID, rangeID roachpb.RangeID)
 
 	// InjectReproposalError injects an error in tryReproposeWithNewLeaseIndexRaftMuLocked.
 	// If nil is returned, reproposal will be attempted.

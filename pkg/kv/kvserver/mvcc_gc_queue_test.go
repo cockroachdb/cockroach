@@ -911,7 +911,7 @@ func testMVCCGCQueueProcessImpl(t *testing.T, snapshotBounds bool) {
 
 	// Process through a scan queue.
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, cfg)
+	processed, err := mgcq.process(ctx, tc.repl, cfg, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1162,7 +1162,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	processed, err := mgcq.process(ctx, tc.repl, cfg)
+	processed, err := mgcq.process(ctx, tc.repl, cfg, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1296,7 +1296,7 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 		t.Fatal(err)
 	}
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
+	processed, err := mgcq.process(ctx, tc.repl, confReader, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1361,7 +1361,7 @@ func TestMVCCGCQueueLastProcessedTimestamps(t *testing.T) {
 
 	// Process through a scan queue.
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
+	processed, err := mgcq.process(ctx, tc.repl, confReader, -1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1472,7 +1472,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	}
 	tc.manualClock.Advance(conf.TTL() + 1)
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
+	processed, err := mgcq.process(ctx, tc.repl, confReader, -1)
 	if err != nil {
 		t.Fatal(err)
 	}

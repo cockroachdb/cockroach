@@ -1087,7 +1087,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
-							BaseQueueDisabledBypassFilter: func(rangeID roachpb.RangeID) bool {
+							BaseQueueDisabledBypassFilter: func(_ roachpb.StoreID, rangeID roachpb.RangeID) bool {
 								return rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID))
 							},
 						},
@@ -2529,6 +2529,75 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 		})
 		if len(descs) != 0 {
 			return errors.Errorf("expected no replicas, found %d: %v", len(descs), descs)
+		}
+		return nil
+	})
+}
+
+// put a marker
+func TestRebalanceLeaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	var scratchRangeID int64
+	atomic.StoreInt64(&scratchRangeID, -1)
+
+	var waitUntilLeavingJoint = func() {}
+
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					BaseQueueDisabledBypassFilter: func(storeID roachpb.StoreID, rangeID roachpb.RangeID) bool {
+						if storeID == 4 && rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) {
+							return true
+						}
+						return false
+					},
+					BaseQueuePostEnqueueInterceptor: func(storeID roachpb.StoreID, rangeID roachpb.RangeID) {
+						if storeID == 4 && rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) {
+							// Keep waiting until learner replica has been removed.
+							waitUntilLeavingJoint()
+						}
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	waitUntilLeavingJoint = func() {
+		testutils.SucceedsSoon(t, func() error {
+			rangeDesc := tc.LookupRangeOrFatal(t, scratchKey)
+			replicas := rangeDesc.Replicas()
+			if replicas.InAtomicReplicationChange() || len(replicas.LearnerDescriptors()) != 0 {
+				return errors.Newf("in between atomic changes: %v", replicas)
+			}
+			return nil
+		})
+	}
+
+	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+	tc.AddVotersOrFatal(t, scratchRange.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+	atomic.StoreInt64(&scratchRangeID, int64(scratchRange.RangeID))
+	lh, err := tc.FindRangeLeaseHolder(scratchRange, nil)
+	require.NoError(t, err)
+	_, err = tc.RebalanceVoter(
+		ctx,
+		scratchRange.StartKey.AsRawKey(),
+		roachpb.ReplicationTarget{StoreID: lh.StoreID, NodeID: lh.NodeID}, /* src */
+		roachpb.ReplicationTarget{StoreID: 4, NodeID: 4},                  /* dest */
+	)
+	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		store := tc.GetFirstStoreFromServer(t, 3)
+		if c := store.ReplicateQueueMetrics().PriorityInversionForReplaceDecommissioningVoterCount.Count(); c == 0 {
+			return errors.Newf("expected non-zero priority inversion count for replacing decommissioning voter but got %d", c)
 		}
 		return nil
 	})
