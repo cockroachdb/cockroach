@@ -128,9 +128,9 @@ func (filter tableEventFilter) shouldFilter(
 	et := classifyTableEvent(e)
 
 	if log.V(2) {
-		log.Infof(ctx, "table event %v classified as %v", e, et)
+		log.Dev.Infof(ctx, "table event %v classified as %v", e, et)
 		defer func() {
-			log.Infof(ctx, "should filter table event %v: %t", e, ok)
+			log.Dev.Infof(ctx, "should filter table event %v: %t", e, ok)
 		}()
 	}
 

@@ -259,7 +259,7 @@ func restoreWithRetry(
 					ctx, txn, "error", fmt.Sprintf("restore encountered error: %v", err),
 				)
 			}); err != nil {
-				log.Warningf(ctx, "failed to record job error message: %v", err)
+				log.Dev.Warningf(ctx, "failed to record job error message: %v", err)
 			}
 		}
 
@@ -330,7 +330,7 @@ func maybeResetRetry(
 		// If the previous persisted spans are different than the current, it
 		// implies that further progress has been persisted.
 		rt.Reset()
-		log.Infof(ctx, "restored frontier has advanced since last retry, resetting retry counter")
+		log.Dev.Infof(ctx, "restored frontier has advanced since last retry, resetting retry counter")
 	}
 	return currProgress
 }

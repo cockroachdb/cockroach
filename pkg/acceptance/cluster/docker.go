@@ -317,10 +317,10 @@ func (c *Container) WaitUntilNotRunning(ctx context.Context) error {
 			// NB: TEST_UNDECLARED_OUTPUTS_DIR is set for remote Bazel tests.
 			undeclaredOutsDir := os.Getenv("TEST_UNDECLARED_OUTPUTS_DIR")
 			if undeclaredOutsDir != "" {
-				log.Shoutf(ctx, severity.INFO, "command left-over files in %s",
+				log.Dev.Shoutf(ctx, severity.INFO, "command left-over files in %s",
 					strings.Replace(volumesDir, undeclaredOutsDir, "outputs.zip", 1))
 			} else {
-				log.Shoutf(ctx, severity.INFO, "command left-over files in %s", volumesDir)
+				log.Dev.Shoutf(ctx, severity.INFO, "command left-over files in %s", volumesDir)
 			}
 		}
 

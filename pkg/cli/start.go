@@ -1472,7 +1472,7 @@ func setupAndInitializeLoggingAndProfiling(
 				"to databases, the --locality flag must contain a \"region\" tier.\n" +
 				"For more information, see:\n\n" +
 				"- %s"
-			log.Shoutf(ctx, severity.WARNING, warningString,
+			log.Dev.Shoutf(ctx, severity.WARNING, warningString,
 				redact.Safe(docs.URL("cockroach-start.html#locality")))
 		}
 	}

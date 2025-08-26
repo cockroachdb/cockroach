@@ -274,11 +274,7 @@ func (loggerDev) InfofDepth(ctx context.Context, depth int, format string, args 
 // The `INFO` severity is used for informational messages that do not
 // require action.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.Infof instead
 func Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.DEV, format, args...)
 }
@@ -302,11 +298,7 @@ func Infof(ctx context.Context, format string, args ...interface{}) {
 // The `INFO` severity is used for informational messages that do not
 // require action.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.VInfof instead
 func VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.DEV, format, args...)
@@ -332,11 +324,7 @@ func VInfof(ctx context.Context, level Level, format string, args ...interface{}
 // The `INFO` severity is used for informational messages that do not
 // require action.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.Info instead
 func Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.DEV, msg)
 }
@@ -361,11 +349,7 @@ func Info(ctx context.Context, msg string) {
 // The `INFO` severity is used for informational messages that do not
 // require action.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.InfofDepth instead
 func InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.DEV, format, args...)
 }
@@ -484,11 +468,7 @@ func (loggerDev) WarningfDepth(ctx context.Context, depth int, format string, ar
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.Warningf instead
 func Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.DEV, format, args...)
 }
@@ -512,11 +492,7 @@ func Warningf(ctx context.Context, format string, args ...interface{}) {
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.VWarningf instead
 func VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.DEV, format, args...)
@@ -542,11 +518,7 @@ func VWarningf(ctx context.Context, level Level, format string, args ...interfac
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.Warning instead
 func Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.DEV, msg)
 }
@@ -571,11 +543,7 @@ func Warning(ctx context.Context, msg string) {
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.WarningfDepth instead
 func WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.DEV, format, args...)
 }
@@ -699,11 +667,7 @@ func (loggerDev) ErrorfDepth(ctx context.Context, depth int, format string, args
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.Errorf instead
 func Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.DEV, format, args...)
 }
@@ -728,11 +692,7 @@ func Errorf(ctx context.Context, format string, args ...interface{}) {
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.VErrorf instead
 func VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.ERROR, channel.DEV, format, args...)
@@ -759,11 +719,7 @@ func VErrorf(ctx context.Context, level Level, format string, args ...interface{
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.Error instead
 func Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.DEV, msg)
 }
@@ -789,11 +745,7 @@ func Error(ctx context.Context, msg string) {
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.ErrorfDepth instead
 func ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.DEV, format, args...)
 }
@@ -917,11 +869,7 @@ func (loggerDev) FatalfDepth(ctx context.Context, depth int, format string, args
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.Fatalf instead
 func Fatalf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.FATAL, channel.DEV, format, args...)
 }
@@ -946,11 +894,7 @@ func Fatalf(ctx context.Context, format string, args ...interface{}) {
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.VFatalf instead
 func VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.FATAL, channel.DEV, format, args...)
@@ -977,11 +921,7 @@ func VFatalf(ctx context.Context, level Level, format string, args ...interface{
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.Fatal instead
 func Fatal(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.FATAL, channel.DEV, msg)
 }
@@ -1007,11 +947,7 @@ func Fatal(ctx context.Context, msg string) {
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.FatalfDepth instead
 func FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.DEV, format, args...)
 }
@@ -1121,11 +1057,7 @@ func (loggerDev) VEventfDepth(ctx context.Context, depth int, level Level, forma
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.Shout instead
 func Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.DEV, msg)
 }
@@ -1146,11 +1078,7 @@ func Shout(ctx context.Context, sev Severity, msg string) {
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.Shoutf instead
 func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.DEV, format, args...)
 }
