@@ -1,5 +1,6 @@
 echo
 ----
+A monotonic sequence should have zero thrashing.
 input: [1 2 3 4]
  4.00 ┤                                   ╭───
  3.70 ┤                               ╭───╯

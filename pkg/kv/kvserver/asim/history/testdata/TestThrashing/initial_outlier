@@ -1,6 +1,7 @@
-# The initial monotonic run doesn't count.
 echo
 ----
+An initial outlier leads to a large normalization factor, 
+i.e. low thrashing percentage. This isn't necessarily good.
 input: [10250 5004 12 1 2]
  10250 ┼╮
   9225 ┤╰─╮

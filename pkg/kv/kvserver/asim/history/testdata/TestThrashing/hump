@@ -1,5 +1,3 @@
-# The first half doesn't count, but the second half adds total variation
-# since it starts a second run.
 echo
 ----
 input: [1 2 4 8 10 8 4 2 1]

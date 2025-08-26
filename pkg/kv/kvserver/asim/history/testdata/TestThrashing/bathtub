@@ -1,5 +1,3 @@
-# The second run starts at the bottom and accrues total variation
-# as it ascends to the top.
 echo
 ----
 input: [10 8 4 2 1 2 4 8 10]
