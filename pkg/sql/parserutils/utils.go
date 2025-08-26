@@ -57,8 +57,26 @@ func PopulateErrorDetails(
 	return errors.WithDetail(retErr, buf.String())
 }
 
+// Parse is the same as sql/parser.Parse but is injected to avoid a dependency
+// on the parser package.
+var Parse = func(sql string) (statements.Statements, error) {
+	return statements.Statements{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
+
+// ParseExpr is the same as sql/parser.ParseExpr but is injected to avoid a
+// dependency on the parser package.
+var ParseExpr = func(sql string) (tree.Expr, error) {
+	return nil, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
+
 // ParseOne is the same as sql/parser.ParseOne but is injected to avoid a
 // dependency on the parser package.
 var ParseOne = func(sql string) (statements.Statement[tree.Statement], error) {
 	return statements.Statement[tree.Statement]{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
+
+// ParseQualifiedTableName is the same as sql/parser.ParseQualifiedTableName but
+// is injected to avoid a dependency on the parser package.
+var ParseQualifiedTableName = func(sql string) (*tree.TableName, error) {
+	return nil, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
 }

@@ -151,7 +151,10 @@ func init() {
 // DoParserInjection performs all the necessary sql/parser injections within the
 // sql directory.
 func DoParserInjection() {
+	parserutils.Parse = parser.Parse
+	parserutils.ParseExpr = parser.ParseExpr
 	parserutils.ParseOne = parser.ParseOne
+	parserutils.ParseQualifiedTableName = parser.ParseQualifiedTableName
 }
 
 // ClusterOrganization is the organization name.
