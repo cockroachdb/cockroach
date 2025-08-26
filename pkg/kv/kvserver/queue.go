@@ -998,11 +998,11 @@ func (bq *baseQueue) processReplica(
 
 	// Load the system config if it's needed.
 	conf, err := bq.replicaCanBeProcessed(ctx, repl, true /* acquireLeaseIfNeeded */)
+	log.VErrEventf(ctx, 2, "replica can not be processed now: %s", err)
 	if err != nil {
 		if errors.Is(err, errMarkNotAcquirableLease) {
 			return nil
 		}
-		log.VErrEventf(ctx, 2, "replica can not be processed now: %s", err)
 		return err
 	}
 
@@ -1184,22 +1184,25 @@ func (bq *baseQueue) assertInvariants() {
 func (bq *baseQueue) finishProcessingReplica(
 	ctx context.Context, stopper *stop.Stopper, repl replicaInQueue, err error,
 ) {
+	rangeID := repl.GetRangeID()
 	bq.mu.Lock()
 	// Remove item from replica set completely. We may add it
 	// back in down below.
-	item := bq.mu.replicas[repl.GetRangeID()]
+	item := bq.mu.replicas[rangeID]
 	processing := item.processing
 	callbacks := item.callbacks
 	requeue := item.requeue
 	priority := item.priority
 	item.callbacks = nil
-	bq.removeFromReplicaSetLocked(repl.GetRangeID())
+	bq.removeFromReplicaSetLocked(rangeID)
 	item = nil // prevent accidental use below
 	bq.mu.Unlock()
 
 	if !processing {
 		log.Fatalf(ctx, "%s: attempt to remove non-processing replica %v", bq.name, repl)
 	}
+	log.Dev.VEventf(ctx, 2, "finish processing: r%v at priority %.2f requeuing=%t",
+		repl.Desc(), priority, requeue)
 
 	// Call any registered callbacks.
 	for _, cb := range callbacks {
@@ -1224,6 +1227,7 @@ func (bq *baseQueue) finishProcessingReplica(
 			bq.mu.Lock()
 			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr, priority)
 			bq.mu.Unlock()
+			log.Dev.VEventf(ctx, 0, "adding to purgatory: r%v", repl.GetRangeID())
 			return
 		}
 
@@ -1348,6 +1352,7 @@ func (bq *baseQueue) processReplicasInPurgatory(
 		for _, item := range ranges {
 			repl, err := bq.getReplica(item.rangeID)
 			if err != nil || item.replicaID != repl.ReplicaID() {
+				log.Dev.VEventf(ctx, 0, "removing from replica due to changed id: r%d", item.rangeID)
 				bq.mu.Lock()
 				bq.removeFromReplicaSetLocked(item.rangeID)
 				bq.mu.Unlock()
