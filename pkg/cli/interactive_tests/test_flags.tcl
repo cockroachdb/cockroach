@@ -9,22 +9,19 @@ eexpect ":/# "
 start_test "Check that --max-disk-temp-storage works."
 send "$argv start-single-node --insecure --store=path=logs/mystore --max-disk-temp-storage=10GiB\r"
 eexpect "node starting"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 end_test
 
 start_test "Check that --max-disk-temp-storage can be expressed as a percentage."
 send "$argv start-single-node --insecure --store=path=logs/mystore --max-disk-temp-storage=10%\r"
 eexpect "node starting"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 end_test
 
 start_test "Check that --max-disk-temp-storage percentage works when the store is in-memory."
 send "$argv start-single-node --insecure --store=type=mem,size=1GB --max-disk-temp-storage=10%\r"
 eexpect "node starting"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 end_test
 
 start_test "Check that memory max flags do not exceed available RAM."
@@ -34,16 +31,14 @@ eexpect "is larger than"
 eexpect "of total RAM"
 eexpect "increased risk"
 eexpect "node starting"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 end_test
 
 start_test "Check that not using --host nor --advertise causes a user warning."
 send "$argv start-single-node --insecure\r"
 eexpect "WARNING: neither --listen-addr nor --advertise-addr was specified"
 eexpect "node starting"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 end_test
 
 start_test "Check that using --advertise-addr does not cause a user warning."
@@ -55,16 +50,14 @@ expect {
   }
 }
 eexpect "node starting"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 end_test
 
 start_test "Check that --listening-url-file gets created with the right data"
 send "$argv start-single-node --insecure --listening-url-file=foourl\r"
 eexpect "node starting"
 system "grep -q 'postgresql://.*@.*:\[0-9\]\[0-9\]*' foourl"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 end_test
 
 start_test {Check that the "failed running SUBCOMMAND" message does not consider a flag the subcommand}
@@ -109,8 +102,7 @@ end_test
 start_test "Check that locality flags without a region tier warn"
 send "$argv start-single-node --insecure --locality=data-center=us-east,zone=a\r"
 eexpect "WARNING: The --locality flag does not contain a"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 end_test
 
 start_server $argv
@@ -170,8 +162,7 @@ send "export GOMEMLIMIT=1GiB;\r"
 eexpect ":/# "
 send "$argv start-single-node --insecure --store=path=logs/mystore\r"
 eexpect "node starting"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 stop_server $argv
 end_test
 
@@ -180,8 +171,7 @@ send "export GOGC=500;\r"
 eexpect ":/# "
 send "$argv start-single-node --insecure --store=path=logs/mystore\r"
 eexpect "node starting"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 stop_server $argv
 end_test
 

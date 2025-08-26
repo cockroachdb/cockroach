@@ -33,8 +33,7 @@ eexpect ":/# "
 # is has been broken, and that may be the secondary logger.
 send "tail -F `find logs/db/logs -type l`\r"
 eexpect "error: write */dev/stderr*: broken pipe"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 end_test
 
 start_test "Check that a broken log file prints a message to stderr."
@@ -52,8 +51,7 @@ eexpect "CockroachDB node starting"
 end_test
 
 # Stop it.
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 
 # Disable replication so as to avoid spurious purgatory errors.
 start_server $argv
@@ -68,9 +66,7 @@ eexpect "CockroachDB node starting"
 end_test
 
 # Stop it.
-interrupt
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 system "rm -rf logs/db"
 
 start_test "Check that --logtostderr can override the threshold but no error is printed on startup"
@@ -79,9 +75,7 @@ eexpect "marker\r\nCockroachDB node starting"
 end_test
 
 # Stop it.
-interrupt
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 system "rm -rf logs/db"
 
 
