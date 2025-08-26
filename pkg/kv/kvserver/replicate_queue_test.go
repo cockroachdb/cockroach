@@ -2533,3 +2533,52 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 		return nil
 	})
 }
+
+// put a marker
+func TestRebalanceLeaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	var scratchRangeID int64
+	atomic.StoreInt64(&scratchRangeID, -1)
+
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					BaseQueueDisabledBypassFilter: func(storeID roachpb.StoreID, rangeID roachpb.RangeID) bool {
+						if storeID == 4 && rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) {
+							return true
+						}
+						return false
+					},
+					BaseQueuePostEnqueueInterceptor: func(storeID roachpb.StoreID, rangeID roachpb.RangeID) {
+						if storeID == 4 && rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) {
+							time.Sleep(1 * time.Second)
+						}
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+	tc.AddVotersOrFatal(t, scratchRange.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+	atomic.StoreInt64(&scratchRangeID, int64(scratchRange.RangeID))
+	lh, err := tc.FindRangeLeaseHolder(scratchRange, nil)
+	require.NoError(t, err)
+	_, err = tc.RebalanceVoter(
+		ctx,
+		scratchRange.StartKey.AsRawKey(),
+		roachpb.ReplicationTarget{StoreID: lh.StoreID, NodeID: lh.NodeID}, /* src */
+		roachpb.ReplicationTarget{StoreID: 4, NodeID: 4},                  /* dest */
+	)
+	require.NoError(t, err)
+	time.Sleep(10 * time.Second)
+}
