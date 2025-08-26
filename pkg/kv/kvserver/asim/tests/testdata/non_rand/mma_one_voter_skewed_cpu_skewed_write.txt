@@ -32,9 +32,13 @@ setting split_queue_enabled=false
 eval duration=90m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
 cpu#1: last:  [s1=269771651, s2=230297516] (stddev=19737067.50, mean=250034583.50, sum=500069167)
+cpu#1: thrash_pct: [s1=8%, s2=54%]  (sum=63%)
 leases#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
 leases#1: last:  [s1=87, s2=113] (stddev=13.00, mean=100.00, sum=200)
+leases#1: thrash_pct: [s1=76%, s2=76%]  (sum=152%)
 replicas#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
 replicas#1: last:  [s1=87, s2=113] (stddev=13.00, mean=100.00, sum=200)
+replicas#1: thrash_pct: [s1=76%, s2=76%]  (sum=152%)
 write_bytes_per_second#1: last:  [s1=1651264, s2=3346471] (stddev=847603.50, mean=2498867.50, sum=4997735)
+write_bytes_per_second#1: thrash_pct: [s1=18%, s2=2%]  (sum=19%)
 artifacts[mma-only]: ad693ef62650aec7

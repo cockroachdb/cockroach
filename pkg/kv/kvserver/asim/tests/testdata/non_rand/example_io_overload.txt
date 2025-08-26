@@ -18,8 +18,10 @@ eval duration=10m seed=42 metrics=(replicas,leases)
 ----
 leases#1: first: [s1=259, s2=129, s3=64, s4=32, s5=16] (stddev=88.43, mean=100.00, sum=500)
 leases#1: last:  [s1=180, s2=102, s3=106, s4=106, s5=6] (stddev=55.34, mean=100.00, sum=500)
+leases#1: thrash_pct: [s1=23%, s2=23%, s3=20%, s4=27%, s5=0%]  (sum=93%)
 replicas#1: first: [s1=500, s2=456, s3=262, s4=165, s5=117] (stddev=153.29, mean=300.00, sum=1500)
 replicas#1: last:  [s1=347, s2=343, s3=348, s4=345, s5=117] (stddev=91.52, mean=300.00, sum=1500)
+replicas#1: thrash_pct: [s1=47%, s2=44%, s3=46%, s4=48%, s5=0%]  (sum=184%)
 artifacts[default]: 6574ebfbb518515a
 failed assertion sample 1
   stat=replicas value=(=0.00) ticks=5

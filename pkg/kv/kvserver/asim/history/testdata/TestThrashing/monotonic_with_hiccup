@@ -1,0 +1,17 @@
+echo
+----
+A "basically" monotonic sequence that has a small hiccup near the
+beginning. The trend-aware thrashing measure (tdtv) should be small.
+input: [100 90 91 85 80 70 60 50 40 30 20 10 0]
+ 100.00 ┼─╮
+  90.00 ┤ ╰───────╮
+  80.00 ┤         ╰────╮
+  70.00 ┤              ╰──╮
+  60.00 ┤                 ╰───╮
+  50.00 ┤                     ╰──╮
+  40.00 ┤                        ╰──╮
+  30.00 ┤                           ╰──╮
+  20.00 ┤                              ╰───╮
+  10.00 ┤                                  ╰──╮
+   0.00 ┤                                     ╰─
+tdtv=3.52% (3.5/100.0) uptv=1.0 dntv=101.0 runs=3

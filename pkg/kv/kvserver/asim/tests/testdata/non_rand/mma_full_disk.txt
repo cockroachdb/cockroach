@@ -11,8 +11,11 @@ eval duration=20m seed=42 cfgs=(mma-only) metrics=(disk_fraction_used,replicas,l
 ----
 disk_fraction_used#1: first: [s1=0.92, s2=0.85, s3=0.49, s4=0.24, s5=0.24] (stddev=0.29, mean=0.55, sum=3)
 disk_fraction_used#1: last:  [s1=0.55, s2=0.55, s3=0.55, s4=0.55, s5=0.55] (stddev=0.00, mean=0.55, sum=3)
+disk_fraction_used#1: thrash_pct: [s1=23%, s2=116%, s3=111%, s4=0%, s5=22%]  (sum=272%)
 leases#1: first: [s1=8, s2=4, s3=2, s4=0, s5=1] (stddev=2.83, mean=3.00, sum=15)
 leases#1: last:  [s1=5, s2=1, s3=3, s4=2, s5=4] (stddev=1.41, mean=3.00, sum=15)
+leases#1: thrash_pct: [s1=0%, s2=63%, s3=60%, s4=0%, s5=0%]  (sum=122%)
 replicas#1: first: [s1=15, s2=14, s3=8, s4=4, s5=4] (stddev=4.73, mean=9.00, sum=45)
 replicas#1: last:  [s1=9, s2=9, s3=9, s4=9, s5=9] (stddev=0.00, mean=9.00, sum=45)
+replicas#1: thrash_pct: [s1=23%, s2=116%, s3=111%, s4=0%, s5=22%]  (sum=272%)
 artifacts[mma-only]: 68b784316a0597fa

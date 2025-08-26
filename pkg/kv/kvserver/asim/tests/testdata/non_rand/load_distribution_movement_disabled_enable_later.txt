@@ -45,9 +45,13 @@ setting rebalance_mode=4 delay=2m
 eval duration=7m samples=1 seed=42 cfgs=(sma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
 cpu#1: last:  [s1=451007155, s2=424066775, s3=481923720, s4=487552810, s5=432089126, s6=536127090, s7=582915883, s8=497226435, s9=545078443, s10=559276708] (stddev=51954473.68, mean=499726414.50, sum=4997264145)
+cpu#1: thrash_pct: [s1=19%, s2=33%, s3=40%, s4=24%, s5=15%, s6=16%, s7=14%, s8=7%, s9=12%, s10=14%]  (sum=193%)
 leases#1: first: [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=6, s8=6, s9=6, s10=6] (stddev=0.00, mean=6.00, sum=60)
 leases#1: last:  [s1=54, s2=56, s3=55, s4=53, s5=57, s6=58, s7=60, s8=57, s9=60, s10=61] (stddev=2.55, mean=57.10, sum=571)
+leases#1: thrash_pct: [s1=106%, s2=118%, s3=95%, s4=95%, s5=123%, s6=33%, s7=33%, s8=27%, s9=27%, s10=30%]  (sum=688%)
 replicas#1: first: [s1=18, s2=18, s3=18, s4=18, s5=18, s6=18, s7=18, s8=18, s9=18, s10=18] (stddev=0.00, mean=18.00, sum=180)
 replicas#1: last:  [s1=175, s2=172, s3=179, s4=173, s5=173, s6=174, s7=167, s8=169, s9=169, s10=162] (stddev=4.50, mean=171.30, sum=1713)
+replicas#1: thrash_pct: [s1=87%, s2=91%, s3=92%, s4=93%, s5=98%, s6=16%, s7=15%, s8=14%, s9=15%, s10=10%]  (sum=531%)
 write_bytes_per_second#1: last:  [s1=2994621, s2=2991747, s3=3008247, s4=2988902, s5=3006699, s6=2993336, s7=2993993, s8=3002728, s9=2996629, s10=2997216] (stddev=6108.70, mean=2997411.80, sum=29974118)
+write_bytes_per_second#1: thrash_pct: [s1=73%, s2=40%, s3=85%, s4=74%, s5=5%, s6=160%, s7=207%, s8=103%, s9=114%, s10=55%]  (sum=916%)
 artifacts[sma-only]: 70a15957c8cfc487
