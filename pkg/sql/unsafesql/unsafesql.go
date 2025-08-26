@@ -6,14 +6,22 @@
 package unsafesql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/redact"
 )
 
 // CheckInternalsAccess checks if the current session has permission to access
 // unsafe internal tables and functionality. This includes system tables and
 // virtual tables / builtins in the crdb_internal schema.
-func CheckInternalsAccess(sd *sessiondata.SessionData) error {
+func CheckInternalsAccess(
+	ctx context.Context, sd *sessiondata.SessionData, q redact.RedactableString,
+) error {
 	// If the querier is internal, we should allow it.
 	if sd.Internal {
 		return nil
@@ -21,6 +29,8 @@ func CheckInternalsAccess(sd *sessiondata.SessionData) error {
 
 	// If an override is set, allow access to this virtual table.
 	if sd.AllowUnsafeInternals {
+		// Log this access to the SQL_EXEC channel since the override condition bypassed normal access controls.
+		log.StructuredEvent(ctx, severity.WARNING, &eventpb.UnsafeInternalsAccess{Query: q})
 		return nil
 	}
 

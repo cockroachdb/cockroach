@@ -8,6 +8,10 @@ go_library(
     deps = [
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlerrors",
+        "//pkg/util/log",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/log/severity",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -27,8 +31,12 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/log/logpb",
+        "//pkg/util/log/logtestutils",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//require",
     ],
