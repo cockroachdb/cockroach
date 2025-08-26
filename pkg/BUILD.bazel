@@ -408,6 +408,7 @@ ALL_TESTS = [
     "//pkg/sql/catalog/descpb:descpb_test",
     "//pkg/sql/catalog/descs:descs_test",
     "//pkg/sql/catalog/externalcatalog:externalcatalog_test",
+    "//pkg/sql/catalog/funcdesc:funcdesc_disallowed_imports_test",
     "//pkg/sql/catalog/funcdesc:funcdesc_test",
     "//pkg/sql/catalog/hydrateddesccache:hydrateddesccache_test",
     "//pkg/sql/catalog/internal/catkv:catkv_test",

@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -153,6 +154,7 @@ func DoParserInjection() {
 	builtins.ParseQualifiedTableName = parser.ParseQualifiedTableName
 	eval.Parse = parser.Parse
 	eval.ParseOne = parser.ParseOne
+	funcdesc.ParseExpr = parser.ParseExpr
 	rowenc.ParseExpr = parser.ParseExpr
 }
 

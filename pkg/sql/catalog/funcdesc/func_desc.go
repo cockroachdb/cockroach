@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -27,6 +26,12 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
+
+// ParseExpr is the same as sql/parser.ParseExpr but is injected to avoid a
+// dependency on the parser package.
+var ParseExpr = func(sql string) (tree.Expr, error) {
+	return nil, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
 
 var _ catalog.Descriptor = (*immutable)(nil)
 var _ catalog.FunctionDescriptor = (*immutable)(nil)
@@ -986,7 +991,7 @@ func (desc *immutable) ToRoutineObj() (*tree.RoutineObj, error) {
 		}
 		if p.DefaultExpr != nil {
 			var err error
-			ret.Params[i].DefaultVal, err = parser.ParseExpr(*p.DefaultExpr)
+			ret.Params[i].DefaultVal, err = ParseExpr(*p.DefaultExpr)
 			if err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "DEFAULT expr for param %s", p.Name)
 			}
@@ -1048,7 +1053,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 			Class: class,
 		}
 		if param.DefaultExpr != nil {
-			routineParam.DefaultVal, err = parser.ParseExpr(*param.DefaultExpr)
+			routineParam.DefaultVal, err = ParseExpr(*param.DefaultExpr)
 			if err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "DEFAULT expr for param %s", param.Name)
 			}
@@ -1127,7 +1132,7 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 			Class: ToTreeRoutineParamClass(desc.Params[i].Class),
 		}
 		if desc.Params[i].DefaultExpr != nil {
-			ret.Params[i].DefaultVal, err = parser.ParseExpr(*desc.Params[i].DefaultExpr)
+			ret.Params[i].DefaultVal, err = ParseExpr(*desc.Params[i].DefaultExpr)
 			if err != nil {
 				return nil, err
 			}
