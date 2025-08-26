@@ -123,6 +123,9 @@ func LevenshteinLessEqualDistanceWithCost(
 				bestColumn = -netInserts
 			}
 			stopColumn = bestColumn + (slackDist / (insCost + delCost)) + 1
+			if stopColumn < 0 {
+				stopColumn = 0
+			}
 			if stopColumn > lenS {
 				stopColumn = lenS + 1
 			}

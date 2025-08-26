@@ -5,7 +5,10 @@
 
 package fuzzystrmatch
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestLevenshteinDistance(t *testing.T) {
 	tt := []struct {
@@ -479,6 +482,36 @@ func TestLevenshteinLessEqualDistanceWithCost(t *testing.T) {
 			t.Fatalf("error checking Levenshtein distance with cost less than %d with "+
 				"source=%q target=%q: expected %d got %d",
 				tc.MaxDistance, tc.Source, tc.Target, tc.Expected, got)
+		}
+	}
+}
+
+func TestLevenshtein_ExtremeValues(t *testing.T) {
+	// Test all combinations of math.MinInt64 and math.MaxInt64 for integer
+	// arguments. This ensures the function handles extreme values correctly
+	// without panicking.
+	extremeValues := []int{math.MinInt64, math.MaxInt64, 0, 1, -1, -6503603920424974249, -3160545599026710833, 3234088755759361354}
+	testStrings := []string{"ab", "bc", "", "test"}
+
+	for _, source := range testStrings {
+		for _, target := range testStrings {
+			for _, insCost := range extremeValues {
+				for _, delCost := range extremeValues {
+					for _, subCost := range extremeValues {
+						for _, maxDist := range extremeValues {
+							// Call the functions and ensure it doesn't panic. We don't check
+							// the exact result since extreme values may cause integer
+							// overflow, but we ensure no panic occurs.
+							_ = LevenshteinLessEqualDistanceWithCost(
+								source, target, insCost, delCost, subCost, maxDist,
+							)
+							_ = LevenshteinDistanceWithCost(
+								source, target, insCost, delCost, subCost,
+							)
+						}
+					}
+				}
+			}
 		}
 	}
 }
