@@ -1,0 +1,732 @@
+# LogicTest: local
+
+# Test that update swap and delete swap work correctly and use a single batch.
+
+# Test swap mutations with only primary key columns.
+
+statement ok
+CREATE TABLE k (
+  k INT PRIMARY KEY
+)
+
+statement ok
+INSERT INTO k VALUES (1)
+
+# Test update swap.
+
+query T
+EXPLAIN UPDATE k SET k = 2 WHERE k = 1
+----
+distribution: local
+vectorized: true
+·
+• update swap
+│ table: k
+│ set: k
+│ auto commit
+│
+└── • values
+      size: 2 columns, 1 row
+
+query T kvtrace
+UPDATE k SET k = 2 WHERE k = 1
+----
+CPut /Table/106/1/1/0 -> nil (delete)
+CPut /Table/106/1/2/0 -> /TUPLE/
+
+query I
+SELECT * FROM k
+----
+2
+
+# Test delete swap.
+
+query T
+EXPLAIN DELETE FROM k WHERE k = 2
+----
+distribution: local
+vectorized: true
+·
+• delete swap
+│ from: k
+│ auto commit
+│
+└── • values
+      size: 1 column, 1 row
+
+query T kvtrace
+DELETE FROM k WHERE k = 2
+----
+CPut /Table/106/1/2/0 -> nil (delete)
+
+query I
+SELECT * FROM k
+----
+
+# Test swap mutations with only a primary index.
+
+statement ok
+CREATE TABLE kabc (
+  k INT PRIMARY KEY,
+  a STRING,
+  b TIMESTAMPTZ,
+  c BOOLEAN,
+  FAMILY (k, a, b, c)
+)
+
+statement ok
+INSERT INTO kabc VALUES (1, NULL, '1999-12-31 23:59:59', NULL)
+
+# Test update swap.
+
+query T
+EXPLAIN UPDATE kabc SET b = '2000-01-01 00:00:00' WHERE k = 1 AND a IS NULL AND b = '1999-12-31 23:59:59' AND c IS NULL
+----
+distribution: local
+vectorized: true
+·
+• update swap
+│ table: kabc
+│ set: b
+│ auto commit
+│
+└── • values
+      size: 5 columns, 1 row
+
+query T kvtrace
+UPDATE kabc SET b = '2000-01-01 00:00:00' WHERE k = 1 AND a IS NULL AND b = '1999-12-31 23:59:59' AND c IS NULL
+----
+CPut /Table/107/1/1/0 -> /TUPLE/3:3:Time/2000-01-01T00:00:00Z (swap)
+
+query ITTB
+SELECT * FROM kabc
+----
+1  NULL  2000-01-01 00:00:00 +0000 UTC  NULL
+
+# Test delete swap.
+
+query T
+EXPLAIN DELETE FROM kabc WHERE k = 1 AND a IS NULL AND b = '2000-01-01 00:00:00' AND c IS NULL
+----
+distribution: local
+vectorized: true
+·
+• delete swap
+│ from: kabc
+│ auto commit
+│
+└── • values
+      size: 4 columns, 1 row
+
+query T kvtrace
+DELETE FROM kabc WHERE k = 1 AND a IS NULL AND b = '2000-01-01 00:00:00' AND c IS NULL
+----
+CPut /Table/107/1/1/0 -> nil (delete)
+
+query ITTB
+SELECT * FROM kabc
+----
+
+# Test swap mutations with computed columns.
+
+statement ok
+CREATE TABLE abcde (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  c INT NOT NULL AS (a + b) VIRTUAL,
+  d INT NOT NULL AS (a - b) VIRTUAL,
+  e INT NOT NULL AS (a * b) STORED,
+  PRIMARY KEY (a, e),
+  INDEX (c),
+  FAMILY (a, b, e)
+)
+
+statement ok
+INSERT INTO abcde (a, b) VALUES (1, 1)
+
+# Test update swap.
+
+query T
+EXPLAIN UPDATE abcde SET b = 0 WHERE a = 1 AND b = 1 AND e = 1
+----
+distribution: local
+vectorized: true
+·
+• update swap
+│ table: abcde
+│ set: b, c, d, e
+│ auto commit
+│
+└── • values
+      size: 9 columns, 1 row
+
+query T kvtrace
+UPDATE abcde SET b = 0 WHERE a = 1 AND b = 1 AND e = 1
+----
+CPut /Table/108/1/1/1/0 -> nil (delete)
+Del /Table/108/2/2/1/1/0
+CPut /Table/108/1/1/0/0 -> /TUPLE/2:2:Int/0
+Put /Table/108/2/1/1/0/0 -> /BYTES/
+
+query IIIII
+SELECT * FROM abcde
+----
+1  0  1  1  0
+
+# Test a delete swap where we don't actually delete a row.
+
+query T
+EXPLAIN DELETE FROM abcde WHERE a = 1 AND b = 1 AND e = 1
+----
+distribution: local
+vectorized: true
+·
+• delete swap
+│ from: abcde
+│ auto commit
+│
+└── • values
+      size: 4 columns, 1 row
+
+query T kvtrace
+DELETE FROM abcde WHERE a = 1 AND b = 1 AND e = 1
+----
+CPut /Table/108/1/1/1/0 -> nil (delete)
+Del /Table/108/2/2/1/1/0
+
+query IIIII
+SELECT * FROM abcde@abcde_c_idx
+----
+1  0  1  1  0
+
+# Test swap mutations with a unique secondary index.
+
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  INDEX (y),
+  UNIQUE INDEX (z),
+  FAMILY (x, y, z)
+)
+
+statement ok
+INSERT INTO xyz VALUES (1, 2, 3), (4, 5, 6)
+
+# Test update swap.
+
+query T
+EXPLAIN UPDATE xyz SET x = 4, y = 7, z = 8 WHERE x = 4 AND y IS NOT DISTINCT FROM 5 AND z IS NOT DISTINCT FROM 6
+----
+distribution: local
+vectorized: true
+·
+• update swap
+│ table: xyz
+│ set: x, y, z
+│ auto commit
+│
+└── • values
+      size: 6 columns, 1 row
+
+query T kvtrace
+UPDATE xyz SET x = 4, y = 7, z = 8 WHERE x = 4 AND y IS NOT DISTINCT FROM 5 AND z IS NOT DISTINCT FROM 6
+----
+CPut /Table/109/1/4/0 -> /TUPLE/2:2:Int/7/1:3:Int/8 (swap)
+Del /Table/109/2/5/4/0
+Put /Table/109/2/7/4/0 -> /BYTES/
+Del (locking) /Table/109/3/6/0
+CPut /Table/109/3/8/0 -> /BYTES/0x8c
+
+query III
+SELECT * FROM xyz WHERE x = 4
+----
+4  7  8
+
+# Test delete swap.
+
+query T
+EXPLAIN DELETE FROM xyz WHERE x = 1 AND y = 2 AND z = 3
+----
+distribution: local
+vectorized: true
+·
+• delete swap
+│ from: xyz
+│ auto commit
+│
+└── • values
+      size: 3 columns, 1 row
+
+query T kvtrace
+DELETE FROM xyz WHERE x = 1 AND y = 2 AND z = 3
+----
+CPut /Table/109/1/1/0 -> nil (delete)
+Del /Table/109/2/2/1/0
+Del (locking) /Table/109/3/3/0
+
+query III
+SELECT * FROM xyz WHERE x = 1
+----
+
+# Test swap mutations with expression indexes.
+
+statement ok
+CREATE TABLE pq (
+  p INT PRIMARY KEY,
+  q INT,
+  INDEX ((p + q)),
+  FAMILY (p, q)
+)
+
+statement ok
+INSERT INTO pq VALUES (0, 1)
+
+# Test update swap.
+
+query T
+EXPLAIN UPDATE pq SET q = NULL WHERE p IS NOT DISTINCT FROM 0 AND q IS NOT DISTINCT FROM 1
+----
+distribution: local
+vectorized: true
+·
+• update swap
+│ table: pq
+│ set: q, crdb_internal_idx_expr
+│ auto commit
+│
+└── • values
+      size: 5 columns, 1 row
+
+query T kvtrace
+UPDATE pq SET q = NULL WHERE p IS NOT DISTINCT FROM 0 AND q IS NOT DISTINCT FROM 1
+----
+CPut /Table/110/1/0/0 -> /TUPLE/ (swap)
+Del /Table/110/2/1/0/0
+Put /Table/110/2/NULL/0/0 -> /BYTES/
+
+query II
+SELECT * FROM pq
+----
+0  NULL
+
+# Test delete swap.
+
+query T
+EXPLAIN DELETE FROM pq WHERE p IS NOT DISTINCT FROM 0 AND q IS NOT DISTINCT FROM NULL
+----
+distribution: local
+vectorized: true
+·
+• delete swap
+│ from: pq
+│ auto commit
+│
+└── • values
+      size: 3 columns, 1 row
+
+query T kvtrace
+DELETE FROM pq WHERE p IS NOT DISTINCT FROM 0 AND q IS NOT DISTINCT FROM NULL
+----
+CPut /Table/110/1/0/0 -> nil (delete)
+Del /Table/110/2/NULL/0/0
+
+query II
+SELECT * FROM pq
+----
+
+# Test swap mutations with partial indexes.
+
+statement ok
+CREATE TABLE mno (
+  m STRING NOT NULL,
+  n STRING NOT NULL,
+  o STRING,
+  PRIMARY KEY (n),
+  INDEX (m) WHERE o LIKE 'o%',
+  FAMILY (m, n, o)
+)
+
+statement ok
+INSERT INTO mno VALUES ('m1', 'n1', 'o'), ('m2', 'n2', NULL), ('m3', 'n3', '')
+
+# Test update swap.
+
+query T
+EXPLAIN UPDATE mno SET o = 'o' || o WHERE m = 'm1' AND n = 'n1' AND o = 'o'
+----
+distribution: local
+vectorized: true
+·
+• update swap
+│ table: mno
+│ set: o
+│ auto commit
+│
+└── • values
+      size: 6 columns, 1 row
+
+query T kvtrace
+UPDATE mno SET o = 'o' || o WHERE m = 'm1' AND n = 'n1' AND o = 'o'
+----
+CPut /Table/111/1/"n1"/0 -> /TUPLE/1:1:Bytes/m1/2:3:Bytes/oo (swap)
+
+query T kvtrace
+UPDATE mno SET o = 'o' || o WHERE m = 'm2' AND n = 'n2' AND o IS NULL
+----
+CPut /Table/111/1/"n2"/0 -> /TUPLE/1:1:Bytes/m2 (swap)
+
+query T kvtrace
+UPDATE mno SET o = 'o' || o WHERE m = 'm3' AND n = 'n3' AND o = ''
+----
+CPut /Table/111/1/"n3"/0 -> /TUPLE/1:1:Bytes/m3/2:3:Bytes/o (swap)
+Put /Table/111/2/"m3"/"n3"/0 -> /BYTES/
+
+query TTT
+SELECT * FROM mno ORDER BY n
+----
+m1  n1  oo
+m2  n2  NULL
+m3  n3  o
+
+query T
+SELECT m FROM mno@mno_m_idx WHERE o LIKE 'o%' ORDER BY m
+----
+m1
+m3
+
+# Test delete swap.
+
+query T
+EXPLAIN DELETE FROM mno WHERE m = 'm1' AND n = 'n1' AND o = 'oo'
+----
+distribution: local
+vectorized: true
+·
+• delete swap
+│ from: mno
+│ auto commit
+│
+└── • values
+      size: 4 columns, 1 row
+
+query T kvtrace
+DELETE FROM mno WHERE m = 'm1' AND n = 'n1' AND o = 'oo'
+----
+CPut /Table/111/1/"n1"/0 -> nil (delete)
+Del /Table/111/2/"m1"/"n1"/0
+
+query T kvtrace
+DELETE FROM mno WHERE m = 'm2' AND n = 'n2' AND o IS NULL
+----
+CPut /Table/111/1/"n2"/0 -> nil (delete)
+
+query T kvtrace
+DELETE FROM mno WHERE m = 'm3' AND n = 'n3' AND o = 'o'
+----
+CPut /Table/111/1/"n3"/0 -> nil (delete)
+Del /Table/111/2/"m3"/"n3"/0
+
+query TTT
+SELECT * FROM mno
+----
+
+# Test swap mutations with inverted indexes.
+
+statement ok
+CREATE TABLE uvw (
+  u UUID NOT NULL DEFAULT gen_random_uuid(),
+  v TEXT,
+  w INT[],
+  PRIMARY KEY (u),
+  INVERTED INDEX (v gin_trgm_ops),
+  INVERTED INDEX (w),
+  FAMILY (u, v, w)
+)
+
+statement ok
+INSERT INTO uvw VALUES ('a8ebe7c3-7fd9-4a75-a56a-242a1088d295', 'abcde', '{1, 2, 3}')
+
+# Test update swap.
+
+query T
+EXPLAIN UPDATE uvw SET v = v || 'f', w = w || 4 WHERE u = 'a8ebe7c3-7fd9-4a75-a56a-242a1088d295' AND v = 'abcde' AND w = '{1, 2, 3}'
+----
+distribution: local
+vectorized: true
+·
+• update swap
+│ table: uvw
+│ set: v, w
+│ auto commit
+│
+└── • values
+      size: 5 columns, 1 row
+
+query T kvtrace
+UPDATE uvw SET v = v || 'f', w = w || 4 WHERE u = 'a8ebe7c3-7fd9-4a75-a56a-242a1088d295' AND v = 'abcde' AND w = '{1, 2, 3}'
+----
+CPut /Table/112/1/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0 -> /TUPLE/2:2:Bytes/abcdef/1:3:Array/ARRAY[1,2,3,4] (swap)
+Del /Table/112/2/"de "/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0
+Put /Table/112/2/"def"/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0 -> /BYTES/
+Put /Table/112/2/"ef "/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0 -> /BYTES/
+Put /Table/112/3/4/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0 -> /BYTES/
+
+query TTT
+SELECT * FROM uvw
+----
+a8ebe7c3-7fd9-4a75-a56a-242a1088d295  abcdef  {1,2,3,4}
+
+# Test delete swap.
+
+query T
+EXPLAIN DELETE FROM uvw WHERE u = 'a8ebe7c3-7fd9-4a75-a56a-242a1088d295' AND v = 'abcdef' AND w = '{1, 2, 3, 4}'
+----
+distribution: local
+vectorized: true
+·
+• delete swap
+│ from: uvw
+│ auto commit
+│
+└── • values
+      size: 3 columns, 1 row
+
+query T kvtrace
+DELETE FROM uvw WHERE u = 'a8ebe7c3-7fd9-4a75-a56a-242a1088d295' AND v = 'abcdef' AND w = '{1, 2, 3, 4}'
+----
+CPut /Table/112/1/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0 -> nil (delete)
+Del /Table/112/2/"  a"/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0
+Del /Table/112/2/" ab"/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0
+Del /Table/112/2/"abc"/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0
+Del /Table/112/2/"bcd"/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0
+Del /Table/112/2/"cde"/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0
+Del /Table/112/2/"def"/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0
+Del /Table/112/2/"ef "/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0
+Del /Table/112/3/1/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0
+Del /Table/112/3/2/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0
+Del /Table/112/3/3/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0
+Del /Table/112/3/4/"\xa8\xeb\xe7\xc3\x7f\xd9Ju\xa5j$*\x10\x88ҕ"/0
+
+query III
+SELECT * FROM uvw
+----
+
+# Test swap mutations with multiple column families.
+
+# TODO: update swap and delete swap do not yet support multiple column families.
+
+statement ok
+CREATE TABLE rstuv (
+  r INT NOT NULL,
+  s INT NOT NULL,
+  t INT,
+  u INT,
+  v INT,
+  PRIMARY KEY (r, s),
+  INDEX (t) STORING (u, v),
+  INDEX (u) STORING (t, v),
+  FAMILY (r, s),
+  FAMILY (t),
+  FAMILY (u, v)
+)
+
+statement ok
+INSERT INTO rstuv VALUES (5, 6, 7, 8, NULL), (15, 16, NULL, 18, 19)
+
+# Test update swap.
+
+query T
+EXPLAIN UPDATE rstuv SET t = 27, u = 28, v = 29 WHERE r = 5 AND s = 6 AND t = 7 AND u = 8 AND v IS NULL
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: rstuv
+│ set: t, u, v
+│ auto commit
+│
+└── • render
+    │
+    └── • filter
+        │ filter: (u = 8) AND (v IS NULL)
+        │
+        └── • scan
+              missing stats
+              table: rstuv@rstuv_t_idx
+              spans: [/7/5/6 - /7/5/6]
+
+query T kvtrace
+UPDATE rstuv SET t = 27, u = 28, v = 29 WHERE r = 5 AND s = 6 AND t = 7 AND u = 8 AND v IS NULL
+----
+Scan /Table/113/2/7/5/{6-7}
+Put (locking) /Table/113/1/5/6/1/1 -> /INT/27
+Put (locking) /Table/113/1/5/6/2/1 -> /TUPLE/4:4:Int/28/1:5:Int/29
+Del /Table/113/2/7/5/6/0
+Put /Table/113/2/27/5/6/0 -> /BYTES/
+Del /Table/113/2/7/5/6/2/1
+Put /Table/113/2/27/5/6/2/1 -> /TUPLE/4:4:Int/28/1:5:Int/29
+Del /Table/113/3/8/5/6/0
+Put /Table/113/3/28/5/6/0 -> /BYTES/
+Del /Table/113/3/8/5/6/1/1
+Put /Table/113/3/28/5/6/1/1 -> /TUPLE/3:3:Int/27
+Put /Table/113/3/28/5/6/2/1 -> /TUPLE/5:5:Int/29
+
+query T kvtrace
+UPDATE rstuv SET t = 37, u = 38, v = 39 WHERE r = 15 AND s = 16 AND t IS NULL AND u = 18 AND v = 19
+----
+Scan /Table/113/2/NULL/15/1{6-7}
+Put (locking) /Table/113/1/15/16/1/1 -> /INT/37
+Put (locking) /Table/113/1/15/16/2/1 -> /TUPLE/4:4:Int/38/1:5:Int/39
+Del /Table/113/2/NULL/15/16/0
+Put /Table/113/2/37/15/16/0 -> /BYTES/
+Del /Table/113/2/NULL/15/16/2/1
+Put /Table/113/2/37/15/16/2/1 -> /TUPLE/4:4:Int/38/1:5:Int/39
+Del /Table/113/3/18/15/16/0
+Put /Table/113/3/38/15/16/0 -> /BYTES/
+Put /Table/113/3/38/15/16/1/1 -> /TUPLE/3:3:Int/37
+Del /Table/113/3/18/15/16/2/1
+Put /Table/113/3/38/15/16/2/1 -> /TUPLE/5:5:Int/39
+
+query IIIII
+SELECT * FROM rstuv ORDER BY r, s
+----
+5   6   27  28  29
+15  16  37  38  39
+
+# Test delete swap.
+
+query T
+EXPLAIN DELETE FROM rstuv WHERE r = 5 AND s = 6 AND t = 27 AND u = 28 AND v = 29
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ from: rstuv
+│ auto commit
+│
+└── • filter
+    │ filter: (u = 28) AND (v = 29)
+    │
+    └── • scan
+          missing stats
+          table: rstuv@rstuv_t_idx
+          spans: [/27/5/6 - /27/5/6]
+
+query T kvtrace
+DELETE FROM rstuv WHERE r = 5 AND s = 6 AND t = 27 AND u = 28 AND v = 29
+----
+Scan /Table/113/2/27/5/{6-7}
+Del (locking) /Table/113/1/5/6/0
+Del (locking) /Table/113/1/5/6/1/1
+Del (locking) /Table/113/1/5/6/2/1
+Del /Table/113/2/27/5/6/0
+Del /Table/113/2/27/5/6/2/1
+Del /Table/113/3/28/5/6/0
+Del /Table/113/3/28/5/6/1/1
+Del /Table/113/3/28/5/6/2/1
+
+query T kvtrace
+DELETE FROM rstuv WHERE r = 15 AND s = 16 AND t = 37 AND u = 38 AND v = 39
+----
+Scan /Table/113/2/37/15/1{6-7}
+Del (locking) /Table/113/1/15/16/0
+Del (locking) /Table/113/1/15/16/1/1
+Del (locking) /Table/113/1/15/16/2/1
+Del /Table/113/2/37/15/16/0
+Del /Table/113/2/37/15/16/2/1
+Del /Table/113/3/38/15/16/0
+Del /Table/113/3/38/15/16/1/1
+Del /Table/113/3/38/15/16/2/1
+
+query IIIII
+SELECT * FROM rstuv
+----
+
+# Test swap mutations with a single column family.
+
+# TODO: support multiple column families.
+
+statement ok
+INSERT INTO rstuv VALUES (5, 6, 7, 8, NULL), (15, 16, NULL, 18, 19)
+
+# Test update swap.
+
+# TODO: If we're only modifying a single column family we shouldn't need to
+# constrain columns in other families to get a swap mutation.
+
+query T
+EXPLAIN UPDATE rstuv SET t = 27 WHERE r = 5 AND s = 6 AND t = 7
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: rstuv
+│ set: t
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: rstuv@rstuv_t_idx
+          spans: [/7/5/6 - /7/5/6]
+          locking strength: for update
+
+query T
+EXPLAIN UPDATE rstuv SET t = 27 WHERE r = 5 AND s = 6 AND t = 7 AND u = 8 AND v IS NULL
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: rstuv
+│ set: t
+│ auto commit
+│
+└── • render
+    │
+    └── • filter
+        │ filter: (u = 8) AND (v IS NULL)
+        │
+        └── • scan
+              missing stats
+              table: rstuv@rstuv_t_idx
+              spans: [/7/5/6 - /7/5/6]
+
+query T kvtrace
+UPDATE rstuv SET t = 27 WHERE r = 5 AND s = 6 AND t = 7 AND u = 8 AND v IS NULL
+----
+Scan /Table/113/2/7/5/{6-7}
+Put (locking) /Table/113/1/5/6/1/1 -> /INT/27
+Del /Table/113/2/7/5/6/0
+Put /Table/113/2/27/5/6/0 -> /BYTES/
+Del /Table/113/2/7/5/6/2/1
+Put /Table/113/2/27/5/6/2/1 -> /TUPLE/4:4:Int/8
+Put /Table/113/3/8/5/6/1/1 -> /TUPLE/3:3:Int/27
+
+query T kvtrace
+UPDATE rstuv SET t = NULL WHERE r = 5 AND s = 6 AND t = 27 AND u = 8 AND v IS NULL
+----
+Scan /Table/113/2/27/5/{6-7}
+Del (locking) /Table/113/1/5/6/1/1
+Del /Table/113/2/27/5/6/0
+Put /Table/113/2/NULL/5/6/0 -> /BYTES/
+Del /Table/113/2/27/5/6/2/1
+Put /Table/113/2/NULL/5/6/2/1 -> /TUPLE/4:4:Int/8
+Del /Table/113/3/8/5/6/1/1
+
+# This shouldn't update anything because t is not 100.
+
+statement ok
+UPDATE rstuv SET u = 28, v = 29 WHERE r = 5 AND s = 6 AND t = 100 AND u = 8 AND v IS NULL
+
+query IIIII
+SELECT * FROM rstuv ORDER BY r, s
+----
+5   6   NULL  8   NULL
+15  16  NULL  18  19
