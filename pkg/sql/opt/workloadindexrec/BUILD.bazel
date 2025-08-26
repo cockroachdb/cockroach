@@ -9,7 +9,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/workloadindexrec",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/parser",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",

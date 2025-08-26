@@ -71,7 +71,6 @@ go_library(
         "//pkg/sql/memsize",
         "//pkg/sql/oidext",
         "//pkg/sql/opt/workloadindexrec",
-        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
@@ -242,5 +241,6 @@ disallowed_imports_test(
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/parser",
     ],
 )

@@ -34,6 +34,12 @@ var ParseOne = func(sql string) (statements.Statement[tree.Statement], error) {
 	return statements.Statement[tree.Statement]{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
 }
 
+// Parse is the same as sql/parser.Parse but is injected to avoid a dependency
+// on the parser package.
+var Parse = func(sql string) (statements.Statements, error) {
+	return statements.Statements{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
+
 // ParseDOid parses and returns an Oid family datum.
 func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tree.DOid, error) {
 	if t.Oid() != oid.T_oid && s == tree.UnknownOidName {

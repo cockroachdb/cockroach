@@ -8,11 +8,17 @@ package rowenc
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
+
+// ParseExpr is the same as sql/parser.ParseExpr but is injected to avoid a
+// dependency on the parser package.
+var ParseExpr = func(sql string) (tree.Expr, error) {
+	return nil, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
 
 // ParseDatumStringAs parses s as type t. This function is guaranteed to
 // round-trip when printing a Datum with FmtExport. semaCtx is optional.
@@ -37,7 +43,7 @@ func ParseDatumStringAs(
 func parseAsTyp(
 	ctx context.Context, evalCtx *eval.Context, semaCtx *tree.SemaContext, typ *types.T, s string,
 ) (tree.Datum, error) {
-	expr, err := parser.ParseExpr(s)
+	expr, err := ParseExpr(s)
 	if err != nil {
 		return nil, err
 	}
