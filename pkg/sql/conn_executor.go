@@ -4226,7 +4226,7 @@ func (ex *connExecutor) waitForTxnJobs() error {
 	if !queryTimedout.Load() && len(ex.extraTxnState.jobs.created) > 0 {
 		if err := ex.server.cfg.JobRegistry.WaitForJobs(jobWaitCtx,
 			ex.extraTxnState.jobs.created); err != nil {
-			if errors.Is(err, context.Canceled) && queryTimedout.Load() {
+			if (errors.Is(err, context.Canceled) || errors.Is(err, cancelchecker.QueryCanceledError)) && queryTimedout.Load() {
 				retErr = sqlerrors.QueryTimeoutError
 				err = nil
 			} else {
