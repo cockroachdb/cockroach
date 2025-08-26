@@ -161,12 +161,12 @@ func (c *cloudNemesis) readObject(ctx context.Context) (err error) {
 		return nil
 	}
 
-	// Generate a random read range that is at most ~4 KiB in size. We keep the
-	// reads small so that we can execute them quickly and with high concurrency
-	// to get more fault coverage. If we read the entire object we would risk
-	// OOMs.
+	// Generate a random read range that is at most ~1 MiB in size. We keep the
+	// reads small enough that we can execute them quickly and with high
+	// concurrency to get more fault coverage. If we read the entire object we
+	// would risk OOMs.
 	start := rand.Intn(obj.size - 1)
-	end := min(start+rand.Intn(4096)+1, obj.size)
+	end := min(start+rand.Intn(1024*1024)+1, obj.size)
 
 	r, size, err := c.storage.ReadFile(ctx, obj.name, cloud.ReadOptions{
 		Offset: int64(start),
