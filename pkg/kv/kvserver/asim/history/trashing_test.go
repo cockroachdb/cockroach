@@ -30,6 +30,7 @@ func TestThrashing(t *testing.T) {
 	defer w.Check(t)
 	for _, td := range []struct {
 		vs   []float64
+		desc string
 		name string
 	}{
 		{
@@ -41,10 +42,12 @@ func TestThrashing(t *testing.T) {
 		},
 		{
 			name: "monotonic",
+			desc: `A monotonic sequence should have zero thrashing.`,
 			vs:   []float64{1, 2, 3, 4},
 		},
 		{
 			name: "last_point_adds_tv",
+			desc: `Regression test to make sure thrashing in only the last index registers.`,
 			vs:   []float64{2, 1, 2},
 		},
 		{
@@ -57,21 +60,48 @@ func TestThrashing(t *testing.T) {
 		},
 		{
 			name: "oscillate",
+			desc: `An example that the thrashing percentage can easily exceed 100%`,
 			vs: tsFromFunc(100, func(tick int) float64 {
 				return math.Sin(math.Pi * float64(tick) / 10)
 			}),
 		},
 		{
 			name: "initial_outlier",
-			vs:   []float64{10250, 5004, 12, 1, 2},
+			desc: `An initial outlier leads to a large normalization factor, 
+i.e. low thrashing percentage. This isn't necessarily good.`,
+			vs: []float64{10250, 5004, 12, 1, 2},
 		},
 		{
 			name: "final_outlier",
 			vs:   []float64{1, 3, 2, 1, 2005},
 		},
+		{
+			name: "monotonic_with_hiccup",
+			desc: `A "basically" monotonic sequence that has a small hiccup near the
+beginning. Sadly this currently results in the bulk of the sequence registering
+as thrashing, which is not desired in any allocator-related use cases.
+Two improvements come to mind:
+- epsilon-hysteresis: small changes that are reversed quickly don't count, but
+  it's hard to determine what "small" means.
+- trend-based: if there is an overall trend, count only total variation
+  in the direction opposing the trend. For example, we can count the number
+  of upward and downward deltas, and if one direction is dominant, count only
+  variation in the other direction.
+TODO(tbg): try out and implement trend-based thrashing detection.
+`,
+			vs: []float64{100, 90, 91, 85, 80, 70, 60, 50, 40, 30, 20, 10, 0},
+		},
+		{
+			name: "negative_crossover",
+			desc: "Oscillating across zero in both directions",
+			vs:   []float64{-10, -4, -6, -1, 4, 5, -2, 6},
+		},
 	} {
 		t.Run(td.name, w.Run(t, td.name, func(t *testing.T) string {
 			var buf strings.Builder
+			if td.desc != "" {
+				_, _ = fmt.Fprintln(&buf, strings.TrimSpace(td.desc))
+			}
 			_, _ = fmt.Fprintln(&buf, "input:", td.vs)
 			if len(td.vs) > 1 {
 				_, _ = fmt.Fprintln(&buf, asciigraph.Plot(td.vs, asciigraph.Width(40), asciigraph.Height(10)))
