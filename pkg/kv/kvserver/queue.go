@@ -1092,19 +1092,24 @@ func IsPurgatoryError(err error) (PurgatoryError, bool) {
 }
 
 // assertInvariants codifies the guarantees upheld by the data structures in the
-// base queue. In summary, a replica is one of:
+// base queue.
+// 1. In summary, a replica is one of:
 // - "queued" and in mu.replicas and mu.priorityQ
 // - "processing" and only in mu.replicas
 // - "purgatory" and in mu.replicas and mu.purgatory
+// 2. For every item in bq.mu.priorityQ.sl, bq.mu.purgatory, and bq.mu.replicas,
+// assertOnItem callback is called with the item. Note that we expect items in
+// priorityQ and purgatory to be in replicas.
 //
 // Note that in particular, nothing is ever in both mu.priorityQ and
 // mu.purgatory.
-func (bq *baseQueue) assertInvariants() {
+func (bq *baseQueue) assertInvariants(assertOnItem func(item *replicaItem)) {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 
 	ctx := bq.AnnotateCtx(context.Background())
 	for _, item := range bq.mu.priorityQ.sl {
+		assertOnItem(item)
 		if item.processing {
 			log.Fatalf(ctx, "processing item found in prioQ: %v", item)
 		}
@@ -1117,6 +1122,7 @@ func (bq *baseQueue) assertInvariants() {
 	}
 	for rangeID := range bq.mu.purgatory {
 		item, inReplicas := bq.mu.replicas[rangeID]
+		assertOnItem(item)
 		if !inReplicas {
 			log.Fatalf(ctx, "item found in purg but not in mu.replicas: %v", item)
 		}
@@ -1131,6 +1137,7 @@ func (bq *baseQueue) assertInvariants() {
 	// that there aren't any non-processing replicas *only* in bq.mu.replicas.
 	var nNotProcessing int
 	for _, item := range bq.mu.replicas {
+		assertOnItem(item)
 		if !item.processing {
 			nNotProcessing++
 		}
