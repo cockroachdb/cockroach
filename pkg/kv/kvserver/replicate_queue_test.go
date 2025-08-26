@@ -2544,6 +2544,8 @@ func TestRebalanceLeaseholder(t *testing.T) {
 	var scratchRangeID int64
 	atomic.StoreInt64(&scratchRangeID, -1)
 
+	var waitUntilLeavingJoint = func() {}
+
 	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
@@ -2558,7 +2560,8 @@ func TestRebalanceLeaseholder(t *testing.T) {
 					},
 					BaseQueuePostEnqueueInterceptor: func(storeID roachpb.StoreID, rangeID roachpb.RangeID) {
 						if storeID == 4 && rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) {
-							time.Sleep(1 * time.Second)
+							// Keep waiting until learner replica has been removed.
+							waitUntilLeavingJoint()
 						}
 					},
 				},
@@ -2568,6 +2571,17 @@ func TestRebalanceLeaseholder(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	scratchKey := tc.ScratchRange(t)
+	waitUntilLeavingJoint = func() {
+		testutils.SucceedsSoon(t, func() error {
+			rangeDesc := tc.LookupRangeOrFatal(t, scratchKey)
+			replicas := rangeDesc.Replicas()
+			if replicas.InAtomicReplicationChange() || len(replicas.LearnerDescriptors()) != 0 {
+				return errors.Newf("in between atomic changes: %v", replicas)
+			}
+			return nil
+		})
+	}
+
 	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
 	tc.AddVotersOrFatal(t, scratchRange.StartKey.AsRawKey(), tc.Targets(1, 2)...)
 	atomic.StoreInt64(&scratchRangeID, int64(scratchRange.RangeID))
@@ -2580,5 +2594,11 @@ func TestRebalanceLeaseholder(t *testing.T) {
 		roachpb.ReplicationTarget{StoreID: 4, NodeID: 4},                  /* dest */
 	)
 	require.NoError(t, err)
-	time.Sleep(10 * time.Second)
+	testutils.SucceedsSoon(t, func() error {
+		store := tc.GetFirstStoreFromServer(t, 3)
+		if c := store.ReplicateQueueMetrics().PriorityInversionForReplaceDecommissioningVoterCount.Count(); c == 0 {
+			return errors.Newf("expected non-zero priority inversion count for replacing decommissioning voter but got %d", c)
+		}
+		return nil
+	})
 }
