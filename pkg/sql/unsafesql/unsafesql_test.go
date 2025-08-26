@@ -17,13 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -35,41 +36,6 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
-}
-
-func TestCheckUnsafeInternalsAccess(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	t.Run("returns the right response with the right session data", func(t *testing.T) {
-		for _, test := range []struct {
-			Internal             bool
-			AllowUnsafeInternals bool
-			Passes               bool
-		}{
-			{Internal: true, AllowUnsafeInternals: true, Passes: true},
-			{Internal: true, AllowUnsafeInternals: false, Passes: true},
-			{Internal: false, AllowUnsafeInternals: true, Passes: true},
-			{Internal: false, AllowUnsafeInternals: false, Passes: false},
-		} {
-			t.Run(fmt.Sprintf("%t", test), func(t *testing.T) {
-				err := unsafesql.CheckInternalsAccess(&sessiondata.SessionData{
-					SessionData: sessiondatapb.SessionData{
-						Internal: test.Internal,
-					},
-					LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-						AllowUnsafeInternals: test.AllowUnsafeInternals,
-					},
-				})
-
-				if test.Passes {
-					require.NoError(t, err)
-				} else {
-					require.ErrorIs(t, err, sqlerrors.ErrUnsafeTableAccess)
-				}
-			})
-		}
-	})
 }
 
 func checkUnsafeErr(t *testing.T, err error) {
@@ -101,9 +67,21 @@ func TestAccessCheckServer(t *testing.T) {
 	pool := s.SQLConn(t)
 	defer pool.Close()
 
+	// override the log limiter so that the tests can run without pauses.
+	defer unsafesql.TestRemoveLimiter()()
+
+	// create a user table to test user table access.
 	_, err := pool.Exec("CREATE TABLE foo (id INT PRIMARY KEY)")
 	require.NoError(t, err)
 
+	// create and register a log spy to see the unsafe access logs
+	spy := logtestutils.NewStructuredLogSpy[eventpb.UnsafeInternalsAccess](
+		t, []logpb.Channel{logpb.Channel_SENSITIVE_ACCESS}, nil, logtestutils.FromLogEntry,
+	)
+	cleanup := log.InterceptWith(ctx, spy)
+	defer cleanup()
+
+	// helper function for sending queries in different ways.
 	sendQuery := func(allowUnsafe bool, internal bool, query string) error {
 		if internal {
 			idb := s.InternalDB().(isql.DB)
@@ -138,6 +116,7 @@ func TestAccessCheckServer(t *testing.T) {
 		Internal             bool
 		AllowUnsafeInternals bool
 		Passes               bool
+		Logs                 bool
 	}{
 		// Regular tables aren't considered unsafe.
 		{
@@ -168,6 +147,7 @@ func TestAccessCheckServer(t *testing.T) {
 			Internal:             false,
 			AllowUnsafeInternals: true,
 			Passes:               true,
+			Logs:                 true,
 		},
 		// Tests on unsupported crdb_internal objects.
 		{
@@ -179,6 +159,7 @@ func TestAccessCheckServer(t *testing.T) {
 			Query:                "SELECT * FROM crdb_internal.gossip_alerts",
 			AllowUnsafeInternals: true,
 			Passes:               true,
+			Logs:                 true,
 		},
 		// Tests on supported crdb_internal objects.
 		{
@@ -205,6 +186,7 @@ func TestAccessCheckServer(t *testing.T) {
 			Query:                "SELECT * FROM crdb_internal.tenant_span_stats()",
 			AllowUnsafeInternals: true,
 			Passes:               true,
+			Logs:                 true,
 		},
 		// Tests on delegate behavior.
 		{
@@ -227,11 +209,18 @@ func TestAccessCheckServer(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("query=%s,internal=%t,allowUnsafe=%t", test.Query, test.Internal, test.AllowUnsafeInternals), func(t *testing.T) {
+			spy.Reset()
 			err := sendQuery(test.AllowUnsafeInternals, test.Internal, test.Query)
 			if test.Passes {
 				require.NoError(t, err)
 			} else {
 				checkUnsafeErr(t, err)
+			}
+
+			if test.Logs {
+				require.Equal(t, 1, spy.Count(), "expected exactly one log entry for unsafe internals access")
+			} else {
+				require.Equal(t, 0, spy.Count(), "expected no log entries")
 			}
 		})
 	}
