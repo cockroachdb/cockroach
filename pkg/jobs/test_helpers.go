@@ -44,6 +44,9 @@ func TestingCreateAndStartJob(
 	c := config{
 		jobID: r.MakeJobID(),
 	}
+	if record.JobID != 0 {
+		c.jobID = record.JobID
+	}
 	for _, opt := range opts {
 		opt(&c)
 	}
