@@ -912,13 +912,6 @@ func (bq *baseQueue) processOneAsyncAndReleaseSem(
 ) {
 	ctx = repl.AnnotateCtx(ctx)
 	taskName := bq.processOpName() + " [outer]"
-	// Validate that the replica is still in a state that can be processed. If
-	// it is no longer processable, return immediately.
-	if _, err := bq.replicaCanBeProcessed(ctx, repl, false /*acquireLeaseIfNeeded */); err != nil {
-		bq.finishProcessingReplica(ctx, stopper, repl, err)
-		<-bq.processSem
-		return
-	}
 	if err := stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: taskName},
 		func(ctx context.Context) {
 			// Release semaphore when finished processing.
@@ -1333,12 +1326,8 @@ func (bq *baseQueue) processReplicasInPurgatory(
 			annotatedCtx := repl.AnnotateCtx(ctx)
 			if stopper.RunTask(
 				annotatedCtx, bq.processOpName(), func(ctx context.Context) {
-					if _, err := bq.replicaCanBeProcessed(ctx, repl, false); err != nil {
-						bq.finishProcessingReplica(ctx, stopper, repl, err)
-					} else {
-						err = bq.processReplica(ctx, repl, item.priority /*priorityAtEnqueue*/)
-						bq.finishProcessingReplica(ctx, stopper, repl, err)
-					}
+					err = bq.processReplica(ctx, repl, item.priority /*priorityAtEnqueue*/)
+					bq.finishProcessingReplica(ctx, stopper, repl, err)
 				},
 			) != nil {
 				// NB: We do not need to worry about removing any unprocessed replicas
