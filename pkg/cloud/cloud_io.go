@@ -146,6 +146,7 @@ func MakeTransport(
 	if config.HttpMiddleware != nil {
 		roundTripper = config.HttpMiddleware(roundTripper)
 	}
+	roundTripper = maybeAddLogging(roundTripper)
 	return roundTripper, nil
 }
 

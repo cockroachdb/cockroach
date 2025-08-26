@@ -233,6 +233,7 @@ func makeAzureStorage(
 	}
 	var opts service.ClientOptions
 	opts.Transport = t
+	opts.Retry.MaxRetries = 10
 
 	var azClient *service.Client
 	switch conf.Auth {
