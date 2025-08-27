@@ -100,6 +100,18 @@ var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetti
 	0,
 )
 
+// TODO(wenyihu6): move these cluster settings to kvserverbase
+
+// DecommissioningPriorityInversionRequeue is a setting that controls whether to
+// requeue replicas when their priority at enqueue time and processing time is
+// inverted with respect to any of decommissioning actions.
+var DecommissioningPriorityInversionRequeue = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.decommissioning.priority_inversion_requeue.enabled",
+	"whether to requeue replicas when their priority is inverted with respect to any of decommissioning actions",
+	false,
+)
+
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
