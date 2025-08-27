@@ -291,7 +291,7 @@ func TestSendProgressMeta(t *testing.T) {
 		expectedErrRegEx string
 		nodeID           roachpb.NodeID
 		deletedRowCount  int64
-		spansCompleted   int64
+		spansCompleted   int
 		totalSpanCount   int64
 	}{
 		{desc: "output fails", outputResult: execinfra.ConsumerClosed, expectedErrRegEx: "ConsumerClosed"},
@@ -303,7 +303,14 @@ func TestSendProgressMeta(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			processor := mockProcessor(42, tc.nodeID, tc.totalSpanCount)
 			mockRowReceiver := metadataCache{pushResult: tc.outputResult}
-			processor.progressUpdater.OnSpanProcessed(tc.spansCompleted, tc.deletedRowCount)
+			spans := makeFakeSpans(tc.spansCompleted)
+			for i, span := range spans {
+				deletedRowCount := int64(0)
+				if i == 0 {
+					deletedRowCount = tc.deletedRowCount
+				}
+				processor.progressUpdater.OnSpanProcessed(span, deletedRowCount)
+			}
 			err := processor.progressUpdater.UpdateProgress(context.Background(), &mockRowReceiver)
 
 			if tc.expectedErrRegEx != "" {
@@ -318,7 +325,7 @@ func TestSendProgressMeta(t *testing.T) {
 			var ttlProgress jobspb.RowLevelTTLProcessorProgress
 			require.NoError(t, pbtypes.UnmarshalAny(&md.BulkProcessorProgress.ProgressDetails, &ttlProgress))
 			require.Equal(t, tc.totalSpanCount, ttlProgress.TotalSpanCount)
-			require.Equal(t, tc.spansCompleted, ttlProgress.ProcessedSpanCount)
+			require.Equal(t, int64(tc.spansCompleted), ttlProgress.ProcessedSpanCount)
 			require.Equal(t, tc.deletedRowCount, ttlProgress.DeletedRowCount)
 		})
 	}
