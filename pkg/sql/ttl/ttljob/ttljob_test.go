@@ -692,29 +692,33 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 		if !colinfo.ColumnTypeIsIndexable(typ) {
 			continue
 		}
-		switch typ.Family() {
-		case types.DateFamily:
-		// TODO(#76419): DateFamily has a broken `-infinity` case.
-		case types.JsonFamily:
-		// TODO(#99432): JsonFamily has broken cases. This is because the
-		// test is wrapping JSON objects in multiple single quotes which
-		// causes parsing errors.
-		case types.CollatedStringFamily:
-			if typ.Oid() != oidext.T_citext && typ.Oid() != oidext.T__citext {
-				if int(clusterversion.MinSupported) >= int(clusterversion.V25_3) {
+		ok := func() bool {
+			switch typ.Family() {
+			case types.DateFamily:
+				// TODO(#76419): DateFamily has a broken `-infinity` case.
+				return false
+			case types.JsonFamily:
+				// TODO(#99432): JsonFamily has broken cases. This is because the
+				// test is wrapping JSON objects in multiple single quotes which
+				// causes parsing errors.
+				return false
+			case types.CollatedStringFamily:
+				if typ.Oid() == oidext.T_citext || typ.Oid() == oidext.T__citext {
 					// CITEXT is only supported in 25.3+, so if we happen to run
 					// the test in the mixed version variant, we can't use the
 					// type.
-					indexableTyps = append(indexableTyps, typ)
+					return int(clusterversion.MinSupported) >= int(clusterversion.V25_3)
 				}
-			}
-		case types.LTreeFamily:
-			if int(clusterversion.MinSupported) >= int(clusterversion.V25_4) {
+				return true
+			case types.LTreeFamily:
 				// LTREE is only supported in 25.4+, so if we happen to run the
 				// test in the mixed version variant, we can't use the type.
-				indexableTyps = append(indexableTyps, typ)
+				return int(clusterversion.MinSupported) >= int(clusterversion.V25_4)
+			default:
+				return true
 			}
-		default:
+		}()
+		if ok {
 			indexableTyps = append(indexableTyps, typ)
 		}
 	}
