@@ -4367,6 +4367,24 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	`optimizer_use_improved_hoist_join_project`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_improved_hoist_join_project`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_improved_hoist_join_project", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseImprovedHoistJoinProject(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(
+				evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject,
+			), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
