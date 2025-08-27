@@ -328,10 +328,6 @@ SELECT column_name, character_maximum_length, numeric_precision, numeric_precisi
 	for i := range tableDesc.Columns {
 		col := &tableDesc.Columns[i]
 		if col.Name == "k" {
-			// TODO(knz): post-2.2, visible types for integer types are gone.
-			if col.Type.InternalType.VisibleType != 0 {
-				t.Errorf("unexpected visible type: got %d, expected 0", col.Type.InternalType.VisibleType)
-			}
 			if col.Type.Width() != 64 {
 				t.Errorf("unexpected width: got %d, expected 64", col.Type.Width())
 			}

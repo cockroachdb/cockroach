@@ -287,29 +287,53 @@ var (
 	// VarBit is the type of an ordered list of bits (0 or 1 valued), with no
 	// specified limit on the count of bits.
 	VarBit = &T{InternalType: InternalType{
-		Family: BitFamily, Oid: oid.T_varbit, Locale: &emptyLocale}}
+		Family: BitFamily, Oid: oid.T_varbit, Locale: &emptyLocale,
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		VisibleType: visibleVARBIT,
+	}}
 
 	// Int is the type of a 64-bit signed integer. This is the canonical type
 	// for IntFamily.
 	Int = &T{InternalType: InternalType{
-		Family: IntFamily, Width: 64, Oid: oid.T_int8, Locale: &emptyLocale}}
+		Family: IntFamily, Width: 64, Oid: oid.T_int8, Locale: &emptyLocale,
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		VisibleType: visibleBIGINT,
+	}}
 
 	// Int4 is the type of a 32-bit signed integer.
 	Int4 = &T{InternalType: InternalType{
-		Family: IntFamily, Width: 32, Oid: oid.T_int4, Locale: &emptyLocale}}
+		Family: IntFamily, Width: 32, Oid: oid.T_int4, Locale: &emptyLocale,
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		VisibleType: visibleINTEGER,
+	}}
 
 	// Int2 is the type of a 16-bit signed integer.
 	Int2 = &T{InternalType: InternalType{
-		Family: IntFamily, Width: 16, Oid: oid.T_int2, Locale: &emptyLocale}}
+		Family: IntFamily, Width: 16, Oid: oid.T_int2, Locale: &emptyLocale,
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		VisibleType: visibleSMALLINT,
+	}}
 
 	// Float is the type of a 64-bit base-2 floating-point number (IEEE 754).
 	// This is the canonical type for FloatFamily.
 	Float = &T{InternalType: InternalType{
-		Family: FloatFamily, Width: 64, Oid: oid.T_float8, Locale: &emptyLocale}}
+		Family: FloatFamily, Width: 64, Oid: oid.T_float8, Locale: &emptyLocale,
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		VisibleType: visibleDOUBLE,
+	}}
 
 	// Float4 is the type of a 32-bit base-2 floating-point number (IEEE 754).
 	Float4 = &T{InternalType: InternalType{
-		Family: FloatFamily, Width: 32, Oid: oid.T_float4, Locale: &emptyLocale}}
+		Family: FloatFamily, Width: 32, Oid: oid.T_float4, Locale: &emptyLocale,
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		VisibleType: visibleREAL,
+	}}
 
 	// Decimal is the type of a base-10 floating-point number, with no specified
 	// limit on precision (number of digits) or scale (digits to right of decimal
@@ -330,14 +354,22 @@ var (
 	// It is reported as BPCHAR in SHOW CREATE and "character" in introspection
 	// for compatibility with PostgreSQL.
 	BPChar = &T{InternalType: InternalType{
-		Family: StringFamily, Oid: oid.T_bpchar, Locale: &emptyLocale}}
+		Family: StringFamily, Oid: oid.T_bpchar, Locale: &emptyLocale,
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		VisibleType: visibleCHAR,
+	}}
 
 	// VarChar is equivalent to String, but has a differing OID (T_varchar),
 	// which makes it show up differently when displayed. It is reported as
 	// VARCHAR in SHOW CREATE and "character varying" in introspection for
 	// compatibility with PostgreSQL.
 	VarChar = &T{InternalType: InternalType{
-		Family: StringFamily, Oid: oid.T_varchar, Locale: &emptyLocale}}
+		Family: StringFamily, Oid: oid.T_varchar, Locale: &emptyLocale,
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		VisibleType: visibleVARCHAR,
+	}}
 
 	// CIText is the type of a case-insensitive string and is similar to AnyCollatedString,
 	// but has a differing Locale (case-insensitive) and a differing OID (T_citext).
@@ -351,7 +383,11 @@ var (
 	//
 	// See https://www.postgresql.org/docs/9.1/static/datatype-character.html
 	QChar = &T{InternalType: InternalType{
-		Family: StringFamily, Width: 1, Oid: oid.T_char, Locale: &emptyLocale}}
+		Family: StringFamily, Width: 1, Oid: oid.T_char, Locale: &emptyLocale,
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		VisibleType: visibleQCHAR,
+	}}
 
 	// Name is a type-alias for String with a different OID (T_name). It is
 	// reported as NAME in SHOW CREATE and "name" in introspection for
@@ -943,7 +979,11 @@ func MakeVarBit(width int32) *T {
 		panic(errors.AssertionFailedf("width %d cannot be negative", width))
 	}
 	return &T{InternalType: InternalType{
-		Family: BitFamily, Width: width, Oid: oid.T_varbit, Locale: &emptyLocale}}
+		Family: BitFamily, Width: width, Oid: oid.T_varbit, Locale: &emptyLocale,
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		VisibleType: visibleVARBIT,
+	}}
 }
 
 // MakeString constructs a new instance of the STRING type (oid = T_text) having
@@ -969,7 +1009,11 @@ func MakeVarChar(width int32) *T {
 		panic(errors.AssertionFailedf("width %d cannot be negative", width))
 	}
 	return &T{InternalType: InternalType{
-		Family: StringFamily, Oid: oid.T_varchar, Width: width, Locale: &emptyLocale}}
+		Family: StringFamily, Oid: oid.T_varchar, Width: width, Locale: &emptyLocale,
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		VisibleType: visibleVARCHAR,
+	}}
 }
 
 // MakeChar constructs a new instance of the CHAR type (oid = T_bpchar) having
@@ -982,7 +1026,11 @@ func MakeChar(width int32) *T {
 		panic(errors.AssertionFailedf("width %d cannot be negative", width))
 	}
 	return &T{InternalType: InternalType{
-		Family: StringFamily, Oid: oid.T_bpchar, Width: width, Locale: &emptyLocale}}
+		Family: StringFamily, Oid: oid.T_bpchar, Width: width, Locale: &emptyLocale,
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		VisibleType: visibleCHAR,
+	}}
 }
 
 // oidCanBeCollatedString returns true if the given oid can be a CollatedString.
@@ -1002,8 +1050,21 @@ func oidCanBeCollatedString(o oid.Oid) bool {
 //	VARCHAR(20) => VARCHAR(20) COLLATE EN
 func MakeCollatedString(strType *T, locale string) *T {
 	if oidCanBeCollatedString(strType.Oid()) {
+		// TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+		// VisibleType.
+		var visType int32
+		switch strType.Oid() {
+		case oid.T_varchar:
+			visType = visibleVARCHAR
+		case oid.T_bpchar:
+			visType = visibleCHAR
+		case oid.T_char:
+			visType = visibleQCHAR
+		}
 		return &T{InternalType: InternalType{
-			Family: CollatedStringFamily, Oid: strType.Oid(), Width: strType.Width(), Locale: &locale}}
+			Family: CollatedStringFamily, Oid: strType.Oid(), Width: strType.Width(), Locale: &locale,
+			VisibleType: visType,
+		}}
 	}
 	panic(errors.AssertionFailedf("cannot apply collation to non-string type: %s", strType))
 }
@@ -2637,7 +2698,6 @@ func (t *T) upgradeType() error {
 		t.InternalType.Width = 0
 		t.InternalType.Precision = 0
 		t.InternalType.Locale = nil
-		t.InternalType.VisibleType = 0
 		t.InternalType.ArrayElemType = nil
 		t.InternalType.ArrayDimensions = nil
 
@@ -2667,10 +2727,6 @@ func (t *T) upgradeType() error {
 	if t.InternalType.Oid == 0 {
 		t.InternalType.Oid = familyToOid[t.Family()]
 	}
-
-	// Clear the deprecated visible types, since they are now handled by the
-	// Width or Oid fields.
-	t.InternalType.VisibleType = 0
 
 	// If locale is not set, always set it to the empty string, in order to avoid
 	// bothersome deref errors when the Locale method is called.

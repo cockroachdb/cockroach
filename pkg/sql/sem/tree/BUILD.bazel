@@ -274,6 +274,7 @@ go_test(
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
         "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_google_go_cmp//cmp",
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
