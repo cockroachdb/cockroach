@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"slices"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -43,8 +45,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,6 +59,115 @@ var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
 	0.01,
 	settings.Fraction,
 )
+
+type txnStatementBundle struct {
+	stmt              tree.Statement
+	stmtFingerprintId appstatspb.StmtFingerprintID
+	stmtFingerprint   string
+	stmtBundle        diagnosticsBundle
+}
+
+func newTxnStmtBundle(
+	stmt tree.Statement,
+	stmtFingerprintId appstatspb.StmtFingerprintID,
+	stmtFingerprint string,
+	stmtBundle diagnosticsBundle,
+) txnStatementBundle {
+	return txnStatementBundle{
+		stmt:              stmt,
+		stmtFingerprintId: stmtFingerprintId,
+		stmtFingerprint:   stmtFingerprint,
+		stmtBundle:        stmtBundle,
+	}
+
+}
+
+type txnInstrumentationHelper struct {
+	StmtDiagnosticsRecorder *stmtdiagnostics.Registry
+	TxnRequest              stmtdiagnostics.TxnRequest
+	TxnRequestId            stmtdiagnostics.RequestID
+	stmtBundles             []txnStatementBundle
+}
+
+func (h *txnInstrumentationHelper) Reset() {
+	if h.TxnRequestId != 0 {
+		h.StmtDiagnosticsRecorder.ResetTxnRequest(h.TxnRequestId)
+		h.TxnRequest = stmtdiagnostics.TxnRequest{}
+		h.TxnRequestId = 0
+		h.stmtBundles = nil
+	}
+}
+
+func (h *txnInstrumentationHelper) SetRequest(
+	txnRequest stmtdiagnostics.TxnRequest, txnRequestId stmtdiagnostics.RequestID,
+) {
+	h.TxnRequestId = txnRequestId
+	h.TxnRequest = txnRequest
+}
+
+func (h *txnInstrumentationHelper) IsActive() bool {
+	return h.TxnRequestId != 0
+}
+
+func (h *txnInstrumentationHelper) AddStatementBundle(bundle txnStatementBundle) {
+	h.stmtBundles = append(h.stmtBundles, bundle)
+}
+
+// readyToFinalize returns true if we have collected all statement bundles for
+// transaction request. This is true if the statement in the last statement
+// bundle is a commit or roll back commit and the size of stmtBundles is one
+// more the size of the statement fingerprints ids in txnRequest. This is
+// because the statement fingerprints in the txn request's stmtfingerprintids
+// doesn't include the commit or rollback statement.
+func (h *txnInstrumentationHelper) readyToFinalize() bool {
+	stmtBundlesLen := len(h.stmtBundles)
+	if h.TxnRequestId == 0 || stmtBundlesLen-len(h.TxnRequest.StmtFingerprintIds()) != 1 {
+		return false
+	}
+
+	lastBundle := h.stmtBundles[stmtBundlesLen-1]
+	return isCommit(lastBundle.stmt) || isRollback(lastBundle.stmt)
+}
+
+func (h *txnInstrumentationHelper) Finalize(ctx context.Context, txnID uuid.UUID) {
+	defer h.Reset()
+	if h.readyToFinalize() {
+		statementBundleIds := make([]stmtdiagnostics.CollectedInstanceID, len(h.stmtBundles))
+		for i, bundle := range h.stmtBundles {
+			bundle.stmtBundle.insert(ctx, bundle.stmtFingerprint, bundle.stmt, h.StmtDiagnosticsRecorder, 0, stmtdiagnostics.Request{})
+			statementBundleIds[i] = bundle.stmtBundle.diagID
+		}
+
+		id, err := h.StmtDiagnosticsRecorder.InsertTxnDiagnostic(ctx, h.TxnRequest, statementBundleIds)
+		if err != nil {
+			log.Dev.Errorf(ctx, "Error inserting diagnostics: %s", err.Error())
+		}
+		fmt.Printf("Inserted transaction diagnostics with id %d\n", id)
+
+		// Temporary: Write to a file for easier collection.
+		finalBundle := memzipper.Zipper{}
+		finalBundle.Init()
+		for i, bundle := range h.stmtBundles {
+			finalBundle.AddFile(fmt.Sprintf("%d-%s.zip", i, bundle.stmt.StatementTag()), string(bundle.stmtBundle.zip))
+		}
+		buf, err := finalBundle.Finalize()
+		if err != nil {
+			panic(err)
+		}
+		f, err := os.CreateTemp("/tmp", "transaction-bundle-*.zip")
+		if err != nil {
+			panic(err)
+		}
+		_, err = f.Write(buf.Bytes())
+		if err != nil {
+			panic(err)
+		}
+		err = f.Close()
+		if err != nil {
+			panic(err)
+		}
+	}
+}
 
 // instrumentationHelper encapsulates the logic around extracting information
 // about the execution of a statement, like bundles and traces. Typical usage:
@@ -75,8 +188,8 @@ type instrumentationHelper struct {
 	explainFlags explain.Flags
 
 	// Query fingerprint (anonymized statement).
-	fingerprint string
-
+	fingerprint   string
+	fingerprintId appstatspb.StmtFingerprintID
 	// Transaction information.
 	implicitTxn bool
 	txnPriority roachpb.UserPriority
@@ -410,16 +523,19 @@ func (ih *instrumentationHelper) finalizeSetup(ctx context.Context, cfg *Executo
 // which case Finish() is a no-op).
 func (ih *instrumentationHelper) Setup(
 	ctx context.Context,
-	cfg *ExecutorConfig,
-	statsCollector *sslocal.StatsCollector,
+	ex *connExecutor,
 	p *planner,
-	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
 	stmt *Statement,
 	implicitTxn bool,
 	txnPriority roachpb.UserPriority,
-	collectTxnExecStats bool,
 	retryCount int32,
 ) (newCtx context.Context) {
+	cfg := ex.server.cfg
+	statsCollector := ex.statsCollector
+	stmtDiagnosticsRecorder := ex.stmtDiagnosticsRecorder
+	collectTxnExecStats := ex.extraTxnState.shouldCollectTxnExecutionStats
+	txnHelper := ex.state.txnInstrumentationHelper
+
 	ih.fingerprint = stmt.StmtNoConstants
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
@@ -431,7 +547,9 @@ func (ih *instrumentationHelper) Setup(
 	ih.isTenant = execinfra.IncludeRUEstimateInExplainAnalyze.Get(cfg.SV()) && cfg.DistSQLSrv != nil &&
 		cfg.DistSQLSrv.TenantCostController != nil
 	ih.topLevelStats = topLevelQueryStats{}
-
+	stmtFingerprintId := appstatspb.ConstructStatementFingerprintID(
+		stmt.StmtNoConstants, implicitTxn, p.SessionData().Database)
+	ih.fingerprintId = stmtFingerprintId
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:
 		ih.collectBundle = true
@@ -445,10 +563,51 @@ func (ih *instrumentationHelper) Setup(
 		ih.discardRows = true
 
 	default:
-		ih.collectBundle, ih.diagRequestID, ih.diagRequest =
-			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.StmtNoConstants, "" /* planGist */)
+
+		//  Check if we should start trace diagnostic bundle collection
+		if !implicitTxn {
+			txnStmtIdx := ex.state.mu.stmtCount - 1
+			if txnStmtIdx == 0 {
+
+				shouldCollect, requestId, request := stmtDiagnosticsRecorder.ShouldStartTxnDiagnostic(ctx, uint64(stmtFingerprintId))
+				if shouldCollect {
+					txnHelper.SetRequest(request, requestId)
+					ih.collectBundle = true
+					ih.diagRequestID = 0
+					ih.diagRequest = stmtdiagnostics.Request{}
+				} else {
+				}
+			} else if txnHelper.TxnRequestId > 0 {
+				// if request is inflight, check if we should continue
+
+				if isCommit(stmt.Statement.AST) || isRollback(stmt.Statement.AST) || txnHelper.TxnRequest.ContinueRequest(uint64(stmtFingerprintId), txnStmtIdx) {
+					ih.collectBundle = true
+					ih.diagRequestID = 0
+					ih.diagRequest = stmtdiagnostics.Request{}
+				} else {
+					// shouldn't continue, reset the txn request so that another bundle collection can be started
+					txnHelper.Reset()
+				}
+			}
+		} else {
+			ih.collectBundle, ih.diagRequestID, ih.diagRequest =
+				stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.StmtNoConstants, "" /* planGist */)
+		}
+
+		//// If no regular diagnostic request matched, check if we should collect
+		////		// bundles for all statements in this trnsaction because a previous
+		//// statement in the transaction triggered collection.
+		//if !ih.collectBundle && txnHelper.Active() {
+		//	fmt.Println("Collecting bundle because txnHelper is active")
+		//	ih.collectBundle = true
+		//	// TODO(davidh): This should be updated to use a transaction
+		//	// request ID when that becomes available.
+		//	ih.diagRequestID = 0
+		//	ih.diagRequest = stmtdiagnostics.Request{}
+		//} else {
+		//}
 		// IsRedacted will be false when ih.collectBundle is false.
-		ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
+		ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted() || txnHelper.TxnRequest.IsRedacted()
 	}
 
 	ih.stmtDiagnosticsRecorder = stmtDiagnosticsRecorder
@@ -612,6 +771,7 @@ func (ih *instrumentationHelper) Finish(
 	res RestrictedCommandResult,
 	retPayload fsm.EventPayload,
 	retErr error,
+	txnHelper *txnInstrumentationHelper,
 ) error {
 	ctx := ih.origCtx
 	if _, ok := ih.Tracing(); !ok {
@@ -711,14 +871,19 @@ func (ih *instrumentationHelper) Finish(
 				stmtRawSQL, &p.curPlan, planString, trace, placeholders, res.ErrAllowReleased(),
 				payloadErr, retErr, &p.extendedEvalCtx.Settings.SV, ih.inFlightTraceCollector,
 			)
-			// Include all non-critical errors as warnings. Note that these
-			// error strings might contain PII, but the warnings are only shown
-			// to the current user and aren't included into the bundle.
-			warnings = append(warnings, bundle.errorStrings...)
-			bundle.insert(
-				bundleCtx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
-			)
+			if txnHelper.IsActive() {
+				txnHelper.AddStatementBundle(newTxnStmtBundle(ast, ih.fingerprintId, ih.fingerprint, bundle))
+			} else {
+				// Include all non-critical errors as warnings. Note that these
+				// error strings might contain PII, but the warnings are only shown
+				// to the current user and aren't included into the bundle.
+				warnings = append(warnings, bundle.errorStrings...)
+				bundle.insert(
+					bundleCtx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
+				)
+			}
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
+
 		}
 	}
 

@@ -294,3 +294,34 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 	})
 
 }
+
+func TestTxnBundleCollection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	knobs := sqlstats.CreateTestingKnobs()
+	knobs.SynchronousSQLStats = true
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: knobs,
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+
+	sqlConn.Exec(t, "CREATE TABLE foo (x INT)")
+	sqlConn.Exec(t, "BEGIN")
+	sqlConn.Exec(t, "INSERT INTO foo VALUES (1)")
+	sqlConn.Exec(t, "SELECT * FROM foo")
+	sqlConn.Exec(t, "COMMIT")
+
+	row := sqlConn.QueryRow(t, "SELECT encode(transaction_fingerprint_id, 'hex') FROM crdb_internal.statement_statistics WHERE metadata->>'query' LIKE 'INSERT INTO foo%' limit 1")
+	var fingerprintId string
+	row.Scan(&fingerprintId)
+
+	sqlConn.Exec(t, "select * from crdb_internal.request_txn_bundle($1)", fingerprintId)
+	sqlConn.Exec(t, "BEGIN")
+	sqlConn.Exec(t, "INSERT INTO foo VALUES (1)")
+	sqlConn.Exec(t, "SELECT * FROM foo")
+	sqlConn.Exec(t, "COMMIT")
+}

@@ -1170,6 +1170,7 @@ func (s *Server) newConnExecutor(
 			connCtx:                      ctx,
 			testingForceRealTracingSpans: s.cfg.TestingKnobs.ForceRealTracingSpans,
 			execType:                     executorType,
+			txnInstrumentationHelper:     &txnInstrumentationHelper{StmtDiagnosticsRecorder: s.cfg.StmtDiagnosticsRecorder},
 		},
 		transitionCtx: transitionCtx{
 			db:           s.cfg.DB,
@@ -3477,6 +3478,12 @@ func isCommit(stmt tree.Statement) bool {
 	return ok
 }
 
+// isRollback returns true if stmt is a "ROLLBACK" statement.
+func isRollback(stmt tree.Statement) bool {
+	_, ok := stmt.(*tree.RollbackTransaction)
+	return ok
+}
+
 var retryableMinTimestampBoundUnsatisfiableError = errors.Newf(
 	"retryable MinTimestampBoundUnsatisfiableError",
 )
@@ -3821,6 +3828,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			ConsistencyChecker:               p.execCfg.ConsistencyChecker,
 			RangeProber:                      p.execCfg.RangeProber,
 			StmtDiagnosticsRequestInserter:   ex.server.cfg.StmtDiagnosticsRecorder.InsertRequest,
+			TxnDiagnosticsRequestInserter:    ex.server.cfg.StmtDiagnosticsRecorder.InsertTxnRequest,
 			CatalogBuiltins:                  &p.evalCatalogBuiltins,
 			QueryCancelKey:                   ex.queryCancelKey,
 			DescIDGenerator:                  ex.getDescIDGenerator(),
