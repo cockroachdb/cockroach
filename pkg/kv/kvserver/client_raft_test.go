@@ -6183,6 +6183,12 @@ func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
 	logStatus(initialStatus)
 	t.Logf("n1 is leader in term %d", initialStatus.Term)
 
+	// Wait for any pending config changes to be finalized. Otherwise, the forced
+	// campaign will fail and not retry.
+	require.Eventually(t, func() bool {
+		return !desc.Replicas().InAtomicReplicationChange()
+	}, 10*time.Second, 500*time.Millisecond)
+
 	// Force-campaign n3. It may not win or hold onto leadership, but it's enough
 	// to know that it bumped the term.
 	repl3.ForceCampaign(ctx, initialStatus.BasicStatus)
