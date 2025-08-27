@@ -331,7 +331,11 @@
 [SimplifyLeftJoinWithZeroRowsRight, Normalize]
 (LeftJoin $left:* $right:* & (HasZeroRows $right))
 =>
-(Project $left (MakeNullProjections $right) (OutputCols $left))
+(Project
+    $left
+    (MakeNullProjections $right)
+    (MakePassthrough (OutputCols $left))
+)
 
 # SimplifyRightJoin reduces a FullJoin operator to a LeftJoin operator when it's
 # known that every row in the join's right input will match at least one row in
@@ -446,7 +450,7 @@ $left
                 (ProjectionOuterCols $projections)
                 (OutputCols $input)
             )
-        $passThrough:*
+        $projPrivate:*
     )
     $on:*
     $private:*
@@ -460,7 +464,9 @@ $left
         $private
     )
     $projections
-    (UnionCols (OutputCols $left) $passThrough)
+    (MakePassthrough
+        (UnionCols (OutputCols $left) (Passthrough $projPrivate))
+    )
 )
 
 # HoistJoinProjectLeft is the same as HoistJoinProjectRight, but for the left
@@ -471,7 +477,7 @@ $left
         $input:*
         $projections:* &
             (AllAreRemappingProjections $projections)
-        $passThrough:*
+        $projPrivate:*
     )
     $right:* &
 
@@ -493,7 +499,12 @@ $left
         $private
     )
     $projections
-    (UnionCols $passThrough (OutputCols $right))
+    (MakePassthrough
+        (UnionCols
+            (Passthrough $projPrivate)
+            (OutputCols $right)
+        )
+    )
 )
 
 # SimplifyJoinNotNullEquality simplifies an Is/IsNot equality filter condition
@@ -841,7 +852,7 @@ $left
     (Project
         $left
         (MakeProjectionsFromValues $right)
-        (OutputCols $left)
+        (MakePassthrough (OutputCols $left))
     )
     $on
 )

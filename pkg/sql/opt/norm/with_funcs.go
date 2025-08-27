@@ -55,7 +55,7 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 						t.OutCols[i],
 					)
 				}
-				return c.f.ConstructProject(binding, projections, opt.ColSet{})
+				return c.f.ConstructProject(binding, projections, &memo.ProjectPrivate{})
 			}
 			// TODO(justin): should apply joins block inlining because they can lead
 			// to expressions being executed multiple times?
@@ -136,7 +136,7 @@ func (c *CustomFuncs) InlineWithScanOfValues(
 		Cols: newCols,
 		ID:   c.f.Metadata().NextUniqueID(),
 	})
-	return c.f.ConstructProject(newValuesExpr, projections, opt.ColSet{})
+	return c.f.ConstructProject(newValuesExpr, projections, &memo.ProjectPrivate{})
 }
 
 // ApplyLimitToRecursiveCTEScan re-optimizes the recursive branch of a recursive

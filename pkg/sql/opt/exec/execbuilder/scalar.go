@@ -682,7 +682,7 @@ func (b *Builder) buildExistsSubquery(
 					props.OrderingChoice{},
 				),
 				memo.ProjectionsExpr{f.ConstructProjectionsItem(memo.TrueSingleton, existsCol)},
-				opt.ColSet{}, /* passthrough */
+				&memo.ProjectPrivate{},
 			)
 		}
 

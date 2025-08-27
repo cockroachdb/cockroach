@@ -173,7 +173,9 @@ func (c *CustomFuncs) MakeProjectFromPassthroughAggs(
 	c.e.mem.AddProjectToGroup(&memo.ProjectExpr{
 		Input:       input,
 		Projections: projections,
-		Passthrough: passthrough,
+		ProjectPrivate: memo.ProjectPrivate{
+			Passthrough: passthrough,
+		},
 	}, grp)
 }
 

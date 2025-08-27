@@ -293,5 +293,5 @@
         )
     )
     []
-    (OutputCols $input)
+    (MakePassthrough (OutputCols $input))
 )

@@ -130,7 +130,11 @@ func (c *CustomFuncs) ConstructProjectionFromDistinctOn(
 			projections = append(projections, c.f.ConstructProjectionsItem(varExpr, aggs[i].Col))
 		}
 	}
-	return c.f.ConstructProject(input, projections, passthrough)
+	return c.f.ConstructProject(input, projections,
+		&memo.ProjectPrivate{
+			Passthrough: passthrough,
+		},
+	)
 }
 
 // AreValuesDistinct returns true if a constant Values operator input contains

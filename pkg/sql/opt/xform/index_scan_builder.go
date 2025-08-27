@@ -190,7 +190,8 @@ func (b *indexScanBuilder) BuildNewExpr() (output memo.RelExpr) {
 
 	// 2. Wrap input in a Project if constant projections were added.
 	if b.hasConstProjections() {
-		output = b.f.ConstructProject(output, b.constProjections, b.scanPrivate.Cols)
+		output = b.f.ConstructProject(output, b.constProjections,
+			b.c.MakePassthrough(b.scanPrivate.Cols))
 		if !b.hasInnerFilters() && !b.hasInvertedFilter() && !b.hasIndexJoin() {
 			return
 		}
@@ -251,12 +252,18 @@ func (b *indexScanBuilder) Build(grp memo.RelExpr) {
 			b.mem.AddProjectToGroup(&memo.ProjectExpr{
 				Input:       input,
 				Projections: b.constProjections,
-				Passthrough: b.scanPrivate.Cols,
+				ProjectPrivate: memo.ProjectPrivate{
+					Passthrough: b.scanPrivate.Cols,
+				},
 			}, grp)
 			return
 		}
 
-		input = b.f.ConstructProject(input, b.constProjections, b.scanPrivate.Cols)
+		input = b.f.ConstructProject(input, b.constProjections,
+			&memo.ProjectPrivate{
+				Passthrough: b.scanPrivate.Cols,
+			},
+		)
 	}
 
 	// 3. Wrap input in inner filter if it was added.
@@ -283,8 +290,10 @@ func (b *indexScanBuilder) Build(grp memo.RelExpr) {
 				return
 			} else {
 				project := &memo.ProjectExpr{
-					Input:       b.f.ConstructInvertedFilter(input, &b.invertedFilterPrivate),
-					Passthrough: grp.Relational().OutputCols,
+					Input: b.f.ConstructInvertedFilter(input, &b.invertedFilterPrivate),
+					ProjectPrivate: memo.ProjectPrivate{
+						Passthrough: grp.Relational().OutputCols,
+					},
 				}
 				b.mem.AddProjectToGroup(project, grp)
 				return

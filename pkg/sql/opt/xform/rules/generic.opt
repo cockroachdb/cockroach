@@ -54,7 +54,7 @@
         (ParameterizedJoinPrivate)
     )
     []
-    (OutputCols (Root))
+    (MakePassthrough (OutputCols (Root)))
 )
 
 # ConvertParameterizedLookupJoinToPlaceholderScan converts some LookupJoins that
