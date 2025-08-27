@@ -10,10 +10,13 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"testing/quick"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/guptarohit/asciigraph"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,15 +55,17 @@ func TestThrashing(t *testing.T) {
 		},
 		{
 			name: "bathtub",
+			desc: `This sequence has high thrashing, since it ends up where it started.`,
 			vs:   []float64{10, 8, 4, 2, 1, 2, 4, 8, 10},
 		},
 		{
 			name: "hump",
+			desc: `This sequence has high thrashing, since it ends up where it started.`,
 			vs:   []float64{1, 2, 4, 8, 10, 8, 4, 2, 1},
 		},
 		{
 			name: "oscillate",
-			desc: `An example that the thrashing percentage can easily exceed 100%`,
+			desc: `An example that the thrashing percentage can arbitarily exceed 200%.`,
 			vs: tsFromFunc(100, func(tick int) float64 {
 				return math.Sin(math.Pi * float64(tick) / 10)
 			}),
@@ -68,33 +73,28 @@ func TestThrashing(t *testing.T) {
 		{
 			name: "initial_outlier",
 			desc: `An initial outlier leads to a large normalization factor, 
-i.e. low thrashing percentage. This isn't necessarily good.`,
+i.e. low thrashing percentage. This isn't necessarily good, if this becomes
+an issue we could use an inter-quantile range instead.`,
 			vs: []float64{10250, 5004, 12, 1, 2},
 		},
 		{
 			name: "final_outlier",
-			vs:   []float64{1, 3, 2, 1, 2005},
+			desc: `An almost monotonic function (the final outlier dominates total variation),
+so it is assigned a small thrashing percentage.`,
+			vs: []float64{1, 3, 2, 1, 2005},
 		},
 		{
 			name: "monotonic_with_hiccup",
 			desc: `A "basically" monotonic sequence that has a small hiccup near the
-beginning. Sadly this currently results in the bulk of the sequence registering
-as thrashing, which is not desired in any allocator-related use cases.
-Two improvements come to mind:
-- epsilon-hysteresis: small changes that are reversed quickly don't count, but
-  it's hard to determine what "small" means.
-- trend-based: if there is an overall trend, count only total variation
-  in the direction opposing the trend. For example, we can count the number
-  of upward and downward deltas, and if one direction is dominant, count only
-  variation in the other direction.
-TODO(tbg): try out and implement trend-based thrashing detection.
+beginning. The trend-aware thrashing measure (tdtv) should be small.
 `,
 			vs: []float64{100, 90, 91, 85, 80, 70, 60, 50, 40, 30, 20, 10, 0},
 		},
 		{
 			name: "negative_crossover",
-			desc: "Oscillating across zero in both directions",
-			vs:   []float64{-10, -4, -6, -1, 4, 5, -2, 6},
+			desc: `Oscillating across zero in both directions, mostly to check that
+negative numbers don't cause issues.'`,
+			vs: []float64{-10, -4, -6, -1, 4, 5, -2, 6},
 		},
 	} {
 		t.Run(td.name, w.Run(t, td.name, func(t *testing.T) string {
@@ -127,4 +127,44 @@ TODO(tbg): try out and implement trend-based thrashing detection.
 			return buf.String()
 		}))
 	}
+}
+
+func TestTDTV(t *testing.T) {
+	t.Run("scaling", func(t *testing.T) {
+		r, seed := randutil.NewPseudoRand()
+		require.NoError(t, quick.Check(func(iu, id uint64) bool {
+			// Starting with ints avoids needing to write Inf and NaN checks.
+			// We reduce the range to avoid hitting larger float computation
+			// inaccuracies.
+			u, d := float64(iu%1e9), float64(id%1e9)
+			u, d = max(u, -u), max(d, -d) // take absolute values for both
+
+			orig := tdtv(u, d)
+			swapped := tdtv(d, u)
+			const k = 4.76
+			scaled := tdtv(k*u, k*d) / k
+			const delta = 0.0001
+			assert.InDelta(t, orig, swapped, delta)
+			assert.InDelta(t, orig, scaled, delta)
+			assert.InDelta(t, 0, tdtv(u, 0), delta)
+			assert.InDelta(t, 2*u, tdtv(u, u), delta)
+
+			return true
+		}, &quick.Config{MaxCount: 1000, Rand: r}), "seed: %d", seed)
+	})
+
+	var buf strings.Builder
+	// Because of the scaling property of tdtv, we only need to test the case
+	// where tu+tv equals one. To this end, we sweep out tu from [0,1] and chose
+	// td as 1-tu.
+	const N = 10
+	sl := make([]float64, N+1)
+	for i := range sl {
+		tu := float64(i) / N
+		td := 1 - tu
+		sl[i] = tdtv(tu, td)
+	}
+	_, _ = fmt.Fprintf(&buf, "%.2f\n", sl)
+	_, _ = fmt.Fprint(&buf, asciigraph.Plot(sl, asciigraph.Width(2*N), asciigraph.Height(N)))
+	echotest.Require(t, buf.String(), datapathutils.TestDataPath(t, t.Name()+".txt"))
 }

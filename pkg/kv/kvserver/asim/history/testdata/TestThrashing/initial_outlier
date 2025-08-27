@@ -1,7 +1,8 @@
 echo
 ----
 An initial outlier leads to a large normalization factor, 
-i.e. low thrashing percentage. This isn't necessarily good.
+i.e. low thrashing percentage. This isn't necessarily good, if this becomes
+an issue we could use an inter-quantile range instead.
 input: [10250 5004 12 1 2]
  10250 ┼╮
   9225 ┤╰─╮
@@ -14,4 +15,4 @@ input: [10250 5004 12 1 2]
   2051 ┤              ╰─╮
   1026 ┤                ╰─╮
      1 ┤                  ╰────────────────────
-tv=0.01% (1.0) runs=2
+tdtv=0.01% (1.0) runs=2
