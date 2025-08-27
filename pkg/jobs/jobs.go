@@ -247,6 +247,7 @@ func (u Updater) started(ctx context.Context) error {
 		traceID = sp.TraceID()
 	}
 	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, ju *JobUpdater) error {
+		*md.Tag = "updater started"
 		if md.State != StatePending && md.State != StateRunning {
 			return errors.Errorf("job with state %s cannot be marked started", md.State)
 		}
@@ -312,6 +313,9 @@ func (u Updater) FractionProgressed(ctx context.Context, progressedFn FractionPr
 		}
 		fractionCompleted := progressedFn(ctx, md.Progress.Details)
 
+		if importProg := md.Progress.GetImport(); importProg != nil {
+			*md.Tag = "import update"
+		}
 		if !build.IsRelease() {
 			// We allow for slight floating-point rounding
 			// inaccuracies. We only want to error in non-release

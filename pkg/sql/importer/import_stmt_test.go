@@ -3850,7 +3850,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 	defer setImportReaderParallelism(1)()
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
-	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
+	defer row.TestingSetDatumRowConverterBatchSize(3 * batchSize)()
 
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
