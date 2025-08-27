@@ -6165,6 +6165,9 @@ func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
 	// Create a range, upreplicate it, and replicate a write.
 	key := tc.ScratchRange(t)
 	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	// Wait for the config changes corresponding to adding voters to be finalized.
+	// Otherwise, the forced campaign will fail and not retry. See #152555.
+	require.NoError(t, tc.WaitForVoters(key, tc.Targets(0, 1, 2)...))
 	_, pErr := kv.SendWrapped(ctx, sender, incrementArgs(key, 1))
 	require.NoError(t, pErr.GoError())
 	tc.WaitForValues(t, key, []int64{1, 1, 1})
