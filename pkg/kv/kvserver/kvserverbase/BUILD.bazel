@@ -23,6 +23,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/buildutil",
         "//pkg/util/debugutil",
+        "//pkg/util/envutil",
         "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
