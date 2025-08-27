@@ -784,6 +784,9 @@ func (bq *baseQueue) addInternal(
 	default:
 		// No need to signal again.
 	}
+	if postEnqueueInterceptor := bq.store.TestingKnobs().BaseQueuePostEnqueueInterceptor; postEnqueueInterceptor != nil {
+		postEnqueueInterceptor(bq.store.StoreID(), desc.RangeID)
+	}
 	return true, nil
 }
 
