@@ -43,12 +43,8 @@ type ChangefeedConfig struct {
 // makeChangefeedConfigFromJobDetails creates a ChangefeedConfig struct from any
 // version of the ChangefeedDetails protobuf.
 func makeChangefeedConfigFromJobDetails(
-	ctx context.Context, d jobspb.ChangefeedDetails, execCfg *sql.ExecutorConfig,
+	d jobspb.ChangefeedDetails, targets changefeedbase.Targets,
 ) (ChangefeedConfig, error) {
-	targets, err := AllTargets(ctx, d, execCfg)
-	if err != nil {
-		return ChangefeedConfig{}, err
-	}
 	return ChangefeedConfig{
 		SinkURI:  d.SinkURI,
 		Opts:     changefeedbase.MakeStatementOptions(d.Opts),
