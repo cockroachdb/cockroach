@@ -1686,6 +1686,13 @@ func (tc *TxnCoordSender) HasPerformedWrites() bool {
 	return tc.hasPerformedWritesLocked()
 }
 
+// HasBufferedWrites is part of the TxnSender interface.
+func (tc *TxnCoordSender) HasBufferedWrites() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.hasBufferedWritesLocked()
+}
+
 // TestingShouldRetry is part of the TxnSender interface.
 func (tc *TxnCoordSender) TestingShouldRetry() bool {
 	tc.mu.Lock()
@@ -1709,4 +1716,8 @@ func (tc *TxnCoordSender) hasPerformedReadsLocked() bool {
 
 func (tc *TxnCoordSender) hasPerformedWritesLocked() bool {
 	return tc.mu.txn.Sequence != 0
+}
+
+func (tc *TxnCoordSender) hasBufferedWritesLocked() bool {
+	return tc.interceptorAlloc.txnWriteBuffer.hasBufferedWrites()
 }
