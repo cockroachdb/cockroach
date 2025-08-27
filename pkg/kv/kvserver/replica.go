@@ -2964,10 +2964,19 @@ func (r *Replica) maybeEnqueueProblemRange(
 		"with priority %f", r.Desc(),
 		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
 	r.store.metrics.DecommissioningNudgerEnqueue.Inc(1)
-	// TODO(dodeca12): Figure out a better way to track the
-	// decommissioning nudger enqueue failures/errors.
-	r.store.replicateQueue.AddAsync(ctx, r,
-		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
+
+	if DecommissioningPriorityHighest.Get(&r.store.ClusterSettings().SV) {
+		// Do the same as makeOnNodeDecommissioningCallback. When async is true,
+		// store.Enqueue enqueues the replica with priority 1e5 which is larger than
+		// any AllocatorAction.Priority() (largest is 12002).
+		processErr, enqueueErr := r.store.Enqueue(ctx, "replicate", r, true /*skipShouldQueue*/, true /*async*/)
+		log.KvDistribution.Infof(ctx, "error during replica enqueue: process=%v, enqueue=%v", processErr, enqueueErr)
+	} else {
+		// TODO(dodeca12): Figure out a better way to track the
+		// decommissioning nudger enqueue failures/errors.
+		r.store.replicateQueue.AddAsync(ctx, r,
+			allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
+	}
 }
 
 // SendStreamStats sets the stats for the replica send streams that belong to
