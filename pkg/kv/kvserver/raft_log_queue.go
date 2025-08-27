@@ -659,7 +659,7 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) process(
-	ctx context.Context, r *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, r *Replica, _ spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {

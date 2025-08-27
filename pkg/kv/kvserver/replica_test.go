@@ -10308,7 +10308,7 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 	}
 	for i := 0; i < 2; i++ {
 		// Do this twice because it used to deadlock. See #25456.
-		processed, err := tc.store.consistencyQueue.process(ctx, tc.repl, confReader)
+		processed, err := tc.store.consistencyQueue.process(ctx, tc.repl, confReader, -1 /*priorityAtEnqueue*/)
 		if !testutils.IsError(err, "boom") {
 			t.Fatal(err)
 		}

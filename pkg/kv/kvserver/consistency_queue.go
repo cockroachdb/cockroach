@@ -164,7 +164,7 @@ func consistencyQueueShouldQueueImpl(
 
 // process() is called on every range for which this node is a lease holder.
 func (q *consistencyQueue) process(
-	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, _ spanconfig.StoreReader, _ float64,
 ) (bool, error) {
 	if q.interval() <= 0 {
 		return false, nil
