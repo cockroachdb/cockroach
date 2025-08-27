@@ -50,14 +50,12 @@ system "test -r .s.PGSQL.$sql_port.lock"
 end_test
 
 # Stop the server that was started above.
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 send "exit\r"
 eexpect eof
 
 set spawn_id $shell1_spawn_id
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 
 start_test "Check that the socket-dir flag checks the length of the directory."
 send "$argv start-single-node --insecure --socket-dir=$longname\r"

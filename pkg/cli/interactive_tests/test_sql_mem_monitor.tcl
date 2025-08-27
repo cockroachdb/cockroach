@@ -97,8 +97,7 @@ expect {
     timeout { handle_timeout "memory allocation error" }
 }
 # Stop the tail command.
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 
 # Check that the client got a bad connection error
 set spawn_id $client_spawn_id
@@ -137,8 +136,6 @@ send_eof
 eexpect eof
 
 set spawn_id $shell_spawn_id
-interrupt
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 send "exit\r"
 eexpect eof
