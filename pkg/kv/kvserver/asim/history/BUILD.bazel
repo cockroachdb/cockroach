@@ -23,7 +23,9 @@ go_test(
     deps = [
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
+        "//pkg/util/randutil",
         "@com_github_guptarohit_asciigraph//:asciigraph",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )

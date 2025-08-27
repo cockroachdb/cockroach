@@ -1,5 +1,6 @@
 echo
 ----
+This sequence has high thrashing, since it ends up where it started.
 input: [1 2 4 8 10 8 4 2 1]
  9.79 ┤                 ╭───╮
  8.92 ┤               ╭─╯   ╰─╮
@@ -12,4 +13,4 @@ input: [1 2 4 8 10 8 4 2 1]
  2.76 ┤     ╭─╯                       ╰─╮
  1.88 ┤ ╭───╯                           ╰───╮
  1.00 ┼─╯                                   ╰─
-tv=100.00% (9.0) runs=2
+tdtv=200.00% (18.0) runs=2
