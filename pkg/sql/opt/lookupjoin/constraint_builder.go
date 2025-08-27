@@ -246,17 +246,6 @@ func (b *ConstraintBuilder) Build(
 		rightSideCols = append(rightSideCols, rightCol)
 	}
 
-	// rightEqIdenticalTypeCols is the set of columns in rightEq that have
-	// identical types to the corresponding columns in leftEq. This is used to
-	// determine if a computed column can be synthesized for a column in the
-	// index in order to allow a lookup join.
-	var rightEqIdenticalTypeCols opt.ColSet
-	for i := range rightEq {
-		if b.md.ColumnMeta(rightEq[i]).Type.Identical(b.md.ColumnMeta(leftEq[i]).Type) {
-			rightEqIdenticalTypeCols.Add(rightEq[i])
-		}
-	}
-
 	// All the lookup conditions must apply to the prefix of the index and so
 	// the projected columns created must be created in order.
 	for j := 0; j < numIndexKeyCols; j++ {
@@ -281,7 +270,7 @@ func (b *ConstraintBuilder) Build(
 		//
 		// NOTE: we must only consider equivalent columns with identical types,
 		// since column remapping is otherwise not valid.
-		if expr, ok := b.findComputedColJoinEquality(b.table, idxCol, rightEqIdenticalTypeCols); ok {
+		if expr, ok := b.findComputedColJoinEquality(b.table, idxCol, rightEq.ToSet()); ok {
 			colMeta := b.md.ColumnMeta(idxCol)
 			compEqCol := b.md.AddColumn(fmt.Sprintf("%s_eq", colMeta.Alias), colMeta.Type)
 
@@ -294,7 +283,22 @@ func (b *ConstraintBuilder) Build(
 
 			// Project the computed column expression, mapping all columns
 			// in rightEq to corresponding columns in leftEq.
-			projection := b.f.ConstructProjectionsItem(b.f.RemapCols(expr, b.eqColMap), compEqCol)
+			var replace norm.ReplaceFunc
+			replace = func(e opt.Expr) opt.Expr {
+				if v, ok := e.(*memo.VariableExpr); ok {
+					if col, ok := b.eqColMap.Get(int(v.Col)); ok {
+						// If the column is a computed column, we need to
+						// cast it to the type of the original column so that
+						// functions which are type sensitive still return the
+						// expected results.
+						return b.f.ConstructCast(b.f.ConstructVariable(opt.ColumnID(col)), b.md.ColumnMeta(v.Col).Type)
+					} else {
+						return e
+					}
+				}
+				return b.f.Replace(e, replace)
+			}
+			projection := b.f.ConstructProjectionsItem(b.f.Replace(expr, replace).(opt.ScalarExpr), compEqCol)
 			inputProjections = append(inputProjections, projection)
 			addEqualityColumns(compEqCol, idxCol)
 			derivedEquivCols.Add(compEqCol)
