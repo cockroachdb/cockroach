@@ -20,10 +20,11 @@ type thrashing struct {
 	// The number of runs equals one plus the number of sign changes in the first
 	// differences.
 	runs int
-	// tv is the total variation (i.e. the sum of absolute first differences)
-	// in all runs except the first. Excluding the first run ensures that a
-	// monotonic sequence is assigned zero thrashing.
-	tv float64
+	// tdtv is the trend-discounting total variation. It's close to the total
+	// variation if the time series has no preferred trend (i.e. upwards or
+	// downwards), but if there is a clear trend, the tdtv will be much smaller,
+	// counting mainly the movement against the trend. see tdtv for details.
+	tdtv float64
 	// normTV is a normalization factor for the total variation. By default, it is
 	// initialized to the range of the input values, i.e. max - min (or 1 if max
 	// == min). `tv/normTV` then measures how many times thrashing has "swept out"
@@ -38,39 +39,63 @@ type thrashing struct {
 }
 
 func (th thrashing) String() string {
-	return fmt.Sprintf("tv=%.2f%% (%.1f) runs=%d", th.TVPercent(), th.tv, th.runs)
+	return fmt.Sprintf("tdtv=%.2f%% (%.1f) runs=%d", th.TDTVPercent(), th.tdtv, th.runs)
 }
 
-func (th thrashing) TVPercent() float64 {
-	return 100 * th.tv / th.normTV
+func (th thrashing) TDTVPercent() float64 {
+	return 100 * th.tdtv / th.normTV
 }
 
 func computeThrashing(values []float64) thrashing {
 	runs := 1
-	var tv float64      // total variation (excluding first monotonic run)
-	var runFirstIdx int // first index of current run, i.e. old run's last index + 1
 	pos := len(values) > 1 && values[1]-values[0] >= 0
+	var posTV, negTV float64
 	for i := 1; i < len(values); i++ {
 		d := values[i] - values[i-1]
 
 		if d >= 0 != pos {
 			// The run ended, and the new run starts here.
 			pos = !pos
-			runFirstIdx = i
 			runs++
 		}
 
-		if runFirstIdx > 0 {
-			tv += math.Abs(d)
+		if d >= 0 {
+			posTV += d
+		} else {
+			negTV += -d
 		}
 	}
 	_, _, normTV := extrema(values)
 	return thrashing{
 		vs:     values,
 		runs:   runs,
-		tv:     tv,
+		tdtv:   tdtv(posTV, negTV),
 		normTV: normTV,
 	}
+}
+
+// tdtv computes a "trend-discounting total variation" that discounts variation
+// in the dominant direction (if there is one). If no direction is dominant, the
+// result roughly matches the total variation.
+//
+// The inputs tu and td are the upwards and (positive) downwards total
+// variations, respectively.
+//
+// Properties:
+// - symmetric in tu, td
+// - min(u,d) <= tdtv(tu,td) <= tu+td
+// - tdtv(u,0) = tdtv(0,u) = 0
+// - tdtv(u,u) = 2t
+// - tdtv(ku,kd) = k*tdtv(u,d) for k>=0
+func tdtv(tu, td float64) float64 {
+	tmin := min(tu, td)
+	if tmin == 0 {
+		// There's only one direction of movement, so we discount all variation.
+		return 0
+	}
+	frac := tmin / max(tu, td) // in [0, 1]
+	alpha := frac * frac       // exponent 2 makes it more "trend-sticky"
+	return alpha*(tu+td) + (1-alpha)*tmin
 }
 
 func extrema(vs []float64) (vmin, vmax, vrange float64) {

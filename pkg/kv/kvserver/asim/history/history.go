@@ -86,7 +86,7 @@ func (h *History) Thrashing(stat string) string {
 		if i > 0 {
 			_, _ = fmt.Fprintf(&buf, ", ")
 		}
-		tvpct := th.TVPercent()
+		tvpct := th.TDTVPercent()
 		_, _ = fmt.Fprintf(&buf, "s%d=%.0f%%", i+1, tvpct)
 		tvpcts[i] = tvpct
 	}
