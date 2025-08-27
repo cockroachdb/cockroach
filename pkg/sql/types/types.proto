@@ -540,6 +540,9 @@ message InternalType {
     // field. It previously contained an alias for any types where our internal
     // representation is different than the user specification. Examples are INT4,
     // FLOAT4, etc. Mostly for Postgres compatibility.
+    // TODO(rafi): remove when we no longer need compatibility with 25.3, which
+    // is the last version to reference VisibleType.
+    // See https://github.com/cockroachdb/cockroach/issues/152629.
     optional int32 visible_type = 6 [(gogoproto.nullable) = false];
 
     // ArrayElemType is deprecated in 19.2, since it is now superseded by the
