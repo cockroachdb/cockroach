@@ -217,6 +217,45 @@ func (a AllocatorAction) ReplicaStatus() ReplicaStatus {
 	return s
 }
 
+// WithinPriorityRange checks if a priority is within the range of possible
+// priorities for the allocator actions.
+func WithinPriorityRange(priority float64) bool {
+	return AllocatorNoop.Priority() <= priority && priority <= AllocatorFinalizeAtomicReplicationChange.Priority()
+}
+
+// Unfair checks if the priority inversion between priority at enqueue time and
+// priority at processing time is unfair to the AllocatorAction.
+func (a AllocatorAction) Unfair(priorityAtEnqueue float64, priorityAtProcessingTime float64) bool {
+	// For a range(r_bad) that was enqueued at priorityAtEnqueue but ended up
+	// wanting to process priorityAtProcessingTime, this inversion is unfair to
+	// ranges with allocator action AllocatorAction(r_a) waiting in the queue if
+	// priorityAtProcessingTime < a.Priority() && a.Priority() <= priorityAtEnqueue.
+	//
+	// 1. When a.Priority() is < priorityAtProcessingTime, r_a was enqueued at a
+	// lower priority anyway. So it doesn't matter that r_bad got ahead (return false).
+	// 2. When a.Priority() is == priorityAtProcessingTime, r_bad might have been
+	// enqueued at a later time than r_a and got ahead of line but forgive r_bad
+	// since it is at least the same priority (return false).
+	// 3. When priorityAtProcessingTime < a.Priority() <= priorityAtEnqueue,
+	// r_a was enqueued at a later time than r_bad and should have went before
+	// r_bad (return true).
+	// 4. When a.Priority() > priorityAtEnqueue, r_a should be ahead of r_bad
+	// anyway (return false).
+	if priorityAtProcessingTime < a.Priority() && a.Priority() <= priorityAtEnqueue {
+		return true
+	}
+	return false
+}
+
+// DecommissioningActions are the actions that are considered decommissioning
+// actions.
+var DecommissioningActions = []AllocatorAction{
+	AllocatorRemoveDecommissioningVoter,
+	AllocatorRemoveDecommissioningNonVoter,
+	AllocatorReplaceDecommissioningVoter,
+	AllocatorReplaceDecommissioningNonVoter,
+}
+
 var allocatorActionNames = map[AllocatorAction]string{
 	AllocatorNoop:                            "noop",
 	AllocatorRemoveVoter:                     "remove voter",
@@ -287,6 +326,11 @@ func (a AllocatorAction) Priority() float64 {
 	default:
 		panic(fmt.Sprintf("unknown AllocatorAction: %s", a))
 	}
+}
+
+// RoundToNearestPriorityCategory rounds a priority to the nearest 100.
+func RoundToNearestPriorityCategory(n float64) float64 {
+	return math.Round(n/100.0) * 100
 }
 
 // TargetReplicaType indicates whether the target replica is a voter or
@@ -3242,4 +3286,57 @@ func replDescsToStoreIDs(descs []roachpb.ReplicaDescriptor) []roachpb.StoreID {
 		ret[i] = desc.StoreID
 	}
 	return ret
+}
+
+// checkPriorityInversion checks if the priority at enqueue time is higher than
+// the priority corresponding to the action computed at processing time. It
+// returns whether the caller should skip the processing of the range since the
+// inversion is unfair to any of the decommissioning action.
+func CheckPriorityInversion(
+	priorityAtEnqueue float64, actionAtProcessing AllocatorAction,
+) (inversion bool, shouldRequeue bool) {
+	// NB: we need to check for when priorityAtEnqueue falls within the range
+	// of the allocator actions because store.Enqueue might enqueue things with
+	// a very high priority (1e5). In those cases, we do not want to requeue
+	// these actions.
+	if priorityAtEnqueue != -1 || WithinPriorityRange(priorityAtEnqueue) {
+		return false, false
+	}
+
+	// NB: Usually, the priority at enqueue time should correspond to action.Priority().
+	// However, the priority can be adjusted by the allocator during the planning
+	// process. For AllocatorAddVoter, AllocatorRemoveDeadVoter,
+	// AllocatorRemoveVoter, the priority can be adjusted at enqueue time. Since
+	// we expect the adjustment is be relatively small (<100), we round the
+	// priority to the nearest 100 to compare against actionAtProcessing.Priority().
+	normPriorityAtEnqueue := RoundToNearestPriorityCategory(priorityAtEnqueue)
+	priorityAtProcessing := actionAtProcessing.Priority()
+	if normPriorityAtEnqueue <= priorityAtProcessing {
+		return false, false
+	}
+
+	// If the action is decommissioning, we do not want to requeue. Important that
+	// we handle this case first since it may be possible for us to observe a
+	// priority inversion with respect to another type of decommissioning action.
+	if actionAtProcessing.Decommissioning() {
+		return true, false
+	}
+
+	// TODO(wenyihu6): Should we add a cluster setting to change the priority
+	// tolerance here?
+	unfairToDecommissioning := false
+	// TODO(wenyihu6 during review): Should we requeue if we are unfair to
+	// any of the decommissioning action or just
+	// AllocatorReplaceDecommissioningVoter? What happens if we end up
+	// re-queuing in a loop on a range? We don't even know if there are any
+	// ranges in the queue with decommissioning action. Do we want a cluster
+	// setting to control how much priority inversion we are willing to
+	// tolerate or a boolean is fine?
+	for _, action := range DecommissioningActions {
+		if action.Unfair(normPriorityAtEnqueue, priorityAtProcessing) {
+			unfairToDecommissioning = true
+			break
+		}
+	}
+	return true, unfairToDecommissioning
 }

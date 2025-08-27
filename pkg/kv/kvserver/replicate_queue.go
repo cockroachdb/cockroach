@@ -889,6 +889,22 @@ func (rq *replicateQueue) processOneChange(
 ) (requeue bool, _ error) {
 	change, err := rq.planner.PlanOneChange(
 		ctx, repl, desc, conf, plan.PlannerOptions{Scatter: scatter})
+
+	if DecommissioningPriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
+		inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action)
+		if inversion {
+			log.KvDistribution.Infof(ctx,
+				"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
+				shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
+		}
+		if shouldRequeue {
+			// Return true here to requeue the range. We can't return an error here
+			// because rq.process would return early and not requeue. See
+			// replicateQueue.process for more details.
+			return true /*requeue*/, nil
+		}
+	}
+
 	// When there is an error planning a change, return the error immediately
 	// and do not requeue. It is unlikely that the range or storepool state
 	// will change quickly enough in order to not get the same error and
