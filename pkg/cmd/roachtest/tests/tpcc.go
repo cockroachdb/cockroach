@@ -1499,10 +1499,10 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehousesGCE:   5000,
-		LoadWarehousesAWS:   5000,
-		LoadWarehousesAzure: 5000,
-		LoadWarehousesIBM:   5000,
+		LoadWarehousesGCE:   5500,
+		LoadWarehousesAWS:   5500,
+		LoadWarehousesAzure: 5500,
+		LoadWarehousesIBM:   5500,
 		EstimatedMaxGCE:     4500,
 		EstimatedMaxAWS:     4500,
 		EstimatedMaxAzure:   4500,
@@ -1514,10 +1514,10 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehousesGCE:   5000,
-		LoadWarehousesAWS:   5000,
-		LoadWarehousesAzure: 5000,
-		LoadWarehousesIBM:   5000,
+		LoadWarehousesGCE:   5500,
+		LoadWarehousesAWS:   5500,
+		LoadWarehousesAzure: 5500,
+		LoadWarehousesIBM:   5500,
 		EstimatedMaxGCE:     4500,
 		EstimatedMaxAWS:     4500,
 		EstimatedMaxAzure:   4500,
@@ -1584,10 +1584,10 @@ func registerTPCC(r registry.Registry) {
 		Chaos:      true,
 		LoadConfig: singlePartitionedLoadgen,
 
-		LoadWarehousesGCE:   3000,
-		LoadWarehousesAWS:   3000,
-		LoadWarehousesAzure: 3000,
-		LoadWarehousesIBM:   3000,
+		LoadWarehousesGCE:   3500,
+		LoadWarehousesAWS:   3500,
+		LoadWarehousesAzure: 3500,
+		LoadWarehousesIBM:   3500,
 		EstimatedMaxGCE:     2500,
 		EstimatedMaxAWS:     2500,
 		EstimatedMaxAzure:   2500,
@@ -1620,10 +1620,10 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehousesGCE:   5000,
-		LoadWarehousesAWS:   5000,
-		LoadWarehousesAzure: 5000,
-		LoadWarehousesIBM:   5000,
+		LoadWarehousesGCE:   5500,
+		LoadWarehousesAWS:   5500,
+		LoadWarehousesAzure: 5500,
+		LoadWarehousesIBM:   5500,
 		EstimatedMaxGCE:     4500,
 		EstimatedMaxAWS:     4500,
 		EstimatedMaxAzure:   4500,
@@ -1710,10 +1710,10 @@ func registerTPCC(r registry.Registry) {
 			Nodes: 3,
 			CPUs:  16,
 
-			LoadWarehousesGCE:   5000,
-			LoadWarehousesAWS:   5000,
-			LoadWarehousesAzure: 5000,
-			LoadWarehousesIBM:   5000,
+			LoadWarehousesGCE:   5500,
+			LoadWarehousesAWS:   5500,
+			LoadWarehousesAzure: 5500,
+			LoadWarehousesIBM:   5500,
 			EstimatedMaxGCE:     4500,
 			EstimatedMaxAWS:     4500,
 			EstimatedMaxAzure:   4500,
@@ -1731,10 +1731,10 @@ func registerTPCC(r registry.Registry) {
 			Nodes: 3,
 			CPUs:  16,
 
-			LoadWarehousesGCE:   5000,
-			LoadWarehousesAWS:   5000,
-			LoadWarehousesAzure: 5000,
-			LoadWarehousesIBM:   5000,
+			LoadWarehousesGCE:   5500,
+			LoadWarehousesAWS:   5500,
+			LoadWarehousesAzure: 5500,
+			LoadWarehousesIBM:   5500,
 			EstimatedMaxGCE:     4500,
 			EstimatedMaxAWS:     4500,
 			EstimatedMaxAzure:   4500,
@@ -2331,6 +2331,13 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			}
 			res = tpcc.MergeResults(results...)
 			failErr = res.FailureError()
+		}
+
+		// Print the result.
+		if failErr == nil {
+			ttycolor.Stdout(ttycolor.Green)
+			t.L().Printf("--- SEARCH ITER PASS: TPCC %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
+				warehouses, res.TpmC(), res.Efficiency())
 			// If the active warehouses have reached the load warehouses, fail the test;
 			// it needs to be updated to allow for more warehouses. Note that the line
 			// search assumes that the test fails at the number of load warehouses, so it
@@ -2346,13 +2353,6 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				)
 				t.Fatal(err)
 			}
-		}
-
-		// Print the result.
-		if failErr == nil {
-			ttycolor.Stdout(ttycolor.Green)
-			t.L().Printf("--- SEARCH ITER PASS: TPCC %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
-				warehouses, res.TpmC(), res.Efficiency())
 		} else {
 			ttycolor.Stdout(ttycolor.Red)
 			t.L().Printf("--- SEARCH ITER FAIL: TPCC %d resulted in %.1f tpmC and failed due to %v",
