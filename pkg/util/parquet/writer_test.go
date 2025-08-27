@@ -267,12 +267,9 @@ func TestBasicDatums(t *testing.T) {
 				columnNames: []string{"a", "b"},
 			},
 			datums: func() ([][]tree.Datum, error) {
-				da := tree.NewDArray(types.Int)
-				da.Array = tree.Datums{tree.NewDInt(0), tree.NewDInt(1)}
-				da2 := tree.NewDArray(types.Int)
-				da2.Array = tree.Datums{tree.NewDInt(2), tree.DNull}
-				da3 := tree.NewDArray(types.Int)
-				da3.Array = tree.Datums{}
+				da := tree.NewDArrayFromDatums(types.Int, tree.Datums{tree.NewDInt(0), tree.NewDInt(1)})
+				da2 := tree.NewDArrayFromDatums(types.Int, tree.Datums{tree.NewDInt(2), tree.DNull})
+				da3 := tree.NewDArrayFromDatums(types.Int, tree.Datums{})
 				return [][]tree.Datum{
 					{da, da2}, {da3, tree.DNull},
 				}, nil
@@ -700,9 +697,7 @@ func TestBufferedBytes(t *testing.T) {
 	sch, err := NewSchema([]string{"a", "b", "c", "d"}, []*types.T{types.Int, types.String, tupleTyp, types.IntArray})
 	require.NoError(t, err)
 	makeArray := func(vals ...tree.Datum) *tree.DArray {
-		da := tree.NewDArray(types.Int)
-		da.Array = vals
-		return da
+		return tree.NewDArrayFromDatums(types.Int, vals)
 	}
 
 	for _, tc := range []struct {

@@ -1581,9 +1581,8 @@ func NullGenerator(typ *types.T) (eval.ValueGenerator, error) {
 		return nil, errors.AssertionFailedf("generator expected to return multiple columns")
 	}
 	arrs := make([]*tree.DArray, len(typ.TupleContents()))
-	for i := range typ.TupleContents() {
-		arrs[i] = &tree.DArray{}
-		arrs[i].Array = tree.Datums{tree.DNull}
+	for i, paramTyp := range typ.TupleContents() {
+		arrs[i] = tree.NewDArrayFromDatums(paramTyp, tree.Datums{tree.DNull})
 	}
 	return &multipleArrayValueGenerator{arrays: arrs}, nil
 }

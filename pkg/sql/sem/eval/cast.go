@@ -617,12 +617,12 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DArray:
 			switch d.ParamTyp.Family() {
 			case types.FloatFamily, types.IntFamily, types.DecimalFamily:
+				if d.HasNulls() {
+					return nil, pgerror.Newf(pgcode.NullValueNotAllowed,
+						"array must not contain nulls")
+				}
 				v := make(vector.T, len(d.Array))
 				for i, elem := range d.Array {
-					if elem == tree.DNull {
-						return nil, pgerror.Newf(pgcode.NullValueNotAllowed,
-							"array must not contain nulls")
-					}
 					datum, err := performCast(ctx, evalCtx, elem, types.Float4, false)
 					if err != nil {
 						return nil, err

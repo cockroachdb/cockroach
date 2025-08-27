@@ -2226,7 +2226,7 @@ func (d *DArray) TypeCheck(_ context.Context, _ *SemaContext, desired *types.T) 
 	// ARRAY[]
 	// ARRAY[NULL, NULL]
 	if (d.ParamTyp.Family() == types.UnknownFamily || d.ParamTyp.Family() == types.AnyFamily) &&
-		(!d.HasNonNulls) {
+		(!d.HasNonNulls()) {
 		if desired.Family() != types.ArrayFamily {
 			// We can't desire a non-array type here.
 			return d, nil
