@@ -2537,11 +2537,8 @@ func (t *T) Unmarshal(data []byte) error {
 // setting required values. This is necessary to preserve backwards-
 // compatibility with older formats (e.g. restoring database from old backup).
 //
-// This can be removed once we can ensure that all descriptors have been
-// rewritten with the newer format. Note that the migration in first_upgrade.go
-// is not sufficient to ensure that all descriptors have been rewritten, since
-// that migration is only based on post-deserialization changes, but the type
-// upgrade logic happens _during_ deserialization.
+// This can be removed once we no longer need compatibility with v25.3 or
+// earlier. See https://github.com/cockroachdb/cockroach/issues/152629.
 func (t *T) upgradeType() error {
 	switch t.Family() {
 	case IntFamily:
