@@ -153,16 +153,16 @@ func TestTopicForEvent(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg, err := makeChangefeedConfigFromJobDetails(context.Background(), tc.details, nil)
+			// Can pass in nil for execCfg to AllTargets because we're not testing
+			// database-level targets.
+			targets, err := AllTargets(context.Background(), tc.details, nil)
+			require.NoError(t, err)
+			cfg, err := makeChangefeedConfigFromJobDetails(tc.details, targets)
 			require.NoError(t, err)
 			c := kvEventToRowConsumer{
 				details:              cfg,
 				topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 			}
-			// Can pass in nil for execCfg to AllTargets because we're not testing
-			// database-level targets.
-			targets, err := AllTargets(context.Background(), tc.details, nil)
-			require.NoError(t, err)
 			tn, err := MakeTopicNamer(targets)
 			require.NoError(t, err)
 
