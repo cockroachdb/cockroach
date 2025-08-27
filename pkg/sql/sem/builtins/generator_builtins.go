@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/workloadindexrec"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -4060,7 +4060,7 @@ func makeInternallyExecutedQueryGeneratorOverload(
 			// internal executor will parse the query too, but we'd get an
 			// assertion failure error if we gave it more than one statement -
 			// we catch those cases here.
-			stmts, err := parser.Parse(query)
+			stmts, err := parserutils.Parse(query)
 			if err != nil {
 				return nil, err
 			}

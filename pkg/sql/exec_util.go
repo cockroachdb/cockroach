@@ -74,12 +74,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rolemembershipcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -144,6 +146,18 @@ func init() {
 		ie := evalCtx.JobExecContext.(JobExecContext).ExecCfg().InternalDB.Executor()
 		return ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
 	}
+	DoParserInjection()
+}
+
+// DoParserInjection performs all the necessary sql/parser injections within the
+// sql directory.
+func DoParserInjection() {
+	parserutils.Parse = parser.Parse
+	parserutils.ParseExpr = parser.ParseExpr
+	parserutils.ParseExprs = parser.ParseExprs
+	parserutils.ParseOne = parser.ParseOne
+	parserutils.ParseQualifiedTableName = parser.ParseQualifiedTableName
+	parserutils.PLpgSQLParse = plpgsqlparser.Parse
 }
 
 // ClusterOrganization is the organization name.

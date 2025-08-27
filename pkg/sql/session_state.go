@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -145,7 +146,7 @@ func (p *planner) DeserializeSessionState(
 
 	for _, prepStmt := range m.PreparedStatements {
 		stmts, err := parser.ParseWithOptions(
-			prepStmt.SQL, parser.DefaultParseOptions.WithIntType(parser.NakedIntTypeFromDefaultIntSize(sd.DefaultIntSize)),
+			prepStmt.SQL, parser.DefaultParseOptions.WithIntType(parserutils.NakedIntTypeFromDefaultIntSize(sd.DefaultIntSize)),
 		)
 		if err != nil {
 			return nil, err

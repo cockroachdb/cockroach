@@ -10,8 +10,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,4 +56,52 @@ func PopulateErrorDetails(
 	// Output a caret indicating where the last token starts.
 	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", int(lastTokPos)-j))
 	return errors.WithDetail(retErr, buf.String())
+}
+
+// NakedIntTypeFromDefaultIntSize given the size in bits or bytes (preferred)
+// of how a "naked" INT type should be parsed returns the corresponding integer
+// type.
+func NakedIntTypeFromDefaultIntSize(defaultIntSize int32) *types.T {
+	switch defaultIntSize {
+	case 4, 32:
+		return types.Int4
+	default:
+		return types.Int
+	}
+}
+
+// Parse is the same as sql/parser.Parse but is injected to avoid a dependency
+// on the parser package.
+var Parse = func(sql string) (statements.Statements, error) {
+	return statements.Statements{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
+
+// ParseExpr is the same as sql/parser.ParseExpr but is injected to avoid a
+// dependency on the parser package.
+var ParseExpr = func(sql string) (tree.Expr, error) {
+	return nil, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
+
+// ParseExprs is the same as sql/parser.ParseExprs but is injected to avoid a
+// dependency on the parser package.
+var ParseExprs = func(exprs []string) (tree.Exprs, error) {
+	return nil, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
+
+// ParseOne is the same as sql/parser.ParseOne but is injected to avoid a
+// dependency on the parser package.
+var ParseOne = func(sql string) (statements.Statement[tree.Statement], error) {
+	return statements.Statement[tree.Statement]{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
+
+// ParseQualifiedTableName is the same as sql/parser.ParseQualifiedTableName but
+// is injected to avoid a dependency on the parser package.
+var ParseQualifiedTableName = func(sql string) (*tree.TableName, error) {
+	return nil, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
+}
+
+// PLpgSQLParse is the same as sql/plpgsql/parser.Parse but is injected to avoid
+// a dependency on the PLpgSQL parser package.
+var PLpgSQLParse = func(sql string) (statements.PLpgStatement, error) {
+	return statements.PLpgStatement{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
 }
