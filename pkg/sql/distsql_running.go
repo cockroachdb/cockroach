@@ -824,12 +824,43 @@ func (dsp *DistSQLPlanner) Run(
 			// which are using the internal executor is error-prone, so we just
 			// disable the Streamer API for the "super-set" of problematic
 			// cases.
+			//
+			// Furthermore, when we have buffered some writes and a system
+			// column that requires MVCC decoding is requested, we disable the
+			// usage of the streamer since we must have access to the RootTxn to
+			// handle such scenario.
+			// TODO(#144166): relax this.
 			mustUseRootTxn := func() bool {
 				for _, p := range plan.Processors {
 					if n := p.Spec.Core.LocalPlanNode; n != nil {
 						if localPlanNodeMightUseTxn(n) {
 							log.VEventf(ctx, 3, "must use root txn due to %q wrapped planNode", n.Name)
 							return true
+						}
+					} else if txn.HasBufferedWrites() {
+						switch {
+						case p.Spec.Core.TableReader != nil:
+							if fetchSpecRequiresMVCCDecoding(p.Spec.Core.TableReader.FetchSpec) {
+								log.VEventf(ctx, 3, "must use root txn due to system column that requires MVCC decoding")
+								return true
+							}
+						case p.Spec.Core.JoinReader != nil:
+							if fetchSpecRequiresMVCCDecoding(p.Spec.Core.JoinReader.FetchSpec) {
+								log.VEventf(ctx, 3, "must use root txn due to system column that requires MVCC decoding")
+								return true
+							}
+						case p.Spec.Core.InvertedJoiner != nil:
+							if fetchSpecRequiresMVCCDecoding(p.Spec.Core.InvertedJoiner.FetchSpec) {
+								log.VEventf(ctx, 3, "must use root txn due to system column that requires MVCC decoding")
+								return true
+							}
+						case p.Spec.Core.ZigzagJoiner != nil:
+							for _, side := range p.Spec.Core.ZigzagJoiner.Sides {
+								if fetchSpecRequiresMVCCDecoding(side.FetchSpec) {
+									log.VEventf(ctx, 3, "must use root txn due to system column that requires MVCC decoding")
+									return true
+								}
+							}
 						}
 					}
 				}
