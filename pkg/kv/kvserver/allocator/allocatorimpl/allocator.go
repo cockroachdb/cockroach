@@ -3245,3 +3245,62 @@ func replDescsToStoreIDs(descs []roachpb.ReplicaDescriptor) []roachpb.StoreID {
 	}
 	return ret
 }
+
+// roundToNearestPriorityCategory rounds a priority to the nearest 100. n should be non-negative.
+func roundToNearestPriorityCategory(n float64) float64 {
+	return math.Round(n/100.0) * 100
+}
+
+// WithinPriorityRange checks if a priority is within the range of possible
+// priorities for the allocator actions.
+func withinPriorityRange(priority float64) bool {
+	return AllocatorNoop.Priority() <= priority && priority <= AllocatorFinalizeAtomicReplicationChange.Priority()
+}
+
+// CheckPriorityInversion checks if the priority at enqueue time is higher than
+// the priority corresponding to the action computed at processing time. It
+// returns whether there was a priority inversion and whether the caller should
+// skip the processing of the range since the inversion is considered unfair.
+// Currently, we only consider the inversion as unfair if it has gone from a
+// repair action to lowest priority (AllocatorConsiderRebalance). We let
+// AllocatorRangeUnavailable, AllocatorNoop pass through since they are noop.
+//
+// NB: If shouldRequeue is true, isInversion must be true.
+func CheckPriorityInversion(
+	priorityAtEnqueue float64, actionAtProcessing AllocatorAction,
+) (isInversion bool, shouldRequeue bool) {
+	// priorityAtEnqueue of -1 is a special case reserved for processing logic to
+	// run even if there’s a priority inversion. If the priority is not -1, the
+	// range may be re-queued to be processed with the correct priority. It is
+	// used for things that call into baseQueue.process without going through the
+	// replicate priority queue. For example, s.ReplicateQueueDryRun or
+	// r.scatterRangeAndRandomizeLeases.
+
+	// NB: we need to check for when priorityAtEnqueue falls within the range
+	// of the allocator actions because store.Enqueue might enqueue things with
+	// a very high priority (1e5). In those cases, we do not want to requeue
+	// these actions or count it as an inversion.
+	if priorityAtEnqueue == -1 || !withinPriorityRange(priorityAtEnqueue) {
+		return false, false
+	}
+
+	if priorityAtEnqueue > AllocatorConsiderRebalance.Priority() && actionAtProcessing == AllocatorConsiderRebalance {
+		return true, true
+	}
+
+	// NB: Usually, the priority at enqueue time should correspond to
+	// action.Priority(). However, for AllocatorAddVoter,
+	// AllocatorRemoveDeadVoter, AllocatorRemoveVoter, the priority can be
+	// adjusted at enqueue time (See ComputeAction for more details). However, we
+	// expect the adjustment to be relatively small (<100). So we round the
+	// priority to the nearest 100 to compare against
+	// actionAtProcessing.Priority(). Without this rounding, we might treat going
+	// from 10000 to 999 as an inversion, but it was just due to the adjustment.
+	// Note that priorities at AllocatorFinalizeAtomicReplicationChange,
+	// AllocatorRemoveLearner, and AllocatorReplaceDeadVoter will be rounded to
+	// the same priority. They are so close to each other, so we don't really
+	// count it as an inversion among them.
+	normPriorityAtEnqueue := roundToNearestPriorityCategory(priorityAtEnqueue)
+	isInversion = normPriorityAtEnqueue > actionAtProcessing.Priority()
+	return isInversion, false
+}
