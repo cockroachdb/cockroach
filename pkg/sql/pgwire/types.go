@@ -139,7 +139,7 @@ func (b *writeBuffer) writeTextDatum(
 	t *types.T,
 ) {
 	if log.V(2) {
-		log.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
+		log.Dev.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
 	}
 	if d == tree.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -327,7 +327,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 	}()
 	typ := vecs.Vecs[vecIdx].Type()
 	if log.V(2) {
-		log.Infof(ctx, "pgwire writing TEXT columnar element of type: %s", typ)
+		log.Dev.Infof(ctx, "pgwire writing TEXT columnar element of type: %s", typ)
 	}
 	if vecs.Nulls[vecIdx].MaybeHasNulls() && vecs.Nulls[vecIdx].NullAt(rowIdx) {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -615,7 +615,7 @@ func (b *writeBuffer) writeBinaryDatum(
 	ctx context.Context, d tree.Datum, sessionLoc *time.Location, t *types.T,
 ) {
 	if log.V(2) {
-		log.Infof(ctx, "pgwire writing BINARY datum of type: %T, %#v", d, d)
+		log.Dev.Infof(ctx, "pgwire writing BINARY datum of type: %T, %#v", d, d)
 	}
 	if d == tree.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -843,7 +843,7 @@ func writeBinaryDatumNotNull(
 		}
 		b.putInt32(ndims)
 		hasNulls := 0
-		if v.HasNulls {
+		if v.HasNulls() {
 			hasNulls = 1
 		}
 		oid := v.ParamTyp.Oid()
@@ -900,7 +900,7 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 ) {
 	typ := vecs.Vecs[vecIdx].Type()
 	if log.V(2) {
-		log.Infof(ctx, "pgwire writing BINARY columnar element of type: %s", typ)
+		log.Dev.Infof(ctx, "pgwire writing BINARY columnar element of type: %s", typ)
 	}
 	if vecs.Nulls[vecIdx].MaybeHasNulls() && vecs.Nulls[vecIdx].NullAt(rowIdx) {
 		// NULL is encoded as -1; all other values have a length prefix.

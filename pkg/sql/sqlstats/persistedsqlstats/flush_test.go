@@ -1354,7 +1354,8 @@ func BenchmarkSQLStatsFlush(b *testing.B) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					SQLStatsKnobs: &sqlstats.TestingKnobs{
-						StubTimeNow: fakeTime.Now,
+						StubTimeNow:         fakeTime.Now,
+						SynchronousSQLStats: true,
 					},
 				},
 			},
@@ -1386,7 +1387,7 @@ func BenchmarkSQLStatsFlush(b *testing.B) {
 
 		gen := genPermutations()
 
-		testutils.RunValues(b, "fingerprintCardinality", []int64{10, 100, 1000, 7000}, func(b *testing.B, uniqueFingerprintCount int64) {
+		testutils.RunValues(b, "fingerprintCardinality", []int64{10, 100, 1000}, func(b *testing.B, uniqueFingerprintCount int64) {
 			ctx := context.Background()
 			for iter := 0; iter < b.N; iter++ {
 				for i := int64(0); i < uniqueFingerprintCount; i++ {

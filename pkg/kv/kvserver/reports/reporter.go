@@ -151,7 +151,7 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 					if err := stats.update(
 						ctx, &constraintsSaver, &replStatsSaver, &criticalLocSaver,
 					); err != nil {
-						log.Errorf(ctx, "failed to generate replication reports: %s", err)
+						log.Dev.Errorf(ctx, "failed to generate replication reports: %s", err)
 					}
 				}
 				timer.Reset(interval)
@@ -230,7 +230,7 @@ func (stats *Reporter) update(
 		&constraintConfVisitor, &localityStatsVisitor, &replicationStatsVisitor,
 	); err != nil {
 		if errors.HasType(err, (*visitorError)(nil)) {
-			log.Errorf(ctx, "some reports have not been generated: %s", err)
+			log.Dev.Errorf(ctx, "some reports have not been generated: %s", err)
 		} else {
 			return errors.Wrap(err, "failed to compute constraint conformance report")
 		}
@@ -270,7 +270,7 @@ func (stats *Reporter) meta1LeaseHolderStore(ctx context.Context) *kvserver.Stor
 		return nil
 	}
 	if err != nil {
-		log.Fatalf(ctx, "unexpected error when visiting stores: %s", err)
+		log.Dev.Fatalf(ctx, "unexpected error when visiting stores: %s", err)
 	}
 	if repl.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
 		return store
@@ -707,7 +707,7 @@ func (r *meta2RangeIter) readBatch(ctx context.Context) (retErr error) {
 	defer func() { r.handleErr(ctx, retErr) }()
 
 	if len(r.buffer) > 0 {
-		log.Fatalf(ctx, "buffer not exhausted: %d keys remaining", len(r.buffer))
+		log.Dev.Fatalf(ctx, "buffer not exhausted: %d keys remaining", len(r.buffer))
 	}
 	if r.txn == nil {
 		r.txn = r.db.NewTxn(ctx, "rangeStoreImpl")
@@ -755,7 +755,7 @@ func (r *meta2RangeIter) handleErr(ctx context.Context, err error) {
 		return
 	}
 	if errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
-		log.Warningf(ctx, "unexpected retryable error from "+
+		log.Dev.Warningf(ctx, "unexpected retryable error from "+
 			"read-only transaction with fixed read timestamp: %s", err)
 	}
 	if r.txn != nil {

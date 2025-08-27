@@ -428,7 +428,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 		// is exit.WithCode, it will never return, outputLogEntry()'s defer will
 		// never complete and all is well. If the exit function was
 		// overridden, then the client that has overridden the exit
-		// function is expecting log.Fatal to return and all is well too.
+		// function is expecting log.Dev.Fatal to return and all is well too.
 	}
 }
 

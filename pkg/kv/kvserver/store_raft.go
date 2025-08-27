@@ -283,7 +283,7 @@ func (s *Store) HandleSnapshot(
 		if err != nil && ctx.Err() != nil {
 			// Log trace of incoming snapshot on context cancellation (e.g.
 			// times out or caller goes away).
-			log.Infof(ctx, "incoming snapshot stream failed with error: %v\ntrace:\n%v",
+			log.Dev.Infof(ctx, "incoming snapshot stream failed with error: %v\ntrace:\n%v",
 				err, tracing.SpanFromContext(ctx).GetConfiguredRecording())
 		}
 		return err
@@ -301,7 +301,7 @@ func (s *Store) uncoalesceBeats(
 		return
 	}
 	if log.V(4) {
-		log.Infof(ctx, "uncoalescing %d beats of type %v: %+v", len(beats), msgT, beats)
+		log.Dev.Infof(ctx, "uncoalescing %d beats of type %v: %+v", len(beats), msgT, beats)
 	}
 	beatReqs := make([]kvserverpb.RaftMessageRequest, len(beats))
 	batch := s.scheduler.NewEnqueueBatch()
@@ -331,7 +331,7 @@ func (s *Store) uncoalesceBeats(
 			LaggingFollowersOnQuiesce: beat.LaggingFollowersOnQuiesce,
 		}
 		if log.V(4) {
-			log.Infof(ctx, "uncoalesced beat: %+v", beatReqs[i])
+			log.Dev.Infof(ctx, "uncoalesced beat: %+v", beatReqs[i])
 		}
 
 		enqueue := s.HandleRaftUncoalescedRequest(ctx, &beatReqs[i], respStream)
@@ -355,7 +355,7 @@ func (s *Store) HandleRaftRequest(
 	// already tied to the Store's Stopper.
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		if req.RangeID != 0 {
-			log.Fatalf(ctx, "coalesced heartbeats must have rangeID == 0")
+			log.Dev.Fatalf(ctx, "coalesced heartbeats must have rangeID == 0")
 		}
 		s.uncoalesceBeats(ctx, req.Heartbeats, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeat, respStream)
 		s.uncoalesceBeats(ctx, req.HeartbeatResps, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeatResp, respStream)
@@ -375,7 +375,7 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) (enqueue bool) {
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
-		log.Fatalf(ctx, "HandleRaftUncoalescedRequest cannot be given coalesced heartbeats or heartbeat responses, received %s", req)
+		log.Dev.Fatalf(ctx, "HandleRaftUncoalescedRequest cannot be given coalesced heartbeats or heartbeat responses, received %s", req)
 	}
 	// HandleRaftRequest is called on locally uncoalesced heartbeats (which are
 	// not sent over the network if the environment variable is set) so do not
@@ -393,7 +393,7 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		s.metrics.RaftRcvdDropped.Inc(1)
 		s.metrics.RaftRcvdDroppedBytes.Inc(size)
 		if logRaftRecvQueueFullEvery.ShouldLog() {
-			log.Warningf(ctx, "raft receive queue for r%d is full", req.RangeID)
+			log.Dev.Warningf(ctx, "raft receive queue for r%d is full", req.RangeID)
 		}
 		return false
 	}
@@ -443,16 +443,16 @@ func (s *Store) processRaftRequestWithReplica(
 	defer r.MeasureRaftCPUNanos(grunning.Time())
 
 	if verboseRaftLoggingEnabled() {
-		log.Infof(ctx, "incoming raft message:\n%s", raft.DescribeMessage(req.Message, raftEntryFormatter))
+		log.Dev.Infof(ctx, "incoming raft message:\n%s", raft.DescribeMessage(req.Message, raftEntryFormatter))
 	}
 
 	if req.Message.Type == raftpb.MsgSnap {
-		log.Fatalf(ctx, "unexpected snapshot: %+v", req)
+		log.Dev.Fatalf(ctx, "unexpected snapshot: %+v", req)
 	}
 
 	if req.Quiesce {
 		if req.Message.Type != raftpb.MsgHeartbeat {
-			log.Fatalf(ctx, "unexpected quiesce: %+v", req)
+			log.Dev.Fatalf(ctx, "unexpected quiesce: %+v", req)
 		}
 		if r.maybeQuiesceOnNotify(
 			ctx,
@@ -498,7 +498,7 @@ func (s *Store) processRaftSnapshotRequest(
 	) (pErr *kvpb.Error) {
 		ctx = r.AnnotateCtx(ctx)
 		if snapHeader.RaftMessageRequest.Message.Type != raftpb.MsgSnap {
-			log.Fatalf(ctx, "expected snapshot: %+v", snapHeader.RaftMessageRequest)
+			log.Dev.Fatalf(ctx, "expected snapshot: %+v", snapHeader.RaftMessageRequest)
 		}
 
 		typ := removePlaceholderFailed
@@ -517,7 +517,7 @@ func (s *Store) processRaftSnapshotRequest(
 			// snapshot's is at least RaftInitialLogIndex).
 			if inSnap.placeholder != nil {
 				if _, err := s.removePlaceholder(ctx, inSnap.placeholder, typ); err != nil {
-					log.Fatalf(ctx, "unable to remove placeholder: %s", err)
+					log.Dev.Fatalf(ctx, "unable to remove placeholder: %s", err)
 				}
 			}
 		}()
@@ -559,7 +559,7 @@ func (s *Store) processRaftSnapshotRequest(
 			// (i.e. follower was able to catch up via the log in the interim) or when
 			// multiple snapshots raced (as is possible when raft leadership changes
 			// and both the old and new leaders send snapshots).
-			log.Infof(ctx, "ignored stale snapshot at index %d", snapHeader.RaftMessageRequest.Message.Snapshot.Metadata.Index)
+			log.Dev.Infof(ctx, "ignored stale snapshot at index %d", snapHeader.RaftMessageRequest.Message.Snapshot.Metadata.Index)
 			s.metrics.RangeSnapshotRecvUnusable.Inc(1)
 		}
 		// If the snapshot was applied and acked with an MsgAppResp, return that
@@ -604,7 +604,7 @@ func (s *Store) HandleRaftResponse(
 				if replErr != nil {
 					// RangeNotFoundErrors are expected here; nothing else is.
 					if !errors.HasType(replErr, (*kvpb.RangeNotFoundError)(nil)) {
-						log.Errorf(ctx, "%v", replErr)
+						log.Dev.Errorf(ctx, "%v", replErr)
 					}
 					return nil
 				}
@@ -633,7 +633,7 @@ func (s *Store) HandleRaftResponse(
 				// could be re-added with a higher replicaID, but we want to clear the
 				// replica's data before that happens.
 				if log.V(1) {
-					log.Infof(ctx, "setting local replica to destroyed due to ReplicaTooOld error")
+					log.Dev.Infof(ctx, "setting local replica to destroyed due to ReplicaTooOld error")
 				}
 
 				repl.mu.Unlock()
@@ -643,7 +643,7 @@ func (s *Store) HandleRaftResponse(
 				if replErr != nil {
 					// RangeNotFoundErrors are expected here; nothing else is.
 					if !errors.HasType(replErr, (*kvpb.RangeNotFoundError)(nil)) {
-						log.Errorf(ctx, "%v", replErr)
+						log.Dev.Errorf(ctx, "%v", replErr)
 					}
 					return nil
 				}
@@ -655,7 +655,7 @@ func (s *Store) HandleRaftResponse(
 				// proper check.
 				s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityDefault)
 			case *kvpb.StoreNotFoundError:
-				log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
+				log.Dev.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
 					resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
 				// This error is expected if the remote node restarted with fewer stores
 				// (before rebalancing off that now dead store is complete).
@@ -665,11 +665,11 @@ func (s *Store) HandleRaftResponse(
 				// NB: as of v25.2, receivers no longer return this error in this situation
 				// and eventually, this case can be removed.
 			default:
-				log.Warningf(ctx, "got error from r%d, replica %s: %s",
+				log.Dev.Warningf(ctx, "got error from r%d, replica %s: %s",
 					resp.RangeID, resp.FromReplica, val)
 			}
 		default:
-			log.Warningf(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
+			log.Dev.Warningf(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
 		}
 		return nil
 	})
@@ -763,7 +763,7 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	// processing time means we'll have starved local replicas of ticks and
 	// remote replicas will likely start campaigning.
 	if elapsed >= defaultReplicaRaftMuWarnThreshold {
-		log.Infof(ctx, "%s; node might be overloaded", stats)
+		log.Dev.Infof(ctx, "%s; node might be overloaded", stats)
 	}
 }
 
@@ -784,7 +784,7 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 
 	exists, err := r.tick(ctx, livenessMap, ioThresholds)
 	if err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 	}
 	s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(start).Nanoseconds())
 	return exists // ready
@@ -1006,7 +1006,7 @@ func (s *Store) updateIOThresholdMap() {
 	// Log whenever the set of overloaded stores changes.
 	shouldLog := log.V(1) || old.seq != cur.seq
 	if shouldLog {
-		log.Infof(
+		log.Dev.Infof(
 			s.AnnotateCtx(context.Background()), "pausable stores: %+v", cur)
 	}
 }
@@ -1065,7 +1065,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 	} else if len(beats) == 0 {
 		msgType = raftpb.MsgHeartbeatResp
 	} else {
-		log.Fatal(ctx, "cannot coalesce both heartbeats and responses")
+		log.Dev.Fatal(ctx, "cannot coalesce both heartbeats and responses")
 	}
 
 	chReq := newRaftMessageRequest()
@@ -1088,7 +1088,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 	}
 
 	if log.V(4) {
-		log.Infof(ctx, "sending raft request (coalesced) %+v", chReq)
+		log.Dev.Infof(ctx, "sending raft request (coalesced) %+v", chReq)
 	}
 
 	if !s.cfg.Transport.SendAsync(chReq, rpcbase.SystemClass) {

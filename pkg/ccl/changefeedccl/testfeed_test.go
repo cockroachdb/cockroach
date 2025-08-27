@@ -186,7 +186,7 @@ func (t seenTrackerMap) markSeen(m *cdctest.TestFeedMessage) (isNew bool) {
 		if marshalledValue, err := gojson.Marshal(valueMap); err == nil {
 			normalizedValue = marshalledValue
 		} else {
-			log.Infof(context.Background(), "could not marshal test feed message %v", err)
+			log.Dev.Infof(context.Background(), "could not marshal test feed message %v", err)
 		}
 	} else {
 		// JSON unmarshal failed, try Protobuf
@@ -199,12 +199,12 @@ func (t seenTrackerMap) markSeen(m *cdctest.TestFeedMessage) (isNew bool) {
 			}
 			marshalledValue, err := protoutil.Marshal(&msg)
 			if err != nil {
-				log.Infof(context.Background(), "could not re-marshal normalized Protobuf: %v", err)
+				log.Dev.Infof(context.Background(), "could not re-marshal normalized Protobuf: %v", err)
 			} else {
 				normalizedValue = marshalledValue
 			}
 		} else {
-			log.Infof(context.Background(), "could not decode test feed message as JSON or Protobuf: %v, %v", err, m.Value)
+			log.Dev.Infof(context.Background(), "could not decode test feed message as JSON or Protobuf: %v, %v", err, m.Value)
 		}
 	}
 
@@ -216,7 +216,7 @@ func (t seenTrackerMap) markSeen(m *cdctest.TestFeedMessage) (isNew bool) {
 	seenKey := m.Topic + m.Partition + string(m.Key) + string(normalizedValue)
 	if _, ok := t[seenKey]; ok {
 		if log.V(1) {
-			log.Infof(context.Background(), "skip dup %s", seenKey)
+			log.Dev.Infof(context.Background(), "skip dup %s", seenKey)
 		}
 		return false
 	}
@@ -651,7 +651,7 @@ func (f *jobFeed) Close() error {
 			return nil
 		}
 		if _, err := f.db.Exec(`CANCEL JOB $1`, f.jobID); err != nil {
-			log.Infof(context.Background(), `could not cancel feed %d: %v`, f.jobID, err)
+			log.Dev.Infof(context.Background(), `could not cancel feed %d: %v`, f.jobID, err)
 		} else {
 			return f.WaitForState(func(s jobs.State) bool { return s == jobs.StateCanceled })
 		}
@@ -878,7 +878,7 @@ func (e *enterpriseFeedFactory) AsUser(user string, fn func(*sqlutils.SQLRunner)
 }
 
 func (e enterpriseFeedFactory) startFeedJob(f *jobFeed, create string, args ...interface{}) error {
-	log.Infof(context.Background(), "Starting feed job: %q", create)
+	log.Dev.Infof(context.Background(), "Starting feed job: %q", create)
 	e.di.prepareJob(f)
 	if err := e.db.QueryRow(create, args...).Scan(&f.jobID); err != nil {
 		e.di.pendingJob = nil
@@ -1604,7 +1604,7 @@ func (c *cloudFeed) walkDir(path string, d fs.DirEntry, err error) error {
 		c.seenFiles = make(map[string]struct{})
 	}
 	if _, seen := c.seenFiles[path]; seen {
-		log.Infof(context.Background(), "Skip file %s", path)
+		log.Dev.Infof(context.Background(), "Skip file %s", path)
 		return nil
 	}
 	c.seenFiles[path] = struct{}{}

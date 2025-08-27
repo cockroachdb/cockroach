@@ -359,7 +359,7 @@ func (r *Replica) leasePostApplyLocked(
 		// We're at a version that supports lease sequence numbers.
 		switch {
 		case s2 < s1:
-			log.Fatalf(ctx, "lease sequence inversion, prevLease=%s, newLease=%s",
+			log.Dev.Fatalf(ctx, "lease sequence inversion, prevLease=%s, newLease=%s",
 				redact.Safe(prevLease), redact.Safe(newLease))
 		case s2 == s1:
 			// If the sequence numbers are the same, make sure they're actually
@@ -373,13 +373,13 @@ func (r *Replica) leasePostApplyLocked(
 			// yet detected the upgrade. Passing true broadens the definition of
 			// equivalence and weakens the assertion.
 			if !prevLease.Equivalent(*newLease, true /* expToEpochEquiv */) {
-				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
+				log.Dev.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
 					redact.Safe(prevLease), redact.Safe(newLease))
 			}
 		case s2 == s1+1:
 			// Lease sequence incremented by 1. Expected case.
 		case s2 > s1+1 && jumpOpt == assertNoLeaseJump:
-			log.Fatalf(ctx, "lease sequence jump, prevLease=%s, newLease=%s",
+			log.Dev.Fatalf(ctx, "lease sequence jump, prevLease=%s, newLease=%s",
 				redact.Safe(prevLease), redact.Safe(newLease))
 		}
 	}
@@ -399,7 +399,7 @@ func (r *Replica) leasePostApplyLocked(
 		if _, err := r.maybeWatchForMergeLocked(ctx); err != nil {
 			// We were unable to determine whether a merge was in progress. We cannot
 			// safely proceed.
-			log.Fatalf(ctx, "failed checking for in-progress merge while installing new lease %s: %s",
+			log.Dev.Fatalf(ctx, "failed checking for in-progress merge while installing new lease %s: %s",
 				newLease, err)
 		}
 
@@ -545,7 +545,7 @@ func (r *Replica) leasePostApplyLocked(
 				return
 			}
 			if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, keys.NodeLivenessSpan); err != nil {
-				log.Errorf(ctx, "%v", err)
+				log.Dev.Errorf(ctx, "%v", err)
 			}
 		})
 	}
@@ -575,7 +575,7 @@ func (r *Replica) leasePostApplyLocked(
 				newLease, r.mu.conf.LeasePreferences)
 			r.store.leaseQueue.AddAsync(ctx, r, allocatorimpl.TransferLeaseForPreferences.Priority()-1)
 		default:
-			log.Fatalf(ctx, "unknown lease preferences status: %v", preferenceStatus)
+			log.Dev.Fatalf(ctx, "unknown lease preferences status: %v", preferenceStatus)
 		}
 	}
 
@@ -698,7 +698,7 @@ func addSSTablePreApply(
 	checksum := util.CRC32(sst.Data)
 
 	if checksum != sst.CRC32 {
-		log.Fatalf(
+		log.Dev.Fatalf(
 			ctx,
 			"checksum for AddSSTable at index term %d, index %d does not match; at proposal time %x (%d), now %x (%d)",
 			term, index, sst.CRC32, sst.CRC32, checksum, checksum,
@@ -707,13 +707,13 @@ func addSSTablePreApply(
 
 	path, err := env.sideloaded.Filename(ctx, index, term)
 	if err != nil {
-		log.Fatalf(ctx, "sideloaded SSTable at term %d, index %d is missing", term, index)
+		log.Dev.Fatalf(ctx, "sideloaded SSTable at term %d, index %d is missing", term, index)
 	}
 
 	tBegin := timeutil.Now()
 	defer func() {
 		if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
-			log.Infof(ctx,
+			log.Dev.Infof(ctx,
 				"ingesting SST of size %s at index %d took %.2fs",
 				humanizeutil.IBytes(int64(len(sst.Data))), index, dur.Seconds(),
 			)
@@ -732,7 +732,7 @@ func addSSTablePreApply(
 		// to happen in any "normal" deployment but we have a fallback path anyway.
 		log.Eventf(ctx, "copying SSTable for ingestion at index %d, term %d: %s", index, term, ingestPath)
 		if err := ingestViaCopy(ctx, env.st, env.eng, ingestPath, term, index, sst, env.bulkLimiter); err != nil {
-			log.Fatalf(ctx, "%v", err)
+			log.Dev.Fatalf(ctx, "%v", err)
 		}
 		return true /* copied */
 	}
@@ -740,7 +740,7 @@ func addSSTablePreApply(
 	// Regular path - we made a hard link, so we can ingest the hard link now.
 	ingestErr := env.eng.IngestLocalFiles(ctx, []string{ingestPath})
 	if ingestErr != nil {
-		log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
+		log.Dev.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
 	}
 	// Adding without modification succeeded, no copy necessary.
 	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
@@ -755,7 +755,7 @@ func linkExternalSStablePreApply(
 	index kvpb.RaftIndex,
 	sst kvserverpb.ReplicatedEvalResult_LinkExternalSSTable,
 ) {
-	log.VInfof(ctx, 1,
+	log.Dev.VInfof(ctx, 1,
 		"linking external sstable %s (size %d, span %s) from %s (size %d) at rewrite ts %s, synth prefix %s",
 		sst.RemoteFilePath,
 		sst.ApproximatePhysicalSize,
@@ -799,7 +799,7 @@ func linkExternalSStablePreApply(
 	tBegin := timeutil.Now()
 	defer func() {
 		if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
-			log.Infof(ctx,
+			log.Dev.Infof(ctx,
 				"ingesting External SST at index %d took %.2fs", index, dur.Seconds(),
 			)
 		}
@@ -807,7 +807,7 @@ func linkExternalSStablePreApply(
 
 	_, ingestErr := env.eng.IngestExternalFiles(ctx, []pebble.ExternalFile{externalFile})
 	if ingestErr != nil {
-		log.Fatalf(ctx, "while ingesting %s: %v", sst.RemoteFilePath, ingestErr)
+		log.Dev.Fatalf(ctx, "while ingesting %s: %v", sst.RemoteFilePath, ingestErr)
 	}
 	log.Eventf(ctx, "ingested SSTable at index %d, term %d: external %s", index, term, sst.RemoteFilePath)
 }
@@ -860,10 +860,10 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 
 	// The caller is required to detach and handle the following three fields.
 	if lResult.EncounteredIntents != nil {
-		log.Fatalf(ctx, "LocalEvalResult.EncounteredIntents should be nil: %+v", lResult.EncounteredIntents)
+		log.Dev.Fatalf(ctx, "LocalEvalResult.EncounteredIntents should be nil: %+v", lResult.EncounteredIntents)
 	}
 	if lResult.EndTxns != nil {
-		log.Fatalf(ctx, "LocalEvalResult.EndTxns should be nil: %+v", lResult.EndTxns)
+		log.Dev.Fatalf(ctx, "LocalEvalResult.EndTxns should be nil: %+v", lResult.EndTxns)
 	}
 
 	if lResult.AcquiredLocks != nil {
@@ -900,13 +900,13 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 				hasLease, pErr := r.getLeaseForGossip(ctx)
 
 				if pErr != nil {
-					log.Infof(ctx, "unable to gossip first range; hasLease=%t, err=%s", hasLease, pErr)
+					log.Dev.Infof(ctx, "unable to gossip first range; hasLease=%t, err=%s", hasLease, pErr)
 				} else if !hasLease {
 					return
 				}
 				r.gossipFirstRange(ctx)
 			}); err != nil {
-			log.Infof(ctx, "unable to gossip first range: %s", err)
+			log.Dev.Infof(ctx, "unable to gossip first range: %s", err)
 		}
 		lResult.GossipFirstRange = false
 	}
@@ -918,7 +918,7 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 
 	if lResult.MaybeGossipNodeLiveness != nil {
 		if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, *lResult.MaybeGossipNodeLiveness); err != nil {
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 		}
 		lResult.MaybeGossipNodeLiveness = nil
 	}
@@ -929,7 +929,7 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 	}
 
 	if !lResult.IsZero() {
-		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
+		log.Dev.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}
 }
 
@@ -1012,7 +1012,7 @@ func (r *Replica) evaluateProposal(
 
 		txn := pErr.GetTxn()
 		if txn != nil && ba.Txn == nil {
-			log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
+			log.Dev.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
 		}
 
 		// Failed proposals can't have any Result except for what's

@@ -518,15 +518,15 @@ func (r *Refresher) getTableDescriptor(
 		}
 		return err
 	}); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 	}
 	return desc
 }
 
 // WaitForAutoStatsShutdown waits for all auto-stats tasks to shut down.
 func (r *Refresher) WaitForAutoStatsShutdown(ctx context.Context) {
-	log.Infof(ctx, "starting to wait for auto-stats tasks to shut down")
-	defer log.Infof(ctx, "auto-stats tasks successfully shut down")
+	log.Dev.Infof(ctx, "starting to wait for auto-stats tasks to shut down")
+	defer log.Dev.Infof(ctx, "auto-stats tasks successfully shut down")
 	r.startedTasksWG.Wait()
 }
 
@@ -689,7 +689,7 @@ func (r *Refresher) Start(
 						timer.Reset(refreshInterval)
 					}); err != nil {
 					r.startedTasksWG.Done()
-					log.Errorf(ctx, "failed to start async stats task: %v", err)
+					log.Dev.Errorf(ctx, "failed to start async stats task: %v", err)
 				}
 				// This clears out any tables that may have been added to the
 				// mutationCounts map by ensureAllTables and any mutation counts that
@@ -711,7 +711,7 @@ func (r *Refresher) Start(
 				r.settingOverrides[clusterSettingOverride.tableID] = clusterSettingOverride.settings
 
 			case <-r.drainAutoStats:
-				log.Infof(ctx, "draining auto stats refresher")
+				log.Dev.Infof(ctx, "draining auto stats refresher")
 				return
 			case <-ctx.Done():
 				return
@@ -719,7 +719,7 @@ func (r *Refresher) Start(
 		}
 	}); err != nil {
 		r.startedTasksWG.Done()
-		log.Warningf(ctx, "refresher task failed to start: %v", err)
+		log.Dev.Warningf(ctx, "refresher task failed to start: %v", err)
 	}
 	// Start another task that will periodically run an internal query to delete
 	// stats for dropped tables.
@@ -750,10 +750,10 @@ func (r *Refresher) Start(
 				case <-intervalChangedCh:
 					continue
 				case <-r.drainAutoStats:
-					log.Infof(ctx, "draining stats garbage collector")
+					log.Dev.Infof(ctx, "draining stats garbage collector")
 					return
 				case <-stopper.ShouldQuiesce():
-					log.Infof(ctx, "quiescing stats garbage collector")
+					log.Dev.Infof(ctx, "quiescing stats garbage collector")
 					return
 				}
 			}
@@ -762,19 +762,19 @@ func (r *Refresher) Start(
 			case <-intervalChangedCh:
 				continue
 			case <-r.drainAutoStats:
-				log.Infof(ctx, "draining stats garbage collector")
+				log.Dev.Infof(ctx, "draining stats garbage collector")
 				return
 			case <-stopper.ShouldQuiesce():
-				log.Infof(ctx, "quiescing stats garbage collector")
+				log.Dev.Infof(ctx, "quiescing stats garbage collector")
 				return
 			}
 			if err := deleteStatsForDroppedTables(ctx, r.internalDB, statsGarbageCollectionLimit.Get(&r.st.SV)); err != nil {
-				log.Warningf(ctx, "stats-garbage-collector encountered an error when deleting stats: %v", err)
+				log.Dev.Warningf(ctx, "stats-garbage-collector encountered an error when deleting stats: %v", err)
 			}
 		}
 	}); err != nil {
 		r.startedTasksWG.Done()
-		log.Warningf(ctx, "stats-garbage-collector task failed to start: %v", err)
+		log.Dev.Warningf(ctx, "stats-garbage-collector task failed to start: %v", err)
 	}
 	return nil
 }
@@ -823,7 +823,7 @@ func (r *Refresher) getApplicableTables(
 		// r.mutationCounts for some of the tables and operation of adding an
 		// entry is idempotent (i.e. we didn't mess up anything for the next
 		// call to this method).
-		log.Errorf(ctx, "failed to get tables for automatic stats: %v", err)
+		log.Dev.Errorf(ctx, "failed to get tables for automatic stats: %v", err)
 	}
 }
 
@@ -868,7 +868,7 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 		default:
 			// Don't block if there is no room in the buffered channel.
 			if bufferedChanFullLogLimiter.ShouldLog() {
-				log.Warningf(context.TODO(),
+				log.Dev.Warningf(context.TODO(),
 					"buffered channel is full. Unable to update settings for table %q (%d) during auto stats refreshing",
 					table.GetName(), table.GetID())
 			}
@@ -886,7 +886,7 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 	default:
 		// Don't block if there is no room in the buffered channel.
 		if bufferedChanFullLogLimiter.ShouldLog() {
-			log.Warningf(context.TODO(),
+			log.Dev.Warningf(context.TODO(),
 				"buffered channel is full. Unable to refresh stats for table %q (%d) with %d rows affected",
 				table.GetName(), table.GetID(), rowsAffected)
 		}
@@ -913,7 +913,7 @@ func (r *Refresher) maybeRefreshStats(
 	var forecast *bool
 	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */)
 	if err != nil {
-		log.Errorf(ctx, "failed to get table statistics: %v", err)
+		log.Dev.Errorf(ctx, "failed to get table statistics: %v", err)
 		return
 	}
 
@@ -1033,7 +1033,7 @@ func (r *Refresher) maybeRefreshStats(
 
 		// Log other errors but don't automatically reschedule the refresh, since
 		// that could lead to endless retries.
-		log.Warningf(ctx, "failed to create statistics on table %d: %v", tableID, err)
+		log.Dev.Warningf(ctx, "failed to create statistics on table %d: %v", tableID, err)
 		return
 	}
 }
@@ -1058,7 +1058,7 @@ func (r *Refresher) refreshStats(
 	)
 
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.Infof(ctx, "automatically executing %q", stmt)
+		log.Dev.Infof(ctx, "automatically executing %q", stmt)
 	}
 	_ /* rows */, err := r.internalDB.Executor().Exec(
 		ctx,

@@ -132,7 +132,7 @@ func New(
 		if ext := tableDesc.ExternalRowData(); ext != nil {
 			// The table is external, so use the external codec and table ID. Also set
 			// the index to read-only.
-			log.VInfof(ctx, 2,
+			log.Dev.VInfof(ctx, 2,
 				"table %d is external, using read-only mode for vector index %d",
 				tableDesc.GetID(), indexID,
 			)
@@ -197,7 +197,7 @@ func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) erro
 
 		err = fn(&tx)
 		if err != nil {
-			log.Errorf(ctx, "error in RunTransaction: %v", err)
+			log.Dev.Errorf(ctx, "error in RunTransaction: %v", err)
 			return err
 		}
 
@@ -381,6 +381,58 @@ func (s *Store) TryUpdatePartitionMetadata(
 		return remapConditionFailedError(err)
 	}
 	return nil
+}
+
+// TryStartMerge is part of the cspann.Store interface. It updates the state of
+// the given partition to Merging, as long as the "ifReady" partition is in the
+// Ready state.
+func (s *Store) TryStartMerge(
+	ctx context.Context,
+	treeKey cspann.TreeKey,
+	partitionKey cspann.PartitionKey,
+	expected cspann.PartitionMetadata,
+	ifReadyKey cspann.PartitionKey,
+) error {
+	if s.ReadOnly() {
+		return errors.AssertionFailedf("cannot start merge in read-only mode")
+	}
+
+	return s.kv.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		b := txn.NewBatch()
+
+		// Conditionally update the partition's metadata state to Merging.
+		metadata := expected
+		metadata.StateDetails.MakeMerging()
+
+		metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
+		encodedMetadata := vecencoding.EncodeMetadataValue(metadata)
+		encodedExpected := vecencoding.EncodeMetadataValue(expected)
+
+		var roachval roachpb.Value
+		roachval.SetBytes(encodedExpected)
+		b.CPut(metadataKey, encodedMetadata, roachval.TagAndDataBytes())
+
+		// Ensure that other partition remains in the Ready state.
+		ifReadyMetadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, ifReadyKey)
+		b.Get(ifReadyMetadataKey)
+
+		if err := txn.Run(ctx, b); err != nil {
+			err = remapConditionFailedError(err)
+			return errors.Wrapf(err, "starting merge for partition %d, with ifReady partition %d",
+				partitionKey, ifReadyKey)
+		}
+
+		ifReadyMetadata, err := s.getMetadataFromKVResult(partitionKey, &b.Results[1])
+		if err != nil {
+			return err
+		}
+		if ifReadyMetadata.StateDetails.State != cspann.ReadyState {
+			return errors.Wrapf(cspann.NewConditionFailedError(ifReadyMetadata),
+				"ifReady partition is not in the Ready state")
+		}
+
+		return nil
+	})
 }
 
 // TryAddToPartition is part of the cspann.Store interface. It adds vectors to

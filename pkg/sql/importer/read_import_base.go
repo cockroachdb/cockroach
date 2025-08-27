@@ -177,7 +177,7 @@ func readInputFiles(
 
 			if sz <= 0 {
 				// Don't log dataFile here because it could leak auth information.
-				log.Infof(ctx, "could not fetch file size; falling back to per-file progress: %v", err)
+				log.Dev.Infof(ctx, "could not fetch file size; falling back to per-file progress: %v", err)
 			} else {
 				fileSizes[id] = sz
 			}
@@ -448,7 +448,7 @@ type importFileContext struct {
 // handleCorruptRow reports an error encountered while processing a row
 // in an input file.
 func handleCorruptRow(ctx context.Context, fileCtx *importFileContext, err error) error {
-	log.Errorf(ctx, "%+v", err)
+	log.Dev.Errorf(ctx, "%+v", err)
 
 	if rowErr := (*importRowError)(nil); errors.As(err, &rowErr) && fileCtx.rejected != nil {
 		fileCtx.rejected <- rowErr.row + "\n"

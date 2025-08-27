@@ -182,7 +182,7 @@ func (o *Outbox) Run(
 	if err := func() error {
 		client, err := execinfra.GetDistSQLClientForOutbox(ctx, dialer, sqlInstanceID, connectionTimeout)
 		if err != nil {
-			log.VWarningf(ctx, 1, "Outbox Dial connection error, distributed query will fail: %+v", err)
+			log.Dev.VWarningf(ctx, 1, "Outbox Dial connection error, distributed query will fail: %+v", err)
 			return err
 		}
 
@@ -193,7 +193,7 @@ func (o *Outbox) Run(
 		// gRPC stream being ungracefully shutdown too.
 		stream, err = client.FlowStream(flowCtx)
 		if err != nil {
-			log.VWarningf(ctx, 1, "Outbox FlowStream connection error, distributed query will fail: %+v", err)
+			log.Dev.VWarningf(ctx, 1, "Outbox FlowStream connection error, distributed query will fail: %+v", err)
 			return err
 		}
 
@@ -204,7 +204,7 @@ func (o *Outbox) Run(
 		if err = stream.Send(
 			&execinfrapb.ProducerMessage{Header: &execinfrapb.ProducerHeader{FlowID: o.flowCtx.ID, StreamID: streamID}},
 		); err != nil {
-			log.VWarningf(ctx, 1, "Outbox Send header error, distributed query will fail: %+v", err)
+			log.Dev.VWarningf(ctx, 1, "Outbox Send header error, distributed query will fail: %+v", err)
 			return err
 		}
 		return nil

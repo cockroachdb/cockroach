@@ -431,7 +431,7 @@ func logSlowRangefeedRegistration(ctx context.Context) func() {
 	return func() {
 		elapsed := timeutil.Since(start)
 		if elapsed >= slowRaftMuWarnThreshold {
-			log.Warningf(ctx, "rangefeed registration took %s", elapsed)
+			log.Dev.Warningf(ctx, "rangefeed registration took %s", elapsed)
 		}
 	}
 }
@@ -889,9 +889,9 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 		expensiveLog := m.RangeFeedSlowClosedTimestampLogN.ShouldLog()
 		if expensiveLog {
 			if closedTS.IsEmpty() {
-				log.Infof(ctx, "RangeFeed closed timestamp is empty")
+				log.Dev.Infof(ctx, "RangeFeed closed timestamp is empty")
 			} else {
-				log.Infof(ctx, "RangeFeed closed timestamp %s is behind by %s (%v)",
+				log.Dev.Infof(ctx, "RangeFeed closed timestamp %s is behind by %s (%v)",
 					closedTS, signal.lag, signal)
 			}
 		}
@@ -919,7 +919,7 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 				}
 				defer func() { <-m.RangeFeedSlowClosedTimestampNudgeSem }()
 				if err := r.ensureClosedTimestampStarted(ctx); err != nil {
-					log.Infof(ctx, `RangeFeed failed to nudge: %s`, err)
+					log.Dev.Infof(ctx, `RangeFeed failed to nudge: %s`, err)
 				} else if signal.exceedsCancelLagThreshold {
 					// We have successfully nudged the leaseholder to make progress on
 					// the closed timestamp. If the lag was already persistently too
@@ -933,7 +933,7 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 					// prohibit us from cancelling the rangefeed in the current version,
 					// due to mixed version compatibility.
 					if expensiveLog {
-						log.Infof(ctx,
+						log.Dev.Infof(ctx,
 							`RangeFeed is too far behind, cancelling for replanning [%v]`, signal)
 					}
 					r.disconnectRangefeedWithReason(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)

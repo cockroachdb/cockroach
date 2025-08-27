@@ -93,7 +93,7 @@ func newKafkaSinkClientV2(
 		// This detects unavoidable data loss due to kafka cluster issues, and we may as well log it if it happens.
 		// See #127246 for further work we can do here.
 		kgo.ProducerOnDataLossDetected(func(topic string, part int32) {
-			log.Errorf(ctx, `kafka sink detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
+			log.Dev.Errorf(ctx, `kafka sink detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
 		}),
 	}
 
@@ -214,7 +214,7 @@ func (k *kafkaSinkClientV2) FlushResolvedPayload(
 			msgs = make([]*kgo.Record, 0, len(k.metadataMu.allTopicPartitions))
 			return forEachTopic(func(topic string) error {
 				if _, ok := k.metadataMu.allTopicPartitions[topic]; !ok {
-					log.Warningf(ctx, `cannot flush resolved timestamp for unknown topic %s`, topic)
+					log.Dev.Warningf(ctx, `cannot flush resolved timestamp for unknown topic %s`, topic)
 				}
 				for _, partition := range k.metadataMu.allTopicPartitions[topic] {
 					msgs = append(msgs, &kgo.Record{
@@ -266,7 +266,7 @@ func (k *kafkaSinkClientV2) maybeUpdateTopicPartitions(
 		return nil
 	}
 
-	log.Infof(ctx, `updating kafka metadata for topics: %+v`, topics)
+	log.Dev.Infof(ctx, `updating kafka metadata for topics: %+v`, topics)
 
 	topicDetails, err := k.adminClient.ListTopics(ctx, topics...)
 	if err != nil {
@@ -481,7 +481,7 @@ func buildKgoConfig(
 			return nil, err
 		}
 		opts = append(opts, authOpts...)
-		log.VInfof(ctx, 2, "applied kafka auth mechanism: %+#v\n", dialConfig.authMechanism)
+		log.Dev.VInfof(ctx, 2, "applied kafka auth mechanism: %+#v\n", dialConfig.authMechanism)
 	}
 
 	// Apply some statement level overrides. The flush related ones (Messages, MaxMessages, Bytes) are not applied here, but on the sinkBatchConfig instead.
@@ -604,7 +604,7 @@ func (k kgoLogAdapter) Log(level kgo.LogLevel, msg string, keyvals ...any) {
 	for i := 0; i < len(keyvals); i += 2 {
 		format += ` %s=%v`
 	}
-	log.InfofDepth(k.ctx, 1, format, append([]any{redact.SafeString(level.String()), redact.SafeString(msg)}, keyvals...)...) //nolint:fmtsafe
+	log.Dev.InfofDepth(k.ctx, 1, format, append([]any{redact.SafeString(level.String()), redact.SafeString(msg)}, keyvals...)...) //nolint:fmtsafe
 }
 
 var _ kgo.Logger = kgoLogAdapter{}

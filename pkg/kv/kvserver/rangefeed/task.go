@@ -60,7 +60,7 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 	if err := s.iterateAndConsume(ctx); err != nil {
 		err = errors.Wrap(err, "initial resolved timestamp scan failed")
 		if ctx.Err() == nil { // cancellation probably caused the error
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 		}
 		s.p.StopWithErr(kvpb.NewError(err))
 	} else {
@@ -249,7 +249,7 @@ func (a *txnPushAttempt) Run(ctx context.Context) {
 	defer a.Cancel()
 	if err := a.pushOldTxns(ctx); err != nil {
 		if ctx.Err() == nil { // cancellation probably caused the error
-			log.Errorf(ctx, "pushing old intents failed: %v", err)
+			log.Dev.Errorf(ctx, "pushing old intents failed: %v", err)
 		}
 	}
 }

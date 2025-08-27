@@ -166,10 +166,10 @@ func (b *streamIngestionBuffer) shouldFlushOnSize(ctx context.Context, sv *setti
 	kvBufMax := int(maxKVBufferSize.Get(sv))
 	rkBufMax := int(maxRangeKeyBufferSize.Get(sv))
 	if kvBufMax > 0 && b.curKVBatchSize >= kvBufMax {
-		log.VInfof(ctx, 2, "flushing because current KV batch based on size %d >= %d", b.curKVBatchSize, kvBufMax)
+		log.Dev.VInfof(ctx, 2, "flushing because current KV batch based on size %d >= %d", b.curKVBatchSize, kvBufMax)
 		return true
 	} else if rkBufMax > 0 && b.curRangeKVBatchSize >= rkBufMax {
-		log.VInfof(ctx, 2, "flushing beacuse current range key batch based on size %d >= %d", b.curRangeKVBatchSize, rkBufMax)
+		log.Dev.VInfof(ctx, 2, "flushing beacuse current range key batch based on size %d >= %d", b.curRangeKVBatchSize, rkBufMax)
 		return true
 	}
 	return false
@@ -394,7 +394,7 @@ func newStreamIngestionDataProcessor(
 func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
 	ctx = logtags.AddTag(ctx, "proc", sip.ProcessorID)
-	log.Infof(ctx, "starting ingest proc")
+	log.Dev.Infof(ctx, "starting ingest proc")
 	sip.agg = tracing.TracingAggregatorForContext(ctx)
 
 	// If the aggregator is nil, we do not want the timer to fire.
@@ -429,7 +429,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	sip.subscriptionGroup = ctxgroup.WithContext(subscriptionCtx)
 	sip.workerGroup = ctxgroup.WithContext(sip.Ctx())
 
-	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionSpecs))
+	log.Dev.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionSpecs))
 
 	// Initialize the event streams.
 	subscriptions := make(map[string]streamclient.Subscription)
@@ -445,7 +445,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		var streamClient streamclient.Client
 		if sip.forceClientForTests != nil {
 			streamClient = sip.forceClientForTests
-			log.Infof(ctx, "using testing client")
+			log.Dev.Infof(ctx, "using testing client")
 		} else {
 			streamClient, err = streamclient.NewStreamClient(ctx, uri, db,
 				streamclient.WithStreamID(streampb.StreamID(sip.spec.StreamID)),
@@ -550,7 +550,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 
 func (sip *streamIngestionProcessor) MoveToDrainingAndLogError(err error) {
 	if err != nil {
-		log.Infof(sip.Ctx(), "gracefully draining with error %s", err)
+		log.Dev.Infof(sip.Ctx(), "gracefully draining with error %s", err)
 	}
 	sip.MoveToDraining(err)
 }
@@ -590,14 +590,14 @@ func (sip *streamIngestionProcessor) close() {
 	// and stopCh close above should result in exit signals being
 	// sent to all relevant goroutines.
 	if err := sip.workerGroup.Wait(); err != nil {
-		log.Errorf(sip.Ctx(), "error on close(): %s", err)
+		log.Dev.Errorf(sip.Ctx(), "error on close(): %s", err)
 	}
 
 	if sip.subscriptionCancel != nil {
 		sip.subscriptionCancel()
 	}
 	if err := sip.subscriptionGroup.Wait(); err != nil {
-		log.Errorf(sip.Ctx(), "error on close(): %s", err)
+		log.Dev.Errorf(sip.Ctx(), "error on close(): %s", err)
 	}
 
 	if sip.batcher != nil {
@@ -642,7 +642,7 @@ func (sip *streamIngestionProcessor) sendError(err error) {
 	select {
 	case sip.errCh <- err:
 	default:
-		log.VInfof(sip.Ctx(), 2, "dropping additional error: %s", err)
+		log.Dev.VInfof(sip.Ctx(), 2, "dropping additional error: %s", err)
 	}
 }
 
@@ -701,7 +701,7 @@ func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 			// cutover ts in the future, this will need to change.
 			//
 			// On receiving a cutover signal, the processor must shutdown gracefully.
-			log.Infof(sip.Ctx(), "received cutover signal")
+			log.Dev.Infof(sip.Ctx(), "received cutover signal")
 			return nil
 		case <-sip.maxFlushRateTimer.C:
 			// This timer is used to periodically flush a
@@ -771,7 +771,7 @@ func (sip *streamIngestionProcessor) handleEvent(event PartitionEvent) error {
 	}
 
 	if sip.logBufferEvery.ShouldLog() {
-		log.Infof(sip.Ctx(), "current KV batch size %d (%d items)", sip.buffer.curKVBatchSize, len(sip.buffer.curKVBatch))
+		log.Dev.Infof(sip.Ctx(), "current KV batch size %d (%d items)", sip.buffer.curKVBatchSize, len(sip.buffer.curKVBatch))
 	}
 
 	if sip.buffer.shouldFlushOnSize(sip.Ctx(), sv) {
@@ -878,7 +878,7 @@ func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
 	if !ok {
 		return nil
 	}
-	log.Infof(ctx, "replicating split at %s", roachpb.Key(rekey).String())
+	log.Dev.Infof(ctx, "replicating split at %s", roachpb.Key(rekey).String())
 	expiration := kvDB.Clock().Now().AddDuration(time.Hour)
 	return kvDB.AdminSplit(ctx, rekey, expiration)
 }
@@ -975,7 +975,7 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 		return nil
 	}
 
-	log.VInfof(ctx, 2, "flushing %d range keys", len(toFlush))
+	log.Dev.VInfof(ctx, 2, "flushing %d range keys", len(toFlush))
 
 	sstFile := &storage.MemObject{}
 	sstWriter := storage.MakeIngestionSSTWriter(ctx, r.settings, sstFile)
@@ -1031,7 +1031,7 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 			ingestAsWrites = true
 		}
 
-		log.Infof(ctx, "sending SSTable [%s, %s) of size %d (as write: %v)", start, end, len(data), ingestAsWrites)
+		log.Dev.Infof(ctx, "sending SSTable [%s, %s) of size %d (as write: %v)", start, end, len(data), ingestAsWrites)
 		_, _, err := r.db.AddSSTable(ctx, start, end, data,
 			false, /* disallowConflicts */
 			hlc.Timestamp{}, nil /* stats */, ingestAsWrites,
@@ -1044,7 +1044,7 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 				}
 
 				split := mr.Desc.EndKey.AsRawKey()
-				log.Infof(ctx, "SSTable cannot be added spanning range bounds. Spliting at %v", split)
+				log.Dev.Infof(ctx, "SSTable cannot be added spanning range bounds. Spliting at %v", split)
 				left, right, err := splitRangeKeySSTAtKey(ctx, r.settings, start, end, split, data)
 				if err != nil {
 					return err
@@ -1053,10 +1053,10 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 				if left != nil && right != nil {
 					work = append([]*rangeKeySST{left, right}, work...)
 				} else if left != nil {
-					log.Warningf(ctx, "RHS of split point %s was unexpectedly empty", split)
+					log.Dev.Warningf(ctx, "RHS of split point %s was unexpectedly empty", split)
 					work = append([]*rangeKeySST{left}, work...)
 				} else if right != nil {
-					log.Warningf(ctx, "LHS of split point %s was unexpectedly empty", split)
+					log.Dev.Warningf(ctx, "LHS of split point %s was unexpectedly empty", split)
 					work = append([]*rangeKeySST{right}, work...)
 				}
 			} else {
@@ -1090,7 +1090,7 @@ func (r *rangeKeyBatcher) recomputeStats(ctx context.Context, rangekeySpans roac
 		})
 	}
 	if err := r.db.Run(ctx, &b); err != nil {
-		log.Warningf(ctx, "recomputes stats bath failed with error: %v", err)
+		log.Dev.Warningf(ctx, "recomputes stats bath failed with error: %v", err)
 	}
 }
 
@@ -1103,7 +1103,7 @@ func getRangeStartkeys(
 	for i := range rangeKeySpans {
 		iter, err := rangeDescIterFactory.NewLazyIterator(ctx, rangeKeySpans[i], 100)
 		if err != nil {
-			log.Warningf(ctx, "could not create range descriptor iterator for %s: %v", rangeKeySpans[i], err)
+			log.Dev.Warningf(ctx, "could not create range descriptor iterator for %s: %v", rangeKeySpans[i], err)
 			continue
 		}
 		for ; iter.Valid(); iter.Next() {
@@ -1115,7 +1115,7 @@ func getRangeStartkeys(
 			}
 		}
 		if err := iter.Error(); err != nil {
-			log.Warningf(ctx, "error iterating range descriptors for %s: %v", rangeKeySpans[i], err)
+			log.Dev.Warningf(ctx, "error iterating range descriptors for %s: %v", rangeKeySpans[i], err)
 		}
 	}
 	return rangeStartKeys
@@ -1360,7 +1360,7 @@ func (sip *streamIngestionProcessor) flushBuffer(
 	// Now process the range KVs.
 	if len(b.buffer.curRangeKVBatch) > 0 {
 		if err := sip.rangeBatcher.flush(ctx, b.buffer.curRangeKVBatch); err != nil {
-			log.Warningf(ctx, "flush error: %v", err)
+			log.Dev.Warningf(ctx, "flush error: %v", err)
 			return nil, errors.Wrap(err, "flushing range key sst")
 		}
 	}
@@ -1396,7 +1396,7 @@ func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, erro
 		return false, err
 	}
 	if ingestionProgress == nil {
-		log.Warningf(ctx, "no legacy job progress recorded yet")
+		log.Dev.Warningf(ctx, "no legacy job progress recorded yet")
 		return false, nil
 	}
 

@@ -250,7 +250,7 @@ func (s *drainServer) maybeShutdownAfterDrain(
 		// The signal-based shutdown path uses a similar time-based escape hatch.
 		// Until we spend (potentially lots of time to) understand and fix this
 		// issue, this will serve us well.
-		log.Fatal(ctx, "timeout after drain")
+		log.Dev.Fatal(ctx, "timeout after drain")
 		return errors.New("unreachable")
 	}
 }
@@ -375,7 +375,7 @@ func (s *drainServer) drainInner(
 		if stillRunning > 0 {
 			return nil
 		}
-		log.Infof(ctx, "all tenant servers stopped")
+		log.Dev.Infof(ctx, "all tenant servers stopped")
 	}
 
 	// Drain the SQL layer.
@@ -383,7 +383,7 @@ func (s *drainServer) drainInner(
 	if err = s.drainClients(ctx, reporter); err != nil {
 		return err
 	}
-	log.Infof(ctx, "done draining clients")
+	log.Dev.Infof(ctx, "done draining clients")
 
 	// Mark the node as draining in liveness and drain all range leases.
 	return s.drainNode(ctx, reporter, verbose)
@@ -511,7 +511,7 @@ func (s *drainServer) drainClientsInternal(
 	s.sqlServer.gracefulDrainComplete.Store(true)
 	// Mark this phase in the logs to clarify the context of any subsequent
 	// errors/warnings, if any.
-	log.Infof(ctx, "SQL server drained successfully; SQL queries cannot execute any more")
+	log.Dev.Infof(ctx, "SQL server drained successfully; SQL queries cannot execute any more")
 	return nil
 }
 

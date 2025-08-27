@@ -584,7 +584,7 @@ type awsLogAdapter struct {
 }
 
 func (l *awsLogAdapter) Logf(_ logging.Classification, format string, v ...interface{}) {
-	log.Infof(l.ctx, format, v...)
+	log.Dev.Infof(l.ctx, format, v...)
 }
 
 func newLogAdapter(ctx context.Context) *awsLogAdapter {
@@ -948,7 +948,7 @@ func (s *s3Storage) ReadFile(
 			}
 		} else {
 			if stream.ContentLength == nil {
-				log.Warningf(ctx, "Content length missing from S3 GetObject (is this actually s3?); attempting to lookup size with separate call...")
+				log.Dev.Warningf(ctx, "Content length missing from S3 GetObject (is this actually s3?); attempting to lookup size with separate call...")
 				// Some not-actually-s3 services may not set it, or set it in a way the
 				// official SDK finds it (e.g. if they don't use the expected checksummer)
 				// so try a Size() request.

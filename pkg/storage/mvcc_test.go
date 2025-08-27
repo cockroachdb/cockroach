@@ -13,7 +13,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -2325,7 +2325,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 		reverts[i] = rand.Intn(randTimeRange)
 	}
 	reverts[0] = swathTime - 1
-	sort.Ints(reverts)
+	slices.Sort(reverts)
 	const byteLimit = 1000
 	const keyLimit = 100
 	const clearRangeThreshold = 64
@@ -3769,14 +3769,14 @@ func writeToEngine(
 ) {
 	ctx := context.Background()
 	if debug {
-		log.Infof(ctx, "writeToEngine")
+		log.Dev.Infof(ctx, "writeToEngine")
 	}
 	for _, p := range puts {
 		for i := range p.writeTS {
 			txn.Sequence = p.seqs[i]
 			txn.WriteTimestamp = p.writeTS[i]
 			if debug {
-				log.Infof(ctx, "Put: %s, seq: %d, writets: %s",
+				log.Dev.Infof(ctx, "Put: %s, seq: %d, writets: %s",
 					p.key.String(), txn.Sequence, txn.WriteTimestamp.String())
 			}
 			_, err := MVCCPut(ctx, eng, p.key, txn.ReadTimestamp, p.values[i], MVCCWriteOptions{Txn: txn})
@@ -3790,7 +3790,7 @@ func checkEngineEquality(
 ) {
 	ctx := context.Background()
 	if debug {
-		log.Infof(ctx, "checkEngineEquality")
+		log.Dev.Infof(ctx, "checkEngineEquality")
 	}
 	makeIter := func(eng Engine) MVCCIterator {
 		iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: span.Key, UpperBound: span.EndKey})
@@ -3829,7 +3829,7 @@ func checkEngineEquality(
 			t.Fatalf("key %s has different values: %x, %x", iter1.UnsafeKey().String(), v1, v2)
 		}
 		if debug {
-			log.Infof(ctx, "key: %s", iter1.UnsafeKey().String())
+			log.Dev.Infof(ctx, "key: %s", iter1.UnsafeKey().String())
 		}
 		iter1.Next()
 		iter2.Next()
@@ -3906,8 +3906,8 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 		}
 		puts = append(puts, put)
 	}
-	sort.Slice(puts, func(i, j int) bool {
-		return puts[i].key.Compare(puts[j].key) < 0
+	slices.SortFunc(puts, func(i, j putState) int {
+		return i.key.Compare(j.key)
 	})
 	// Do the puts to the engines.
 	for i := range engs {
@@ -3941,7 +3941,7 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 		IgnoredSeqNums: ignoredSeqNums,
 	}
 	if debug {
-		log.Infof(ctx, "LockUpdate: %s, %s", status.String(), lu.String())
+		log.Dev.Infof(ctx, "LockUpdate: %s, %s", status.String(), lu.String())
 	}
 	for i := range engs {
 		func() {
@@ -3997,7 +3997,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 		context.Background(), InMemory(), cluster.MakeTestingClusterSettings(),
 		func(cfg *engineConfig) error {
 			cfg.opts.LBaseMaxBytes = int64(100 + rng.Intn(16384))
-			log.Infof(ctx, "lbase: %d", cfg.opts.LBaseMaxBytes)
+			log.Dev.Infof(ctx, "lbase: %d", cfg.opts.LBaseMaxBytes)
 			return nil
 		})
 	require.NoError(t, err)
@@ -4028,8 +4028,8 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 		}
 		puts = append(puts, put)
 	}
-	sort.Slice(puts, func(i, j int) bool {
-		return puts[i].key.Compare(puts[j].key) < 0
+	slices.SortFunc(puts, func(i, j putState) int {
+		return i.key.Compare(j.key)
 	})
 	txn := *txn1
 	txn.ReadTimestamp = timestamps[0]
@@ -4052,7 +4052,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 		IgnoredSeqNums: ignoredSeqNums,
 	}
 	if debug {
-		log.Infof(ctx, "LockUpdate: %s", lu.String())
+		log.Dev.Infof(ctx, "LockUpdate: %s", lu.String())
 	}
 	// All the writes are ignored, so DEL is written for the intent. These
 	// should be buffered in the memtable.
@@ -4088,7 +4088,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	lu.Txn = txn.TxnMeta
 	lu.Status = []roachpb.TransactionStatus{roachpb.COMMITTED, roachpb.ABORTED}[rng.Intn(2)]
 	if debug {
-		log.Infof(ctx, "LockUpdate: %s", lu.String())
+		log.Dev.Infof(ctx, "LockUpdate: %s", lu.String())
 	}
 	_, _, _, _, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, MVCCResolveWriteIntentRangeOptions{})
 	require.NoError(t, err)
@@ -4860,13 +4860,13 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		t.Fatal(err)
 	}
 	if log.V(1) {
-		log.Info(context.Background(), "Engine content before GC")
+		log.Dev.Info(context.Background(), "Engine content before GC")
 		kvsn, err := Scan(context.Background(), engine, localMax, keyMax, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for i, kv := range kvsn {
-			log.Infof(context.Background(), "%d: %s", i, kv.Key)
+			log.Dev.Infof(context.Background(), "%d: %s", i, kv.Key)
 		}
 	}
 
@@ -4907,13 +4907,13 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	}
 
 	if log.V(1) {
-		log.Info(context.Background(), "Engine content after GC")
+		log.Dev.Info(context.Background(), "Engine content after GC")
 		kvsn, err := Scan(context.Background(), engine, localMax, keyMax, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for i, kv := range kvsn {
-			log.Infof(context.Background(), "%d: %s", i, kv.Key)
+			log.Dev.Infof(context.Background(), "%d: %s", i, kv.Key)
 		}
 	}
 

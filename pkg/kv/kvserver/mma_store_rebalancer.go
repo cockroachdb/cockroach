@@ -69,7 +69,7 @@ func newMMAStoreRebalancer(
 func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
 	timer := time.NewTicker(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&m.st.SV)))
 	defer timer.Stop()
-	log.Infof(ctx, "starting multi-metric store rebalancer with mode=%v", kvserverbase.LoadBasedRebalancingMode.Get(&m.st.SV))
+	log.Dev.Infof(ctx, "starting multi-metric store rebalancer with mode=%v", kvserverbase.LoadBasedRebalancingMode.Get(&m.st.SV))
 
 	for {
 		select {
@@ -129,7 +129,7 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 	knownStoresByMMA := m.mma.KnownStores()
 	storeLeaseholderMsg, numIgnoredRanges := m.store.MakeStoreLeaseholderMsg(ctx, knownStoresByMMA)
 	if numIgnoredRanges > 0 {
-		log.Infof(ctx, "mma rebalancer: ignored %d ranges since the allocator does not know all stores",
+		log.Dev.Infof(ctx, "mma rebalancer: ignored %d ranges since the allocator does not know all stores",
 			numIgnoredRanges)
 	}
 
@@ -140,7 +140,7 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 	// TODO(wenyihu6): add allocator sync and post apply here
 	for _, change := range changes {
 		if err := m.applyChange(ctx, change); err != nil {
-			log.VInfof(ctx, 1, "failed to apply change for range %d: %v", change.RangeID, err)
+			log.Dev.VInfof(ctx, 1, "failed to apply change for range %d: %v", change.RangeID, err)
 		}
 	}
 

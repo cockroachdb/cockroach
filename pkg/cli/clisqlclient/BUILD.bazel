@@ -22,7 +22,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
-        "//pkg/ccl/securityccl/fipsccl/fipscclbase",
         "//pkg/cli/clicfg",
         "//pkg/cli/clierror",
         "//pkg/security/pprompt",

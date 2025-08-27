@@ -201,7 +201,7 @@ func computeStatsDelta(
 			// We only want to assert the correctness of stats that do not contain
 			// estimates.
 			if delta.ContainsEstimates == 0 && !delta.Equal(computed) {
-				log.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
+				log.Dev.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
 					pretty.Diff(delta, computed))
 			}
 		}

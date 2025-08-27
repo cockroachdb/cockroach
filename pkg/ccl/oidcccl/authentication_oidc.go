@@ -272,7 +272,7 @@ func (o *oidcManager) ExchangeVerifyGetTokenInfo(
 		// the message is useful for troubleshooting but not an operator-actionable error.
 		parsedToken, err := jwt.ParseInsecure([]byte(*tokenInfo.rawToken))
 		if err != nil {
-			log.VInfof(ctx, 1, "OIDC: could not parse %s as JWT (this is expected for opaque tokens): %v", tokenInfo.name, err)
+			log.Dev.VInfof(ctx, 1, "OIDC: could not parse %s as JWT (this is expected for opaque tokens): %v", tokenInfo.name, err)
 			continue // Not a JWT, so we can't get claims from it.
 		}
 
@@ -449,25 +449,25 @@ func reloadConfigLocked(
 
 	redirectURL, err := getRegionSpecificRedirectURL(locality, oidcAuthServer.conf.redirectURLConf)
 	if err != nil {
-		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
+		log.Dev.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
-			log.Infof(ctx, "check redirect URL OIDC cluster setting: "+OIDCRedirectURLSettingName)
+			log.Dev.Infof(ctx, "check redirect URL OIDC cluster setting: "+OIDCRedirectURLSettingName)
 		}
 		return
 	}
 
 	manager, err := NewOIDCManager(ctx, oidcAuthServer.conf, redirectURL, scopesForOauth)
 	if err != nil {
-		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
+		log.Dev.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
-			log.Infof(ctx, "check provider URL OIDC cluster setting: "+OIDCProviderURLSettingName)
+			log.Dev.Infof(ctx, "check provider URL OIDC cluster setting: "+OIDCProviderURLSettingName)
 		}
 		return
 	}
 
 	oidcAuthServer.manager = manager
 	oidcAuthServer.initialized = true
-	log.Infof(ctx, "initialized OIDC server")
+	log.Dev.Infof(ctx, "initialized OIDC server")
 }
 
 // getRegionSpecificRedirectURL will query the localities and see if we have
@@ -541,7 +541,7 @@ var ConfigureOIDC = func(
 
 		secretCookie, err := r.Cookie(secretCookieName)
 		if err != nil {
-			log.Errorf(ctx, "OIDC: missing client side cookie: %v", err)
+			log.Dev.Errorf(ctx, "OIDC: missing client side cookie: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -553,12 +553,12 @@ var ConfigureOIDC = func(
 
 		valid, mode, err := kast.validate()
 		if err != nil {
-			log.Errorf(ctx, "OIDC: validating client cookie and state token pair: %v", err)
+			log.Dev.Errorf(ctx, "OIDC: validating client cookie and state token pair: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 		if !valid {
-			log.Error(ctx, "OIDC: invalid client cookie and state token pair")
+			log.Dev.Error(ctx, "OIDC: invalid client cookie and state token pair")
 			http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
 			return
 		}
@@ -572,7 +572,7 @@ var ConfigureOIDC = func(
 				Code:  r.URL.Query().Get(codeKey),
 			})
 			if err != nil {
-				log.Error(ctx, "OIDC: failed to marshal state and code (can this happen?)")
+				log.Dev.Error(ctx, "OIDC: failed to marshal state and code (can this happen?)")
 				http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
 			}
 
@@ -586,13 +586,13 @@ var ConfigureOIDC = func(
 			ExchangeVerifyGetTokenInfo(ctx, r.URL.Query().Get(codeKey), idTokenKey, oidcAuthentication.conf.authZEnabled)
 
 		if err != nil {
-			log.Errorf(ctx, "OIDC: failed to get and verify token: %v", err)
+			log.Dev.Errorf(ctx, "OIDC: failed to get and verify token: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
 		if log.V(1) {
-			log.Infof(
+			log.Dev.Infof(
 				ctx,
 				"attempting to extract SQL username from the payload using the claim key %s and regex %s",
 				oidcAuthentication.conf.claimJSONKey,
@@ -610,14 +610,14 @@ var ConfigureOIDC = func(
 
 		// OIDC authorization
 		if err := oidcAuthentication.authorize(ctx, rawIDToken, rawAccessToken, username); err != nil {
-			log.Errorf(ctx, "OIDC authorization failed with error: %v", err)
+			log.Dev.Errorf(ctx, "OIDC authorization failed with error: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusForbidden)
 			return
 		}
 
 		cookie, err := userLoginFromSSO(ctx, username)
 		if err != nil {
-			log.Errorf(ctx, "OIDC: failed to complete authentication: unable to create session for %s: %v", username, err)
+			log.Dev.Errorf(ctx, "OIDC: failed to complete authentication: unable to create session for %s: %v", username, err)
 			http.Error(w, genericCallbackHTTPError, http.StatusForbidden)
 			return
 		}
@@ -663,7 +663,7 @@ var ConfigureOIDC = func(
 
 		secretCookie, err := r.Cookie(secretCookieName)
 		if err != nil {
-			log.Errorf(ctx, "OIDC: missing client side cookie: %v", err)
+			log.Dev.Errorf(ctx, "OIDC: missing client side cookie: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -676,20 +676,20 @@ var ConfigureOIDC = func(
 		// There's no need to check mode because we're only handling the JWT mode here.
 		valid, _, err := kast.validate()
 		if err != nil {
-			log.Errorf(ctx, "OIDC: validating client cookie and state token pair: %v", err)
+			log.Dev.Errorf(ctx, "OIDC: validating client cookie and state token pair: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 		if !valid {
-			log.Error(ctx, "OIDC: invalid client cookie and state token pair")
+			log.Dev.Error(ctx, "OIDC: invalid client cookie and state token pair")
 			http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
 			return
 		}
 
 		credentials, err := oidcAuthentication.manager.Exchange(ctx, r.URL.Query().Get(codeKey))
 		if err != nil {
-			log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
-			log.Errorf(ctx, "%v", r.URL.Query().Get(codeKey))
+			log.Dev.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
+			log.Dev.Errorf(ctx, "%v", r.URL.Query().Get(codeKey))
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -698,7 +698,7 @@ var ConfigureOIDC = func(
 		if oidcAuthentication.conf.generateJWTAuthTokenUseToken == useIdToken {
 			rawIDToken, ok := credentials.Extra(idTokenKey).(string)
 			if !ok {
-				log.Error(ctx, "OIDC: failed to extract ID token from the token credentials")
+				log.Dev.Error(ctx, "OIDC: failed to extract ID token from the token credentials")
 				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 				return
 			}
@@ -707,14 +707,14 @@ var ConfigureOIDC = func(
 
 		token, err := oidcAuthentication.manager.Verify(ctx, rawToken)
 		if err != nil {
-			log.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
+			log.Dev.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
 		var claims map[string]json.RawMessage
 		if err := token.Claims(&claims); err != nil {
-			log.Errorf(ctx, "OIDC: unable to deserialize token claims: %v", err)
+			log.Dev.Errorf(ctx, "OIDC: unable to deserialize token claims: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -722,7 +722,7 @@ var ConfigureOIDC = func(
 		claim := jwtauthccl.JWTAuthClaim.Get(&st.SV)
 
 		if log.V(1) {
-			log.Infof(
+			log.Dev.Infof(
 				ctx,
 				"attempting to extract SQL username from the payload using the claim key %s, issuer %s, and %s",
 				claim,
@@ -755,17 +755,17 @@ var ConfigureOIDC = func(
 
 				targetClaim, ok := claims[claim]
 				if !ok {
-					log.Errorf(ctx, "OIDC: failed to complete authentication: invalid JSON claim key: %s", claim)
-					log.Infof(ctx, "token payload includes the following claims: %s", strings.Join(claimKeys, ", "))
+					log.Dev.Errorf(ctx, "OIDC: failed to complete authentication: invalid JSON claim key: %s", claim)
+					log.Dev.Infof(ctx, "token payload includes the following claims: %s", strings.Join(claimKeys, ", "))
 					http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 					return
 				}
 				if err := json.Unmarshal(targetClaim, &principal); err != nil {
 					if log.V(1) {
-						log.Infof(ctx, "failed parsing claim as string; attempting to parse as a list")
+						log.Dev.Infof(ctx, "failed parsing claim as string; attempting to parse as a list")
 					}
 					if err := json.Unmarshal(targetClaim, &tokenPrincipals); err != nil {
-						log.Errorf(ctx, "OIDC: failed to complete authentication: failed to parse value for the claim %s: %v", claim, err)
+						log.Dev.Errorf(ctx, "OIDC: failed to complete authentication: failed to parse value for the claim %s: %v", claim, err)
 						http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 						return
 					}
@@ -795,7 +795,7 @@ var ConfigureOIDC = func(
 			for _, tokenPrincipal := range tokenPrincipals {
 				if usernames, mapFound, err := idMap.Map(token.Issuer, tokenPrincipal); mapFound {
 					if err != nil {
-						log.Errorf(ctx, "OIDC: failed to map %s, issuer %s, to SQL usernames: %v", tokenPrincipal, token.Issuer, err)
+						log.Dev.Errorf(ctx, "OIDC: failed to map %s, issuer %s, to SQL usernames: %v", tokenPrincipal, token.Issuer, err)
 						http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 						return
 					}
@@ -803,7 +803,7 @@ var ConfigureOIDC = func(
 						acceptedUsernames = append(acceptedUsernames, username.Normalized())
 					}
 				} else {
-					log.Infof(ctx, "OIDC: no identity map found for issuer %s; using %s without mapping", token.Issuer, tokenPrincipal)
+					log.Dev.Infof(ctx, "OIDC: no identity map found for issuer %s; using %s without mapping", token.Issuer, tokenPrincipal)
 					// N.B. err is elided when using secuser.PurposeValidation.
 					username, _ := secuser.MakeSQLUsernameFromUserInput(tokenPrincipal, secuser.PurposeValidation)
 					acceptedUsernames = append(acceptedUsernames, username.Normalized())
@@ -812,7 +812,7 @@ var ConfigureOIDC = func(
 		}
 
 		if len(acceptedUsernames) == 0 {
-			log.Errorf(ctx, "OIDC: failed to extract usernames from principals %v; check %s", tokenPrincipals, pgwire.ConnIdentityMapConf.Name())
+			log.Dev.Errorf(ctx, "OIDC: failed to extract usernames from principals %v; check %s", tokenPrincipals, pgwire.ConnIdentityMapConf.Name())
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -833,7 +833,7 @@ var ConfigureOIDC = func(
 		}, "", "  ")
 
 		if err != nil {
-			log.Error(ctx, "OIDC: failed to marshal connection parameters (can this happen?)")
+			log.Dev.Error(ctx, "OIDC: failed to marshal connection parameters (can this happen?)")
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -870,7 +870,7 @@ var ConfigureOIDC = func(
 
 		kast, err := newKeyAndSignedToken(hmacKeySize, stateTokenSize, mode)
 		if err != nil {
-			log.Errorf(ctx, "OIDC: unable to generate key and signed message: %v", err)
+			log.Dev.Errorf(ctx, "OIDC: unable to generate key and signed message: %v", err)
 			http.Error(w, genericLoginHTTPError, http.StatusInternalServerError)
 			return
 		}

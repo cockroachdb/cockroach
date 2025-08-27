@@ -239,7 +239,15 @@ func (t *testdir) dumpConfig(configIdx int) error {
 	for _, configPaths := range t.sqliteLogicTestsConfigPaths {
 		paths := configPaths.configPaths[configIdx]
 		for _, file := range paths {
-			dumpTestForFile(f, configPaths.testPrefix, strings.TrimPrefix(file, t.g.sqliteLogicTestsPath), "runSqliteLogicTest")
+			relativeFile := strings.TrimPrefix(file, t.g.sqliteLogicTestsPath)
+			// Skip testindexview1000slt_good_0_test for local-prepared config.
+			// Fails due to "session prepared statements: memory budget exceeded".
+			// TODO(#152139): Enable this test if we can evict some prepared statements
+			// from the session cache during the test.
+			if cfg.Name == "local-prepared" && relativeFile == "/test/index/view/1000/slt_good_0.test" {
+				continue
+			}
+			dumpTestForFile(f, configPaths.testPrefix, relativeFile, "runSqliteLogicTest")
 		}
 	}
 

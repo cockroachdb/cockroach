@@ -182,17 +182,11 @@ func (c *CustomFuncs) IsListOfConstants(elems memo.ScalarListExpr) bool {
 // array as a Const datum with type TArray.
 func (c *CustomFuncs) FoldArray(elems memo.ScalarListExpr, typ *types.T) opt.ScalarExpr {
 	elemType := typ.ArrayContents()
-	a := tree.NewDArray(elemType)
-	a.Array = make(tree.Datums, len(elems))
-	for i := range a.Array {
-		a.Array[i] = memo.ExtractConstDatum(elems[i])
-		if a.Array[i] == tree.DNull {
-			a.HasNulls = true
-		} else {
-			a.HasNonNulls = true
-		}
+	elements := make(tree.Datums, len(elems))
+	for i := range elements {
+		elements[i] = memo.ExtractConstDatum(elems[i])
 	}
-	return c.f.ConstructConst(a, typ)
+	return c.f.ConstructConst(tree.NewDArrayFromDatums(elemType, elements), typ)
 }
 
 // IsConstValueOrGroupOfConstValues returns true if the input is a constant,
@@ -672,7 +666,7 @@ func (c *CustomFuncs) FoldFunction(
 			context.Background(), tree.MakeUnresolvedFunctionName(&unresolved),
 			&c.f.evalCtx.SessionData().SearchPath)
 		if err != nil {
-			log.Warningf(c.f.ctx, "function %s() not defined: %v", redact.Safe(private.Name), err)
+			log.Dev.Warningf(c.f.ctx, "function %s() not defined: %v", redact.Safe(private.Name), err)
 			return nil, false
 		}
 		funcRef = tree.ResolvableFunctionReference{FunctionReference: def}

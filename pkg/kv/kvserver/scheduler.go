@@ -401,7 +401,7 @@ func (ss *raftSchedulerShard) worker(
 		}
 		if util.RaceEnabled { // assert the ticks invariant
 			if tick := state.flags&stateRaftTick != 0; tick != (state.ticks != 0) {
-				log.Fatalf(ctx, "stateRaftTick is %v with ticks %v", tick, state.ticks)
+				log.Dev.Fatalf(ctx, "stateRaftTick is %v with ticks %v", tick, state.ticks)
 			}
 		}
 		if state.flags&stateRaftTick != 0 {

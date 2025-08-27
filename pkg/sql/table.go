@@ -87,7 +87,7 @@ func (p *planner) createDropDatabaseJob(
 		NonCancelable: true,
 	}
 	jobID := p.extendedEvalCtx.QueueJob(jobRecord)
-	log.Infof(ctx, "queued new drop database job %d for database %d", jobID, databaseID)
+	log.Dev.Infof(ctx, "queued new drop database job %d for database %d", jobID, databaseID)
 	return nil
 }
 
@@ -114,7 +114,7 @@ func (p *planner) createNonDropDatabaseChangeJob(
 		NonCancelable: true,
 	}
 	jobID := p.extendedEvalCtx.QueueJob(jobRecord)
-	log.Infof(ctx, "queued new database schema change job %d for database %d", jobID, databaseID)
+	log.Dev.Infof(ctx, "queued new database schema change job %d for database %d", jobID, databaseID)
 	return nil
 }
 
@@ -201,7 +201,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		if mutationID != descpb.InvalidMutationID {
 			tableDesc.MutationJobs = append(tableDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
 				MutationID: mutationID, JobID: newRecord.JobID})
-			log.Infof(ctx, "queued new schema-change job %d for table %d, mutation %d",
+			log.Dev.Infof(ctx, "queued new schema-change job %d for table %d, mutation %d",
 				newRecord.JobID, tableDesc.ID, mutationID)
 		}
 		return nil
@@ -244,7 +244,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	if record.Description != jobDesc {
 		record.AppendDescription(jobDesc)
 	}
-	log.Infof(ctx, "job %d: updated with schema change for table %d, mutation %d",
+	log.Dev.Infof(ctx, "job %d: updated with schema change for table %d, mutation %d",
 		record.JobID, tableDesc.ID, mutationID)
 	return nil
 }
@@ -309,7 +309,7 @@ func (p *planner) writeVersionBump(ctx context.Context, id descpb.ID) error {
 		return scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
 
-	return p.writeTableDesc(ctx, tableDesc, withIsVersionBump())
+	return p.writeTableDesc(ctx, tableDesc, descs.WithOnlyVersionBump())
 }
 
 func (p *planner) writeSchemaChangeToBatch(
@@ -337,21 +337,8 @@ func (p *planner) writeDropTable(
 	return p.writeTableDesc(ctx, tableDesc)
 }
 
-type writeTableDescOptions struct {
-	isVersionBump bool
-}
-
-// Option is a function that modifies Options
-type writeTableDescOption func(*writeTableDescOptions)
-
-func withIsVersionBump() writeTableDescOption {
-	return func(opts *writeTableDescOptions) {
-		opts.isVersionBump = true
-	}
-}
-
 func (p *planner) writeTableDesc(
-	ctx context.Context, tableDesc *tabledesc.Mutable, opts ...writeTableDescOption,
+	ctx context.Context, tableDesc *tabledesc.Mutable, opts ...descs.WriteDescOption,
 ) error {
 	b := p.txn.NewBatch()
 	if err := p.writeTableDescToBatch(ctx, tableDesc, b, opts...); err != nil {
@@ -361,13 +348,8 @@ func (p *planner) writeTableDesc(
 }
 
 func (p *planner) writeTableDescToBatch(
-	ctx context.Context, tableDesc *tabledesc.Mutable, b *kv.Batch, opts ...writeTableDescOption,
+	ctx context.Context, tableDesc *tabledesc.Mutable, b *kv.Batch, opts ...descs.WriteDescOption,
 ) error {
-	options := &writeTableDescOptions{}
-	for _, opt := range opts {
-		opt(options)
-	}
-
 	if tableDesc.IsVirtualTable() {
 		return errors.AssertionFailedf("virtual descriptors cannot be stored, found: %v", tableDesc)
 	}
@@ -386,12 +368,7 @@ func (p *planner) writeTableDescToBatch(
 		return errors.NewAssertionErrorWithWrappedErrf(err, "table descriptor is not valid\n%v\n", tableDesc)
 	}
 
-	// Noop writes to a descriptor (version bumps) are used to trigger cache
-	// invalidations. In that case, transactions block on visibility instead of
-	// convergence
-	defer p.descCollection.MaybeMarkVersionBump(tableDesc, options.isVersionBump)()
-
 	return p.Descriptors().WriteDescToBatch(
-		ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), tableDesc, b,
+		ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), tableDesc, b, opts...,
 	)
 }

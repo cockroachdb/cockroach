@@ -129,7 +129,7 @@ func (ds *ServerImpl) Drain(
 	ctx context.Context, flowDrainWait time.Duration, reporter func(int, redact.SafeString),
 ) {
 	if err := ds.setDraining(true); err != nil {
-		log.Warningf(ctx, "unable to gossip distsql draining state: %v", err)
+		log.Dev.Warningf(ctx, "unable to gossip distsql draining state: %v", err)
 	}
 
 	flowWait := flowDrainWait
@@ -230,7 +230,7 @@ func (ds *ServerImpl) setupFlow(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
 			req.Version, execversion.MinAccepted, execversion.Latest,
 		)
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		return ctx, nil, nil, err
 	}
 	ctx = execversion.WithVersion(ctx, req.Version)
@@ -354,7 +354,6 @@ func (ds *ServerImpl) setupFlow(
 			ReCache:                   ds.regexpCache,
 			ToCharFormatCache:         ds.toCharFormatCache,
 			Locality:                  ds.ServerConfig.Locality,
-			OriginalLocality:          ds.ServerConfig.Locality,
 			Tracer:                    ds.ServerConfig.Tracer,
 			Planner:                   &faketreeeval.DummyEvalPlanner{Monitor: monitor},
 			StreamManagerFactory:      &faketreeeval.DummyStreamManagerFactory{},
@@ -429,7 +428,7 @@ func (ds *ServerImpl) setupFlow(
 	var err error
 	ctx, opChains, err = f.Setup(ctx, &req.Flow, opt)
 	if err != nil {
-		log.Errorf(ctx, "error setting up flow: %s", err)
+		log.Dev.Errorf(ctx, "error setting up flow: %s", err)
 		return ctx, nil, nil, err
 	}
 	if isVectorized {
@@ -627,7 +626,7 @@ func (ds *ServerImpl) setupSpanForIncomingRPC(
 	// gRPC metadata, we use it.
 	remoteParent, err := grpcinterceptor.ExtractSpanMetaFromGRPCCtx(ctx, tr)
 	if err != nil {
-		log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
+		log.Dev.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
 	}
 	return tr.StartSpanCtx(ctx, tracingutil.SetupFlowMethodName,
 		tracing.WithRemoteParentFromSpanMeta(remoteParent),
@@ -742,7 +741,7 @@ func (ds *ServerImpl) flowStreamInt(
 	flowID := msg.Header.FlowID
 	streamID := msg.Header.StreamID
 	if log.V(1) {
-		log.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
+		log.Dev.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
 	}
 	f, streamStrategy, cleanup, err := ds.flowRegistry.ConnectInboundStream(
 		ctx, flowID, streamID, stream, flowinfra.SettingFlowStreamTimeout.Get(&ds.Settings.SV),
@@ -775,7 +774,7 @@ func (ds *ServerImpl) flowStream(stream execinfrapb.RPCDistSQL_FlowStreamStream)
 		// flowStreamInt may return an error during normal operation (e.g. a flow
 		// was canceled as part of a graceful teardown). Log this error at the INFO
 		// level behind a verbose flag for visibility.
-		log.Infof(ctx, "%v", err)
+		log.Dev.Infof(ctx, "%v", err)
 	}
 	return err
 }

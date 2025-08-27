@@ -654,7 +654,7 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 		if pool != nil {
 			poolname = redact.SafeString(pool.name.String())
 		}
-		log.InfofDepth(ctx, 1, "%s: starting monitor, reserved %s, pool %s",
+		log.Dev.InfofDepth(ctx, 1, "%s: starting monitor, reserved %s, pool %s",
 			mm.name,
 			humanizeutil.IBytes(mm.reserved.used),
 			poolname)
@@ -701,7 +701,7 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 // "detached" mode without a pool and without a maximum budget.
 func NewUnlimitedMonitor(ctx context.Context, args Options) *BytesMonitor {
 	if log.V(2) {
-		log.InfofDepth(ctx, 1, "%s: starting unlimited monitor", args.Name)
+		log.Dev.InfofDepth(ctx, 1, "%s: starting unlimited monitor", args.Name)
 	}
 	// The limit is expected to not be set, but let's be conservative.
 	args.Limit = math.MaxInt64
@@ -787,7 +787,7 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	}
 
 	if log.V(1) && mm.mu.maxAllocated >= bytesMaxUsageLoggingThreshold {
-		log.InfofDepth(ctx, 1, "%s, bytes usage max %s",
+		log.Dev.InfofDepth(ctx, 1, "%s, bytes usage max %s",
 			mm.name,
 			humanizeutil.IBytes(mm.mu.maxAllocated))
 	}
@@ -1063,7 +1063,7 @@ func (mm *BytesMonitor) TransferAccount(
 // allocation.
 func (b *BoundAccount) Init(ctx context.Context, mon *BytesMonitor) {
 	if *b != (BoundAccount{}) {
-		log.Fatalf(ctx, "trying to re-initialize non-empty account")
+		log.Dev.Fatalf(ctx, "trying to re-initialize non-empty account")
 	}
 	b.mon = mon
 }
@@ -1261,7 +1261,7 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 	if log.V(2) {
 		// We avoid VEventf here because we want to avoid computing the
 		// trace string if there is nothing to log.
-		log.Infof(ctx, "%s: now at %d bytes (+%d) - %s",
+		log.Dev.Infof(ctx, "%s: now at %d bytes (+%d) - %s",
 			mm.name, mm.mu.curAllocated, x, util.GetSmallTrace(3))
 	}
 	return nil
@@ -1294,7 +1294,7 @@ func (mm *BytesMonitor) releaseBytesLocked(ctx context.Context, sz int64) {
 	if log.V(2) {
 		// We avoid VEventf here because we want to avoid computing the
 		// trace string if there is nothing to log.
-		log.Infof(ctx, "%s: now at %d bytes (-%d) - %s",
+		log.Dev.Infof(ctx, "%s: now at %d bytes (-%d) - %s",
 			mm.name, mm.mu.curAllocated, sz, util.GetSmallTrace(5))
 	}
 }
@@ -1307,7 +1307,7 @@ func (mm *BytesMonitor) increaseBudget(ctx context.Context, minExtra int64) erro
 		return mm.makeBudgetExceededError(minExtra)
 	}
 	if log.V(2) {
-		log.Infof(ctx, "%s: requesting %d bytes from the pool", mm.name, minExtra)
+		log.Dev.Infof(ctx, "%s: requesting %d bytes from the pool", mm.name, minExtra)
 	}
 
 	return mm.mu.curBudget.Grow(ctx, minExtra)
@@ -1331,7 +1331,7 @@ func (mm *BytesMonitor) roundSize(sz int64) int64 {
 func (mm *BytesMonitor) releaseBudget(ctx context.Context) {
 	// NB: mm.mu need not be locked here, as this is only called from StopMonitor().
 	if log.V(2) {
-		log.Infof(ctx, "%s: releasing %d bytes to the pool", mm.name, mm.mu.curBudget.Allocated())
+		log.Dev.Infof(ctx, "%s: releasing %d bytes to the pool", mm.name, mm.mu.curBudget.Allocated())
 	}
 	mm.mu.curBudget.Clear(ctx)
 }

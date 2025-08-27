@@ -149,12 +149,12 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 				if jobs.HasJobNotFoundError(err) {
 					return errors.Wrapf(err, "replication stream %d failed loading producer job progress", p.job.ID())
 				}
-				log.Errorf(ctx,
+				log.Dev.Errorf(ctx,
 					"replication stream %d failed loading producer job progress (retrying): %v", p.job.ID(), err)
 				continue
 			}
 			if progress == nil {
-				log.Errorf(ctx, "replication stream %d cannot find producer job progress (retrying)", p.job.ID())
+				log.Dev.Errorf(ctx, "replication stream %d cannot find producer job progress (retrying)", p.job.ID())
 				continue
 			}
 

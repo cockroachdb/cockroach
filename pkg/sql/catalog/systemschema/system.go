@@ -1338,10 +1338,11 @@ CREATE TABLE public.inspect_errors (
     id OID NOT NULL,
     primary_key STRING NULL,
     details STRING NOT NULL,
+    crdb_internal_expiration TIMESTAMPTZ NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL,
     CONSTRAINT "primary" PRIMARY KEY (error_id ASC),
     INDEX object_idx (id ASC),
-	FAMILY "primary" (error_id, job_id, error_type, database_id, schema_id, id, primary_key, details)
-);`
+	FAMILY "primary" (error_id, job_id, error_type, database_id, schema_id, id, primary_key, details, crdb_internal_expiration)
+) WITH (ttl_expire_after = '90 days');`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1499,7 +1500,7 @@ func makeSystemTable(
 		}
 		privs := catprivilege.SystemSuperuserPrivileges(nameInfo)
 		if privs == nil {
-			log.Fatalf(ctx, "no superuser privileges found when building descriptor of system table %q", tbl.Name)
+			log.Dev.Fatalf(ctx, "no superuser privileges found when building descriptor of system table %q", tbl.Name)
 		}
 		tbl.Privileges = catpb.NewCustomSuperuserPrivilegeDescriptor(privs, username.NodeUserName())
 	}
@@ -5228,6 +5229,8 @@ var (
 		),
 	)
 
+	inspectErrorsExpirationString = "current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL"
+
 	InspectErrorsTable = makeSystemTable(
 		InspectErrorsTableSchema,
 		systemTable(
@@ -5242,13 +5245,14 @@ var (
 				{Name: "id", ID: 6, Type: types.Oid},
 				{Name: "primary_key", ID: 7, Type: types.String, Nullable: true},
 				{Name: "details", ID: 8, Type: types.String},
+				{Name: "crdb_internal_expiration", ID: 9, Type: types.TimestampTZ, DefaultExpr: &inspectErrorsExpirationString, OnUpdateExpr: &inspectErrorsExpirationString},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 
 					Name:        "primary",
-					ColumnNames: []string{"error_id", "job_id", "error_type", "database_id", "schema_id", "id", "primary_key", "details"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
+					ColumnNames: []string{"error_id", "job_id", "error_type", "database_id", "schema_id", "id", "primary_key", "details", "crdb_internal_expiration"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
 				},
 			},
 			descpb.IndexDescriptor{
@@ -5270,6 +5274,10 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 			},
 		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.RowLevelTTL = &catpb.RowLevelTTL{
+				DurationExpr: catpb.Expression("'90 days':::INTERVAL")}
+		},
 	)
 )
 

@@ -192,10 +192,10 @@ func (p *poller) poll(ctx context.Context) {
 				return p.db.StoreData(ctx, p.r, data)
 			},
 		); err != nil {
-			log.Warningf(ctx, "error writing time series data: %s", err)
+			log.Dev.Warningf(ctx, "error writing time series data: %s", err)
 		}
 	}); err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 	}
 }
 

@@ -3795,7 +3795,7 @@ func TestReplicaErrorsMerged(t *testing.T) {
 				tok, err := rc.LookupWithEvictionToken(ctx, roachpb.RKeyMin, rangecache.EvictionToken{}, false)
 				require.NoError(t, err)
 				br, err := ds.sendToReplicas(ctx, ba, tok, tc.withCommit)
-				log.Infof(ctx, "Error is %v", err)
+				log.Dev.Infof(ctx, "Error is %v", err)
 				require.ErrorContains(t, err, tc.expErr)
 				require.Nil(t, br)
 			})

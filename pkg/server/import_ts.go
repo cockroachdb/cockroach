@@ -45,7 +45,7 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 	{
 		var defErr error
 		deferError = func(err error) {
-			log.Infof(ctx, "%v", err)
+			log.Dev.Infof(ctx, "%v", err)
 			defErr = errors.CombineErrors(defErr, err)
 		}
 		defer func() {
@@ -175,7 +175,7 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 		if err != nil {
 			return err
 		}
-		log.Infof(ctx, "imported %d ts pairs\n", batchSize)
+		log.Dev.Infof(ctx, "imported %d ts pairs\n", batchSize)
 		*batch, batchSize = kv.Batch{}, 0
 		return nil
 	}

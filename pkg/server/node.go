@@ -695,7 +695,7 @@ func (n *Node) start(
 					return
 				}
 				n.addStore(ctx, s)
-				log.Infof(ctx, "initialized store s%s in %s (%d replicas)",
+				log.Dev.Infof(ctx, "initialized store s%s in %s (%d replicas)",
 					s.StoreID(), timeutil.Since(start).Truncate(time.Millisecond), s.ReplicaCount())
 				engineErrC <- nil
 			})
@@ -770,7 +770,7 @@ func (n *Node) start(
 		n.additionalStoreInitCh = make(chan struct{})
 		if err := n.stopper.RunAsyncTask(workersCtx, "initialize-additional-stores", func(ctx context.Context) {
 			if err := n.initializeAdditionalStores(ctx, state.uninitializedEngines); err != nil {
-				log.Fatalf(ctx, "while initializing additional stores: %v", err)
+				log.Dev.Fatalf(ctx, "while initializing additional stores: %v", err)
 			}
 			close(n.additionalStoreInitCh)
 		}); err != nil {
@@ -806,7 +806,7 @@ func (n *Node) start(
 		}
 	})
 
-	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
+	log.Dev.Infof(ctx, "started with attributes %v", attrs.Attrs)
 
 	n.startPeriodicLivenessCompaction(n.stopper, livenessRangeCompactInterval)
 	return nil
@@ -864,7 +864,7 @@ func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
 	if cv == (roachpb.Version{}) {
 		// The store should have had a version written to it during the store
 		// initialization process.
-		log.Fatal(ctx, "attempting to add a store without a version")
+		log.Dev.Fatal(ctx, "attempting to add a store without a version")
 	}
 	store.TODOEngine().RegisterDiskSlowCallback(func(info pebble.DiskSlowInfo) {
 		n.onStoreDiskSlow(n.AnnotateCtx(context.Background()), store.StoreID(), info)
@@ -1015,12 +1015,12 @@ func (n *Node) initializeAdditionalStores(ctx context.Context, engines []storage
 			}
 
 			n.addStore(ctx, s)
-			log.Infof(ctx, "initialized new store s%s", s.StoreID())
+			log.Dev.Infof(ctx, "initialized new store s%s", s.StoreID())
 
 			// Done regularly in Node.startGossiping, but this cuts down the time
 			// until this store is used for range allocations.
 			if err := s.GossipStore(ctx, false /* useCached */); err != nil {
-				log.Warningf(ctx, "error doing initial gossiping: %s", err)
+				log.Dev.Warningf(ctx, "error doing initial gossiping: %s", err)
 			}
 
 			sIdent.StoreID++
@@ -1030,7 +1030,7 @@ func (n *Node) initializeAdditionalStores(ctx context.Context, engines []storage
 	// Write a new status summary after all stores have been initialized; this
 	// helps the UI remain responsive when new nodes are added.
 	if err := n.writeNodeStatus(ctx, false /* mustExist */); err != nil {
-		log.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
+		log.Dev.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
 	}
 
 	return nil
@@ -1073,7 +1073,7 @@ func (n *Node) startGossiping(ctx context.Context, stopper *stop.Stopper) {
 				n.gossipStores(ctx)
 			case <-nodeTicker.C:
 				if err := n.storeCfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
-					log.Warningf(ctx, "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
+					log.Dev.Warningf(ctx, "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 				}
 			case <-stopper.ShouldQuiesce():
 				return
@@ -1087,7 +1087,7 @@ func (n *Node) gossipStores(ctx context.Context) {
 	if err := n.stores.VisitStores(func(s *kvserver.Store) error {
 		return s.GossipStore(ctx, false /* useCached */)
 	}); err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 	}
 }
 
@@ -1106,7 +1106,7 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 			select {
 			case <-ticker.C:
 				if err := n.computeMetricsPeriodically(ctx, previousMetrics, tick); err != nil {
-					log.Errorf(ctx, "failed computing periodic metrics: %s", err)
+					log.Dev.Errorf(ctx, "failed computing periodic metrics: %s", err)
 				}
 			case <-stopper.ShouldQuiesce():
 				return
@@ -1175,10 +1175,10 @@ func (n *Node) startPeriodicLivenessCompaction(
 							timeBeforeCompaction := timeutil.Now()
 							if err := store.StateEngine().CompactRange(
 								context.Background(), startEngineKey, endEngineKey); err != nil {
-								log.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
+								log.Dev.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
 							}
 
-							log.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
+							log.Dev.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
 								repl, timeutil.Since(timeBeforeCompaction))
 						}
 						return true
@@ -1192,7 +1192,7 @@ func (n *Node) startPeriodicLivenessCompaction(
 			}
 		}
 	}); err != nil {
-		log.Errorf(ctx, "failed to start the async liveness compaction task")
+		log.Dev.Errorf(ctx, "failed to start the async liveness compaction task")
 	}
 
 }
@@ -1216,7 +1216,7 @@ func (n *Node) computeMetricsPeriodically(
 ) error {
 	err := n.stores.VisitStores(func(store *kvserver.Store) error {
 		if newMetrics, err := store.ComputeMetricsPeriodically(ctx, storeToMetrics[store], tick); err != nil {
-			log.Warningf(ctx, "%s: unable to compute metrics: %s", store, err)
+			log.Dev.Warningf(ctx, "%s: unable to compute metrics: %s", store, err)
 		} else {
 			if storeToMetrics[store] == nil {
 				storeToMetrics[store] = &storage.MetricsForInterval{
@@ -1247,7 +1247,7 @@ func (n *Node) computeMetricsPeriodically(
 func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOThreshold) {
 	s, err := n.stores.GetStore(id)
 	if err != nil {
-		log.Errorf(n.AnnotateCtx(context.Background()), "%v", err)
+		log.Dev.Errorf(n.AnnotateCtx(context.Background()), "%v", err)
 	}
 	s.UpdateIOThreshold(threshold)
 }
@@ -1361,7 +1361,7 @@ func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetric
 		&pmp.n.storeCfg.Settings.SV)
 	storeIDToDiskStats, err := pmp.diskStatsMap.tryPopulateAdmissionDiskStats(clusterProvisionedBandwidth)
 	if err != nil {
-		log.Warningf(context.Background(), "%v",
+		log.Dev.Warningf(context.Background(), "%v",
 			errors.Wrapf(err, "unable to populate disk stats"))
 	}
 	var metrics []admission.StoreMetrics
@@ -1447,7 +1447,7 @@ func startGraphiteStatsExporter(
 				endpoint := graphiteEndpoint.Get(&st.SV)
 				if endpoint != "" {
 					if err := recorder.ExportToGraphite(ctx, endpoint, &pm); err != nil {
-						log.Infof(ctx, "error pushing metrics to graphite: %s\n", err)
+						log.Dev.Infof(ctx, "error pushing metrics to graphite: %s\n", err)
 					}
 				}
 			}
@@ -1484,7 +1484,7 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 					// the status entry after the decommissioner has removed it.
 					// See Server.Decommission().
 					if err := n.writeNodeStatus(ctx, true /* mustExist */); err != nil {
-						log.Warningf(ctx, "error recording status summaries: %s", err)
+						log.Dev.Warningf(ctx, "error recording status summaries: %s", err)
 					}
 				case <-n.stopper.ShouldQuiesce():
 					return
@@ -1514,16 +1514,16 @@ func (n *Node) writeNodeStatus(ctx context.Context, mustExist bool) error {
 				numNodes++
 				return nil
 			}); err != nil {
-				log.Warningf(ctx, "%v", err)
+				log.Dev.Warningf(ctx, "%v", err)
 			}
 			if numNodes > 1 {
 				// Avoid this warning on single-node clusters, which require special UX.
-				log.Warningf(ctx, "health alerts detected: %s", result)
+				log.Dev.Warningf(ctx, "health alerts detected: %s", result)
 			}
 			if err := n.storeCfg.Gossip.AddInfoProto(
 				gossip.MakeNodeHealthAlertKey(n.Descriptor.NodeID), &result, 2*base.DefaultMetricsSampleInterval, /* ttl */
 			); err != nil {
-				log.Warningf(ctx, "unable to gossip health alerts: %+v", result)
+				log.Dev.Warningf(ctx, "unable to gossip health alerts: %+v", result)
 			}
 
 			// TODO(tschottdorf): add a metric that we increment every time there are
@@ -1702,7 +1702,7 @@ func (n *Node) batchInternal(
 		if sp := tracing.SpanFromContext(ctx); sp != nil {
 			recording := sp.GetConfiguredRecording()
 			if recording.Len() != 0 {
-				log.Infof(ctx, "batch request %s failed with error: %v\ntrace:\n%s", args.String(),
+				log.Dev.Infof(ctx, "batch request %s failed with error: %v\ntrace:\n%s", args.String(),
 					pErr.GoError(), recording)
 			}
 		}
@@ -1775,7 +1775,7 @@ func (n *Node) getLocalityComparison(
 ) roachpb.LocalityComparisonType {
 	gossip := n.storeCfg.Gossip
 	if gossip == nil {
-		log.VInfof(ctx, 2, "gossip is not configured")
+		log.Dev.VInfof(ctx, 2, "gossip is not configured")
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
@@ -1787,7 +1787,7 @@ func (n *Node) getLocalityComparison(
 	}
 	gatewayNodeDesc, err := gossip.GetNodeDescriptor(gatewayNodeID)
 	if err != nil {
-		log.VInfof(ctx, 5,
+		log.Dev.VInfof(ctx, 5,
 			"failed to perform look up for node descriptor %v", err)
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
@@ -1854,7 +1854,7 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 			br = &kvpb.BatchResponse{}
 		}
 		if br.Error != nil {
-			log.Fatalf(
+			log.Dev.Fatalf(
 				ctx, "attempting to return both a plain error (%s) and kvpb.Error (%s)", err, br.Error,
 			)
 		}
@@ -2012,7 +2012,7 @@ func setupSpanForIncomingRPC(
 		// one, it'd be unclear what needRecordingCollection should be set to.
 		parentSpan := tracing.SpanFromContext(ctx)
 		if parentSpan != nil {
-			log.Fatalf(ctx, "unexpected span found in non-local RPC: %s", parentSpan)
+			log.Dev.Fatalf(ctx, "unexpected span found in non-local RPC: %s", parentSpan)
 		}
 
 		ctx, newSpan = tr.StartSpanCtx(
@@ -2126,7 +2126,7 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 		dur := start.Elapsed()
 		if dur > slowMuxStreamSendThreshold {
 			s.metrics.SlowSends.Inc(1)
-			log.Infof(s.wrapped.Context(), "slow send on stream %d for r%d took %s", e.StreamID, e.RangeID, dur)
+			log.Dev.Infof(s.wrapped.Context(), "slow send on stream %d for r%d took %s", e.StreamID, e.RangeID, dur)
 		}
 	}()
 
@@ -2275,7 +2275,7 @@ func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error
 					consumerID = req.ConsumerID
 				}
 				if req.ConsumerID != 0 && consumerID != req.ConsumerID {
-					log.Warningf(ctx, "ignoring previously unseen consumer ID %d, using %d",
+					log.Dev.Warningf(ctx, "ignoring previously unseen consumer ID %d, using %d",
 						req.ConsumerID, consumerID)
 				}
 
@@ -2311,7 +2311,7 @@ func (n *Node) ResetQuorum(
 	if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txnTries++
 		if txnTries > 1 {
-			log.Infof(ctx, "failed to retrieve range descriptor for r%d, retrying...", req.RangeID)
+			log.Dev.Infof(ctx, "failed to retrieve range descriptor for r%d, retrying...", req.RangeID)
 		}
 		kvs, err := kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
 			Key:    roachpb.KeyMin,
@@ -2332,10 +2332,10 @@ func (n *Node) ResetQuorum(
 		}
 		return errors.Errorf("r%d not found", req.RangeID)
 	}); err != nil {
-		log.Errorf(ctx, "range descriptor for r%d could not be read: %v", req.RangeID, err)
+		log.Dev.Errorf(ctx, "range descriptor for r%d could not be read: %v", req.RangeID, err)
 		return nil, err
 	}
-	log.Infof(ctx, "retrieved original range descriptor %s", desc)
+	log.Dev.Infof(ctx, "retrieved original range descriptor %s", desc)
 
 	// Check that we've actually lost quorum.
 	available := desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
@@ -2372,7 +2372,7 @@ func (n *Node) ResetQuorum(
 	// Increment the generation so that the various caches will recognize this descriptor as newer.
 	desc.IncrementGeneration()
 
-	log.Infof(ctx, "initiating recovery process using %s", desc)
+	log.Dev.Infof(ctx, "initiating recovery process using %s", desc)
 
 	// Update the meta2 entry. Note that we're intentionally
 	// eschewing updateRangeAddressing since the copy of the
@@ -2381,7 +2381,7 @@ func (n *Node) ResetQuorum(
 	if err := n.storeCfg.DB.CPut(ctx, metaKey, &desc, expValue.TagAndDataBytes()); err != nil {
 		return nil, err
 	}
-	log.Infof(ctx, "updated meta2 entry for r%d", desc.RangeID)
+	log.Dev.Infof(ctx, "updated meta2 entry for r%d", desc.RangeID)
 
 	// Set up connection to self. Use rpc.SystemClass to avoid throttling.
 	client, err := kvserver.DialMultiRaftClient(n.storeCfg.NodeDialer, ctx, n.Descriptor.NodeID, rpcbase.SystemClass)
@@ -2404,7 +2404,7 @@ func (n *Node) ResetQuorum(
 	); err != nil {
 		return nil, err
 	}
-	log.Infof(ctx, "sent empty snapshot to %s", toReplicaDescriptor)
+	log.Dev.Infof(ctx, "sent empty snapshot to %s", toReplicaDescriptor)
 
 	return &kvpb.ResetQuorumResponse{}, nil
 }
@@ -2474,7 +2474,7 @@ func (n *Node) gossipSubscription(
 				// The consumer was not keeping up with gossip updates, so its
 				// subscription was terminated to avoid blocking gossip.
 				err := kvpb.NewErrorf("subscription terminated due to slow consumption")
-				log.Warningf(ctx, "%v", err)
+				log.Dev.Warningf(ctx, "%v", err)
 				e = &kvpb.GossipSubscriptionEvent{Error: err}
 			}
 			if err := stream.Send(e); err != nil {
@@ -2533,7 +2533,7 @@ func (n *Node) tenantSettings(
 	}
 
 	sendSettings := func(precedence kvpb.TenantSettingsEvent_Precedence, overrides []kvpb.TenantSetting, incremental bool) error {
-		log.VInfof(ctx, 1, "sending precedence %d (incremental=%v): %v", precedence, overrides, incremental)
+		log.Dev.VInfof(ctx, 1, "sending precedence %d (incremental=%v): %v", precedence, overrides, incremental)
 		return stream.Send(&kvpb.TenantSettingsEvent{
 			EventType:   kvpb.TenantSettingsEvent_SETTING_EVENT,
 			Precedence:  precedence,
@@ -2546,7 +2546,7 @@ func (n *Node) tenantSettings(
 		fakePrecedence kvpb.TenantSettingsEvent_Precedence,
 		tInfo tenantcapabilities.Entry,
 	) error {
-		log.VInfof(ctx, 1, "sending tenant info: %+v", tInfo)
+		log.Dev.VInfof(ctx, 1, "sending tenant info: %+v", tInfo)
 		// Note: we are piggy-backing on the TenantSetting streaming RPC
 		// to send non-setting data. This must be careful to work on
 		// SQL servers running previous versions of the CockroachDB code.
@@ -2773,7 +2773,7 @@ func (n *Node) Join(
 		return nil, err
 	}
 
-	log.Infof(ctx, "allocated IDs: n%d, s%d", nodeID, storeID)
+	log.Dev.Infof(ctx, "allocated IDs: n%d, s%d", nodeID, storeID)
 
 	return &kvpb.JoinNodeResponse{
 		ClusterID:     n.clusterID.Get().GetBytes(),

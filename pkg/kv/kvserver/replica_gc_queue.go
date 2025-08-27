@@ -123,7 +123,7 @@ func (rgcq *replicaGCQueue) shouldQueue(
 	}
 	lastCheck, err := repl.GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
-		log.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
+		log.Dev.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
 		return false, 0
 	}
 	isSuspect := replicaIsSuspect(repl)
@@ -215,7 +215,7 @@ func replicaGCShouldQueueImpl(now, lastCheck hlc.Timestamp, isSuspect bool) (boo
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
 func (rgcq *replicaGCQueue) process(
-	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, _ spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	// Note that the Replicas field of desc is probably out of date, so
 	// we should only use `desc` for its static fields like RangeID and
@@ -299,7 +299,7 @@ func (rgcq *replicaGCQueue) process(
 			// snapshot for *each* of them. This typically happens for the last
 			// range:
 			// [n1,replicaGC,s1,r33/1:/{Table/53/1/3…-Max}] removing replica [...]
-			log.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
+			log.Dev.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
 		}
 
 		rgcq.metrics.RemoveReplicaCount.Inc(1)

@@ -1866,11 +1866,11 @@ func newRegisteredServer(
 
 	_ = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		closeReason := s.Serve(&tracker)
-		log.Infof(ctx, "Closed listener with reason %v", closeReason)
+		log.Dev.Infof(ctx, "Closed listener with reason %v", closeReason)
 	})
 
 	addr := ln.Addr().String()
-	log.Infof(ctx, "Listening on %s", addr)
+	log.Dev.Infof(ctx, "Listening on %s", addr)
 	// This needs to be set once we know our address so that ping requests have
 	// the correct reverse addr in them.
 	rpcCtx.AdvertiseAddr = addr

@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	jsonpath "github.com/cockroachdb/cockroach/pkg/util/jsonpath/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -4103,7 +4104,6 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Immutable,
 		},
 	),
-	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
 	"metaphone": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
 		tree.Overload{
@@ -4134,6 +4134,62 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"dmetaphone":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
 	"dmetaphone_alt": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"levenshtein_less_equal": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "source", Typ: types.String},
+				{Name: "target", Typ: types.String},
+				{Name: "max_d", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				d := int(tree.MustBeDInt(args[2]))
+
+				// Same limit as Postgres. Ref: https://github.com/postgres/postgres/blob/53ea2b7ad050ce4ad95c89bb55197209b65886a1/src/backend/utils/adt/levenshtein.c#L26
+				const maxLen = 255
+				if utf8.RuneCountInString(s) > maxLen || utf8.RuneCountInString(t) > maxLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"levenshtein_less_equal argument exceeds maximum length of %d characters", maxLen)
+				}
+				ld := fuzzystrmatch.LevenshteinLessEqualDistance(s, t, d)
+				return tree.NewDInt(tree.DInt(ld)), nil
+			},
+			Info: "Calculates the Levenshtein distance between two strings. If actual distance is less or equal then max_d, " +
+				"then it returns the distance. Otherwise this function returns a value greater than max_d. " +
+				"The maximum length of the input strings is 255 characters.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "source", Typ: types.String},
+				{Name: "target", Typ: types.String},
+				{Name: "ins_cost", Typ: types.Int},
+				{Name: "del_cost", Typ: types.Int},
+				{Name: "sub_cost", Typ: types.Int},
+				{Name: "max_d", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				ins, del, sub := int(tree.MustBeDInt(args[2])), int(tree.MustBeDInt(args[3])), int(tree.MustBeDInt(args[4]))
+				d := int(tree.MustBeDInt(args[5]))
+				const maxLen = 255
+				if utf8.RuneCountInString(s) > maxLen || utf8.RuneCountInString(t) > maxLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"levenshtein_less_equal argument exceeds maximum length of %d characters", maxLen)
+				}
+				ld := fuzzystrmatch.LevenshteinLessEqualDistanceWithCost(s, t, ins, del, sub, d)
+				return tree.NewDInt(tree.DInt(ld)), nil
+			},
+			Info: "Calculates the Levenshtein distance between two strings. The cost parameters specify how much to " +
+				"charge for each edit operation. If actual distance is less or equal then max_d, " +
+				"then it returns the distance. Otherwise this function returns a value greater than max_d. " +
+				"The maximum length of the input strings is 255 characters.",
+			Volatility: volatility.Immutable,
+		},
+	),
 
 	// JSON functions.
 	// The behavior of both the JSON and JSONB data types in CockroachDB is
@@ -6058,7 +6114,7 @@ SELECT
 					return nil, errors.Newf("expected string value, got %T", args[0])
 				}
 				msg := string(s)
-				log.Infof(ctx, "crdb_internal.log(): %s", msg)
+				log.Dev.Infof(ctx, "crdb_internal.log(): %s", msg)
 				return tree.DVoidDatum, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
@@ -6085,7 +6141,7 @@ SELECT
 					return nil, errors.Newf("expected string value, got %T", args[0])
 				}
 				msg := string(s)
-				log.Fatalf(ctx, "force_log_fatal(): %s", msg)
+				log.Dev.Fatalf(ctx, "force_log_fatal(): %s", msg)
 				return nil, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
@@ -7204,7 +7260,7 @@ SELECT
 					return tree.DBoolFalse, nil // return false for easier race handling in tests
 				}
 
-				log.Warningf(ctx, "crdb_internal.unsafe_lock_replica on r%d with lock=%t", rangeID, lock)
+				log.Dev.Warningf(ctx, "crdb_internal.unsafe_lock_replica on r%d with lock=%t", rangeID, lock)
 
 				if lock {
 					replicaMu.Lock() // deadlocks if called twice
@@ -7480,7 +7536,7 @@ Parameters:` + randgencfg.ConfigDoc,
 				if ek, ok := storage.DecodeEngineKey(endKey); !ok || ek.Validate() != nil {
 					endKey = storage.EncodeMVCCKey(storage.MVCCKey{Key: endKey})
 				}
-				log.Infof(ctx, "crdb_internal.compact_engine_span called for nodeID=%d, storeID=%d, range[startKey=%s, endKey=%s]", nodeID, storeID, startKey, endKey)
+				log.Dev.Infof(ctx, "crdb_internal.compact_engine_span called for nodeID=%d, storeID=%d, range[startKey=%s, endKey=%s]", nodeID, storeID, startKey, endKey)
 				if err := evalCtx.CompactEngineSpan(
 					ctx, nodeID, storeID, startKey, endKey); err != nil {
 					return nil, err
@@ -9410,6 +9466,225 @@ WHERE object_id = table_descriptor_id
 			Volatility: volatility.Volatile,
 		},
 	),
+
+	// The following functions are all part of the LTREE extension in Postgres.
+	// They can be found documented in https://www.postgresql.org/docs/9.1/ltree.html#LTREE-FUNC-TABLE.
+	// This includes:
+	// - subltree
+	// - subpath
+	// - nlevel
+	// - index
+	// - text2ltree
+	// - ltree2text
+	// - lca
+
+	"subltree": makeBuiltin(
+		ltreeProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "ltree", Typ: types.LTree},
+				{Name: "start", Typ: types.Int},
+				{Name: "end", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.LTree),
+			Info:       "subpath of `ltree` from position `start` to position `end`-1 (counting from 0)",
+			Volatility: volatility.Immutable,
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ltree := tree.MustBeDLTree(args[0]).LTree
+				start := int(tree.MustBeDInt(args[1]))
+				end := int(tree.MustBeDInt(args[2]))
+				if start < 0 || end < 0 || start > end || start >= ltree.Len() {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "invalid positions")
+				}
+				length := end - start
+				subltree, err := ltree.SubPath(start, length)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDLTree(subltree), nil
+			},
+		},
+	),
+	"subpath": makeBuiltin(
+		ltreeProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "ltree", Typ: types.LTree},
+				{Name: "offset", Typ: types.Int},
+				{Name: "length", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.LTree),
+			Info: "subpath of `ltree` starting at position `offset`, length `length`. If `offset` is negative, subpath starts that " +
+				"far from the end of the path. If `length` is negative, leaves that many labels off the end of the path.",
+			Volatility: volatility.Immutable,
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ltree := tree.MustBeDLTree(args[0]).LTree
+				offset := int(tree.MustBeDInt(args[1]))
+				length := int(tree.MustBeDInt(args[2]))
+				subltree, err := ltree.SubPath(offset, length)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDLTree(subltree), nil
+			},
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "ltree", Typ: types.LTree},
+				{Name: "offset", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.LTree),
+			Info: "subpath of `ltree` starting at position `offset`, extending to end of path. If `offset` is negative, " +
+				"subpath starts that far from the end of the path.",
+			Volatility: volatility.Immutable,
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ltree := tree.MustBeDLTree(args[0]).LTree
+				// If offset is negative, then length could extend past the end of `ltree`.
+				offset := int(tree.MustBeDInt(args[1]))
+				length := ltree.Len() - offset
+				subltree, err := ltree.SubPath(offset, length)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDLTree(subltree), nil
+			},
+		},
+	),
+	"nlevel": makeBuiltin(
+		ltreeProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "ltree", Typ: types.LTree},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Info:       "number of labels in path `ltree`",
+			Volatility: volatility.Immutable,
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ltree := tree.MustBeDLTree(args[0]).LTree
+				return tree.NewDInt(tree.DInt(ltree.Len())), nil
+			},
+		},
+	),
+	"index": makeBuiltin(
+		ltreeProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "a", Typ: types.LTree},
+				{Name: "b", Typ: types.LTree},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Info:       "position of first occurrence of `b` in `a`; -1 if not found",
+			Volatility: volatility.Immutable,
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				a := tree.MustBeDLTree(args[0]).LTree
+				b := tree.MustBeDLTree(args[1]).LTree
+				return tree.NewDInt(tree.DInt(a.IndexOf(b, 0 /* offset */))), nil
+			},
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "a", Typ: types.LTree},
+				{Name: "b", Typ: types.LTree},
+				{Name: "offset", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Info:       "position of first occurrence of `b` in `a`, starting at `offset`; -1 if not found",
+			Volatility: volatility.Immutable,
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				a := tree.MustBeDLTree(args[0]).LTree
+				b := tree.MustBeDLTree(args[1]).LTree
+				offset := tree.MustBeDInt(args[2])
+				return tree.NewDInt(tree.DInt(a.IndexOf(b, int(offset)))), nil
+			},
+		},
+	),
+	"text2ltree": makeBuiltin(
+		ltreeProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "text", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.LTree),
+			Info:       "cast `text` to ltree",
+			Volatility: volatility.Immutable,
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				text := tree.MustBeDString(args[0])
+				ltree, err := tree.ParseDLTree(string(text))
+				if err != nil {
+					return nil, err
+				}
+				return ltree, nil
+			},
+		},
+	),
+	"ltree2text": makeBuiltin(
+		ltreeProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "ltree", Typ: types.LTree},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Info:       "cast `ltree` to text",
+			Volatility: volatility.Immutable,
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ltree := tree.MustBeDLTree(args[0])
+				return tree.NewDString(ltree.String()), nil
+			},
+		},
+	),
+	"lca": makeBuiltin(
+		ltreeProps(),
+		tree.Overload{
+			Types: tree.VariadicType{
+				FixedTypes: []*types.T{types.LTree, types.LTree},
+				VarType:    types.LTree,
+			},
+			ReturnType: tree.FixedReturnType(types.LTree),
+			Info:       "lowest common ancestor, i.e., longest common prefix of paths",
+			Volatility: volatility.Immutable,
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ltrees := make([]ltree.T, len(args))
+				for i, arg := range args {
+					if arg == tree.DNull {
+						return arg, nil
+					}
+					ltrees[i] = tree.MustBeDLTree(arg).LTree
+				}
+				lca, isNull := ltree.LCA(ltrees) // lint: uppercase function OK
+				if isNull {
+					return tree.DNull, nil
+				}
+				return tree.NewDLTree(lca), nil
+			},
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "ltree[]", Typ: types.MakeArray(types.LTree)},
+			},
+			ReturnType: tree.FixedReturnType(types.LTree),
+			Info:       "lowest common ancestor, i.e., longest common prefix of paths",
+			Volatility: volatility.Immutable,
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				array := tree.MustBeDArray(args[0])
+				if array.Len() == 0 {
+					return tree.DNull, nil
+				}
+				if array.HasNulls() {
+					return nil, pgerror.New(pgcode.NullValueNotAllowed, "array must not contain nulls")
+				}
+				ltrees := make([]ltree.T, array.Len())
+				for i, l := range array.Array {
+					ltrees[i] = tree.MustBeDLTree(l).LTree
+				}
+				lca, isNull := ltree.LCA(ltrees) // lint: uppercase function OK
+				if isNull {
+					return tree.DNull, nil
+				}
+				return tree.NewDLTree(lca), nil
+			},
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
@@ -10164,7 +10439,7 @@ func darrayToStringSlice(d tree.DArray) (result []string, ok bool) {
 
 // checkHasNulls returns an appropriate error if the array contains a NULL.
 func checkHasNulls(ary tree.DArray) error {
-	if ary.HasNulls {
+	if ary.HasNulls() {
 		for i := range ary.Array {
 			if ary.Array[i] == tree.DNull {
 				return pgerror.Newf(pgcode.NullValueNotAllowed, "path element at position %d is null", i+1)
@@ -10492,6 +10767,12 @@ var jsonStripNullsImpl = tree.Overload{
 	},
 	Info:       "Returns from_json with all object fields that have null values omitted. Other null values are untouched.",
 	Volatility: volatility.Immutable,
+}
+
+func ltreeProps() tree.FunctionProperties {
+	return tree.FunctionProperties{
+		Category: builtinconstants.CategoryLTree,
+	}
 }
 
 var jsonArrayLengthImpl = tree.Overload{

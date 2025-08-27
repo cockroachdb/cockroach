@@ -212,7 +212,7 @@ func (s *statusServer) DrainSqlStats(
 	// don't return it. This will allow the caller to still receive the
 	// drained sql stats from the other nodes.
 	if fanOutError != nil {
-		log.Warningf(ctx, "error draining SQL stats from node: %s", fanOutError)
+		log.Dev.Warningf(ctx, "error draining SQL stats from node: %s", fanOutError)
 	}
 	return respBuilder.Build(), nil
 }
@@ -224,7 +224,7 @@ func (s *statusServer) drainSqlStatsLocal(
 	ctx = s.AnnotateCtx(ctx)
 	statsProvider := s.sqlServer.pgServer.SQLServer.GetLocalSQLStatsProvider()
 	stmtStats, txnstats, fpCount := statsProvider.DrainStats(ctx)
-	log.VInfof(ctx,
+	log.Dev.VInfof(ctx,
 		1,
 		"drainSqlStatsLocal: %d statement stats, %d txn stats, %d fingerprint count",
 		len(stmtStats),

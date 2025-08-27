@@ -138,6 +138,11 @@ func (s *descriptorVersionState) hasExpired(ctx context.Context, timestamp hlc.T
 	return s.getExpiration(ctx).LessEq(timestamp)
 }
 
+// hasFixedExpiration returns if the descriptor has a fixed expiration.
+func (s *descriptorVersionState) hasFixedExpiration() bool {
+	return s.expiration.Load() != nil
+}
+
 func (s *descriptorVersionState) incRefCount(ctx context.Context, expensiveLogEnabled bool) {
 	s.refcount.Add(1)
 	if expensiveLogEnabled {

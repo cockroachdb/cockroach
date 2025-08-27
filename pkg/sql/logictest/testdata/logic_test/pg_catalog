@@ -1740,8 +1740,8 @@ FROM pg_catalog.pg_depend
 ORDER BY objid, refobjid, refobjsubid
 ----
 classid     objid       objsubid  refclassid  refobjid    refobjsubid  deptype
-4294967082  111         0         4294967082  110         14           a
-4294967082  112         0         4294967082  110         15           a
+4294967082  111         0         4294967082  110         14           i
+4294967082  112         0         4294967082  110         15           i
 4294967036  842401391   0         4294967082  110         1            n
 4294967036  842401391   0         4294967082  110         2            n
 4294967036  842401391   0         4294967082  110         3            n
@@ -1775,6 +1775,19 @@ WHERE seq.oid           = dep.objid
 ----
 attname  nspname  relname
 a        public   t_with_pk_seq_a_seq
+
+# Test for issue #108439: IDENTITY columns should have deptype 'i' dependencies.
+query TTT colnames
+SELECT seq_cls.relname AS sequence_name, attr.attname AS column_name, dep.deptype
+FROM pg_depend dep
+JOIN pg_class seq_cls ON seq_cls.oid = dep.objid
+JOIN pg_attribute attr ON attr.attrelid = dep.refobjid AND attr.attnum = dep.refobjsubid
+WHERE dep.refobjid = 't_with_pk_seq'::regclass
+  AND dep.deptype = 'i'
+ORDER BY dep.deptype
+----
+sequence_name        column_name  deptype
+t_with_pk_seq_a_seq  a            i
 
 # Some entries in pg_depend are dependency links from the pg_constraint system
 # table to the pg_class system table. Other entries are links to pg_class when it is
@@ -2990,6 +3003,7 @@ default_with_oids                                                off            
 descriptor_validation                                            on                  NULL      NULL        NULL        string
 disable_changefeed_replication                                   off                 NULL      NULL        NULL        string
 disable_hoist_projection_in_join_limitation                      off                 NULL      NULL        NULL        string
+disable_optimizer_rules                                          ·                   NULL      NULL        NULL        string
 disable_partially_distributed_plans                              off                 NULL      NULL        NULL        string
 disable_plan_gists                                               off                 NULL      NULL        NULL        string
 disable_vec_union_eager_cancellation                             off                 NULL      NULL        NULL        string
@@ -3018,7 +3032,6 @@ enable_shared_locking_for_serializable                           off            
 enable_super_regions                                             off                 NULL      NULL        NULL        string
 enable_zigzag_join                                               off                 NULL      NULL        NULL        string
 enforce_home_region                                              off                 NULL      NULL        NULL        string
-enforce_home_region_follower_reads_enabled                       off                 NULL      NULL        NULL        string
 escape_string_warning                                            on                  NULL      NULL        NULL        string
 expect_and_ignore_not_visible_columns_in_copy                    off                 NULL      NULL        NULL        string
 experimental_enable_implicit_column_partitioning                 off                 NULL      NULL        NULL        string
@@ -3082,6 +3095,7 @@ optimizer_use_histograms                                         on             
 optimizer_use_improved_computed_column_filters_derivation        on                  NULL      NULL        NULL        string
 optimizer_use_improved_disjunction_stats                         on                  NULL      NULL        NULL        string
 optimizer_use_improved_distinct_on_limit_hint_costing            on                  NULL      NULL        NULL        string
+optimizer_use_improved_hoist_join_project                        on                  NULL      NULL        NULL        string
 optimizer_use_improved_join_elimination                          on                  NULL      NULL        NULL        string
 optimizer_use_improved_multi_column_selectivity_estimate         on                  NULL      NULL        NULL        string
 optimizer_use_improved_split_disjunction_for_joins               on                  NULL      NULL        NULL        string
@@ -3163,6 +3177,7 @@ use_declarative_schema_changer                                   on             
 use_improved_routine_dependency_tracking                         on                  NULL      NULL        NULL        string
 use_pre_25_2_variadic_builtins                                   off                 NULL      NULL        NULL        string
 use_proc_txn_control_extended_protocol_fix                       on                  NULL      NULL        NULL        string
+use_soft_limit_for_distribute_scan                               off                 NULL      NULL        NULL        string
 variable_inequality_lookup_join_enabled                          on                  NULL      NULL        NULL        string
 vector_search_beam_size                                          32                  NULL      NULL        NULL        string
 vector_search_rerank_multiplier                                  50                  NULL      NULL        NULL        string
@@ -3232,6 +3247,7 @@ default_with_oids                                                off            
 descriptor_validation                                            on                  NULL  user     NULL      on                  on
 disable_changefeed_replication                                   off                 NULL  user     NULL      off                 off
 disable_hoist_projection_in_join_limitation                      off                 NULL  user     NULL      off                 off
+disable_optimizer_rules                                          ·                   NULL  user     NULL      ·                   ·
 disable_partially_distributed_plans                              off                 NULL  user     NULL      off                 off
 disable_plan_gists                                               off                 NULL  user     NULL      off                 off
 disable_vec_union_eager_cancellation                             off                 NULL  user     NULL      off                 off
@@ -3260,7 +3276,6 @@ enable_shared_locking_for_serializable                           off            
 enable_super_regions                                             off                 NULL  user     NULL      off                 off
 enable_zigzag_join                                               off                 NULL  user     NULL      off                 off
 enforce_home_region                                              off                 NULL  user     NULL      off                 off
-enforce_home_region_follower_reads_enabled                       off                 NULL  user     NULL      off                 off
 escape_string_warning                                            on                  NULL  user     NULL      on                  on
 expect_and_ignore_not_visible_columns_in_copy                    off                 NULL  user     NULL      off                 off
 experimental_enable_implicit_column_partitioning                 off                 NULL  user     NULL      off                 off
@@ -3324,6 +3339,7 @@ optimizer_use_histograms                                         on             
 optimizer_use_improved_computed_column_filters_derivation        on                  NULL  user     NULL      on                  on
 optimizer_use_improved_disjunction_stats                         on                  NULL  user     NULL      on                  on
 optimizer_use_improved_distinct_on_limit_hint_costing            on                  NULL  user     NULL      on                  on
+optimizer_use_improved_hoist_join_project                        on                  NULL  user     NULL      on                  on
 optimizer_use_improved_join_elimination                          on                  NULL  user     NULL      on                  on
 optimizer_use_improved_multi_column_selectivity_estimate         on                  NULL  user     NULL      on                  on
 optimizer_use_improved_split_disjunction_for_joins               on                  NULL  user     NULL      on                  on
@@ -3405,6 +3421,7 @@ use_declarative_schema_changer                                   on             
 use_improved_routine_dependency_tracking                         on                  NULL  user     NULL      on                  on
 use_pre_25_2_variadic_builtins                                   off                 NULL  user     NULL      off                 off
 use_proc_txn_control_extended_protocol_fix                       on                  NULL  user     NULL      on                  on
+use_soft_limit_for_distribute_scan                               off                 NULL  user     NULL      off                 off
 variable_inequality_lookup_join_enabled                          on                  NULL  user     NULL      on                  on
 vector_search_beam_size                                          32                  NULL  user     NULL      32                  32
 vector_search_rerank_multiplier                                  50                  NULL  user     NULL      50                  50
@@ -3461,6 +3478,7 @@ descriptor_validation                                            NULL    NULL   
 direct_columnar_scans_enabled                                    NULL    NULL     NULL     NULL        NULL
 disable_changefeed_replication                                   NULL    NULL     NULL     NULL        NULL
 disable_hoist_projection_in_join_limitation                      NULL    NULL     NULL     NULL        NULL
+disable_optimizer_rules                                          NULL    NULL     NULL     NULL        NULL
 disable_partially_distributed_plans                              NULL    NULL     NULL     NULL        NULL
 disable_plan_gists                                               NULL    NULL     NULL     NULL        NULL
 disable_vec_union_eager_cancellation                             NULL    NULL     NULL     NULL        NULL
@@ -3490,7 +3508,6 @@ enable_shared_locking_for_serializable                           NULL    NULL   
 enable_super_regions                                             NULL    NULL     NULL     NULL        NULL
 enable_zigzag_join                                               NULL    NULL     NULL     NULL        NULL
 enforce_home_region                                              NULL    NULL     NULL     NULL        NULL
-enforce_home_region_follower_reads_enabled                       NULL    NULL     NULL     NULL        NULL
 escape_string_warning                                            NULL    NULL     NULL     NULL        NULL
 expect_and_ignore_not_visible_columns_in_copy                    NULL    NULL     NULL     NULL        NULL
 experimental_enable_implicit_column_partitioning                 NULL    NULL     NULL     NULL        NULL
@@ -3557,6 +3574,7 @@ optimizer_use_histograms                                         NULL    NULL   
 optimizer_use_improved_computed_column_filters_derivation        NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_disjunction_stats                         NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_distinct_on_limit_hint_costing            NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_hoist_join_project                        NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_join_elimination                          NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_multi_column_selectivity_estimate         NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_split_disjunction_for_joins               NULL    NULL     NULL     NULL        NULL
@@ -3639,6 +3657,7 @@ use_declarative_schema_changer                                   NULL    NULL   
 use_improved_routine_dependency_tracking                         NULL    NULL     NULL     NULL        NULL
 use_pre_25_2_variadic_builtins                                   NULL    NULL     NULL     NULL        NULL
 use_proc_txn_control_extended_protocol_fix                       NULL    NULL     NULL     NULL        NULL
+use_soft_limit_for_distribute_scan                               NULL    NULL     NULL     NULL        NULL
 variable_inequality_lookup_join_enabled                          NULL    NULL     NULL     NULL        NULL
 vector_search_beam_size                                          NULL    NULL     NULL     NULL        NULL
 vector_search_rerank_multiplier                                  NULL    NULL     NULL     NULL        NULL

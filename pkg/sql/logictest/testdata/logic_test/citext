@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.2
+# LogicTest: !local-mixed-25.2 !local-prepared
 
 query T
 SELECT pg_typeof(CITEXT 'Foo')

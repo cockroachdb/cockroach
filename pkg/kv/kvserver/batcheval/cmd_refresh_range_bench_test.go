@@ -222,7 +222,7 @@ func setupData(
 
 	dir := testfixtures.ReuseOrGenerate(b, name, func(dir string) {
 		eng := emk(b, dir, opts.lBaseMaxBytes, fs.ReadWrite)
-		log.Infof(ctx, "creating refresh range benchmark data: %s", dir)
+		log.Dev.Infof(ctx, "creating refresh range benchmark data: %s", dir)
 
 		// Generate the same data every time.
 		rng := rand.New(rand.NewSource(1449168817))
@@ -261,7 +261,7 @@ func setupData(
 			// optimizations which change the data size result in the same number of
 			// sstables.
 			if scaled := len(order) / 20; i > 0 && (i%scaled) == 0 {
-				log.Infof(ctx, "committing (%d/~%d) (%d/%d)", i/scaled, 20, i, len(order))
+				log.Dev.Infof(ctx, "committing (%d/~%d) (%d/%d)", i/scaled, 20, i, len(order))
 				if err := batch.Commit(false /* sync */); err != nil {
 					b.Fatal(err)
 				}

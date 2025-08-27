@@ -1054,7 +1054,7 @@ func populateTableConstraints(
 			if refConstraint, err := catalog.FindFKReferencedUniqueConstraint(referencedTable, fk); err != nil {
 				// We couldn't find a unique constraint that matched. This shouldn't
 				// happen.
-				log.Warningf(ctx, "broken fk reference: %v", err)
+				log.Dev.Warningf(ctx, "broken fk reference: %v", err)
 			} else if idx := refConstraint.AsUniqueWithIndex(); idx != nil {
 				conindid = h.IndexOid(referencedTable.GetID(), idx.GetID())
 			}
@@ -1183,7 +1183,7 @@ func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (catalog.TableDescr
 }
 
 func (r oneAtATimeSchemaResolver) getSchemaByID(id descpb.ID) (catalog.SchemaDescriptor, error) {
-	return r.p.Descriptors().ByIDWithoutLeased(r.p.txn).Get().Schema(r.ctx, id)
+	return r.p.Descriptors().ByIDWithLeased(r.p.txn).Get().Schema(r.ctx, id)
 }
 
 // makeAllRelationsVirtualTableWithDescriptorIDIndex creates a virtual table that searches through
@@ -1579,7 +1579,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 			}
 		}
 		err := dbContext.ForEachSchema(func(id descpb.ID, name string) error {
-			schemaDescriptor, err := p.Descriptors().ByIDWithoutLeased(p.txn).Get().Schema(ctx, id)
+			schemaDescriptor, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Schema(ctx, id)
 			if err != nil {
 				return err
 			}
@@ -1674,32 +1674,17 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 		}
 		pgProcDesc, err := vt.getVirtualTableDesc(&pgProcTableName, p)
 		if err != nil {
-			return errors.New("could not find pg_catalog.pg_rewrite")
+			return errors.New("could not find pg_catalog.pg_proc")
 		}
 		h := makeOidHasher()
+		pgConstraintTableOid := tableOid(pgConstraintsDesc.GetID())
+		pgClassTableOid := tableOid(pgClassDesc.GetID())
+		pgRewriteTableOid := tableOid(pgRewriteDesc.GetID())
+
 		opts := forEachTableDescOptions{virtualOpts: hideVirtual} /*virtual tables have no constraints*/
 		err = forEachTableDesc(ctx, p, dbContext, opts, func(
 			ctx context.Context, descCtx tableDescContext) error {
 			db, sc, table, tableLookup := descCtx.database, descCtx.schema, descCtx.table, descCtx.tableLookup
-			pgConstraintTableOid := tableOid(pgConstraintsDesc.GetID())
-			pgClassTableOid := tableOid(pgClassDesc.GetID())
-			pgRewriteTableOid := tableOid(pgRewriteDesc.GetID())
-			if table.IsSequence() &&
-				!table.GetSequenceOpts().SequenceOwner.Equal(descpb.TableDescriptor_SequenceOpts_SequenceOwner{}) {
-				refObjID := tableOid(table.GetSequenceOpts().SequenceOwner.OwnerTableID)
-				refObjSubID := tree.NewDInt(tree.DInt(table.GetSequenceOpts().SequenceOwner.OwnerColumnID))
-				objID := tableOid(table.GetID())
-				return addRow(
-					pgClassTableOid, // classid
-					objID,           // objid
-					zeroVal,         // objsubid
-					pgClassTableOid, // refclassid
-					refObjID,        // refobjid
-					refObjSubID,     // refobjsubid
-					depTypeAuto,     // deptype
-				)
-			}
-
 			// In the case of table/view relationship, In PostgreSQL pg_depend.objid refers to
 			// pg_rewrite.oid, then pg_rewrite ev_class refers to the dependent object.
 			reportViewDependency := func(dep *descpb.TableDescriptor_Reference) error {
@@ -1739,7 +1724,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 				if refConstraint, err := catalog.FindFKReferencedUniqueConstraint(referencedTable, fk); err != nil {
 					// We couldn't find a unique constraint that matched. This shouldn't
 					// happen.
-					log.Warningf(ctx, "broken fk reference: %v", err)
+					log.Dev.Warningf(ctx, "broken fk reference: %v", err)
 				} else if idx := refConstraint.AsUniqueWithIndex(); idx != nil {
 					refObjID = h.IndexOid(referencedTable.GetID(), idx.GetID())
 				}
@@ -1757,6 +1742,36 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 					return err
 				}
 			}
+
+			// Add dependencies for columns that use sequences. This creates pg_depend
+			// entries with deptype 'a' (auto) for regular sequences and 'i'
+			// (internal) for IDENTITY columns.
+			if table.IsTable() {
+				for _, column := range table.AllColumns() {
+					for i := 0; i < column.NumOwnsSequences(); i++ {
+						seqID := column.GetOwnsSequenceID(i)
+						seqObjID := tableOid(seqID)
+						tableObjID := tableOid(table.GetID())
+						columnSubID := tree.NewDInt(tree.DInt(column.GetPGAttributeNum()))
+						depType := depTypeAuto
+						if column.IsGeneratedAsIdentity() {
+							depType = depTypeInternal
+						}
+
+						if err := addRow(
+							pgClassTableOid, // classid
+							seqObjID,        // objid
+							zeroVal,         // objsubid
+							pgClassTableOid, // refclassid
+							tableObjID,      // refobjid
+							columnSubID,     // refobjsubid
+							depType,         // deptype
+						); err != nil {
+							return err
+						}
+					}
+				}
+			}
 			return nil
 		})
 		if err != nil {
@@ -1765,7 +1780,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 		return forEachSchema(ctx, p, dbContext, true, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
 			pgProcTableOid := tableOid(pgProcDesc.GetID())
 			return sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
-				funcDesc, err := p.Descriptors().ByIDWithoutLeased(p.txn).Get().Function(ctx, sig.ID)
+				funcDesc, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Function(ctx, sig.ID)
 				if err != nil {
 					return err
 				}
@@ -2508,11 +2523,14 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 			paramNames := make([]string, len(placeholderTypes))
 
 			for i, placeholderType := range placeholderTypes {
+				// TODO(yuzefovich): we're including INT8 into array containing
+				// REGTYPE. Figure it out.
 				paramTypes.Array[i] = tree.NewDOidWithTypeAndName(
 					placeholderType.Oid(),
 					placeholderType,
 					placeholderType.SQLStandardName(),
 				)
+				paramTypes.SetHasNonNulls(true /* hasNonNulls */)
 				paramNames[i] = placeholderType.Name()
 			}
 
@@ -2609,7 +2627,7 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 		}
 
 		getVariadicStringArray := func() tree.Datum {
-			return &tree.DArray{ParamTyp: types.String, Array: tree.Datums{proArgModeVariadic}}
+			return tree.NewDArrayFromDatums(types.String, tree.Datums{proArgModeVariadic})
 		}
 
 		var argmodes tree.Datum
@@ -2849,7 +2867,7 @@ https://www.postgresql.org/docs/16/catalog-pg-proc.html`,
 			func(ctx context.Context, dbDesc catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, dbDesc, true /* requiresPrivileges */, func(ctx context.Context, scDesc catalog.SchemaDescriptor) error {
 					return scDesc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
-						fnDesc, err := p.Descriptors().ByIDWithoutLeased(p.Txn()).WithoutNonPublic().Get().Function(ctx, sig.ID)
+						fnDesc, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Function(ctx, sig.ID)
 						if err != nil {
 							return err
 						}
@@ -2869,7 +2887,7 @@ https://www.postgresql.org/docs/16/catalog-pg-proc.html`,
 				ooid := coid.Oid
 
 				if funcdesc.IsOIDUserDefinedFunc(ooid) {
-					fnDesc, err := p.Descriptors().ByIDWithoutLeased(p.Txn()).WithoutNonPublic().Get().Function(ctx, funcdesc.UserDefinedFunctionOIDToID(ooid))
+					fnDesc, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Function(ctx, funcdesc.UserDefinedFunctionOIDToID(ooid))
 					if err != nil {
 						if errors.Is(err, tree.ErrRoutineUndefined) {
 							return false, nil //nolint:returnerrcheck

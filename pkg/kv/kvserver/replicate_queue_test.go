@@ -149,7 +149,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 			if c < minReplicas {
 				err := errors.Errorf(
 					"not balanced (want at least %d replicas on all stores): %d", minReplicas, counts)
-				log.Infof(ctx, "%v", err)
+				log.Dev.Infof(ctx, "%v", err)
 				return err
 			}
 		}
@@ -338,7 +338,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 					if c < minReplicas {
 						err := errors.Errorf(
 							"not balanced (want at least %d replicas on all stores): %d", minReplicas, replicasPerStore)
-						log.Infof(ctx, "%v", err)
+						log.Dev.Infof(ctx, "%v", err)
 						return err
 					}
 				}
@@ -349,7 +349,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 					if c < minLeases {
 						err := errors.Errorf(
 							"not balanced (want at least %d leases on all stores): %d", minLeases, leasesPerStore)
-						log.Infof(ctx, "%v", err)
+						log.Dev.Infof(ctx, "%v", err)
 						return err
 					}
 				}
@@ -614,7 +614,7 @@ func checkReplicaCount(
 ) (bool, error) {
 	err := forceScanOnAllReplicationQueues(tc)
 	if err != nil {
-		log.Infof(ctx, "store.ForceReplicationScanAndProcess() failed with: %s", err)
+		log.Dev.Infof(ctx, "store.ForceReplicationScanAndProcess() failed with: %s", err)
 		return false, err
 	}
 	*rangeDesc, err = tc.LookupRange(rangeDesc.StartKey.AsRawKey())
@@ -674,7 +674,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -711,7 +711,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			if !ok {
@@ -834,7 +834,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -1118,7 +1118,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -1164,7 +1164,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			if !ok {
@@ -1259,7 +1259,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -1321,7 +1321,7 @@ func TestReplicateQueueMetrics(t *testing.T) {
 			&scratchRange, 3 /* voterCount */, 0, /* nonVoterCount */
 		)
 		if err != nil {
-			log.Errorf(ctx, "error checking replica count: %s", err)
+			log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 			return false
 		}
 		return ok
@@ -1347,7 +1347,7 @@ func TestReplicateQueueMetrics(t *testing.T) {
 				ctx, tc.(*testcluster.TestCluster), &scratchRange, 1, 0,
 			)
 			if err != nil {
-				log.Errorf(ctx, "error checking replica count: %s", err)
+				log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -1393,7 +1393,7 @@ func TestReplicateQueueMetrics(t *testing.T) {
 			ctx, tc.(*testcluster.TestCluster), &scratchRange, 3, 0,
 		)
 		if err != nil {
-			log.Errorf(ctx, "error checking replica count: %s", err)
+			log.Dev.Errorf(ctx, "error checking replica count: %s", err)
 			return false
 		}
 		return ok
@@ -1442,7 +1442,7 @@ func getAggregateMetricCounts(
 		if storeId, exists := voterMap[s.NodeID()]; exists {
 			store, err := s.GetStores().(*kvserver.Stores).GetStore(storeId)
 			if err != nil {
-				log.Errorf(ctx, "error finding store: %s", err)
+				log.Dev.Errorf(ctx, "error finding store: %s", err)
 				continue
 			}
 			if add {
@@ -1604,7 +1604,7 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 		// any given point, any change in the configuration of these 5 replicas
 		// _must_ go through atomic non-voter promotions and voter demotions.
 		alterStatement, voterStores, nonVoterStores := synthesizeRandomConstraints()
-		log.Infof(ctx, "applying: %s", alterStatement)
+		log.Dev.Infof(ctx, "applying: %s", alterStatement)
 		_, err := tc.ServerConn(0).Exec(alterStatement)
 		require.NoError(t, err)
 		checkRelocated(t, voterStores, nonVoterStores)
@@ -1659,7 +1659,7 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 	// above.
 	require.Eventually(t, func() bool {
 		if err := forceScanOnAllReplicationQueues(tc); err != nil {
-			log.Warningf(ctx, "received error while forcing a replicateQueue scan: %s", err)
+			log.Dev.Warningf(ctx, "received error while forcing a replicateQueue scan: %s", err)
 			return false
 		}
 		scratchRange := tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -1702,16 +1702,16 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 		)
 		recording := rec()
 		if err != nil {
-			log.Errorf(ctx, "err: %s", err.Error())
+			log.Dev.Errorf(ctx, "err: %s", err.Error())
 			return false
 		}
 		if processErr != nil {
-			log.Errorf(ctx, "processErr: %s", processErr.Error())
+			log.Dev.Errorf(ctx, "processErr: %s", processErr.Error())
 			return false
 		}
 		if matched, err := regexp.Match(matchString,
 			[]byte(recording.String())); !matched {
-			log.Infof(ctx, "didn't find matching string '%s' in trace %s",
+			log.Dev.Infof(ctx, "didn't find matching string '%s' in trace %s",
 				matchString, recording.String())
 			require.NoError(t, err)
 			return false
@@ -1940,7 +1940,7 @@ func (h delayingRaftMessageHandler) HandleRaftRequest(
 		time.Sleep(raftDelay)
 		err := h.IncomingRaftMessageHandler.HandleRaftRequest(context.Background(), req, respStream)
 		if err != nil {
-			log.Infof(ctx, "HandleRaftRequest returned err %s", err)
+			log.Dev.Infof(ctx, "HandleRaftRequest returned err %s", err)
 		}
 	}()
 
@@ -1999,7 +1999,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	if leaseHolderNodeID == 1 {
 		remoteNodeID = 2
 	}
-	log.Infof(ctx, "RangeID %d, RemoteNodeID %d, LeaseHolderNodeID %d",
+	log.Dev.Infof(ctx, "RangeID %d, RemoteNodeID %d, LeaseHolderNodeID %d",
 		rangeID, remoteNodeID, leaseHolderNodeID)
 	leaseHolderSrv := tc.Servers[leaseHolderNodeID-1]
 	leaseHolderStoreID := leaseHolderSrv.GetFirstStoreID()
@@ -2091,10 +2091,10 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	// By now the lease holder may have changed.
 	testutils.SucceedsSoon(t, func() error {
 		leaseBefore, _ := leaseHolderRepl.GetLease()
-		log.Infof(ctx, "Lease before transfer %+v\n", leaseBefore)
+		log.Dev.Infof(ctx, "Lease before transfer %+v\n", leaseBefore)
 
 		if uint64(leaseBefore.Replica.NodeID) == remoteNodeID {
-			log.Infof(
+			log.Dev.Infof(
 				ctx,
 				"Lease successfully transferred to desired node %d\n",
 				remoteNodeID,
@@ -2225,7 +2225,7 @@ SELECT * FROM (
 	_, err := db.Exec("CREATE TABLE t (i INT PRIMARY KEY, s STRING)")
 	require.NoError(t, err)
 
-	log.Infof(ctx, "test setting ZONE survival configuration")
+	log.Dev.Infof(ctx, "test setting ZONE survival configuration")
 	// ZONE survival configuration.
 	setConstraintFn("TABLE t", 5, 3,
 		", constraints = '{\"+region=2\": 1, \"+region=3\": 1}', voter_constraints = '{\"+region=1\": 3}'")
@@ -2270,7 +2270,7 @@ SELECT * FROM (
 	})
 
 	// REGION survival configuration.
-	log.Infof(ctx, "test setting REGION survival configuration")
+	log.Dev.Infof(ctx, "test setting REGION survival configuration")
 	// Clear the rangelog so that we can rest assured to only pick up events
 	// resulting from the zone config change.
 	_, err = tc.Conns[0].ExecContext(ctx, `DELETE FROM system.rangelog WHERE TRUE`)
@@ -2472,12 +2472,55 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 		return nil
 	})
 
+	getDecommissioningNudgerMetricValue := func(t *testing.T, tc *testcluster.TestCluster, metricType string,
+	) int64 {
+		var total int64
+
+		for i := 0; i < tc.NumServers(); i++ {
+			store := tc.GetFirstStoreFromServer(t, i)
+			var value int64
+
+			switch metricType {
+			case "decommissioning_ranges":
+				value = store.Metrics().DecommissioningRangeCount.Value()
+			case "enqueue":
+				value = store.Metrics().DecommissioningNudgerEnqueue.Count()
+			case "not_leaseholder_or_invalid_lease":
+				value = store.Metrics().DecommissioningNudgerNotLeaseholderOrInvalidLease.Count()
+			default:
+				t.Fatalf("unknown metric type: %s", metricType)
+			}
+
+			total += value
+		}
+		return total
+	}
+
+	initialDecommissioningRanges := getDecommissioningNudgerMetricValue(t, tc, "decommissioning_ranges")
+
 	// Now add a replica to the decommissioning node and then enable the
 	// replicate queue. We expect that the replica will be removed after the
 	// decommissioning replica is noticed via maybeEnqueueProblemRange.
 	scratchKey := tc.ScratchRange(t)
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decommissioningSrvIdx))
 	tc.ToggleReplicateQueues(true /* active */)
+
+	// Wait for the enqueue logic to trigger and validate metrics were updated.
+	testutils.SucceedsSoon(t, func() error {
+		afterDecommissioningRanges := getDecommissioningNudgerMetricValue(t, tc, "decommissioning_ranges")
+		afterEnqueued := getDecommissioningNudgerMetricValue(t, tc, "enqueue")
+
+		if afterDecommissioningRanges <= initialDecommissioningRanges {
+			return errors.New("expected DecommissioningRangeCount to increase")
+		}
+		if afterEnqueued <= 0 {
+			return errors.New("expected DecommissioningNudgerEnqueueEnqueued to be greater than 0")
+		}
+
+		return nil
+	})
+
+	// Verify that the decommissioning node has no replicas left.
 	testutils.SucceedsSoon(t, func() error {
 		var descs []*roachpb.RangeDescriptor
 		tc.GetFirstStoreFromServer(t, decommissioningSrvIdx).VisitReplicas(func(r *kvserver.Replica) bool {

@@ -143,6 +143,7 @@ go_test(
     ],
     embed = [":logical"],
     exec_properties = {"test.Pool": "large"},
+    shard_count = 5,
     deps = [
         "//pkg/base",
         "//pkg/ccl",

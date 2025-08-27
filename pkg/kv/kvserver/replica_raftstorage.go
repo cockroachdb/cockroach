@@ -197,7 +197,7 @@ var raftStorageErrorLogger = log.Every(30 * time.Second)
 
 func (r *replicaRaftStorage) reportRaftStorageError(err error) {
 	if raftStorageErrorLogger.ShouldLog() {
-		log.Errorf(r.raftCtx, "error in raft.Storage %v", err)
+		log.Dev.Errorf(r.raftCtx, "error in raft.Storage %v", err)
 	}
 	r.store.metrics.RaftStorageError.Inc(1)
 }
@@ -248,7 +248,7 @@ func (r *Replica) GetSnapshot(
 	// create a new state loader.
 	snapData, err := snapshot(ctx, snapUUID, stateloader.Make(rangeID), snap, startKey)
 	if err != nil {
-		log.Errorf(ctx, "error generating snapshot: %+v", err)
+		log.Dev.Errorf(ctx, "error generating snapshot: %+v", err)
 		return nil, err
 	}
 	return &snapData, nil
@@ -392,7 +392,7 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	if errors.Is(err, errSpanConfigsUnavailable) {
 		// This could be before the span config subscription was ever
 		// established.
-		log.Warningf(ctx, "unable to retrieve conf reader, cannot determine range MaxBytes")
+		log.Dev.Warningf(ctx, "unable to retrieve conf reader, cannot determine range MaxBytes")
 		return nil
 	}
 	if err != nil {
@@ -463,7 +463,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 ) (err error) {
 	desc := inSnap.Desc
 	if desc.RangeID != r.RangeID {
-		log.Fatalf(ctx, "unexpected range ID %d", desc.RangeID)
+		log.Dev.Fatalf(ctx, "unexpected range ID %d", desc.RangeID)
 	}
 	if !desc.IsInitialized() {
 		return errors.AssertionFailedf("applying snapshot with uninitialized desc: %s", desc)
@@ -494,13 +494,13 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	}
 	defer func() {
 		if e := recover(); e != nil {
-			// Re-panic to avoid the log.Fatal() below.
+			// Re-panic to avoid the log.Dev.Fatal() below.
 			panic(e)
 		}
 		if err == nil {
 			desc, err := r.GetReplicaDescriptor()
 			if err != nil {
-				log.Fatalf(ctx, "could not fetch replica descriptor for range after applying snapshot: %v", err)
+				log.Dev.Fatalf(ctx, "could not fetch replica descriptor for range after applying snapshot: %v", err)
 			}
 			if isInitialSnap {
 				r.store.metrics.RangeSnapshotsAppliedForInitialUpreplication.Inc(1)
@@ -517,7 +517,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 				case roachpb.NON_VOTER:
 					r.store.metrics.RangeSnapshotsAppliedByNonVoters.Inc(1)
 				default:
-					log.Fatalf(ctx, "unexpected replica type %s while applying snapshot", desc.Type)
+					log.Dev.Fatalf(ctx, "unexpected replica type %s while applying snapshot", desc.Type)
 				}
 			}
 		}
@@ -527,7 +527,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		// Raft will never provide an empty HardState if it is providing a
 		// nonempty snapshot because we discard snapshots that do not increase
 		// the commit index.
-		log.Fatalf(ctx, "found empty HardState for non-empty Snapshot %+v", nonemptySnap)
+		log.Dev.Fatalf(ctx, "found empty HardState for non-empty Snapshot %+v", nonemptySnap)
 	}
 
 	var stats struct {
@@ -556,7 +556,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		if !applyAsIngest {
 			appliedAsWriteStr = "as write "
 		}
-		log.Infof(ctx, "applied %s %s(%s)", inSnap, appliedAsWriteStr, logDetails)
+		log.Dev.Infof(ctx, "applied %s %s(%s)", inSnap, appliedAsWriteStr, logDetails)
 	}(timeutil.Now())
 
 	// Clear the raft state and reset it. The log starts from the applied entry ID
@@ -669,19 +669,19 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	sl := stateloader.Make(desc.RangeID)
 	state, err := sl.Load(ctx, r.store.TODOEngine(), desc)
 	if err != nil {
-		log.Fatalf(ctx, "unable to load replica state: %s", err)
+		log.Dev.Fatalf(ctx, "unable to load replica state: %s", err)
 	}
 
 	if uint64(state.RaftAppliedIndex) != nonemptySnap.Metadata.Index {
-		log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
+		log.Dev.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
 			state.RaftAppliedIndex, nonemptySnap.Metadata.Index)
 	}
 	if uint64(state.RaftAppliedIndexTerm) != nonemptySnap.Metadata.Term {
-		log.Fatalf(ctx, "snapshot RaftAppliedIndexTerm %d doesn't match its metadata term %d",
+		log.Dev.Fatalf(ctx, "snapshot RaftAppliedIndexTerm %d doesn't match its metadata term %d",
 			state.RaftAppliedIndexTerm, nonemptySnap.Metadata.Term)
 	}
 	if ls.shMu.size != 0 {
-		log.Fatalf(ctx, "expected empty raft log after snapshot, got %d", ls.shMu.size)
+		log.Dev.Fatalf(ctx, "expected empty raft log after snapshot, got %d", ls.shMu.size)
 	}
 
 	// Read the prior read summary for this range, which was included in the
@@ -689,7 +689,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// discover that we are the leaseholder as of the snapshot's log index.
 	prioReadSum, err := readsummary.Load(ctx, r.store.TODOEngine(), r.RangeID)
 	if err != nil {
-		log.Fatalf(ctx, "failed to read prior read summary after applying snapshot: %+v", err)
+		log.Dev.Fatalf(ctx, "failed to read prior read summary after applying snapshot: %+v", err)
 	}
 
 	// The necessary on-disk state is read. Update the in-memory Replica and Store
@@ -697,7 +697,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 
 	subPHs, err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls)
 	if err != nil {
-		log.Fatalf(ctx, "failed to clear in-memory data of subsumed replicas while applying snapshot: %+v", err)
+		log.Dev.Fatalf(ctx, "failed to clear in-memory data of subsumed replicas while applying snapshot: %+v", err)
 	}
 
 	// Atomically swap the placeholder, if any, for the replica, and update the
@@ -713,7 +713,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	for _, ph := range subPHs {
 		_, err := r.store.removePlaceholderLocked(ctx, ph, removePlaceholderFilled)
 		if err != nil {
-			log.Fatalf(ctx, "unable to remove placeholder %s: %s", ph, err)
+			log.Dev.Fatalf(ctx, "unable to remove placeholder %s: %s", ph, err)
 		}
 	}
 
@@ -724,10 +724,10 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		// NB: this will also call setDescLockedRaftMuLocked.
 		if err := r.initFromSnapshotLockedRaftMuLocked(ctx, desc); err != nil {
 			r.mu.Unlock()
-			log.Fatalf(ctx, "unable to initialize replica while applying snapshot: %+v", err)
+			log.Dev.Fatalf(ctx, "unable to initialize replica while applying snapshot: %+v", err)
 		} else if err := r.store.markReplicaInitializedLockedReplLocked(ctx, r); err != nil {
 			r.mu.Unlock()
-			log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
+			log.Dev.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
 		}
 	} else {
 		r.setDescLockedRaftMuLocked(ctx, desc)
@@ -785,7 +785,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// config is not available, in which case we rely on the next gossip update
 	// to perform the update.
 	if err := r.updateRangeInfo(ctx, desc); err != nil {
-		log.Fatalf(ctx, "unable to update range info while applying snapshot: %+v", err)
+		log.Dev.Fatalf(ctx, "unable to update range info while applying snapshot: %+v", err)
 	}
 
 	return nil

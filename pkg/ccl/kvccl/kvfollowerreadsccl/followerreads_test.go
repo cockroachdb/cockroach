@@ -859,9 +859,9 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 
 	// Sleep so that we can perform follower reads. The read timestamp needs to be
 	// above the timestamp when the table was created.
-	log.Infof(ctx, "test sleeping for the follower read timestamps to pass the table creation timestamp...")
+	log.Dev.Infof(ctx, "test sleeping for the follower read timestamps to pass the table creation timestamp...")
 	n1.Exec(t, `SELECT pg_sleep((now() - follower_read_timestamp())::FLOAT)`)
-	log.Infof(ctx, "test sleeping... done")
+	log.Dev.Infof(ctx, "test sleeping... done")
 
 	// Run a query on n4 to populate its cache.
 	n4 := sqlutils.MakeSQLRunner(tc.Conns[3])
@@ -1183,9 +1183,9 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 
 			// Sleep so that we can perform follower reads. The read timestamp
 			// needs to be above the timestamp when the table was created.
-			log.Infof(ctx, "test sleeping for the follower read timestamps to pass the table creation timestamp...")
+			log.Dev.Infof(ctx, "test sleeping for the follower read timestamps to pass the table creation timestamp...")
 			tenantSQL.Exec(t, `SELECT pg_sleep((now() - follower_read_timestamp())::FLOAT)`)
-			log.Infof(ctx, "test sleeping... done")
+			log.Dev.Infof(ctx, "test sleeping... done")
 
 			// Check that the cache was indeed populated.
 			tenantSQL.Exec(t, `SELECT * FROM t.test WHERE k = 1`)

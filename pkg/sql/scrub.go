@@ -506,13 +506,13 @@ func (n *scrubNode) runScrubTableJob(
 	}); err != nil {
 		if sj != nil {
 			if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
-				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
+				log.Dev.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 			}
 		}
 		return err
 	}
 
-	log.Infof(ctx, "created and started inspect job %d (no-op)", jobID)
+	log.Dev.Infof(ctx, "created and started inspect job %d (no-op)", jobID)
 	if err := sj.Start(ctx); err != nil {
 		return err
 	}

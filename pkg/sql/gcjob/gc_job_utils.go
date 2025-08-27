@@ -32,7 +32,7 @@ func markTableGCed(
 		if tableProgress.ID == tableID {
 			tableProgress.Status = status
 			if log.V(2) {
-				log.Infof(ctx, "determined table %d is GC'd", tableID)
+				log.Dev.Infof(ctx, "determined table %d is GC'd", tableID)
 			}
 		}
 	}
@@ -50,7 +50,7 @@ func markIndexGCed(
 		indexToUpdate := &progress.Indexes[i]
 		if indexToUpdate.IndexID == garbageCollectedIndexID {
 			indexToUpdate.Status = nextStatus
-			log.Infof(ctx, "marked index %d as GC'd", garbageCollectedIndexID)
+			log.Dev.Infof(ctx, "marked index %d as GC'd", garbageCollectedIndexID)
 		}
 	}
 }
@@ -268,9 +268,9 @@ func persistProgress(
 			return nil
 		})
 	}); err != nil {
-		log.Warningf(ctx, "failed to update job's progress payload or running status err: %+v", err)
+		log.Dev.Warningf(ctx, "failed to update job's progress payload or running status err: %+v", err)
 	}
-	log.Infof(ctx, "updated progress status: %s, payload: %+v", status, progress)
+	log.Dev.Infof(ctx, "updated progress status: %s, payload: %+v", status, progress)
 }
 
 // getDropTimes returns the data stored in details as a map for convenience.

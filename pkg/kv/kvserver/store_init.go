@@ -270,6 +270,6 @@ func writeGlobalMVCCRangeTombstone(
 	if err := w.PutMVCCRangeKey(rangeKey, storage.MVCCValue{}); err != nil {
 		return err
 	}
-	log.Warningf(ctx, "wrote global MVCC range tombstone %s", rangeKey)
+	log.Dev.Warningf(ctx, "wrote global MVCC range tombstone %s", rangeKey)
 	return nil
 }

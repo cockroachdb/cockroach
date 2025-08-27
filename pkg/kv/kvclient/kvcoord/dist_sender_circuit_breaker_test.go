@@ -87,7 +87,7 @@ func TestDistSenderReplicaStall(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer time.AfterFunc(29*time.Second, func() {
-			log.Errorf(ctx, "about to time out, all stacks:\n\n%s", allstacks.Get())
+			log.Dev.Errorf(ctx, "about to time out, all stacks:\n\n%s", allstacks.Get())
 		}).Stop()
 		defer cancel()
 

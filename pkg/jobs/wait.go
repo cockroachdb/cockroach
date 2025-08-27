@@ -53,7 +53,7 @@ func (r *Registry) NotifyToResume(ctx context.Context, jobs ...jobspb.JobID) {
 // WaitForJobs waits for a given list of jobs to reach some sort
 // of terminal state.
 func (r *Registry) WaitForJobs(ctx context.Context, jobs []jobspb.JobID) error {
-	log.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
+	log.Dev.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
 	jobFinishedLocally, cleanup := r.installWaitingSet(jobs...)
 	defer cleanup()
 	return r.waitForJobs(ctx, jobs, jobFinishedLocally)
@@ -62,7 +62,7 @@ func (r *Registry) WaitForJobs(ctx context.Context, jobs []jobspb.JobID) error {
 // WaitForJobsIgnoringJobErrors is like WaitForJobs but it only
 // returns an error in the case that polling the jobs table fails.
 func (r *Registry) WaitForJobsIgnoringJobErrors(ctx context.Context, jobs []jobspb.JobID) error {
-	log.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
+	log.Dev.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
 	jobFinishedLocally, cleanup := r.installWaitingSet(jobs...)
 	defer cleanup()
 	return r.waitForJobsToBeTerminalOrPaused(ctx, jobs, jobFinishedLocally)
@@ -128,7 +128,7 @@ func (r *Registry) waitForJobsToBeTerminalOrPaused(
 		}
 		count := int64(tree.MustBeDInt(row[0]))
 		if log.V(3) {
-			log.Infof(ctx, "waiting for %d queued jobs to complete", count)
+			log.Dev.Infof(ctx, "waiting for %d queued jobs to complete", count)
 		}
 		if count == 0 {
 			return nil
@@ -145,7 +145,7 @@ func (r *Registry) waitForJobs(
 	}
 	start := timeutil.Now()
 	defer func() {
-		log.Infof(ctx, "waited for %d %v queued jobs to complete %v",
+		log.Dev.Infof(ctx, "waited for %d %v queued jobs to complete %v",
 			len(jobs), jobs, timeutil.Since(start))
 	}()
 
@@ -279,7 +279,7 @@ func (r *Registry) installWaitingSet(
 			set, ok := r.mu.waiting[id]
 			if !ok {
 				// This should never happen and indicates a programming error.
-				log.Errorf(
+				log.Dev.Errorf(
 					r.ac.AnnotateCtx(context.Background()),
 					"corruption detected in waiting set for id %d", id,
 				)

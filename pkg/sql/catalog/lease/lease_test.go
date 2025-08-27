@@ -557,6 +557,8 @@ func TestWaitForNewVersion(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	defer log.Scope(testingT).Close(testingT)
 
+	skip.WithIssue(testingT, 152051)
+
 	var params base.TestClusterArgs
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
@@ -586,7 +588,7 @@ func TestWaitForNewVersion(testingT *testing.T) {
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		_, err := leaseMgr.WaitForNewVersion(timeoutCtx, descID, retry.Options{}, nil)
+		_, err := leaseMgr.WaitForNewVersion(timeoutCtx, descID, nil, retry.Options{})
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	}
 
@@ -597,7 +599,7 @@ func TestWaitForNewVersion(testingT *testing.T) {
 		require.NoError(t, t.node(2).AcquireFreshestFromStore(ctx, descID))
 		t.expectLeases(descID, "/1/1 /1/2 /2/1 /2/2 /2/3")
 
-		desc, err := leaseMgr.WaitForNewVersion(context.Background(), descID, retry.Options{}, nil)
+		desc, err := leaseMgr.WaitForNewVersion(context.Background(), descID, nil, retry.Options{})
 		require.NoError(t, err)
 		require.Equal(t, desc.GetVersion(), descpb.DescriptorVersion(2))
 	}
@@ -938,12 +940,12 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 				RemoveOnceDereferenced: true,
 				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
 					if desc.GetName() == "foo" {
-						log.Infof(ctx, "lease acquirer stack trace: %s", debugutil.Stack())
+						log.Dev.Infof(ctx, "lease acquirer stack trace: %s", debugutil.Stack())
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
 				LeaseReleasedEvent: func(id descpb.ID, _ descpb.DescriptorVersion, _ error) {
-					log.Infof(ctx, "releasing lease for ID %d", int64(id))
+					log.Dev.Infof(ctx, "releasing lease for ID %d", int64(id))
 					if int64(id) == atomic.LoadInt64(&tableID) {
 						atomic.AddInt32(&fooReleaseCount, 1)
 					}
@@ -974,7 +976,7 @@ CREATE TABLE t.foo (v INT);
 
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "foo")
 	atomic.StoreInt64(&tableID, int64(tableDesc.GetID()))
-	log.Infof(ctx, "table ID for foo is %d", tableDesc.GetID())
+	log.Dev.Infof(ctx, "table ID for foo is %d", tableDesc.GetID())
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
@@ -1639,11 +1641,11 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	log.Infof(ctx, "until %s", end)
+	log.Dev.Infof(ctx, "until %s", end)
 
 	go func() {
 		for count := 0; timeutil.Now().Before(end); count++ {
-			log.Infof(ctx, "renaming test%d to test%d", count, count+1)
+			log.Dev.Infof(ctx, "renaming test%d to test%d", count, count+1)
 			if _, err := t.db.Exec(fmt.Sprintf(`ALTER TABLE t.test%d RENAME TO t.test%d`, count, count+1)); err != nil {
 				t.Fatal(err)
 			}
@@ -1654,7 +1656,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 	go func() {
 		leaseMgr := t.node(1)
 		for timeutil.Now().Before(end) {
-			log.Infof(ctx, "publishing new descriptor")
+			log.Dev.Infof(ctx, "publishing new descriptor")
 			desc, err := leaseMgr.Publish(ctx, descID, func(catalog.MutableDescriptor) error { return nil }, nil)
 			if err != nil {
 				t.Fatalf("error while publishing: %v", err)
@@ -1671,7 +1673,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 			// This checks that the modification timestamp is not lying about
 			// the transaction commit time (and that the txn commit time wasn't
 			// bumped past it).
-			log.Infof(ctx, "checking version %d", table.GetVersion())
+			log.Dev.Infof(ctx, "checking version %d", table.GetVersion())
 			txn := kv.NewTxn(ctx, t.kvDB, roachpb.NodeID(0))
 			// Make the txn look back at the known modification timestamp.
 			require.NoError(t, txn.SetFixedTimestamp(ctx, table.GetModificationTime()))
@@ -2174,7 +2176,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			log.Infof(ctx, "received descriptor update event: id=%d, version=%d", id, version)
+			log.Dev.Infof(ctx, "received descriptor update event: id=%d, version=%d", id, version)
 			if id == interestingTable.Load().(descpb.ID) && version >= 2 {
 				select {
 				case descUpdateChan <- descriptor:
@@ -2220,7 +2222,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	tdb1.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name = $1 AND database_name = current_database()",
 		"foo").Scan(&tableID)
 	interestingTable.Store(tableID)
-	log.Infof(ctx, "tableID of interesting table is %d", tableID)
+	log.Dev.Infof(ctx, "tableID of interesting table is %d", tableID)
 
 	// Launch a goroutine to query foo. It will be blocked in lease acquisition.
 	selectDone := make(chan error, 1)

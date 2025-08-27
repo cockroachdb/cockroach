@@ -850,7 +850,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	timestamp, err := info.Timestamp()
 	if err != nil {
 		// We can't panic here, tests don't have a build timestamp.
-		log.Warningf(ctx, "could not parse build timestamp: %v", err)
+		log.Dev.Warningf(ctx, "could not parse build timestamp: %v", err)
 	}
 
 	// Build information.
@@ -961,7 +961,7 @@ func GetCGoMemStats(ctx context.Context) *CGoMemStats {
 		var err error
 		cgoAllocated, cgoTotal, err = getCgoMemStats(ctx)
 		if err != nil {
-			log.Warningf(ctx, "problem fetching CGO memory stats: %s; CGO stats will be empty.", err)
+			log.Dev.Warningf(ctx, "problem fetching CGO memory stats: %s; CGO stats will be empty.", err)
 		}
 	}
 	return &CGoMemStats{
@@ -1285,7 +1285,7 @@ var mockableMaybeReadProcStatFile = maybeReadProcStatFile
 func getSummedNetStats(ctx context.Context) (netCounters, error) {
 	c, err := net.IOCountersWithContext(ctx, true /* per NIC */)
 	if err != nil {
-		log.VWarningf(ctx, 1, "error reading network IO counters: %v", err)
+		log.Dev.VWarningf(ctx, 1, "error reading network IO counters: %v", err)
 		c = nil
 		// Continue. Empty slice c results in zero counters.
 	}
@@ -1294,7 +1294,7 @@ func getSummedNetStats(ctx context.Context) (netCounters, error) {
 	mTCP := func() map[string]int64 {
 		pc, err := net.ProtoCountersWithContext(ctx, []string{"tcp"})
 		if err != nil {
-			log.VWarningf(ctx, 1, "error reading tcp counters: %v", err)
+			log.Dev.VWarningf(ctx, 1, "error reading tcp counters: %v", err)
 			return nil
 		}
 		return pc[0].Stats
@@ -1311,7 +1311,7 @@ func getSummedNetStats(ctx context.Context) (netCounters, error) {
 	const netstatFile = "/proc/net/netstat"
 	mTCPExt, err := mockableMaybeReadProcStatFile(ctx, "TcpExt", netstatFile)
 	if err != nil {
-		log.VWarningf(ctx, 1, "error reading %s: %v", netstatFile, err)
+		log.Dev.VWarningf(ctx, 1, "error reading %s: %v", netstatFile, err)
 		mTCPExt = nil
 		// Continue.
 	}
@@ -1329,7 +1329,7 @@ func getSummedNetStats(ctx context.Context) (netCounters, error) {
 	}
 
 	if log.V(3) {
-		log.Infof(ctx, "tcp stats: Tcp: %+v TcpExt: %+v", mTCP, mTCPExt)
+		log.Dev.Infof(ctx, "tcp stats: Tcp: %+v TcpExt: %+v", mTCP, mTCPExt)
 	}
 
 	return netCounters{

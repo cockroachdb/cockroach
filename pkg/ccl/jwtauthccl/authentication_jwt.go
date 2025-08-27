@@ -109,7 +109,7 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 	authenticator.mu.conf = conf
 	authenticator.mu.enabled = authenticator.mu.conf.enabled
 
-	log.Infof(ctx, "initialized JWT authenticator")
+	log.Dev.Infof(ctx, "initialized JWT authenticator")
 }
 
 // mapUsername takes maps the tokenUsername using the identMap corresponding to the issuer.

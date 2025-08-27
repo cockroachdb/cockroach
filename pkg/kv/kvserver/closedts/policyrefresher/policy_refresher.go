@@ -69,7 +69,7 @@ func NewPolicyRefresher(
 	knobs *TestingKnobs,
 ) *PolicyRefresher {
 	if getLeaseholderReplicas == nil || getNodeLatencies == nil {
-		log.Fatalf(context.Background(), "getLeaseholderReplicas and getNodeLatencies must be non-nil")
+		log.Dev.Fatalf(context.Background(), "getLeaseholderReplicas and getNodeLatencies must be non-nil")
 		return nil
 	}
 	refresher := &PolicyRefresher{

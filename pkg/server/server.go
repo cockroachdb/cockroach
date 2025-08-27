@@ -545,7 +545,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			if err := nodeTombStorage.SetDecommissioned(
 				ctx, id, clock.PhysicalTime().UTC(),
 			); err != nil {
-				log.Fatalf(ctx, "unable to add tombstone for n%d: %s", id, err)
+				log.Dev.Fatalf(ctx, "unable to add tombstone for n%d: %s", id, err)
 			}
 
 			decomNodeMap.onNodeDecommissioned(id)
@@ -615,7 +615,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			goschedstats.UnregisterRunnableCountCallback(cbID)
 		}))
 	} else {
-		log.Warning(ctx, "goschedstats not supported; admission control will be impaired")
+		log.Dev.Warning(ctx, "goschedstats not supported; admission control will be impaired")
 	}
 	stopper.AddCloser(gcoords)
 
@@ -910,7 +910,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		func(_ string, content roachpb.Value, origTimestampNanos int64) {
 			var storeDesc roachpb.StoreDescriptor
 			if err := content.GetProto(&storeDesc); err != nil {
-				log.Errorf(ctx, "%v", err)
+				log.Dev.Errorf(ctx, "%v", err)
 				return
 			}
 			storeLoadMsg := mmaintegration.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
@@ -1674,11 +1674,11 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	if s.cfg.TestingKnobs.Server != nil {
 		knobs := s.cfg.TestingKnobs.Server.(*TestingKnobs)
 		if knobs.SignalAfterGettingRPCAddress != nil {
-			log.Infof(ctx, "signaling caller that RPC address is ready")
+			log.Dev.Infof(ctx, "signaling caller that RPC address is ready")
 			close(knobs.SignalAfterGettingRPCAddress)
 		}
 		if knobs.PauseAfterGettingRPCAddress != nil {
-			log.Infof(ctx, "waiting for signal from caller to proceed with initialization")
+			log.Dev.Infof(ctx, "waiting for signal from caller to proceed with initialization")
 			select {
 			case <-knobs.PauseAfterGettingRPCAddress:
 				// Normal case. Just continue below.
@@ -1693,7 +1693,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 				// starting up.
 				return errors.New("server stopping prematurely")
 			}
-			log.Infof(ctx, "caller is letting us proceed with initialization")
+			log.Dev.Infof(ctx, "caller is letting us proceed with initialization")
 		}
 	}
 
@@ -2377,7 +2377,7 @@ func (s *topLevelServer) runIdempontentSQLForInitType(
 	}
 	for r := retry.StartWithCtx(ctx, rOpts); r.Next(); {
 		if err := initAttempt(); err != nil {
-			log.Errorf(ctx, "cluster initialization attempt failed: %s", err.Error())
+			log.Dev.Errorf(ctx, "cluster initialization attempt failed: %s", err.Error())
 			continue
 		}
 		return nil

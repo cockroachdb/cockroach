@@ -183,7 +183,7 @@ func (tr *tableReader) generateTrailingMeta() []execinfrapb.ProducerMetadata {
 // Start is part of the RowSource interface.
 func (tr *tableReader) Start(ctx context.Context) {
 	if tr.FlowCtx.Txn == nil {
-		log.Fatalf(ctx, "tableReader outside of txn")
+		log.Dev.Fatalf(ctx, "tableReader outside of txn")
 	}
 
 	// Keep ctx assignment so we remember StartInternal can make a new one.

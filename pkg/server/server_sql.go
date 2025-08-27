@@ -501,7 +501,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 			nodeID, _ := r.cfg.nodeIDContainer.OptionalNodeID()
 			s, err := r.cfg.sqlLivenessProvider.Session(ctx)
 			if err != nil {
-				log.Warningf(ctx, "failed to get new liveness session ID: %v", err)
+				log.Dev.Warningf(ctx, "failed to get new liveness session ID: %v", err)
 				continue
 			}
 			if _, err := r.cfg.sqlInstanceStorage.CreateNodeInstance(
@@ -513,13 +513,13 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 				r.cfg.Settings.Version.LatestVersion(),
 				nodeID,
 			); err != nil {
-				log.Warningf(ctx, "failed to update instance with new session ID: %v", err)
+				log.Dev.Warningf(ctx, "failed to update instance with new session ID: %v", err)
 				continue
 			}
 			return
 		}
 	}); err != nil {
-		log.Errorf(ctx, "failed to run update of instance with new session ID: %v", err)
+		log.Dev.Errorf(ctx, "failed to run update of instance with new session ID: %v", err)
 	}
 	return true
 }
@@ -898,7 +898,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		AdminURL: cfg.AdminURL,
 		PGURL: func(user *url.Userinfo) (*pgurl.URL, error) {
 			if cfg.Config.SQLAdvertiseAddr == "" {
-				log.Fatal(ctx, "programming error: usage of advertised addr before listeners have started")
+				log.Dev.Fatal(ctx, "programming error: usage of advertised addr before listeners have started")
 			}
 			ccopts := clientsecopts.ClientSecurityOptions{
 				Insecure: cfg.Config.Insecure,
@@ -1388,13 +1388,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	startedWithExplicitVModule := log.GetVModule() != ""
 	fn := func(ctx context.Context) {
 		if startedWithExplicitVModule {
-			log.Infof(ctx, "ignoring vmodule cluster setting due to starting with explicit vmodule flag")
+			log.Dev.Infof(ctx, "ignoring vmodule cluster setting due to starting with explicit vmodule flag")
 		} else {
 			s := vmoduleSetting.Get(&cfg.Settings.SV)
 			if log.GetVModule() != s {
-				log.Infof(ctx, "updating vmodule from cluster setting to %s", s)
+				log.Dev.Infof(ctx, "updating vmodule from cluster setting to %s", s)
 				if err := log.SetVModule(s); err != nil {
-					log.Warningf(ctx, "failed to apply vmodule cluster setting: %v", err)
+					log.Dev.Warningf(ctx, "failed to apply vmodule cluster setting: %v", err)
 				}
 			}
 		}
@@ -1618,7 +1618,7 @@ func (s *SQLServer) preStart(
 	// quiescing doesn't work. Doing it too soon, for example as part of draining,
 	// is potentially dangerous because the server will continue to use the
 	// instance ID for a while.
-	log.Infof(ctx, "bound sqlinstance: %v", instance)
+	log.Dev.Infof(ctx, "bound sqlinstance: %v", instance)
 	if err := s.sqlIDContainer.SetSQLInstanceID(ctx, instance.InstanceID); err != nil {
 		return err
 	}
@@ -1720,7 +1720,7 @@ func (s *SQLServer) preStart(
 		return err
 	}
 
-	log.Infof(ctx, "done ensuring all necessary startup migrations have run")
+	log.Dev.Infof(ctx, "done ensuring all necessary startup migrations have run")
 
 	// Prevent the server from starting if its binary version is too low
 	// for the current tenant cluster version.
@@ -1790,10 +1790,10 @@ func (s *SQLServer) preStart(
 			warnCtx := s.AnnotateCtx(context.Background())
 
 			if sk != nil && sk.RequireGracefulDrain {
-				log.Fatalf(warnCtx, "drain required but not performed")
+				log.Dev.Fatalf(warnCtx, "drain required but not performed")
 			}
 
-			log.Warningf(warnCtx, "server shutdown without a prior graceful drain")
+			log.Dev.Warningf(warnCtx, "server shutdown without a prior graceful drain")
 		}
 
 		if sk != nil && sk.DrainReportCh != nil {
@@ -1947,7 +1947,7 @@ func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.Testing
 	// This is not a critical component. If it fails to start, we log a warning
 	// rather than prevent the entire server from starting.
 	if err != nil {
-		log.Warningf(ctx, "failed to start the license enforcer: %v", err)
+		log.Dev.Warningf(ctx, "failed to start the license enforcer: %v", err)
 	}
 }
 

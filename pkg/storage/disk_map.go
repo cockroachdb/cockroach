@@ -180,7 +180,7 @@ func (r *pebbleMap) Clear() error {
 // Close implements the SortedDiskMap interface.
 func (r *pebbleMap) Close(ctx context.Context) {
 	if err := r.Clear(); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 	}
 }
 

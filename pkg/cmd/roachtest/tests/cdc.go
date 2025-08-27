@@ -2907,7 +2907,7 @@ func registerCDC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			params := multiTablePTSBenchmarkParams{
 				numTables: 500,
-				numRows:   10_000,
+				numRows:   100,
 				duration:  "20m",
 			}
 			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
@@ -4399,7 +4399,7 @@ const createMSKTopicBinPath = "/tmp/create-msk-topic"
 var setupMskTopicScript = fmt.Sprintf(`
 #!/bin/bash
 set -e -o pipefail
-wget https://go.dev/dl/go1.24.5.linux-amd64.tar.gz -O /tmp/go.tar.gz
+wget https://go.dev/dl/go1.23.12.linux-amd64.tar.gz -O /tmp/go.tar.gz
 sudo rm -rf /usr/local/go
 sudo tar -C /usr/local -xzf /tmp/go.tar.gz
 echo export PATH=$PATH:/usr/local/go/bin >> ~/.profile

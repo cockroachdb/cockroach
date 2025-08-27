@@ -116,7 +116,7 @@ func upgradeDescriptors(
 			if kv.IsAutoRetryLimitExhaustedError(err) ||
 				errors.HasType(err, (*timeutil.TimeoutError)(nil)) {
 				batchSize = max(batchSize/2, 1)
-				log.Infof(ctx, "reducing batch size of invalid_object repair query to %d (hipri=%t)",
+				log.Dev.Infof(ctx, "reducing batch size of invalid_object repair query to %d (hipri=%t)",
 					batchSize,
 					batchSize <= HighPriBatchSize)
 				continue
@@ -196,7 +196,7 @@ func FirstUpgradeFromReleasePrecondition(
 		return err
 	} else if hasRows {
 		// Attempt to repair catalog corruptions in batches.
-		log.Info(ctx, "auto-repairing catalog corruptions detected during upgrade attempt")
+		log.Dev.Info(ctx, "auto-repairing catalog corruptions detected during upgrade attempt")
 		var n int
 		const repairQuery = `
 SELECT
@@ -245,7 +245,7 @@ WHERE
 				if kv.IsAutoRetryLimitExhaustedError(err) ||
 					errors.HasType(err, (*timeutil.TimeoutError)(nil)) {
 					batchSize = max(batchSize/2, 1)
-					log.Infof(ctx, "reducing batch size of invalid_object repair query to %d (hipri=%t)",
+					log.Dev.Infof(ctx, "reducing batch size of invalid_object repair query to %d (hipri=%t)",
 						batchSize,
 						batchSize <= HighPriBatchSize)
 					continue
@@ -257,14 +257,14 @@ WHERE
 				break
 			}
 			n += int(rowsUpdated)
-			log.Infof(ctx, "repaired %d catalog corruptions", rowsUpdated)
+			log.Dev.Infof(ctx, "repaired %d catalog corruptions", rowsUpdated)
 		}
 		if n == 0 {
-			log.Info(ctx, "no catalog corruptions found to repair during upgrade attempt")
+			log.Dev.Info(ctx, "no catalog corruptions found to repair during upgrade attempt")
 		} else {
 			// Repairs have actually been performed: stop all time travel henceforth.
 			withAOST = false
-			log.Infof(ctx, "%d catalog corruptions have been repaired in total", n)
+			log.Dev.Infof(ctx, "%d catalog corruptions have been repaired in total", n)
 		}
 	}
 	// Check for all known catalog corruptions.

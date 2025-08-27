@@ -292,10 +292,10 @@ func logSupportForChange(ctx context.Context, ss slpb.SupportState, ssNew slpb.S
 	assert(!ssNew.Expiration.IsEmpty(), "requested support with zero expiration")
 	if ss.Epoch == ssNew.Epoch && !ss.Expiration.IsEmpty() {
 		if log.ExpensiveLogEnabled(ctx, 3) {
-			log.VInfof(ctx, 3, "extended support for %s", supportChangeStr(ss, ssNew))
+			log.Dev.VInfof(ctx, 3, "extended support for %s", supportChangeStr(ss, ssNew))
 		}
 	} else {
-		log.Infof(ctx, "provided support for %s", supportChangeStr(ss, ssNew))
+		log.Dev.Infof(ctx, "provided support for %s", supportChangeStr(ss, ssNew))
 	}
 }
 
@@ -318,7 +318,7 @@ func (ssfu *supporterStateForUpdate) withdrawSupport(
 		ssNew := maybeWithdrawSupport(ss, now)
 		if ss != ssNew {
 			ssfu.inProgress.supportFor[id] = ssNew
-			log.Infof(ctx, "withdrew support for %s", supportChangeStr(ss, ssNew))
+			log.Dev.Infof(ctx, "withdrew support for %s", supportChangeStr(ss, ssNew))
 			meta := ssfu.getMeta()
 			if meta.MaxWithdrawn.Forward(now) {
 				ssfu.inProgress.meta = meta

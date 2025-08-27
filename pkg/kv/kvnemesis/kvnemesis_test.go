@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"math/rand"
 	"os"
+	"path"
 	"testing"
 	"time"
 
@@ -48,6 +49,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 	ctx context.Context, tr *SeqTracker,
 ) base.TestClusterArgs {
 	storeKnobs := &kvserver.StoreTestingKnobs{
+		DisableRaftLogQueue:                   true,
 		AllowUnsynchronizedReplicationChanges: true,
 		// Drop the clock MaxOffset to reduce commit-wait time for
 		// transactions that write to global_read ranges.
@@ -102,7 +104,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 			if !shouldInject(p, n, seen[key]) {
 				return nil
 			}
-			log.Infof(context.Background(), "inserting reproposal error for %s (seen %d times)", roachpb.Key(key), seen[key])
+			log.Dev.Infof(context.Background(), "inserting reproposal error for %s (seen %d times)", roachpb.Key(key), seen[key])
 			err := errInjected // special error that kvnemesis accepts
 			return errors.Wrapf(err, "on %s at %s", pd.Request.Summary(), roachpb.Key(key))
 		}
@@ -127,7 +129,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 			if !shouldInject(p, n, seen[key]) {
 				return 0
 			}
-			log.Infof(context.Background(), "inserting illegal lease index for %s (seen %d times)", roachpb.Key(key), seen[key])
+			log.Dev.Infof(context.Background(), "inserting illegal lease index for %s (seen %d times)", roachpb.Key(key), seen[key])
 			// LAI 1 is always going to fail because the LAI is initialized when the lease
 			// comes into existence. (It's important that we pick one here that reliably
 			// fails because otherwise we may accidentally regress the closed timestamp[^1][^2].
@@ -535,7 +537,7 @@ func dumpRaftLogsOnFailure(t testing.TB, dir string, srvs []serverutils.TestServ
 	if !t.Failed() {
 		return
 	}
-	d := kvtestutils.RaftLogDumper{Dir: dir}
+	d := kvtestutils.RaftLogDumper{Dir: path.Join(dir, "raftlogs")}
 	for _, srv := range srvs {
 		require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 			s.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {

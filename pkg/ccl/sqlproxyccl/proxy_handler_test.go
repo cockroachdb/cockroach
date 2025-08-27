@@ -717,7 +717,7 @@ func TestUnexpectedError(t *testing.T) {
 	defer testutils.TestingHook(&FrontendAdmit, func(
 		conn net.Conn, incomingTLSConfig *tls.Config,
 	) *FrontendAdmitInfo {
-		log.Infof(context.Background(), "frontend admitter returning unexpected error")
+		log.Dev.Infof(context.Background(), "frontend admitter returning unexpected error")
 		return &FrontendAdmitInfo{Conn: conn, Err: errors.New("unexpected error")}
 	})()
 

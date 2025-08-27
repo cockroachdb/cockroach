@@ -133,7 +133,7 @@ func Status(ctx context.Context, nl NodeLiveness, i StatusInput) kvserverpb.Leas
 					lease.Replica, lease.Replica.NodeID, lease, l.Liveness)
 			}
 			if leaseStatusLogLimiter.ShouldLog() {
-				log.Infof(ctx, "%s", msg)
+				log.Dev.Infof(ctx, "%s", msg)
 			}
 			status.State = kvserverpb.LeaseState_ERROR
 			status.ErrInfo = msg.String()

@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestQueryComparer(t *testing.T) {
+func TestQueryVector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -157,12 +157,24 @@ func TestQueryComparer(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup queryComparer.
+			// Setup queryVector.
 			var rot RandomOrthoTransformer
 			rot.Init(vecpb.RotGivens, len(tc.queryVector), 42)
 
-			var comparer queryComparer
-			comparer.InitOriginal(tc.metric, tc.queryVector, &rot)
+			// Test InitCentroid.
+			var query queryVector
+			query.InitCentroid(tc.metric, tc.queryVector)
+			require.Nil(t, query.original)
+			if tc.metric == vecpb.L2SquaredDistance {
+				require.Equal(t, tc.queryVector, query.Transformed())
+			} else {
+				normalized := make(vector.T, len(tc.queryVector))
+				copy(normalized, tc.queryVector)
+				num32.Normalize(normalized)
+				require.Equal(t, normalized, query.Transformed())
+			}
+
+			query.InitOriginal(tc.metric, tc.queryVector, &rot)
 
 			// Make a copy of the candidates.
 			candidates := make([]SearchResult, len(tc.candidates))
@@ -176,7 +188,7 @@ func TestQueryComparer(t *testing.T) {
 			}
 
 			// Test ComputeExactDistances.
-			comparer.ComputeExactDistances(tc.level, candidates)
+			query.ComputeExactDistances(tc.metric, tc.level, candidates)
 			require.Len(t, candidates, len(tc.expected), "number of candidates should be preserved")
 
 			for i, expected := range tc.expected {
@@ -188,7 +200,7 @@ func TestQueryComparer(t *testing.T) {
 					"error bound should be 0 for exact distances")
 			}
 
-			// Test InitRandomized for interior levels.
+			// Test InitTransformed for interior levels.
 			if tc.level == LeafLevel {
 				return
 			}
@@ -199,10 +211,10 @@ func TestQueryComparer(t *testing.T) {
 			if tc.metric == vecpb.CosineDistance {
 				num32.Normalize(queryVector)
 			}
-			comparer.InitTransformed(tc.metric, queryVector, &rot)
+			query.InitTransformed(queryVector)
 
 			// Test ComputeExactDistances.
-			comparer.ComputeExactDistances(tc.level, candidates)
+			query.ComputeExactDistances(tc.metric, tc.level, candidates)
 			require.Len(t, candidates, len(tc.expected), "number of candidates should be preserved")
 
 			for i, expected := range tc.expected {
@@ -215,4 +227,30 @@ func TestQueryComparer(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("test Clear method", func(t *testing.T) {
+		var query queryVector
+
+		query.InitTransformed(vector.T{1, 2})
+		require.Nil(t, query.original)
+		require.Equal(t, vector.T{1, 2}, query.Transformed())
+		query.Clear()
+		require.Nil(t, query.Transformed())
+
+		var rot RandomOrthoTransformer
+		rot.Init(vecpb.RotNone, 2, 42)
+
+		query.InitOriginal(vecpb.CosineDistance, vector.T{3, 4}, &rot)
+		require.Equal(t, vector.T{3, 4}, query.original)
+		require.Equal(t, vector.T{0.6, 0.8}, query.Transformed())
+		query.Clear()
+		require.Nil(t, query.original)
+		require.Equal(t, vector.T{}, query.Transformed())
+
+		query.InitCentroid(vecpb.InnerProductDistance, vector.T{3, 4})
+		require.Nil(t, query.original)
+		require.Equal(t, vector.T{0.6, 0.8}, query.Transformed())
+		query.Clear()
+		require.Equal(t, vector.T{}, query.Transformed())
+	})
 }

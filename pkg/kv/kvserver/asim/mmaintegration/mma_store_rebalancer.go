@@ -132,15 +132,15 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 				msr.pendingTicket = -1
 				success := true
 				if err := op.Errors(); err != nil {
-					log.Infof(ctx, "operation for pendingChange=%v failed: %v", curChange, err)
+					log.Dev.Infof(ctx, "operation for pendingChange=%v failed: %v", curChange, err)
 					success = false
 				} else {
-					log.VInfof(ctx, 1, "operation for pendingChange=%v completed successfully", curChange)
+					log.Dev.VInfof(ctx, 1, "operation for pendingChange=%v completed successfully", curChange)
 				}
 				msr.as.PostApply(curChange.syncChangeID, success)
 				msr.pendingChangeIdx++
 			} else {
-				log.VInfof(ctx, 1, "operation for pendingChange=%v is still in progress", curChange)
+				log.Dev.VInfof(ctx, 1, "operation for pendingChange=%v is still in progress", curChange)
 				// Operation is still in progress, nothing to do this tick.
 				return
 			}
@@ -151,7 +151,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 			msr.pendingChanges = nil
 			msr.pendingChangeIdx = 0
 			msr.lastRebalanceTime = tick
-			log.VInfof(ctx, 1, "no more pending changes to process, will call compute changes again")
+			log.Dev.VInfof(ctx, 1, "no more pending changes to process, will call compute changes again")
 			storeLeaseholderMsg := MakeStoreLeaseholderMsgFromState(s, msr.localStoreID)
 			pendingChanges := msr.allocator.ComputeChanges(ctx, &storeLeaseholderMsg, mmaprototype.ChangeOptions{
 				LocalStoreID: roachpb.StoreID(msr.localStoreID),
@@ -163,11 +163,11 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 					usage:  usageInfo,
 				})
 			}
-			log.Infof(ctx, "store %d: computed %d changes %v", msr.localStoreID, len(msr.pendingChanges), msr.pendingChanges)
+			log.Dev.Infof(ctx, "store %d: computed %d changes %v", msr.localStoreID, len(msr.pendingChanges), msr.pendingChanges)
 			if len(msr.pendingChanges) == 0 {
 				// Nothing to do, there were no changes returned.
 				msr.currentlyRebalancing = false
-				log.VInfof(ctx, 1, "no pending changes to process, will wait for next tick")
+				log.Dev.VInfof(ctx, 1, "no pending changes to process, will wait for next tick")
 				return
 			}
 
@@ -202,7 +202,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		} else {
 			panic(fmt.Sprintf("unexpected pending change type: %v", curChange))
 		}
-		log.VInfof(ctx, 1, "dispatching operation for pendingChange=%v", curChange)
+		log.Dev.VInfof(ctx, 1, "dispatching operation for pendingChange=%v", curChange)
 		msr.pendingChanges[msr.pendingChangeIdx].syncChangeID =
 			msr.as.MMAPreApply(curChange.usage, curChange.change)
 		msr.pendingTicket = msr.controller.Dispatch(ctx, tick, s, curOp)

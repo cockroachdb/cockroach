@@ -226,14 +226,14 @@ func (r *Replica) executeWriteBatch(
 				if err := r.store.intentResolver.CleanupTxnIntentsAsync(
 					ctx, r.RangeID, propResult.EndTxns, true, /* allowSync */
 				); err != nil {
-					log.Warningf(ctx, "transaction cleanup failed: %v", err)
+					log.Dev.Warningf(ctx, "transaction cleanup failed: %v", err)
 				}
 			}
 			if len(propResult.EncounteredIntents) > 0 {
 				if err := r.store.intentResolver.CleanupIntentsAsync(
 					ctx, ba.AdmissionHeader, propResult.EncounteredIntents, true, /* allowSync */
 				); err != nil {
-					log.Warningf(ctx, "intent cleanup failed: %v", err)
+					log.Dev.Warningf(ctx, "intent cleanup failed: %v", err)
 				}
 			}
 			if ba.Requests[0].GetMigrate() != nil && propResult.Err == nil {
@@ -335,7 +335,7 @@ func (r *Replica) executeWriteBatch(
 								return ctx.Err()
 							})
 						if err != nil {
-							log.Warningf(ctx, "transaction cleanup failed: %v", err)
+							log.Dev.Warningf(ctx, "transaction cleanup failed: %v", err)
 							r.store.intentResolver.Metrics.FinalizedTxnCleanupFailed.Inc(1)
 						}
 					})
@@ -377,7 +377,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 	// timestamp, even for isolation levels that can commit with such skew. Sanity
 	// check that this timestamp is equal to the batch timestamp.
 	if ba.Timestamp != ba.Txn.ReadTimestamp || ba.Timestamp != ba.Txn.WriteTimestamp {
-		log.Fatalf(ctx, "unexpected 1PC execution with diverged read or write timestamps; "+
+		log.Dev.Fatalf(ctx, "unexpected 1PC execution with diverged read or write timestamps; "+
 			"ba.Timestamp: %s, ba.Txn.ReadTimestamp: %s, ba.Txn.WriteTimestamp: %s",
 			ba.Timestamp, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	}
@@ -446,7 +446,7 @@ func (r *Replica) evaluateWriteBatch(
 			return ba, res.batch, res.stats, res.br, res.res, nil
 		case onePCFailed:
 			if res.pErr == nil {
-				log.Fatalf(ctx, "1PC failed but no err. ba: %s", ba.String())
+				log.Dev.Fatalf(ctx, "1PC failed but no err. ba: %s", ba.String())
 			}
 			return ba, nil, enginepb.MVCCStats{}, nil, result.Result{}, res.pErr
 		case onePCFallbackToTransactionalEvaluation:
@@ -464,7 +464,7 @@ func (r *Replica) evaluateWriteBatch(
 	}
 
 	if ba.Require1PC() {
-		log.Fatalf(ctx,
+		log.Dev.Fatalf(ctx,
 			"Require1PC should not have gotten to transactional evaluation. ba: %s", ba.String())
 	}
 

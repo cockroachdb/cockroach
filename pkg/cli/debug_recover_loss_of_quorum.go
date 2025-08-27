@@ -58,7 +58,7 @@ func (l *confirmActionFlag) String() string {
 	case prompt:
 		return "p"
 	}
-	log.Fatalf(context.Background(), "unknown confirm action flag value %d", *l)
+	log.Dev.Fatalf(context.Background(), "unknown confirm action flag value %d", *l)
 	return ""
 }
 

@@ -98,7 +98,7 @@ func (sm *StreamManager) NewStream(streamID int64, rangeID roachpb.RangeID) (sin
 	case *UnbufferedSender:
 		return NewPerRangeEventSink(rangeID, streamID, sender)
 	default:
-		log.Fatalf(context.Background(), "unexpected sender type %T", sm)
+		log.Dev.Fatalf(context.Background(), "unexpected sender type %T", sm)
 		return nil
 	}
 }
@@ -119,7 +119,7 @@ func (sm *StreamManager) OnError(streamID int64) {
 // DisconnectStream disconnects the stream with the given streamID.
 func (sm *StreamManager) DisconnectStream(streamID int64, err *kvpb.Error) {
 	if err == nil {
-		log.Fatalf(context.Background(),
+		log.Dev.Fatalf(context.Background(),
 			"unexpected: DisconnectStream called with nil error")
 		return
 	}
@@ -146,7 +146,7 @@ func (sm *StreamManager) AddStream(streamID int64, d Disconnector) {
 		return
 	}
 	if _, ok := sm.streams.m[streamID]; ok {
-		log.Fatalf(context.Background(), "stream %d already exists", streamID)
+		log.Dev.Fatalf(context.Background(), "stream %d already exists", streamID)
 	}
 	sm.streams.m[streamID] = d
 	sm.metrics.ActiveMuxRangeFeed.Inc(1)
@@ -207,7 +207,7 @@ func (sm *StreamManager) Stop(ctx context.Context) {
 // sender.run may also finish without sending anything to the channel.
 func (sm *StreamManager) Error() <-chan error {
 	if sm.errCh == nil {
-		log.Fatalf(context.Background(), "StreamManager.Error called before StreamManager.Start")
+		log.Dev.Fatalf(context.Background(), "StreamManager.Error called before StreamManager.Start")
 	}
 	return sm.errCh
 }

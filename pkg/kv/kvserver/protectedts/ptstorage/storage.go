@@ -116,7 +116,7 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 
 	defer func() {
 		if err := it.Close(); err != nil {
-			log.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
+			log.Dev.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
 		}
 	}()
 
@@ -236,7 +236,7 @@ func (p *storage) getRecords(ctx context.Context) ([]ptpb.Record, error) {
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		var record ptpb.Record
 		if err := rowToRecord(it.Cur(), &record, false /* isDeprecatedRow */); err != nil {
-			log.Errorf(ctx, "failed to parse row as record: %v", err)
+			log.Dev.Errorf(ctx, "failed to parse row as record: %v", err)
 		}
 		records = append(records, record)
 	}
@@ -370,7 +370,7 @@ func (p *storage) deprecatedProtect(ctx context.Context, r *ptpb.Record, meta []
 	}
 	row := it.Cur()
 	if err := it.Close(); err != nil {
-		log.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
+		log.Dev.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
 	}
 	if failed := *row[0].(*tree.DBool); failed {
 		curNumSpans := int64(*row[1].(*tree.DInt))
@@ -423,7 +423,7 @@ func (p *storage) deprecatedGetRecords(ctx context.Context) ([]ptpb.Record, erro
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		var record ptpb.Record
 		if err := rowToRecord(it.Cur(), &record, true /* isDeprecatedRow */); err != nil {
-			log.Errorf(ctx, "failed to parse row as record: %v", err)
+			log.Dev.Errorf(ctx, "failed to parse row as record: %v", err)
 		}
 		records = append(records, record)
 	}

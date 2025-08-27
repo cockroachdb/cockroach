@@ -1623,7 +1623,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 
 	}
 
-	cdcTest(t, testFn, feedTestForceSink(`kafka`))
+	cdcTest(t, testFn, feedTestForceSink(`kafka`), withAllowChangefeedErr("changefeed may have parsing failure on some queries"))
 }
 
 // getWhereClause extracts the predicate from a randomly generated SQL statement.
@@ -3103,7 +3103,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		require.NoError(t, jobFeed.Pause())
 
 		// Verify that none of the resolved spans after resume were checkpointed.
-		t.Logf("Table Span: %s, Second Checkpoint: %v, Resolved Spans: %v", tableSpan, secondCheckpoint, resolved)
+		t.Logf("Table Span: %s, Second Checkpoint: %v, Resolved Spans: %v", tableSpan, secondCheckpoint.Slice(), resolved)
 		for _, sp := range resolved {
 			require.Falsef(t, !sp.Equal(tableSpan) && secondCheckpoint.Contains(sp.Key), "span should not have been resolved: %s", sp)
 		}
@@ -5537,7 +5537,7 @@ func requireTerminalErrorSoon(
 					assert.Regexp(t, errRegex, err)
 					return nil
 				}
-				log.Infof(ctx, "waiting for error; skipping test feed message: %s", m.String())
+				log.Dev.Infof(ctx, "waiting for error; skipping test feed message: %s", m.String())
 			}
 		}
 	})
@@ -5862,7 +5862,7 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 		t.Helper()
 		for {
 			if ev, err := f.Next(); err != nil {
-				log.Infof(context.Background(), "got event %v %v", ev, err)
+				log.Dev.Infof(context.Background(), "got event %v %v", ev, err)
 				tsStr = timestampStrFromError(t, err)
 				_ = f.Close()
 				return tsStr
@@ -8620,7 +8620,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 								errors.Newf("synthetic fatal error from node %d", nodeToFail),
 								pgcode.Io, "something happened with IO")),
 						"while doing something")
-					log.Errorf(ctx, "BeforeEmitRow returning error %s", err)
+					log.Dev.Errorf(ctx, "BeforeEmitRow returning error %s", err)
 					return err
 				}
 				return nil
@@ -8646,7 +8646,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 		for feedErr == nil {
 			_, feedErr = feed.Next()
 		}
-		log.Errorf(context.Background(), "feedErr=%s", feedErr)
+		log.Dev.Errorf(context.Background(), "feedErr=%s", feedErr)
 		require.Regexp(t, "synthetic fatal error", feedErr)
 
 		// enterprise feeds should also have the job marked failed.

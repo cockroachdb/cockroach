@@ -58,7 +58,7 @@ func (tq *testQueueImpl) shouldQueue(
 }
 
 func (tq *testQueueImpl) process(
-	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
+	_ context.Context, _ *Replica, _ spanconfig.StoreReader, _ float64,
 ) (bool, error) {
 	defer atomic.AddInt32(&tq.processed, 1)
 	if tq.err != nil {
@@ -222,6 +222,11 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	} else {
 		bq.finishProcessingReplica(ctx, stopper, r2, nil)
 	}
+	bq.assertInvariants(func(item *replicaItem) {
+		replica, err := bq.getReplica(item.rangeID)
+		require.NoError(t, err)
+		require.Equal(t, priorityMap[replica.(*Replica)], item.priority)
+	})
 	if v := bq.pending.Value(); v != 1 {
 		t.Errorf("expected 1 pending replicas; got %d", v)
 	}
@@ -294,6 +299,11 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if r, _ := bq.pop(); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
 	}
+	bq.assertInvariants(func(item *replicaItem) {
+		replica, err := bq.getReplica(item.rangeID)
+		require.NoError(t, err)
+		require.Equal(t, priorityMap[replica.(*Replica)], item.priority)
+	})
 
 	// Try removing a replica.
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
@@ -313,6 +323,11 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if v := bq.pending.Value(); v != 0 {
 		t.Errorf("expected 0 pending replicas; got %d", v)
 	}
+	bq.assertInvariants(func(item *replicaItem) {
+		replica, err := bq.getReplica(item.rangeID)
+		require.NoError(t, err)
+		require.Equal(t, priorityMap[replica.(*Replica)], item.priority)
+	})
 }
 
 // TestBaseQueueSamePriorityFIFO verifies that if multiple items are queued at
@@ -538,11 +553,12 @@ func TestBaseQueueAddRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	const testPriority = 1.0
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
 		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
-			priority = 1.0
+			priority = testPriority
 			return
 		},
 	}
@@ -550,7 +566,14 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	bq.Start(stopper)
 
 	bq.maybeAdd(ctx, r, hlc.ClockTimestamp{})
+	bq.assertInvariants(func(item *replicaItem) {
+		require.Equal(t, testPriority, item.priority)
+	})
+
 	bq.MaybeRemove(r.RangeID)
+	bq.assertInvariants(func(item *replicaItem) {
+		require.Equal(t, testPriority, item.priority)
+	})
 
 	// Wake the queue
 	close(testQueue.blocker)
@@ -837,10 +860,19 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		bq.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
 	}
 
+	// Make sure priority is preserved during processing.
+	bq.assertInvariants(func(item *replicaItem) {
+		require.Equal(t, float64(item.rangeID), item.priority)
+	})
+
 	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != replicaCount {
 			return errors.Errorf("expected %d processed replicas; got %d", replicaCount, pc)
 		}
+		// Make sure priorities are preserved with the purgatory queue.
+		bq.assertInvariants(func(item *replicaItem) {
+			require.Equal(t, float64(item.rangeID), item.priority)
+		})
 		// We have to loop checking the following conditions because the increment
 		// of testQueue.processed does not happen atomically with the replica being
 		// placed in purgatory.
@@ -852,6 +884,9 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		if l := bq.Length(); l != 0 {
 			return errors.Errorf("expected empty priorityQ; got %d", l)
 		}
+		bq.assertInvariants(func(item *replicaItem) {
+			require.Equal(t, float64(item.rangeID), item.priority)
+		})
 		// Check metrics.
 		if v := bq.successes.Count(); v != 0 {
 			return errors.Errorf("expected 0 processed replicas; got %d", v)
@@ -886,6 +921,9 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		if l := bq.Length(); l != 0 {
 			return errors.Errorf("expected empty priorityQ; got %d", l)
 		}
+		bq.assertInvariants(func(item *replicaItem) {
+			require.Equal(t, float64(item.rangeID), item.priority)
+		})
 		// Check metrics.
 		if v := bq.successes.Count(); v != 0 {
 			return errors.Errorf("expected 0 processed replicas; got %d", v)
@@ -918,6 +956,9 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		if pc := testQueue.getProcessed(); pc != replicaCount*3-rmReplCount {
 			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*3-rmReplCount, pc)
 		}
+		bq.assertInvariants(func(item *replicaItem) {
+			require.Equal(t, float64(item.rangeID), item.priority)
+		})
 		// Check metrics.
 		if v := bq.successes.Count(); v != int64(replicaCount)-rmReplCount {
 			return errors.Errorf("expected %d processed replicas; got %d", replicaCount-rmReplCount, v)
@@ -961,6 +1002,9 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		if pc := testQueue.getProcessed(); pc != beforeProcessCount+1 {
 			return errors.Errorf("expected %d processed replicas; got %d", beforeProcessCount+1, pc)
 		}
+		bq.assertInvariants(func(item *replicaItem) {
+			require.Equal(t, float64(item.rangeID), item.priority)
+		})
 		if v := bq.successes.Count(); v != beforeSuccessCount+1 {
 			return errors.Errorf("expected %d processed replicas; got %d", beforeSuccessCount+1, v)
 		}
@@ -984,7 +1028,7 @@ type processTimeoutQueueImpl struct {
 var _ queueImpl = &processTimeoutQueueImpl{}
 
 func (pq *processTimeoutQueueImpl) process(
-	ctx context.Context, r *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, r *Replica, _ spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
@@ -1114,7 +1158,7 @@ type processTimeQueueImpl struct {
 var _ queueImpl = &processTimeQueueImpl{}
 
 func (pq *processTimeQueueImpl) process(
-	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
+	_ context.Context, _ *Replica, _ spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	time.Sleep(5 * time.Millisecond)
 	return true, nil
@@ -1338,13 +1382,13 @@ type parallelQueueImpl struct {
 var _ queueImpl = &parallelQueueImpl{}
 
 func (pq *parallelQueueImpl) process(
-	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader, priority float64,
 ) (processed bool, err error) {
 	atomic.AddInt32(&pq.processing, 1)
 	if pq.processBlocker != nil {
 		<-pq.processBlocker
 	}
-	processed, err = pq.testQueueImpl.process(ctx, repl, confReader)
+	processed, err = pq.testQueueImpl.process(ctx, repl, confReader, priority)
 	atomic.AddInt32(&pq.processing, -1)
 	return processed, err
 }
@@ -1365,11 +1409,12 @@ func TestBaseQueueProcessConcurrently(t *testing.T) {
 	repls := createReplicas(t, &tc, 3)
 	r1, r2, r3 := repls[0], repls[1], repls[2]
 
+	const testPriority = 1
 	pQueue := &parallelQueueImpl{
 		testQueueImpl: testQueueImpl{
 			blocker: make(chan struct{}, 1),
 			shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
-				return true, 1
+				return true, testPriority
 			},
 		},
 		processBlocker: make(chan struct{}, 1),
@@ -1414,6 +1459,9 @@ func TestBaseQueueProcessConcurrently(t *testing.T) {
 
 	pQueue.processBlocker <- struct{}{}
 	assertProcessedAndProcessing(3, 0)
+	bq.assertInvariants(func(item *replicaItem) {
+		require.Equal(t, float64(testPriority), item.priority)
+	})
 }
 
 // TestBaseQueueReplicaChange ensures that if a replica is added to the queue

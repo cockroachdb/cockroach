@@ -47,7 +47,7 @@ func WaitForNoIngestingNodes(
 		if err == nil {
 			break
 		}
-		log.Infof(ctx, "failed to verify job no longer importing on all nodes: %+v", err)
+		log.Dev.Infof(ctx, "failed to verify job no longer importing on all nodes: %+v", err)
 
 		if timeutil.Since(started) > maxWait {
 			return err
@@ -56,7 +56,7 @@ func WaitForNoIngestingNodes(
 		if timeutil.Since(lastStatusUpdate) > statusUpdateFrequency {
 			status := jobs.StatusMessage(fmt.Sprintf("waiting for all nodes to finish ingesting writing before proceeding: %s", err))
 			if statusErr := job.NoTxn().UpdateStatusMessage(ctx, status); statusErr != nil {
-				log.Warningf(ctx, "failed to update running status of job %d: %s", job.ID(), statusErr)
+				log.Dev.Warningf(ctx, "failed to update running status of job %d: %s", job.ID(), statusErr)
 			} else {
 				lastStatusUpdate = timeutil.Now()
 			}

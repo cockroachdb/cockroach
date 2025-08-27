@@ -211,7 +211,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.applyStats.assertionsRequested++
 		}
 	} else if res := cmd.ReplicatedResult(); !res.IsZero() {
-		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)
+		log.Dev.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)
 	}
 
 	// On ConfChange entries, inform the raft.RawNode.
@@ -232,7 +232,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		rejected := cmd.Rejected()
 		higherReproposalsExist := cmd.Cmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex
 		if !rejected && higherReproposalsExist {
-			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index")
+			log.Dev.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index")
 		}
 		if !rejected && cmd.proposal.applied {
 			// If the command already applied then we shouldn't be "finishing" its
@@ -240,7 +240,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// once. We expect that when any reproposal for the same command attempts
 			// to apply it will be rejected by the below raft lease sequence or lease
 			// index check in checkForcedErr.
-			log.Fatalf(ctx, "command already applied: %+v; unexpected successful result", cmd)
+			log.Dev.Fatalf(ctx, "command already applied: %+v; unexpected successful result", cmd)
 		}
 		// If any reproposals at a higher MaxLeaseIndex exist we know that they will
 		// never successfully apply, remove them from the map to avoid future
@@ -283,7 +283,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 ) (shouldAssert, isRemoved bool) {
 	// Assert that this replicatedResult implies at least one side-effect.
 	if rResult.IsZero() {
-		log.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
+		log.Dev.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
 	}
 
 	if rResult.State != nil {
@@ -358,7 +358,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	// implemented by always catching a forced error and thus never show up in
 	// this method, which the next line will assert for us.
 	if !rResult.IsZero() {
-		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, &kvserverpb.ReplicatedEvalResult{}))
+		log.Dev.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, &kvserverpb.ReplicatedEvalResult{}))
 	}
 	return true, isRemoved
 }

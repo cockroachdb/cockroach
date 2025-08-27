@@ -7,6 +7,7 @@ package ltree
 
 import (
 	"bytes"
+	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -106,14 +107,6 @@ func (lt T) ForEachLabel(fn func(int, string)) {
 	}
 }
 
-// LabelAt returns the label at the specified index in an LTree path.
-func (lt T) LabelAt(idx int) (string, error) {
-	if idx < 0 || idx >= lt.Len() {
-		return "", pgerror.Newf(pgcode.InvalidParameterValue, "index %d out of bounds", idx)
-	}
-	return lt.path[idx], nil
-}
-
 // Compare compares two LTrees lexicographically based on their labels.
 func (lt T) Compare(other T) int {
 	minLen := min(lt.Len(), other.Len())
@@ -144,6 +137,25 @@ func (lt T) Copy() T {
 	return T{path: copiedLabels}
 }
 
+func RandLTree(rng *rand.Rand) T {
+	charSet := "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+	length := rng.Intn(10)
+	if length == 0 {
+		return Empty
+	}
+	labels := make([]string, length)
+	for i := range labels {
+		// Labels cannot be empty.
+		labelLen := rng.Intn(9) + 1
+		p := make([]byte, labelLen)
+		for j := range p {
+			p[j] = charSet[rng.Intn(len(charSet))]
+		}
+		labels[i] = string(p)
+	}
+	return T{path: labels}
+}
+
 // validateLabel checks if a label is valid and returns an error if it is not,
 // otherwise, it returns nil.
 // A label is valid if it:
@@ -168,4 +180,161 @@ func validateLabel(l string) error {
 // isValidChar returns true if the character is valid in an LTree label.
 func isValidChar(c byte) bool {
 	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_') || (c == '-')
+}
+
+// Contains returns true if an LTree path contains another LTree path.
+// This implements the @> and <@ operators. This is equivalent to
+// checking if an LTree path is an ancestor or descendant of another
+// LTree path. This is also equivalent to matching a prefix of labels.
+// Examples:
+// 'a.b.c' @> 'a.b' returns false
+// 'a.b' @> 'a.b.c' returns true
+func (lt T) Contains(other T) bool {
+	for i, label := range lt.path {
+		if i >= other.Len() || label != other.path[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// Concat returns a new LTree that is the concatenation of two valid LTree paths.
+func Concat(l, other T) (T, error) {
+	newLen := l.Len() + other.Len()
+	if newLen > maxNumOfLabels {
+		return Empty, pgerror.Newf(pgcode.ProgramLimitExceeded, "number of ltree levels (%d) exceeds the maximum allowed (%d)", newLen, maxNumOfLabels)
+	}
+	newPath := make([]string, 0, newLen)
+	return T{path: append(append(newPath, l.path...), other.path...)}, nil
+}
+
+// SubPath returns a sub-path of the LTree starting from the given offset
+// and of the specified length. If the offset is negative, it counts from the end of the path.
+// If the length is negative, it extends to the end of the path from the offset.
+func (lt T) SubPath(offset, length int) (T, error) {
+	start := offset
+	if start < 0 {
+		start += lt.Len()
+	}
+	if length < 0 {
+		length += lt.Len() - start
+	}
+	end := min(start+length, lt.Len())
+	if start < 0 || start >= lt.Len() || length < 0 || end < start {
+		// The end < start check is necessary to prevent overflows.
+		return Empty, pgerror.Newf(pgcode.InvalidParameterValue, "invalid positions")
+	}
+
+	return T{
+		path: lt.path[start:end:end],
+	}, nil
+}
+
+// IndexOf returns the first index in l that matches the other l sub-ltree,
+// starting from offset. If offset is negative, it counts from the end of the ltree.
+// If the sub-ltree is not found, it returns -1.
+func (lt T) IndexOf(other T, offset int) int {
+	start := offset
+	if start < 0 {
+		start += lt.Len()
+	}
+	// The max() is necessary here, as start could still be negative even after
+	// adding the length to `offset` since offset isn't restricted.
+	for i := max(start, 0); i < lt.Len()-other.Len()+1; i++ {
+		match := true
+		for j := 0; j < other.Len(); j++ {
+			if lt.path[i+j] != other.path[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return i
+		}
+	}
+	return -1
+}
+
+// LCA computes the Lowest Common proper Ancestor from a slice of LTree
+// instances and returns the LCA and a bool indicating whether the result is
+// NULL (the LCA of an Empty ltree is NULL). The LCA is the longest common
+// proper prefix of the paths in the provided LTree slice. If the paths have
+// no common prefix, it returns an empty LTree.
+func LCA(ltrees []T) (_ T, isNull bool) { // lint: uppercase function OK
+	if len(ltrees) == 0 {
+		return Empty, true
+	}
+	var minLength = ltrees[0].Len()
+	for _, ltree := range ltrees {
+		minLength = min(minLength, ltree.Len())
+	}
+	if minLength == 0 {
+		// If an Empty LTREE is in ltrees, then the LCA should be NULL.
+		return Empty, true
+	}
+	var i int
+	for i = 0; i < minLength; i++ {
+		label := ltrees[0].path[i]
+		equal := true
+		for _, t := range ltrees[1:] {
+			if t.path[i] != label {
+				equal = false
+				break
+			}
+		}
+		if !equal {
+			break
+		}
+	}
+
+	// Enforcing proper ancestor
+	// i.e: 'A.B' is the proper ancestor to 'A.B.C'.
+	if minLength > 0 && i == minLength {
+		i -= 1
+	}
+
+	return T{path: ltrees[0].path[:i:i]}, false
+}
+
+// NextSibling returns a LTree with a lexicographically incremented last label.
+// This is different from the next lexicographic LTree. This is mainly used for
+// defining a key-encoded span for ancestry operators.
+// Note that this could produce a LTREE with more labels than the maximum
+// allowed.
+// Example: 'A.B' -> 'A.C'
+func (lt T) NextSibling() T {
+	if lt.Len() == 0 {
+		return Empty
+	}
+	lastLabel := lt.path[len(lt.path)-1]
+	nextLabel := incrementLabel(lastLabel)
+
+	newLTree := lt.Copy()
+	newLTree.path[newLTree.Len()-1] = nextLabel
+	return newLTree
+}
+
+var nextCharMap = map[byte]byte{
+	'-': '0',
+	'9': 'A',
+	'Z': '_',
+	'_': 'a',
+	'z': 0,
+}
+
+func incrementLabel(label string) string {
+	nextLabel := []byte(label)
+	nextChar, ok := nextCharMap[nextLabel[len(nextLabel)-1]]
+
+	if ok && nextChar == 0 {
+		// Technically, this could mean exceeding the length of the label.
+		return string(append(nextLabel, '-'))
+	}
+
+	if !ok {
+		nextChar = nextLabel[len(nextLabel)-1] + 1
+	}
+
+	nextLabel[len(nextLabel)-1] = nextChar
+	return string(nextLabel)
 }

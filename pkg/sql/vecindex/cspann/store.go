@@ -121,6 +121,24 @@ type Store interface {
 		expected PartitionMetadata,
 	) error
 
+	// TryStartMerge updates the partition's state to Merging if the "ifReady"
+	// partition's state is Ready. The "ifReady" partition should be at the same
+	// level of the tree, and its state should be checked in the same transaction
+	// as the state update. This ensures that there's at least one partition where
+	// vectors can be moved during a merge fixup.
+	//
+	// Before performing any action, TryStartMerge checks the partition's
+	// metadata and returns a ConditionFailedError if it is not the same as the
+	// expected metadata. If either partition does not exist, it returns
+	// ErrPartitionNotFound.
+	TryStartMerge(
+		ctx context.Context,
+		treeKey TreeKey,
+		partitionKey PartitionKey,
+		expected PartitionMetadata,
+		ifReadyKey PartitionKey,
+	) error
+
 	// TryAddToPartition adds the given vectors (and associated keys/values) to
 	// the specified partition and returns true if at least one vector was added.
 	// If a vector's key already exists in the partition, the vector is not added.
@@ -159,7 +177,7 @@ type Store interface {
 	) (removed bool, err error)
 
 	// TryMoveVector attempts to move a single vector from the source partition to
-	// the target partition, as an atommic operation. If either partition does not
+	// the target partition, as an atomic operation. If either partition does not
 	// exist, it returns moved=false. If the vector does not exist in the source
 	// partition, or already exists in the target partition, it returns
 	// moved=false.

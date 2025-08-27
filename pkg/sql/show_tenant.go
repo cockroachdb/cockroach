@@ -150,7 +150,7 @@ func (n *showTenantNode) getTenantValues(
 			stats, status, err := mgr.GetReplicationStatsAndStatus(params.ctx, jobId)
 			values.dataState = status
 			if err != nil {
-				log.Warningf(params.ctx, "replication stats unavailable for tenant %q and job %d: %v",
+				log.Dev.Warningf(params.ctx, "replication stats unavailable for tenant %q and job %d: %v",
 					tenantInfo.Name, jobId, err)
 			} else if n.withReplication {
 				values.replicationInfo = stats
@@ -160,7 +160,7 @@ func (n *showTenantNode) getTenantValues(
 					record, err := ptp.GetRecord(params.ctx, *stats.IngestionDetails.ProtectedTimestampRecordID)
 					if err != nil {
 						// Protected timestamp might not be set yet, no need to fail.
-						log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d: %v",
+						log.Dev.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d: %v",
 							tenantInfo.Name, jobId, err)
 					} else {
 						values.protectedTimestamp = record.Timestamp

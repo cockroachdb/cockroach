@@ -240,7 +240,7 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 		err := status.Errorf(
 			codes.InvalidArgument,
 			"session with id %d nonexistent", sessionCookie.ID)
-		log.Infof(ctx, "%v", err)
+		log.Dev.Infof(ctx, "%v", err)
 		http.Error(w, "invalid session", http.StatusBadRequest)
 		return
 	}
@@ -295,12 +295,12 @@ func (a *authenticationV2Mux) getSession(
 	} else {
 		decoded, err := base64.StdEncoding.DecodeString(rawSession)
 		if err != nil {
-			log.Warningf(ctx, "attempted to decode session but failed: %v", err)
+			log.Dev.Warningf(ctx, "attempted to decode session but failed: %v", err)
 			return "", nil, http.StatusBadRequest, err
 		}
 		err = protoutil.Unmarshal(decoded, cookie)
 		if err != nil {
-			log.Warningf(ctx, "attempted to unmarshal session but failed: %v", err)
+			log.Dev.Warningf(ctx, "attempted to unmarshal session but failed: %v", err)
 		}
 	}
 	if err != nil {

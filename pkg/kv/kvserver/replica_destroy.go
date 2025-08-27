@@ -130,13 +130,13 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 		return err
 	}
 	if r.IsInitialized() {
-		log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+		log.Dev.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 			ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
 			commitTime.Sub(startTime).Seconds()*1000,
 			preTime.Sub(startTime).Seconds()*1000,
 			commitTime.Sub(preTime).Seconds()*1000)
 	} else {
-		log.Infof(ctx, "removed uninitialized range in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+		log.Dev.Infof(ctx, "removed uninitialized range in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 			commitTime.Sub(startTime).Seconds()*1000,
 			preTime.Sub(startTime).Seconds()*1000,
 			commitTime.Sub(preTime).Seconds()*1000)
@@ -168,7 +168,7 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	}
 
 	if !r.mu.destroyStatus.Removed() {
-		log.Fatalf(ctx, "removing raft group before destroying replica %s", r)
+		log.Dev.Fatalf(ctx, "removing raft group before destroying replica %s", r)
 	}
 	r.mu.internalRaftGroup = nil
 	r.mu.raftTracer.Close()

@@ -119,7 +119,7 @@ func (s *Settings) SetCPUProfiling(to CPUProfileType) error {
 		return errors.New("a CPU profile is already in process, try again later")
 	}
 	if log.V(1) {
-		log.Infof(context.Background(), "active CPU profile type set to: %d", to)
+		log.Dev.Infof(context.Background(), "active CPU profile type set to: %d", to)
 	}
 	return nil
 }
@@ -180,7 +180,7 @@ func MakeTestingClusterSettingsWithVersions(
 	if initializeVersion {
 		// Initialize cluster version to specified latestVersion.
 		if err := clusterversion.Initialize(context.TODO(), latestVersion, &s.SV); err != nil {
-			log.Fatalf(context.TODO(), "unable to initialize version: %s", err)
+			log.Dev.Fatalf(context.TODO(), "unable to initialize version: %s", err)
 		}
 	}
 	return s

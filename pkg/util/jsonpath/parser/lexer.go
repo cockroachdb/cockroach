@@ -8,7 +8,7 @@ package parser
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -83,7 +83,7 @@ func (l *lexer) Error(s string) {
 	s = strings.TrimPrefix(s, "syntax error: ") // we'll add it again below.
 	err := pgerror.WithCandidateCode(errors.Newf("%s", s), pgcode.Syntax)
 	lastTok := l.lastToken()
-	l.lastError = parser.PopulateErrorDetails(lastTok.id, lastTok.str, lastTok.pos, err, l.in)
+	l.lastError = parserutils.PopulateErrorDetails(lastTok.id, ERROR, lastTok.str, lastTok.pos, err, l.in)
 }
 
 func (l *lexer) SetJsonpath(expr jsonpath.Jsonpath) {
@@ -94,14 +94,14 @@ func (l *lexer) setErr(err error) {
 	err = pgerror.WithCandidateCode(err, pgcode.Syntax)
 	l.lastError = err
 	lastTok := l.lastToken()
-	l.lastError = parser.PopulateErrorDetails(lastTok.id, lastTok.str, lastTok.pos, l.lastError, l.in)
+	l.lastError = parserutils.PopulateErrorDetails(lastTok.id, ERROR, lastTok.str, lastTok.pos, l.lastError, l.in)
 }
 
 func (l *lexer) Unimplemented(feature string) {
 	// Link to meta-issue for unimplemented JSONPath features.
 	l.lastError = unimp.NewWithIssuef(22513, "this syntax: %s", feature)
 	lastTok := l.lastToken()
-	l.lastError = parser.PopulateErrorDetails(lastTok.id, lastTok.str, lastTok.pos, l.lastError, l.in)
+	l.lastError = parserutils.PopulateErrorDetails(lastTok.id, ERROR, lastTok.str, lastTok.pos, l.lastError, l.in)
 	l.lastError = &tree.UnsupportedError{
 		Err:         l.lastError,
 		FeatureName: feature,

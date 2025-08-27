@@ -134,7 +134,7 @@ func (sfr *SimpleFlightRecorder) Start(ctx context.Context, stopper *stop.Stoppe
 			if sfr.fr.Enabled() {
 				err := sfr.fr.Stop()
 				if err != nil {
-					log.Warningf(ctx, "error while stopping flight recorder: %v", err)
+					log.Dev.Warningf(ctx, "error while stopping flight recorder: %v", err)
 				}
 				sfr.enabled.Store(false)
 			}
@@ -149,10 +149,10 @@ func (sfr *SimpleFlightRecorder) Start(ctx context.Context, stopper *stop.Stoppe
 					if sfr.fr.Enabled() {
 						err := sfr.fr.Stop()
 						if err != nil {
-							log.Warningf(ctx, "error while stopping flight recorder: %v", err)
+							log.Dev.Warningf(ctx, "error while stopping flight recorder: %v", err)
 						}
 						sfr.enabled.Store(false)
-						log.Infof(ctx, "flight recorder stopped")
+						log.Dev.Infof(ctx, "flight recorder stopped")
 					}
 					// Disabled. Check again soon.
 					t.Reset(sfr.enabledCheckInterval)
@@ -163,23 +163,23 @@ func (sfr *SimpleFlightRecorder) Start(ctx context.Context, stopper *stop.Stoppe
 					sfr.fr.SetPeriod(duration)
 					err := sfr.fr.Start()
 					if err != nil {
-						log.Warningf(ctx, "error while starting flight recorder, will try again: %v", err)
+						log.Dev.Warningf(ctx, "error while starting flight recorder, will try again: %v", err)
 						t.Reset(max(interval-timeutil.Since(startTime), 0))
 						continue
 					}
 					sfr.enabled.Store(true)
-					log.Infof(ctx, "flight recorder started")
+					log.Dev.Infof(ctx, "flight recorder started")
 				}
 				filename := sfr.TimestampedFilename()
 				destFile, err := os.Create(filename)
 				if err != nil {
-					log.Warningf(ctx, "unable to open file %s to dump flight record, will try again: %v", filename, err)
+					log.Dev.Warningf(ctx, "unable to open file %s to dump flight record, will try again: %v", filename, err)
 					t.Reset(max(interval-timeutil.Since(startTime), 0))
 					continue
 				}
 				_, err = sfr.fr.WriteTo(destFile)
 				if err != nil {
-					log.Warningf(ctx, "error while writing flight record to %s, will try again: %v", filename, err)
+					log.Dev.Warningf(ctx, "error while writing flight record to %s, will try again: %v", filename, err)
 					t.Reset(max(interval-timeutil.Since(startTime), 0))
 					continue
 				}

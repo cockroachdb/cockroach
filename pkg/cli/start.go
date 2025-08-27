@@ -179,7 +179,7 @@ func initTraceDir(ctx context.Context, dir string) {
 		// from a directory which is not writable, we won't
 		// be able to create a sub-directory here.
 		err = errors.WithHint(err, "Try changing the CWD of the cockroach process to a writable directory.")
-		log.Warningf(ctx, "cannot create trace dir; traces will not be dumped: %v", err)
+		log.Dev.Warningf(ctx, "cannot create trace dir; traces will not be dumped: %v", err)
 		return
 	}
 }
@@ -292,7 +292,7 @@ func initTempStorageConfig(
 			unlockDirFn()
 			// Remove the temp directory directly since there is no record file.
 			if err := os.RemoveAll(tempStorageConfig.Path); err != nil {
-				log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
+				log.Dev.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
 			}
 		}))
 	} else {
@@ -308,7 +308,7 @@ func initTempStorageConfig(
 		stopper.AddCloser(stop.CloserFn(func() {
 			unlockDirFn()
 			if err := fs.CleanupTempDirs(recordPath); err != nil {
-				log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
+				log.Dev.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
 			}
 		}))
 	}
@@ -880,7 +880,7 @@ func createAndStartServerAsync(
 				select {
 				case req := <-s.ShutdownRequested():
 					shutdownCtx := s.AnnotateCtx(context.Background())
-					log.Infof(shutdownCtx, "server requesting spontaneous shutdown: %v", req.ShutdownCause())
+					log.Dev.Infof(shutdownCtx, "server requesting spontaneous shutdown: %v", req.ShutdownCause())
 					shutdownReqC <- req
 				case <-stopper.ShouldQuiesce():
 				}
@@ -1551,7 +1551,7 @@ func reportReadinessExternally(ctx context.Context, cmd *cobra.Command, waitForI
 		clientConnOptions, serverParams := server.MakeServerOptionsForURL(serverCfg.Config)
 		pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
 		if err != nil {
-			log.Errorf(ctx, "failed computing the URL: %v", err)
+			log.Dev.Errorf(ctx, "failed computing the URL: %v", err)
 			return
 		}
 

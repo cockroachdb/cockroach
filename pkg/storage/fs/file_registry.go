@@ -9,9 +9,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -184,16 +185,14 @@ func (r *FileRegistry) Load(ctx context.Context) error {
 				// must have crashed while creating it.
 				err := r.FS.Remove(r.FS.PathJoin(r.DBDir, f))
 				if err != nil {
-					log.Errorf(ctx, "unable to remove registry file %s", f)
+					log.Dev.Errorf(ctx, "unable to remove registry file %s", f)
 				}
 			}
 			if fileNum < registryFileNum {
 				obsoleteFiles = append(obsoleteFiles, fileNum)
 			}
 		}
-		sort.Slice(obsoleteFiles, func(i, j int) bool {
-			return obsoleteFiles[i] < obsoleteFiles[j]
-		})
+		slices.Sort(obsoleteFiles)
 		r.writeMu.obsoleteRegistryFiles = make([]string, 0, r.NumOldRegistryFiles+1)
 		for _, f := range obsoleteFiles {
 			r.writeMu.obsoleteRegistryFiles = append(r.writeMu.obsoleteRegistryFiles, makeRegistryFilename(f))
@@ -306,11 +305,7 @@ func (r *FileRegistry) maybeElideEntries(ctx context.Context) error {
 	// recursively List each directory and walk two lists of sorted
 	// filenames. We should test a store with many files to see how much
 	// the current approach slows node start.
-	filenames := make([]string, 0, len(r.writeMu.mu.entries))
-	for filename := range r.writeMu.mu.entries {
-		filenames = append(filenames, filename)
-	}
-	sort.Strings(filenames)
+	filenames := slices.Sorted(maps.Keys(r.writeMu.mu.entries))
 
 	batch := &enginepb.RegistryUpdateBatch{}
 	for _, filename := range filenames {
@@ -337,7 +332,7 @@ func (r *FileRegistry) maybeElideEntries(ctx context.Context) error {
 			path = r.FS.PathJoin(r.DBDir, filename)
 		}
 		if _, err := r.FS.Stat(path); oserror.IsNotExist(err) {
-			log.Infof(ctx, "eliding file registry entry %s", redact.SafeString(filename))
+			log.Dev.Infof(ctx, "eliding file registry entry %s", redact.SafeString(filename))
 			batch.DeleteEntry(filename)
 		}
 	}

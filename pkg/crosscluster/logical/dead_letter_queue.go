@@ -120,7 +120,7 @@ func (dlq *noopDeadLetterQueueClient) Log(
 		return errors.Wrap(err, "failed to marshal kv event")
 	}
 
-	log.Infof(ctx, `ingestion_job_id: %d,  
+	log.Dev.Infof(ctx, `ingestion_job_id: %d,  
 		table_id: %d, 
 		dlq_reason: (%s) %s,
 		mutation_type: %s,  
@@ -187,7 +187,7 @@ func (dlq *deadLetterQueueClient) Log(
 
 	jsonRow, err := cdcEventRow.ToJSON()
 	if err != nil {
-		log.Warningf(ctx, "failed to convert cdc event row to json: %v", err)
+		log.Dev.Warningf(ctx, "failed to convert cdc event row to json: %v", err)
 		if _, err := dlq.ie.Exec(
 			ctx,
 			"insert-row-into-dlq-table-fallback",

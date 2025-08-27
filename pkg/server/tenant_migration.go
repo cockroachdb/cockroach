@@ -52,7 +52,7 @@ func validateTargetClusterVersion(
 			"binary's minimum supported version %s for SQL server instance %d",
 			targetCV, tenantVersion.MinSupportedVersion(),
 			instanceID)
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		return err
 	}
 
@@ -61,7 +61,7 @@ func validateTargetClusterVersion(
 			"less than the attempted upgrade version %s",
 			instanceID,
 			tenantVersion.LatestVersion(), targetCV)
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		return errors.WithHintf(err,
 			"upgrade sql server %d binary to version %s (or higher) to allow tenant upgrade to succeed",
 			instanceID,
@@ -127,7 +127,7 @@ func bumpTenantClusterVersion(
 	instanceID base.SQLInstanceID,
 ) error {
 	activeCV := tenantCV.ActiveVersion(ctx)
-	log.Infof(ctx, "bumping cluster version from %v to %v on instance %s", activeCV, newCV, instanceID.String())
+	log.Dev.Infof(ctx, "bumping cluster version from %v to %v on instance %s", activeCV, newCV, instanceID.String())
 	if !activeCV.Less(newCV.Version) {
 		// Nothing to do.
 		return nil
@@ -159,7 +159,7 @@ func bumpTenantClusterVersion(
 	if err := tenantCV.SetActiveVersion(ctx, newCV); err != nil {
 		return err
 	}
-	log.Infof(ctx, "active cluster version setting is now %s (up from %s)",
+	log.Dev.Infof(ctx, "active cluster version setting is now %s (up from %s)",
 		newCV.PrettyPrint(), activeCV.PrettyPrint())
 	return nil
 }

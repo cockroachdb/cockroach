@@ -2474,7 +2474,7 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
 	err := h.metricSource.PrintAsText(w, contentType, h.useStaticLabels)
 	if err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
@@ -4123,7 +4123,7 @@ func (si *systemInfoOnce) systemInfo(ctx context.Context) serverpb.SystemInfo {
 		cmd.Stderr = &errBuf
 		output, err := cmd.Output()
 		if err != nil {
-			log.Warningf(ctx, "failed to get system information: %v\nstderr: %v",
+			log.Dev.Warningf(ctx, "failed to get system information: %v\nstderr: %v",
 				err, errBuf.String())
 			return
 		}
@@ -4133,7 +4133,7 @@ func (si *systemInfoOnce) systemInfo(ctx context.Context) serverpb.SystemInfo {
 		cmd.Stderr = &errBuf
 		output, err = cmd.Output()
 		if err != nil {
-			log.Warningf(ctx, "failed to get kernel information: %v\nstderr: %v",
+			log.Dev.Warningf(ctx, "failed to get kernel information: %v\nstderr: %v",
 				err, errBuf.String())
 			return
 		}

@@ -53,7 +53,7 @@ func TestLogRedirect(t *testing.T) {
 	TestingCRDBLogConfig(l.logger)
 	ctx := context.Background()
 
-	log.Infof(ctx, "[simple test]")
+	log.Dev.Infof(ctx, "[simple test]")
 	requireLine(t, l, "[simple test]")
 	require.Equal(t, 1, len(l.writer.lines))
 }

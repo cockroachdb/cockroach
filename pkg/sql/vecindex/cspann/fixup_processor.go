@@ -421,7 +421,7 @@ func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	if len(fp.mu.pendingFixups) >= maxFixups {
 		// Don't enqueue the fixup.
 		if fp.fixupsLimitHit.ShouldLog() {
-			log.Warning(ctx, "reached limit of unprocessed fixups")
+			log.Dev.Warning(ctx, "reached limit of unprocessed fixups")
 		}
 		return
 	}
@@ -467,7 +467,7 @@ func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	err := fp.stopper.RunAsyncTask(fp.initCtx, taskName, worker.Start)
 	if err != nil {
 		// Log error and continue.
-		log.Errorf(ctx, "error starting vector index background worker: %v", err)
+		log.Dev.Errorf(ctx, "error starting vector index background worker: %v", err)
 	}
 }
 

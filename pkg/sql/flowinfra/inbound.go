@@ -226,7 +226,7 @@ func processProducerMessage(
 		// TODO(yuzefovich): consider removing this logging since the verbosity
 		// check is not exactly free.
 		if log.V(3) && row != nil {
-			log.Infof(ctx, "inbound stream pushing row %s", row.String(sd.types))
+			log.Dev.Infof(ctx, "inbound stream pushing row %s", row.String(sd.types))
 		}
 		if *draining && meta == nil {
 			// Don't forward data rows when we're draining.
@@ -245,7 +245,7 @@ func processProducerMessage(
 			if !*draining {
 				*draining = true
 				if err := sendDrainSignalToStreamProducer(ctx, stream); err != nil {
-					log.Errorf(ctx, "draining error: %s", err)
+					log.Dev.Errorf(ctx, "draining error: %s", err)
 				}
 			}
 		case execinfra.ConsumerClosed:

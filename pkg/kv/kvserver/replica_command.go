@@ -438,7 +438,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	// as a no-op and return success instead of throwing an error.
 	if desc.StartKey.Equal(splitKey) {
 		if len(args.SplitKey) == 0 {
-			log.Fatal(ctx, "MVCCFindSplitKey returned start key of range")
+			log.Dev.Fatal(ctx, "MVCCFindSplitKey returned start key of range")
 		}
 		log.Event(ctx, "range already split")
 		// Even if the range is already split, we should still update the sticky
@@ -493,7 +493,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		if r.GetMVCCStats().ContainsEstimates == 0 {
 			useEstimatedStatsForExternalBytes = false
 		} else if hasExternal, err := r.HasExternalBytes(); err != nil {
-			log.Warningf(ctx, "failed to get approximate disk bytes: %v", err)
+			log.Dev.Warningf(ctx, "failed to get approximate disk bytes: %v", err)
 			useEstimatedStatsForExternalBytes = false
 		} else {
 			useEstimatedStatsForExternalBytes = hasExternal
@@ -527,7 +527,7 @@ func (r *Replica) adminSplitWithDescriptor(
 				// the error here, and let the code below handle the descriptor-changed
 				// error coming from splitTxnAttempt.
 				if errors.Is(err, batcheval.RecomputeStatsMismatchError) {
-					log.Warningf(ctx, "failed to re-compute MVCCStats pre split: %v", err)
+					log.Dev.Warningf(ctx, "failed to re-compute MVCCStats pre split: %v", err)
 				} else {
 					return reply, errors.Wrapf(err, "failed to re-compute MVCCStats pre split")
 				}
@@ -694,7 +694,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 			break
 		}
 		if splitRetryLogLimiter.ShouldLog() {
-			log.Warningf(ctx, "retrying split after err: %v", lastErr)
+			log.Dev.Warningf(ctx, "retrying split after err: %v", lastErr)
 		}
 	}
 	return kvpb.NewError(lastErr)
@@ -835,7 +835,7 @@ func (r *Replica) AdminMerge(
 		}
 		updatedLeftDesc.IncrementGeneration()
 		updatedLeftDesc.EndKey = rightDesc.EndKey
-		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
+		log.Dev.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
 		// Log the merge into the range event log.
 		if err := r.store.logMerge(ctx, txn, updatedLeftDesc, rightDesc, true /* logAsync */); err != nil {
@@ -982,7 +982,7 @@ func (r *Replica) AdminMerge(
 			if attempt < 3 {
 				log.VEventf(ctx, 2, "merge txn failed: %s", err)
 			} else {
-				log.Warningf(ctx, "merge txn failed (attempt %d): %s", attempt, err)
+				log.Dev.Warningf(ctx, "merge txn failed (attempt %d): %s", attempt, err)
 			}
 			if rollbackErr := txn.Rollback(ctx); rollbackErr != nil {
 				log.VEventf(ctx, 2, "merge txn rollback failed: %s", rollbackErr)
@@ -1303,7 +1303,7 @@ func (r *Replica) changeReplicasImpl(
 			// Don't leave a learner replica lying around if we didn't succeed in
 			// promoting it to a voter.
 			if adds := targets.VoterAdditions; len(adds) > 0 {
-				log.Infof(ctx, "could not promote %v to voter, rolling back: %v", adds, err)
+				log.Dev.Infof(ctx, "could not promote %v to voter, rolling back: %v", adds, err)
 				for _, target := range adds {
 					r.tryRollbackRaftLearner(ctx, r.Desc(), target, reason, details)
 				}
@@ -1433,7 +1433,7 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 		// to continue trying to leave the JOINT config. If this is the case,
 		// our replica will not be able to leave the JOINT config, but the new
 		// leaseholder will be able to do so.
-		log.Warningf(ctx, "no VOTER_INCOMING to transfer lease to. This replica probably lost the "+
+		log.Dev.Warningf(ctx, "no VOTER_INCOMING to transfer lease to. This replica probably lost the "+
 			"lease, but still thinks its the leaseholder. In this case the new leaseholder is expected to "+
 			"complete LEAVE_JOINT. Range descriptor: %v", desc)
 		return nil
@@ -1902,7 +1902,7 @@ func (r *Replica) initializeRaftLearners(
 	case roachpb.NON_VOTER:
 		iChangeType = internalChangeTypeAddNonVoter
 	default:
-		log.Fatalf(ctx, "unexpected replicaType %s", replicaType)
+		log.Dev.Fatalf(ctx, "unexpected replicaType %s", replicaType)
 	}
 
 	// Lock learner snapshots even before we run the ConfChange txn to add them
@@ -1920,7 +1920,7 @@ func (r *Replica) initializeRaftLearners(
 	// them all back.
 	defer func() {
 		if err != nil {
-			log.Infof(
+			log.Dev.Infof(
 				ctx,
 				"could not successfully add and upreplicate %s replica(s) on %s, rolling back: %v",
 				replicaType,
@@ -2188,7 +2188,7 @@ func (r *Replica) tryRollbackRaftLearner(
 	if err := timeutil.RunWithTimeout(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {
-		log.Infof(
+		log.Dev.Infof(
 			ctx,
 			"failed to rollback %s %s, abandoning it for the replicate queue: %v",
 			repDesc.Type,
@@ -2197,7 +2197,7 @@ func (r *Replica) tryRollbackRaftLearner(
 		)
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	} else {
-		log.Infof(ctx, "rolled back %s %s in %s", repDesc.Type, target, rangeDesc)
+		log.Dev.Infof(ctx, "rolled back %s %s in %s", repDesc.Type, target, rangeDesc)
 	}
 }
 
@@ -2462,7 +2462,7 @@ func execChangeReplicasTxn(
 				// race than other operations. So we verify that the descriptor fetched
 				// from kv is indeed in a joint config, and hint to the caller that it
 				// can no-op this replication change.
-				log.Infof(
+				log.Dev.Infof(
 					ctx, "we were trying to exit a joint config but found that we are no longer in one; skipping",
 				)
 				return false /* matched */, true /* skip */
@@ -2478,7 +2478,7 @@ func execChangeReplicasTxn(
 					}
 				}
 				if learnerAlreadyRemoved {
-					log.Infof(ctx, "skipping learner removal because it was already removed")
+					log.Dev.Infof(ctx, "skipping learner removal because it was already removed")
 					return false /* matched */, true /* skip */
 				}
 			}
@@ -3158,7 +3158,7 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// send an additional one. This check attempts to minimize the change of the
 	// double snapshot being sent.
 	if replTerm < req.Term {
-		log.Infof(
+		log.Dev.Infof(
 			ctx,
 			"sender: %v is not fit to send snapshot for %v; sender term: %v coordinator term: %v",
 			req.DelegatedSender, req.CoordinatorReplica, replTerm, req.Term,
@@ -3175,7 +3175,7 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// possible that we can enforce strictly lesser than if etcd does not require
 	// previous raft log entries for appending.
 	if replIdx <= req.FirstIndex {
-		log.Infof(
+		log.Dev.Infof(
 			ctx, "sender: %v is not fit to send snapshot;"+
 				" sender first index: %v, "+
 				"coordinator log truncation constraint: %v", req.DelegatedSender, replIdx, req.FirstIndex,
@@ -3259,7 +3259,7 @@ func (r *Replica) followerSendSnapshot(
 			if sendThreshold > 0 && sendDur > sendThreshold {
 				// Note that log lines larger than 65k are truncated in the debug zip (see
 				// #50166).
-				log.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s",
+				log.Dev.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s",
 					"snapshot", sendDur, sendThreshold, sp.GetConfiguredRecording())
 			}
 			sp.Finish()
@@ -3321,7 +3321,7 @@ func (r *Replica) followerSendSnapshot(
 		end := snap.State.Desc.EndKey.AsRawKey()
 		total, _, external, err := r.store.StateEngine().ApproximateDiskBytes(start, end)
 		if err != nil {
-			log.Warningf(ctx, "could not determine if store has external bytes: %v", err)
+			log.Dev.Warningf(ctx, "could not determine if store has external bytes: %v", err)
 			externalReplicate = false
 		}
 
@@ -3586,7 +3586,7 @@ func (r *Replica) AdminRelocateRange(
 	// the joint config if we're in one.
 	newDesc, _, err := r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, &rangeDesc)
 	if err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		return err
 	}
 	rangeDesc = *newDesc
@@ -3637,7 +3637,7 @@ func (r *Replica) relocateReplicas(
 		if err := r.store.DB().AdminTransferLease(
 			ctx, startKey, target.StoreID,
 		); err != nil {
-			log.Warningf(ctx, "while transferring lease: %+v", err)
+			log.Dev.Warningf(ctx, "while transferring lease: %+v", err)
 			if r.store.TestingKnobs().DontIgnoreFailureToTransferLease {
 				return err
 			}
@@ -3683,7 +3683,7 @@ func (r *Replica) relocateReplicas(
 						return rangeDesc, returnErr
 					}
 					if every.ShouldLog() {
-						log.Infof(ctx, "%v", returnErr)
+						log.Dev.Infof(ctx, "%v", returnErr)
 					}
 					success = false
 					break
@@ -4174,7 +4174,7 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 
 	// Return early with number of replicas moved as 0.
 	if tokenErr != nil {
-		log.Warningf(ctx, "unable to acquire allocator "+
+		log.Dev.Warningf(ctx, "unable to acquire allocator "+
 			"due to %v after %d attempts", tokenErr, retryOpts.MaxRetries)
 		return 0
 	}
@@ -4212,20 +4212,20 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 	// currentAttempt, but no backoff between different attempts.
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
-			log.Infof(ctx, "stopped scattering after hitting max %d attempts", maxAttempts)
+			log.Dev.Infof(ctx, "stopped scattering after hitting max %d attempts", maxAttempts)
 			break
 		}
 		desc, conf := r.DescAndSpanConfig()
 		_, err := rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
 		if err != nil {
 			// The replica can not be processed, so skip it.
-			log.Warningf(ctx,
+			log.Dev.Warningf(ctx,
 				"cannot process range (%v) due to %v at attempt %d",
 				desc, err, currentAttempt+1)
 			break
 		}
 		_, err = rq.processOneChange(
-			ctx, r, desc, conf, true /* scatter */, false, /* dryRun */
+			ctx, r, desc, conf, true /* scatter */, false /* dryRun */, -1, /*priorityAtEnqueue*/
 		)
 		if err != nil {
 			// If the error is expected to be transient, retry processing the range.
@@ -4233,10 +4233,10 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 			// issued, in which case the scatter may fail due to the range split
 			// updating the descriptor while processing.
 			if IsRetriableReplicationChangeError(err) {
-				log.Errorf(ctx, "retrying scatter process for range %v after retryable error: %v", desc, err)
+				log.Dev.Errorf(ctx, "retrying scatter process for range %v after retryable error: %v", desc, err)
 				continue
 			}
-			log.Warningf(ctx, "failed to process range (%v) due to %v at attempt %d",
+			log.Dev.Warningf(ctx, "failed to process range (%v) due to %v at attempt %d",
 				desc, err, currentAttempt+1)
 			break
 		}
@@ -4258,7 +4258,7 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 			if targetStoreID != r.store.StoreID() {
 				log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
 				if err := r.AdminTransferLease(ctx, targetStoreID, false /* bypassSafetyChecks */); err != nil {
-					log.Warningf(ctx, "scatter lease to s%d failed due to %v: candidates included %v",
+					log.Dev.Warningf(ctx, "scatter lease to s%d failed due to %v: candidates included %v",
 						targetStoreID, err, potentialLeaseTargets)
 				}
 			}

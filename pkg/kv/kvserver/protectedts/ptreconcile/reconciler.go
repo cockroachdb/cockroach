@@ -118,7 +118,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 		return err
 	}); err != nil {
 		r.metrics.ReconciliationErrors.Inc(1)
-		log.Errorf(ctx, "failed to load protected timestamp records: %+v", err)
+		log.Dev.Errorf(ctx, "failed to load protected timestamp records: %+v", err)
 		return
 	}
 	for _, rec := range state.Records {
@@ -145,7 +145,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 			return nil
 		}); err != nil {
 			r.metrics.ReconciliationErrors.Inc(1)
-			log.Errorf(ctx, "failed to reconcile protected timestamp with id %s: %v",
+			log.Dev.Errorf(ctx, "failed to reconcile protected timestamp with id %s: %v",
 				rec.ID.String(), err)
 		} else {
 			r.metrics.RecordsProcessed.Inc(1)

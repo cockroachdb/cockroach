@@ -127,7 +127,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	kvsToRows := func(kvs []roachpb.KeyValue) []rowWithMVCCMetadata {
 		t.Helper()
 		for _, kv := range kvs {
-			log.Infof(ctx, "%v %v %v", kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
+			log.Dev.Infof(ctx, "%v %v %v", kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
 		}
 
 		if err := rf.ConsumeKVProvider(ctx, &row.KVProvider{KVs: kvs}); err != nil {

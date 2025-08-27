@@ -799,7 +799,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 	alreadyInitialized := *sj != nil
 	if alreadyInitialized {
 		if jobID != (*sj).Job.ID() {
-			log.Fatalf(ctx,
+			log.Dev.Fatalf(ctx,
 				"attempted to rewrite startable job for ID %d with unexpected ID %d",
 				(*sj).Job.ID(), jobID,
 			)
@@ -823,7 +823,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 		resumerCtx, cancel = r.makeCtx()
 
 		if alreadyAdopted := r.addAdoptedJob(jobID, j.session, cancel, resumer); alreadyAdopted {
-			log.Fatalf(
+			log.Dev.Fatalf(
 				ctx,
 				"job %d: was just created but found in registered adopted jobs",
 				jobID,
@@ -915,7 +915,7 @@ func (r *Registry) withSession(ctx context.Context, f withSessionFunc) {
 	if err != nil {
 		if log.ExpensiveLogEnabled(ctx, 2) ||
 			(ctx.Err() == nil && r.withSessionEvery.ShouldLog()) {
-			log.Errorf(ctx, "error getting live session: %s", err)
+			log.Dev.Errorf(ctx, "error getting live session: %s", err)
 		}
 		return
 	}
@@ -959,7 +959,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			)
 			return err
 		}); err != nil {
-			log.Errorf(ctx, "error expiring job sessions: %s", err)
+			log.Dev.Errorf(ctx, "error expiring job sessions: %s", err)
 		}
 	}
 	// servePauseAndCancelRequests queries tho pause-requested and cancel-requested
@@ -967,7 +967,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// respectively, and then stops the execution of those jobs.
 	servePauseAndCancelRequests := func(ctx context.Context, s sqlliveness.Session) {
 		if err := r.servePauseAndCancelRequests(ctx, s); err != nil {
-			log.Errorf(ctx, "failed to serve pause and cancel requests: %v", err)
+			log.Dev.Errorf(ctx, "failed to serve pause and cancel requests: %v", err)
 		}
 	}
 	cancelLoopTask := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
@@ -981,13 +981,13 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	claimJobs := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
 		if r.adoptionDisabled(ctx) {
 			if logDisabledAdoptionLimiter.ShouldLog() {
-				log.Warningf(ctx, "job adoption is disabled, registry will not claim any jobs")
+				log.Dev.Warningf(ctx, "job adoption is disabled, registry will not claim any jobs")
 			}
 			return
 		}
 		r.metrics.AdoptIterations.Inc(1)
 		if err := r.claimJobs(ctx, s); err != nil {
-			log.Errorf(ctx, "error claiming jobs: %s", err)
+			log.Dev.Errorf(ctx, "error claiming jobs: %s", err)
 		}
 	})
 	// removeClaimsFromJobs queries the jobs table for non-terminal jobs and
@@ -1007,7 +1007,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			)
 			return err
 		}); err != nil {
-			log.Errorf(ctx, "error expiring job sessions: %s", err)
+			log.Dev.Errorf(ctx, "error expiring job sessions: %s", err)
 		}
 	}
 	// processClaimedJobs iterates the jobs claimed by the current node that
@@ -1019,7 +1019,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// all adopted job, and cancel them.
 		if r.adoptionDisabled(ctx) {
 			if logDisabledClaimLimiter.ShouldLog() {
-				log.Warningf(ctx, "job adoptions is disabled, canceling all adopted "+
+				log.Dev.Warningf(ctx, "job adoptions is disabled, canceling all adopted "+
 					"jobs due to liveness failure")
 			}
 			removeClaimsFromSession(ctx, s)
@@ -1027,7 +1027,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			return
 		}
 		if err := r.processClaimedJobs(ctx, s); err != nil {
-			log.Errorf(ctx, "error processing claimed jobs: %s", err)
+			log.Dev.Errorf(ctx, "error processing claimed jobs: %s", err)
 		}
 	})
 
@@ -1050,7 +1050,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				// WithCancelOnQuesce context. See the resumeJob() function.
 				return
 			case <-r.drainJobs:
-				log.Warningf(ctx, "canceling all adopted jobs due to graceful drain request")
+				log.Dev.Warningf(ctx, "canceling all adopted jobs due to graceful drain request")
 				r.cancelAllAdoptedJobs()
 				return
 			case <-lc.timer.C:
@@ -1092,7 +1092,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			case <-lc.timer.C:
 				old := timeutil.Now().Add(-1 * retentionDuration())
 				if err := r.cleanupOldJobs(ctx, old); err != nil {
-					log.Warningf(ctx, "error cleaning up old job records: %v", err)
+					log.Dev.Warningf(ctx, "error cleaning up old job records: %v", err)
 				}
 				lc.onExecute()
 			}
@@ -1144,7 +1144,7 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, s sqlliveness.Session) {
 	defer r.mu.Unlock()
 	for id, aj := range r.mu.adoptedJobs {
 		if aj.session.ID() != s.ID() {
-			log.Warningf(ctx, "job %d: running without having a live claim; killed.", id)
+			log.Dev.Warningf(ctx, "job %d: running without having a live claim; killed.", id)
 			aj.cancel()
 			delete(r.mu.adoptedJobs, id)
 		}
@@ -1557,20 +1557,20 @@ func (r *Registry) stepThroughStateMachine(
 	if jobErr != nil {
 		isExpectedError := pgerror.HasCandidateCode(jobErr) || HasErrJobCanceled(jobErr)
 		if isExpectedError {
-			log.Infof(ctx, "%s job %d: stepping through state %s with error: %v", jobType, job.ID(), state, jobErr)
+			log.Dev.Infof(ctx, "%s job %d: stepping through state %s with error: %v", jobType, job.ID(), state, jobErr)
 		} else {
-			log.Errorf(ctx, "%s job %d: stepping through state %s with unexpected error: %+v", jobType, job.ID(), state, jobErr)
+			log.Dev.Errorf(ctx, "%s job %d: stepping through state %s with unexpected error: %+v", jobType, job.ID(), state, jobErr)
 		}
 	} else {
 		if jobType == jobspb.TypeAutoCreateStats || jobType == jobspb.TypeAutoCreatePartialStats {
-			log.VInfof(ctx, 1, "%s job %d: stepping through state %s", jobType, job.ID(), state)
+			log.Dev.VInfof(ctx, 1, "%s job %d: stepping through state %s", jobType, job.ID(), state)
 		} else {
-			log.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), state)
+			log.Dev.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), state)
 		}
 	}
 	jm := r.metrics.JobMetrics[jobType]
 	onExecutionFailed := func(cause error) error {
-		log.ErrorfDepth(
+		log.Dev.ErrorfDepth(
 			ctx, 1,
 			"job %d: %s execution encountered retriable error: %+v",
 			job.ID(), state, cause,
@@ -1773,12 +1773,12 @@ func (r *Registry) adoptionDisabled(ctx context.Context) bool {
 	if r.preventAdoptionFile != "" {
 		if _, err := os.Stat(r.preventAdoptionFile); err != nil {
 			if !oserror.IsNotExist(err) {
-				log.Warningf(ctx, "error checking if job adoption is currently disabled: %v", err)
+				log.Dev.Warningf(ctx, "error checking if job adoption is currently disabled: %v", err)
 			}
 			return false
 		}
 		if r.preventAdoptionLogEvery.ShouldLog() {
-			log.Warningf(ctx, "job adoption is currently disabled by existence of %s", r.preventAdoptionFile)
+			log.Dev.Warningf(ctx, "job adoption is currently disabled by existence of %s", r.preventAdoptionFile)
 		}
 		return true
 	}
@@ -1883,7 +1883,7 @@ func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j
 		return
 	}
 	if updateErr != nil {
-		log.Warningf(ctx, "failed to record error for job %d: %v: %v", j.ID(), err, updateErr)
+		log.Dev.Warningf(ctx, "failed to record error for job %d: %v: %v", j.ID(), err, updateErr)
 	}
 }
 
@@ -1944,8 +1944,8 @@ func (r *Registry) IsDraining() bool {
 
 // WaitForRegistryShutdown waits for all background job registry tasks to complete.
 func (r *Registry) WaitForRegistryShutdown(ctx context.Context) {
-	log.Infof(ctx, "starting to wait for job registry to shut down")
-	defer log.Infof(ctx, "job registry tasks successfully shut down")
+	log.Dev.Infof(ctx, "starting to wait for job registry to shut down")
+	defer log.Dev.Infof(ctx, "job registry tasks successfully shut down")
 	r.startedControllerTasksWG.Wait()
 }
 

@@ -1384,6 +1384,7 @@ func (og *operationGenerator) createType(
 		hasLtreeType := hasTypeWithPrefix("LTREE")
 		opStmt.potentialExecErrors.addAll(codesWithConditions{
 			{code: pgcode.UndefinedObject, condition: hasLtreeType && ltreeNotSupported},
+			{code: pgcode.FeatureNotSupported, condition: hasLtreeType && ltreeNotSupported},
 			{code: pgcode.Syntax, condition: hasLtreeType && ltreeNotSupported},
 		})
 	}

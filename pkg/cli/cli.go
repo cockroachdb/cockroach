@@ -374,13 +374,13 @@ func debugSignalSetup() func() {
 					server := http.Server{Handler: mux}
 					go func() {
 						if err := server.Serve(listener); err != nil {
-							log.Warningf(ctx, "debug server: %v", err)
+							log.Dev.Warningf(ctx, "debug server: %v", err)
 						}
 					}()
 					log.Shoutf(ctx, severity.INFO, "debug server listening on %s", listener.Addr())
 					<-exit
 					if err := server.Shutdown(ctx); err != nil {
-						log.Warningf(ctx, "error shutting down debug server: %s", err)
+						log.Dev.Warningf(ctx, "error shutting down debug server: %s", err)
 					}
 				}
 			}

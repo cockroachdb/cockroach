@@ -162,7 +162,7 @@ func (sc *TableStatisticsCache) Start(
 	handleEvent := func(ctx context.Context, kv *kvpb.RangeFeedValue) {
 		tableID, err := decodeTableStatisticsKV(codec, kv, &sc.datumAlloc)
 		if err != nil {
-			log.Warningf(ctx, "failed to decode table statistics row %v: %v", kv.Key, err)
+			log.Dev.Warningf(ctx, "failed to decode table statistics row %v: %v", kv.Key, err)
 			return
 		}
 		ts := kv.Value.Timestamp
@@ -424,7 +424,7 @@ func (sc *TableStatisticsCache) lookupStatsLocked(
 	} else {
 		// This is the expected "fast" path; don't emit an event.
 		if log.V(2) {
-			log.Infof(ctx, "statistics for table %d found in cache", tableID)
+			log.Dev.Infof(ctx, "statistics for table %d found in cache", tableID)
 		}
 	}
 	return true, e
@@ -888,7 +888,7 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		stats, udt, err := sc.parseStats(ctx, it.Cur(), typeResolver)
 		if err != nil {
-			log.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
+			log.Dev.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
 			continue
 		}
 		statsList = append(statsList, stats)
@@ -965,7 +965,7 @@ func getTableStatsProtosFromDB(
 		var tsp *TableStatisticProto
 		tsp, err = NewTableStatisticProto(it.Cur())
 		if err != nil {
-			log.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
+			log.Dev.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
 			continue
 		}
 		statsProtos = append(statsProtos, tsp)

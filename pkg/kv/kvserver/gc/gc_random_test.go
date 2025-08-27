@@ -435,9 +435,9 @@ func assertLiveData(
 	// 1000 elements is ok, but 10k or 100k entries might become unreadable.
 	if log.V(1) {
 		ctx := context.Background()
-		log.Info(ctx, "Expected data:")
+		log.Dev.Info(ctx, "Expected data:")
 		for _, l := range formatTable(engineData(t, before, desc), desc.StartKey.AsRawKey()) {
-			log.Infof(ctx, "%s", l)
+			log.Dev.Infof(ctx, "%s", l)
 		}
 	}
 

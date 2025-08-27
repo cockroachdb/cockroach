@@ -487,7 +487,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value, _ int64)
 
 	if err := content.GetProto(&storeDesc); err != nil {
 		ctx := sp.AnnotateCtx(context.TODO())
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		return
 	}
 
@@ -930,7 +930,7 @@ func (sp *StorePool) liveAndDeadReplicasWithLiveness(
 				liveReplicas = append(liveReplicas, repl)
 			}
 		default:
-			log.Fatalf(context.TODO(), "unknown store status %d", status)
+			log.Dev.Fatalf(context.TODO(), "unknown store status %d", status)
 		}
 	}
 	return
@@ -1278,11 +1278,11 @@ func (sp *StorePool) Throttle(reason ThrottleReason, why string, storeID roachpb
 		detail.ThrottledUntil = sp.clock.Now().AddDuration(timeout)
 		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())
-			log.Infof(ctx, "snapshot failed (%s), s%d will be throttled for %s until %s",
+			log.Dev.Infof(ctx, "snapshot failed (%s), s%d will be throttled for %s until %s",
 				why, storeID, timeout, detail.ThrottledUntil)
 		}
 	default:
-		log.Warningf(sp.AnnotateCtx(context.TODO()), "unknown throttle reason %v", reason)
+		log.Dev.Warningf(sp.AnnotateCtx(context.TODO()), "unknown throttle reason %v", reason)
 	}
 }
 

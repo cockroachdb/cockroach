@@ -87,7 +87,7 @@ func (s *systemStatusServer) DownloadSpan(
 			if err == nil {
 				break
 			}
-			log.VInfof(ctx, 1, "attempt %d failed to download span: %v", r.CurrentAttempt(), err)
+			log.Dev.VInfof(ctx, 1, "attempt %d failed to download span: %v", r.CurrentAttempt(), err)
 		}
 		return nodeResp, err
 	}
@@ -172,7 +172,7 @@ func sendDownloadSpans(ctx context.Context, spans roachpb.Spans, out chan roachp
 			return ctx.Err()
 		}
 	}
-	log.Infof(ctx, "all %d download spans enqueued", len(spans))
+	log.Dev.Infof(ctx, "all %d download spans enqueued", len(spans))
 	return nil
 }
 
@@ -186,7 +186,7 @@ func downloadSpans(ctx context.Context, e storage.Engine, spans chan roachpb.Spa
 				return err
 			}
 		}
-		log.Infof(ctx, "finished downloading %d spans", len(spans))
+		log.Dev.Infof(ctx, "finished downloading %d spans", len(spans))
 		return nil
 	})
 }

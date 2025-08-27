@@ -402,7 +402,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 			return
 		}
 		if err != nil && ctx.Err() == nil && restartLogEvery.ShouldLog() {
-			log.Warningf(ctx, "rangefeed failed %d times, restarting: %v",
+			log.Dev.Warningf(ctx, "rangefeed failed %d times, restarting: %v",
 				redact.Safe(i), err)
 		}
 		if ctx.Err() != nil {

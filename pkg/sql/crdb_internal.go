@@ -1128,7 +1128,7 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
 			if err := it.Close(); err != nil {
 				// TODO(yuzefovich): this error should be propagated further up
 				// and not simply being logged. Fix it (#61123).
-				log.Warningf(ctx, "error closing an iterator: %v", err)
+				log.Dev.Warningf(ctx, "error closing an iterator: %v", err)
 			}
 		}
 		defer cleanup(ctx)
@@ -2208,7 +2208,7 @@ func populateTransactionsTable(
 		}
 	}
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, the error for the txn string,
 			// and nulls for all other columns.
@@ -2436,7 +2436,7 @@ func populateQueriesTable(
 	}
 
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, the error for query, and
 			// nulls for all other columns.
@@ -2660,7 +2660,7 @@ func populateSessionsTable(
 	}
 
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, error in active queries, and nulls
 			// for all other columns.
@@ -2922,7 +2922,7 @@ func populateContentionEventsTable(
 		}
 	}
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 	}
 	return nil
 }
@@ -2987,7 +2987,7 @@ func populateDistSQLFlowsTable(
 		}
 	}
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 	}
 	return nil
 }
@@ -3333,7 +3333,7 @@ func createRoutinePopulate(
 			}
 		}
 
-		fnDescs, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Descs(ctx, fnIDs)
+		fnDescs, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Descs(ctx, fnIDs)
 		if err != nil {
 			return err
 		}
@@ -3411,7 +3411,7 @@ func createRoutinePopulateByFnIndex(
 	// `crdb_internal.create_function_statements` and `crdb_internal.create_procedure_statements`, helping
 	// optimize the queries for the create statements output in `SHOW CREATE ALL ROUTINES`.
 	fnID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
-	fnDesc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Function(ctx, fnID)
+	fnDesc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Function(ctx, fnID)
 	if err != nil || fnDesc == nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) || fnDesc == nil {
 			return false, nil
@@ -3419,7 +3419,7 @@ func createRoutinePopulateByFnIndex(
 		return false, err
 	}
 	scID := fnDesc.GetParentSchemaID()
-	sc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, scID)
+	sc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, scID)
 	if err != nil || sc == nil {
 		return false, err
 	}
@@ -3932,7 +3932,7 @@ CREATE TABLE crdb_internal.table_indexes (
 						if ts := idx.CreatedAt(); !ts.IsZero() {
 							tsDatum, err := tree.MakeDTimestamp(ts, time.Nanosecond)
 							if err != nil {
-								log.Warningf(ctx, "failed to construct timestamp for index: %v", err)
+								log.Dev.Warningf(ctx, "failed to construct timestamp for index: %v", err)
 							} else {
 								createdAt = tsDatum
 							}
@@ -4051,7 +4051,7 @@ CREATE TABLE crdb_internal.index_columns (
 							// We log an error here, instead of reporting an error
 							// to the user, because we really want to see the
 							// erroneous data in the virtual table.
-							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
+							log.Dev.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
 								table.GetID(), idx.GetID(), parentName, table.GetName(), idx.GetName(),
 								len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnNames))
 						} else {
@@ -4059,7 +4059,7 @@ CREATE TABLE crdb_internal.index_columns (
 						}
 						if i >= len(idx.IndexDesc().KeyColumnDirections) {
 							// See comment above.
-							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
+							log.Dev.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
 								table.GetID(), idx.GetID(), parentName, table.GetName(), idx.GetName(),
 								len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnDirections))
 						} else {

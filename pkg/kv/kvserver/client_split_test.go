@@ -1729,7 +1729,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				if err := s.Stopper().RunAsyncTask(ctx, "force split", func(_ context.Context) {
 					store.TestingSetSplitQueueActive(true)
 					if err := store.ForceSplitScanAndProcess(); err != nil {
-						log.Fatalf(ctx, "%v", err)
+						log.Dev.Fatalf(ctx, "%v", err)
 					}
 				}); err != nil {
 					t.Fatal(err)
@@ -2077,12 +2077,12 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		if !argOK || !descOK || !bytes.Equal(leaseReq.Key, splitKey) {
 			return nil
 		}
-		log.Infof(ctx, "received lease request (%s, %s)",
+		log.Dev.Infof(ctx, "received lease request (%s, %s)",
 			leaseReq.Span(), leaseReq.Lease)
 		if !reflect.DeepEqual(*forbiddenDesc, leaseReq.Lease.Replica) {
 			return nil
 		}
-		log.Infof(ctx,
+		log.Dev.Infof(ctx,
 			"refusing lease request (%s, %s) because %+v held lease for LHS of split",
 			leaseReq.Span(), leaseReq.Lease, forbiddenDesc)
 		return kvpb.NewError(&kvpb.NotLeaseHolderError{RangeID: args.Hdr.RangeID})
@@ -2158,7 +2158,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		return replica
 	}
 	blocklistedLeaseHolder := leaseHolder(leftKey)
-	log.Infof(ctx, "blocklisting replica %+v for leases", blocklistedLeaseHolder)
+	log.Dev.Infof(ctx, "blocklisting replica %+v for leases", blocklistedLeaseHolder)
 	noLeaseForDesc.Store(&blocklistedLeaseHolder)
 
 	// Pull the trigger. This actually also reads the RHS descriptor after the
@@ -2173,7 +2173,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	//
 	// In practice, this should only be possible if second-long delays occur
 	// just above this comment, and we assert against it below.
-	log.Infof(ctx, "splitting at %s", splitKey)
+	log.Dev.Infof(ctx, "splitting at %s", splitKey)
 	if _, _, err := tc.SplitRange(splitKey); err != nil {
 		t.Fatal(err)
 	}
@@ -2590,7 +2590,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 					// attempting to sending 1 MsgVote every microsecond. See comments
 					// below and above for the frequency rationale.
 					if failedSendLog.ShouldLog() {
-						log.Infof(ctx, "transport failed to send vote request")
+						log.Dev.Infof(ctx, "transport failed to send vote request")
 					}
 				}
 				select {
@@ -2856,7 +2856,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 		if pErr := splitFunc(i); pErr != nil {
 			// Avoid flakes caused by bad clocks.
 			if testutils.IsPError(pErr, "rejecting command with timestamp in the future") {
-				log.Warningf(context.Background(), "ignoring split error: %s", pErr)
+				log.Dev.Warningf(context.Background(), "ignoring split error: %s", pErr)
 				continue
 			}
 			t.Fatal(pErr)

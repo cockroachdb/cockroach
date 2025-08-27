@@ -445,7 +445,7 @@ func (rb *routerBase) updateStreamState(
 // Note: fwdMetadata should be called without holding the lock.
 func (rb *routerBase) fwdMetadata(meta *execinfrapb.ProducerMetadata) {
 	if meta == nil {
-		log.Fatalf(context.TODO(), "asked to fwd empty metadata")
+		log.Dev.Fatalf(context.TODO(), "asked to fwd empty metadata")
 		return
 	}
 

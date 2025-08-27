@@ -71,7 +71,7 @@ func (mp *metricsPoller) Resume(ctx context.Context, execCtx interface{}) error 
 		case <-t.C:
 			for name, task := range metricPollerTasks {
 				if err := runTask(name, task); err != nil {
-					log.Errorf(ctx, "Periodic stats collector task %s completed with error %s", name, err)
+					log.Dev.Errorf(ctx, "Periodic stats collector task %s completed with error %s", name, err)
 					metrics.NumErrors.Inc(1)
 				}
 			}

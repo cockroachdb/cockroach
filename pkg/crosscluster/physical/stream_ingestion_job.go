@@ -103,11 +103,11 @@ func updateStatus(
 		return nil
 	})
 	if err != nil {
-		log.Warningf(ctx, "error when updating job running status: %s", err)
+		log.Dev.Warningf(ctx, "error when updating job running status: %s", err)
 	} else if replicationStatus == jobspb.ReplicationError {
-		log.Warningf(ctx, "%s", status)
+		log.Dev.Warningf(ctx, "%s", status)
 	} else {
-		log.Infof(ctx, "%s", status)
+		log.Dev.Infof(ctx, "%s", status)
 	}
 }
 
@@ -129,7 +129,7 @@ func completeIngestion(
 	cutoverTimestamp hlc.Timestamp,
 ) error {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
-	log.Infof(ctx, "activating destination tenant %d", details.DestinationTenantID)
+	log.Dev.Infof(ctx, "activating destination tenant %d", details.DestinationTenantID)
 	if err := activateTenant(ctx, execCtx, details, cutoverTimestamp); err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func completeIngestion(
 	completeProducerJob(ctx, ingestionJob, execCtx.ExecCfg().InternalDB, true)
 	evalContext := &execCtx.ExtendedEvalContext().Context
 	if err := startPostCutoverRetentionJob(ctx, execCtx.ExecCfg(), details, evalContext, cutoverTimestamp); err != nil {
-		log.Warningf(ctx, "failed to begin post cutover retention job: %s", err.Error())
+		log.Dev.Warningf(ctx, "failed to begin post cutover retention job: %s", err.Error())
 	}
 
 	// Now that we have completed the cutover we can release the protected
@@ -179,7 +179,7 @@ func completeProducerJob(
 			return client.Complete(ctx, streamID, successfulIngestion)
 		},
 	); err != nil {
-		log.Warningf(ctx, `encountered error when completing the source cluster producer job %d: %s`, streamID, err.Error())
+		log.Dev.Warningf(ctx, `encountered error when completing the source cluster producer job %d: %s`, streamID, err.Error())
 	}
 }
 
@@ -218,7 +218,7 @@ func ingest(
 		return err
 	}
 	if reverted {
-		log.Infof(ctx, "job completed cutover on resume")
+		log.Dev.Infof(ctx, "job completed cutover on resume")
 		return completeIngestion(ctx, execCtx, ingestionJob, cutoverTimestamp)
 	}
 	if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.BeforeIngestionStart != nil {
@@ -276,14 +276,14 @@ func ingestWithRetries(
 		if jobs.IsPermanentJobError(err) || ctx.Err() != nil {
 			break
 		}
-		log.Infof(ctx, "hit retryable error %s", err)
+		log.Dev.Infof(ctx, "hit retryable error %s", err)
 
 		currentPersistedSpans = resumer.job.Progress().Details.(*jobspb.Progress_StreamIngest).StreamIngest.Checkpoint.ResolvedSpans
 		if !currentPersistedSpans.Equal(previousPersistedSpans) {
 			// If the previous persisted spans are different than the current, it
 			// implies that further progress has been persisted.
 			r.Reset()
-			log.Infof(ctx, "resolved spans have advanced since last retry, resetting retry counter")
+			log.Dev.Infof(ctx, "resolved spans have advanced since last retry, resetting retry counter")
 		}
 		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterRetryIteration != nil {
 			knobs.AfterRetryIteration(err)
@@ -346,7 +346,7 @@ func releaseDestinationTenantProtectedTimestamp(
 ) error {
 	if err := ptp.Release(ctx, ptsID); err != nil {
 		if errors.Is(err, protectedts.ErrNotExists) {
-			log.Warningf(ctx, "failed to release protected ts as it does not to exist: %s", err)
+			log.Dev.Warningf(ctx, "failed to release protected ts as it does not to exist: %s", err)
 			err = nil
 		}
 		return err
@@ -425,13 +425,13 @@ func cutoverTimeIsEligibleForCutover(
 	ctx context.Context, cutoverTime hlc.Timestamp, progress *jobspb.Progress,
 ) bool {
 	if cutoverTime.IsEmpty() {
-		log.Infof(ctx, "empty cutover time, no revert required")
+		log.Dev.Infof(ctx, "empty cutover time, no revert required")
 		return false
 	}
 
 	replicatedTime := replicationutils.ReplicatedTimeFromProgress(progress)
 	if replicatedTime.Less(cutoverTime) {
-		log.Infof(ctx, "job with replicated time %s not yet ready to revert to cutover at %s",
+		log.Dev.Infof(ctx, "job with replicated time %s not yet ready to revert to cutover at %s",
 			replicatedTime,
 			cutoverTime.String())
 		return false
@@ -456,12 +456,11 @@ func maybeRevertToCutoverTimestamp(
 	// existed in the record at the point of the update rather the
 	// value that may be in the job record before the update.
 	var (
-		shouldRevertToCutover   bool
-		cutoverTimestamp        hlc.Timestamp
-		originalSpanToRevert    roachpb.Span
-		remainingSpansToRevert  roachpb.Spans
-		replicatedTimeAtCutover hlc.Timestamp
-		readerTenantID          roachpb.TenantID
+		shouldRevertToCutover  bool
+		cutoverTimestamp       hlc.Timestamp
+		originalSpanToRevert   roachpb.Span
+		remainingSpansToRevert roachpb.Spans
+		readerTenantID         roachpb.TenantID
 	)
 	if err := ingestionJob.NoTxn().Update(ctx,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
@@ -478,7 +477,6 @@ func maybeRevertToCutoverTimestamp(
 			}
 
 			cutoverTimestamp = streamIngestionProgress.CutoverTime
-			replicatedTimeAtCutover = streamIngestionProgress.ReplicatedTimeAtCutover
 			readerTenantID = streamIngestionDetails.ReadTenantID
 			originalSpanToRevert = streamIngestionDetails.Span
 			remainingSpansToRevert = streamIngestionProgress.RemainingCutoverSpans
@@ -500,9 +498,7 @@ func maybeRevertToCutoverTimestamp(
 	if !shouldRevertToCutover {
 		return cutoverTimestamp, false, nil
 	}
-	// Identical cutoverTimestamp and replicatedTimeAtCutover implies that
-	// CUTOVER TO LATEST command was run. Destroy reader tenant if not CUTOVER TO LATEST.
-	if !cutoverTimestamp.Equal(replicatedTimeAtCutover) && readerTenantID.IsSet() {
+	if readerTenantID.IsSet() {
 		if err := stopTenant(ctx, p.ExecCfg(), readerTenantID); err != nil {
 			return cutoverTimestamp, false, errors.Wrapf(err, "failed to stop reader tenant")
 		}
@@ -510,9 +506,9 @@ func maybeRevertToCutoverTimestamp(
 	if err := ingeststopped.WaitForNoIngestingNodes(ctx, p, ingestionJob, maxIngestionProcessorShutdownWait); err != nil {
 		return cutoverTimestamp, false, errors.Wrapf(err, "unable to verify that attempted LDR job %d had stopped offline ingesting %s", ingestionJob.ID(), maxIngestionProcessorShutdownWait)
 	}
-	log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", ingestionJob.ID())
+	log.Dev.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", ingestionJob.ID())
 
-	log.Infof(ctx, "reverting to cutover timestamp %s", cutoverTimestamp)
+	log.Dev.Infof(ctx, "reverting to cutover timestamp %s", cutoverTimestamp)
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
 		p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted()
 	}
@@ -637,9 +633,9 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	// Ensure no sip processors are still ingesting data, so a subsequent DROP
 	// TENANT cmd will cleanly wipe out all data.
 	if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, s.job, maxIngestionProcessorShutdownWait); err != nil {
-		log.Warningf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", s.job.ID(), maxIngestionProcessorShutdownWait, err)
+		log.Dev.Warningf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", s.job.ID(), maxIngestionProcessorShutdownWait, err)
 	} else {
-		log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", s.job.ID())
+		log.Dev.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", s.job.ID())
 	}
 
 	return execCfg.InternalDB.Txn(ctx, func(
@@ -693,7 +689,7 @@ func (s *streamIngestionResumer) CollectProfile(ctx context.Context, execCtx int
 
 func closeAndLog(ctx context.Context, d streamclient.Client) {
 	if err := d.Close(ctx); err != nil {
-		log.Warningf(ctx, "error closing stream client: %s", err.Error())
+		log.Dev.Warningf(ctx, "error closing stream client: %s", err.Error())
 	}
 }
 
@@ -809,7 +805,7 @@ func (c *cutoverProgressTracker) onCompletedCallback(
 	}
 
 	if err := c.updateJobProgress(ctx, c.remainingSpans.Slice()); err != nil {
-		log.Warningf(ctx, "failed to update job progress: %s", err)
+		log.Dev.Warningf(ctx, "failed to update job progress: %s", err)
 	}
 	return nil
 }

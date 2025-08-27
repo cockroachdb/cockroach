@@ -278,7 +278,7 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 
 	if len(splitPoints) == 0 {
 		// If we can't sample splits from another index, just add one split.
-		log.Infof(ctx, "making a single split point in tableId=%d index=%d", tableID, indexToBackfill.GetID())
+		log.Dev.Infof(ctx, "making a single split point in tableId=%d index=%d", tableID, indexToBackfill.GetID())
 		span := table.IndexSpan(is.codec, indexToBackfill.GetID())
 		expirationTime := is.db.Clock().Now().Add(backfillSplitExpiration.Nanoseconds(), 0)
 		splitKey, err := keys.EnsureSafeSplitKey(span.Key)
@@ -296,7 +296,7 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 
 	// Finally, downsample the split points - choose just nSplits of them to keep.
 	actualSplits := min(nSplits, len(splitPoints))
-	log.Infof(ctx, "making %d split points in index=%d sampled from (table=%d index=%d)",
+	log.Dev.Infof(ctx, "making %d split points in index=%d sampled from (table=%d index=%d)",
 		actualSplits, indexToBackfill.GetID(), tableID, copySplitsFromIndexID)
 	step := float64(len(splitPoints)) / float64(nSplits)
 	if step < 1 {
@@ -335,7 +335,7 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	// If there were a non-trivial number of splits, then scatter the ranges
 	// after we've finished splitting them.
 	if actualSplits > nNodes {
-		log.Infof(ctx, "scattering %d split points in index=%d sampled from (table=%d index=%d)",
+		log.Dev.Infof(ctx, "scattering %d split points in index=%d sampled from (table=%d index=%d)",
 			actualSplits, indexToBackfill.GetID(), tableID, copySplitsFromIndexID)
 		b = is.db.NewBatch()
 		b.AddRawRequest(&kvpb.AdminScatterRequest{

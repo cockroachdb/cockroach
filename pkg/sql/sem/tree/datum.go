@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -4595,18 +4596,14 @@ func (d *DLTree) Size() uintptr {
 	return uintptr(d.LTree.ByteSize())
 }
 
-// AsDLTree attempts to retrieve a *DLTree from an Expr, returning a
-// *DLTree and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DLTree wrapped by a *DOidWrapper is possible.
-func AsDLTree(e Expr) (*DLTree, bool) {
-	switch t := e.(type) {
-	case *DLTree:
-		return t, true
-	case *DOidWrapper:
-		return AsDLTree(t.Wrapped)
+// MustBeDLTree attempts to retrieve a DLTree from an Expr, panicking if the
+// assertion fails.
+func MustBeDLTree(e Expr) *DLTree {
+	b, ok := e.(*DLTree)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DLTree, found %T", e))
 	}
-	return nil, false
+	return b
 }
 
 // DTuple is the tuple Datum.
@@ -5077,17 +5074,18 @@ func (d dNull) Size() uintptr {
 	return unsafe.Sizeof(d)
 }
 
-// DArray is the array Datum. Any Datum inserted into a DArray are treated as
-// text during serialization.
+// DArray is the array Datum.
 type DArray struct {
 	ParamTyp *types.T
-	Array    Datums
-	// HasNulls is set to true if any of the datums within the array are null.
-	// This is used in the binary array serialization format.
-	HasNulls bool
-	// HasNonNulls is set to true if any of the datums within the are non-null.
-	// This is used in expression serialization (FmtParsable).
-	HasNonNulls bool
+	// Array gives access to the underlying array. Using NewDArrayFromDatums or
+	// Append is preferrable for constructing the contents, but modifying the
+	// slice is also allowed - just be sure to update NULL-related flags via
+	// Set* methods accordingly.
+	Array Datums
+	// hasNulls is set to true if any of the datums within the array are null.
+	hasNulls bool
+	// hasNonNulls is set to true if any of the datums within the are non-null.
+	hasNonNulls bool
 
 	// customOid, if non-0, is the oid of this array datum.
 	customOid oid.Oid
@@ -5096,6 +5094,31 @@ type DArray struct {
 // NewDArray returns a DArray containing elements of the specified type.
 func NewDArray(paramTyp *types.T) *DArray {
 	return &DArray{ParamTyp: paramTyp}
+}
+
+// NewDArrayFromDatums returns a DArray containing the given datums that are
+// assumed to be of the specified type. It'll populate NULL-related fields
+// accordingly.
+func NewDArrayFromDatums(paramTyp *types.T, datums Datums) *DArray {
+	if buildutil.CrdbTestBuild {
+		for _, d := range datums {
+			if !d.ResolvedType().EquivalentOrNull(paramTyp, true /* allowNullTupleEquivalence */) {
+				panic(errors.AssertionFailedf(
+					"cannot include %s into array containing %s",
+					d.ResolvedType().SQLStringForError(), paramTyp.SQLStringForError(),
+				))
+			}
+		}
+	}
+	d := &DArray{ParamTyp: paramTyp, Array: datums}
+	for _, elem := range d.Array {
+		if elem == DNull {
+			d.hasNulls = true
+		} else {
+			d.hasNonNulls = true
+		}
+	}
+	return d
 }
 
 // AsDArray attempts to retrieve a *DArray from an Expr, returning a *DArray and
@@ -5120,6 +5143,34 @@ func MustBeDArray(e Expr) *DArray {
 		panic(errors.AssertionFailedf("expected *DArray, found %T", e))
 	}
 	return i
+}
+
+func (d *DArray) testOnlyValidation() {
+	if buildutil.CrdbTestBuild {
+		if err := d.Validate(); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func (d *DArray) HasNulls() bool {
+	d.testOnlyValidation()
+	return d.hasNulls
+}
+
+func (d *DArray) SetHasNulls(hasNulls bool) {
+	d.hasNulls = hasNulls
+	d.testOnlyValidation()
+}
+
+func (d *DArray) HasNonNulls() bool {
+	d.testOnlyValidation()
+	return d.hasNonNulls
+}
+
+func (d *DArray) SetHasNonNulls(hasNonNulls bool) {
+	d.hasNonNulls = hasNonNulls
+	d.testOnlyValidation()
 }
 
 // MaybeSetCustomOid checks whether t has a special oid that we want to set into
@@ -5210,10 +5261,10 @@ func (d *DArray) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) 
 
 // Next implements the Datum interface.
 func (d *DArray) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	a := DArray{ParamTyp: d.ParamTyp, Array: make(Datums, d.Len()+1)}
-	copy(a.Array, d.Array)
-	a.Array[len(a.Array)-1] = DNull
-	return &a, true
+	elements := make(Datums, d.Len()+1)
+	copy(elements, d.Array)
+	elements[d.Len()] = DNull
+	return NewDArrayFromDatums(d.ParamTyp, elements), true
 }
 
 // Max implements the Datum interface.
@@ -5246,7 +5297,7 @@ func (d *DArray) AmbiguousFormat() bool {
 		// a valid type. So an array of unknown type is (paradoxically) unambiguous.
 		return false
 	}
-	return !d.HasNonNulls
+	return !d.HasNonNulls()
 }
 
 // Format implements the NodeFormatter interface.
@@ -5281,11 +5332,33 @@ const maxArrayLength = math.MaxInt32
 
 var errArrayTooLongError = errors.New("ARRAYs can be at most 2^31-1 elements long")
 
-// Validate checks that the given array is valid,
-// for example, that it's not too big.
+// Validate checks that the given array is valid, for example, that it's not too
+// big.
 func (d *DArray) Validate() error {
 	if d.Len() > maxArrayLength {
 		return errors.WithStack(errArrayTooLongError)
+	}
+	if buildutil.CrdbTestBuild {
+		// Additionally, in test builds ensure that NULL-related flags are set
+		// correctly.
+		var hasNulls, hasNonNulls bool
+		for _, elem := range d.Array {
+			if elem == DNull {
+				hasNulls = true
+			} else {
+				hasNonNulls = true
+			}
+		}
+		if hasNulls != d.hasNulls {
+			return errors.AssertionFailedf(
+				"found DArray with incorrect HasNulls (expected %t)", hasNulls,
+			)
+		}
+		if hasNonNulls != d.hasNonNulls {
+			return errors.AssertionFailedf(
+				"found DArray with incorrect HasNonNulls (expected %t)", hasNonNulls,
+			)
+		}
 	}
 	return nil
 }
@@ -5337,9 +5410,9 @@ func (d *DArray) Append(v Datum) error {
 		}
 	}
 	if v == DNull {
-		d.HasNulls = true
+		d.hasNulls = true
 	} else {
-		d.HasNonNulls = true
+		d.hasNonNulls = true
 	}
 	d.Array = append(d.Array, v)
 	return d.Validate()
@@ -6650,6 +6723,11 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 				}
 			}
 			if outArr != nil {
+				if buildutil.CrdbTestBuild {
+					if err := outArr.Validate(); err != nil {
+						return nil, err
+					}
+				}
 				return outArr, nil
 			}
 		}

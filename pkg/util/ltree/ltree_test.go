@@ -152,3 +152,29 @@ func TestCompare(t *testing.T) {
 		}
 	}
 }
+
+func TestNext(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"a", "b"},
+		{"a.b", "a.c"},
+		{"a.z", "a.z-"},
+		{"-", "0"},
+		{"9", "A"},
+		{"Z", "_"},
+		{"_", "a"},
+	}
+
+	for _, tc := range tests {
+		a, err := ParseLTree(tc.input)
+		if err != nil {
+			t.Fatalf("unexpected error parsing %q: %v", tc.input, err)
+		}
+		next := a.NextSibling()
+		if next.String() != tc.expected {
+			t.Errorf("expected next of %q to be %q, got %q", tc.input, tc.expected, next.String())
+		}
+	}
+}

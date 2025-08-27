@@ -500,7 +500,7 @@ func TestServerStartStop(t *testing.T) {
 		return errors.New("server still alive")
 	})
 
-	log.Infof(ctx, "end of test - test server will now shut down ungracefully")
+	log.Dev.Infof(ctx, "end of test - test server will now shut down ungracefully")
 
 	// Monitor the state of the test server stopper. We use this logging
 	// to troubleshoot slow drains.
@@ -513,9 +513,9 @@ func TestServerStartStop(t *testing.T) {
 			case <-time.After(200 * time.Millisecond):
 				select {
 				case <-s.Stopper().ShouldQuiesce():
-					log.Infof(ctx, "test server is quiescing")
+					log.Dev.Infof(ctx, "test server is quiescing")
 				case <-s.Stopper().IsStopped():
-					log.Infof(ctx, "test server is stopped")
+					log.Dev.Infof(ctx, "test server is stopped")
 					return
 				default:
 				}
@@ -526,7 +526,7 @@ func TestServerStartStop(t *testing.T) {
 
 	defer time.AfterFunc(10*time.Second, func() {
 		log.DumpStacks(ctx, "slow quiesce")
-		log.Fatalf(ctx, "test took too long to shut down")
+		log.Dev.Fatalf(ctx, "test took too long to shut down")
 	}).Stop()
 	s.Stopper().Stop(ctx)
 }

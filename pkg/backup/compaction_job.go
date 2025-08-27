@@ -185,7 +185,7 @@ func maybeStartCompactionJob(
 		return scheduledJob.Update(ctx, backupSchedule)
 	})
 	if err == nil {
-		log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
+		log.Dev.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
 	}
 	return jobID, err
 }
@@ -420,7 +420,7 @@ func (b *backupResumer) ResumeCompaction(
 			return jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
 		}
 
-		log.Warningf(ctx, "encountered retryable error: %+v", err)
+		log.Dev.Warningf(ctx, "encountered retryable error: %+v", err)
 
 		// Reload the backup manifest to pick up any spans we may have completed on
 		// previous attempts.
@@ -736,7 +736,7 @@ func getBackupChain(
 	}
 	defer func() {
 		if err := baseCleanup(); err != nil {
-			log.Warningf(ctx, "failed to cleanup base backup stores: %+v", err)
+			log.Dev.Warningf(ctx, "failed to cleanup base backup stores: %+v", err)
 		}
 	}()
 	incStores, incCleanup, err := backupdest.MakeBackupDestinationStores(
@@ -747,7 +747,7 @@ func getBackupChain(
 	}
 	defer func() {
 		if err := incCleanup(); err != nil {
-			log.Warningf(ctx, "failed to cleanup incremental backup stores: %+v", err)
+			log.Dev.Warningf(ctx, "failed to cleanup incremental backup stores: %+v", err)
 		}
 	}()
 	baseEncryptionInfo := encryptionOpts
@@ -844,7 +844,7 @@ func processProgress(
 	for progress := range progCh {
 		var progDetails backuppb.BackupManifest_Progress
 		if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
-			log.Errorf(ctx, "unable to unmarshal backup progress details: %+v", err)
+			log.Dev.Errorf(ctx, "unable to unmarshal backup progress details: %+v", err)
 			return err
 		}
 		for _, file := range progDetails.Files {
@@ -857,7 +857,7 @@ func processProgress(
 		if wroteCheckpoint, err := maybeWriteBackupCheckpoint(
 			ctx, execCtx, details, manifest, lastCheckpointTime, kmsEnv,
 		); err != nil {
-			log.Errorf(ctx, "unable to checkpoint compaction: %+v", err)
+			log.Dev.Errorf(ctx, "unable to checkpoint compaction: %+v", err)
 		} else if wroteCheckpoint {
 			lastCheckpointTime = timeutil.Now()
 			if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("backup_compaction.after.write_checkpoint"); err != nil {

@@ -79,7 +79,7 @@ func (s *vmoduleServer) vmoduleHandleDebug(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	if err := s.vmoduleHandleDebugInternal(ctx, w, opts); err != nil {
 		// This is likely a broken HTTP connection, so nothing too unexpected.
-		log.Infof(ctx, "%v", err)
+		log.Dev.Infof(ctx, "%v", err)
 	}
 }
 
@@ -119,7 +119,7 @@ func (s *vmoduleServer) vmoduleHandleDebugInternal(
 	}
 
 	// Report the change in logs.
-	log.Infof(ctx, "configured vmodule: %q", redact.SafeString(opts.VModule))
+	log.Dev.Infof(ctx, "configured vmodule: %q", redact.SafeString(opts.VModule))
 
 	if opts.Duration <= 0 {
 		s.unlockVModule(ctx)
@@ -142,7 +142,7 @@ func (s *vmoduleServer) vmoduleHandleDebugInternal(
 		// Restore the configuration.
 		err := log.SetVModule(prevSettings)
 		// Report the change in logs.
-		log.Infof(context.Background(), "restoring vmodule configuration (%q): %v", redact.SafeString(prevSettings), err)
+		log.Dev.Infof(context.Background(), "restoring vmodule configuration (%q): %v", redact.SafeString(prevSettings), err)
 
 		s.unlockVModule(context.Background())
 	}()

@@ -118,7 +118,7 @@ func (c *FileCredential) GetToken(
 	}
 
 	if err != nil {
-		log.Infof(ctx, "reloading file credentials from %s", c.fileName)
+		log.Dev.Infof(ctx, "reloading file credentials from %s", c.fileName)
 		if err := c.reloadCredentialsFromFile(); err != nil {
 			return azcore.AccessToken{}, err
 		}

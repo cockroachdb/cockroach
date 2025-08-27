@@ -213,10 +213,10 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// and the quotaReleaseQueue together track status.Applied exactly.
 		r.mu.proposalQuotaBaseIndex = kvpb.RaftIndex(status.Applied)
 		if r.mu.proposalQuota != nil {
-			log.Fatal(ctx, "proposalQuota was not nil before becoming the leader")
+			log.Dev.Fatal(ctx, "proposalQuota was not nil before becoming the leader")
 		}
 		if releaseQueueLen := len(r.mu.quotaReleaseQueue); releaseQueueLen != 0 {
-			log.Fatalf(ctx, "len(r.mu.quotaReleaseQueue) = %d, expected 0", releaseQueueLen)
+			log.Dev.Fatalf(ctx, "len(r.mu.quotaReleaseQueue) = %d, expected 0", releaseQueueLen)
 		}
 		r.mu.proposalQuota = quotapool.NewIntPool(
 			"raft proposal",
@@ -324,7 +324,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// index.
 	releasableIndex := r.mu.proposalQuotaBaseIndex + kvpb.RaftIndex(len(r.mu.quotaReleaseQueue))
 	if releasableIndex != kvpb.RaftIndex(status.Applied) {
-		log.Fatalf(ctx, "proposalQuotaBaseIndex (%d) + quotaReleaseQueueLen (%d) = %d"+
+		log.Dev.Fatalf(ctx, "proposalQuotaBaseIndex (%d) + quotaReleaseQueueLen (%d) = %d"+
 			" must equal the applied index (%d)",
 			r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue), releasableIndex,
 			status.Applied)

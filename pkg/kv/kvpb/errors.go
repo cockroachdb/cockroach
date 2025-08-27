@@ -7,6 +7,7 @@ package kvpb
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"reflect"
 	"slices"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
 	_ "github.com/cockroachdb/errors/extgrpc" // register EncodeError support for gRPC Status
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
@@ -434,7 +436,7 @@ func (e *Error) checkTxnStatusValid() {
 		return
 	}
 	if txn.Status.IsFinalized() {
-		log.Fatalf(context.TODO(), "transaction unexpectedly finalized in (%T): %v", err, e)
+		log.Dev.Fatalf(context.TODO(), "transaction unexpectedly finalized in (%T): %v", err, e)
 	}
 }
 
@@ -658,7 +660,7 @@ func (e *RangeKeyMismatchError) AppendRangeInfo(ctx context.Context, ris ...roac
 	for _, ri := range ris {
 		if !ri.Lease.Empty() {
 			if _, ok := ri.Desc.GetReplicaDescriptorByID(ri.Lease.Replica.ReplicaID); !ok {
-				log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", ri.Lease, ri.Desc)
+				log.Dev.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", ri.Lease, ri.Desc)
 			}
 		}
 		e.Ranges = append(e.Ranges, ri)
@@ -1569,10 +1571,10 @@ func NewRefreshFailedError(
 		o.apply(&options)
 	}
 	if reason == RefreshFailedError_REASON_INTENT && options.conflictingTxn == nil {
-		log.Fatal(ctx, "conflictingTxn should be set if refresh failed with REASON_INTENT")
+		log.Dev.Fatal(ctx, "conflictingTxn should be set if refresh failed with REASON_INTENT")
 	}
 	if reason != RefreshFailedError_REASON_INTENT && options.conflictingTxn != nil {
-		log.Fatal(ctx, "conflictingTxn should not be set if refresh failed without REASON_INTENT")
+		log.Dev.Fatal(ctx, "conflictingTxn should not be set if refresh failed without REASON_INTENT")
 	}
 	return &RefreshFailedError{
 		Reason:         reason,
@@ -1886,10 +1888,50 @@ func init() {
 	errors.RegisterWrapperDecoder(typeName, decode)
 }
 
+func encodeKeyCollisionError(
+	_ context.Context, err error,
+) (msgPrefix string, safe []string, details proto.Message) {
+	t := err.(*KeyCollisionError)
+	details = &errorspb.StringsPayload{
+		Details: []string{
+			base64.StdEncoding.EncodeToString(t.Key),
+			base64.StdEncoding.EncodeToString(t.Value),
+		},
+	}
+	msgPrefix = "ingested key collides with an existing one"
+	return msgPrefix, nil, details
+}
+
+func decodeKeyCollisionError(_ context.Context, _ string, _ []string, payload proto.Message) error {
+	m, ok := payload.(*errorspb.StringsPayload)
+	if !ok || len(m.Details) < 2 {
+		// If this ever happens, this means some version of the library
+		// (presumably future) changed the payload type, and we're
+		// receiving this here. In this case, give up and let
+		// DecodeError use the opaque type.
+		return nil
+	}
+	key, decodeErr := base64.StdEncoding.DecodeString(m.Details[0])
+	if decodeErr != nil {
+		return nil //nolint:returnerrcheck
+	}
+	value, decodeErr := base64.StdEncoding.DecodeString(m.Details[1])
+	if decodeErr != nil {
+		return nil //nolint:returnerrcheck
+	}
+	return &KeyCollisionError{
+		Key:   key,
+		Value: value,
+	}
+}
+
 func init() {
 	errors.RegisterLeafDecoder(errors.GetTypeKey((*MissingRecordError)(nil)), func(_ context.Context, _ string, _ []string, _ proto.Message) error {
 		return &MissingRecordError{}
 	})
+	collisionErrorKey := errors.GetTypeKey((*KeyCollisionError)(nil))
+	errors.RegisterLeafEncoder(collisionErrorKey, encodeKeyCollisionError)
+	errors.RegisterLeafDecoder(collisionErrorKey, decodeKeyCollisionError)
 	errorutilpath := reflect.TypeOf(errorutil.TempSentinel{}).PkgPath()
 	errors.RegisterTypeMigration(errorutilpath, "*errorutil.descriptorNotFound", &DescNotFoundError{})
 }

@@ -487,12 +487,12 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 			return json.Marshal(stats.mu.data)
 		}()
 		if err != nil {
-			log.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key.fingerprintID, err)
+			log.Dev.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key.fingerprintID, err)
 			continue
 		}
 		fmt.Fprintf(&buf, "%q: %s\n", key.fingerprintID, json)
 	}
-	log.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
+	log.Dev.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
 }
 
 // DrainStats returns all collected statement and transaction stats in memory to the caller and clears SQL stats

@@ -75,7 +75,7 @@ func (c *Cluster) UntilClusterStable(
 			}
 
 			if ok, diffs := live.Identical(curLive); !ok || curUnavailable != nil {
-				log.Infof(ctx, "waiting for cluster stability, unavailable: %v, diff: %v", curUnavailable, diffs)
+				log.Dev.Infof(ctx, "waiting for cluster stability, unavailable: %v, diff: %v", curUnavailable, diffs)
 				live = curLive
 				unavailable = curUnavailable
 
@@ -120,7 +120,7 @@ func (c *Cluster) ForEveryNodeOrServer(
 
 	// We'll want to rate limit outgoing RPCs (limit pulled out of thin air).
 	qp := quotapool.NewIntPool("every-node", 25)
-	log.Infof(ctx, "executing %s on nodes %s", redact.Safe(op), live)
+	log.Dev.Infof(ctx, "executing %s on nodes %s", redact.Safe(op), live)
 	grp := ctxgroup.WithContext(ctx)
 
 	for _, node := range live {

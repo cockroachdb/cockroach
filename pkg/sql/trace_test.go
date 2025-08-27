@@ -338,10 +338,10 @@ func TestTraceFieldDecomposition(t *testing.T) {
 						// We need to check a tag containing brackets (e.g. an
 						// IPv6 address).  See #18558.
 						taggedCtx := logtags.AddTag(ctx, "hello", "[::666]")
-						// We use log.Infof here (instead of log.Event) to ensure
+						// We use log.Dev.Infof here (instead of log.Event) to ensure
 						// the trace message contains also a file name prefix. See
 						// #19453/#20085.
-						log.Infof(taggedCtx, "world")
+						log.Dev.Infof(taggedCtx, "world")
 					}
 				},
 			},

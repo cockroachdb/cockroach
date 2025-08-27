@@ -460,14 +460,14 @@ func updateSpanConfigRecords(
 				// We expect the underlying sqlliveness session's expiration to be
 				// extended automatically, which makes this retry loop effective in the
 				// face of these retryable lease expired errors from the RPC.
-				log.Infof(ctx, "lease expired while updating span config records, retrying..")
+				log.Dev.Infof(ctx, "lease expired while updating span config records, retrying..")
 				continue
 			}
 			return err // not a retryable error, bubble up
 		}
 
 		if log.V(3) {
-			log.Infof(ctx, "successfully updated span config records: deleted = %+#v; upserted = %+#v", toDelete, toUpsert)
+			log.Dev.Infof(ctx, "successfully updated span config records: deleted = %+#v; upserted = %+#v", toDelete, toUpsert)
 		}
 		return nil // we performed the update; we're done here
 	}

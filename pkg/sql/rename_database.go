@@ -168,7 +168,7 @@ func getQualifiedDependentObjectName(
 			return "", errors.AssertionFailedf("expected only function or table descriptor, but got %s", t.DescriptorType())
 		}
 		if err != nil {
-			log.Warningf(ctx, "unable to retrieve fully-qualified name of %s (id: %d): %v", tbTableName.String(), depDesc.GetID(), err)
+			log.Dev.Warningf(ctx, "unable to retrieve fully-qualified name of %s (id: %d): %v", tbTableName.String(), depDesc.GetID(), err)
 			return "", sqlerrors.NewDependentObjectErrorf(
 				"cannot rename database because a relation depends on relation %q",
 				tbTableName.String(),

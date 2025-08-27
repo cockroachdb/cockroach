@@ -1482,7 +1482,7 @@ func entireSpanExcludedFromBackup(
 			return false, errors.Newf("replica's span configuration bounds not set")
 		}
 		if !confSpan.Contains(sp) {
-			log.Warningf(ctx, "ExcludeDataFromBackup set but span %q not containd by span config bounds %q",
+			log.Dev.Warningf(ctx, "ExcludeDataFromBackup set but span %q not containd by span config bounds %q",
 				sp,
 				confSpan)
 
@@ -1531,7 +1531,7 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 			// I wish this could be a Fatal, but unfortunately it's possible for the
 			// lease to be incoherent with the descriptor after a leaseholder was
 			// brutally removed through `cockroach debug recover`.
-			log.Errorf(ctx, "leaseholder replica not in descriptor; desc: %s, lease: %s", desc, l)
+			log.Dev.Errorf(ctx, "leaseholder replica not in descriptor; desc: %s, lease: %s", desc, l)
 			// Let's not return an incoherent lease; for example if we end up
 			// returning it to a client through a br.RangeInfos, the client will freak
 			// out.
@@ -1970,17 +1970,17 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 	ctx context.Context, reader storage.Reader,
 ) {
 	if ts := r.shMu.state.TruncatedState; ts != nil {
-		log.Fatalf(ctx, "non-empty RaftTruncatedState in ReplicaState: %+v", ts)
+		log.Dev.Fatalf(ctx, "non-empty RaftTruncatedState in ReplicaState: %+v", ts)
 	} else if loaded, err := r.raftMu.stateLoader.LoadRaftTruncatedState(ctx, reader); err != nil {
-		log.Fatalf(ctx, "%s", err)
+		log.Dev.Fatalf(ctx, "%s", err)
 	} else if ts := r.asLogStorage().shMu.trunc; loaded != ts {
-		log.Fatalf(ctx, "on-disk and in-memory RaftTruncatedState diverged: %s",
+		log.Dev.Fatalf(ctx, "on-disk and in-memory RaftTruncatedState diverged: %s",
 			redact.Safe(pretty.Diff(loaded, ts)))
 	}
 
 	diskState, err := r.raftMu.stateLoader.Load(ctx, reader, r.shMu.state.Desc)
 	if err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 
 	// We don't care about this field; see comment on
@@ -1991,15 +1991,15 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 		// The roundabout way of printing here is to expose this information in sentry.io.
 		//
 		// TODO(dt): expose properly once #15892 is addressed.
-		log.Errorf(ctx, "on-disk and in-memory state diverged:\n%s",
+		log.Dev.Errorf(ctx, "on-disk and in-memory state diverged:\n%s",
 			pretty.Diff(diskState, r.shMu.state))
 		r.shMu.state.Desc, diskState.Desc = nil, nil
-		log.Fatalf(ctx, "on-disk and in-memory state diverged: %s",
+		log.Dev.Fatalf(ctx, "on-disk and in-memory state diverged: %s",
 			redact.Safe(pretty.Diff(diskState, r.shMu.state)))
 	}
 	if r.IsInitialized() {
 		if !r.startKey.Equal(r.shMu.state.Desc.StartKey) {
-			log.Fatalf(ctx, "denormalized start key %s diverged from %s",
+			log.Dev.Fatalf(ctx, "denormalized start key %s diverged from %s",
 				r.startKey, r.shMu.state.Desc.StartKey)
 		}
 	}
@@ -2029,18 +2029,18 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 	if !r.store.TestingKnobs().DisableEagerReplicaRemoval && r.shMu.state.Desc.IsInitialized() {
 		replDesc, ok := r.shMu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
 		if !ok {
-			log.Fatalf(ctx, "%+v does not contain local store s%d", r.shMu.state.Desc, r.store.StoreID())
+			log.Dev.Fatalf(ctx, "%+v does not contain local store s%d", r.shMu.state.Desc, r.store.StoreID())
 		}
 		if replDesc.ReplicaID != r.replicaID {
-			log.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.shMu.state.Desc)
+			log.Dev.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.shMu.state.Desc)
 		}
 	}
 	diskReplID, err := r.raftMu.stateLoader.LoadRaftReplicaID(ctx, reader)
 	if err != nil {
-		log.Fatalf(ctx, "%s", err)
+		log.Dev.Fatalf(ctx, "%s", err)
 	}
 	if diskReplID.ReplicaID != r.replicaID {
-		log.Fatalf(ctx, "disk replicaID %d does not match in-mem %d", diskReplID, r.replicaID)
+		log.Dev.Fatalf(ctx, "disk replicaID %d does not match in-mem %d", diskReplID, r.replicaID)
 	}
 }
 
@@ -2362,7 +2362,7 @@ func shouldWaitForPendingMerge(
 	mergeTxnID uuid.UUID,
 ) error {
 	if !mergeInProgress {
-		log.Fatal(ctx, "programming error: shouldWaitForPendingMerge should"+
+		log.Dev.Fatal(ctx, "programming error: shouldWaitForPendingMerge should"+
 			" only be called when a range merge is in progress")
 		return nil
 	}
@@ -2599,7 +2599,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 					// transaction was probably caused by the shutdown, so ignore it.
 					return
 				default:
-					log.Warningf(ctx, "error while watching for merge to complete: PushTxn: %+v", err)
+					log.Dev.Warningf(ctx, "error while watching for merge to complete: PushTxn: %+v", err)
 					// We can't safely unblock traffic until we can prove that the merge
 					// transaction is committed or aborted. Nothing to do but try again.
 					continue
@@ -2640,7 +2640,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 						// descriptor was probably caused by the shutdown, so ignore it.
 						return
 					default:
-						log.Warningf(ctx, "error while watching for merge to complete: Get %s: %s", metaKey, pErr)
+						log.Dev.Warningf(ctx, "error while watching for merge to complete: Get %s: %s", metaKey, pErr)
 						// We can't safely unblock traffic until we can prove that the merge
 						// transaction is committed or aborted. Nothing to do but try again.
 						continue
@@ -2658,7 +2658,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 				// merge committed iff that range descriptor has a different range ID.
 				var meta2Desc roachpb.RangeDescriptor
 				if err := getRes.Value.GetProto(&meta2Desc); err != nil {
-					log.Fatalf(ctx, "error while watching for merge to complete: "+
+					log.Dev.Fatalf(ctx, "error while watching for merge to complete: "+
 						"unmarshaling meta2 range descriptor: %s", err)
 				}
 				if meta2Desc.RangeID != r.RangeID {
@@ -2666,7 +2666,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 				}
 			}
 		default:
-			log.Fatalf(ctx, "PushTxn returned while merge transaction %s was still %s",
+			log.Dev.Fatalf(ctx, "PushTxn returned while merge transaction %s was still %s",
 				intentRes.Intent.Txn.ID.Short(), pushTxnRes.PusheeTxn.Status)
 		}
 		r.raftMu.Lock()
@@ -2929,7 +2929,10 @@ func (r *Replica) maybeEnqueueProblemRange(
 	// updating metrics.
 	if !isLeaseholder || !leaseValid {
 		// The replicate queue will not process the replica without a valid lease.
-		// Nothing to do.
+		// Track when we skip enqueuing for these reasons.
+		log.KvDistribution.Infof(ctx, "not enqueuing replica %s because isLeaseholder=%t, leaseValid=%t",
+			r.Desc(), isLeaseholder, leaseValid)
+		r.store.metrics.DecommissioningNudgerNotLeaseholderOrInvalidLease.Inc(1)
 		return
 	}
 
@@ -2950,8 +2953,19 @@ func (r *Replica) maybeEnqueueProblemRange(
 	// expect a race, however if the value changed underneath us we won't enqueue
 	// the replica as we lost the race.
 	if !r.lastProblemRangeReplicateEnqueueTime.CompareAndSwap(lastTime, now) {
+		// This race condition is expected to be rare.
+		log.KvDistribution.VInfof(ctx, 1, "not enqueuing replica %s due to race: "+
+			"lastProblemRangeReplicateEnqueueTime was updated concurrently", r.Desc())
 		return
 	}
+	// Log at default verbosity to ensure some indication the nudger is working
+	// (other logs have a verbosity of 1 which).
+	log.KvDistribution.Infof(ctx, "decommissioning nudger enqueuing replica %s "+
+		"with priority %f", r.Desc(),
+		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
+	r.store.metrics.DecommissioningNudgerEnqueue.Inc(1)
+	// TODO(dodeca12): Figure out a better way to track the
+	// decommissioning nudger enqueue failures/errors.
 	r.store.replicateQueue.AddAsync(ctx, r,
 		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
 }

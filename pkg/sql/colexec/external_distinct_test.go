@@ -61,7 +61,7 @@ func TestExternalDistinct(t *testing.T) {
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for tcIdx, tc := range distinctTestCases {
-			log.Infof(context.Background(), "spillForced=%t/%d", spillForced, tcIdx)
+			log.Dev.Infof(context.Background(), "spillForced=%t/%d", spillForced, tcIdx)
 			var semsToCheck []semaphore.Semaphore
 			var outputOrdering execinfrapb.Ordering
 			verifier := colexectestutils.UnorderedVerifier

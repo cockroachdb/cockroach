@@ -147,7 +147,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 						if gc, ok := sgc.gcMap.Load(m.StoreID); ok {
 							gc.adjustDiskTokenError(m)
 						} else {
-							log.Warningf(ctx,
+							log.Dev.Warningf(ctx,
 								"seeing metrics for unknown storeID %d", m.StoreID)
 						}
 					}
@@ -157,7 +157,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 				if remainingTicks == 0 {
 					metrics = pebbleMetricsProvider.GetPebbleMetrics()
 					if len(metrics) != sgc.numStores {
-						log.Warningf(ctx,
+						log.Dev.Warningf(ctx,
 							"expected %d store metrics and found %d metrics", sgc.numStores, len(metrics))
 					}
 					for _, m := range metrics {
@@ -167,7 +167,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 							systemLoaded = systemLoaded || storeLoaded
 							iotc.UpdateIOThreshold(m.StoreID, gc.ioLoadListener.ioThreshold)
 						} else {
-							log.Warningf(ctx,
+							log.Dev.Warningf(ctx,
 								"seeing metrics for unknown storeID %d", m.StoreID)
 						}
 					}

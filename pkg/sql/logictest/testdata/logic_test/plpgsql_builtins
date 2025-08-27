@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 statement ok
 CREATE TABLE xy (x INT, y INT);
 INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6);

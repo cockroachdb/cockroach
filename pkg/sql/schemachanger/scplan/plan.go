@@ -118,7 +118,7 @@ func makePlan(ctx context.Context, p *Plan) (err error) {
 		// Generate the graph used to build the stages.
 		p.Graph = buildGraph(ctx, p.Params.ActiveVersion, p.CurrentState)
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, "graph generation took %v", timeutil.Since(start))
+			log.Dev.Infof(ctx, "graph generation took %v", timeutil.Since(start))
 		}
 	}
 	{
@@ -132,7 +132,7 @@ func makePlan(ctx context.Context, p *Plan) (err error) {
 			!p.Params.SkipPlannerSanityChecks,
 		)
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, "stage generation took %v", timeutil.Since(start))
+			log.Dev.Infof(ctx, "stage generation took %v", timeutil.Since(start))
 		}
 	}
 	if n := len(p.Stages); n > 0 && p.Stages[n-1].Phase > scop.PreCommitPhase {
@@ -204,7 +204,7 @@ func getMinValidVersionForRules(
 	ctx context.Context, activeVersion clusterversion.ClusterVersion,
 ) clusterversion.ClusterVersion {
 	if !activeVersion.IsActive(minVersionForRules) {
-		log.Warningf(ctx, "falling back to rules for minimum version (%v),"+
+		log.Dev.Warningf(ctx, "falling back to rules for minimum version (%v),"+
 			"active version was : %v",
 			minVersionForRules,
 			activeVersion)

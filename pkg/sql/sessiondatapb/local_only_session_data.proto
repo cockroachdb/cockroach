@@ -339,10 +339,7 @@ message LocalOnlySessionData {
   // transaction to return a transaction retry error just before transcation commit.
   // It is intended for developers to test their app's retry logic.
   bool inject_retry_errors_on_commit_enabled = 92;
-  // EnforceHomeRegionFollowerReadsEnabled, when true, allows the use of
-  // follower reads to dynamically detect and report a query's home region
-  // when the enforce_home_region session setting is also true.
-  bool enforce_home_region_follower_reads_enabled = 93;
+  reserved 93;
   // OptimizerAlwaysUseHistograms, when true, ensures that the optimizer
   // always uses histograms to calculate statistics if available.
   bool optimizer_always_use_histograms = 94;
@@ -728,10 +725,21 @@ message LocalOnlySessionData {
   // then the heuristic applies to all statements (both read-only and
   // mutations), regardless of the table being multi-region.
   bool parallelize_multi_key_lookup_joins_only_on_mr_mutations = 182 [(gogoproto.customname) = "ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations"];
-
   // AllowUnsafeInternals allows the caller to access the crdb_internal
   // or system databases within queries.
   bool allow_unsafe_internals = 183;
+  // DisableOptimizerRules is a list of optimizer rules that should be disabled
+  // during query optimization. The names of the rules can be found in the
+  // opt/rule_name.og.go file.
+  repeated string disable_optimizer_rules = 184;
+  // UseSoftLimitForDistributeScan, if set, means that we'll use the soft limit
+  // hint - if available - when comparing against
+  // DistributeScanRowCountThreshold.
+  bool use_soft_limit_for_distribute_scan = 185;
+  // OptimizerUseImprovedHoistJoinProject controls whether the
+  // HoistJoinProjectLeft normalization rule hoists more kinds of projections
+  // above joins.
+  bool optimizer_use_improved_hoist_join_project = 186;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

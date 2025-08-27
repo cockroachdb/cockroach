@@ -165,7 +165,7 @@ func logTrackerEvent(event string, sa *ServerAssignment) {
 	// for logging. Since we want logs to tie back to the connection, we'll copy
 	// the logtags associated with the owner's context.
 	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(owner.Context()))
-	log.Infof(logCtx, "%s: %s", event, sa.Addr())
+	log.Dev.Infof(logCtx, "%s: %s", event, sa.Addr())
 }
 
 // refreshPartitionsLoop runs on a background goroutine to continuously refresh

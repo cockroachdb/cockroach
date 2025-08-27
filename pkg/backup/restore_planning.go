@@ -1713,7 +1713,7 @@ func doRestorePlan(
 	)
 	if err != nil {
 		if errors.Is(err, cloud.ErrListingUnsupported) {
-			log.Warningf(ctx, "storage sink %v does not support listing, only resolving the base backup", incFrom)
+			log.Dev.Warningf(ctx, "storage sink %v does not support listing, only resolving the base backup", incFrom)
 		} else {
 			return err
 		}
@@ -1733,7 +1733,7 @@ func doRestorePlan(
 	}
 	defer func() {
 		if err := cleanupFn(); err != nil {
-			log.Warningf(ctx, "failed to close incremental store: %+v", err)
+			log.Dev.Warningf(ctx, "failed to close incremental store: %+v", err)
 		}
 	}()
 
@@ -1744,7 +1744,7 @@ func doRestorePlan(
 	}
 	defer func() {
 		if err := cleanupFn(); err != nil {
-			log.Warningf(ctx, "failed to close incremental store: %+v", err)
+			log.Dev.Warningf(ctx, "failed to close incremental store: %+v", err)
 		}
 	}()
 
@@ -2156,7 +2156,7 @@ func doRestorePlan(
 				return
 			}
 			if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
-				log.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
+				log.Dev.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
 			}
 		}()
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()

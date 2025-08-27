@@ -186,7 +186,7 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 
 	d.Server = drpcserver.NewWithOptions(mux, drpcserver.Options{
 		Log: func(err error) {
-			log.Warningf(context.Background(), "drpc server error %v", err)
+			log.Dev.Warningf(context.Background(), "drpc server error %v", err)
 		},
 		// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
 		// as happens with AddSSTable) the RPCs fail.

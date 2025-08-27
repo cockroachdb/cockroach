@@ -81,7 +81,7 @@ func splitAndScatter(
 	ctx, sp := tracing.ChildSpan(ctx, "backup.spitAndScatter")
 	defer sp.Finish()
 
-	log.Infof(ctx, "splitting and scattering spans")
+	log.Dev.Infof(ctx, "splitting and scattering spans")
 
 	workers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	toScatter := make(chan execinfrapb.RestoreSpanEntry, 1)
@@ -104,20 +104,20 @@ func splitAndScatter(
 			// which was just split in the previous iteration.
 			if !lastSplit.Equal(sp.Key) {
 				if err := sendSplitAt(ctx, execCtx, sp.Key, false /* forRecovery */); err != nil {
-					log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+					log.Dev.Warningf(ctx, "failed to split during experimental restore: %v", err)
 				}
 			}
 			// Split at the end of the chunk so that anything which happens to the
 			// right of this chunk's span, including splitting other chunks, does not
 			// interact with this span's scatter, ingests or additional splits.
 			if err := sendSplitAt(ctx, execCtx, sp.EndKey, false /* forRecovery */); err != nil {
-				log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+				log.Dev.Warningf(ctx, "failed to split during experimental restore: %v", err)
 			}
 			lastSplit = append(lastSplit[:0], sp.EndKey...)
 
 			// Scatter the chunk's span now that it is is split at both sides.
 			if err := sendAdminScatter(ctx, execCtx, sp.Key); err != nil {
-				log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
+				log.Dev.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
 			}
 
 			toSplit <- entry
@@ -141,7 +141,7 @@ func splitAndScatter(
 						return errors.Wrapf(err, "span start key %s was not rewritten", fileStart)
 					}
 					if err := sendSplitAt(ctx, execCtx, start, false /* forRecovery */); err != nil {
-						log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+						log.Dev.Warningf(ctx, "failed to split during experimental restore: %v", err)
 					}
 					rangeSize = 0
 				}
@@ -268,7 +268,7 @@ func linkExternalFiles(
 	defer sp.Finish()
 	defer close(requestFinishedCh)
 
-	log.Infof(ctx, "ingesting remote files")
+	log.Dev.Infof(ctx, "ingesting remote files")
 
 	workers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 
@@ -297,7 +297,7 @@ func sendAddRemoteSSTWorker(
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		for entry := range restoreSpanEntriesCh {
-			log.VInfof(ctx, 1, "starting restore of backed up span %s containing %d files", entry.Span, len(entry.Files))
+			log.Dev.VInfof(ctx, 1, "starting restore of backed up span %s containing %d files", entry.Span, len(entry.Files))
 
 			if err := assertCommonPrefix(entry.Span, entry.ElidedPrefix); err != nil {
 				return err
@@ -330,7 +330,7 @@ func sendAddRemoteSSTWorker(
 					return err
 				}
 
-				log.VInfof(ctx, 1, "restoring span %s of file %s (file span: %s)", restoringSubspan, file.Path, file.BackupFileEntrySpan)
+				log.Dev.VInfof(ctx, 1, "restoring span %s of file %s (file span: %s)", restoringSubspan, file.Path, file.BackupFileEntrySpan)
 				file.BackupFileEntrySpan = restoringSubspan
 				if err := sendRemoteAddSSTable(ctx, execCtx, file, entry.ElidedPrefix, fromSystemTenant); err != nil {
 					return err
@@ -522,7 +522,7 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 	// If this is the first resumption of this job, we need to find out the total
 	// amount we expect to download and persist it so that we can indicate our
 	// progress as that number goes down later.
-	log.Infof(ctx, "calculating total download size (across all stores) to complete restore")
+	log.Dev.Infof(ctx, "calculating total download size (across all stores) to complete restore")
 	if err := r.job.NoTxn().UpdateStatusMessage(ctx, "Calculating total download size..."); err != nil {
 		return 0, errors.Wrapf(err, "failed to update running status of job %d", r.job.ID())
 	}
@@ -532,7 +532,7 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 		return 0, errors.Wrap(err, "failed to get remaining external file bytes")
 	}
 
-	log.Infof(ctx, "total download size (across all stores) to complete restore: %s", sz(total))
+	log.Dev.Infof(ctx, "total download size (across all stores) to complete restore: %s", sz(total))
 
 	if total == 0 {
 		return total, nil
@@ -597,7 +597,7 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 	ctx, sp := tracing.ChildSpan(ctx, "backup.sendDownloadSpan")
 	defer sp.Finish()
 
-	log.VInfof(ctx, 1, "sending download request for %d spans", len(spans))
+	log.Dev.VInfof(ctx, 1, "sending download request for %d spans", len(spans))
 	resp, err := execCtx.ExecCfg().TenantStatusServer.DownloadSpan(ctx, &serverpb.DownloadSpanRequest{
 		Spans:                  spans,
 		ViaBackingFileDownload: useCopy,
@@ -605,7 +605,7 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 	if err != nil {
 		return err
 	}
-	log.VInfof(ctx, 1, "finished sending download requests for %d spans, %d errors", len(spans), len(resp.Errors))
+	log.Dev.VInfof(ctx, 1, "finished sending download requests for %d spans, %d errors", len(spans), len(resp.Errors))
 	for n, encoded := range resp.Errors {
 		err := errors.DecodeError(ctx, encoded)
 		return errors.Wrapf(err,
@@ -666,7 +666,7 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 	downloadJobDetails := details
 	downloadJobDetails.DownloadJob = true
 
-	log.Infof(ctx, "creating job to track downloads in %d spans", len(details.DownloadSpans))
+	log.Dev.Infof(ctx, "creating job to track downloads in %d spans", len(details.DownloadSpans))
 	downloadJobRecord := jobs.Record{
 		Description: fmt.Sprintf("Background Data Download for %s", r.job.Payload().Description),
 		Username:    r.job.Payload().UsernameProto.Decode(),
@@ -729,7 +729,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		}
 
 		fractionComplete := float32(total-remaining) / float32(total)
-		log.VInfof(ctx, 1, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
+		log.Dev.VInfof(ctx, 1, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
 			sz(total-remaining), sz(remaining), sz(total), fractionComplete,
 		)
 		r.downloadJobProg = fractionComplete
@@ -821,11 +821,11 @@ func (r *restoreResumer) doDownloadFilesWithRetry(
 		if err == nil {
 			return nil
 		}
-		log.Warningf(ctx, "failed attempt to download files: %v", err)
+		log.Dev.Warningf(ctx, "failed attempt to download files: %v", err)
 		if lastProgress != r.downloadJobProg {
 			lastProgress = r.downloadJobProg
 			rt.Reset()
-			log.Infof(ctx, "download progress has advanced since last retry, resetting retry counter")
+			log.Dev.Infof(ctx, "download progress has advanced since last retry, resetting retry counter")
 		}
 	}
 	return errors.Wrapf(err, "retries exhausted for downloading files")
@@ -891,7 +891,7 @@ func (r *restoreResumer) cleanupAfterDownload(
 		}); err != nil {
 			// Re-enabling stats is best effort. The user may have dropped the table
 			// since it came online.
-			log.Warningf(ctx, "failed to re-enable auto stats on table %d", id)
+			log.Dev.Warningf(ctx, "failed to re-enable auto stats on table %d", id)
 		}
 	}
 	return unstickRestoreSpans(ctx, r.execCfg, details.DownloadSpans)

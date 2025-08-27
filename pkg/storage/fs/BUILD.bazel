@@ -7,6 +7,7 @@ go_library(
         "encryption_at_rest.go",
         "file_registry.go",
         "fs.go",
+        "min_version.go",
         "sticky_vfs.go",
         "temp_dir.go",
         "test_utils.go",
@@ -16,7 +17,10 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cli/exit",
+        "//pkg/clusterversion",
+        "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/storage/disk",
         "//pkg/storage/enginepb",
         "//pkg/storage/storageconfig",

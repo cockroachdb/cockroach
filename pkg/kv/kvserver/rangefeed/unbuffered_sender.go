@@ -127,7 +127,7 @@ func (ubs *UnbufferedSender) sendBuffered(
 // Important to be thread-safe.
 func (ubs *UnbufferedSender) sendUnbuffered(event *kvpb.MuxRangeFeedEvent) error {
 	if event.Error != nil {
-		log.Fatalf(context.Background(), "unexpected: SendUnbuffered called with error event")
+		log.Dev.Fatalf(context.Background(), "unexpected: SendUnbuffered called with error event")
 	}
 	return ubs.sender.Send(event)
 }
@@ -147,7 +147,7 @@ func (ubs *UnbufferedSender) run(
 			for _, clientErr := range toSend {
 				onError(clientErr.StreamID)
 				if err := ubs.sender.Send(clientErr); err != nil {
-					log.Infof(ctx, "failed to send rangefeed error to client: %v", err)
+					log.Dev.Infof(ctx, "failed to send rangefeed error to client: %v", err)
 					return err
 				}
 			}

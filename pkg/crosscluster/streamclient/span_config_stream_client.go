@@ -115,7 +115,7 @@ func (p *spanConfigStreamSubscription) Subscribe(ctx context.Context) error {
 	}
 	defer func() {
 		if err != nil {
-			log.Warningf(ctx, "error when closing subscription connection: %v", err)
+			log.Dev.Warningf(ctx, "error when closing subscription connection: %v", err)
 		}
 	}()
 
@@ -134,7 +134,7 @@ func (p *spanConfigStreamSubscription) Subscribe(ctx context.Context) error {
 		// cluster version to gate features on the destination.
 		if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
 			if pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction {
-				log.Warningf(ctx, "source cluster is running a version < 23.2, skipping span config replication: %v", err)
+				log.Dev.Warningf(ctx, "source cluster is running a version < 23.2, skipping span config replication: %v", err)
 				return nil
 			}
 		}

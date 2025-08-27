@@ -208,7 +208,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	// setting to take effect.
 	numWorkers, err := reserveRestoreWorkerMemory(ctx, rd.FlowCtx.Cfg.Settings, rd.qp)
 	if err != nil {
-		log.Warningf(ctx, "cannot reserve restore worker memory: %v", err)
+		log.Dev.Warningf(ctx, "cannot reserve restore worker memory: %v", err)
 		rd.MoveToDraining(err)
 		return
 	}
@@ -216,7 +216,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	rd.metaCh = make(chan *execinfrapb.ProducerMetadata, numWorkers)
 
 	rd.phaseGroup = ctxgroup.WithContext(ctx)
-	log.Infof(ctx, "starting restore data processor with %d workers", rd.numWorkers)
+	log.Dev.Infof(ctx, "starting restore data processor with %d workers", rd.numWorkers)
 
 	entries := make(chan execinfrapb.RestoreSpanEntry, rd.numWorkers)
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
@@ -319,7 +319,7 @@ func (rd *restoreDataProcessor) openSSTs(
 	defer func() {
 		for _, dir := range dirs {
 			if err := dir.Close(); err != nil {
-				log.Warningf(ctx, "close export storage failed %v", err)
+				log.Dev.Warningf(ctx, "close export storage failed %v", err)
 			}
 		}
 	}()
@@ -330,12 +330,12 @@ func (rd *restoreDataProcessor) openSSTs(
 		readAsOfIter := storage.NewReadAsOfIterator(iter, rd.spec.RestoreTime)
 
 		cleanup := func() {
-			log.VInfof(ctx, 1, "finished with and closing %d files in span %d [%s-%s)", len(entry.Files), entry.ProgressIdx, entry.Span.Key, entry.Span.EndKey)
+			log.Dev.VInfof(ctx, 1, "finished with and closing %d files in span %d [%s-%s)", len(entry.Files), entry.ProgressIdx, entry.Span.Key, entry.Span.EndKey)
 			readAsOfIter.Close()
 
 			for _, dir := range dirsToSend {
 				if err := dir.Close(); err != nil {
-					log.Warningf(ctx, "close export storage failed %v", err)
+					log.Dev.Warningf(ctx, "close export storage failed %v", err)
 				}
 			}
 		}
@@ -534,7 +534,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		startKeyMVCC.Key = bytes.TrimPrefix(startKeyMVCC.Key, elidedPrefix)
 	}
 	if verbose {
-		log.Infof(ctx, "reading from %s to %s", startKeyMVCC, endKeyMVCC)
+		log.Dev.Infof(ctx, "reading from %s to %s", startKeyMVCC, endKeyMVCC)
 	}
 	for iter.SeekGE(startKeyMVCC); ; iter.NextKey() {
 		ok, err := iter.Valid()
@@ -543,7 +543,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		}
 		if !ok {
 			if verbose {
-				log.Infof(ctx, "iterator exhausted")
+				log.Dev.Infof(ctx, "iterator exhausted")
 			}
 			break
 		}
@@ -554,7 +554,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 		if !key.Less(endKeyMVCC) {
 			if verbose {
-				log.Infof(ctx, "iterator key %s exceeded end %s", key, endKeyMVCC)
+				log.Dev.Infof(ctx, "iterator key %s exceeded end %s", key, endKeyMVCC)
 			}
 			break
 		}
@@ -582,7 +582,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			// since the key's table gets restored to its pre-import state. Therefore,
 			// we elide ingesting this key.
 			if verbose {
-				log.Infof(ctx, "skipping %s %s", key.Key, value.PrettyPrint())
+				log.Dev.Infof(ctx, "skipping %s %s", key.Key, value.PrettyPrint())
 			}
 			continue
 		}
@@ -592,7 +592,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		value.InitChecksum(key.Key)
 
 		if verbose {
-			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
+			log.Dev.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
 
 		// Using valueScratch here assumes that

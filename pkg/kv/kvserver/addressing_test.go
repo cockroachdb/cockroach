@@ -210,16 +210,16 @@ func TestUpdateRangeAddressing(t *testing.T) {
 
 		if test.split {
 			if log.V(1) {
-				log.Infof(ctx, "test case %d: split %q-%q at %q", i, left.StartKey, right.EndKey, left.EndKey)
+				log.Dev.Infof(ctx, "test case %d: split %q-%q at %q", i, left.StartKey, right.EndKey, left.EndKey)
 			}
 		} else {
 			if log.V(1) {
-				log.Infof(ctx, "test case %d: merge %q-%q + %q-%q", i, left.StartKey, left.EndKey, left.EndKey, right.EndKey)
+				log.Dev.Infof(ctx, "test case %d: merge %q-%q + %q-%q", i, left.StartKey, left.EndKey, left.EndKey, right.EndKey)
 			}
 		}
 		for _, meta := range metas {
 			if log.V(1) {
-				log.Infof(ctx, "%q", meta.key)
+				log.Dev.Infof(ctx, "%q", meta.key)
 			}
 		}
 

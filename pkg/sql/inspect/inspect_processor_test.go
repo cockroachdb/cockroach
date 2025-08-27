@@ -144,7 +144,7 @@ func (t *testingInspectCheck) Started() bool {
 func (t *testingInspectCheck) Start(
 	ctx context.Context, _ *execinfra.ServerConfig, _ roachpb.Span, workerIndex int,
 ) error {
-	log.Infof(ctx, "Worker index %d given span", workerIndex)
+	log.Dev.Infof(ctx, "Worker index %d given span", workerIndex)
 	t.started = true
 	t.index = workerIndex
 	t.iteration = 0
@@ -162,13 +162,13 @@ func (t *testingInspectCheck) Next(
 	switch cfg.mode {
 	case checkModeFailsAfterN:
 		if cfg.failAfter == 0 || t.iteration >= cfg.failAfter {
-			log.Infof(ctx, "Worker %d failing via test check", t.index)
+			log.Dev.Infof(ctx, "Worker %d failing via test check", t.index)
 			return nil, errors.New("worker failure triggered by test check")
 		}
 		time.Sleep(10 * time.Millisecond)
 
 	case checkModeBlocksUntilCancel:
-		log.Infof(ctx, "Worker %d blocking until cancelled", t.index)
+		log.Dev.Infof(ctx, "Worker %d blocking until cancelled", t.index)
 		for {
 			select {
 			case <-ctx.Done():
@@ -184,7 +184,7 @@ func (t *testingInspectCheck) Next(
 
 	if t.issueCursor < len(cfg.issues) {
 		issue := cfg.issues[t.issueCursor]
-		log.Infof(ctx, "Worker %d emitting issue: %+v", t.index, issue)
+		log.Dev.Infof(ctx, "Worker %d emitting issue: %+v", t.index, issue)
 		t.issueCursor++
 		return issue, nil
 	}

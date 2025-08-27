@@ -35,7 +35,7 @@ func gcTables(
 	ctx context.Context, execCfg *sql.ExecutorConfig, progress *jobspb.SchemaChangeGCProgress,
 ) error {
 	if log.V(2) {
-		log.Infof(ctx, "GC is being considered for tables: %+v", progress.Tables)
+		log.Dev.Infof(ctx, "GC is being considered for tables: %+v", progress.Tables)
 	}
 
 	for _, droppedTable := range progress.Tables {
@@ -52,7 +52,7 @@ func gcTables(
 			if isMissingDescriptorError(err) {
 				// This can happen if another GC job created for the same table got to
 				// the table first. See #50344.
-				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
+				log.Dev.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
 				// Update the details payload to indicate that the table was dropped.
 				markTableGCed(ctx, droppedTable.ID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 				continue
@@ -106,7 +106,7 @@ func ClearTableData(
 	sv *settings.Values,
 	table catalog.TableDescriptor,
 ) error {
-	log.Infof(ctx, "clearing data for table %d", table.GetID())
+	log.Dev.Infof(ctx, "clearing data for table %d", table.GetID())
 	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.GetID())))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 	return clearSpanData(ctx, db, distSender, tableSpan)
@@ -199,7 +199,7 @@ func DeleteAllTableData(
 	codec keys.SQLCodec,
 	table catalog.TableDescriptor,
 ) error {
-	log.Infof(ctx, "deleting data for table %d", table.GetID())
+	log.Dev.Infof(ctx, "deleting data for table %d", table.GetID())
 	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.GetID())))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 	return deleteAllSpanData(ctx, db, distSender, tableSpan)
@@ -254,7 +254,7 @@ func deleteAllSpanData(
 			})
 			log.VEventf(ctx, 2, "delete range %s - %s", lastKey, endKey)
 			if err := db.Run(ctx, &b); err != nil {
-				log.Errorf(ctx, "delete range %s - %s failed: %s", span.Key, span.EndKey, err.Error())
+				log.Dev.Errorf(ctx, "delete range %s - %s failed: %s", span.Key, span.EndKey, err.Error())
 				return errors.Wrapf(err, "delete range %s - %s", lastKey, endKey)
 			}
 			n = 0
@@ -290,7 +290,7 @@ func deleteTableDescriptorsAfterGC(
 			if isMissingDescriptorError(err) {
 				// This can happen if another GC job created for the same table got to
 				// the table first. See #50344.
-				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
+				log.Dev.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
 				// Update the details payload to indicate that the table was dropped.
 				markTableGCed(ctx, droppedTable.ID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 				continue

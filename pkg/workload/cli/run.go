@@ -378,7 +378,7 @@ func startPProfEndPoint(ctx context.Context) {
 	go func() {
 		err := http.ListenAndServe(":"+strconv.Itoa(*pprofport), nil)
 		if err != nil {
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 		}
 	}()
 }
@@ -402,7 +402,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		return err
 	}
 	if *doInit || *drop {
-		log.Info(ctx, `DEPRECATION: `+
+		log.Dev.Info(ctx, `DEPRECATION: `+
 			`the --init flag on "workload run" will no longer be supported after 19.2`)
 		for {
 			err = runInitImpl(ctx, gen, initDB, dbName)
@@ -412,7 +412,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			if !*tolerateErrors {
 				return err
 			}
-			log.Infof(ctx, "retrying after error during init: %v", err)
+			log.Dev.Infof(ctx, "retrying after error during init: %v", err)
 		}
 	}
 
@@ -455,13 +455,13 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			fmt.Sprintf(":%d", *prometheusPort),
 			promhttp.HandlerFor(reg.Gatherer(), promhttp.HandlerOpts{}),
 		); err != nil {
-			log.Errorf(context.Background(), "error serving prometheus: %v", err)
+			log.Dev.Errorf(context.Background(), "error serving prometheus: %v", err)
 		}
 	}()
 
 	var ops workload.QueryLoad
 	prepareStart := timeutil.Now()
-	log.Infof(ctx, "creating load generator...")
+	log.Dev.Infof(ctx, "creating load generator...")
 
 	prepareCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -481,7 +481,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		var err error
 		for retry.Next() {
 			if err != nil {
-				log.Warningf(ctx, "retrying after error while creating load: %v", err)
+				log.Dev.Warningf(ctx, "retrying after error while creating load: %v", err)
 			}
 			ops, err = o.Ops(ctx, urls, reg)
 			if err == nil {
@@ -495,7 +495,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		if ctx.Err() != nil {
 			// Don't retry endlessly. Note that this retry loop is not under the
 			// control of --duration, so we're avoiding retrying endlessly.
-			log.Errorf(ctx, "Attempt to create load generator failed. "+
+			log.Dev.Errorf(ctx, "Attempt to create load generator failed. "+
 				"It's been more than %s since we started trying to create the load generator "+
 				"so we're giving up. Last failure: %s\nStacks:\n%s", prepareTimeout, err, <-stacksCh)
 		}
@@ -503,7 +503,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}(prepareCtx); prepareErr != nil {
 		return prepareErr
 	}
-	log.Infof(ctx, "creating load generator... done (took %s)", timeutil.Since(prepareStart))
+	log.Dev.Infof(ctx, "creating load generator... done (took %s)", timeutil.Since(prepareStart))
 
 	start := timeutil.Now()
 	errCh := make(chan error)
@@ -582,12 +582,12 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			formatter.outputError(err)
 			if *tolerateErrors {
 				if everySecond.ShouldLog() {
-					log.Errorf(ctx, "%v", err)
+					log.Dev.Errorf(ctx, "%v", err)
 				}
 				continue
 			}
 			// Log the error with %+v so we get the stack trace.
-			log.Errorf(ctx, "workload run error: %+v", err)
+			log.Dev.Errorf(ctx, "workload run error: %+v", err)
 			return err
 
 		case <-ticker.C:
@@ -596,7 +596,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				formatter.outputTick(startElapsed, t)
 				if t.Exporter != nil && rampDone == nil {
 					if err := t.Exporter.SnapshotAndWrite(t.Hist, t.Now, t.Elapsed, &t.Name); err != nil {
-						log.Warningf(ctx, "histogram: %v", err)
+						log.Dev.Warningf(ctx, "histogram: %v", err)
 					}
 				}
 			})
@@ -621,7 +621,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				formatter.outputTotal(startElapsed, t)
 				if t.Exporter != nil {
 					if err := t.Exporter.SnapshotAndWrite(t.Hist, t.Now, t.Elapsed, &t.Name); err != nil {
-						log.Warningf(ctx, "histogram: %v", err)
+						log.Dev.Warningf(ctx, "histogram: %v", err)
 					}
 				}
 				if ops.ResultHist == `` || ops.ResultHist == t.Name {
@@ -653,7 +653,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 // if a seed is being used.
 func maybeLogRandomSeed(ctx context.Context, gen workload.Generator) {
 	if randomSeed := gen.Meta().RandomSeed; randomSeed != nil {
-		log.Infof(ctx, "%s", randomSeed.LogMessage())
+		log.Dev.Infof(ctx, "%s", randomSeed.LogMessage())
 	}
 }
 
@@ -723,7 +723,7 @@ func closeExporter(ctx context.Context, metricsExporter exporter.Exporter, file 
 	if metricsExporter != nil {
 		if err := metricsExporter.Close(func() error {
 			if file == nil {
-				log.Infof(ctx, "no file to close")
+				log.Dev.Infof(ctx, "no file to close")
 				return nil
 			}
 
@@ -735,7 +735,7 @@ func closeExporter(ctx context.Context, metricsExporter exporter.Exporter, file 
 
 			return renameTempFile(file, *histograms)
 		}); err != nil {
-			log.Warningf(ctx, "failed to close metrics exporter: %v", err)
+			log.Dev.Warningf(ctx, "failed to close metrics exporter: %v", err)
 		}
 	}
 }

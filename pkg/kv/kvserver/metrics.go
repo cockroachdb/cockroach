@@ -171,6 +171,23 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	// Decommisioning nudger metrics.
+	metaDecommissioningNudgerEnqueue = metric.Metadata{
+		Name:         "ranges.decommissioning.nudger.enqueue",
+		Help:         "Number of enqueued enqueues of a range for decommissioning by the decommissioning nudger. Note: This metric tracks when the nudger attempts to enqueue, but the replica might not end up being enqueued by the priority queue due to various filtering or failure conditions.",
+		Measurement:  "Ranges",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "ranges.decommissioning.nudger.enqueue",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelStatus, "enqueue"),
+	}
+	metaDecommissioningNudgerNotLeaseholderOrInvalidLease = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.not_leaseholder_or_invalid_lease",
+		Help:        "Number of enqueues of a range for decommissioning by the decommissioning nudger that were not the leaseholder or had an invalid lease",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.not_leaseholder_or_invalid_lease",
+	}
+
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount = metric.Metadata{
 		Name:        "leases.success",
@@ -2867,6 +2884,10 @@ type StoreMetrics struct {
 	DecommissioningRangeCount       *metric.Gauge
 	RangeClosedTimestampPolicyCount [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge
 
+	// Decommissioning nudger metrics.
+	DecommissioningNudgerEnqueue                      *metric.Counter
+	DecommissioningNudgerNotLeaseholderOrInvalidLease *metric.Counter
+
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
 	// lease).
@@ -3424,11 +3445,11 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, m *tenantSto
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.mu.released.Load() {
-		log.FatalfDepth(ctx, 1, "tenant metrics already released in:\n%s", m.mu.stack)
+		log.Dev.FatalfDepth(ctx, 1, "tenant metrics already released in:\n%s", m.mu.stack)
 	}
 	m.mu.refCount--
 	if n := m.mu.refCount; n < 0 {
-		log.Fatalf(ctx, "invalid refCount on metrics for tenant %v: %d", m.tenantID, n)
+		log.Dev.Fatalf(ctx, "invalid refCount on metrics for tenant %v: %d", m.tenantID, n)
 	} else if n > 0 {
 		return
 	}
@@ -3518,7 +3539,7 @@ func (tm *tenantStorageMetrics) assert(ctx context.Context) {
 	if tm.mu.released.Load() {
 		tm.mu.Lock()
 		defer tm.mu.Unlock()
-		log.Fatalf(ctx, "tenant metrics already released in:\n%s", tm.mu.stack)
+		log.Dev.Fatalf(ctx, "tenant metrics already released in:\n%s", tm.mu.stack)
 	}
 }
 
@@ -3585,6 +3606,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		OverReplicatedRangeCount:        metric.NewGauge(metaOverReplicatedRangeCount),
 		DecommissioningRangeCount:       metric.NewGauge(metaDecommissioningRangeCount),
 		RangeClosedTimestampPolicyCount: makePolicyRefresherMetrics(),
+
+		// Decommissioning nuder metrics.
+		DecommissioningNudgerEnqueue:                      metric.NewCounter(metaDecommissioningNudgerEnqueue),
+		DecommissioningNudgerNotLeaseholderOrInvalidLease: metric.NewCounter(metaDecommissioningNudgerNotLeaseholderOrInvalidLease),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
@@ -4356,7 +4381,7 @@ func (sm *StoreMetrics) updateDiskStats(
 		sm.DiskIopsInProgress.Update(int64(cumulativeStats.InProgressCount))
 	} else {
 		// Don't update cumulative stats to the useless zero value.
-		log.Errorf(ctx, "not updating cumulative stats due to %s", cumulativeStatsErr)
+		log.Dev.Errorf(ctx, "not updating cumulative stats due to %s", cumulativeStatsErr)
 	}
 	maxRollingStats := rollingStats.Max()
 	// maxRollingStats is computed as the change in stats every 100ms
@@ -4398,7 +4423,7 @@ func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.M
 	metric.SplitEstimatedTotalBytesDiff = 0
 
 	if metric != (result.Metrics{}) {
-		log.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)
+		log.Dev.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)
 	}
 }
 

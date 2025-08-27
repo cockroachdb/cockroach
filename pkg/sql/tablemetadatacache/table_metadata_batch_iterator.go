@@ -204,7 +204,7 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(ctx context.Context)
 	}
 
 	if len(res.Errors) > 0 {
-		log.Errorf(ctx, "SpanStats request completed with %d errors. errors=%q",
+		log.Dev.Errorf(ctx, "SpanStats request completed with %d errors. errors=%q",
 			len(res.Errors), res.Errors)
 		// For now, we won't write partial results to the cache.
 		return true, errors.New("An error has occurred while fetching span stats.")

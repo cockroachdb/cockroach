@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scerrors",
@@ -14,5 +14,17 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//proto",
+    ],
+)
+
+go_test(
+    name = "scerrors_test",
+    srcs = ["errors_test.go"],
+    deps = [
+        ":scerrors",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errbase",
+        "@com_github_stretchr_testify//require",
     ],
 )

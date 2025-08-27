@@ -101,10 +101,10 @@ func TestMapSQLType(t *testing.T) {
 // Test fanoutProduct computes the cascaded product correctly
 func TestFanoutProduct(t *testing.T) {
 	// child has one FK to parent with fanout=2
-	child := ColumnMeta{HasForeignKey: true, Fanout: 2, FK: "parent.id"}
-	parent := ColumnMeta{HasForeignKey: false}
+	child := &ColumnMeta{HasForeignKey: true, Fanout: 2, FK: "parent.id"}
+	parent := &ColumnMeta{HasForeignKey: false}
 	schema := Schema{
-		"parent": {TableBlock{Columns: map[string]ColumnMeta{"id": parent}}},
+		"parent": &TableBlock{Columns: map[string]*ColumnMeta{"id": parent}},
 	}
 	prod := fanoutProduct(child, schema)
 	if prod != 2 {
@@ -166,11 +166,10 @@ func TestBuildInitialBlocks(t *testing.T) {
 	blocks, fkSeed := buildInitialBlocks(allSchemas, "db", rng, baseRows)
 
 	// One block for "test"
-	blks, ok := blocks["test"]
-	if !ok || len(blks) != 1 {
-		t.Fatalf("expected one block for test; got %v", blks)
+	blk, ok := blocks["test"]
+	if !ok {
+		t.Fatalf("expected one block for test; got %v", blk)
 	}
-	blk := blks[0]
 
 	// Count and metadata
 	if blk.Count != baseRows {
@@ -211,7 +210,7 @@ func TestWireForeignKeysAndAdjustFanout(t *testing.T) {
 	wireForeignKeys(blocks, all, fkSeed, rng)
 	adjustFanoutForPureFKPKs(blocks)
 	// Verify child column meta
-	cblk := blocks["child"][0]
+	cblk := blocks["child"]
 	cm, ok := cblk.Columns["cid"]
 	if !ok {
 		t.Fatal("missing ColumnMeta for cid")
@@ -226,17 +225,17 @@ func TestWireForeignKeysAndAdjustFanout(t *testing.T) {
 
 func TestComputeRowCounts(t *testing.T) {
 	// Single table with one FK column
-	cmFK := ColumnMeta{HasForeignKey: true, Fanout: 4, FK: "parent.id"}
-	cmNonFK := ColumnMeta{HasForeignKey: false}
+	cmFK := &ColumnMeta{HasForeignKey: true, Fanout: 4, FK: "parent.id"}
+	cmNonFK := &ColumnMeta{HasForeignKey: false}
 	// Parent block for lookup
-	parentBlk := TableBlock{Columns: map[string]ColumnMeta{"id": cmNonFK}}
+	parentBlk := &TableBlock{Columns: map[string]*ColumnMeta{"id": cmNonFK}}
 	schema := Schema{
-		"child":  {TableBlock{Count: 0, Columns: map[string]ColumnMeta{"cid": cmFK}}},
-		"parent": {parentBlk},
+		"child":  &TableBlock{Count: 0, Columns: map[string]*ColumnMeta{"cid": cmFK}},
+		"parent": parentBlk,
 	}
 	computeRowCounts(schema, 5)
 	// child Count should be 5 * 4
-	childBlk := schema["child"][0]
+	childBlk := schema["child"]
 	if childBlk.Count != 20 {
 		t.Errorf("childBlk.Count = %d; want 20", childBlk.Count)
 	}
@@ -251,12 +250,12 @@ func TestBuildWorkloadSchema(t *testing.T) {
 	base := 7
 	schema := buildWorkloadSchema(all, "db", base)
 	// parent block unchanged (no FK)
-	pblk := schema["parent"][0]
+	pblk := schema["parent"]
 	if pblk.Count != base {
 		t.Errorf("parent Count = %d; want %d", pblk.Count, base)
 	}
 	// child block should be base (after adjust for pure-FK PKs fanout=1)
-	cblk := schema["child"][0]
+	cblk := schema["child"]
 	if cblk.Count != base {
 		t.Errorf("child Count = %d; want %d", cblk.Count, base)
 	}

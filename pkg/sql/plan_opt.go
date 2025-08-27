@@ -337,7 +337,7 @@ func (p *planner) runExecBuild(
 		}
 		// TODO(yuzefovich): make the logging conditional on the verbosity
 		// level once new DistSQL planning is no longer experimental.
-		log.Infof(
+		log.Dev.Infof(
 			ctx, "distSQLSpecExecFactory failed planning with %v, falling back to the old path", err,
 		)
 	}
@@ -406,11 +406,8 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 		// descriptor versions are bumped at most once per transaction, even if there
 		// are multiple DDL operations; and transactions can be aborted leading to
 		// potential reuse of versions. To avoid these issues, we prevent saving a
-		// memo (for prepare) or reusing a saved memo (for execute). If
-		// RemoteRegions is set in the eval context we're building a memo for the
-		// purposes of generating the proper error message, and memo reuse or
-		// caching should not be done.
-		opc.allowMemoReuse = !p.Descriptors().HasUncommittedTables() && len(p.EvalContext().RemoteRegions) == 0
+		// memo (for prepare) or reusing a saved memo (for execute).
+		opc.allowMemoReuse = !p.Descriptors().HasUncommittedTables()
 		opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
 
 		if _, isCanned := p.stmt.AST.(*tree.CannedOptPlan); isCanned {
@@ -430,11 +427,11 @@ func (opc *optPlanningCtx) log(ctx context.Context, msg string) {
 		// msg is guaranteed to be a constant string by the fmtsafe linter, so
 		// it is safe to convert to a redact.SafeString.
 		//
-		// Also, note that passing msg directly to log.InfofDepth() would cause
+		// Also, note that passing msg directly to log.Dev.InfofDepth() would cause
 		// a heap allocation to box it, even if the else path is taken. With the
 		// type conversion, a new implicit variable is created that only causes
 		// a heap allocation if this branch is taken.
-		log.InfofDepth(ctx, 1, "%s: %s", redact.SafeString(msg), opc.p.stmt)
+		log.Dev.InfofDepth(ctx, 1, "%s: %s", redact.SafeString(msg), opc.p.stmt)
 	} else {
 		log.Event(ctx, msg)
 	}

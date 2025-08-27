@@ -81,7 +81,7 @@ func NewInternalSessionData(
 				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
 				if hasDefault {
 					if err := v.Set(ctx, m, defVal); err != nil {
-						log.Warningf(ctx, "error setting default for %s: %v", varName, err)
+						log.Dev.Warningf(ctx, "error setting default for %s: %v", varName, err)
 					}
 				}
 			}

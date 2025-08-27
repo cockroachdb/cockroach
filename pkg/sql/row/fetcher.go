@@ -669,7 +669,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		}
 		advanceBy := txnStartTime.Sub(initialTimestamp.GoTime()).Nanoseconds() - targetTimestampAge
 		if log.V(1) {
-			log.Infof(ctx, "initial timestamp %v too far into the past, advancing it by %v", initialTimestamp, advanceBy)
+			log.Dev.Infof(ctx, "initial timestamp %v too far into the past, advancing it by %v", initialTimestamp, advanceBy)
 		}
 		initialTimestamp = initialTimestamp.Add(advanceBy, 0 /* logical */)
 	}
@@ -680,7 +680,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		return err
 	}
 	if log.V(1) {
-		log.Infof(ctx, "starting inconsistent scan at timestamp %v", txnTimestamp)
+		log.Dev.Infof(ctx, "starting inconsistent scan at timestamp %v", txnTimestamp)
 	}
 
 	sendFn := func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
@@ -698,7 +698,7 @@ func (rf *Fetcher) StartInconsistentScan(
 			}
 
 			if log.V(1) {
-				log.Infof(ctx, "bumped inconsistent scan timestamp to %v", txnTimestamp)
+				log.Dev.Infof(ctx, "bumped inconsistent scan timestamp to %v", txnTimestamp)
 			}
 		}
 

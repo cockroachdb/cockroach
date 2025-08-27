@@ -1144,7 +1144,7 @@ func (tag *contentionTag) notify(ctx context.Context, s waitingState) *kvpb.Cont
 		return res
 	default:
 		kind := s.kind // escapes to the heap
-		log.Fatalf(ctx, "unhandled waitingState.kind: %v", kind)
+		log.Dev.Fatalf(ctx, "unhandled waitingState.kind: %v", kind)
 	}
 	panic("unreachable")
 }

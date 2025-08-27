@@ -258,7 +258,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	}
 	version := tableDesc.GetVersion()
 
-	log.Infof(ctx, "running backfill for %q, v=%d", tableDesc.GetName(), tableDesc.GetVersion())
+	log.Dev.Infof(ctx, "running backfill for %q, v=%d", tableDesc.GetName(), tableDesc.GetVersion())
 
 	needColumnBackfill := false
 	for _, m := range tableDesc.AllMutations() {
@@ -378,7 +378,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 		}
 	}
 
-	log.Infof(ctx, "completed backfill for %q, v=%d", tableDesc.GetName(), tableDesc.GetVersion())
+	log.Dev.Infof(ctx, "completed backfill for %q, v=%d", tableDesc.GetName(), tableDesc.GetVersion())
 
 	if sc.testingKnobs.RunAfterBackfill != nil {
 		if err := sc.testingKnobs.RunAfterBackfill(sc.job.ID()); err != nil {
@@ -424,7 +424,7 @@ func shouldSkipConstraintValidation(
 func (sc *SchemaChanger) dropConstraints(
 	ctx context.Context, constraints []catalog.Constraint,
 ) (map[descpb.ID]catalog.TableDescriptor, error) {
-	log.Infof(ctx, "dropping %d constraints", len(constraints))
+	log.Dev.Infof(ctx, "dropping %d constraints", len(constraints))
 
 	fksByBackrefTable := make(map[descpb.ID][]catalog.Constraint)
 	for _, c := range constraints {
@@ -543,7 +543,7 @@ func (sc *SchemaChanger) dropConstraints(
 		return nil, err
 	}
 
-	log.Info(ctx, "finished dropping constraints")
+	log.Dev.Info(ctx, "finished dropping constraints")
 	tableDescs := make(map[descpb.ID]catalog.TableDescriptor, len(fksByBackrefTable)+1)
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn descs.Txn,
@@ -575,7 +575,7 @@ func (sc *SchemaChanger) dropConstraints(
 func (sc *SchemaChanger) addConstraints(
 	ctx context.Context, constraints []catalog.Constraint,
 ) error {
-	log.Infof(ctx, "adding %d constraints", len(constraints))
+	log.Dev.Infof(ctx, "adding %d constraints", len(constraints))
 
 	fksByBackrefTable := make(map[descpb.ID][]catalog.Constraint)
 	for _, c := range constraints {
@@ -719,7 +719,7 @@ func (sc *SchemaChanger) addConstraints(
 	}); err != nil {
 		return err
 	}
-	log.Info(ctx, "finished adding constraints")
+	log.Dev.Info(ctx, "finished adding constraints")
 	return nil
 }
 
@@ -734,7 +734,7 @@ func (sc *SchemaChanger) validateConstraints(
 	if lease.TestingTableLeasesAreDisabled() {
 		return nil
 	}
-	log.Infof(ctx, "validating %d new constraints", len(constraints))
+	log.Dev.Infof(ctx, "validating %d new constraints", len(constraints))
 
 	_, err := sc.updateJobStatusMessage(ctx, StatusValidation)
 	if err != nil {
@@ -823,7 +823,7 @@ func (sc *SchemaChanger) validateConstraints(
 	if err := grp.Wait(); err != nil {
 		return err
 	}
-	log.Info(ctx, "finished validating new constraints")
+	log.Dev.Info(ctx, "finished validating new constraints")
 	return nil
 }
 
@@ -970,7 +970,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 		}
 		writeAsOf = sc.clock.Now()
-		log.Infof(ctx, "starting scan of target index as of %v...", writeAsOf)
+		log.Dev.Infof(ctx, "starting scan of target index as of %v...", writeAsOf)
 		// Index backfilling ingests SSTs that don't play nicely with running txns
 		// since they just add their keys blindly. Running a Scan of the target
 		// spans at the time the SSTs' keys will be written will calcify history up
@@ -995,7 +995,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		}); err != nil {
 			return err
 		}
-		log.Infof(ctx, "persisting target safe write time %v...", writeAsOf)
+		log.Dev.Infof(ctx, "persisting target safe write time %v...", writeAsOf)
 		if err := sc.txn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) error {
@@ -1009,7 +1009,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 		}
 	} else {
-		log.Infof(ctx, "writing at persisted safe write time %v...", writeAsOf)
+		log.Dev.Infof(ctx, "writing at persisted safe write time %v...", writeAsOf)
 	}
 
 	var p *PhysicalPlan
@@ -1430,7 +1430,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	if lease.TestingTableLeasesAreDisabled() {
 		return nil
 	}
-	log.Info(ctx, "validating new indexes")
+	log.Dev.Info(ctx, "validating new indexes")
 
 	_, err := sc.updateJobStatusMessage(ctx, StatusValidation)
 	if err != nil {
@@ -1517,7 +1517,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	if err := grp.Wait(); err != nil {
 		return err
 	}
-	log.Info(ctx, "finished validating new indexes")
+	log.Dev.Info(ctx, "finished validating new indexes")
 	return nil
 }
 
@@ -1711,7 +1711,7 @@ func ValidateInvertedIndexes(
 			}); err != nil {
 				return err
 			}
-			log.Infof(ctx, "inverted index %s/%s count = %d, took %s",
+			log.Dev.Infof(ctx, "inverted index %s/%s count = %d, took %s",
 				tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
 
 			select {
@@ -1838,7 +1838,7 @@ func countExpectedRowsForInvertedIndex(
 	}); err != nil {
 		return 0, err
 	}
-	log.Infof(ctx, "%s %s expected inverted index count = %d, took %s",
+	log.Dev.Infof(ctx, "%s %s expected inverted index count = %d, took %s",
 		desc.GetName(), colNameOrExpr, expectedCount, timeutil.Since(start))
 	return expectedCount, nil
 
@@ -1895,7 +1895,7 @@ func ValidateForwardIndexes(
 			if err != nil {
 				return err
 			}
-			log.Infof(ctx, "validation: index %s/%s row count = %d, time so far %s",
+			log.Dev.Infof(ctx, "validation: index %s/%s row count = %d, time so far %s",
 				tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
 
 			// Now compare with the row count in the table.
@@ -1916,7 +1916,7 @@ func ValidateForwardIndexes(
 					// Resolve the table index descriptor name.
 					indexName, err := catalog.FindTargetIndexNameByID(tableDesc, idx.GetID())
 					if err != nil {
-						log.Warningf(ctx,
+						log.Dev.Warningf(ctx,
 							"unable to find index by ID for ValidateForwardIndexes: %d",
 							idx.GetID())
 						indexName = idx.GetName()
@@ -1950,7 +1950,7 @@ func ValidateForwardIndexes(
 		if err != nil {
 			return err
 		}
-		log.Infof(ctx, "validation: table %s row count = %d, took %s",
+		log.Dev.Infof(ctx, "validation: table %s row count = %d, took %s",
 			tableDesc.GetName(), c, timeutil.Since(start))
 		tableRowCount = c
 		defer close(tableCountsReady)
@@ -2243,7 +2243,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	// backfill. If it is empty, we assume this is an older schema
 	// change using the non-MVCC-compliant flow.
 	writeAtRequestTimestamp := len(temporaryIndexes) != 0
-	log.Infof(ctx, "backfilling %d indexes: %v (writeAtRequestTimestamp: %v)", len(addingSpans), addingSpans, writeAtRequestTimestamp)
+	log.Dev.Infof(ctx, "backfilling %d indexes: %v (writeAtRequestTimestamp: %v)", len(addingSpans), addingSpans, writeAtRequestTimestamp)
 
 	// Split off a new range for each new index span.
 	expirationTime := sc.db.KV().Clock().Now().Add(time.Hour.Nanoseconds(), 0)
@@ -2303,7 +2303,7 @@ func (sc *SchemaChanger) backfillIndexes(
 		fn()
 	}
 
-	log.Info(ctx, "finished backfilling indexes")
+	log.Dev.Info(ctx, "finished backfilling indexes")
 	return sc.validateIndexes(ctx)
 }
 
@@ -2358,7 +2358,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 			}
 
 			if idx.IsTemporaryIndexForBackfill() && m.Adding() && m.WriteAndDeleteOnly() {
-				log.Infof(ctx, "dropping temporary index: %d", idx.IndexDesc().ID)
+				log.Dev.Infof(ctx, "dropping temporary index: %d", idx.IndexDesc().ID)
 				tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_ONLY
 				tbl.Mutations[m.MutationOrdinal()].Direction = descpb.DescriptorMutation_DROP
 				runStatus = StatusDeleteOnly
@@ -2391,7 +2391,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	ctx context.Context, version descpb.DescriptorVersion,
 ) error {
-	log.Infof(ctx, "clearing and backfilling columns")
+	log.Dev.Infof(ctx, "clearing and backfilling columns")
 
 	if err := sc.distColumnBackfill(
 		ctx,
@@ -2405,7 +2405,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		}
 		return err
 	}
-	log.Info(ctx, "finished clearing and backfilling columns")
+	log.Dev.Info(ctx, "finished clearing and backfilling columns")
 	return nil
 }
 
@@ -3000,7 +3000,7 @@ func getMergeTimestamp(ctx context.Context, clock *hlc.Clock) hlc.Timestamp {
 	// that are already present in the index being merged, but that’s fine as
 	// they will be treated as no-ops.
 	ts := clock.Now().AddDuration(clock.MaxOffset())
-	log.Infof(ctx, "merging all keys in temporary index before time %v", ts)
+	log.Dev.Infof(ctx, "merging all keys in temporary index before time %v", ts)
 	return ts
 }
 

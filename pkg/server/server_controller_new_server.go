@@ -149,7 +149,7 @@ func newTenantServerInternal(
 	newCtx := ambientCtx.AnnotateCtx(context.Background())
 
 	// Inform the logs we're starting a new server.
-	log.Infof(newCtx, "creating tenant server")
+	log.Dev.Infof(newCtx, "creating tenant server")
 
 	// Now instantiate the tenant server proper.
 	return newSharedProcessTenantServer(newCtx, stopper, baseCfg, sqlCfg, tenantNameContainer, elastic)
@@ -227,7 +227,7 @@ func makeSharedProcessTenantServerConfig(
 		}
 		stopper.AddCloser(stop.CloserFn(func() {
 			if err := os.RemoveAll(storeDir); err != nil {
-				log.Warningf(context.Background(), "unable to delete tenant directory: %v", err)
+				log.Dev.Warningf(context.Background(), "unable to delete tenant directory: %v", err)
 			}
 		}))
 		storeSpec.Path = storeDir
@@ -390,7 +390,7 @@ func (s *SQLServerWrapper) reportTenantInfo(ctx context.Context) error {
 	clientConnOptions, serverParams := MakeServerOptionsForURL(s.cfg.Config)
 	pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
 	if err != nil {
-		log.Errorf(ctx, "failed computing the URL: %v", err)
+		log.Dev.Errorf(ctx, "failed computing the URL: %v", err)
 	} else {
 		buf.Printf("sql:\t%s\n", pgURL.ToPQ())
 		buf.Printf("sql (JDBC):\t%s\n", pgURL.ToJDBC())

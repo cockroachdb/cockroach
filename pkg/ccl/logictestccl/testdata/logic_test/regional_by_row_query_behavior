@@ -1746,10 +1746,8 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 │               │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column2 = pk)
 │               │ locking strength: for update
 │               │
-│               └── • render
-│                   │
-│                   └── • values
-│                         size: 5 columns, 2 rows
+│               └── • values
+│                     size: 5 columns, 2 rows
 │
 ├── • constraint-check
 │   │

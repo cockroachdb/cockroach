@@ -68,7 +68,7 @@ func (s *PersistedSQLStats) MaybeFlushWithDrainer(
 	if !enabled && allowDiscardWhenDisabled {
 		defer func() {
 			if err := ssDrainer.Reset(ctx); err != nil {
-				log.Warningf(ctx, "fail to reset SQL Stats: %s", err)
+				log.Dev.Warningf(ctx, "fail to reset SQL Stats: %s", err)
 			}
 		}()
 	}
@@ -79,7 +79,7 @@ func (s *PersistedSQLStats) MaybeFlushWithDrainer(
 	}
 
 	if flushingTooSoon {
-		log.Infof(ctx, "flush aborted due to high flush frequency. "+
+		log.Dev.Infof(ctx, "flush aborted due to high flush frequency. "+
 			"The minimum interval between flushes is %s", minimumFlushInterval.String())
 		return false
 	}
@@ -93,10 +93,10 @@ func (s *PersistedSQLStats) MaybeFlushWithDrainer(
 	}
 
 	if err != nil {
-		log.Errorf(ctx, "encountered an error at flush, checking for statement statistics size limit: %v", err)
+		log.Dev.Errorf(ctx, "encountered an error at flush, checking for statement statistics size limit: %v", err)
 	}
 	if limitReached {
-		log.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
+		log.Dev.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
 		return false
 	}
 
@@ -107,7 +107,7 @@ func (s *PersistedSQLStats) MaybeFlushWithDrainer(
 	stmtStats, txnStats, fingerprintCount := ssDrainer.DrainStats(ctx)
 	s.cfg.FlushedFingerprintCount.Inc(fingerprintCount)
 	if log.V(1) {
-		log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
+		log.Dev.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
 			fingerprintCount, s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(lastFlush))
 	}
 
@@ -132,7 +132,7 @@ func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, er
 	intervalToCheck := SQLStatsLimitTableCheckInterval.Get(&s.cfg.Settings.SV)
 	if !s.lastSizeCheck.IsZero() && s.lastSizeCheck.Add(intervalToCheck).After(timeutil.Now()) {
 		if log.V(1) {
-			log.Infof(ctx, "PersistedSQLStats.StmtsLimitSizeReached skipped with last check at: %s and check interval: %s", s.lastSizeCheck, intervalToCheck)
+			log.Dev.Infof(ctx, "PersistedSQLStats.StmtsLimitSizeReached skipped with last check at: %s and check interval: %s", s.lastSizeCheck, intervalToCheck)
 		}
 		return false, nil
 	}
@@ -199,7 +199,7 @@ func (s *PersistedSQLStats) flush(
 		s.flushStmtStatsInBatches(ctx, stmtStats, flushBucket)
 	})
 	if err != nil {
-		log.Warningf(ctx, "failed to execute sql-stmt-stats-flush task, %s", err.Error())
+		log.Dev.Warningf(ctx, "failed to execute sql-stmt-stats-flush task, %s", err.Error())
 		wg.Done()
 		return
 	}
@@ -212,7 +212,7 @@ func (s *PersistedSQLStats) flush(
 		s.flushTxnStatsInBatches(ctx, txnStats, flushBucket)
 	})
 	if err != nil {
-		log.Warningf(ctx, "failed to execute sql-txn-stats-flush task, %s", err.Error())
+		log.Dev.Warningf(ctx, "failed to execute sql-txn-stats-flush task, %s", err.Error())
 		wg.Done()
 		return
 	}
@@ -232,7 +232,7 @@ func (s *PersistedSQLStats) flushTxnStatsInBatches(
 		batch := stats[i:end]
 		if err := doFlushTxnStats(ctx, batch, flushBucket, s.cfg.DB); err != nil {
 			s.cfg.FlushesFailed.Inc(1)
-			log.Warningf(ctx, "failed to flush transaction statistics: %s", err)
+			log.Dev.Warningf(ctx, "failed to flush transaction statistics: %s", err)
 		} else {
 			s.cfg.FlushesSuccessful.Inc(1)
 		}
@@ -251,7 +251,7 @@ func (s *PersistedSQLStats) flushStmtStatsInBatches(
 		batch := stats[i:end]
 		if err := doFlushStmtStats(ctx, batch, flushBucket, s.cfg.DB); err != nil {
 			s.cfg.FlushesFailed.Inc(1)
-			log.Warningf(ctx, "failed to flush statement statistics: %s", err)
+			log.Dev.Warningf(ctx, "failed to flush statement statistics: %s", err)
 		} else {
 			s.cfg.FlushesSuccessful.Inc(1)
 		}

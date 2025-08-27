@@ -168,7 +168,7 @@ func (s dbSplitAndScatterer) split(
 	}
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		if err = s.db.AdminSplit(ctx, newSplitKey, expirationTime); err != nil {
-			log.VInfof(
+			log.Dev.VInfof(
 				ctx, 1, "attempt %d failed to split at key %s: %v", r.CurrentAttempt(), newSplitKey, err,
 			)
 			continue
@@ -226,7 +226,7 @@ func (s dbSplitAndScatterer) scatter(
 			// this could break entirely and not start failing the tests,
 			// but on the bright side, it doesn't affect correctness, only
 			// throughput.
-			log.Errorf(ctx, "failed to scatter span [%s,%s): %+v",
+			log.Dev.Errorf(ctx, "failed to scatter span [%s,%s): %+v",
 				newScatterKey, newScatterKey.Next(), pErr.GoError())
 		}
 		return 0, nil
@@ -468,7 +468,7 @@ func runGenerativeSplitAndScatter(
 	doneScatterCh chan<- entryNode,
 	cache *routingDatumCache,
 ) error {
-	log.Infof(ctx, "Running generative split and scatter with %d total spans, %d chunk size, %d nodes",
+	log.Dev.Infof(ctx, "Running generative split and scatter with %d total spans, %d chunk size, %d nodes",
 		spec.NumEntries, spec.ChunkSize, spec.NumNodes)
 	g := ctxgroup.WithContext(ctx)
 
@@ -597,17 +597,17 @@ func runGenerativeSplitAndScatter(
 							if len(cachedNodeIDs) > 0 {
 								hash.Reset()
 								if _, err := hash.Write(scatterKey); err != nil {
-									log.Warningf(ctx, "scatter returned node 0. Route span starting at %s to current node %v because of hash error: %v",
+									log.Dev.Warningf(ctx, "scatter returned node 0. Route span starting at %s to current node %v because of hash error: %v",
 										scatterKey, nodeID, err)
 								} else {
 									hashedKey := int(hash.Sum32())
 									nodeID = cachedNodeIDs[hashedKey%len(cachedNodeIDs)]
 								}
 
-								log.Warningf(ctx, "scatter returned node 0. "+
+								log.Dev.Warningf(ctx, "scatter returned node 0. "+
 									"Random route span starting at %s node %v", scatterKey, nodeID)
 							} else {
-								log.Warningf(ctx, "scatter returned node 0. "+
+								log.Dev.Warningf(ctx, "scatter returned node 0. "+
 									"Route span starting at %s to current node %v", scatterKey, nodeID)
 							}
 							chunkDestination = nodeID
@@ -615,7 +615,7 @@ func runGenerativeSplitAndScatter(
 							// TODO(rui): OptionalNodeID only returns a node if the sql server runs
 							// in the same process as the kv server (e.g., not serverless). Figure
 							// out how to handle this error in serverless restore.
-							log.Warningf(ctx, "scatter returned node 0. "+
+							log.Dev.Warningf(ctx, "scatter returned node 0. "+
 								"Route span starting at %s to default stream", scatterKey)
 						}
 					}
@@ -670,7 +670,7 @@ func runGenerativeSplitAndScatter(
 				for i, importEntry := range importSpanChunk.entries {
 					nextChunkIdx := i + 1
 
-					log.VInfof(ctx, 2, "processing a span [%s,%s)", importEntry.Span.Key, importEntry.Span.EndKey)
+					log.Dev.VInfof(ctx, 2, "processing a span [%s,%s)", importEntry.Span.Key, importEntry.Span.EndKey)
 					var splitKey roachpb.Key
 					if nextChunkIdx < len(importSpanChunk.entries) {
 						// Split at the next entry.

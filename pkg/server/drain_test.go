@@ -253,7 +253,7 @@ func (t *testDrainContext) sendShutdown() *serverpb.DrainResponse {
 		// It's possible we're getting "connection reset by peer" or some
 		// gRPC initialization failure because the server is shutting
 		// down. Tolerate that.
-		log.Infof(context.Background(), "RPC error: %v", err)
+		log.Dev.Infof(context.Background(), "RPC error: %v", err)
 	}
 	return resp
 }

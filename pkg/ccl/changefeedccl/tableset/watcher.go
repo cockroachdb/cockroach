@@ -149,7 +149,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	log.Infof(ctx, "starting watcher with filter=%s, initialTS=%s", w.filter, initialTS)
+	log.Dev.Infof(ctx, "starting watcher with filter=%s, initialTS=%s", w.filter, initialTS)
 
 	w.acc = w.mon.MakeBoundAccount()
 	defer w.acc.Close(ctx)
@@ -198,7 +198,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 				}
 				if diff.AsOf.Less(initialTS) {
 					if log.V(2) {
-						log.Infof(ctx, "diff %s is before initialTS %s; skipping", diff, initialTS)
+						log.Dev.Infof(ctx, "diff %s is before initialTS %s; skipping", diff, initialTS)
 					}
 					continue
 				}
@@ -216,7 +216,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 			// Flush buffered tables when we receive a resolved message.
 			case resolved := <-incomingResolveds:
 				if log.V(2) {
-					log.Infof(ctx, "resolved: %s; %d tables buffered", resolved, len(bufferedTableDiffs[curResolved]))
+					log.Dev.Infof(ctx, "resolved: %s; %d tables buffered", resolved, len(bufferedTableDiffs[curResolved]))
 				}
 
 				if resolved.Less(curResolved) {
@@ -271,7 +271,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 			}
 
 			if log.V(2) {
-				log.Infof(ctx, "onValue: %s; prev: %s", table, prevTable)
+				log.Dev.Infof(ctx, "onValue: %s; prev: %s", table, prevTable)
 			}
 
 			tableIncluded := w.filter.includes(table)
@@ -291,7 +291,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 			} else if dropped {
 				diff = TableDiff{Dropped: prevTable, AsOf: kv.Value.Timestamp}
 			} else {
-				log.Warningf(ctx, "onValue: unexpected table state: table=%s, prev=%s", table, prevTable)
+				log.Dev.Warningf(ctx, "onValue: unexpected table state: table=%s, prev=%s", table, prevTable)
 				return nil
 			}
 			select {
@@ -308,7 +308,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 		rangefeed.WithMemoryMonitor(w.mon),
 		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
 			if log.V(2) {
-				log.Infof(ctx, "onCheckpoint: chk=%s", checkpoint)
+				log.Dev.Infof(ctx, "onCheckpoint: chk=%s", checkpoint)
 			}
 			// This can happen when done catching up; ignore it.
 			if checkpoint.ResolvedTS.IsEmpty() {
@@ -351,18 +351,18 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 		return err
 	}
 
-	log.Infof(ctx, "rangefeed started")
+	log.Dev.Infof(ctx, "rangefeed started")
 
 	// Wait for shutdown due to error or context cancellation.
 	select {
 	case err := <-errCh:
 		cancel(err)
 		err = errors.Join(err, eg.Wait())
-		log.Warningf(ctx, "watcher %d shutting down due to error: %v (%s)", w.id, err, context.Cause(ctx))
+		log.Dev.Warningf(ctx, "watcher %d shutting down due to error: %v (%s)", w.id, err, context.Cause(ctx))
 		return err
 	case <-ctx.Done():
 		err = errors.Join(ctx.Err(), eg.Wait())
-		log.Warningf(ctx, "watcher %d shutting down due to context cancellation: %v (%s)", w.id, err, context.Cause(ctx))
+		log.Dev.Warningf(ctx, "watcher %d shutting down due to context cancellation: %v (%s)", w.id, err, context.Cause(ctx))
 		return err
 	}
 }
@@ -428,7 +428,7 @@ func (w *Watcher) popDiffsUpTo(ctx context.Context, upTo hlc.Timestamp) ([]Table
 func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) error {
 	start := timeutil.Now()
 	if log.V(2) {
-		log.Infof(ctx, "maybeWaitForResolved(%s) start", ts)
+		log.Dev.Infof(ctx, "maybeWaitForResolved(%s) start", ts)
 	}
 
 	maybeWaiter := func() chan struct{} {
@@ -437,7 +437,7 @@ func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) er
 
 		if w.mu.resolved.Compare(ts) >= 0 {
 			if log.V(2) {
-				log.Infof(ctx, "maybeWaitForResolved(%s) already resolved", ts)
+				log.Dev.Infof(ctx, "maybeWaitForResolved(%s) already resolved", ts)
 			}
 			return nil
 		}
@@ -451,7 +451,7 @@ func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) er
 	select {
 	case <-maybeWaiter:
 		if log.V(2) {
-			log.Infof(ctx, "maybeWaitForResolved(%s) done waiting in %s", ts, timeutil.Since(start))
+			log.Dev.Infof(ctx, "maybeWaitForResolved(%s) done waiting in %s", ts, timeutil.Since(start))
 		}
 		return nil
 	case <-ctx.Done():
@@ -467,7 +467,7 @@ func (w *Watcher) updateResolvedLocked(ctx context.Context, ts hlc.Timestamp) er
 	// the lag seems to be about 3s, coinciding with the default value of kv.closed_timestamp.target_duration.
 	// this is probably fine since the changefeed data will have the same lag anyway.
 	if log.V(2) {
-		log.Infof(ctx, "updateResolved@%d %s -> %s", timeutil.Now().Unix(), w.mu.resolved, ts)
+		log.Dev.Infof(ctx, "updateResolved@%d %s -> %s", timeutil.Now().Unix(), w.mu.resolved, ts)
 	}
 	w.mu.resolved = ts
 	for wts, waiter := range w.mu.resolvedWaiters {
@@ -489,7 +489,7 @@ func (w *Watcher) kvToTable(
 	ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder,
 ) (Table, error) {
 	if log.V(2) {
-		log.Infof(ctx, "kvToTable: %s, %s", kv.Key, kv.Value.Timestamp)
+		log.Dev.Infof(ctx, "kvToTable: %s, %s", kv.Key, kv.Value.Timestamp)
 	}
 
 	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)

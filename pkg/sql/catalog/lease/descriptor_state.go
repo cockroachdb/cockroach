@@ -132,7 +132,7 @@ func (t *descriptorState) upsertLeaseLocked(
 	s := t.mu.active.find(desc.GetVersion())
 	if s == nil {
 		if t.mu.active.findNewest() != nil {
-			log.Infof(ctx, "new lease: %s", desc)
+			log.Dev.Infof(ctx, "new lease: %s", desc)
 		}
 		descState := newDescriptorVersionState(t, desc, hlc.Timestamp{}, session, regionEnumPrefix, true /* isLease */)
 		if err := t.m.boundAccount.Grow(ctx, descState.getByteSize()); err != nil {
@@ -235,7 +235,7 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 	decRefCount := func(s *descriptorVersionState) (shouldRemove bool) {
 		currCount := s.refcount.Add(-1)
 		if expensiveLoggingEnabled {
-			log.Infof(ctx, "release: %s", s.redactedString())
+			log.Dev.Infof(ctx, "release: %s", s.redactedString())
 		}
 		return currCount == 0
 	}

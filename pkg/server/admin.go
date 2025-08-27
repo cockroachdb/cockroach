@@ -1983,7 +1983,7 @@ func (s *adminServer) Settings(
 		sessiondata.NodeUserSessionDataOverride,
 		`SELECT name, "lastUpdated" FROM system.settings`,
 	); err != nil {
-		log.Warningf(ctx, "failed to read settings: %s", err)
+		log.Dev.Warningf(ctx, "failed to read settings: %s", err)
 	} else {
 		var ok bool
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
@@ -1995,7 +1995,7 @@ func (s *adminServer) Settings(
 		if err != nil {
 			// No need to clear AlteredSettings map since we only make best
 			// effort to populate it.
-			log.Warningf(ctx, "failed to read settings: %s", err)
+			log.Dev.Warningf(ctx, "failed to read settings: %s", err)
 		}
 	}
 

@@ -71,7 +71,7 @@ func startDistIngestion(
 		revertTo := replicatedTime
 		revertTo.Forward(streamProgress.InitialRevertTo)
 
-		log.Infof(ctx, "reverting tenant %s to time %s (via %s) before starting replication", details.DestinationTenantID, replicatedTime, revertTo)
+		log.Dev.Infof(ctx, "reverting tenant %s to time %s (via %s) before starting replication", details.DestinationTenantID, replicatedTime, revertTo)
 
 		spanToRevert := keys.MakeTenantSpan(details.DestinationTenantID)
 		if err := revert.RevertSpansFanout(ctx, execCtx.ExecCfg().DB, execCtx,
@@ -106,7 +106,7 @@ func startDistIngestion(
 		return err
 	}
 
-	log.Infof(ctx, "producer job %d is active, planning DistSQL flow", streamID)
+	log.Dev.Infof(ctx, "producer job %d is active, planning DistSQL flow", streamID)
 	dsp := execCtx.DistSQLPlanner()
 
 	planner, err := makeReplicationFlowPlanner(
@@ -181,7 +181,7 @@ func startDistIngestion(
 	spanConfigIngestStopper := make(chan struct{})
 	streamSpanConfigs := func(ctx context.Context) error {
 		if !crosscluster.ReplicateSpanConfigsEnabled.Get(&execCtx.ExecCfg().Settings.SV) {
-			log.Warningf(ctx, "span config replication is disabled")
+			log.Dev.Warningf(ctx, "span config replication is disabled")
 			return nil
 		}
 		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.SkipSpanConfigReplication {
@@ -255,7 +255,7 @@ func startDistIngestion(
 			return err
 		}
 	} else {
-		log.Infof(ctx, "initial splits already complete")
+		log.Dev.Infof(ctx, "initial splits already complete")
 	}
 
 	replicationStatusForFlow := jobspb.Replicating
@@ -434,13 +434,13 @@ func splitAndScatterWorker(
 func splitAndScatter(
 	ctx context.Context, splitAndScatterKey roachpb.Key, s splitAndScatterer, extra time.Duration,
 ) error {
-	log.VInfof(ctx, 1, "splitting and scattering at %s", splitAndScatterKey)
+	log.Dev.VInfof(ctx, 1, "splitting and scattering at %s", splitAndScatterKey)
 	expirationTime := s.now().AddDuration(min(baseSplitExpiration+extra, maxSplitExpiration))
 	if err := s.split(ctx, splitAndScatterKey, expirationTime); err != nil {
 		return err
 	}
 	if err := s.scatter(ctx, splitAndScatterKey); err != nil {
-		log.Warningf(ctx, "failed to scatter span starting at %s: %v",
+		log.Dev.Warningf(ctx, "failed to scatter span starting at %s: %v",
 			splitAndScatterKey, err)
 	}
 	return nil
@@ -557,7 +557,7 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 	gatewayID base.SQLInstanceID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
-		log.Infof(ctx, "generating DistSQL plan candidate")
+		log.Dev.Infof(ctx, "generating DistSQL plan candidate")
 		streamID := streampb.StreamID(details.StreamID)
 		topology, err := client.PlanPhysicalReplication(ctx, streamID)
 		if err != nil {
@@ -828,7 +828,7 @@ func constructStreamIngestionPlanSpecs(
 	matcher := MakeNodeMatcher(destSQLInstances)
 	for _, candidate := range matcher.FindSourceNodePriority(topology) {
 		destID := matcher.FindMatch(candidate.ClosestDestIDs)
-		log.Infof(ctx, "physical replication src-dst pair candidate: %s (locality %s) - %d ("+
+		log.Dev.Infof(ctx, "physical replication src-dst pair candidate: %s (locality %s) - %d ("+
 			"locality %s)",
 			candidate.Partition.ID,
 			candidate.Partition.SrcLocality,
@@ -898,7 +898,7 @@ func waitUntilProducerActive(
 		if status.StreamStatus != streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
 			break
 		}
-		log.Warningf(ctx, "producer job %d has status %s, retrying", streamID, status.StreamStatus)
+		log.Dev.Warningf(ctx, "producer job %d has status %s, retrying", streamID, status.StreamStatus)
 	}
 	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
 		return jobs.MarkAsPermanentJobError(errors.Errorf("failed to resume ingestion job %d "+

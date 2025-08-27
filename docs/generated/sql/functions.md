@@ -1068,6 +1068,10 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. Maximum input length is 255 characters.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="levenshtein_less_equal"></a><code>levenshtein_less_equal(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>, max_d: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. If actual distance is less or equal then max_d, then it returns the distance. Otherwise this function returns a value greater than max_d. The maximum length of the input strings is 255 characters.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="levenshtein_less_equal"></a><code>levenshtein_less_equal(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, max_d: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. If actual distance is less or equal then max_d, then it returns the distance. Otherwise this function returns a value greater than max_d. The maximum length of the input strings is 255 characters.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="metaphone"></a><code>metaphone(source: <a href="string.html">string</a>, max_output_length: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Metaphone code. Maximum input length is 255 characters</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="soundex"></a><code>soundex(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Soundex code.</p>
@@ -1360,6 +1364,33 @@ argument must be a JSON object, and its fields provide named values
 to be substituted into the jsonpath expression. If the silent argument is true, the
 function suppresses the following errors: missing object field or
 array element, unexpected JSON item type, datetime and numeric errors.</p>
+</span></td><td>Immutable</td></tr></tbody>
+</table>
+
+### LTree functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="index"></a><code>index(a: ltree, b: ltree) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>position of first occurrence of <code>b</code> in <code>a</code>; -1 if not found</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="index"></a><code>index(a: ltree, b: ltree, offset: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>position of first occurrence of <code>b</code> in <code>a</code>, starting at <code>offset</code>; -1 if not found</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lca"></a><code>lca(ltree, ltree, ltree...) &rarr; ltree</code></td><td><span class="funcdesc"><p>lowest common ancestor, i.e., longest common prefix of paths</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lca"></a><code>lca(ltree[]: ltree[]) &rarr; ltree</code></td><td><span class="funcdesc"><p>lowest common ancestor, i.e., longest common prefix of paths</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="ltree2text"></a><code>ltree2text(ltree: ltree) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>cast <code>ltree</code> to text</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="nlevel"></a><code>nlevel(ltree: ltree) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>number of labels in path <code>ltree</code></p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="subltree"></a><code>subltree(ltree: ltree, start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>subpath of <code>ltree</code> from position <code>start</code> to position <code>end</code>-1 (counting from 0)</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="subpath"></a><code>subpath(ltree: ltree, offset: <a href="int.html">int</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>subpath of <code>ltree</code> starting at position <code>offset</code>, extending to end of path. If <code>offset</code> is negative, subpath starts that far from the end of the path.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="subpath"></a><code>subpath(ltree: ltree, offset: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>subpath of <code>ltree</code> starting at position <code>offset</code>, length <code>length</code>. If <code>offset</code> is negative, subpath starts that far from the end of the path. If <code>length</code> is negative, leaves that many labels off the end of the path.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="text2ltree"></a><code>text2ltree(text: <a href="string.html">string</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>cast <code>text</code> to ltree</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 

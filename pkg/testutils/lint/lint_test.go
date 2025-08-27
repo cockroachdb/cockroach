@@ -242,7 +242,7 @@ func TestLint(t *testing.T) {
 				continue
 			}
 			switch name {
-			case "extract", "trim", "overlay", "position", "substring", "st_x", "st_y":
+			case "extract", "trim", "overlay", "position", "substring", "st_x", "st_y", "index":
 				// Exempt special forms: EXTRACT(... FROM ...), etc.
 			default:
 				names = append(names, strings.ToUpper(name))
@@ -1583,6 +1583,7 @@ func TestLint(t *testing.T) {
 			":!sql/plpgsql/plpgsql_error.go",
 			":!sql/protoreflect/redact.go",
 			":!sql/colexecerror/error.go",
+			":!sql/schemachanger/scerrors/errors.go",
 			":!util/timeutil/timeout_error.go",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
@@ -2733,7 +2734,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/util/timeutil/timeout_error\.go:.*invalid direct cast on error object`),
 			// Direct error cast OK in this case for a low-dependency helper binary.
 			stream.GrepNot(`pkg/cmd/github-pull-request-make/main\.go:.*invalid direct cast on error object`),
-			// The logging package translates log.Fatal calls into errors.
+			// The logging package translates log.Dev.Fatal calls into errors.
 			// We can't use the regular exception mechanism via functions.go
 			// because addStructured takes its positional argument as []interface{},
 			// instead of ...interface{}.

@@ -264,7 +264,7 @@ func MakeFixture(
 		for _, t := range gen.Tables() {
 			t := t
 			g.Go(func() error {
-				log.Infof(ctx, "Creating table stats for %s", t.Name)
+				log.Dev.Infof(ctx, "Creating table stats for %s", t.Name)
 				_, err := sqlDB.Exec(fmt.Sprintf(
 					`CREATE STATISTICS pre_backup FROM "%s"."%s"`, dbName, t.Name,
 				))
@@ -282,7 +282,7 @@ func MakeFixture(
 		g.Go(func() error {
 			q := fmt.Sprintf(`BACKUP "%s"."%s" INTO $1`, dbName, t.Name)
 			output := config.ObjectPathToURI(filepath.Join(fixtureFolder, t.Name))
-			log.Infof(ctx, "Backing %s up to %q...", t.Name, output)
+			log.Dev.Infof(ctx, "Backing %s up to %q...", t.Name, output)
 			_, err := sqlDB.Exec(q, output)
 			return err
 		})
@@ -311,7 +311,7 @@ func (l ImportDataLoader) InitialDataLoad(
 		l.FilesPerNode = 1
 	}
 
-	log.Infof(ctx, "starting import of %d tables", len(gen.Tables()))
+	log.Dev.Infof(ctx, "starting import of %d tables", len(gen.Tables()))
 	start := timeutil.Now()
 	bytes, err := ImportFixture(
 		ctx, db, gen, l.dbName, l.FilesPerNode, l.InjectStats, l.CSVServer)
@@ -319,7 +319,7 @@ func (l ImportDataLoader) InitialDataLoad(
 		return 0, errors.Wrap(err, `importing fixture`)
 	}
 	elapsed := timeutil.Since(start)
-	log.Infof(ctx, "imported %s bytes in %d tables (took %s, %s)",
+	log.Dev.Infof(ctx, "imported %s bytes in %d tables (took %s, %s)",
 		humanizeutil.IBytes(bytes), len(gen.Tables()), elapsed, humanizeutil.DataRate(bytes, elapsed))
 
 	return bytes, nil
@@ -506,7 +506,7 @@ func importFixtureTable(
 		}
 	}
 	elapsed := timeutil.Since(start)
-	log.Infof(ctx, `imported %s in %s table (%d rows, %d index entries, took %s, %s)`,
+	log.Dev.Infof(ctx, `imported %s in %s table (%d rows, %d index entries, took %s, %s)`,
 		humanizeutil.IBytes(tableBytes), table.Name, rows, index, elapsed,
 		humanizeutil.DataRate(tableBytes, elapsed))
 
@@ -540,7 +540,7 @@ func disableAutoStats(ctx context.Context, sqlDB *gosql.DB) func() {
 		`SHOW CLUSTER SETTING sql.stats.automatic_collection.enabled`,
 	).Scan(&autoStatsEnabled)
 	if err != nil {
-		log.Warningf(ctx, "error retrieving automatic stats cluster setting: %v", err)
+		log.Dev.Warningf(ctx, "error retrieving automatic stats cluster setting: %v", err)
 		return func() {}
 	}
 
@@ -549,7 +549,7 @@ func disableAutoStats(ctx context.Context, sqlDB *gosql.DB) func() {
 			`SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`,
 		)
 		if err != nil {
-			log.Warningf(ctx, "error disabling automatic stats: %v", err)
+			log.Dev.Warningf(ctx, "error disabling automatic stats: %v", err)
 			return func() {}
 		}
 		return func() {
@@ -557,7 +557,7 @@ func disableAutoStats(ctx context.Context, sqlDB *gosql.DB) func() {
 				`SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`,
 			)
 			if err != nil {
-				log.Warningf(ctx, "error enabling automatic stats: %v", err)
+				log.Dev.Warningf(ctx, "error enabling automatic stats: %v", err)
 			}
 		}
 	}
@@ -621,7 +621,7 @@ func RestoreFixture(
 		g.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
 			restoreStmt := fmt.Sprintf(`RESTORE %s.%s FROM LATEST IN $1 WITH into_db=$2, unsafe_restore_incompatible_version`, genName, table.TableName)
-			log.Infof(ctx, "Restoring from %s", table.BackupURI)
+			log.Dev.Infof(ctx, "Restoring from %s", table.BackupURI)
 			var rows int64
 			var discard interface{}
 			res, err := sqlDB.Query(restoreStmt, table.BackupURI, database)
@@ -642,7 +642,7 @@ func RestoreFixture(
 			}
 
 			elapsed := timeutil.Since(start)
-			log.Infof(ctx, `loaded table %s in %s (%d rows)`,
+			log.Dev.Infof(ctx, `loaded table %s in %s (%d rows)`,
 				table.TableName, elapsed, rows)
 			return nil
 		})
@@ -674,7 +674,7 @@ func listDir(
 		dir = dir + "/"
 	}
 	if log.V(1) {
-		log.Infof(ctx, "Listing %s", dir)
+		log.Dev.Infof(ctx, "Listing %s", dir)
 	}
 	return es.List(ctx, dir, "/", lsFn)
 }
