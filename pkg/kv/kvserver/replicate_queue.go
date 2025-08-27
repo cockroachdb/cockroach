@@ -100,6 +100,19 @@ var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetti
 	0,
 )
 
+// TODO(wenyihu6): move these cluster settings to kvserverbase
+
+// PriorityInversionRequeue is a setting that controls whether to requeue
+// replicas when their priority at enqueue time and processing time is inverted
+// too much (e.g. dropping from a repair cation to AllocatorConsiderRebalance).
+var PriorityInversionRequeue = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.priority_inversion_requeue_replicate_queue.enabled",
+	"whether the requeue replicas should requeue when enqueued for "+
+		"repair action but ended up consider rebalancing during processing",
+	false,
+)
+
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
