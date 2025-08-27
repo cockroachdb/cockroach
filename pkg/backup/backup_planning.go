@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -636,7 +637,11 @@ func backupPlanHook(
 			initialDetails.Destination.Subdir = backupbase.LatestFileName
 			initialDetails.Destination.Exists = true
 		} else if subdir != "" {
-			initialDetails.Destination.Subdir = "/" + strings.TrimPrefix(subdir, "/")
+			normalizedSubdir, err := backuputils.NormalizeSubdir(subdir)
+			if err != nil {
+				return err
+			}
+			initialDetails.Destination.Subdir = normalizedSubdir
 			initialDetails.Destination.Exists = true
 		} else {
 			initialDetails.Destination.Subdir = endTime.GoTime().Format(backupbase.DateBasedIntoFolderName)

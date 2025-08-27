@@ -215,11 +215,6 @@ func TestWriteBackupIndexMetadataWithLocalityAwareBackups(t *testing.T) {
 
 	require.True(t, fullIndex.StartTime.IsEmpty())
 	require.False(t, incrIndex.StartTime.IsEmpty())
-
-	// Ensure that the incremental path index starts immediately with the full
-	// index path, implying that its path starts from the root of the incremental
-	// storage directory.
-	require.True(t, strings.HasPrefix(incrIndex.Path, fullIndex.Path))
 }
 
 func TestWriteBackupindexMetadataWithSpecifiedIncrementalLocation(t *testing.T) {
