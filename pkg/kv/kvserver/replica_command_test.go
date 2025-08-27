@@ -677,9 +677,13 @@ func TestWaitForLeaseAppliedIndex(t *testing.T) {
 	stopper.Stop(ctx)
 
 	destroyErr := errors.New("destroyed")
-	tc.repl.mu.Lock()
-	tc.repl.mu.destroyStatus.Set(destroyErr, destroyReasonRemoved)
-	tc.repl.mu.Unlock()
+	func() {
+		tc.repl.readOnlyCmdMu.Lock()
+		defer tc.repl.readOnlyCmdMu.Unlock()
+		tc.repl.mu.Lock()
+		defer tc.repl.mu.Unlock()
+		tc.repl.shMu.destroyStatus.Set(destroyErr, destroyReasonRemoved)
+	}()
 
 	_, err = tc.repl.WaitForLeaseAppliedIndex(ctx, maxLAI)
 	require.Error(t, err)

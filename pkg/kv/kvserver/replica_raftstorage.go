@@ -577,7 +577,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		// erroneously return empty data.
 		sr.readOnlyCmdMu.Lock()
 		sr.mu.Lock()
-		sr.mu.destroyStatus.Set(
+		sr.shMu.destroyStatus.Set(
 			kvpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
 			destroyReasonRemoved)
 		sr.mu.Unlock()

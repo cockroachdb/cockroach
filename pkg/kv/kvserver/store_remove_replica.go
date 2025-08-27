@@ -91,13 +91,13 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 		if opts.DestroyData {
 			// Detect if we were already removed.
-			if rep.mu.destroyStatus.Removed() {
+			if rep.shMu.destroyStatus.Removed() {
 				return nil, nil // already removed, noop
 			}
 		} else {
 			// If the caller doesn't want to destroy the data because it already
 			// has done so, then it must have already also set the destroyStatus.
-			if !rep.mu.destroyStatus.Removed() {
+			if !rep.shMu.destroyStatus.Removed() {
 				return nil, errors.AssertionFailedf("replica not marked as destroyed but data already destroyed: %v", rep)
 			}
 		}
@@ -129,7 +129,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		}
 
 		// Sanity checks passed. Mark the replica as removed before deleting data.
-		rep.mu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
+		rep.shMu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
 			destroyReasonRemoved)
 		return desc, nil
 	}()
@@ -242,7 +242,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 		// Detect if we were already removed, this is a fatal error
 		// because we should have already checked this under the raftMu
 		// before calling this method.
-		if rep.mu.destroyStatus.Removed() {
+		if rep.shMu.destroyStatus.Removed() {
 			rep.mu.Unlock()
 			rep.readOnlyCmdMu.Unlock()
 			log.Dev.Fatalf(ctx, "uninitialized replica unexpectedly already removed")
@@ -255,7 +255,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 		}
 
 		// Mark the replica as removed before deleting data.
-		rep.mu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
+		rep.shMu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
 			destroyReasonRemoved)
 
 		rep.mu.Unlock()
