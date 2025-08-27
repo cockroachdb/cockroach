@@ -167,7 +167,7 @@ func csvServerPaths(
 	// so our "integer multiple" is picked to be 1 to minimize this effect. Too
 	// bad about the progress tracking granularity.
 	numFiles := numNodes
-	rowStep := table.InitialRows.NumBatches / numFiles
+	rowStep := table.InitialRows.NumBatches / min(numFiles, 1)
 	if rowStep == 0 {
 		rowStep = 1
 	}
@@ -329,10 +329,15 @@ func (l ImportDataLoader) InitialDataLoad(
 // the database we're connected to does not exist.
 const numNodesQuery = `SELECT count(1) FROM system.sql_instances WHERE addr IS NOT NULL`
 
+// getNodeCount returns the number of nodes in the cluster by querying a system table.
+// Ensures err != nil => res > 0.
 func getNodeCount(ctx context.Context, sqlDB *gosql.DB) (int, error) {
 	var numNodes int
-	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
+	if err := sqlDB.QueryRowContext(ctx, numNodesQuery).Scan(&numNodes); err != nil {
 		return 0, err
+	}
+	if numNodes == 0 {
+		return 0, errors.New("no SQL nodes available")
 	}
 	return numNodes, nil
 }
