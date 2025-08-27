@@ -201,20 +201,24 @@ func newChangeAggregatorProcessor(
 ) (_ execinfra.Processor, retErr error) {
 	// Setup monitoring for this node drain.
 	drainWatcher, drainDone := makeDrainWatcher(flowCtx)
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("changeagg-mem"))
+	var err error
 	defer func() {
 		if retErr != nil {
 			drainDone()
 		}
+		if err != nil {
+			memMonitor.Stop(ctx)
+		}
 	}()
 
-	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("changeagg-mem"))
 	ca := &changeAggregator{
 		spec:              spec,
 		memAcc:            memMonitor.MakeBoundAccount(),
 		checkForNodeDrain: drainWatcher.checkForNodeDrain,
 	}
 
-	if err := ca.Init(
+	if err = ca.Init(
 		ctx,
 		ca,
 		post,
@@ -351,7 +355,19 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	feed, err := makeChangefeedConfigFromJobDetails(ctx, ca.spec.Feed, ca.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
+	execCfg := ca.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	if ca.knobs.OverrideExecCfg != nil {
+		execCfg = ca.knobs.OverrideExecCfg(execCfg)
+	}
+	ca.targets, err = AllTargets(ctx, ca.spec.Feed, execCfg)
+	if err != nil {
+		log.Dev.Warningf(ca.Ctx(), "moving to draining due to error getting targets: %v", err)
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
+	}
+
+	feed, err := makeChangefeedConfigFromJobDetails(ca.spec.Feed, ca.targets)
 	if err != nil {
 		log.Dev.Warningf(ca.Ctx(), "moving to draining due to error making changefeed config: %v", err)
 		ca.MoveToDraining(err)
@@ -382,13 +398,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 	ca.sliMetricsID = ca.sliMetrics.claimId()
-	ca.targets, err = AllTargets(ctx, ca.spec.Feed, ca.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
-	if err != nil {
-		log.Dev.Warningf(ca.Ctx(), "moving to draining due to error getting targets: %v", err)
-		ca.MoveToDraining(err)
-		ca.cancel()
-		return
-	}
 
 	recorder := metricsRecorder(ca.sliMetrics)
 	recorder, err = ca.wrapMetricsRecorderWithTelemetry(ctx, recorder, ca.targets)
@@ -1233,6 +1242,12 @@ func newChangeFrontierProcessor(
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("changefntr-mem"))
+	var err error
+	defer func() {
+		if err != nil {
+			memMonitor.Stop(ctx)
+		}
+	}()
 
 	cf := &changeFrontier{
 		// We might modify the ChangefeedState field in the eval.Context, so we
@@ -1248,7 +1263,7 @@ func newChangeFrontierProcessor(
 		cf.knobs = *cfKnobs
 	}
 
-	if err := cf.InitWithEvalCtx(
+	if err = cf.InitWithEvalCtx(
 		ctx,
 		cf,
 		post,
@@ -1306,7 +1321,11 @@ func newChangeFrontierProcessor(
 	if err != nil {
 		return nil, err
 	}
-	targets, err := AllTargets(ctx, spec.Feed, flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
+	execCfg := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	if cf.knobs.OverrideExecCfg != nil {
+		execCfg = cf.knobs.OverrideExecCfg(execCfg)
+	}
+	targets, err := AllTargets(ctx, spec.Feed, execCfg)
 	if err != nil {
 		return nil, err
 	}
