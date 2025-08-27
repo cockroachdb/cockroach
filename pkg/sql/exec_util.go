@@ -2246,7 +2246,20 @@ func (p *planner) getPlanDistribution(
 		return physicalplan.LocalPlan, nil
 	}
 
-	rec, err := checkSupportForPlanNode(ctx, plan.planNode, &p.distSQLVisitor, sd)
+	// Determine whether the txn has buffered some writes.
+	txnHasBufferedWrites := p.txn.HasBufferedWrites()
+	if sd.BufferedWritesEnabled && p.curPlan.main == plan {
+		// Given that we're checking the plan distribution for the main query
+		// _before_ executing any of the subqueries, it's possible that some
+		// writes will have been buffered by one of the subqueries. In such a
+		// case, we'll assume that if the query as a whole has any mutations AND
+		// it has at least one subquery, then that subquery will perform some
+		// writes that will be buffered.
+		if p.curPlan.flags.IsSet(planFlagContainsMutation) && len(p.curPlan.subqueryPlans) > 0 {
+			txnHasBufferedWrites = true
+		}
+	}
+	rec, err := checkSupportForPlanNode(ctx, plan.planNode, &p.distSQLVisitor, sd, txnHasBufferedWrites)
 	if err != nil {
 		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)

@@ -330,6 +330,15 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		// TODO(nvanbenschoten): lift this restriction.
 		recommendation = cannotDistribute
 	}
+	for _, colID := range columnIDs {
+		if columnIDRequiresMVCCDecoding(colID) {
+			// TODO(yuzefovich): only require MVCC decoding when txn has
+			// buffered writes.
+			// TODO(#144166): relax this.
+			recommendation = cannotDistribute
+			break
+		}
+	}
 
 	// Note that we don't do anything about the possible filter here since we
 	// don't know yet whether we will have it. ConstructFilter is responsible
@@ -871,11 +880,15 @@ func (e *distSQLSpecExecFactory) ConstructIndexJoin(
 	}
 
 	recommendation := canDistribute
-	if locking.Strength != tree.ForNone {
+	if locking.Strength != tree.ForNone ||
 		// Index joins that are performing row-level locking cannot currently be
 		// distributed because their locks would not be propagated back to the root
 		// transaction coordinator.
 		// TODO(nvanbenschoten): lift this restriction.
+		fetch.requiresMVCCDecoding() {
+		// TODO(yuzefovich): only require MVCC decoding when txn has buffered
+		// writes.
+		// TODO(#144166): relax this.
 		recommendation = cannotDistribute
 		physPlan.EnsureSingleStreamOnGateway(e.ctx, nil /* finalizeLastStageCb */)
 	}
@@ -961,16 +974,19 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 		}
 
 		recommendation := e.checkExprsAndMaybeMergeLastStage([]tree.TypedExpr{lookupExpr, onCond}, physPlan)
-		if locking.Strength != tree.ForNone {
-			// Lookup joins that are performing row-level locking cannot currently be
-			// distributed because their locks would not be propagated back to the root
-			// transaction coordinator.
+		noDistribution := locking.Strength != tree.ForNone ||
+			// Lookup joins that are performing row-level locking cannot
+			// currently be distributed because their locks would not be
+			// propagated back to the root transaction coordinator.
 			// TODO(nvanbenschoten): lift this restriction.
-			recommendation = cannotDistribute
-			physPlan.EnsureSingleStreamOnGateway(e.ctx, nil /* finalizeLastStageCb */)
-		} else if remoteLookupExpr != nil || remoteOnlyLookups {
-			// Do not distribute locality-optimized joins, since it would defeat the
-			// purpose of the optimization.
+			(remoteLookupExpr != nil || remoteOnlyLookups) ||
+			// Do not distribute locality-optimized joins, since it would defeat
+			// the purpose of the optimization.
+			fetch.requiresMVCCDecoding()
+		// TODO(yuzefovich): only require MVCC decoding when txn has buffered
+		// writes.
+		// TODO(#144166): relax this.
+		if noDistribution {
 			recommendation = cannotDistribute
 			physPlan.EnsureSingleStreamOnGateway(e.ctx, nil /* finalizeLastStageCb */)
 		}
