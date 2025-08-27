@@ -286,6 +286,13 @@ func TestCCLLogic_regional_by_row_rename_column(
 	runCCLLogicTest(t, "regional_by_row_rename_column")
 }
 
+func TestCCLLogic_regional_by_row_safe_updates(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "regional_by_row_safe_updates")
+}
+
 func TestCCLLogic_regional_by_table_placement_restricted(
 	t *testing.T,
 ) {
