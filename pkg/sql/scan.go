@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -80,12 +81,7 @@ type fetchPlanningInfo struct {
 	index catalog.Index
 
 	colCfg scanColumnsConfig
-	// The table columns, possibly including ones currently in schema changes.
-	// TODO(radu/knz): currently we always load the entire row from KV and only
-	// skip unnecessary decodes to Datum. Investigate whether performance is to
-	// be gained (e.g. for tables with wide rows) by reading only certain
-	// columns from KV using point lookups instead of a single range lookup for
-	// the entire row.
+	// catalogCols contains only the columns that need to be fetched.
 	catalogCols []catalog.Column
 	// There is a 1-1 correspondence between catalogCols and columns.
 	columns colinfo.ResultColumns
@@ -234,4 +230,33 @@ func (n *scanNode) initDescSpecificCol(colCfg scanColumnsConfig, prefixCol catal
 	// Set up the rest of the scanNode.
 	n.columns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.catalogCols)
 	return nil
+}
+
+// columnIDRequiresMVCCDecoding returns whether the given columnID corresponds
+// to a system column that requires MVCC decoding to be populated.
+func columnIDRequiresMVCCDecoding(columnID descpb.ColumnID) bool {
+	if !colinfo.IsColIDSystemColumn(columnID) {
+		return false
+	}
+	switch colinfo.GetSystemColumnKindFromColumnID(columnID) {
+	case catpb.SystemColumnKind_MVCCTIMESTAMP,
+		catpb.SystemColumnKind_ORIGINID,
+		catpb.SystemColumnKind_ORIGINTIMESTAMP:
+		return true
+	case catpb.SystemColumnKind_TABLEOID:
+		return false
+	default:
+		panic(errors.AssertionFailedf("unexpected system column: %d", columnID))
+	}
+}
+
+// requiresMVCCDecoding returns true if at least one system column that requires
+// MVCC decoding is fetched.
+func (n *fetchPlanningInfo) requiresMVCCDecoding() bool {
+	for _, col := range n.catalogCols {
+		if columnIDRequiresMVCCDecoding(col.GetID()) {
+			return true
+		}
+	}
+	return false
 }
