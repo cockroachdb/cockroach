@@ -9475,3 +9475,148 @@ func TestAllocatorRebalanceTargetVoterConstraintUnsatisfied(t *testing.T) {
 		})
 	}
 }
+
+// TestRoundToNearestPriorityCategory tests the RoundToNearestPriorityCategory
+// function.
+func TestRoundToNearestPriorityCategory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name     string
+		input    float64
+		expected float64
+	}{
+		{
+			name:     "zero",
+			input:    0.0,
+			expected: 0.0,
+		},
+		{
+			name:     "exact multiple of 100",
+			input:    100.0,
+			expected: 100.0,
+		},
+		{
+			name:     "round down to nearest 100",
+			input:    149.0,
+			expected: 100.0,
+		},
+		{
+			name:     "round up to nearest 100",
+			input:    151.0,
+			expected: 200.0,
+		},
+		{
+			name:     "negative exact multiple of 100",
+			input:    -200.0,
+			expected: -200.0,
+		},
+		{
+			name:     "negative round down to nearest 100",
+			input:    -249.0,
+			expected: -200.0,
+		},
+		{
+			name:     "negative round up to nearest 100",
+			input:    -251.0,
+			expected: -300.0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, roundToNearestPriorityCategory(tc.input))
+		})
+	}
+}
+
+// TestCheckPriorityInversion tests the CheckPriorityInversion function.
+func TestCheckPriorityInversion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for action := AllocatorNoop; action <= AllocatorFinalizeAtomicReplicationChange; action++ {
+		t.Run(action.String(), func(t *testing.T) {
+			if action == AllocatorConsiderRebalance || action == AllocatorNoop || action == AllocatorRangeUnavailable {
+				inversion, requeue := CheckPriorityInversion(action.Priority(), AllocatorConsiderRebalance)
+				require.False(t, inversion)
+				require.False(t, requeue)
+			} else {
+				inversion, requeue := CheckPriorityInversion(action.Priority(), AllocatorConsiderRebalance)
+				require.True(t, inversion)
+				require.True(t, requeue)
+			}
+		})
+	}
+
+	testCases := []struct {
+		name               string
+		priorityAtEnqueue  float64
+		actionAtProcessing AllocatorAction
+		expectedInversion  bool
+		expectedRequeue    bool
+	}{
+		{
+			name:               "AllocatorNoop at processing is noop",
+			priorityAtEnqueue:  AllocatorFinalizeAtomicReplicationChange.Priority(),
+			actionAtProcessing: AllocatorNoop,
+			expectedInversion:  true,
+			expectedRequeue:    false,
+		},
+		{
+			name:               "AllocatorRangeUnavailable at processing is noop",
+			priorityAtEnqueue:  AllocatorFinalizeAtomicReplicationChange.Priority(),
+			actionAtProcessing: AllocatorRangeUnavailable,
+			expectedInversion:  true,
+			expectedRequeue:    false,
+		},
+		{
+			name:               "priority -1 bypasses",
+			priorityAtEnqueue:  -1,
+			actionAtProcessing: AllocatorConsiderRebalance,
+			expectedInversion:  false,
+			expectedRequeue:    false,
+		},
+		{
+			name:               "above range priority(1e5)",
+			priorityAtEnqueue:  1e5,
+			actionAtProcessing: AllocatorConsiderRebalance,
+			expectedInversion:  false,
+			expectedRequeue:    false,
+		},
+		{
+			name:               "below range priority at -10",
+			priorityAtEnqueue:  -10,
+			actionAtProcessing: -100,
+			expectedInversion:  false,
+			expectedRequeue:    false,
+		},
+		{
+			name:               "inversion but small priority changes",
+			priorityAtEnqueue:  AllocatorFinalizeAtomicReplicationChange.Priority(),
+			actionAtProcessing: AllocatorReplaceDecommissioningNonVoter,
+			expectedInversion:  true,
+			expectedRequeue:    false,
+		},
+		{
+			name:               "inversion but small priority changes",
+			priorityAtEnqueue:  AllocatorRemoveDeadVoter.Priority(),
+			actionAtProcessing: AllocatorAddNonVoter,
+			expectedInversion:  true,
+			expectedRequeue:    false,
+		},
+		{
+			name:               "inversion but small priority changes",
+			priorityAtEnqueue:  AllocatorConsiderRebalance.Priority(),
+			actionAtProcessing: AllocatorNoop,
+			expectedInversion:  false,
+			expectedRequeue:    false,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			inversion, requeue := CheckPriorityInversion(tc.priorityAtEnqueue, tc.actionAtProcessing)
+			require.Equal(t, tc.expectedInversion, inversion)
+			require.Equal(t, tc.expectedRequeue, requeue)
+		})
+	}
+}
