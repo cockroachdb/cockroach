@@ -935,6 +935,9 @@ func (bq *baseQueue) addInternal(
 	default:
 		// No need to signal again.
 	}
+	if postEnqueueInterceptor := bq.store.TestingKnobs().BaseQueuePostEnqueueInterceptor; postEnqueueInterceptor != nil {
+		postEnqueueInterceptor(bq.store.StoreID(), desc.RangeID)
+	}
 	// Note: it may already be dropped or dropped afterwards.
 	cb.onEnqueueResult(item.index /*indexOnHeap*/, nil)
 	return true, nil
