@@ -100,6 +100,17 @@ var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetti
 	0,
 )
 
+// DecommissioningPriorityHighest is a setting that controls whether the
+// decommissioning nudger should enqueue decommissioning ranges with the highest
+// priority in replicate queue. EnqueueProblemRangeInReplicateQueueInterval
+// needs to be set for this to have an effect.
+var DecommissioningPriorityHighest = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.decommissioning.highest_priority.enabled",
+	"whether to process decommissioning replicas at highest priority in replicate queue",
+	false,
+)
+
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
