@@ -286,3 +286,23 @@ END
 $$;
 
 subtest end
+
+statement ok
+CREATE TABLE seed (_int8 INT8, _float8 FLOAT8);
+
+statement ok
+INSERT INTO seed DEFAULT VALUES;
+
+statement ok
+CREATE INDEX on seed (_int8, _float8);
+
+# Use the DO block to trigger runPlanInsidePlan code path, where we must disable
+# usage of the Streamer for the SELECT query that uses
+# 'crdb_internal_mvcc_timestamp' column after we've buffered some writes.
+statement ok
+DO $$
+BEGIN
+  UPDATE seed SET _int8 = 1;
+  SELECT _float8, _int8, crdb_internal_mvcc_timestamp FROM seed@seed__int8__float8_idx;
+END;
+$$;
