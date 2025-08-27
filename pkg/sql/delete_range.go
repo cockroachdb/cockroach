@@ -204,8 +204,8 @@ func (d *deleteRangeNode) processResults(
 			// Make a copy of curRowPrefix to avoid referencing the memory from
 			// the now-old BatchRequest.
 			//
-			// When auto-commit is enabled, we expect to see any resume spans,
-			// so we won't need to access d.curRowPrefix later.
+			// When auto-commit is enabled, we expect to not see any resume
+			// spans, so we won't need to access d.curRowPrefix later.
 			curRowPrefix := make([]byte, len(d.curRowPrefix))
 			copy(curRowPrefix, d.curRowPrefix)
 			d.curRowPrefix = curRowPrefix
