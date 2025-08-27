@@ -696,6 +696,10 @@ func (rq *replicateQueue) process(
 		}
 
 		if err != nil {
+			if requeue {
+				log.KvDistribution.VEventf(ctx, 1, "re-queuing on errors: %v", err)
+				rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
+			}
 			return false, err
 		}
 
@@ -890,6 +894,24 @@ func (rq *replicateQueue) processOneChange(
 ) (requeue bool, _ error) {
 	change, err := rq.planner.PlanOneChange(
 		ctx, repl, desc, conf, plan.PlannerOptions{Scatter: scatter})
+
+	inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action)
+	if inversion {
+		log.KvDistribution.Infof(ctx,
+			"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
+			shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
+	}
+	if PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
+		if shouldRequeue {
+			// Return true here to requeue the range. We can't return an error here
+			// because rq.process only requeue when error is nil. See
+			// replicateQueue.process for more details.
+			return true /*requeue*/, maybeAnnotateDecommissionErr(
+				errors.Errorf("requing due to priority inversion: action=%s, priority=%v, enqueuePriority=%v",
+					change.Action, change.Action.Priority(), priorityAtEnqueue), change.Action)
+		}
+	}
+
 	// When there is an error planning a change, return the error immediately
 	// and do not requeue. It is unlikely that the range or storepool state
 	// will change quickly enough in order to not get the same error and
