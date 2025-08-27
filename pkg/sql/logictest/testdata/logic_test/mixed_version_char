@@ -1,0 +1,27 @@
+# LogicTest: cockroach-go-testserver-25.2
+
+# This test verifies that the "char" type is handled correctly in a mixed
+# version cluster. The reason its being tested is because dueing 25.4
+# development we began removing the legacy code for serializing types in the
+# pre-19.1 format. Doing this correctly required preserving some protobuf fields
+# until we drop support for 25.3, which is the last version that writes types in
+# the pre-19.1 format.
+# See https://github.com/cockroachdb/cockroach/issues/152629.
+
+statement ok
+create table t (a "char"[], b "char", family (rowid,a,b));
+
+statement ok
+insert into t values (ARRAY['cat':::STRING, '':::STRING], 'a');
+
+upgrade 1
+
+user root nodeidx=1
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT
+
+user root nodeidx=2
+
+statement ok
+insert into t values (ARRAY['abc'::STRING, ''::STRING], 'cat'::STRING);
