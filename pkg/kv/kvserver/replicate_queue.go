@@ -302,6 +302,20 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaReplicateQueuePriorityInversionTotal = metric.Metadata{
+		Name: "queue.replicate.priority_inversion.total",
+		Help: "Number of priority inversions in the replicate queue. " +
+			"A priority inversion occurs when the priority at processing time ends up being lower than at enqueue time",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionUnfairToDecommission = metric.Metadata{
+		Name: "queue.replicate.priority_inversion_unfair_to_decommission.total",
+		Help: "Number of priority inversions in the replicate queue with respect to decommissioning. " +
+			"A priority inversion occurs when the priority at processing time ends up being lower than at enqueue time",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // quorumError indicates a retryable error condition which sends replicas being
@@ -361,6 +375,10 @@ type ReplicateQueueMetrics struct {
 	// TODO(sarkesian): Consider adding metrics for AllocatorRemoveLearner,
 	// AllocatorConsiderRebalance, and AllocatorFinalizeAtomicReplicationChange
 	// allocator actions.
+
+	// Priority inversion.
+	PriorityInversionTotal                *metric.Counter
+	PriorityInversionUnfairToDecommission *metric.Counter
 }
 
 func makeReplicateQueueMetrics() ReplicateQueueMetrics {
@@ -397,6 +415,8 @@ func makeReplicateQueueMetrics() ReplicateQueueMetrics {
 		ReplaceDecommissioningReplicaErrorCount:   metric.NewCounter(metaReplicateQueueReplaceDecommissioningReplicaErrorCount),
 		RemoveDecommissioningReplicaSuccessCount:  metric.NewCounter(metaReplicateQueueRemoveDecommissioningReplicaSuccessCount),
 		RemoveDecommissioningReplicaErrorCount:    metric.NewCounter(metaReplicateQueueRemoveDecommissioningReplicaErrorCount),
+		PriorityInversionTotal:                    metric.NewCounter(metaReplicateQueuePriorityInversionTotal),
+		PriorityInversionUnfairToDecommission:     metric.NewCounter(metaReplicateQueuePriorityInversionUnfairToDecommission),
 	}
 }
 
@@ -893,11 +913,13 @@ func (rq *replicateQueue) processOneChange(
 	if DecommissioningPriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
 		inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action)
 		if inversion {
+			rq.metrics.PriorityInversionTotal.Inc(1)
 			log.KvDistribution.Infof(ctx,
 				"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
 				shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
 		}
 		if shouldRequeue {
+			rq.metrics.PriorityInversionUnfairToDecommission.Inc(1)
 			// Return true here to requeue the range. We can't return an error here
 			// because rq.process would return early and not requeue. See
 			// replicateQueue.process for more details.
