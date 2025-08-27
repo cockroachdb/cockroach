@@ -351,7 +351,19 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	feed, err := makeChangefeedConfigFromJobDetails(ctx, ca.spec.Feed, ca.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
+	execCfg := ca.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	if ca.knobs.OverrideExecCfg != nil {
+		execCfg = ca.knobs.OverrideExecCfg(execCfg)
+	}
+	ca.targets, err = AllTargets(ctx, ca.spec.Feed, execCfg)
+	if err != nil {
+		log.Dev.Warningf(ca.Ctx(), "moving to draining due to error getting targets: %v", err)
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
+	}
+
+	feed, err := makeChangefeedConfigFromJobDetails(ca.spec.Feed, ca.targets)
 	if err != nil {
 		log.Dev.Warningf(ca.Ctx(), "moving to draining due to error making changefeed config: %v", err)
 		ca.MoveToDraining(err)
@@ -382,13 +394,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 	ca.sliMetricsID = ca.sliMetrics.claimId()
-	ca.targets, err = AllTargets(ctx, ca.spec.Feed, ca.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
-	if err != nil {
-		log.Dev.Warningf(ca.Ctx(), "moving to draining due to error getting targets: %v", err)
-		ca.MoveToDraining(err)
-		ca.cancel()
-		return
-	}
 
 	recorder := metricsRecorder(ca.sliMetrics)
 	recorder, err = ca.wrapMetricsRecorderWithTelemetry(ctx, recorder, ca.targets)
@@ -1306,8 +1311,13 @@ func newChangeFrontierProcessor(
 	if err != nil {
 		return nil, err
 	}
-	targets, err := AllTargets(ctx, spec.Feed, flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig))
+	execCfg := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	if cf.knobs.OverrideExecCfg != nil {
+		execCfg = cf.knobs.OverrideExecCfg(execCfg)
+	}
+	targets, err := AllTargets(ctx, spec.Feed, execCfg)
 	if err != nil {
+		cf.close()
 		return nil, err
 	}
 	cf.targets = targets
