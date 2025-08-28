@@ -41,6 +41,8 @@ type HTTPClientConfig struct {
 	// accepts any certificate presented by the server and any host name in that
 	// certificate. In this mode, TLS is susceptible to machine-in-the-middle attacks.
 	InsecureSkipVerify bool
+
+	HttpMiddleware HttpMiddleware
 }
 
 // Timeout is a cluster setting used for cloud storage interactions.
@@ -115,7 +117,7 @@ func MakeHTTPClientForTransport(t http.RoundTripper) (*http.Client, error) {
 // Prefer MakeHTTPClient where possible.
 func MakeTransport(
 	settings *cluster.Settings, metrics *Metrics, config HTTPClientConfig,
-) (*http.Transport, error) {
+) (http.RoundTripper, error) {
 	var tlsConf *tls.Config
 	if config.InsecureSkipVerify {
 		tlsConf = &tls.Config{InsecureSkipVerify: true}
@@ -129,7 +131,6 @@ func MakeTransport(
 		}
 		tlsConf = &tls.Config{RootCAs: roots}
 	}
-
 	t := http.DefaultTransport.(*http.Transport).Clone()
 
 	// Add our custom CA.
@@ -140,7 +141,12 @@ func MakeTransport(
 	if metrics != nil {
 		t.DialContext = metrics.NetMetrics.Wrap(t.DialContext, config.Cloud, config.Bucket, config.Client)
 	}
-	return t, nil
+
+	var roundTripper http.RoundTripper = t
+	if config.HttpMiddleware != nil {
+		roundTripper = config.HttpMiddleware(roundTripper)
+	}
+	return roundTripper, nil
 }
 
 // MaxDelayedRetryAttempts is the number of times the delayedRetry method will
