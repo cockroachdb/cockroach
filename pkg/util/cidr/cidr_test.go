@@ -243,3 +243,41 @@ func TestWrapDialer(t *testing.T) {
 	require.Greater(t, m.mu.childMetrics["foo/test"].WriteBytes.Value(), int64(1))
 	require.Greater(t, m.mu.childMetrics["foo/test"].ReadBytes.Value(), int64(1))
 }
+
+// TestCIDRConflictResolution tests that smaller (more specific) CIDR ranges
+// take precedence over larger (less specific) ones when there are conflicts.
+func TestCIDRConflictResolution(t *testing.T) {
+	c := Lookup{}
+
+	destinations := `[
+		{ "Name": "Broad", "Ipnet": "10.0.0.0/8" },
+		{ "Name": "Medium", "Ipnet": "10.1.0.0/16" },
+		{ "Name": "Narrow", "Ipnet": "10.1.1.0/24" },
+		{ "Name": "Specific", "Ipnet": "10.1.1.100/32" },
+		{ "Name": "AnotherBroad", "Ipnet": "172.16.0.0/12" },
+		{ "Name": "AnotherNarrow", "Ipnet": "172.16.1.0/24" }
+	]`
+	require.NoError(t, c.setDestinations(context.Background(), []byte(destinations)))
+
+	testCases := []struct {
+		ip       string
+		expected string
+		desc     string
+	}{
+		{"10.1.1.100", "Specific", "exact match should pick most specific /32"},
+		{"10.1.1.50", "Narrow", "should pick /24 over /16 and /8"},
+		{"10.1.1.200", "Narrow", "should pick /24 over /16 and /8"},
+		{"10.1.2.1", "Medium", "should pick /16 over /8"},
+		{"10.2.0.1", "Broad", "should pick /8 when no more specific match"},
+		{"172.16.1.50", "AnotherNarrow", "should pick /24 over /12"},
+		{"172.16.2.1", "AnotherBroad", "should pick /12 when no more specific match"},
+		{"192.168.1.1", "", "should return empty for no match"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s_%s", tc.ip, tc.expected), func(t *testing.T) {
+			actual := c.LookupIP(net.ParseIP(tc.ip))
+			require.Equal(t, tc.expected, actual, tc.desc)
+		})
+	}
+}
