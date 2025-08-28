@@ -4242,15 +4242,16 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.SSTableRemoteBytes.Update(int64(size))
 	sm.SSTableRemoteCount.Update(int64(count))
 
-	// TODO(radu): aggregate blob file compression metrics when those are added.
-	sm.CompressionSnappyBytes.Update(int64(m.Table.Compression.Snappy.CompressedBytes))
-	sm.CompressionSnappyCR.Update(m.Table.Compression.Snappy.CompressionRatio())
-	sm.CompressionMinLZBytes.Update(int64(m.Table.Compression.MinLZ.CompressedBytes))
-	sm.CompressionMinLZCR.Update(m.Table.Compression.MinLZ.CompressionRatio())
-	sm.CompressionZstdBytes.Update(int64(m.Table.Compression.Zstd.CompressedBytes))
-	sm.CompressionZstdCR.Update(m.Table.Compression.Zstd.CompressionRatio())
-	sm.CompressionNoneBytes.Update(int64(m.Table.Compression.NoCompressionBytes))
-	sm.CompressionUnknownBytes.Update(int64(m.Table.Compression.CompressedBytesWithoutStats))
+	c := m.Table.Compression
+	c.MergeWith(&m.BlobFiles.Compression)
+	sm.CompressionSnappyBytes.Update(int64(c.Snappy.CompressedBytes))
+	sm.CompressionSnappyCR.Update(c.Snappy.CompressionRatio())
+	sm.CompressionMinLZBytes.Update(int64(c.MinLZ.CompressedBytes))
+	sm.CompressionMinLZCR.Update(c.MinLZ.CompressionRatio())
+	sm.CompressionZstdBytes.Update(int64(c.Zstd.CompressedBytes))
+	sm.CompressionZstdCR.Update(c.Zstd.CompressionRatio())
+	sm.CompressionNoneBytes.Update(int64(c.NoCompressionBytes))
+	sm.CompressionUnknownBytes.Update(int64(c.CompressedBytesWithoutStats))
 
 	overall := pebble.CompressionStatsForSetting{
 		CompressedBytes:   m.Table.Compression.NoCompressionBytes,
