@@ -41,8 +41,6 @@ const (
 	// The timeout prevents a queue from getting stuck on a replica.
 	// For example, a replica whose range is not reachable for quorum.
 	defaultProcessTimeout = 1 * time.Minute
-	// defaultQueueMaxSize is the default max size for a queue.
-	defaultQueueMaxSize = 10000
 )
 
 // queueGuaranteedProcessingTimeBudget is the smallest amount of time before
@@ -324,7 +322,7 @@ type queueProcessTimeoutFunc func(*cluster.Settings, replicaInQueue) time.Durati
 
 type queueConfig struct {
 	// maxSize is the maximum number of replicas to queue.
-	maxSize int
+	maxSize *settings.IntSetting
 	// maxConcurrency is the maximum number of replicas that can be processed
 	// concurrently. If not set, defaults to 1.
 	maxConcurrency       int
@@ -474,6 +472,7 @@ type baseQueue struct {
 		purgatory      map[roachpb.RangeID]PurgatoryError // Map of replicas to processing errors
 		stopped        bool
 		disabled       bool
+		maxSize        int64
 	}
 }
 
@@ -526,11 +525,14 @@ func newBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *b
 		},
 	}
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
+	bq.SetMaxSize(cfg.maxSize.Get(&store.cfg.Settings.SV))
+	cfg.maxSize.SetOnChange(&store.cfg.Settings.SV, func(ctx context.Context) {
+		bq.SetMaxSize(cfg.maxSize.Get(&store.cfg.Settings.SV))
+	})
 	bq.SetDisabled(!cfg.disabledConfig.Get(&store.cfg.Settings.SV))
 	cfg.disabledConfig.SetOnChange(&store.cfg.Settings.SV, func(ctx context.Context) {
 		bq.SetDisabled(!cfg.disabledConfig.Get(&store.cfg.Settings.SV))
 	})
-
 	return &bq
 }
 
@@ -567,6 +569,12 @@ func (bq *baseQueue) PurgatoryLength() int {
 func (bq *baseQueue) SetDisabled(disabled bool) {
 	bq.mu.Lock()
 	bq.mu.disabled = disabled
+	bq.mu.Unlock()
+}
+
+func (bq *baseQueue) SetMaxSize(maxSize int64) {
+	bq.mu.Lock()
+	bq.mu.maxSize = maxSize
 	bq.mu.Unlock()
 }
 
@@ -832,7 +840,7 @@ func (bq *baseQueue) addInternal(
 	// guaranteed to be globally ordered. Ideally, we would remove the lowest
 	// priority element, but it would require additional bookkeeping or a linear
 	// scan.
-	if pqLen := bq.mu.priorityQ.Len(); pqLen > bq.maxSize {
+	if pqLen := bq.mu.priorityQ.Len(); int64(pqLen) > bq.mu.maxSize {
 		replicaItemToDrop := bq.mu.priorityQ.sl[pqLen-1]
 		bq.droppedDueToQSize.Inc(1)
 		log.Dev.VInfof(ctx, 1, "dropping due to exceeding queue max size: priority=%0.3f, replica=%v",

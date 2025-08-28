@@ -113,19 +113,6 @@ var PriorityInversionRequeue = settings.RegisterBoolSetting(
 	false,
 )
 
-var ReplicateQueueMaxSize = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"kv.replicate_queue.max_size",
-	"controls max size of the replicate queue. Replicate queue starts dropping replicas when exceeding the max size.",
-	defaultQueueMaxSize,
-	settings.WithValidateInt(func(v int64) error {
-		if v < defaultQueueMaxSize {
-			return errors.Errorf("cannot be set to a value lower than %d: %d", defaultQueueMaxSize, v)
-		}
-		return nil
-	}),
-)
-
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
@@ -772,7 +759,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 	rq.baseQueue = newBaseQueue(
 		"replicate", rq, store,
 		queueConfig{
-			maxSize:              int(ReplicateQueueMaxSize.Get(&store.cfg.Settings.SV)),
+			maxSize:              kvserverbase.ReplicateQueueMaxSize,
 			needsLease:           true,
 			needsSpanConfigs:     true,
 			acceptsUnsplitRanges: false,
