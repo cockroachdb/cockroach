@@ -32,5 +32,8 @@ go_library(
     embed = [":wagpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/kv/kvpb"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
 )

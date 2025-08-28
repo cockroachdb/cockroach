@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/kr/text"
 )
 
 // PrintEngineKeyValue attempts to print the given key-value pair to
@@ -136,7 +138,8 @@ func SprintMVCCKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 
 	// TODO(pav-kv): some functions here do not check the key, so can accidentally
 	// succeed parsing values that have a different "type", and print them in a
-	// misleading way. Make all these functions key-aware.
+	// misleading way. Make all these functions key-aware, and use lookups for
+	// efficiency.
 	decoders := append(DebugSprintMVCCKeyValueDecoders,
 		tryRangeIDKey,
 		tryRangeDescriptor,
@@ -144,6 +147,7 @@ func SprintMVCCKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 		tryTxn,
 		tryTimeSeries,
 		tryIntent,
+		tryWAGKey,
 		func(kv storage.MVCCKeyValue) (string, error) {
 			// No better idea, just print raw bytes and hope that folks use `less -S`.
 			return fmt.Sprintf("%q", kv.Value), nil
@@ -463,6 +467,40 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 		return "", err
 	}
 	return msg.String(), nil
+}
+
+func tryWAGKey(kv storage.MVCCKeyValue) (string, error) {
+	if !bytes.HasPrefix(kv.Key.Key, keys.StoreWAGPrefix()) {
+		return "", errors.New("not a WAG node key")
+	}
+	var node wagpb.Node
+	if err := node.Unmarshal(kv.Value); err != nil { // nolint:protounmarshal
+		return "", err
+	}
+
+	str := fmt.Appendf(nil, "%v %s", node.Type, node.Addr)
+	if c, d := node.Create, node.Destroy; c != 0 || len(d) != 0 {
+		if c != 0 {
+			str = fmt.Appendf(str, " create:%d", c)
+		}
+		if len(d) != 0 {
+			str = fmt.Appendf(str, " destroy:%v", d)
+		}
+	}
+
+	if b := node.Mutation.Batch; len(b) > 0 {
+		bs, err := DecodeWriteBatch(b)
+		if err != nil {
+			bs = "failed to decode write batch: " + err.Error()
+		}
+		str = fmt.Appendf(str, "\n%s", text.Indent(bs, "> "))
+	}
+	if ing := node.Mutation.Ingestion; ing != nil {
+		// TODO(pav-kv): make this format nicely. Currently, this proto is too big.
+		str = fmt.Appendf(str, "\ningestion: %v", ing)
+	}
+
+	return string(str), nil
 }
 
 func tryMeta(kv storage.MVCCKeyValue) (string, error) {
