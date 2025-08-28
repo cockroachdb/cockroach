@@ -353,11 +353,7 @@ func (logger{{.Name}}) {{with $sev}}{{.Name}}{{end}}fDepth(ctx context.Context, 
 //
 {{with $sev}}{{.Comment}}{{end -}}
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.{{with $sev}}{{.Name}}{{end}}f instead
 func {{with $sev}}{{.Name}}{{end}}f(ctx context.Context, format string, args ...interface{}) {
   logfDepth(ctx, 1, severity.{{with $sev}}{{.NAME}}{{end}}, channel.{{.NAME}}, format, args...)
 }
@@ -370,11 +366,7 @@ func {{with $sev}}{{.Name}}{{end}}f(ctx context.Context, format string, args ...
 //
 {{with $sev}}{{.Comment}}{{end -}}
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.V{{with $sev}}{{.Name}}{{end}}f instead
 func V{{with $sev}}{{.Name}}{{end}}f(ctx context.Context, level Level, format string, args ...interface{}) {
   if VDepth(level, 1) {
     logfDepth(ctx, 1, severity.{{with $sev}}{{.NAME}}{{end}}, channel.{{.NAME}}, format, args...)
@@ -389,11 +381,7 @@ func V{{with $sev}}{{.Name}}{{end}}f(ctx context.Context, level Level, format st
 //
 {{with $sev}}{{.Comment}}{{end -}}
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.{{with $sev}}{{.Name}}{{end}} instead
 func {{with $sev}}{{.Name}}{{end}}(ctx context.Context, msg string) {
   logfDepth(ctx, 1, severity.{{with $sev}}{{.NAME}}{{end}}, channel.{{.NAME}}, msg)
 }
@@ -407,11 +395,7 @@ func {{with $sev}}{{.Name}}{{end}}(ctx context.Context, msg string) {
 //
 {{with $sev}}{{.Comment}}{{end -}}
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.{{with $sev}}{{.Name}}{{end}}fDepth instead
 func {{with $sev}}{{.Name}}{{end}}fDepth(ctx context.Context, depth int, format string, args ...interface{}) {
   logfDepth(ctx, depth+1, severity.{{with $sev}}{{.NAME}}{{end}}, channel.{{.NAME}}, format, args...)
 }
@@ -466,11 +450,7 @@ func (logger{{.Name}}) VEventfDepth(ctx context.Context, depth int, level Level,
 //
 {{.Comment -}}
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.Shout instead
 func Shout(ctx context.Context, sev Severity, msg string) {
   shoutfDepth(ctx, 1, sev, channel.{{.NAME}}, msg)
 }
@@ -481,11 +461,7 @@ func Shout(ctx context.Context, sev Severity, msg string) {
 //
 {{.Comment -}}
 //
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
+// Deprecated: use log.Dev.Shoutf instead
 func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
   shoutfDepth(ctx, 1, sev, channel.{{.NAME}}, format, args...)
 }

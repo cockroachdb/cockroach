@@ -189,7 +189,7 @@ func (is *indexSplitAndScatter) getSplitPointsWithStats(
 	// we generated any split points above
 	if len(splitPoints) > 0 {
 		splitPoints = append(splitPoints, is.codec.IndexPrefix(uint32(table.GetID()), uint32(indexToBackfill.GetID())))
-		log.Infof(ctx, "generated %d split points from statistics for tableId=%d index=%d", len(splitPoints), table.GetID(), indexToBackfill.GetID())
+		log.Dev.Infof(ctx, "generated %d split points from statistics for tableId=%d index=%d", len(splitPoints), table.GetID(), indexToBackfill.GetID())
 	}
 	return splitPoints, nil
 }
@@ -272,7 +272,7 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	if len(splitPoints) == 0 {
 		splitPoints, err = is.getSplitPointsWithStats(ctx, table, indexToBackfill, nSplits)
 		if err != nil {
-			log.Warningf(ctx, "unable to get split points for stats for tableID=%d index=%d due to %v", tableID, indexToBackfill.GetID(), err)
+			log.Dev.Warningf(ctx, "unable to get split points for stats for tableID=%d index=%d due to %v", tableID, indexToBackfill.GetID(), err)
 		}
 	}
 

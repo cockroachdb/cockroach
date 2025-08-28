@@ -617,9 +617,9 @@ func (m *Manager) WaitForNewVersion(
 
 				if regionStaleSessionCount != 0 { // quit early
 					if region == "" {
-						log.Infof(ctx, "%d sessions holding stale descriptor", regionStaleSessionCount)
+						log.Dev.Infof(ctx, "%d sessions holding stale descriptor", regionStaleSessionCount)
 					} else {
-						log.Infof(ctx, "Region '%s' has %d sessions holding stale descriptor", region, regionStaleSessionCount)
+						log.Dev.Infof(ctx, "Region '%s' has %d sessions holding stale descriptor", region, regionStaleSessionCount)
 					}
 					break
 				}
@@ -1211,13 +1211,13 @@ func (m *Manager) purgeOldVersions(
 		// Otherwise, we ran into some type of transient issue, where the sqllivness
 		// session was expired. This could happen if the sqlliveness range is slow
 		// for some reason.
-		log.Infof(ctx, "unable to acquire lease on latest descriptor "+
+		log.Dev.Infof(ctx, "unable to acquire lease on latest descriptor "+
 			"version of ID: %d, retrying...", id)
 	}
 	// As a last resort, we will release all versions of the descriptor. This is
 	// suboptimal, but the safest option.
 	if errors.Is(err, errRenewLease) {
-		log.Warningf(ctx, "unable to acquire lease on latest descriptor "+
+		log.Dev.Warningf(ctx, "unable to acquire lease on latest descriptor "+
 			"version of ID: %d, cleaning up all versions from storage.", id)
 		err = nil
 	}

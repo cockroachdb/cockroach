@@ -128,7 +128,7 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 			}
 			storeToNode[roachpb.StoreID(si)] = roachpb.NodeID(ni)
 		}
-		log.Infof(ctx, "Using embedded store-to-node mapping from the tsdump file itself. "+
+		log.Dev.Infof(ctx, "Using embedded store-to-node mapping from the tsdump file itself. "+
 			"Skipped check for explicit store-to-node mapping file.")
 	} else {
 		// Reset file to beginning for subsequent decoding.
@@ -136,7 +136,7 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 			return err
 		}
 		dec = gob.NewDecoder(f)
-		log.Infof(ctx, "Embedded metadata not found in the tsdump file. "+
+		log.Dev.Infof(ctx, "Embedded metadata not found in the tsdump file. "+
 			"Reading from the store-to-node mapping file.")
 
 		// Fallback to explicit YAML mapping file.

@@ -348,7 +348,7 @@ func (r *logicalReplicationResumer) ingest(
 			case <-t.C:
 				newDest, err := reloadDest(ctx, ingestionJob.ID(), jobExecCtx.ExecCfg())
 				if err != nil {
-					log.Warningf(ctx, "failed to check for updated configuration: %v", err)
+					log.Dev.Warningf(ctx, "failed to check for updated configuration: %v", err)
 				} else if newDest != resolvedDest {
 					return errors.Mark(errors.Newf("replan due to detail change: old=%s, new=%s", resolvedDest, newDest), sql.ErrPlanChanged)
 				}
