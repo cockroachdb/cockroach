@@ -2810,15 +2810,6 @@ func anonymizeStmtAndConstants(stmt tree.Statement, vt VirtualTabler) string {
 	return f.CloseAndGetString()
 }
 
-// WithAnonymizedStatement attaches the anonymized form of a statement
-// to an error object.
-func WithAnonymizedStatement(err error, stmt tree.Statement, vt VirtualTabler) error {
-	anonStmtStr := anonymizeStmtAndConstants(stmt, vt)
-	anonStmtStr = truncateStatementStringForTelemetry(anonStmtStr)
-	return errors.WithSafeDetails(err,
-		"while executing: %s", errors.Safe(anonStmtStr))
-}
-
 // SessionTracing holds the state used by SET TRACING statements in the context
 // of one SQL session.
 // It holds the current trace being collected (or the last trace collected, if
