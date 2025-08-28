@@ -75,6 +75,37 @@ SQL Layer (pkg/sql/) → Distributed KV (pkg/kv/) → Storage (pkg/storage/)
 4. **Code Generation**: After schema/proto changes, run `./dev generate go`.
 5. **Linting**: Run with `./dev lint` or `./dev lint --short`. This takes a while, so no need to run it regularly.
 
+### Go Code Navigation and Analysis (gopls MCP)
+
+When working with Go code in this repository, use the gopls MCP server tools for efficient code navigation and analysis. **Always prefer MCP tools over bash commands** (`grep`, `find`) for Go code analysis.
+
+**Read Workflow (for understanding code):**
+1. **Understand workspace layout**: Use `go_workspace` to understand if it's a module, workspace, or GOPATH project
+   - MUST use at the start of every session
+2. **Find relevant symbols**: Use `go_search` for fuzzy searching of types, functions, or variables
+   - Start specific when known: `go_search({"query":"SQLParser"})`
+   - Use broader terms for exploration: `go_search({"query":"sql"})` (expect large results)
+   - Example: `go_search({"query":"Server"})` to find Server-related symbols in pkg/server
+3. **Understand file dependencies**: Use `go_file_context` immediately after reading any Go file to see intra-package dependencies
+   - Skip for simple files or when focused on single functions to manage context
+   - Example: `go_file_context({"file":"pkg/sql/parser/parse.go"})`
+4. **Understand package APIs**: Use `go_package_api` to see what a package provides externally
+   - Focus on unfamiliar packages or service boundaries rather than standard packages
+   - Example: `go_package_api({"packagePaths":["github.com/cockroachdb/cockroach/pkg/sql/opt"]})`
+
+**Edit Workflow (for making changes):**
+1. **Read first**: Follow the Read Workflow before making edits
+2. **Find references**: Use `go_symbol_references` before modifying any symbol definition
+   - Critical for understanding impact in this large codebase
+   - Example: `go_symbol_references({"file":"pkg/server/server.go","symbol":"Server.Start"})`
+3. **Make edits**: Complete all planned edits including reference updates
+4. **Check for errors**: MUST call `go_diagnostics` after every code modification
+   - Run only on files you've modified, not entire packages or workspace
+   - Example: `go_diagnostics({"files":["pkg/sql/parser/parse.go"]})`
+5. **Fix errors**: Apply suggested fixes from diagnostics, then re-run `go_diagnostics`
+6. **Run tests**: Only after no errors, run tests for changed packages
+   - Use package-specific testing: `go test ./pkg/sql/parser/...` not `go test ./pkg/sql/...`
+
 ### Testing Strategy
 
 CockroachDB has comprehensive testing infrastructure:
