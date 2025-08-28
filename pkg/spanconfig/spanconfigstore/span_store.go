@@ -231,6 +231,19 @@ func (s *spanConfigStore) getSpanConfigForKey(
 		found = true
 		break
 	}
+	// The pebble span policy function needs to look up span configs for keys that
+	// might not have one and it needs to be able to "walk" to the next config after
+	// that key.
+	// TODO(radu): figure out a better way to handle this case, at least to
+	// quiet the warning below.
+	if !found {
+		sp = roachpb.Span{Key: key.AsRawKey()}
+		query = makeQueryEntry(sp)
+		iter.SeekGE(query)
+		if iter.Valid() {
+			confSpan.EndKey = iter.Cur().span.Key
+		}
+	}
 	if !found && log.ExpensiveLogEnabled(ctx, 1) {
 		log.Warningf(ctx, "span config not found for %s", key.String())
 	}

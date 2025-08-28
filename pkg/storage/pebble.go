@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -543,7 +544,6 @@ func DefaultPebbleOptions() *pebble.Options {
 	opts.TargetByteDeletionRate = 128 << 20 // 128 MB
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
 
-	opts.Experimental.SpanPolicyFunc = spanPolicyFunc
 	opts.Experimental.UserKeyCategories = userKeyCategories
 
 	opts.Levels[0] = pebble.LevelOptions{
@@ -585,7 +585,8 @@ var (
 	spanPolicyLocalRangeIDEndKey   = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd()})
 	spanPolicyLockTableStartKey    = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix})
 	spanPolicyLockTableEndKey      = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()})
-	spanPolicyLocalEndKey          = EncodeMVCCKey(MVCCKey{Key: keys.LocalPrefix.PrefixEnd()})
+	spanPolicyLocalEndKey          = EncodeMVCCKey(MVCCKey{Key: keys.LocalMax})
+	spanPolicySystemEndKey         = EncodeMVCCKey(MVCCKey{Key: keys.SystemMax})
 
 	spanPolicyLocalKeys = pebble.MakeStaticSpanPolicyFunc(cockroachkvs.Compare,
 		// Range-ID keyspace includes the raft log, which is rarely read and
@@ -611,10 +612,16 @@ var (
 	)
 )
 
-// spanPolicyFunc is a pebble.SpanPolicyFunc that applies special policies for
-// the CockroachDB keyspace.
-func spanPolicyFunc(bounds pebble.UserKeyBounds) (pebble.SpanPolicy, error) {
-	if cockroachkvs.Compare(bounds.Start, spanPolicyLocalEndKey) < 0 {
+func (p *Pebble) spanPolicyFunc(bounds pebble.UserKeyBounds) (pebble.SpanPolicy, error) {
+	if cockroachkvs.Compare(bounds.Start, spanPolicySystemEndKey) < 0 {
+		if cockroachkvs.Compare(bounds.Start, spanPolicyLocalEndKey) >= 0 {
+			return pebble.SpanPolicy{
+				KeyRange: pebble.KeyRange{
+					Start: spanPolicyLocalEndKey,
+					End:   spanPolicySystemEndKey,
+				},
+			}, nil
+		}
 		policy, err := spanPolicyLocalKeys(bounds)
 		if err != nil {
 			return pebble.SpanPolicy{}, err
@@ -633,11 +640,109 @@ func spanPolicyFunc(bounds pebble.UserKeyBounds) (pebble.SpanPolicy, error) {
 		}
 		return policy, nil
 	}
-	return pebble.SpanPolicy{
-		KeyRange: pebble.KeyRange{
-			Start: spanPolicyLocalEndKey,
-		},
-	}, nil
+
+	if !p.spanReaderInitialized.Load() {
+		return pebble.SpanPolicy{
+			KeyRange: pebble.KeyRange{
+				Start: slices.Clone(bounds.Start),
+			},
+		}, nil
+	}
+
+	startKey, ok1 := DecodeEngineKey(bounds.Start)
+	endKey, ok2 := DecodeEngineKey(bounds.End.Key)
+	if !ok1 || !ok2 {
+		return pebble.SpanPolicy{}, errors.AssertionFailedf("invalid bounds %s", bounds)
+	}
+
+	spanConfig, span, err := p.spanReader.GetSpanConfigForKey(context.Background(), roachpb.RKey(startKey.Key))
+	if err != nil {
+		return pebble.SpanPolicy{}, err
+	}
+	var sp pebble.SpanPolicy
+	if len(span.Key) > 0 {
+		// TODO(radu): these allocations are unfortunate.
+		sp.KeyRange.Start = EncodeMVCCKey(MVCCKey{Key: span.Key})
+	} else {
+		// If the key is not part of any span config, span.Key is empty.
+		sp.KeyRange.Start = slices.Clone(bounds.Start)
+	}
+
+	spanEndKey := span.EndKey
+	if tieringPolicy := spanConfig.StorageTieringPolicy; tieringPolicy != nil {
+		sp.TieringPolicy = makeTieringPolicy(tieringPolicy)
+	} else {
+		// There is no special policy for this span; keep reading span configs until
+		// we reach bounds.End or we reach a config that includes tiering.
+		for len(spanEndKey) > 0 {
+			const exclusiveBoundary = 0
+			if cmp := spanEndKey.Compare(endKey.Key); cmp > 0 || (cmp == 0 && len(endKey.Version) == 0 && bounds.End.Kind == exclusiveBoundary) {
+				// This span config ends at or beyond bounds.End.
+				break
+			}
+			nextSpanConfig, nextSpan, err := p.spanReader.GetSpanConfigForKey(context.Background(), roachpb.RKey(spanEndKey))
+			if err != nil {
+				return pebble.SpanPolicy{}, err
+			}
+			if nextSpanConfig.StorageTieringPolicy != nil {
+				break
+			}
+			spanEndKey = nextSpan.EndKey
+		}
+	}
+	if len(spanEndKey) > 0 {
+		sp.KeyRange.End = EncodeMVCCKey(MVCCKey{Key: spanEndKey})
+	}
+
+	if debugSpanPolicy {
+		fmt.Printf("spanPolicyFunc %s-%s: returning [%s, %s): ", startKey, endKey, span.Key, spanEndKey)
+		if sp.TieringPolicy == nil {
+			fmt.Printf("no tiering\n")
+		} else {
+			fmt.Printf("%#v\n", sp.TieringPolicy.Policy())
+		}
+	}
+	return sp, nil
+}
+
+func makeTieringPolicy(p *roachpb.StorageTieringPolicy) pebble.TieringPolicyAndExtractor {
+	pebbleTieringPolicy := pebble.TieringPolicy{
+		SpanID: 1, // TODO(radu): generate a span ID and store in spanConfig.StorageTieringPolicy
+	}
+	switch {
+	case p.FixedThreshold > 0:
+		pebbleTieringPolicy.ColdTierLTThreshold = pebble.TieringAttribute(p.FixedThreshold)
+	case p.AgeSeconds > 0:
+		threshold := time.Now().Add(-time.Second * time.Duration(p.AgeSeconds)).Unix()
+		pebbleTieringPolicy.ColdTierLTThreshold = pebble.TieringAttribute(max(threshold, 0))
+	default:
+		panic(errors.AssertionFailedf("invalid tiering policy %#v", p))
+	}
+	// TODO(radu): we shouldn't use an interface which requires us to allocate.
+	// We should just return the policy and the extractor function.
+	return &tieringPolicyAndExtractor{pebbleTieringPolicy}
+}
+
+const debugSpanPolicy = true
+
+type tieringPolicyAndExtractor struct {
+	policy pebble.TieringPolicy
+}
+
+var _ pebble.TieringPolicyAndExtractor = (*tieringPolicyAndExtractor)(nil)
+
+func (t *tieringPolicyAndExtractor) Policy() pebble.TieringPolicy {
+	return t.policy
+}
+
+func (t *tieringPolicyAndExtractor) ExtractAttribute(
+	userKey []byte, value []byte,
+) (pebble.TieringAttribute, error) {
+	a, err := DecodeTieringAttributeFromMVCCValue(value)
+	if err != nil {
+		return 0, err
+	}
+	return pebble.TieringAttribute(a), err
 }
 
 func shortAttributeExtractorForValues(
@@ -761,6 +866,9 @@ type Pebble struct {
 	lowDiskSpaceFunc atomic.Pointer[func(pebble.LowDiskSpaceInfo)]
 
 	singleDelLogEvery log.EveryN
+
+	spanReader            spanconfig.StoreReader
+	spanReaderInitialized atomic.Bool
 }
 
 // WorkloadCollector implements an workloadCollectorGetter and returns the
@@ -811,6 +919,11 @@ func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) error {
 		}
 	}
 	return nil
+}
+
+func (p *Pebble) SetSpanConfigReader(reader spanconfig.StoreReader) {
+	p.spanReader = reader
+	p.spanReaderInitialized.Store(true)
 }
 
 // GetStoreID returns to configured store ID.
@@ -1025,6 +1138,8 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		singleDelLogEvery:       log.Every(5 * time.Minute),
 		diskWriteStatsCollector: cfg.DiskWriteStatsCollector,
 	}
+
+	cfg.opts.Experimental.SpanPolicyFunc = p.spanPolicyFunc
 
 	// Wrap the CompactionConcurrencyRange function to allow overriding the lower
 	// and upper values at runtime through Engine.SetCompactionConcurrency.

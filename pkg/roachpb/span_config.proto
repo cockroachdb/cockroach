@@ -36,6 +36,25 @@ message GCPolicy {
   bool ignore_strict_enforcement = 3;
 }
 
+// StorageTieringPolicy dictates the policy for separating KVs across different
+// storage tiers (when enabled). All KVs encode a "tiering attribute" and this
+// policy describes how to interpret the attribute to decide if a KV belongs in
+// the primary or secondary tier.
+message StorageTieringPolicy {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+  // AgeSeconds is set when the tiering attribute for the KVs is a Unix
+  // timestamp (the number of seconds elapsed since January 1, 1970 UTC); in
+  // this case all KVs with tiering timestamps older than AgeSeconds can go to
+  // the secondary tier.
+  int32 age_seconds = 1;
+  // FixedThreshold is set when the tiering attribute for the KVs is an
+  // arbitrary value and all non-zero tiering attribute values less than the
+  // threshold can go to the secondary tier. The zero attribute value is
+  // reserved for "unknown" and always stays in the primary tier.
+  int64 fixed_threshold = 2;
+}
+
 // ProtectionPolicy dictates a protection policy against garbage collection that
 // applies over a given span.
 message ProtectionPolicy {
@@ -237,7 +256,11 @@ message SpanConfig {
   // serviced in KV, to decide whether or not to send back any row data.
   bool exclude_data_from_backup = 11;
 
-  // Next ID: 12
+  // StorageTieringPolicy dictates the policy for separating KVs across different
+  // storage tiers (only set when tiering is enabled).
+  StorageTieringPolicy storage_tiering_policy = 12;
+
+  // Next ID: 13
   //
   // When adding a field, also add a check a to `ValidateSystemTargetSpanConfig`
   // if it is not expected to be set on a SpanConfig corresponding to a

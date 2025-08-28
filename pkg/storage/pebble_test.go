@@ -1874,7 +1874,8 @@ func TestPebbleSpanPolicyFunc(t *testing.T) {
 	for _, tc := range cases {
 		t.Run("", func(t *testing.T) {
 			ek := EngineKey{Key: tc.startKey}.Encode()
-			policy, err := spanPolicyFunc(pebble.UserKeyBounds{Start: ek})
+			var p Pebble
+			policy, err := p.spanPolicyFunc(pebble.UserKeyBounds{Start: ek})
 			require.NoError(t, err)
 			want := tc.wantPolicy
 			// Accept any start key <= ek.
