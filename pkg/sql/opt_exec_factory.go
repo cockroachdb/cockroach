@@ -808,7 +808,7 @@ func constructVirtualTableLookupJoin(
 	onCond tree.TypedExpr,
 ) (planNode, error) {
 	tn := &table.(*optVirtualTable).name
-	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn, p)
+	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err
 	}
