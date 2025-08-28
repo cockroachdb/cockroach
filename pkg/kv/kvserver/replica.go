@@ -2963,8 +2963,23 @@ func (r *Replica) maybeEnqueueProblemRange(
 	r.store.metrics.DecommissioningNudgerEnqueue.Inc(1)
 	// TODO(dodeca12): Figure out a better way to track the
 	// decommissioning nudger enqueue failures/errors.
-	r.store.replicateQueue.AddAsync(ctx, r,
-		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
+	r.store.replicateQueue.AddAsyncWithCallback(ctx, r,
+		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority(), processCallback{
+			onProcessResult: func(err error) {
+				if err != nil {
+					// bump the metrics
+					log.KvDistribution.Errorf(ctx,
+						"decommissioning nudger failed to enqueue replica due to %v", err)
+				}
+			},
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				if err != nil {
+					// bump the metrics
+					log.KvDistribution.Errorf(ctx,
+						"decommissioning nudger failed to process replica due to %v", err)
+				}
+			},
+		})
 }
 
 // SendStreamStats sets the stats for the replica send streams that belong to
