@@ -897,12 +897,10 @@ func (rq *replicateQueue) processOneChange(
 
 	inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action)
 	if inversion {
-		log.KvDistribution.Infof(ctx,
+		log.KvDistribution.VInfof(ctx, 2,
 			"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
 			shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
-	}
-	if PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
-		if shouldRequeue {
+		if shouldRequeue && PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
 			// Return true here to requeue the range. We can't return an error here
 			// because rq.process only requeue when error is nil. See
 			// replicateQueue.process for more details.

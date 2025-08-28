@@ -3259,12 +3259,21 @@ func withinPriorityRange(priority float64) bool {
 // the priority corresponding to the action computed at processing time. It
 // returns whether there was a priority inversion and whether the caller should
 // skip the processing of the range since the inversion is considered unfair.
-// Currently, we only consider the inversion as unfair if it has went from a
+// Currently, we only consider the inversion as unfair if it has gone from a
 // repair action to lowest priority (AllocatorConsiderRebalance). We let
 // AllocatorRangeUnavailable, AllocatorNoop pass through since they are noop.
+//
+// NB: If shouldRequeue is true, isInversion must be true.
 func CheckPriorityInversion(
 	priorityAtEnqueue float64, actionAtProcessing AllocatorAction,
 ) (isInversion bool, shouldRequeue bool) {
+	// priorityAtEnqueue of -1 is a special case reserved for processing logic to
+	// run even if there’s a priority inversion. If the priority is not -1, the
+	// range may be re-queued to be processed with the correct priority. It is
+	// used for things that call into baseQueue.process without going through the
+	// replicate queue. For example, s.ReplicateQueueDryRun or
+	// r.scatterRangeAndRandomizeLeases.
+
 	// NB: we need to check for when priorityAtEnqueue falls within the range
 	// of the allocator actions because store.Enqueue might enqueue things with
 	// a very high priority (1e5). In those cases, we do not want to requeue
