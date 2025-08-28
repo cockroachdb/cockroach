@@ -1515,10 +1515,10 @@ func (rr requestRecord) toResp(
 		// a lock, we add it to the buffer since we may need to flush it as
 		// replicated lock.
 		if rr.transformed {
-
 			transformedGetResponse := br.GetInner().(*kvpb.GetResponse)
 			valueWasPresent := transformedGetResponse.Value.IsPresent()
-			lockShouldHaveBeenAcquired := valueWasPresent || req.LockNonExisting
+			lockShouldHaveBeenAcquired := (valueWasPresent || req.LockNonExisting) &&
+				transformedGetResponse.ResumeSpan == nil
 
 			if lockShouldHaveBeenAcquired {
 				dla := &bufferedDurableLockAcquisition{
