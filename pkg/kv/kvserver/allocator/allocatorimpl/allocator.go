@@ -965,10 +965,12 @@ func (a *Allocator) ComputeAction(
 	// the caller expects the processing logic to be invoked even if there's a
 	// priority inversion. If the priority is not -1, the range might be re-queued
 	// to be processed with the correct priority.
-	if priority == -1 && buildutil.CrdbTestBuild {
-		log.Fatalf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
-	} else {
-		log.Warningf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
+	if priority == -1 {
+		if buildutil.CrdbTestBuild {
+			log.Fatalf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
+		} else {
+			log.Warningf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
+		}
 	}
 	return action, priority
 }
