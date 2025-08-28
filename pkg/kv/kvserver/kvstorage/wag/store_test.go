@@ -8,6 +8,7 @@ package wag
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -45,6 +46,9 @@ func TestWrite(t *testing.T) {
 	write("init", func(w storage.Writer) error { return initReplica(&s, w, id, 10) })
 	write("split", func(w storage.Writer) error { return splitReplica(&s, w, id, 200) })
 
+	// TODO(pav-kv): the trailing \n in DecodeWriteBatch is duplicated with
+	// recursion. Remove it, and let the caller handle new lines.
+	out = strings.ReplaceAll(out, "\n\n", "\n")
 	echotest.Require(t, out, filepath.Join("testdata", t.Name()+".txt"))
 }
 
