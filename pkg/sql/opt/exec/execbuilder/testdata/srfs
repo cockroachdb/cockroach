@@ -303,6 +303,11 @@ vectorized: true
                 │ columns: (x, y, unnest)
                 │ estimated row count: 2,000 (missing stats)
                 │
+                ├── • values
+                │     columns: ()
+                │     ├── (xy.x,)
+                │     └── (y,)
+                │
                 └── • scan
                       columns: (x, y)
                       estimated row count: 1,000 (missing stats)

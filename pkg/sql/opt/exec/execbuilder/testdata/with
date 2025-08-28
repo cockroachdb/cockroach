@@ -213,6 +213,14 @@ vectorized: true
     │
     └── • apply join (left outer)
         │
+        ├── • with &1 (foo)
+        │     ├── materialized
+        │     ├── select
+        │     │    ├── scan x
+        │     │    └── filters
+        │     │         └── x.a = y.a
+        │     └── with-scan &1 (foo)
+        │
         └── • scan
               missing stats
               table: y@y_pkey
@@ -228,6 +236,14 @@ distribution: local
 vectorized: true
 ·
 • apply join
+│
+├── • with &1 (foo)
+│     ├── materialized
+│     ├── select
+│     │    ├── scan y
+│     │    └── filters
+│     │         └── y.a <= column1
+│     └── with-scan &1 (foo)
 │
 └── • values
       size: 1 column, 3 rows

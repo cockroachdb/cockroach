@@ -132,6 +132,10 @@ explain(shape):
 • apply join (semi)
 │ pred: column1 = a
 │
+├── • values
+│     ├── (a,)
+│     └── (b,)
+│
 └── • scan
       table: abc@abc_pkey
       spans: FULL SCAN

@@ -2616,6 +2616,18 @@ vectorized: true
     │
     └── • apply join (left outer)
         │
+        ├── • distinct-on
+        │     └── project
+        │     ├── select
+        │     │    ├── scan bc
+        │     │    │    └── computed column expressions
+        │     │    │         └── c
+        │     │    │              └── b * ‹×›
+        │     │    └── filters
+        │     │         └── (b * f) < ‹×›
+        │     └── projections
+        │     └── (f + (b * ‹×›)) + ‹×›
+        │
         └── • scan
               missing stats
               table: f@f_pkey
@@ -2642,6 +2654,19 @@ vectorized: true
     └── • apply join (left outer)
         │ columns: (f, rowid, column13)
         │ estimated row count: 333,333 (missing stats)
+        │
+        ├── • distinct-on
+        │     columns: ()
+        │     └── project
+        │     ├── select
+        │     │    ├── scan bc
+        │     │    │    └── computed column expressions
+        │     │    │         └── c
+        │     │    │              └── b * ‹×›
+        │     │    └── filters
+        │     │         └── (b * f) < ‹×›
+        │     └── projections
+        │     └── (f + (b * ‹×›)) + ‹×›
         │
         └── • scan
               columns: (f, rowid)
@@ -3022,6 +3047,17 @@ vectorized: true
 • apply join (anti)
 │ pred: (a <= "?column?") IS NOT ‹×›
 │
+├── • project
+│     ├── select
+│     │    ├── scan bc
+│     │    │    └── computed column expressions
+│     │    │         └── c
+│     │    │              └── b * ‹×›
+│     │    └── filters
+│     │         └── b > (a::FLOAT8 * ‹×›)
+│     └── projections
+│     └── (b * ‹×›)::INT8 + ‹×›
+│
 └── • scan
       missing stats
       table: a@a_pkey
@@ -3037,6 +3073,18 @@ vectorized: true
 │ columns: (a)
 │ estimated row count: 667 (missing stats)
 │ pred: (a <= "?column?") IS NOT ‹×›
+│
+├── • project
+│     columns: ()
+│     ├── select
+│     │    ├── scan bc
+│     │    │    └── computed column expressions
+│     │    │         └── c
+│     │    │              └── b * ‹×›
+│     │    └── filters
+│     │         └── b > (a::FLOAT8 * ‹×›)
+│     └── projections
+│     └── (b * ‹×›)::INT8 + ‹×›
 │
 └── • scan
       columns: (a)
