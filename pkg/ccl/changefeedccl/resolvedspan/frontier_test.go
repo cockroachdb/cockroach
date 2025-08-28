@@ -33,7 +33,7 @@ func TestAggregatorFrontier(t *testing.T) {
 	f, err := resolvedspan.NewAggregatorFrontier(
 		statementTime,
 		initialHighwater,
-		mockDecoder{},
+		mockCodec{},
 		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
@@ -79,7 +79,7 @@ func TestAggregatorFrontier(t *testing.T) {
 	f, err = resolvedspan.NewAggregatorFrontier(
 		statementTime,
 		initialHighwater,
-		mockDecoder{},
+		mockCodec{},
 		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
@@ -105,7 +105,7 @@ func TestCoordinatorFrontier(t *testing.T) {
 	f, err := resolvedspan.NewCoordinatorFrontier(
 		statementTime,
 		initialHighwater,
-		mockDecoder{},
+		mockCodec{},
 		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
@@ -154,7 +154,7 @@ func TestCoordinatorFrontier(t *testing.T) {
 	f, err = resolvedspan.NewCoordinatorFrontier(
 		statementTime,
 		initialHighwater,
-		mockDecoder{},
+		mockCodec{},
 		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
@@ -264,7 +264,7 @@ func TestAggregatorFrontier_ForwardResolvedSpan(t *testing.T) {
 	f, err := resolvedspan.NewAggregatorFrontier(
 		hlc.Timestamp{},
 		hlc.Timestamp{},
-		mockDecoder{},
+		mockCodec{},
 		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
@@ -308,12 +308,26 @@ func TestAggregatorFrontier_ForwardResolvedSpan(t *testing.T) {
 	})
 }
 
-// mockDecoder is a simple TablePrefixDecoder for testing
+// mockCodec is a simple TableCodec for testing
 // that treats all keys as table ID 1.
-type mockDecoder struct{}
+type mockCodec struct{}
 
-func (mockDecoder) DecodeTablePrefix(key roachpb.Key) ([]byte, uint32, error) {
+var _ resolvedspan.TableCodec = mockCodec{}
+
+// DecodeTablePrefix implements TableCodec.
+func (mockCodec) DecodeTablePrefix(key roachpb.Key) ([]byte, uint32, error) {
 	return key, 1, nil
+}
+
+// TableSpan implements TableCodec.
+func (mockCodec) TableSpan(tableID uint32) roachpb.Span {
+	if tableID == 1 {
+		// Since the mock codec treats all keys as belonging to table ID 1,
+		// we return the everything span so that all keys will be considered
+		// a part of the table.
+		return keys.EverythingSpan
+	}
+	panic("mock codec only handles table ID 1")
 }
 
 func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
@@ -335,6 +349,10 @@ func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
 
 			// Helper to create spans for tables.
 			tableSpan := func(tableID uint32) roachpb.Span {
+				// Randomly choose either the full table span or an index span.
+				if rnd.Float64() < 0.5 {
+					return codec.TableSpan(tableID)
+				}
 				prefix := codec.IndexPrefix(tableID, 1 /* indexID */)
 				return roachpb.Span{
 					Key:    prefix,
