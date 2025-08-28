@@ -4509,6 +4509,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		TraceID:                    uint64(ex.planner.extendedEvalCtx.Tracing.connSpan.TraceID()),
 		GoroutineID:                ex.ctxHolder.goroutineID,
 		AuthenticationMethod:       sd.AuthenticationMethod,
+		DefaultIsolationLevel:      tree.IsolationLevel(sd.DefaultTxnIsolationLevel).String(),
 	}
 }
 
