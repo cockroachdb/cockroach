@@ -1017,6 +1017,10 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
 		}
 	}
+	// If SpanPolicyFunc is unset, we want to use the default implementation; but
+	// we can't set it right now and we want to allow EnsureDefaults to replace
+	// SpanPolicyFunc if it is nil.
+	setDefaultSpanPolicyFunc := cfg.opts.Experimental.SpanPolicyFunc == nil
 
 	cfg.opts.EnsureDefaults()
 
@@ -1139,7 +1143,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		diskWriteStatsCollector: cfg.DiskWriteStatsCollector,
 	}
 
-	cfg.opts.Experimental.SpanPolicyFunc = p.spanPolicyFunc
+	if setDefaultSpanPolicyFunc {
+		cfg.opts.Experimental.SpanPolicyFunc = p.spanPolicyFunc
+	}
 
 	// Wrap the CompactionConcurrencyRange function to allow overriding the lower
 	// and upper values at runtime through Engine.SetCompactionConcurrency.
