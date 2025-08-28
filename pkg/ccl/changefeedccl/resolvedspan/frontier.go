@@ -474,11 +474,12 @@ func newTableIDPartitioner(decoder TablePrefixDecoder) span.PartitionerFunc[desc
 		if err != nil {
 			return 0, err
 		}
-		_, endKeyTableID, err := decoder.DecodeTablePrefix(sp.EndKey)
+		endKeyRemaining, endKeyTableID, err := decoder.DecodeTablePrefix(sp.EndKey)
 		if err != nil {
 			return 0, err
 		}
-		if startKeyTableID != endKeyTableID {
+		// Reject any spans that cross table boundaries.
+		if startKeyTableID != endKeyTableID && (endKeyTableID != startKeyTableID+1 || len(endKeyRemaining) > 0) {
 			return 0, errors.AssertionFailedf("span encompassing multiple tables: %s", sp)
 		}
 		return descpb.ID(startKeyTableID), nil
