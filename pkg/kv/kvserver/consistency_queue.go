@@ -97,7 +97,7 @@ func newConsistencyQueue(store *Store) *consistencyQueue {
 	q.baseQueue = newBaseQueue(
 		"consistencyChecker", q, store,
 		queueConfig{
-			maxSize:                             defaultQueueMaxSize,
+			maxSize:                             kvserverbase.BaseQueueMaxSize,
 			needsLease:                          true,
 			needsSpanConfigs:                    false,
 			acceptsUnsplitRanges:                true,

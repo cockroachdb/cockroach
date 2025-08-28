@@ -86,7 +86,7 @@ func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue 
 
 	lq.baseQueue = newBaseQueue("lease", lq, store,
 		queueConfig{
-			maxSize:              defaultQueueMaxSize,
+			maxSize:              kvserverbase.BaseQueueMaxSize,
 			needsLease:           true,
 			needsSpanConfigs:     true,
 			acceptsUnsplitRanges: false,
