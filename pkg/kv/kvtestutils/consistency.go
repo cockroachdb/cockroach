@@ -44,10 +44,17 @@ func CheckConsistency(ctx context.Context, db querier, span roachpb.Span) []erro
 		if err := rows.Scan(&rangeID, &key, &status, &detail); err != nil {
 			return []error{err}
 		}
-		// NB: There's a known issue that can result in a 10-byte discrepancy in
-		// SysBytes. See:
-		// https://github.com/cockroachdb/cockroach/issues/93896
-		//
+		// NB: There are a few known issues that can cause a discrepancy in SysBytes
+		// and/or SysCount:
+		// - Only SysBytes: usually +/- 10, 12, 20, 22, and 24 bytes. This is due to
+		//   lack of latching during lease transfers, and these bytes correspond to
+		//   the size of either one or two leases (10 bytes of an epxiration/epoch
+		//   lease and 12 bytes for a leader lease). See:
+		//   https://github.com/cockroachdb/cockroach/issues/93896
+		// - Both SysBytes and SysCount: usually +/- 1 SysCount and any SysBytes.
+		//   This is due to a race between GC and EndTxn requests, and the
+		//   discrepancy corresponds to a transaction record. See:
+		//   https://github.com/cockroachdb/cockroach/issues/152164
 		// This isn't critical, so we ignore such discrepancies.
 		if status == kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT.String() {
 			m := regexp.MustCompile(`.*\ndelta \(stats-computed\): \{(.*)\}`).FindStringSubmatch(detail)
@@ -56,7 +63,13 @@ func CheckConsistency(ctx context.Context, db querier, span roachpb.Span) []erro
 				// Strip out LastUpdateNanos and all zero-valued fields.
 				delta = regexp.MustCompile(`LastUpdateNanos:\d+`).ReplaceAllString(delta, "")
 				delta = regexp.MustCompile(`\S+:0\b`).ReplaceAllString(delta, "")
-				if regexp.MustCompile(`^\s*SysBytes:-?10\s*$`).MatchString(delta) {
+				// The two cases below correspond to the two linked issues above.
+				if regexp.MustCompile(`^\s*SysBytes:-?10|12|20|22|24\s*$`).MatchString(delta) {
+					continue
+				}
+				// The SysCount and SysBytes should be either both positive or negative.
+				if regexp.MustCompile(`^\s*SysBytes:-([0-9]+)\s*SysCount:-1\s*$`).MatchString(delta) ||
+					regexp.MustCompile(`^\s*SysBytes:([0-9]+)\s*SysCount:1\s*$`).MatchString(delta) {
 					continue
 				}
 			}
