@@ -293,7 +293,10 @@ WHERE id = $1
 		}
 	}
 
-	if progress != nil {
+	// NB: if ju.md.Progress was non-nil then progress has been set to the value
+	// from the updater. If it isn't set, progress has the value from the original
+	// scan.
+	if ju.md.Progress != nil {
 		var ts hlc.Timestamp
 		if hwm := progress.GetHighWater(); hwm != nil {
 			ts = *hwm
