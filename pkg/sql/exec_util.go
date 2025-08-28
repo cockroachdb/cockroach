@@ -3478,6 +3478,10 @@ func (m *sessionDataMutator) SetAlwaysDistributeFullScans(val bool) {
 	m.data.AlwaysDistributeFullScans = val
 }
 
+func (m *sessionDataMutator) SetUseSoftLimitForDistributeScan(val bool) {
+	m.data.UseSoftLimitForDistributeScan = val
+}
+
 func (m *sessionDataMutator) SetDistributeJoinRowCountThreshold(val uint64) {
 	m.data.DistributeJoinRowCountThreshold = val
 }
