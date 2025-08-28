@@ -241,9 +241,22 @@ func (f *MultiFrontier[P]) String() string {
 	return buf.String()
 }
 
-// Frontiers returns an iterator over the sub-frontiers.
-func (f *MultiFrontier[P]) Frontiers() iter.Seq2[P, Frontier] {
-	return func(yield func(P, Frontier) bool) {
+// ReadOnlyFrontier is a subset of Frontier with only the methods
+// that are read-only.
+type ReadOnlyFrontier interface {
+	Frontier() hlc.Timestamp
+	PeekFrontierSpan() roachpb.Span
+	Entries() iter.Seq2[roachpb.Span, hlc.Timestamp]
+	SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span, hlc.Timestamp]
+	Len() int
+	String() string
+}
+
+var _ ReadOnlyFrontier = Frontier(nil)
+
+// Frontiers returns an iterator over the sub-frontiers (with read-only access).
+func (f *MultiFrontier[P]) Frontiers() iter.Seq2[P, ReadOnlyFrontier] {
+	return func(yield func(P, ReadOnlyFrontier) bool) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 

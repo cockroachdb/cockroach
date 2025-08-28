@@ -176,7 +176,7 @@ type frontier interface {
 	InBackfill(jobspb.ResolvedSpan) bool
 	AtBoundary() (bool, jobspb.ResolvedSpan_BoundaryType, hlc.Timestamp)
 	All() iter.Seq[jobspb.ResolvedSpan]
-	Frontiers() iter.Seq2[descpb.ID, span.Frontier]
+	Frontiers() iter.Seq2[descpb.ID, span.ReadOnlyFrontier]
 }
 
 func testBackfillSpan(
