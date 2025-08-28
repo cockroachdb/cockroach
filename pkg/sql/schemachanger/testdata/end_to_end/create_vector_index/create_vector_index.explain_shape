@@ -1,0 +1,17 @@
+/* setup */
+SET CLUSTER SETTING feature.vector_index.enabled = true;
+CREATE TABLE t (id INT PRIMARY KEY, embedding VECTOR(3), metadata TEXT);
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE VECTOR INDEX vec_idx ON t (embedding);
+----
+Schema change plan for CREATE VECTOR INDEX ‹vec_idx› ON ‹defaultdb›.‹public›.‹t› (‹embedding›);
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey in relation t
+ │    └── into vec_idx+ (embedding: id)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into vec_idx+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index vec_idx+ in relation t
+ └── execute 2 system table mutations transactions

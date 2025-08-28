@@ -1,0 +1,30 @@
+/* setup */
+SET CLUSTER SETTING feature.vector_index.enabled = true;
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, embedding VECTOR(3), metadata TEXT);
+INSERT INTO t(i, j, embedding, metadata) VALUES (-4, -4, '[1,2,3]', 'data1'), (-2, -2, '[4,5,6]', 'data2'), (-3, -3, NULL, 'null_data');
+CREATE VECTOR INDEX vec_idx ON t(embedding);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›);
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey- in relation t
+ │    ├── into vec_idx+ (embedding: j)
+ │    └── into t_pkey+ (j; i, embedding, metadata)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    ├── from t@[5] into vec_idx+
+ │    └── from t@[9] into t_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ ├── validate UNIQUE constraint backed by index vec_idx+ in relation t
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey+ in relation t
+ │    └── into t_i_key+ (i: j)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[7] into t_i_key+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_i_key+ in relation t
+ └── execute 4 system table mutations transactions

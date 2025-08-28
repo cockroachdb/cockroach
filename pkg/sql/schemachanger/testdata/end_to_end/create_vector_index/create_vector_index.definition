@@ -1,0 +1,46 @@
+setup
+SET CLUSTER SETTING feature.vector_index.enabled = true;
+CREATE TABLE t (id INT PRIMARY KEY, embedding VECTOR(3), metadata TEXT);
+----
+
+# Insert rows with both NULL and non-NULL vector values during backfill
+# to test that the temporary forward index properly excludes NULL vectors
+# while still capturing all changes that affect non-NULL vectors.
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES($stageKey, '[1,2,3]', 'data1');
+INSERT INTO t VALUES($stageKey + 1, NULL, 'null_data1');
+INSERT INTO t VALUES($stageKey + 2, '[4,5,6]', 'data2');
+DELETE FROM t WHERE id = $stageKey;
+INSERT INTO t VALUES($stageKey, '[1,2,3]', 'data1_updated');
+UPDATE t SET embedding = '[7,8,9]' WHERE id = $stageKey + 2;
+UPDATE t SET metadata = 'null_data1_updated' WHERE embedding IS NULL;
+----
+
+# Verify that non-NULL vector rows are properly tracked
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*) FROM t WHERE embedding IS NOT NULL;
+----
+14
+
+# Similar DML operations during the non-revertible phase
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t VALUES($stageKey + 100, '[10,11,12]', 'data3');
+INSERT INTO t VALUES($stageKey + 101, NULL, 'null_data2');
+INSERT INTO t VALUES($stageKey + 102, '[13,14,15]', 'data4');
+DELETE FROM t WHERE id = $stageKey + 100;
+INSERT INTO t VALUES($stageKey + 100, '[10,11,12]', 'data3_updated');
+UPDATE t SET embedding = '[16,17,18]' WHERE id = $stageKey + 102;
+UPDATE t SET metadata = 'null_data2_updated' WHERE embedding IS NULL AND id = $stageKey + 101;
+----
+
+# Verify that non-NULL vector rows are still properly tracked
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*) FROM t WHERE embedding IS NOT NULL;
+----
+4
+
+# Create a vector index - this should use a temporary forward index
+# that excludes NULL vectors as a partial index optimization
+test
+CREATE VECTOR INDEX vec_idx ON t (embedding);
+----
