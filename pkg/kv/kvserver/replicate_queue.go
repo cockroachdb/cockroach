@@ -905,6 +905,10 @@ func ShouldRequeue(
 	return requeue
 }
 
+// priorityInversionLogEveryN rate limits how often we log about priority
+// inversion to avoid spams.
+var priorityInversionLogEveryN = log.Every(3 * time.Second)
+
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
 	repl *Replica,
@@ -918,9 +922,12 @@ func (rq *replicateQueue) processOneChange(
 
 	inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action)
 	if inversion {
-		log.KvDistribution.VInfof(ctx, 2,
-			"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
-			shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
+		if priorityInversionLogEveryN.ShouldLog() {
+			log.KvDistribution.Infof(ctx,
+				"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
+				shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
+		}
+
 		if shouldRequeue && PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
 			// Return true here to requeue the range. We can't return an error here
 			// because rq.process only requeue when error is nil. See
