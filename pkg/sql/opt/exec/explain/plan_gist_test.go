@@ -8,6 +8,7 @@ package explain_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -18,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/datadriven"
+	"github.com/kr/pretty"
 )
 
 func makeGist(ot *opttester.OptTester, t *testing.T) explain.PlanGist {
@@ -49,7 +52,7 @@ func explainGist(gist string, catalog cat.Catalog) string {
 	return ob.BuildString()
 }
 
-func plan(ot *opttester.OptTester, t *testing.T) string {
+func planNode(ot *opttester.OptTester, t *testing.T) *explain.Plan {
 	f := explain.NewFactory(exec.StubFactory{}, &tree.SemaContext{}, &eval.Context{})
 	expr, err := ot.Optimize()
 	if err != nil {
@@ -65,15 +68,59 @@ func plan(ot *opttester.OptTester, t *testing.T) string {
 	if explainPlan == nil {
 		t.Fatal("Couldn't ExecBuild memo, use a logictest instead?")
 	}
+	return explainPlan.(*explain.Plan)
+}
+
+func planString(plan *explain.Plan, t *testing.T) string {
 	flags := explain.Flags{HideValues: true, Deflake: explain.DeflakeAll, OnlyShape: true, ShowPolicyInfo: true}
 	ob := explain.NewOutputBuilder(flags)
-	err = explain.Emit(context.Background(), &eval.Context{}, explainPlan.(*explain.Plan), ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" }, false /* createPostQueryPlanIfMissing */)
+	err := explain.Emit(context.Background(), &eval.Context{}, plan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" }, false /* createPostQueryPlanIfMissing */)
 	if err != nil {
 		t.Error(err)
 	}
 	str := ob.BuildString()
 	fmt.Printf("%s\n", str)
 	return str
+}
+
+func plan(ot *opttester.OptTester, t *testing.T) string {
+	explainPlan := planNode(ot, t)
+	return planString(explainPlan, t)
+}
+
+func decompile(ot *opttester.OptTester, catalog cat.Catalog, t *testing.T) string {
+	explainPlan := planNode(ot, t)
+	var ogPheromone explain.Pheromone
+	var explainShape string
+	if explainPlan != nil && explainPlan.Root != nil {
+		ogPheromone = explain.DecompileToPheromone(explainPlan.Root)
+		explainShape = planString(explainPlan, t)
+	}
+
+	gist := makeGist(ot, t)
+	gistExplainPlan, err := explain.DecodePlanGistToPlan(gist.String(), catalog)
+	if err != nil {
+		panic(err)
+	}
+	var gistPheromone explain.Pheromone
+	if gistExplainPlan != nil && gistExplainPlan.Root != nil {
+		gistPheromone = explain.DecompileToPheromone(gistExplainPlan.Root)
+	}
+
+	tp := treeprinter.New()
+	ogPheromone.Format(tp)
+	ogPheromoneRows := tp.FormattedRows()
+
+	tp = treeprinter.New()
+	gistPheromone.Format(tp)
+	gistPheromoneRows := tp.FormattedRows()
+
+	if diff := pretty.Diff(ogPheromoneRows, gistPheromoneRows); diff != nil {
+		t.Fatalf("Pheromones from original explain tree and plan gist do not match:\n%s\n%s",
+			strings.Join(diff, "\n"), strings.Join(ogPheromoneRows, "\n"))
+	}
+	return fmt.Sprintf("explain(shape):\n%spheromone:\n%s",
+		explainShape, strings.Join(gistPheromoneRows, "\n"))
 }
 
 func TestExplainBuilder(t *testing.T) {
@@ -102,12 +149,14 @@ func TestExplainBuilder(t *testing.T) {
 			return plan(ot, t)
 		case "hash":
 			return fmt.Sprintf("%d\n", makeGist(ot, t).Hash())
+		case "decompile":
+			return decompile(ot, catalog, t)
 		default:
 			return ot.RunCommand(t, d)
 		}
 	}
 	// RFC: should I move this to opt_tester?
-	for _, testfile := range []string{"gists", "gists_tpce", "row_level_security"} {
+	for _, testfile := range []string{"gists", "gists_tpce", "pheromone", "row_level_security"} {
 		t.Run(testfile, func(t *testing.T) {
 			datadriven.RunTest(t, datapathutils.TestDataPath(t, testfile), testGists)
 			// Reset the catalog for the next test.
