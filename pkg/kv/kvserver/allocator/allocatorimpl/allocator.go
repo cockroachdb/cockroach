@@ -3271,7 +3271,7 @@ func CheckPriorityInversion(
 	// run even if there’s a priority inversion. If the priority is not -1, the
 	// range may be re-queued to be processed with the correct priority. It is
 	// used for things that call into baseQueue.process without going through the
-	// replicate queue. For example, s.ReplicateQueueDryRun or
+	// replicate priority queue. For example, s.ReplicateQueueDryRun or
 	// r.scatterRangeAndRandomizeLeases.
 
 	// NB: we need to check for when priorityAtEnqueue falls within the range
