@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "gopls-mcp": {
+      "_comment": "Detached mode/SSE not mature, so don't use daemon mode",
+      "command": "gopls",
+      "args": ["mcp"]
+    }
+  }
+}
