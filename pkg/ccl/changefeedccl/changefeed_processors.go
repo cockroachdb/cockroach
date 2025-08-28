@@ -1855,8 +1855,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 				resolvedTables := &changefeedpb.ResolvedTables{
 					Tables: make(map[descpb.ID]hlc.Timestamp),
 				}
-				for tableID, tableFrontier := range cf.frontier.Frontiers() {
-					resolvedTables.Tables[tableID] = tableFrontier.Frontier()
+				for id, ts := range cf.frontier.Frontiers() {
+					resolvedTables.Tables[id] = ts
 				}
 
 				if err := writeChangefeedJobInfo(ctx, resolvedTablesFilename, resolvedTables, txn, cf.spec.JobID); err != nil {

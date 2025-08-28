@@ -434,11 +434,11 @@ func (b *resolvedSpanBoundary) SafeFormat(s redact.SafePrinter, _ rune) {
 type maybeTablePartitionedFrontier interface {
 	span.Frontier
 
-	// Frontiers returns an iterator over the table ID and sub-frontiers
-	// being tracked by the frontier. If the frontier is not tracking
-	// on a per-table basis, the iterator will return a single frontier
-	// with an ID of 0.
-	Frontiers() iter.Seq2[descpb.ID, span.Frontier]
+	// Frontiers returns an iterator over the table ID and minimum timestamps
+	// for every table being tracked. If the frontier is not tracking on a
+	// per-table basis, the iterator will return a single element with a
+	// table ID of 0 and the frontier's overall minimum timestamp.
+	Frontiers() iter.Seq2[descpb.ID, hlc.Timestamp]
 }
 
 var _ maybeTablePartitionedFrontier = (*span.MultiFrontier[descpb.ID])(nil)
@@ -456,9 +456,9 @@ type notTablePartitionedFrontier struct {
 var _ maybeTablePartitionedFrontier = notTablePartitionedFrontier{}
 
 // Frontiers implements maybeTablePartitionedFrontier.
-func (f notTablePartitionedFrontier) Frontiers() iter.Seq2[descpb.ID, span.Frontier] {
-	return func(yield func(descpb.ID, span.Frontier) bool) {
-		yield(0, f.spanFrontier)
+func (f notTablePartitionedFrontier) Frontiers() iter.Seq2[descpb.ID, hlc.Timestamp] {
+	return func(yield func(descpb.ID, hlc.Timestamp) bool) {
+		yield(0, f.spanFrontier.Frontier())
 	}
 }
 

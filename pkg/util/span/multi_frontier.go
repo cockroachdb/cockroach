@@ -241,14 +241,15 @@ func (f *MultiFrontier[P]) String() string {
 	return buf.String()
 }
 
-// Frontiers returns an iterator over the sub-frontiers.
-func (f *MultiFrontier[P]) Frontiers() iter.Seq2[P, Frontier] {
-	return func(yield func(P, Frontier) bool) {
+// Frontiers returns an iterator over the partition and minimum timestamp
+// for each sub-frontier.
+func (f *MultiFrontier[P]) Frontiers() iter.Seq2[P, hlc.Timestamp] {
+	return func(yield func(P, hlc.Timestamp) bool) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 
 		for partition, frontier := range f.mu.frontiers.all() {
-			if !yield(partition, frontier) {
+			if !yield(partition, frontier.Frontier()) {
 				return
 			}
 		}

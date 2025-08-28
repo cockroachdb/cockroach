@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -176,7 +175,7 @@ type frontier interface {
 	InBackfill(jobspb.ResolvedSpan) bool
 	AtBoundary() (bool, jobspb.ResolvedSpan_BoundaryType, hlc.Timestamp)
 	All() iter.Seq[jobspb.ResolvedSpan]
-	Frontiers() iter.Seq2[descpb.ID, span.Frontier]
+	Frontiers() iter.Seq2[descpb.ID, hlc.Timestamp]
 }
 
 func testBackfillSpan(
@@ -404,8 +403,8 @@ func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
 
 			// Verify per-table resolved timestamps.
 			perTableResolved := make(map[uint32]hlc.Timestamp)
-			for tableID, frontier := range f.Frontiers() {
-				perTableResolved[uint32(tableID)] = frontier.Frontier()
+			for id, ts := range f.Frontiers() {
+				perTableResolved[uint32(id)] = ts
 			}
 			require.Equal(t, makeTS(10), perTableResolved[10])
 			require.Equal(t, makeTS(15), perTableResolved[20])
@@ -423,8 +422,8 @@ func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
 
 			// Verify per-table resolved timestamps again.
 			perTableResolved = make(map[uint32]hlc.Timestamp)
-			for tableID, frontier := range f.Frontiers() {
-				perTableResolved[uint32(tableID)] = frontier.Frontier()
+			for id, ts := range f.Frontiers() {
+				perTableResolved[uint32(id)] = ts
 			}
 			require.Equal(t, makeTS(10), perTableResolved[10])
 			require.Equal(t, makeTS(15), perTableResolved[20])

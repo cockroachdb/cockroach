@@ -6,9 +6,7 @@
 package span_test
 
 import (
-	"cmp"
-	"fmt"
-	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -27,22 +25,22 @@ func TestMultiFrontier_AddSpansAt(t *testing.T) {
 
 	f, err := span.NewMultiFrontier(testingTripartitePartitioner)
 	require.NoError(t, err)
-	require.Equal(t, ``, multiFrontierStr(f))
+	require.Equal(t, ``, prettifyMultiFrontierStr(f.String()))
 
 	// Add a single span.
 	require.NoError(t, f.AddSpansAt(ts(2), sp('a', 'b')))
 	require.Equal(t, ts(2), f.Frontier())
-	require.Equal(t, `1: {{a-b}@2}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-b}@2]}`, prettifyMultiFrontierStr(f.String()))
 
 	// Add another span in same partition but later timestamp.
 	require.NoError(t, f.AddSpansAt(ts(3), sp('c', 'd')))
 	require.Equal(t, ts(2), f.Frontier())
-	require.Equal(t, `1: {{a-b}@2 {c-d}@3}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-b}@2] [{c-d}@3]}`, prettifyMultiFrontierStr(f.String()))
 
 	// Add another span in a different partition with lower timestamp.
 	require.NoError(t, f.AddSpansAt(ts(1), sp('f', 'g')))
 	require.Equal(t, ts(1), f.Frontier())
-	require.Equal(t, `1: {{a-b}@2 {c-d}@3} 3: {{f-g}@1}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-b}@2] [{c-d}@3]} 3: {[{f-g}@1]}`, prettifyMultiFrontierStr(f.String()))
 
 	// Add an invalid span.
 	err = f.AddSpansAt(ts(2), sp('a', 'h'))
@@ -52,7 +50,7 @@ func TestMultiFrontier_AddSpansAt(t *testing.T) {
 	// Add a span that overlaps existing spans.
 	require.NoError(t, f.AddSpansAt(ts(1), sp('a', 'd')))
 	require.Equal(t, ts(1), f.Frontier())
-	require.Equal(t, `1: {{a-b}@2 {b-c}@1 {c-d}@3} 3: {{f-g}@1}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-b}@2] [{b-c}@1] [{c-d}@3]} 3: {[{f-g}@1]}`, prettifyMultiFrontierStr(f.String()))
 }
 
 func TestMultiFrontier_Frontier(t *testing.T) {
@@ -63,7 +61,7 @@ func TestMultiFrontier_Frontier(t *testing.T) {
 		f, err := span.NewMultiFrontier(testingTripartitePartitioner)
 		require.NoError(t, err)
 		require.Equal(t, ts(0), f.Frontier())
-		require.Equal(t, ``, multiFrontierStr(f))
+		require.Equal(t, ``, prettifyMultiFrontierStr(f.String()))
 	})
 
 	// Create an empty multi frontier with an initial timestamp.
@@ -72,7 +70,7 @@ func TestMultiFrontier_Frontier(t *testing.T) {
 		f, err := span.NewMultiFrontierAt(testingTripartitePartitioner, ts(2))
 		require.NoError(t, err)
 		require.Equal(t, ts(0), f.Frontier())
-		require.Equal(t, ``, multiFrontierStr(f))
+		require.Equal(t, ``, prettifyMultiFrontierStr(f.String()))
 	})
 
 	// Create a multi frontier tracking some spans and do various forwards.
@@ -81,19 +79,19 @@ func TestMultiFrontier_Frontier(t *testing.T) {
 			sp('a', 'b'), sp('d', 'e'))
 		require.NoError(t, err)
 		require.Equal(t, ts(3), f.Frontier())
-		require.Equal(t, `1: {{a-b}@3} 2: {{d-e}@3}`, multiFrontierStr(f))
+		require.Equal(t, `1: {[{a-b}@3]} 2: {[{d-e}@3]}`, prettifyMultiFrontierStr(f.String()))
 
 		forwarded, err := f.Forward(sp('a', 'b'), ts(5))
 		require.NoError(t, err)
 		require.False(t, forwarded)
 		require.Equal(t, ts(3), f.Frontier())
-		require.Equal(t, `1: {{a-b}@5} 2: {{d-e}@3}`, multiFrontierStr(f))
+		require.Equal(t, `1: {[{a-b}@5]} 2: {[{d-e}@3]}`, prettifyMultiFrontierStr(f.String()))
 
 		forwarded, err = f.Forward(sp('d', 'e'), ts(5))
 		require.NoError(t, err)
 		require.True(t, forwarded)
 		require.Equal(t, ts(5), f.Frontier())
-		require.Equal(t, `1: {{a-b}@5} 2: {{d-e}@5}`, multiFrontierStr(f))
+		require.Equal(t, `1: {[{a-b}@5]} 2: {[{d-e}@5]}`, prettifyMultiFrontierStr(f.String()))
 	})
 }
 
@@ -117,13 +115,13 @@ func TestMultiFrontier_Forward(t *testing.T) {
 	f, err := span.NewMultiFrontier(
 		testingTripartitePartitioner, sp('a', 'd'), sp('d', 'f'), sp('f', 'k'))
 	require.NoError(t, err)
-	require.Equal(t, `1: {{a-d}@0} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-d}@0]} 2: {[{d-f}@0]} 3: {[{f-k}@0]}`, prettifyMultiFrontierStr(f.String()))
 
 	forwarded, err := f.Forward(sp('a', 'b'), ts(2))
 	require.NoError(t, err)
 	require.False(t, forwarded)
 	require.Equal(t, ts(0), f.Frontier())
-	require.Equal(t, `1: {{a-b}@2 {b-d}@0} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-b}@2] [{b-d}@0]} 2: {[{d-f}@0]} 3: {[{f-k}@0]}`, prettifyMultiFrontierStr(f.String()))
 
 	_, err = f.Forward(sp('a', 'e'), ts(2))
 	require.ErrorContains(t, err,
@@ -133,19 +131,19 @@ func TestMultiFrontier_Forward(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, forwarded)
 	require.Equal(t, ts(0), f.Frontier())
-	require.Equal(t, `1: {{a-d}@2} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-d}@2]} 2: {[{d-f}@0]} 3: {[{f-k}@0]}`, prettifyMultiFrontierStr(f.String()))
 
 	forwarded, err = f.Forward(sp('f', 'k'), ts(2))
 	require.NoError(t, err)
 	require.False(t, forwarded)
 	require.Equal(t, ts(0), f.Frontier())
-	require.Equal(t, `1: {{a-d}@2} 2: {{d-f}@0} 3: {{f-k}@2}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-d}@2]} 2: {[{d-f}@0]} 3: {[{f-k}@2]}`, prettifyMultiFrontierStr(f.String()))
 
 	forwarded, err = f.Forward(sp('d', 'f'), ts(2))
 	require.NoError(t, err)
 	require.True(t, forwarded)
 	require.Equal(t, ts(2), f.Frontier())
-	require.Equal(t, `1: {{a-d}@2} 2: {{d-f}@2} 3: {{f-k}@2}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-d}@2]} 2: {[{d-f}@2]} 3: {[{f-k}@2]}`, prettifyMultiFrontierStr(f.String()))
 }
 
 func TestMultiFrontier_Release(t *testing.T) {
@@ -154,11 +152,11 @@ func TestMultiFrontier_Release(t *testing.T) {
 	f, err := span.NewMultiFrontier(testingTripartitePartitioner, sp('a', 'b'), sp('d', 'f'))
 	require.NoError(t, err)
 	require.Equal(t, 2, f.Len())
-	require.Equal(t, `1: {{a-b}@0} 2: {{d-f}@0}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-b}@0]} 2: {[{d-f}@0]}`, prettifyMultiFrontierStr(f.String()))
 
 	f.Release()
 	require.Equal(t, 0, f.Len())
-	require.Equal(t, ``, multiFrontierStr(f))
+	require.Equal(t, ``, prettifyMultiFrontierStr(f.String()))
 }
 
 func TestMultiFrontier_Entries(t *testing.T) {
@@ -226,17 +224,17 @@ func TestMultiFrontier_Len(t *testing.T) {
 	// Add a single span.
 	require.NoError(t, f.AddSpansAt(ts(1), sp('a', 'b')))
 	require.Equal(t, 1, f.Len())
-	require.Equal(t, `1: {{a-b}@1}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-b}@1]}`, prettifyMultiFrontierStr(f.String()))
 
 	// Add another span in a different partition.
 	require.NoError(t, f.AddSpansAt(ts(2), sp('f', 'g')))
 	require.Equal(t, 2, f.Len())
-	require.Equal(t, `1: {{a-b}@1} 3: {{f-g}@2}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-b}@1]} 3: {[{f-g}@2]}`, prettifyMultiFrontierStr(f.String()))
 
 	// Add a span that merges with an existing span.
 	require.NoError(t, f.AddSpansAt(ts(1), sp('b', 'c')))
 	require.Equal(t, 2, f.Len())
-	require.Equal(t, `1: {{a-c}@1} 3: {{f-g}@2}`, multiFrontierStr(f))
+	require.Equal(t, `1: {[{a-c}@1]} 3: {[{f-g}@2]}`, prettifyMultiFrontierStr(f.String()))
 }
 
 func TestMultiFrontier_String(t *testing.T) {
@@ -277,14 +275,11 @@ func TestMultiFrontier_Frontiers(t *testing.T) {
 	for partition, frontier := range f.Frontiers() {
 		switch partition {
 		case 1:
-			require.Equal(t, ts(1), frontier.Frontier())
-			require.Equal(t, sp('a', 'b'), frontier.PeekFrontierSpan())
+			require.Equal(t, ts(1), frontier)
 		case 2:
-			require.Equal(t, ts(4), frontier.Frontier())
-			require.Equal(t, sp('e', 'f'), frontier.PeekFrontierSpan())
+			require.Equal(t, ts(4), frontier)
 		case 3:
-			require.Equal(t, ts(9), frontier.Frontier())
-			require.Equal(t, sp('i', 'j'), frontier.PeekFrontierSpan())
+			require.Equal(t, ts(9), frontier)
 		default:
 			t.Fatalf("unknown partition: %d", partition)
 		}
@@ -314,28 +309,19 @@ func testingTripartitePartitioner(sp roachpb.Span) (int, error) {
 
 var _ span.PartitionerFunc[int] = testingTripartitePartitioner
 
-func multiFrontierStr[P cmp.Ordered](f *span.MultiFrontier[P]) string {
-	if f == nil {
-		return ""
-	}
-	var buf strings.Builder
-	frontiers := maps.Collect(f.Frontiers())
-	for _, partition := range slices.Sorted(maps.Keys(frontiers)) {
-		if buf.Len() != 0 {
-			buf.WriteByte(' ')
-		}
-		buf.WriteString(fmt.Sprintf("%v: {", partition))
-		var frontierBuf strings.Builder
-		for sp, ts := range frontiers[partition].Entries() {
-			if frontierBuf.Len() != 0 {
-				frontierBuf.WriteByte(' ')
-			}
-			frontierBuf.WriteString(fmt.Sprintf(`%s@%d`, sp, ts.WallTime))
-		}
-		buf.WriteString(frontierBuf.String())
-		buf.WriteByte('}')
-	}
-	return buf.String()
+var timestampRegex = regexp.MustCompile(`@0\.0+(\d+),0`)
+
+func prettifyMultiFrontierStr(s string) string {
+	// Sort the partitions for deterministic output.
+	ss := strings.Split(s, ", ")
+	slices.Sort(ss)
+	s = strings.Join(ss, " ")
+
+	// Simplify timestamps from @0.000000001,0 to @1.
+	s = timestampRegex.ReplaceAllString(s, "@$1")
+	s = strings.ReplaceAll(s, "@0,0", "@0")
+
+	return s
 }
 
 func key(b byte) roachpb.Key { return []byte{b} }
