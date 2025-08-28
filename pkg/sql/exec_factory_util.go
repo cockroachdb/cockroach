@@ -259,7 +259,7 @@ func constructVirtualScan(
 	delayedNodeCallback func(*delayedNode) (exec.Node, error),
 ) (exec.Node, error) {
 	tn := &table.(*optVirtualTable).name
-	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn, p)
+	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err
 	}

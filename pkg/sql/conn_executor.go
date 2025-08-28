@@ -820,7 +820,7 @@ func (s *Server) getScrubbedStmtStats(
 		}
 
 		// Scrub the statement itself.
-		scrubbedQueryStr, ok := scrubStmtStatKey(s.cfg.VirtualSchemas, stat.Key.Query, nil)
+		scrubbedQueryStr, ok := scrubStmtStatKey(s.cfg.VirtualSchemas, stat.Key.Query)
 
 		// We don't want to report this stats if scrubbing has failed. We also don't
 		// wish to abort here because we want to try our best to report all the
@@ -1337,7 +1337,7 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 			// Embed the statement in the error object for the telemetry
 			// report below. The statement gets anonymized.
 			vt := ex.planner.extendedEvalCtx.VirtualSchemas
-			panicErr = WithAnonymizedStatement(panicErr, ex.curStmtAST, vt, nil)
+			panicErr = WithAnonymizedStatement(panicErr, ex.curStmtAST, vt)
 		}
 
 		// Report the panic to telemetry in any case.
