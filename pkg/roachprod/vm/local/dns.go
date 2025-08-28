@@ -58,15 +58,17 @@ func (n *dnsProvider) CreateRecords(_ context.Context, records ...vm.DNSRecord) 
 	return n.saveRecords(entries)
 }
 
-// LookupSRVRecords is part of the vm.DNSProvider interface.
-func (n *dnsProvider) LookupSRVRecords(_ context.Context, name string) ([]vm.DNSRecord, error) {
+// LookupRecords is part of the vm.DNSProvider interface.
+func (n *dnsProvider) LookupRecords(
+	_ context.Context, recordType vm.DNSType, name string,
+) ([]vm.DNSRecord, error) {
 	records, err := n.loadRecords()
 	if err != nil {
 		return nil, err
 	}
 	var matchingRecords []vm.DNSRecord
 	for _, record := range records {
-		if record.Name == name && record.Type == vm.SRV {
+		if record.Name == name && record.Type == recordType {
 			matchingRecords = append(matchingRecords, record)
 		}
 	}

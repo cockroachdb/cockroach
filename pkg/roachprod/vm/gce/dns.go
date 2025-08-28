@@ -131,8 +131,12 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 	}
 
 	for name, recordGroup := range recordsByName {
+		// We assume that all records in a group have the same name, type, and ttl.
+		// TODO(herko): Add error checking to ensure that the above is the case.
+		firstRecord := recordGroup[0]
+
 		err := n.withRecordLock(name, func() error {
-			existingRecords, err := n.lookupSRVRecords(ctx, name)
+			existingRecords, err := n.lookupRecords(ctx, firstRecord.Type, name)
 			if err != nil {
 				return err
 			}
@@ -151,9 +155,6 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 				combinedRecords[record.Data] = record
 			}
 
-			// We assume that all records in a group have the same name, type, and ttl.
-			// TODO(herko): Add error checking to ensure that the above is the case.
-			firstRecord := recordGroup[0]
 			data := maps.Keys(combinedRecords)
 			sort.Strings(data)
 			zone := n.managedZone
@@ -194,16 +195,18 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 }
 
 // LookupSRVRecords implements the vm.DNSProvider interface.
-func (n *dnsProvider) LookupSRVRecords(ctx context.Context, name string) ([]vm.DNSRecord, error) {
+func (n *dnsProvider) LookupRecords(
+	ctx context.Context, recordType vm.DNSType, name string,
+) ([]vm.DNSRecord, error) {
 	var records []vm.DNSRecord
 	var err error
 	err = n.withRecordLock(name, func() error {
-		if config.FastDNS {
+		if config.FastDNS && recordType == vm.SRV {
 			rIdx := randutil.FastUint32() % uint32(len(n.resolvers))
 			records, err = n.fastLookupSRVRecords(ctx, n.resolvers[rIdx], name, true)
 			return err
 		}
-		records, err = n.lookupSRVRecords(ctx, name)
+		records, err = n.lookupRecords(ctx, recordType, name)
 		return err
 	})
 	return records, err
@@ -211,7 +214,7 @@ func (n *dnsProvider) LookupSRVRecords(ctx context.Context, name string) ([]vm.D
 
 // ListRecords implements the vm.DNSProvider interface.
 func (n *dnsProvider) ListRecords(ctx context.Context) ([]vm.DNSRecord, error) {
-	return n.listSRVRecords(ctx, "", dnsMaxResults)
+	return n.listRecords(ctx, vm.SRV, "", dnsMaxResults)
 }
 
 func (n *dnsProvider) deleteRecords(
@@ -253,7 +256,7 @@ func (n *dnsProvider) DeletePublicRecordsByName(ctx context.Context, names ...st
 // DeleteRecordsBySubdomain implements the vm.DNSProvider interface.
 func (n *dnsProvider) DeleteSRVRecordsBySubdomain(ctx context.Context, subdomain string) error {
 	suffix := fmt.Sprintf("%s.%s.", subdomain, n.Domain())
-	records, err := n.listSRVRecords(ctx, suffix, dnsMaxResults)
+	records, err := n.listRecords(ctx, vm.SRV, suffix, dnsMaxResults)
 	if err != nil {
 		return err
 	}
@@ -287,13 +290,15 @@ func (n *dnsProvider) Domain() string {
 // network problems. For lookups, we prefer this to using the gcloud command as
 // it is faster, and preferable when service information is being queried
 // regularly.
-func (n *dnsProvider) lookupSRVRecords(ctx context.Context, name string) ([]vm.DNSRecord, error) {
+func (n *dnsProvider) lookupRecords(
+	ctx context.Context, recordType vm.DNSType, name string,
+) ([]vm.DNSRecord, error) {
 	// Check the cache first.
 	if cachedRecords, ok := n.getCache(name); ok {
 		return cachedRecords, nil
 	}
 	// Lookup the records, if no records are found in the cache.
-	records, err := n.listSRVRecords(ctx, name, dnsMaxResults)
+	records, err := n.listRecords(ctx, recordType, name, dnsMaxResults)
 	if err != nil {
 		return nil, err
 	}
@@ -310,16 +315,21 @@ func (n *dnsProvider) lookupSRVRecords(ctx context.Context, name string) ([]vm.D
 	return filteredRecords, nil
 }
 
-// listSRVRecords returns all SRV records that match the given filter from Google Cloud DNS.
+// listRecords returns all records that match the given filter from Google Cloud DNS.
 // The data field of the records could be a comma-separated list of values if multiple
 // records are returned for the same name.
-func (n *dnsProvider) listSRVRecords(
-	ctx context.Context, filter string, limit int,
+func (n *dnsProvider) listRecords(
+	ctx context.Context, recordType vm.DNSType, filter string, limit int,
 ) ([]vm.DNSRecord, error) {
+	zone := n.managedZone
+	if recordType == vm.A {
+		zone = n.publicZone
+	}
+
 	args := []string{"--project", n.dnsProject, "dns", "record-sets", "list",
 		"--limit", strconv.Itoa(limit),
 		"--page-size", strconv.Itoa(limit),
-		"--zone", n.managedZone,
+		"--zone", zone,
 		"--format", "json",
 	}
 	if filter != "" {
@@ -348,11 +358,11 @@ func (n *dnsProvider) listSRVRecords(
 		if record.Kind != "dns#resourceRecordSet" {
 			continue
 		}
-		if record.RecordType != string(vm.SRV) {
+		if record.RecordType != string(recordType) {
 			continue
 		}
 		for _, data := range record.RRDatas {
-			records = append(records, vm.CreateDNSRecord(record.Name, vm.SRV, data, record.TTL))
+			records = append(records, vm.CreateDNSRecord(record.Name, recordType, data, record.TTL))
 		}
 	}
 	return records, nil

@@ -48,7 +48,7 @@ func TestLookupRecords(t *testing.T) {
 	}...)
 
 	t.Run("lookup system", func(t *testing.T) {
-		records, err := p.LookupSRVRecords(ctx, "_system-sql._tcp.local.local-zone")
+		records, err := p.LookupRecords(ctx, vm.SRV, "_system-sql._tcp.local.local-zone")
 		require.NoError(t, err)
 		require.Equal(t, 3, len(records))
 		for _, r := range records {
@@ -58,7 +58,7 @@ func TestLookupRecords(t *testing.T) {
 	})
 
 	t.Run("parse SRV data", func(t *testing.T) {
-		records, err := p.LookupSRVRecords(ctx, "_tenant-1-sql._tcp.local.local-zone")
+		records, err := p.LookupRecords(ctx, vm.SRV, "_tenant-1-sql._tcp.local.local-zone")
 		require.NoError(t, err)
 		require.Equal(t, 1, len(records))
 		data, err := records[0].ParseSRVRecord()
