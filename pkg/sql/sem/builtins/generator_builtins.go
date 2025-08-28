@@ -838,16 +838,32 @@ The last argument is a JSONB object containing the following optional fields:
 		makeInternallyExecutedQueryGeneratorOverload(false /* withSessionBound */, true /* withOverrides */, true /* withTxn */),
 		makeInternallyExecutedQueryGeneratorOverload(true /* withSessionBound */, true /* withOverrides */, true /* withTxn */),
 	),
+	"crdb_internal.decompile_plan_gist_to_pheromone": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "gist", Typ: types.String},
+			},
+			decodePlanGistGeneratorType,
+			makeDecompilePlanGistGenerator,
+			`TODO`,
+			volatility.Volatile,
+		),
+	),
 }
 
 var decodePlanGistGeneratorType = types.String
 
 type gistPlanGenerator struct {
-	gist     string
-	index    int
-	rows     []string
-	evalCtx  *eval.Context
-	external bool
+	gist      string
+	index     int
+	rows      []string
+	evalCtx   *eval.Context
+	external  bool
+	decompile bool
 }
 
 var _ eval.ValueGenerator = &gistPlanGenerator{}
@@ -857,7 +873,7 @@ func (g *gistPlanGenerator) ResolvedType() *types.T {
 }
 
 func (g *gistPlanGenerator) Start(ctx context.Context, _ *kv.Txn) error {
-	rows, err := g.evalCtx.Planner.DecodeGist(ctx, g.gist, g.external)
+	rows, err := g.evalCtx.Planner.DecodeGist(ctx, g.gist, g.external, g.decompile)
 	if err != nil {
 		return err
 	}
@@ -890,6 +906,13 @@ func makeDecodeExternalPlanGistGenerator(
 ) (eval.ValueGenerator, error) {
 	gist := string(tree.MustBeDString(args[0]))
 	return &gistPlanGenerator{gist: gist, evalCtx: evalCtx, external: true}, nil
+}
+
+func makeDecompilePlanGistGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	gist := string(tree.MustBeDString(args[0]))
+	return &gistPlanGenerator{gist: gist, evalCtx: evalCtx, external: false, decompile: true}, nil
 }
 
 func makeGeneratorOverload(
