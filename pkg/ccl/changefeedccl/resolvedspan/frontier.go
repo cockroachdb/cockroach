@@ -437,8 +437,8 @@ type maybeTablePartitionedFrontier interface {
 	// Frontiers returns an iterator over the table ID and sub-frontiers
 	// being tracked by the frontier. If the frontier is not tracking
 	// on a per-table basis, the iterator will return a single frontier
-	// with an ID of 0.
-	Frontiers() iter.Seq2[descpb.ID, span.Frontier]
+	// with descpb.InvalidID.
+	Frontiers() iter.Seq2[descpb.ID, span.ReadOnlyFrontier]
 }
 
 var _ maybeTablePartitionedFrontier = (*span.MultiFrontier[descpb.ID])(nil)
@@ -456,9 +456,9 @@ type notTablePartitionedFrontier struct {
 var _ maybeTablePartitionedFrontier = notTablePartitionedFrontier{}
 
 // Frontiers implements maybeTablePartitionedFrontier.
-func (f notTablePartitionedFrontier) Frontiers() iter.Seq2[descpb.ID, span.Frontier] {
-	return func(yield func(descpb.ID, span.Frontier) bool) {
-		yield(0, f.spanFrontier)
+func (f notTablePartitionedFrontier) Frontiers() iter.Seq2[descpb.ID, span.ReadOnlyFrontier] {
+	return func(yield func(descpb.ID, span.ReadOnlyFrontier) bool) {
+		yield(descpb.InvalidID, f.spanFrontier)
 	}
 }
 
