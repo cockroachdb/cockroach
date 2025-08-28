@@ -153,6 +153,7 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 					sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
 					sctestdeps.WithIDGenerator(s.ApplicationLayer()),
 					sctestdeps.WithReferenceProviderFactory(refFactory),
+					sctestdeps.WithClusterSettings(s.ClusterSettings()),
 				)
 				stmtStates := execStatementWithTestDeps(ctx, t, deps, stmts...)
 				var fileNameSuffix string

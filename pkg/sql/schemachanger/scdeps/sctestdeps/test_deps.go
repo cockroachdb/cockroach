@@ -88,6 +88,9 @@ func (s *TestState) SessionData() *sessiondata.SessionData {
 
 // ClusterSettings implements the scbuild.Dependencies interface.
 func (s *TestState) ClusterSettings() *cluster.Settings {
+	if s.clusterSettings != nil {
+		return s.clusterSettings
+	}
 	return cluster.MakeTestingClusterSettings()
 }
 
