@@ -123,37 +123,6 @@ type s3Storage struct {
 	cached *s3Client
 }
 
-// customRetryer implements the `request.Retryer` interface and allows for
-// customization of the retry behaviour of an AWS client.
-type customRetryer struct{}
-
-// isErrReadConnectionReset returns true if the underlying error is a read
-// connection reset error.
-//
-// NB: A read connection reset error is thrown when the SDK is unable to read
-// the response of an underlying API request due to a connection reset. The
-// DefaultRetryer in the AWS SDK does not treat this error as a retryable error
-// since the SDK does not have knowledge about the idempotence of the request,
-// and whether it is safe to retry -
-// https://github.com/aws/aws-sdk-go/pull/2926#issuecomment-553637658.
-//
-// In CRDB all operations with s3 (read, write, list) are considered idempotent,
-// and so we can treat the read connection reset error as retryable too.
-func isErrReadConnectionReset(err error) bool {
-	// The error string must match the one in
-	// github.com/aws/aws-sdk-go/aws/request/connection_reset_error.go. This is
-	// unfortunate but the only solution until the SDK exposes a specialized error
-	// code or type for this class of errors.
-	return err != nil && strings.Contains(err.Error(), "read: connection reset")
-}
-
-// IsErrorRetryable implements the retry.IsErrorRetryable interface.
-func (sr *customRetryer) IsErrorRetryable(e error) aws.Ternary {
-	return aws.BoolTernary(isErrReadConnectionReset(e))
-}
-
-var _ retry.IsErrorRetryable = &customRetryer{}
-
 // s3Client wraps an SDK client and uploader for a given session.
 type s3Client struct {
 	client   *s3.Client
@@ -647,23 +616,18 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		return s3Client{}, "", err
 	}
 	addLoadOption(config.WithHTTPClient(client))
-
-	retryMaxAttempts := int(maxRetries.Get(&s.settings.SV))
-	addLoadOption(config.WithRetryMaxAttempts(retryMaxAttempts))
-
 	addLoadOption(config.WithLogger(newLogAdapter(ctx)))
 	if s.opts.logMode != 0 {
 		addLoadOption(config.WithClientLogMode(s.opts.logMode))
 	}
-	config.WithRetryer(func() aws.Retryer {
+	addLoadOption(config.WithRetryer(func() aws.Retryer {
 		return retry.NewStandard(func(opts *retry.StandardOptions) {
-			opts.MaxAttempts = retryMaxAttempts
-			opts.Retryables = append(opts.Retryables, &customRetryer{})
+			opts.MaxAttempts = int(maxRetries.Get(&s.settings.SV))
 			if !enableClientRetryTokenBucket.Get(&s.settings.SV) {
 				opts.RateLimiter = ratelimit.None
 			}
 		})
-	})
+	}))
 
 	switch s.opts.auth {
 	case "", cloud.AuthParamSpecified:
