@@ -3182,6 +3182,9 @@ type StoreMetrics struct {
 	ReplicaGCQueueFailures                    *metric.Counter
 	ReplicaGCQueuePending                     *metric.Gauge
 	ReplicaGCQueueProcessingNanos             *metric.Counter
+	ReplicateQueueEnqueueFailure              *metric.Counter
+	ReplicateQueueEnqueueSuccess              *metric.Counter
+	ReplicateQueueEnqueueDropped              *metric.Counter
 	ReplicateQueueSuccesses                   *metric.Counter
 	ReplicateQueueFailures                    *metric.Counter
 	ReplicateQueuePending                     *metric.Gauge
