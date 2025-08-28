@@ -97,6 +97,22 @@ func DecodeNodeTombstoneKey(key roachpb.Key) (roachpb.NodeID, error) {
 	return roachpb.NodeID(nodeID), err
 }
 
+// DecodeWAGIndexKey returns the index of the WAG node from its key.
+func DecodeWAGIndexKey(key roachpb.Key) (uint64, error) {
+	suffix, detail, err := DecodeStoreKey(key)
+	if err != nil {
+		return 0, err
+	}
+	if !suffix.Equal(localStoreWAGIndexSuffix) {
+		return 0, errors.Errorf("key with suffix %q != %q", suffix, localStoreWAGIndexSuffix)
+	}
+	detail, index, err := encoding.DecodeUint64Ascending(detail)
+	if len(detail) != 0 {
+		return 0, errors.Errorf("invalid key has trailing garbage: %q", detail)
+	}
+	return index, err
+}
+
 // StoreLivenessRequesterMetaKey returns the key for the local store's Store
 // Liveness requester metadata.
 func StoreLivenessRequesterMetaKey() roachpb.Key {

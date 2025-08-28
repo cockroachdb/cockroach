@@ -146,6 +146,7 @@ var constSubKeyDict = []struct {
 	{"/clusterVersion", localStoreClusterVersionSuffix},
 	{"/nodeTombstone", localStoreNodeTombstoneSuffix},
 	{"/cachedSettings", localStoreCachedSettingsSuffix},
+	{"/wag", localStoreWAGIndexSuffix},
 	{"/lossOfQuorumRecovery/applied", localStoreUnsafeReplicaRecoverySuffix},
 	{"/lossOfQuorumRecovery/status", localStoreLossOfQuorumRecoveryStatusSuffix},
 	{"/lossOfQuorumRecovery/cleanup", localStoreLossOfQuorumRecoveryCleanupActionsSuffix},
@@ -167,6 +168,14 @@ func cachedSettingsKeyPrint(buf *redact.StringBuilder, key roachpb.Key) {
 	buf.Print(settingKey.String())
 }
 
+func wagIndexKeyPrint(buf *redact.StringBuilder, key roachpb.Key) {
+	index, err := DecodeWAGIndexKey(key)
+	if err != nil {
+		buf.Printf("<invalid: %s>", err)
+	}
+	buf.Printf("%d", index)
+}
+
 func localStoreKeyPrint(buf *redact.StringBuilder, _ []encoding.Direction, key roachpb.Key) {
 	for _, v := range constSubKeyDict {
 		if bytes.HasPrefix(key, v.key) {
@@ -184,6 +193,11 @@ func localStoreKeyPrint(buf *redact.StringBuilder, _ []encoding.Direction, key r
 			} else if v.key.Equal(localStoreUnsafeReplicaRecoverySuffix) {
 				buf.SafeRune('/')
 				lossOfQuorumRecoveryEntryKeyPrint(
+					buf, append(roachpb.Key(nil), append(LocalStorePrefix, key...)...),
+				)
+			} else if v.key.Equal(localStoreWAGIndexSuffix) {
+				buf.SafeRune('/')
+				wagIndexKeyPrint(
 					buf, append(roachpb.Key(nil), append(LocalStorePrefix, key...)...),
 				)
 			}
