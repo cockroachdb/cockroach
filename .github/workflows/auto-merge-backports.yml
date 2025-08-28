@@ -51,6 +51,12 @@ jobs:
             const result = await github.graphql(query);
             const prs = result.search.nodes;
 
+            if (prs.length === 0) {
+              console.log('No backport PRs found matching criteria');
+            } else {
+              console.log(`Found ${prs.length} backport PR(s) to evaluate`);
+            }
+
             for (const pr of prs) {
               const createdAt = new Date(pr.createdAt);
               const isOldEnough = createdAt <= iso24HoursAgo;
