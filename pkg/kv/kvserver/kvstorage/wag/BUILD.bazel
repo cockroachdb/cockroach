@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "wag",
@@ -9,5 +9,22 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvserver/kvstorage/wag/wagpb",
         "//pkg/storage",
+    ],
+)
+
+go_test(
+    name = "wag_test",
+    srcs = ["store_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":wag"],
+    deps = [
+        "//pkg/kv/kvserver/kvstorage/wag/wagpb",
+        "//pkg/kv/kvserver/print",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/testutils/echotest",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )
