@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/gogo/protobuf/proto"
 )
 
 // PrintEngineKeyValue attempts to print the given key-value pair to
@@ -144,6 +146,7 @@ func SprintMVCCKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 		tryTxn,
 		tryTimeSeries,
 		tryIntent,
+		tryWAGKey,
 		func(kv storage.MVCCKeyValue) (string, error) {
 			// No better idea, just print raw bytes and hope that folks use `less -S`.
 			return fmt.Sprintf("%q", kv.Value), nil
@@ -463,6 +466,17 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 		return "", err
 	}
 	return msg.String(), nil
+}
+
+func tryWAGKey(kv storage.MVCCKeyValue) (string, error) {
+	if !bytes.HasPrefix(kv.Key.Key, keys.StoreWAGPrefix()) {
+		return "", errors.New("not a WAG index key")
+	}
+	var node wagpb.Node
+	if err := node.Unmarshal(kv.Value); err != nil {
+		return "", err
+	}
+	return proto.MarshalTextString(&node), nil
 }
 
 func tryMeta(kv storage.MVCCKeyValue) (string, error) {

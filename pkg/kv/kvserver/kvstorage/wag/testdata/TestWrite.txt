@@ -1,3 +1,14 @@
 echo
 ----
-Put: 0,0 /Local/Store/wag/1 (0x017369776167000000000000000100): "\n\x04\b{\x10\x04\x10\x01\x1a(\n&\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x01\x12state-machine-key\x00\x05state"
+----
+Put: 0,0 /Local/Store/wag/1 (0x017369776167000000000000000100): addr: <
+  range_id: 123
+  replica_id: 4
+>
+type: NodeCreate
+mutation: <
+  batch: "\000\000\000\000\000\000\000\000\001\000\000\000\001\022state-machine-key\000\005state"
+>
+
+----
+----

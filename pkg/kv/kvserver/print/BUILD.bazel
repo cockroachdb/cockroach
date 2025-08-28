@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/kvstorage/wag/wagpb",
         "//pkg/kv/kvserver/raftlog",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
