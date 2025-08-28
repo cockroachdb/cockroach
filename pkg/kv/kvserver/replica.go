@@ -2940,16 +2940,33 @@ func (r *Replica) maybeEnqueueProblemRange(
 			"lastProblemRangeReplicateEnqueueTime was updated concurrently", r.Desc())
 		return
 	}
-	// Log at default verbosity to ensure some indication the nudger is working
-	// (other logs have a verbosity of 1 which).
-	log.KvDistribution.Infof(ctx, "decommissioning nudger enqueuing replica %s "+
-		"with priority %f", r.Desc(),
-		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
 	r.store.metrics.DecommissioningNudgerEnqueue.Inc(1)
 	// TODO(dodeca12): Figure out a better way to track the
 	// decommissioning nudger enqueue failures/errors.
-	r.store.replicateQueue.AddAsync(ctx, r,
-		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
+	r.store.replicateQueue.AddAsyncWithCallback(ctx, r,
+		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority(), processCallback{
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				if err != nil {
+					// TODO(wenyihu6): if we want to put these logs behind vmodule, move
+					// this function to another file so that we can avoid the spam on
+					// other logs.
+					log.KvDistribution.Infof(ctx,
+						"decommissioning nudger failed to enqueue range %v due to %v", r.Desc(), err)
+				} else {
+					log.KvDistribution.Infof(ctx,
+						"decommissioning nudger successfully enqueued range %v at index %d", r.Desc(), indexOnHeap)
+				}
+			},
+			onProcessResult: func(err error) {
+				if err != nil {
+					log.KvDistribution.Infof(ctx,
+						"decommissioning nudger failed to process range %v due to %v", r.Desc(), err)
+				} else {
+					log.KvDistribution.Infof(ctx,
+						"decommissioning nudger successfully processed replica %s", r.Desc())
+				}
+			},
+		})
 }
 
 // SendStreamStats sets the stats for the replica send streams that belong to
