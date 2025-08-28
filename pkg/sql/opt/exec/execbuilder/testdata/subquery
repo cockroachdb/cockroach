@@ -437,11 +437,19 @@ vectorized: true
 │ estimated row count: 2 (missing stats)
 │ pred: column1 = a
 │
-└── • scan
-      columns: (a, b, c)
-      estimated row count: 1,000 (missing stats)
-      table: abc@abc_pkey
-      spans: FULL SCAN
+├── • scan
+│     columns: (a, b, c)
+│     estimated row count: 1,000 (missing stats)
+│     table: abc@abc_pkey
+│     spans: FULL SCAN
+│
+└── • inner loop (unoptimized)
+    │ columns: ()
+    │
+    └── • values
+          columns: ()
+           ├── (a,)
+           └── (b,)
 
 statement ok
 CREATE TABLE corr (

@@ -2616,10 +2616,24 @@ vectorized: true
     │
     └── • apply join (left outer)
         │
-        └── • scan
-              missing stats
-              table: f@f_pkey
-              spans: FULL SCAN
+        ├── • scan
+        │     missing stats
+        │     table: f@f_pkey
+        │     spans: FULL SCAN
+        │
+        └── • inner loop (unoptimized)
+            │
+            └── • distinct-on
+                   └── project
+                        ├── select
+                        │    ├── scan bc
+                        │    │    └── computed column expressions
+                        │    │         └── c
+                        │    │              └── b * ‹×›
+                        │    └── filters
+                        │         └── (b * f) < ‹×›
+                        └── projections
+                             └── (f + (b * ‹×›)) + ‹×›
 
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
@@ -2643,11 +2657,27 @@ vectorized: true
         │ columns: (f, rowid, column13)
         │ estimated row count: 333,333 (missing stats)
         │
-        └── • scan
-              columns: (f, rowid)
-              estimated row count: 1,000 (missing stats)
-              table: f@f_pkey
-              spans: FULL SCAN
+        ├── • scan
+        │     columns: (f, rowid)
+        │     estimated row count: 1,000 (missing stats)
+        │     table: f@f_pkey
+        │     spans: FULL SCAN
+        │
+        └── • inner loop (unoptimized)
+            │ columns: ()
+            │
+            └── • distinct-on
+                  columns: ()
+                   └── project
+                        ├── select
+                        │    ├── scan bc
+                        │    │    └── computed column expressions
+                        │    │         └── c
+                        │    │              └── b * ‹×›
+                        │    └── filters
+                        │         └── (b * f) < ‹×›
+                        └── projections
+                             └── (f + (b * ‹×›)) + ‹×›
 
 query T
 EXPLAIN (OPT, REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
@@ -3022,10 +3052,23 @@ vectorized: true
 • apply join (anti)
 │ pred: (a <= "?column?") IS NOT ‹×›
 │
-└── • scan
-      missing stats
-      table: a@a_pkey
-      spans: FULL SCAN
+├── • scan
+│     missing stats
+│     table: a@a_pkey
+│     spans: FULL SCAN
+│
+└── • inner loop (unoptimized)
+    │
+    └── • project
+           ├── select
+           │    ├── scan bc
+           │    │    └── computed column expressions
+           │    │         └── c
+           │    │              └── b * ‹×›
+           │    └── filters
+           │         └── b > (a::FLOAT8 * ‹×›)
+           └── projections
+                └── (b * ‹×›)::INT8 + ‹×›
 
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
@@ -3038,11 +3081,26 @@ vectorized: true
 │ estimated row count: 667 (missing stats)
 │ pred: (a <= "?column?") IS NOT ‹×›
 │
-└── • scan
-      columns: (a)
-      estimated row count: 1,000 (missing stats)
-      table: a@a_pkey
-      spans: FULL SCAN
+├── • scan
+│     columns: (a)
+│     estimated row count: 1,000 (missing stats)
+│     table: a@a_pkey
+│     spans: FULL SCAN
+│
+└── • inner loop (unoptimized)
+    │ columns: ()
+    │
+    └── • project
+          columns: ()
+           ├── select
+           │    ├── scan bc
+           │    │    └── computed column expressions
+           │    │         └── c
+           │    │              └── b * ‹×›
+           │    └── filters
+           │         └── b > (a::FLOAT8 * ‹×›)
+           └── projections
+                └── (b * ‹×›)::INT8 + ‹×›
 
 query T
 EXPLAIN (OPT, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)

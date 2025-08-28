@@ -132,9 +132,15 @@ explain(shape):
 • apply join (semi)
 │ pred: column1 = a
 │
-└── • scan
-      table: abc@abc_pkey
-      spans: FULL SCAN
+├── • scan
+│     table: abc@abc_pkey
+│     spans: FULL SCAN
+│
+└── • inner loop (unoptimized)
+    │
+    └── • values
+           ├── (a,)
+           └── (b,)
 explain(gist):
 • apply join (semi)
 │
