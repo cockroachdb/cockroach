@@ -331,6 +331,7 @@ type queueConfig struct {
 	failures *metric.Counter
 	// pending is a gauge measuring current replica count pending.
 	pending *metric.Gauge
+	//
 	// processingNanos is a counter measuring total nanoseconds spent processing
 	// replicas.
 	processingNanos *metric.Counter
@@ -773,6 +774,7 @@ func (bq *baseQueue) addInternal(
 	// priority element, but it would require additional bookkeeping or a linear
 	// scan.
 	if pqLen := bq.mu.priorityQ.Len(); pqLen > bq.maxSize {
+		bq.failures
 		replicaItemToDrop := bq.mu.priorityQ.sl[pqLen-1]
 		log.Dev.VInfof(ctx, 1, "dropping due to exceeding queue max size: priority=%0.3f, replica=%v",
 			priority, replicaItemToDrop.replicaID)
@@ -918,7 +920,7 @@ func (bq *baseQueue) processOneAsyncAndReleaseSem(
 			defer func() { <-bq.processSem }()
 			start := timeutil.Now()
 			err := bq.processReplica(ctx, repl, priorityAtEnqueue)
-			bq.recordProcessDuration(ctx, timeutil.Since(start))
+			bq.recordProcessDuration(ctx, timeutil.Since(start), priorityAtEnqueue)
 			bq.finishProcessingReplica(ctx, stopper, repl, err)
 		}); err != nil {
 		// Release semaphore if we can't start the task, normally this only
@@ -936,9 +938,11 @@ func (bq *baseQueue) lastProcessDuration() time.Duration {
 }
 
 // recordProcessDuration records the duration of a processing run.
-func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duration) {
+func (bq *baseQueue) recordProcessDuration(
+	ctx context.Context, dur time.Duration, priorityAtEnqueue float64,
+) {
 	if log.V(2) {
-		log.Dev.Infof(ctx, "done %s", dur)
+		log.Dev.Infof(ctx, "done=%s, priority(enqueue)=%.2f", dur, priorityAtEnqueue)
 	}
 	bq.processingNanos.Inc(dur.Nanoseconds())
 	atomic.StoreInt64(&bq.processDur, int64(dur))
