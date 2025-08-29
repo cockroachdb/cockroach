@@ -583,18 +583,23 @@ type queueHelper interface {
 	Add(ctx context.Context, repl replicaInQueue, prio float64)
 }
 
+// baseQueueAsyncRateLimited indicates that the base queue async task was rate
+// limited and the task was not executed.
+var baseQueueAsyncRateLimited = errors.Newf("async task rate limited")
+
 // Async is a more performant substitute for calling AddAsync or MaybeAddAsync
 // when many operations are going to be carried out. It invokes the given helper
 // function in a goroutine if semaphore capacity is available. If the semaphore
-// is not available, the 'wait' parameter decides whether to wait or to return
-// as a noop. Note that if the system is quiescing, fn may never be called in-
-// dependent of the value of 'wait'.
+// is at capacity, the 'wait' parameter determines whether to block until
+// capacity becomes available or return immediately with an error. Note that if
+// the system is shutting down, the function may not be executed regardless of
+// the 'wait' value.
 //
 // The caller is responsible for ensuring that opName does not contain PII.
 // (Best is to pass a constant string.)
 func (bq *baseQueue) Async(
 	ctx context.Context, opName string, wait bool, fn func(ctx context.Context, h queueHelper),
-) {
+) error {
 	if log.V(3) {
 		log.Dev.InfofDepth(ctx, 2, "%s", redact.Safe(opName))
 	}
@@ -609,12 +614,13 @@ func (bq *baseQueue) Async(
 		if bq.addLogN.ShouldLog() {
 			log.Dev.Infof(ctx, "rate limited in %s: %s", redact.Safe(opName), err)
 		}
-		return
+		return baseQueueAsyncRateLimited
 	}
 	go func(ctx context.Context) {
 		defer hdl.Activate(ctx).Release(ctx)
 		fn(ctx, baseQueueHelper{bq})
 	}(bgCtx)
+	return nil
 }
 
 // MaybeAddAsync offers the replica to the queue. The queue will only process a
@@ -623,7 +629,7 @@ func (bq *baseQueue) Async(
 func (bq *baseQueue) MaybeAddAsync(
 	ctx context.Context, repl replicaInQueue, now hlc.ClockTimestamp,
 ) {
-	bq.Async(ctx, "MaybeAdd", false /* wait */, func(ctx context.Context, h queueHelper) {
+	_ = bq.Async(ctx, "MaybeAdd", false /* wait */, func(ctx context.Context, h queueHelper) {
 		h.MaybeAdd(ctx, repl, now)
 	})
 }
@@ -632,7 +638,7 @@ func (bq *baseQueue) MaybeAddAsync(
 // for other operations to finish instead of turning into a noop (because
 // unlikely MaybeAdd, Add is not subject to being called opportunistically).
 func (bq *baseQueue) AddAsync(ctx context.Context, repl replicaInQueue, prio float64) {
-	bq.Async(ctx, "Add", true /* wait */, func(ctx context.Context, h queueHelper) {
+	_ = bq.Async(ctx, "Add", true /* wait */, func(ctx context.Context, h queueHelper) {
 		h.Add(ctx, repl, prio)
 	})
 }
