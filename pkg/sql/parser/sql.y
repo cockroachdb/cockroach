@@ -959,6 +959,13 @@ func (u *sqlSymUnion) doBlockOptions() tree.DoBlockOptions {
 func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
     return u.val.(tree.DoBlockOption)
 }
+func (u *sqlSymUnion) changefeedFilterOption() *tree.ChangefeedFilterOption {
+    if filterOption, ok := u.val.(*tree.ChangefeedFilterOption); ok {
+        return filterOption
+    }
+    return nil
+} 
+
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -1592,6 +1599,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <tree.ReturningClause> returning_clause
 %type <tree.TableExprs> opt_using_clause
 %type <tree.RefreshDataOption> opt_clear_data
+%type <*tree.ChangefeedFilterOption> db_level_changefeed_filter_option
 
 %type <tree.BatchParam> batch_param
 %type <[]tree.BatchParam> batch_param_list
@@ -6257,12 +6265,13 @@ create_changefeed_stmt:
       Level: tree.ChangefeedLevelTable,
     }
   }
-| CREATE_CHANGEFEED_FOR_DATABASE CHANGEFEED FOR DATABASE database_name opt_changefeed_sink opt_with_options
+| CREATE_CHANGEFEED_FOR_DATABASE CHANGEFEED FOR DATABASE database_name db_level_changefeed_filter_option opt_changefeed_sink opt_with_options
   {
     $$.val = &tree.CreateChangefeed{
       DatabaseTarget: tree.ChangefeedDatabaseTarget($5),
-      SinkURI: $6.expr(),
-      Options: $7.kvOptions(),
+      FilterOption: $6.changefeedFilterOption(),
+      SinkURI: $7.expr(),
+      Options: $8.kvOptions(),
       Level: tree.ChangefeedLevelDatabase,
     }
   }
@@ -6485,6 +6494,16 @@ opt_using_clause:
 | /* EMPTY */
   {
     $$.val = tree.TableExprs{}
+  }
+
+db_level_changefeed_filter_option:
+  EXCLUDE TABLES table_name_list
+  {
+    $$.val = &tree.ChangefeedFilterOption{Tables: $3.tableNames(), FilterType: tree.ExcludeFilter}
+  }
+| /* EMPTY */ 
+  {
+    $$.val = nil
   }
 
 
