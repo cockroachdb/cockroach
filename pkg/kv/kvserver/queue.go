@@ -359,6 +359,9 @@ type queueConfig struct {
 	// failures is a counter of replicas which failed processing.
 	failures          *metric.Counter
 	droppedDueToQSize *metric.Counter
+	enqueueRate       *metric.Counter
+	enqueueFailure    *metric.Counter
+	enqueueSuccess    *metric.Counter
 	// pending is a gauge measuring current replica count pending.
 	pending *metric.Gauge
 	//
@@ -842,9 +845,11 @@ func (bq *baseQueue) addInternal(
 	// scan.
 	if pqLen := bq.mu.priorityQ.Len(); int64(pqLen) > bq.mu.maxSize {
 		replicaItemToDrop := bq.mu.priorityQ.sl[pqLen-1]
-		bq.droppedDueToQSize.Inc(1)
-		log.Dev.VInfof(ctx, 1, "dropping due to exceeding queue max size: priority=%0.3f, replica=%v",
-			priority, replicaItemToDrop.replicaID)
+		if bq.droppedDueToQSize != nil {
+			bq.droppedDueToQSize.Inc(1)``
+		}
+		log.Dev.VInfof(ctx, 1, "dropping due to exceeding queue max size: priority=%0.3f, replica=%v, pqLen=%v > maxSize=%v",
+			priority, replicaItemToDrop.replicaID, pqLen, bq.mu.maxSize)
 		for _, cb := range replicaItemToDrop.callbacks {
 			cb.onEnqueueResult(-1 /*indexOnHeap*/, errDroppedDueToFullQueueSize)
 		}
@@ -1409,7 +1414,7 @@ func (bq *baseQueue) processReplicasInPurgatory(
 			if stopper.RunTask(
 				annotatedCtx, bq.processOpName(), func(ctx context.Context) {
 					err = bq.processReplica(ctx, repl, item.priority /*priorityAtEnqueue*/)
-					bq.finishProcessingReplica(ctx, stopper, repl, err)
+					bq.finishProcessingReplica(ctx, stopper, repl, errors.Wrap(err, "purgatory queue"))
 				},
 			) != nil {
 				// NB: We do not need to worry about removing any unprocessed replicas
