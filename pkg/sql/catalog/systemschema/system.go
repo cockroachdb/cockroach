@@ -1491,7 +1491,6 @@ type SystemTable struct {
 func makeSystemTable(
 	createTableStmt string, tbl descpb.TableDescriptor, fns ...func(tbl *descpb.TableDescriptor),
 ) SystemTable {
-	ctx := context.Background()
 	{
 		nameInfo := descpb.NameInfo{
 			ParentID:       tbl.ParentID,
@@ -1500,7 +1499,7 @@ func makeSystemTable(
 		}
 		privs := catprivilege.SystemSuperuserPrivileges(nameInfo)
 		if privs == nil {
-			log.Dev.Fatalf(ctx, "no superuser privileges found when building descriptor of system table %q", tbl.Name)
+			log.Dev.Fatalf(context.Background(), "no superuser privileges found when building descriptor of system table %q", tbl.Name)
 		}
 		tbl.Privileges = catpb.NewCustomSuperuserPrivilegeDescriptor(privs, username.NodeUserName())
 	}
