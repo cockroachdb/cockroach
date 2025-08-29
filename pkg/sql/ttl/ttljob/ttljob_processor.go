@@ -130,6 +130,10 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	// involved in a TTL job.
 	log.Infof(ctx, "TTL processor started processorID=%d tableID=%d", t.ProcessorID, tableID)
 
+	// Each node sets up two rate limiters (one for SELECT, one for DELETE) per
+	// table. The limiters apply to all ranges assigned to this processor, whether
+	// or not the node is the leaseholder for those ranges.
+
 	selectRateLimit := ttlSpec.SelectRateLimit
 	// Default 0 value to "unlimited" in case job started on node <= v23.2.
 	// todo(sql-foundations): Remove this in 25.1 for consistency with
