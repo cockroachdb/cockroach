@@ -178,3 +178,21 @@ at or near "into": syntax error
 DETAIL: source SQL:
 CREATE CHANGEFEED FOR database INTO 'foo'
                                ^
+
+parse
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLE bar INTO 'foo'
+----
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLE bar INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLE (bar) INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLE bar INTO '_' -- literals removed
+CREATE CHANGEFEED FOR DATABASE _ EXCLUDE TABLE _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLE bar INTO 'foo' -- passwords exposed
+
+parse
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLE foo,bar INTO 'foo'
+----
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLE foo, bar INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLE (foo), (bar) INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLE foo, bar INTO '_' -- literals removed
+CREATE CHANGEFEED FOR DATABASE _ EXCLUDE TABLE _, _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLE foo, bar INTO 'foo' -- passwords exposed
