@@ -99,7 +99,7 @@ func newTimeSeriesMaintenanceQueue(
 	q.baseQueue = newBaseQueue(
 		"timeSeriesMaintenance", q, store,
 		queueConfig{
-			maxSize:              kvserverbase.BaseQueueMaxSize,
+			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
 			needsSpanConfigs:     false,
 			acceptsUnsplitRanges: true,

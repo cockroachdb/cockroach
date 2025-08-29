@@ -105,7 +105,7 @@ func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 	mq.baseQueue = newBaseQueue(
 		"merge", mq, store,
 		queueConfig{
-			maxSize:        kvserverbase.BaseQueueMaxSize,
+			maxSize:        defaultQueueMaxSize,
 			maxConcurrency: mergeQueueConcurrency,
 			// TODO(ajwerner): Sometimes the merge queue needs to send multiple
 			// snapshots, but the timeout function here is configured based on the

@@ -41,7 +41,7 @@ func newRaftSnapshotQueue(store *Store) *raftSnapshotQueue {
 	rq.baseQueue = newBaseQueue(
 		"raftsnapshot", rq, store,
 		queueConfig{
-			maxSize: kvserverbase.BaseQueueMaxSize,
+			maxSize: defaultQueueMaxSize,
 			// The Raft leader (which sends Raft snapshots) may not be the
 			// leaseholder. Operating on a replica without holding the lease is the
 			// reason Raft snapshots cannot be performed by the replicateQueue.

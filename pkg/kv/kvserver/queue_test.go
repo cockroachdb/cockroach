@@ -101,13 +101,6 @@ var testQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
-var testQueueMaxSizeSetting = settings.RegisterIntSetting(
-	settings.SystemOnly,
-	"testing.queue.max_size",
-	"testing setting for max queue size",
-	int64(10000),
-)
-
 func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *baseQueue {
 	if !cfg.acceptsUnsplitRanges {
 		// Needed in order to pass the validation in newBaseQueue.
@@ -119,7 +112,6 @@ func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfi
 	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
 	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
 	cfg.disabledConfig = testQueueEnabled
-	cfg.maxSize = testQueueMaxSizeSetting
 	return newBaseQueue(name, impl, store, cfg)
 }
 
@@ -215,8 +207,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 			return shouldAddMap[r], priorityMap[r]
 		},
 	}
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 2)
-	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: testQueueMaxSizeSetting})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
 
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
@@ -363,8 +354,7 @@ func TestBaseQueueSamePriorityFIFO(t *testing.T) {
 		},
 	}
 
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 100)
-	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: testQueueMaxSizeSetting})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 100})
 
 	for _, repl := range repls {
 		added, err := bq.testingAdd(ctx, repl, 0.0)
@@ -404,8 +394,7 @@ func TestBaseQueueAdd(t *testing.T) {
 			return false, 0.0
 		},
 	}
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 1)
-	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: testQueueMaxSizeSetting})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 1})
 	bq.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
 	if bq.Length() != 0 {
 		t.Fatalf("expected length 0; got %d", bq.Length())
@@ -446,8 +435,7 @@ func TestBaseQueueNoop(t *testing.T) {
 		},
 		noop: false,
 	}
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 2)
-	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: testQueueMaxSizeSetting})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	testQueue.blocker <- struct{}{}
@@ -501,8 +489,7 @@ func TestBaseQueueProcess(t *testing.T) {
 			return
 		},
 	}
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 2)
-	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: testQueueMaxSizeSetting})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
@@ -575,8 +562,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 			return
 		},
 	}
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 2)
-	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: testQueueMaxSizeSetting})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 
 	bq.maybeAdd(ctx, r, hlc.ClockTimestamp{})
@@ -669,12 +655,11 @@ func TestNeedsSystemConfig(t *testing.T) {
 		},
 	}
 
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 1)
 	// bqNeedsSysCfg will not add the replica or process it without a system config.
 	bqNeedsSysCfg := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
 		needsSpanConfigs:     true,
 		acceptsUnsplitRanges: true,
-		maxSize:              testQueueMaxSizeSetting,
+		maxSize:              1,
 	})
 
 	bqNeedsSysCfg.Start(stopper)
@@ -700,7 +685,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 	bqNoSysCfg := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
 		needsSpanConfigs:     false,
 		acceptsUnsplitRanges: true,
-		maxSize:              testQueueMaxSizeSetting,
+		maxSize:              1,
 	})
 	bqNoSysCfg.Start(stopper)
 	bqNoSysCfg.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
@@ -760,8 +745,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		},
 	}
 
-	testQueueMaxSizeSetting.Override(ctx, &s.cfg.Settings.SV, 2)
-	bq := makeTestBaseQueue("test", testQueue, s, queueConfig{maxSize: testQueueMaxSizeSetting})
+	bq := makeTestBaseQueue("test", testQueue, s, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 
 	// Check our config.
@@ -869,8 +853,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	const replicaCount = 10
 	repls := createReplicas(t, &tc, replicaCount)
 
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, int64(replicaCount))
-	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: testQueueMaxSizeSetting})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: replicaCount})
 	bq.Start(stopper)
 
 	for _, r := range repls {
@@ -1075,10 +1058,9 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 			},
 		},
 	}
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 1)
 	bq := makeTestBaseQueue("test", ptQueue, tc.store,
 		queueConfig{
-			maxSize:              testQueueMaxSizeSetting,
+			maxSize:              1,
 			processTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
 			acceptsUnsplitRanges: true,
 		})
@@ -1203,10 +1185,9 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 			},
 		},
 	}
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 1)
 	bq := makeTestBaseQueue("test", ptQueue, tc.store,
 		queueConfig{
-			maxSize:              testQueueMaxSizeSetting,
+			maxSize:              1,
 			processTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
 			acceptsUnsplitRanges: true,
 		})
@@ -1279,8 +1260,7 @@ func TestBaseQueueDisable(t *testing.T) {
 			return true, 1.0
 		},
 	}
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 2)
-	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: testQueueMaxSizeSetting})
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 
 	bq.SetDisabled(true)
@@ -1439,10 +1419,9 @@ func TestBaseQueueProcessConcurrently(t *testing.T) {
 		},
 		processBlocker: make(chan struct{}, 1),
 	}
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 3)
 	bq := makeTestBaseQueue("test", pQueue, tc.store,
 		queueConfig{
-			maxSize:        testQueueMaxSizeSetting,
+			maxSize:        3,
 			maxConcurrency: 2,
 		},
 	)
@@ -1502,9 +1481,8 @@ func TestBaseQueueChangeReplicaID(t *testing.T) {
 			return true, 1.0
 		},
 	}
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 10000)
 	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
-		maxSize:              testQueueMaxSizeSetting,
+		maxSize:              defaultQueueMaxSize,
 		acceptsUnsplitRanges: true,
 	})
 	r := &fakeReplica{rangeID: 1, replicaID: 1}
@@ -1557,10 +1535,9 @@ func TestBaseQueueRequeue(t *testing.T) {
 		},
 		processBlocker: make(chan struct{}, 1),
 	}
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 3)
 	bq := makeTestBaseQueue("test", pQueue, tc.store,
 		queueConfig{
-			maxSize:        testQueueMaxSizeSetting,
+			maxSize:        3,
 			maxConcurrency: 2,
 		},
 	)

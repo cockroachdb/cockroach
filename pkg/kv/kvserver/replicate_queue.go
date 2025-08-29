@@ -566,7 +566,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 	rq.baseQueue = newBaseQueue(
 		"replicate", rq, store,
 		queueConfig{
-			maxSize:              kvserverbase.ReplicateQueueMaxSize,
+			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
 			needsSpanConfigs:     true,
 			acceptsUnsplitRanges: false,

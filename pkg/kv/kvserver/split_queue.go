@@ -127,7 +127,7 @@ func newSplitQueue(store *Store, db *kv.DB) *splitQueue {
 	sq.baseQueue = newBaseQueue(
 		"split", sq, store,
 		queueConfig{
-			maxSize:              kvserverbase.BaseQueueMaxSize,
+			maxSize:              defaultQueueMaxSize,
 			maxConcurrency:       splitQueueConcurrency,
 			needsLease:           true,
 			needsSpanConfigs:     true,

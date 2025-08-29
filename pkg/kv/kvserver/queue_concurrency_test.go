@@ -46,25 +46,12 @@ func TestBaseQueueConcurrent(t *testing.T) {
 	stopper := stop.NewStopper(stop.WithTracer(tr))
 	defer stopper.Stop(ctx)
 
-	// Set up a fake store with just exactly what the code calls into. Ideally
-	// we'd set up an interface against the *Store as well, similar to
-	// replicaInQueue, but this isn't an ideal world. Deal with it.
-	store := &Store{
-		cfg: StoreConfig{
-			Clock:             hlc.NewClockForTesting(nil),
-			AmbientCtx:        log.MakeTestingAmbientContext(tr),
-			DefaultSpanConfig: roachpb.TestingDefaultSpanConfig(),
-			Settings:          cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.Latest.Version(), true),
-		},
-	}
-
 	// We'll use this many ranges, each of which is added a few times to the
 	// queue and maybe removed as well.
 	const num = 1000
 
-	testQueueMaxSizeSetting.Override(ctx, &store.cfg.Settings.SV, num/2)
 	cfg := queueConfig{
-		maxSize:              testQueueMaxSizeSetting,
+		maxSize:              num / 2,
 		maxConcurrency:       4,
 		acceptsUnsplitRanges: true,
 		processTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
@@ -75,6 +62,18 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		processingNanos: metric.NewCounter(metric.Metadata{Name: "processingnanos"}),
 		purgatory:       metric.NewGauge(metric.Metadata{Name: "purgatory"}),
 		disabledConfig:  testQueueEnabled,
+	}
+
+	// Set up a fake store with just exactly what the code calls into. Ideally
+	// we'd set up an interface against the *Store as well, similar to
+	// replicaInQueue, but this isn't an ideal world. Deal with it.
+	store := &Store{
+		cfg: StoreConfig{
+			Clock:             hlc.NewClockForTesting(nil),
+			AmbientCtx:        log.MakeTestingAmbientContext(tr),
+			DefaultSpanConfig: roachpb.TestingDefaultSpanConfig(),
+			Settings:          cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.Latest.Version(), true),
+		},
 	}
 
 	// Set up a queue impl that will return random results from processing.

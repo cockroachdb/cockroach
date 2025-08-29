@@ -184,7 +184,7 @@ func newMVCCGCQueue(store *Store) *mvccGCQueue {
 	mgcq.baseQueue = newBaseQueue(
 		"mvccGC", mgcq, store,
 		queueConfig{
-			maxSize:              kvserverbase.BaseQueueMaxSize,
+			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
 			needsSpanConfigs:     true,
 			acceptsUnsplitRanges: false,
