@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -43,12 +42,13 @@ type PlanHintsCache struct {
 
 		// queryHashes maintains an entry for *every* query that has plan hints.
 		// This allows queries without hints to return immediately without
-		// consulting the cache and system.plan_hints table. It is updated only
-		// by the system.plan_hints rangefeed.
+		// consulting the cache and system.plan_hints table. It is updated only by
+		// the system.plan_hints table rangefeed.
 		//
-		// In order to handle hash collisions, queryHashes maintains a count for the
-		// number of fingerprints associated with each hash.
-		queryHashes map[int64]int
+		// queryHashes maps to a list of row_id values in order to resolve hash
+		// collisions. This makes it possible to remove entries in response to
+		// rangefeed events without having to consult the db.
+		queryHashes map[int64]rowIDs
 
 		// cache stores query plan hints from the system.plan_hints table. It has a
 		// maximum capacity, and uses an LRU eviction policy.
@@ -61,33 +61,11 @@ type PlanHintsCache struct {
 	datumAlloc tree.DatumAlloc
 }
 
-type cacheEntry struct {
-	// If mustWait is true, we do not have any statistics for this table and we
-	// are in the process of fetching the stats from the database. Other callers
-	// can wait on the waitCond until this is false.
-	mustWait bool
-	waitCond sync.Cond
-
-	// A cache entry can store multiple sets of hints in case of hash collisions.
-	hints []planHints
-}
-
-// planHints annotates PlanHints with a query fingerprint in order to resolve
-// hash collisions.
-type planHints struct {
-	// queryFingerprint is the fingerprint common to all queries that match this
-	// hint. It is used in addition to the fingerprint hash to determine whether
-	// the plan hints apply to a specific query.
-	queryFingerprint string
-
-	// hints is the set of query plan hints for queries that match the
-	// fingerprint.
-	hints *PlanHints
-}
-
+// NewPlanHintsCache creates a new PlanHintsCache that can hold plan hints for
+// <cacheSize> queries (and records the existence of hints for all queries).
 func NewPlanHintsCache(cacheSize int, db descs.DB) *PlanHintsCache {
 	planHintsCache := &PlanHintsCache{db: db}
-	planHintsCache.mu.queryHashes = make(map[int64]int)
+	planHintsCache.mu.queryHashes = make(map[int64]rowIDs)
 	planHintsCache.mu.cache = cache.NewUnorderedCache(cache.Config{
 		Policy:      cache.CacheLRU,
 		ShouldEvict: func(s int, key, value interface{}) bool { return s > cacheSize },
@@ -114,28 +92,26 @@ func (c *PlanHintsCache) Start(
 
 	// Set up a range feed to watch for updates to system.plan_hints.
 	handleEvent := func(ctx context.Context, kv *kvpb.RangeFeedValue) {
-		queryHash, err := decodePlanHintsIDFromKV(codec, kv, &c.datumAlloc)
+		queryHash, rowID, err := decodePlanHintsIDFromKV(codec, kv, &c.datumAlloc)
 		if err != nil {
 			log.Warningf(ctx, "failed to decode system.plan_hints key %v: %v", kv.Key, err)
 			return
 		}
+		// Update the queryHashes map and hints cache.
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if kv.Value.IsPresent() {
-			// Ensure an entry in the queryHashes map.
-			c.mu.queryHashes[queryHash] = c.mu.queryHashes[queryHash] + 1
+			c.mu.queryHashes[queryHash] = c.mu.queryHashes[queryHash].addRowID(rowID)
 		} else {
-			// This is a deletion. Remove the entry from queryHashes if there are no
-			// collisions.
-			if c.mu.queryHashes[queryHash] > 1 {
-				c.mu.queryHashes[queryHash] = c.mu.queryHashes[queryHash] - 1
-			} else {
+			// This is a deletion event.
+			c.mu.queryHashes[queryHash] = c.mu.queryHashes[queryHash].removeRowID(rowID)
+			if len(c.mu.queryHashes[queryHash]) == 0 {
 				delete(c.mu.queryHashes, queryHash)
 			}
 		}
 		// Unconditionally remove the cache entry to ensure a refresh on the next
-		// matching query. Note that this may cause unnecessary overhead in the case
-		// of hash collisions, but these are expected to be rare.
+		// matching query. Note that this may cause unnecessary refreshing in the
+		// case of hash collisions, but these are expected to be rare.
 		c.mu.cache.Del(queryHash)
 	}
 	_, err = rangeFeedFactory.RangeFeed(
@@ -154,18 +130,21 @@ func (c *PlanHintsCache) Start(
 // on system.plan_hints.
 func decodePlanHintsIDFromKV(
 	codec keys.SQLCodec, kv *kvpb.RangeFeedValue, da *tree.DatumAlloc,
-) (queryHash int64, err error) {
+) (queryHash, rowID int64, err error) {
 	// The primary key of plan_hints is (id INT8).
 	dirs := []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC}
-	keyVals := make([]rowenc.EncDatum, 1)
+	keyVals := make([]rowenc.EncDatum, 2)
 	if _, err = rowenc.DecodeIndexKey(codec, keyVals, dirs, kv.Key); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	if err = keyVals[0].EnsureDecoded(types.Int, da); err != nil {
-		return 0, err
+	for i := range keyVals {
+		if err = keyVals[i].EnsureDecoded(types.Int, da); err != nil {
+			return 0, 0, err
+		}
 	}
 	queryHash = int64(tree.MustBeDInt(keyVals[0].Datum))
-	return queryHash, nil
+	rowID = int64(tree.MustBeDInt(keyVals[1].Datum))
+	return queryHash, rowID, nil
 }
 
 // MaybeGetPlanHints attempts to retrieve the plan hints for the given query
@@ -176,11 +155,7 @@ func (c *PlanHintsCache) MaybeGetPlanHints(
 ) (hints *PlanHints) {
 	// TODO(drewk): consider reusing the hash calculated here and for query
 	// logging.
-	fnv := util.MakeFNV64()
-	for _, c := range queryFingerprint {
-		fnv.Add(uint64(c))
-	}
-	queryHash := int64(fnv.Sum())
+	queryHash := FingerprintHashForPlanHints(queryFingerprint)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if _, ok := c.mu.queryHashes[queryHash]; !ok {
@@ -196,12 +171,7 @@ func (c *PlanHintsCache) MaybeGetPlanHints(
 	}
 	entry := e.(*cacheEntry)
 	c.maybeWaitForRefreshLocked(ctx, entry, queryHash)
-	for i := range entry.hints {
-		if entry.hints[i].queryFingerprint == queryFingerprint {
-			return entry.hints[i].hints
-		}
-	}
-	return nil
+	return entry.getMatchingHints(queryFingerprint)
 }
 
 // maybeWaitForRefreshLocked checks if the given cache entry is being refreshed
@@ -231,7 +201,7 @@ func (c *PlanHintsCache) maybeWaitForRefreshLocked(
 // released while reading from the db, and then reacquired.
 func (c *PlanHintsCache) addCacheEntryLocked(
 	ctx context.Context, queryHash int64, queryFingerprint string,
-) (hints *PlanHints) {
+) *PlanHints {
 	// Add a cache entry that other queries can find and wait on until we have the
 	// plan hints.
 	entry := &cacheEntry{
@@ -245,7 +215,7 @@ func (c *PlanHintsCache) addCacheEntryLocked(
 		c.mu.Unlock()
 		defer c.mu.Lock()
 		log.VEventf(ctx, 1, "reading hints for query %s", queryFingerprint)
-		hints, err = c.getPlanHintsFromDB(ctx, queryHash, queryFingerprint)
+		err = c.getPlanHintsFromDB(ctx, queryHash, entry)
 		log.VEventf(ctx, 1, "finished reading hints for query %s", queryFingerprint)
 	}()
 
@@ -259,16 +229,16 @@ func (c *PlanHintsCache) addCacheEntryLocked(
 		log.VEventf(ctx, 1, "encountered error while reading hints for query %s", queryFingerprint)
 		return nil
 	}
-	return hints
+	return entry.getMatchingHints(queryFingerprint)
 }
 
 // getPlanHintsFromDB queries the system.plan_hints table for hints matching the
-// given fingerprint. It is able to handle the case when multiple fingerprints
-// match the hash, as well as the case when there are no hints for the
-// fingerprint.
+// given fingerprint hash. It is able to handle the case when multiple
+// fingerprints match the hash, as well as the case when there are no hints for
+// the fingerprint.
 func (c *PlanHintsCache) getPlanHintsFromDB(
-	ctx context.Context, queryHash int64, queryFingerprint string,
-) (hints *PlanHints, err error) {
+	ctx context.Context, queryHash int64, entry *cacheEntry,
+) error {
 	const opName = "get-plan-hints"
 	const getHintsStmt = `SELECT "fingerprint", "plan_hints" FROM system.plan_hints WHERE "query_hash" = $1`
 	it, err := c.db.Executor().QueryIteratorEx(
@@ -276,21 +246,85 @@ func (c *PlanHintsCache) getPlanHintsFromDB(
 		getHintsStmt, queryHash,
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	var datums tree.Datums
 	for {
 		ok, err := it.Next(ctx)
 		if !ok || err != nil {
-			return nil, err
+			return err
 		}
-		datums = it.Cur()
+		datums := it.Cur()
 		fingerprint := string(tree.MustBeDString(datums[0]))
-		if fingerprint == queryFingerprint {
-			// It is possible for the query hash to collide, so check the actual
-			// fingerprint strings.
+		hints, err := NewPlanHints([]byte(tree.MustBeDBytes(datums[1])))
+		if err != nil {
+			return err
+		}
+		entry.hints = append(entry.hints, planHints{queryFingerprint: fingerprint, hints: hints})
+	}
+}
+
+type cacheEntry struct {
+	// If mustWait is true, we do not have any statistics for this table and we
+	// are in the process of fetching the stats from the database. Other callers
+	// can wait on the waitCond until this is false.
+	mustWait bool
+	waitCond sync.Cond
+
+	// A cache entry can store multiple sets of hints in case of hash collisions.
+	hints []planHints
+}
+
+// planHints annotates PlanHints with a query fingerprint in order to resolve
+// hash collisions.
+type planHints struct {
+	// queryFingerprint is the fingerprint common to all queries that match this
+	// hint. It is used in addition to the fingerprint hash to determine whether
+	// the plan hints apply to a specific query.
+	queryFingerprint string
+
+	// hints is the set of query plan hints for queries that match the
+	// fingerprint.
+	hints *PlanHints
+}
+
+// getMatchingHints returns the plan hints for the given fingerprint, or nil if
+// they don't exist.
+func (entry *cacheEntry) getMatchingHints(queryFingerprint string) *PlanHints {
+	for i := range entry.hints {
+		if entry.hints[i].queryFingerprint == queryFingerprint {
+			return entry.hints[i].hints
+		}
+	}
+	return nil
+}
+
+// rowIDs manages an unordered set of row_id values from the system.plan_hints
+// table.
+type rowIDs []int64
+
+func (ids rowIDs) addRowID(rowID int64) rowIDs {
+	res := ids
+	var hasRowID bool
+	for _, id := range res {
+		if id == rowID {
+			hasRowID = true
 			break
 		}
 	}
-	return NewPlanHints([]byte(tree.MustBeDBytes(datums[1])))
+	if !hasRowID {
+		res = append(res, rowID)
+	}
+	return res
+}
+
+func (ids rowIDs) removeRowID(rowID int64) rowIDs {
+	res := ids
+	for i := range res {
+		if res[i] == rowID {
+			res[i] = res[len(res)-1]
+			res = res[:len(res)-1]
+			break
+		}
+	}
+	return res
 }

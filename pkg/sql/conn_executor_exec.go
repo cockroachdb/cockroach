@@ -2695,6 +2695,52 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		}
 	}()
 
+	// Retrieve the plan hints for this query, if any.
+	// TODO(drewk): consider whether it's possible to cache the result across
+	// statement retries.
+	stmtNoConstants := planner.stmt.StmtNoConstants
+	switch t := planner.stmt.AST.(type) {
+	case *tree.ExplainAnalyze:
+		// Unwrap EXPLAIN ANALYZE so that hints apply to the wrapped statement.
+		f := tree.NewFmtCtx(tree.FmtHideConstants)
+		t.Statement.Format(f)
+		stmtNoConstants = f.CloseAndGetString()
+	case *tree.Explain:
+		// Unwrap EXPLAIN so that hints apply to the wrapped statement.
+		f := tree.NewFmtCtx(tree.FmtHideConstants)
+		t.Statement.Format(f)
+		stmtNoConstants = f.CloseAndGetString()
+	}
+	planHints := planner.execCfg.PlanHintsCache.MaybeGetPlanHints(ctx, stmtNoConstants)
+
+	// Apply any session settings from the plan hints.
+	if planHints != nil && len(planHints.Settings) > 0 {
+		for _, setting := range planHints.Settings {
+			// TODO(drewk): the setting will persist until the end of the
+			// transaction, rather than just the statement. We'll have to plumb
+			// awareness of statement vs transaction SessionData objects.
+			// TODO(drewk): think about interactions with savepoints.
+			// TODO(drewk): think about interactions with explicit SET statements.
+			// TODO(drewk): this is missing some nil checks.
+			const errorMsg = "failed to apply plan hint SET %s = %s"
+			_, v, err := getSessionVar(setting.SettingName, false /* missingOk */)
+			if err != nil {
+				log.VInfof(ctx, 1, errorMsg, setting.SettingName, setting.SettingValue, err)
+			}
+			if planner.extendedEvalCtx.TxnImplicit {
+				planner.sessionDataStack.PushTopClone()
+			}
+			err = planner.sessionDataMutatorIterator.applyOnTopMutator(
+				func(m sessionDataMutator) error {
+					return v.Set(ctx, m, setting.SettingValue)
+				},
+			)
+			if err != nil {
+				log.VInfof(ctx, 1, errorMsg, setting.SettingName, setting.SettingValue, err)
+			}
+		}
+	}
+
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	// TODO(sql-sessions): fix the phase time for pausable portals.

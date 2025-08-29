@@ -10,7 +10,10 @@
 
 package hints
 
-import "github.com/cockroachdb/cockroach/pkg/util/protoutil"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+)
 
 // NewPlanHints converts the raw bytes from system.plan_hints into a PlanHints
 // object.
@@ -26,4 +29,30 @@ func NewPlanHints(bytes []byte) (*PlanHints, error) {
 // inserted into the system.plan_hints table.
 func (hints *PlanHints) ToBytes() ([]byte, error) {
 	return protoutil.Marshal(hints)
+}
+
+// MergePlanHints combines the given PlanHints. If one is nil, MergePlanHints
+// returns the other. If both are nil, MergePlanHints returns nil.
+func MergePlanHints(l, r *PlanHints) *PlanHints {
+	if l == nil {
+		return r
+	} else if r == nil {
+		return l
+	}
+	ret := &PlanHints{
+		Settings: make([]*SettingHint, 0, len(l.Settings)+len(r.Settings)),
+	}
+	ret.Settings = append(ret.Settings, l.Settings...)
+	ret.Settings = append(ret.Settings, r.Settings...)
+	return ret
+}
+
+// FingerprintHashForPlanHints returns a 64-bit hash for the given query
+// fingerprint to be used in the system.plan_hints table.
+func FingerprintHashForPlanHints(queryFingerprint string) int64 {
+	fnv := util.MakeFNV64()
+	for _, c := range queryFingerprint {
+		fnv.Add(uint64(c))
+	}
+	return int64(fnv.Sum())
 }

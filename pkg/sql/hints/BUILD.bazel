@@ -37,10 +37,7 @@ proto_library(
     srcs = ["plan_hint.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = [
-        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
-        "@com_google_protobuf//:timestamp_proto",
-    ],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )
 
 go_proto_library(
