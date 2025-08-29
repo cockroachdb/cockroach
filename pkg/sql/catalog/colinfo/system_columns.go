@@ -48,13 +48,18 @@ const (
 	// MVCCValueHeader.
 	//
 	// In the presence of multiple column families, this column
-	// will only be non-NULL if the latest OriginTimstamp is
+	// will only be non-NULL if the latest OriginTimestamp is
 	// larger than then MVCC timestamp of all column families
 	// _without_ and OriginTimestamp.
 	//
 	// NB: The semantics of this column are subject to change and
 	// should not be relied upon.
 	OriginTimestampColumnID
+
+	// TieringAttrColumnID is the ColumnID of the tiering attribute column which
+	// returns the TieringAttribute from the MVCCValueHeader. All KVs associated
+	// with the same row have the same value for this column.
+	TieringAttrColumnID
 
 	numSystemColumns = iota
 )
@@ -82,6 +87,7 @@ var AllSystemColumnDescs = []descpb.ColumnDescriptor{
 	TableOIDColumnDesc,
 	OriginIDColumnDesc,
 	OriginTimestampColumnDesc,
+	TieringAttrColumnDesc,
 }
 
 // MVCCTimestampColumnDesc is a column descriptor for the MVCC system column.
@@ -121,7 +127,7 @@ var OriginTimestampColumnDesc = descpb.ColumnDescriptor{
 	Name:             OriginTimestampColumnName,
 	Type:             OriginTimestampColumnType,
 	Hidden:           true,
-	Nullable:         true,
+	Nullable:         false,
 	SystemColumnKind: catpb.SystemColumnKind_ORIGINTIMESTAMP,
 	ID:               OriginTimestampColumnID,
 }
@@ -144,6 +150,21 @@ var TableOIDColumnDesc = descpb.ColumnDescriptor{
 
 // TableOIDColumnName is the name of the tableoid system column.
 const TableOIDColumnName = "tableoid"
+
+// TieringAttrColumnDesc is the descriptor for the tiering attribute column,
+// only usable with tables that use storage tiering.
+var TieringAttrColumnDesc = descpb.ColumnDescriptor{
+	Name:             TieringAttrColumnName,
+	Type:             TieringAttrColumnType,
+	Hidden:           true,
+	Nullable:         true,
+	SystemColumnKind: catpb.SystemColumnKind_TIERINGATTR,
+	ID:               TieringAttrColumnID,
+}
+
+const TieringAttrColumnName = "crdb_internal_tiering_attr"
+
+var TieringAttrColumnType = types.Int
 
 // IsColIDSystemColumn returns whether a column ID refers to a system column.
 func IsColIDSystemColumn(colID descpb.ColumnID) bool {

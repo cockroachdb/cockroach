@@ -54,6 +54,14 @@ func TestTieringPolicy(t *testing.T) {
 		(3, 'baz', '1970-01-01 00:11:00'),
 		(4, 'qux', '1970-01-01 00:00:02')`)
 
+	fmt.Printf("\n\nquerying:\n")
+	runner.CheckQueryResults(t, `SELECT k, ts, crdb_internal_tiering_attr FROM tieredtable`, [][]string{
+		{"1", "1970-01-01 00:10:00 +0000 UTC", "600"},
+		{"2", "1970-01-01 00:00:01 +0000 UTC", "1"},
+		{"3", "1970-01-01 00:11:00 +0000 UTC", "660"},
+		{"4", "1970-01-01 00:00:02 +0000 UTC", "2"},
+	})
+
 	fmt.Printf("\n\nrunning compaction\n")
 	runner.Exec(t, `SELECT crdb_internal.compact_engine_span(1, 1,
 		(SELECT raw_start_key FROM [SHOW RANGES FROM TABLE tieredtable WITH KEYS] ORDER BY start_key LIMIT 1),

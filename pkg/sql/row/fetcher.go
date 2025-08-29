@@ -208,6 +208,9 @@ type tableInfo struct {
 	rowLastModifiedWithoutOriginTimestamp hlc.Timestamp
 	originTimestampOutputIdx              int
 
+	rowLastTieringAttr   int64
+	tieringAttrOutputIdx int
+
 	// rowIsDeleted is true when the row has been deleted. This is only
 	// meaningful when kv deletion tombstones are returned by the KVBatchFetcher,
 	// which the one used by `StartScan` (the common case) doesnt. Notably,
@@ -381,6 +384,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 		oidOutputIdx:             noOutputColumn,
 		originIDOutputIdx:        noOutputColumn,
 		originTimestampOutputIdx: noOutputColumn,
+		tieringAttrOutputIdx:     noOutputColumn,
 	}
 
 	for idx := range args.Spec.FetchedColumns {
@@ -403,6 +407,11 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 
 			case catpb.SystemColumnKind_ORIGINTIMESTAMP:
 				table.originTimestampOutputIdx = idx
+				rf.mvccDecodeStrategy = storage.MVCCDecodingRequired
+				rf.shouldRequestRawMVCCKeys = true
+
+			case catpb.SystemColumnKind_TIERINGATTR:
+				table.tieringAttrOutputIdx = idx
 				rf.mvccDecodeStrategy = storage.MVCCDecodingRequired
 				rf.shouldRequestRawMVCCKeys = true
 			}
@@ -937,6 +946,7 @@ func (rf *Fetcher) processKV(
 		table.rowLastOriginID = 0
 		table.rowLastOriginTimestamp = hlc.Timestamp{}
 		table.rowLastModifiedWithoutOriginTimestamp = hlc.Timestamp{}
+		table.rowLastTieringAttr = 0
 		// All row encodings (both before and after column families) have a
 		// sentinel kv (column family 0) that is always present when a row is
 		// present, even if that row is all NULLs. Thus, a row is deleted if and
@@ -955,6 +965,11 @@ func (rf *Fetcher) processKV(
 		if vh.OriginTimestamp.IsEmpty() && table.rowLastModifiedWithoutOriginTimestamp.Less(kv.Value.Timestamp) {
 			table.rowLastModifiedWithoutOriginTimestamp = kv.Value.Timestamp
 		}
+		if table.rowLastTieringAttr != 0 && table.rowLastTieringAttr != int64(vh.TieringAttribute) {
+			return "", "", errors.AssertionFailedf("conflicting tiering attributes %d, %d for the same row",
+				table.rowLastTieringAttr, vh.TieringAttribute)
+		}
+		table.rowLastTieringAttr = int64(vh.TieringAttribute)
 	}
 
 	if len(table.spec.FetchedColumns) == 0 {
@@ -1318,6 +1333,10 @@ func (rf *Fetcher) finalizeRow() error {
 		} else {
 			table.row[table.originTimestampOutputIdx] = rowenc.NullEncDatum()
 		}
+	}
+
+	if table.tieringAttrOutputIdx != noOutputColumn {
+		table.row[table.tieringAttrOutputIdx] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(rf.table.rowLastTieringAttr))}
 	}
 
 	// Fill in any missing values with NULLs

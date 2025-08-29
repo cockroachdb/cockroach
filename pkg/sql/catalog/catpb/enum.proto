@@ -31,6 +31,9 @@ enum SystemColumnKind {
   // A system column containing the value of the OriginTimestamp field of the
   // MVCCValueHeader associated with the KV's coressponding to the row.
   ORIGINTIMESTAMP = 4;
+  // A system column containing the value of the TieringAttribute field of the
+  // MVCCValueHeader associated with the KV's coressponding to the row.
+  TIERINGATTR = 5;
 }
 
 // InvertedIndexColumnKind is the kind of the inverted index on a column. The

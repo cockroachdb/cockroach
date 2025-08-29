@@ -280,11 +280,7 @@ func makeDropColumn(s *Smither) (tree.Statement, bool) {
 	var col *tree.ColumnTableDef
 	for {
 		col = tableRef.Columns[s.rnd.Intn(len(tableRef.Columns))]
-		var isSystemCol bool
-		for _, systemColDesc := range colinfo.AllSystemColumnDescs {
-			isSystemCol = isSystemCol || string(col.Name) == systemColDesc.Name
-		}
-		if !isSystemCol {
+		if !colinfo.IsSystemColumnName(string(col.Name)) {
 			break
 		}
 	}
