@@ -6,6 +6,7 @@
 package wag
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -39,6 +40,8 @@ func TestWrite(t *testing.T) {
 		str, err := print.DecodeWriteBatch(b.Repr())
 		require.NoError(t, err)
 		out += fmt.Sprintf(">> %s\n%s", name, str)
+
+		require.NoError(t, b.Commit(false /* sync */))
 	}
 
 	id := roachpb.FullReplicaID{RangeID: 123, ReplicaID: 4}
@@ -50,6 +53,15 @@ func TestWrite(t *testing.T) {
 	// recursion. Remove it, and let the caller handle new lines.
 	out = strings.ReplaceAll(out, "\n\n", "\n")
 	echotest.Require(t, out, filepath.Join("testdata", t.Name()+".txt"))
+
+	// Smoke check that the iterator works.
+	var iter Iterator
+	count := 0
+	for range iter.Iter(context.Background(), s.eng) {
+		count++
+	}
+	require.NoError(t, iter.Error())
+	require.Equal(t, 4, count)
 }
 
 type store struct {
