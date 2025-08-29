@@ -595,7 +595,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			successes:          store.metrics.ReplicateQueueSuccesses,
 			failures:           store.metrics.ReplicateQueueFailures,
 			pending:            store.metrics.ReplicateQueuePending,
-			droppedDueToSize:   store.metrics.ReplicateQueueDroppedDueToSize,
+			full:               store.metrics.ReplicateQueueFull,
 			processingNanos:    store.metrics.ReplicateQueueProcessingNanos,
 			purgatory:          store.metrics.ReplicateQueuePurgatory,
 			disabledConfig:     kvserverbase.ReplicateQueueEnabled,

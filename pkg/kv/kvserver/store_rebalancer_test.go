@@ -1887,8 +1887,8 @@ func TestReplicateQueueMaxSize(t *testing.T) {
 	// Helper function to add a replica and verify queue state.
 	verify := func(expectedLength int, expectedDropped int64) {
 		require.Equal(t, expectedLength, replicateQueue.Length())
-		require.Equal(t, expectedDropped, replicateQueue.droppedDueToSize.Count())
-		require.Equal(t, expectedDropped, tc.store.metrics.ReplicateQueueDroppedDueToSize.Count())
+		require.Equal(t, expectedDropped, replicateQueue.full.Count())
+		require.Equal(t, expectedDropped, tc.store.metrics.ReplicateQueueFull.Count())
 	}
 
 	addReplicaAndVerify := func(rangeID roachpb.RangeID, expectedLength int, expectedDropped int64) {
