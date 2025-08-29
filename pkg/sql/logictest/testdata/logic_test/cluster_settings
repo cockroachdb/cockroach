@@ -454,7 +454,7 @@ subtest notice_on_ttl_default_rate_limit
 query T noticetrace
 SET CLUSTER SETTING sql.ttl.default_delete_rate_limit = 90;
 ----
-NOTICE: The TTL rate limit is per leaseholder per table.
+NOTICE: The TTL rate limit is per node per table.
 DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/v25.3/row-level-ttl#ttl-storage-parameters
 
 statement ok
@@ -463,7 +463,7 @@ SET CLUSTER SETTING sql.ttl.default_delete_rate_limit = 100;
 query T noticetrace
 SET CLUSTER SETTING sql.ttl.default_select_rate_limit = 100;
 ----
-NOTICE: The TTL rate limit is per leaseholder per table.
+NOTICE: The TTL rate limit is per node per table.
 DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/v25.3/row-level-ttl#ttl-storage-parameters
 
 statement ok
