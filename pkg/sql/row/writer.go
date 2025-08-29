@@ -108,6 +108,27 @@ func prepareInsertOrUpdateBatch(
 	if oth.IsSet() && len(families) > 1 {
 		return nil, errors.AssertionFailedf("OriginTimestampCPutHelper is not yet testing with multi-column family writes")
 	}
+
+	var tieringAttribute uint64
+	// TODO(radu): some of this logic should be pushed into initialization.
+	if primaryIndex := helper.TableDesc.GetPrimaryIndex(); primaryIndex.UsesStorageTiering() {
+		tieringColID := primaryIndex.StorageTieringColumnID()
+		tieringColOrd, ok := updatedColIDMapping.Get(tieringColID)
+		if !ok {
+			return nil, errors.AssertionFailedf("no value provided for tiering column %d", tieringColID)
+		}
+		if v := values[tieringColOrd]; v != tree.DNull {
+			switch v := v.(type) {
+			case *tree.DTimestamp:
+				tieringAttribute = uint64(max(1, v.Unix()))
+			case *tree.DTimestampTZ:
+				tieringAttribute = uint64(max(1, v.Unix()))
+			default:
+				return nil, errors.AssertionFailedf("unsupported tiering column datum type %T", v)
+			}
+		}
+	}
+
 	var putFn func(context.Context, Putter, *roachpb.Key, *roachpb.Value, bool, *RowHelper, lazyIndexDirs)
 	var oldKeysLocked, overwrite bool
 	switch kvOp {
@@ -220,6 +241,9 @@ func prepareInsertOrUpdateBatch(
 				if err := helper.CheckRowSize(ctx, kvKey, marshaled.RawBytes, family.ID); err != nil {
 					return nil, err
 				}
+				if tieringAttribute != 0 {
+					marshaled.TieringAttribute = tieringAttribute
+				}
 
 				if oth.IsSet() {
 					oth.CPutFn(ctx, batch, kvKey, &marshaled, oldVal, traceKV)
@@ -297,6 +321,9 @@ func prepareInsertOrUpdateBatch(
 			// a deep copy so rawValueBuf can be re-used by other calls to the
 			// function.
 			kvValue.SetTuple(rawValueBuf)
+			if tieringAttribute != 0 {
+				kvValue.TieringAttribute = tieringAttribute
+			}
 			if err := helper.CheckRowSize(ctx, kvKey, kvValue.RawBytes, family.ID); err != nil {
 				return nil, err
 			}

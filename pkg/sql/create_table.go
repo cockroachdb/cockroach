@@ -2303,6 +2303,22 @@ func NewTableDesc(
 		}
 	}
 
+	// Prototype hack.
+	if desc.Name == "tieredtable" {
+		col := catalog.FindColumnByName(&desc, "ts")
+		if col == nil {
+			return nil, errors.Errorf("tiering requires a \"timestamp\" column")
+		}
+		fmt.Printf("\n\ntimestamp column ID: %v\n\n", col.GetID())
+		threshold, _ := time.Parse(time.RFC3339, "2025-01-01T00:00:00Z")
+		desc.PrimaryIndex.StorageTiering = &descpb.StorageTieringDescriptor{
+			TieringColumnID: col.GetID(),
+			Threshold: &descpb.StorageTieringDescriptor_Fixed{
+				Fixed: threshold.Unix(),
+			},
+		}
+	}
+
 	// With all structural elements in place and IDs allocated, we can resolve the
 	// constraints and qualifications.
 	// FKs are resolved after the descriptor is otherwise complete and IDs have

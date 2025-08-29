@@ -469,6 +469,16 @@ func (w index) IsTemporaryIndexForBackfill() bool {
 	return w.desc.UseDeletePreservingEncoding
 }
 
+// UsesStorageTiering implements the catalog.Index interface.
+func (w index) UsesStorageTiering() bool {
+	return w.desc.StorageTiering != nil
+}
+
+// StorageTieringColumnID implements the catalog.Index interface.
+func (w index) StorageTieringColumnID() descpb.ColumnID {
+	return w.desc.StorageTiering.TieringColumnID
+}
+
 // AsCheck implements the catalog.ConstraintProvider interface.
 func (w index) AsCheck() catalog.CheckConstraint {
 	return nil

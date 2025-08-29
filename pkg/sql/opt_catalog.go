@@ -1109,6 +1109,8 @@ func newOptTable(
 				}
 			}
 		}
+
+		invertedColOrd := -1
 		if idx.GetType() == idxtype.INVERTED {
 			// The inverted column of an inverted index is special: in the
 			// descriptors, it looks as if the table column is part of the
@@ -1122,7 +1124,8 @@ func newOptTable(
 			invertedSourceColOrdinal, _ := ot.LookupColumnOrdinal(invertedColumnID)
 
 			// Add an inverted column that refers to the inverted index key.
-			invertedCol, invertedColOrd := newColumn()
+			var invertedCol *cat.Column
+			invertedCol, invertedColOrd = newColumn()
 			invertedCol.InitInverted(
 				invertedColOrd,
 				tree.Name(invertedColumnName+"_inverted_key"),
@@ -1130,10 +1133,17 @@ func newOptTable(
 				false, /* nullable */
 				invertedSourceColOrdinal,
 			)
-			ot.indexes[i].init(ot, i, idx, idxZone, partZones, invertedColOrd)
-		} else {
-			ot.indexes[i].init(ot, i, idx, idxZone, partZones, -1 /* invertedColOrd */)
 		}
+
+		storageTieringColOrd := -1
+		if idx.UsesStorageTiering() {
+			var err error
+			storageTieringColOrd, err = ot.LookupColumnOrdinal(idx.StorageTieringColumnID())
+			if err != nil {
+				return nil, errors.AssertionFailedf("invalid storage tiering column: %v", err)
+			}
+		}
+		ot.indexes[i].init(ot, i, idx, idxZone, partZones, invertedColOrd, storageTieringColOrd)
 
 		if idx.IsUnique() {
 			if idx.ImplicitPartitioningColumnCount() > 0 {
@@ -1688,6 +1698,11 @@ type optIndex struct {
 	// the ordinal of the inverted column created to refer to the key of this
 	// index. It is -1 if this is not an inverted index.
 	invertedColOrd int
+
+	// storageTieringColOrd is used if this index uses storage tiering; it stores
+	// the ordinal of the column used as the tiering attribute. It is -1 if this
+	// index does not use storage tiering.
+	storageTieringColOrd int
 }
 
 var _ cat.Index = &optIndex{}
@@ -1702,12 +1717,14 @@ func (oi *optIndex) init(
 	zone cat.Zone,
 	partZones map[string]cat.Zone,
 	invertedColOrd int,
+	storageTieringColOrd int,
 ) {
 	oi.tab = tab
 	oi.idx = idx
 	oi.zone = zone
 	oi.indexOrdinal = indexOrdinal
 	oi.invertedColOrd = invertedColOrd
+	oi.storageTieringColOrd = storageTieringColOrd
 	if idx.Primary() {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
@@ -1968,6 +1985,16 @@ func (oi *optIndex) Partition(i int) cat.Partition {
 
 func (oi *optIndex) IsTemporaryIndexForBackfill() bool {
 	return oi.idx.IsTemporaryIndexForBackfill()
+}
+
+// UsesStorageTiering is part of the cat.Index interface.
+func (oi *optIndex) UsesStorageTiering() bool {
+	return oi.storageTieringColOrd != -1
+}
+
+// StorageTieringColumn is part of the cat.Index interface.
+func (oi *optIndex) StorageTieringColumn() cat.IndexColumn {
+	return oi.Column(oi.storageTieringColOrd)
 }
 
 // optPartition implements cat.Partition and represents a PARTITION BY LIST
@@ -2964,6 +2991,14 @@ func (oi *optVirtualIndex) Partition(i int) cat.Partition {
 // IsTemporaryIndexForBackfill is part of the cat.Index interface.
 func (oi *optVirtualIndex) IsTemporaryIndexForBackfill() bool {
 	return false
+}
+
+// UsesStorageTiering is part of the cat.Index interface.
+func (oi *optVirtualIndex) UsesStorageTiering() bool { return false }
+
+// StorageTieringColumn is part of the cat.Index interface.
+func (oi *optVirtualIndex) StorageTieringColumn() cat.IndexColumn {
+	panic(errors.AssertionFailedf("virtual index does not use storage tiering"))
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family

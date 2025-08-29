@@ -213,6 +213,14 @@ type Index interface {
 	// IsTemporaryIndexForBackfill returns true iff the index is an index being
 	// used as the temporary index being used by an in-progress index backfill.
 	IsTemporaryIndexForBackfill() bool
+
+	// UsesStorageTiering returns true if the index is configured to use storage
+	// tiering.
+	UsesStorageTiering() bool
+
+	// StorageTieringColumn returns the column that is used for storage tiering;
+	// panics if the index does not use storage tiering.
+	StorageTieringColumn() IndexColumn
 }
 
 // IndexColumn describes a single column that is part of an index definition.

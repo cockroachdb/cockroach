@@ -739,9 +739,18 @@ func (t *tieringPolicyAndExtractor) ExtractAttribute(
 	userKey []byte, value []byte,
 ) (pebble.TieringAttribute, error) {
 	a, err := DecodeTieringAttributeFromMVCCValue(value)
+	if debugSpanPolicy {
+		k, _ := DecodeEngineKey(userKey)
+		if err != nil {
+			fmt.Printf("ExtractAttribute %s error: %v", k, err)
+		} else {
+			fmt.Printf("ExtractAttribute %s -> %d\n", k, a)
+		}
+	}
 	if err != nil {
 		return 0, err
 	}
+
 	return pebble.TieringAttribute(a), err
 }
 

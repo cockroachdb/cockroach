@@ -41,14 +41,18 @@ func TestTieringPolicy(t *testing.T) {
 	runner.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
 
 	fmt.Printf("\n\ncreating table\n")
-	runner.Exec(t, "CREATE TABLE tieredtable (k INT PRIMARY KEY, v STRING, tierval INTEGER)")
+	runner.Exec(t, "CREATE TABLE tieredtable (k INT PRIMARY KEY, v STRING, ts TIMESTAMPTZ)")
 
 	// Wait for the span config to be applied.
 	fmt.Printf("\n\nsleeping\n")
 	time.Sleep(2 * time.Second)
 
 	fmt.Printf("\n\ninserting\n")
-	runner.Exec(t, "INSERT INTO tieredtable VALUES (1, 'foo', 10), (2, 'bar', 200), (3, 'baz', 300), (4, 'qux', 50)")
+	runner.Exec(t, `INSERT INTO tieredtable VALUES
+		(1, 'foo', '1970-01-01 00:10:00'),
+		(2, 'bar', '1970-01-01 00:00:01'),
+		(3, 'baz', '1970-01-01 00:11:00'),
+		(4, 'qux', '1970-01-01 00:00:02')`)
 
 	fmt.Printf("\n\nrunning compaction\n")
 	runner.Exec(t, `SELECT crdb_internal.compact_engine_span(1, 1,

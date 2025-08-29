@@ -460,12 +460,11 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		prevEndKey = span.EndKey
 	}
 
-	// The prototype special-cases a table by its name. In a real implementation,
-	// the table descriptor would contain the relevant information.
-	if table.GetName() == "tieredtable" {
-		// This is not an inherent limitation, we just don't want to add more
-		// complicated logic in the prototype.
+	// TODO(radu): support secondary indexes.
+	if table.GetPrimaryIndex().UsesStorageTiering() {
 		if len(zone.SubzoneSpans) != 0 {
+			// This is not an inherent limitation, we just don't want to add more
+			// complicated logic in the prototype.
 			return nil, errors.AssertionFailedf("subzone spans not supported with tiered storage")
 		}
 		pkStartKey := s.codec.IndexPrefix(uint32(table.GetID()), uint32(table.GetPrimaryIndexID()))
