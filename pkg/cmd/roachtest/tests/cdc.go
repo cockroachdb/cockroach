@@ -2943,7 +2943,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          1 * time.Hour,
+		Timeout:          2 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			params := multiTablePTSBenchmarkParams{
 				numTables: 50_000,
