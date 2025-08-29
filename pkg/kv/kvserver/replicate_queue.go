@@ -106,13 +106,12 @@ var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetti
 // PriorityInversionRequeue is a setting that controls whether to requeue
 // replicas when their priority at enqueue time and processing time is inverted
 // too much (e.g. dropping from a repair action to AllocatorConsiderRebalance).
-// TODO(wenyihu6): flip default to true after landing 152596 to bake
 var PriorityInversionRequeue = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.priority_inversion_requeue_replicate_queue.enabled",
 	"whether the requeue replicas should requeue when enqueued for "+
 		"repair action but ended up consider rebalancing during processing",
-	false,
+	true,
 )
 
 // ReplicateQueueMaxSize is a setting that controls the max size of the
