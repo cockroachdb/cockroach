@@ -175,8 +175,7 @@ func distImport(
 			}
 
 			accumulatedBulkSummary.Lock()
-			prog.Summary.Add(accumulatedBulkSummary.BulkOpSummary)
-			accumulatedBulkSummary.Reset()
+			prog.Summary = accumulatedBulkSummary.BulkOpSummary
 			accumulatedBulkSummary.Unlock()
 			return overall / float32(len(from))
 		},
