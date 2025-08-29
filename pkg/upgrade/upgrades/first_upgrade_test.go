@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -164,7 +163,6 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	// also holds a lease on the system database descriptor, which we will wait to
 	// be released. Reducing the lease duration makes this part of the test speed
 	// up.
-	lease.LeaseDuration.Override(ctx, &settings.SV, time.Second*30)
 	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
 	upgradePausePoint := make(chan struct{})
 	upgradeResumePoint := make(chan struct{})
@@ -377,7 +375,6 @@ func TestFirstUpgradeRepairBatchSize(t *testing.T) {
 	// also holds a lease on the system database descriptor, which we will wait to
 	// be released. Reducing the lease duration makes this part of the test speed
 	// up.
-	lease.LeaseDuration.Override(ctx, &settings.SV, time.Second*30)
 	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
 	testServer, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
