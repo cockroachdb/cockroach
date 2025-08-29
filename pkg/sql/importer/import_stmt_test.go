@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -3838,6 +3839,22 @@ func TestImportDefaultWithResume(t *testing.T) {
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
 
+	// Set up timeout context - test will fail if it runs over 10 seconds
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	// Monitor for timeout and print stack traces if test times out
+	go func() {
+		<-ctx.Done()
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			t.Errorf("Test timed out after 10 seconds")
+			// Print stack traces of all goroutines to help debug the hang
+			buf := make([]byte, 1<<20) // 1MB buffer
+			stackSize := runtime.Stack(buf, true)
+			t.Errorf("Stack trace at timeout:\n%s", buf[:stackSize])
+		}
+	}()
+
 	filterFunc, verifyFunc := kvclientutils.PrefixTransactionRetryFilter(t, importProgressDebugName, 1)
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
@@ -3856,7 +3873,6 @@ func TestImportDefaultWithResume(t *testing.T) {
 			SQLMemoryPoolSize: 1 << 30, // 1 GiB
 		})
 	registry := s.JobRegistry().(*jobs.Registry)
-	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
