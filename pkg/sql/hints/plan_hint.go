@@ -44,6 +44,14 @@ func MergePlanHints(l, r *PlanHints) *PlanHints {
 	}
 	ret.Settings = append(ret.Settings, l.Settings...)
 	ret.Settings = append(ret.Settings, r.Settings...)
+
+	// For AstHint, the right-hand side takes precedence (last one wins).
+	if r.AstHint != nil {
+		ret.AstHint = r.AstHint
+	} else if l.AstHint != nil {
+		ret.AstHint = l.AstHint
+	}
+
 	return ret
 }
 

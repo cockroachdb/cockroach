@@ -369,6 +369,12 @@ func (*DummyEvalPlanner) HintSetting(
 	return errors.WithStack(errEvalPlanner)
 }
 
+func (*DummyEvalPlanner) HintAST(
+	ctx context.Context, queryFingerprint, hintedFingerprint string,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,

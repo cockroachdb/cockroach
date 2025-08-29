@@ -51,22 +51,43 @@ func (p *planner) HintSetting(
 	return p.addPlanHints(ctx, queryFingerprint, planHints)
 }
 
+// HintAST adds an external plan hint for the query with the given fingerprint
+// which applies inline hints from a hinted version of the same query fingerprint.
+func (p *planner) HintAST(ctx context.Context, queryFingerprint, hintedFingerprint string) error {
+	// Check that the plan_hints table is active.
+	if !p.execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_4_AddSystemPlanHintsTable) {
+		return errors.New("can't use external plan hints until the upgrade to 25.4 is complete")
+	}
+
+	// TODO(drewk): validate that hintedFingerprint has the same structure as
+	// queryFingerprint (same table names, join structure, etc.) but with inline hints applied.
+
+	// Add the new hint to the system.plan_hints table.
+	planHints := &hints.PlanHints{
+		AstHint: &hints.AstHint{
+			HintedFingerprint: hintedFingerprint,
+		},
+	}
+	return p.addPlanHints(ctx, queryFingerprint, planHints)
+}
+
 func (p *planner) addPlanHints(
 	ctx context.Context, queryFingerprint string, planHints *hints.PlanHints,
 ) error {
+	// TODO(drewk): need to normalize the query fingerprint.
 	queryHash := hints.FingerprintHashForPlanHints(queryFingerprint)
 
 	// Retrieve the existing hints, if any.
 	// TODO(drewk): we assume here and elsewhere that there is only one row with
 	// a given hash and fingerprint, but that isn't enforced by the schema.
-	var opName redact.RedactableString = "hint-setting"
+	var opName redact.RedactableString = "add-plan-hints"
 	const getQuery = `SELECT "row_id", "plan_hints" FROM system.plan_hints WHERE "query_hash" = $1 AND "fingerprint" = $2`
 	res, err := p.InternalSQLTxn().QueryRow(ctx, opName, p.Txn(), getQuery, queryHash, queryFingerprint)
 	if err != nil {
 		return err
 	}
 	if res != nil {
-		existingHints, err := hints.NewPlanHints([]byte(tree.MustBeDBytes(res[0])))
+		existingHints, err := hints.NewPlanHints([]byte(tree.MustBeDBytes(res[1])))
 		if err != nil {
 			return err
 		}

@@ -867,7 +867,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.PlanHintsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+		shouldIncludeInClusterBackup: optOutOfClusterBackup, // No desc ID columns.
 	},
 }
 

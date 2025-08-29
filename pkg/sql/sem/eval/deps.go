@@ -435,6 +435,10 @@ type Planner interface {
 	// HintSetting associates a SET statement with the query with the given ID.
 	HintSetting(ctx context.Context, queryFingerprint, settingName, settingValue string) error
 
+	// HintAST associates inline hints from a hinted fingerprint with the query
+	// with the given fingerprint.
+	HintAST(ctx context.Context, queryFingerprint, hintedFingerprint string) error
+
 	// AutoCommit indicates whether the Planner has flagged the current statement
 	// as eligible for transaction auto-commit.
 	AutoCommit() bool

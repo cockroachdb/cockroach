@@ -524,6 +524,13 @@ func (p *fakePlannerWithMonitor) HintSetting(
 	return nil
 }
 
+// HintAST is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) HintAST(
+	ctx context.Context, queryFingerprint, hintedFingerprint string,
+) error {
+	return nil
+}
+
 // AutoCommit is part of the eval.Planner interface.
 func (p *fakePlannerWithMonitor) AutoCommit() bool {
 	return false

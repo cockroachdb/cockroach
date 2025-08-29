@@ -2696,22 +2696,14 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}()
 
 	// Retrieve the plan hints for this query, if any.
-	// TODO(drewk): consider whether it's possible to cache the result across
-	// statement retries.
-	stmtNoConstants := planner.stmt.StmtNoConstants
-	switch t := planner.stmt.AST.(type) {
-	case *tree.ExplainAnalyze:
-		// Unwrap EXPLAIN ANALYZE so that hints apply to the wrapped statement.
-		f := tree.NewFmtCtx(tree.FmtHideConstants)
-		t.Statement.Format(f)
-		stmtNoConstants = f.CloseAndGetString()
-	case *tree.Explain:
-		// Unwrap EXPLAIN so that hints apply to the wrapped statement.
-		f := tree.NewFmtCtx(tree.FmtHideConstants)
-		t.Statement.Format(f)
-		stmtNoConstants = f.CloseAndGetString()
+	astForHints := planner.stmt.AST
+	if explainStmt, ok := astForHints.(*tree.Explain); ok {
+		// If this is an EXPLAIN (OPT, ...), we want to get the wrapped stmt.
+		astForHints = explainStmt.Statement
 	}
-	planHints := planner.execCfg.PlanHintsCache.MaybeGetPlanHints(ctx, stmtNoConstants)
+	f := tree.NewFmtCtx(tree.FmtHideConstants)
+	astForHints.Format(f)
+	planHints := planner.execCfg.PlanHintsCache.MaybeGetPlanHints(ctx, f.CloseAndGetString())
 
 	// Apply any session settings from the plan hints.
 	if planHints != nil && len(planHints.Settings) > 0 {

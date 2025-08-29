@@ -9712,6 +9712,31 @@ WHERE object_id = table_descriptor_id
 			CalledOnNullInput: true,
 		},
 	),
+	"crdb_internal.hint_ast": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryTesting,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "queryFingerprint", Typ: types.String},
+				{Name: "hintedFingerprint", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull {
+					return nil, pgerror.New(
+						pgcode.NullValueNotAllowed,
+						"query fingerprint and hinted fingerprint must be non-null",
+					)
+				}
+				queryFingerprint := string(tree.MustBeDString(args[0]))
+				hintedFingerprint := string(tree.MustBeDString(args[1]))
+				return tree.DNull, evalCtx.Planner.HintAST(ctx, queryFingerprint, hintedFingerprint)
+			},
+			Volatility:        volatility.Volatile,
+			CalledOnNullInput: true,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
