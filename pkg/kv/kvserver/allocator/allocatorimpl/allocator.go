@@ -252,6 +252,20 @@ func (a AllocatorAction) SafeValue() {}
 // range. Within a given range, the ordering of the various checks inside
 // `Allocator.computeAction` determines which repair/rebalancing actions are
 // taken before the others.
+//
+// NB: Priorities should be non-negative and should be spaced in multiples of
+// 100 unless you believe they should belong to the same priority category.
+// AllocatorNoop should have the lowest priority. CheckPriorityInversion depends
+// on this contract. In most cases, the allocator returns a priority that
+// matches the definitions below. For AllocatorAddVoter,
+// AllocatorRemoveDeadVoter, and AllocatorRemoveVoter, the priority may be
+// adjusted (see ComputeAction for details), but the adjustment is expected to
+// be small (<100).
+//
+// Exceptions: AllocatorFinalizeAtomicReplicationChange, AllocatorRemoveLearner,
+// and AllocatorReplaceDeadVoter violates the spacing of 100. These cases
+// predate this comment, so we allow them as they belong to the same general
+// priority category.
 func (a AllocatorAction) Priority() float64 {
 	switch a {
 	case AllocatorFinalizeAtomicReplicationChange:
@@ -973,6 +987,46 @@ func (a *Allocator) ComputeAction(
 	return action, priority
 }
 
+// computeAction determines the action to take on a range along with its
+// priority.
+//
+// NB: The returned priority may include a small adjustment and therefore might
+// not exactly match action.Priority(). See AllocatorAddVoter,
+// AllocatorRemoveDeadVoter, AllocatorRemoveVoter below. The adjustment should be <100.
+//
+// The claim that the adjustment is < 100 has two assumptions:
+// 1. min(num_replicas,total_nodes) in zone configuration is < 200.
+// 2. when ranges are not under-replicated, the difference between
+// min(num_replicas,total_nodes)/2-1 and existing_replicas is < 100.
+//
+// neededVoters <= min(num_replicas,total_nodes)
+// desiredQuorum = neededVoters/2-1
+// quorum = haveVoters/2-1
+//
+// For AllocatorAddVoter, we know haveVoters < neededVoters
+// adjustment = desiredQuorum-haveVoters = neededVoters/2-1-haveVoters
+// To find the worst case (largest adjustment),
+//  1. haveVoters = neededVoters-1,
+//     adjustment = neededVoters/2-1-(neededVoters-1)
+//     = neededVoters/2-neededVoters = -neededVoters/2
+//  2. haveVoters = 0
+//     adjustement = neededVoters/2-1
+//
+// In order for adjustment to be < 100, neededVoters/2<100 => neededVoters<200.
+// Hence the first assumption.
+//
+// For AllocatorRemoveDeadVoter, we know haveVoters >= neededVoters
+// adjustment = desiredQuorum-haveVoters = neededVoters/2-1-haveVoters
+// To find the worst case (largest adjustment),
+// 1. neededVoters/2-1 is much larger than haveVoters: given haveVoters >=
+// neededVoters, haveVoters/2-1 >= neededVoters/2-1. So this case is impossible.
+// 2. neededVoters/2-1 is much smaller than haveVoters: since ranges could be
+// over-replicated, theoretically speaking, there may be no upper bounds on
+// haveVoters. In order for adjustment to be < 100, we can only make an
+// assumption here that the difference between neededVoters/2-1 and haveVoters
+// cannot be >= 100 in this case.
+//
+// For AllocatorRemoveVoter, adjustment is haveVoters%2 = 0 or 1 < 100.
 func (a *Allocator) computeAction(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
@@ -3255,15 +3309,21 @@ func withinPriorityRange(priority float64) bool {
 	return AllocatorNoop.Priority() <= priority && priority <= AllocatorFinalizeAtomicReplicationChange.Priority()
 }
 
-// CheckPriorityInversion checks if the priority at enqueue time is higher than
-// the priority corresponding to the action computed at processing time. It
-// returns whether there was a priority inversion and whether the caller should
-// skip the processing of the range since the inversion is considered unfair.
-// Currently, we only consider the inversion as unfair if it has gone from a
-// repair action to lowest priority (AllocatorConsiderRebalance). We let
-// AllocatorRangeUnavailable, AllocatorNoop pass through since they are noop.
+// CheckPriorityInversion returns whether there was a priority inversion (and
+// the range should not be processed at this time, since doing so could starve
+// higher-priority items), and whether the caller should re-add the range to the
+// queue (presumably under its new priority). A priority inversion happens if
+// the priority at enqueue time is higher than the priority corresponding to the
+// action computed at processing time. Caller should re-add the range to the
+// queue if it has gone from a repair action to lowest priority
+// (AllocatorConsiderRebalance).
 //
-// NB: If shouldRequeue is true, isInversion must be true.
+// Note: Changing from AllocatorRangeUnavailable/AllocatorNoop to
+// AllocatorConsiderRebalance is not treated as a priority inversion. Going from
+// a repair action to AllocatorRangeUnavailable/AllocatorNoop is considered a
+// priority inversion but shouldRequeue = false.
+//
+// INVARIANT: shouldRequeue => isInversion
 func CheckPriorityInversion(
 	priorityAtEnqueue float64, actionAtProcessing AllocatorAction,
 ) (isInversion bool, shouldRequeue bool) {
