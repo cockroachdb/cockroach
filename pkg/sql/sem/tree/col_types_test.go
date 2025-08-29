@@ -7,7 +7,6 @@ package tree_test
 
 import (
 	"fmt"
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -15,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestParseColumnType(t *testing.T) {
@@ -85,7 +85,12 @@ func TestParseColumnType(t *testing.T) {
 				t.Fatalf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
 			}
 			colType := tree.MustBeStaticallyKnownType(columnDef.Type)
-			if !reflect.DeepEqual(d.expectedType, colType) {
+			if !cmp.Equal(d.expectedType, colType, cmp.FilterPath(
+				func(path cmp.Path) bool {
+					// VisibleType is only for compatibility with v25.3 and earlier.
+					return path.Last().String() == "VisibleType"
+				}, cmp.Ignore()),
+			) {
 				t.Fatalf("%d: expected %s, but got %s",
 					i, d.expectedType.DebugString(), colType.DebugString())
 			}
