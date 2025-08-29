@@ -921,21 +921,21 @@ func (rq *replicateQueue) processOneChange(
 	change, err := rq.planner.PlanOneChange(
 		ctx, repl, desc, conf, plan.PlannerOptions{Scatter: scatter})
 
-	inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action)
-	if inversion {
-		if priorityInversionLogEveryN.ShouldLog() {
-			log.KvDistribution.Infof(ctx,
-				"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
-				shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
-		}
-
-		if shouldRequeue && PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
-			// Return true to requeue the range. Return the error to ensure it is
-			// logged and tracked in replicate queue bq.failures metrics. See
-			// replicateQueue.process for details.
-			return true /*requeue*/, maybeAnnotateDecommissionErr(
-				errors.Errorf("requing due to priority inversion: action=%s, priority=%v, enqueuePriority=%v",
-					change.Action, change.Action.Priority(), priorityAtEnqueue), change.Action)
+	if PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
+		if inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action); inversion {
+			if priorityInversionLogEveryN.ShouldLog() {
+				log.KvDistribution.Infof(ctx,
+					"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
+					shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
+			}
+			if shouldRequeue {
+				// Return true to requeue the range. Return the error to ensure it is
+				// logged and tracked in replicate queue bq.failures metrics. See
+				// replicateQueue.process for details.
+				return true /*requeue*/, maybeAnnotateDecommissionErr(
+					errors.Errorf("requing due to priority inversion: action=%s, priority=%v, enqueuePriority=%v",
+						change.Action, change.Action.Priority(), priorityAtEnqueue), change.Action)
+			}
 		}
 	}
 
