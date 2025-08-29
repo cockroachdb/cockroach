@@ -167,7 +167,7 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 	rlq.baseQueue = newBaseQueue(
 		"raftlog", rlq, store,
 		queueConfig{
-			maxSize:              kvserverbase.BaseQueueMaxSize,
+			maxSize:              defaultQueueMaxSize,
 			maxConcurrency:       raftLogQueueConcurrency,
 			needsLease:           false,
 			needsSpanConfigs:     false,

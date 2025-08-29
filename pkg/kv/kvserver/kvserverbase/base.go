@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/redact"
-	"github.com/pkg/errors"
 )
 
 // LeaseQueueEnabled is a setting that controls whether the lease queue
@@ -114,43 +113,6 @@ var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
 	"kv.mvcc_gc_queue.enabled",
 	"whether the MVCC GC queue is enabled",
 	true,
-)
-
-var (
-	// defaultQueueMaxSize is the default max size for a queue.
-	defaultQueueMaxSize = int64(10000)
-)
-
-// BaseQueueMaxSize is a setting that controls the max size of the base queues
-// except for the replicate queue. Base queue starts dropping replicas when
-// exceeding the max size. Use kv.replicate_queue.max_size for that.
-var BaseQueueMaxSize = settings.RegisterIntSetting(
-	settings.SystemOnly,
-	"kv.base_queue.max_size",
-	"controls max size of the base queues except for replicate queue. "+
-		"Base queue starts dropping replicas when exceeding the max size. Use kv.replicate_queue.max_size for that.",
-	defaultQueueMaxSize,
-	settings.WithValidateInt(func(v int64) error {
-		if v < defaultQueueMaxSize {
-			return errors.Errorf("cannot be set to a value lower than %d: %d", defaultQueueMaxSize, v)
-		}
-		return nil
-	}),
-)
-
-// ReplicateQueueMaxSize is the same as BaseQueueMaxSize, but for the replicate
-// queue.
-var ReplicateQueueMaxSize = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"kv.replicate_queue.max_size",
-	"controls max size of the replicate queue. Replicate queue starts dropping replicas when exceeding the max size.",
-	defaultQueueMaxSize,
-	settings.WithValidateInt(func(v int64) error {
-		if v < defaultQueueMaxSize {
-			return errors.Errorf("cannot be set to a value lower than %d: %d", defaultQueueMaxSize, v)
-		}
-		return nil
-	}),
 )
 
 var allowMMA = envutil.EnvOrDefaultBool("COCKROACH_ALLOW_MMA", false)

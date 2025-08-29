@@ -94,7 +94,7 @@ func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 	rgcq.baseQueue = newBaseQueue(
 		"replicaGC", rgcq, store,
 		queueConfig{
-			maxSize:                  kvserverbase.BaseQueueMaxSize,
+			maxSize:                  defaultQueueMaxSize,
 			needsLease:               false,
 			needsSpanConfigs:         false,
 			acceptsUnsplitRanges:     true,
