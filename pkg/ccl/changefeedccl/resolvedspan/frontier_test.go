@@ -33,7 +33,7 @@ func TestAggregatorFrontier(t *testing.T) {
 	f, err := resolvedspan.NewAggregatorFrontier(
 		statementTime,
 		initialHighwater,
-		mockDecoder{},
+		mockCodec{},
 		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
@@ -79,7 +79,7 @@ func TestAggregatorFrontier(t *testing.T) {
 	f, err = resolvedspan.NewAggregatorFrontier(
 		statementTime,
 		initialHighwater,
-		mockDecoder{},
+		mockCodec{},
 		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
@@ -105,7 +105,7 @@ func TestCoordinatorFrontier(t *testing.T) {
 	f, err := resolvedspan.NewCoordinatorFrontier(
 		statementTime,
 		initialHighwater,
-		mockDecoder{},
+		mockCodec{},
 		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
@@ -154,7 +154,7 @@ func TestCoordinatorFrontier(t *testing.T) {
 	f, err = resolvedspan.NewCoordinatorFrontier(
 		statementTime,
 		initialHighwater,
-		mockDecoder{},
+		mockCodec{},
 		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
@@ -264,7 +264,7 @@ func TestAggregatorFrontier_ForwardResolvedSpan(t *testing.T) {
 	f, err := resolvedspan.NewAggregatorFrontier(
 		hlc.Timestamp{},
 		hlc.Timestamp{},
-		mockDecoder{},
+		mockCodec{},
 		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
@@ -308,15 +308,15 @@ func TestAggregatorFrontier_ForwardResolvedSpan(t *testing.T) {
 	})
 }
 
-// mockDecoder is a simple TablePrefixDecoder for testing
+// mockCodec is a simple TableCodec for testing
 // that treats all keys as table ID 1.
-type mockDecoder struct{}
+type mockCodec struct{}
 
-func (mockDecoder) DecodeTablePrefix(key roachpb.Key) ([]byte, uint32, error) {
+func (mockCodec) DecodeTablePrefix(key roachpb.Key) ([]byte, uint32, error) {
 	return key, 1, nil
 }
 
-func (mockDecoder) TableSpan(tableID uint32) roachpb.Span {
+func (mockCodec) TableSpan(tableID uint32) roachpb.Span {
 	return keys.EverythingSpan
 }
 
