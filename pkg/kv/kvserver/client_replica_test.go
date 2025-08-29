@@ -3133,7 +3133,7 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 	// The leaderlessWatcher starts off as available.
 	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
 	// Let it know it's leaderless.
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, raft.None, manual.Now(), st)
 	// Even though the replica is leaderless, enough time hasn't passed for it to
 	// be considered unavailable.
 	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
@@ -3141,7 +3141,7 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 	require.NoError(t, repl.LeaderlessWatcher.Err())
 	// Let enough time pass.
 	manual.Increment(10 * time.Second.Nanoseconds())
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, raft.None, manual.Now(), st)
 	// Now the replica is considered unavailable.
 	require.True(t, repl.LeaderlessWatcher.IsUnavailable())
 	require.Error(t, repl.LeaderlessWatcher.Err())
@@ -3151,14 +3151,14 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 
 	// Next up, let the replica know there's a leader. This should make it
 	// available again.
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, 1, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, 1, manual.Now(), st)
 	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
 	// Change the range descriptor. Mark it leaderless and let enough time pass
 	// for it to be considered unavailable again.
 	tc.AddVotersOrFatal(t, key, tc.Targets(2)...)
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, raft.None, manual.Now(), st)
 	manual.Increment(10 * time.Second.Nanoseconds())
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, raft.None, manual.Now(), st)
 	// The replica should now be considered unavailable again.
 	require.True(t, repl.LeaderlessWatcher.IsUnavailable())
 	require.Error(t, repl.LeaderlessWatcher.Err())
@@ -4707,7 +4707,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 					t,
 					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, l.Start.ToTimestamp().Next()),
 				)
-				require.NoError(t, r.ReadProtectedTimestampsForTesting(ctx))
+				require.NoError(t, r.TestingReadProtectedTimestamps(ctx))
 			}
 		}
 		refreshTo = func(t *testing.T, asOf hlc.Timestamp) {
@@ -4718,7 +4718,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 					t,
 					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
 				)
-				require.NoError(t, r.ReadProtectedTimestampsForTesting(ctx))
+				require.NoError(t, r.TestingReadProtectedTimestamps(ctx))
 			}
 		}
 		// waitForProtectionAndReadProtectedTimestamps waits until the
@@ -4735,7 +4735,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 				ptutil.TestingWaitForProtectedTimestampToExistOnSpans(ctx, t, tc.Server(i),
 					ptsReader, protectionTimestamp,
 					[]roachpb.Span{span})
-				require.NoError(t, r.ReadProtectedTimestampsForTesting(ctx))
+				require.NoError(t, r.TestingReadProtectedTimestamps(ctx))
 			}
 		}
 		insqlDB = tc.Server(0).InternalDB().(isql.DB)
