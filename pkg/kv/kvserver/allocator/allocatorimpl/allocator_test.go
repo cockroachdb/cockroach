@@ -9577,6 +9577,13 @@ func TestCheckPriorityInversion(t *testing.T) {
 			expectedRequeue:    false,
 		},
 		{
+			name:               "priority increase",
+			priorityAtEnqueue:  0,
+			actionAtProcessing: AllocatorFinalizeAtomicReplicationChange,
+			expectedInversion:  false,
+			expectedRequeue:    false,
+		},
+		{
 			name:               "above range priority(1e5)",
 			priorityAtEnqueue:  1e5,
 			actionAtProcessing: AllocatorConsiderRebalance,
@@ -9618,5 +9625,31 @@ func TestCheckPriorityInversion(t *testing.T) {
 			require.Equal(t, tc.expectedInversion, inversion)
 			require.Equal(t, tc.expectedRequeue, requeue)
 		})
+	}
+}
+
+// TestAllocatorPriorityInvariance verifies that allocator priorities remain
+// spaced in multiples of 100. This prevents regressions against the contract
+// relied on by CheckPriorityInversion. For details, see the comment above
+// action.Priority().
+func TestAllocatorPriorityInvariance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	exceptions := map[AllocatorAction]struct{}{
+		AllocatorFinalizeAtomicReplicationChange: {},
+		AllocatorRemoveLearner:                   {},
+		AllocatorReplaceDeadVoter:                {},
+	}
+	lowestPriority := AllocatorNoop.Priority()
+	for action := AllocatorNoop; action < AllocatorMaxPriority; action++ {
+		require.GreaterOrEqualf(t, action.Priority(), lowestPriority,
+			"priority %f is less than AllocatorNoop: likely violating contract",
+			action.Priority())
+		if _, ok := exceptions[action]; !ok {
+			require.Equalf(t, int(action.Priority())%100, 0,
+				"priority %f is not a multiple of 100: likely violating contract",
+				action.Priority())
+
+		}
 	}
 }
