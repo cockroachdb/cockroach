@@ -466,6 +466,7 @@ func (f notTablePartitionedFrontier) Frontiers() iter.Seq2[descpb.ID, span.ReadO
 // The production implementation is keys.SQLCodec.
 type TablePrefixDecoder interface {
 	DecodeTablePrefix(key roachpb.Key) ([]byte, uint32, error)
+	TableSpan(tableID uint32) roachpb.Span
 }
 
 func newTableIDPartitioner(decoder TablePrefixDecoder) span.PartitionerFunc[descpb.ID] {
@@ -474,12 +475,9 @@ func newTableIDPartitioner(decoder TablePrefixDecoder) span.PartitionerFunc[desc
 		if err != nil {
 			return 0, errors.Wrapf(err, "error decoding start key in %v", sp)
 		}
-		endKeyRemaining, endKeyTableID, err := decoder.DecodeTablePrefix(sp.EndKey)
-		if err != nil {
-			return 0, errors.Wrapf(err, "error decoding end key in %v", sp)
-		}
 		// Reject any spans that cross table boundaries.
-		if startKeyTableID != endKeyTableID && (endKeyTableID != startKeyTableID+1 || len(endKeyRemaining) > 0) {
+		tableSpan := decoder.TableSpan(startKeyTableID)
+		if !tableSpan.Contains(sp) {
 			return 0, errors.AssertionFailedf("span encompassing multiple tables: %s", sp)
 		}
 		return descpb.ID(startKeyTableID), nil

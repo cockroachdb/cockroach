@@ -316,6 +316,10 @@ func (mockDecoder) DecodeTablePrefix(key roachpb.Key) ([]byte, uint32, error) {
 	return key, 1, nil
 }
 
+func (mockDecoder) TableSpan(tableID uint32) roachpb.Span {
+	return keys.EverythingSpan
+}
+
 func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
