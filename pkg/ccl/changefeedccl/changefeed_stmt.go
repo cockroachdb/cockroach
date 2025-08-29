@@ -545,7 +545,8 @@ func createChangefeedJobRecord(
 
 	if opts.HasEndTime() {
 		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(opts.GetEndTime())}
-		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().Context, asof.OptionAllowFutureTimestamp)
+		asOf, err :=
+			asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().Context, asof.OptionAllowFutureTimestamp)
 		if err != nil {
 			return nil, changefeedbase.Targets{}, err
 		}
@@ -571,7 +572,12 @@ func createChangefeedJobRecord(
 
 	var details jobspb.ChangefeedDetails
 
-	tableNameToDescriptor, targetDatabaseDescs, tableAndParentDescs, err := getTargetDescriptors(
+	// tableNameToDescriptor is empty if the targets are not tables.
+	// targetDatabaseDescs is empty if the targets are not databases.
+	// tableAndParentDescs contain the table, parent schema and database
+	// descriptor of all target tables. It also contains the database
+	// descriptor and all child schema and table descriptors for the target database.
+	targetTableNameToDescriptor, targetDatabaseDescs, tableAndParentDescs, err := getTargetDescriptors(
 		ctx,
 		p,
 		targetList,
@@ -586,19 +592,22 @@ func createChangefeedJobRecord(
 		return nil, changefeedbase.Targets{}, errors.AssertionFailedf("expected at least one descriptor")
 	}
 	if len(targetDatabaseDescs) > 1 {
-		return nil, changefeedbase.Targets{}, errors.AssertionFailedf("expected at most one database descriptor, got %d", len(targetDatabaseDescs))
+		return nil, changefeedbase.Targets{}, errors.AssertionFailedf("expected at most one database descriptor, got %d",
+			len(targetDatabaseDescs))
 	}
 
-	for _, t := range tableNameToDescriptor {
+	for _, t := range targetTableNameToDescriptor {
 		if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
 			if tbl.ExternalRowData().TenantID.IsSet() {
-				return nil, changefeedbase.Targets{}, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
+				return nil, changefeedbase.Targets{},
+					errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
 			}
-			return nil, changefeedbase.Targets{}, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
+			return nil, changefeedbase.Targets{},
+				errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
 		}
 	}
 	// This grabs table descriptors once to get their ids.
-	tableTargets, tables, err := getTargetsAndTables(ctx, p, tableNameToDescriptor, changefeedStmt.TableTargets,
+	tableTargets, tables, err := getTargetsAndTables(ctx, p, targetTableNameToDescriptor, changefeedStmt.TableTargets,
 		changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName())
 
 	if err != nil {
@@ -610,12 +619,14 @@ func createChangefeedJobRecord(
 	sessiondata.MarshalNonLocal(p.SessionData(), &sd.SessionData)
 	switch changefeedStmt.Level {
 	case tree.ChangefeedLevelTable:
-		for _, t := range tableNameToDescriptor {
+		for _, t := range targetTableNameToDescriptor {
 			if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
 				if tbl.ExternalRowData().TenantID.IsSet() {
-					return nil, changefeedbase.Targets{}, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
+					return nil, changefeedbase.Targets{},
+						errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
 				}
-				return nil, changefeedbase.Targets{}, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
+				return nil, changefeedbase.Targets{},
+					errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
 			}
 		}
 
@@ -629,7 +640,8 @@ func createChangefeedJobRecord(
 		}
 	case tree.ChangefeedLevelDatabase:
 		if len(targetDatabaseDescs) == 0 || len(targetDatabaseDescs) > 1 {
-			return nil, changefeedbase.Targets{}, errors.Errorf("changefeed only supports one database target")
+			return nil, changefeedbase.Targets{},
+				errors.Errorf("changefeed only supports one database target")
 		}
 		if targetDatabaseDescs[0].GetID() == keys.SystemDatabaseID {
 			return nil, changefeedbase.Targets{}, errors.Errorf("changefeed cannot target the system database")
@@ -649,6 +661,7 @@ func createChangefeedJobRecord(
 	if err != nil {
 		return nil, changefeedbase.Targets{}, err
 	}
+	_, tableToDatabaseLookup := buildTableToDatabaseAndSchemaLookup(tableAndParentDescs)
 
 	hasSelectPrivOnAllTables := true
 	hasChangefeedPrivOnAllTables := true
@@ -662,8 +675,7 @@ func createChangefeedJobRecord(
 	//  - DB-level feeds require the CHANGEFEED privilege on the target database
 	switch changefeedStmt.Level {
 	case tree.ChangefeedLevelTable:
-		_, tableToDatabaseLookup := buildTableToDatabaseAndSchemaLookup(tableAndParentDescs)
-		for _, desc := range tableNameToDescriptor {
+		for _, desc := range targetTableNameToDescriptor {
 			if table, isTable := desc.(catalog.TableDescriptor); isTable {
 				if err := changefeedvalidators.ValidateTable(targets, table, tolerances); err != nil {
 					return nil, changefeedbase.Targets{}, err
@@ -679,7 +691,8 @@ func createChangefeedJobRecord(
 
 				databaseDesc, ok := tableToDatabaseLookup[table.GetID()]
 				if !ok {
-					return nil, changefeedbase.Targets{}, errors.AssertionFailedf("expected to find a database descriptor for table %s", table.GetName())
+					return nil, changefeedbase.Targets{},
+						errors.AssertionFailedf("expected to find a database descriptor for table %s", table.GetName())
 				}
 				if !hasChangefeed {
 					_, hasChangefeed, err = checkPrivilegesForDescriptor(ctx, p, databaseDesc)
@@ -719,7 +732,7 @@ func createChangefeedJobRecord(
 	if changefeedStmt.Select != nil {
 		// Serialize changefeed expression.
 		normalized, withDiff, err := validateAndNormalizeChangefeedExpression(
-			ctx, p, opts, changefeedStmt.Select, tableNameToDescriptor, tableTargets, statementTime,
+			ctx, p, opts, changefeedStmt.Select, targetTableNameToDescriptor, tableTargets, statementTime,
 		)
 		if err != nil {
 			return nil, changefeedbase.Targets{}, err
@@ -989,7 +1002,7 @@ Few hours to a few days range are appropriate values for this option.`
 		if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
 			sqlDescIDs = append(sqlDescIDs, targetDatabaseDescs[0].GetID())
 		} else {
-			for _, desc := range tableNameToDescriptor {
+			for _, desc := range targetTableNameToDescriptor {
 				sqlDescIDs = append(sqlDescIDs, desc.GetID())
 			}
 		}
@@ -1053,7 +1066,6 @@ func getTargetDescriptors(
 			return nil, nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(t))
 		}
 	}
-	// targetTableDescs is empty if the targets are not tables, targetDatabaseDescs is empty if the targets are not databases
 	targetAndParentDescs, _, targetDatabaseDescs, targetTableDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
 	if err != nil {
 		var m *backupresolver.MissingTableErr

@@ -643,7 +643,7 @@ create_stats_stmt ::=
 
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_targets opt_changefeed_sink opt_with_options
-	| 'CREATE_CHANGEFEED_FOR_DATABASE' 'CHANGEFEED' 'FOR' 'DATABASE' database_name opt_changefeed_sink opt_with_options
+	| 'CREATE_CHANGEFEED_FOR_DATABASE' 'CHANGEFEED' 'FOR' 'DATABASE' database_name db_level_changefeed_filter_option opt_changefeed_sink opt_with_options
 	| 'CREATE' 'CHANGEFEED' opt_changefeed_sink opt_with_options 'AS' 'SELECT' target_list 'FROM' changefeed_target_expr opt_where_clause
 
 create_extension_stmt ::=
@@ -1950,6 +1950,10 @@ changefeed_table_targets ::=
 
 opt_changefeed_sink ::=
 	'INTO' string_or_placeholder
+
+db_level_changefeed_filter_option ::=
+	'EXCLUDE' 'TABLES' table_pattern_list
+	| 
 
 target_list ::=
 	( target_elem ) ( ( ',' target_elem ) )*
