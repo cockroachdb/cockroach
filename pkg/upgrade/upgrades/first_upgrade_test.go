@@ -206,6 +206,8 @@ func TestFirstUpgradeRepair(t *testing.T) {
 		"CREATE SCHEMA bar",
 		"CREATE TYPE bar.bar AS ENUM ('hello')",
 		"CREATE FUNCTION bar.bar(a INT) RETURNS INT AS 'SELECT a*a' LANGUAGE SQL",
+		// Insert an invalid object into the system.comments table
+		"INSERT INTO system.comments VALUES(0, 4124323, 0, 'comment for dead object')",
 	)
 
 	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "test")
@@ -276,12 +278,12 @@ func TestFirstUpgradeRepair(t *testing.T) {
 
 	// Check that the corruption is detected by invalid_objects.
 	const qDetectCorruption = `SELECT count(*) FROM "".crdb_internal.invalid_objects`
-	tdb.CheckQueryResults(t, qDetectCorruption, [][]string{{"2"}})
+	tdb.CheckQueryResults(t, qDetectCorruption, [][]string{{"3"}})
 
 	// Check that the corruption is detected by kv_repairable_catalog_corruptions.
 	const qDetectRepairableCorruption = `
 		SELECT count(*) FROM "".crdb_internal.kv_repairable_catalog_corruptions`
-	tdb.CheckQueryResults(t, qDetectRepairableCorruption, [][]string{{"2"}})
+	tdb.CheckQueryResults(t, qDetectRepairableCorruption, [][]string{{"3"}})
 
 	// Wait long enough for precondition check to be effective.
 	tdb.Exec(t, "CREATE DATABASE test2")
