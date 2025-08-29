@@ -261,6 +261,33 @@ func (node *From) Format(ctx *FmtCtx) {
 	}
 }
 
+// InputCount implements the WalkableTreeNode interface.
+func (node *From) InputCount() int {
+	return len(node.Tables)
+}
+
+// Input implements the WalkableTreeNode interface.
+func (node *From) Input(i int) WalkableTreeNode {
+	if i >= 0 && i < len(node.Tables) {
+		if walkable, ok := node.Tables[i].(WalkableTreeNode); ok {
+			return walkable
+		}
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *From) SetChild(i int, child WalkableTreeNode) error {
+	if i >= 0 && i < len(node.Tables) {
+		if tableExpr, ok := child.(TableExpr); ok {
+			node.Tables[i] = tableExpr
+			return nil
+		}
+		return errors.Errorf("From child %d must be TableExpr, got %T", i, child)
+	}
+	return errors.Errorf("From child index %d out of bounds", i)
+}
+
 // TableExprs represents a list of table expressions.
 type TableExprs []TableExpr
 
@@ -298,6 +325,31 @@ func (node *StatementSource) Format(ctx *FmtCtx) {
 	ctx.WriteByte('[')
 	ctx.FormatNode(node.Statement)
 	ctx.WriteByte(']')
+}
+
+// InputCount implements the WalkableTreeNode interface.
+func (node *StatementSource) InputCount() int { return 1 }
+
+// Input implements the WalkableTreeNode interface.
+func (node *StatementSource) Input(i int) WalkableTreeNode {
+	if i == 0 {
+		if walkable, ok := node.Statement.(WalkableTreeNode); ok {
+			return walkable
+		}
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *StatementSource) SetChild(i int, child WalkableTreeNode) error {
+	if i == 0 {
+		if stmt, ok := child.(Statement); ok {
+			node.Statement = stmt
+			return nil
+		}
+		return errors.Errorf("StatementSource child 0 must be Statement, got %T", child)
+	}
+	return errors.Errorf("StatementSource child index %d out of bounds", i)
 }
 
 // IndexID is a custom type for IndexDescriptor IDs.
@@ -623,6 +675,31 @@ func (node *AliasedTableExpr) Format(ctx *FmtCtx) {
 	}
 }
 
+// InputCount implements the WalkableTreeNode interface.
+func (node *AliasedTableExpr) InputCount() int { return 1 }
+
+// Input implements the WalkableTreeNode interface.
+func (node *AliasedTableExpr) Input(i int) WalkableTreeNode {
+	if i == 0 {
+		if walkable, ok := node.Expr.(WalkableTreeNode); ok {
+			return walkable
+		}
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *AliasedTableExpr) SetChild(i int, child WalkableTreeNode) error {
+	if i == 0 {
+		if tableExpr, ok := child.(TableExpr); ok {
+			node.Expr = tableExpr
+			return nil
+		}
+		return errors.Errorf("AliasedTableExpr child 0 must be TableExpr, got %T", child)
+	}
+	return errors.Errorf("AliasedTableExpr child index %d out of bounds", i)
+}
+
 // ParenTableExpr represents a parenthesized TableExpr.
 type ParenTableExpr struct {
 	Expr TableExpr
@@ -633,6 +710,31 @@ func (node *ParenTableExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(node.Expr)
 	ctx.WriteByte(')')
+}
+
+// InputCount implements the WalkableTreeNode interface.
+func (node *ParenTableExpr) InputCount() int { return 1 }
+
+// Input implements the WalkableTreeNode interface.
+func (node *ParenTableExpr) Input(i int) WalkableTreeNode {
+	if i == 0 {
+		if walkable, ok := node.Expr.(WalkableTreeNode); ok {
+			return walkable
+		}
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *ParenTableExpr) SetChild(i int, child WalkableTreeNode) error {
+	if i == 0 {
+		if tableExpr, ok := child.(TableExpr); ok {
+			node.Expr = tableExpr
+			return nil
+		}
+		return errors.Errorf("ParenTableExpr child 0 must be TableExpr, got %T", child)
+	}
+	return errors.Errorf("ParenTableExpr child index %d out of bounds", i)
 }
 
 // StripTableParens strips any parentheses surrounding a selection clause.
@@ -705,6 +807,43 @@ func (node *JoinTableExpr) Format(ctx *FmtCtx) {
 			ctx.FormatNode(node.Cond)
 		}
 	}
+}
+
+// InputCount implements the WalkableTreeNode interface.
+func (node *JoinTableExpr) InputCount() int { return 2 }
+
+// Input implements the WalkableTreeNode interface.
+func (node *JoinTableExpr) Input(i int) WalkableTreeNode {
+	switch i {
+	case 0:
+		if walkable, ok := node.Left.(WalkableTreeNode); ok {
+			return walkable
+		}
+	case 1:
+		if walkable, ok := node.Right.(WalkableTreeNode); ok {
+			return walkable
+		}
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *JoinTableExpr) SetChild(i int, child WalkableTreeNode) error {
+	switch i {
+	case 0:
+		if tableExpr, ok := child.(TableExpr); ok {
+			node.Left = tableExpr
+			return nil
+		}
+		return errors.Errorf("JoinTableExpr child 0 must be TableExpr, got %T", child)
+	case 1:
+		if tableExpr, ok := child.(TableExpr); ok {
+			node.Right = tableExpr
+			return nil
+		}
+		return errors.Errorf("JoinTableExpr child 1 must be TableExpr, got %T", child)
+	}
+	return errors.Errorf("JoinTableExpr child index %d out of bounds", i)
 }
 
 // JoinCond represents a join condition.
@@ -948,6 +1087,17 @@ func (node *RowsFromExpr) Format(ctx *FmtCtx) {
 	ctx.WriteString("ROWS FROM (")
 	ctx.FormatNode(&node.Items)
 	ctx.WriteByte(')')
+}
+
+// InputCount implements the WalkableTreeNode interface.
+func (node *RowsFromExpr) InputCount() int { return 0 }
+
+// Input implements the WalkableTreeNode interface.
+func (node *RowsFromExpr) Input(i int) WalkableTreeNode { return nil }
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *RowsFromExpr) SetChild(i int, child WalkableTreeNode) error {
+	return errors.Newf("index out of range: %d", i)
 }
 
 // Window represents a WINDOW clause.
