@@ -139,6 +139,7 @@ const (
 	AllocatorConsiderRebalance
 	AllocatorRangeUnavailable
 	AllocatorFinalizeAtomicReplicationChange
+	AllocatorMaxPriority
 )
 
 // Add indicates an action adding a replica.
@@ -267,9 +268,12 @@ func (a AllocatorAction) SafeValue() {}
 // predate this comment, so we allow them as they belong to the same general
 // priority category.
 func (a AllocatorAction) Priority() float64 {
+	const maxPriority = 12002
 	switch a {
+	case AllocatorMaxPriority:
+		return maxPriority
 	case AllocatorFinalizeAtomicReplicationChange:
-		return 12002
+		return maxPriority
 	case AllocatorRemoveLearner:
 		return 12001
 	case AllocatorReplaceDeadVoter:
@@ -3309,12 +3313,6 @@ func roundToNearestPriorityCategory(n float64) float64 {
 	return math.Round(n/100.0) * 100
 }
 
-// WithinPriorityRange checks if a priority is within the range of possible
-// priorities for the allocator actions.
-func withinPriorityRange(priority float64) bool {
-	return AllocatorNoop.Priority() <= priority && priority <= AllocatorFinalizeAtomicReplicationChange.Priority()
-}
-
 // CheckPriorityInversion returns whether there was a priority inversion (and
 // the range should not be processed at this time, since doing so could starve
 // higher-priority items), and whether the caller should re-add the range to the
@@ -3333,18 +3331,20 @@ func withinPriorityRange(priority float64) bool {
 func CheckPriorityInversion(
 	priorityAtEnqueue float64, actionAtProcessing AllocatorAction,
 ) (isInversion bool, shouldRequeue bool) {
-	// priorityAtEnqueue of -1 is a special case reserved for processing logic to
-	// run even if there’s a priority inversion. If the priority is not -1, the
-	// range may be re-queued to be processed with the correct priority. It is
-	// used for things that call into baseQueue.process without going through the
-	// replicate priority queue. For example, s.ReplicateQueueDryRun or
-	// r.scatterRangeAndRandomizeLeases.
+	// NB: priorityAtEnqueue is -1 for callers such as scatter, dry runs, and
+	// manual queue runs. Priority inversion does not apply to these calls.
+	if priorityAtEnqueue == -1 {
+		return false, false
+	}
 
 	// NB: we need to check for when priorityAtEnqueue falls within the range
 	// of the allocator actions because store.Enqueue might enqueue things with
 	// a very high priority (1e5). In those cases, we do not want to requeue
 	// these actions or count it as an inversion.
-	if priorityAtEnqueue == -1 || !withinPriorityRange(priorityAtEnqueue) {
+	withinPriorityRange := func(priority float64) bool {
+		return AllocatorNoop.Priority() <= priority && priority <= AllocatorMaxPriority.Priority()
+	}
+	if !withinPriorityRange(priorityAtEnqueue) {
 		return false, false
 	}
 
