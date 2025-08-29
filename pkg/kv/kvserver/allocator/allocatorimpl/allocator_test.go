@@ -9794,7 +9794,11 @@ func TestAllocatorPriorityInvariance(t *testing.T) {
 		AllocatorRemoveLearner:                   {},
 		AllocatorReplaceDeadVoter:                {},
 	}
+	lowestPriority := AllocatorNoop.Priority()
 	for action := AllocatorNoop; action < AllocatorMaxPriority; action++ {
+		require.GreaterOrEqualf(t, action.Priority(), lowestPriority,
+			"priority %f is less than AllocatorNoop: likely violating contract",
+			action.Priority())
 		if _, ok := exceptions[action]; !ok {
 			require.Equalf(t, int(action.Priority())%100, 0,
 				"priority %f is not a multiple of 100: likely violating contract",
