@@ -54,6 +54,7 @@ import (
 	"google.golang.org/grpc/stats"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
+	"storj.io/drpc/drpcmigrate"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
@@ -287,6 +288,9 @@ type Context struct {
 	// the gRPC protocol over an in-memory pipe.
 	loopbackDialFn func(context.Context) (net.Conn, error)
 
+	// This is similar to the loopbackDialFn above, but for DRPC connections.
+	loopbackDRPCDialFn func(context.Context) (net.Conn, error)
+
 	// clientCreds is used to pass additional headers to called RPCs.
 	clientCreds credentials.PerRPCCredentials
 
@@ -295,7 +299,7 @@ type Context struct {
 	windowSizeSettings
 }
 
-// SetLoopbackDialer configures the loopback dialer function.
+// SetLoopbackDialer configures the loopback dialer function to dial gRPC connections.
 func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Conn, error)) {
 	if c.ContextOptions.Knobs.NoLoopbackDialer {
 		// A test has decided it is opting out of the special loopback
@@ -304,6 +308,17 @@ func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Co
 		return
 	}
 	c.loopbackDialFn = loopbackDialFn
+}
+
+// SetLoopbackDRPCDialer configures the loopback dialer function to dial DRPC connections.
+func (c *Context) SetLoopbackDRPCDialer(loopbackDialFn func(context.Context) (net.Conn, error)) {
+	if c.ContextOptions.Knobs.NoLoopbackDialer {
+		// A test has decided it is opting out of the special loopback
+		// dialing mechanism. Obey it. We already have defined
+		// loopbackDialFn in that case in NewContext().
+		return
+	}
+	c.loopbackDRPCDialFn = loopbackDialFn
 }
 
 // StoreLivenessGracePeriod computes the grace period after a store restarts before which it will
@@ -595,6 +610,9 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		rpcCtx.loopbackDialFn = func(ctx context.Context) (net.Conn, error) {
 			d := onlyOnceDialer{}
 			return d.dial(ctx, opts.AdvertiseAddr)
+		}
+		rpcCtx.loopbackDRPCDialFn = func(ctx context.Context) (net.Conn, error) {
+			return drpcmigrate.DialWithHeader(ctx, "tcp", opts.AdvertiseAddr, drpcmigrate.DRPCHeader)
 		}
 	}
 
