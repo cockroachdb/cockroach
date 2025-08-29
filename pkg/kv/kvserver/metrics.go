@@ -2192,6 +2192,12 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaReplicateQueueDroppedDueToSize = metric.Metadata{
+		Name:        "queue.replicate.dropped_due_to_size",
+		Help:        "Number of replicas dropped due to the replicate queue exceeding its max size",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaReplicateQueueProcessingNanos = metric.Metadata{
 		Name:        "queue.replicate.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the replicate queue",
@@ -3185,6 +3191,7 @@ type StoreMetrics struct {
 	ReplicateQueueSuccesses                   *metric.Counter
 	ReplicateQueueFailures                    *metric.Counter
 	ReplicateQueuePending                     *metric.Gauge
+	ReplicateQueueDroppedDueToSize            *metric.Counter
 	ReplicateQueueProcessingNanos             *metric.Counter
 	ReplicateQueuePurgatory                   *metric.Gauge
 	SplitQueueSuccesses                       *metric.Counter
@@ -3974,6 +3981,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicateQueueSuccesses:                   metric.NewCounter(metaReplicateQueueSuccesses),
 		ReplicateQueueFailures:                    metric.NewCounter(metaReplicateQueueFailures),
 		ReplicateQueuePending:                     metric.NewGauge(metaReplicateQueuePending),
+		ReplicateQueueDroppedDueToSize:            metric.NewCounter(metaReplicateQueueDroppedDueToSize),
 		ReplicateQueueProcessingNanos:             metric.NewCounter(metaReplicateQueueProcessingNanos),
 		ReplicateQueuePurgatory:                   metric.NewGauge(metaReplicateQueuePurgatory),
 		SplitQueueSuccesses:                       metric.NewCounter(metaSplitQueueSuccesses),
