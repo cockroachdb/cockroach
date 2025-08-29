@@ -108,15 +108,6 @@ var testQueueMaxSizeSetting = settings.RegisterIntSetting(
 	int64(10000),
 )
 
-func makeTestQueueDroppedDueToSizeSetting() *metric.Counter {
-	return metric.NewCounter(metric.Metadata{
-		Name:        "dropped_due_to_size",
-		Help:        "Number of replicas dropped due to the queue exceeding its max size",
-		Measurement: "Replicas",
-		Unit:        metric.Unit_COUNT,
-	})
-}
-
 func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *baseQueue {
 	if !cfg.acceptsUnsplitRanges {
 		// Needed in order to pass the validation in newBaseQueue.
@@ -1632,53 +1623,4 @@ func TestBaseQueueRequeue(t *testing.T) {
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	assertShouldQueueCount(6)
 	assertProcessedAndProcessing(2, 0)
-}
-
-// TestBaseQueueMaxSize tests the max size of the queue.
-func TestBaseQueueMaxSize(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	ctx := context.Background()
-	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
-
-	r, err := tc.store.GetReplica(1)
-	require.NoError(t, err)
-
-	// Create a test queue and set max size to 1.
-	testQueue := &testQueueImpl{}
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 1)
-	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
-		maxSize:          testQueueMaxSizeSetting,
-		droppedDueToSize: makeTestQueueDroppedDueToSizeSetting(),
-	})
-
-	// Function to add a replica and verify queue state
-	addReplicaAndVerify := func(rangeID roachpb.RangeID, expectedLength int, expectedDropped int64) {
-		r.Desc().RangeID = rangeID
-		enqueued, err := bq.testingAdd(context.Background(), r, 0.0)
-		require.NoError(t, err)
-		require.True(t, enqueued)
-		require.Equal(t, expectedLength, bq.Length())
-		require.Equal(t, expectedDropped, bq.droppedDueToSize.Count())
-	}
-
-	// First replica should be added.
-	addReplicaAndVerify(1 /* rangeID */, 1 /* expectedLength */, 0 /* expectedDropped */)
-	// Second replica should be dropped.
-	addReplicaAndVerify(2 /* rangeID */, 1 /* expectedLength */, 1 /* expectedDropped */)
-	// Third replica should be dropped.
-	addReplicaAndVerify(3 /* rangeID */, 1 /* expectedLength */, 2 /* expectedDropped */)
-
-	// Increase the max size to 100 and add more replicas
-	testQueueMaxSizeSetting.Override(ctx, &tc.store.cfg.Settings.SV, 100)
-	for i := 2; i <= 100; i++ {
-		// Should be added.
-		addReplicaAndVerify(roachpb.RangeID(i+1 /* rangeID */), i /* expectedLength */, 2 /* expectedDropped */)
-	}
-
-	// Add one more to exceed the max size. Should be dropped.
-	addReplicaAndVerify(102 /* rangeID */, 100 /* expectedLength */, 3 /* expectedDropped */)
 }
