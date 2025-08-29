@@ -331,11 +331,11 @@ type queueConfig struct {
 	failures *metric.Counter
 	// pending is a gauge measuring current replica count pending.
 	pending *metric.Gauge
-	// droppedDueToSize is a counter measuring replicas dropped due to
-	// exceeding the queue max size.
+	// full is a counter measuring replicas dropped due to exceeding the queue max
+	// size.
 	// NB: this metric may be nil for queues that are not interested in tracking
 	// this.
-	droppedDueToSize *metric.Counter
+	full *metric.Counter
 	// processingNanos is a counter measuring total nanoseconds spent processing
 	// replicas.
 	processingNanos *metric.Counter
@@ -556,7 +556,7 @@ func (bq *baseQueue) SetMaxSize(maxSize int64) {
 	// queue. To be safe, however, we use removeLocked.
 	for int64(bq.mu.priorityQ.Len()) > maxSize {
 		pqLen := bq.mu.priorityQ.Len()
-		bq.droppedDueToSize.Inc(1)
+		bq.full.Inc(1)
 		bq.removeLocked(bq.mu.priorityQ.sl[pqLen-1])
 	}
 }
@@ -798,8 +798,8 @@ func (bq *baseQueue) addInternal(
 	// scan.
 	if pqLen := bq.mu.priorityQ.Len(); int64(pqLen) > bq.mu.maxSize {
 		replicaItemToDrop := bq.mu.priorityQ.sl[pqLen-1]
-		if bq.droppedDueToSize != nil {
-			bq.droppedDueToSize.Inc(1)
+		if bq.full != nil {
+			bq.full.Inc(1)
 		}
 		log.Dev.VInfof(ctx, 1, "dropping due to exceeding queue max size: priority=%0.3f, replica=%v",
 			priority, replicaItemToDrop.replicaID)
