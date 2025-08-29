@@ -547,8 +547,18 @@ func (bq *baseQueue) SetDisabled(disabled bool) {
 // SetMaxSize sets the max size of the queue.
 func (bq *baseQueue) SetMaxSize(maxSize int64) {
 	bq.mu.Lock()
+	defer bq.mu.Unlock()
 	bq.mu.maxSize = maxSize
-	bq.mu.Unlock()
+	// Drop replicas until no longer exceeding the max size. Note: We call
+	// removeLocked to match the behavior of addInternal. In theory, only
+	// removeFromQueueLocked should be triggered in removeLocked, since the item
+	// is in the priority queue, it should not be processing or in the purgatory
+	// queue. To be safe, however, we use removeLocked.
+	for int64(bq.mu.priorityQ.Len()) > maxSize {
+		pqLen := bq.mu.priorityQ.Len()
+		bq.droppedDueToSize.Inc(1)
+		bq.removeLocked(bq.mu.priorityQ.sl[pqLen-1])
+	}
 }
 
 // lockProcessing locks all processing in the baseQueue. It returns

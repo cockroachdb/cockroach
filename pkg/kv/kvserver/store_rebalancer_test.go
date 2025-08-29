@@ -1884,15 +1884,19 @@ func TestReplicateQueueMaxSize(t *testing.T) {
 	ReplicateQueueMaxSize.Override(ctx, &tc.store.cfg.Settings.SV, 1)
 	replicateQueue := newReplicateQueue(tc.store, a)
 
-	// Function to add a replica and verify queue state
+	// Helper function to add a replica and verify queue state.
+	verify := func(expectedLength int, expectedDropped int64) {
+		require.Equal(t, expectedLength, replicateQueue.Length())
+		require.Equal(t, expectedDropped, replicateQueue.droppedDueToSize.Count())
+		require.Equal(t, expectedDropped, tc.store.metrics.ReplicateQueueDroppedDueToSize.Count())
+	}
+
 	addReplicaAndVerify := func(rangeID roachpb.RangeID, expectedLength int, expectedDropped int64) {
 		r.Desc().RangeID = rangeID
 		enqueued, err := replicateQueue.testingAdd(context.Background(), r, 0.0)
 		require.NoError(t, err)
 		require.True(t, enqueued)
-		require.Equal(t, expectedLength, replicateQueue.Length())
-		require.Equal(t, expectedDropped, replicateQueue.droppedDueToSize.Count())
-		require.Equal(t, expectedDropped, tc.store.metrics.ReplicateQueueDroppedDueToSize.Count())
+		verify(expectedLength, expectedDropped)
 	}
 
 	// First replica should be added.
@@ -1911,4 +1915,15 @@ func TestReplicateQueueMaxSize(t *testing.T) {
 
 	// Add one more to exceed the max size. Should be dropped.
 	addReplicaAndVerify(102 /* rangeID */, 100 /* expectedLength */, 3 /* expectedDropped */)
+
+	// Reset to the same size should not change the queue length.
+	ReplicateQueueMaxSize.Override(ctx, &tc.store.cfg.Settings.SV, 100)
+	verify(100 /* expectedLength */, 3 /* expectedDropped */)
+
+	// Decrease the max size to 10 which should drop 90 replicas.
+	ReplicateQueueMaxSize.Override(ctx, &tc.store.cfg.Settings.SV, 10)
+	verify(10 /* expectedLength */, 93 /* expectedDropped: 3 + 90 */)
+
+	// Should drop another one now that max size is 10.
+	addReplicaAndVerify(103 /* rangeID */, 10 /* expectedLength */, 94 /* expectedDropped: 3 + 90 + 1 */)
 }
