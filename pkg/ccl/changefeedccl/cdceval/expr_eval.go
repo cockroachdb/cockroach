@@ -343,7 +343,7 @@ func (e *familyEvaluator) setupProjection(presentation colinfo.ResultColumns) {
 func inputSpecForEventDescriptor(
 	ed *cdcevent.EventDescriptor, prevCol catalog.Column,
 ) ([]*types.T, catalog.TableColMap, error) {
-	numCols := len(ed.ResultColumns()) + len(colinfo.AllSystemColumnDescs)
+	numCols := len(ed.ResultColumns()) + len(ed.TableDescriptor().SystemColumns())
 	inputTypes := make([]*types.T, 0, numCols)
 	var inputCols catalog.TableColMap
 	for i, c := range ed.ResultColumns() {
@@ -356,9 +356,9 @@ func inputSpecForEventDescriptor(
 	}
 
 	// Add system columns.
-	for _, sc := range colinfo.AllSystemColumnDescs {
-		inputCols.Set(sc.ID, inputCols.Len())
-		inputTypes = append(inputTypes, sc.Type)
+	for _, sc := range ed.TableDescriptor().SystemColumns() {
+		inputCols.Set(sc.GetID(), inputCols.Len())
+		inputTypes = append(inputTypes, sc.GetType())
 	}
 
 	// Setup cdc_prev if needed.

@@ -334,6 +334,11 @@ func newColumnCache(desc *descpb.TableDescriptor, mutations *mutationCache) *col
 	numMutations := len(mutations.columns)
 	numDeletable := numPublic + numMutations
 	for i := range colinfo.AllSystemColumnDescs {
+		if colinfo.AllSystemColumnDescs[i].ID == colinfo.TieringAttrColumnID && desc.PrimaryIndex.StorageTiering == nil {
+			// The tiering attribute column can only be used with table that use
+			// storage tiering.
+			continue
+		}
 		col := column{
 			desc:    &colinfo.AllSystemColumnDescs[i],
 			ordinal: numDeletable + i,

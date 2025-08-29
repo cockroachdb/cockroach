@@ -111,6 +111,11 @@ type cTableInfo struct {
 	// timestamp.
 	rowLastModifiedWithoutOriginTimestamp hlc.Timestamp
 
+	// originIDOutputIdx controls at what column ordinal in the output batch
+	// to write the value for the TieringAttr system column.
+	tieringAttrOutputIdx int
+	rowLastTieringAttr   int64
+
 	da tree.DatumAlloc
 }
 
@@ -329,6 +334,9 @@ type cFetcher struct {
 		// originTimetampCol is the same as timestapCol but for the
 		// OriginTimestamp system column.
 		originTimestampCol []apd.Decimal
+		// tieringAttrCol is the underlying ColVec for the tiering attr column, or
+		// nil if the column was not requested.
+		tieringAttrCol coldata.Int64s
 	}
 
 	scratch struct {
@@ -382,6 +390,9 @@ func (cf *cFetcher) resetBatch() {
 		if cf.table.originTimestampOutputIdx != noOutputColumn {
 			cf.machine.originTimestampCol = cf.machine.colvecs.DecimalCols[cf.machine.colvecs.ColsMap[cf.table.originTimestampOutputIdx]]
 		}
+		if cf.table.tieringAttrOutputIdx != noOutputColumn {
+			cf.machine.tieringAttrCol = cf.machine.colvecs.Int64Cols[cf.machine.colvecs.ColsMap[cf.table.tieringAttrOutputIdx]]
+		}
 
 		// Change the allocation size to be the same as the capacity of the
 		// batch we allocated above.
@@ -420,6 +431,7 @@ func (cf *cFetcher) Init(
 		oidOutputIdx:             noOutputColumn,
 		originIDOutputIdx:        noOutputColumn,
 		originTimestampOutputIdx: noOutputColumn,
+		tieringAttrOutputIdx:     noOutputColumn,
 	}
 
 	if nCols > 0 {
@@ -451,6 +463,10 @@ func (cf *cFetcher) Init(
 				table.neededValueColsByIdx.Remove(idx)
 			case catpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
+				table.neededValueColsByIdx.Remove(idx)
+			case catpb.SystemColumnKind_TIERINGATTR:
+				table.tieringAttrOutputIdx = idx
+				cf.mvccDecodeStrategy = storage.MVCCDecodingRequired
 				table.neededValueColsByIdx.Remove(idx)
 			}
 		}
@@ -779,6 +795,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			cf.table.rowLastOriginID = 0
 			cf.table.rowLastOriginTimestamp = hlc.Timestamp{}
 			cf.table.rowLastModifiedWithoutOriginTimestamp = hlc.Timestamp{}
+			cf.table.rowLastTieringAttr = 0
 			cf.machine.firstKeyOfRow = cf.machine.nextKV.Key
 
 			// foundNull is set when decoding a new index key for a row finds a NULL value
@@ -888,6 +905,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				if vh.OriginTimestamp.IsEmpty() && cf.table.rowLastModifiedWithoutOriginTimestamp.Less(cf.machine.nextKV.Value.Timestamp) {
 					cf.table.rowLastModifiedWithoutOriginTimestamp = cf.machine.nextKV.Value.Timestamp
 				}
+				cf.table.rowLastTieringAttr = int64(vh.TieringAttribute)
 			}
 
 			// If the index has only one column family, then the next KV will
@@ -966,6 +984,10 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				if vh.OriginTimestamp.IsEmpty() && cf.table.rowLastModifiedWithoutOriginTimestamp.Less(cf.machine.nextKV.Value.Timestamp) {
 					cf.table.rowLastModifiedWithoutOriginTimestamp = cf.machine.nextKV.Value.Timestamp
 				}
+				if cf.table.rowLastTieringAttr != int64(vh.TieringAttribute) {
+					return nil, errors.AssertionFailedf("conflicting tiering attributes %d, %d for the same row",
+						cf.table.rowLastTieringAttr, vh.TieringAttribute)
+				}
 			}
 
 			if familyID == cf.table.spec.MaxFamilyID {
@@ -993,6 +1015,9 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				} else {
 					cf.machine.colvecs.Nulls[cf.table.originTimestampOutputIdx].SetNull(cf.machine.rowIdx)
 				}
+			}
+			if cf.table.tieringAttrOutputIdx != noOutputColumn {
+				cf.machine.tieringAttrCol.Set(cf.machine.rowIdx, cf.table.rowLastTieringAttr)
 			}
 
 			// We're finished with a row. Fill the row in with nulls if
