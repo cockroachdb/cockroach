@@ -1863,3 +1863,52 @@ func TestingRaftStatusFn(desc *roachpb.RangeDescriptor, storeID roachpb.StoreID)
 	}
 	return status
 }
+
+// TestReplicateQueueMaxSize tests the max size of the replicate queue and
+// verifies that replicas are dropped when the max size is exceeded. It also
+// checks that the metric ReplicateQueueDroppedDueToSize is updated correctly.
+func TestReplicateQueueMaxSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	r, err := tc.store.GetReplica(1)
+	require.NoError(t, err)
+
+	stopper, _, _, a, _ := allocatorimpl.CreateTestAllocator(ctx, 10, true /* deterministic */)
+	defer stopper.Stop(ctx)
+	ReplicateQueueMaxSize.Override(ctx, &tc.store.cfg.Settings.SV, 1)
+	replicateQueue := newReplicateQueue(tc.store, a)
+
+	// Function to add a replica and verify queue state
+	addReplicaAndVerify := func(rangeID roachpb.RangeID, expectedLength int, expectedDropped int64) {
+		r.Desc().RangeID = rangeID
+		enqueued, err := replicateQueue.testingAdd(context.Background(), r, 0.0)
+		require.NoError(t, err)
+		require.True(t, enqueued)
+		require.Equal(t, expectedLength, replicateQueue.Length())
+		require.Equal(t, expectedDropped, replicateQueue.droppedDueToSize.Count())
+		require.Equal(t, expectedDropped, tc.store.metrics.ReplicateQueueDroppedDueToSize.Count())
+	}
+
+	// First replica should be added.
+	addReplicaAndVerify(1 /* rangeID */, 1 /* expectedLength */, 0 /* expectedDropped */)
+	// Second replica should be dropped.
+	addReplicaAndVerify(2 /* rangeID */, 1 /* expectedLength */, 1 /* expectedDropped */)
+	// Third replica should be dropped.
+	addReplicaAndVerify(3 /* rangeID */, 1 /* expectedLength */, 2 /* expectedDropped */)
+
+	// Increase the max size to 100 and add more replicas
+	ReplicateQueueMaxSize.Override(ctx, &tc.store.cfg.Settings.SV, 100)
+	for i := 2; i <= 100; i++ {
+		// Should be added.
+		addReplicaAndVerify(roachpb.RangeID(i+1 /* rangeID */), i /* expectedLength */, 2 /* expectedDropped */)
+	}
+
+	// Add one more to exceed the max size. Should be dropped.
+	addReplicaAndVerify(102 /* rangeID */, 100 /* expectedLength */, 3 /* expectedDropped */)
+}
