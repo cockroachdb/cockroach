@@ -102,6 +102,7 @@ func TestUDFInsertOnly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 138667, "flaky in CI")
 
 	ctx := context.Background()
 	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
