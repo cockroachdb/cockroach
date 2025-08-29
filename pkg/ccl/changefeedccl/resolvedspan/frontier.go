@@ -472,11 +472,11 @@ func newTableIDPartitioner(decoder TablePrefixDecoder) span.PartitionerFunc[desc
 	return func(sp roachpb.Span) (descpb.ID, error) {
 		_, startKeyTableID, err := decoder.DecodeTablePrefix(sp.Key)
 		if err != nil {
-			return 0, err
+			return 0, errors.Wrapf(err, "error decoding start key in %v", sp)
 		}
 		endKeyRemaining, endKeyTableID, err := decoder.DecodeTablePrefix(sp.EndKey)
 		if err != nil {
-			return 0, err
+			return 0, errors.Wrapf(err, "error decoding end key in %v", sp)
 		}
 		// Reject any spans that cross table boundaries.
 		if startKeyTableID != endKeyTableID && (endKeyTableID != startKeyTableID+1 || len(endKeyRemaining) > 0) {
