@@ -104,6 +104,7 @@ var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetti
 // PriorityInversionRequeue is a setting that controls whether to requeue
 // replicas when their priority at enqueue time and processing time is inverted
 // too much (e.g. dropping from a repair action to AllocatorConsiderRebalance).
+// TODO(wenyihu6): flip default to true after landing 152596 to bake
 var PriorityInversionRequeue = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.priority_inversion_requeue_replicate_queue.enabled",
@@ -929,9 +930,9 @@ func (rq *replicateQueue) processOneChange(
 		}
 
 		if shouldRequeue && PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
-			// Return true here to requeue the range. We can't return an error here
-			// because rq.process only requeue when error is nil. See
-			// replicateQueue.process for more details.
+			// Return true to requeue the range. Return the error to ensure it is
+			// logged and tracked in replicate queue bq.failures metrics. See
+			// replicateQueue.process for details.
 			return true /*requeue*/, maybeAnnotateDecommissionErr(
 				errors.Errorf("requing due to priority inversion: action=%s, priority=%v, enqueuePriority=%v",
 					change.Action, change.Action.Priority(), priorityAtEnqueue), change.Action)
