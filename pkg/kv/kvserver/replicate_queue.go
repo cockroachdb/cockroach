@@ -902,6 +902,11 @@ func (rq *replicateQueue) processOneChange(
 
 	if PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
 		if inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action); inversion {
+			if priorityInversionLogEveryN.ShouldLog() {
+				log.KvDistribution.Infof(ctx,
+					"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
+					shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
+			}
 			if shouldRequeue {
 				// Return true to requeue the range. Return the error to ensure it is
 				// logged and tracked in replicate queue bq.failures metrics. See
@@ -909,11 +914,6 @@ func (rq *replicateQueue) processOneChange(
 				return true /*requeue*/, maybeAnnotateDecommissionErr(
 					errors.Errorf("requing due to priority inversion: action=%s, priority=%v, enqueuePriority=%v",
 						change.Action, change.Action.Priority(), priorityAtEnqueue), change.Action)
-			}
-			if priorityInversionLogEveryN.ShouldLog() {
-				log.KvDistribution.Infof(ctx,
-					"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
-					shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
 			}
 		}
 	}
