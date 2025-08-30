@@ -109,11 +109,16 @@ type Request struct {
 	expiresAt           time.Time
 	redacted            bool
 	username            string
+	includeTxn          bool
 }
 
 // IsRedacted returns whether this diagnostic request is for a redacted bundle.
 func (r *Request) IsRedacted() bool {
 	return r.redacted
+}
+
+func (r *Request) IncludeTxn() bool {
+	return r.includeTxn
 }
 
 // Username returns the normalized username of the user that initiated this
@@ -232,6 +237,7 @@ func (r *Registry) addRequestInternalLocked(
 	expiresAt time.Time,
 	redacted bool,
 	username string,
+	includeTxn bool,
 ) {
 	if r.findRequestLocked(id) {
 		// Request already exists.
@@ -249,6 +255,7 @@ func (r *Registry) addRequestInternalLocked(
 		expiresAt:           expiresAt,
 		redacted:            redacted,
 		username:            username,
+		includeTxn:          includeTxn,
 	}
 }
 
@@ -288,10 +295,11 @@ func (r *Registry) InsertRequest(
 	expiresAfter time.Duration,
 	redacted bool,
 	username string,
+	includeTxn bool,
 ) error {
 	_, err := r.insertRequestInternal(
 		ctx, stmtFingerprint, planGist, antiPlanGist, samplingProbability,
-		minExecutionLatency, expiresAfter, redacted, username,
+		minExecutionLatency, expiresAfter, redacted, username, includeTxn,
 	)
 	return err
 }
@@ -306,6 +314,7 @@ func (r *Registry) insertRequestInternal(
 	expiresAfter time.Duration,
 	redacted bool,
 	username string,
+	includeTxn bool,
 ) (RequestID, error) {
 	if samplingProbability != 0 {
 		if samplingProbability < 0 || samplingProbability > 1 {
@@ -382,6 +391,7 @@ func (r *Registry) insertRequestInternal(
 		for i := range qargs[2:] {
 			valuesClause += fmt.Sprintf(", $%d", i+3)
 		}
+		// TODO(davidh): add persistence of the includeTxn field.
 		stmt := "INSERT INTO system.statement_diagnostics_requests (" +
 			insertColumns + ") VALUES (" + valuesClause + ") RETURNING id;"
 		row, err = txn.QueryRowEx(
@@ -411,7 +421,7 @@ func (r *Registry) insertRequestInternal(
 		r.mu.epoch++
 		r.addRequestInternalLocked(
 			ctx, reqID, stmtFingerprint, planGist, antiPlanGist, samplingProbability,
-			minExecutionLatency, expiresAt, redacted, username,
+			minExecutionLatency, expiresAt, redacted, username, includeTxn,
 		)
 	}()
 
@@ -757,7 +767,8 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 			username = string(*u)
 		}
 		ids.Add(int(id))
-		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt, redacted, username)
+		// TODO(davidh) read bool from table
+		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt, redacted, username, false)
 	}
 
 	// Remove all other requests.

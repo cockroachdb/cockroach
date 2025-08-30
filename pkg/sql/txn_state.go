@@ -145,6 +145,10 @@ type txnState struct {
 
 	// execType records the executor type for the transaction.
 	execType executorType
+
+	// txnInstrumentationHelper contains state used to manage transaction
+	// bundle collection.
+	txnInstrumentationHelper txnInstrumentationHelper
 }
 
 // txnType represents the type of a SQL transaction.
@@ -315,6 +319,12 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 				ts.outputJaegerJSON,                 /* outputJaegerJSON */
 			)
 		}
+	}
+
+	if ts.txnInstrumentationHelper.Active() {
+		r := sp.GetRecording(tracingpb.RecordingVerbose)
+		ts.txnInstrumentationHelper.Finalize(txnID, r)
+		ts.txnInstrumentationHelper = txnInstrumentationHelper{}
 	}
 
 	sp.Finish()

@@ -763,6 +763,7 @@ type StmtDiagnosticsRequestInsertFunc func(
 	expiresAfter time.Duration,
 	redacted bool,
 	username string,
+	includeTxn bool,
 ) error
 
 // AsOfSystemTime represents the result from the evaluation of AS OF SYSTEM TIME

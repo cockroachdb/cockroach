@@ -94,6 +94,8 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 		req.ExpiresAfter,
 		req.Redacted,
 		username,
+		// TODO(davidh): add flag to request payload and thread through.
+		false,
 	)
 	if err != nil {
 		return nil, err

@@ -12572,6 +12572,8 @@ argument is true, then the bundle will be redacted`
 				expiresAfter,
 				redacted,
 				username,
+				// TODO(davidh): Wire this up to new bundle arg.
+				false, /* includeTxn */
 			); err != nil {
 				return nil, err
 			}
