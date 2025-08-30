@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -30,12 +31,12 @@ import (
 // or corrupting data.
 //
 // TODO(jeffswenson): use this to test GCS and Azure
-// TODO(jeffswenson): add a list operation
 func RunCloudNemesisTest(t *testing.T, storage cloud.ExternalStorage) {
 	nemesis := &cloudNemesis{
 		storage:          storage,
 		writeConcurrency: 1,
 		readConcurrency:  40,
+		listConcurrency:  1,
 	}
 
 	// We create a context here because we don't want to support a caller supplied
@@ -47,15 +48,18 @@ func RunCloudNemesisTest(t *testing.T, storage cloud.ExternalStorage) {
 
 	require.Greater(t, nemesis.writeSuccesses.Load(), int64(5), "not enough completed writes")
 	require.Greater(t, nemesis.readSuccesses.Load(), int64(200), "not enough completed reads")
+	require.Greater(t, nemesis.listSuccesses.Load(), int64(5), "not enough completed lists")
 }
 
 type cloudNemesis struct {
 	storage          cloud.ExternalStorage
 	writeConcurrency int
 	readConcurrency  int
+	listConcurrency  int
 
 	readSuccesses  atomic.Int64
 	writeSuccesses atomic.Int64
+	listSuccesses  atomic.Int64
 
 	mu struct {
 		syncutil.Mutex
@@ -111,6 +115,22 @@ func (c *cloudNemesis) run(ctx context.Context, duration time.Duration) error {
 					return nil
 				default:
 					if err := c.readObject(ctx); err != nil {
+						return err
+					}
+				}
+			}
+		})
+	}
+
+	for i := 0; i < c.listConcurrency; i++ {
+		g.Go(func() error {
+			for {
+				time.Sleep(time.Millisecond)
+				select {
+				case <-done:
+					return nil
+				default:
+					if err := c.listObjects(ctx); err != nil {
 						return err
 					}
 				}
@@ -213,6 +233,42 @@ func (c *cloudNemesis) readObject(ctx context.Context) (err error) {
 	return nil
 }
 
+func (c *cloudNemesis) listObjects(ctx context.Context) (err error) {
+	before := c.snapshotObjects()
+
+	listedFiles := map[string]bool{}
+	err = c.storage.List(ctx, "", "", func(filename string) error {
+		listedFiles[strings.TrimPrefix(filename, "/")] = true
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "unable to list files")
+	}
+
+	// Check if there are any missing files in the listing.
+	for _, o := range before {
+		if o.finished {
+			if !listedFiles[o.name] {
+				return errors.AssertionFailedf("expected to find object %s in listing", o.name)
+			}
+		}
+	}
+
+	// Check if there are any unexpected files in the listing.
+	afterFiles := map[string]bool{}
+	for _, o := range c.snapshotObjects() {
+		afterFiles[o.name] = true
+	}
+	for filename := range listedFiles {
+		if !afterFiles[filename] {
+			return errors.AssertionFailedf("found unexpected object %s in listing", filename)
+		}
+	}
+
+	c.listSuccesses.Add(1)
+	return nil
+}
+
 func (c *cloudNemesis) newObject() cloudObject {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -247,6 +303,15 @@ func (c *cloudNemesis) randomObject() cloudObject {
 	}
 
 	return c.mu.objects[rand.Intn(len(c.mu.objects))]
+}
+
+func (c *cloudNemesis) snapshotObjects() []cloudObject {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	snapshot := make([]cloudObject, len(c.mu.objects))
+	copy(snapshot, c.mu.objects)
+	return snapshot
 }
 
 // generatedObject is a deterministic implementation of io.Reader.
