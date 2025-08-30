@@ -42,6 +42,12 @@ var maxConcurrentUploadBuffers = settings.RegisterIntSetting(
 	1,
 	settings.WithPublic)
 
+var maxRetries = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"cloudstorage.azure.max_retries",
+	"the maximum number of retries per Azure operation",
+	10)
+
 // A note on Azure authentication:
 //
 // The standardized way to authenticate a third-party identity to the Azure
@@ -233,6 +239,9 @@ func makeAzureStorage(
 	}
 	var opts service.ClientOptions
 	opts.Transport = t
+	// Azure SDK defaults to 3 retries, which is too low to survive the 30 second
+	// brownout in TestAzureFaultInjection.
+	opts.Retry.MaxRetries = int32(maxRetries.Get(&args.Settings.SV))
 
 	var azClient *service.Client
 	switch conf.Auth {
