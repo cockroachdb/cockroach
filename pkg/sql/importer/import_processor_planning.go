@@ -47,6 +47,8 @@ var replanFrequency = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
+const importProgressDebugName = `import_progress`
+
 // distImport is used by IMPORT to run a DistSQL flow to ingest data by starting
 // reader processes on many nodes that each read and ingest their assigned files
 // and then send back a summary of what they ingested. The combined summary is
@@ -158,7 +160,7 @@ func distImport(
 	fractionProgress := make([]uint32, len(from))
 
 	updateJobProgress := func() error {
-		return job.NoTxn().FractionProgressed(ctx, func(
+		return job.DebugNameNoTxn(importProgressDebugName).FractionProgressed(ctx, func(
 			ctx context.Context, details jobspb.ProgressDetails,
 		) float32 {
 			var overall float32
@@ -173,8 +175,7 @@ func distImport(
 			}
 
 			accumulatedBulkSummary.Lock()
-			prog.Summary.Add(accumulatedBulkSummary.BulkOpSummary)
-			accumulatedBulkSummary.Reset()
+			prog.Summary = accumulatedBulkSummary.BulkOpSummary
 			accumulatedBulkSummary.Unlock()
 			return overall / float32(len(from))
 		},
