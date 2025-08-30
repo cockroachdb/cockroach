@@ -45,6 +45,8 @@ enum NodeType {
 // with lower ReplicaIDs (including their destruction), or same ReplicaID and
 // lower Index have been applied.
 message Addr {
+  option (gogoproto.goproto_stringer) = false;
+
   // RangeID is the ID of the range that the WAG node pertains to.
   int64 range_id = 1 [
     (gogoproto.customname) = "RangeID",

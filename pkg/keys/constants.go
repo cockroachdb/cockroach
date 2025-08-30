@@ -226,6 +226,8 @@ var (
 	// SupporterMeta stores the highest timestamp at which support has been
 	// withdrawn.
 	localStoreLivenessSupporterMeta = []byte("slsm")
+	// localStoreWAGNodeSuffix is the suffix for WAG nodes.
+	localStoreWAGNodeSuffix = []byte("wagn")
 	// localStoreLivenessSupportFor stores the Store Liveness support by the local
 	// store for a store in the cluster. It includes the epoch and expiration of
 	// support.
