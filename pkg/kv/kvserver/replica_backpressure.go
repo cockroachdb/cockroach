@@ -207,8 +207,16 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 
 		// Register a callback on an ongoing split for this range in the splitQueue.
 		splitC := make(chan error, 1)
-		if !r.store.splitQueue.MaybeAddCallback(r.RangeID, func(err error) {
-			splitC <- err
+		if !r.store.splitQueue.MaybeAddCallback(r.RangeID, processCallback{
+			onEnqueueResult: func(rank int, err error) {},
+			onProcessResult: func(err error) {
+				select {
+				case splitC <- err:
+				default:
+					// Drop the error on the floor if there is already an error.
+					return
+				}
+			},
 		}) {
 			// No split ongoing. We may have raced with its completion. There's
 			// no good way to prevent this race, so we conservatively allow the
