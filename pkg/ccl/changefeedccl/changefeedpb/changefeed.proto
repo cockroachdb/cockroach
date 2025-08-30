@@ -21,3 +21,11 @@ message ResolvedTables {
   // TODO(#148124): Write to this field for aggregator-to-frontier messages.
   cockroach.sql.jobs.jobspb.ResolvedSpan.BoundaryType boundary_type = 2;
 }
+
+// ProtectedTimestampRecords is a map from table descriptor IDs to protected timestamp record IDs.
+message ProtectedTimestampRecords {
+  map<uint32, bytes> protected_timestamp_records = 1 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+}
