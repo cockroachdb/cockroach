@@ -1105,6 +1105,7 @@ ElementState:
     constraintId: 0
     expr: id > 0:::INT8
     geoConfig: null
+    hideForPrimaryKeyRecreated: false
     indexId: 2
     invisibility: 0
     isConcurrently: false

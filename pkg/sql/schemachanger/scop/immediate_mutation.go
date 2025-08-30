@@ -1185,6 +1185,7 @@ type MarkRecreatedIndexAsInvisible struct {
 	TableID              descpb.ID
 	IndexID              descpb.IndexID
 	TargetPrimaryIndexID descpb.IndexID
+	SetHideIndexFlag     bool
 }
 
 // MarkRecreatedIndexesAsVisible is used to mark secondary indexes recreated
@@ -1194,6 +1195,16 @@ type MarkRecreatedIndexesAsVisible struct {
 	immediateMutationOp
 	TableID           descpb.ID
 	IndexVisibilities map[descpb.IndexID]float64
+}
+
+// MarkRecreatedIndexAsVisible is used to mark secondary index recreated
+// after a primary key swap as visible. This is to allow their use after
+// primary key swap is complete.
+type MarkRecreatedIndexAsVisible struct {
+	immediateMutationOp
+	TableID         descpb.ID
+	IndexID         descpb.IndexID
+	IndexVisibility float64
 }
 
 // SetTableSchemaLocked is used to toggle a table schema as locked.

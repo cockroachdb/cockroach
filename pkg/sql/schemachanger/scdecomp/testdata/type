@@ -680,6 +680,7 @@ ElementState:
     constraintId: 0
     expr: g::STRING = 'hi':::STRING
     geoConfig: null
+    hideForPrimaryKeyRecreated: false
     indexId: 2
     invisibility: 0
     isConcurrently: false
@@ -1687,6 +1688,7 @@ ElementState:
     constraintId: 0
     expr: (c).a = 3:::INT8
     geoConfig: null
+    hideForPrimaryKeyRecreated: false
     indexId: 2
     invisibility: 0
     isConcurrently: false

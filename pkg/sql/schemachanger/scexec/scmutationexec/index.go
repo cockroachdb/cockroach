@@ -7,7 +7,9 @@ package scmutationexec
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -529,6 +531,11 @@ func (i *immediateVisitor) MarkRecreatedIndexAsInvisible(
 	if idx := m.GetIndex(); idx != nil {
 		idx.Invisibility = 1.0
 		idx.NotVisible = true
+		if op.SetHideIndexFlag {
+			// Prefix the index, so that the index can't accidentally be accessed.
+			idx.Name = fmt.Sprintf("crdb_internal_%s_recreated", idx.Name)
+			idx.HideForPrimaryKeyRecreate = true
+		}
 	}
 	return nil
 }
@@ -536,22 +543,45 @@ func (i *immediateVisitor) MarkRecreatedIndexAsInvisible(
 func (i *immediateVisitor) MarkRecreatedIndexesAsVisible(
 	ctx context.Context, op scop.MarkRecreatedIndexesAsVisible,
 ) error {
+	for indexID, invisibility := range op.IndexVisibilities {
+		err := i.MarkRecreatedIndexAsVisible(ctx, scop.MarkRecreatedIndexAsVisible{
+			TableID:         op.TableID,
+			IndexID:         indexID,
+			IndexVisibility: invisibility,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *immediateVisitor) MarkRecreatedIndexAsVisible(
+	ctx context.Context, op scop.MarkRecreatedIndexAsVisible,
+) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
 
-	for indexID, invisibility := range op.IndexVisibilities {
-		idx, err := catalog.MustFindIndexByID(tbl, indexID)
-		if err != nil {
-			return err
-		}
-		idx.IndexDesc().Invisibility = invisibility
-		if invisibility == 0.0 {
-			idx.IndexDesc().NotVisible = false
-		} else {
-			idx.IndexDesc().NotVisible = true
-		}
+	idx, err := catalog.MustFindIndexByID(tbl, op.IndexID)
+	if err != nil {
+		return err
 	}
+	idx.IndexDesc().Invisibility = op.IndexVisibility
+	if op.IndexVisibility == 0.0 {
+		idx.IndexDesc().NotVisible = false
+	} else {
+		idx.IndexDesc().NotVisible = true
+	}
+	// On a mixed version cluster, both reverting the name and unsetting
+	// the hide flag are no-ops, since we check for the name prefix and
+	// the default is for the index to be visible.
+	if strings.HasPrefix(idx.IndexDesc().Name, "crdb_internal") &&
+		strings.HasSuffix(idx.IndexDesc().Name, "_recreated") {
+		idx.IndexDesc().Name = strings.TrimSuffix(strings.TrimPrefix(idx.IndexDesc().Name, "crdb_internal_"),
+			"_recreated")
+	}
+	idx.IndexDesc().HideForPrimaryKeyRecreate = false
 	return nil
 }

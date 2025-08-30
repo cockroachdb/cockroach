@@ -170,6 +170,7 @@ type ImmediateMutationVisitor interface {
 	ForcedRowLevelSecurityMode(context.Context, ForcedRowLevelSecurityMode) error
 	MarkRecreatedIndexAsInvisible(context.Context, MarkRecreatedIndexAsInvisible) error
 	MarkRecreatedIndexesAsVisible(context.Context, MarkRecreatedIndexesAsVisible) error
+	MarkRecreatedIndexAsVisible(context.Context, MarkRecreatedIndexAsVisible) error
 	SetTableSchemaLocked(context.Context, SetTableSchemaLocked) error
 }
 
@@ -936,6 +937,11 @@ func (op MarkRecreatedIndexAsInvisible) Visit(ctx context.Context, v ImmediateMu
 // Visit is part of the ImmediateMutationOp interface.
 func (op MarkRecreatedIndexesAsVisible) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.MarkRecreatedIndexesAsVisible(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op MarkRecreatedIndexAsVisible) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MarkRecreatedIndexAsVisible(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
