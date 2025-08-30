@@ -41,6 +41,39 @@ func putPooledQueueChunk(e *queueChunk) {
 	sharedQueueChunkSyncPool.Put(e)
 }
 
+// a chunk that only supports popping.
+type chunkQueue struct {
+	wrapped *queueChunk
+	read    int
+	size    int
+}
+
+func (c *chunkQueue) popFront() (sharedMuxEvent, bool) {
+	if c.size == 0 {
+		return sharedMuxEvent{}, false
+	}
+	res := c.wrapped.data[c.read]
+	c.wrapped.data[c.read] = sharedMuxEvent{}
+	c.read++
+	c.size--
+	if c.read == eventQueueChunkSize {
+		putPooledQueueChunk(c.wrapped)
+	}
+	return res, true
+}
+
+func (c *chunkQueue) drain(ctx context.Context) {
+	if c.size == 0 {
+		return
+	}
+	for i := c.read; i < eventQueueChunkSize; i++ {
+		res := c.wrapped.data[i]
+		c.wrapped.data[i] = sharedMuxEvent{}
+		res.alloc.Release(ctx)
+	}
+	putPooledQueueChunk(c.wrapped)
+}
+
 // eventQueue stores sharedMuxEvents. Internally events are stored in
 // eventQueueChunkSize sized arrays that are added as needed and discarded once
 // reader and writers finish working with it.
@@ -94,6 +127,25 @@ func (q *eventQueue) popFront() (sharedMuxEvent, bool) {
 	q.read++
 	q.size--
 	return res, true
+}
+
+// popChunk gives up a chunk that the external consumer can perform pop operations on
+// when the chunk is drained, it will be returned to the pool
+func (q *eventQueue) popChunk() (chunkQueue, bool) {
+	if q.first == q.last {
+		return chunkQueue{}, false
+	}
+	// chunkQueue's pop function will put it back in the pool
+	chunk := chunkQueue{
+		wrapped: q.first,
+		read:    q.read,
+		size:    eventQueueChunkSize - q.read,
+	}
+	q.first = q.first.nextChunk
+	chunk.wrapped.nextChunk = nil
+	q.read = 0
+	q.size -= chunk.size
+	return chunk, true
 }
 
 // free drops references held by the queue.
