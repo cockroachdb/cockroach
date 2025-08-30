@@ -227,7 +227,7 @@ subtest alter_column_crdb_internal_expiration_rename
 statement ok
 CREATE TABLE alter_column_crdb_internal_expiration_rename() WITH (ttl_expire_after='10 minutes')
 
-statement error cannot rename column crdb_internal_expiration while ttl_expire_after is set
+statement error cannot alter column crdb_internal_expiration while ttl_expire_after is set
 ALTER TABLE alter_column_crdb_internal_expiration_rename RENAME COLUMN crdb_internal_expiration TO crdb_internal_expiration_2
 
 subtest end
