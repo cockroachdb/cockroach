@@ -1225,7 +1225,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// get leaders and leaseholder much faster as they don't need to wait for
 	// store liveness support.
 	var targetRangeID atomic.Value
-	ltk.storeKnobs.BaseQueueDisabledBypassFilter = func(rangeID roachpb.RangeID) bool {
+	ltk.storeKnobs.BaseQueueDisabledBypassFilter = func(_ roachpb.StoreID, rangeID roachpb.RangeID) bool {
 		if target := targetRangeID.Load(); target != nil && rangeID == target {
 			return true
 		}

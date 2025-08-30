@@ -663,7 +663,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		// replication, however still require specific range(s) to be processed
 		// through the queue.
 		bypassDisabled := bq.store.TestingKnobs().BaseQueueDisabledBypassFilter
-		if bypassDisabled == nil || !bypassDisabled(repl.GetRangeID()) {
+		if bypassDisabled == nil || !bypassDisabled(bq.store.StoreID(), repl.GetRangeID()) {
 			return
 		}
 	}
@@ -727,7 +727,7 @@ func (bq *baseQueue) addInternal(
 		// replication, however still require specific range(s) to be processed
 		// through the queue.
 		bypassDisabled := bq.store.TestingKnobs().BaseQueueDisabledBypassFilter
-		if bypassDisabled == nil || !bypassDisabled(desc.RangeID) {
+		if bypassDisabled == nil || !bypassDisabled(bq.store.StoreID(), desc.RangeID) {
 			if log.V(3) {
 				log.Dev.Infof(ctx, "queue disabled")
 			}
@@ -783,6 +783,9 @@ func (bq *baseQueue) addInternal(
 	case bq.incoming <- struct{}{}:
 	default:
 		// No need to signal again.
+	}
+	if postEnqueueInterceptor := bq.store.TestingKnobs().BaseQueuePostEnqueueInterceptor; postEnqueueInterceptor != nil {
+		postEnqueueInterceptor(bq.store.StoreID(), desc.RangeID)
 	}
 	return true, nil
 }
@@ -1366,7 +1369,7 @@ func (bq *baseQueue) pop() (replicaInQueue, float64) {
 		if item.processing {
 			log.Dev.Fatalf(bq.AnnotateCtx(context.Background()), "%s pulled processing item from heap: %v", bq.name, item)
 		}
-		// We are saving priority because the state is reset by setProcessing()
+		// We are saving pr	iority because the state is reset by setProcessing()
 		priority := item.priority
 		item.setProcessing()
 		bq.pending.Update(int64(bq.mu.priorityQ.Len()))
