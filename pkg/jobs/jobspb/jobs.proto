@@ -1448,6 +1448,85 @@ message InspectDetails {
   repeated Check checks = 1;
 }
 
+// FingerprintDetails contains the specification of a fingerprint job.
+message FingerprintDetails {
+  // Target specifies what to fingerprint - either a table or tenant.
+  oneof target {
+    // table fingerprint target
+    FingerprintTableTarget table = 1;
+    // tenant fingerprint target
+    FingerprintTenantTarget tenant = 2;
+  }
+
+  // Table fingerprinting details
+  message FingerprintTableTarget {
+    // TableID is the ID of the table to fingerprint.
+    uint32 table_id = 1 [
+      (gogoproto.customname) = "TableID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+    ];
+    
+    // TableName stores the fully qualified table name for display purposes.
+    string table_name = 2;
+    
+    // ExcludedColumns lists columns to exclude from fingerprinting.
+    repeated string excluded_columns = 3;
+  }
+
+  // Tenant fingerprinting details
+  message FingerprintTenantTarget {
+    // TenantID is the ID of the tenant to fingerprint.
+    roachpb.TenantID tenant_id = 1 [(gogoproto.nullable) = false];
+    
+    // TenantName stores the tenant name for display purposes.
+    string tenant_name = 2;
+    
+    // StartTimestamp specifies the revision history start point.
+    util.hlc.Timestamp start_timestamp = 3;
+    
+    // AllRevisions indicates whether to include all revisions.
+    bool all_revisions = 4;
+    
+    // Stripped indicates whether to exclude user data from fingerprint.
+    bool stripped = 5;
+  }
+
+  // Detached is true if the fingerprint job should run in detached mode.
+  bool detached = 3;
+  
+  // Statement is the original SQL statement that created this job.
+  string statement = 4;
+}
+
+// FingerprintProgress stores progress information for fingerprint jobs.
+message FingerprintProgress {
+  // CompletedIndexes tracks which table indexes have been fingerprinted.
+  repeated uint32 completed_indexes = 1 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
+  ];
+  
+  // TotalIndexes is the total number of indexes to fingerprint.
+  int64 total_indexes = 2;
+  
+  // Results stores the computed fingerprint values.
+  repeated FingerprintResult results = 3;
+}
+
+// FingerprintResult represents the result of fingerprinting a single index or span.
+message FingerprintResult {
+  // IndexID identifies which index was fingerprinted (0 for tenant fingerprints).
+  uint32 index_id = 1 [
+    (gogoproto.customname) = "IndexID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
+  ];
+  
+  // IndexName is the name of the fingerprinted index.
+  string index_name = 2;
+  
+  // Fingerprint is the computed hash value.
+  uint64 fingerprint = 3;
+}
+
 message UpdateTableMetadataCacheDetails {}
 message UpdateTableMetadataCacheProgress {
   enum Status {
@@ -1567,6 +1646,7 @@ message Payload {
     SqlActivityFlushDetails sql_activity_flush_details = 51;
     HotRangesLoggerDetails hot_ranges_logger_details = 52;
     InspectDetails inspect_details = 53;
+    FingerprintDetails fingerprint_details = 54;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1651,11 +1731,12 @@ message Progress {
     SqlActivityFlushProgress sql_activity_flush = 39;
     HotRangesLoggerProgress hot_ranges_logger = 40;
     InspectProgress inspect = 41;
+    FingerprintProgress fingerprint = 42;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
 
-  // NEXT ID: 42
+  // NEXT ID: 43
 }
 
 enum Type {
@@ -1698,6 +1779,7 @@ enum Type {
   SQL_ACTIVITY_FLUSH = 31 [(gogoproto.enumvalue_customname) = "TypeSQLActivityFlush"];
   HOT_RANGES_LOGGER = 32 [(gogoproto.enumvalue_customname) = "TypeHotRangesLogger"];
   INSPECT = 33 [(gogoproto.enumvalue_customname) = "TypeInspect"];
+  FINGERPRINT = 34 [(gogoproto.enumvalue_customname) = "TypeFingerprint"];
 }
 
 message Job {
