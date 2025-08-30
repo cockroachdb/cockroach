@@ -2150,6 +2150,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			sqlServer:        s.sqlServer,
 			db:               s.db,
 		}), /* apiServer */
+		newRESTStatusServer(s.status),
 		serverpb.FeatureFlags{
 			CanViewKvMetricDashboards:   s.rpcContext.TenantID.Equal(roachpb.SystemTenantID),
 			DisableKvLevelAdvancedDebug: false,

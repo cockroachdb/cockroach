@@ -845,6 +845,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			sqlServer:        s.sqlServer,
 			db:               s.db,
 		}), /* apiServer */
+		newRESTStatusServer(s.tenantStatus),
 		serverpb.FeatureFlags{
 			CanViewKvMetricDashboards: s.rpcContext.TenantID.Equal(roachpb.SystemTenantID) ||
 				s.sqlServer.serviceMode == mtinfopb.ServiceModeShared,
