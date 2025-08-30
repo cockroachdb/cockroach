@@ -106,7 +106,7 @@ func (w KVWriter) Insert(
 	}
 	for _, kv := range kvs {
 		if kvTrace {
-			log.VEventf(ctx, 2, "CPut %s -> %s", kv.Key, kv.Value)
+			log.VEventf(ctx, 2, "CPut %s -> %s", kv.Key, kv.Value.String())
 		}
 		b.CPut(kv.Key, &kv.Value, nil /* expValue */)
 	}
@@ -131,7 +131,7 @@ func (w KVWriter) Update(
 	for i, keyVal := range kvs {
 		expVal := expKvs[i].Value.TagAndDataBytes()
 		if kvTrace {
-			log.VEventf(ctx, 2, "CPut %s -> %s, expValue: %s", keyVal.Key, keyVal.Value, expKvs[i].Value)
+			log.VEventf(ctx, 2, "CPut %s -> %s, expValue: %s", keyVal.Key, keyVal.Value.String(), expKvs[i].Value.String())
 		}
 		b.CPut(keyVal.Key, &keyVal.Value, expVal)
 	}
