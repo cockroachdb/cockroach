@@ -205,6 +205,86 @@ func (t *T) CopyForHydrate() *T {
 	return &newT
 }
 
+// Canonical returns the canonical type for this type. A type's canonical type
+// is the type of the datum used to represent instances of the type in the SQL
+// engine. Types with the same canonical type share an in-memory datum
+// representation. If you have a datum of a type T, then `datum.ResolvedType`
+// will be T.Canonical().
+func (t *T) Canonical() *T {
+	switch t.Family() {
+	case BoolFamily:
+		return Bool
+	case IntFamily:
+		return Int
+	case FloatFamily:
+		return Float
+	case DecimalFamily:
+		return Decimal
+	case DateFamily:
+		return Date
+	case TimestampFamily:
+		return Timestamp
+	case IntervalFamily:
+		return Interval
+	case StringFamily, CollatedStringFamily:
+		return String
+	case BytesFamily:
+		return Bytes
+	case TimestampTZFamily:
+		return TimestampTZ
+	case OidFamily:
+		return Oid
+	case UnknownFamily:
+		return Unknown
+	case UuidFamily:
+		return Uuid
+	case INetFamily:
+		return INet
+	case TimeFamily:
+		return Time
+	case JsonFamily:
+		return Jsonb
+	case TimeTZFamily:
+		return TimeTZ
+	case BitFamily:
+		return VarBit
+	case GeometryFamily:
+		return Geometry
+	case GeographyFamily:
+		return Geography
+	case Box2DFamily:
+		return Box2D
+	case VoidFamily:
+		return Void
+	case EncodedKeyFamily:
+		return EncodedKey
+	case TSQueryFamily:
+		return TSQuery
+	case TSVectorFamily:
+		return TSVector
+	case PGLSNFamily:
+		return PGLSN
+	case RefCursorFamily:
+		return RefCursor
+	case PGVectorFamily:
+		return PGVector
+	case TriggerFamily:
+		return Trigger
+	case JsonpathFamily:
+		return Jsonpath
+	case LTreeFamily:
+		return LTree
+	case AnyFamily:
+		return Any
+	case ArrayFamily, TupleFamily, EnumFamily:
+		// Datums for these types have types attached to the datum instance, so
+		// every type in the family is canonical.
+		return t
+	default:
+		return Unknown
+	}
+}
+
 // UserDefinedTypeMetadata contains metadata needed for runtime
 // operations on user defined types. The metadata must be read only.
 type UserDefinedTypeMetadata struct {
