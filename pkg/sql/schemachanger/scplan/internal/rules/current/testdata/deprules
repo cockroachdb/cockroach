@@ -4220,6 +4220,22 @@ deprules
     - $new-primary-index-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-primary-index, $old-primary-index-Target, $old-primary-index-Node)
     - joinTargetNode($new-primary-index, $new-primary-index-Target, $new-primary-index-Node)
+- name: old table namespace is dropped before new table namespace is added
+  from: old-namespace-Node
+  kind: Precedence
+  to: new-namespace-Node
+  query:
+    - $old-namespace[Type] = '*scpb.Namespace'
+    - $new-namespace[Type] = '*scpb.Namespace'
+    - $old-namespace[Type] = $same-type
+    - $new-namespace[Type] = $same-type
+    - joinOnDescID($old-namespace, $new-namespace, $desc-id)
+    - $old-namespace-Target[TargetStatus] = ABSENT
+    - $old-namespace-Node[CurrentStatus] = ABSENT
+    - $new-namespace-Target[TargetStatus] = PUBLIC
+    - $new-namespace-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-namespace, $old-namespace-Target, $old-namespace-Node)
+    - joinTargetNode($new-namespace, $new-namespace-Target, $new-namespace-Node)
 - name: policy dependents are swapped in order
   from: drop-policy-dependent-Node
   kind: Precedence
@@ -9145,6 +9161,22 @@ deprules
     - $new-primary-index-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-primary-index, $old-primary-index-Target, $old-primary-index-Node)
     - joinTargetNode($new-primary-index, $new-primary-index-Target, $new-primary-index-Node)
+- name: old table namespace is dropped before new table namespace is added
+  from: old-namespace-Node
+  kind: Precedence
+  to: new-namespace-Node
+  query:
+    - $old-namespace[Type] = '*scpb.Namespace'
+    - $new-namespace[Type] = '*scpb.Namespace'
+    - $old-namespace[Type] = $same-type
+    - $new-namespace[Type] = $same-type
+    - joinOnDescID($old-namespace, $new-namespace, $desc-id)
+    - $old-namespace-Target[TargetStatus] = ABSENT
+    - $old-namespace-Node[CurrentStatus] = ABSENT
+    - $new-namespace-Target[TargetStatus] = PUBLIC
+    - $new-namespace-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-namespace, $old-namespace-Target, $old-namespace-Node)
+    - joinTargetNode($new-namespace, $new-namespace-Target, $new-namespace-Node)
 - name: policy dependents are swapped in order
   from: drop-policy-dependent-Node
   kind: Precedence
