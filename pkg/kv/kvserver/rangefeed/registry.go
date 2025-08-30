@@ -10,8 +10,10 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -53,6 +55,8 @@ type registration interface {
 	setID(int64)
 	// setSpanAsKeys sets the keys field to the span of the registration.
 	setSpanAsKeys()
+	// getState returns a snapshot of all the fields of the registration.
+	getState() rangefeedpb.RegistrationState
 	// getSpan returns the span of the registration.
 	getSpan() roachpb.Span
 	// getCatchUpTimestamp returns the catchUpTimestamp of the registration.
@@ -81,22 +85,28 @@ type registration interface {
 // baseRegistration is a common base for all registration types. It is intended
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
-	streamCtx      context.Context
-	span           roachpb.Span
-	withDiff       bool
-	withFiltering  bool
-	withOmitRemote bool
-	bulkDelivery   int
+	// The following fields are immutable and are initialized upon registration.
+	id               int64 // internal
+	streamCtx        context.Context
+	span             roachpb.Span
+	catchUpTimestamp hlc.Timestamp // exclusive
+	withDiff         bool
+	withFiltering    bool
+	withOmitRemote   bool
+	bulkDelivery     int
+	rangeID          roachpb.RangeID
+	streamID         int64
+	consumerID       int64
+	createdTime      time.Time
 	// removeRegFromProcessor is called to remove the registration from its
 	// processor. This is provided by the creator of the registration and called
 	// during disconnect(). Since it is called during disconnect it must be
 	// non-blocking.
 	removeRegFromProcessor func(registration)
 
-	catchUpTimestamp hlc.Timestamp // exclusive
-	id               int64         // internal
-	keys             interval.Range
-	shouldUnreg      atomic.Bool
+	// The following fields are mutable.
+	shouldUnreg atomic.Bool
+	keys        interval.Range // see setSpanAsKeys
 }
 
 // ID implements interval.Interface.
@@ -388,6 +398,21 @@ func (reg *registry) PublishToOverlapping(
 // https://github.com/cockroachdb/cockroach/issues/110634
 func (reg *registry) DisconnectAllOnShutdown(ctx context.Context, pErr *kvpb.Error) {
 	reg.DisconnectWithErr(ctx, all, pErr)
+}
+
+func (reg *registry) CollectAllStates(ctx context.Context) []rangefeedpb.RegistrationState {
+	return reg.CollectStates(ctx, all)
+}
+
+func (reg *registry) CollectStates(
+	ctx context.Context, span roachpb.Span,
+) []rangefeedpb.RegistrationState {
+	states := make([]rangefeedpb.RegistrationState, 0, reg.tree.Len())
+	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
+		states = append(states, r.getState())
+		return false, nil
+	})
+	return states
 }
 
 // DisconnectWithErr disconnects all registrations that overlap the specified
