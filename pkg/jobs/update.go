@@ -9,6 +9,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"runtime"
+	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,6 +57,9 @@ func (j *Job) WithTxn(txn isql.Txn) Updater {
 
 func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 	if u.txn == nil {
+		stack := debug.Stack()
+		fmt.Printf("\n=== flag 3 STACK TRACE [%d] ===\n%s\n=== END STACK TRACE [%d] ===\n\n",
+			getGID(), stack, getGID())
 		return u.j.registry.db.Txn(ctx, func(
 			ctx context.Context, txn isql.Txn,
 		) error {
@@ -158,11 +164,14 @@ WHERE id = $1
 		return errors.AssertionFailedf("expected int num_runs, but got %T", numRuns)
 	}
 
+	var mdTag string
+
 	md := JobMetadata{
 		ID:       j.ID(),
 		State:    state,
 		Payload:  payload,
 		Progress: progress,
+		Tag:      &mdTag,
 	}
 
 	var ju JobUpdater
@@ -269,6 +278,37 @@ WHERE id = $1
 	// Insert the job payload and progress into the system.jobs_info table.
 	infoStorage := j.InfoStorage(u.txn)
 	infoStorage.claimChecked = true
+
+	printJobInfo := func(tag string) error {
+		if importProg := progress.GetImport(); importProg != nil {
+			it, err := u.txn.QueryIteratorEx(ctx, "select-job-debug", u.txn.KV(), sessiondata.NodeUserSessionDataOverride,
+				`SELECT job_id, info_key, written, value FROM system.job_info WHERE info_key = 'legacy_progress' AND job_id = $1 `, j.ID())
+			if err != nil {
+				return errors.Wrapf(err, "failed to select job for debug")
+			}
+
+			var debugRes strings.Builder
+			debugRes.WriteString(fmt.Sprintf("[time: %s] [GOROUTINE %d] [tag: %s] [progressBytes != nil :%t]%s WriteLegacyProgressjob, %d info rows:\n",
+				time.Now().String(), getGID(), *md.Tag, progressBytes != nil, tag, j.id))
+			for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+				curRow := it.Cur()
+				if progress, err = UnmarshalProgress(curRow[3]); err != nil {
+					return errors.Wrapf(err, "failed to unmarshal progress for debug")
+				}
+				debugRes.WriteString(fmt.Sprintf("job_id=%s, info_key=%s, written=%s, progress=%+v\n", curRow[0].String(), curRow[1].String(), curRow[2].String(), progress.GetImport().Summary))
+			}
+			if err != nil {
+				return errors.Wrapf(err, "failed to iterate result for select for debug")
+			}
+			fmt.Printf("%s\n", debugRes.String())
+		}
+		return nil
+	}
+
+	if err := printJobInfo("before"); err != nil {
+		return err
+	}
+
 	if payloadBytes != nil {
 		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
 			return err
@@ -278,6 +318,10 @@ WHERE id = $1
 		if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
 			return err
 		}
+	}
+
+	if err := printJobInfo("after"); err != nil {
+		return err
 	}
 
 	if ju.md.State != "" && ju.md.State != state {
@@ -374,6 +418,7 @@ type JobMetadata struct {
 	State    State
 	Payload  *jobspb.Payload
 	Progress *jobspb.Progress
+	Tag      *string
 }
 
 // CheckRunningOrReverting returns an InvalidStatusError if md.Status is not
@@ -434,6 +479,7 @@ func (ju *JobUpdater) PauseRequestedWithFunc(
 	}
 	ju.UpdateState(StatePauseRequested)
 	md.Payload.PauseReason = reason
+	*md.Tag = "pause for fun"
 	ju.UpdatePayload(md.Payload)
 	log.Dev.Infof(ctx, "job %d: pause requested recorded with reason %s", md.ID, reason)
 	return nil
@@ -442,6 +488,7 @@ func (ju *JobUpdater) PauseRequestedWithFunc(
 // Unpaused sets the state of the tracked job to running or reverting iff the
 // job is currently paused. It does not directly resume the job.
 func (ju *JobUpdater) Unpaused(_ context.Context, md JobMetadata) error {
+	*md.Tag = "unpause for fun"
 	if md.State == StateRunning || md.State == StateReverting {
 		// Already resumed - do nothing.
 		return nil
@@ -513,4 +560,14 @@ func (u Updater) Update(ctx context.Context, updateFn UpdateFn) error {
 
 func (u Updater) now() time.Time {
 	return u.j.registry.clock.Now().GoTime()
+}
+
+// getGID returns the goroutine ID for debugging purposes
+func getGID() uint64 {
+	b := make([]byte, 64)
+	b = b[:runtime.Stack(b, false)]
+	b = bytes.TrimPrefix(b, []byte("goroutine "))
+	b = b[:bytes.IndexByte(b, ' ')]
+	n, _ := strconv.ParseUint(string(b), 10, 64)
+	return n
 }

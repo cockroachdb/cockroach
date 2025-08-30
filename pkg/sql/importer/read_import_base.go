@@ -14,6 +14,8 @@ import (
 	"io"
 	"math"
 	"net/url"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -52,6 +54,16 @@ var importElasticCPUControlEnabled = settings.RegisterBoolSetting(
 	"determines whether import operations integrate with elastic CPU control",
 	false, // TODO(dt): enable this by default after more benchmarking.
 )
+
+// getGID returns the goroutine ID for debugging purposes
+func getGID() uint64 {
+	b := make([]byte, 64)
+	b = b[:runtime.Stack(b, false)]
+	b = bytes.TrimPrefix(b, []byte("goroutine "))
+	b = b[:bytes.IndexByte(b, ' ')]
+	n, _ := strconv.ParseUint(string(b), 10, 64)
+	return n
+}
 
 func runImport(
 	ctx context.Context,
