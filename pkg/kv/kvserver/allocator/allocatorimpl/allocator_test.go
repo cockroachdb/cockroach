@@ -9629,3 +9629,298 @@ func TestAllocatorRebalanceTargetVoterConstraintUnsatisfied(t *testing.T) {
 		})
 	}
 }
+
+func TestAllocatorActionUnfair(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name                     string
+		action                   AllocatorAction
+		priorityAtEnqueue        float64
+		priorityAtProcessingTime float64
+		expected                 bool
+		description              string
+	}{
+		// Test case 1: When a.Priority() < priorityAtProcessingTime
+		// r_a was enqueued at a lower priority anyway, so it doesn't matter
+		{
+			name:                     "action priority less than processing priority",
+			action:                   AllocatorRemoveVoter, // Priority: 800
+			priorityAtEnqueue:        1000,
+			priorityAtProcessingTime: 900,
+			expected:                 false,
+			description:              "action priority (800) < processing priority (900), so not unfair",
+		},
+		// Test case 2: When a.Priority() == priorityAtProcessingTime
+		// r_bad might have been enqueued later but forgive since same priority
+		{
+			name:                     "action priority equals processing priority",
+			action:                   AllocatorRemoveVoter, // Priority: 800
+			priorityAtEnqueue:        1000,
+			priorityAtProcessingTime: 800,
+			expected:                 false,
+			description:              "action priority (800) == processing priority (800), so not unfair",
+		},
+		// Test case 3: When priorityAtProcessingTime < a.Priority() <= priorityAtEnqueue
+		// r_a was enqueued later than r_bad and should have gone before r_bad
+		{
+			name:                     "unfair priority inversion",
+			action:                   AllocatorRemoveVoter, // Priority: 800
+			priorityAtEnqueue:        1000,
+			priorityAtProcessingTime: 700,
+			expected:                 true,
+			description:              "processing priority (700) < action priority (800) <= enqueue priority (1000), so unfair",
+		},
+		// Test case 4: When a.Priority() > priorityAtEnqueue
+		// r_a should be ahead of r_bad anyway
+		{
+			name:                     "action priority greater than enqueue priority",
+			action:                   AllocatorRemoveVoter, // Priority: 800
+			priorityAtEnqueue:        600,
+			priorityAtProcessingTime: 700,
+			expected:                 false,
+			description:              "action priority (800) > enqueue priority (600), so not unfair",
+		},
+		// Edge cases
+		{
+			name:                     "exact boundary case - unfair",
+			action:                   AllocatorRemoveVoter, // Priority: 800
+			priorityAtEnqueue:        800,
+			priorityAtProcessingTime: 799,
+			expected:                 true,
+			description:              "processing priority (799) < action priority (800) <= enqueue priority (800), so unfair",
+		},
+		{
+			name:                     "exact boundary case - not unfair",
+			action:                   AllocatorRemoveVoter, // Priority: 800
+			priorityAtEnqueue:        800,
+			priorityAtProcessingTime: 800,
+			expected:                 false,
+			description:              "action priority (800) == processing priority (800), so not unfair",
+		},
+		// Test with different allocator actions
+		{
+			name:                     "high priority action - unfair",
+			action:                   AllocatorReplaceDeadVoter, // Priority: 12000
+			priorityAtEnqueue:        15000,
+			priorityAtProcessingTime: 11000,
+			expected:                 true,
+			description:              "processing priority (11000) < action priority (12000) <= enqueue priority (15000), so unfair",
+		},
+		{
+			name:                     "low priority action - not unfair",
+			action:                   AllocatorRemoveNonVoter, // Priority: 200
+			priorityAtEnqueue:        1000,
+			priorityAtProcessingTime: 300,
+			expected:                 false,
+			description:              "action priority (200) < processing priority (300), so not unfair",
+		},
+		// Test with zero priorities
+		{
+			name:                     "zero priorities",
+			action:                   AllocatorNoop, // Priority: 0
+			priorityAtEnqueue:        0,
+			priorityAtProcessingTime: 0,
+			expected:                 false,
+			description:              "all priorities are zero, so not unfair",
+		},
+		{
+			name:                     "zero processing priority with positive action priority",
+			action:                   AllocatorRemoveVoter, // Priority: 800
+			priorityAtEnqueue:        1000,
+			priorityAtProcessingTime: 0,
+			expected:                 true,
+			description:              "processing priority (0) < action priority (800) <= enqueue priority (1000), so unfair",
+		},
+		// Test with negative priorities
+		{
+			name:                     "negative priorities",
+			action:                   AllocatorRemoveVoter, // Priority: 800
+			priorityAtEnqueue:        -100,
+			priorityAtProcessingTime: -200,
+			expected:                 false,
+			description:              "action priority (800) > enqueue priority (-100), so not unfair",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tc.action.Unfair(tc.priorityAtEnqueue, tc.priorityAtProcessingTime)
+			if result != tc.expected {
+				t.Errorf("Unfair(%f, %f) = %v, expected %v\nDescription: %s",
+					tc.priorityAtEnqueue, tc.priorityAtProcessingTime, result, tc.expected, tc.description)
+			}
+		})
+	}
+}
+
+func TestRoundToNearestPriorityCategory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name     string
+		input    float64
+		expected float64
+	}{
+		{
+			name:     "zero",
+			input:    0.0,
+			expected: 0.0,
+		},
+		{
+			name:     "exact multiple of 100",
+			input:    100.0,
+			expected: 100.0,
+		},
+		{
+			name:     "round down to nearest 100",
+			input:    149.0,
+			expected: 100.0,
+		},
+		{
+			name:     "round up to nearest 100",
+			input:    151.0,
+			expected: 200.0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := RoundToNearestPriorityCategory(tc.input)
+			if result != tc.expected {
+				t.Errorf("RoundToNearestPriorityCategory(%f) = %f, expected %f", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestCheckPriorityInversion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	testCases := []struct {
+		name               string
+		priorityAtEnqueue  float64
+		actionAtProcessing AllocatorAction
+		expected           bool
+		description        string
+	}{
+		{
+			name:               "priority -1 with non-decommissioning action",
+			priorityAtEnqueue:  -1,
+			actionAtProcessing: AllocatorRemoveVoter,
+			expected:           true,
+			description:        "priority -1 with non-decommissioning action should check unfairness",
+		},
+		{
+			name:               "priority -1 with decommissioning action",
+			priorityAtEnqueue:  -1,
+			actionAtProcessing: AllocatorRemoveDecommissioningVoter,
+			expected:           false,
+			description:        "decommissioning actions should not be requeued",
+		},
+		{
+			name:               "priority within range",
+			priorityAtEnqueue:  1000,
+			actionAtProcessing: AllocatorRemoveVoter,
+			expected:           false,
+			description:        "priority within range should not be requeued",
+		},
+		{
+			name:               "priority 0 with decommissioning action",
+			priorityAtEnqueue:  0,
+			actionAtProcessing: AllocatorReplaceDecommissioningVoter,
+			expected:           false,
+			description:        "decommissioning actions with priority 0 should not be requeued",
+		},
+		{
+			name:               "priority 100 with decommissioning action",
+			priorityAtEnqueue:  100,
+			actionAtProcessing: AllocatorReplaceDecommissioningNonVoter,
+			expected:           false,
+			description:        "decommissioning actions with priority 100 should not be requeued",
+		},
+		{
+			name:               "priority 100 with non-decommissioning action",
+			priorityAtEnqueue:  100,
+			actionAtProcessing: AllocatorAddVoter,
+			expected:           false,
+			description:        "non-decommissioning actions with priority 100 should not be requeued",
+		},
+		{
+			name:               "priority 200 with decommissioning action",
+			priorityAtEnqueue:  200,
+			actionAtProcessing: AllocatorRemoveDecommissioningNonVoter,
+			expected:           false,
+			description:        "decommissioning actions with priority 200 should not be requeued",
+		},
+		{
+			name:               "priority 200 with non-decommissioning action",
+			priorityAtEnqueue:  200,
+			actionAtProcessing: AllocatorRemoveNonVoter,
+			expected:           false,
+			description:        "non-decommissioning actions with priority 200 should not be requeued",
+		},
+		{
+			name:               "priority 150 with action jumping to higher category",
+			priorityAtEnqueue:  150,
+			actionAtProcessing: AllocatorAddVoter,
+			expected:           true,
+			description:        "action with priority 150 jumping to a higher category should check unfairness",
+		},
+		{
+			name:               "priority 250 with action jumping to lower category",
+			priorityAtEnqueue:  250,
+			actionAtProcessing: AllocatorRemoveVoter,
+			expected:           false,
+			description:        "action with priority 250 jumping to a lower category should not be requeued",
+		},
+		// Additional edge cases
+		{
+			name:               "extremely high priority with non-decommissioning action",
+			priorityAtEnqueue:  1e6,
+			actionAtProcessing: AllocatorAddVoter,
+			expected:           false,
+			description:        "extremely high priority should not cause requeue if within range",
+		},
+		{
+			name:               "extremely low priority with decommissioning action",
+			priorityAtEnqueue:  -1e6,
+			actionAtProcessing: AllocatorRemoveDecommissioningVoter,
+			expected:           false,
+			description:        "extremely low priority should not cause requeue for decommissioning actions",
+		},
+		{
+			name:               "priority at boundary of range with non-decommissioning action",
+			priorityAtEnqueue:  AllocatorNoop.Priority(),
+			actionAtProcessing: AllocatorRemoveVoter,
+			expected:           false,
+			description:        "priority at boundary of range should not be requeued",
+		},
+		{
+			name:               "priority just above boundary with non-decommissioning action",
+			priorityAtEnqueue:  AllocatorNoop.Priority() + 1,
+			actionAtProcessing: AllocatorRemoveVoter,
+			expected:           false,
+			description:        "priority just above boundary should not be requeued",
+		},
+		{
+			name:               "priority just below boundary with decommissioning action",
+			priorityAtEnqueue:  AllocatorFinalizeAtomicReplicationChange.Priority() - 1,
+			actionAtProcessing: AllocatorRemoveDecommissioningVoter,
+			expected:           false,
+			description:        "priority just below boundary should not be requeued for decommissioning actions",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			inversion, _ := CheckPriorityInversion(ctx, tc.priorityAtEnqueue, tc.actionAtProcessing)
+			if inversion != tc.expected {
+				t.Errorf("checkPriorityInversion(%f, %s) = %v, expected %v\nDescription: %s",
+					tc.priorityAtEnqueue, tc.actionAtProcessing, inversion, tc.expected, tc.description)
+			}
+		})
+	}
+}
