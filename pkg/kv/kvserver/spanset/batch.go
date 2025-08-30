@@ -518,6 +518,11 @@ func (s spanSetReader) PinEngineStateForIterators(readCategory fs.ReadCategory) 
 	return s.r.PinEngineStateForIterators(readCategory)
 }
 
+// RecordMVCCGetBlocksLoaded implements the storage.Reader interface.
+func (s spanSetReader) RecordMVCCGetBlocksLoaded(blockLoads int64) {
+	s.r.RecordMVCCGetBlocksLoaded(blockLoads)
+}
+
 type spanSetWriter struct {
 	w     storage.Writer
 	spans *SpanSet
@@ -836,6 +841,11 @@ func (s spanSetBatch) PutInternalPointKey(key *pebble.InternalKey, value []byte)
 
 func (s spanSetBatch) ClearRawEncodedRange(start, end []byte) error {
 	return s.b.ClearRawEncodedRange(start, end)
+}
+
+// RecordMVCCGetBlocksLoaded implements the storage.Reader interface.
+func (s spanSetBatch) RecordMVCCGetBlocksLoaded(blockLoads int64) {
+	s.b.RecordMVCCGetBlocksLoaded(blockLoads)
 }
 
 // NewBatch returns a storage.Batch that asserts access of the underlying
