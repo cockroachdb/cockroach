@@ -878,7 +878,7 @@ func (mgcq *mvccGCQueue) scanReplicasForHiPriGCHints(
 				if !isLeaseHolder {
 					return true
 				}
-				added, _ := mgcq.addInternal(ctx, desc, replica.ReplicaID(), deleteRangePriority)
+				added, _ := mgcq.addInternal(ctx, desc, replica.ReplicaID(), deleteRangePriority, noopProcessCallback)
 				if added {
 					mgcq.store.metrics.GCEnqueueHighPriority.Inc(1)
 					foundReplicas++
