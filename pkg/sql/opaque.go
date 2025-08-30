@@ -98,6 +98,10 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterDatabaseDropSecondaryRegion(ctx, n)
 	case *tree.AlterDatabaseSetZoneConfigExtension:
 		return p.AlterDatabaseSetZoneConfigExtension(ctx, n)
+	case *tree.AlterDatabaseSetStorageParams:
+		return p.AlterDatabaseSetStorageParams(ctx, n)
+	case *tree.AlterDatabaseResetStorageParams:
+		return p.AlterDatabaseResetStorageParams(ctx, n)
 	case *tree.AlterDefaultPrivileges:
 		return p.alterDefaultPrivileges(ctx, n)
 	case *tree.AlterExternalConnection:
@@ -327,6 +331,8 @@ func init() {
 		&tree.AlterDatabaseAddRegion{},
 		&tree.AlterDatabaseDropRegion{},
 		&tree.AlterDatabaseOwner{},
+		&tree.AlterDatabaseSetStorageParams{},
+		&tree.AlterDatabaseResetStorageParams{},
 		&tree.AlterDatabasePrimaryRegion{},
 		&tree.AlterDatabasePlacement{},
 		&tree.AlterDatabaseSurvivalGoal{},

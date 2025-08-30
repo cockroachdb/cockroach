@@ -333,6 +333,7 @@ func NewDatumRowConverter(
 	ctx context.Context,
 	baseSemaCtx *tree.SemaContext,
 	tableDesc catalog.TableDescriptor,
+	databaseDesc catalog.DatabaseDescriptor,
 	targetColNames tree.NameList,
 	evalCtx *eval.Context,
 	kvCh chan<- KVBatch,
@@ -391,6 +392,7 @@ func NewDatumRowConverter(
 	ri, err := MakeInserter(
 		evalCtx.Codec,
 		tableDesc,
+		databaseDesc,
 		nil, /* uniqueWithTombstoneIndexes */
 		cols,
 		evalCtx.SessionData(),

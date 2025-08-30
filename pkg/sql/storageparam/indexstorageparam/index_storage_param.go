@@ -11,6 +11,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -139,6 +141,9 @@ func (po *Setter) Set(
 	key string,
 	expr tree.Datum,
 ) error {
+	//TODO (KB): add this for Alter statements
+	telemetry.Inc(sqltelemetry.SetIndexStorageParameter(key))
+
 	switch key {
 	case `fillfactor`:
 		return storageparam.SetFillFactor(ctx, evalCtx, key, expr)
@@ -224,8 +229,8 @@ func (po *Setter) RunPostChecks() error {
 	return nil
 }
 
-// IsNewTableObject implements the Setter interface.
-func (po *Setter) IsNewTableObject() bool {
+// IsNewObject implements the Setter interface.
+func (po *Setter) IsNewObject() bool {
 	//Not applicable to indexes.
 	panic(errors.AssertionFailedf("not-implemented for indexes"))
 }

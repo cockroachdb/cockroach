@@ -717,7 +717,11 @@ func importPlanHook(
 			}
 		}
 
-		tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, TargetCols: intoCols}}
+		tableDetails = []jobspb.ImportDetails_Table{{
+			Desc:         &found.TableDescriptor,
+			DatabaseDesc: db.DatabaseDesc(),
+			TargetCols:   intoCols,
+		}}
 
 		// Store the primary region of the database being imported into. This is
 		// used during job execution to evaluate certain default expressions and

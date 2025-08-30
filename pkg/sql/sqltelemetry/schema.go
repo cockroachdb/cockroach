@@ -208,6 +208,30 @@ func ResetTableStorageParameter(param string) telemetry.Counter {
 	return telemetry.GetCounter("sql.schema.table_storage_parameter." + param + ".reset")
 }
 
+// SetDatabaseStorageParameter is to be incremented every time a database storage
+// parameter has been SET (through CREATE DATABASE or ALTER DATABASE).
+func SetDatabaseStorageParameter(param string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.database_storage_parameter." + param + ".set")
+}
+
+// ResetDatabaseStorageParameter is to be incremented every time a database storage
+// parameter has been RESET.
+func ResetDatabaseStorageParameter(param string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.database_storage_parameter." + param + ".reset")
+}
+
+// SetIndexStorageParameter is to be incremented every time an index storage
+// parameter has been SET (through CREATE INDEX or ALTER INDEX).
+func SetIndexStorageParameter(param string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.index_storage_parameter." + param + ".set")
+}
+
+// ResetIndexStorageParameter is to be incremented every time an index storage
+// parameter has been RESET.
+func ResetIndexStorageParameter(param string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.index_storage_parameter." + param + ".reset")
+}
+
 // DeclarativeSchemaChangerCounter is incremented whenever the declarative
 // schema changer is used.
 var DeclarativeSchemaChangerCounter = telemetry.GetCounterOnce("sql.schema.schema_changer_mode.declarative")

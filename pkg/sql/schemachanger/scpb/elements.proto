@@ -135,6 +135,8 @@ message ElementProto {
     DatabaseComment database_comment = 82 [(gogoproto.moretags) = "parent:\"Database\""];
     DatabaseData database_data = 83 [(gogoproto.customname) = "DatabaseData", (gogoproto.moretags) = "parent:\"Database\""];
     DatabaseZoneConfig database_zone_config = 84 [(gogoproto.moretags) = "parent:\"Database\""];
+    DatabaseMaxRowSizeErr database_max_row_size_err = 85 [(gogoproto.moretags) = "parent:\"Database\""];
+    DatabaseMaxRowSizeLog database_max_row_size_log = 86 [(gogoproto.moretags) = "parent:\"Database\""];
 
     // Schema elements.
     SchemaParent schema_parent = 90 [(gogoproto.moretags) = "parent:\"Schema\""];
@@ -1016,4 +1018,16 @@ message FunctionSecurity {
 message ElementCreationMetadata {
   bool in_23_1_or_later = 1;
   bool in_24_3_or_later = 2;
+}
+
+// DatabaseMaxRowSizeErr models the storage parameter `max_row_size_err` of a database.
+message DatabaseMaxRowSizeErr {
+  uint32 database_id = 1 [(gogoproto.nullable) = true, (gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.sql.catalog.catpb.MaxRowSizeErr max_row_size_err = 2 [(gogoproto.nullable) = true, (gogoproto.embed) = true];
+}
+
+// DatabaseMaxRowSizeLog models the storage parameter `max_row_size_log` of a database.
+message DatabaseMaxRowSizeLog {
+  uint32 database_id = 1 [(gogoproto.nullable) = true, (gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.sql.catalog.catpb.MaxRowSizeLog max_row_size_log = 2 [(gogoproto.nullable) = true, (gogoproto.embed) = true];
 }

@@ -538,6 +538,13 @@ func TestReadCommittedLogic_create_as(
 	runLogicTest(t, "create_as")
 }
 
+func TestReadCommittedLogic_create_database(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "create_database")
+}
+
 func TestReadCommittedLogic_create_index(
 	t *testing.T,
 ) {

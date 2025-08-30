@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -136,6 +137,23 @@ func (flowCtx *FlowCtx) TableDescriptor(
 		}
 	}
 	return tabledesc.NewUnsafeImmutable(desc)
+}
+
+// DatabaseDescriptor returns a catalog.DatabaseDescriptor object for the given
+// descriptor proto, using the descriptors collection if it is available.
+func (flowCtx *FlowCtx) DatabaseDescriptor(
+	ctx context.Context, desc *descpb.DatabaseDescriptor,
+) catalog.DatabaseDescriptor {
+	if desc == nil {
+		return nil
+	}
+	if flowCtx != nil && flowCtx.Descriptors != nil && flowCtx.Txn != nil {
+		leased, _ := flowCtx.Descriptors.ByIDWithoutLeased(flowCtx.Txn).Get().Database(ctx, desc.ID)
+		if leased != nil && leased.GetVersion() == desc.Version {
+			return leased
+		}
+	}
+	return dbdesc.NewBuilder(desc).BuildImmutableDatabase()
 }
 
 // NewTypeResolver creates a new TypeResolver that is bound under the input

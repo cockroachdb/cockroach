@@ -289,6 +289,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	ctx context.Context,
 	txn *kv.Txn,
 	tableDesc catalog.TableDescriptor,
+	databaseDesc catalog.DatabaseDescriptor,
 	sp roachpb.Span,
 	chunkSize rowinfra.RowLimit,
 	updateChunkSizeThresholdBytes rowinfra.BytesLimit,
@@ -304,6 +305,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	ru, err := row.MakeUpdater(
 		cb.evalCtx.Codec,
 		tableDesc,
+		databaseDesc,
 		nil, /* uniqueWithTombstoneIndexes */
 		nil, /* lockedIndexes */
 		cb.updateCols,

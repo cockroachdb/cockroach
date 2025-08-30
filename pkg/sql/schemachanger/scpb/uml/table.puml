@@ -127,6 +127,16 @@ object DatabaseData
 
 DatabaseData :  DatabaseID
 
+object DatabaseMaxRowSizeErr
+
+DatabaseMaxRowSizeErr :  DatabaseID
+DatabaseMaxRowSizeErr :  MaxRowSizeErr
+
+object DatabaseMaxRowSizeLog
+
+DatabaseMaxRowSizeLog :  DatabaseID
+DatabaseMaxRowSizeLog :  MaxRowSizeLog
+
 object DatabaseRegionConfig
 
 DatabaseRegionConfig :  DatabaseID
@@ -584,6 +594,8 @@ CheckConstraint <|-- ConstraintWithoutIndexName
 ForeignKeyConstraint <|-- ConstraintWithoutIndexName
 Database <|-- DatabaseComment
 Database <|-- DatabaseData
+Database <|-- DatabaseMaxRowSizeErr
+Database <|-- DatabaseMaxRowSizeLog
 Database <|-- DatabaseRegionConfig
 Database <|-- DatabaseRoleSetting
 Database <|-- DatabaseZoneConfig

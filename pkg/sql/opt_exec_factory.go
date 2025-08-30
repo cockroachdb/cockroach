@@ -1434,11 +1434,15 @@ func (ef *execFactory) ConstructInsert(
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
 	cols := makeColList(table, insertColOrdSet)
-
+	databaseDesc, err := ef.planner.Descriptors().ByIDWithoutLeased(ef.planner.txn).Get().Database(ef.ctx, tabDesc.GetParentID())
+	if err != nil {
+		return nil, err
+	}
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		databaseDesc,
 		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
 		cols,
 		ef.planner.SessionData(),
@@ -1507,11 +1511,15 @@ func (ef *execFactory) ConstructInsertFastPath(
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
 	cols := makeColList(table, insertColOrdSet)
-
+	databaseDesc, err := ef.planner.Descriptors().ByIDWithoutLeased(ef.planner.txn).Get().Database(ef.ctx, tabDesc.GetParentID())
+	if err != nil {
+		return nil, err
+	}
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		databaseDesc,
 		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
 		cols,
 		ef.planner.SessionData(),
@@ -1739,12 +1747,16 @@ func (ef *execFactory) constructUpdateRun(
 ) error {
 	tabDesc := table.(*optTable).desc
 	fetchCols, updateCols := makeColList2(table, fetchColOrdSet, updateColOrdSet)
-
+	databaseDesc, err := ef.planner.Descriptors().ByIDWithoutLeased(ef.planner.txn).Get().Database(ef.ctx, tabDesc.GetParentID())
+	if err != nil {
+		return err
+	}
 	// Create the table updater.
 	tombstoneIdxs, lockIdxs := ordinalsToIndexes2(table, uniqueWithTombstoneIndexes, lockedIndexes)
 	ru, err := row.MakeUpdater(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		databaseDesc,
 		tombstoneIdxs,
 		lockIdxs,
 		updateCols,
@@ -1801,11 +1813,15 @@ func (ef *execFactory) ConstructUpsert(
 	insertCols := makeColList(table, insertColOrdSet)
 	fetchCols := makeColList(table, fetchColOrdSet)
 	updateCols := makeColList(table, updateColOrdSet)
-
+	databaseDesc, err := ef.planner.Descriptors().ByIDWithoutLeased(ef.planner.txn).Get().Database(ef.ctx, tabDesc.GetParentID())
+	if err != nil {
+		return nil, err
+	}
 	// Create the table inserter, which does the bulk of the insert-related work.
 	ri, err := row.MakeInserter(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		databaseDesc,
 		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
 		insertCols,
 		ef.planner.SessionData(),
@@ -1821,6 +1837,7 @@ func (ef *execFactory) ConstructUpsert(
 	ru, err := row.MakeUpdater(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		databaseDesc,
 		tombstoneIdxs,
 		lockIdxs,
 		updateCols,
@@ -1912,9 +1929,12 @@ func (ef *execFactory) ConstructDelete(
 	}
 
 	// Create the table deleter, which does the bulk of the work.
-	ef.constructDeleteRun(
+	err := ef.constructDeleteRun(
 		&del.run, table, fetchColOrdSet, rowsNeeded, returnCols, passthrough, lockedIndexes,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	if autoCommit {
 		del.enableAutoCommit()
@@ -1977,9 +1997,12 @@ func (ef *execFactory) ConstructDeleteSwap(
 	}
 
 	// Create the table deleter, which does the bulk of the work.
-	ef.constructDeleteRun(
+	err := ef.constructDeleteRun(
 		&del.run, table, fetchColOrdSet, rowsNeeded, returnCols, passthrough, lockedIndexes,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	if autoCommit {
 		del.enableAutoCommit()
@@ -2007,14 +2030,18 @@ func (ef *execFactory) constructDeleteRun(
 	returnCols []catalog.Column,
 	passthrough colinfo.ResultColumns,
 	lockedIndexes cat.IndexOrdinals,
-) {
+) error {
 	tabDesc := table.(*optTable).desc
 	fetchCols := makeColList(table, fetchColOrdSet)
-
+	databaseDesc, err := ef.planner.Descriptors().ByIDWithoutLeased(ef.planner.txn).Get().Database(ef.ctx, tabDesc.GetParentID())
+	if err != nil {
+		return err
+	}
 	// Create the table deleter.
 	rd := row.MakeDeleter(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		databaseDesc,
 		ordinalsToIndexes(table, lockedIndexes),
 		fetchCols,
 		ef.planner.SessionData(),
@@ -2029,6 +2056,7 @@ func (ef *execFactory) constructDeleteRun(
 		run.rowIdxToRetIdx = row.ColMapping(rd.FetchCols, returnCols)
 		run.rowsNeeded = true
 	}
+	return nil
 }
 
 func (ef *execFactory) ConstructDeleteRange(

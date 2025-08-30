@@ -28,6 +28,7 @@ DOCS_SRCS = [
     "//docs/generated/sql/bnf:alter_database_owner.bnf",
     "//docs/generated/sql/bnf:alter_database_placement_stmt.bnf",
     "//docs/generated/sql/bnf:alter_database_primary_region.bnf",
+    "//docs/generated/sql/bnf:alter_database_set_reset_storage_params_stmt.bnf",
     "//docs/generated/sql/bnf:alter_database_set_secondary_region_stmt.bnf",
     "//docs/generated/sql/bnf:alter_database_set_stmt.bnf",
     "//docs/generated/sql/bnf:alter_database_set_zone_config_extension_stmt.bnf",

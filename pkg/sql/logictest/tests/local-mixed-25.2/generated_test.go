@@ -479,6 +479,13 @@ func TestLogic_create_as(
 	runLogicTest(t, "create_as")
 }
 
+func TestLogic_create_database(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "create_database")
+}
+
 func TestLogic_create_index(
 	t *testing.T,
 ) {

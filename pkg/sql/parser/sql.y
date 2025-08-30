@@ -1187,6 +1187,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <tree.Statement> alter_zone_database_stmt
 %type <tree.Statement> alter_database_owner
 %type <tree.Statement> alter_database_placement_stmt
+%type <tree.Statement> alter_database_set_reset_storage_params_stmt
 %type <tree.Statement> alter_database_set_stmt
 %type <tree.Statement> alter_database_add_super_region
 %type <tree.Statement> alter_database_alter_super_region
@@ -1483,6 +1484,12 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <tree.DropBehavior> opt_drop_behavior
 
 %type <tree.ValidationBehavior> opt_validate_behavior
+
+%type <str> database_storage_parameter_key
+%type <[]string> database_storage_parameter_key_list
+%type <tree.StorageParam> database_storage_parameter
+%type <[]tree.StorageParam> database_storage_parameter_list opt_database_with opt_with_database_storage_parameter_list
+
 
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
 %type <tree.NameList> opt_regions_list
@@ -2122,6 +2129,7 @@ alter_database_stmt:
 | alter_database_add_region_stmt
 | alter_database_drop_region_stmt
 | alter_database_survival_goal_stmt
+| alter_database_set_reset_storage_params_stmt
 | alter_database_primary_region_stmt
 | alter_database_placement_stmt
 | alter_database_set_stmt
@@ -2186,9 +2194,38 @@ alter_database_owner:
     $$.val = &tree.AlterDatabaseOwner{Name: tree.Name($3), Owner: $6.roleSpec()}
   }
 
+alter_database_set_reset_storage_params_stmt:
+  ALTER DATABASE database_name SET '(' database_storage_parameter_list ')'
+  {
+    $$.val = &tree.AlterDatabaseSetStorageParams{
+      Name: tree.Name($3),
+      StorageParams: $6.storageParams(),
+    }
+  }
+| ALTER DATABASE database_name RESET '(' database_storage_parameter_key_list ')'
+  {
+    $$.val = &tree.AlterDatabaseResetStorageParams{
+      Name: tree.Name($3),
+      Params: $6.storageParamKeys(),
+    }
+  }
+
 // This form is an alias for ALTER ROLE ALL IN DATABASE <db> SET ...
 alter_database_set_stmt:
-  ALTER DATABASE database_name set_or_reset_clause
+//   ALTER DATABASE database_name SET '(' database_storage_parameter_list ')'
+//   {
+//     $$.val = &tree.AlterDatabaseSetStorageParams{
+//       StorageParams: $6.storageParams(),
+//     }
+//   }
+// | ALTER DATABASE database_name RESET '(' database_storage_parameter_key_list ')'
+//   {
+//     $$.val = &tree.AlterDatabaseResetStorageParams{
+//       Params: $6.storageParamKeys(),
+//     }
+//   }
+// | 
+ALTER DATABASE database_name set_or_reset_clause
   {
     $$.val = &tree.AlterRoleSet{
       AllRoles: true,
@@ -2206,6 +2243,18 @@ alter_database_placement_stmt:
       Placement: $4.dataPlacement(),
     }
   }
+// | ALTER DATABASE database_name SET '(' database_storage_parameter_list ')'
+//   {
+//     $$.val = &tree.AlterDatabaseSetStorageParams{
+//       StorageParams: $6.storageParams(),
+//     }
+//   }
+// | ALTER DATABASE database_name RESET '(' database_storage_parameter_key_list ')'
+//   {
+//     $$.val = &tree.AlterDatabaseResetStorageParams{
+//       Params: $6.storageParamKeys(),
+//     }
+//   }
 
 alter_database_add_region_stmt:
   ALTER DATABASE database_name ADD REGION region_name
@@ -13441,10 +13490,11 @@ rollback_prepared_stmt:
 // %Text: CREATE DATABASE [IF NOT EXISTS] <name>
 // %SeeAlso: WEBDOCS/create-database.html
 create_database_stmt:
-  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause opt_super_region_clause opt_secondary_region_clause
+  CREATE DATABASE database_name opt_database_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause opt_super_region_clause opt_secondary_region_clause
   {
     $$.val = &tree.CreateDatabase{
       Name: tree.Name($3),
+      StorageParams: $4.storageParams(),
       Template: $5,
       Encoding: $6,
       Collate: $7,
@@ -13459,11 +13509,12 @@ create_database_stmt:
       SecondaryRegion: tree.Name($16),
     }
   }
-| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause opt_super_region_clause opt_secondary_region_clause
+| CREATE DATABASE IF NOT EXISTS database_name opt_database_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause opt_super_region_clause opt_secondary_region_clause
   {
     $$.val = &tree.CreateDatabase{
       IfNotExists: true,
       Name: tree.Name($6),
+      StorageParams: $7.storageParams(),
       Template: $8,
       Encoding: $9,
       Collate: $10,
@@ -13479,6 +13530,54 @@ create_database_stmt:
     }
   }
 | CREATE DATABASE error // SHOW HELP: CREATE DATABASE
+
+opt_database_with:
+  opt_with_database_storage_parameter_list
+| /* EMPTY */
+  {
+    $$.val = nil
+  }
+
+opt_with_database_storage_parameter_list:
+  WITH '(' database_storage_parameter_list ')'
+  {
+    $$.val = $3.storageParams()
+  }
+| WITH {}
+
+
+database_storage_parameter_key:
+  name
+| SCONST
+
+database_storage_parameter_key_list:
+  database_storage_parameter_key
+  {
+    $$.val = []string{$1}
+  }
+| database_storage_parameter_key_list ',' database_storage_parameter_key
+  {
+    $$.val = append($1.storageParamKeys(), $3)
+  }
+
+database_storage_parameter:
+  database_storage_parameter_key '=' var_value
+  {
+    $$.val = tree.StorageParam{Key: $1, Value: $3.expr()}
+  }
+
+database_storage_parameter_list:
+  database_storage_parameter
+  {
+    // return unimplemented(sqllex, "unimplemented")
+    $$.val = []tree.StorageParam{$1.storageParam()}
+  }
+|  database_storage_parameter_list ',' database_storage_parameter
+  {
+    // return unimplemented(sqllex, "unimplemented")
+    // $$.val = nil
+    $$.val = append($1.storageParams(), $3.storageParam())
+  }
 
 opt_primary_region_clause:
   primary_region_clause

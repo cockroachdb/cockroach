@@ -8,6 +8,8 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"log"
+	"runtime/debug"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -446,6 +448,9 @@ func PopulateErrorDetails(
 			// "syntax error" is already prepended when the yacc-generated
 			// parser encounters a parsing error.
 			lastErr = errors.Wrap(lastErr, "syntax error")
+		}
+		if strings.Contains(lastTokStr, "(") {
+			log.Printf("STACK TRACE for token '%s':\n%s", lastTokStr, debug.Stack())
 		}
 		retErr = errors.Wrapf(lastErr, "at or near \"%s\"", lastTokStr)
 	}

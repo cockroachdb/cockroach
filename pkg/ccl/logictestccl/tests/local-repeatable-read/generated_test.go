@@ -524,6 +524,13 @@ func TestRepeatableReadLogic_create_as(
 	runLogicTest(t, "create_as")
 }
 
+func TestRepeatableReadLogic_create_database(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "create_database")
+}
+
 func TestRepeatableReadLogic_create_index(
 	t *testing.T,
 ) {

@@ -514,6 +514,13 @@ func TestLogic_create_as_non_metamorphic(
 	runLogicTest(t, "create_as_non_metamorphic")
 }
 
+func TestLogic_create_database(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "create_database")
+}
+
 func TestLogic_create_index(
 	t *testing.T,
 ) {

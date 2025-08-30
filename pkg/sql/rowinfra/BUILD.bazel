@@ -12,5 +12,6 @@ go_library(
         "//pkg/testutils/skip",
         "//pkg/util/metamorphic",
         "//pkg/util/metric",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

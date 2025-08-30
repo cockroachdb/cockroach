@@ -512,6 +512,13 @@ func TestTenantLogic_create_as(
 	runLogicTest(t, "create_as")
 }
 
+func TestTenantLogic_create_database(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "create_database")
+}
+
 func TestTenantLogic_create_index(
 	t *testing.T,
 ) {

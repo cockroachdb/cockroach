@@ -219,3 +219,24 @@ message AutoStatsSettings {
   // FullEnabled is table setting sql_stats_automatic_full_collection_enabled.
   optional bool full_enabled = 7;
 }
+
+// max_row_size_err is a guardrail for the maximum size of a row that can be written to the table/database.
+// This is the maximum size of row (or column family if multiple column families are in use) that SQL can write to the database,
+// above which an error is returned; use null to disable
+message MaxRowSizeErr {
+  option (gogoproto.equal) = true;
+
+  optional uint32 max_row_size_err = 1 [(gogoproto.nullable) = false,
+  (gogoproto.customname) = "MaxRowSizeErr"];
+}
+
+// max_row_size_log is a guardrail for the maximum size of a row that can be written to the table/database.
+// This is the maximum size of row (or column family if multiple column families are in use) that SQL can write to the database,
+// above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use null to disable
+message MaxRowSizeLog {
+  option (gogoproto.equal) = true;
+
+  optional uint32 max_row_size_log = 1 [(gogoproto.nullable) = false,
+  (gogoproto.customname) = "MaxRowSizeLog"];
+}
+

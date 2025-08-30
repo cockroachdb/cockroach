@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -68,8 +70,8 @@ func (po *Setter) RunPostChecks() error {
 	return nil
 }
 
-// IsNewTableObject implements the Setter interface.
-func (po *Setter) IsNewTableObject() bool {
+// IsNewObject implements the Setter interface.
+func (po *Setter) IsNewObject() bool {
 	return po.NewObject
 }
 
@@ -631,6 +633,9 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	// TODO (KB): check if declarative schema changer is handling ALTER TABLE OR CREATE TABLE
+	// make sure new storage params are being set there as well
+	// afaik tree.AlterTableSetStorageParams is not supported in declaritive schema
 	`max_row_size_log`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			if datum == tree.DNull {
@@ -897,6 +902,9 @@ func (po *Setter) Set(
 			"cannot modify TTL settings while another schema change on the table is being processed",
 		)
 	}
+
+	telemetry.Inc(sqltelemetry.SetTableStorageParameter(key))
+
 	if p, ok := tableParams[key]; ok {
 		return p.onSet(ctx, po, semaCtx, evalCtx, key, datum)
 	}

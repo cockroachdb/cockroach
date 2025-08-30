@@ -1,0 +1,93 @@
+==================== Test output for //pkg/sql/parser:parser_test:
+metamorphic: use COCKROACH_RANDOM_SEED=-1460033564781828459 for reproduction
+initialized metamorphic constant "parse-json-impl" with value 0
+initialized metamorphic constant "span-reuse-rate" with value 69
+initialized metamorphic constant "logical_replication.consumer.immediate_mode_writer" with value legacy-kv
+initialized metamorphic constant "kvadmission.store.snapshot_ingest_bandwidth_control.enabled" with value false
+initialized metamorphic constant "rpc.batch_stream_pool.enabled" with value false
+initialized metamorphic constant "distsender-leaseholder-first" with value false
+initialized metamorphic constant "kv.transaction.write_buffering.transformations.scans.enabled" with value false
+initialized metamorphic constant "kv.transaction.write_buffering.max_buffer_size" with value 638240
+initialized metamorphic constant "lock-table-iters-before-seek" with value 2
+initialized metamorphic constant "mvcc-incremental-iter-tbi" with value false
+initialized metamorphic constant "storage.delete_compaction_excise.enabled" with value false
+initialized metamorphic constant "storage.ingest_as_flushable.enabled" with value false
+initialized metamorphic constant "storage.value_separation.minimum_size" with value 292024
+initialized metamorphic constant "storage.value_separation.compaction_garbage_threshold" with value 26
+initialized metamorphic constant "mvcc-max-iters-before-seek" with value 1
+initialized metamorphic constant "disable-checksstconflicts-range-key-masking" with value true
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1  STACK TRACE for token '(':
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +goroutine 24 [running]:
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +runtime/debug.Stack()
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	GOROOT/src/runtime/debug/stack.go:26 +0x5e
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/sql/parser.PopulateErrorDetails(0x3d?, {0xc000c08304, 0x1}, 0x4, {0x2e56c80, 0xc0002d4800}, {0xc000c08300, 0x3e})
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/sql/parser/lexer.go:453 +0x28e
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/sql/parser.(*lexer).populateErrorDetails(0xc000c6a058)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/sql/parser/lexer.go:478 +0xfa
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/sql/parser.(*lexer).Error(0xc000c6a058, {0x28e27d0?, 0x0?})
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/sql/parser/lexer.go:430 +0x17f
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/sql/parser.(*sqlParserImpl).Parse(0xc000c6a0c0, {0x2e629d0, 0xc000c6a058})
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	yaccpar:253 +0x414
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/sql/parser.(*Parser).parse(0xc000c6a008, 0xc000c63190?, {0xc000c08300, 0x3e}, {0xc000c52708?, 0x0?, 0x723e90075b38?}, 0x600?)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/sql/parser/parse.go:193 +0x179
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/sql/parser.(*Parser).parseWithDepth(0xc000c6a008, 0x1, {0xc000c08300, 0x3e}, {0x440f6e0?, 0x0?})
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/sql/parser/parse.go:173 +0x1fe
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/sql/parser.(*Parser).parseOne(0xc000c28050?, {0xc000c08300?, 0x416b85?}, {0x440f6e0?, 0x40?})
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/sql/parser/parse.go:98 +0x5e
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/sql/parser.ParseOneWithOptions(...)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/sql/parser/parse.go:280
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/sql/parser.ParseOne({0xc000c08300, 0x3e})
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/sql/parser/parse.go:268 +0x90
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/testutils/sqlutils.parseOne(0xc000c10340, {0xc000c08300, 0x3e}, 0x0)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/testutils/sqlutils/parse.go:46 +0x1d6
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/testutils/sqlutils.verifyStatementPrettyRoundTrip(0xc000c10340, {0xc000c28140, 0x4e}, {0x2e5b420, 0xc000c00150}, 0x0)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/testutils/sqlutils/pretty.go:83 +0x1a5
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/testutils/sqlutils.VerifyStatementPrettyRoundtrip(0xc000c10340, {0xc000c28140, 0x4e})
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/testutils/sqlutils/pretty.go:24 +0x15f
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/testutils/sqlutils.VerifyParseFormat(0xc000c10340, {0xc000c28140, 0x4e}, {0xc000c3dc20, 0x11f}, 0x0, 0x1)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/testutils/sqlutils/parse.go:82 +0x1e5
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/sql/parser_test.TestParseDataDriven.func1.1(0xc000c10340, 0xc000c42028)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/sql/parser/parse_test.go:62 +0x4df
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/datadriven.RunTest.func1({0x2ea7f90?, 0xc000c10340?}, 0x62bd9f?)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	external/com_github_cockroachdb_datadriven/datadriven.go:119 +0x34
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/datadriven.runDirective.func1({0x2ea7f90?, 0xc000c10340?}, 0x50?, 0x4f?)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	external/com_github_cockroachdb_datadriven/datadriven.go:340 +0x66
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/datadriven.runDirective({0x2ea7f90, 0xc000c10340}, 0xc000c42000, 0xc0003e42e0)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	external/com_github_cockroachdb_datadriven/datadriven.go:345 +0x7c
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/datadriven.runDirectiveOrSubTest({0x2ea7f90, 0xc000c10340}, 0xc000c42000, {0x0, 0x0}, 0xc0003e42e0)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	external/com_github_cockroachdb_datadriven/datadriven.go:214 +0x8f
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/datadriven.runTestInternal({0x2ea7f90, 0xc000c10340}, {0xc000c3d680, 0x11d}, {0x2e567c0, 0xc000280078}, 0xc0003e42e0, 0x0)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	external/com_github_cockroachdb_datadriven/datadriven.go:187 +0x9c
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/datadriven.RunTestAny({0x2ea7f90, 0xc000c10340}, {0xc000c3d680, 0x11d}, 0xc0003e42e0)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	external/com_github_cockroachdb_datadriven/datadriven.go:147 +0x2a7
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/datadriven.RunTest(0xc000c10340, {0xc000c3d680, 0x11d}, 0x2af3e78)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	external/com_github_cockroachdb_datadriven/datadriven.go:118 +0x7e
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/cockroach/pkg/sql/parser_test.TestParseDataDriven.func1(0x51f34c?, {0xc000c3d680?, 0x11d?})
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	pkg/sql/parser/parse_test.go:53 +0x1f
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/datadriven.Walk.func1({0x2ea7f90?, 0xc000c10340?}, {0xc000c3d680?, 0x10f?})
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	external/com_github_cockroachdb_datadriven/datadriven.go:423 +0x3b
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/datadriven.WalkAny({0x2ea7f90, 0xc000c10340}, {0xc000c3d680, 0x11d}, 0xc0003e4170)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	external/com_github_cockroachdb_datadriven/datadriven.go:434 +0x1e2
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/datadriven.WalkAny.func1({0x2ea7f90, 0xc000c10340})
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	external/com_github_cockroachdb_datadriven/datadriven.go:447 +0x9f
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +github.com/cockroachdb/datadriven.subTest.func1(0xc000c10340?)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	external/com_github_cockroachdb_datadriven/test_interface.go:27 +0x22
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +testing.tRunner(0xc000c10340, 0xc0003e4260)
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	GOROOT/src/testing/testing.go:1690 +0xf4
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +created by testing.(*T).Run in goroutine 23
+I250827 16:25:31.470616 24 (gostd) lexer.go:453  [-] 1 +	GOROOT/src/testing/testing.go:1743 +0x390
+--- FAIL: TestParseDataDriven (0.00s)
+    --- FAIL: TestParseDataDriven/alter_database (0.00s)
+        pretty.go:85: at or near "(": syntax error: SET ('max_row_size_log' = '1KiB', 'max_row_size_err' = '1KiB')
+FAIL
+I250827 16:25:31.475725 1 (gostd) testmain.go:141  [-] 1  Test //pkg/sql/parser:parser_test exited with error code 1
+================================================================================
+PASSED: //pkg/sql/parser:parser_disallowed_imports_test (see /home/naiv/.cache/bazel/_bazel_naiv/a97677f850e1782d15c8bdc33ba60d00/execroot/com_github_cockroachdb_cockroach/bazel-out/k8-fastbuild/testlogs/pkg/sql/parser/parser_disallowed_imports_test/test.log)
+INFO: From Testing //pkg/sql/parser:parser_disallowed_imports_test
+==================== Test output for //pkg/sql/parser:parser_disallowed_imports_test:
+================================================================================
+//pkg/sql/parser:parser_disallowed_imports_test                 (cached) PASSED in 0.0s
+//pkg/sql/parser:parser_test                                             FAILED in 0.1s
+  /home/naiv/.cache/bazel/_bazel_naiv/a97677f850e1782d15c8bdc33ba60d00/execroot/com_github_cockroachdb_cockroach/bazel-out/k8-fastbuild/testlogs/pkg/sql/parser/parser_test/test.log
+
+Executed 1 out of 2 tests: 1 test passes and 1 fails locally.

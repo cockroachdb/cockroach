@@ -183,8 +183,9 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 
 			tables[tableName] = &execinfrapb.ReadImportDataSpec_ImportTable{
-				Desc:       i.Desc,
-				TargetCols: i.TargetCols,
+				Desc:         i.Desc,
+				DatabaseDesc: i.DatabaseDesc,
+				TargetCols:   i.TargetCols,
 			}
 		}
 	}
@@ -331,10 +332,11 @@ func (r *importResumer) prepareTablesForIngestion(
 			return importDetails, err
 		}
 		importDetails.Tables[i] = jobspb.ImportDetails_Table{
-			Desc:       desc,
-			Name:       table.Name,
-			SeqVal:     table.SeqVal,
-			TargetCols: table.TargetCols,
+			Desc:         desc,
+			DatabaseDesc: table.DatabaseDesc,
+			Name:         table.Name,
+			SeqVal:       table.SeqVal,
+			TargetCols:   table.TargetCols,
 		}
 	}
 

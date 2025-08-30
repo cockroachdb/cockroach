@@ -87,6 +87,7 @@ const (
 func MakeUpdater(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
+	databaseDesc catalog.DatabaseDescriptor,
 	uniqueWithTombstoneIndexes []catalog.Index,
 	lockedIndexes []catalog.Index,
 	updateCols []catalog.Column,
@@ -143,7 +144,7 @@ func MakeUpdater(
 
 	var deleteOnlyHelper *RowHelper
 	if len(deleteOnlyIndexes) > 0 {
-		rh := NewRowHelper(codec, tableDesc, deleteOnlyIndexes, nil /* uniqueWithTombstoneIndexes */, sd, sv, metrics)
+		rh := NewRowHelper(codec, tableDesc, databaseDesc, deleteOnlyIndexes, nil /* uniqueWithTombstoneIndexes */, sd, sv, metrics)
 		deleteOnlyHelper = &rh
 	}
 
@@ -166,7 +167,7 @@ func MakeUpdater(
 	numEntries := len(includeIndexes)
 	indexEntries := make([][]rowenc.IndexEntry, numEntries*2)
 	ru := Updater{
-		Helper:                NewRowHelper(codec, tableDesc, includeIndexes, uniqueWithTombstoneIndexes, sd, sv, metrics),
+		Helper:                NewRowHelper(codec, tableDesc, databaseDesc, includeIndexes, uniqueWithTombstoneIndexes, sd, sv, metrics),
 		DeleteHelper:          deleteOnlyHelper,
 		FetchCols:             requestedCols,
 		FetchColIDtoRowIndex:  ColIDtoRowIndexFromCols(requestedCols),
@@ -186,9 +187,9 @@ func MakeUpdater(
 		// locking when deleting from them - we only would delete KVs that we've
 		// scanned (and locked) already.
 		deleteLockedIndexes := lockedIndexes
-		ru.rd = MakeDeleter(codec, tableDesc, deleteLockedIndexes, requestedCols, sd, sv, metrics)
+		ru.rd = MakeDeleter(codec, tableDesc, databaseDesc, deleteLockedIndexes, requestedCols, sd, sv, metrics)
 		if ru.ri, err = MakeInserter(
-			codec, tableDesc, uniqueWithTombstoneIndexes, requestedCols, sd, sv, metrics,
+			codec, tableDesc, databaseDesc, uniqueWithTombstoneIndexes, requestedCols, sd, sv, metrics,
 		); err != nil {
 			return Updater{}, err
 		}

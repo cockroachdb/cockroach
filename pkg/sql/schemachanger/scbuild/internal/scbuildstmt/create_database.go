@@ -6,24 +6,74 @@
 package scbuildstmt
 
 import (
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
 )
+
+var storageParamValidationMap = map[string]func(context.Context, *eval.Context, string, tree.Datum) error{
+	"max_row_size_err": func(ctx context.Context, evalCtx *eval.Context, key string, value tree.Datum) error {
+		str, err := paramparse.DatumAsString(ctx, evalCtx, key, value)
+		if err != nil {
+			return err
+		}
+		sizeBytes, err := humanizeutil.ParseBytes(str)
+		if err != nil {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"invalid value for parameter %q, value should be a valid byte size string like '1KiB', '2MiB'", key)
+		}
+
+		err = rowinfra.IntInRange(rowinfra.MaxRowSizeFloor, rowinfra.MaxRowSizeCeil)(sizeBytes)
+		if err != nil {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"parameter %q value is out of range, expected value in range [%s, %s]", key, humanizeutil.IBytes(rowinfra.MaxRowSizeFloor), humanizeutil.IBytes(rowinfra.MaxRowSizeCeil))
+		}
+		return nil
+	},
+	"max_row_size_log": func(ctx context.Context, evalCtx *eval.Context, key string, value tree.Datum) error {
+		str, err := paramparse.DatumAsString(ctx, evalCtx, key, value)
+		if err != nil {
+			return err
+		}
+		sizeBytes, err := humanizeutil.ParseBytes(str)
+		if err != nil {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"invalid value for parameter %q, value should be a valid byte size string like '1KiB', '2MiB'", key)
+		}
+
+		err = rowinfra.IntInRange(rowinfra.MaxRowSizeFloor, rowinfra.MaxRowSizeCeil)(sizeBytes)
+		if err != nil {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"parameter %q value is out of range, expected value in range [%s, %s]", key, humanizeutil.IBytes(rowinfra.MaxRowSizeFloor), humanizeutil.IBytes(rowinfra.MaxRowSizeCeil))
+		}
+		return nil
+	},
+}
 
 func CreateDatabase(b BuildCtx, n *tree.CreateDatabase) {
 	// TODO (xiang): Remove the fallback cases.
@@ -51,12 +101,12 @@ func CreateDatabase(b BuildCtx, n *tree.CreateDatabase) {
 
 	// 4. Construct and add all relevant elements, including the database,
 	// its public schema, and others.
-	dbElem, _ := addCreateDatabaseElements(b, dbName, owner)
+	dbElem, _ := addCreateDatabaseElements(b, dbName, owner, n)
 	b.LogEventForExistingTarget(dbElem)
 }
 
 func addCreateDatabaseElements(
-	b BuildCtx, dbName string, dbOwner username.SQLUsername,
+	b BuildCtx, dbName string, dbOwner username.SQLUsername, n *tree.CreateDatabase,
 ) (*scpb.Database, *scpb.Schema) {
 	databaseID := b.GenerateUniqueDescID()
 	publicSchemaID := b.GenerateUniqueDescID()
@@ -111,6 +161,24 @@ func addCreateDatabaseElements(
 			UserName:        up.User().Normalized(),
 			Privileges:      up.Privileges,
 			WithGrantOption: up.WithGrantOption,
+		})
+	}
+
+	maxRowSizeErr := n.StorageParams.GetVal("max_row_size_err")
+	if maxRowSizeErr != nil {
+		maxRowSizeErrValue, _ := humanizeutil.ParseBytes(maxRowSizeErr.String())
+		b.Add(&scpb.DatabaseMaxRowSizeErr{
+			DatabaseID:    databaseID,
+			MaxRowSizeErr: &catpb.MaxRowSizeErr{MaxRowSizeErr: uint32(maxRowSizeErrValue)},
+		})
+	}
+
+	maxRowSizeLog := n.StorageParams.GetVal("max_row_size_log")
+	if maxRowSizeLog != nil {
+		maxRowSizeLogValue, _ := humanizeutil.ParseBytes(maxRowSizeLog.String())
+		b.Add(&scpb.DatabaseMaxRowSizeLog{
+			DatabaseID:    databaseID,
+			MaxRowSizeLog: &catpb.MaxRowSizeLog{MaxRowSizeLog: uint32(maxRowSizeLogValue)},
 		})
 	}
 
@@ -270,6 +338,13 @@ func createDatabasePreChecks(b BuildCtx, n *tree.CreateDatabase) {
 	); err != nil {
 		panic(err)
 	}
+
+	if n.StorageParams != nil {
+		err := validateStorageParams(b, n)
+		if err != nil {
+			panic(err)
+		}
+	}
 }
 
 // canCreateDatabase returns nil if current user has CREATEDB system privilege
@@ -313,4 +388,32 @@ func getOwnerOfDB(b BuildCtx, n *tree.CreateDatabase) username.SQLUsername {
 		}
 	}
 	return owner
+}
+
+func validateStorageParams(b BuildCtx, n *tree.CreateDatabase) error {
+	for _, param := range n.StorageParams {
+		validationFn, validParam := storageParamValidationMap[param.Key]
+		if !validParam {
+			return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", param.Key)
+		}
+
+		typedExpr, err := tree.TypeCheck(b, param.Value, b.SemaCtx(), types.AnyElement)
+		if err != nil {
+			return err
+		}
+
+		if typedExpr, err = normalize.Expr(b, b.EvalCtx(), typedExpr); err != nil {
+			return err
+		}
+
+		datum, err := eval.Expr(b, b.EvalCtx(), typedExpr)
+		if err != nil {
+			return err
+		}
+
+		if err := validationFn(b, b.EvalCtx(), param.Key, datum); err != nil {
+			return err
+		}
+	}
+	return nil
 }

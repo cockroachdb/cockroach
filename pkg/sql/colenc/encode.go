@@ -78,7 +78,8 @@ type BatchEncoder struct {
 
 func MakeEncoder(
 	codec keys.SQLCodec,
-	desc catalog.TableDescriptor,
+	tableDesc catalog.TableDescriptor,
+	databaseDesc catalog.DatabaseDescriptor,
 	sd *sessiondata.SessionData,
 	sv *settings.Values,
 	b coldata.Batch,
@@ -87,7 +88,7 @@ func MakeEncoder(
 	partialIndexes map[descpb.IndexID][]bool,
 	memoryUsageCheck func() error,
 ) BatchEncoder {
-	rh := row.NewRowHelper(codec, desc, desc.WritableNonPrimaryIndexes(), nil /* uniqueWithTombstoneIndexes */, sd, sv, metrics)
+	rh := row.NewRowHelper(codec, tableDesc, databaseDesc, tableDesc.WritableNonPrimaryIndexes(), nil /* uniqueWithTombstoneIndexes */, sd, sv, metrics)
 	rh.Init()
 	colMap := row.ColIDtoRowIndexFromCols(insCols)
 	return BatchEncoder{

@@ -520,16 +520,25 @@ func TestMemoryQuota(t *testing.T) {
 func TestCheckRowSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 	r := sqlutils.MakeSQLRunner(db)
+
+	// setup for cluster-level guardrails
 	r.Exec(t, `SET CLUSTER SETTING sql.guardrails.max_row_size_err = '2KiB'`)
 	r.Exec(t, "CREATE TABLE t (i int PRIMARY KEY, s STRING)")
+
+	// setup for table-level guardrails
+	r.Exec(t, `CREATE TABLE t_guardrails (i int PRIMARY KEY, s STRING) WITH (max_row_size_err = '1KiB')`)
+
+	rng, _ := randutil.NewTestRand()
+
+	// test cluster-level guardrails
 	desc := desctestutils.TestingGetTableDescriptor(
 		kvdb, codec, "defaultdb", "public", "t")
-	rng, _ := randutil.NewTestRand()
 	datums := []tree.Datum{tree.NewDInt(1234), tree.NewDString(randutil.RandString(rng, 3<<10, "asdf"))}
 	_, err1 := buildRowKVs([]tree.Datums{datums}, desc, desc.PublicColumns(), sv, codec)
 	code1 := pgerror.GetPGCodeInternal(err1, pgerror.ComputeDefaultCode)
@@ -537,6 +546,17 @@ func TestCheckRowSize(t *testing.T) {
 	_, err2 := buildVecKVs([]tree.Datums{datums}, desc, desc.PublicColumns(), sv, codec)
 	code2 := pgerror.GetPGCodeInternal(err2, pgerror.ComputeDefaultCode)
 	require.Equal(t, pgcode.ProgramLimitExceeded, code2)
+
+	// test table-level guardrails
+	desc_guardrails := desctestutils.TestingGetTableDescriptor(
+		kvdb, codec, "defaultdb", "public", "t_guardrails")
+	datums_guardrails := []tree.Datum{tree.NewDInt(1234), tree.NewDString(randutil.RandString(rng, 2<<10, "asdf"))}
+	_, err3 := buildRowKVs([]tree.Datums{datums_guardrails}, desc_guardrails, desc_guardrails.PublicColumns(), sv, codec)
+	code3 := pgerror.GetPGCodeInternal(err3, pgerror.ComputeDefaultCode)
+	require.Equal(t, pgcode.ProgramLimitExceeded, code3)
+	_, err4 := buildVecKVs([]tree.Datums{datums_guardrails}, desc_guardrails, desc_guardrails.PublicColumns(), sv, codec)
+	code4 := pgerror.GetPGCodeInternal(err4, pgerror.ComputeDefaultCode)
+	require.Equal(t, pgcode.ProgramLimitExceeded, code4)
 }
 
 // runComparison compares row and vector output and prints out a test case

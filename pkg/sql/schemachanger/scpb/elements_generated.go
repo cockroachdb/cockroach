@@ -750,6 +750,80 @@ func (c *ElementCollection[E]) FilterDatabaseData() *ElementCollection[*Database
 	return (*ElementCollection[*DatabaseData])(ret)
 }
 
+func (e DatabaseMaxRowSizeErr) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_DatabaseMaxRowSizeErr) Element() Element {
+	return e.DatabaseMaxRowSizeErr
+}
+
+// ForEachDatabaseMaxRowSizeErr iterates over elements of type DatabaseMaxRowSizeErr.
+// Deprecated
+func ForEachDatabaseMaxRowSizeErr(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DatabaseMaxRowSizeErr),
+) {
+  c.FilterDatabaseMaxRowSizeErr().ForEach(fn)
+}
+
+// FindDatabaseMaxRowSizeErr finds the first element of type DatabaseMaxRowSizeErr.
+// Deprecated
+func FindDatabaseMaxRowSizeErr(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DatabaseMaxRowSizeErr) {
+	if tc := c.FilterDatabaseMaxRowSizeErr(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DatabaseMaxRowSizeErr)
+	}
+	return current, target, element
+}
+
+// DatabaseMaxRowSizeErrElements filters elements of type DatabaseMaxRowSizeErr.
+func (c *ElementCollection[E]) FilterDatabaseMaxRowSizeErr() *ElementCollection[*DatabaseMaxRowSizeErr] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DatabaseMaxRowSizeErr)
+		return ok
+	})
+	return (*ElementCollection[*DatabaseMaxRowSizeErr])(ret)
+}
+
+func (e DatabaseMaxRowSizeLog) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_DatabaseMaxRowSizeLog) Element() Element {
+	return e.DatabaseMaxRowSizeLog
+}
+
+// ForEachDatabaseMaxRowSizeLog iterates over elements of type DatabaseMaxRowSizeLog.
+// Deprecated
+func ForEachDatabaseMaxRowSizeLog(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DatabaseMaxRowSizeLog),
+) {
+  c.FilterDatabaseMaxRowSizeLog().ForEach(fn)
+}
+
+// FindDatabaseMaxRowSizeLog finds the first element of type DatabaseMaxRowSizeLog.
+// Deprecated
+func FindDatabaseMaxRowSizeLog(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DatabaseMaxRowSizeLog) {
+	if tc := c.FilterDatabaseMaxRowSizeLog(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DatabaseMaxRowSizeLog)
+	}
+	return current, target, element
+}
+
+// DatabaseMaxRowSizeLogElements filters elements of type DatabaseMaxRowSizeLog.
+func (c *ElementCollection[E]) FilterDatabaseMaxRowSizeLog() *ElementCollection[*DatabaseMaxRowSizeLog] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DatabaseMaxRowSizeLog)
+		return ok
+	})
+	return (*ElementCollection[*DatabaseMaxRowSizeLog])(ret)
+}
+
 func (e DatabaseRegionConfig) element() {}
 
 // Element implements ElementGetter.
@@ -3348,6 +3422,10 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_DatabaseComment{ DatabaseComment: t}
 		case *DatabaseData:
 			e.ElementOneOf = &ElementProto_DatabaseData{ DatabaseData: t}
+		case *DatabaseMaxRowSizeErr:
+			e.ElementOneOf = &ElementProto_DatabaseMaxRowSizeErr{ DatabaseMaxRowSizeErr: t}
+		case *DatabaseMaxRowSizeLog:
+			e.ElementOneOf = &ElementProto_DatabaseMaxRowSizeLog{ DatabaseMaxRowSizeLog: t}
 		case *DatabaseRegionConfig:
 			e.ElementOneOf = &ElementProto_DatabaseRegionConfig{ DatabaseRegionConfig: t}
 		case *DatabaseRoleSetting:
@@ -3512,6 +3590,8 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_Database)(nil)),
 	((*ElementProto_DatabaseComment)(nil)),
 	((*ElementProto_DatabaseData)(nil)),
+	((*ElementProto_DatabaseMaxRowSizeErr)(nil)),
+	((*ElementProto_DatabaseMaxRowSizeLog)(nil)),
 	((*ElementProto_DatabaseRegionConfig)(nil)),
 	((*ElementProto_DatabaseRoleSetting)(nil)),
 	((*ElementProto_DatabaseZoneConfig)(nil)),
@@ -3608,6 +3688,8 @@ func GetElementTypes() []interface{} {
 	((*Database)(nil)),
 	((*DatabaseComment)(nil)),
 	((*DatabaseData)(nil)),
+	((*DatabaseMaxRowSizeErr)(nil)),
+	((*DatabaseMaxRowSizeLog)(nil)),
 	((*DatabaseRegionConfig)(nil)),
 	((*DatabaseRoleSetting)(nil)),
 	((*DatabaseZoneConfig)(nil)),

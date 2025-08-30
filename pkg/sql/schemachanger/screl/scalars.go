@@ -136,6 +136,8 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		return version.IsActive(clusterversion.V25_2)
 	case *scpb.TableLocalityRegionalByRowUsingConstraint:
 		return version.IsActive(clusterversion.V25_3)
+	case *scpb.DatabaseMaxRowSizeErr, *scpb.DatabaseMaxRowSizeLog:
+		return version.IsActive(clusterversion.V25_4)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}

@@ -82,7 +82,7 @@ func verifyStatementPrettyRoundTrip(
 	}
 	parsedPretty, err := parseOne(t, prettyStmt, p)
 	if err != nil {
-		t.Fatalf("%s: %s", err, prettyStmt)
+		t.Fatalf("%s: %s, %v", err, sql, parsedPretty)
 	}
 	prettyFormatted := tree.AsStringWithFlags(parsedPretty, tree.FmtSimple)
 	origFormatted := tree.AsStringWithFlags(origStmt, tree.FmtParsable)
