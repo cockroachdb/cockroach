@@ -297,7 +297,30 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	args, hasET := ba.GetArg(kvpb.EndTxn)
 	if len(ba.Requests) > 1 && hasET && !args.(*kvpb.EndTxnRequest).Require1PC {
 		log.Eventf(ctx, "sending EndTxn separately from rest of batch on retry")
-		return sr.splitEndTxnAndRetrySend(ctx, ba)
+
+		// If we have a STAGING transaction, then once we start retrying the writes,
+		// the transaction's commit criteria may be satisfied. In this case, we
+		// return any error as an ambiguous result error.
+		//
+		// TODO(ssd): It would be nice to be more narrow here. Some potential ways
+		// to be more narrow that I have not yet sorted out how to do:
+		//
+		// 1. Make sure that the STAGING record written was written at a timestamp
+		// >= the write timestamp we are about to use. If it wasn't the new writes
+		// won't satisfy the implicit commit property of the old STAGING record.
+		//
+		// 2. Check whether or not we've succeeded writing the in-flight-writes from
+		// the original try. I am not sure this is actually possible with the
+		// current behavior of distsender.
+		ambigErrRequired := txn.Status == roachpb.STAGING
+
+		retryBr, retryErr := sr.splitEndTxnAndRetrySend(ctx, ba)
+		if ambigErrRequired {
+			retryErr = kvpb.NewError(
+				kvpb.NewAmbiguousResultError(
+					errors.Wrapf(retryErr.GoError(), "error during retry after transaction moved to STAGING")))
+		}
+		return retryBr, retryErr
 	}
 
 	retryBr, retryErr := sr.sendLockedWithRefreshAttempts(ctx, ba, maxRefreshAttempts-1)
