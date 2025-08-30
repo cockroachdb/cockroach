@@ -16,38 +16,39 @@ ok
 plan debug=true
 ----
 Seed:               12345
-Upgrades:           v24.2.2 → <current>
+Upgrades:           v24.2.2 → v24.3.0 (<current>)
 Deployment mode:    system-only
 Mutators:           concurrent_user_hooks_mutator
+Hooks:              my mixed version feature
 Plan:
 ├── install fixtures for version "v24.2.2" (1) [stage=system-setup]
 ├── start cluster at version "v24.2.2" (2) [stage=system-setup]
 ├── wait for all nodes (:1-4) to acknowledge cluster version '24.2' on system tenant (3) [stage=system-setup]
-└── upgrade cluster from "v24.2.2" to "<current>"
+└── upgrade cluster from "v24.2.2" to "v24.3.0 (<current>)"
    ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (4) [stage=init]
-   ├── upgrade nodes :1-4 from "v24.2.2" to "<current>"
-   │   ├── restart node 4 with binary version <current> (5) [stage=temporary-upgrade]
+   ├── upgrade nodes :1-4 from "v24.2.2" to "v24.3.0 (<current>)"
+   │   ├── restart node 4 with binary version v24.3.0 (<current>) (5) [stage=temporary-upgrade]
    │   ├── run following steps concurrently
-   │   │   ├── run "my mixed version feature", after 5s delay (6) [stage=temporary-upgrade]
+   │   │   ├── run "my mixed version feature" hookId="planner_test.go:128", after 5s delay (6) [stage=temporary-upgrade]
    │   │   └── testSingleStep, after 30s delay (7) [stage=temporary-upgrade]
-   │   ├── restart node 3 with binary version <current> (8) [stage=temporary-upgrade]
-   │   ├── restart node 2 with binary version <current> (9) [stage=temporary-upgrade]
-   │   └── restart node 1 with binary version <current> (10) [stage=temporary-upgrade]
-   ├── downgrade nodes :1-4 from "<current>" to "v24.2.2"
+   │   ├── restart node 3 with binary version v24.3.0 (<current>) (8) [stage=temporary-upgrade]
+   │   ├── restart node 2 with binary version v24.3.0 (<current>) (9) [stage=temporary-upgrade]
+   │   └── restart node 1 with binary version v24.3.0 (<current>) (10) [stage=temporary-upgrade]
+   ├── downgrade nodes :1-4 from "v24.3.0 (<current>)" to "v24.2.2"
    │   ├── restart node 2 with binary version v24.2.2 (11) [stage=rollback-upgrade]
    │   ├── restart node 1 with binary version v24.2.2 (12) [stage=rollback-upgrade]
    │   ├── run following steps concurrently
-   │   │   ├── run "my mixed version feature", after 3m0s delay (13) [stage=rollback-upgrade]
+   │   │   ├── run "my mixed version feature" hookId="planner_test.go:128", after 3m0s delay (13) [stage=rollback-upgrade]
    │   │   └── testSingleStep, after 0s delay (14) [stage=rollback-upgrade]
    │   ├── restart node 3 with binary version v24.2.2 (15) [stage=rollback-upgrade]
    │   └── restart node 4 with binary version v24.2.2 (16) [stage=rollback-upgrade]
-   ├── upgrade nodes :1-4 from "v24.2.2" to "<current>"
-   │   ├── restart node 3 with binary version <current> (17) [stage=last-upgrade]
-   │   ├── restart node 1 with binary version <current> (18) [stage=last-upgrade]
-   │   ├── restart node 4 with binary version <current> (19) [stage=last-upgrade]
+   ├── upgrade nodes :1-4 from "v24.2.2" to "v24.3.0 (<current>)"
+   │   ├── restart node 3 with binary version v24.3.0 (<current>) (17) [stage=last-upgrade]
+   │   ├── restart node 1 with binary version v24.3.0 (<current>) (18) [stage=last-upgrade]
+   │   ├── restart node 4 with binary version v24.3.0 (<current>) (19) [stage=last-upgrade]
    │   ├── run following steps concurrently
-   │   │   ├── run "my mixed version feature", after 100ms delay (20) [stage=last-upgrade]
+   │   │   ├── run "my mixed version feature" hookId="planner_test.go:128", after 100ms delay (20) [stage=last-upgrade]
    │   │   └── testSingleStep, after 0s delay (21) [stage=last-upgrade]
-   │   └── restart node 2 with binary version <current> (22) [stage=last-upgrade]
+   │   └── restart node 2 with binary version v24.3.0 (<current>) (22) [stage=last-upgrade]
    ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (23) [stage=running-upgrade-migrations,finalizing]
    └── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (24) [stage=running-upgrade-migrations,finalizing]

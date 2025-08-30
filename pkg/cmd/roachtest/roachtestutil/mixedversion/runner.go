@@ -255,7 +255,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 	defer func() {
 		prefix := fmt.Sprintf("FINISHED [%s]", timeutil.Since(start))
 		tr.logStep(prefix, ss, l)
-		annotation := fmt.Sprintf("(%d): %s", ss.ID, ss.impl.Description())
+		annotation := fmt.Sprintf("(%d): %s", ss.ID, ss.impl.Description(false))
 		err := tr.addGrafanaAnnotation(tr.ctx, tr.logger, grafana.AddAnnotationRequest{
 			Text: annotation, StartTime: start.UnixMilli(), EndTime: timeutil.Now().UnixMilli(),
 		})
@@ -287,7 +287,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 func (tr *testRunner) startBackgroundStep(ss *singleStep, l *logger.Logger, stopChan shouldStop) {
 	stop := tr.background.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
 		return tr.runSingleStep(ctx, ss, l)
-	}, task.Logger(l), task.Name(ss.impl.Description()))
+	}, task.Logger(l), task.Name(ss.impl.Description(false)))
 
 	// We start a goroutine to listen for user-requests to stop the
 	// background function.
@@ -315,7 +315,7 @@ func (tr *testRunner) stepError(
 	stepErr := errors.Wrapf(
 		err,
 		"mixed-version test failure while running step %d (%s)",
-		step.ID, step.impl.Description(),
+		step.ID, step.impl.Description(false),
 	)
 
 	return tr.testFailure(ctx, stepErr, l, &step.context)
@@ -388,7 +388,7 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 
 func (tr *testRunner) logStep(prefix string, step *singleStep, l *logger.Logger) {
 	dashes := strings.Repeat("-", 10)
-	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.ID, step.impl.Description())
+	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.ID, step.impl.Description(false))
 }
 
 func (tr *testRunner) logVersions(l *logger.Logger, testContext Context) {
@@ -501,7 +501,7 @@ func versionsTable(
 // easy to go from the IDs displayed in the test plan to the
 // corresponding output of that step.
 func (tr *testRunner) loggerFor(step *singleStep) (*logger.Logger, error) {
-	name := invalidChars.ReplaceAllString(strings.ToLower(step.impl.Description()), "")
+	name := invalidChars.ReplaceAllString(strings.ToLower(step.impl.Description(false)), "")
 	name = fmt.Sprintf("%d_%s", step.ID, name)
 	prefix := filepath.Join(tr.tag, logPrefix, name)
 
