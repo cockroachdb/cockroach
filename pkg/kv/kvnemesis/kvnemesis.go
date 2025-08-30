@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -66,6 +67,25 @@ func l(ctx context.Context, basename string, format string, args ...interface{})
 	return ""
 }
 
+// TestMode defines how faults are inserted and validated.
+type TestMode int
+
+const (
+	// The default value of TestMode is 0, which corresponds to no faults.
+	_ TestMode = iota
+	// Safety mode is used to test for safety properties (i.e. serializability) in
+	// the presence of unlimited faults. Unavailability errors are expected and
+	// ignored.
+	Safety = 1
+	// Liveness mode is used to test for liveness properties (i.e. availability).
+	// To do so in the presence of faults, the test will inject faults carefully,
+	// ensuring a well-connected quorum of replicas is always available, and the
+	// tests connects to one of the nodes in it. Without loss of generality, we
+	// keep nodes 1 and 2 available and connected to each other.
+	// TODO(mira): don't hardcode the safe nodes.
+	Liveness = 2
+)
+
 // RunNemesis generates and applies a series of Operations to exercise the KV
 // api. It returns a slice of the logical failures encountered.
 func RunNemesis(
@@ -75,6 +95,7 @@ func RunNemesis(
 	config GeneratorConfig,
 	concurrency int,
 	numSteps int,
+	mode TestMode,
 	dbs ...*kv.DB,
 ) ([]error, error) {
 	if env.L != nil {
@@ -84,13 +105,29 @@ func RunNemesis(
 		return nil, fmt.Errorf("numSteps must be >0, got %v", numSteps)
 	}
 
-	dataSpan := GeneratorDataSpan()
-
-	g, err := MakeGenerator(config, newGetReplicasFn(dbs...))
+	var replicasFn GetReplicasFn
+	// In the presence of network partitions, range lookup while holding the
+	// generator mutex can stall the test. All operations that require this lookup
+	// should be disabled in these modes.
+	if mode == Liveness || mode == Safety {
+		replicasFn = func(key roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget) {
+			return []roachpb.ReplicationTarget{}, []roachpb.ReplicationTarget{}
+		}
+	} else {
+		replicasFn = newGetReplicasFn(dbs...)
+	}
+	g, err := MakeGenerator(config, replicasFn, mode)
 	if err != nil {
 		return nil, err
 	}
-	a := MakeApplier(env, dbs...)
+	applierDBs := dbs
+	// In Liveness mode, only nodes 1 and 2 are guaranteed to be available, so use
+	// only the first two DBs to apply operations.
+	if mode == Liveness {
+		applierDBs = applierDBs[:2]
+	}
+	a := MakeApplier(env, applierDBs...)
+	dataSpan := GeneratorDataSpan()
 	w, err := Watch(ctx, env, dbs, dataSpan)
 	if err != nil {
 		return nil, err
@@ -142,9 +179,11 @@ func RunNemesis(
 		}
 		return nil
 	}
+	env.Partitioner.EnablePartitions(true)
 	if err := ctxgroup.GroupWorkers(ctx, concurrency, workerFn); err != nil {
 		return nil, err
 	}
+	env.Partitioner.EnablePartitions(false)
 
 	allSteps := make(steps, 0, numSteps)
 	for _, steps := range stepsByWorker {
@@ -159,7 +198,7 @@ func RunNemesis(
 	kvs := w.Finish()
 	defer kvs.Close()
 
-	failures := Validate(allSteps, kvs, env.Tracker)
+	failures := Validate(allSteps, kvs, env.Tracker, mode)
 
 	// Run consistency checks across the data span, primarily to check the
 	// accuracy of evaluated MVCC stats.
