@@ -67,6 +67,8 @@ message OIDCState {
 	bytes tokenMAC = 4;
 	// mode is the requested behavior of the OIDC callback handler
 	Mode mode = 5;
+	// pkce_code_verifier is the secret used for the PKCE flow.
+	string pkce_code_verifier = 6;
 }
 
 // LogIn and LogOut are the GRPC APIs used to create web authentication sessions.
