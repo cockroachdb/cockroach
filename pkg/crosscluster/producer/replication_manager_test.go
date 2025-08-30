@@ -73,6 +73,9 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 	tDB.Exec(t, "GRANT SYSTEM REPLICATIONSOURCE TO somebody")
 	tDB.Exec(t, "CREATE ROLE anybody")
 
+	tDB.Exec(t, "CREATE ROLE someone")
+	tDB.Exec(t, "GRANT SYSTEM VIEWSYSTEMTABLE TO someone")
+
 	for _, tc := range []struct {
 		user   string
 		expErr string
@@ -80,7 +83,8 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 		{user: "admin", expErr: ""},
 		{user: "root", expErr: ""},
 		{user: "somebody", expErr: ""},
-		{user: "anybody", expErr: "user anybody does not have REPLICATIONSOURCE system privilege"},
+		{user: "someone", expErr: ""},
+		{user: "anybody", expErr: "user anybody does not have either REPLICATIONSOURCE or VIEWSYSTEMTABLE system privilege"},
 		{user: "nobody", expErr: `role/user "nobody" does not exist`},
 	} {
 		t.Run(tc.user, func(t *testing.T) {
