@@ -225,6 +225,11 @@ func TestCreatePostRequest(t *testing.T) {
 						case "lose-error-object":
 							// Lose the error object which should make our flake detection fail.
 							refError = errors.Newf("%s", redact.SafeString(refError.Error()))
+						case "node-fatal":
+							refError = errors.Newf(`(monitor.go:267).Wait: monitor failure: dial tcp 127.0.0.1:29000: connect: connection refused
+test artifacts and logs in: artifacts/roachtest/manual/monitor/test-failure/node-fatal-explicit-monitor/cpu_arch=arm64/run_1
+F250826 19:49:07.194443 3106 sql/sem/builtins/builtins.go:6063 ⋮ [T1,Vsystem,n1,client=127.0.0.1:54552,hostssl,user=‹roachprod›] 250  force_log_fatal(): ‹oops›
+`)
 						}
 					}
 				}
