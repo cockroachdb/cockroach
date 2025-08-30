@@ -92,32 +92,6 @@ var errorOnConcurrentCreateStats = settings.RegisterBoolSetting(
 
 const nonIndexColHistogramBuckets = 2
 
-// StubTableStats generates "stub" statistics for a table which are missing
-// statistics on virtual computed columns, multi-column stats, and histograms,
-// and have 0 for all values.
-func StubTableStats(
-	desc catalog.TableDescriptor, name string,
-) ([]*stats.TableStatisticProto, error) {
-	colStats, err := createStatsDefaultColumns(
-		context.Background(), desc,
-		false /* virtColEnabled */, false, /* multiColEnabled */
-		false /* nonIndexJSONHistograms */, false, /* partialStats */
-		nonIndexColHistogramBuckets, nil, /* evalCtx */
-	)
-	if err != nil {
-		return nil, err
-	}
-	statistics := make([]*stats.TableStatisticProto, len(colStats))
-	for i, colStat := range colStats {
-		statistics[i] = &stats.TableStatisticProto{
-			TableID:   desc.GetID(),
-			Name:      name,
-			ColumnIDs: colStat.ColumnIDs,
-		}
-	}
-	return statistics, nil
-}
-
 // createStatsNode is a planNode implemented in terms of a function. The
 // runJob function starts a Job during Start, and the remainder of the
 // CREATE STATISTICS planning and execution is performed within the jobs

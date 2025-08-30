@@ -395,6 +395,8 @@ func newInternalPlanner(
 	// asking the caller for one is hard to explain. What we need is better and
 	// separate interfaces for planning and running plans, which could take
 	// suitable contexts.
+	// TODO(yuzefovich): this comment is outdated - we no longer store context
+	// within EvalCtx. Re-evaluate the situation.
 	ctx := logtags.AddTag(context.Background(), string(opName), "")
 
 	sd = sd.Clone()
