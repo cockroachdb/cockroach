@@ -57,7 +57,7 @@ Vector KV Value:
 func EncodeMetadataKey(
 	indexPrefix []byte, encodedPrefixCols []byte, partitionKey cspann.PartitionKey,
 ) roachpb.Key {
-	capacity := len(indexPrefix) + len(encodedPrefixCols) + EncodedPartitionKeyLen(partitionKey) + 1
+	capacity := len(indexPrefix) + len(encodedPrefixCols) + EncodedPartitionKeyLen(partitionKey) + EncodedPartitionLevelLen(cspann.InvalidLevel)
 	keyBuffer := make([]byte, 0, capacity)
 	keyBuffer = append(keyBuffer, indexPrefix...)
 	keyBuffer = append(keyBuffer, encodedPrefixCols...)
@@ -132,13 +132,16 @@ func DecodeVectorKey(
 		keyBytes = keyBytes[prefixLen:]
 	}
 
-	partitionKey, keyBytes, err := DecodePartitionKey(keyBytes)
+	// Decode the partition key and level.
+	var partitionKey cspann.PartitionKey
+	partitionKey, keyBytes, err = DecodePartitionKey(keyBytes)
 	if err != nil {
 		return vecIndexKey, err
 	}
 	vecIndexKey.PartitionKey = partitionKey
 
-	level, keyBytes, err := DecodePartitionLevel(keyBytes)
+	var level cspann.Level
+	level, keyBytes, err = DecodePartitionLevel(keyBytes)
 	if err != nil {
 		return vecIndexKey, err
 	}

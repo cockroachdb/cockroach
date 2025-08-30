@@ -44,15 +44,9 @@ import (
 
 // CreateIndex implements CREATE INDEX.
 func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
-	// Check if sql_safe_updates is enabled and this is a vector index
-	if n.Type == idxtype.VECTOR {
-		if !b.EvalCtx().Settings.Version.ActiveVersion(b).AtLeast(clusterversion.V25_2.Version()) {
-			panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot create a vector index until finalizing on 25.2"))
-		} else if b.EvalCtx().SessionData().SafeUpdates {
-			panic(pgerror.DangerousStatementf("CREATE VECTOR INDEX will disable writes to the table while the index is being built"))
-		} else {
-			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b, pgnotice.Newf("CREATE VECTOR INDEX will disable writes to the table while the index is being built"))
-		}
+	// Ensure that the cluster is fully upgraded to 25.2 before creating a vector index.
+	if n.Type == idxtype.VECTOR && !b.EvalCtx().Settings.Version.ActiveVersion(b).AtLeast(clusterversion.V25_2.Version()) {
+		panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot create a vector index until finalizing on 25.2"))
 	}
 
 	b.IncrementSchemaChangeCreateCounter("index")
@@ -255,8 +249,9 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	})
 	// Construct the temporary objects from the index spec, since these will
 	// be transient.
-	tempIdxSpec := makeTempIndexSpec(idxSpec)
+	tempIdxSpec := makeTempIndexSpec(b, idxSpec)
 	tempIdxSpec.apply(b.AddTransient)
+
 	// If the concurrent option is added emit a warning.
 	if n.Concurrently {
 		b.EvalCtx().ClientNoticeSender.BufferClientNotice(b,
@@ -736,6 +731,129 @@ func addColumnsForSecondaryIndex(
 			}
 		}
 		idxSpec.columns = append([]*scpb.IndexColumn{indexColumn}, idxSpec.columns...)
+	}
+}
+
+func fixupColumnsForTempVectorIndex(b BuildCtx, tempIdxSpec *indexSpec) {
+	// For vector indexes, the temporary index should only be keyed by the primary
+	// key columns. Get the actual primary key columns from the source index.
+
+	// Get the source index ID (which should be the primary index)
+	sourceIndexID := tempIdxSpec.temporary.SourceIndexID
+
+	// Query for the primary key columns from the source index
+	tableElts := b.QueryByID(tempIdxSpec.temporary.TableID)
+	primaryKeyColumns := getIndexColumns(tableElts, sourceIndexID, scpb.IndexColumn_KEY)
+
+	// Create new index columns for the temporary index based on primary key columns
+	var newTempColumns []*scpb.IndexColumn
+	for i, pkCol := range primaryKeyColumns {
+		newCol := &scpb.IndexColumn{
+			TableID:       tempIdxSpec.temporary.TableID,
+			IndexID:       tempIdxSpec.temporary.IndexID,
+			ColumnID:      pkCol.ColumnID,
+			OrdinalInKind: uint32(i),
+			Kind:          scpb.IndexColumn_KEY,
+			Direction:     pkCol.Direction,
+			Implicit:      pkCol.Implicit,
+		}
+		newTempColumns = append(newTempColumns, newCol)
+	}
+	// Replace the entire column set with just the primary key columns
+	tempIdxSpec.columns = newTempColumns
+}
+
+// fixupPartitioningForTempVectorIndex updates the partitioning for a temporary
+// vector index to inherit from the primary key instead of the vector index.
+func fixupPartitioningForTempVectorIndex(b BuildCtx, tempIdxSpec *indexSpec, tempID catid.IndexID) {
+	// Get the source index ID (which should be the primary index)
+	sourceIndexID := tempIdxSpec.temporary.SourceIndexID
+
+	// Query for the primary key's partitioning
+	tableElts := b.QueryByID(tempIdxSpec.temporary.TableID)
+	var primaryPartitioning *scpb.IndexPartitioning
+	scpb.ForEachIndexPartitioning(tableElts, func(_ scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) {
+		if target == scpb.ToPublic && e.IndexID == sourceIndexID {
+			primaryPartitioning = e
+		}
+	})
+
+	if primaryPartitioning != nil {
+		// Clone the primary key's partitioning and update it for the temporary index
+		tempIdxSpec.partitioning = protoutil.Clone(primaryPartitioning).(*scpb.IndexPartitioning)
+		tempIdxSpec.partitioning.IndexID = tempID
+	} else {
+		// No partitioning on primary key, so temporary index shouldn't have partitioning either
+		tempIdxSpec.partitioning = nil
+	}
+}
+
+// fixupPredicateForTempVectorIndex sets up a partial index predicate for the
+// temporary forward index that excludes NULL vector values since we don't
+// include those in the resulting vector index.
+func fixupPredicateForTempVectorIndex(
+	b BuildCtx, tempIdxSpec *indexSpec, existingExpr *scpb.Expression,
+) {
+	// Find the vector column ID (last KEY column in the original vector index)
+	// We need to find the original vector index that this temporary index corresponds to
+	var vectorColumnID catid.ColumnID
+	var maxOrdinal uint32
+	tableElts := b.QueryByID(tempIdxSpec.temporary.TableID)
+
+	// Find the original vector index by looking for an index with the same TemporaryIndexID
+	var originalVectorIndexID catid.IndexID
+	scpb.ForEachSecondaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, si *scpb.SecondaryIndex) {
+		if si.TemporaryIndexID == tempIdxSpec.temporary.IndexID {
+			originalVectorIndexID = si.IndexID
+		}
+	})
+
+	// Now find the vector column (last KEY column) in the original vector index
+	scpb.ForEachIndexColumn(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
+		if ic.IndexID == originalVectorIndexID && ic.Kind == scpb.IndexColumn_KEY {
+			if ic.OrdinalInKind >= maxOrdinal {
+				maxOrdinal = ic.OrdinalInKind
+				vectorColumnID = ic.ColumnID
+			}
+		}
+	})
+
+	// If we can't find the column name, it should mean that the PK is also being
+	// changed to add the vector column.
+	// TODO(mw5h) In this case, will every value inserted into the temporary
+	// index be NULL? If so, let's just not add a temporary index.
+	vectorColName := tableElts.FilterColumnName().Filter(func(_ scpb.Status, target scpb.TargetStatus, colNameElem *scpb.ColumnName) bool {
+		return colNameElem.ColumnID == vectorColumnID && target == scpb.ToPublic
+	}).MustGetZeroOrOneElement()
+	if vectorColName == nil {
+		return
+	}
+
+	// Create a predicate expression: <vector_column> IS NOT NULL
+	notNullExpr := &tree.IsNotNullExpr{
+		Expr: &tree.ColumnItem{ColumnName: tree.Name(vectorColName.Name)},
+	}
+
+	// If the original vector index already has a partial predicate,
+	// combine it with the NOT NULL predicate using AND
+	var finalPredicate tree.Expr = notNullExpr
+	if existingExpr != nil {
+		// Parse the existing predicate expression
+		existingPredicate, err := parser.ParseExpr(string(existingExpr.Expr))
+		if err != nil {
+			panic(err)
+		}
+		// Combine with AND: (existing_predicate) AND (<vector_column> IS NOT NULL)
+		finalPredicate = &tree.AndExpr{
+			Left:  existingPredicate,
+			Right: notNullExpr,
+		}
+	}
+
+	// Set the partial predicate expression on the temporary index
+	exprString := tree.SerializeForDisplay(finalPredicate)
+	tempIdxSpec.temporary.Expr = &scpb.Expression{
+		Expr: catpb.Expression(exprString),
 	}
 }
 

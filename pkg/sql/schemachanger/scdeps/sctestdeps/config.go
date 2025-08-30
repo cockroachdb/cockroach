@@ -8,6 +8,7 @@ package sctestdeps
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -163,6 +164,16 @@ func WithIDGenerator(s serverutils.ApplicationLayerInterface) Option {
 func WithReferenceProviderFactory(f scbuild.ReferenceProviderFactory) Option {
 	return optionFunc(func(state *TestState) {
 		state.refProviderFactory = f
+	})
+}
+
+func WithClusterSettings(cs *cluster.Settings) Option {
+	return optionFunc(func(state *TestState) {
+		state.clusterSettings = cs
+		// Update evalCtx settings if it already exists
+		if state.evalCtx != nil {
+			state.evalCtx.Settings = cs
+		}
 	})
 }
 
