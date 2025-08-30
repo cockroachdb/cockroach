@@ -4777,6 +4777,7 @@ func TestBlockedSchemaChange(t *testing.T) {
 	codec := s.ApplicationLayer().Codec()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
 	sqlDB.Exec(t, `
 	  SET create_table_with_schema_locked=false;
 	  SET use_declarative_schema_changer='off';
