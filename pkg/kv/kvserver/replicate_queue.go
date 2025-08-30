@@ -100,6 +100,19 @@ var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetti
 	0,
 )
 
+// TODO(wenyihu6): move these cluster settings to kvserverbase
+
+// PriorityInversionRequeue is a setting that controls whether to requeue
+// replicas when their priority at enqueue time and processing time is inverted
+// too much (e.g. dropping from a repair action to AllocatorConsiderRebalance).
+var PriorityInversionRequeue = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.priority_inversion_requeue_replicate_queue.enabled",
+	"whether the requeue replicas should requeue when enqueued for "+
+		"repair action but ended up consider rebalancing during processing",
+	true,
+)
+
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
@@ -683,6 +696,10 @@ func (rq *replicateQueue) process(
 		}
 
 		if err != nil {
+			if requeue {
+				log.KvDistribution.VEventf(ctx, 1, "re-queuing on errors: %v", err)
+				rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
+			}
 			return false, err
 		}
 
@@ -867,6 +884,10 @@ func ShouldRequeue(
 	return requeue
 }
 
+// priorityInversionLogEveryN rate limits how often we log about priority
+// inversion to avoid spams.
+var priorityInversionLogEveryN = log.Every(3 * time.Second)
+
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
 	repl *Replica,
@@ -877,6 +898,25 @@ func (rq *replicateQueue) processOneChange(
 ) (requeue bool, _ error) {
 	change, err := rq.planner.PlanOneChange(
 		ctx, repl, desc, conf, plan.PlannerOptions{Scatter: scatter})
+
+	if PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
+		if inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action); inversion {
+			if priorityInversionLogEveryN.ShouldLog() {
+				log.KvDistribution.Infof(ctx,
+					"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
+					shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
+			}
+			if shouldRequeue {
+				// Return true to requeue the range. Return the error to ensure it is
+				// logged and tracked in replicate queue bq.failures metrics. See
+				// replicateQueue.process for details.
+				return true /*requeue*/, maybeAnnotateDecommissionErr(
+					errors.Errorf("requing due to priority inversion: action=%s, priority=%v, enqueuePriority=%v",
+						change.Action, change.Action.Priority(), priorityAtEnqueue), change.Action)
+			}
+		}
+	}
+
 	// When there is an error planning a change, return the error immediately
 	// and do not requeue. It is unlikely that the range or storepool state
 	// will change quickly enough in order to not get the same error and
