@@ -87,6 +87,8 @@ type Registry struct {
 		// servicing.
 		unconditionalOngoing map[RequestID]Request
 
+		txnRequests             map[RequestID]TxnRequest
+		txnUnconditionalOngoing map[RequestID]TxnRequest
 		// epoch is observed before reading system.statement_diagnostics_requests, and then
 		// checked again before loading the tables contents. If the value changed in
 		// between, then the table contents might be stale.
@@ -136,6 +138,50 @@ func (r *Request) continueCollecting(st *cluster.Settings) bool {
 	return collectUntilExpiration.Get(&st.SV) && // continuous collection must be enabled
 		r.samplingProbability != 0 && !r.expiresAt.IsZero() && // conditions for continuous collection must be set
 		!r.isExpired(timeutil.Now()) // the request must not have expired yet
+}
+
+type TxnRequest struct {
+	txnFingerprintId    uint64
+	stmtFingerprintsId  []uint64
+	redacted            bool
+	username            string
+	expiresAt           time.Time
+	minExecutionLatency time.Duration
+	samplingProbability float64
+}
+
+func (t *TxnRequest) ContinueRequest(stmtFingerprint uint64, idx int) bool {
+	if len(t.stmtFingerprintsId) == 0 || idx > len(t.stmtFingerprintsId)-1 {
+		return false
+	}
+
+	return t.stmtFingerprintsId[idx] == stmtFingerprint
+}
+
+func (t *TxnRequest) StmtFingerprintIds() []uint64 {
+	return t.stmtFingerprintsId
+}
+
+func (t *TxnRequest) IsRedacted() bool {
+	return t.redacted
+}
+
+func (t *TxnRequest) Username() string {
+	return t.username
+}
+
+func (t *TxnRequest) isExpired(now time.Time) bool {
+	return !t.expiresAt.IsZero() && t.expiresAt.Before(now)
+}
+
+func (t *TxnRequest) isConditional() bool {
+	return t.minExecutionLatency != 0
+}
+
+func (t *TxnRequest) continueCollecting(st *cluster.Settings) bool {
+	return collectUntilExpiration.Get(&st.SV) && // continuous collection must be enabled
+		t.samplingProbability != 0 && !t.expiresAt.IsZero() && // conditions for continuous collection must be set
+		!t.isExpired(timeutil.Now()) // the request must not have expired yet
 }
 
 // NewRegistry constructs a new Registry.
@@ -219,6 +265,35 @@ type RequestID int
 // corresponding to the id column in statement_diagnostics.
 type CollectedInstanceID int
 
+func (r *Registry) addTxnRequestInternalLocked(
+	ctx context.Context,
+	id RequestID,
+	txnFingerprintId uint64,
+	stmtFingerprintsId []uint64,
+	samplingProbability float64,
+	minExecutionLatency time.Duration,
+	expiresAt time.Time,
+	redacted bool,
+	username string,
+) {
+	if r.findTxnRequestLocked(id) {
+		return
+	}
+	if r.mu.txnRequests == nil {
+		r.mu.txnRequests = make(map[RequestID]TxnRequest)
+	}
+	request := TxnRequest{
+		txnFingerprintId:    txnFingerprintId,
+		stmtFingerprintsId:  stmtFingerprintsId,
+		redacted:            redacted,
+		username:            username,
+		expiresAt:           expiresAt,
+		minExecutionLatency: minExecutionLatency,
+		samplingProbability: samplingProbability,
+	}
+	r.mu.txnRequests[id] = request
+}
+
 // addRequestInternalLocked adds a request to r.mu.requestFingerprints. If the
 // request is already present or it has already expired, the call is a noop.
 func (r *Registry) addRequestInternalLocked(
@@ -268,6 +343,19 @@ func (r *Registry) findRequestLocked(requestID RequestID) bool {
 	return ok
 }
 
+func (r *Registry) findTxnRequestLocked(requestID RequestID) bool {
+	f, ok := r.mu.txnRequests[requestID]
+	if ok {
+		if f.isExpired(timeutil.Now()) {
+			// This request has already expired.
+			delete(r.mu.txnRequests, requestID)
+		}
+		return true
+	}
+	_, ok = r.mu.txnUnconditionalOngoing[requestID]
+	return ok
+}
+
 // cancelRequest removes the request with the given RequestID from the Registry
 // if present.
 func (r *Registry) cancelRequest(requestID RequestID) {
@@ -275,6 +363,48 @@ func (r *Registry) cancelRequest(requestID RequestID) {
 	defer r.mu.Unlock()
 	delete(r.mu.requestFingerprints, requestID)
 	delete(r.mu.unconditionalOngoing, requestID)
+}
+
+func (r *Registry) InsertTxnRequest(
+	ctx context.Context,
+	txnFingerprintId uint64,
+	stmtFingerprintIds []uint64,
+	username string,
+	samplingProbability float64,
+	minExecutionLatency time.Duration,
+	expiresAfter time.Duration,
+	redacted bool,
+) error {
+	if samplingProbability != 0 {
+		if samplingProbability < 0 || samplingProbability > 1 {
+			return errors.Newf(
+				"expected sampling probability in range [0.0, 1.0], got %f",
+				samplingProbability)
+		}
+		if minExecutionLatency == 0 {
+			return errors.Newf(
+				"got non-zero sampling probability %f and empty min exec latency",
+				samplingProbability)
+		}
+	}
+
+	//var reqID RequestID
+	var expiresAt time.Time
+	if expiresAfter != 0 {
+		expiresAt = timeutil.Now().Add(expiresAfter)
+	}
+	// TODO: insert the request into system.txn_diagnostics_requests once the table is made
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		//r.mu.epoch++
+		r.addTxnRequestInternalLocked(
+			ctx, RequestID(rand.Int()), txnFingerprintId, stmtFingerprintIds, samplingProbability,
+			minExecutionLatency, expiresAt, redacted, username,
+		)
+	}()
+
+	return nil
 }
 
 // InsertRequest is part of the server.StmtDiagnosticsRequester interface.
@@ -382,6 +512,7 @@ func (r *Registry) insertRequestInternal(
 		for i := range qargs[2:] {
 			valuesClause += fmt.Sprintf(", $%d", i+3)
 		}
+		// TODO(davidh): add persistence of the includeTxn field.
 		stmt := "INSERT INTO system.statement_diagnostics_requests (" +
 			insertColumns + ") VALUES (" + valuesClause + ") RETURNING id;"
 		row, err = txn.QueryRowEx(
@@ -469,6 +600,68 @@ func (r *Registry) MaybeRemoveRequest(requestID RequestID, req Request, execLate
 			delete(r.mu.unconditionalOngoing, requestID)
 		}
 	}
+}
+
+func (r *Registry) ShouldStartTxnDiagnostic(
+	ctx context.Context, stmtFingerprintId uint64,
+) (shouldCollect bool, reqID RequestID, req TxnRequest) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if len(r.mu.txnRequests) == 0 {
+		return false, 0, req
+	}
+
+	for id, f := range r.mu.txnRequests {
+		if len(f.stmtFingerprintsId) > 0 && f.stmtFingerprintsId[0] == stmtFingerprintId {
+			if f.isExpired(timeutil.Now()) {
+				delete(r.mu.txnRequests, id)
+				return false, 0, req
+			}
+			req = f
+			reqID = id
+		}
+	}
+	if reqID == 0 {
+		return false, 0, TxnRequest{}
+	}
+
+	if !req.isConditional() {
+		if r.mu.txnUnconditionalOngoing == nil {
+			r.mu.txnUnconditionalOngoing = make(map[RequestID]TxnRequest)
+		}
+		r.mu.txnUnconditionalOngoing[reqID] = req
+		delete(r.mu.txnRequests, reqID)
+	}
+
+	if req.samplingProbability == 0 || r.mu.rand.Float64() < req.samplingProbability {
+		return true, reqID, req
+	}
+	return false, 0, TxnRequest{}
+}
+
+// ResetTxnRequest moves the TxnRequest of the given requestID from the ongoing
+// requests map back to the requests map, so that it can be started again for a
+// new transaction.
+func (r *Registry) ResetTxnRequest(requestID RequestID) (req TxnRequest, ok bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.mu.txnUnconditionalOngoing == nil {
+		return TxnRequest{}, false
+	}
+	req, ok = r.mu.txnUnconditionalOngoing[requestID]
+	if !ok {
+		return TxnRequest{}, false
+	}
+
+	delete(r.mu.txnUnconditionalOngoing, requestID)
+	if r.mu.txnRequests != nil {
+		r.mu.txnRequests = make(map[RequestID]TxnRequest)
+	}
+	r.mu.txnRequests[requestID] = req
+
+	return req, true
 }
 
 // ShouldCollectDiagnostics checks whether any data should be collected for the
@@ -579,34 +772,9 @@ func (r *Registry) InsertStatementDiagnostics(
 			errorVal = tree.NewDString(collectionErr.Error())
 		}
 
-		bundleChunksVal := tree.NewDArray(types.Int)
-		bundleToUpload := bundle
-		for len(bundleToUpload) > 0 {
-			chunkSize := int(bundleChunkSize.Get(&r.st.SV))
-			chunk := bundleToUpload
-			if len(chunk) > chunkSize {
-				chunk = chunk[:chunkSize]
-			}
-			bundleToUpload = bundleToUpload[len(chunk):]
-
-			// Insert the chunk into system.statement_bundle_chunks.
-			row, err := txn.QueryRowEx(
-				ctx, "stmt-bundle-chunks-insert", txn.KV(),
-				sessiondata.NodeUserSessionDataOverride,
-				"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
-				"statement diagnostics bundle",
-				tree.NewDBytes(tree.DBytes(chunk)),
-			)
-			if err != nil {
-				return err
-			}
-			if row == nil {
-				return errors.New("failed to check statement bundle chunk")
-			}
-			chunkID := row[0].(*tree.DInt)
-			if err := bundleChunksVal.Append(chunkID); err != nil {
-				return err
-			}
+		bundleChunksVal, err := r.InsertBundleChunk(ctx, txn, "statement diagnostics bundle", bundle)
+		if err != nil {
+			return err
 		}
 
 		collectionTime := timeutil.Now()
@@ -767,4 +935,79 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (r *Registry) InsertBundleChunk(
+	ctx context.Context, txn isql.Txn, description string, bundle []byte,
+) (*tree.DArray, error) {
+	bundleChunksVal := tree.NewDArray(types.Int)
+	bundleToUpload := bundle
+	for len(bundleToUpload) > 0 {
+		chunkSize := int(bundleChunkSize.Get(&r.st.SV))
+		chunk := bundleToUpload
+		if len(chunk) > chunkSize {
+			chunk = chunk[:chunkSize]
+		}
+		bundleToUpload = bundleToUpload[len(chunk):]
+
+		// Insert the chunk into system.statement_bundle_chunks.
+		row, err := txn.QueryRowEx(
+			ctx, "stmt-bundle-chunks-insert", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
+			description,
+			tree.NewDBytes(tree.DBytes(chunk)),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if row == nil {
+			return nil, errors.New("failed to check statement bundle chunk")
+		}
+		chunkID := row[0].(*tree.DInt)
+		if err := bundleChunksVal.Append(chunkID); err != nil {
+			return nil, err
+		}
+	}
+	return bundleChunksVal, nil
+}
+
+func (r *Registry) InsertTxnDiagnostic(
+	ctx context.Context, request TxnRequest, diagnosticBundles []CollectedInstanceID,
+) (CollectedInstanceID, error) {
+	var txnDiagnosticId CollectedInstanceID
+	stmtDiagnostics := tree.NewDArray(types.Int)
+	for _, d := range diagnosticBundles {
+		if err := stmtDiagnostics.Append(tree.NewDInt(tree.DInt(d))); err != nil {
+			return txnDiagnosticId, err
+		}
+	}
+	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		txn.KV().SetDebugName("txn-diag-insert-bundle")
+
+		// TODO insert into txn_diagnostics once the table is made
+		//collectionTime := timeutil.Now()
+		//
+		//// Insert the collection metadata into system.statement_diagnostics.
+		//row, err := txn.QueryRowEx(
+		//	ctx, "txn-diag-insert", txn.KV(),
+		//	sessiondata.NodeUserSessionDataOverride,
+		//	"INSERT INTO system.txn_diagnostics "+
+		//		"(fingerprint_id, collected_at, bundle_chunks, stmt_diagnostic_ids) "+
+		//		"VALUES ($1, $2, $3, $4) RETURNING id",
+		//	request.txnFingerprintId, collectionTime, bundleChunksVal, stmtDiagnostics,
+		//)
+		//if err != nil {
+		//	return err
+		//}
+		//if row == nil {
+		//	return errors.New("failed to insert statement diagnostics")
+		//}
+		//txnDiagnosticId = CollectedInstanceID(*row[0].(*tree.DInt))
+
+		// TODO mark request complete in txn_diagnostics_requests once the table is made
+		return nil
+	})
+
+	return txnDiagnosticId, err
 }
