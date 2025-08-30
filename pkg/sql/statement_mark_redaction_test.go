@@ -84,7 +84,7 @@ func TestMarkRedactionStatement(t *testing.T) {
 		f := tree.NewFmtCtx(
 			tree.FmtAlwaysQualifyTableNames|tree.FmtMarkRedactionNode,
 			tree.FmtAnnotations(&ann),
-			tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt, nil)))
+			tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt)))
 		f.FormatNode(stmt.AST)
 		redactedString := f.CloseAndGetString()
 		require.Equal(t, test.expected, redactedString)
