@@ -100,6 +100,24 @@ var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetti
 	0,
 )
 
+// ReplicateQueueMaxSize is a setting that controls the max size of the
+// replicate queue. When this limit is exceeded, lower priority replicas (not
+// guaranteed to be the lowest) are dropped from the queue.
+var ReplicateQueueMaxSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"kv.replicate_queue.max_size",
+	"maximum number of replicas that can be queued for replicate queue processing; "+
+		"when this limit is exceeded, lower priority (not guaranteed to be the lowest) "+
+		"replicas are dropped from the queue",
+	defaultQueueMaxSize,
+	settings.WithValidateInt(func(v int64) error {
+		if v < defaultQueueMaxSize {
+			return errors.Errorf("cannot be set to a value lower than %d: %d", defaultQueueMaxSize, v)
+		}
+		return nil
+	}),
+)
+
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
@@ -524,6 +542,7 @@ func (metrics *ReplicateQueueMetrics) trackResultByAllocatorAction(
 // additional replica to their range.
 type replicateQueue struct {
 	*baseQueue
+	maxSize   *settings.IntSetting
 	metrics   ReplicateQueueMetrics
 	allocator allocatorimpl.Allocator
 	as        *mmaintegration.AllocatorSync
@@ -549,6 +568,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 		storePool = store.cfg.StorePool
 	}
 	rq := &replicateQueue{
+		maxSize: ReplicateQueueMaxSize,
 		metrics: makeReplicateQueueMetrics(),
 		planner: plan.NewReplicaPlanner(allocator, storePool,
 			store.TestingKnobs().ReplicaPlannerKnobs),
@@ -578,11 +598,16 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			successes:          store.metrics.ReplicateQueueSuccesses,
 			failures:           store.metrics.ReplicateQueueFailures,
 			pending:            store.metrics.ReplicateQueuePending,
+			full:               store.metrics.ReplicateQueueFull,
 			processingNanos:    store.metrics.ReplicateQueueProcessingNanos,
 			purgatory:          store.metrics.ReplicateQueuePurgatory,
 			disabledConfig:     kvserverbase.ReplicateQueueEnabled,
 		},
 	)
+	rq.baseQueue.SetMaxSize(ReplicateQueueMaxSize.Get(&store.cfg.Settings.SV))
+	ReplicateQueueMaxSize.SetOnChange(&store.cfg.Settings.SV, func(ctx context.Context) {
+		rq.baseQueue.SetMaxSize(ReplicateQueueMaxSize.Get(&store.cfg.Settings.SV))
+	})
 	updateFn := func() {
 		select {
 		case rq.updateCh <- timeutil.Now():
