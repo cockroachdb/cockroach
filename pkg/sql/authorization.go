@@ -125,7 +125,8 @@ func (p *planner) HasPrivilege(
 	// Do a safety check on the object, if it is considered unsafe
 	// does the caller have the appropriate session data to access it?
 	if p.objectIsUnsafe(ctx, privilegeObject) {
-		if err := unsafesql.CheckInternalsAccess(p.SessionData()); err != nil {
+		q := tree.FormatAstAsRedactableString(p.stmt.AST, p.extendedEvalCtx.Annotations, &p.ExecCfg().Settings.SV)
+		if err := unsafesql.CheckInternalsAccess(ctx, p.SessionData(), q); err != nil {
 			return false, err
 		}
 	}
