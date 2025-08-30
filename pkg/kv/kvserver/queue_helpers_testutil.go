@@ -22,6 +22,15 @@ func (bq *baseQueue) testingAdd(
 	return bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority, noopProcessCallback)
 }
 
+// testingAddWithCallback is the same as testingAdd, but allows the caller to
+// register a process callback that will be invoked when the replica is enqueued
+// or processed.
+func (bq *baseQueue) testingAddWithCallback(
+	ctx context.Context, repl replicaInQueue, priority float64, callback processCallback,
+) (bool, error) {
+	return bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority, callback)
+}
+
 func forceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) error {
 	// Check that the system config is available. It is needed by many queues. If
 	// it's not available, some queues silently fail to process any replicas,
