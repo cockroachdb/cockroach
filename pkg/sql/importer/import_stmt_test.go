@@ -3828,13 +3828,29 @@ func TestImportDefaultNextVal(t *testing.T) {
 	})
 }
 
+// TestImportDefaultWithResume tests import job resumption with sequence default values
+// and verifies that bulk operation summaries are correctly handled across multiple
+// pause/resume cycles without duplication or data loss.
+//
+// The test specifically validates:
+//  1. Sequence value allocation and chunk management during import pauses/resumes
+//  2. Bulk operation summary consistency - ensuring row counts are not duplicated
+//     across different attempts of the same import execution
+//  3. Job progress tracking remains accurate through multiple retry attempts
+//
+// The test uses two breakpoints during CSV processing:
+// - First breakpoint at 7*batchSize (35 rows with batchSize=5)
+// - Second breakpoint at 9*batchSize (45 rows with batchSize=5)
+// This creates three execution attempts, allowing verification that at the very end of
+// the execution, the accumulated bulk summary correctly tracks progress without losing
+// or duplicating row counts.
 func TestImportDefaultWithResume(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer setImportReaderParallelism(1)()
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
-	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
+	defer row.TestingSetDatumRowConverterBatchSize(3 * batchSize)()
 
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
@@ -3901,9 +3917,14 @@ func TestImportDefaultWithResume(t *testing.T) {
 
 			expectedNumRows := 10*batchSize + 1
 			testBarrier, csvBarrier := newSyncBarrier()
+			testBarrier2, csvBarrier2 := newSyncBarrier()
 			csv1 := newCsvGenerator(0, expectedNumRows, &intGenerator{}, &strGenerator{})
 			csv1.addBreakpoint(7*batchSize, func() (bool, error) {
 				defer csvBarrier.Enter()()
+				return false, nil
+			})
+			csv1.addBreakpoint(9*batchSize, func() (bool, error) {
+				defer csvBarrier2.Enter()()
 				return false, nil
 			})
 
@@ -3956,6 +3977,40 @@ func TestImportDefaultWithResume(t *testing.T) {
 			var seqValOnPause int64
 			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT last_value FROM %s`, test.sequence)).Scan(&seqValOnPause)
 
+			// Check summary counts after first pause - should have partial data
+			require.Equal(t, 1, len(js.prog.Summary.EntryCounts))
+
+			// Unpause the job and wait for it to hit the second breakpoint.
+			if err := registry.Unpause(ctx, nil, jobID); err != nil {
+				t.Fatal(err)
+			}
+
+			// Wait until we hit the second breakpoint
+			unblockImport2 := testBarrier2.Enter()
+			// Wait until we have recorded more job progress.
+			js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool {
+				return js.prog.ResumePos[0] > 6*batchSize-1
+			})
+
+			// Pause the job again for the second time
+			if err := registry.PauseRequested(ctx, nil, jobID, ""); err != nil {
+				t.Fatal(err)
+			}
+			unblockImport2()
+
+			// Wait for the job to be paused again
+			js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool {
+				return jobs.StatePaused == js.status
+			})
+
+			// Check summary counts after second pause - should still be consistent
+			require.Equal(t, 1, len(js.prog.Summary.EntryCounts))
+
+			// Check sequence value hasn't changed during the second pause
+			var seqValOnSecondPause int64
+			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT last_value FROM %s`, test.sequence)).Scan(&seqValOnSecondPause)
+			require.Equal(t, seqValOnPause, seqValOnSecondPause)
+
 			// Unpause the job and wait for it to complete.
 			if err := registry.Unpause(ctx, nil, jobID); err != nil {
 				t.Fatal(err)
@@ -3971,6 +4026,14 @@ func TestImportDefaultWithResume(t *testing.T) {
 			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT last_value FROM %s`,
 				test.sequence)).Scan(&seqValOnSuccess)
 			require.Equal(t, seqValOnPause, seqValOnSuccess)
+
+			// Verify final summary counts - should contain exactly the expected number of rows
+			// with no duplication despite multiple pause/resume cycles
+			require.Equal(t, 1, len(js.prog.Summary.EntryCounts))
+
+			for _, entry := range js.prog.Summary.EntryCounts {
+				require.Equal(t, int64(expectedNumRows), entry)
+			}
 		})
 	}
 }

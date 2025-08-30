@@ -469,12 +469,16 @@ func testMigrationWithFailures(
 			}
 
 			t.Log("resuming the schema change job")
+
+			// Resume the schema-change job first to release any FOR UPDATE locks it holds.
+			// This must happen before attempting cancellation to avoid deadlock: the job update
+			// query uses FOR UPDATE which would block cancelJob's database operations.
+			schemaEvent.errChan <- nil
+
 			// If configured so, mark the schema-change job to cancel.
 			if test.cancelSchemaJob {
 				cancelJob(t, ctx, s, schemaEvent.orig.ID)
 			}
-			// Resume the schema-change job and all other jobs.
-			schemaEvent.errChan <- nil
 
 			// If canceled the job, wait for the job to finish.
 			if test.cancelSchemaJob {
