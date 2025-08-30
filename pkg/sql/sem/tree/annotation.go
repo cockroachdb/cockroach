@@ -5,6 +5,8 @@
 
 package tree
 
+import "github.com/cockroachdb/cockroach/pkg/util/buildutil"
+
 // AnnotationIdx is the 1-based index of an annotation. AST nodes that can
 // be annotated store such an index (unique within that AST).
 type AnnotationIdx int32
@@ -20,6 +22,12 @@ type AnnotatedNode struct {
 // GetAnnotation retrieves the annotation associated with this node.
 func (n AnnotatedNode) GetAnnotation(ann *Annotations) interface{} {
 	if n.AnnIdx == NoAnnotation {
+		return nil
+	}
+	if (len(*ann) < int(n.AnnIdx) || int(n.AnnIdx) < 1) && !buildutil.CrdbTestBuild {
+		// Avoid index-out-of bounds panics in production builds. The impact is
+		// that the node will be treated as if it doesn't have the annotation,
+		// which is better than the process crash.
 		return nil
 	}
 	return ann.Get(n.AnnIdx)
