@@ -458,6 +458,13 @@ func TestLogic_connect_privilege(
 	runLogicTest(t, "connect_privilege")
 }
 
+func TestLogic_constrained_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "constrained_stats")
+}
+
 func TestLogic_crdb_internal(
 	t *testing.T,
 ) {

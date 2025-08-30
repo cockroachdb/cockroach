@@ -432,7 +432,9 @@ func (b *Builder) buildCancelSessions(
 func (b *Builder) buildCreateStatistics(
 	c *memo.CreateStatisticsExpr,
 ) (_ execPlan, outputCols colOrdMap, err error) {
-	node, err := b.factory.ConstructCreateStatistics(c.Syntax)
+	table := b.mem.Metadata().Table(c.Table)
+	index := table.Index(c.Index)
+	node, err := b.factory.ConstructCreateStatistics(c.Syntax, table, index, c.Constraint)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}

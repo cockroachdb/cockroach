@@ -72,6 +72,8 @@ go_library(
         "//pkg/sql/lex",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/idxconstraint",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/optgen/exprgen",
