@@ -437,6 +437,11 @@ vectorized: true
 │ estimated row count: 2 (missing stats)
 │ pred: column1 = a
 │
+├── • values
+│     columns: ()
+│     ├── (a,)
+│     └── (b,)
+│
 └── • scan
       columns: (a, b, c)
       estimated row count: 1,000 (missing stats)
