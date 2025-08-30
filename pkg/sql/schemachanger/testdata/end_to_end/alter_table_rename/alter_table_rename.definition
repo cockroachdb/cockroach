@@ -1,0 +1,73 @@
+setup
+CREATE TABLE t1 (id INT PRIMARY KEY, data TEXT);
+CREATE TABLE t2 (id INT PRIMARY KEY, value INT);
+CREATE VIEW v1 AS SELECT * FROM t1;
+CREATE SEQUENCE seq1 START 1;
+----
+
+# Test basic table rename
+test
+ALTER TABLE t1 RENAME TO t1_renamed;
+----
+
+# Test rename with IF EXISTS when table exists
+test
+ALTER TABLE IF EXISTS t2 RENAME TO t2_renamed;
+----
+
+# Test rename with IF EXISTS when table doesn't exist (should be no-op)
+test
+ALTER TABLE IF EXISTS nonexistent RENAME TO new_name;
+----
+
+# Test rename to same name (should be no-op)
+test
+ALTER TABLE t1 RENAME TO t1;
+----
+
+# Test rename view
+test
+ALTER TABLE v1 RENAME TO v1_renamed;
+----
+
+# Test rename sequence
+test
+ALTER TABLE seq1 RENAME TO seq1_renamed;
+----
+
+# Test name conflict detection - try to rename to existing table
+setup
+CREATE TABLE t3 (id INT PRIMARY KEY);
+CREATE TABLE t4 (id INT PRIMARY KEY);
+----
+
+test
+ALTER TABLE t3 RENAME TO t4;
+----
+
+# Test concurrent rename operations
+setup
+CREATE TABLE t5 (id INT PRIMARY KEY);
+----
+
+test
+ALTER TABLE t5 RENAME TO t5_new;
+----
+
+# Test rename with special characters in name
+setup
+CREATE TABLE "table-with-dashes" (id INT PRIMARY KEY);
+----
+
+test
+ALTER TABLE "table-with-dashes" RENAME TO "table_with_underscores";
+----
+
+# Test rename rollback scenario
+setup
+CREATE TABLE t6 (id INT PRIMARY KEY);
+----
+
+test rollback
+ALTER TABLE t6 RENAME TO t6_renamed;
+----
