@@ -142,14 +142,31 @@ var ConnectedStoreExpiration = settings.RegisterDurationSetting(
 	5*time.Minute,
 )
 
+// useRangeTenantIDForNonAdminEnabled determines whether the range's tenant ID
+// is used by admission control when called by the system tenant.
+var useRangeTenantIDForNonAdminEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.use_range_tenant_id_for_non_admin.enabled",
+	"when true, and the caller is the system tenant, the tenantID used by admission control "+
+		"for non-admin requests is overridden to the range's tenantID",
+	true,
+)
+
 // Controller provides admission control for the KV layer.
 type Controller interface {
 	// AdmitKVWork must be called before performing KV work.
 	// BatchRequest.AdmissionHeader and BatchRequest.Replica.StoreID must be
-	// populated for admission to work correctly. If err is non-nil, the
-	// returned handle can be ignored. If err is nil, AdmittedKVWorkDone must be
-	// called after the KV work is done executing.
-	AdmitKVWork(context.Context, roachpb.TenantID, *kvpb.BatchRequest) (Handle, error)
+	// populated for admission to work correctly. The requestTenantID represents
+	// the authenticated caller and must be populated. The rangeTenantID
+	// represents the tenant of the range on which the work is being performed
+	// -- in rare cases it may be unpopulated.
+	//
+	// If err is non-nil, the returned handle can be ignored. If err is nil,
+	// AdmittedKVWorkDone must be called after the KV work is done executing.
+	AdmitKVWork(
+		_ context.Context, requestTenantID roachpb.TenantID, rangeTenantID roachpb.TenantID,
+		_ *kvpb.BatchRequest,
+	) (Handle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
 	AdmittedKVWorkDone(Handle, *StoreWriteBytes)
@@ -269,16 +286,27 @@ func MakeController(
 // TODO(irfansharif): There's a fair bit happening here and there's no test
 // coverage. Fix that.
 func (n *controllerImpl) AdmitKVWork(
-	ctx context.Context, tenantID roachpb.TenantID, ba *kvpb.BatchRequest,
-) (handle Handle, retErr error) {
-	ah := Handle{tenantID: tenantID}
+	ctx context.Context,
+	requestTenantID roachpb.TenantID,
+	rangeTenantID roachpb.TenantID,
+	ba *kvpb.BatchRequest,
+) (_ Handle, retErr error) {
 	if n.kvAdmissionQ == nil {
-		return ah, nil
+		return Handle{}, nil
 	}
 
 	bypassAdmission := ba.IsAdmin()
 	source := ba.AdmissionHeader.Source
-	if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
+	tenantID := requestTenantID
+	if requestTenantID.IsSystem() {
+		if useRangeTenantIDForNonAdminEnabled.Get(&n.settings.SV) && !bypassAdmission &&
+			rangeTenantID.IsSet() {
+			tenantID = rangeTenantID
+		}
+		// Else, either it is an admin request (common), or rangeTenantID is not
+		// set (rare), or the cluster setting is disabled, so continue using the
+		// SystemTenantID.
+	} else {
 		// Request is from a SQL node.
 		bypassAdmission = false
 		source = kvpb.AdmissionHeader_FROM_SQL
@@ -286,6 +314,7 @@ func (n *controllerImpl) AdmitKVWork(
 	if source == kvpb.AdmissionHeader_OTHER {
 		bypassAdmission = true
 	}
+	ah := Handle{tenantID: tenantID}
 	// TODO(abaptist): Revisit and deprecate this setting in v23.1.
 	if admission.KVBulkOnlyAdmissionControlEnabled.Get(&n.settings.SV) {
 		if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
