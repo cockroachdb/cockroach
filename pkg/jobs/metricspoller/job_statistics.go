@@ -253,7 +253,10 @@ func updateJobPTSMetrics(
 		if jobspb.Type(typ) == jobspb.TypeUnspecified { // do not track TypeUnspecified
 			continue
 		}
-		m := jobMetrics.JobMetrics[typ]
+		m := jobMetrics.JobPTSMetrics[typ]
+		if m == nil { // this job doesn't interact with PTS system
+			continue
+		}
 		stats, found := ptsStats[jobspb.Type(typ)]
 		if found {
 			m.NumJobsWithPTS.Update(stats.numRecords)
