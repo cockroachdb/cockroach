@@ -434,6 +434,35 @@ is shut down inside the same process as the KV layer.
 | `InstanceID` | The ID of the server instance. | no |
 | `TenantName` | The name of the tenant at the time the event was emitted. | yes |
 
+## Contention events
+
+Aggregated information about contention events.
+
+Events in this category are logged to the `SQL_EXEC` channel.
+
+
+### `aggregated_contention_info`
+
+An event of type `aggregated_contention_info` is recorded periodically when contention events
+are resolved.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `WaitingStmtFingerprintId` |  | no |
+| `WaitingTxnFingerprintId` |  | no |
+| `BlockingTxnFingerprintId` |  | no |
+| `ContendedKey` |  | partially |
+| `Duration` |  | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Debugging events
 
 Events in this category pertain to debugging operations performed by

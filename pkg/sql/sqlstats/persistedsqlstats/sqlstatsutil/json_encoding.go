@@ -455,6 +455,12 @@ func EncodeUint64ToBytes(id uint64) []byte {
 	return encoding.EncodeUint64Ascending(result, id)
 }
 
-func encodeStmtFingerprintIDToString(id appstatspb.StmtFingerprintID) string {
+// EncodeStmtFingerprintIDToString returns the hex string representation of a statement fingerprint ID.
+func EncodeStmtFingerprintIDToString(id appstatspb.StmtFingerprintID) string {
+	return hex.EncodeToString(EncodeUint64ToBytes(uint64(id)))
+}
+
+// EncodeTxnFingerprintIDToString returns the hex string representation of a transaction fingerprint ID.
+func EncodeTxnFingerprintIDToString(id appstatspb.TransactionFingerprintID) string {
 	return hex.EncodeToString(EncodeUint64ToBytes(uint64(id)))
 }
