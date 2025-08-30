@@ -21,10 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -365,7 +363,6 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	v1, v2 := raftlog.EntryEncodingStandardWithAC, raftlog.EntryEncodingSideloadedWithAC
-	rangeID := roachpb.RangeID(1)
 
 	sstFat := kvserverpb.ReplicatedEvalResult_AddSSTable{
 		Data:  []byte("foo"),
@@ -375,18 +372,18 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		CRC32: 0, // not checked
 	}
 
-	putOnDisk := func(_ *raftentry.Cache, ss SideloadStorage) {
+	putOnDisk := func(ss SideloadStorage) {
 		require.NoError(t, ss.Put(context.Background(), 5, 6, sstFat.Data))
 	}
 
 	for _, test := range []struct {
 		name string
-		// Entry passed into maybeInlineSideloadedRaftCommand and the entry
-		// after having (perhaps) been modified.
+		// Entry passed into MaybeInlineSideloadedRaftCommand and the entry after
+		// having (perhaps) been modified.
 		thin, fat raftpb.Entry
-		// Populate the raft entry cache and sideload storage before running the test.
-		setup func(*raftentry.Cache, SideloadStorage)
-		// If nonempty, the error expected from maybeInlineSideloadedRaftCommand.
+		// Populate the sideload storage before running the test.
+		setup func(SideloadStorage)
+		// If nonempty, the error expected from MaybeInlineSideloadedRaftCommand.
 		expErr string
 		// If nonempty, a regex that the recorded trace span must match.
 		expTrace string
@@ -409,20 +406,11 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		{
 			name: "v2-with-payload-with-file-no-cache",
 			thin: mkEnt(v2, 5, 6, &sstThin), fat: mkEnt(v2, 5, 6, &sstFat),
-			setup: putOnDisk, expTrace: "inlined entry not cached",
-		},
-		{
-			name: "v2-with-payload-with-file-with-cache",
-			thin: mkEnt(v2, 5, 6, &sstThin), fat: mkEnt(v2, 5, 6, &sstFat),
-			setup: func(ec *raftentry.Cache, ss SideloadStorage) {
-				putOnDisk(ec, ss)
-				ec.Add(rangeID, []raftpb.Entry{mkEnt(v2, 5, 6, &sstFat)}, true)
-			}, expTrace: "using cache hit",
-		},
-		{
+			setup: putOnDisk, expTrace: "inlining sideloaded",
+		}, {
 			name: "v2-fat-without-file",
 			thin: mkEnt(v2, 5, 6, &sstFat), fat: mkEnt(v2, 5, 6, &sstFat),
-			setup:    func(ec *raftentry.Cache, ss SideloadStorage) {},
+			setup:    func(ss SideloadStorage) {},
 			expTrace: "already inlined",
 		},
 	} {
@@ -434,13 +422,12 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 			ss := newTestingSideloadStorage(eng)
-			ec := raftentry.NewCache(1024) // large enough
 			if test.setup != nil {
-				test.setup(ec, ss)
+				test.setup(ss)
 			}
 
 			thinCopy := *(protoutil.Clone(&test.thin).(*raftpb.Entry))
-			newEnt, err := MaybeInlineSideloadedRaftCommand(ctx, rangeID, thinCopy, ss, ec)
+			newEnt, err := MaybeInlineSideloadedRaftCommand(ctx, thinCopy, ss)
 			if want := test.expErr; want != "" {
 				require.ErrorContains(t, err, want)
 			} else {
