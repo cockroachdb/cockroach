@@ -38,7 +38,8 @@ type BinaryOperatorSymbol uint8
 
 // BinaryExpr.Operator
 const (
-	Bitand BinaryOperatorSymbol = iota
+	UnknownBinaryOp BinaryOperatorSymbol = iota
+	Bitand
 	Bitor
 	Bitxor
 	Plus

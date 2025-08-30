@@ -17,15 +17,15 @@ import (
 // TranslateNonIgnoreAggs, that every aggregate will be handled somehow by it.
 // If that restriction is lifted this test can be deleted.
 func TestAllAggsIgnoreNullsOrNullOnEmpty(t *testing.T) {
-	for op := range opt.AggregateOpReverseMap {
+	opt.ForEachAggregateOp(func(op opt.Operator) {
 		if op == opt.CountRowsOp {
 			// CountRows is the only aggregate allowed to break this rule.
-			continue
+			return
 		}
 		if !opt.AggregateIgnoresNulls(op) && !opt.AggregateIsNullOnEmpty(op) {
 			panic(errors.AssertionFailedf(
 				"%s does not ignore nulls and is not null on empty", redact.Safe(op),
 			))
 		}
-	}
+	})
 }

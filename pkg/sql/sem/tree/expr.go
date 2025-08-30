@@ -1174,7 +1174,8 @@ type UnaryOperatorSymbol uint8
 
 // UnaryExpr.Operator.Symbol
 const (
-	UnaryMinus UnaryOperatorSymbol = iota
+	UnknownUnaryOp UnaryOperatorSymbol = iota
+	UnaryMinus
 	UnaryComplement
 	UnarySqrt
 	UnaryCbrt
