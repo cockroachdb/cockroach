@@ -1627,5 +1627,30 @@ CREATE TABLE drop_region_126549.t1 (n string PRIMARY KEY, INDEX((lower(n)))) LOC
 statement ok
 ALTER DATABASE drop_region_126549 DROP REGION "us-east-1";
 
+# Regression test for issue #151216
+# Tests that CREATE VIEW with references to crdb_region column in expressions
+# (but not directly returned) should not trigger validation assertion errors.
+subtest issue_151216_view_crdb_region_reference
+
+statement ok
+CREATE DATABASE bank_151216 PRIMARY REGION "us-east-1" REGIONS "us-east-1", "ca-central-1", "ap-southeast-2" SURVIVE REGION FAILURE;
+
+statement ok
+USE bank_151216;
+
+statement ok
+CREATE TABLE t1 (c1 INT) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE MATERIALIZED VIEW mv1 AS SELECT c1, CASE WHEN crdb_region = 'us-east-1' THEN 'east' ELSE 'other' END AS region_type FROM t1;
+
+statement ok
+CREATE VIEW v2 AS SELECT c1, crdb_region = 'us-east-1' AS is_us_east1 FROM t1;
+
+statement ok
+SET sql_safe_updates = false;
+DROP DATABASE bank_151216;
+SET sql_safe_updates = true
+
 subtest end
 
