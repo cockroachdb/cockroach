@@ -359,6 +359,9 @@ type planTop struct {
 	// avoidBuffering, when set, causes the execution to avoid buffering
 	// results.
 	avoidBuffering bool
+	// avoidVectorization, when set, causes the execution to avoid using
+	// vectorized execution.
+	avoidVectorization bool
 
 	// If we are collecting query diagnostics, flow information, including
 	// diagrams, are saved here.
