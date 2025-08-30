@@ -288,6 +288,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/beorn7/perks/com_github_beorn7_perks-v1.0.1.zip": "25bd9e2d94aca770e6dbc1f53725f84f6af4432f631d35dd2c46f96ef0512f1a",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/bgentry/go-netrc/com_github_bgentry_go_netrc-v0.0.0-20140422174119-9fd32a8b3d3d.zip": "59fbb1e8e307ccd7052f77186990d744284b186e8b1c5ebdfb12405ae8d7f935",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/bgentry/speakeasy/com_github_bgentry_speakeasy-v0.1.0.zip": "d4bfd48b9bf68c87f92c94478ac910bcdab272e15eb909d58f1fb939233f75f0",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/binxio/gcloudconfig/com_github_binxio_gcloudconfig-v0.1.5.zip": "82797ef5d9fa4cba09d64ca885a3b6b8867d046c8f144ed15dc102085b0c6ceb",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/biogo/store/com_github_biogo_store-v0.0.0-20160505134755-913427a1d5e8.zip": "26551f8829c5ada84a68ef240732375be6747252aba423cf5c88bc03002c3600",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/bitly/go-hostpool/com_github_bitly_go_hostpool-v0.0.0-20171023180738-a3a6125de932.zip": "9a55584d7fa2c1639d0ea11cd5b437786c2eadc2401d825e699ad6445fc8e476",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/bitly/go-simplejson/com_github_bitly_go_simplejson-v0.5.0.zip": "53930281dc7fba8947c1b1f07c82952a38dcaefae23bd3c8e71d70a6daa6cb40",

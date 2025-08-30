@@ -1128,6 +1128,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_binxio_gcloudconfig",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/binxio/gcloudconfig",
+        sha256 = "82797ef5d9fa4cba09d64ca885a3b6b8867d046c8f144ed15dc102085b0c6ceb",
+        strip_prefix = "github.com/binxio/gcloudconfig@v0.1.5",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/binxio/gcloudconfig/com_github_binxio_gcloudconfig-v0.1.5.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_biogo_store",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/biogo/store",
