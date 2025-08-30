@@ -252,7 +252,7 @@ func printTTLRateLimitNotice(ctx context.Context, p eval.ClientNoticeSender) {
 	p.BufferClientNotice(
 		ctx,
 		errors.WithDetail(
-			pgnotice.Newf("The TTL rate limit is per leaseholder per table."),
+			pgnotice.Newf("The TTL rate limit is per node per table."),
 			ttlDocDetail,
 		),
 	)
