@@ -340,6 +340,10 @@ func (pb payloadBuilder) droppedSchemaObjects(b buildCtx) (ret []string) {
 func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 	const mutationID = 1
 	switch e := pb.Element().(type) {
+	case *scpb.Namespace:
+		if pb.maybePayload != nil {
+			return pb.maybePayload
+		}
 	case *scpb.Database:
 		if pb.TargetStatus == scpb.Status_PUBLIC {
 			return &eventpb.CreateDatabase{
