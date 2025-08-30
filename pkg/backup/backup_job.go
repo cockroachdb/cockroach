@@ -458,6 +458,7 @@ func backup(
 		execCtx.User(),
 		execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
 		details,
+		backupManifest.RevisionStartTime,
 	); err != nil {
 		return roachpb.RowCount{}, 0, errors.Wrapf(err, "writing backup index metadata")
 	}
