@@ -384,7 +384,8 @@ func startPProfEndPoint(ctx context.Context) {
 }
 
 func runRun(gen workload.Generator, urls []string, dbName string) error {
-	ctx := context.Background()
+	ctx, cancel := signal.NotifyContext(context.Background(), exitSignals...)
+	defer cancel()
 
 	var formatter outputFormat
 	switch *displayFormat {
@@ -463,9 +464,17 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	prepareStart := timeutil.Now()
 	log.Dev.Infof(ctx, "creating load generator...")
 
-	prepareCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	// We set up a timer that cancels this context after prepareTimeout,
+	// but we'll collect the stacks before we do, so that they can be
+	// logged.
+	prepareCtx, prepareCancel := context.WithCancel(ctx)
+	defer prepareCancel()
 	stacksCh := make(chan []byte, 1)
+	const prepareTimeout = 90 * time.Minute
+	defer time.AfterFunc(prepareTimeout, func() {
+		stacksCh <- allstacks.Get()
+		prepareCancel()
+	}).Stop()
 
 	if prepareErr := func(ctx context.Context) error {
 		// We set up a timer that cancels this context after prepareTimeout,
@@ -507,11 +516,21 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 	start := timeutil.Now()
 	errCh := make(chan error)
-	var rampDone chan struct{}
+
+	displayTicker := time.NewTicker(*displayEvery)
+	defer displayTicker.Stop()
+
+	var resetStats atomic.Bool // Reset stats after ramp completes
+
+	// Create a context indicate channel to signal when the ramp period finishes.
 	if *ramp > 0 {
-		// Create a channel to signal when the ramp period finishes. Will
-		// be reset to nil when consumed by the process loop below.
-		rampDone = make(chan struct{})
+		rampCtx, _ := context.WithTimeout(ctx, *ramp) //nolint:lostcancel
+
+		// Reset the ticker and stats after the ramp period is complete
+		go func() {
+			<-rampCtx.Done()
+			resetStats.Store(true)
+		}()
 	}
 
 	// If ops.Close is specified, defer it to ensure that it is run before
@@ -526,56 +545,48 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 	workersCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
-	var wg sync.WaitGroup
-	wg.Add(len(ops.WorkerFns))
+
+	// implement the --duration timeout
+	if *duration > 0 {
+		workersCtx, cancelWorkers = context.WithTimeout(workersCtx, *duration+*ramp)
+	}
+
+	var workerWG sync.WaitGroup
+	workerWG.Add(len(ops.WorkerFns))
+
+	// Cancel all implement --max-ops limit (when all the workers are done)
+	go func() {
+		workerWG.Wait()
+		cancelWorkers()
+	}()
+
+	// Spawn workers
 	go func() {
 		// If a ramp period was specified, start all the workers gradually
 		// with a new context.
-		var rampCtx context.Context
-		if rampDone != nil {
-			var cancel func()
-			rampCtx, cancel = context.WithTimeout(workersCtx, *ramp)
-			defer cancel()
-		}
+		var rampWG sync.WaitGroup
 
 		for i, workFn := range ops.WorkerFns {
-			go func(i int, workFn func(context.Context) error) {
+			i, workFn := i, workFn // https://golang.org/doc/faq#closures_and_goroutines
+			rampWG.Add(1)
+
+			go func() {
 				// If a ramp period was specified, start all of the workers
 				// gradually.
-				if rampCtx != nil {
+				if *ramp > 0 {
 					rampPerWorker := *ramp / time.Duration(len(ops.WorkerFns))
 					time.Sleep(time.Duration(i) * rampPerWorker)
 				}
-				workerRun(workersCtx, errCh, &wg, limiter, workFn)
-			}(i, workFn)
+				rampWG.Done()
+				workerRun(workersCtx, errCh, &workerWG, limiter, workFn)
+			}()
 		}
 
-		if rampCtx != nil {
-			// Wait for the ramp period to finish, then notify the process loop
-			// below to reset timers and histograms.
-			<-rampCtx.Done()
-			close(rampDone)
-		}
+		rampWG.Wait()
 	}()
-
-	ticker := time.NewTicker(*displayEvery)
-	defer ticker.Stop()
-	done := make(chan os.Signal, 3)
-	signal.Notify(done, exitSignals...)
-
-	go func() {
-		wg.Wait()
-		done <- os.Interrupt
-	}()
-
-	if *duration > 0 {
-		go func() {
-			time.Sleep(*duration + *ramp)
-			done <- os.Interrupt
-		}()
-	}
 
 	everySecond := log.Every(*displayEvery)
+
 	for {
 		select {
 		case err := <-errCh:
@@ -590,29 +601,32 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			log.Dev.Errorf(ctx, "workload run error: %+v", err)
 			return err
 
-		case <-ticker.C:
+		case <-displayTicker.C:
 			startElapsed := timeutil.Since(start)
 			reg.Tick(func(t histogram.Tick) {
 				formatter.outputTick(startElapsed, t)
-				if t.Exporter != nil && rampDone == nil {
+				if t.Exporter != nil {
 					if err := t.Exporter.SnapshotAndWrite(t.Hist, t.Now, t.Elapsed, &t.Name); err != nil {
 						log.Dev.Warningf(ctx, "histogram: %v", err)
 					}
 				}
 			})
 
-		// Once the load generator is fully ramped up, we reset the histogram
-		// and the start time to throw away the stats for the ramp up period.
-		case <-rampDone:
-			rampDone = nil
-			start = timeutil.Now()
-			formatter.rampDone()
-			reg.Tick(func(t histogram.Tick) {
-				t.Cumulative.Reset()
-				t.Hist.Reset()
-			})
+			if resetStats.CompareAndSwap(true, false) {
+				// Used by load generator to reset stats after workload is fully ramped
+				// up.  Reset the histogram and the start time to throw away the stats
+				// for the ramp up period.
+				reg.Tick(func(t histogram.Tick) {
+					t.Elapsed = 0
+					t.Cumulative.Reset()
+					t.Hist.Reset()
+				})
+				formatter.rampDone()
+				start = timeutil.Now()
+				displayTicker.Reset(*displayEvery)
+			}
 
-		case <-done:
+		case <-workersCtx.Done():
 			cancelWorkers()
 
 			startElapsed := timeutil.Since(start)
