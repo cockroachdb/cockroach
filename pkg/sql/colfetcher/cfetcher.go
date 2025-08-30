@@ -460,6 +460,15 @@ func (cf *cFetcher) Init(
 	// MVCC decoding.
 	if cf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
 		if cf.txn != nil && cf.txn.BufferedWritesEnabled() {
+			if cf.txn.Type() == kv.LeafTxn {
+				// We're only allowed to disable buffered writes on the RootTxn.
+				// If we have a LeafTxn, we'll return an assertion error instead
+				// of crashing.
+				//
+				// Note that we might have a LeafTxn with no buffered writes, in
+				// which case BufferedWritesEnabled() is false.
+				return errors.AssertionFailedf("got LeafTxn when MVCC decoding is required")
+			}
 			cf.txn.SetBufferedWritesEnabled(false /* enabled */)
 		}
 	}
