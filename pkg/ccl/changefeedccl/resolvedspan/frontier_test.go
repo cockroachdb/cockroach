@@ -335,6 +335,10 @@ func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
 
 			// Helper to create spans for tables.
 			tableSpan := func(tableID uint32) roachpb.Span {
+				// Randomly choose either the full table span or an index span.
+				if rnd.Float64() < 0.5 {
+					return codec.TableSpan(tableID)
+				}
 				prefix := codec.IndexPrefix(tableID, 1 /* indexID */)
 				return roachpb.Span{
 					Key:    prefix,
