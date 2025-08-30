@@ -107,6 +107,11 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 	if node.Path == nil {
 		ctx.WriteString("SHOW BACKUPS IN ")
 		ctx.FormatURIs(node.InCollection)
+		if !node.Options.IsDefault() {
+			ctx.WriteString(" WITH OPTIONS (")
+			ctx.FormatNode(&node.Options)
+			ctx.WriteString(")")
+		}
 		return
 	}
 	ctx.WriteString("SHOW BACKUP ")
@@ -144,6 +149,7 @@ type ShowBackupOptions struct {
 	EncryptionPassphrase Expr
 	Privileges           bool
 	SkipSize             bool
+	Index                bool
 
 	// EncryptionInfoDir is a hidden option used when the user wants to run the deprecated
 	//
@@ -170,6 +176,11 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		}
 		addSep = true
 	}
+	// Index is only used in SHOW BACKUPS
+	if o.Index {
+		ctx.WriteString("index")
+	}
+
 	if o.AsJson {
 		ctx.WriteString("as_json")
 		addSep = true
@@ -248,7 +259,8 @@ func (o ShowBackupOptions) IsDefault() bool {
 		o.EncryptionInfoDir == options.EncryptionInfoDir &&
 		o.CheckConnectionTransferSize == options.CheckConnectionTransferSize &&
 		o.CheckConnectionDuration == options.CheckConnectionDuration &&
-		o.CheckConnectionConcurrency == options.CheckConnectionConcurrency
+		o.CheckConnectionConcurrency == options.CheckConnectionConcurrency &&
+		o.Index == options.Index
 }
 
 func combineBools(v1 bool, v2 bool, label string) (bool, error) {

@@ -1759,22 +1759,26 @@ func TestBackupRestoreResume(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				backupDir := dir + "/backup" + "-" + item.testName
+				collectionURI := fmt.Sprintf("nodelocal://1/%s", item.testName)
+				subdir := time.Now().Format(backupbase.DateBasedIntoFolderName)
 
-				if err := os.MkdirAll(backupDir+item.checkpointDirectory, 0755); err != nil {
+				checkpointDir := path.Join(dir, item.testName, subdir, item.checkpointDirectory)
+				if err := os.MkdirAll(checkpointDir, 0755); err != nil {
 					t.Fatal(err)
 				}
-				checkpointFile := backupDir + item.checkpointDirectory + "/" + backupinfo.BackupManifestCheckpointName
+				checkpointFile := path.Join(checkpointDir, backupinfo.BackupManifestCheckpointName)
 				if err := os.WriteFile(checkpointFile, mockManifest, 0644); err != nil {
 					t.Fatal(err)
 				}
-				uri := "nodelocal://1/backup" + "-" + item.testName
 				createAndWaitForJob(
 					t, sqlDB, []descpb.ID{backupTableDesc.GetID()},
 					jobspb.BackupDetails{
+						Destination: jobspb.BackupDetails_Destination{
+							Subdir: subdir,
+						},
 						EndTime:       srv.Clock().Now(),
-						CollectionURI: uri,
-						URI:           uri,
+						CollectionURI: collectionURI,
+						URI:           fmt.Sprintf("%s%s", collectionURI, subdir),
 					},
 					jobspb.BackupProgress{},
 					roachpb.Version{},
@@ -1782,7 +1786,7 @@ func TestBackupRestoreResume(t *testing.T) {
 
 				// If the backup properly took the (incorrect) checkpoint into account, it
 				// won't have tried to re-export any keys within backupCompletedSpan.
-				backupManifestFile := backupDir + "/" + backupbase.BackupManifestName
+				backupManifestFile := path.Join(dir, item.testName, subdir, backupbase.BackupManifestName)
 				backupManifestBytes, err := os.ReadFile(backupManifestFile)
 				if err != nil {
 					t.Fatal(err)
