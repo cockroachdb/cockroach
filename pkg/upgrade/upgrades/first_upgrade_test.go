@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -140,8 +141,14 @@ func TestFirstUpgrade(t *testing.T) {
 	// the only post-deserialization change should be SetModTimeToMVCCTimestamp.
 	require.False(t, readDescFromStorage().GetModificationTime().IsEmpty())
 	changes = readDescFromStorage().GetPostDeserializationChanges()
-	require.Equal(t, changes.Len(), 1)
-	require.True(t, changes.Contains(catalog.SetModTimeToMVCCTimestamp))
+	if v1.Equal(clusterversion.V25_4.Version()) {
+		// In 25.4, we do a one-time rewrite of all descriptors, so there should be
+		// no changes here. In later versions, there should be one change.
+		require.Equal(t, 0, changes.Len())
+	} else {
+		require.Equal(t, 1, changes.Len())
+		require.True(t, changes.Contains(catalog.SetModTimeToMVCCTimestamp))
+	}
 }
 
 // TestFirstUpgradeRepair tests the correct repair behavior of upgrade
@@ -163,6 +170,7 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	// also holds a lease on the system database descriptor, which we will wait to
 	// be released. Reducing the lease duration makes this part of the test speed
 	// up.
+	lease.LeaseDuration.Override(ctx, &settings.SV, time.Second*30)
 	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
 	upgradePausePoint := make(chan struct{})
 	upgradeResumePoint := make(chan struct{})
@@ -375,6 +383,7 @@ func TestFirstUpgradeRepairBatchSize(t *testing.T) {
 	// also holds a lease on the system database descriptor, which we will wait to
 	// be released. Reducing the lease duration makes this part of the test speed
 	// up.
+	lease.LeaseDuration.Override(ctx, &settings.SV, time.Second*30)
 	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
 	testServer, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
