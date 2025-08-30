@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/flakystorage"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -845,6 +846,7 @@ type remoteStorageAdaptor struct {
 
 func (r remoteStorageAdaptor) CreateStorage(locator remote.Locator) (remote.Storage, error) {
 	es, err := r.factory.OpenURL(r.ctx, string(locator))
+	es = flakystorage.WrapStorage(0.0001, es)
 	return &externalStorageWrapper{p: r.p, ctx: r.ctx, es: es}, err
 }
 
