@@ -1,0 +1,37 @@
+/* setup */
+CREATE DATABASE db;
+USE db;
+CREATE TABLE t1 (id INT PRIMARY KEY, name STRING);
+INSERT INTO t1 VALUES (1, 'foo');
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE t1 RENAME TO t2;
+----
+Schema change plan for ALTER TABLE ‹t1› RENAME TO ‹t2›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC Namespace:{DescID: 106 (t1-t2+), Name: "t2", ReferencedDescID: 104 (db)}
+ │         ├── 1 element transitioning toward ABSENT
+ │         │    └── PUBLIC → ABSENT Namespace:{DescID: 106 (t1-t2+), Name: "t1", ReferencedDescID: 104 (db)}
+ │         └── 3 Mutation operations
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"t1","SchemaID":105}}
+ │              ├── SetNameInDescriptor {"DescriptorID":106,"Name":"t2"}
+ │              └── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"t2","SchemaID":105}}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── PUBLIC → ABSENT Namespace:{DescID: 106 (t1-t2+), Name: "t2", ReferencedDescID: 104 (db)}
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── ABSENT → PUBLIC Namespace:{DescID: 106 (t1-t2+), Name: "t1", ReferencedDescID: 104 (db)}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── ABSENT → PUBLIC Namespace:{DescID: 106 (t1-t2+), Name: "t2", ReferencedDescID: 104 (db)}
+           ├── 1 element transitioning toward ABSENT
+           │    └── PUBLIC → ABSENT Namespace:{DescID: 106 (t1-t2+), Name: "t1", ReferencedDescID: 104 (db)}
+           └── 3 Mutation operations
+                ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"t1","SchemaID":105}}
+                ├── SetNameInDescriptor {"DescriptorID":106,"Name":"t2"}
+                └── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"t2","SchemaID":105}}

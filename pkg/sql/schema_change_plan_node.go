@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -81,6 +82,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	state, logSchemaChangesFn, err := scbuild.Build(ctx, deps, scs.state, stmt, &scs.memAcc)
 	if scerrors.HasNotImplemented(err) &&
 		mode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
+		fmt.Printf("err %+v\n", err)
 		return nil, nil
 	}
 	if err != nil {
