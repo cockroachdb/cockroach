@@ -204,6 +204,11 @@ statement error pgcode 2BP01 pq: cannot rename column "a" because function "f_un
 ALTER TABLE t_twocol RENAME COLUMN a TO d;
 
 # TODO(#101934): Postgres allows table renaming when only referenced by UDFs.
+skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3
+statement error pgcode 2BP01 pq: cannot rename relation "test.public.t_twocol" because function "f_unqualified_twocol" depends on it
+ALTER TABLE t_twocol RENAME TO t_twocol_prime;
+
+onlyif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3
 statement error pgcode 2BP01 pq: cannot rename relation "t_twocol" because function "f_unqualified_twocol" depends on it
 ALTER TABLE t_twocol RENAME TO t_twocol_prime;
 
