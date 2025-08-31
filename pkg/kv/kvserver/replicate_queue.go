@@ -551,7 +551,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 	rq := &replicateQueue{
 		metrics: makeReplicateQueueMetrics(),
 		planner: plan.NewReplicaPlanner(allocator, storePool,
-			store.TestingKnobs().ReplicaPlannerKnobs),
+			store.TestingKnobs().ReplicaPlannerKnobs, store.cfg.Settings),
 		// TODO(kvoli): Consider removing these from the replicate queue struct.
 		allocator: allocator,
 		storePool: storePool,

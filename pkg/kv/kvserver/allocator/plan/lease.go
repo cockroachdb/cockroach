@@ -12,7 +12,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -22,6 +24,7 @@ import (
 type LeasePlanner struct {
 	storePool storepool.AllocatorStorePool
 	allocator allocatorimpl.Allocator
+	st        *cluster.Settings
 }
 
 var _ ReplicationPlanner = &LeasePlanner{}
@@ -29,11 +32,14 @@ var _ ReplicationPlanner = &LeasePlanner{}
 // NewLeasePlanner returns a new LeasePlanner which implements the
 // ReplicationPlanner interface.
 func NewLeasePlanner(
-	allocator allocatorimpl.Allocator, storePool storepool.AllocatorStorePool,
+	allocator allocatorimpl.Allocator,
+	storePool storepool.AllocatorStorePool,
+	st *cluster.Settings,
 ) LeasePlanner {
 	return LeasePlanner{
 		storePool: storePool,
 		allocator: allocator,
+		st:        st,
 	}
 }
 
@@ -83,7 +89,8 @@ func (lp LeasePlanner) ShouldPlanChange(
 		ctx, lp.storePool, desc, conf, desc.Replicas().VoterDescriptors(),
 		repl, repl.RangeUsageInfo())
 
-	if decision.ShouldTransfer() {
+	disableCountRebalancing := kvserverbase.DisableReplicaLeaseCountRebalancingIfMMAEnabled.Get(&lp.st.SV)
+	if decision.ShouldTransfer(disableCountRebalancing) {
 		log.KvDistribution.VEventf(ctx,
 			2, "lease transfer needed %v, enqueuing", decision)
 		return true, decision.Priority()

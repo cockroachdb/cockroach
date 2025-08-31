@@ -3050,7 +3050,7 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 			&mockRepl{storeID: 2, replicationFactor: 3},
 			allocator.RangeUsageInfo{},
 		)
-		require.Equal(t, expected, result.ShouldTransfer())
+		require.Equal(t, expected, result.ShouldTransfer(false /* disableCountRebalancing */))
 	}
 	timeAfterNodeSuspect := liveness.TimeAfterNodeSuspect.Get(&a.st.SV)
 	// Based on capacity node 1 is desirable.

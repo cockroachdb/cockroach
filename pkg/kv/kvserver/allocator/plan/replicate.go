@@ -16,10 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -107,6 +109,7 @@ type AllocatorReplica interface {
 
 // ReplicaPlanner implements the ReplicationPlanner interface.
 type ReplicaPlanner struct {
+	st        *cluster.Settings
 	storePool storepool.AllocatorStorePool
 	allocator allocatorimpl.Allocator
 	knobs     ReplicaPlannerTestingKnobs
@@ -131,11 +134,13 @@ func NewReplicaPlanner(
 	allocator allocatorimpl.Allocator,
 	storePool storepool.AllocatorStorePool,
 	knobs ReplicaPlannerTestingKnobs,
+	st *cluster.Settings,
 ) ReplicaPlanner {
 	return ReplicaPlanner{
 		storePool: storePool,
 		allocator: allocator,
 		knobs:     knobs,
+		st:        st,
 	}
 }
 
@@ -164,9 +169,9 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 		return true, priority
 	}
 
-	voterReplicas := desc.Replicas().VoterDescriptors()
-	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
-	if !rp.knobs.DisableReplicaRebalancing {
+	if disableCountRebalancing := kvserverbase.DisableReplicaLeaseCountRebalancingIfMMAEnabled.Get(&rp.st.SV) || rp.knobs.DisableReplicaRebalancing; !disableCountRebalancing {
+		voterReplicas := desc.Replicas().VoterDescriptors()
+		nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
 		scorerOptions := rp.allocator.ScorerOptions(ctx)
 		rangeUsageInfo := repl.RangeUsageInfo()
 		_, _, _, ok := rp.allocator.RebalanceVoter(

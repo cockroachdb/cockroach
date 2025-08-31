@@ -53,7 +53,7 @@ func NewLeaseQueue(
 			next:           start,
 		},
 		settings:  settings,
-		planner:   plan.NewLeasePlanner(allocator, storePool),
+		planner:   plan.NewLeasePlanner(allocator, storePool, settings.ST),
 		storePool: storePool,
 		clock:     storePool.Clock(),
 		as:        allocatorSync,

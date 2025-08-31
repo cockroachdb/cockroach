@@ -77,7 +77,7 @@ func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue 
 		storePool = store.cfg.StorePool
 	}
 	lq := &leaseQueue{
-		planner:   plan.NewLeasePlanner(allocator, storePool),
+		planner:   plan.NewLeasePlanner(allocator, storePool, store.cfg.Settings),
 		allocator: allocator,
 		as:        store.cfg.AllocatorSync,
 		storePool: storePool,

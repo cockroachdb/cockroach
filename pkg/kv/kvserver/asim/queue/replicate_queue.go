@@ -52,7 +52,7 @@ func NewReplicateQueue(
 		},
 		settings: settings,
 		planner: plan.NewReplicaPlanner(
-			allocator, storePool, plan.ReplicaPlannerTestingKnobs{}),
+			allocator, storePool, plan.ReplicaPlannerTestingKnobs{}, settings.ST),
 		clock: storePool.Clock(),
 		as:    allocatorSync,
 	}

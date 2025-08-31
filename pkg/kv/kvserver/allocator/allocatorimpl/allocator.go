@@ -2606,10 +2606,11 @@ const (
 
 // ShouldTransfer returns true when the lease should be transferred, false
 // otherwise.
-func (t TransferLeaseDecision) ShouldTransfer() bool {
+func (t TransferLeaseDecision) ShouldTransfer(disableCountRebalancing bool) bool {
 	switch t {
-	case TransferLeaseForCountBalance, TransferLeaseForAccessLocality,
-		TransferLeaseForIOOverload, TransferLeaseForPreferences:
+	case TransferLeaseForCountBalance:
+		return !disableCountRebalancing
+	case TransferLeaseForAccessLocality, TransferLeaseForIOOverload, TransferLeaseForPreferences:
 		return true
 	case DontTransferLeaseBalanced, DontTransferLeaseNoValidTargets,
 		DontTransferLeaseNoStoreDescriptor:
