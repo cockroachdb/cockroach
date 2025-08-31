@@ -996,7 +996,10 @@ func (a *Allocator) ComputeAction(
 //
 // NB: The returned priority may include a small adjustment and therefore might
 // not exactly match action.Priority(). See AllocatorAddVoter,
-// AllocatorRemoveDeadVoter, AllocatorRemoveVoter below. The adjustment should be <100.
+// AllocatorRemoveDeadVoter, AllocatorRemoveVoter below. The adjustment should
+// be <100 with two assumptions below. New uses on this contract should be
+// avoided since the assumptions are not strong guarantees (especially the
+// second one).
 //
 // The claim that the adjustment is < 100 has two assumptions:
 // 1. min(num_replicas,total_nodes) in zone configuration is < 200.
@@ -2094,11 +2097,11 @@ func (a *Allocator) ValidLeaseTargets(
 	conf *roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
-		StoreID() roachpb.StoreID
-		RaftStatus() *raft.Status
-		GetCompactedIndex() kvpb.RaftIndex
-		SendStreamStats(*rac2.RangeSendStreamStats)
-	},
+	StoreID() roachpb.StoreID
+	RaftStatus() *raft.Status
+	GetCompactedIndex() kvpb.RaftIndex
+	SendStreamStats(*rac2.RangeSendStreamStats)
+},
 	opts allocator.TransferLeaseOptions,
 ) []roachpb.ReplicaDescriptor {
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
@@ -2268,11 +2271,11 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	storePool storepool.AllocatorStorePool,
 	conf *roachpb.SpanConfig,
 	leaseRepl interface {
-		StoreID() roachpb.StoreID
-		RaftStatus() *raft.Status
-		GetCompactedIndex() kvpb.RaftIndex
-		SendStreamStats(*rac2.RangeSendStreamStats)
-	},
+	StoreID() roachpb.StoreID
+	RaftStatus() *raft.Status
+	GetCompactedIndex() kvpb.RaftIndex
+	SendStreamStats(*rac2.RangeSendStreamStats)
+},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 	exclReplsInNeedOfSnapshots bool,
 ) bool {
@@ -2360,12 +2363,12 @@ func (a *Allocator) TransferLeaseTarget(
 	conf *roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
-		StoreID() roachpb.StoreID
-		GetRangeID() roachpb.RangeID
-		RaftStatus() *raft.Status
-		GetCompactedIndex() kvpb.RaftIndex
-		SendStreamStats(*rac2.RangeSendStreamStats)
-	},
+	StoreID() roachpb.StoreID
+	GetRangeID() roachpb.RangeID
+	RaftStatus() *raft.Status
+	GetCompactedIndex() kvpb.RaftIndex
+	SendStreamStats(*rac2.RangeSendStreamStats)
+},
 	usageInfo allocator.RangeUsageInfo,
 	forceDecisionWithoutStats bool,
 	opts allocator.TransferLeaseOptions,
@@ -2730,11 +2733,11 @@ func (a *Allocator) ShouldTransferLease(
 	conf *roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
-		StoreID() roachpb.StoreID
-		RaftStatus() *raft.Status
-		GetCompactedIndex() kvpb.RaftIndex
-		SendStreamStats(*rac2.RangeSendStreamStats)
-	},
+	StoreID() roachpb.StoreID
+	RaftStatus() *raft.Status
+	GetCompactedIndex() kvpb.RaftIndex
+	SendStreamStats(*rac2.RangeSendStreamStats)
+},
 	usageInfo allocator.RangeUsageInfo,
 ) TransferLeaseDecision {
 	excludeReplsInNeedOfSnap := a.knobs == nil || !a.knobs.AllowLeaseTransfersToReplicasNeedingSnapshots
