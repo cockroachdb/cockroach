@@ -2967,18 +2967,22 @@ func (r *Replica) maybeEnqueueProblemRange(
 					// other logs.
 					log.KvDistribution.Infof(ctx,
 						"decommissioning nudger failed to enqueue range %v due to %v", r.Desc(), err)
+					r.store.metrics.DecommissioningNudgerEnqueueFailure.Inc(1)
 				} else {
 					log.KvDistribution.Infof(ctx,
 						"decommissioning nudger successfully enqueued range %v at index %d", r.Desc(), indexOnHeap)
+					r.store.metrics.DecommissioningNudgerEnqueueSuccess.Inc(1)
 				}
 			},
 			onProcessResult: func(err error) {
 				if err != nil {
 					log.KvDistribution.Infof(ctx,
 						"decommissioning nudger failed to process range %v due to %v", r.Desc(), err)
+					r.store.metrics.DecommissioningNudgerEnqueueProcessFailure.Inc(1)
 				} else {
 					log.KvDistribution.Infof(ctx,
 						"decommissioning nudger successfully processed replica %s", r.Desc())
+					r.store.metrics.DecommissioningNudgerEnqueueProcessSuccess.Inc(1)
 				}
 			},
 		})
