@@ -2568,6 +2568,7 @@ func TestPriorityInversionRequeue(t *testing.T) {
 
 	var scratchRangeID int64
 	atomic.StoreInt64(&scratchRangeID, -1)
+	require.NoError(t, log.SetVModule("queue=5,replicate_queue=5,replica_command=5,replicate=5,replica=5"))
 
 	const newLeaseholderStoreAndNodeID = 4
 	var waitUntilLeavingJoint = func() {}
@@ -2580,12 +2581,14 @@ func TestPriorityInversionRequeue(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					BaseQueueDisabledBypassFilter: func(rangeID roachpb.RangeID) bool {
 						// Disable the replicate queue except for the scratch range on the new leaseholder.
+						t.Logf("range %d is added to replicate queue store %d", storeID, rangeID)
 						return rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID))
 					},
 					BaseQueuePostEnqueueInterceptor: func(storeID roachpb.StoreID, rangeID roachpb.RangeID) {
 						// After enqueuing, wait for the old leaseholder to leave the atomic
 						// joint config state or remove the learner replica to force the
 						// priority inversion.
+						t.Logf("waiting for %d to leave joint config", rangeID)
 						if storeID == 4 && rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) {
 							waitUntilLeavingJoint()
 						}
@@ -2604,6 +2607,7 @@ func TestPriorityInversionRequeue(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			rangeDesc := tc.LookupRangeOrFatal(t, scratchKey)
 			replicas := rangeDesc.Replicas()
+			t.Logf("range %v: waiting to leave joint conf", rangeDesc)
 			if replicas.InAtomicReplicationChange() || len(replicas.LearnerDescriptors()) != 0 {
 				return errors.Newf("in between atomic changes: %v", replicas)
 			}
@@ -2621,6 +2625,7 @@ func TestPriorityInversionRequeue(t *testing.T) {
 	// condition where the new leaseholder can enqueue a replica to replicate
 	// queue with high priority but compute a low priority action at processing
 	// time.
+	t.Logf("rebalancing range %d from s%d to s%d", scratchRange, lh.StoreID, newLeaseholderStoreAndNodeID)
 	_, err = tc.RebalanceVoter(
 		ctx,
 		scratchRange.StartKey.AsRawKey(),
