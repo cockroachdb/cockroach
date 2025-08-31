@@ -2581,7 +2581,7 @@ func TestPriorityInversionRequeue(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					BaseQueueDisabledBypassFilter: func(rangeID roachpb.RangeID) bool {
 						// Disable the replicate queue except for the scratch range on the new leaseholder.
-						t.Logf("range %d is added to replicate queue store %d", storeID, rangeID)
+						t.Logf("range %d is added to replicate queue store %d", rangeID)
 						return rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID))
 					},
 					BaseQueuePostEnqueueInterceptor: func(storeID roachpb.StoreID, rangeID roachpb.RangeID) {
