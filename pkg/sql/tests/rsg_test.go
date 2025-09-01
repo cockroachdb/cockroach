@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -897,6 +898,17 @@ func testRandomSyntax(
 	}
 	srv, rawDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
+	if srv.StartedDefaultTestTenant() {
+		// If we started a test tenant, then disable rate limiting for it (we're
+		// going to be slamming the server with many queries, and we don't want
+		// for them to be artificially delayed).
+		tenID := serverutils.TestTenantID()
+		_, err := srv.SystemLayer().SQLConn(t).Exec(
+			"ALTER TENANT [$1] GRANT CAPABILITY exempt_from_rate_limiting", tenID.ToUint64())
+		require.NoError(t, err)
+		expCaps := map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.ExemptFromRateLimiting: "true"}
+		serverutils.WaitForTenantCapabilities(t, srv, tenID, expCaps, "exempt_from_rate_limiting")
+	}
 	db := &verifyFormatDB{db: rawDB}
 	// If the test fails we can log the previous set of statements.
 	defer func() {
