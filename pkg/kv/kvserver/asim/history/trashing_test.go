@@ -148,6 +148,7 @@ func TestTDTV(t *testing.T) {
 			assert.InDelta(t, orig, scaled, delta)
 			assert.InDelta(t, 0, tdtv(u, 0), delta)
 			assert.InDelta(t, 2*u, tdtv(u, u), delta)
+			assert.Greater(t, tdtv(2*u, d), tdtv(u, d))
 
 			return true
 		}, &quick.Config{MaxCount: 1000, Rand: r}), "seed: %d", seed)
