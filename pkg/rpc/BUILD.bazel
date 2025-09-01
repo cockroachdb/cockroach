@@ -20,7 +20,6 @@ go_library(
         "keepalive.go",
         "metrics.go",
         "peer.go",
-        "peer_drpc.go",
         "peer_map.go",
         "restricted_internal_client.go",
         "settings.go",

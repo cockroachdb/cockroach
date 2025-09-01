@@ -9,9 +9,34 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"storj.io/drpc"
 )
+
+var envExperimentalDRPCEnabled = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_DRPC_ENABLED", false)
+
+// ExperimentalDRPCEnabled determines whether a drpc server accepting BatchRequest
+// is enabled. This server is experimental and completely unsuitable to production
+// usage (for example, does not implement authorization checks).
+var ExperimentalDRPCEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"rpc.experimental_drpc.enabled",
+	"if true, use drpc to execute Batch RPCs (instead of gRPC)",
+	envExperimentalDRPCEnabled,
+	settings.WithValidateBool(func(values *settings.Values, b bool) error {
+		// drpc support is highly experimental and should not be enabled in production.
+		// Since authorization is not implemented, we only even host the server if the
+		// env var is set or it's a CRDB test build. Consequently, these are prereqs
+		// for setting the cluster setting.
+		if b && !(envExperimentalDRPCEnabled || buildutil.CrdbTestBuild) {
+			return errors.New("experimental drpc is not allowed in this environment")
+		}
+		return nil
+	}))
 
 // TODODRPC is a marker to identify each RPC client creation site that needs to
 // be updated to support DRPC.

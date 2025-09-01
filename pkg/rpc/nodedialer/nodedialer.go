@@ -171,7 +171,7 @@ func (n *Dialer) DialInternalClient(
 
 	var client rpc.RestrictedInternalClient
 	useStreamPoolClient := shouldUseBatchStreamPoolClient(ctx, n.rpcContext.Settings)
-	if !rpc.ExperimentalDRPCEnabled.Get(&n.rpcContext.Settings.SV) {
+	if !rpcbase.ExperimentalDRPCEnabled.Get(&n.rpcContext.Settings.SV) {
 		gc, conn, err := dial(ctx, n.resolver, n.rpcContext.GRPCDialNode, nodeID, class, true /* checkBreaker */)
 		if err != nil {
 			return nil, errors.Wrapf(err, "gRPC")
