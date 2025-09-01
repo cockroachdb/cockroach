@@ -921,24 +921,6 @@ func (rq *replicateQueue) processOneChange(
 	change, err := rq.planner.PlanOneChange(
 		ctx, repl, desc, conf, plan.PlannerOptions{Scatter: scatter})
 
-	if PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
-		if inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action); inversion {
-			if priorityInversionLogEveryN.ShouldLog() {
-				log.KvDistribution.Infof(ctx,
-					"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
-					shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
-			}
-			if shouldRequeue {
-				// Return true to requeue the range. Return the error to ensure it is
-				// logged and tracked in replicate queue bq.failures metrics. See
-				// replicateQueue.process for details.
-				return true /*requeue*/, maybeAnnotateDecommissionErr(
-					errors.Errorf("requing due to priority inversion: action=%s, priority=%v, enqueuePriority=%v",
-						change.Action, change.Action.Priority(), priorityAtEnqueue), change.Action)
-			}
-		}
-	}
-
 	// When there is an error planning a change, return the error immediately
 	// and do not requeue. It is unlikely that the range or storepool state
 	// will change quickly enough in order to not get the same error and
@@ -961,6 +943,28 @@ func (rq *replicateQueue) processOneChange(
 	// There is nothing further to do during a dry run.
 	if dryRun {
 		return false, nil
+	}
+
+	// At this point, planning returned no error, and we're not doing a dry run.
+	// Check for priority inversion if enabled. If detected, we may requeue the
+	// replica to return an error early to requeue the range instead to avoid
+	// starving other higher priority work.
+	if PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
+		if inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action); inversion {
+			if priorityInversionLogEveryN.ShouldLog() {
+				log.KvDistribution.Infof(ctx,
+					"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
+					shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
+			}
+			if shouldRequeue {
+				// Return true to requeue the range. Return the error to ensure it is
+				// logged and tracked in replicate queue bq.failures metrics. See
+				// replicateQueue.process for details.
+				return true /*requeue*/, maybeAnnotateDecommissionErr(
+					errors.Errorf("requing due to priority inversion: action=%s, priority=%v, enqueuePriority=%v",
+						change.Action, change.Action.Priority(), priorityAtEnqueue), change.Action)
+			}
+		}
 	}
 
 	// Track the metrics generated during planning. These are not updated
