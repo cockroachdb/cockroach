@@ -1418,6 +1418,10 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		if err := c.ForEach(iterFn); err != nil {
 			return noopSpanMeta, err
 		}
+	case DRPCMetadataCarrier:
+		if err := c.ForEach(iterFn); err != nil {
+			return noopSpanMeta, err
+		}
 	default:
 		return noopSpanMeta, errors.New("unsupported carrier")
 	}
@@ -1738,6 +1742,28 @@ func (w MetadataCarrier) ForEach(fn func(key, val string) error) error {
 		}
 	}
 
+	return nil
+}
+
+// DRPCMetadataCarrier is an implementation of the Carrier interface for DRPC
+// metadata stored as a map.
+type DRPCMetadataCarrier struct {
+	MD map[string]string
+}
+
+// Set implements the Carrier interface.
+func (w DRPCMetadataCarrier) Set(key, val string) {
+	key = strings.ToLower(key)
+	w.MD[key] = val
+}
+
+// ForEach implements the Carrier interface.
+func (w DRPCMetadataCarrier) ForEach(fn func(key, val string) error) error {
+	for k, v := range w.MD {
+		if err := fn(k, v); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
