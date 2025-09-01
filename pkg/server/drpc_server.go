@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
@@ -34,7 +35,7 @@ type drpcServer struct {
 // DRPC if the experimental setting is on, otherwise returns a dummy server.
 func newDRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*drpcServer, error) {
 	drpcServer := &drpcServer{}
-	if rpc.ExperimentalDRPCEnabled.Get(&rpcCtx.Settings.SV) {
+	if rpcbase.ExperimentalDRPCEnabled.Get(&rpcCtx.Settings.SV) {
 		d, err := rpc.NewDRPCServer(ctx, rpcCtx)
 		if err != nil {
 			return nil, err
