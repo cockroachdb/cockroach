@@ -1122,7 +1122,7 @@ func (lrw *logicalReplicationWriterProcessor) maybeDLQ(
 		if row.IsInitialized() {
 			log.Infof(ctx, "DLQ'ing row update due to %s (%s): %s", applyErr, eligibility, row.DebugString())
 		} else {
-			log.Infof(ctx, "DLQ'ing KV due to %s (%s): %s", applyErr, eligibility, event)
+			log.Infof(ctx, "DLQ'ing KV due to %s (%s): %s", applyErr, eligibility, event.String())
 		}
 	}
 	// We don't inc the total DLQ'ed metric here as that is done by flushBuffer
