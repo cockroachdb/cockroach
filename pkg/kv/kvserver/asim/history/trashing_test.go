@@ -12,6 +12,7 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -168,4 +169,24 @@ func TestTDTV(t *testing.T) {
 	_, _ = fmt.Fprintf(&buf, "%.2f\n", sl)
 	_, _ = fmt.Fprint(&buf, asciigraph.Plot(sl, asciigraph.Width(2*N), asciigraph.Height(N)))
 	echotest.Require(t, buf.String(), datapathutils.TestDataPath(t, t.Name()+".txt"))
+}
+
+func TestExploreTDTV(t *testing.T) {
+	// Not a real test, more a helper.
+	sl := []float64{
+		// You can paste a time series copied from viewer.html here to explore
+		// the variation of its prefixes.
+		0,
+		0,
+	}
+	testutils.RunTrueAndFalse(t, "stripped", func(t *testing.T, stripped bool) {
+		sl := sl
+		if stripped {
+			sl = stripLeaderingZeroes(sl)
+		}
+		for i := len(sl) / 100; i < len(sl); i += len(sl) / 100 {
+			t.Logf("sl[:%d]: %+v", i, computeThrashing(sl[:i]))
+		}
+
+	})
 }
