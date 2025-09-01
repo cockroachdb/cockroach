@@ -20,6 +20,7 @@ FILES = [
     "alter_database_placement_stmt",
     "alter_database_primary_region",
     "alter_database_set_zone_config_extension_stmt",
+    "alter_database_set_reset_storage_params_stmt",
     "alter_database_set_stmt",
     "alter_database_survival_goal_stmt",
     "alter_database_to_schema_stmt",

@@ -348,6 +348,28 @@ func (*AlterDatabaseSurvivalGoal) hiddenFromShowQueries() {}
 // StatementReturnType implements the Statement interface.
 func (*AlterDatabasePlacement) StatementReturnType() StatementReturnType { return DDL }
 
+// StatementReturnType implements the Statement interface.
+func (*AlterDatabaseSetStorageParams) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterDatabaseSetStorageParams) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabaseSetStorageParams) StatementTag() string { return "ALTER DATABASE" }
+
+func (*AlterDatabaseSetStorageParams) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
+func (*AlterDatabaseResetStorageParams) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterDatabaseResetStorageParams) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabaseResetStorageParams) StatementTag() string { return "ALTER DATABASE" }
+
+func (*AlterDatabaseResetStorageParams) hiddenFromShowQueries() {}
+
 // StatementType implements the Statement interface.
 func (*AlterDatabasePlacement) StatementType() StatementType { return TypeDDL }
 
@@ -2501,6 +2523,8 @@ func (n *AlterDatabaseAddRegion) String() string              { return AsString(
 func (n *AlterDatabaseDropRegion) String() string             { return AsString(n) }
 func (n *AlterDatabaseSurvivalGoal) String() string           { return AsString(n) }
 func (n *AlterDatabasePlacement) String() string              { return AsString(n) }
+func (n *AlterDatabaseSetStorageParams) String() string       { return AsString(n) }
+func (n *AlterDatabaseResetStorageParams) String() string     { return AsString(n) }
 func (n *AlterDatabasePrimaryRegion) String() string          { return AsString(n) }
 func (n *AlterDatabaseAddSuperRegion) String() string         { return AsString(n) }
 func (n *AlterDatabaseDropSuperRegion) String() string        { return AsString(n) }

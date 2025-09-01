@@ -386,3 +386,12 @@ at or near "b": syntax error
 DETAIL: source SQL:
 CREATE DATABASE a b c
                   ^
+
+parse
+CREATE DATABASE a WITH (max_row_size_log = '1KiB', max_row_size_err = '1KiB')
+----
+CREATE DATABASE a WITH ('max_row_size_log' = '1KiB', 'max_row_size_err' = '1KiB') -- normalized!
+CREATE DATABASE a WITH ('max_row_size_log' = ('1KiB'), 'max_row_size_err' = ('1KiB')) -- fully parenthesized
+CREATE DATABASE a WITH ('max_row_size_log' = '_', 'max_row_size_err' = '_') -- literals removed
+CREATE DATABASE _ WITH ('max_row_size_log' = '1KiB', 'max_row_size_err' = '1KiB') -- identifiers removed
+

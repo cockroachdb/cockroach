@@ -20,8 +20,8 @@ go_library(
         "//pkg/sql/storageparam",
         "//pkg/util/duration",
         "//pkg/util/errorutil/unimplemented",
-        "//pkg/util/protoutil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
