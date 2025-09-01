@@ -90,6 +90,7 @@ func computeThrashing(values []float64) thrashing {
 // - tdtv(u,0) = tdtv(0,u) = 0
 // - tdtv(u,u) = 2t
 // - tdtv(ku,kd) = k*tdtv(u,d) for k>=0
+// - tdtv(l*ku, kd) > tdtv(ku) for l>1 (same for kd)
 func tdtv(tu, td float64) float64 {
 	tmin := min(tu, td)
 	if tmin == 0 {
@@ -97,7 +98,10 @@ func tdtv(tu, td float64) float64 {
 		return 0
 	}
 	frac := tmin / max(tu, td) // in [0, 1]
-	alpha := frac * frac       // exponent 2 makes it more "trend-sticky"
+	// The exponent can't exceed 1 because that would violate the scaling property
+	// (last property above). For the endpoint 1, tdtv=2min(tu,td). The choice of
+	// 0.8 is somewhat arbitrary, but gives a reasonable trade-off.
+	alpha := math.Pow(frac, 0.8)
 	return alpha*(tu+td) + (1-alpha)*tmin
 }
 
