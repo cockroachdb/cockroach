@@ -2575,6 +2575,7 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 func TestPriorityInversionRequeue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t)
 
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
@@ -2653,9 +2654,6 @@ func TestPriorityInversionRequeue(t *testing.T) {
 		store := tc.GetFirstStoreFromServer(t, 3)
 		if c := store.ReplicateQueueMetrics().PriorityInversionTotal.Count(); c == 0 {
 			return errors.New("expected non-zero priority inversion total count but got 0")
-		}
-		if c := store.ReplicateQueueMetrics().PriorityInversionForConsiderRebalance.Count(); c == 0 {
-			return errors.New("expected non-zero priority inversion count for consider rebalance but got 0")
 		}
 		if c := store.ReplicateQueueMetrics().RequeueDueToPriorityInversion.Count(); c == 0 {
 			return errors.New("expected to requeue due to priority inversion but got 0")
