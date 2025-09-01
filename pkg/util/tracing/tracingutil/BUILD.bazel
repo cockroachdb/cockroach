@@ -12,6 +12,7 @@ go_library(
         "//pkg/util/grpcutil",
         "//pkg/util/tracing",
         "@com_github_gogo_protobuf//types",
+        "@io_storj_drpc//drpcmetadata",
         "@org_golang_google_grpc//metadata",
     ],
 )
