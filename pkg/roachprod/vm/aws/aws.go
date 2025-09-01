@@ -60,7 +60,7 @@ func Init() error {
 	// aws-cli version 1 automatically base64 encodes the string passed as --public-key-material.
 	// Version 2 supports file:// and fileb:// prefixes for text and binary files.
 	// The latter prefix will base64-encode the file contents. See
-	// https://docs.aws.amazon.//com/cli/latest/userguide/cliv2-migration.html#cliv2-migration-binaryparam
+	// https://docs.aws.amazon.com/cli/latest/userguide/cliv2-migration.html#cliv2-migration-binaryparam
 	const unsupportedAwsCliVersionPrefix = "aws-cli/1."
 	const unimplemented = "please install the AWS CLI utilities version 2+ " +
 		"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)"

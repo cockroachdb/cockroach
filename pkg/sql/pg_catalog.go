@@ -3054,7 +3054,7 @@ https://www.postgresql.org/docs/9.6/view-pg-seclabels.html`,
 
 var pgCatalogSequenceTable = virtualSchemaTable{
 	comment: `sequences (see also information_schema.sequences)
-https://www.postgresql.org/docs/9.5/catalog-pg-sequence.html`,
+https://www.postgresql.org/docs/10/catalog-pg-sequence.html`,
 	schema: vtable.PGCatalogSequence,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		opts := forEachTableDescOptions{virtualOpts: hideVirtual} /* virtual schemas do not have indexes */
@@ -3086,7 +3086,7 @@ var (
 
 var pgCatalogSettingsTable = virtualSchemaTable{
 	comment: `session variables (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
+https://www.postgresql.org/docs/9.5/view-pg-settings.html`,
 	schema: vtable.PGCatalogSettings,
 	populate: func(_ context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, vName := range varNames {

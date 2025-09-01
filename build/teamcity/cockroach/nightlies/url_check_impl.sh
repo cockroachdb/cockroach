@@ -8,4 +8,7 @@
 
 set -xeuo pipefail
 
+echo "$GOOGLE_EPHEMERAL_CREDENTIALS" > creds.json
+gcloud auth activate-service-account --key-file=creds.json
+
 bazel run //pkg/cmd/urlcheck --run_under="cd $PWD && "

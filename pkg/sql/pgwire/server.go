@@ -1409,7 +1409,7 @@ func (s *Server) serveImpl(
 				// We're starting a batch here. If the client continues using the extended
 				// protocol and encounters an error, everything until the next sync
 				// message has to be skipped. See:
-				// https://www.postgresql.org/docs/current/10/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
+				// https://www.postgresql.org/docs/10/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{
 					// The client explicitly sent this Sync as part of the extended
 					// protocol.

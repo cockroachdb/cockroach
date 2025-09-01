@@ -116,7 +116,7 @@ $ ./dev ui test
 The NPM registry (and the Yarn proxy in front of it, registry.yarnpkg.com)
 have historically proven quite flaky. Errors during `yarn install` were the
 leading cause of spurious CI failures in the first half of 2018. We used yarn's
-[offline mirror](https://classic.yarnpkg.com/blog/2016/11/24/ offline-mirror/)
+[offline mirror](https://classic.yarnpkg.com/blog/2016/11/24/offline-mirror/)
 functionality through December 2022 (and for the initial 22.2 release), but
 Bazel support for that feature was poor to non-existent and the workflow
 involved was complicated. Worse, upgrades to Bazel and the deprecation of

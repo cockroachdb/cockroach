@@ -45,7 +45,7 @@ func MakeClock(ctx context.Context, clockDevicePath string) (Clock, error) {
 
 	clockDeviceFD := result.clockDevice.Fd()
 	// For clarification of how the clock id is computed:
-	// https://lore.kernel.org/patchwork/patch/868609/
+	// https://www.kernel.org/doc/html/v6.2/driver-api/ptp.html
 	// https://github.com/torvalds/linux/blob/7e63420847ae5f1036e4f7c42f0b3282e73efbc2/tools/testing/selftests/ptp/testptp.c#L87
 	clockID := (^clockDeviceFD << 3) | 3
 	log.Dev.Infof(

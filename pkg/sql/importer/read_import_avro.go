@@ -175,7 +175,7 @@ var familyToAvroT = map[types.Family][]string{
 
 	// Time families with avro logical types. Avro logical type names pulled from:
 	// https://github.com/linkedin/goavro/blob/master/logical_type.go and
-	// https://avro.apache.org/docs/current/spec.html
+	// https://avro.apache.org/docs/++version++/specification/
 	types.DateFamily:      {"string", "int.date"},
 	types.TimeFamily:      {"string", "long.time-micros", "int.time-millis"},
 	types.TimestampFamily: {"string", "long.timestamp-micros", "long.timestamp-millis"},

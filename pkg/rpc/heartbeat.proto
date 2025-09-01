@@ -17,7 +17,7 @@ import "gogoproto/gogo.proto";
 // out, Offset = 0.
 //
 // Offset and Uncertainty are measured using the remote clock reading technique
-// described in http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+// described in https://web.archive.org/web/20221207190432/https://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
 message RemoteOffset {
   option (gogoproto.goproto_stringer) = false;
 
