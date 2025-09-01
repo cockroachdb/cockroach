@@ -24,7 +24,8 @@ type thrashing struct {
 	// variation if the time series has no preferred trend (i.e. upwards or
 	// downwards), but if there is a clear trend, the tdtv will be much smaller,
 	// counting mainly the movement against the trend. see tdtv for details.
-	tdtv float64
+	tdtv       float64
+	uptv, dntv float64 // upwards and downwards total variations (both nonnegative)
 	// normTV is a normalization factor for the total variation. By default, it is
 	// initialized to the range of the input values, i.e. max - min (or 1 if max
 	// == min). `tv/normTV` then measures how many times thrashing has "swept out"
@@ -39,7 +40,7 @@ type thrashing struct {
 }
 
 func (th thrashing) String() string {
-	return fmt.Sprintf("tdtv=%.2f%% (%.1f) runs=%d", th.TDTVPercent(), th.tdtv, th.runs)
+	return fmt.Sprintf("tdtv=%.2f%% (%.1f/%.1f) uptv=%.1f dntv=%.1f runs=%d", th.TDTVPercent(), th.tdtv, th.normTV, th.uptv, th.dntv, th.runs)
 }
 
 func (th thrashing) TDTVPercent() float64 {
@@ -49,7 +50,7 @@ func (th thrashing) TDTVPercent() float64 {
 func computeThrashing(values []float64) thrashing {
 	runs := 1
 	pos := len(values) > 1 && values[1]-values[0] >= 0
-	var posTV, negTV float64
+	var uptv, dntv float64
 	for i := 1; i < len(values); i++ {
 		d := values[i] - values[i-1]
 
@@ -60,16 +61,18 @@ func computeThrashing(values []float64) thrashing {
 		}
 
 		if d >= 0 {
-			posTV += d
+			uptv += d
 		} else {
-			negTV += -d
+			dntv += -d
 		}
 	}
 	_, _, normTV := extrema(values)
 	return thrashing{
 		vs:     values,
 		runs:   runs,
-		tdtv:   tdtv(posTV, negTV),
+		tdtv:   tdtv(uptv, dntv),
+		uptv:   uptv,
+		dntv:   dntv,
 		normTV: normTV,
 	}
 }
