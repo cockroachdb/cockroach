@@ -331,6 +331,11 @@ type queueConfig struct {
 	failures *metric.Counter
 	// pending is a gauge measuring current replica count pending.
 	pending *metric.Gauge
+	// full is a counter measuring replicas dropped due to exceeding the queue max
+	// size.
+	// NB: this metric may be nil for queues that are not interested in tracking
+	// this.
+	full *metric.Counter
 	// processingNanos is a counter measuring total nanoseconds spent processing
 	// replicas.
 	processingNanos *metric.Counter
@@ -441,6 +446,7 @@ type baseQueue struct {
 		purgatory      map[roachpb.RangeID]PurgatoryError // Map of replicas to processing errors
 		stopped        bool
 		disabled       bool
+		maxSize        int64
 	}
 }
 
@@ -493,6 +499,7 @@ func newBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *b
 		},
 	}
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
+	bq.mu.maxSize = int64(cfg.maxSize)
 	bq.SetDisabled(!cfg.disabledConfig.Get(&store.cfg.Settings.SV))
 	cfg.disabledConfig.SetOnChange(&store.cfg.Settings.SV, func(ctx context.Context) {
 		bq.SetDisabled(!cfg.disabledConfig.Get(&store.cfg.Settings.SV))
@@ -535,6 +542,23 @@ func (bq *baseQueue) SetDisabled(disabled bool) {
 	bq.mu.Lock()
 	bq.mu.disabled = disabled
 	bq.mu.Unlock()
+}
+
+// SetMaxSize sets the max size of the queue.
+func (bq *baseQueue) SetMaxSize(maxSize int64) {
+	bq.mu.Lock()
+	defer bq.mu.Unlock()
+	bq.mu.maxSize = maxSize
+	// Drop replicas until no longer exceeding the max size. Note: We call
+	// removeLocked to match the behavior of addInternal. In theory, only
+	// removeFromQueueLocked should be triggered in removeLocked, since the item
+	// is in the priority queue, it should not be processing or in the purgatory
+	// queue. To be safe, however, we use removeLocked.
+	for int64(bq.mu.priorityQ.Len()) > maxSize {
+		pqLen := bq.mu.priorityQ.Len()
+		bq.full.Inc(1)
+		bq.removeLocked(bq.mu.priorityQ.sl[pqLen-1])
+	}
 }
 
 // lockProcessing locks all processing in the baseQueue. It returns
@@ -772,8 +796,11 @@ func (bq *baseQueue) addInternal(
 	// guaranteed to be globally ordered. Ideally, we would remove the lowest
 	// priority element, but it would require additional bookkeeping or a linear
 	// scan.
-	if pqLen := bq.mu.priorityQ.Len(); pqLen > bq.maxSize {
+	if pqLen := bq.mu.priorityQ.Len(); int64(pqLen) > bq.mu.maxSize {
 		replicaItemToDrop := bq.mu.priorityQ.sl[pqLen-1]
+		if bq.full != nil {
+			bq.full.Inc(1)
+		}
 		log.Dev.VInfof(ctx, 1, "dropping due to exceeding queue max size: priority=%0.3f, replica=%v",
 			priority, replicaItemToDrop.replicaID)
 		bq.removeLocked(replicaItemToDrop)
