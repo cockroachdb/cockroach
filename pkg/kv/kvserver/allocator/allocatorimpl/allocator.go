@@ -261,7 +261,7 @@ func (a AllocatorAction) SafeValue() {}
 // matches the definitions below. For AllocatorAddVoter,
 // AllocatorRemoveDeadVoter, and AllocatorRemoveVoter, the priority may be
 // adjusted (see ComputeAction for details), but the adjustment is expected to
-// be small (<100).
+// be small (<49).
 //
 // Exceptions: AllocatorFinalizeAtomicReplicationChange, AllocatorRemoveLearner,
 // and AllocatorReplaceDeadVoter violates the spacing of 100. These cases
@@ -997,14 +997,14 @@ func (a *Allocator) ComputeAction(
 // NB: The returned priority may include a small adjustment and therefore might
 // not exactly match action.Priority(). See AllocatorAddVoter,
 // AllocatorRemoveDeadVoter, AllocatorRemoveVoter below. The adjustment should
-// be <100 with two assumptions below. New uses on this contract should be
+// be <49 with two assumptions below. New uses on this contract should be
 // avoided since the assumptions are not strong guarantees (especially the
 // second one).
 //
-// The claim that the adjustment is < 100 has two assumptions:
-// 1. min(num_replicas,total_nodes) in zone configuration is < 200.
+// The claim that the adjustment is < 49 has two assumptions:
+// 1. min(num_replicas,total_nodes) in zone configuration is < 98.
 // 2. when ranges are not under-replicated, the difference between
-// min(num_replicas,total_nodes)/2-1 and existing_replicas is < 100.
+// min(num_replicas,total_nodes)/2-1 and existing_replicas is < 49.
 //
 // neededVoters <= min(num_replicas,total_nodes)
 // desiredQuorum = neededVoters/2-1
@@ -1019,7 +1019,7 @@ func (a *Allocator) ComputeAction(
 //  2. haveVoters = 0
 //     adjustement = neededVoters/2-1
 //
-// In order for adjustment to be < 100, neededVoters/2<100 => neededVoters<200.
+// In order for adjustment to be <49, neededVoters/2<49 => neededVoters<98.
 // Hence the first assumption.
 //
 // For AllocatorRemoveDeadVoter, we know haveVoters >= neededVoters
@@ -1029,11 +1029,11 @@ func (a *Allocator) ComputeAction(
 // neededVoters, haveVoters/2-1 >= neededVoters/2-1. So this case is impossible.
 // 2. neededVoters/2-1 is much smaller than haveVoters: since ranges could be
 // over-replicated, theoretically speaking, there may be no upper bounds on
-// haveVoters. In order for adjustment to be < 100, we can only make an
+// haveVoters. In order for adjustment to be < 49, we can only make an
 // assumption here that the difference between neededVoters/2-1 and haveVoters
-// cannot be >= 100 in this case.
+// cannot be >= 49 in this case.
 //
-// For AllocatorRemoveVoter, adjustment is haveVoters%2 = 0 or 1 < 100.
+// For AllocatorRemoveVoter, adjustment is haveVoters%2 = 0 or 1 < 49.
 func (a *Allocator) computeAction(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
@@ -2097,11 +2097,11 @@ func (a *Allocator) ValidLeaseTargets(
 	conf *roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
-	StoreID() roachpb.StoreID
-	RaftStatus() *raft.Status
-	GetCompactedIndex() kvpb.RaftIndex
-	SendStreamStats(*rac2.RangeSendStreamStats)
-},
+		StoreID() roachpb.StoreID
+		RaftStatus() *raft.Status
+		GetCompactedIndex() kvpb.RaftIndex
+		SendStreamStats(*rac2.RangeSendStreamStats)
+	},
 	opts allocator.TransferLeaseOptions,
 ) []roachpb.ReplicaDescriptor {
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
@@ -2271,11 +2271,11 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	storePool storepool.AllocatorStorePool,
 	conf *roachpb.SpanConfig,
 	leaseRepl interface {
-	StoreID() roachpb.StoreID
-	RaftStatus() *raft.Status
-	GetCompactedIndex() kvpb.RaftIndex
-	SendStreamStats(*rac2.RangeSendStreamStats)
-},
+		StoreID() roachpb.StoreID
+		RaftStatus() *raft.Status
+		GetCompactedIndex() kvpb.RaftIndex
+		SendStreamStats(*rac2.RangeSendStreamStats)
+	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 	exclReplsInNeedOfSnapshots bool,
 ) bool {
@@ -2363,12 +2363,12 @@ func (a *Allocator) TransferLeaseTarget(
 	conf *roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
-	StoreID() roachpb.StoreID
-	GetRangeID() roachpb.RangeID
-	RaftStatus() *raft.Status
-	GetCompactedIndex() kvpb.RaftIndex
-	SendStreamStats(*rac2.RangeSendStreamStats)
-},
+		StoreID() roachpb.StoreID
+		GetRangeID() roachpb.RangeID
+		RaftStatus() *raft.Status
+		GetCompactedIndex() kvpb.RaftIndex
+		SendStreamStats(*rac2.RangeSendStreamStats)
+	},
 	usageInfo allocator.RangeUsageInfo,
 	forceDecisionWithoutStats bool,
 	opts allocator.TransferLeaseOptions,
@@ -2733,11 +2733,11 @@ func (a *Allocator) ShouldTransferLease(
 	conf *roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
-	StoreID() roachpb.StoreID
-	RaftStatus() *raft.Status
-	GetCompactedIndex() kvpb.RaftIndex
-	SendStreamStats(*rac2.RangeSendStreamStats)
-},
+		StoreID() roachpb.StoreID
+		RaftStatus() *raft.Status
+		GetCompactedIndex() kvpb.RaftIndex
+		SendStreamStats(*rac2.RangeSendStreamStats)
+	},
 	usageInfo allocator.RangeUsageInfo,
 ) TransferLeaseDecision {
 	excludeReplsInNeedOfSnap := a.knobs == nil || !a.knobs.AllowLeaseTransfersToReplicasNeedingSnapshots
@@ -3305,7 +3305,8 @@ func replDescsToStoreIDs(descs []roachpb.ReplicaDescriptor) []roachpb.StoreID {
 	return ret
 }
 
-// roundToNearestPriorityCategory rounds a priority to the nearest 100. n should be non-negative.
+// roundToNearestPriorityCategory rounds a priority to the nearest 100. n should
+// be non-negative.
 func roundToNearestPriorityCategory(n float64) float64 {
 	return math.Round(n/100.0) * 100
 }
@@ -3353,7 +3354,7 @@ func CheckPriorityInversion(
 	// action.Priority(). However, for AllocatorAddVoter,
 	// AllocatorRemoveDeadVoter, AllocatorRemoveVoter, the priority can be
 	// adjusted at enqueue time (See ComputeAction for more details). However, we
-	// expect the adjustment to be relatively small (<100). So we round the
+	// expect the adjustment to be relatively small (<49). So we round the
 	// priority to the nearest 100 to compare against
 	// actionAtProcessing.Priority(). Without this rounding, we might treat going
 	// from 10000 to 999 as an inversion, but it was just due to the adjustment.
