@@ -370,7 +370,7 @@ func (km *BalancedKmeans) selectInitialRightCentroid(
 //
 // "Algorithms for computing the sample variance: Analysis and recommendations",
 // by Chan, Tony F., Gene H. Golub, and Randall J. LeVeque.
-// URL: https://cpsc.yale.edu/sites/default/files/files/tr222.pdf
+// URL: https://web.archive.org/web/20240924181734/https://cpsc.yale.edu/sites/default/files/files/tr222.pdf
 //
 // See formula 1.7 in the paper:
 //

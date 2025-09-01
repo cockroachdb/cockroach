@@ -64,7 +64,7 @@ The specs we refer to in this document are:
 
 * OGC: [v1.1](http://portal.opengeospatial.org/files/?artifact_id=13228)
 ** NOTE: For 20.2, we will aim to support v1.1 as PostGIS does
-* SQL/MM: [ISO 13249-3](http://jtc1sc32.org/doc/N1101-1150/32N1107-WD13249-3--spatial.pdf)
+* SQL/MM: [ISO 13249-3](https://web.archive.org/web/20071212154300/http://jtc1sc32.org/doc/N1101-1150/32N1107-WD13249-3--spatial.pdf)
 
 Our approach will leverage the open-source geometry libraries used by
 PostGIS whenever possible. These libraries are widely used and tested,
@@ -843,7 +843,7 @@ Disadvantages of Divide the Objects:
   read latencies
 * Object insertions and balancing require locking
 * How to effectively horizontally distribute an R tree is an [open
-  question](https://www.anand-iyer.com/papers/sift-socc2017.pdf).
+  question](https://web.archive.org/web/20230526201606/https://www.anand-iyer.com/papers/sift-socc2017.pdf).
 * Bulk ingest (IMPORT) requires coordination between nodes as the
   tree's shape depends on its contents
 * A bounding box can return many false positives

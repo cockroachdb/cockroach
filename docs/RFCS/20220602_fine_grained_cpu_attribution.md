@@ -614,4 +614,4 @@ Considerations:
   this document proposes.
 
 [release-go]: The official Go archives are built using the steps
-  [here](https://go.googlesource.com/build/+/refs/heads/master/cmd/release/release.go).
+  [here](https://go.dev/doc/install/source).
