@@ -67,26 +67,26 @@ func (h *History) ThrashingForStat(stat string) ThrashingSlice {
 
 	ths := make(ThrashingSlice, numStores)
 	for storeIdx := range vsByStore {
-		sl := vsByStore[storeIdx]
-		// HACK: instead of the slice directly, we measure the thrashing of a slice
-		// that has all leading zeroes removed. This works around the fact that some
-		// timeseries only show sensible values after an initial period of
-		// inactivity. For example, CPU usage is zero until the first stats tick.
-		// Without this hack, the large initial jump from zero to the first value
-		// would be interpreted as variation.
-		noLeadingZeroes := sl
-		for i := 0; i < len(sl); i++ {
-			if sl[i] == 0 {
-				noLeadingZeroes = sl[i+1:]
-				continue
-			}
-			break
-		}
-		th := computeThrashing(noLeadingZeroes)
+		// HACK: we remove leading zeroes before computing the thrashin This works
+		// around the fact that some timeseries only show sensible values after an
+		// initial period of inactivity. For example, CPU usage is zero until the
+		// first stats tick. Without this hack, the large initial jump from zero to
+		// the first value would be interpreted as variation.
+		th := computeThrashing(stripLeaderingZeroes(vsByStore[storeIdx]))
 		ths[storeIdx] = th
 	}
 	ths.normalize()
 	return ths
+}
+
+func stripLeaderingZeroes(vs []float64) []float64 {
+	for i := range vs {
+		if vs[i] == 0 {
+			continue
+		}
+		return vs[i:]
+	}
+	return nil
 }
 
 // Thrashing returns a string representation of the thrashing for the given
