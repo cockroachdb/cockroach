@@ -13919,6 +13919,134 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: queue.replicate.priority_inversion.addnonvoter
+      exported_name: queue_replicate_priority_inversion_addnonvoter
+      description: Number of priority inversions in the replicate queue that resulted in add non-voter action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.addvoter
+      exported_name: queue_replicate_priority_inversion_addvoter
+      description: Number of priority inversions in the replicate queue that resulted in add voter action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.considerrebalance
+      exported_name: queue_replicate_priority_inversion_considerrebalance
+      description: Number of priority inversions in the replicate queue that resulted in consider rebalance action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.noop
+      exported_name: queue_replicate_priority_inversion_noop
+      description: Number of priority inversions in the replicate queue that resulted in noop action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.rangeunavailable
+      exported_name: queue_replicate_priority_inversion_rangeunavailable
+      description: Number of priority inversions in the replicate queue that resulted in range unavailable action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.removedeadnonvoter
+      exported_name: queue_replicate_priority_inversion_removedeadnonvoter
+      description: Number of priority inversions in the replicate queue that resulted in remove dead non-voter action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.removedeadvoter
+      exported_name: queue_replicate_priority_inversion_removedeadvoter
+      description: Number of priority inversions in the replicate queue that resulted in remove dead voter action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.removedecommissioningnonvoter
+      exported_name: queue_replicate_priority_inversion_removedecommissioningnonvoter
+      description: Number of priority inversions in the replicate queue that resulted in remove decommissioning non-voter action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.removedecommissioningvoter
+      exported_name: queue_replicate_priority_inversion_removedecommissioningvoter
+      description: Number of priority inversions in the replicate queue that resulted in remove decommissioning voter action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.removenonvoter
+      exported_name: queue_replicate_priority_inversion_removenonvoter
+      description: Number of priority inversions in the replicate queue that resulted in remove non-voter action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.removevoter
+      exported_name: queue_replicate_priority_inversion_removevoter
+      description: Number of priority inversions in the replicate queue that resulted in remove voter action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.replacedeadnonvoter
+      exported_name: queue_replicate_priority_inversion_replacedeadnonvoter
+      description: Number of priority inversions in the replicate queue that resulted in replace dead non-voter action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.replacedecommissioningnonvoter
+      exported_name: queue_replicate_priority_inversion_replacedecommissioningnonvoter
+      description: Number of priority inversions in the replicate queue that resulted in replace decommissioning non-voter action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.replacedecommissioningvoter
+      exported_name: queue_replicate_priority_inversion_replacedecommissioningvoter
+      description: Number of priority inversions in the replicate queue that resulted in replace decommissioning voter action during processing
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.requeue
+      exported_name: queue_replicate_priority_inversion_requeue
+      description: Number of priority inversions in the replicate queue that resulted in requeuing of the replicas. A priority inversion occurs when the priority at processing time ends up being lower than at enqueue time. When the priority has changed from a high priority repair action to rebalance, the change is requeued to avoid unfairness.
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.total
+      exported_name: queue_replicate_priority_inversion_total
+      description: Total number of priority inversions in the replicate queue. A priority inversion occurs when the priority at processing time ends up being lower than at enqueue time
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: queue.replicate.process.failure
       exported_name: queue_replicate_process_failure
       description: Number of replicas which failed processing in the replicate queue

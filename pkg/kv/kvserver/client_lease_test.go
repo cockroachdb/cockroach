@@ -1098,7 +1098,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	var testRangeID int64
 	var clockJumpMu syncutil.Mutex
 	atomic.StoreInt64(&testRangeID, -1)
-	disabledQueueBypassFn := func(rangeID roachpb.RangeID) bool {
+	disabledQueueBypassFn := func(_ roachpb.StoreID, rangeID roachpb.RangeID) bool {
 		if rangeID == roachpb.RangeID(atomic.LoadInt64(&testRangeID)) {
 			clockJumpMu.Lock()
 			defer clockJumpMu.Unlock()
