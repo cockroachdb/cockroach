@@ -57,9 +57,11 @@ type applyCommittedEntriesStats struct {
 // side-effects of each command is applied to the Replica's in-memory state.
 type replicaStateMachine struct {
 	r *Replica
-	// batch is returned from NewBatch.
+	// batch is returned from NewBatch. It is non-zero between NewBatch() and the
+	// corresponding Close() call.
 	batch replicaAppBatch
-	// ephemeralBatch is returned from NewEphemeralBatch.
+	// ephemeralBatch is returned from NewEphemeralBatch. It is non-zero between
+	// NewEphemeralBatch() and the corresponding Close() call.
 	ephemeralBatch ephemeralReplicaAppBatch
 	// stats are updated during command application and reset by moveStats.
 	applyStats applyCommittedEntriesStats
@@ -128,6 +130,8 @@ func replicaApplyTestingFilters(
 func (sm *replicaStateMachine) NewEphemeralBatch() apply.EphemeralBatch {
 	r := sm.r
 	mb := &sm.ephemeralBatch
+	// NB: the batch struct is zero-initialized, which is guaranteed by the fact
+	// that its previous use ended with ephemeralReplicaAppBatch.Close().
 	mb.r = r
 	r.raftMu.AssertHeld()
 	mb.state = r.shMu.state
@@ -138,9 +142,8 @@ func (sm *replicaStateMachine) NewEphemeralBatch() apply.EphemeralBatch {
 func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	r := sm.r
 	b := &sm.batch
-	// TODO(pav-kv): replicaAppBatch initialization below is bug-prone, we need to
-	// not forget resetting the fields that are local to one batch. Find a way to
-	// make it safer.
+	// NB: the batch struct is zero-initialized, which is guaranteed by the fact
+	// that its previous use ended with replicaAppBatch.Close().
 	b.r = r
 	b.applyStats = &sm.applyStats
 	// TODO(#144627): most commands do not need to read. Use NewWriteBatch because
@@ -154,9 +157,6 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	*b.state.Stats = *r.shMu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
 	r.mu.RUnlock()
-	b.changeRemovesReplica = false
-	b.changeTruncatesSideloadedFiles = false
-	// TODO(pav-kv): what about b.ab and b.followerStoreWriteBytes?
 	b.start = timeutil.Now()
 	return b
 }
