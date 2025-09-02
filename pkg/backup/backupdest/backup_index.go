@@ -204,18 +204,11 @@ func ListIndexes(
 }
 
 // GetBackupTreeIndexMetadata concurrently retrieves the index metadata for all
-// backups within the specified subdir, up to the specified end time, inclusive.
-// The store should be rooted at the collection URI that contains the `index/`
-// directory. Indexes are returned in ascending end time order, with ties broken
-// by ascending start time order. If the end time is not covered by the backups
-// in the subdir, an error is returned.
-//
-// Note: If endTime is provided, GetBackupTreeIndexMetadata will return ALL
-// backups that could be used to restore to endTime. So even if a compacted
-// backup can be used to restore to endTime, the incremental backups that
-// make up the compacted backup will also be returned.
+// backups within the specified subdir. The store should be rooted at the
+// collection URI that contains the `index/` directory. Indexes are returned in
+// ascending end time order, with ties broken by ascending start time order.
 func GetBackupTreeIndexMetadata(
-	ctx context.Context, store cloud.ExternalStorage, subdir string, endTime hlc.Timestamp,
+	ctx context.Context, store cloud.ExternalStorage, subdir string,
 ) ([]backuppb.BackupIndexMetadata, error) {
 	indexBasenames, err := ListIndexes(ctx, store, subdir)
 	if err != nil {
@@ -252,25 +245,7 @@ func GetBackupTreeIndexMetadata(
 		return nil, errors.Wrapf(err, "getting backup index metadata")
 	}
 
-	if endTime.IsEmpty() {
-		return indexes, nil
-	}
-
-	coveringIdx := slices.IndexFunc(indexes, func(index backuppb.BackupIndexMetadata) bool {
-		return index.StartTime.Less(endTime) && endTime.LessEq(index.EndTime)
-	})
-	if coveringIdx == -1 {
-		return nil, errors.Newf(`backups in "%s" do not cover end time %s`, subdir, endTime)
-	}
-	coverEndTime := indexes[coveringIdx].EndTime
-	// To include all components of a compacted backup, we need to include all
-	// backups with the same end time.
-	for ; coveringIdx < len(indexes); coveringIdx++ {
-		if !indexes[coveringIdx].EndTime.Equal(coverEndTime) {
-			break
-		}
-	}
-	return indexes[:coveringIdx], nil
+	return indexes, nil
 }
 
 // ParseBackupFilePathFromIndexFileName parses the path to a backup given the
