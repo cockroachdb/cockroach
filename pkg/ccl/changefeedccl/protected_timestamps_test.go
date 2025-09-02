@@ -1039,7 +1039,7 @@ func TestChangefeedProtectedTimestampUpdateForMultipleTables(t *testing.T) {
 				return err
 			}
 
-			require.Equal(t, 0, ptsEntries.Size())
+			require.Equal(t, 0, len(ptsEntries.PerTableRecords))
 			return nil
 		})
 
@@ -1137,12 +1137,16 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 						return err
 					}
 
-					if len(ptsEntries.ProtectedTimestampRecords) != len(expectedTables) {
-						return errors.Newf("expected %d per-table PTS records, got %d", len(expectedTables), len(ptsEntries.ProtectedTimestampRecords))
+					if len(ptsEntries.PerTableRecords) != len(expectedTables) {
+						return errors.Newf(
+							"expected %d per-table PTS records, got %d",
+							len(expectedTables),
+							len(ptsEntries.PerTableRecords),
+						)
 					}
 
 					for tableID := range expectedTables {
-						if ptsEntries.ProtectedTimestampRecords[tableID] == nil {
+						if ptsEntries.PerTableRecords[tableID] == uuid.Nil {
 							return errors.Newf("expected PTS record for table %d", tableID)
 						}
 					}
