@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -46,7 +47,9 @@ func declareKeysMigrate(
 // migrationRegistry is a global registry of all KV-level migrations. See
 // pkg/migration for details around how the migrations defined here are
 // wired up.
-var migrationRegistry = make(map[roachpb.Version]migration)
+var migrationRegistry = map[roachpb.Version]migration{
+	clusterversion.V25_4_FlushRaft.Version(): flushRaft,
+}
 
 type migration func(context.Context, storage.ReadWriter, CommandArgs) (result.Result, error)
 
@@ -102,4 +105,11 @@ func TestingRegisterMigrationInterceptor(version roachpb.Version, fn func()) (un
 		return result.Result{}, nil
 	}
 	return func() { delete(migrationRegistry, version) }
+}
+
+// flushRaft is a no-op migration which only causes forced raft log application,
+// to guarantee that we will no longer need handling historical proposals made
+// by previous versions.
+func flushRaft(context.Context, storage.ReadWriter, CommandArgs) (result.Result, error) {
+	return result.Result{}, nil
 }
