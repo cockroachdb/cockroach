@@ -897,7 +897,7 @@ func (bq *baseQueue) addInternal(
 				log.Infof(ctx, "updating priority: %0.3f -> %0.3f", item.priority, priority)
 			}
 			bq.mu.priorityQ.update(item, priority)
- 			// item.index should be updated now based on heap property now.
+			// item.index should be updated now based on heap property now.
 			cb.onEnqueueResult(item.index /*indexOnHeap*/, nil)
 		}
 		return false, nil
