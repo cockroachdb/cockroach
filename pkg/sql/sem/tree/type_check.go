@@ -2744,34 +2744,12 @@ func typeCheckComparisonOp(
 	leftFamily = leftReturn.Family()
 	rightFamily = rightReturn.Family()
 
-	// Return early if at least one overload is possible, NULL is an argument,
-	// and none of the overloads accept NULL.
-	nullComparison := false
-	if leftFamily == types.UnknownFamily || rightFamily == types.UnknownFamily {
-		nullComparison = true
-		if len(s.overloadIdxs) > 0 {
-			noneAcceptNull := true
-			for _, idx := range s.overloadIdxs {
-				e := ops.overloads[idx]
-				if e.CalledOnNullInput {
-					noneAcceptNull = false
-					break
-				}
-			}
-			if !buildutil.CrdbTestBuild || semaCtx == nil || !semaCtx.TestingKnobs.DisallowAlwaysNullShortCut {
-				if noneAcceptNull {
-					return leftExpr, rightExpr, nil, true /* alwaysNull */, nil
-				}
-			}
-		}
-	}
-
 	leftIsGeneric := leftFamily == types.CollatedStringFamily || leftFamily == types.ArrayFamily || leftFamily == types.EnumFamily
 	rightIsGeneric := rightFamily == types.CollatedStringFamily || rightFamily == types.ArrayFamily || rightFamily == types.EnumFamily
 	genericComparison := leftIsGeneric && rightIsGeneric
 
 	typeMismatch := false
-	if (genericComparison || handleTupleTypeMismatch) && !nullComparison {
+	if genericComparison || handleTupleTypeMismatch {
 		// A generic comparison (one between two generic types, like arrays) is not
 		// well-typed if the two input types are not equivalent, unless one of the
 		// sides is NULL.
