@@ -9583,8 +9583,6 @@ func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 152060)
-
 	scanner := keysutil.MakePrettyScanner(nil, nil)
 
 	observeTables := func(sqlDB *sqlutils.SQLRunner, codec keys.SQLCodec) []int {
@@ -9627,6 +9625,10 @@ func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
 			cf = feed(t, f, `CREATE CHANGEFEED FOR table_a;`)
 		})
 		defer closeFeed(t, cf)
+
+		// We need to ensure that the reason the user doesn't see the table
+		// is not because the rangefeed hasn't started yet.
+		waitForHighwater(t, cf.(cdctest.EnterpriseTestFeed), s.Server.JobRegistry().(*jobs.Registry))
 
 		for _, c := range cases {
 			testutils.SucceedsSoon(t, func() error {
