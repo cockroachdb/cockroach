@@ -2129,6 +2129,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		}
 	}
 
+	// Pass our own node ID to connect to local RPC servers
 	apiInternalServer, err := apiinternal.NewAPIInternalServer(
 		ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get())
 	if err != nil {
