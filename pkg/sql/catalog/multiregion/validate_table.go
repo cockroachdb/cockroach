@@ -121,7 +121,8 @@ func ValidateTableLocalityConfig(
 	switch lc := lc.Locality.(type) {
 	case *catpb.LocalityConfig_Global_:
 		if regionEnumIDReferenced {
-			if !columnTypesTypeIDs.Contains(regionsEnumID) {
+			// Omit views since they may reference the multi-region enum type of the base table.
+			if !columnTypesTypeIDs.Contains(regionsEnumID) && !desc.IsView() {
 				return errors.AssertionFailedf(
 					"expected no region Enum ID to be referenced by a GLOBAL TABLE: %q"+
 						" but found: %d",
@@ -233,8 +234,9 @@ func ValidateTableLocalityConfig(
 			if regionEnumIDReferenced {
 				// It may be the case that the multi-region type descriptor is used
 				// as the type of the table column. Validations should only fail if
-				// that is not the case.
-				if !columnTypesTypeIDs.Contains(regionsEnumID) {
+				// that is not the case. We omit views since they may reference the
+				// multi-region enum type of the base table.
+				if !columnTypesTypeIDs.Contains(regionsEnumID) && !desc.IsView() {
 					return errors.AssertionFailedf(
 						"expected no region Enum ID to be referenced by a REGIONAL BY TABLE: %q homed in the "+
 							"primary region, but found: %d",
