@@ -214,6 +214,7 @@
     
     <div class="control-buttons">
       <button id="clearButton">Clear All</button>
+      <button id="undoZoom" title="Undo Zoom (⌘[)">Undo Zoom</button>
       <button id="zoomOut">Zoom Out</button>
       <button id="resetZoom">Reset Zoom</button>
     </div>
@@ -238,6 +239,205 @@
     // Default metrics to show (in order)
     const defaultMetrics = ['cpu', 'qps', 'write_bytes_per_second', 'replicas', 'leases'];
     let selectedMetrics = new Set();
+    
+    // Clean Zoom State Manager
+    const ZoomManager = {
+      currentRange: { min: null, max: null },  // null = full view
+      history: [],
+      maxHistory: 50,
+      isProgrammaticUpdate: false,  // Track if current update is programmatic
+      
+      // Handle user-initiated zoom from chart callback
+      handleUserZoom(sourceChart) {
+        if (this.isProgrammaticUpdate || !sourceChart || !sourceChart.scales) return;
+        
+        const { min, max } = sourceChart.scales.x;
+        
+        // Save current state to history
+        if (this.currentRange.min !== min || this.currentRange.max !== max) {
+          this.history.push({ ...this.currentRange });
+          if (this.history.length > this.maxHistory) {
+            this.history.shift();
+          }
+          this.currentRange = { min, max };
+        }
+        
+        // Sync other charts
+        this.isProgrammaticUpdate = true;
+        charts.forEach(chart => {
+          if (chart !== sourceChart) {
+            this.updateChartZoom(chart, min, max);
+          }
+        });
+        this.isProgrammaticUpdate = false;
+        
+        // Update Y-axes
+        this.updateAllYAxes(min, max);
+      },
+      
+      // Apply a zoom range to all charts (for buttons/keyboard)
+      applyZoom(min, max, saveToHistory = true) {
+        // Save current state before changing
+        if (saveToHistory && (this.currentRange.min !== min || this.currentRange.max !== max)) {
+          this.history.push({ ...this.currentRange });
+          if (this.history.length > this.maxHistory) {
+            this.history.shift();
+          }
+        }
+        
+        this.currentRange = { min, max };
+        this.isProgrammaticUpdate = true;
+        
+        // Update all charts
+        charts.forEach(chart => {
+          this.updateChartZoom(chart, min, max);
+        });
+        
+        this.isProgrammaticUpdate = false;
+        
+        // Update Y-axes after all X-axes are set
+        this.updateAllYAxes(min, max);
+      },
+      
+      // Update a single chart's zoom without triggering callbacks
+      updateChartZoom(chart, min, max) {
+        if (!chart || !chart.options) return;
+        
+        try {
+          if (min === null || max === null) {
+            // For reset, we can safely call resetZoom
+            chart.resetZoom('none');
+          } else {
+            // For zoom updates, directly modify the scale options to avoid plugin conflicts
+            if (chart.options.scales && chart.options.scales.x) {
+              chart.options.scales.x.min = min;
+              chart.options.scales.x.max = max;
+              chart.update('none');
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to update chart zoom:', e);
+        }
+      },
+      
+      // Reset to full view
+      reset() {
+        this.history = [];
+        this.currentRange = { min: null, max: null };
+        this.applyZoom(null, null, false);
+      },
+      
+      // Undo last zoom
+      undo() {
+        if (this.history.length > 0) {
+          const previousState = this.history.pop();
+          this.currentRange = previousState;
+          this.applyZoom(previousState.min, previousState.max, false);
+        } else {
+          // No history, reset to full view
+          this.reset();
+        }
+      },
+      
+      // Zoom out by 2x
+      zoomOut() {
+        if (!charts.length) return;
+        
+        const chart = charts[0];
+        if (!chart || !chart.data) return;
+        
+        const dataMax = chart.data.labels.length - 1;
+        const currentMin = this.currentRange.min ?? 0;
+        const currentMax = this.currentRange.max ?? dataMax;
+        
+        // If already at full view, do nothing
+        if (currentMin === 0 && currentMax === dataMax) return;
+        
+        const currentRange = currentMax - currentMin;
+        const midpoint = (currentMin + currentMax) / 2;
+        const newRange = Math.min(currentRange * 2, dataMax);
+        
+        let newMin = Math.max(0, midpoint - newRange / 2);
+        let newMax = Math.min(dataMax, midpoint + newRange / 2);
+        
+        // Adjust if we hit boundaries
+        if (newMin === 0) {
+          newMax = Math.min(dataMax, newRange);
+        }
+        if (newMax === dataMax) {
+          newMin = Math.max(0, dataMax - newRange);
+        }
+        
+        // If we're at or beyond full range, reset
+        if (newMin <= 0 && newMax >= dataMax) {
+          this.reset();
+        } else {
+          this.applyZoom(newMin, newMax);
+        }
+      },
+      
+      // Update Y-axes for visible range
+      updateAllYAxes(xMin, xMax) {
+        // Group charts by metric
+        const chartsByMetric = new Map();
+        charts.forEach(chart => {
+          if (!chart.data) return;
+          const metric = chart.data.metricName;
+          if (!chartsByMetric.has(metric)) {
+            chartsByMetric.set(metric, []);
+          }
+          chartsByMetric.get(metric).push(chart);
+        });
+        
+        // Calculate and apply Y range for each metric group
+        chartsByMetric.forEach((metricCharts) => {
+          const yRange = this.calculateYRange(metricCharts, xMin, xMax);
+          metricCharts.forEach(chart => {
+            if (chart.options?.scales?.y) {
+              chart.options.scales.y.min = yRange.min;
+              chart.options.scales.y.max = yRange.max;
+              chart.update('none');
+            }
+          });
+        });
+      },
+      
+      calculateYRange(metricCharts, xMin, xMax) {
+        let globalMin = Infinity;
+        let globalMax = -Infinity;
+        
+        metricCharts.forEach(chart => {
+          if (!chart.data) return;
+          
+          const startIndex = Math.floor(xMin ?? 0);
+          const endIndex = Math.ceil(xMax ?? (chart.data.labels.length - 1));
+          
+          chart.data.datasets.forEach(dataset => {
+            for (let i = startIndex; i <= endIndex && i < dataset.data.length; i++) {
+              const value = dataset.data[i];
+              if (value !== null && value !== undefined && !isNaN(value)) {
+                globalMin = Math.min(globalMin, value);
+                globalMax = Math.max(globalMax, value);
+              }
+            }
+          });
+        });
+        
+        // Handle edge cases
+        if (globalMin === Infinity || globalMax === -Infinity) {
+          return { min: undefined, max: undefined };
+        }
+        
+        // Add padding
+        const range = globalMax - globalMin;
+        const padding = range > 0 ? range * 0.05 : Math.abs(globalMax) * 0.1 || 1;
+        
+        return {
+          min: globalMin - padding,
+          max: globalMax + padding
+        };
+      }
+    };
     
     // Load metric preferences from localStorage
     function loadMetricPreferences() {
@@ -264,6 +464,15 @@
     window.addEventListener('DOMContentLoaded', async () => {
       loadMetricPreferences();
       await fetchAvailableFiles();
+    });
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      // Cmd+[ or Ctrl+[ for undo zoom
+      if ((e.metaKey || e.ctrlKey) && e.key === '[') {
+        e.preventDefault();
+        ZoomManager.undo();
+      }
     });
 
     async function fetchAvailableFiles() {
@@ -545,48 +754,17 @@
       await loadSelectedFiles();
     });
 
-    // Zoom controls
+    // Clean zoom control event handlers
+    document.getElementById('undoZoom').addEventListener('click', () => {
+      ZoomManager.undo();
+    });
+    
     document.getElementById('resetZoom').addEventListener('click', () => {
-      charts.forEach(chart => {
-        chart.resetZoom();
-        updateYAxisForMetric(chart, 0, chart.data.labels.length - 1);
-      });
+      ZoomManager.reset();
     });
 
     document.getElementById('zoomOut').addEventListener('click', () => {
-      charts.forEach(chart => {
-        const xScale = chart.scales.x;
-        const currentMin = xScale.min;
-        const currentMax = xScale.max;
-        
-        if (currentMin === undefined || currentMax === undefined) return;
-        
-        const currentRange = currentMax - currentMin;
-        const midpoint = (currentMin + currentMax) / 2;
-        const newRange = currentRange * 2;
-        const dataMin = 0;
-        const dataMax = chart.data.labels.length - 1;
-        
-        let newMin = midpoint - newRange / 2;
-        let newMax = midpoint + newRange / 2;
-        
-        if (newMin < dataMin) {
-          newMin = dataMin;
-          newMax = Math.min(dataMax, newMin + newRange);
-        }
-        if (newMax > dataMax) {
-          newMax = dataMax;
-          newMin = Math.max(dataMin, newMax - newRange);
-        }
-        
-        if (newMin <= dataMin && newMax >= dataMax) {
-          chart.resetZoom();
-          updateYAxisForMetric(chart, 0, chart.data.labels.length - 1);
-        } else {
-          chart.zoomScale('x', {min: newMin, max: newMax}, 'none');
-          updateYAxisForMetric(chart, newMin, newMax);
-        }
-      });
+      ZoomManager.zoomOut();
     });
 
     function renderAllCharts() {
@@ -766,7 +944,8 @@
                     },
                     mode: 'x',
                     onZoomComplete: function({chart}) {
-                      syncZoom(chart);
+                      // Let ZoomManager handle the zoom sync
+                      ZoomManager.handleUserZoom(chart);
                     }
                   }
                 }
@@ -871,65 +1050,7 @@
       }
     }
 
-    function syncZoom(sourceChart) {
-      const sourceXScale = sourceChart.scales.x;
-      const min = sourceXScale.min;
-      const max = sourceXScale.max;
-      
-      updateYAxisForMetric(sourceChart, min, max);
-      
-      charts.forEach(chart => {
-        if (chart !== sourceChart) {
-          chart.zoomScale('x', {min, max}, 'none');
-        }
-      });
-    }
-
-    function updateYAxisForMetric(sourceChart, xMin, xMax) {
-      const sourceMetric = sourceChart.data.metricName;
-      
-      const sameMetricCharts = charts.filter(chart => 
-        chart.data.metricName === sourceMetric
-      );
-      
-      let globalMin = Infinity;
-      let globalMax = -Infinity;
-      
-      sameMetricCharts.forEach(chart => {
-        const startIndex = Math.floor(xMin || 0);
-        const endIndex = Math.ceil(xMax || chart.data.labels.length - 1);
-        
-        chart.data.datasets.forEach(dataset => {
-          for (let i = startIndex; i <= endIndex && i < dataset.data.length; i++) {
-            const value = dataset.data[i];
-            if (value !== null && value !== undefined && !isNaN(value)) {
-              globalMin = Math.min(globalMin, value);
-              globalMax = Math.max(globalMax, value);
-            }
-          }
-        });
-      });
-      
-      if (globalMin === Infinity || globalMax === -Infinity) {
-        sameMetricCharts.forEach(chart => {
-          delete chart.options.scales.y.min;
-          delete chart.options.scales.y.max;
-          chart.update('none');
-        });
-        return;
-      }
-      
-      const range = globalMax - globalMin;
-      const padding = range > 0 ? range * 0.05 : Math.abs(globalMax) * 0.1 || 1;
-      const yAxisMin = globalMin - padding;
-      const yAxisMax = globalMax + padding;
-      
-      sameMetricCharts.forEach(chart => {
-        chart.options.scales.y.min = yAxisMin;
-        chart.options.scales.y.max = yAxisMax;
-        chart.update('none');
-      });
-    }
+    // All old zoom functions have been replaced by ZoomManager
 
     function copyChartData(metricName, fileIndex, button) {
       const file = loadedFiles[fileIndex];
