@@ -28,10 +28,11 @@ func createProtectedTimestampRecord(
 	jobID jobspb.JobID,
 	targets changefeedbase.Targets,
 	resolved hlc.Timestamp,
+	includeSystemTables bool,
 ) *ptpb.Record {
 	ptsID := uuid.MakeV4()
 	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
-	targetToProtect := makeTargetToProtect(targets)
+	targetToProtect := makeTargetToProtect(targets, includeSystemTables)
 
 	log.VEventf(ctx, 2, "creating protected timestamp %v at %v", ptsID, resolved)
 	return jobsprotectedts.MakeRecord(
@@ -53,13 +54,15 @@ var systemTablesToProtect = []descpb.ID{
 	// These can be identified by the TestChangefeedIdentifyDependentTablesForProtecting test.
 }
 
-func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
+func makeTargetToProtect(targets changefeedbase.Targets, includeSystemTables bool) *ptpb.Target {
 	tablesToProtect := make(descpb.IDs, 0, targets.NumUniqueTables()+len(systemTablesToProtect))
 	_ = targets.EachTableID(func(id descpb.ID) error {
 		tablesToProtect = append(tablesToProtect, id)
 		return nil
 	})
+	if includeSystemTables {
 	tablesToProtect = append(tablesToProtect, systemTablesToProtect...)
+	}
 	return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
 }
 
