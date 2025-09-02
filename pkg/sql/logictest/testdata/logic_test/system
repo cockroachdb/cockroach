@@ -21,7 +21,7 @@ skipif config local-mixed-25.3
 query I rowsort
 SELECT count(id) FROM system.descriptor
 ----
-70
+72
 
 # Verify we can read ID on its own (see #58614).
 query I
