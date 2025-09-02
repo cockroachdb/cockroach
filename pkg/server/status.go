@@ -515,7 +515,10 @@ type statusServer struct {
 	metricSource             metricMarshaler
 	si                       systemInfoOnce
 	stmtDiagnosticsRequester StmtDiagnosticsRequester
-	internalExecutor         *sql.InternalExecutor
+	// TODO(davidh) this needs to be set during startup from the exec
+	// config. Registry should implement this.
+	txnDiagnosticsRequester TxnDiagnosticsRequester
+	internalExecutor        *sql.InternalExecutor
 
 	// cancelSemaphore is a semaphore that limits the number of
 	// concurrent calls to the pgwire query cancellation endpoint. This
@@ -730,6 +733,13 @@ func newSystemStatusServer(
 // turn depends on the statusServer.
 func (s *statusServer) setStmtDiagnosticsRequester(sr StmtDiagnosticsRequester) {
 	s.stmtDiagnosticsRequester = sr
+}
+
+// setTxnDiagnosticsRequester sets the transaction diagnostics
+// requester on the status server much in the same way as the
+// `StmtDiagnosticsRequester` above.
+func (s *statusServer) setTxnDiagnosticsRequester(tr TxnDiagnosticsRequester) {
+	s.txnDiagnosticsRequester = tr
 }
 
 // RegisterService registers the GRPC service.
