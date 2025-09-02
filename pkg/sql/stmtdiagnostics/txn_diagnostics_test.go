@@ -12,6 +12,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -529,4 +531,133 @@ func checkDatabaseForRequest(
 	}
 
 	require.Equal(t, expectedRequest, actualRequest)
+}
+
+func TestTxnRegistry_CancelRequest_MultiNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	// Set polling interval to 50ms for faster test execution
+	PollingInterval.Override(ctx, &settings.SV, 50*time.Millisecond)
+
+	cluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+		},
+	})
+	defer cluster.Stopper().Stop(ctx)
+
+	// Get registries from all 3 nodes
+	registry1 := cluster.Server(0).ApplicationLayer().TxnRegistry().(*TxnRegistry)
+	registry2 := cluster.Server(1).ApplicationLayer().TxnRegistry().(*TxnRegistry)
+	registry3 := cluster.Server(2).ApplicationLayer().TxnRegistry().(*TxnRegistry)
+
+	testCases := []struct {
+		name                string
+		samplingProbability float64
+		minExecutionLatency time.Duration
+		expiresAfter        time.Duration
+		expectedError       string
+	}{
+		{
+			name:                "valid unconditional request",
+			samplingProbability: 0,
+			minExecutionLatency: 0,
+			expiresAfter:        time.Hour,
+			expectedError:       "",
+		},
+		{
+			name:                "valid conditional request",
+			samplingProbability: 0.5,
+			minExecutionLatency: time.Millisecond * 100,
+			expiresAfter:        time.Hour,
+			expectedError:       "",
+		},
+		{
+			name:                "nonexistent request",
+			samplingProbability: 0,
+			minExecutionLatency: 0,
+			expiresAfter:        0,
+			expectedError:       "no pending request found for the request",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var requestID int64
+			var err error
+
+			if tc.expectedError == "" {
+				requestID, err = registry1.InsertRequest(
+					ctx,
+					appstatspb.TransactionFingerprintID(1000+i), // Unique transaction fingerprint
+					[]appstatspb.StmtFingerprintID{
+						appstatspb.StmtFingerprintID(1111 + i),
+						appstatspb.StmtFingerprintID(2222 + i),
+						appstatspb.StmtFingerprintID(3333 + i),
+					},
+					tc.samplingProbability,
+					tc.minExecutionLatency,
+					tc.expiresAfter,
+					false, // not redacted
+					"testuser",
+				)
+				require.NoError(t, err)
+				require.NotZero(t, requestID)
+
+				// Wait for the request to propagate to all nodes by checking the database
+				// Since polling works asynchronously, we'll verify the request exists in the DB
+				testutils.SucceedsSoon(t, func() error {
+					_, shouldStart1 := registry1.GetRequest(RequestID(requestID))
+					_, shouldStart2 := registry2.GetRequest(RequestID(requestID))
+					_, shouldStart3 := registry3.GetRequest(RequestID(requestID))
+
+					if shouldStart1 && shouldStart2 && shouldStart3 {
+						return nil
+					}
+					return errors.Newf("missing diagnostic on at least one of the nodes (%t, %t, %t)", shouldStart1, shouldStart2, shouldStart3)
+				})
+
+			} else {
+				// Use a nonexistent request ID
+				requestID = 99999
+			}
+
+			// Cancel the request using node 2 (different from the one that created it)
+			err = registry2.CancelRequest(ctx, requestID)
+			if tc.expectedError != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedError)
+				return
+			}
+			require.NoError(t, err)
+
+			// Verify the request is marked as expired in the database
+			runner := sqlutils.MakeSQLRunner(cluster.Server(0).SQLConn(t))
+			var expiresAt time.Time
+			err = runner.DB.QueryRowContext(ctx,
+				"SELECT expires_at FROM system.transaction_diagnostics_requests WHERE id = $1",
+				requestID).Scan(&expiresAt)
+			require.NoError(t, err)
+
+			// The expires_at should be set to '1970-01-01' (Unix epoch)
+			expectedExpiration := time.Unix(0, 0).UTC()
+			require.True(t, expiresAt.Equal(expectedExpiration) || expiresAt.Before(expectedExpiration.Add(time.Second)),
+				"Expected expires_at to be set to epoch time, got %v", expiresAt)
+
+			// Verify the request is eventually removed from all nodes' registries
+			testutils.SucceedsSoon(t, func() error {
+				_, shouldStart1 := registry1.GetRequest(RequestID(requestID))
+				_, shouldStart2 := registry2.GetRequest(RequestID(requestID))
+				_, shouldStart3 := registry3.GetRequest(RequestID(requestID))
+
+				if shouldStart1 || shouldStart2 || shouldStart3 {
+					return errors.New("request still found in registry after cancellation")
+				}
+				return nil
+			})
+		})
+	}
 }
