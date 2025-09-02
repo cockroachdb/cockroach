@@ -124,44 +124,47 @@ var noopProcessCallback = processCallback{
 // NB: None of the fields below can be nil. Use noopProcessCallback if you do
 // not need to register any callback.
 //
-// NB: These callbacks may be called multiple times:
-// 1. onEnqueueResult may be called with error = nil first and called again with
-// error = errDroppedDueToFullQueueSize when the replicaItem is later dropped
-// before processing due to exceeding max queue size.
-// 2. onProcessResult may be called with error first and sent to the purgatory
-// queue and called again when the puragtory processes the replica.
+// The callback behavior depends on when it's registered. Currently, addInternal
+// and MaybeAddCallback are the only two users. See comments above them for more
+// details on the exact behaviour.
 //
-// NB: It is not a strong guarantee that the callback will be executed since
-// removeLocked or removeFromReplicaSetLocked may be called without executing
-// the callbacks. That happens when the replica is destroyed or recreated with a
-// new replica id.
+// NB: Callback execution is not guaranteed since removeLocked or
+// removeFromReplicaSetLocked may be called without executing callbacks. This
+// happens when the replica is destroyed or recreated with a new replica ID.
 //
 // For now, the two use cases (decommissioning nudger and
-// maybeBackpressureBatch) are okay with this behaviour. But adding new uses is
-// discouraged without cleaning up the contract of processCallback.
-// TODO(wenyihu6): consider clean the semantics up after backports
+// maybeBackpressureBatch) are okay with the current behaviour. But adding new
+// uses is discouraged without cleaning up the contract of processCallback.
+// TODO(wenyihu6): consider cleaning up the semantics after backports
 type processCallback struct {
-	// onProcessResult is called with the result of a process attempt. It is only
-	// invoked if the base queue gets a chance to process this replica. It may be
-	// invoked multiple times: first with a processing error and again with
-	// purgatory processing error.
-	onProcessResult func(err error)
-
 	// onEnqueueResult is called with the result of the enqueue attempt. It is
 	// invoked when the range is added to the queue and if the range encounters
-	// any errors before getting a chance to be popped off the queue and getting
-	// processed.
-	//
-	// This may be invoked multiple times: first with error = nil when
-	// successfully enqueued at the beginning, and again with an error if the
-	// replica encounters any errors
+	// any errors and being enqueued again before being processed.
 	//
 	// If error is nil, the index on the priority queue where this item sits is
 	// also passed in the callback. If error is non-nil, the index passed in the
 	// callback is -1. Note: indexOnHeap does not represent the item's exact rank
 	// by priority. It only reflects the item's position in the heap array, which
 	// gives a rough idea of where it sits in the priority hierarchy.
+	//
+	// - May be invoked multiple times:
+	//   1. Immediately after successful enqueue (err = nil).
+	//   2. If the replica is later dropped due to full queue (err =
+	//   errDroppedDueToFullQueueSize).
+	//   3. If re-added with updated priority (err = nil, new heap index).
+	//   4. If the replica is already in the queue and processing.
+	// - May be skipped if the replica is already in queue and no priority changes
+	// occur.
 	onEnqueueResult func(indexOnHeap int, err error)
+
+	// onProcessResult is called with the result of any process attempts. It is
+	// only invoked if the base queue gets a chance to process this replica.
+	//
+	// - May be invoked multiple times if the replica goes through purgatory or
+	// re-processing.
+	// - May be skipped if the replica is removed with removeFromReplicaSetLocked
+	// or registered with a new replica id before processing begins.
+	onProcessResult func(err error)
 }
 
 // A replicaItem holds a replica and metadata about its queue state and
@@ -720,9 +723,9 @@ func (bq *baseQueue) MaybeAddAsync(
 	})
 }
 
-// MaybeAddAsyncWithCallback is the same as MaybeAddAsync, but allows the caller
-// to register a process callback that will be invoked when the replica is
-// enqueued or processed.
+// AddAsyncWithCallback is the same as AddAsync, but allows the caller to
+// register a process callback that will be invoked when the replica is enqueued
+// or processed.
 func (bq *baseQueue) AddAsyncWithCallback(
 	ctx context.Context, repl replicaInQueue, prio float64, processCallback processCallback,
 ) {
@@ -809,6 +812,27 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 // addInternal adds the replica the queue with specified priority. If
 // the replica is already queued at a lower priority, updates the existing
 // priority. Expects the queue lock to be held by caller.
+//
+// processCallback allows the caller to register a callback that will be invoked
+// when the replica is enqueued or processed.
+//   - If the replicaItem has not been added to bq.mu.replicas yet, the callback
+//     is registered and onEnqueueResult is invoked immediately with the result of
+//     the enqueue attempt. If successfully enqueued, onProcessResult will be
+//     invoked when processing completes.
+//   - If the replicaItem has already been added to bq.mu.replicas, no new
+//     callbacks will be registered. onEnqueueResult registered first time will be
+//     invoked with the result of enqueue attempts:
+//     1. Already processing or in purgatory: invoked with
+//     errReplicaAlreadyProcessing/errReplicaAlreadyInPurgatory
+//     2. Priority updated: invoked with error = nil and new heap index
+//     3. Waiting in queue without priority change: not invoked
+//     4. Dropped due to full queue: invoked with
+//     errDroppedDueToFullQueueSizeonEnqueueResult registered first time is
+//     invoked with the result of this enqueue attempt.
+//     5. Other errors: invoked with the error.
+//
+// NB: callback invokation is not guanranteed since removeFromReplicaSetLocked
+// may remove the replica from the queue at any time without invoking them.
 func (bq *baseQueue) addInternal(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
@@ -922,18 +946,21 @@ func (bq *baseQueue) addInternal(
 //     Returns false and no callback is executed.
 //
 //   - queued: in mu.replicas and mu.priorityQ
-//     Returns true and callback is executed when the replica is processed.
+//     Returns true. onProcessResult is executed when the replica is processed.
 //
 //   - purgatory: in mu.replicas and mu.purgatory
-//     Returns true and the callback is called immediately with the purgatory error.
-//     Note that the callback may be invoked again when the purgatory finishes
-//     processing the replica.
+//     Returns true and the onProcessResult is called immediately with the
+//     purgatory error. Note that the onProcessResult may be invoked again when
+//     the purgatory finishes processing the replica..
 //
 //   - processing: only in mu.replicas and currently being processed
-//     Returns true and callback is executed when processing completes. If the
-//     replica is currently being processed by the purgatory queue, it will not
-//     be in bq.mu.purgatory and the callback will only execute when the purgatory
-//     finishes processing the replica.
+//     Returns true and onProcessResult is executed when processing completes.
+//     If the replica is currently being processed by the purgatory queue, it
+//     will not be in bq.mu.purgatory and the onProcessResult will only execute
+//     when the purgatory finishes processing the replica.
+//
+// If it returns true, onEnqueueResult is invoked on subsequent invocations to
+// addInternal as well.
 //
 // NB: Adding new uses is discouraged without cleaning up the contract of
 // processCallback. For example, removeFromReplicaSetLocked may be called
