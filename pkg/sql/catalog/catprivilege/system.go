@@ -52,6 +52,8 @@ var (
 		catconstants.StatementBundleChunksTableName,
 		catconstants.StatementDiagnosticsRequestsTableName,
 		catconstants.StatementDiagnosticsTableName,
+		catconstants.TransactionDiagnosticsRequestsTableName,
+		catconstants.TransactionDiagnosticsTableName,
 		catconstants.ScheduledJobsTableName,
 		catconstants.SqllivenessTableName,
 		catconstants.MigrationsTableName,

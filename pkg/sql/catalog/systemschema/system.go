@@ -549,9 +549,39 @@ create table system.statement_diagnostics(
   trace JSONB,
   bundle_chunks INT ARRAY,
 	error STRING,
+	transaction_diagnostics_id INT8,
 	CONSTRAINT "primary" PRIMARY KEY (id),
 
-	FAMILY "primary" (id, statement_fingerprint, statement, collected_at, trace, bundle_chunks, error)
+	FAMILY "primary" (id, statement_fingerprint, statement, collected_at, trace, bundle_chunks, error, transaction_diagnostics_id)
+);`
+
+	TransactionDiagnosticsRequestsTableSchema = `
+CREATE TABLE system.transaction_diagnostics_requests(
+	id INT8 DEFAULT unique_rowid() NOT NULL,
+	completed BOOL NOT NULL DEFAULT FALSE,
+	transaction_fingerprint_id STRING NOT NULL,
+	statement_fingerprints STRING[] NOT NULL,
+	requested_at TIMESTAMPTZ NOT NULL,
+	min_execution_latency INTERVAL NULL,
+	expires_at TIMESTAMPTZ NULL,
+	sampling_probability FLOAT NULL,
+	redact BOOL NOT NULL DEFAULT FALSE,
+	CONSTRAINT "primary" PRIMARY KEY (id),
+	CONSTRAINT check_sampling_probability CHECK (sampling_probability BETWEEN 0.0 AND 1.0),
+	INDEX completed_idx (completed, id) STORING (transaction_fingerprint_id, statement_fingerprints, min_execution_latency, expires_at, sampling_probability, redact),
+	FAMILY "primary" (id, completed, transaction_fingerprint_id, statement_fingerprints, requested_at, min_execution_latency, expires_at, sampling_probability, redact)
+);`
+
+	TransactionDiagnosticsTableSchema = `
+CREATE TABLE system.transaction_diagnostics(
+	id INT8 DEFAULT unique_rowid() NOT NULL,
+	transaction_fingerprint_id STRING NOT NULL,
+	statement_fingerprints STRING[] NOT NULL,
+	collected_at TIMESTAMPTZ NOT NULL,
+	trace_chunks INT8 ARRAY,
+	statement_diagnostics_ids INT8 ARRAY,
+	CONSTRAINT "primary" PRIMARY KEY (id),
+	FAMILY "primary" (id, transaction_fingerprint_id, statement_fingerprints, collected_at, trace_chunks, statement_diagnostics_ids)
 );`
 
 	ScheduledJobsTableSchema = `
@@ -1387,7 +1417,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_4_InspectErrorsTable.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_4_TransactionDiagnosticsSupport.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -2836,13 +2866,75 @@ var (
 				{Name: "trace", ID: 5, Type: types.Jsonb, Nullable: true},
 				{Name: "bundle_chunks", ID: 6, Type: types.IntArray, Nullable: true},
 				{Name: "error", ID: 7, Type: types.String, Nullable: true},
+				{Name: "transaction_diagnostics_id", ID: 8, Type: types.Int, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name: "primary",
 					ColumnNames: []string{"id", "statement_fingerprint", "statement",
-						"collected_at", "trace", "bundle_chunks", "error"},
-					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+						"collected_at", "trace", "bundle_chunks", "error", "transaction_diagnostics_id"},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
+				},
+			},
+			pk("id"),
+		))
+
+	TransactionDiagnosticsRequestsTable = makeSystemTable(
+		TransactionDiagnosticsRequestsTableSchema,
+		systemTable(
+			catconstants.TransactionDiagnosticsRequestsTableName,
+			descpb.InvalidID, // Use dynamic ID allocation
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
+				{Name: "completed", ID: 2, Type: types.Bool, Nullable: false, DefaultExpr: &falseBoolString},
+				{Name: "transaction_fingerprint_id", ID: 3, Type: types.String, Nullable: false},
+				{Name: "statement_fingerprints", ID: 4, Type: types.StringArray, Nullable: false},
+				{Name: "requested_at", ID: 5, Type: types.TimestampTZ, Nullable: false},
+				{Name: "min_execution_latency", ID: 6, Type: types.Interval, Nullable: true},
+				{Name: "expires_at", ID: 7, Type: types.TimestampTZ, Nullable: true},
+				{Name: "sampling_probability", ID: 8, Type: types.Float, Nullable: true},
+				{Name: "redact", ID: 9, Type: types.Bool, Nullable: false, DefaultExpr: &falseBoolString},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ColumnNames: []string{"id", "completed", "transaction_fingerprint_id", "statement_fingerprints", "requested_at", "min_execution_latency", "expires_at", "sampling_probability", "redact"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+				},
+			},
+			pk("id"),
+			// Index for the polling query.
+			descpb.IndexDescriptor{
+				Name:                "completed_idx",
+				ID:                  2,
+				Unique:              false,
+				KeyColumnNames:      []string{"completed", "id"},
+				StoreColumnNames:    []string{"transaction_fingerprint_id", "statement_fingerprints", "min_execution_latency", "expires_at", "sampling_probability", "redact"},
+				KeyColumnIDs:        []descpb.ColumnID{2, 1},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				StoreColumnIDs:      []descpb.ColumnID{3, 4, 6, 7, 8, 9},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		))
+
+	TransactionDiagnosticsTable = makeSystemTable(
+		TransactionDiagnosticsTableSchema,
+		systemTable(
+			catconstants.TransactionDiagnosticsTableName,
+			descpb.InvalidID, // Use dynamic ID allocation
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
+				{Name: "transaction_fingerprint_id", ID: 2, Type: types.String, Nullable: false},
+				{Name: "statement_fingerprints", ID: 3, Type: types.StringArray, Nullable: false},
+				{Name: "collected_at", ID: 4, Type: types.TimestampTZ, Nullable: false},
+				{Name: "trace_chunks", ID: 5, Type: types.IntArray, Nullable: true},
+				{Name: "statement_diagnostics_ids", ID: 6, Type: types.IntArray, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ColumnNames: []string{"id", "transaction_fingerprint_id", "statement_fingerprints", "collected_at", "trace_chunks", "statement_diagnostics_ids"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6},
 				},
 			},
 			pk("id"),
