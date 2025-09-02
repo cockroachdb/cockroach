@@ -25,9 +25,15 @@ message ResolvedTables {
 // ProtectedTimestampRecords contains the IDs of protected timestamps records
 // for the changefeed.
 message ProtectedTimestampRecords {
+  // SystemTablesRecord protects all system tables back to the highwater.
+  bytes system_tables_record = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SystemTablesRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
   // PerTableRecords maps the ID of a lagging table to a protected timestamp
   // record that protects it.
-  map<uint32, bytes> per_table_records = 3 [
+  map<uint32, bytes> per_table_records = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];

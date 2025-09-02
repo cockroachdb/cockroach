@@ -40,6 +40,13 @@ func createProtectedTimestampRecord(
 		jobsprotectedts.Jobs, targetToProtect)
 }
 
+func createSystemTablesProtectedTimestampRecord(
+	ctx context.Context, codec keys.SQLCodec, jobID jobspb.JobID, resolved hlc.Timestamp,
+) *ptpb.Record {
+	targets := changefeedbase.Targets{}
+	return createProtectedTimestampRecord(ctx, codec, jobID, targets, resolved, true /* includeSystemTables */)
+}
+
 // systemTablesToProtect holds the descriptor IDs of the system tables
 // that need to be protected to ensure that a CHANGEFEED can do a
 // historical read of a table descriptor.
