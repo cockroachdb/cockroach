@@ -22,9 +22,12 @@ message ResolvedTables {
   cockroach.sql.jobs.jobspb.ResolvedSpan.BoundaryType boundary_type = 2;
 }
 
-// ProtectedTimestampRecords is a map from table descriptor IDs to protected timestamp record IDs.
+// ProtectedTimestampRecords contains the IDs of protected timestamps records
+// for the changefeed.
 message ProtectedTimestampRecords {
-  map<uint32, bytes> protected_timestamp_records = 1 [
+  // LaggingTablesRecords maps the ID of a lagging table to a protected timestamp
+  // record that protects it.
+  map<uint32, bytes> lagging_tables_records = 3 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
