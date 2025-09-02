@@ -2747,7 +2747,9 @@ func typeCheckComparisonOp(
 	// Return early if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
 	nullComparison := false
-	if leftFamily == types.UnknownFamily || rightFamily == types.UnknownFamily {
+	_, leftIsNull := leftExpr.(dNull)
+	_, rightIsNull := rightExpr.(dNull)
+	if leftIsNull || rightIsNull {
 		nullComparison = true
 		if len(s.overloadIdxs) > 0 {
 			noneAcceptNull := true
