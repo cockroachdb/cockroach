@@ -406,7 +406,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 							return nil, false
 						}
 						return upgrade.NewSystemUpgrade("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps,
+							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps, _ *jobs.Job,
 						) error {
 							return d.DB.KV().Migrate(ctx, desc.StartKey, desc.EndKey, cv)
 						}, upgrade.RestoreActionNotRequired("test")), true
@@ -514,7 +514,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 					},
 					RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 						return upgrade.NewSystemUpgrade("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps,
+							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps, _ *jobs.Job,
 						) error {
 							if atomic.AddInt32(&active, 1) != 1 {
 								t.Error("unexpected concurrency")

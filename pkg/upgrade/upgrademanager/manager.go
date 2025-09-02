@@ -665,7 +665,7 @@ func (m *Manager) runMigration(
 
 		switch upg := mig.(type) {
 		case *upgrade.SystemUpgrade:
-			if err := upg.Run(ctx, v, m.SystemDeps()); err != nil {
+			if err := upg.Run(ctx, v, m.SystemDeps(), nil /* job */); err != nil {
 				return err
 			}
 		case *upgrade.TenantUpgrade:

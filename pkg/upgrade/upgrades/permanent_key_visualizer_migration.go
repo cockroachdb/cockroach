@@ -26,7 +26,7 @@ import (
 // keyVisualizerTablesMigration creates the system.span_stats_unique_keys, system.span_stats_buckets,
 // system.span_stats_samples, and system.span_stats_tenant_boundaries tables.
 func keyVisualizerTablesMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.SystemDeps,
+	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.SystemDeps, _ *jobs.Job,
 ) error {
 
 	tables := []catalog.TableDescriptor{
