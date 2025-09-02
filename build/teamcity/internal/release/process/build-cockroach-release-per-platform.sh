@@ -118,6 +118,6 @@ fi
 # Here we verify the FIPS image only. The multi-arch image will be verified in the job it's created.
 if [[ $platform == "linux-amd64-fips" ]]; then
   tc_start_block "Verify FIPS docker image"
-  verify_docker_image "$build_docker_tag" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" true false
+  verify_docker_image "$build_docker_tag" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" true $telemetry_disabled
   tc_end_block "Verify FIPS docker image"
 fi
