@@ -7430,33 +7430,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: schedules.CHANGEFEED.failed
-      exported_name: schedules_CHANGEFEED_failed
-      labeled_name: 'schedules{name: CHANGEFEED, status: failed}'
-      description: Number of CHANGEFEED jobs failed
-      y_axis_label: Jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: schedules.CHANGEFEED.started
-      exported_name: schedules_CHANGEFEED_started
-      labeled_name: 'schedules{name: CHANGEFEED, status: started}'
-      description: Number of CHANGEFEED jobs started
-      y_axis_label: Jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: schedules.CHANGEFEED.succeeded
-      exported_name: schedules_CHANGEFEED_succeeded
-      labeled_name: 'schedules{name: CHANGEFEED, status: succeeded}'
-      description: Number of CHANGEFEED jobs succeeded
-      y_axis_label: Jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.error
       exported_name: schedules_error
       description: Number of schedules which did not execute successfully

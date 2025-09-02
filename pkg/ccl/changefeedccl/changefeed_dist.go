@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -459,8 +460,28 @@ func makePlan(
 		// Create progress config based on current settings.
 		var progressConfig *execinfrapb.ChangefeedProgressConfig
 		if execCtx.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+			perTableTrackingEnabled := changefeedbase.TrackPerTableProgress.Get(sv)
+			perTableProtectedTimestampsEnabled := changefeedbase.PerTableProtectedTimestamps.Get(sv)
 			progressConfig = &execinfrapb.ChangefeedProgressConfig{
-				PerTableTracking: changefeedbase.TrackPerTableProgress.Get(sv),
+				PerTableTracking: perTableTrackingEnabled,
+				// If the per table pts flag was turned on between changefeed creation and now,
+				// the per table pts records will be rewritten in the new format when the
+				// highwater mark is updated in manageProtectedTimestamps.
+				PerTableProtectedTimestamps: perTableTrackingEnabled && perTableProtectedTimestampsEnabled,
+			}
+		}
+
+		var resolvedTables *changefeedpb.ResolvedTables
+		if jobID != 0 && progressConfig != nil && progressConfig.PerTableTracking {
+			var rt changefeedpb.ResolvedTables
+			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return readChangefeedJobInfo(ctx, resolvedTablesFilename, &rt, txn, jobID)
+			}); err != nil {
+				return nil, nil, err
+			}
+			resolvedTables = &rt
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.Dev.Infof(ctx, "read resolved tables: %v", resolvedTables)
 			}
 		}
 
@@ -487,6 +508,7 @@ func makePlan(
 				Select:              execinfrapb.Expression{Expr: details.Select},
 				Description:         description,
 				ProgressConfig:      progressConfig,
+				ResolvedTables:      resolvedTables,
 			}
 		}
 
@@ -502,6 +524,7 @@ func makePlan(
 			UserProto:           execCtx.User().EncodeProto(),
 			Description:         description,
 			ProgressConfig:      progressConfig,
+			ResolvedTables:      resolvedTables,
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {

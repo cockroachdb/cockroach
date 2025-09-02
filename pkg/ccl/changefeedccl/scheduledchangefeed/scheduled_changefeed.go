@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package changefeedccl
+package scheduledchangefeed
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -124,7 +123,7 @@ func (s *scheduledChangefeedExecutor) GetCreateScheduleStatement(
 		return "", err
 	}
 
-	args := &changefeedpb.ScheduledChangefeedExecutionArgs{}
+	args := &ScheduledChangefeedExecutionArgs{}
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return "", errors.Wrap(err, "un-marshaling args")
 	}
@@ -216,7 +215,7 @@ func (s *scheduledChangefeedExecutor) executeChangefeed(
 // extractChangefeedStatement returns tree.CreateChangefeed node encoded inside
 // scheduled job.
 func extractChangefeedStatement(sj *jobs.ScheduledJob) (*annotatedChangefeedStatement, error) {
-	args := &changefeedpb.ScheduledChangefeedExecutionArgs{}
+	args := &ScheduledChangefeedExecutionArgs{}
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return nil, errors.Wrap(err, "un-marshaling args")
 	}
@@ -390,7 +389,7 @@ func makeChangefeedSchedule(
 
 	sj.SetScheduleDetails(details)
 
-	var args changefeedpb.ScheduledChangefeedExecutionArgs
+	var args ScheduledChangefeedExecutionArgs
 	args.ChangefeedStatement = tree.AsStringWithFlags(changefeedNode, tree.FmtParsable|tree.FmtShowPasswords)
 	any, err := pbtypes.MarshalAny(&args)
 	if err != nil {

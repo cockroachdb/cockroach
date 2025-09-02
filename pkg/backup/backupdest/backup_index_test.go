@@ -565,41 +565,15 @@ func TestGetBackupTreeIndexMetadata(t *testing.T) {
 	testcases := []struct {
 		name  string
 		chain chain
-		// endTime filter. Set to 0 for no filter.
-		endTime int
-		error   string
+		error string
 		// expectedIndexTimes should be sorted in ascending order by end time, with
 		// ties broken by ascending start time.
 		expectedIndexTimes chain
 	}{
 		{
-			name:               "fetch all indexes from subdir",
+			name:               "fetch all indexes from chain with no compacted backups",
 			chain:              simpleChain,
 			expectedIndexTimes: [][2]int{{0, 2}, {2, 4}, {4, 6}, {6, 8}},
-		},
-		{
-			name:               "exact end time match",
-			chain:              simpleChain,
-			endTime:            6,
-			expectedIndexTimes: [][2]int{{0, 2}, {2, 4}, {4, 6}},
-		},
-		{
-			name:               "end time between an incremental",
-			chain:              simpleChain,
-			endTime:            5,
-			expectedIndexTimes: [][2]int{{0, 2}, {2, 4}, {4, 6}},
-		},
-		{
-			name:               "end time before full backup end",
-			chain:              simpleChain,
-			endTime:            1,
-			expectedIndexTimes: chain{{0, 2}},
-		},
-		{
-			name:    "end time after the chain",
-			chain:   simpleChain,
-			endTime: 10,
-			error:   "do not cover end time",
 		},
 		{
 			name:               "fetch all indexes from tree with compacted backups",
@@ -607,48 +581,8 @@ func TestGetBackupTreeIndexMetadata(t *testing.T) {
 			expectedIndexTimes: chain{{0, 10}, {10, 11}, {10, 12}, {11, 12}, {12, 14}, {14, 16}},
 		},
 		{
-			name:               "end time of compacted backup",
-			chain:              compactedChain,
-			endTime:            12,
-			expectedIndexTimes: chain{{0, 10}, {10, 11}, {10, 12}, {11, 12}},
-		},
-		{
-			name:               "end time between incremental after compacted backup",
-			chain:              compactedChain,
-			endTime:            13,
-			expectedIndexTimes: chain{{0, 10}, {10, 11}, {10, 12}, {11, 12}, {12, 14}},
-		},
-		{
-			name:               "end time between compacted backup",
-			chain:              compactedChain,
-			endTime:            11,
-			expectedIndexTimes: chain{{0, 10}, {10, 11}},
-		},
-		{
-			name:               "end time before compacted backup",
-			chain:              compactedChain,
-			endTime:            11,
-			expectedIndexTimes: chain{{0, 10}, {10, 11}},
-		},
-		{
 			name:  "fetch all indexes from tree with double compacted backups",
 			chain: doubleCompactedChain,
-			expectedIndexTimes: chain{
-				{0, 18}, {18, 20}, {18, 22}, {20, 22}, {22, 24}, {18, 26}, {24, 26},
-			},
-		},
-		{
-			name:    "end time before second compacted backup but after first",
-			chain:   doubleCompactedChain,
-			endTime: 24,
-			expectedIndexTimes: chain{
-				{0, 18}, {18, 20}, {18, 22}, {20, 22}, {22, 24},
-			},
-		},
-		{
-			name:    "end time of second compacted backup",
-			chain:   doubleCompactedChain,
-			endTime: 26,
 			expectedIndexTimes: chain{
 				{0, 18}, {18, 20}, {18, 22}, {20, 22}, {22, 24}, {18, 26}, {24, 26},
 			},
@@ -664,9 +598,8 @@ func TestGetBackupTreeIndexMetadata(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			subdirTS := intToTime(tc.chain[0][1]).GoTime()
 			subdir := subdirTS.Format(backupbase.DateBasedIntoFolderName)
-			end := intToTime(tc.endTime)
 
-			metadatas, err := GetBackupTreeIndexMetadata(ctx, externalStorage, subdir, end)
+			metadatas, err := GetBackupTreeIndexMetadata(ctx, externalStorage, subdir)
 			if tc.error != "" {
 				require.ErrorContains(t, err, tc.error)
 				return

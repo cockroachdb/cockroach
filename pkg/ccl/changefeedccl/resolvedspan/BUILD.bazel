@@ -12,6 +12,7 @@ go_library(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/checkpoint",
         "//pkg/jobs/jobspb",
+        "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/sql/catalog/descpb",

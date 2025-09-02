@@ -1786,10 +1786,11 @@ func runMessageTooLarge(ctx context.Context, t test.Test, c cluster.Cluster) {
 }
 
 type multiTablePTSBenchmarkParams struct {
-	numTables int
-	numRanges int
-	numRows   int
-	duration  string
+	numTables   int
+	numRanges   int
+	numRows     int
+	duration    string
+	perTablePTS bool
 }
 
 // runCDCMultiTablePTSBenchmark is a benchmark for changefeeds with multiple tables,
@@ -1816,6 +1817,12 @@ func runCDCMultiTablePTSBenchmark(
 	numRanges := 10
 	if params.numRanges > 0 {
 		numRanges = params.numRanges
+	}
+
+	if params.perTablePTS {
+		if _, err := db.Exec("SET CLUSTER SETTING changefeed.protected_timestamp.per_table.enabled = true"); err != nil {
+			t.Fatalf("failed to set per-table protected timestamps: %v", err)
+		}
 	}
 
 	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --ranges=%d --num-tables=%d {pgurl%s}",
@@ -2902,60 +2909,37 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptIBM,
 		Run:              runMessageTooLarge,
 	})
-	r.Add(registry.TestSpec{
-		Name:             "cdc/multi-table-pts-benchmark/num-tables=500",
-		Owner:            registry.OwnerCDC,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
-		CompatibleClouds: registry.AllClouds,
-		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          1 * time.Hour,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			params := multiTablePTSBenchmarkParams{
-				numTables: 500,
-				numRows:   100,
-				duration:  "20m",
-			}
-			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
-		},
-	})
-	r.Add(registry.TestSpec{
-		Name:             "cdc/multi-table-pts-benchmark/num-tables=5000",
-		Owner:            registry.OwnerCDC,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
-		CompatibleClouds: registry.AllClouds,
-		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          1 * time.Hour,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			params := multiTablePTSBenchmarkParams{
-				numTables: 5000,
-				numRows:   100,
-				duration:  "20m",
-			}
-			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
-		},
-	})
-	r.Add(registry.TestSpec{
-		Name:             "cdc/multi-table-pts-benchmark/num-tables=50000",
-		Owner:            registry.OwnerCDC,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
-		CompatibleClouds: registry.AllClouds,
-		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          1 * time.Hour,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			params := multiTablePTSBenchmarkParams{
-				numTables: 50_000,
-				// Splitting tables into ranges slows down test setup at this scale.
-				// Therefore, we don't split the tables into multiple ranges.
-				numRanges: 1,
-				numRows:   10,
-				duration:  "20m",
-			}
-			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
-		},
-	})
+
+	for _, perTablePTS := range []bool{false, true} {
+		for _, config := range []struct {
+			numTables int
+			numRanges int
+		}{
+			{numTables: 500, numRanges: 10},
+			{numTables: 5000, numRanges: 10},
+			{numTables: 50000, numRanges: 1}, // Splitting tables into ranges slows down test setup at this scale
+		} {
+			r.Add(registry.TestSpec{
+				Name:             fmt.Sprintf("cdc/multi-table-pts-benchmark/per-table-pts=%t/num-tables=%d/num-ranges=%d", perTablePTS, config.numTables, config.numRanges),
+				Owner:            registry.OwnerCDC,
+				Benchmark:        true,
+				Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+				CompatibleClouds: registry.AllClouds,
+				Suites:           registry.Suites(registry.Nightly),
+				Timeout:          1 * time.Hour,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					params := multiTablePTSBenchmarkParams{
+						numTables:   config.numTables,
+						numRanges:   config.numRanges,
+						numRows:     100,
+						duration:    "20m",
+						perTablePTS: perTablePTS,
+					}
+					runCDCMultiTablePTSBenchmark(ctx, t, c, params)
+				},
+			})
+		}
+	}
 }
 
 const (
