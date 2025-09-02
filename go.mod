@@ -136,7 +136,7 @@ require (
 	github.com/cockroachdb/errors v1.12.0
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20250816223034-df18f0eac460
+	github.com/cockroachdb/pebble v0.0.0-20250902193948-a9d717bbafc7
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb
