@@ -3390,6 +3390,12 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	ioOverload, _ = s.ioThreshold.t.Score()
 	s.ioThreshold.Unlock()
 
+	// TODO(wenyihu6): it would be nicer if we can sort the replicas so that we
+	// can always get the nudger story on the same set of replicas, will this
+	// introduce a lot of overhead? For now, it seems fine since we usually see <
+	// 15 ranges on decommission stall.
+	var logBudgetOnDecommissioningNudger = 15
+
 	// We want to avoid having to read this multiple times during the replica
 	// visiting, so load it once up front for all nodes.
 	livenessMap := s.cfg.NodeLiveness.ScanNodeVitalityFromCache()
@@ -3460,7 +3466,11 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			if metrics.Decommissioning {
 				// NB: Enqueue is disabled by default from here and throttled async if
 				// enabled.
-				rep.maybeEnqueueProblemRange(ctx, goNow, metrics.LeaseValid, metrics.Leaseholder)
+				shouldLog := logBudgetOnDecommissioningNudger > 0
+				if shouldLog {
+					logBudgetOnDecommissioningNudger--
+				}
+				rep.maybeEnqueueProblemRange(ctx, goNow, metrics.LeaseValid, metrics.Leaseholder, shouldLog)
 				decommissioningRangeCount++
 			}
 		}
