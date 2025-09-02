@@ -986,7 +986,7 @@ func applyColumnMutation(
 			}
 			return pgerror.Newf(
 				pgcode.Syntax,
-				"computed column %q cannot also have a DEFAULT expression",
+				"computed column %q cannot also have a DEFAULT or ON UPDATE expression",
 				col.GetName())
 		}
 		if err := updateNonComputedColExpr(
@@ -1005,6 +1005,12 @@ func applyColumnMutation(
 		}
 
 	case *tree.AlterTableSetOnUpdate:
+		if col.IsComputed() {
+			return pgerror.Newf(
+				pgcode.Syntax,
+				"computed column %q cannot also have a DEFAULT or ON UPDATE expression",
+				col.GetName())
+		}
 		// We want to reject uses of ON UPDATE where there is also a foreign key ON
 		// UPDATE.
 		for _, fk := range tableDesc.OutboundFKs {

@@ -109,7 +109,7 @@ func resolveColumnForDropColumn(
 		return nil, nil, true
 	}
 	// Block drops on system columns.
-	panicIfSystemColumn(col, n.Column.String())
+	panicIfSystemColumn(col, n.Column)
 	return col, elts, false
 }
 

@@ -23,7 +23,7 @@ func alterTableDropNotNull(
 	alterColumnPreChecks(b, tn, tbl, t.Column)
 	columnID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /*required */)
 	// Block alters on system columns.
-	panicIfSystemColumn(mustRetrieveColumnElem(b, tbl.TableID, columnID), t.Column.String())
+	panicIfSystemColumn(mustRetrieveColumnElem(b, tbl.TableID, columnID), t.Column)
 	// Ensure that this column is not in the primary indexes key.
 	primaryIdx := getLatestPrimaryIndex(b, tbl.TableID)
 	idxColumns := mustRetrieveIndexColumnElements(b, tbl.TableID, primaryIdx.IndexID)

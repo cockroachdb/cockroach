@@ -1218,12 +1218,12 @@ func checkTableSchemaChangePrerequisites(
 }
 
 // panicIfSystemColumn blocks alter operations on system columns.
-func panicIfSystemColumn(column *scpb.Column, columnName string) {
+func panicIfSystemColumn(column *scpb.Column, columnName tree.Name) {
 	if column.IsSystemColumn {
 		// Block alter operations on system columns.
 		panic(pgerror.Newf(
 			pgcode.FeatureNotSupported,
-			"cannot alter system column %q", columnName))
+			"cannot alter system column %q", tree.ErrString(&columnName)))
 	}
 }
 

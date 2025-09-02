@@ -42,7 +42,7 @@ func alterTableAlterColumnType(
 ) {
 	colID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /* required */)
 	col := mustRetrieveColumnElem(b, tbl.TableID, colID)
-	panicIfSystemColumn(col, t.Column.String())
+	panicIfSystemColumn(col, t.Column)
 
 	// Setup for the new type ahead of any checking. As we need its resolved type
 	// for the checks.

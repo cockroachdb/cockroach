@@ -71,7 +71,7 @@ func renameColumnChecks(b BuildCtx, col *scpb.Column, oldName, newName tree.Name
 	}
 
 	// Block renaming of system columns.
-	panicIfSystemColumn(col, oldName.String())
+	panicIfSystemColumn(col, oldName)
 
 	// Block renaming of shard columns.
 	if isShardColumn(b, col) {
