@@ -12026,6 +12026,13 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Hour)
 
+		// We need to disable per-table PTS records for this test so that we can
+		// make assertions about the PTS records.
+		// (TODO before merge: improve assertions here so we don't lose coverage
+		// when per-table PTS records become the default.)
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
+
 		sqlDB.Exec(t, `CREATE TABLE foo (id INT)`)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
