@@ -535,27 +535,63 @@
       }
     }
 
-    // Fuzzy search implementation
+    // Better fuzzy search implementation
     function fuzzyMatch(pattern, str) {
       pattern = pattern.toLowerCase();
       str = str.toLowerCase();
       
+      // First, check for exact substring match (highest priority)
+      const substringIndex = str.indexOf(pattern);
+      if (substringIndex !== -1) {
+        const indices = [];
+        for (let i = 0; i < pattern.length; i++) {
+          indices.push(substringIndex + i);
+        }
+        return { matched: true, indices, score: 0, consecutive: true };
+      }
+      
+      // Then try word boundary matches (e.g., "lo" matches "Load_Overload" better)
+      const words = str.split(/[_\-\s\.\/]+/);
+      for (let w = 0; w < words.length; w++) {
+        const word = words[w];
+        if (word.toLowerCase().startsWith(pattern)) {
+          // Calculate where this word starts in the original string
+          const wordStart = str.indexOf(word.toLowerCase());
+          const indices = [];
+          for (let i = 0; i < pattern.length; i++) {
+            indices.push(wordStart + i);
+          }
+          return { matched: true, indices, score: 1, consecutive: true };
+        }
+      }
+      
+      // Finally, do fuzzy matching but require some locality
       let patternIdx = 0;
       let strIdx = 0;
       let matches = [];
+      let lastMatchIdx = -1;
+      let gaps = 0;
       
       while (patternIdx < pattern.length && strIdx < str.length) {
         if (pattern[patternIdx] === str[strIdx]) {
+          // Penalize large gaps between matches
+          if (lastMatchIdx !== -1 && strIdx - lastMatchIdx > 1) {
+            gaps += strIdx - lastMatchIdx - 1;
+          }
           matches.push(strIdx);
+          lastMatchIdx = strIdx;
           patternIdx++;
         }
         strIdx++;
       }
       
-      if (patternIdx === pattern.length) {
-        return { matched: true, indices: matches };
+      // Only consider it a match if all pattern chars were found
+      // and the gaps aren't too large (relative to pattern length)
+      if (patternIdx === pattern.length && gaps < pattern.length * 3) {
+        return { matched: true, indices: matches, score: 2 + gaps, consecutive: false };
       }
-      return { matched: false, indices: [] };
+      
+      return { matched: false, indices: [], score: 999 };
     }
 
     function highlightMatches(text, indices) {
@@ -621,18 +657,27 @@
         }
       });
       
-      // Sort by match quality (earlier matches are better)
+      // Sort by match quality (lower score is better)
       results.sort((a, b) => {
-        const aScore = a.match.indices[0] || 1000;
-        const bScore = b.match.indices[0] || 1000;
-        return aScore - bScore;
+        // First sort by score (lower is better)
+        if (a.match.score !== b.match.score) {
+          return a.match.score - b.match.score;
+        }
+        // Then by position of first match
+        const aFirst = a.match.indices[0] || 1000;
+        const bFirst = b.match.indices[0] || 1000;
+        return aFirst - bFirst;
       });
       
-      results.forEach(({ file, match }) => {
+      // Limit results if there are too many poor matches
+      const goodResults = results.filter(r => r.match.score < 10);
+      const displayResults = goodResults.length > 0 ? goodResults : results.slice(0, 20);
+      
+      displayResults.forEach(({ file, match }) => {
         addDropdownItem(file, match.indices);
       });
       
-      if (results.length === 0) {
+      if (displayResults.length === 0) {
         dropdown.innerHTML = '<div class="dropdown-item">No matches found</div>';
       }
     }
