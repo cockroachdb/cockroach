@@ -1,7 +1,7 @@
 echo
 ----
 Oscillating across zero in both directions, mostly to check that
-negative numbers don't cause issues.'
+negative numbers don't cause issues.
 input: [-10 -4 -6 -1 4 5 -2 6]
    6.00 ┤                                      ╭
    4.40 ┤                      ╭─────╮        ╭╯

@@ -76,7 +76,7 @@ func TestThrashing(t *testing.T) {
 			desc: `An initial outlier leads to a large normalization factor, 
 i.e. low thrashing percentage. This isn't necessarily good, if this becomes
 an issue we could use an inter-quantile range instead.`,
-			vs: []float64{10250, 5004, 12, 1, 2},
+			vs: []float64{10250, 13, 12, 1, 2},
 		},
 		{
 			name: "final_outlier",
@@ -94,7 +94,7 @@ beginning. The trend-aware thrashing measure (tdtv) should be small.
 		{
 			name: "negative_crossover",
 			desc: `Oscillating across zero in both directions, mostly to check that
-negative numbers don't cause issues.'`,
+negative numbers don't cause issues.`,
 			vs: []float64{-10, -4, -6, -1, 4, 5, -2, 6},
 		},
 	} {
