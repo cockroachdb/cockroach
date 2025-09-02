@@ -2978,11 +2978,11 @@ func (r *Replica) maybeEnqueueProblemRange(
 				if err != nil {
 					log.KvDistribution.Infof(ctx,
 						"decommissioning nudger failed to process range %v due to %v", r.Desc(), err)
-					r.store.metrics.DecommissioningNudgerEnqueueProcessFailure.Inc(1)
+					r.store.metrics.DecommissioningNudgerProcessFailure.Inc(1)
 				} else {
 					log.KvDistribution.Infof(ctx,
 						"decommissioning nudger successfully processed replica %s", r.Desc())
-					r.store.metrics.DecommissioningNudgerEnqueueProcessSuccess.Inc(1)
+					r.store.metrics.DecommissioningNudgerProcessSuccess.Inc(1)
 				}
 			},
 		})

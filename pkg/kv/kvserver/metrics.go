@@ -194,19 +194,19 @@ var (
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "ranges.decommissioning.nudger.enqueue.failure",
 	}
-	metaDecommissioningNudgerEnqueueProcessSuccess = metric.Metadata{
-		Name:        "ranges.decommissioning.nudger.enqueue.process.success",
+	metaDecommissioningNudgerProcessSuccess = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.process.success",
 		Help:        "Number of ranges enqueued by the decommissioning nudger that were successfully processed by the replicate queue",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-		LabeledName: "ranges.decommissioning.nudger.enqueue.process.success",
+		LabeledName: "ranges.decommissioning.nudger.process.success",
 	}
-	metaDecommissioningNudgerEnqueueProcessFailure = metric.Metadata{
-		Name:        "ranges.decommissioning.nudger.enqueue.process.failure",
+	metaDecommissioningNudgerProcessFailure = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.process.failure",
 		Help:        "Number of ranges enqueued by the decommissioning nudger that failed to process by the replicate queue",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-		LabeledName: "ranges.decommissioning.nudger.enqueue.process.failure",
+		LabeledName: "ranges.decommissioning.nudger.process.failure",
 	}
 	metaDecommissioningNudgerNotLeaseholderOrInvalidLease = metric.Metadata{
 		Name:        "ranges.decommissioning.nudger.not_leaseholder_or_invalid_lease",
@@ -2916,8 +2916,8 @@ type StoreMetrics struct {
 	DecommissioningNudgerEnqueue                      *metric.Counter
 	DecommissioningNudgerEnqueueSuccess               *metric.Counter
 	DecommissioningNudgerEnqueueFailure               *metric.Counter
-	DecommissioningNudgerEnqueueProcessSuccess        *metric.Counter
-	DecommissioningNudgerEnqueueProcessFailure        *metric.Counter
+	DecommissioningNudgerProcessSuccess               *metric.Counter
+	DecommissioningNudgerProcessFailure               *metric.Counter
 	DecommissioningNudgerNotLeaseholderOrInvalidLease *metric.Counter
 
 	// Lease request metrics for successful and failed lease requests. These
@@ -3643,8 +3643,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		DecommissioningNudgerEnqueue:                      metric.NewCounter(metaDecommissioningNudgerEnqueue),
 		DecommissioningNudgerEnqueueSuccess:               metric.NewCounter(metaDecommissioningNudgerEnqueueSuccess),
 		DecommissioningNudgerEnqueueFailure:               metric.NewCounter(metaDecommissioningNudgerEnqueueFailure),
-		DecommissioningNudgerEnqueueProcessSuccess:        metric.NewCounter(metaDecommissioningNudgerEnqueueProcessSuccess),
-		DecommissioningNudgerEnqueueProcessFailure:        metric.NewCounter(metaDecommissioningNudgerEnqueueProcessFailure),
+		DecommissioningNudgerProcessSuccess:               metric.NewCounter(metaDecommissioningNudgerProcessSuccess),
+		DecommissioningNudgerProcessFailure:               metric.NewCounter(metaDecommissioningNudgerProcessFailure),
 		DecommissioningNudgerNotLeaseholderOrInvalidLease: metric.NewCounter(metaDecommissioningNudgerNotLeaseholderOrInvalidLease),
 
 		// Lease request metrics.
