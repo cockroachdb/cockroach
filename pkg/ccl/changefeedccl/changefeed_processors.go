@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/tableset"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -63,6 +64,8 @@ import (
 const EnableCloudBillingAccountingEnvVar = "COCKROACH_ENABLE_CLOUD_BILLING_ACCOUNTING"
 
 var EnableCloudBillingAccounting = envutil.EnvOrDefaultBool(EnableCloudBillingAccountingEnvVar, false)
+
+var errDatabaseTargetsChanged = changefeedbase.MarkRetryableError(errors.New("database targets changed"))
 
 type changeAggregator struct {
 	execinfra.ProcessorBase
@@ -1109,6 +1112,13 @@ type changeFrontier struct {
 	usageWgCancel context.CancelFunc
 
 	targets changefeedbase.Targets
+
+	// tsWatcher watches the namespace for database-level changefeeds to ensure
+	// no new tables are added before we checkpoint/update the high watermark.
+	tsWatcher       *tableset.Watcher
+	tsWatcherCancel context.CancelFunc
+	tsWatcherWg     sync.WaitGroup
+	tsWatchDBID     descpb.ID
 }
 
 const (
@@ -1521,6 +1531,25 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		cf.knobs.AfterCoordinatorFrontierRestore(cf.frontier)
 	}
 
+	// If this is a database-level changefeed, start a tableset watcher that
+	// observes namespace changes for the database and records any table adds.
+	if len(cf.spec.Feed.TargetSpecifications) == 1 &&
+		cf.spec.Feed.TargetSpecifications[0].Type == jobspb.ChangefeedTargetSpecification_DATABASE {
+		cf.tsWatchDBID = cf.spec.Feed.TargetSpecifications[0].DescID
+		wFilter := tableset.Filter{DatabaseID: cf.tsWatchDBID}
+		execCfg := cf.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+		mon := cf.FlowCtx.Cfg.BackfillerMonitor
+		w := tableset.NewWatcher(wFilter, execCfg, mon, int64(cf.spec.JobID))
+		cf.tsWatcher = w
+		wctx, cancel := context.WithCancel(ctx)
+		cf.tsWatcherCancel = cancel
+		cf.tsWatcherWg.Add(1)
+		go func(initialTS hlc.Timestamp) {
+			defer cf.tsWatcherWg.Done()
+			_ = w.Start(wctx, initialTS)
+		}(cf.frontier.Frontier())
+	}
+
 	func() {
 		cf.metrics.mu.Lock()
 		defer cf.metrics.mu.Unlock()
@@ -1606,6 +1635,12 @@ func (cf *changeFrontier) close() {
 	// we can use a span after it's finished.
 	cf.usageWgCancel()
 	cf.usageWg.Wait()
+
+	// Stop tableset watcher if running.
+	if cf.tsWatcherCancel != nil {
+		cf.tsWatcherCancel()
+		cf.tsWatcherWg.Wait()
+	}
 
 	if cf.InternalClose() {
 		if cf.metrics != nil {
@@ -1878,6 +1913,27 @@ func (cf *changeFrontier) checkpointJobProgress(
 		}
 	}
 
+	// For database-level changefeeds, before advancing the high-water (or
+	// writing span-level checkpoints), ensure that no new tables have been
+	// added up to the frontier timestamp. This guarantees we don't persist a
+	// checkpoint that would cause us to miss data from newly added tables.
+	var tablesToAddToResolvedTables []tableset.AddedTable
+	if cf.tsWatcher != nil {
+		// N.B. this call is not idempotent. If this code changes to be in a place where it might be retried during the lifetime of the watcher, things will be wrong.
+		unchanged, diffs, err := cf.tsWatcher.PopUnchangedUpTo(ctx, frontier)
+		if err != nil {
+			return false, err
+		}
+		if !unchanged {
+			// - if there's a newly added table, add it to the table-level resolved / checkpt and save that before restart (and localstate too)
+			// - return error after saving
+			// - adjust the frontier to the lowest ts in the diffs
+			// 	 - we'll end up advancing to a lower frontier than we wanted to. but that's ok .... right? it won't regress, just progress less than we thought.
+			tablesToAddToResolvedTables = diffs.Adds()
+			frontier = diffs.Frontier()
+		}
+	}
+
 	updateRunStatus := timeutil.Since(cf.js.lastRunStatusUpdate) > runStatusUpdateFrequency
 	if updateRunStatus {
 		defer func() { cf.js.lastRunStatusUpdate = timeutil.Now() }()
@@ -1920,6 +1976,14 @@ func (cf *changeFrontier) checkpointJobProgress(
 					resolvedTables.Tables[tableID] = tableFrontier.Frontier()
 				}
 
+				for _, table := range tablesToAddToResolvedTables {
+					if _, ok := resolvedTables.Tables[table.Table.ID]; !ok {
+						resolvedTables.Tables[table.Table.ID] = table.AsOf
+					} else {
+						return errors.AssertionFailedf("table already has a resolved timestamp: %d = %s", table.Table.ID, resolvedTables.Tables[table.Table.ID])
+					}
+				}
+
 				if err := writeChangefeedJobInfo(ctx, resolvedTablesFilename, resolvedTables, txn, cf.spec.JobID); err != nil {
 					return errors.Wrap(err, "error writing resolved tables to job info")
 				}
@@ -1940,8 +2004,14 @@ func (cf *changeFrontier) checkpointJobProgress(
 		}
 	}
 
+	// TODO: is it correct to set these and then die?
+
 	cf.localState.SetHighwater(frontier)
 	cf.localState.SetCheckpoint(spanLevelCheckpoint)
+
+	if len(tablesToAddToResolvedTables) > 0 {
+		return false, errors.Wrapf(errDatabaseTargetsChanged, "(progress saved) before checkpoint at %s: %v", frontier, tablesToAddToResolvedTables)
+	}
 
 	return true, nil
 }
