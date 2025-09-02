@@ -327,6 +327,7 @@ func changefeedPlanHook(
 				jobID,
 				targets,
 				details.StatementTime,
+				true, /* includeSystemTables */
 			)
 			progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
 
