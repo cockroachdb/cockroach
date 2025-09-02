@@ -171,14 +171,14 @@
     }
     
     .copy-button {
-      background: #007acc;
-      color: white;
+      background: transparent;
+      color: #666;
       border: none;
       border-radius: 4px;
       padding: 4px 8px;
       cursor: pointer;
-      font-size: 12px;
-      opacity: 0.8;
+      font-size: 16px;
+      opacity: 0.6;
       transition: opacity 0.2s;
     }
     
@@ -947,10 +947,10 @@
       navigator.clipboard.writeText(jsonOutput).then(() => {
         const originalText = button.textContent;
         button.textContent = '✓';
-        button.style.background = '#28a745';
+        button.style.color = '#28a745';
         setTimeout(() => {
           button.textContent = originalText;
-          button.style.background = '#007acc';
+          button.style.color = '#666';
         }, 1000);
       }).catch(err => {
         console.error('Failed to copy to clipboard:', err);
