@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ASIM Test Results Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    canvas { margin: 2rem 0; }
+    
+    .file-selector {
+      margin: 1rem 0;
+      padding: 1rem;
+      background: #f5f5f5;
+      border-radius: 8px;
+    }
+    
+    .search-container {
+      position: relative;
+      margin-bottom: 1rem;
+    }
+    
+    .search-input {
+      width: 100%;
+      padding: 0.75rem;
+      font-size: 1rem;
+      border: 2px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    
+    .search-input:focus {
+      outline: none;
+      border-color: #007acc;
+    }
+    
+    .dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      max-height: 400px;
+      overflow-y: auto;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      z-index: 1000;
+      margin-top: 4px;
+    }
+    
+    .dropdown-item {
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .dropdown-item:hover {
+      background: #f8f8f8;
+    }
+    
+    .dropdown-item.selected {
+      background: #e8f4ff;
+    }
+    
+    .dropdown-item input[type="checkbox"] {
+      margin-right: 0.75rem;
+    }
+    
+    .dropdown-item-text {
+      flex: 1;
+    }
+    
+    .dropdown-item-primary {
+      font-weight: 500;
+      color: #333;
+    }
+    
+    .dropdown-item-secondary {
+      font-size: 0.85rem;
+      color: #666;
+      margin-top: 2px;
+    }
+    
+    .highlight {
+      background: yellow;
+      font-weight: bold;
+    }
+    
+    .selected-files {
+      margin-top: 1rem;
+    }
+    
+    .selected-file-chip {
+      display: inline-block;
+      margin: 0.25rem;
+      padding: 0.5rem 0.75rem;
+      background: #007acc;
+      color: white;
+      border-radius: 20px;
+      font-size: 0.9rem;
+    }
+    
+    .selected-file-chip button {
+      margin-left: 0.5rem;
+      background: transparent;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    
+    .control-buttons {
+      margin: 1rem 0;
+      display: flex;
+      gap: 1rem;
+    }
+    
+    .control-buttons button {
+      padding: 0.5rem 1rem;
+      background: #007acc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    
+    .control-buttons button:hover {
+      background: #005a9e;
+    }
+    
+    .control-buttons button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    
+    .charts-container {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+    
+    .metric-section {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    
+    .metric-charts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    
+    .chart-wrapper {
+      flex: 1;
+      min-width: 400px;
+      max-width: 600px;
+    }
+    
+    .chart-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .copy-button {
+      background: transparent;
+      color: #666;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 16px;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+    
+    .copy-button:hover {
+      opacity: 1;
+    }
+    
+    .status-message {
+      margin: 1rem 0;
+      padding: 1rem;
+      border-radius: 4px;
+      background: #f0f8ff;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>ASIM Test Results Viewer</h1>
+  
+  <div class="file-selector">
+    <h3>Select Test Files</h3>
+    <div class="search-container">
+      <input 
+        type="text" 
+        class="search-input" 
+        id="searchInput" 
+        placeholder="Type to search for test files (fuzzy search)..."
+      />
+      <div class="dropdown" id="dropdown" style="display: none;"></div>
+    </div>
+    
+    <div class="selected-files" id="selectedFiles"></div>
+    
+    <div class="control-buttons">
+      <button id="clearButton">Clear All</button>
+      <button id="undoZoom" title="Undo Zoom (⌘[)">Undo Zoom</button>
+      <button id="zoomOut">Zoom Out</button>
+      <button id="resetZoom">Reset Zoom</button>
+    </div>
+  </div>
+  
+  <div class="file-selector" id="metricSelector" style="display: none;">
+    <h3>Select Metrics to Display</h3>
+    <div id="metricCheckboxes" style="display: flex; flex-wrap: wrap; gap: 1rem;"></div>
+  </div>
+  
+  <div id="statusMessage" class="status-message" style="display: none;"></div>
+  
+  <div id="charts" class="charts-container"></div>
+
+  <script>
+    let availableFiles = [];
+    let selectedFiles = new Set();
+    let loadedFiles = [];
+    const charts = [];
+    let dropdownOpen = false;
+    
+    // Default metrics to show (in order)
+    const defaultMetrics = ['cpu', 'qps', 'write_bytes_per_second', 'replicas', 'leases'];
+    let selectedMetrics = new Set();
+    
+    // Clean Zoom State Manager - Option 1: Plugin for input only
+    const ZoomManager = {
+      currentRange: { min: null, max: null },  // null = full view
+      history: [],
+      maxHistory: 50,
+      
+      // Handle user-initiated zoom from chart callback (drag or pan)
+      handleUserZoom(sourceChart) {
+        if (!sourceChart || !sourceChart.scales) return;
+        
+        const { min, max } = sourceChart.scales.x;
+        
+        // Only process if zoom actually changed
+        if (this.currentRange.min === min && this.currentRange.max === max) {
+          return;
+        }
+        
+        // Push current state to history
+        this.pushToHistory();
+        
+        // Update current range
+        this.currentRange = { min, max };
+        
+        // Sync all other charts directly (bypass zoom plugin)
+        this.syncCharts(sourceChart, min, max);
+        
+        // Update Y-axes
+        this.updateAllYAxes(min, max);
+      },
+      
+      // Push current state to history
+      pushToHistory() {
+        // Don't push duplicates
+        const last = this.history[this.history.length - 1];
+        if (!last || last.min !== this.currentRange.min || last.max !== this.currentRange.max) {
+          this.history.push({ ...this.currentRange });
+          if (this.history.length > this.maxHistory) {
+            this.history.shift();
+          }
+        }
+      },
+      
+      // Sync all charts to match the given range (except source)
+      syncCharts(sourceChart, min, max) {
+        charts.forEach(chart => {
+          if (chart !== sourceChart) {
+            this.updateChartView(chart, min, max);
+          }
+        });
+      },
+      
+      // Update a single chart's view directly (bypass zoom plugin)
+      updateChartView(chart, min, max) {
+        if (!chart || !chart.options) return;
+        
+        if (min === null || max === null) {
+          // Reset to full view
+          delete chart.options.scales.x.min;
+          delete chart.options.scales.x.max;
+        } else {
+          // Apply specific range
+          chart.options.scales.x.min = min;
+          chart.options.scales.x.max = max;
+        }
+        
+        chart.update('none');
+      },
+      
+      // Apply zoom to all charts (for undo/buttons/keyboard)
+      applyZoom(min, max, saveToHistory = true) {
+        // Save current state if requested
+        if (saveToHistory) {
+          this.pushToHistory();
+        }
+        
+        // Update current range
+        this.currentRange = { min, max };
+        
+        // Update all charts directly (bypass zoom plugin for programmatic updates)
+        charts.forEach(chart => {
+          this.updateChartView(chart, min, max);
+        });
+        
+        // Update Y-axes
+        this.updateAllYAxes(min, max);
+      },
+      
+      // Reset to full view
+      reset() {
+        this.history = [];
+        this.applyZoom(null, null, false);
+      },
+      
+      // Undo last zoom
+      undo() {
+        if (this.history.length > 0) {
+          const previousState = this.history.pop();
+          this.applyZoom(previousState.min, previousState.max, false);
+        } else if (this.currentRange.min !== null || this.currentRange.max !== null) {
+          // No history but zoomed in - reset
+          this.reset();
+        }
+      },
+      
+      // Zoom out by 2x
+      zoomOut() {
+        if (!charts.length || !charts[0]?.data) return;
+        
+        const dataMax = charts[0].data.labels.length - 1;
+        const currentMin = this.currentRange.min ?? 0;
+        const currentMax = this.currentRange.max ?? dataMax;
+        
+        // Already at full view
+        if (currentMin === 0 && currentMax === dataMax) return;
+        
+        const currentRange = currentMax - currentMin;
+        const midpoint = (currentMin + currentMax) / 2;
+        const newRange = Math.min(currentRange * 2, dataMax);
+        
+        let newMin = Math.max(0, midpoint - newRange / 2);
+        let newMax = Math.min(dataMax, midpoint + newRange / 2);
+        
+        // Adjust for boundaries
+        if (newMin === 0) newMax = Math.min(dataMax, newRange);
+        if (newMax === dataMax) newMin = Math.max(0, dataMax - newRange);
+        
+        // Apply zoom or reset if at full range
+        if (newMin <= 0 && newMax >= dataMax) {
+          this.reset();
+        } else {
+          this.applyZoom(newMin, newMax);
+        }
+      },
+      
+      // Update Y-axes for visible range
+      updateAllYAxes(xMin, xMax) {
+        // Group charts by metric
+        const chartsByMetric = new Map();
+        charts.forEach(chart => {
+          if (!chart.data) return;
+          const metric = chart.data.metricName;
+          if (!chartsByMetric.has(metric)) {
+            chartsByMetric.set(metric, []);
+          }
+          chartsByMetric.get(metric).push(chart);
+        });
+        
+        // Calculate and apply Y range for each metric group
+        chartsByMetric.forEach((metricCharts) => {
+          const yRange = this.calculateYRange(metricCharts, xMin, xMax);
+          metricCharts.forEach(chart => {
+            if (chart.options?.scales?.y) {
+              chart.options.scales.y.min = yRange.min;
+              chart.options.scales.y.max = yRange.max;
+              chart.update('none');
+            }
+          });
+        });
+      },
+      
+      calculateYRange(metricCharts, xMin, xMax) {
+        let globalMin = Infinity;
+        let globalMax = -Infinity;
+        
+        metricCharts.forEach(chart => {
+          if (!chart.data) return;
+          
+          const startIndex = Math.floor(xMin ?? 0);
+          const endIndex = Math.ceil(xMax ?? (chart.data.labels.length - 1));
+          
+          chart.data.datasets.forEach(dataset => {
+            for (let i = startIndex; i <= endIndex && i < dataset.data.length; i++) {
+              const value = dataset.data[i];
+              if (value !== null && value !== undefined && !isNaN(value)) {
+                globalMin = Math.min(globalMin, value);
+                globalMax = Math.max(globalMax, value);
+              }
+            }
+          });
+        });
+        
+        // Handle edge cases
+        if (globalMin === Infinity || globalMax === -Infinity) {
+          return { min: undefined, max: undefined };
+        }
+        
+        // Add padding
+        const range = globalMax - globalMin;
+        const padding = range > 0 ? range * 0.05 : Math.abs(globalMax) * 0.1 || 1;
+        
+        return {
+          min: globalMin - padding,
+          max: globalMax + padding
+        };
+      }
+    };
+    
+    // Load metric preferences from localStorage
+    function loadMetricPreferences() {
+      const saved = localStorage.getItem('asimview-selected-metrics');
+      if (saved) {
+        try {
+          selectedMetrics = new Set(JSON.parse(saved));
+        } catch (e) {
+          // If parsing fails, use defaults
+          selectedMetrics = new Set(defaultMetrics);
+        }
+      } else {
+        // First time - use defaults
+        selectedMetrics = new Set(defaultMetrics);
+      }
+    }
+    
+    // Save metric preferences to localStorage
+    function saveMetricPreferences() {
+      localStorage.setItem('asimview-selected-metrics', JSON.stringify([...selectedMetrics]));
+    }
+    
+    // Load file selection from localStorage
+    function loadFileSelection() {
+      const saved = localStorage.getItem('asimview-selected-files');
+      if (saved) {
+        try {
+          return new Set(JSON.parse(saved));
+        } catch (e) {
+          return new Set();
+        }
+      }
+      return new Set();
+    }
+    
+    // Save file selection to localStorage
+    function saveFileSelection() {
+      localStorage.setItem('asimview-selected-files', JSON.stringify([...selectedFiles]));
+    }
+
+    // Fetch available files on page load
+    window.addEventListener('DOMContentLoaded', async () => {
+      loadMetricPreferences();
+      await fetchAvailableFiles();
+      
+      // Restore saved file selection if any files match
+      const savedSelection = loadFileSelection();
+      if (savedSelection.size > 0) {
+        const validSelections = new Set();
+        savedSelection.forEach(path => {
+          if (availableFiles.some(f => f.path === path)) {
+            validSelections.add(path);
+          }
+        });
+        
+        if (validSelections.size > 0) {
+          selectedFiles = validSelections;
+          updateSelectedFilesDisplay();
+          // Auto-load the previously selected files
+          await loadSelectedFiles();
+        }
+      }
+    });
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      // Cmd+[ or Ctrl+[ for undo zoom
+      if ((e.metaKey || e.ctrlKey) && e.key === '[') {
+        e.preventDefault();
+        ZoomManager.undo();
+      }
+    });
+
+    async function fetchAvailableFiles() {
+      try {
+        const response = await fetch('/api/files');
+        availableFiles = await response.json();
+        showStatus(`Found ${availableFiles.length} test files`);
+      } catch (error) {
+        showStatus('Error fetching file list: ' + error.message, true);
+      }
+    }
+
+    function showStatus(message, isError = false) {
+      const statusDiv = document.getElementById('statusMessage');
+      statusDiv.textContent = message;
+      statusDiv.style.display = 'block';
+      statusDiv.style.background = isError ? '#ffe0e0' : '#f0f8ff';
+      statusDiv.style.color = isError ? '#c00' : '#333';
+      
+      if (!isError) {
+        setTimeout(() => {
+          statusDiv.style.display = 'none';
+        }, 3000);
+      }
+    }
+
+    // Better fuzzy search implementation
+    function fuzzyMatch(pattern, str) {
+      pattern = pattern.toLowerCase();
+      str = str.toLowerCase();
+      
+      // First, check for exact substring match (highest priority)
+      const substringIndex = str.indexOf(pattern);
+      if (substringIndex !== -1) {
+        const indices = [];
+        for (let i = 0; i < pattern.length; i++) {
+          indices.push(substringIndex + i);
+        }
+        return { matched: true, indices, score: 0, consecutive: true };
+      }
+      
+      // Then try word boundary matches (e.g., "lo" matches "Load_Overload" better)
+      const words = str.split(/[_\-\s\.\/]+/);
+      for (let w = 0; w < words.length; w++) {
+        const word = words[w];
+        if (word.toLowerCase().startsWith(pattern)) {
+          // Calculate where this word starts in the original string
+          const wordStart = str.indexOf(word.toLowerCase());
+          const indices = [];
+          for (let i = 0; i < pattern.length; i++) {
+            indices.push(wordStart + i);
+          }
+          return { matched: true, indices, score: 1, consecutive: true };
+        }
+      }
+      
+      // Finally, do fuzzy matching but require some locality
+      let patternIdx = 0;
+      let strIdx = 0;
+      let matches = [];
+      let lastMatchIdx = -1;
+      let gaps = 0;
+      
+      while (patternIdx < pattern.length && strIdx < str.length) {
+        if (pattern[patternIdx] === str[strIdx]) {
+          // Penalize large gaps between matches
+          if (lastMatchIdx !== -1 && strIdx - lastMatchIdx > 1) {
+            gaps += strIdx - lastMatchIdx - 1;
+          }
+          matches.push(strIdx);
+          lastMatchIdx = strIdx;
+          patternIdx++;
+        }
+        strIdx++;
+      }
+      
+      // Only consider it a match if all pattern chars were found
+      // and the gaps aren't too large (relative to pattern length)
+      if (patternIdx === pattern.length && gaps < pattern.length * 3) {
+        return { matched: true, indices: matches, score: 2 + gaps, consecutive: false };
+      }
+      
+      return { matched: false, indices: [], score: 999 };
+    }
+
+    function highlightMatches(text, indices) {
+      if (indices.length === 0) return text;
+      
+      let result = '';
+      let lastIndex = 0;
+      
+      for (const index of indices) {
+        result += text.slice(lastIndex, index);
+        result += `<span class="highlight">${text[index]}</span>`;
+        lastIndex = index + 1;
+      }
+      result += text.slice(lastIndex);
+      
+      return result;
+    }
+
+    // Search input handling
+    const searchInput = document.getElementById('searchInput');
+    const dropdown = document.getElementById('dropdown');
+
+    searchInput.addEventListener('input', (e) => {
+      const query = e.target.value.trim();
+      
+      if (query.length === 0) {
+        showAllFiles();
+      } else {
+        filterFiles(query);
+      }
+      
+      dropdown.style.display = 'block';
+      dropdownOpen = true;
+    });
+
+    searchInput.addEventListener('focus', () => {
+      previousSelectionSize = selectedFiles.size;
+      if (searchInput.value.trim().length === 0) {
+        showAllFiles();
+      } else {
+        filterFiles(searchInput.value.trim());
+      }
+      dropdown.style.display = 'block';
+      dropdownOpen = true;
+    });
+
+    function showAllFiles() {
+      dropdown.innerHTML = '';
+      availableFiles.forEach(file => {
+        addDropdownItem(file);
+      });
+    }
+
+    function filterFiles(query) {
+      dropdown.innerHTML = '';
+      
+      const results = [];
+      availableFiles.forEach(file => {
+        const searchText = `${file.testName} ${file.name}`;
+        const match = fuzzyMatch(query, searchText);
+        if (match.matched) {
+          results.push({ file, match });
+        }
+      });
+      
+      // Sort by match quality (lower score is better)
+      results.sort((a, b) => {
+        // First sort by score (lower is better)
+        if (a.match.score !== b.match.score) {
+          return a.match.score - b.match.score;
+        }
+        // Then by position of first match
+        const aFirst = a.match.indices[0] || 1000;
+        const bFirst = b.match.indices[0] || 1000;
+        return aFirst - bFirst;
+      });
+      
+      // Limit results if there are too many poor matches
+      const goodResults = results.filter(r => r.match.score < 10);
+      const displayResults = goodResults.length > 0 ? goodResults : results.slice(0, 20);
+      
+      displayResults.forEach(({ file, match }) => {
+        addDropdownItem(file, match.indices);
+      });
+      
+      if (displayResults.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item">No matches found</div>';
+      }
+    }
+
+    function addDropdownItem(file, highlightIndices = []) {
+      const item = document.createElement('div');
+      item.className = 'dropdown-item';
+      if (selectedFiles.has(file.path)) {
+        item.className += ' selected';
+      }
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = selectedFiles.has(file.path);
+      checkbox.onclick = (e) => {
+        e.stopPropagation();
+        toggleFileSelection(file);
+      };
+      
+      const textDiv = document.createElement('div');
+      textDiv.className = 'dropdown-item-text';
+      
+      const searchText = `${file.testName} ${file.name}`;
+      const highlighted = highlightIndices.length > 0 
+        ? highlightMatches(searchText, highlightIndices)
+        : searchText;
+      
+      textDiv.innerHTML = `
+        <div class="dropdown-item-primary">${file.testName}</div>
+      `;
+      
+      item.appendChild(checkbox);
+      item.appendChild(textDiv);
+      
+      item.onclick = () => {
+        toggleFileSelection(file);
+      };
+      
+      dropdown.appendChild(item);
+    }
+
+    function toggleFileSelection(file) {
+      if (selectedFiles.has(file.path)) {
+        selectedFiles.delete(file.path);
+      } else {
+        selectedFiles.add(file.path);
+      }
+      
+      updateSelectedFilesDisplay();
+      updateDropdownSelections();
+      saveFileSelection();  // Save selection to localStorage
+      
+      // Don't load immediately - wait for dropdown to close
+    }
+
+    function updateDropdownSelections() {
+      // Re-render the dropdown to update checkbox states
+      if (dropdownOpen) {
+        const query = searchInput.value.trim();
+        if (query.length === 0) {
+          showAllFiles();
+        } else {
+          filterFiles(query);
+        }
+      }
+    }
+
+    function updateSelectedFilesDisplay() {
+      const container = document.getElementById('selectedFiles');
+      container.innerHTML = '';
+      
+      selectedFiles.forEach(path => {
+        const file = availableFiles.find(f => f.path === path);
+        if (file) {
+          const chip = document.createElement('div');
+          chip.className = 'selected-file-chip';
+          chip.innerHTML = `
+            ${file.testName}
+            <button onclick="removeSelectedFile('${path}')">×</button>
+          `;
+          container.appendChild(chip);
+        }
+      });
+    }
+
+    async function removeSelectedFile(path) {
+      selectedFiles.delete(path);
+      updateSelectedFilesDisplay();
+      updateDropdownSelections();
+      saveFileSelection();  // Save updated selection
+      
+      // Load immediately when removing from chips
+      await loadSelectedFiles();
+    }
+
+    // Track previous selection state to detect changes
+    let previousSelectionSize = 0;
+    
+    // Hide dropdown when clicking outside and load if selection changed
+    document.addEventListener('click', async (e) => {
+      if (!e.target.closest('.search-container')) {
+        if (dropdownOpen) {
+          dropdown.style.display = 'none';
+          dropdownOpen = false;
+          
+          // Load files if selection changed while dropdown was open
+          if (selectedFiles.size !== previousSelectionSize) {
+            saveFileSelection();  // Save when dropdown closes after changes
+            await loadSelectedFiles();
+            previousSelectionSize = selectedFiles.size;
+          }
+        }
+      }
+    });
+
+    // Load selected files function - optimized with parallel loading
+    async function loadSelectedFiles() {
+      if (selectedFiles.size === 0) {
+        loadedFiles = [];
+        renderAllCharts();
+        return;
+      }
+      
+      showStatus('Loading files...', false);
+      
+      // Load all files in parallel
+      const loadPromises = Array.from(selectedFiles).map(async (path) => {
+        const file = availableFiles.find(f => f.path === path);
+        if (!file) return null;
+        
+        try {
+          const response = await fetch(`/api/file/${encodeURIComponent(file.path)}`);
+          const data = await response.json();
+          return { name: file.testName, data };
+        } catch (error) {
+          console.error(`Error loading ${file.name}: ${error.message}`);
+          return null;
+        }
+      });
+      
+      const results = await Promise.all(loadPromises);
+      loadedFiles = results.filter(r => r !== null);
+      
+      if (loadedFiles.length > 0) {
+        showStatus(`Loaded ${loadedFiles.length} files`);
+        renderAllCharts();
+      } else {
+        showStatus('No files could be loaded', true);
+      }
+    }
+
+    // Clear button
+    document.getElementById('clearButton').addEventListener('click', async () => {
+      selectedFiles.clear();
+      updateSelectedFilesDisplay();
+      updateDropdownSelections();
+      saveFileSelection();  // Clear saved selection
+      searchInput.value = '';
+      await loadSelectedFiles();
+    });
+
+    // Clean zoom control event handlers
+    document.getElementById('undoZoom').addEventListener('click', () => {
+      ZoomManager.undo();
+    });
+    
+    document.getElementById('resetZoom').addEventListener('click', () => {
+      ZoomManager.reset();
+    });
+
+    document.getElementById('zoomOut').addEventListener('click', () => {
+      ZoomManager.zoomOut();
+    });
+
+    function renderAllCharts() {
+      // Destroy existing charts
+      charts.forEach(chart => chart.destroy());
+      charts.length = 0;
+      
+      const chartsDiv = document.getElementById('charts');
+      
+      if (loadedFiles.length === 0) {
+        chartsDiv.innerHTML = '<p>No data to display.</p>';
+        return;
+      }
+      
+      chartsDiv.innerHTML = '<p style="color: #666;">Rendering charts...</p>';
+      
+      // Defer rendering to next frame for better responsiveness
+      requestAnimationFrame(() => {
+        const fragment = document.createDocumentFragment();
+        
+        // Get all unique metric names
+        const allMetrics = new Set();
+        loadedFiles.forEach(file => {
+          if (file.data.metrics) {
+            Object.keys(file.data.metrics).forEach(metric => allMetrics.add(metric));
+          }
+        });
+        
+        // Update metric selector checkboxes
+        updateMetricSelector(allMetrics);
+        
+        // Sort metrics according to defaultMetrics order, then alphabetically for others
+        const sortedMetrics = Array.from(allMetrics).sort((a, b) => {
+          const aIndex = defaultMetrics.indexOf(a);
+          const bIndex = defaultMetrics.indexOf(b);
+          if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+          if (aIndex !== -1) return -1;
+          if (bIndex !== -1) return 1;
+          return a.localeCompare(b);
+        });
+        
+        // Filter to only selected metrics
+        const metricsToRender = sortedMetrics.filter(m => selectedMetrics.has(m));
+        
+        // Pre-calculate all Y-axis ranges once (for all metrics, not just selected)
+        const metricRanges = new Map();
+        
+        sortedMetrics.forEach(metricName => {
+          let globalMin = Infinity;
+          let globalMax = -Infinity;
+          
+          loadedFiles.forEach(file => {
+            if (file.data.metrics && file.data.metrics[metricName]) {
+              const storeData = file.data.metrics[metricName];
+              Object.values(storeData).forEach(values => {
+                // Use Math.min/max with spread for better performance on large arrays
+                const validValues = values.filter(v => v != null && !isNaN(v));
+                if (validValues.length > 0) {
+                  globalMin = Math.min(globalMin, Math.min(...validValues));
+                  globalMax = Math.max(globalMax, Math.max(...validValues));
+                }
+              });
+            }
+          });
+          
+          if (globalMin !== Infinity && globalMax !== -Infinity) {
+            const range = globalMax - globalMin;
+            const padding = range > 0 ? range * 0.05 : Math.abs(globalMax) * 0.1 || 1;
+            metricRanges.set(metricName, {
+              min: globalMin - padding,
+              max: globalMax + padding
+            });
+          }
+        });
+        
+        // Now create sections for ALL metrics (we'll hide/show them based on selection)
+        sortedMetrics.forEach(metricName => {
+          const section = document.createElement('div');
+          section.className = 'metric-section';
+          section.dataset.metric = metricName;
+          
+          // Hide if not selected
+          if (!selectedMetrics.has(metricName)) {
+            section.style.display = 'none';
+          }
+          
+          const title = document.createElement('h3');
+          title.textContent = metricName;
+          section.appendChild(title);
+          
+          const chartsContainer = document.createElement('div');
+          chartsContainer.className = 'metric-charts';
+          section.appendChild(chartsContainer);
+          
+          const range = metricRanges.get(metricName);
+          const yAxisMin = range ? range.min : undefined;
+          const yAxisMax = range ? range.max : undefined;
+        
+        loadedFiles.forEach((file, fileIndex) => {
+          if (!file.data.metrics || !file.data.metrics[metricName]) return;
+          
+          const chartWrapper = document.createElement('div');
+          chartWrapper.className = 'chart-wrapper';
+          
+          const titleDiv = document.createElement('div');
+          titleDiv.className = 'chart-title';
+          
+          const titleText = document.createElement('span');
+          titleText.textContent = file.name;
+          titleText.style.fontWeight = 'bold';
+          titleText.style.fontSize = '14px';
+          
+          const copyButton = document.createElement('button');
+          copyButton.className = 'copy-button';
+          copyButton.textContent = '📋';
+          copyButton.title = 'Copy timeseries data';
+          copyButton.onclick = (event) => copyChartData(metricName, fileIndex, event.target);
+          
+          titleDiv.appendChild(titleText);
+          titleDiv.appendChild(copyButton);
+          
+          const canvas = document.createElement('canvas');
+          canvas.id = `chart-${metricName}-${fileIndex}`;
+          
+          chartWrapper.appendChild(titleDiv);
+          chartWrapper.appendChild(canvas);
+          chartsContainer.appendChild(chartWrapper);
+
+          const storeData = file.data.metrics[metricName];
+          const labelCount = Math.max(...Object.values(storeData).map(arr => arr.length));
+          
+          const tickInterval = file.data.tickInterval || 500000000;
+          const totalDurationNs = (labelCount - 1) * tickInterval;
+          const timeUnit = getTimeUnit(totalDurationNs);
+          const timeScale = getTimeScale(timeUnit);
+          
+          const labels = Array.from({ length: labelCount }, (_, i) => {
+            const timeValue = (i * tickInterval / timeScale).toFixed(timeUnit === 's' ? 1 : 0);
+            return `${timeValue}${timeUnit}`;
+          });
+
+          const datasets = Object.entries(storeData).map(([store, values]) => ({
+            label: store,
+            data: values,
+            fill: false,
+            borderWidth: 1,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            tension: 0
+          }));
+
+          const chart = new Chart(canvas, {
+            type: 'line',
+            data: {
+              labels,
+              datasets,
+              metricName
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              plugins: { 
+                legend: {
+                  position: 'bottom'
+                },
+                zoom: {
+                  pan: {
+                    enabled: true,
+                    mode: 'x'
+                  },
+                  zoom: {
+                    drag: {
+                      enabled: true,
+                      backgroundColor: 'rgba(225,225,225,0.3)',
+                      borderColor: 'rgba(225,225,225)',
+                      borderWidth: 1
+                    },
+                    mode: 'x',
+                    onZoomComplete: function({chart}) {
+                      // Let ZoomManager handle the zoom sync
+                      ZoomManager.handleUserZoom(chart);
+                    }
+                  }
+                }
+              },
+              scales: {
+                x: { title: { display: true, text: `Time (${timeUnit})` } },
+                y: { 
+                  title: { display: true, text: 'Value' },
+                  ...(yAxisMin !== undefined && { min: yAxisMin }),
+                  ...(yAxisMax !== undefined && { max: yAxisMax })
+                }
+              }
+            }
+          });
+          
+          charts.push(chart);
+        });
+        
+        fragment.appendChild(section);
+      });
+      
+      // Append all sections at once for better performance
+      chartsDiv.innerHTML = '';
+      chartsDiv.appendChild(fragment);
+    });
+  }
+
+    function updateMetricSelector(availableMetrics) {
+      const selectorDiv = document.getElementById('metricSelector');
+      const checkboxContainer = document.getElementById('metricCheckboxes');
+      
+      if (availableMetrics.size === 0) {
+        selectorDiv.style.display = 'none';
+        return;
+      }
+      
+      selectorDiv.style.display = 'block';
+      checkboxContainer.innerHTML = '';
+      
+      // Sort metrics according to defaultMetrics order, then alphabetically
+      const sortedMetrics = Array.from(availableMetrics).sort((a, b) => {
+        const aIndex = defaultMetrics.indexOf(a);
+        const bIndex = defaultMetrics.indexOf(b);
+        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+        if (aIndex !== -1) return -1;
+        if (bIndex !== -1) return 1;
+        return a.localeCompare(b);
+      });
+      
+      sortedMetrics.forEach(metric => {
+        const label = document.createElement('label');
+        label.style.display = 'flex';
+        label.style.alignItems = 'center';
+        label.style.gap = '0.5rem';
+        label.style.cursor = 'pointer';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = metric;
+        checkbox.checked = selectedMetrics.has(metric);
+        checkbox.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            selectedMetrics.add(metric);
+          } else {
+            selectedMetrics.delete(metric);
+          }
+          saveMetricPreferences();
+          
+          // Just toggle visibility instead of re-rendering everything
+          const sections = document.querySelectorAll('.metric-section');
+          sections.forEach(section => {
+            if (section.dataset.metric === metric) {
+              section.style.display = e.target.checked ? 'block' : 'none';
+            }
+          });
+        });
+        
+        const text = document.createElement('span');
+        text.textContent = metric;
+        
+        label.appendChild(checkbox);
+        label.appendChild(text);
+        checkboxContainer.appendChild(label);
+      });
+    }
+    
+    function getTimeUnit(totalDurationNs) {
+      if (totalDurationNs >= 60000000000) return 's';
+      if (totalDurationNs >= 10000000000) return 's';
+      if (totalDurationNs >= 10000000) return 'ms';
+      if (totalDurationNs >= 10000) return 'μs';
+      return 'ns';
+    }
+
+    function getTimeScale(unit) {
+      switch (unit) {
+        case 's': return 1000000000;
+        case 'ms': return 1000000;
+        case 'μs': return 1000;
+        case 'ns': return 1;
+        default: return 1000000;
+      }
+    }
+
+    // All old zoom functions have been replaced by ZoomManager
+
+    function copyChartData(metricName, fileIndex, button) {
+      const file = loadedFiles[fileIndex];
+      if (!file || !file.data.metrics || !file.data.metrics[metricName]) {
+        alert('No data found for this chart');
+        return;
+      }
+
+      const storeData = file.data.metrics[metricName];
+      const storeNames = Object.keys(storeData);
+      const storeArrays = storeNames.map(storeName => storeData[storeName]);
+      
+      const jsonOutput = JSON.stringify(storeArrays, null, 2);
+      
+      navigator.clipboard.writeText(jsonOutput).then(() => {
+        const originalText = button.textContent;
+        button.textContent = '✓';
+        button.style.color = '#28a745';
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.style.color = '#666';
+        }, 1000);
+      }).catch(err => {
+        console.error('Failed to copy to clipboard:', err);
+        alert('Failed to copy data to clipboard. Check console for details.');
+      });
+    }
+
+    window.removeSelectedFile = removeSelectedFile;
+  </script>
+</body>
+</html>
