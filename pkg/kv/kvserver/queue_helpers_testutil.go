@@ -26,9 +26,9 @@ func (bq *baseQueue) testingAdd(
 // register a process callback that will be invoked when the replica is enqueued
 // or processed.
 func (bq *baseQueue) testingAddWithCallback(
-	ctx context.Context, repl replicaInQueue, priority float64, callback processCallback,
+	ctx context.Context, repl replicaInQueue, priority float64, cb processCallback,
 ) (bool, error) {
-	return bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority, callback)
+	return bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority, cb)
 }
 
 func forceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) error {
