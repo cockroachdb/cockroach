@@ -52,48 +52,28 @@ type route struct {
 
 var decoder = schema.NewDecoder()
 
-// GetStatementBundleServer defines the interface for handling statement bundle requests.
-// This interface allows the API server to delegate statement bundle handling to the appropriate service.
-type GetStatementBundleServer interface {
-	GetStatementBundle(req *http.Request, id int64, w http.ResponseWriter)
-}
-
 // apiInternalServer provides REST endpoints that proxy to RPC services. It
 // serves as a bridge between HTTP REST clients and internal RPC services.
 type apiInternalServer struct {
 	mux    *mux.Router
 	status serverpb.RPCStatusClient
-	admin  serverpb.RPCAdminClient
-	// getStatementBundleServer handles statement bundle requests that require
-	// special processing
-	getStatementBundleServer GetStatementBundleServer
 }
 
 // NewAPIInternalServer creates a new REST API server that proxies to internal
 // RPC services. It establishes connections to both Status and Admin RPC
 // services and registers all REST endpoints.
 func NewAPIInternalServer(
-	ctx context.Context,
-	nd rpcbase.NodeDialer,
-	nodeID roachpb.NodeID,
-	getStatementBundleServer GetStatementBundleServer,
+	ctx context.Context, nd rpcbase.NodeDialer, nodeID roachpb.NodeID,
 ) (*apiInternalServer, error) {
 	status, err := serverpb.DialStatusClient(nd, ctx, nodeID)
 	if err != nil {
 		return nil, err
 	}
-	admin, err := serverpb.DialAdminClient(nd, ctx, nodeID)
-	if err != nil {
-		return nil, err
-	}
 
 	r := &apiInternalServer{
-		status:                   status,
-		admin:                    admin,
-		mux:                      mux.NewRouter(),
-		getStatementBundleServer: getStatementBundleServer,
+		status: status,
+		mux:    mux.NewRouter(),
 	}
-	r.registerAdminRoutes()
 	r.registerStatusRoutes()
 
 	decoder.SetAliasTag("json")

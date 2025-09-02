@@ -2130,7 +2130,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	}
 
 	apiInternalServer, err := apiinternal.NewAPIInternalServer(
-		ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get(), s.admin)
+		ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get())
 	if err != nil {
 		return err
 	}

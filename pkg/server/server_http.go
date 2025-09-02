@@ -210,6 +210,7 @@ func (s *httpServer) setupRoutes(
 	}
 
 	// Admin/Status servers. These are used by the UI via RPC-over-HTTP.
+	s.mux.Handle(apiconstants.AdminPrefix, authenticatedHandler)
 	if apiInternalServer != nil && rpc.ExperimentalDRPCEnabled.Get(&s.cfg.Settings.SV) {
 		authenticatedRestHandler := apiInternalServer
 		if !s.cfg.InsecureWebAccess() {
@@ -217,10 +218,8 @@ func (s *httpServer) setupRoutes(
 				authnServer, authenticatedRestHandler, false /* allowAnonymous */)
 		}
 		s.mux.Handle(apiconstants.StatusPrefix, authenticatedRestHandler)
-		s.mux.Handle(apiconstants.AdminPrefix, authenticatedRestHandler)
 	} else {
 		s.mux.Handle(apiconstants.StatusPrefix, authenticatedHandler)
-		s.mux.Handle(apiconstants.AdminPrefix, authenticatedHandler)
 	}
 
 	// The timeseries endpoint, used to produce graphs.
