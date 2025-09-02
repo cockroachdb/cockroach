@@ -249,6 +249,13 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
+		// This test verifies that we ensure that the protected timestamp is
+		// removed when the job is canceled which isn't true when per-table PTS
+		// records are enabled. We will add that functionality in the following
+		// commit and remove this override.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
+
 		sysDB.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'`)
 		sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 		sqlDB.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 100`)
@@ -379,6 +386,11 @@ func TestChangefeedAlterPTS(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+		// We need to disable per-table PTS records for this test so that we can
+		// make assertions about the PTS records.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
+
 		f2 := feed(t, f, `CREATE CHANGEFEED FOR table foo with protect_data_from_gc_on_pause,
 			resolved='1s', min_checkpoint_frequency='1s'`)
 		defer closeFeed(t, f2)
@@ -601,7 +613,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	waitForJobState(sqlDB, t, jobID, `running`)
 
 	// Lay protected timestamp record.
-	ptr := createProtectedTimestampRecord(ctx, s.Codec(), jobID, targets, ts)
+	ptr := createProtectedTimestampRecord(ctx, s.Codec(), jobID, targets, ts, true /* includeSystemTables */)
 	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return execCfg.ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
 	}))
@@ -737,6 +749,10 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
+		// No per-table PTS records should be created without targets, so none
+		// will need to be migrated.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
@@ -853,6 +869,11 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
+
+		// No old style PTS records should be created when per-table PTS
+		// records are enabled.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
@@ -1137,6 +1158,8 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 						return err
 					}
 
+					require.NotEqual(t, uuid.Nil, ptsEntries.SystemTablesRecord)
+
 					if len(ptsEntries.PerTableRecords) != len(expectedTables) {
 						return errors.Newf(
 							"expected %d per-table PTS records, got %d",
@@ -1150,12 +1173,13 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 							return errors.Newf("expected PTS record for table %d", tableID)
 						}
 					}
+
 					return nil
 				})
 			})
 		}
 
-		// Assert that the feed-level PTS record exists.
+		// Assert that feed-level PTS record exists.
 		assertFeedLevelPTS := func() {
 			testutils.SucceedsSoon(t, func() error {
 				hwm, err := eFeed.HighWaterMark()
@@ -1171,7 +1195,7 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 						return err
 					}
 					if progress.ProtectedTimestampRecord.Equal(uuid.UUID{}) {
-						return errors.New("expected feed-level PTS record to be set")
+						return errors.New("expected feed-level PTS record not to be set")
 					}
 					return nil
 				})

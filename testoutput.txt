@@ -1,0 +1,74 @@
+==================== Test output for //pkg/ccl/changefeedccl:changefeedccl_test:
+metamorphic: use COCKROACH_RANDOM_SEED=3536729231644676030 for reproduction
+initialized metamorphic constant "max-batch-byte-size" with value 26078094
+initialized metamorphic constant "parse-json-impl" with value 0
+initialized metamorphic constant "coldata-batch-size" with value 3820
+initialized metamorphic constant "kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled" with value true
+initialized metamorphic constant "COCKROACH_ENABLE_HDR_HISTOGRAMS" with value true
+initialized metamorphic constant "default-batch-bytes-limit" with value 32521
+initialized metamorphic constant "logical_replication.consumer.immediate_mode_writer" with value legacy-kv
+initialized metamorphic constant "kvadmission.flow_control.mode" with value apply_to_elastic
+initialized metamorphic constant "spilling-queue-initial-len" with value 1
+initialized metamorphic constant "merge-joiner-groups-buffer" with value 6
+initialized metamorphic constant "rpc.batch_stream_pool.enabled" with value false
+initialized metamorphic constant "distsender-leaseholder-first" with value false
+initialized metamorphic constant "kv.transaction.randomized_anchor_key.enabled" with value true
+initialized metamorphic constant "kv.transaction.write_buffering.enabled" with value false
+initialized metamorphic constant "kv.transaction.write_buffering.transformations.scans.enabled" with value false
+initialized metamorphic constant "kv.transaction.write_buffering.transformations.get.enabled" with value false
+initialized metamorphic constant "kv.transaction.write_buffering.max_buffer_size" with value 6439
+initialized metamorphic constant "row-container-rows-per-chunk-shift" with value 1
+initialized metamorphic constant "lock-table-iters-before-seek" with value 1
+initialized metamorphic constant "mvcc-incremental-iter-tbi" with value false
+initialized metamorphic constant "mvcc-value-disable-simple-encoding" with value true
+initialized metamorphic constant "storage.ingest_split.enabled" with value false
+initialized metamorphic constant "storage.ingest_as_flushable.enabled" with value false
+initialized metamorphic constant "storage.value_separation.enabled" with value false
+initialized metamorphic constant "storage.value_separation.minimum_size" with value 923899
+initialized metamorphic constant "storage.value_separation.max_reference_depth" with value 6
+initialized metamorphic constant "storage.value_separation.compaction_garbage_threshold" with value 77
+initialized metamorphic constant "mvcc-max-iters-before-seek" with value 2
+initialized metamorphic constant "disable-checksstconflicts-range-key-masking" with value true
+initialized metamorphic constant "raft-log-truncation-clearrange-threshold" with value 596868
+initialized metamorphic constant "kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled" with value false
+initialized metamorphic constant "kv.split.mvcc_stats_recomputation.enabled" with value false
+initialized metamorphic constant "kv.snapshot.ingest_as_write_threshold" with value 1073741824
+initialized metamorphic constant "rangefeed-bulk_delivery" with value 2549346
+initialized metamorphic constant "kv.raft.leader_fortification.fraction_enabled" with value 0
+initialized metamorphic constant "kv.snapshot_rebalance.max_sst_size" with value 405626750
+initialized metamorphic constant "jobs.avoid_full_scans_in_find_running_jobs" with value false
+initialized metamorphic constant "changefeed.event_consumer_worker_queue_size" with value 2
+initialized metamorphic constant "changefeed.progress.per_table_tracking.enabled" with value false
+initialized metamorphic constant "ColIndexJoin-batch-size" with value 3697664
+initialized metamorphic constant "parallel-scan-result-threshold" with value 4900
+initialized metamorphic constant "zig-zag-joiner-batch-size" with value 1
+initialized metamorphic constant "conn-executor-force-exec-with-pausable-portal" with value true
+initialized metamorphic constant "copy-batch-size" with value 9823
+initialized metamorphic constant "async-IE-result-channel-buffer-size" with value 26
+initialized metamorphic constant "use-index-lookup-for-descriptors-in-database" with value false
+initialized metamorphic constant "tail-call-optimization-enabled" with value false
+initialized metamorphic constant "backup.write_metadata_with_external_ssts.enabled" with value false
+initialized metamorphic constant "backup.index.read.enabled" with value true
+initialized metamorphic constant "backup-read-manifest" with value true
+initialized metamorphic constant "restore-worker-concurrency" with value 7
+initialized metamorphic constant "default_range_distribution_strategy" with value balanced_simple
+initialized metamorphic constant "changefeed.parallel_io.request_quota" with value 64
+initialized metamorphic constant "changefeed-force-enriched-envelope" with value true
+I250912 00:26:22.953584 1 (gostd) rand.go:268  [-] 1  random seed: 3536729231644676030
+=== RUN   TestChangefeedPerTableProtectedTimestampProgression
+    test_log_scope.go:171: test logs captured to: /tmp/cockroach/_tmp/f5cb02fa45891c8256821a187ced6fe9/logTestChangefeedPerTableProtectedTimestampProgression3652674139
+    test_log_scope.go:82: use -show-logs to present logs inline
+=== RUN   TestChangefeedPerTableProtectedTimestampProgression/cloudstorage
+    helpers_test.go:1394: making server as system tenant
+    helpers_test.go:1470: making cloudstorage feed factory
+    helpers_test.go:1198: did not force enriched envelope for CREATE CHANGEFEED FOR table1, table2, table3 WITH resolved='100ms' because *changefeedccl.cloudFeedFactory is not supported
+=== NAME  TestChangefeedPerTableProtectedTimestampProgression
+    protected_timestamps_test.go:1237: -- test log scope end --
+--- PASS: TestChangefeedPerTableProtectedTimestampProgression (12.89s)
+    --- PASS: TestChangefeedPerTableProtectedTimestampProgression/cloudstorage (12.87s)
+PASS
+================================================================================
+//pkg/ccl/changefeedccl:changefeedccl_test                               PASSED in 14.5s
+
+Executed 1 out of 1 test: 1 test passes.
+There were tests whose specified size is too big. Use the --test_verbose_timeout_warnings command line option to see which ones these are.
