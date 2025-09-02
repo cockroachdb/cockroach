@@ -894,10 +894,9 @@ func (bq *baseQueue) addInternal(
 			if log.V(1) {
 				log.Infof(ctx, "updating priority: %0.3f -> %0.3f", item.priority, priority)
 			}
-			// TODO(wenyihu6): will this introduce a lot of new memory allocation?
-			processCallback.onEnqueueResult(-1, /*indexOnHeap*/
-				errors.Wrapf(errReplicaAlreadyInQueue, "priority=%.3f->%.3f", item.priority, priority))
 			bq.mu.priorityQ.update(item, priority)
+			// item.index should be updated now based on heap property now.
+			processCallback.onEnqueueResult(item.index /*indexOnHeap*/, nil)
 		}
 		return false, nil
 	}
