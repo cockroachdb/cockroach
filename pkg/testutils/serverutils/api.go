@@ -492,6 +492,11 @@ type ApplicationLayerInterface interface {
 	// tenant, which can be single-tenant (system-only), shared-process, or
 	// external-process.
 	DeploymentMode() DeploymentMode
+
+	// TxnRegistry returns the internal transaction diagnostics registry
+	// from the SQLServer. This registry holds the currently active
+	// transaction diagnostics requests.
+	TxnRegistry() interface{}
 }
 
 // TenantControlInterface defines the API of a test server that can

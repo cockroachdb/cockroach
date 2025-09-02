@@ -621,6 +621,11 @@ func (ts *testServer) TestTenant() serverutils.ApplicationLayerInterface {
 	return ts.testTenants[0]
 }
 
+// GetTxnRegistry is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) TxnRegistry() interface{} {
+	return ts.sqlServer.txnDiagnosticsRegistry
+}
+
 func (ts *testServer) startDefaultTestTenant(
 	ctx context.Context,
 ) (serverutils.ApplicationLayerInterface, error) {
@@ -2763,4 +2768,9 @@ func newClientRPCContext(
 
 	stopper.AddCloser(stop.CloserFn(func() { clientStopper.Stop(ctx) }))
 	return rpcCtx
+}
+
+// GetTxnRegistry is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) TxnRegistry() interface{} {
+	return t.sql.txnDiagnosticsRegistry
 }

@@ -1809,6 +1809,28 @@ message StatementDiagnosticsReport {
   // and username fields?
 }
 
+// TransactionDiagnosticsReport is a message that represents a
+// diagnostics capture request for a given transaction.
+message TransactionDiagnosticsReport {
+  int64 id = 1;
+  bool completed = 2;
+  // TODO(davidh): should these be strings or int64??? I think bytes is most correct.
+  bytes transaction_fingerprint_id = 3;
+  repeated bytes statement_fingerprint_ids = 4;
+  string transaction_fingerprint = 5;
+  int64 transaction_diagnostics_id = 6
+    [ (gogoproto.nullable) = true];
+  google.protobuf.Timestamp requested_at = 7
+    [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  google.protobuf.Duration min_execution_latency = 8
+    [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
+  google.protobuf.Timestamp expires_at = 9
+    [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  double sampling_probability = 10;
+  bool redacted = 11;
+  string username = 12;
+}
+
 message CreateStatementDiagnosticsReportRequest {
   string statement_fingerprint = 1;
   // MinExecutionLatency, when non-zero, indicates the minimum execution latency
@@ -1869,15 +1891,42 @@ message CreateStatementDiagnosticsReportRequest {
   bool redacted = 7;
 }
 
+// createTransactionDiagnosticsReportRequest is a message that captures a
+// user's requst to capture a transaction diagnostic bundle.
+message CreateTransactionDiagnosticsReportRequest {
+  bytes transaction_fingerprint_id = 1;
+  repeated bytes statement_fingerprint_ids = 2;
+  google.protobuf.Duration min_execution_latency = 3 [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
+  google.protobuf.Duration expires_at = 4 [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
+  double sampling_probability = 5;
+  bool redacted = 6;
+}
+
 message CreateStatementDiagnosticsReportResponse {
   StatementDiagnosticsReport report = 1;
+}
+
+message CreateTransactionDiagnosticsReportResponse {
+  TransactionDiagnosticsReport report = 1;
 }
 
 message CancelStatementDiagnosticsReportRequest {
   int64 request_id = 1 [(gogoproto.customname) = "RequestID"];
 }
 
+message CancelTransactionDiagnosticsReportRequest {
+  int64 request_id = 1 [(gogoproto.customname) = "RequestID"];
+}
+
 message CancelStatementDiagnosticsReportResponse {
+  // canceled indicates whether the request for the given fingerprint was
+  // actually canceled.
+  bool canceled = 1;
+  // error is set only if canceled is false.
+  string error = 2;
+}
+
+message CancelTransactionDiagnosticsReportResponse {
   // canceled indicates whether the request for the given fingerprint was
   // actually canceled.
   bool canceled = 1;
@@ -1905,6 +1954,12 @@ message StatementDiagnosticsRequest {
 
 message StatementDiagnosticsResponse {
   StatementDiagnostics diagnostics = 2;
+}
+
+message TransactionDiagnosticsReportsRequest {}
+
+message TransactionDiagnosticsReportsResponse {
+  repeated TransactionDiagnosticsReport reports = 1 [ (gogoproto.nullable) = false ];
 }
 
 message JobRegistryStatusRequest {
@@ -2583,6 +2638,23 @@ service Status {
   rpc StatementDiagnostics(StatementDiagnosticsRequest) returns (StatementDiagnosticsResponse) {
     option (google.api.http) = {
       get: "/_status/stmtdiag/{statement_diagnostics_id}"
+    };
+  }
+  rpc CreateTransactionDiagnosticsReport(CreateTransactionDiagnosticsReportRequest) returns (CreateTransactionDiagnosticsReportResponse) {
+    option (google.api.http) = {
+      post: "/_status/txndiagreports"
+      body: "*"
+    };
+  }
+  rpc CancelTransactionDiagnosticsReport(CancelTransactionDiagnosticsReportRequest) returns (CancelTransactionDiagnosticsReportResponse) {
+    option (google.api.http) = {
+      post: "/_status/txndiagreports/cancel"
+      body: "*"
+    };
+  }
+  rpc TransactionDiagnosticsRequests(TransactionDiagnosticsReportsRequest) returns (TransactionDiagnosticsReportsResponse) {
+    option (google.api.http) = {
+      get: "/_status/txndiagreports"
     };
   }
   rpc JobRegistryStatus(JobRegistryStatusRequest) returns (JobRegistryStatusResponse) {
