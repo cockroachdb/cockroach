@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -54,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -3836,6 +3839,22 @@ func TestImportDefaultWithResume(t *testing.T) {
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
 
+	ctx, cancel := context.WithTimeout(context.Background(), testutils.RaceSucceedsSoonDuration)
+	defer cancel()
+
+	// Monitor for timeout and print stack traces if test times out.
+	go func() {
+		<-ctx.Done()
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			t.Errorf("Test timed out")
+			// Print stack traces of all goroutines to help debug the hang.
+			buf := make([]byte, 1<<20)
+			stackSize := runtime.Stack(buf, true)
+			t.Errorf("Stack trace at timeout:\n%s", buf[:stackSize])
+		}
+	}()
+
+	filterFunc, verifyFunc := kvclientutils.PrefixTransactionRetryFilter(t, importProgressDebugName, 1)
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			// Test hangs when run within a test tenant. More investigation
@@ -3846,11 +3865,13 @@ func TestImportDefaultWithResume(t *testing.T) {
 				DistSQL: &execinfra.TestingKnobs{
 					BulkAdderFlushesEveryBatch: true,
 				},
+				KVClient: &kvcoord.ClientTestingKnobs{
+					TransactionRetryFilter: filterFunc,
+				},
 			},
 			SQLMemoryPoolSize: 1 << 30, // 1 GiB
 		})
 	registry := s.JobRegistry().(*jobs.Registry)
-	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -3971,6 +3992,16 @@ func TestImportDefaultWithResume(t *testing.T) {
 			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT last_value FROM %s`,
 				test.sequence)).Scan(&seqValOnSuccess)
 			require.Equal(t, seqValOnPause, seqValOnSuccess)
+
+			verifyFunc()
+
+			// Verify final summary counts - should contain exactly the expected number of rows
+			// with no duplication despite multiple pause/resume cycles
+			require.Equal(t, 1, len(js.prog.Summary.EntryCounts))
+
+			for _, entry := range js.prog.Summary.EntryCounts {
+				require.Equal(t, int64(expectedNumRows), entry)
+			}
 		})
 	}
 }
