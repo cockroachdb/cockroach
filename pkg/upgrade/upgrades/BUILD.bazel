@@ -20,6 +20,7 @@ go_library(
         "v25_3_add_hot_range_logger_job.go",
         "v25_3_add_users_last_login_time_column.go",
         "v25_4_inspect_errors_table.go",
+        "v25_4_transaction_diagnostics_tables.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/upgrades",
     visibility = ["//visibility:public"],
