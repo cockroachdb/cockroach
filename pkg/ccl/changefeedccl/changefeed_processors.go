@@ -2002,13 +2002,13 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 		}
 
 		if !isLagging {
-			if ptsEntries.ProtectedTimestampRecords[tableID] != nil {
+			if ptsEntries.LaggingTablesRecords[tableID] != nil {
 				tableIDsToRelease = append(tableIDsToRelease, tableID)
 			}
 			continue
 		}
 
-		if ptsEntries.ProtectedTimestampRecords[tableID] != nil {
+		if ptsEntries.LaggingTablesRecords[tableID] != nil {
 			if updated, err := cf.advancePerTableProtectedTimestampRecord(ctx, ptsEntries, tableID, tableHighWater, pts); err != nil {
 				return hlc.Timestamp{}, false, err
 			} else if updated {
@@ -2041,10 +2041,10 @@ func (cf *changeFrontier) releasePerTableProtectedTimestampRecords(
 	pts protectedts.Storage,
 ) error {
 	for _, tableID := range tableIDs {
-		if err := pts.Release(ctx, *ptsEntries.ProtectedTimestampRecords[tableID]); err != nil {
+		if err := pts.Release(ctx, *ptsEntries.LaggingTablesRecords[tableID]); err != nil {
 			return err
 		}
-		delete(ptsEntries.ProtectedTimestampRecords, tableID)
+		delete(ptsEntries.LaggingTablesRecords, tableID)
 	}
 	return writeChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, ptsEntries, txn, cf.spec.JobID)
 }
@@ -2056,7 +2056,7 @@ func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
 	tableHighWater hlc.Timestamp,
 	pts protectedts.Storage,
 ) (updated bool, err error) {
-	rec, err := pts.GetRecord(ctx, *ptsEntries.ProtectedTimestampRecords[tableID])
+	rec, err := pts.GetRecord(ctx, *ptsEntries.LaggingTablesRecords[tableID])
 	if err != nil {
 		return false, err
 	}
@@ -2066,7 +2066,7 @@ func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
 		return false, nil
 	}
 
-	if err := pts.UpdateTimestamp(ctx, *ptsEntries.ProtectedTimestampRecords[tableID], tableHighWater); err != nil {
+	if err := pts.UpdateTimestamp(ctx, *ptsEntries.LaggingTablesRecords[tableID], tableHighWater); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -2097,16 +2097,16 @@ func (cf *changeFrontier) createPerTableProtectedTimestampRecord(
 	ptr := createProtectedTimestampRecord(
 		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, tableHighWater,
 	)
-	if ptsEntries.ProtectedTimestampRecords == nil {
-		ptsEntries.ProtectedTimestampRecords = make(map[descpb.ID]*uuid.UUID)
+	if ptsEntries.LaggingTablesRecords == nil {
+		ptsEntries.LaggingTablesRecords = make(map[descpb.ID]*uuid.UUID)
 	}
 	uuid := ptr.ID.GetUUID()
-	ptsEntries.ProtectedTimestampRecords[tableID] = &uuid
-	if err := pts.Protect(ctx, ptr); err != nil {
-		return err
-	}
-	return writeChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, ptsEntries, txn, cf.spec.JobID)
+
+	ptsEntries.LaggingTablesRecords[tableID] = &uuid
+	return pts.Protect(ctx, ptr)
 }
+
+
 
 func (cf *changeFrontier) advanceProtectedTimestamp(
 	ctx context.Context,
