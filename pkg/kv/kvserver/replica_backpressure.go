@@ -213,7 +213,6 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 				select {
 				case splitC <- err:
 				default:
-					// TODO(wenyihu6): should we add ctx timeout when invoking callbacks
 					// Drop the error if the channel is already full. This prevents
 					// blocking if the callback is invoked multiple times.
 					return
