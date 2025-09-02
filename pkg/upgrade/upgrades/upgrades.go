@@ -95,6 +95,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"add transaction diagnostics tables and update statement_diagnostics table",
+		clusterversion.V25_4_TransactionDiagnosticsSupport.Version(),
+		upgrade.NoPrecondition,
+		createTransactionDiagnosticsTables,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore these tables"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
