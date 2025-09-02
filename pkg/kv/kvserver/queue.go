@@ -839,13 +839,17 @@ func (bq *baseQueue) addInternal(
 	replicaID roachpb.ReplicaID,
 	priority float64,
 	cb processCallback,
-) (bool, error) {
+) (added bool, err error) {
+	defer func() {
+		if err != nil {
+			cb.onEnqueueResult(-1 /* indexOnHeap */, err)
+		}
+	}()
 	// NB: this is intentionally outside of bq.mu to avoid having to consider
 	// lock ordering constraints.
 	if !desc.IsInitialized() {
 		// We checked this above in MaybeAdd(), but we need to check it
 		// again for Add().
-		cb.onEnqueueResult(-1 /*indexOnHeap*/, errReplicaNotInitialized)
 		return false, errReplicaNotInitialized
 	}
 
@@ -853,7 +857,6 @@ func (bq *baseQueue) addInternal(
 	defer bq.mu.Unlock()
 
 	if bq.mu.stopped {
-		cb.onEnqueueResult(-1 /*indexOnHeap*/, errQueueStopped)
 		return false, errQueueStopped
 	}
 
@@ -866,7 +869,6 @@ func (bq *baseQueue) addInternal(
 			if log.V(3) {
 				log.Infof(ctx, "queue disabled")
 			}
-			cb.onEnqueueResult(-1 /*indexOnHeap*/, errQueueDisabled)
 			return false, errQueueDisabled
 		}
 	}
