@@ -493,6 +493,7 @@ func newTenantServer(
 
 	// Tell the status/admin servers how to access SQL structures.
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
+	sStatus.setTxnDiagnosticsRequester(sqlServer.execCfg.TxnDiagnosticsRecorder)
 	serverIterator.sqlServer = sqlServer
 	sStatus.baseStatusServer.sqlServer = sqlServer
 	sAdmin.sqlServer = sqlServer
