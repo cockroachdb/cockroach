@@ -717,24 +717,20 @@ func (rq *replicateQueue) process(
 			log.KvDistribution.Infof(ctx, "%v", err)
 			continue
 		}
-
+		// At the time of writing, requeue => err == nil except for priority
+		// inversions. Priority inversion intentionally returns a priority inversion
+		// error along with requeue = true.
+		if requeue {
+			log.KvDistribution.VEventf(ctx, 1, "re-queuing: %v", err)
+			rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
+		}
 		if err != nil {
-			if requeue {
-				log.KvDistribution.VEventf(ctx, 1, "re-queuing on errors: %v", err)
-				rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
-			}
 			return false, err
 		}
-
 		if testingAggressiveConsistencyChecks {
 			if _, err := rq.store.consistencyQueue.process(ctx, repl, confReader, -1 /*priorityAtEnqueue*/); err != nil {
 				log.KvDistribution.Warningf(ctx, "%v", err)
 			}
-		}
-
-		if requeue {
-			log.KvDistribution.VEventf(ctx, 1, "re-queuing")
-			rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
 		}
 		return true, nil
 	}
