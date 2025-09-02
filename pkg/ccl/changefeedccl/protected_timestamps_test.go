@@ -249,6 +249,11 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
+		// We need to disable per-table PTS records for this test so that we can
+		// make assertions about the PTS records.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
+
 		sysDB.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'`)
 		sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 		sqlDB.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 100`)
@@ -379,6 +384,11 @@ func TestChangefeedAlterPTS(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+		// We need to disable per-table PTS records for this test so that we can
+		// make assertions about the PTS records.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
+
 		f2 := feed(t, f, `CREATE CHANGEFEED FOR table foo with protect_data_from_gc_on_pause,
 			resolved='1s', min_checkpoint_frequency='1s'`)
 		defer closeFeed(t, f2)
@@ -737,6 +747,10 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
+		// We need to disable per-table PTS records for this test so that we can
+		// make assertions about the PTS records.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
@@ -853,6 +867,11 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
+
+		// We need to disable per-table PTS records for this test so that we can
+		// make assertions about the PTS records.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
@@ -1153,8 +1172,8 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 			})
 		}
 
-		// Assert that the feed-level PTS record exists.
-		assertFeedLevelPTS := func() {
+		// Assert that no feed-level PTS record exists.
+		assertNoFeedLevelPTS := func() {
 			testutils.SucceedsSoon(t, func() error {
 				hwm, err := eFeed.HighWaterMark()
 				if err != nil {
@@ -1168,15 +1187,15 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					if progress.ProtectedTimestampRecord.Equal(uuid.UUID{}) {
-						return errors.New("expected feed-level PTS record to be set")
+					if !progress.ProtectedTimestampRecord.Equal(uuid.UUID{}) {
+						return errors.New("expected feed-level PTS record not to be set")
 					}
 					return nil
 				})
 			})
 		}
 
-		assertFeedLevelPTS()
+		assertNoFeedLevelPTS()
 		// Since no tables are lagging, we should see 0 per-table records.
 		assertTablePTSRecords(map[descpb.ID]struct{}{})
 
@@ -1204,7 +1223,7 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 		table1Lagging.Store(false)
 		table2Lagging.Store(false)
 		assertTablePTSRecords(map[descpb.ID]struct{}{})
-		assertFeedLevelPTS()
+		assertNoFeedLevelPTS()
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
