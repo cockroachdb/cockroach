@@ -617,7 +617,7 @@ func recreateAllSecondaryIndexes(
 		})
 	}
 	// Recreate each secondary index.
-	scpb.ForEachSecondaryIndex(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
+	scpb.ForEachSecondaryIndex(publicTableElts, func(currentStatus scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
 		out := makeIndexSpec(b, idx.TableID, idx.IndexID)
 		// If this index is referenced by any other objects, then we will
 		// block the primary key swap, since we don't have a mechanism to
@@ -719,7 +719,19 @@ func recreateAllSecondaryIndexes(
 			}
 		}
 		in, temp := makeSwapIndexSpec(b, out, sourcePrimaryIndex.IndexID, inColumns, false /* inUseTempIDs */)
-		in.secondary.RecreateSourceIndexID = out.indexID()
+		// Set RecreateSourceIndexID only if the original index is already public.
+		// This enables index swapping: the new index will replace the old one when
+		// the old index becomes non-public.
+		//
+		// If the original index is not public (e.g., still being created), then we're
+		// in a concurrent scenario where both the index creation and primary key swap
+		// are happening in the same transaction. In this case, we don't set
+		// RecreateSourceIndexID because the "source" index will never become public
+		// and thus doesn't need to be replaced.
+		if currentStatus == scpb.Status_PUBLIC {
+			in.secondary.RecreateSourceIndexID = out.indexID()
+		}
+		in.secondary.HideForPrimaryKeyRecreated = b.ClusterSettings().Version.IsActive(b, clusterversion.V25_4)
 		in.secondary.RecreateTargetIndexID = newPrimaryIndex.IndexID
 		out.apply(b.Drop)
 		in.apply(b.Add)
