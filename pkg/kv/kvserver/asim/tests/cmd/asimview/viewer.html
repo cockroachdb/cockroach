@@ -459,11 +459,47 @@
     function saveMetricPreferences() {
       localStorage.setItem('asimview-selected-metrics', JSON.stringify([...selectedMetrics]));
     }
+    
+    // Load file selection from localStorage
+    function loadFileSelection() {
+      const saved = localStorage.getItem('asimview-selected-files');
+      if (saved) {
+        try {
+          return new Set(JSON.parse(saved));
+        } catch (e) {
+          return new Set();
+        }
+      }
+      return new Set();
+    }
+    
+    // Save file selection to localStorage
+    function saveFileSelection() {
+      localStorage.setItem('asimview-selected-files', JSON.stringify([...selectedFiles]));
+    }
 
     // Fetch available files on page load
     window.addEventListener('DOMContentLoaded', async () => {
       loadMetricPreferences();
       await fetchAvailableFiles();
+      
+      // Restore saved file selection if any files match
+      const savedSelection = loadFileSelection();
+      if (savedSelection.size > 0) {
+        const validSelections = new Set();
+        savedSelection.forEach(path => {
+          if (availableFiles.some(f => f.path === path)) {
+            validSelections.add(path);
+          }
+        });
+        
+        if (validSelections.size > 0) {
+          selectedFiles = validSelections;
+          updateSelectedFilesDisplay();
+          // Auto-load the previously selected files
+          await loadSelectedFiles();
+        }
+      }
     });
     
     // Keyboard shortcuts
@@ -647,6 +683,7 @@
       
       updateSelectedFilesDisplay();
       updateDropdownSelections();
+      saveFileSelection();  // Save selection to localStorage
       
       // Don't load immediately - wait for dropdown to close
     }
@@ -685,6 +722,7 @@
       selectedFiles.delete(path);
       updateSelectedFilesDisplay();
       updateDropdownSelections();
+      saveFileSelection();  // Save updated selection
       
       // Load immediately when removing from chips
       await loadSelectedFiles();
@@ -702,6 +740,7 @@
           
           // Load files if selection changed while dropdown was open
           if (selectedFiles.size !== previousSelectionSize) {
+            saveFileSelection();  // Save when dropdown closes after changes
             await loadSelectedFiles();
             previousSelectionSize = selectedFiles.size;
           }
@@ -750,6 +789,7 @@
       selectedFiles.clear();
       updateSelectedFilesDisplay();
       updateDropdownSelections();
+      saveFileSelection();  // Clear saved selection
       searchInput.value = '';
       await loadSelectedFiles();
     });
