@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
@@ -320,33 +321,62 @@ func changefeedPlanHook(
 			recordPTSMetricsTime := sliMetrics.Timers.PTSCreate.Start()
 
 			var ptr *ptpb.Record
-			codec := p.ExecCfg().Codec
-			ptr = createProtectedTimestampRecord(
-				ctx,
-				codec,
-				jobID,
-				targets,
-				details.StatementTime,
-			)
-			progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
+			var ptsRecords *cdcprogresspb.ProtectedTimestampRecords
+			var primaryRecord *ptpb.Record
+			var systemTablesRecord *ptpb.Record
 
-			jr.Progress = *progress.GetChangefeed()
+			codec := p.ExecCfg().Codec
+
+			// We do not yet have the progress config here, so we need to check the settings directly.
+			perTableTrackingEnabled := changefeedbase.TrackPerTableProgress.Get(&p.ExecCfg().Settings.SV)
+			perTableProtectedTimestampsEnabled := changefeedbase.PerTableProtectedTimestamps.Get(&p.ExecCfg().Settings.SV)
+			if writingMultiplePTS := perTableTrackingEnabled && perTableProtectedTimestampsEnabled; writingMultiplePTS {
+				primaryRecord = createProtectedTimestampRecord(ctx, codec, jobID, targets, details.StatementTime, false)
+				systemTablesRecord = createSystemTablesProtectedTimestampRecord(ctx, p.ExecCfg().Codec, jobID, details.StatementTime)
+				ptsRecords = &cdcprogresspb.ProtectedTimestampRecords{
+					SystemTablesRecord: systemTablesRecord.ID.GetUUID(),
+				}
+			} else {
+				ptr = createProtectedTimestampRecord(
+					ctx,
+					codec,
+					jobID,
+					targets,
+					details.StatementTime,
+					true, /* includeSystemTables */
+				)
+				progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
+			}
 
 			if changefeedStmt.CreatedByInfo != nil {
 				// This changefeed statement invoked by the scheduler.  As such, the scheduler
 				// must have specified transaction to use, and is responsible for committing
 				// transaction.
 
+				pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
+				for _, record := range []*ptpb.Record{ptr, primaryRecord, systemTablesRecord} {
+					if record != nil {
+						if err := pts.Protect(ctx, record); err != nil {
+							return err
+						}
+					}
+				}
+				if ptsRecords != nil {
+					if err := writeChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, ptsRecords, p.InternalSQLTxn(), jobID); err != nil {
+						return err
+					}
+				}
+				if ptr != nil {
+					progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
+				}
+				if primaryRecord != nil {
+					progress.GetChangefeed().ProtectedTimestampRecord = primaryRecord.ID.GetUUID()
+				}
+
+				jr.Progress = *progress.GetChangefeed()
 				_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, *jr, jr.JobID, p.InternalSQLTxn())
 				if err != nil {
 					return err
-				}
-
-				if ptr != nil {
-					pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
-					if err := pts.Protect(ctx, ptr); err != nil {
-						return err
-					}
 				}
 
 				select {
@@ -360,11 +390,31 @@ func changefeedPlanHook(
 			}
 
 			if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn)
+				for _, record := range []*ptpb.Record{ptr, primaryRecord, systemTablesRecord} {
+					if record != nil {
+						if err := pts.Protect(ctx, record); err != nil {
+							return err
+						}
+					}
+				}
+				if ptr != nil {
+					progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
+				}
+				if primaryRecord != nil {
+					progress.GetChangefeed().ProtectedTimestampRecord = primaryRecord.ID.GetUUID()
+				}
+
+				jr.Progress = *progress.GetChangefeed()
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jr.JobID, txn, *jr); err != nil {
 					return err
 				}
-				if ptr != nil {
-					return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
+				if ptsRecords != nil {
+					if err := writeChangefeedJobInfo(
+						ctx, perTableProtectedTimestampsFilename, ptsRecords, txn, jobID,
+					); err != nil {
+						return err
+					}
 				}
 				return nil
 			}); err != nil {
