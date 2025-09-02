@@ -64,6 +64,7 @@ go_library(
         "//pkg/ccl/changefeedccl/progresspb",
         "//pkg/ccl/changefeedccl/resolvedspan",
         "//pkg/ccl/changefeedccl/schemafeed",
+        "//pkg/ccl/changefeedccl/tableset",
         "//pkg/ccl/changefeedccl/timers",
         "//pkg/ccl/kvccl/kvfollowerreadsccl",
         "//pkg/ccl/utilccl",
@@ -199,6 +200,7 @@ go_test(
     size = "enormous",
     srcs = [
         "alter_changefeed_test.go",
+        "changefeed_database_watcher_test.go",
         "changefeed_dist_test.go",
         "changefeed_job_info_test.go",
         "changefeed_stmt_test.go",
