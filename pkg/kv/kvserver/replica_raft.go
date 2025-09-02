@@ -699,7 +699,7 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 			// Update the lastUpdateTimes map, unless configured not to by a testing
 			// knob.
 			disableUpdateLastUpdateTimesMapOnRaftGroupStep := false
-			if r.store.TestingKnobs() == nil &&
+			if r.store.TestingKnobs() != nil &&
 				r.store.TestingKnobs().DisableUpdateLastUpdateTimesMapOnRaftGroupStep != nil {
 				disableUpdateLastUpdateTimesMapOnRaftGroupStep = r.store.TestingKnobs().DisableUpdateLastUpdateTimesMapOnRaftGroupStep(r)
 			}
