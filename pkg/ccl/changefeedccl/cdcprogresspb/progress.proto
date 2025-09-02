@@ -25,6 +25,18 @@ message ResolvedTables {
 // ProtectedTimestampRecords contains the IDs of protected timestamps records
 // for the changefeed.
 message ProtectedTimestampRecords {
+  // PrimaryRecord protects tables that are not lagging.
+  bytes primary_record = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "PrimaryRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+  // SystemTablesRecord protects all system tables back to the highwater.
+  bytes system_tables_record = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SystemTablesRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
   // LaggingTablesRecords maps the ID of a lagging table to a protected timestamp
   // record that protects it.
   map<uint32, bytes> lagging_tables_records = 3 [

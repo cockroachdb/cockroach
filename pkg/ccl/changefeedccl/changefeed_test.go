@@ -12026,6 +12026,13 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Hour)
 
+		// The pts query in this test assumes that the pts record is stored
+		// in the job progress table. This assumption is only true when
+		// PerTableProtectedTimestamps is disabled. We will add test coverage
+		// for when it is enabled in the following commit.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
+
 		sqlDB.Exec(t, `CREATE TABLE foo (id INT)`)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)

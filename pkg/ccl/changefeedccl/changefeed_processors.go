@@ -1902,7 +1902,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 }
 
 // manageProtectedTimestamps periodically advances the protected timestamp for
-// the changefeed's targets to the current highwater mark.  The record is
+// the changefeed's targets to the current highwater mark. The record is
 // cleared during changefeedResumer.OnFailOrCancel
 //
 // NOTE: this method may be retried by `txn`, so don't mutate any state that
@@ -1948,11 +1948,16 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		if err != nil {
 			return false, err
 		}
-		updatedMainPTS, err := cf.advanceProtectedTimestamp(ctx, progress, pts, newPTS)
+		updatedMainPTS, err := cf.advancePrimaryProtectedTimestamp(ctx, pts, &ptsEntries, newPTS)
 		if err != nil {
 			return false, err
 		}
-		return updatedMainPTS || updatedPerTablePTS, nil
+		updatedSystemTablesPTS, err :=
+			cf.advanceSystemTablesProtectedTimestamp(ctx, &ptsEntries, highwater, pts, updatedPerTablePTS)
+		if err != nil {
+			return false, err
+		}
+		return updatedMainPTS || updatedPerTablePTS || updatedSystemTablesPTS, nil
 	}
 
 	return cf.advanceProtectedTimestamp(ctx, progress, pts, highwater)
@@ -2016,7 +2021,6 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 				updatedPerTablePTS = true
 			}
 		} else {
-			// TODO(#152448): Do not include system table protections in these records.
 			tableIDsToCreate[tableID] = tableHighWater
 		}
 	}
@@ -2093,7 +2097,7 @@ func (cf *changeFrontier) createPerTableProtectedTimestampRecords(
 			return err
 		}
 		ptr := createProtectedTimestampRecord(
-			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, tableHighWater, true, /* includeSystemTables */
+			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, tableHighWater, false, /* includeSystemTables */
 		)
 		uuid := ptr.ID.GetUUID()
 		ptsEntries.LaggingTablesRecords[tableID] = &uuid
@@ -2122,6 +2126,71 @@ func (cf *changeFrontier) createPerTablePTSTarget(
 		return changefeedbase.Targets{}, errors.AssertionFailedf("expected 1 target, got %d", targets.Size)
 	}
 	return targets, nil
+}
+
+func (cf *changeFrontier) advanceSystemTablesProtectedTimestamp(
+	ctx context.Context,
+	ptsEntries *cdcprogresspb.ProtectedTimestampRecords,
+	timestamp hlc.Timestamp,
+	pts protectedts.Storage,
+	updatedPerTablePts bool,
+) (updated bool, err error) {
+	if ptsEntries.SystemTablesRecord == uuid.Nil {
+		ptr := createSystemTablesProtectedTimestampRecord(
+			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, timestamp,
+		)
+		ptsEntries.SystemTablesRecord = ptr.ID.GetUUID()
+		return true, pts.Protect(ctx, ptr)
+	}
+
+	rec, err := pts.GetRecord(ctx, ptsEntries.SystemTablesRecord)
+	if err != nil {
+		return false, err
+	}
+
+	ptsUpdateLag := changefeedbase.ProtectTimestampLag.Get(&cf.FlowCtx.Cfg.Settings.SV)
+	if rec.Timestamp.AddDuration(ptsUpdateLag).After(timestamp) {
+		return updatedPerTablePts, nil
+	}
+
+	if err := pts.UpdateTimestamp(ctx, ptsEntries.SystemTablesRecord, timestamp); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (cf *changeFrontier) advancePrimaryProtectedTimestamp(
+	ctx context.Context,
+	pts protectedts.Storage,
+	ptsEntries *cdcprogresspb.ProtectedTimestampRecords,
+	timestamp hlc.Timestamp,
+) (updated bool, err error) {
+	if ptsEntries.PrimaryRecord == uuid.Nil {
+		ptr := createProtectedTimestampRecord(
+			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, cf.targets, timestamp, false, /* includeSystemTables */
+		)
+		ptsEntries.PrimaryRecord = ptr.ID.GetUUID()
+		return true, pts.Protect(ctx, ptr)
+	}
+
+	rec, err := pts.GetRecord(ctx, ptsEntries.PrimaryRecord)
+	if err != nil {
+		return false, err
+	}
+
+	ptsUpdateLag := changefeedbase.ProtectTimestampLag.Get(&cf.FlowCtx.Cfg.Settings.SV)
+	if rec.Timestamp.AddDuration(ptsUpdateLag).After(timestamp) {
+		return false, nil
+	}
+
+	if cf.knobs.ManagePTSError != nil {
+		return false, cf.knobs.ManagePTSError()
+	}
+
+	if err := pts.UpdateTimestamp(ctx, ptsEntries.PrimaryRecord, timestamp); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (cf *changeFrontier) advanceProtectedTimestamp(
