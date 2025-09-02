@@ -4,7 +4,6 @@ go_library(
     name = "apiinternal",
     srcs = [
         "api_internal.go",
-        "api_internal_admin.go",
         "api_internal_status.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/apiinternal",
