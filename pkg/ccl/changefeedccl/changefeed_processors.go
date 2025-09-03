@@ -16,10 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/progresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -1868,7 +1868,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			// Write per-table progress if enabled.
 			if cf.spec.ProgressConfig != nil && cf.spec.ProgressConfig.PerTableTracking {
-				resolvedTables := &changefeedpb.ResolvedTables{
+				resolvedTables := &progresspb.ResolvedTables{
 					Tables: make(map[descpb.ID]hlc.Timestamp),
 				}
 				for tableID, tableFrontier := range cf.frontier.Frontiers() {
@@ -1930,7 +1930,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		}
 	}()
 
-	var ptsEntries changefeedpb.ProtectedTimestampRecords
+	var ptsEntries progresspb.ProtectedTimestampRecords
 	if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, cf.spec.JobID); err != nil {
 		return false, err
 	}
@@ -1961,7 +1961,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 func (cf *changeFrontier) managePerTableProtectedTimestamps(
 	ctx context.Context,
 	txn isql.Txn,
-	ptsEntries *changefeedpb.ProtectedTimestampRecords,
+	ptsEntries *progresspb.ProtectedTimestampRecords,
 	highwater hlc.Timestamp,
 ) (newPTS hlc.Timestamp, updatedPerTablePTS bool, err error) {
 	var leastLaggingTimestamp hlc.Timestamp
@@ -2036,7 +2036,7 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 func (cf *changeFrontier) releasePerTableProtectedTimestampRecords(
 	ctx context.Context,
 	txn isql.Txn,
-	ptsEntries *changefeedpb.ProtectedTimestampRecords,
+	ptsEntries *progresspb.ProtectedTimestampRecords,
 	tableIDs []descpb.ID,
 	pts protectedts.Storage,
 ) error {
@@ -2051,7 +2051,7 @@ func (cf *changeFrontier) releasePerTableProtectedTimestampRecords(
 
 func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
 	ctx context.Context,
-	ptsEntries *changefeedpb.ProtectedTimestampRecords,
+	ptsEntries *progresspb.ProtectedTimestampRecords,
 	tableID descpb.ID,
 	tableHighWater hlc.Timestamp,
 	pts protectedts.Storage,
@@ -2075,7 +2075,7 @@ func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
 func (cf *changeFrontier) createPerTableProtectedTimestampRecord(
 	ctx context.Context,
 	txn isql.Txn,
-	ptsEntries *changefeedpb.ProtectedTimestampRecords,
+	ptsEntries *progresspb.ProtectedTimestampRecords,
 	tableID descpb.ID,
 	tableHighWater hlc.Timestamp,
 	pts protectedts.Storage,
