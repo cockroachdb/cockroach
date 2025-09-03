@@ -31,6 +31,26 @@ type TxnRequest struct {
 	samplingProbability float64
 }
 
+func NewTxnRequest(
+	txnFingerprintId uint64,
+	stmtFingerprintsId []uint64,
+	redacted bool,
+	username string,
+	expiresAt time.Time,
+	minExecutionLatency time.Duration,
+	samplingProbability float64,
+) TxnRequest {
+	return TxnRequest{
+		txnFingerprintId:    txnFingerprintId,
+		stmtFingerprintsId:  stmtFingerprintsId,
+		redacted:            redacted,
+		username:            username,
+		expiresAt:           expiresAt,
+		minExecutionLatency: minExecutionLatency,
+		samplingProbability: samplingProbability,
+	}
+}
+
 func (t *TxnRequest) StmtFingerprintIds() []uint64 {
 	return t.stmtFingerprintsId
 }
