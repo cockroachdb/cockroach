@@ -154,118 +154,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
 	rowCountValidation := importRowCountValidation.Get(&p.ExecCfg().Settings.SV)
 
-	preImportCountGrp := ctxgroup.WithContext(ctx)
-	// expectedRowCountReadyByIndex maps from a BulkOpSummaryID defined by
-	// the table id and the index id.
-	expectedRowCountReadyByIndex := make(map[uint64]chan int64)
-	// preImportRowCountMu protects concurrent access to details.PreImportRowCount.
-	// We need this mutex because PreImportRowCount is hung on to details, and details
-	// is defined in a proto file which only accepts generic types as fields, so we
-	// can't use a thread-safe map type like syncutil.Map directly in the proto.
-	var preImportRowCountMu syncutil.Mutex
-	indexesWithTag := make([]indexWithTag, 0)
-	if rowCountValidation {
-		// TODO(janexing): simplify this once the details.Tables is changed
-		// to a single table rather than a list.
-		for i := range details.Tables {
-			tblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
-			for _, idx := range tblDesc.AllIndexes() {
-				idx := idx
-				indexTag := kvpb.BulkOpSummaryID(uint64(tblDesc.GetID()), uint64(idx.GetID()))
-				indexesWithTag = append(indexesWithTag, indexWithTag{idx: idx, tag: indexTag})
-				expectedCntChan := make(chan int64)
-				expectedRowCountReadyByIndex[indexTag] = expectedCntChan
-				preImportCountGrp.GoCtx(func(ctx context.Context) error {
-					var preImportIdxLen int64
-					var err error
-					// Skip pre-import row counting when resuming a paused job, as the counts
-					// were already captured during the initial run. Additionally, attempting
-					// to re-execute row count queries on an offline table descriptor would
-					// fail during job resumption.
-					preImportRowCountMu.Lock()
-					_, ok := details.PreImportRowCount[indexTag]
-					preImportRowCountMu.Unlock()
-					if !ok {
-						preImportIdxLen, err =
-							sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx,
-								false, /* withFirstMutationPublic */
-								newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()),
-								sessiondata.NoSessionDataOverride)
-						if err != nil {
-							return errors.Wrapf(err, "counting rows in index %q of table %q before import", idx.GetName(), tblDesc.GetName())
-						}
-						preImportRowCountMu.Lock()
-						details.PreImportRowCount[indexTag] = preImportIdxLen
-						preImportRowCountMu.Unlock()
-					}
-					return nil
-				})
-			}
-		}
-	}
-
-	var postImportCountGrp ctxgroup.Group
-	if rowCountValidation {
-		// Wait for all the pre-counts to finish before bringing the table offline,
-		// but respect context cancellation.
-		if err := preImportCountGrp.Wait(); err != nil {
-			return errors.Wrapf(err, "pre-import row count failed")
-		}
-		log.Eventf(ctx, "finished pre-import row counts for all indexes of table %q", details.Tables[0].Desc.Name)
-
-		postImportCountGrp = ctxgroup.WithContext(ctx)
-		for _, idxWithTag := range indexesWithTag {
-			idxWithTag := idxWithTag
-			postImportCountGrp.GoCtx(func(ctx context.Context) error {
-				expectedRowCountChan, ok := expectedRowCountReadyByIndex[idxWithTag.tag]
-				if !ok {
-					// This should never happen.
-					return errors.AssertionFailedf("expected count chan not found for index %d", idxWithTag.idx.GetID())
-				}
-				select {
-				case expectedCount := <-expectedRowCountChan:
-					// We reach here only after the table has been published, hence it has been
-					// changed to PUBLIC from OFFLINE. We need to retrieve the freshest descriptor
-					// for the post-import row count query to be run successfully.
-					var newTblDesc catalog.TableDescriptor
-					if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-						ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
-					) error {
-						freshMutableTblDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, details.Tables[0].Desc.ID)
-						if err != nil {
-							return err
-						}
-						newTblDesc = freshMutableTblDesc.ImmutableCopy().(catalog.TableDescriptor)
-						return nil
-					}); err != nil {
-						return errors.Wrapf(err, "failed to get fresh table descriptor for table %s during post-import row count validation", details.Tables[0].Desc.Name)
-					}
-					postImportIdxLen, err :=
-						sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, newTblDesc, idxWithTag.idx,
-							false, /* withFirstMutationPublic */
-							newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()),
-							sessiondata.NoSessionDataOverride)
-					if err != nil {
-						return errors.Wrapf(err, "counting rows in index %q of table %q after import", idxWithTag.idx.GetName(), details.Tables[0].Desc.Name)
-					}
-					preImportRowCountMu.Lock()
-					preImportIdxLen, ok := details.PreImportRowCount[idxWithTag.tag]
-					preImportRowCountMu.Unlock()
-					if !ok {
-						return errors.AssertionFailedf("expected count chan not found for index %s", idxWithTag.idx.GetName())
-					}
-					if diff := postImportIdxLen - preImportIdxLen; diff != expectedCount {
-						return errors.AssertionFailedf("row count validation failed for index %q of table %q: expected %d rows imported, got %d",
-							idxWithTag.idx, details.Tables[0].Desc.Name, expectedCount, diff)
-					}
-				case <-ctx.Done():
-					return ctx.Err()
-				}
-				return nil
-			})
-		}
-	}
-
 	if details.Tables != nil {
 		// Skip prepare stage on job resumption, if it has already been completed.
 		if !details.PrepareComplete {
@@ -336,6 +224,119 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				Desc:       i.Desc,
 				TargetCols: i.TargetCols,
 			}
+		}
+	}
+
+	preImportCountGrp := ctxgroup.WithContext(ctx)
+	// expectedRowCountReadyByIndex maps from a BulkOpSummaryID defined by
+	// the table id and the index id.
+	expectedRowCountReadyByIndex := make(map[uint64]chan int64)
+	// preImportRowCountMu protects concurrent access to details.PreImportRowCount.
+	// We need this mutex because PreImportRowCount is hung on to details, and details
+	// is defined in a proto file which only accepts generic types as fields, so we
+	// can't use a thread-safe map type like syncutil.Map directly in the proto.
+	var preImportRowCountMu syncutil.Mutex
+	indexesWithTag := make([]indexWithTag, 0)
+	if rowCountValidation {
+		// TODO(janexing): simplify this once the details.Tables is changed
+		// to a single table rather than a list.
+		for i := range details.Tables {
+			tblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
+			for _, idx := range tblDesc.AllIndexes() {
+				idx := idx
+				indexTag := kvpb.BulkOpSummaryID(uint64(tblDesc.GetID()), uint64(idx.GetID()))
+				indexesWithTag = append(indexesWithTag, indexWithTag{idx: idx, tag: indexTag})
+				expectedCntChan := make(chan int64)
+				expectedRowCountReadyByIndex[indexTag] = expectedCntChan
+				preImportCountGrp.GoCtx(func(ctx context.Context) error {
+					var preImportIdxLen int64
+					var err error
+					// Skip pre-import row counting when resuming a paused job, as the counts
+					// were already captured during the initial run. Additionally, attempting
+					// to re-execute row count queries on an offline table descriptor would
+					// fail during job resumption.
+					preImportRowCountMu.Lock()
+					_, ok := details.PreImportRowCount[indexTag]
+					preImportRowCountMu.Unlock()
+					if !ok {
+						preImportIdxLen, err =
+							sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, tblDesc, idx,
+								false /* withFirstMutationPublic */, true, /* withTablePublic */
+								newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()),
+								sessiondata.NoSessionDataOverride)
+						if err != nil {
+							return errors.Wrapf(err, "counting rows in index %q of table %q before import", idx.GetName(), tblDesc.GetName())
+						}
+						preImportRowCountMu.Lock()
+						details.PreImportRowCount[indexTag] = preImportIdxLen
+						preImportRowCountMu.Unlock()
+					}
+					return nil
+				})
+			}
+		}
+	}
+
+	var postImportCountGrp ctxgroup.Group
+	if rowCountValidation {
+		// Wait for all the pre-counts to finish before bringing the table offline,
+		// but respect context cancellation.
+		if err := preImportCountGrp.Wait(); err != nil {
+			return errors.Wrapf(err, "pre-import row count failed")
+		}
+		log.Eventf(ctx, "finished pre-import row counts for all indexes of table %q", details.Tables[0].Desc.Name)
+
+		postImportCountGrp = ctxgroup.WithContext(ctx)
+		for _, idxWithTag := range indexesWithTag {
+			idxWithTag := idxWithTag
+			postImportCountGrp.GoCtx(func(ctx context.Context) error {
+				expectedRowCountChan, ok := expectedRowCountReadyByIndex[idxWithTag.tag]
+				if !ok {
+					// This should never happen.
+					return errors.AssertionFailedf("expected count chan not found for index %d", idxWithTag.idx.GetID())
+				}
+				select {
+				case expectedCount := <-expectedRowCountChan:
+					// We reach here only after the table has been published, hence it has been
+					// changed to PUBLIC from OFFLINE. We need to retrieve the freshest descriptor
+					// for the post-import row count query to be run successfully.
+					var newTblDesc catalog.TableDescriptor
+					if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
+						ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+					) error {
+						freshMutableTblDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, details.Tables[0].Desc.ID)
+						if err != nil {
+							return err
+						}
+						newTblDesc = freshMutableTblDesc.ImmutableCopy().(catalog.TableDescriptor)
+						return nil
+					}); err != nil {
+						return errors.Wrapf(err, "failed to get fresh table descriptor for table %s during post-import row count validation", details.Tables[0].Desc.Name)
+					}
+					postImportIdxLen, err :=
+						sql.CountIndexRowsAndMaybeCheckUniqueness(ctx, newTblDesc, idxWithTag.idx,
+							false, /* withFirstMutationPublic */
+							true,  /* withTablePublic*/
+							newHistoricalInternalExecByTime(p.ExecCfg().Clock.Now()),
+							sessiondata.NoSessionDataOverride)
+					if err != nil {
+						return errors.Wrapf(err, "counting rows in index %q of table %q after import", idxWithTag.idx.GetName(), details.Tables[0].Desc.Name)
+					}
+					preImportRowCountMu.Lock()
+					preImportIdxLen, ok := details.PreImportRowCount[idxWithTag.tag]
+					preImportRowCountMu.Unlock()
+					if !ok {
+						return errors.AssertionFailedf("expected count chan not found for index %s", idxWithTag.idx.GetName())
+					}
+					if diff := postImportIdxLen - preImportIdxLen; diff != expectedCount {
+						return errors.AssertionFailedf("row count validation failed for index %q of table %q: expected %d rows imported, got %d",
+							idxWithTag.idx, details.Tables[0].Desc.Name, expectedCount, diff)
+					}
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+				return nil
+			})
 		}
 	}
 
@@ -437,10 +438,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	if err := r.publishTables(ctx, p.ExecCfg(), res); err != nil {
-		return err
-	}
-
 	if rowCountValidation {
 		// Now that the table descriptor is marked as PUBLIC, signal the row count
 		// validation goroutines to continue with post-import row count checks.
@@ -484,6 +481,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		if rowCountValidationTestingKnob != nil {
 			close(rowCountValidationTestingKnob)
 		}
+	}
+
+	if err := r.publishTables(ctx, p.ExecCfg(), res); err != nil {
+		return err
 	}
 
 	emitImportJobEvent(ctx, p, jobs.StateSucceeded, r.job)

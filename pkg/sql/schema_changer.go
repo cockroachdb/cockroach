@@ -372,7 +372,7 @@ func (sc *SchemaChanger) validateBackfillQueryIntoTable(
 	// counts match.
 	mut := builder.BuildExistingMutable().(*tabledesc.Mutable)
 	mut.SetPublic()
-	newTblEntryCount, err := CountIndexRowsAndMaybeCheckUniqueness(ctx, mut, index, false,
+	newTblEntryCount, err := CountIndexRowsAndMaybeCheckUniqueness(ctx, mut, index, false /* withFirstMutationPublic */, false, /* withTablePublic */
 		descs.NewHistoricalInternalExecTxnRunner(now, func(ctx context.Context, fn descs.InternalExecFn) error {
 			return sc.execCfg.InternalDB.DescsTxn(ctx, func(
 				ctx context.Context, txn descs.Txn,

@@ -1891,7 +1891,7 @@ func ValidateForwardIndexes(
 		idx := idx
 		grp.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
-			idxLen, err := CountIndexRowsAndMaybeCheckUniqueness(ctx, tableDesc, idx, withFirstMutationPublic, runHistoricalTxn, execOverride)
+			idxLen, err := CountIndexRowsAndMaybeCheckUniqueness(ctx, tableDesc, idx, withFirstMutationPublic, false /* withTablePublic */, runHistoricalTxn, execOverride)
 			if err != nil {
 				return err
 			}
@@ -2048,6 +2048,7 @@ func CountIndexRowsAndMaybeCheckUniqueness(
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,
 	withFirstMutationPublic bool,
+	withTablePublic bool,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (int64, error) {
@@ -2109,6 +2110,10 @@ func CountIndexRowsAndMaybeCheckUniqueness(
 			}
 		}
 		desc = mut.ImmutableCopy().(catalog.TableDescriptor)
+	}
+
+	if withTablePublic {
+		desc = desc.MakePublic()
 	}
 
 	// Retrieve the row count in the index.

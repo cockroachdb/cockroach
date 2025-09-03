@@ -70,7 +70,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
-	"github.com/lib/pq"
 	"github.com/linkedin/goavro/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -3873,25 +3872,6 @@ func TestImportDefaultWithResume(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			defer fmt.Sprintf(`DROP SEQUENCE IF EXISTS %s`, test.sequence)
 			defer sqlDB.Exec(t, `DROP TABLE t`)
-
-			// TODO(janexing): pending issues #152543 and #152519.
-			disableValidationStmt := "SET CLUSTER SETTING bulkio.import.row_count_validation.unsafe.enabled=false"
-			_, err := db.Exec(disableValidationStmt)
-			require.Error(t, err)
-
-			getKey := func(err error) string {
-				require.Contains(t, err.Error(), "may cause cluster instability")
-				var pqErr *pq.Error
-				ok := errors.As(err, &pqErr)
-				require.True(t, ok)
-				require.True(t, strings.HasPrefix(pqErr.Detail, "key:"), pqErr.Detail)
-				return strings.TrimPrefix(pqErr.Detail, "key: ")
-			}
-			key := getKey(err)
-
-			// Now set the key and try again. We're not expecting an error any more.
-			sqlDB.Exec(t, "SET unsafe_setting_interlock_key = $1", key)
-			sqlDB.Exec(t, disableValidationStmt)
 
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE SEQUENCE %s`, test.sequence))
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
