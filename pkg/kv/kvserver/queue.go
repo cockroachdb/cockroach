@@ -387,11 +387,21 @@ type queueConfig struct {
 	// replicas that have been destroyed but not GCed.
 	processDestroyedReplicas bool
 	// processTimeout returns the timeout for processing a replica.
-	processTimeoutFunc        queueProcessTimeoutFunc
-	enqueueAdd                *metric.Counter
+	processTimeoutFunc queueProcessTimeoutFunc
+	// enqueueAdd is a counter of replicas that were successfully added to the
+	// queue.
+	enqueueAdd *metric.Counter
+	// enqueueFailedPrecondition is a counter of replicas that failed the
+	// precondition checks and were therefore not added to the queue.
 	enqueueFailedPrecondition *metric.Counter
-	enqueueNoAction           *metric.Counter
-	enqueueUnexpectedError    *metric.Counter
+	// enqueueNoAction is a counter of replicas that had ShouldQueue determine no
+	// action was needed and were therefore not added to the queue.
+	enqueueNoAction *metric.Counter
+	// enqueueUnexpectedError is a counter of replicas that were expected to be
+	// enqueued (either had ShouldQueue return true or the caller explicitly
+	// requested to be added to the queue directly), but failed to be enqueued
+	// during the enqueue process (such as Async was rated limited).
+	enqueueUnexpectedError *metric.Counter
 	// successes is a counter of replicas processed successfully.
 	successes *metric.Counter
 	// failures is a counter of replicas which failed processing.
@@ -787,6 +797,14 @@ func (bq *baseQueue) updateMetricsOnEnqueueUnexpectedError() {
 	}
 }
 
+// updateMetricsOnEnqueueAdd updates the metrics when a replica is successfully
+// added to the queue.
+func (bq *baseQueue) updateMetricsOnEnqueueAdd() {
+	if bq.enqueueAdd != nil {
+		bq.enqueueAdd.Inc(1)
+	}
+}
+
 func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.ClockTimestamp) {
 	ctx = repl.AnnotateCtx(ctx)
 	ctx = bq.AnnotateCtx(ctx)
@@ -887,9 +905,7 @@ func (bq *baseQueue) addInternal(
 	cb processCallback,
 ) (added bool, err error) {
 	defer func() {
-		if added && bq.enqueueAdd != nil {
-			bq.enqueueAdd.Inc(1)
-		}
+		// INVARIANT: added => err == nil.
 		if err != nil {
 			cb.onEnqueueResult(-1 /* indexOnHeap */, err)
 			bq.updateMetricsOnEnqueueUnexpectedError()
@@ -985,6 +1001,10 @@ func (bq *baseQueue) addInternal(
 	default:
 		// No need to signal again.
 	}
+	// Note that we are bumping enqueueAdd here instead of during defer to avoid
+	// treating requeuing a processing replica as newly added. They will be
+	// re-added to the queue later which will double count them.
+	bq.updateMetricsOnEnqueueAdd()
 	// Note: it may already be dropped or dropped afterwards.
 	cb.onEnqueueResult(item.index /*indexOnHeap*/, nil)
 	return true, nil
