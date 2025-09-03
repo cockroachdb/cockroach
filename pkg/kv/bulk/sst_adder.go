@@ -345,7 +345,7 @@ func addStatsToSplitTables(left, right, original *sstSpan, sendStartTimestamp ti
 		return err
 	}
 	statsIter.SeekGE(storage.MVCCKey{Key: right.start})
-	right.stats, err = storage.ComputeStatsForIter(statsIter, sendStartTimestamp.Unix())
+	right.stats, err = storage.ComputeStatsForIter(statsIter, sendStartTimestamp.UnixNano())
 	statsIter.Close()
 	if err != nil {
 		return err
