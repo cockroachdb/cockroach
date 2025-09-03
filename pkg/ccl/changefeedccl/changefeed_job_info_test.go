@@ -9,9 +9,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -50,7 +50,7 @@ func TestChangefeedJobInfoResolvedTables(t *testing.T) {
 		waitForHighwater(t, enterpriseFeed, s.Server.JobRegistry().(*jobs.Registry))
 
 		// Make sure the ResolvedTables message was persisted and can be decoded.
-		var resolvedTables changefeedpb.ResolvedTables
+		var resolvedTables cdcprogresspb.ResolvedTables
 		execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
 		err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return readChangefeedJobInfo(ctx, resolvedTablesFilename, &resolvedTables, txn, enterpriseFeed.JobID())

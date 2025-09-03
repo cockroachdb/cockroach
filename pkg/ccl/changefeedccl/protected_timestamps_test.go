@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1033,7 +1033,7 @@ func TestChangefeedProtectedTimestampUpdateForMultipleTables(t *testing.T) {
 
 		execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
 		err = execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
-			var ptsEntries changefeedpb.ProtectedTimestampRecords
+			var ptsEntries cdcprogresspb.ProtectedTimestampRecords
 			if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID()); err != nil {
 				return err
 			}
@@ -1131,7 +1131,7 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 		assertTablePTSRecords := func(expectedTables map[descpb.ID]struct{}) {
 			testutils.SucceedsSoon(t, func() error {
 				return execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
-					var ptsEntries changefeedpb.ProtectedTimestampRecords
+					var ptsEntries cdcprogresspb.ProtectedTimestampRecords
 					if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID()); err != nil {
 						return err
 					}
