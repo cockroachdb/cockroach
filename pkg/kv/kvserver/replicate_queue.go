@@ -101,6 +101,20 @@ var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetti
 	0,
 )
 
+// TODO(wenyihu6): move these cluster settings to kvserverbase
+
+// PriorityInversionRequeue is a setting that controls whether to requeue
+// replicas when their priority at enqueue time and processing time is inverted
+// too much (e.g. dropping from a repair action to AllocatorConsiderRebalance).
+// TODO(wenyihu6): flip default to true after landing 152596 to bake
+var PriorityInversionRequeue = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.priority_inversion_requeue_replicate_queue.enabled",
+	"whether the requeue replicas should requeue when enqueued for "+
+		"repair action but ended up consider rebalancing during processing",
+	false,
+)
+
 // ReplicateQueueMaxSize is a setting that controls the max size of the
 // replicate queue. When this limit is exceeded, lower priority replicas (not
 // guaranteed to be the lowest) are dropped from the queue.
@@ -707,20 +721,20 @@ func (rq *replicateQueue) process(
 			log.KvDistribution.Infof(ctx, "%v", err)
 			continue
 		}
-
+		// At the time of writing, requeue => err == nil except for priority
+		// inversions. Priority inversion intentionally returns a priority inversion
+		// error along with requeue = true.
+		if requeue {
+			log.KvDistribution.VEventf(ctx, 1, "re-queuing: %v", err)
+			rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
+		}
 		if err != nil {
 			return false, err
 		}
-
 		if testingAggressiveConsistencyChecks {
 			if _, err := rq.store.consistencyQueue.process(ctx, repl, confReader, -1 /*priorityAtEnqueue*/); err != nil {
 				log.KvDistribution.Warningf(ctx, "%v", err)
 			}
-		}
-
-		if requeue {
-			log.KvDistribution.VEventf(ctx, 1, "re-queuing")
-			rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
 		}
 		return true, nil
 	}
@@ -893,6 +907,10 @@ func ShouldRequeue(
 	return requeue
 }
 
+// priorityInversionLogEveryN rate limits how often we log about priority
+// inversion to avoid spams.
+var priorityInversionLogEveryN = log.Every(3 * time.Second)
+
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
 	repl *Replica,
@@ -903,6 +921,7 @@ func (rq *replicateQueue) processOneChange(
 ) (requeue bool, _ error) {
 	change, err := rq.planner.PlanOneChange(
 		ctx, repl, desc, conf, plan.PlannerOptions{Scatter: scatter})
+
 	// When there is an error planning a change, return the error immediately
 	// and do not requeue. It is unlikely that the range or storepool state
 	// will change quickly enough in order to not get the same error and
@@ -925,6 +944,28 @@ func (rq *replicateQueue) processOneChange(
 	// There is nothing further to do during a dry run.
 	if dryRun {
 		return false, nil
+	}
+
+	// At this point, planning returned no error, and we're not doing a dry run.
+	// Check for priority inversion if enabled. If detected, we may requeue the
+	// replica to return an error early to requeue the range instead to avoid
+	// starving other higher priority work.
+	if PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
+		if inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action); inversion {
+			if priorityInversionLogEveryN.ShouldLog() {
+				log.KvDistribution.Infof(ctx,
+					"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
+					shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
+			}
+			if shouldRequeue {
+				// Return true to requeue the range. Return the error to ensure it is
+				// logged and tracked in replicate queue bq.failures metrics. See
+				// replicateQueue.process for details.
+				return true /*requeue*/, maybeAnnotateDecommissionErr(
+					errors.Errorf("requing due to priority inversion: action=%s, priority=%v, enqueuePriority=%v",
+						change.Action, change.Action.Priority(), priorityAtEnqueue), change.Action)
+			}
+		}
 	}
 
 	// Track the metrics generated during planning. These are not updated
