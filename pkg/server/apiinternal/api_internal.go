@@ -10,6 +10,8 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
+	"reflect"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,14 +45,14 @@ const (
 	localNodeID = "local"
 )
 
+var decoder = schema.NewDecoder()
+
 // route defines a REST endpoint with its handler and HTTP method.
 type route struct {
-	path    string
-	handler func(http.ResponseWriter, *http.Request) error
 	method  httpMethod
+	path    string
+	handler http.HandlerFunc
 }
-
-var decoder = schema.NewDecoder()
 
 // apiInternalServer provides REST endpoints that proxy to RPC services. It
 // serves as a bridge between HTTP REST clients and internal RPC services.
@@ -60,8 +62,8 @@ type apiInternalServer struct {
 }
 
 // NewAPIInternalServer creates a new REST API server that proxies to internal
-// RPC services. It establishes connections to both Status and Admin RPC
-// services and registers all REST endpoints.
+// RPC services. It establishes connections to the RPC services and registers
+// all REST endpoints.
 func NewAPIInternalServer(
 	ctx context.Context, nd rpcbase.NodeDialer, nodeID roachpb.NodeID,
 ) (*apiInternalServer, error) {
@@ -74,7 +76,10 @@ func NewAPIInternalServer(
 		status: status,
 		mux:    mux.NewRouter(),
 	}
-	r.registerStatusRoutes()
+
+	if err := r.registerStatusRoutes(); err != nil {
+		return nil, err
+	}
 
 	decoder.SetAliasTag("json")
 	decoder.IgnoreUnknownKeys(true)
@@ -87,12 +92,23 @@ func (r *apiInternalServer) ServeHTTP(w http.ResponseWriter, req *http.Request) 
 	r.mux.ServeHTTP(w, req)
 }
 
-// wrapHandler wraps an error-returning handler function to provide consistent
-// error handling. If the handler returns an error, it's converted to an
-// appropriate HTTP error response.
-func wrapHandler(handler func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
+// createHandler creates an HTTP handler function that proxies requests to the
+// given RPC method. Returns nil if an error occurs during handler creation.
+// Returns nil instead of an error to keep caller code concise when registering
+// multiple handlers in arrays. Callers should check for nil before using the
+// returned handler.
+func createHandler[TReq, TResp protoutil.Message](
+	rpcMethod func(context.Context, TReq) (TResp, error),
+) http.HandlerFunc {
+	var zero TReq
+	msgName := proto.MessageName(zero)
+	msgType := proto.MessageType(msgName)
+	if msgType == nil {
+		return nil
+	}
 	return func(w http.ResponseWriter, req *http.Request) {
-		if err := handler(w, req); err != nil {
+		newReq := reflect.New(msgType.Elem()).Interface().(TReq)
+		if err := executeRPC(w, req, rpcMethod, newReq); err != nil {
 			ctx := req.Context()
 			writeHTTPError(ctx, w, req, err)
 		}
@@ -118,7 +134,9 @@ func executeRPC[TReq, TResp protoutil.Message](
 	if err := decoder.Decode(rpcReq, req.URL.Query()); err != nil {
 		return err
 	}
-
+	if err := decodePathVars(rpcReq, mux.Vars(req)); err != nil {
+		return err
+	}
 	// For POST requests, decode the request body (JSON or protobuf)
 	if req.Method == http.MethodPost {
 		if err := decodeRequest(req, rpcReq); err != nil {
@@ -131,6 +149,14 @@ func executeRPC[TReq, TResp protoutil.Message](
 		return err
 	}
 	return writeResponse(ctx, w, req, http.StatusOK, resp)
+}
+
+func decodePathVars[TReq protoutil.Message](rpcReq TReq, vars map[string]string) error {
+	queryParams := make(url.Values)
+	for k, v := range vars {
+		queryParams[k] = []string{v}
+	}
+	return decoder.Decode(rpcReq, queryParams)
 }
 
 // writeHTTPError converts an error to an HTTP error response. It handles gRPC

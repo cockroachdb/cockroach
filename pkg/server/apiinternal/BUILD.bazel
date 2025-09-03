@@ -22,6 +22,7 @@ go_library(
         "@com_github_gorilla_mux//:mux",
         "@com_github_gorilla_schema//:schema",
         "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
+        "@com_github_pkg_errors//:errors",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",
     ],
