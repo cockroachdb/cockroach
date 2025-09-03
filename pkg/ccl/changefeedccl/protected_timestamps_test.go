@@ -155,7 +155,8 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 		}
 	}
 
-	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
+	// Skip kafka sink because it's not compatible with s390x/IBM architecture
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks, feedTestOmitSinks("kafka"))
 }
 
 // TestChangefeedProtectedTimestamps asserts the state of changefeed PTS records
