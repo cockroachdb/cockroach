@@ -5,7 +5,7 @@
 
 package apiinternal
 
-import "github.com/pkg/errors"
+import "github.com/cockroachdb/errors"
 
 // registerStatusRoutes sets up all the status REST endpoints.
 func (r *apiInternalServer) registerStatusRoutes() error {

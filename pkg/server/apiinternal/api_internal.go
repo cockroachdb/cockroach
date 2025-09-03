@@ -6,13 +6,11 @@
 package apiinternal
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"net/http"
 	"net/url"
 	"reflect"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
@@ -38,11 +36,6 @@ type httpMethod string
 const (
 	GET  httpMethod = http.MethodGet
 	POST httpMethod = http.MethodPost
-)
-
-// Constants for common URL parameter and path variables.
-const (
-	localNodeID = "local"
 )
 
 var decoder = schema.NewDecoder()
@@ -222,18 +215,16 @@ func writeResponse(
 		}
 		buf = b
 	case httputil.JSONContentType, httputil.MIMEWildcard:
-		marshaler := jsonpb.Marshaler{
+		marshaler := &protoutil.JSONPb{
 			EnumsAsInts:  true,
 			EmitDefaults: true,
 			Indent:       "  ",
 		}
-
-		var b bytes.Buffer
-		err := marshaler.Marshal(&b, payload)
+		b, err := marshaler.Marshal(payload)
 		if err != nil {
 			return status.Errorf(codes.Internal, "failed to marshal the JSON response: %v", err)
 		}
-		buf = b.Bytes()
+		buf = b
 	}
 
 	w.Header().Set("Content-Type", resContentType)
@@ -259,7 +250,7 @@ func decodeRequest(req *http.Request, target protoutil.Message) error {
 		if err != nil {
 			return err
 		}
-		return proto.Unmarshal(bytes, target)
+		return protoutil.Unmarshal(bytes, target)
 	default:
 		return jsonpb.Unmarshal(req.Body, target)
 	}
@@ -278,31 +269,4 @@ func selectContentType(contentTypes []string) string {
 		}
 	}
 	return httputil.JSONContentType
-}
-
-// extractNodeID extracts the node_id path variable from the request. If no
-// node_id is specified, it defaults to "local" indicating the current node.
-func extractNodeID(req *http.Request) string {
-	vars := mux.Vars(req)
-	nodeID := vars["node_id"]
-	if nodeID == "" {
-		nodeID = localNodeID
-	}
-	return nodeID
-}
-
-// getInt64Var extracts and parses an int64 path variable from the request.
-// Returns an InvalidArgument error if the variable is missing or cannot be
-// parsed.
-func getInt64Var(req *http.Request, name string) (int64, error) {
-	vars := mux.Vars(req)
-	numStr := vars[name]
-	if numStr == "" {
-		return 0, status.Errorf(codes.InvalidArgument, "missing required path parameter: %s", name)
-	}
-	num, err := strconv.ParseInt(numStr, 10, 64)
-	if err != nil {
-		return 0, status.Errorf(codes.InvalidArgument, "invalid %s parameter: %v", name, err)
-	}
-	return num, nil
 }
