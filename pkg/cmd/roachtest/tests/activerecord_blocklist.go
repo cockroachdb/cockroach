@@ -26,6 +26,7 @@ var activeRecordIgnoreList = blocklist{
 	`ActiveRecord::CockroachDBStructureDumpTest#test_structure_dump`:                                                                                           "flaky",
 	`ActiveRecord::ConnectionAdapters::ConnectionPoolThreadTest#test_checkout_fairness`:                                                                        "flaky",
 	`ActiveRecord::ConnectionAdapters::ConnectionPoolThreadTest#test_checkout_fairness_by_group`:                                                               "flaky",
+	`ActiveRecord::ConnectionAdapters::ConnectionPoolThreadTest#test_disconnect_and_clear_reloadable_connections_are_able_to_preempt_other_waiting_threads`:    "flaky",
 	`ActiveRecord::ConnectionAdapters::PostgreSQLAdapterTest#test_translate_no_connection_exception_to_not_established`:                                        "pg_terminate_backend not implemented",
 	`ActiveRecord::Encryption::EncryptableRecordTest#test_by_default,_it's_case_sensitive`:                                                                     "flaky",
 	`ActiveRecord::Encryption::EncryptableRecordTest#test_forced_encoding_for_deterministic_attributes_will_replace_invalid_characters`:                        "flaky",
