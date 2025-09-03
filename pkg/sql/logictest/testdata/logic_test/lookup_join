@@ -1601,8 +1601,10 @@ SELECT col1_6 FROM table_1_124732 INNER HASH JOIN table_3_124732 ON col3_0 = col
 ----
 -
 
-statement error pgcode XXUUU pq: could not produce a query plan conforming to the LOOKUP JOIN hint
+query T
 SELECT col1_6 FROM table_1_124732 INNER LOOKUP JOIN table_3_124732 ON col3_0 = col1_6;
+----
+-
 
 # Regression test for incorrectly remapping columns in a composite-sensitive
 # expression to produce a lookup join (#124732).
