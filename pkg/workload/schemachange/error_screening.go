@@ -494,6 +494,28 @@ func isValidGenerationError(code string) bool {
 	return getValidGenerationErrors().contains(pgCode)
 }
 
+// tableHasBeforeInsertTrigger checks if the table has any BEFORE INSERT triggers
+// that could affect the insertion behavior.
+func (og *operationGenerator) tableHasBeforeInsertTrigger(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
+	query := `
+	SELECT EXISTS (
+		SELECT 1 FROM pg_trigger t
+		JOIN pg_class c ON t.tgrelid = c.oid
+		JOIN pg_namespace n ON c.relnamespace = n.oid
+		WHERE n.nspname = $1 
+		AND c.relname = $2
+		AND t.tgenabled != 'D'
+		AND (t.tgtype & 2) = 2  -- BEFORE trigger
+		AND (t.tgtype & 4) = 4  -- INSERT trigger
+	)`
+
+	var hasTrigger bool
+	err := tx.QueryRow(ctx, query, tableName.Schema(), tableName.Object()).Scan(&hasTrigger)
+	return hasTrigger, err
+}
+
 // validateGeneratedExpressionsForInsert goes through generated expressions and
 // detects if a valid value can be generated with a given insert row.
 func (og *operationGenerator) validateGeneratedExpressionsForInsert(
@@ -514,6 +536,12 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 			isInvalidInsert = true
 		}
 	}()
+
+	hasBeforeInsertTrigger, err := og.tableHasBeforeInsertTrigger(ctx, tx, tableName)
+	if err != nil {
+		return false, nil, nil, err
+	}
+
 	// Put values to be inserted into a column name to value map to simplify lookups.
 	columnsToValues := map[tree.Name]string{}
 	for i := 0; i < len(nonGeneratedColNames); i++ {
@@ -601,7 +629,14 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 		}
 		if isNull && !isNullable && !nullViolationAdded {
 			nullViolationAdded = true
-			expectedErrCodes = expectedErrCodes.append(pgcode.NotNullViolation)
+			// If there is a trigger, then we cannot be sure if the NULL value
+			// will actually be inserted. It may be replaced or the row itself could
+			// be cleared.
+			if hasBeforeInsertTrigger {
+				potentialErrCodes = potentialErrCodes.append(pgcode.NotNullViolation)
+			} else {
+				expectedErrCodes = expectedErrCodes.append(pgcode.NotNullViolation)
+			}
 		}
 		// Re-run the another variant in case we have NULL values in arithmetic
 		// of expression, the evaluation order can differ depending on how variables
