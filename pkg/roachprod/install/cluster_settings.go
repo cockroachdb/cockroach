@@ -9,8 +9,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil/codec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/errors"
+	"gopkg.in/yaml.v3"
 )
 
 // ClusterSettings contains various knobs that affect operations on a cluster.
@@ -40,10 +42,12 @@ type secureFlagsOpt struct {
 
 // ClusterSettingOption is the interface satisfied by options to MakeClusterSettings.
 type ClusterSettingOption interface {
+	codec.DynamicType
 	apply(settings *ClusterSettings)
 }
 
 // ClusterSettingsOption adds cluster settings via SET CLUSTER SETTING.
+// typegen:reg
 type ClusterSettingsOption map[string]string
 
 func (o ClusterSettingsOption) apply(settings *ClusterSettings) {
@@ -53,6 +57,7 @@ func (o ClusterSettingsOption) apply(settings *ClusterSettings) {
 }
 
 // TagOption is used to pass a process tag.
+// typegen:reg
 type TagOption string
 
 func (o TagOption) apply(settings *ClusterSettings) {
@@ -60,6 +65,7 @@ func (o TagOption) apply(settings *ClusterSettings) {
 }
 
 // BinaryOption is used to pass a process tag.
+// typegen:reg
 type BinaryOption string
 
 func (o BinaryOption) apply(settings *ClusterSettings) {
@@ -67,6 +73,7 @@ func (o BinaryOption) apply(settings *ClusterSettings) {
 }
 
 // PGUrlCertsDirOption is used to pass certs dir for secure connections.
+// typegen:reg
 type PGUrlCertsDirOption string
 
 func (o PGUrlCertsDirOption) apply(settings *ClusterSettings) {
@@ -75,6 +82,7 @@ func (o PGUrlCertsDirOption) apply(settings *ClusterSettings) {
 
 // ComplexSecureOption is a complex type for secure options that keeps track of
 // the user's intent regarding security.
+// typegen:reg
 type ComplexSecureOption secureFlagsOpt
 
 func (o ComplexSecureOption) apply(settings *ClusterSettings) {
@@ -126,6 +134,7 @@ func (o ComplexSecureOption) overrideBasedOnClusterSettings(c *SyncedCluster) er
 
 // SimpleSecureOption is a simple type that simplifies setting the secure flags
 // in the cluster settings without keeping track of --secure or --insecure options.
+// typegen:reg
 type SimpleSecureOption bool
 
 func (o SimpleSecureOption) apply(settings *ClusterSettings) {
@@ -150,6 +159,7 @@ type SecureOption interface {
 }
 
 // UseTreeDistOption is passed to use treedist copy algorithm.
+// typegen:reg
 type UseTreeDistOption bool
 
 func (o UseTreeDistOption) apply(settings *ClusterSettings) {
@@ -157,6 +167,7 @@ func (o UseTreeDistOption) apply(settings *ClusterSettings) {
 }
 
 // EnvOption is used to pass environment variables to the cockroach process.
+// typegen:reg
 type EnvOption []string
 
 var _ EnvOption
@@ -166,6 +177,7 @@ func (o EnvOption) apply(settings *ClusterSettings) {
 }
 
 // NumRacksOption is used to pass the number of racks to partition the nodes into.
+// typegen:reg
 type NumRacksOption int
 
 var _ NumRacksOption
@@ -175,6 +187,7 @@ func (o NumRacksOption) apply(settings *ClusterSettings) {
 }
 
 // DebugDirOption is used to stash debug information.
+// typegen:reg
 type DebugDirOption string
 
 var _ DebugDirOption
@@ -200,4 +213,21 @@ func MakeClusterSettings(opts ...ClusterSettingOption) ClusterSettings {
 		opt.apply(&clusterSettings)
 	}
 	return clusterSettings
+}
+
+// ClusterSettingOptionList is a list of ClusterSettingOption that can be
+// serialized to YAML. It uses codec.ListWrapper to handle the dynamic types.
+type ClusterSettingOptionList []ClusterSettingOption
+
+func (o ClusterSettingOptionList) MarshalYAML() (any, error) {
+	return codec.WrapList(o), nil
+}
+
+func (o *ClusterSettingOptionList) UnmarshalYAML(value *yaml.Node) error {
+	var lw codec.ListWrapper[ClusterSettingOption]
+	if err := value.Decode(&lw); err != nil {
+		return err
+	}
+	*o = lw.Get()
+	return nil
 }
