@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -220,14 +221,14 @@ func appendPKRangeORChain(
 			isLast := i == numQueryBounds-1
 			buf.WriteString("\n  (")
 			for j := 0; j < i; j++ {
-				buf.WriteString(pkColNames[j])
+				lexbase.EncodeRestrictedSQLIdent(buf, pkColNames[j], lexbase.EncNoFlags)
 				buf.WriteString(" = $")
 				buf.WriteString(strconv.Itoa(j + placeholderOffset))
 				buf.WriteString("::")
 				buf.WriteString(pkColTypes[j].SQLStringFullyQualified())
 				buf.WriteString(" AND ")
 			}
-			buf.WriteString(pkColNames[i])
+			lexbase.EncodeRestrictedSQLIdent(buf, pkColNames[i], lexbase.EncNoFlags)
 			buf.WriteString(" ")
 			buf.WriteString(compareOps[pkColDirs[i]])
 			if isLast && inclusive {
