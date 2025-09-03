@@ -14,6 +14,7 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
 
+import "ccl/changefeedccl/progresspb/progress.proto";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/data.proto";
 import "sql/execinfrapb/data.proto";
@@ -64,6 +65,11 @@ message ChangeAggregatorSpec {
 
   // ProgressConfig is the configuration for the changefeed's progress tracking.
   optional ChangefeedProgressConfig progress_config = 10;
+
+  // ResolvedTables contains per-table resolved timestamp information.
+  // Upon resume, it is safe to restore the progress for each table to
+  // its per-table resolved timestamp.
+  optional cockroach.ccl.changefeedccl.progresspb.ResolvedTables resolved_tables = 11;
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
@@ -98,6 +104,11 @@ message ChangeFrontierSpec {
 
   // ProgressConfig is the configuration for the changefeed's progress tracking.
   optional ChangefeedProgressConfig progress_config = 7;
+
+  // ResolvedTables contains per-table resolved timestamp information.
+  // Upon resume, it is safe to restore the progress for each table to
+  // its per-table resolved timestamp.
+  optional cockroach.ccl.changefeedccl.progresspb.ResolvedTables resolved_tables = 8;
 }
 
 // ChangefeedProgressConfig is the configuration for the changefeed's progress tracking.

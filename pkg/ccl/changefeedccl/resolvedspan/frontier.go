@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -31,11 +32,11 @@ type AggregatorFrontier struct {
 func NewAggregatorFrontier(
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
-	decoder TablePrefixDecoder,
+	codec TableCodec,
 	perTableTracking bool,
 	spans ...roachpb.Span,
 ) (*AggregatorFrontier, error) {
-	rsf, err := newResolvedSpanFrontier(statementTime, initialHighWater, decoder, perTableTracking, spans...)
+	rsf, err := newResolvedSpanFrontier(statementTime, initialHighWater, codec, perTableTracking, spans...)
 	if err != nil {
 		return nil, err
 	}
@@ -80,11 +81,11 @@ type CoordinatorFrontier struct {
 func NewCoordinatorFrontier(
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
-	decoder TablePrefixDecoder,
+	codec TableCodec,
 	perTableTracking bool,
 	spans ...roachpb.Span,
 ) (*CoordinatorFrontier, error) {
-	rsf, err := newResolvedSpanFrontier(statementTime, initialHighWater, decoder, perTableTracking, spans...)
+	rsf, err := newResolvedSpanFrontier(statementTime, initialHighWater, codec, perTableTracking, spans...)
 	if err != nil {
 		return nil, err
 	}
@@ -218,13 +219,13 @@ type resolvedSpanFrontier struct {
 func newResolvedSpanFrontier(
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
-	decoder TablePrefixDecoder,
+	codec TableCodec,
 	perTableTracking bool,
 	spans ...roachpb.Span,
 ) (*resolvedSpanFrontier, error) {
 	sf, err := func() (maybeTablePartitionedFrontier, error) {
 		if perTableTracking {
-			return span.NewMultiFrontierAt(newTableIDPartitioner(decoder), initialHighWater, spans...)
+			return span.NewMultiFrontierAt(newTableIDPartitioner(codec), initialHighWater, spans...)
 		}
 		f, err := span.MakeFrontierAt(initialHighWater, spans...)
 		if err != nil {
@@ -462,23 +463,24 @@ func (f notTablePartitionedFrontier) Frontiers() iter.Seq2[descpb.ID, span.ReadO
 	}
 }
 
-// A TablePrefixDecoder decodes table prefixes from keys.
-// The production implementation is keys.SQLCodec.
-type TablePrefixDecoder interface {
+// TableCodec is a subset of keys.SQLCodec's methods that are needed
+// to partition spans into their respective tables.
+type TableCodec interface {
 	DecodeTablePrefix(key roachpb.Key) ([]byte, uint32, error)
+	TableSpan(tableID uint32) roachpb.Span
 }
 
-func newTableIDPartitioner(decoder TablePrefixDecoder) span.PartitionerFunc[descpb.ID] {
+var _ TableCodec = keys.SQLCodec{}
+
+func newTableIDPartitioner(codec TableCodec) span.PartitionerFunc[descpb.ID] {
 	return func(sp roachpb.Span) (descpb.ID, error) {
-		_, startKeyTableID, err := decoder.DecodeTablePrefix(sp.Key)
+		_, startKeyTableID, err := codec.DecodeTablePrefix(sp.Key)
 		if err != nil {
-			return 0, err
+			return 0, errors.Wrapf(err, "error decoding start key in %v", sp)
 		}
-		_, endKeyTableID, err := decoder.DecodeTablePrefix(sp.EndKey)
-		if err != nil {
-			return 0, err
-		}
-		if startKeyTableID != endKeyTableID {
+		// Reject any spans that cross table boundaries.
+		tableSpan := codec.TableSpan(startKeyTableID)
+		if !tableSpan.Contains(sp) {
 			return 0, errors.AssertionFailedf("span encompassing multiple tables: %s", sp)
 		}
 		return descpb.ID(startKeyTableID), nil

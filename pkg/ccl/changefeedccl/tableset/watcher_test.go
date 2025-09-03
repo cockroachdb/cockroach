@@ -294,6 +294,47 @@ func TestTablesetBasic(t *testing.T) {
 	})
 }
 
+func TestTablesetNonIdempotentProtection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s, sdb, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sdb)
+	db.Exec(t, "SELECT crdb_internal.set_vmodule('watcher=100')")
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	mm := mon.NewMonitor(mon.Options{
+		Name:      mon.MakeName("test-mm"),
+		Limit:     1024 * 1024,
+		Increment: 128,
+		Settings:  cluster.MakeTestingClusterSettings(),
+	})
+	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(1024*2024))
+	defer mm.Stop(ctx)
+
+	dbID := getDatabaseID(t, ctx, &execCfg, "defaultdb")
+	filter := tableset.Filter{DatabaseID: dbID}
+	watcher := tableset.NewWatcher(filter, &execCfg, mm, 42)
+
+	db.Exec(t, "CREATE TABLE foo (id int primary key)")
+
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		return watcher.Start(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	})
+
+	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	_, _, err := watcher.PopUnchangedUpTo(ctx, ts)
+	require.NoError(t, err)
+
+	_, _, err = watcher.PopUnchangedUpTo(ctx, ts)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "PopUnchangedUpTo called with non-advancing timestamp")
+}
+
 func getDatabaseID(
 	t *testing.T, ctx context.Context, execCfg *sql.ExecutorConfig, name string,
 ) descpb.ID {

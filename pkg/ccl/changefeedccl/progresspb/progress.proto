@@ -4,8 +4,8 @@
 // included in the /LICENSE file.
 
 syntax = "proto3";
-package cockroach.ccl.changefeedccl;
-option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb";
+package cockroach.ccl.changefeedccl.progresspb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/progresspb";
 
 import "gogoproto/gogo.proto";
 import "jobs/jobspb/jobs.proto";
