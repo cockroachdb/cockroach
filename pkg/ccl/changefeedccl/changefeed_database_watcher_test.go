@@ -78,3 +78,43 @@ func TestDatabaseLevelChangefeedRestartsOnNewTableAdded(t *testing.T) {
 
 	cdcTest(t, testFn)
 }
+
+func TestDatabaseLevelChangefeedToleratesDropsAndFinishesData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE DATABASE IF NOT EXISTS d`)
+		sqlDB.Exec(t, `CREATE TABLE IF NOT EXISTS d.t1 (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE IF NOT EXISTS d.t2 (a INT PRIMARY KEY)`)
+
+		feed := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d WITH initial_scan='no', min_checkpoint_frequency='100ms'`)
+		defer closeFeed(t, feed)
+
+		sqlDB.Exec(t, `INSERT INTO d.t1 VALUES (1)`)
+
+		assertPayloads(t, feed, []string{
+			`t1: [1]->{"after": {"a": 1}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO d.t2 VALUES (1)`)
+		sqlDB.Exec(t, `DROP TABLE d.t2`)
+		sqlDB.Exec(t, `INSERT INTO d.t1 VALUES (2)`)
+
+		assertPayloads(t, feed, []string{
+			`t1: [2]->{"after": {"a": 2}}`,
+			// expect to see the last value of t2 even though it was dropped
+			`t2: [1]->{"after": {"a": 1}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO d.t1 VALUES (3)`)
+		assertPayloads(t, feed, []string{
+			`t1: [3]->{"after": {"a": 3}}`,
+		})
+
+	}
+
+	cdcTest(t, testFn)
+}

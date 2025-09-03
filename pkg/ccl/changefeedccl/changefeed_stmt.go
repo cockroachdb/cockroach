@@ -1606,6 +1606,13 @@ func (b *changefeedResumer) resumeWithRetries(
 				continue
 			}
 
+			isDBLevelChangefeed := details.TargetSpecifications[0].Type == jobspb.ChangefeedTargetSpecification_DATABASE
+			if isDBLevelChangefeed && errors.Is(flowErr, catalog.ErrDescriptorDropped) {
+				log.Dev.Infof(ctx, "ignoring dropped table error for database-level changefeed")
+				// TODO: we need to save progress here without that table ... right?
+				continue
+			}
+
 			if knobs != nil && knobs.HandleDistChangefeedError != nil {
 				flowErr = knobs.HandleDistChangefeedError(flowErr)
 			}
