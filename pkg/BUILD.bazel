@@ -1699,6 +1699,8 @@ GO_TARGETS = [
     "//pkg/roachprod/prometheus:prometheus_test",
     "//pkg/roachprod/promhelperclient:promhelperclient",
     "//pkg/roachprod/promhelperclient:promhelperclient_test",
+    "//pkg/roachprod/roachprodutil/codec/cmd/typegen:typegen",
+    "//pkg/roachprod/roachprodutil/codec/cmd/typegen:typegen_lib",
     "//pkg/roachprod/roachprodutil/codec:codec",
     "//pkg/roachprod/roachprodutil/codec:codec_test",
     "//pkg/roachprod/roachprodutil:roachprodutil",
