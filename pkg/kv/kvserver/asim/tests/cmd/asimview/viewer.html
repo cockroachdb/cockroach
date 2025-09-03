@@ -240,90 +240,96 @@
     const defaultMetrics = ['cpu', 'qps', 'write_bytes_per_second', 'replicas', 'leases'];
     let selectedMetrics = new Set();
     
-    // Clean Zoom State Manager
+    // Clean Zoom State Manager - Option 1: Plugin for input only
     const ZoomManager = {
       currentRange: { min: null, max: null },  // null = full view
       history: [],
       maxHistory: 50,
-      isProgrammaticUpdate: false,  // Track if current update is programmatic
       
-      // Handle user-initiated zoom from chart callback
+      // Handle user-initiated zoom from chart callback (drag or pan)
       handleUserZoom(sourceChart) {
-        if (this.isProgrammaticUpdate || !sourceChart || !sourceChart.scales) return;
+        if (!sourceChart || !sourceChart.scales) return;
         
         const { min, max } = sourceChart.scales.x;
         
-        // Save current state to history
-        if (this.currentRange.min !== min || this.currentRange.max !== max) {
-          this.history.push({ ...this.currentRange });
-          if (this.history.length > this.maxHistory) {
-            this.history.shift();
-          }
-          this.currentRange = { min, max };
+        // Only process if zoom actually changed
+        if (this.currentRange.min === min && this.currentRange.max === max) {
+          return;
         }
         
-        // Sync other charts
-        this.isProgrammaticUpdate = true;
-        charts.forEach(chart => {
-          if (chart !== sourceChart) {
-            this.updateChartZoom(chart, min, max);
-          }
-        });
-        this.isProgrammaticUpdate = false;
+        // Push current state to history
+        this.pushToHistory();
+        
+        // Update current range
+        this.currentRange = { min, max };
+        
+        // Sync all other charts directly (bypass zoom plugin)
+        this.syncCharts(sourceChart, min, max);
         
         // Update Y-axes
         this.updateAllYAxes(min, max);
       },
       
-      // Apply a zoom range to all charts (for buttons/keyboard)
-      applyZoom(min, max, saveToHistory = true) {
-        // Save current state before changing
-        if (saveToHistory && (this.currentRange.min !== min || this.currentRange.max !== max)) {
+      // Push current state to history
+      pushToHistory() {
+        // Don't push duplicates
+        const last = this.history[this.history.length - 1];
+        if (!last || last.min !== this.currentRange.min || last.max !== this.currentRange.max) {
           this.history.push({ ...this.currentRange });
           if (this.history.length > this.maxHistory) {
             this.history.shift();
           }
         }
-        
-        this.currentRange = { min, max };
-        this.isProgrammaticUpdate = true;
-        
-        // Update all charts
-        charts.forEach(chart => {
-          this.updateChartZoom(chart, min, max);
-        });
-        
-        this.isProgrammaticUpdate = false;
-        
-        // Update Y-axes after all X-axes are set
-        this.updateAllYAxes(min, max);
       },
       
-      // Update a single chart's zoom without triggering callbacks
-      updateChartZoom(chart, min, max) {
+      // Sync all charts to match the given range (except source)
+      syncCharts(sourceChart, min, max) {
+        charts.forEach(chart => {
+          if (chart !== sourceChart) {
+            this.updateChartView(chart, min, max);
+          }
+        });
+      },
+      
+      // Update a single chart's view directly (bypass zoom plugin)
+      updateChartView(chart, min, max) {
         if (!chart || !chart.options) return;
         
-        try {
-          if (min === null || max === null) {
-            // For reset, we can safely call resetZoom
-            chart.resetZoom('none');
-          } else {
-            // For zoom updates, directly modify the scale options to avoid plugin conflicts
-            if (chart.options.scales && chart.options.scales.x) {
-              chart.options.scales.x.min = min;
-              chart.options.scales.x.max = max;
-              chart.update('none');
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to update chart zoom:', e);
+        if (min === null || max === null) {
+          // Reset to full view
+          delete chart.options.scales.x.min;
+          delete chart.options.scales.x.max;
+        } else {
+          // Apply specific range
+          chart.options.scales.x.min = min;
+          chart.options.scales.x.max = max;
         }
+        
+        chart.update('none');
+      },
+      
+      // Apply zoom to all charts (for undo/buttons/keyboard)
+      applyZoom(min, max, saveToHistory = true) {
+        // Save current state if requested
+        if (saveToHistory) {
+          this.pushToHistory();
+        }
+        
+        // Update current range
+        this.currentRange = { min, max };
+        
+        // Update all charts directly (bypass zoom plugin for programmatic updates)
+        charts.forEach(chart => {
+          this.updateChartView(chart, min, max);
+        });
+        
+        // Update Y-axes
+        this.updateAllYAxes(min, max);
       },
       
       // Reset to full view
       reset() {
         this.history = [];
-        this.currentRange = { min: null, max: null };
         this.applyZoom(null, null, false);
       },
       
@@ -331,26 +337,22 @@
       undo() {
         if (this.history.length > 0) {
           const previousState = this.history.pop();
-          this.currentRange = previousState;
           this.applyZoom(previousState.min, previousState.max, false);
-        } else {
-          // No history, reset to full view
+        } else if (this.currentRange.min !== null || this.currentRange.max !== null) {
+          // No history but zoomed in - reset
           this.reset();
         }
       },
       
       // Zoom out by 2x
       zoomOut() {
-        if (!charts.length) return;
+        if (!charts.length || !charts[0]?.data) return;
         
-        const chart = charts[0];
-        if (!chart || !chart.data) return;
-        
-        const dataMax = chart.data.labels.length - 1;
+        const dataMax = charts[0].data.labels.length - 1;
         const currentMin = this.currentRange.min ?? 0;
         const currentMax = this.currentRange.max ?? dataMax;
         
-        // If already at full view, do nothing
+        // Already at full view
         if (currentMin === 0 && currentMax === dataMax) return;
         
         const currentRange = currentMax - currentMin;
@@ -360,15 +362,11 @@
         let newMin = Math.max(0, midpoint - newRange / 2);
         let newMax = Math.min(dataMax, midpoint + newRange / 2);
         
-        // Adjust if we hit boundaries
-        if (newMin === 0) {
-          newMax = Math.min(dataMax, newRange);
-        }
-        if (newMax === dataMax) {
-          newMin = Math.max(0, dataMax - newRange);
-        }
+        // Adjust for boundaries
+        if (newMin === 0) newMax = Math.min(dataMax, newRange);
+        if (newMax === dataMax) newMin = Math.max(0, dataMax - newRange);
         
-        // If we're at or beyond full range, reset
+        // Apply zoom or reset if at full range
         if (newMin <= 0 && newMax >= dataMax) {
           this.reset();
         } else {

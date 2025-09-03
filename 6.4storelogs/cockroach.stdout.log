@@ -1,0 +1,19 @@
+cockroach start: Tue Sep  2 12:17:47 UTC 2025, logging to logs
+CockroachDB node starting at 2025-09-02 12:17:47.862408912 +0000 UTC m=+0.614200830 (took 0.3s)
+build:               CCL v25.4.0-alpha.1-dev-ee0bb8fa3912df192238a61e6d0e471f14408b2c @ 2025/09/02 12:02:23 (go1.23.12 X:nocoverageredesign)
+malloc_conf:         prof:false,prof_active:true,background_thread:true,thp:never,metadata_thp:disabled,narenas:64,dirty_decay_ms:2000,muzzy_decay_ms:0
+webui:               http://10.142.1.214:26258
+sql:                 postgresql://root@10.142.1.214:26257/defaultdb?sslmode=disable
+sql (JDBC):          jdbc:postgresql://10.142.1.214:26257/defaultdb?sslmode=disable&user=root
+RPC client flags:    ./cockroach <client cmd> --host=10.142.1.214:26257 --insecure
+logs:                /home/ubuntu/logs
+locality:            cloud=gce,region=us-east1,zone=us-east1-c
+temp dir:            /mnt/data1/cockroach/cockroach-temp3532426095
+external I/O path:   /mnt/data1/cockroach/extern
+store[0]:            path=/mnt/data1/cockroach,attrs=node6:node6store1:store1
+store[1]:            path=/mnt/data2/cockroach,attrs=node6:node6store2:store2
+store[2]:            path=/mnt/data3/cockroach,attrs=node6:node6store3:store3
+store[3]:            path=/mnt/data4/cockroach,attrs=node6:node6store4:store4
+clusterID:           81e80de5-e733-45a3-b544-e3979b29fb1f
+status:              initialized new node, joined pre-existing cluster
+nodeID:              6
