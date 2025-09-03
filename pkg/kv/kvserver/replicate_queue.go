@@ -574,13 +574,17 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			// so we use the raftSnapshotQueueTimeoutFunc. This function sets a
 			// timeout based on the range size and the sending rate in addition
 			// to consulting the setting which controls the minimum timeout.
-			processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
-			successes:          store.metrics.ReplicateQueueSuccesses,
-			failures:           store.metrics.ReplicateQueueFailures,
-			pending:            store.metrics.ReplicateQueuePending,
-			processingNanos:    store.metrics.ReplicateQueueProcessingNanos,
-			purgatory:          store.metrics.ReplicateQueuePurgatory,
-			disabledConfig:     kvserverbase.ReplicateQueueEnabled,
+			processTimeoutFunc:        makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
+			successes:                 store.metrics.ReplicateQueueSuccesses,
+			enqueueAdd:                store.metrics.ReplicateQueueEnqueueAdd,
+			enqueueFailedPrecondition: store.metrics.ReplicateQueueEnqueueFailedPrecondition,
+			enqueueNoAction:           store.metrics.ReplicateQueueEnqueueNoAction,
+			enqueueUnexpectedError:    store.metrics.ReplicateQueueEnqueueUnexpectedError,
+			failures:                  store.metrics.ReplicateQueueFailures,
+			pending:                   store.metrics.ReplicateQueuePending,
+			processingNanos:           store.metrics.ReplicateQueueProcessingNanos,
+			purgatory:                 store.metrics.ReplicateQueuePurgatory,
+			disabledConfig:            kvserverbase.ReplicateQueueEnabled,
 		},
 	)
 	updateFn := func() {

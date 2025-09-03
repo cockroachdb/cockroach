@@ -384,7 +384,11 @@ type queueConfig struct {
 	// replicas that have been destroyed but not GCed.
 	processDestroyedReplicas bool
 	// processTimeout returns the timeout for processing a replica.
-	processTimeoutFunc queueProcessTimeoutFunc
+	processTimeoutFunc        queueProcessTimeoutFunc
+	enqueueAdd                *metric.Counter
+	enqueueFailedPrecondition *metric.Counter
+	enqueueNoAction           *metric.Counter
+	enqueueUnexpectedError    *metric.Counter
 	// successes is a counter of replicas processed successfully.
 	successes *metric.Counter
 	// failures is a counter of replicas which failed processing.
@@ -705,6 +709,7 @@ func (bq *baseQueue) AddAsyncWithCallback(
 	if err := bq.Async(ctx, "Add", true /* wait */, func(ctx context.Context, h queueHelper) {
 		h.Add(ctx, repl, prio, processCallback)
 	}); err != nil {
+		bq.updateMetricsOnEnqueueUnexpectedError()
 		processCallback.onEnqueueResult(-1 /*indexOnHeap*/, err)
 	}
 }
@@ -713,9 +718,46 @@ func (bq *baseQueue) AddAsyncWithCallback(
 // for other operations to finish instead of turning into a noop (because
 // unlikely MaybeAdd, Add is not subject to being called opportunistically).
 func (bq *baseQueue) AddAsync(ctx context.Context, repl replicaInQueue, prio float64) {
-	_ = bq.Async(ctx, "Add", true /* wait */, func(ctx context.Context, h queueHelper) {
+	if err := bq.Async(ctx, "Add", true /* wait */, func(ctx context.Context, h queueHelper) {
 		h.Add(ctx, repl, prio, noopProcessCallback)
-	})
+	}); err != nil {
+		// We don't update metrics in MaybeAddAsync because we don't know if the
+		// replica should be queued at this point. We only count it as an unexpected
+		// error when we're certain the replica should be enqueued. In this case,
+		// the caller explicitly wants to add the replica to the queue directly, so
+		// we do update the metrics on unexpected error.
+		bq.updateMetricsOnEnqueueUnexpectedError()
+	}
+}
+
+// updateMetricsOnEnqueueFailedPrecondition updates the metrics when a replica
+// fails precondition checks (replicaCanBeProcessed) and should not be
+// considered for enqueueing. This may include cases where the replica does not
+// have a valid lease, is uninitialized, is destroyed, failed to retrieve span
+// conf reader, or unsplit ranges.
+func (bq *baseQueue) updateMetricsOnEnqueueFailedPrecondition() {
+	if bq.enqueueFailedPrecondition != nil {
+		bq.enqueueFailedPrecondition.Inc(1)
+	}
+}
+
+// updateMetricsOnEnqueueNoAction updates the metrics when shouldQueue
+// determines no action is needed and the replica is not added to the queue.
+func (bq *baseQueue) updateMetricsOnEnqueueNoAction() {
+	if bq.enqueueNoAction != nil {
+		bq.enqueueNoAction.Inc(1)
+	}
+}
+
+// updateMetricsOnEnqueueUnexpectedError updates the metrics when an unexpected
+// error occurs during enqueue operations. This should be called for replicas
+// that were expected to be enqueued (either had ShouldQueue return true or the
+// caller explicitly requested to be added to the queue directly), but failed to
+// be enqueued during the enqueue process (such as Async was rated limited).
+func (bq *baseQueue) updateMetricsOnEnqueueUnexpectedError() {
+	if bq.enqueueUnexpectedError != nil {
+		bq.enqueueUnexpectedError.Inc(1)
+	}
 }
 
 func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.ClockTimestamp) {
@@ -752,6 +794,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	// Load the system config if it's needed.
 	confReader, err := bq.replicaCanBeProcessed(ctx, repl, false /* acquireLeaseIfNeeded */)
 	if err != nil {
+		bq.updateMetricsOnEnqueueFailedPrecondition()
 		return
 	}
 
@@ -761,6 +804,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	realRepl, _ := repl.(*Replica)
 	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, confReader)
 	if !should {
+		bq.updateMetricsOnEnqueueNoAction()
 		return
 	}
 
@@ -768,10 +812,12 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	if extConf != nil && extConf.Get(&bq.store.cfg.Settings.SV) {
 		hasExternal, err := realRepl.HasExternalBytes()
 		if err != nil {
+			bq.updateMetricsOnEnqueueUnexpectedError()
 			log.Dev.Warningf(ctx, "could not determine if %s has external bytes: %s", realRepl, err)
 			return
 		}
 		if hasExternal {
+			bq.updateMetricsOnEnqueueUnexpectedError()
 			log.Dev.VInfof(ctx, 1, "skipping %s for %s because it has external bytes", bq.name, realRepl)
 			return
 		}
@@ -791,7 +837,15 @@ func (bq *baseQueue) addInternal(
 	replicaID roachpb.ReplicaID,
 	priority float64,
 	processCallback processCallback,
-) (bool, error) {
+) (added bool, err error) {
+	defer func() {
+		if added && bq.enqueueAdd != nil {
+			bq.enqueueAdd.Inc(1)
+		}
+		if err != nil {
+			bq.updateMetricsOnEnqueueUnexpectedError()
+		}
+	}()
 	// NB: this is intentionally outside of bq.mu to avoid having to consider
 	// lock ordering constraints.
 	if !desc.IsInitialized() {
