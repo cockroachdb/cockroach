@@ -111,6 +111,8 @@ func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfi
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
 	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
 	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
+	cfg.enqueueAdd = metric.NewCounter(metric.Metadata{Name: "enqueueadd"})
+	cfg.enqueueUnexpectedError = metric.NewCounter(metric.Metadata{Name: "enqueueunexpectederror"})
 	cfg.disabledConfig = testQueueEnabled
 	return newBaseQueue(name, impl, store, cfg)
 }
@@ -1327,6 +1329,7 @@ func TestBaseQueueCallbackOnEnqueueResult(t *testing.T) {
 				t.Fatal("unexpected call to onProcessResult")
 			},
 		})
+		require.Equal(t, bq.enqueueAdd.Count(), int64(1))
 		require.True(t, queued)
 	})
 
@@ -1353,6 +1356,7 @@ func TestBaseQueueCallbackOnEnqueueResult(t *testing.T) {
 					t.Fatal("unexpected call to onProcessResult")
 				},
 			})
+			require.Equal(t, int64(i+1), bq.enqueueAdd.Count())
 			require.True(t, queued)
 		}
 		// Set range id back to 1.
@@ -1373,6 +1377,8 @@ func TestBaseQueueCallbackOnEnqueueResult(t *testing.T) {
 				t.Fatal("unexpected call to onProcessResult")
 			},
 		})
+		require.Equal(t, int64(0), bq.enqueueAdd.Count())
+		require.Equal(t, int64(1), bq.enqueueUnexpectedError.Count())
 		require.False(t, queued)
 	})
 	t.Run("stopped", func(t *testing.T) {
@@ -1391,6 +1397,8 @@ func TestBaseQueueCallbackOnEnqueueResult(t *testing.T) {
 			},
 		})
 		require.False(t, queued)
+		require.Equal(t, int64(0), bq.enqueueAdd.Count())
+		require.Equal(t, int64(1), bq.enqueueUnexpectedError.Count())
 	})
 
 	t.Run("alreadyqueued", func(t *testing.T) {
@@ -1408,6 +1416,8 @@ func TestBaseQueueCallbackOnEnqueueResult(t *testing.T) {
 			},
 		})
 		require.True(t, queued)
+		require.Equal(t, int64(1), bq.enqueueAdd.Count())
+		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
 
 		// Inserting again on the same range id should fail.
 		queued, _ = bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
@@ -1420,6 +1430,8 @@ func TestBaseQueueCallbackOnEnqueueResult(t *testing.T) {
 			},
 		})
 		require.False(t, queued)
+		require.Equal(t, int64(1), bq.enqueueAdd.Count())
+		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
 	})
 
 	t.Run("purgatory", func(t *testing.T) {
@@ -1443,6 +1455,8 @@ func TestBaseQueueCallbackOnEnqueueResult(t *testing.T) {
 			},
 		})
 		require.False(t, queued)
+		require.Equal(t, int64(0), bq.enqueueAdd.Count())
+		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
 	})
 
 	t.Run("processing", func(t *testing.T) {
@@ -1454,7 +1468,7 @@ func TestBaseQueueCallbackOnEnqueueResult(t *testing.T) {
 		item.setProcessing()
 		bq.addLocked(item)
 		// Inserting a range that is already being processed should not enqueue again.
-		requeued, _ := bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
+		markedAsRequeued, _ := bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
 			onEnqueueResult: func(indexOnHeap int, err error) {
 				require.Equal(t, -1, indexOnHeap)
 				require.ErrorIs(t, err, errReplicaAlreadyProcessing)
@@ -1463,7 +1477,9 @@ func TestBaseQueueCallbackOnEnqueueResult(t *testing.T) {
 				t.Fatal("unexpected call to onProcessResult")
 			},
 		})
-		require.True(t, requeued)
+		require.True(t, markedAsRequeued)
+		require.Equal(t, int64(0), bq.enqueueAdd.Count())
+		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
 	})
 	t.Run("fullqueue", func(t *testing.T) {
 		testQueue := &testQueueImpl{}
@@ -1483,6 +1499,8 @@ func TestBaseQueueCallbackOnEnqueueResult(t *testing.T) {
 			},
 		})
 		require.True(t, queued)
+		require.Equal(t, int64(1), bq.enqueueAdd.Count())
+		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
 	})
 }
 
