@@ -3466,11 +3466,11 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			if metrics.Decommissioning {
 				// NB: Enqueue is disabled by default from here and throttled async if
 				// enabled.
-				shouldLog := logBudgetOnDecommissioningNudger > 0
-				if shouldLog {
+				maybeLog := logBudgetOnDecommissioningNudger > 0
+				if maybeLog {
 					logBudgetOnDecommissioningNudger--
 				}
-				rep.maybeEnqueueProblemRange(ctx, goNow, metrics.LeaseValid, metrics.Leaseholder, shouldLog)
+				rep.maybeEnqueueProblemRange(ctx, goNow, metrics.LeaseValid, metrics.Leaseholder, maybeLog)
 				decommissioningRangeCount++
 			}
 		}

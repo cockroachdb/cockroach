@@ -2903,7 +2903,7 @@ func (r *Replica) RefreshLeaderlessWatcherUnavailableStateForTesting(
 // manner via the replica scanner, see #130199. This functionality is disabled
 // by default for this reason.
 func (r *Replica) maybeEnqueueProblemRange(
-	ctx context.Context, now time.Time, leaseValid, isLeaseholder bool, shouldLog bool,
+	ctx context.Context, now time.Time, leaseValid, isLeaseholder bool, maybeLog bool,
 ) {
 
 	// The method expects the caller to provide whether the lease is valid and
@@ -2944,44 +2944,28 @@ func (r *Replica) maybeEnqueueProblemRange(
 	r.store.metrics.DecommissioningNudgerEnqueue.Inc(1)
 	// TODO(dodeca12): Figure out a better way to track the
 	// decommissioning nudger enqueue failures/errors.
+	level := log.Level(2)
+	if maybeLog {
+		level = log.Level(0)
+	}
 	r.store.replicateQueue.AddAsyncWithCallback(ctx, r,
 		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority(), processCallback{
 			onEnqueueResult: func(indexOnHeap int, err error) {
-				if shouldLog {
-					if err != nil {
-						log.KvDistribution.Infof(ctx,
-							"decommissioning nudger failed to enqueue range %v due to %v", r.Desc(), err)
-					} else {
-						log.KvDistribution.Infof(ctx,
-							"decommissioning nudger successfully enqueued range %v at index %d", r.Desc(), indexOnHeap)
-					}
+				if err != nil {
+					log.KvDistribution.VInfof(ctx, level,
+						"decommissioning nudger failed to enqueue range %v due to %v", r.Desc(), err)
 				} else {
-					if err != nil {
-						log.KvDistribution.VInfof(ctx, 2,
-							"decommissioning nudger failed to enqueue range %v due to %v", r.Desc(), err)
-					} else {
-						log.KvDistribution.VInfof(ctx, 2,
-							"decommissioning nudger successfully enqueued range %v at index %d", r.Desc(), indexOnHeap)
-					}
+					log.KvDistribution.VInfof(ctx, level,
+						"decommissioning nudger successfully enqueued range %v at index %d", r.Desc(), indexOnHeap)
 				}
 			},
 			onProcessResult: func(err error) {
-				if shouldLog {
-					if err != nil {
-						log.KvDistribution.Infof(ctx,
-							"decommissioning nudger failed to process range %v due to %v", r.Desc(), err)
-					} else {
-						log.KvDistribution.Infof(ctx,
-							"decommissioning nudger successfully processed replica %s", r.Desc())
-					}
+				if err != nil {
+					log.KvDistribution.VInfof(ctx, level,
+						"decommissioning nudger failed to process range %v due to %v", r.Desc(), err)
 				} else {
-					if err != nil {
-						log.KvDistribution.VInfof(ctx, 2,
-							"decommissioning nudger failed to process range %v due to %v", r.Desc(), err)
-					} else {
-						log.KvDistribution.VInfof(ctx, 2,
-							"decommissioning nudger successfully processed replica %s", r.Desc())
-					}
+					log.KvDistribution.VInfof(ctx, level,
+						"decommissioning nudger successfully processed replica %s", r.Desc())
 				}
 			},
 		})
