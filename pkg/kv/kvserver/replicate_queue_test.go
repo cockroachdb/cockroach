@@ -2485,8 +2485,10 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 				value = store.Metrics().DecommissioningRangeCount.Value()
 			case "enqueue":
 				value = store.Metrics().DecommissioningNudgerEnqueue.Count()
-			case "not_leaseholder_or_invalid_lease":
-				value = store.Metrics().DecommissioningNudgerNotLeaseholderOrInvalidLease.Count()
+			case "enqueue_success":
+				value = store.Metrics().DecommissioningNudgerEnqueueSuccess.Count()
+			case "process_success":
+				value = store.Metrics().DecommissioningNudgerProcessSuccess.Count()
 			default:
 				t.Fatalf("unknown metric type: %s", metricType)
 			}
@@ -2507,9 +2509,10 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 
 	// Wait for the enqueue logic to trigger and validate metrics were updated.
 	testutils.SucceedsSoon(t, func() error {
+		// TODO(wenyihu6): is there a race condition here where we might not observe
+		// decommissioning_ranges increasing?
 		afterDecommissioningRanges := getDecommissioningNudgerMetricValue(t, tc, "decommissioning_ranges")
 		afterEnqueued := getDecommissioningNudgerMetricValue(t, tc, "enqueue")
-
 		if afterDecommissioningRanges <= initialDecommissioningRanges {
 			return errors.New("expected DecommissioningRangeCount to increase")
 		}
@@ -2532,4 +2535,8 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 		}
 		return nil
 	})
+	afterEnqueueSuccess := getDecommissioningNudgerMetricValue(t, tc, "enqueue_success")
+	require.Greater(t, afterEnqueueSuccess, int64(0))
+	afterProcessSuccess := getDecommissioningNudgerMetricValue(t, tc, "process_success")
+	require.Greater(t, afterProcessSuccess, int64(0))
 }
