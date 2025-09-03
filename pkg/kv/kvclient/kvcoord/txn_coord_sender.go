@@ -281,11 +281,9 @@ func newRootTxnCoordSender(
 		timeSource: timeutil.DefaultTimeSource{},
 		txn:        &tcs.mu.txn,
 	}
-	tcs.interceptorAlloc.txnWriteBuffer.init(
-		&tcs.interceptorAlloc.txnPipeliner,
-	)
 
 	tcs.initCommonInterceptors(tcf, txn, kv.RootTxn)
+	tcs.interceptorAlloc.txnWriteBuffer.init(&tcs.interceptorAlloc.txnPipeliner)
 
 	// Once the interceptors are initialized, piece them all together in the
 	// correct order.

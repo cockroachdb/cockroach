@@ -344,6 +344,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%QueryIntent%'
 ----
 dist sender send  r77: sending batch 1 Get to (n1,s1):1
 dist sender send  r77: sending batch 1 EndTxn to (n1,s1):1
@@ -375,6 +376,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%QueryIntent%'
 ----
 dist sender send  r77: sending batch 4 CPut, 1 EndTxn to (n1,s1):1
 dist sender send  r77: sending batch 5 Get to (n1,s1):1
@@ -398,6 +400,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%QueryIntent%'
 ----
 dist sender send  r77: sending batch 6 CPut to (n1,s1):1
 dist sender send  r77: sending batch 6 CPut to (n1,s1):1
