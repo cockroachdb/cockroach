@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -109,7 +110,7 @@ var ReplicateQueueMaxSize = settings.RegisterIntSetting(
 	"maximum number of replicas that can be queued for replicate queue processing; "+
 		"when this limit is exceeded, lower priority (not guaranteed to be the lowest) "+
 		"replicas are dropped from the queue",
-	defaultQueueMaxSize,
+	math.MaxInt64,
 	settings.WithValidateInt(func(v int64) error {
 		if v < defaultQueueMaxSize {
 			return errors.Errorf("cannot be set to a value lower than %d: %d", defaultQueueMaxSize, v)
