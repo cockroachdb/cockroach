@@ -111,7 +111,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 		ClearUnreplicatedByRangeID: true,
 	}
 	// TODO(sep-raft-log): need both engines separately here.
-	if err := kvstorage.DestroyReplica(ctx, r.RangeID, r.store.TODOEngine(), batch, nextReplicaID, opts); err != nil {
+	if err := kvstorage.DestroyReplica(ctx, r.ID(), r.store.TODOEngine(), batch, nextReplicaID, opts); err != nil {
 		return err
 	}
 	preTime := timeutil.Now()

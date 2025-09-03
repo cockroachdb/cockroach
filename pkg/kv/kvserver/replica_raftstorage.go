@@ -566,7 +566,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		Term:  kvpb.RaftTerm(nonemptySnap.Metadata.Term),
 	}
 
-	subsumedDescs := make([]*roachpb.RangeDescriptor, 0, len(subsumedRepls))
+	subsume := make([]destroyReplicaInfo, 0, len(subsumedRepls))
 	for _, sr := range subsumedRepls {
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
@@ -580,10 +580,11 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		sr.shMu.destroyStatus.Set(
 			kvpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
 			destroyReasonRemoved)
+		srDesc := sr.descRLocked()
 		sr.mu.Unlock()
 		sr.readOnlyCmdMu.Unlock()
 
-		subsumedDescs = append(subsumedDescs, sr.Desc())
+		subsume = append(subsume, destroyReplicaInfo{id: sr.ID(), desc: srDesc})
 	}
 
 	sb := snapWriteBuilder{
@@ -593,10 +594,10 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		sl:       r.raftMu.stateLoader,
 		writeSST: inSnap.SSTStorageScratch.WriteSST,
 
-		truncState:    truncState,
-		hardState:     hs,
-		desc:          desc,
-		subsumedDescs: subsumedDescs,
+		truncState: truncState,
+		hardState:  hs,
+		desc:       desc,
+		subsume:    subsume,
 
 		cleared: inSnap.clearedSpans,
 	}

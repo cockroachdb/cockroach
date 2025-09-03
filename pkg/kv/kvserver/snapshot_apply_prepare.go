@@ -20,6 +20,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// destroyReplicaInfo contains the replica's metadata needed for its removal
+// from storage.
+// TODO(pav-kv): for WAG, add the truncated state and applied index. See #152845.
+type destroyReplicaInfo struct {
+	id   roachpb.FullReplicaID
+	desc *roachpb.RangeDescriptor
+}
+
 // snapWriteBuilder contains the data needed to prepare the on-disk state for a
 // snapshot.
 type snapWriteBuilder struct {
@@ -29,10 +37,10 @@ type snapWriteBuilder struct {
 	sl       stateloader.StateLoader
 	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
 
-	truncState    kvserverpb.RaftTruncatedState
-	hardState     raftpb.HardState
-	desc          *roachpb.RangeDescriptor
-	subsumedDescs []*roachpb.RangeDescriptor
+	truncState kvserverpb.RaftTruncatedState
+	hardState  raftpb.HardState
+	desc       *roachpb.RangeDescriptor
+	subsume    []destroyReplicaInfo
 
 	// cleared contains the spans that this snapshot application clears before
 	// writing new state on top.
@@ -115,7 +123,7 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	}
 	keySpans := getKeySpans(s.desc)
 	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
-	for _, subDesc := range s.subsumedDescs {
+	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			// NOTE: We set mustClearRange to true because we are setting
@@ -126,16 +134,16 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 				ClearUnreplicatedByRangeID: true,
 				MustUseClearRange:          true,
 			}
-			s.cleared = append(s.cleared, rditer.Select(subDesc.RangeID, rditer.SelectOpts{
+			s.cleared = append(s.cleared, rditer.Select(sub.id.RangeID, rditer.SelectOpts{
 				ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
 				UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
 			})...)
-			return kvstorage.DestroyReplica(ctx, subDesc.RangeID, reader, w, mergedTombstoneReplicaID, opts)
+			return kvstorage.DestroyReplica(ctx, sub.id, reader, w, mergedTombstoneReplicaID, opts)
 		}); err != nil {
 			return err
 		}
 
-		srKeySpans := getKeySpans(subDesc)
+		srKeySpans := getKeySpans(sub.desc)
 		// Compute the total key space covered by the current replica and all
 		// subsumed replicas.
 		for i := range srKeySpans {
