@@ -2172,6 +2172,33 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaReplicateQueueEnqueueAdd = metric.Metadata{
+		Name:        "queue.replicate.enqueue.add",
+		Help:        "Number of replicas successfully added to the replicate queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueEnqueueFailedPrecondition = metric.Metadata{
+		Name: "queue.replicate.enqueue.failedprecondition",
+		Help: "Number of replicas that failed the precondition checks and were therefore not added to the replicate " +
+			"queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueEnqueueNoAction = metric.Metadata{
+		Name: "queue.replicate.enqueue.noaction",
+		Help: "Number of replicas for which ShouldQueue determined no action was needed and were therefore not " +
+			"added to the replicate queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueEnqueueUnexpectedError = metric.Metadata{
+		Name: "queue.replicate.enqueue.unexpectederror",
+		Help: "Number of replicas that were expected to be enqueued (ShouldQueue returned true or the caller decided to " +
+			"add to the replicate queue directly), but failed to be enqueued due to unexpected errors",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaLeaseQueueSuccesses = metric.Metadata{
 		Name:        "queue.lease.process.success",
 		Help:        "Number of replicas successfully processed by the replica lease queue",
@@ -3220,6 +3247,10 @@ type StoreMetrics struct {
 	ReplicaGCQueueFailures                    *metric.Counter
 	ReplicaGCQueuePending                     *metric.Gauge
 	ReplicaGCQueueProcessingNanos             *metric.Counter
+	ReplicateQueueEnqueueAdd                  *metric.Counter
+	ReplicateQueueEnqueueFailedPrecondition   *metric.Counter
+	ReplicateQueueEnqueueNoAction             *metric.Counter
+	ReplicateQueueEnqueueUnexpectedError      *metric.Counter
 	ReplicateQueueSuccesses                   *metric.Counter
 	ReplicateQueueFailures                    *metric.Counter
 	ReplicateQueuePending                     *metric.Gauge
@@ -4014,6 +4045,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaGCQueueFailures:                    metric.NewCounter(metaReplicaGCQueueFailures),
 		ReplicaGCQueuePending:                     metric.NewGauge(metaReplicaGCQueuePending),
 		ReplicaGCQueueProcessingNanos:             metric.NewCounter(metaReplicaGCQueueProcessingNanos),
+		ReplicateQueueEnqueueAdd:                  metric.NewCounter(metaReplicateQueueEnqueueAdd),
+		ReplicateQueueEnqueueFailedPrecondition:   metric.NewCounter(metaReplicateQueueEnqueueFailedPrecondition),
+		ReplicateQueueEnqueueNoAction:             metric.NewCounter(metaReplicateQueueEnqueueNoAction),
+		ReplicateQueueEnqueueUnexpectedError:      metric.NewCounter(metaReplicateQueueEnqueueUnexpectedError),
 		ReplicateQueueSuccesses:                   metric.NewCounter(metaReplicateQueueSuccesses),
 		ReplicateQueueFailures:                    metric.NewCounter(metaReplicateQueueFailures),
 		ReplicateQueuePending:                     metric.NewGauge(metaReplicateQueuePending),

@@ -610,6 +610,10 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			// timeout based on the range size and the sending rate in addition
 			// to consulting the setting which controls the minimum timeout.
 			processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
+			enqueueAdd:                store.metrics.ReplicateQueueEnqueueAdd,
+			enqueueFailedPrecondition: store.metrics.ReplicateQueueEnqueueFailedPrecondition,
+			enqueueNoAction:           store.metrics.ReplicateQueueEnqueueNoAction,
+			enqueueUnexpectedError:    store.metrics.ReplicateQueueEnqueueUnexpectedError,
 			successes:          store.metrics.ReplicateQueueSuccesses,
 			failures:           store.metrics.ReplicateQueueFailures,
 			pending:            store.metrics.ReplicateQueuePending,
