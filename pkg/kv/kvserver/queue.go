@@ -839,6 +839,7 @@ func (bq *baseQueue) addInternal(
 	processCallback processCallback,
 ) (added bool, err error) {
 	defer func() {
+		// INVARIANT: added => err == nil.
 		if added && bq.enqueueAdd != nil {
 			bq.enqueueAdd.Inc(1)
 		}
