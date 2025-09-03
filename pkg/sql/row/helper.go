@@ -618,7 +618,7 @@ func FetchSpecRequiresRawMVCCValues(spec fetchpb.IndexFetchSpec) bool {
 		colID := spec.FetchedColumns[idx].ColumnID
 		if colinfo.IsColIDSystemColumn(colID) {
 			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
-			case catpb.SystemColumnKind_ORIGINID, catpb.SystemColumnKind_ORIGINTIMESTAMP:
+			case catpb.SystemColumnKind_ORIGINID, catpb.SystemColumnKind_ORIGINTIMESTAMP, catpb.SystemColumnKind_TIERINGATTR:
 				return true
 			}
 		}

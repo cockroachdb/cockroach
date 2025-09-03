@@ -814,4 +814,12 @@ func (u *unknownIndex) IsTemporaryIndexForBackfill() bool {
 	return false
 }
 
+func (u *unknownIndex) UsesStorageTiering() bool {
+	return false
+}
+
+func (u *unknownIndex) StorageTieringColumn() cat.IndexColumn {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
 var _ cat.Index = &unknownIndex{}

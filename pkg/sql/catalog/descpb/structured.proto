@@ -508,8 +508,38 @@ message IndexDescriptor {
   // this vector index.
   optional vecindex.vecpb.Config vec_config = 30 [(gogoproto.nullable) = false];
 
-  // Next ID: 31
+  optional StorageTieringDescriptor storage_tiering = 31;
+
+  // Next ID: 32
 }
+
+// StorageTieringDescriptor contains the configuration for storage tiering on an
+// index.
+//
+// Storage tiering is a feature that allows moving data for certain rows to
+// cheaper storage.
+message StorageTieringDescriptor {
+  option (gogoproto.equal) = true;
+
+  // TieringColumnID is the ID of the column that is used to determine the
+  // storage tier for a given row in the index. The column must be part of the
+  // index (either as the key or as a stored column).
+  //
+  // Currently, only columns of type Timestamp or TimestampTZ are supported.
+  optional uint32 tiering_column_id = 1 [(gogoproto.casttype) = "ColumnID", (gogoproto.customname) = "TieringColumnID", (gogoproto.nullable) = false];
+
+  // Threshold determines the threshold for moving data to the secondary tier.
+  oneof threshold {
+    // AgeSeconds is used when tiering column is a timestamp and the threshold
+    // is relative to the current time.
+    int32 age_seconds = 2;
+    // Fixed is used when the threshold is an absolute value. For timestamps,
+    // this is a Unix timestamp (the number of seconds elapsed since January 1,
+    // 1970 UTC).
+    int64 fixed = 3;
+  }
+}
+
 
 // TriggerDescriptor describes a trigger on a table.
 message TriggerDescriptor {

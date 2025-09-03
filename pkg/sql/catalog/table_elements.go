@@ -284,6 +284,13 @@ type Index interface {
 	// an index being used as the temporary index being used by an
 	// in-progress index backfill.
 	IsTemporaryIndexForBackfill() bool
+
+	// UsesStorageTiering returns true if the index uses storage tiering.
+	UsesStorageTiering() bool
+
+	// StorageTieringColumnID returns the column ID of the column that is used as
+	// the tiering attribute. Panics if the index does not use storage tiering.
+	StorageTieringColumnID() descpb.ColumnID
 }
 
 // Column is an interface around the column descriptor types.
