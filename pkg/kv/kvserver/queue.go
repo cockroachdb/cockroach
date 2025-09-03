@@ -112,9 +112,25 @@ type PurgatoryError interface {
 	PurgatoryErrorMarker() // dummy method for unique interface
 }
 
-// processCallback is a hook that is called when a replica finishes processing.
-// It is called with the result of the process attempt.
-type processCallback func(error)
+var noopProcessCallback = processCallback{
+	onProcessResult: func(err error) {},
+	onEnqueueResult: func(indexOnHeap int, err error) {},
+}
+
+// processCallback is a hook that is called when a replica is enqueued or
+// finishes processing. Any of the fields can be nil.
+type processCallback struct {
+	// onProcessResult is called with the result of the process attempt.
+	onProcessResult func(err error)
+
+	// onEnqueueResultis called with the result of the enqueue attempt. If error
+	// is nil, the index on whether this item sits at in the priority queue is
+	// also passed in the callback. If error is non-nil, the index passed in the
+	// callback in -1. Note: indexOnHeap does not represent the item's exact rank
+	// by priority. It only reflects the item's position in the heap array, which
+	// gives a rough idea of where it sits in the priority hierarchy.
+	onEnqueueResult func(indexOnHeap int, err error)
+}
 
 // A replicaItem holds a replica and metadata about its queue state and
 // processing state.
@@ -147,6 +163,16 @@ func (i *replicaItem) setProcessing() {
 
 // registerCallback adds a new callback to be executed when the replicaItem
 // finishes processing.
+//
+// NB: it is not a strong guarantee that the callback will be executed since
+// removeLocked or removeFromReplicaSetLocked may be called without executing
+// the callbacks. It may also be called multiple times
+// 1. onEnqueueResult may be called when the replicaItem is dropped early due to
+// exceeding max queue size
+// 2. onProcessResult will be called again when baseQueue processes the replica
+// in the puragtory queue TODO(wenyihu6 during review): this is bebhaviour
+// change - is this too big of a backport
+// TODO(wenyihu6): consider clean the semantics up after backports
 func (i *replicaItem) registerCallback(cb processCallback) {
 	i.callbacks = append(i.callbacks, cb)
 }
@@ -204,8 +230,13 @@ func (pq *priorityQueue) update(item *replicaItem, priority float64) {
 }
 
 var (
-	errQueueDisabled = errors.New("queue disabled")
-	errQueueStopped  = errors.New("queue stopped")
+	errQueueDisabled             = errors.New("queue disabled")
+	errQueueStopped              = errors.New("queue stopped")
+	errReplicaNotInitialized     = errors.New("replica not initialized")
+	errReplicaAlreadyProcessing  = errors.New("replica already processing")
+	errReplicaAlreadyInPurgatory = errors.New("replica in purgatory")
+	errReplicaAlreadyInQueue     = errors.New("replica already in queue")
+	errDroppedDueToFullQueueSize = errors.New("queue full")
 )
 
 func isExpectedQueueError(err error) bool {
@@ -595,8 +626,10 @@ func (h baseQueueHelper) MaybeAdd(
 	h.bq.maybeAdd(ctx, repl, now)
 }
 
-func (h baseQueueHelper) Add(ctx context.Context, repl replicaInQueue, prio float64) {
-	_, err := h.bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), prio)
+func (h baseQueueHelper) Add(
+	ctx context.Context, repl replicaInQueue, prio float64, processCallback processCallback,
+) {
+	_, err := h.bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), prio, processCallback)
 	if err != nil && log.V(1) {
 		log.Dev.Infof(ctx, "during Add: %s", err)
 	}
@@ -604,8 +637,10 @@ func (h baseQueueHelper) Add(ctx context.Context, repl replicaInQueue, prio floa
 
 type queueHelper interface {
 	MaybeAdd(ctx context.Context, repl replicaInQueue, now hlc.ClockTimestamp)
-	Add(ctx context.Context, repl replicaInQueue, prio float64)
+	Add(ctx context.Context, repl replicaInQueue, prio float64, processCallback processCallback)
 }
+
+var baseQueueAsyncRateLimited = errors.Newf("rate limited")
 
 // Async is a more performant substitute for calling AddAsync or MaybeAddAsync
 // when many operations are going to be carried out. It invokes the given helper
@@ -618,7 +653,7 @@ type queueHelper interface {
 // (Best is to pass a constant string.)
 func (bq *baseQueue) Async(
 	ctx context.Context, opName string, wait bool, fn func(ctx context.Context, h queueHelper),
-) {
+) error {
 	if log.V(3) {
 		log.Dev.InfofDepth(ctx, 2, "%s", redact.Safe(opName))
 	}
@@ -633,12 +668,13 @@ func (bq *baseQueue) Async(
 		if bq.addLogN.ShouldLog() {
 			log.Dev.Infof(ctx, "rate limited in %s: %s", redact.Safe(opName), err)
 		}
-		return
+		return baseQueueAsyncRateLimited
 	}
 	go func(ctx context.Context) {
 		defer hdl.Activate(ctx).Release(ctx)
 		fn(ctx, baseQueueHelper{bq})
 	}(bgCtx)
+	return nil
 }
 
 // MaybeAddAsync offers the replica to the queue. The queue will only process a
@@ -647,17 +683,27 @@ func (bq *baseQueue) Async(
 func (bq *baseQueue) MaybeAddAsync(
 	ctx context.Context, repl replicaInQueue, now hlc.ClockTimestamp,
 ) {
-	bq.Async(ctx, "MaybeAdd", false /* wait */, func(ctx context.Context, h queueHelper) {
+	_ = bq.Async(ctx, "MaybeAdd", false /* wait */, func(ctx context.Context, h queueHelper) {
 		h.MaybeAdd(ctx, repl, now)
 	})
+}
+
+func (bq *baseQueue) AddAsyncWithCallback(
+	ctx context.Context, repl replicaInQueue, prio float64, processCallback processCallback,
+) {
+	if err := bq.Async(ctx, "Add", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.Add(ctx, repl, prio, processCallback)
+	}); err != nil {
+		processCallback.onEnqueueResult(-1 /*indexOnHeap*/, err)
+	}
 }
 
 // AddAsync adds the replica to the queue. Unlike MaybeAddAsync, it will wait
 // for other operations to finish instead of turning into a noop (because
 // unlikely MaybeAdd, Add is not subject to being called opportunistically).
 func (bq *baseQueue) AddAsync(ctx context.Context, repl replicaInQueue, prio float64) {
-	bq.Async(ctx, "Add", true /* wait */, func(ctx context.Context, h queueHelper) {
-		h.Add(ctx, repl, prio)
+	_ = bq.Async(ctx, "Add", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.Add(ctx, repl, prio, noopProcessCallback)
 	})
 }
 
@@ -719,7 +765,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 			return
 		}
 	}
-	_, err = bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority)
+	_, err = bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority, noopProcessCallback)
 	if !isExpectedQueueError(err) {
 		log.Dev.Errorf(ctx, "unable to add: %+v", err)
 	}
@@ -729,20 +775,26 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 // the replica is already queued at a lower priority, updates the existing
 // priority. Expects the queue lock to be held by caller.
 func (bq *baseQueue) addInternal(
-	ctx context.Context, desc *roachpb.RangeDescriptor, replicaID roachpb.ReplicaID, priority float64,
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	replicaID roachpb.ReplicaID,
+	priority float64,
+	processCallback processCallback,
 ) (bool, error) {
 	// NB: this is intentionally outside of bq.mu to avoid having to consider
 	// lock ordering constraints.
 	if !desc.IsInitialized() {
 		// We checked this above in MaybeAdd(), but we need to check it
 		// again for Add().
-		return false, errors.New("replica not initialized")
+		processCallback.onEnqueueResult(-1 /*indexOnHeap*/, errReplicaNotInitialized)
+		return false, errReplicaNotInitialized
 	}
 
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 
 	if bq.mu.stopped {
+		processCallback.onEnqueueResult(-1 /*indexOnHeap*/, errQueueStopped)
 		return false, errQueueStopped
 	}
 
@@ -755,12 +807,14 @@ func (bq *baseQueue) addInternal(
 			if log.V(3) {
 				log.Dev.Infof(ctx, "queue disabled")
 			}
+			processCallback.onEnqueueResult(-1 /*indexOnHeap*/, errQueueDisabled)
 			return false, errQueueDisabled
 		}
 	}
 
 	// If the replica is currently in purgatory, don't re-add it.
 	if _, ok := bq.mu.purgatory[desc.RangeID]; ok {
+		processCallback.onEnqueueResult(-1 /*indexOnHeap*/, errReplicaAlreadyInPurgatory)
 		return false, nil
 	}
 
@@ -770,6 +824,7 @@ func (bq *baseQueue) addInternal(
 		if item.processing {
 			wasRequeued := item.requeue
 			item.requeue = true
+			processCallback.onEnqueueResult(-1 /*indexOnHeap*/, errReplicaAlreadyProcessing)
 			return !wasRequeued, nil
 		}
 
@@ -782,6 +837,7 @@ func (bq *baseQueue) addInternal(
 			}
 			bq.mu.priorityQ.update(item, priority)
 		}
+		processCallback.onEnqueueResult(-1 /*indexOnHeap*/, errReplicaAlreadyInQueue)
 		return false, nil
 	}
 
@@ -789,6 +845,7 @@ func (bq *baseQueue) addInternal(
 		log.Dev.Infof(ctx, "adding: priority=%0.3f", priority)
 	}
 	item = &replicaItem{rangeID: desc.RangeID, replicaID: replicaID, priority: priority}
+	item.registerCallback(processCallback)
 	bq.addLocked(item)
 
 	// If adding this replica has pushed the queue past its maximum size, remove
@@ -803,6 +860,9 @@ func (bq *baseQueue) addInternal(
 		}
 		log.Dev.VInfof(ctx, 1, "dropping due to exceeding queue max size: priority=%0.3f, replica=%v",
 			priority, replicaItemToDrop.replicaID)
+		for _, cb := range replicaItemToDrop.callbacks {
+			cb.onEnqueueResult(-1 /*indexOnHeap*/, errDroppedDueToFullQueueSize)
+		}
 		bq.removeLocked(replicaItemToDrop)
 	}
 	// Signal the processLoop that a replica has been added.
@@ -811,6 +871,7 @@ func (bq *baseQueue) addInternal(
 	default:
 		// No need to signal again.
 	}
+	processCallback.onEnqueueResult(-1 /*indexOnHeap*/, nil)
 	return true, nil
 }
 
@@ -820,17 +881,16 @@ func (bq *baseQueue) addInternal(
 // the range is not in the queue (either waiting or processing), the method
 // returns false.
 //
-// NB: If the replica this attaches to is dropped from an overfull queue, this
-// callback is never called. This is surprising, but the single caller of this
-// is okay with these semantics. Adding new uses is discouraged without cleaning
-// up the contract of this method, but this code doesn't lend itself readily to
-// upholding invariants so there may need to be some cleanup first.
+// NB: Adding new uses is discouraged without cleaning up the contract of this
+// method, but this code doesn't lend itself readily to upholding invariants so
+// there may need to be some cleanup first. For example,
+// removeFromReplicaSetLocked may be called without invoking these callbacks.
 func (bq *baseQueue) MaybeAddCallback(rangeID roachpb.RangeID, cb processCallback) bool {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 
 	if purgatoryErr, ok := bq.mu.purgatory[rangeID]; ok {
-		cb(purgatoryErr)
+		cb.onProcessResult(purgatoryErr)
 		return true
 	}
 	if item, ok := bq.mu.replicas[rangeID]; ok {
@@ -1200,7 +1260,7 @@ func (bq *baseQueue) finishProcessingReplica(
 
 	// Call any registered callbacks.
 	for _, cb := range callbacks {
-		cb(err)
+		cb.onProcessResult(err)
 	}
 
 	// Handle failures.
@@ -1219,7 +1279,7 @@ func (bq *baseQueue) finishProcessingReplica(
 		// purgatory.
 		if purgErr, ok := IsPurgatoryError(err); ok {
 			bq.mu.Lock()
-			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr, priority /*priorityAtEnqueue*/)
+			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr, priority /*priorityAtEnqueue*/, callbacks /*processCallback*/)
 			bq.mu.Unlock()
 			return
 		}
@@ -1244,6 +1304,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 	repl replicaInQueue,
 	purgErr PurgatoryError,
 	priorityAtEnqueue float64,
+	processCallback []processCallback,
 ) {
 	bq.mu.AssertHeld()
 
@@ -1267,7 +1328,14 @@ func (bq *baseQueue) addToPurgatoryLocked(
 		return
 	}
 
-	item := &replicaItem{rangeID: repl.GetRangeID(), replicaID: repl.ReplicaID(), index: -1, priority: priorityAtEnqueue}
+	item := &replicaItem{
+		rangeID:   repl.GetRangeID(),
+		replicaID: repl.ReplicaID(),
+		index:     -1,
+		priority:  priorityAtEnqueue,
+		callbacks: processCallback,
+	}
+
 	bq.mu.replicas[repl.GetRangeID()] = item
 
 	defer func() {
