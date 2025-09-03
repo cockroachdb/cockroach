@@ -10,6 +10,7 @@ PROTOBUF_SRCS = [
     "//pkg/build/bazel/bes/option_filters:options_go_proto",
     "//pkg/build/bazel/bes:build_event_stream_go_proto",
     "//pkg/build:build_go_proto",
+    "//pkg/ccl/changefeedccl/cdcprogresspb:cdcprogresspb_go_proto",
     "//pkg/ccl/changefeedccl/changefeedpb:changefeedpb_go_proto",
     "//pkg/ccl/sqlproxyccl/tenant:tenant_go_proto",
     "//pkg/ccl/utilccl/licenseccl:licenseccl_go_proto",

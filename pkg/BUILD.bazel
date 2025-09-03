@@ -931,6 +931,7 @@ GO_TARGETS = [
     "//pkg/ccl/changefeedccl/cdceval:cdceval_test",
     "//pkg/ccl/changefeedccl/cdcevent:cdcevent",
     "//pkg/ccl/changefeedccl/cdcevent:cdcevent_test",
+    "//pkg/ccl/changefeedccl/cdcprogresspb:cdcprogresspb",
     "//pkg/ccl/changefeedccl/cdctest:cdctest",
     "//pkg/ccl/changefeedccl/cdctest:cdctest_test",
     "//pkg/ccl/changefeedccl/cdcutils:cdcutils",
