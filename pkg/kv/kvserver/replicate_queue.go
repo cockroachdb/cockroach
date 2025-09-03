@@ -605,14 +605,18 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			// so we use the raftSnapshotQueueTimeoutFunc. This function sets a
 			// timeout based on the range size and the sending rate in addition
 			// to consulting the setting which controls the minimum timeout.
-			processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
-			successes:          store.metrics.ReplicateQueueSuccesses,
-			failures:           store.metrics.ReplicateQueueFailures,
-			pending:            store.metrics.ReplicateQueuePending,
-			full:               store.metrics.ReplicateQueueFull,
-			processingNanos:    store.metrics.ReplicateQueueProcessingNanos,
-			purgatory:          store.metrics.ReplicateQueuePurgatory,
-			disabledConfig:     kvserverbase.ReplicateQueueEnabled,
+			processTimeoutFunc:        makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
+			enqueueAdd:                store.metrics.ReplicateQueueEnqueueAdd,
+			enqueueFailedPrecondition: store.metrics.ReplicateQueueEnqueueFailedPrecondition,
+			enqueueNoAction:           store.metrics.ReplicateQueueEnqueueNoAction,
+			enqueueUnexpectedError:    store.metrics.ReplicateQueueEnqueueUnexpectedError,
+			successes:                 store.metrics.ReplicateQueueSuccesses,
+			failures:                  store.metrics.ReplicateQueueFailures,
+			pending:                   store.metrics.ReplicateQueuePending,
+			full:                      store.metrics.ReplicateQueueFull,
+			processingNanos:           store.metrics.ReplicateQueueProcessingNanos,
+			purgatory:                 store.metrics.ReplicateQueuePurgatory,
+			disabledConfig:            kvserverbase.ReplicateQueueEnabled,
 		},
 	)
 	rq.baseQueue.SetMaxSize(ReplicateQueueMaxSize.Get(&store.cfg.Settings.SV))
