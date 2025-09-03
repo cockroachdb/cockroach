@@ -473,6 +473,8 @@ func (n *scrubNode) runScrubTableJob(
 
 	// TODO(148300): just grab the first secondary index and use that for the
 	// consistency check.
+	// TODO(148365): When INSPECT is added, we want to skip unsupported indexes
+	// and return a NOTICE.
 	secIndexes := tableDesc.PublicNonPrimaryIndexes()
 	if len(secIndexes) == 0 {
 		return errors.AssertionFailedf("must have at least one secondary index")
