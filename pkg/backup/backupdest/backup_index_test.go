@@ -261,7 +261,7 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 		return externalStorage, nil
 	}
 
-	subdir := "2025/07/18-143826.00"
+	subdir := "/2025/07/18-143826.00"
 	details := jobspb.BackupDetails{
 		Destination: jobspb.BackupDetails_Destination{
 			To:     []string{"nodelocal://1/backup"},
@@ -344,8 +344,8 @@ func TestIndexExists(t *testing.T) {
 	ctx := context.Background()
 
 	const collectionURI = "nodelocal://1/backup"
-	const subdir1 = "/2025/07/18-222500.00/"
-	const subdir2 = "/2025/07/19-123456.00/"
+	const subdir1 = "/2025/07/18-222500.00"
+	const subdir2 = "/2025/07/19-123456.00"
 	st := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.Latest.Version(),
 		clusterversion.Latest.Version(),

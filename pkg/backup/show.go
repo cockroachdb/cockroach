@@ -1396,7 +1396,7 @@ func showBackupsInCollectionPlanHook(
 			return errors.Wrapf(err, "connect to external storage")
 		}
 		defer store.Close()
-		res, err := backupdest.ListFullBackupsInCollection(ctx, store)
+		res, err := backupdest.ListFullBackupsInCollection(ctx, store, showStmt.Options.Index)
 		if err != nil {
 			return err
 		}

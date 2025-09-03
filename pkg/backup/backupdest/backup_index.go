@@ -120,9 +120,13 @@ func WriteBackupIndexMetadata(
 // words, we can remove these checks in v26.2+.
 func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string) (bool, error) {
 	var indexExists bool
+	indexDir, err := indexSubdir(subdir)
+	if err != nil {
+		return false, err
+	}
 	if err := store.List(
 		ctx,
-		indexSubdir(subdir),
+		indexDir,
 		"/",
 		func(file string) error {
 			indexExists = true
@@ -150,9 +154,13 @@ func ListIndexes(
 	ctx context.Context, store cloud.ExternalStorage, subdir string,
 ) ([]string, error) {
 	var indexBasenames []string
+	indexDir, err := indexSubdir(subdir)
+	if err != nil {
+		return nil, err
+	}
 	if err := store.List(
 		ctx,
-		indexSubdir(subdir)+"/",
+		indexDir+"/",
 		"",
 		func(file string) error {
 			indexBasenames = append(indexBasenames, path.Base(file))
@@ -219,8 +227,12 @@ func GetBackupTreeIndexMetadata(
 	g := ctxgroup.WithContext(ctx)
 	for i, basename := range indexBasenames {
 		g.GoCtx(func(ctx context.Context) error {
+			indexDir, err := indexSubdir(subdir)
+			if err != nil {
+				return err
+			}
 			reader, size, err := store.ReadFile(
-				ctx, path.Join(indexSubdir(subdir), basename), cloud.ReadOptions{},
+				ctx, path.Join(indexDir, basename), cloud.ReadOptions{},
 			)
 			if err != nil {
 				return errors.Wrapf(err, "reading index file %s", basename)
@@ -300,6 +312,30 @@ func parseIndexFilename(basename string) (start time.Time, end time.Time, err er
 	return start, end, nil
 }
 
+// ListSubdirsFromIndex lists the paths of all full backup subdirectories that
+// have an entry in the index. The store should be rooted at the default
+// collection URI. The subdirs are returned in chronological order.
+func ListSubdirsFromIndex(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
+	var subdirs []string
+	if err := store.List(
+		ctx,
+		backupbase.BackupIndexDirectoryPath,
+		"/",
+		func(indexSubdir string) error {
+			indexSubdir = strings.TrimSuffix(indexSubdir, "/")
+			subdir, err := unflattenIndexSubdir(indexSubdir)
+			if err != nil {
+				return err
+			}
+			subdirs = append(subdirs, subdir)
+			return nil
+		},
+	); err != nil {
+		return nil, errors.Wrapf(err, "listing index subdirs")
+	}
+	return subdirs, nil
+}
+
 // shouldWriteIndex determines if a backup index file should be written for a
 // given backup. The rule is:
 //  1. An index should only be written on a v25.4+ cluster.
@@ -346,8 +382,12 @@ func getBackupIndexFilePath(subdir string, startTime, endTime hlc.Timestamp) (st
 	if strings.EqualFold(subdir, backupbase.LatestFileName) {
 		return "", errors.AssertionFailedf("expected subdir to be resolved and not be 'LATEST'")
 	}
+	indexDir, err := indexSubdir(subdir)
+	if err != nil {
+		return "", err
+	}
 	return backuputils.JoinURLPath(
-		indexSubdir(subdir),
+		indexDir,
 		getBackupIndexFileName(startTime, endTime),
 	), nil
 }
@@ -372,8 +412,12 @@ func getBackupIndexFileName(startTime, endTime hlc.Timestamp) string {
 // path for a given full backup subdir. The path is relative to the root of the
 // collection URI and does not contain a trailing slash. It assumes that subdir
 // has been resolved and is not `LATEST`.
-func indexSubdir(subdir string) string {
-	return path.Join(backupbase.BackupIndexDirectoryPath, flattenSubdirForIndex(subdir))
+func indexSubdir(subdir string) (string, error) {
+	flattened, err := flattenSubdirForIndex(subdir)
+	if err != nil {
+		return "", err
+	}
+	return path.Join(backupbase.BackupIndexDirectoryPath, flattened), nil
 }
 
 // flattenSubdirForIndex flattens a full backup subdirectory to be used in the
@@ -393,11 +437,21 @@ func indexSubdir(subdir string) string {
 //
 // Listing on `index/` and delimiting on `/` will return the subdirectories
 // without listing the files in them.
-func flattenSubdirForIndex(subdir string) string {
-	return strings.ReplaceAll(
-		// Trimming any trailing and leading slashes guarantees a specific format when
-		// returning the flattened subdir, so callers can expect a consistent result.
-		strings.TrimSuffix(strings.TrimPrefix(subdir, "/"), "/"),
-		"/", "-",
-	)
+func flattenSubdirForIndex(subdir string) (string, error) {
+	subdirTime, err := time.Parse(backupbase.DateBasedIntoFolderName, subdir)
+	if err != nil {
+		return "", errors.Wrapf(err, "parsing subdir %q for flattening", subdir)
+	}
+	return subdirTime.Format(backupbase.BackupIndexFlattenedSubdir), nil
+}
+
+// unflattenIndexSubdir is the inverse of flattenSubdirForIndex. It converts a
+// flattened index subdir back to the original full backup subdir.
+func unflattenIndexSubdir(flattened string) (string, error) {
+	subdirTime, err := time.Parse(backupbase.BackupIndexFlattenedSubdir, flattened)
+	if err != nil {
+		return "", errors.Wrapf(err, "parsing flattened index subdir %q for unflattening", flattened)
+	}
+	unflattened := subdirTime.Format(backupbase.DateBasedIntoFolderName)
+	return unflattened, nil
 }
