@@ -13903,6 +13903,38 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.enqueue.add
+      exported_name: queue_replicate_enqueue_add
+      description: Number of replicas successfully added to the replicate queue
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.enqueue.failedprecondition
+      exported_name: queue_replicate_enqueue_failedprecondition
+      description: Number of replicas that failed the precondition checks and were therefore not added to the replicate queue
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.enqueue.noaction
+      exported_name: queue_replicate_enqueue_noaction
+      description: Number of replicas for which ShouldQueue determined no action was needed and were therefore not added to the replicate queue
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.enqueue.unexpectederror
+      exported_name: queue_replicate_enqueue_unexpectederror
+      description: Number of replicas that were expected to be enqueued (ShouldQueue returned true or the caller decided to add to the replicate queue directly), but failed to be enqueued due to unexpected errors
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: queue.replicate.nonvoterpromotions
       exported_name: queue_replicate_nonvoterpromotions
       description: Number of non-voters promoted to voters by the replicate queue
