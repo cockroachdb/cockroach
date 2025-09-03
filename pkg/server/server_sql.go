@@ -172,7 +172,6 @@ type SQLServer struct {
 	statsRefresher                 *stats.Refresher
 	temporaryObjectCleaner         *sql.TemporaryObjectCleaner
 	stmtDiagnosticsRegistry        *stmtdiagnostics.Registry
-	txnDiagnosticsRegistry         *stmtdiagnostics.TxnRegistry
 	sqlLivenessSessionID           sqlliveness.SessionID
 	sqlLivenessProvider            sqlliveness.Provider
 	sqlInstanceReader              *instancestorage.Reader
@@ -1256,10 +1255,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.internalDB,
 		cfg.Settings,
 	)
-	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
 	txnDiagnosticsRegistry := stmtdiagnostics.NewTxnRegistry(cfg.internalDB,
 		cfg.Settings, stmtDiagnosticsRegistry, timeutil.DefaultTimeSource{})
+
+	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 	execCfg.TxnDiagnosticsRecorder = txnDiagnosticsRegistry
 
 	var upgradeMgr *upgrademanager.Manager
@@ -1437,7 +1437,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		statsRefresher:                 statsRefresher,
 		temporaryObjectCleaner:         temporaryObjectCleaner,
 		stmtDiagnosticsRegistry:        stmtDiagnosticsRegistry,
-		txnDiagnosticsRegistry:         txnDiagnosticsRegistry,
 		sqlLivenessProvider:            cfg.sqlLivenessProvider,
 		sqlInstanceStorage:             cfg.sqlInstanceStorage,
 		sqlInstanceReader:              cfg.sqlInstanceReader,
@@ -1769,7 +1768,6 @@ func (s *SQLServer) preStart(
 		return err
 	}
 	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
-	s.txnDiagnosticsRegistry.Start(ctx, stopper)
 	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
 		return err
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -75,8 +76,8 @@ type instrumentationHelper struct {
 	explainFlags explain.Flags
 
 	// Query fingerprint (anonymized statement).
-	fingerprint string
-
+	fingerprint   string
+	fingerprintId appstatspb.StmtFingerprintID
 	// Transaction information.
 	implicitTxn bool
 	txnPriority roachpb.UserPriority
@@ -410,16 +411,19 @@ func (ih *instrumentationHelper) finalizeSetup(ctx context.Context, cfg *Executo
 // which case Finish() is a no-op).
 func (ih *instrumentationHelper) Setup(
 	ctx context.Context,
-	cfg *ExecutorConfig,
-	statsCollector *sslocal.StatsCollector,
+	ex *connExecutor,
 	p *planner,
-	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
 	stmt *Statement,
 	implicitTxn bool,
 	txnPriority roachpb.UserPriority,
-	collectTxnExecStats bool,
 	retryCount int32,
 ) (newCtx context.Context) {
+	cfg := ex.server.cfg
+	statsCollector := ex.statsCollector
+	stmtDiagnosticsRecorder := ex.stmtDiagnosticsRecorder
+	collectTxnExecStats := ex.extraTxnState.shouldCollectTxnExecutionStats
+	txnHelper := &ex.state.txnInstrumentationHelper
+
 	ih.fingerprint = stmt.StmtNoConstants
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
@@ -431,7 +435,9 @@ func (ih *instrumentationHelper) Setup(
 	ih.isTenant = execinfra.IncludeRUEstimateInExplainAnalyze.Get(cfg.SV()) && cfg.DistSQLSrv != nil &&
 		cfg.DistSQLSrv.TenantCostController != nil
 	ih.topLevelStats = topLevelQueryStats{}
-
+	stmtFingerprintId := appstatspb.ConstructStatementFingerprintID(
+		stmt.StmtNoConstants, implicitTxn, p.SessionData().Database)
+	ih.fingerprintId = stmtFingerprintId
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:
 		ih.collectBundle = true
@@ -445,8 +451,39 @@ func (ih *instrumentationHelper) Setup(
 		ih.discardRows = true
 
 	default:
-		ih.collectBundle, ih.diagRequestID, ih.diagRequest =
-			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.StmtNoConstants, "" /* planGist */)
+		if ex.state.mu.stmtCount == 1 {
+			// If stmtCount == 1, then we are on the first statement of the
+			// transaction. In this case, check if we should start collecting
+			// a txn diagnostics bundle.
+			shouldCollect, requestId, request := txnHelper.TxnDiagnosticsRecorder.ShouldStartTxnDiagnostic(ctx, uint64(stmtFingerprintId))
+			if shouldCollect {
+				txnHelper.StartDiagnostics(request, requestId)
+				ih.collectBundle = true
+				ih.diagRequestID = 0
+				ih.diagRequest = stmtdiagnostics.Request{}
+				ih.explainFlags.RedactValues = request.IsRedacted()
+			}
+		} else if txnHelper.DiagnosticsInProgress() {
+			// Otherwise, check if we should continue collecting a transaction
+			// bundle based on the current statement. If not, stop collecting
+			// statement bundles and reset the txnHelper.
+			if txnHelper.ShouldContinueDiagnostics(stmt.Statement.AST, stmtFingerprintId) {
+				ih.collectBundle = true
+				ih.diagRequestID = 0
+				ih.diagRequest = stmtdiagnostics.Request{}
+				ih.explainFlags.RedactValues = txnHelper.ShouldRedact()
+			} else {
+				txnHelper.Reset()
+			}
+		}
+
+		// If txn diagnostics aren't in progress, check if a statement diagnostics
+		// bundle should be collected.
+		if !txnHelper.DiagnosticsInProgress() {
+			ih.collectBundle, ih.diagRequestID, ih.diagRequest =
+				stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.StmtNoConstants, "" /* planGist */)
+		}
+
 		// IsRedacted will be false when ih.collectBundle is false.
 		ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
 	}
@@ -612,6 +649,7 @@ func (ih *instrumentationHelper) Finish(
 	res RestrictedCommandResult,
 	retPayload fsm.EventPayload,
 	retErr error,
+	txnHelper *txnInstrumentationHelper,
 ) error {
 	ctx := ih.origCtx
 	if _, ok := ih.Tracing(); !ok {
@@ -711,14 +749,22 @@ func (ih *instrumentationHelper) Finish(
 				stmtRawSQL, &p.curPlan, planString, trace, placeholders, res.ErrAllowReleased(),
 				payloadErr, retErr, &p.extendedEvalCtx.Settings.SV, ih.inFlightTraceCollector,
 			)
-			// Include all non-critical errors as warnings. Note that these
-			// error strings might contain PII, but the warnings are only shown
-			// to the current user and aren't included into the bundle.
-			warnings = append(warnings, bundle.errorStrings...)
-			bundle.insert(
-				bundleCtx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
-			)
+			if txnHelper.DiagnosticsInProgress() {
+				// If we're collecting a transaction bundle, add the statement to the
+				// current txn diagnostic bundle. These will be persisted at the end
+				// of the transaction if the transaction matches the request.
+				txnHelper.AddStatementBundle(ctx, ast, ih.fingerprintId, ih.fingerprint, bundle)
+			} else {
+				// Include all non-critical errors as warnings. Note that these
+				// error strings might contain PII, but the warnings are only shown
+				// to the current user and aren't included into the bundle.
+				warnings = append(warnings, bundle.errorStrings...)
+				bundle.insert(
+					bundleCtx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
+				)
+			}
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
+
 		}
 	}
 

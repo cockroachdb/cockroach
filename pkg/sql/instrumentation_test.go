@@ -8,6 +8,9 @@ package sql
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
+	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -16,11 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -293,4 +299,113 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 		}
 	})
 
+}
+
+func TestTxnBundleCollection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	knobs := sqlstats.CreateTestingKnobs()
+	knobs.SynchronousSQLStats = true
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: knobs,
+			},
+		},
+	})
+
+	defer tc.Stopper().Stop(ctx)
+
+	// SETUP
+	sqlConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	var execTxn = func(runner *sqlutils.SQLRunner, i int) {
+		runner.Exec(t, "BEGIN")
+		runner.Exec(t, "INSERT INTO foo VALUES ($1)", i)
+		runner.Exec(t, "SELECT * FROM foo")
+		runner.Exec(t, "COMMIT")
+	}
+
+	// Execute to transaction so that it is in transaction_statistics
+	sqlConn.Exec(t, "CREATE TABLE foo (x INT)")
+	execTxn(sqlConn, 1)
+
+	// Get the fingerprint id and statement fingerprint ids for the transaction
+	// to make the diagnostics request
+	row := sqlConn.QueryRow(t,
+		`
+SELECT 
+  ts.fingerprint_id AS fingerprint_id,
+  ts.metadata->'stmtFingerprintIDs' as fingerprint_ids
+FROM crdb_internal.transaction_statistics ts
+JOIN crdb_internal.statement_statistics ss on ss.transaction_fingerprint_id = ts.fingerprint_id
+WHERE ss.metadata->>'query' LIKE 'INSERT INTO foo%' 
+LIMIT 1`)
+	var fingerprintId []byte
+	var fingerprintIdsBytes []byte
+
+	row.Scan(&fingerprintId, &fingerprintIdsBytes)
+	_, fpId, err := encoding.DecodeUint64Ascending(fingerprintId)
+
+	var fingerprintsStrs []string
+
+	err = json.Unmarshal(fingerprintIdsBytes, &fingerprintsStrs)
+	require.NoError(t, err)
+
+	var fps []uint64
+	for _, s := range fingerprintsStrs {
+		value, err := strconv.ParseUint(s, 16, 64)
+		require.NoError(t, err)
+		fps = append(fps, value)
+	}
+
+	// Insert a request for the transaction fingerprint
+	registry := tc.Server(0).ExecutorConfig().(ExecutorConfig).TxnDiagnosticsRecorder
+	err = registry.InsertTxnRequest(
+		ctx,
+		fpId,
+		fps,
+		"testuser",
+		0,
+		0,
+		0,
+		false,
+	)
+
+	require.NoError(t, err)
+
+	var count int
+	sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false").Scan(&count)
+	stopper := tc.Stopper()
+	err = stopper.RunAsyncTask(ctx, "task", func(ctx context.Context) {
+		for i := 1; i < tc.NumServers()*10; i++ {
+			conn := sqlutils.MakeSQLRunner(tc.ServerConn(i % tc.NumServers()))
+			err := stopper.RunAsyncTask(ctx, fmt.Sprintf("task-%d", i), func(ctx context.Context) {
+				execTxn(conn, i)
+			})
+			require.NoError(t, err)
+		}
+	})
+
+	require.NoError(t, err)
+
+	// Wait for the bundle to be collected, as denoted by a completed diagnostics
+	// request.
+	testutils.SucceedsSoon(t, func() error {
+		r := tc.ServerConn(0).QueryRow("SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=true")
+		if r.Err() != nil {
+			return r.Err()
+		}
+		var count int
+		err := r.Scan(&count)
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return errors.Newf("expected 1 completed bundle, got %d", count)
+		}
+
+		return nil
+	})
 }
