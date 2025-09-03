@@ -2530,8 +2530,11 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 	}
 
 	strDefault := tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`,
-		tableName.String(), columnForDefault.name.String(), strDefault)
+	// Always use explicit type casting to ensure consistent behavior and avoid parse errors.
+	// When the types don't match, this will produce the expected DatatypeMismatch error.
+	// When the types do match, the cast is harmless and makes the intent explicit.
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s::%s`,
+		tableName.String(), columnForDefault.name.String(), strDefault, datumTyp.SQLString())
 	return stmt, nil
 }
 
