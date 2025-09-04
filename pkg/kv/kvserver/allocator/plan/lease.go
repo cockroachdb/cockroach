@@ -83,12 +83,6 @@ func (lp LeasePlanner) ShouldPlanChange(
 		ctx, lp.storePool, desc, conf, desc.Replicas().VoterDescriptors(),
 		repl, repl.RangeUsageInfo())
 
-	// It is a little unfortunate we are checking on the decision.
-	if decision == allocatorimpl.TransferLeaseForCountBalance &&
-		lp.allocator.CountBasedRebalanceDisabled() {
-		return false, 0
-	}
-
 	if decision.ShouldTransfer() {
 		log.KvDistribution.VEventf(ctx,
 			2, "lease transfer needed %v, enqueuing", decision)

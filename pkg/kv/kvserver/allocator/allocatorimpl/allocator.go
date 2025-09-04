@@ -2664,6 +2664,8 @@ const (
 	// because there is a more preferred leaseholder according the applied range
 	// lease preferences.
 	TransferLeaseForPreferences
+
+	DontTransferLeaseCountBalanceDisabled
 )
 
 // ShouldTransfer returns true when the lease should be transferred, false
@@ -2674,7 +2676,7 @@ func (t TransferLeaseDecision) ShouldTransfer() bool {
 		TransferLeaseForIOOverload, TransferLeaseForPreferences:
 		return true
 	case DontTransferLeaseBalanced, DontTransferLeaseNoValidTargets,
-		DontTransferLeaseNoStoreDescriptor:
+		DontTransferLeaseNoStoreDescriptor, DontTransferLeaseCountBalanceDisabled:
 		return false
 	default:
 		panic(fmt.Sprintf("unknown transfer lease decision %d", t))
@@ -2695,7 +2697,7 @@ func (t TransferLeaseDecision) Priority() float64 {
 	case TransferLeaseForCountBalance:
 		return 0
 	case DontTransferLeaseBalanced, DontTransferLeaseNoValidTargets,
-		DontTransferLeaseNoStoreDescriptor:
+		DontTransferLeaseNoStoreDescriptor, DontTransferLeaseCountBalanceDisabled:
 		return 0
 	default:
 		panic(fmt.Sprintf("unknown transfer lease decision %d", t))
@@ -2721,6 +2723,8 @@ func (t TransferLeaseDecision) String() string {
 		return "no-transfer(missing store descriptor)"
 	case DontTransferLeaseNoValidTargets:
 		return "no-transfer(no valid targets)"
+	case DontTransferLeaseCountBalanceDisabled:
+		return "no-transfer(count balance disabled)"
 	default:
 		panic(fmt.Sprintf("unknown transfer lease decision %d", t))
 	}
@@ -2798,7 +2802,10 @@ func (a *Allocator) ShouldTransferLease(
 	case shouldTransfer:
 		result = TransferLeaseForAccessLocality
 	case decideWithoutStats:
-		if a.shouldTransferLeaseForLeaseCountConvergence(ctx, storePool, sl, source, existing) {
+		// It is a little unfortunate we are checking on the decision.
+		if a.CountBasedRebalanceDisabled() {
+			result = DontTransferLeaseCountBalanceDisabled
+		} else if a.shouldTransferLeaseForLeaseCountConvergence(ctx, storePool, sl, source, existing) {
 			result = TransferLeaseForCountBalance
 		} else {
 			result = DontTransferLeaseBalanced
