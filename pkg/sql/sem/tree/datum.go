@@ -6294,7 +6294,15 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 		}
 		return NewDTuple(t, datums...), nil
 	case types.BitFamily:
-		return bitArrayZero, nil
+		// For fixed-width BIT columns, we need the width to create the
+		// default value. Otherwise, we end up getting an error like:
+		// "bit string length 0 does not match type length 5"
+		var w uint
+		switch t.Oid() {
+		case oid.T_bit:
+			w = uint(t.Width())
+		}
+		return NewDBitArray(w), nil
 	case types.EnumFamily:
 		// The scenario in which this arises is when the column is being dropped and
 		// is NOT NULL. If there are no values for this enum, there's nothing that
