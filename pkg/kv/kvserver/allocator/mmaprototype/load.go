@@ -501,7 +501,14 @@ func loadSummaryForDimension(
 	// currently consider how far we are from the mean. But the mean isn't very
 	// useful when there are heterogeneous nodes/stores, so this computation
 	// will need to be revisited.
-	fractionAbove := float64(load)/float64(meanLoad) - 1.0
+	var fractionAbove float64
+	if meanLoad != 0 {
+		fractionAbove = float64(load)/float64(meanLoad) - 1.0
+	} else {
+		// Mean load is zero, and since loads are positive, this implies that all
+		// loads are zero, and none is an outlier relative to others.
+		fractionAbove = 0
+	}
 	var fractionUsed float64
 	if capacity != UnknownCapacity {
 		fractionUsed = float64(load) / float64(capacity)
