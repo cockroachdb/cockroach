@@ -822,11 +822,16 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	// Pass our own instance ID to connect to local RPC servers
-	apiInternalServer, err := apiinternal.NewAPIInternalServer(ctx,
-		s.sqlServer.sqlInstanceDialer, roachpb.NodeID(s.sqlServer.SQLInstanceID()))
-	if err != nil {
-		return err
+	var apiInternalServer http.Handler
+	if rpc.ExperimentalDRPCEnabled.Get(&s.cfg.Settings.SV) {
+		// Pass our own instance ID to connect to local RPC servers
+		apiInternalServer, err = apiinternal.NewAPIInternalServer(ctx,
+			s.sqlServer.sqlInstanceDialer, roachpb.NodeID(s.sqlServer.SQLInstanceID()))
+		if err != nil {
+			return err
+		}
+	} else {
+		apiInternalServer = gwMux
 	}
 
 	// Connect the HTTP endpoints. This also wraps the privileged HTTP
@@ -841,7 +846,8 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */
-		gwMux,                        /* handleRequestsUnauthenticated */
+		gwMux,                        /* unauthenticatedGWMux */
+		apiInternalServer,            /* unauthenticatedAPIInternalServer */
 		s.debug,                      /* handleDebugUnauthenticated */
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
@@ -853,7 +859,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			sqlServer:        s.sqlServer,
 			db:               s.db,
 		}), /* apiServer */
-		apiInternalServer,
 		serverpb.FeatureFlags{
 			CanViewKvMetricDashboards: s.rpcContext.TenantID.Equal(roachpb.SystemTenantID) ||
 				s.sqlServer.serviceMode == mtinfopb.ServiceModeShared,

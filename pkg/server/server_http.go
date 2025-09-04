@@ -143,6 +143,10 @@ var virtualClustersHandler = http.HandlerFunc(func(w http.ResponseWriter, req *h
 	}
 })
 
+// setupRoutes configures HTTP routes for the server.
+//
+// TODO(shubham,server): Remove unauthenticatedGWMux once apiinternal supports
+// all RPC prefixes.
 func (s *httpServer) setupRoutes(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -150,11 +154,11 @@ func (s *httpServer) setupRoutes(
 	adminAuthzCheck privchecker.CheckerForRPCHandlers,
 	metricSource metricMarshaler,
 	runtimeStatSampler *status.RuntimeStatSampler,
-	handleRequestsUnauthenticated http.Handler,
+	unauthenticatedGWMux http.Handler,
+	unauthenticatedAPIInternalServer http.Handler,
 	handleDebugUnauthenticated http.Handler,
 	handleInspectzUnauthenticated http.Handler,
 	apiServer http.Handler,
-	apiInternalServer http.Handler,
 	flags serverpb.FeatureFlags,
 ) error {
 	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
@@ -191,17 +195,24 @@ func (s *httpServer) setupRoutes(
 		authnServer, assetHandler, true /* allowAnonymous */)
 	s.mux.Handle("/", authenticatedUIHandler)
 
+	authenticatedAPIInternalServer := unauthenticatedAPIInternalServer
+	if !s.cfg.InsecureWebAccess() {
+		authenticatedAPIInternalServer = authserver.NewMux(
+			authnServer, authenticatedAPIInternalServer, false /* allowAnonymous */)
+	}
+	s.mux.Handle(apiconstants.StatusPrefix, authenticatedAPIInternalServer)
+
 	// Add HTTP authentication to the gRPC-gateway endpoints used by the UI,
 	// if not disabled by configuration.
-	var authenticatedHandler = handleRequestsUnauthenticated
+	var authenticatedGWMux = unauthenticatedGWMux
 	if !s.cfg.InsecureWebAccess() {
-		authenticatedHandler = authserver.NewMux(authnServer, authenticatedHandler, false /* allowAnonymous */)
+		authenticatedGWMux = authserver.NewMux(authnServer, authenticatedGWMux, false /* allowAnonymous */)
 	}
 
 	// Login and logout paths.
 	// The /login endpoint is, by definition, available pre-authentication.
-	s.mux.Handle(authserver.LoginPath, handleRequestsUnauthenticated)
-	s.mux.Handle(authserver.LogoutPath, authenticatedHandler)
+	s.mux.Handle(authserver.LoginPath, unauthenticatedGWMux)
+	s.mux.Handle(authserver.LogoutPath, authenticatedGWMux)
 	s.mux.Handle(virtualClustersPath, virtualClustersHandler)
 	// The login path for 'cockroach demo', if we're currently running
 	// that.
@@ -209,25 +220,14 @@ func (s *httpServer) setupRoutes(
 		s.mux.Handle(authserver.DemoLoginPath, http.HandlerFunc(authnServer.DemoLogin))
 	}
 
-	// Admin/Status servers. These are used by the UI via RPC-over-HTTP.
-	s.mux.Handle(apiconstants.AdminPrefix, authenticatedHandler)
-	if apiInternalServer != nil && rpc.ExperimentalDRPCEnabled.Get(&s.cfg.Settings.SV) {
-		authenticatedRestHandler := apiInternalServer
-		if !s.cfg.InsecureWebAccess() {
-			authenticatedRestHandler = authserver.NewMux(
-				authnServer, authenticatedRestHandler, false /* allowAnonymous */)
-		}
-		s.mux.Handle(apiconstants.StatusPrefix, authenticatedRestHandler)
-	} else {
-		s.mux.Handle(apiconstants.StatusPrefix, authenticatedHandler)
-	}
+	s.mux.Handle(apiconstants.AdminPrefix, authenticatedGWMux)
 
 	// The timeseries endpoint, used to produce graphs.
-	s.mux.Handle(ts.URLPrefix, authenticatedHandler)
+	s.mux.Handle(ts.URLPrefix, authenticatedGWMux)
 
 	// Exempt the 2nd health check endpoint from authentication.
 	// (This simply mirrors /health and exists for backward compatibility.)
-	s.mux.Handle(apiconstants.AdminHealth, handleRequestsUnauthenticated)
+	s.mux.Handle(apiconstants.AdminHealth, unauthenticatedGWMux)
 	// The /_status/vars and /metrics endpoint is not authenticated either. Useful for monitoring.
 	s.mux.Handle(apiconstants.StatusVars, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings, false /* useStaticLabels */}.handleVars))
 	s.mux.Handle(apiconstants.MetricsPath, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings, true /* useStaticLabels */}.handleVars))
