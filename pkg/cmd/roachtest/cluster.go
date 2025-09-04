@@ -1203,6 +1203,11 @@ func (c *clusterImpl) WorkloadNode() option.NodeListOption {
 	return c.lister().WorkloadNode()
 }
 
+//
+//func (c *clusterImpl) WorkloadNodeExists() bool {
+//	return c.lister().WorkloadNodeExists()
+//}
+
 // FetchLogs downloads the logs from the cluster using `roachprod get`.
 // The logs will be placed in the test's artifacts dir.
 func (c *clusterImpl) FetchLogs(ctx context.Context, l *logger.Logger) error {

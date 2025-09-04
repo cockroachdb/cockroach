@@ -36,6 +36,7 @@ type Cluster interface {
 	Nodes(ns ...int) option.NodeListOption
 	Node(i int) option.NodeListOption
 	WorkloadNode() option.NodeListOption
+	//WorkloadNodeExists() bool
 
 	// Uploading and downloading from/to nodes.
 

@@ -287,12 +287,16 @@ var planMutators = func() []mutator {
 // the respective `UpgradeStage` that they run in:
 //
 //  1. SystemSetupStage: start all nodes in the cluster at the initial version,
+//
 //     maybe using fixtures. Some upgrades may take place here from older
 //     versions, as we make our way to the test's minimum supported version.
+//
 //  2. TenantSetupStage: creates tenants (if running in a multitenant
 //     deployment mode). May also run some setup upgrades if the cluster
 //     is not yet at the minimum supported version.
+//
 //  3. OnStartupStage: run startup hooks.
+//
 //  4. for each cluster upgrade:
 //     - InitUpgradeStage: set `preserve_downgrade_option`.
 //     - TemporaryUpgradeStage: upgrade all nodes to the next cockroach version
@@ -300,6 +304,7 @@ var planMutators = func() []mutator {
 //     stage only applies if the planner decides to rollback.
 //     - RollbackUpgradeStage: downgrade all nodes back to the previous
 //     version (running mixed-version hooks again). This stage may not happen.
+//
 //     - LastUpgradeStage: upgrade all nodes to the next version (running
 //     mixed-version hooks). The upgrade will not be rolled back.
 //     - RunningUpgradeMigrationsStage: reset `preserve_downgrade_option`,
@@ -357,7 +362,9 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 		addSteps(p.finalizeUpgradeSteps(service, to, scheduleHooks, virtualClusterRunning))
 
 		// run after upgrade steps, if any,
-		addSteps(p.afterUpgradeSteps(service, from, to, scheduleHooks))
+		p.logger.Printf("[testPlanner][Plan] before p.afterUpgradeSteps len(steps): %d", len(steps))
+		addSteps(p.afterUpgradeSteps(service, scheduleHooks))
+		p.logger.Printf("[testPlanner][Plan] after p.afterUpgradeSteps len(steps): %d", len(steps))
 
 		return steps
 	}
@@ -653,15 +660,15 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	shouldGrantCapabilities := p.deploymentMode == SeparateProcessDeployment ||
 		(p.deploymentMode == SharedProcessDeployment && !v.AtLeast(TenantsAndSystemAlignedSettingsVersion))
 
-	var startStep singleStepProtocol
+	var tenantSetupStep singleStepProtocol
 	if p.deploymentMode == SharedProcessDeployment {
-		startStep = startSharedProcessVirtualClusterStep{
+		tenantSetupStep = startSharedProcessVirtualClusterStep{
 			name:       p.tenantName(),
 			initTarget: p.currentContext.Tenant.Descriptor.Nodes[0],
 			settings:   p.clusterSettingsForTenant(v),
 		}
 	} else {
-		startStep = startSeparateProcessVirtualClusterStep{
+		tenantSetupStep = startSeparateProcessVirtualClusterStep{
 			name:     p.tenantName(),
 			rt:       p.rt,
 			version:  v,
@@ -678,7 +685,7 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	// it as the default cluster, and finally give it all capabilities
 	// if necessary.
 	steps = append(steps,
-		p.newSingleStepWithContext(setupContext, startStep),
+		p.newSingleStepWithContext(setupContext, tenantSetupStep),
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
 			nodes:              p.currentContext.Tenant.Descriptor.Nodes,
 			timeout:            p.options.upgradeTimeout,
@@ -798,17 +805,47 @@ func (p *testPlanner) initUpgradeSteps(
 // the same and then run any after-finalization hooks the user may
 // have provided.
 func (p *testPlanner) afterUpgradeSteps(
-	service *ServiceContext, fromVersion, toVersion *clusterupgrade.Version, scheduleHooks bool,
-) []testStep {
+	service *ServiceContext, scheduleHooks bool,
+) (steps []testStep) {
 	p.setFinalizing(service, false)
 	p.setStage(service, AfterUpgradeFinalizedStage)
-	if scheduleHooks {
-		return p.concurrently(afterTestLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))
-	}
 
-	// Currently, we only schedule user-provided hooks after the upgrade
-	// is finalized; if we are not scheduling hooks, return a nil slice.
-	return nil
+	// These strings should be the same? confirmed, these are the same
+	//p.logger.Printf("[testPlanner][afterUpgradeSteps] fromVersion: %s, toVersion: %s", fromVersion.String(), toVersion.String())
+	p.logger.Printf("[testPlanner][afterUpgradeSteps] service.FromVersion: %s, service.ToVersion: %s", service.FromVersion.String(), service.ToVersion.String())
+	// Verify this condition for adding the binary works
+	// Confirmed
+	p.logger.Printf("[testPlanner][afterUpgradeSteps] p.cluster.All(): %d, len(p.cluster.CRDBNodes()): %d",
+		len(p.cluster.All()), len(p.cluster.CRDBNodes()))
+	if len(p.cluster.All()) != len(p.cluster.CRDBNodes()) {
+		// there exists workload nodes (?)
+		// Create a step for staging the workload node binary that matches the current version
+		p.logger.Printf("[testPlanner][afterUpgradeSteps] Adding new step for workload node binary")
+		// FIXME doesn't look like this step is running?
+		steps = append(steps,
+			p.newSingleStep(stageWorkloadBinaryStep{
+				version: service.FromVersion,
+				rt:      p.rt,
+			}))
+		p.logger.Printf("[testPlanner][afterUpgradeSteps] steps: %v", steps)
+	}
+	if scheduleHooks {
+		p.logger.Printf("[testPlanner][afterUpgradeSteps] scheduleHooks: %t", scheduleHooks)
+		//steps = p.concurrently(
+		//	afterTestLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))
+		steps = append(steps,
+			p.concurrently(afterTestLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))...)
+		p.logger.Printf("[testPlanner][afterUpgradeSteps] after appending scheduleHooks steps len(steps): %d", len(steps))
+		//return p.concurrently(afterTestLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))
+	}
+	// if we are not scheduling hooks, return a nil slice.
+	p.logger.Printf("[testPlanner][afterUpgradeSteps] len(steps): %d", len(steps))
+	if len(steps) == 0 {
+		return nil
+	} else {
+		return steps
+	}
+	//return nil
 }
 
 func (p *testPlanner) upgradeSteps(
