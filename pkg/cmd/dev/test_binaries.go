@@ -6,6 +6,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/alessio/shellescape"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
-	"github.com/klauspost/pgzip"
 	"github.com/spf13/cobra"
 )
 
@@ -305,7 +305,7 @@ func compressFile(filePath string) (err error) {
 	defer func() {
 		err = combineErrors(compressedFile.Close(), err)
 	}()
-	writer := pgzip.NewWriter(compressedFile)
+	writer := gzip.NewWriter(compressedFile)
 	_, err = io.Copy(writer, inputFile)
 	if err != nil {
 		return
