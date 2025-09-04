@@ -302,18 +302,18 @@ func (w *kv) validateConfig() (err error) {
 	}
 	// We create generator and discard it to have a single piece of code that
 	// handles generator type which affects target key range.
-	_, _, _, kr := w.createKeyGenerator()
-	if kr.totalKeys() < uint64(w.insertCount) {
+	kg := w.createKeyGenerator()
+	if kg.kr.totalKeys() < uint64(w.insertCount) {
 		return errors.Errorf(
 			"`--insert-count` (%d) is greater than the number of unique keys that could be possibly generated [%d,%d)",
-			w.insertCount, kr.min, kr.max)
+			w.insertCount, kg.kr.min, kg.kr.max)
 	}
 	return nil
 }
 
 // Note that sequence is only exposed for testing purposes and is used by
 // returned keyGenerators.
-func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransformer, keyRange) {
+func (w *kv) createKeyGenerator() keyGeneratorConfig {
 	var writeSeq atomic.Int64
 	if w.writeSeq != "" {
 		writeSeqVal, err := strconv.Atoi(w.writeSeq[1:])
@@ -323,46 +323,57 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 		writeSeq.Store(int64(writeSeqVal))
 	}
 
-	// Sequence is shared between all generators.
-	seq := &sequence{max: w.cycleLength, val: &writeSeq}
+	var kg keyGeneratorConfig
+	kg.seq = &sequence{max: w.cycleLength, val: &writeSeq}
 
-	var gen func() keyGenerator
-	var kr keyRange
 	switch {
 	case w.zipfian:
-		gen = func() keyGenerator {
-			return newZipfianGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+		kg.seqPrefix = 'Z'
+		kg.newState = func() *keyGeneratorState {
+			return &keyGeneratorState{
+				rand:   rand.New(rand.NewSource(timeutil.Now().UnixNano())),
+				mapKey: &zipfKeyMapper{zipf: newZipf(1.1, 1, uint64(math.MaxInt64))},
+			}
 		}
-		kr = keyRange{
+		kg.kr = keyRange{
 			min: 0,
 			max: math.MaxInt64,
 		}
 	case w.sequential:
-		gen = func() keyGenerator {
-			return newSequentialGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+		kg.seqPrefix = 'S'
+		kg.newState = func() *keyGeneratorState {
+			return &keyGeneratorState{
+				rand:   rand.New(rand.NewSource(timeutil.Now().UnixNano())),
+				mapKey: sequentialKeyMapper{},
+			}
 		}
-		kr = keyRange{
+		kg.kr = keyRange{
 			min: 0,
 			max: w.cycleLength,
 		}
 	default:
-		gen = func() keyGenerator {
-			return newHashGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+		kg.seqPrefix = 'R'
+		kg.newState = func() *keyGeneratorState {
+			return &keyGeneratorState{
+				rand:   rand.New(rand.NewSource(timeutil.Now().UnixNano())),
+				mapKey: &hashKeyMapper{hasher: sha1.New()},
+			}
 		}
-		kr = keyRange{
+		kg.kr = keyRange{
 			min: math.MinInt64,
 			max: math.MaxInt64,
 		}
 	}
 
 	if w.keySize == 0 {
-		return gen, seq, intKeyTransformer{}, kr
+		kg.transformer = intKeyTransformer{}
+	} else {
+		kg.transformer = stringKeyTransformer{
+			startOffset: kg.kr.min,
+			fillerSize:  w.keySize - minStringKeyDigits,
+		}
 	}
-
-	return gen, seq, stringKeyTransformer{
-		startOffset: kr.min,
-		fillerSize:  w.keySize - minStringKeyDigits,
-	}, kr
+	return kg
 }
 
 func splitFinder(i, splits int, r keyRange, k keyTransformer) interface{} {
@@ -378,24 +389,18 @@ func splitFinder(i, splits int, r keyRange, k keyTransformer) interface{} {
 	return k.getKey(splitPoint)
 }
 
-func insertCountKey(idx, count int64, kr keyRange) int64 {
-	stride := kr.max/(count+1) - kr.min/(count+1)
-	key := kr.min + (idx+1)*stride
-	return key
-}
-
 // Tables implements the Generator interface.
 func (w *kv) Tables() []workload.Table {
 	// Tables should only run on initialized workload, safe to call create without
 	// having a panic. We don't need to defer this to the actual table callbacks
 	// like Splits or InitialRows.
-	_, _, kt, kr := w.createKeyGenerator()
+	kg := w.createKeyGenerator()
 
 	table := workload.Table{Name: `kv`}
 	table.Splits = workload.Tuples(
 		w.splits,
 		func(splitIdx int) []interface{} {
-			return []interface{}{splitFinder(splitIdx, w.splits, kr, kt)}
+			return []interface{}{splitFinder(splitIdx, w.splits, kg.kr, kg.transformer)}
 		},
 	)
 
@@ -404,27 +409,37 @@ func (w *kv) Tables() []workload.Table {
 		if w.secondaryIndex {
 			schema = shardedKvSchemaWithIndex
 		}
-		table.Schema = fmt.Sprintf(schema, kt.keySQLType(), w.shards)
+		table.Schema = fmt.Sprintf(schema, kg.transformer.keySQLType(), w.shards)
 	} else {
 		schema := kvSchema
 		if w.secondaryIndex {
 			schema = kvSchemaWithIndex
 		}
-		table.Schema = fmt.Sprintf(schema, kt.keySQLType())
+		table.Schema = fmt.Sprintf(schema, kg.transformer.keySQLType())
 	}
 
 	if w.insertCount > 0 {
 		const batchSize = 1000
 		table.InitialRows = workload.BatchedTuples{
 			NumBatches: (w.insertCount + batchSize - 1) / batchSize,
+			// If the key sequence is not sequential, duplicates are possible.
+			// The zipfian distribution produces duplicates by design, and the
+			// hash key mapper can also produce duplicates at larger insert
+			// counts (it's at least inevitable at ~1b rows). Marking that the
+			// keys may contain duplicates will cause the data loader to use
+			// INSERT ... ON CONFLICT DO NOTHING statements.
+			MayContainDuplicates: !w.sequential,
 			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
+				// Grab a new state for each batch, under the assumption that
+				// FillBatch may be called concurrently.
+				ks := kg.newState()
 				rowBegin, rowEnd := batchIdx*batchSize, (batchIdx+1)*batchSize
 				if rowEnd > w.insertCount {
 					rowEnd = w.insertCount
 				}
 
 				var kvtableTypes = []*types.T{
-					kt.getColumnType(),
+					kg.transformer.getColumnType(),
 					types.Bytes,
 				}
 
@@ -432,12 +447,12 @@ func (w *kv) Tables() []workload.Table {
 
 				{
 					seq := rowBegin
-					kt.fillColumnBatch(cb, a, func() (s int64, ok bool) {
-						if seq < rowEnd {
-							seq++
-							return insertCountKey(int64(seq-1), int64(w.insertCount), kr), true
+					kg.transformer.fillColumnBatch(cb, a, func() (s int64, ok bool) {
+						if seq >= rowEnd {
+							return 0, false
 						}
-						return 0, false
+						seq++
+						return ks.mapKey.mapKey(int64(seq)), true
 					})
 				}
 
@@ -548,7 +563,7 @@ func (w *kv) Ops(
 	buf.WriteString(`)`)
 	delStmtStr := buf.String()
 
-	gen, _, kt, _ := w.createKeyGenerator()
+	kg := w.createKeyGenerator()
 	ql := workload.QueryLoad{}
 	var numEmptyResults atomic.Int64
 	for i := 0; i < w.connFlags.Concurrency; i++ {
@@ -579,8 +594,8 @@ func (w *kv) Ops(
 			return workload.QueryLoad{}, err
 		}
 		op.mcp = mcp
-		op.g = gen()
-		op.t = kt
+		op.kg = kg
+		op.ks = kg.newState()
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
 		ql.Close = op.close
 	}
@@ -600,8 +615,8 @@ type kvOp struct {
 	sfuStmt          workload.StmtHandle
 	sel1Stmt         workload.StmtHandle
 	delStmt          workload.StmtHandle
-	g                keyGenerator
-	t                keyTransformer
+	kg               keyGeneratorConfig
+	ks               *keyGeneratorState
 	numEmptyResults  *atomic.Int64
 }
 
@@ -618,17 +633,17 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 			return err
 		}
 	}
-	statementProbability := o.g.rand().Intn(100) // Determines what statement is executed.
+	statementProbability := o.ks.rand.Intn(100) // Determines what statement is executed.
 	if statementProbability < o.config.readPercent {
 		args := make([]interface{}, o.config.batchSize)
 		for i := 0; i < o.config.batchSize; i++ {
-			args[i] = o.t.getKey(o.g.readKey())
+			args[i] = o.kg.transformer.getKey(o.kg.readKey(o.ks))
 		}
 		start := timeutil.Now()
 		readStmt := o.readStmt
 		opName := `read`
 
-		if o.g.rand().Intn(100) < o.config.followerReadPercent {
+		if o.ks.rand.Intn(100) < o.config.followerReadPercent {
 			readStmt = o.followerReadStmt
 			opName = `follower-read`
 		}
@@ -654,7 +669,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		start := timeutil.Now()
 		args := make([]interface{}, o.config.batchSize)
 		for i := 0; i < o.config.batchSize; i++ {
-			args[i] = o.g.readKey()
+			args[i] = o.kg.readKey(o.ks)
 		}
 		_, err := o.delStmt.Exec(ctx, args...)
 		if err != nil {
@@ -669,7 +684,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		start := timeutil.Now()
 		var err error
 		if o.config.spanLimit > 0 {
-			arg := o.g.readKey()
+			arg := o.kg.readKey(o.ks)
 			_, err = o.spanStmt.Exec(ctx, arg)
 		} else {
 			_, err = o.spanStmt.Exec(ctx)
@@ -690,11 +705,11 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		}
 		for i := 0; i < o.config.batchSize; i++ {
 			j := i * argCount
-			writeArgs[j+0] = o.t.getKey(o.g.writeKey())
+			writeArgs[j+0] = o.kg.transformer.getKey(o.kg.writeKey(o.ks))
 			if sfuArgs != nil {
 				sfuArgs[i] = writeArgs[j]
 			}
-			writeArgs[j+1] = o.config.randBlock(o.g.rand())
+			writeArgs[j+1] = o.config.randBlock(o.ks.rand)
 		}
 		return writeArgs, sfuArgs
 	}
@@ -786,7 +801,7 @@ func (o *kvOp) close(context.Context) error {
 		fmt.Printf("Number of reads that didn't return any results: %d.\n", empty)
 	}
 	fmt.Printf("Write sequence could be resumed by passing --write-seq=%s to the next run.\n",
-		o.g.state())
+		o.kg.cursor())
 	return nil
 }
 
@@ -897,133 +912,73 @@ func (e stringKeyTransformer) fillColumnBatch(
 	}
 }
 
-// keyGenerator generates read and write keys. Read keys may not yet exist and
-// write keys may already exist.
-type keyGenerator interface {
-	writeKey() int64
-	readKey() int64
-	rand() *rand.Rand
-	state() string
+// keyGeneratorConfig holds the key generation configuration necessary for
+// generating read and write keys. All the fields of a keyGeneratorConfig may be
+// accessed concurrently, but each *keyGeneratorState constructed by newState
+// must be accessed sequentially (eg, one state per worker).
+//
+// Read keys may not yet exist and write keys may already exist.
+type keyGeneratorConfig struct {
+	kr          keyRange
+	seq         *sequence
+	seqPrefix   rune
+	newState    func() *keyGeneratorState
+	transformer keyTransformer
 }
 
-type hashGenerator struct {
-	seq    *sequence
-	random *rand.Rand
+// keyGeneratorState holds state for a key generator. Any given state must not
+// be accessed concurrently. Every worker may be given its own state to avoid
+// synchronization.
+type keyGeneratorState struct {
+	rand   *rand.Rand
+	mapKey keyMapper
+}
+
+func (g *keyGeneratorConfig) cursor() string {
+	return fmt.Sprintf("%s%d", string(g.seqPrefix), g.seq.read())
+}
+
+func (g *keyGeneratorConfig) writeKey(state *keyGeneratorState) int64 {
+	return state.mapKey.mapKey(g.seq.write())
+}
+
+func (g *keyGeneratorConfig) readKey(state *keyGeneratorState) int64 {
+	v := g.seq.read()
+	if v == 0 {
+		return 0
+	}
+	return state.mapKey.mapKey(state.rand.Int63n(v))
+}
+
+type keyMapper interface {
+	mapKey(v int64) int64
+}
+
+type hashKeyMapper struct {
 	hasher hash.Hash
 	buf    [sha1.Size]byte
 }
 
-func newHashGenerator(seq *sequence, rng *rand.Rand) *hashGenerator {
-	return &hashGenerator{
-		seq:    seq,
-		random: rng,
-		hasher: sha1.New(),
-	}
+func (h *hashKeyMapper) mapKey(v int64) int64 {
+	binary.BigEndian.PutUint64(h.buf[:8], uint64(v))
+	binary.BigEndian.PutUint64(h.buf[8:16], uint64(RandomSeed.Seed()))
+	h.hasher.Reset()
+	_, _ = h.hasher.Write(h.buf[:16])
+	h.hasher.Sum(h.buf[:0])
+	return int64(binary.BigEndian.Uint64(h.buf[:8]))
 }
 
-func (g *hashGenerator) hash(v int64) int64 {
-	binary.BigEndian.PutUint64(g.buf[:8], uint64(v))
-	binary.BigEndian.PutUint64(g.buf[8:16], uint64(RandomSeed.Seed()))
-	g.hasher.Reset()
-	_, _ = g.hasher.Write(g.buf[:16])
-	g.hasher.Sum(g.buf[:0])
-	return int64(binary.BigEndian.Uint64(g.buf[:8]))
+type sequentialKeyMapper struct{}
+
+func (sequentialKeyMapper) mapKey(v int64) int64 { return v }
+
+type zipfKeyMapper struct {
+	zipf *zipf
 }
 
-func (g *hashGenerator) writeKey() int64 {
-	return g.hash(g.seq.write())
-}
-
-func (g *hashGenerator) readKey() int64 {
-	v := g.seq.read()
-	if v == 0 {
-		return 0
-	}
-	return g.hash(g.random.Int63n(v))
-}
-
-func (g *hashGenerator) rand() *rand.Rand {
-	return g.random
-}
-
-func (g *hashGenerator) state() string {
-	return fmt.Sprintf("R%d", g.seq.read())
-}
-
-type sequentialGenerator struct {
-	seq    *sequence
-	random *rand.Rand
-}
-
-func newSequentialGenerator(seq *sequence, rng *rand.Rand) *sequentialGenerator {
-	return &sequentialGenerator{
-		seq:    seq,
-		random: rng,
-	}
-}
-
-func (g *sequentialGenerator) writeKey() int64 {
-	return g.seq.write()
-}
-
-func (g *sequentialGenerator) readKey() int64 {
-	v := g.seq.read()
-	if v == 0 {
-		return 0
-	}
-	return g.random.Int63n(v)
-}
-
-func (g *sequentialGenerator) rand() *rand.Rand {
-	return g.random
-}
-
-func (g *sequentialGenerator) state() string {
-	return fmt.Sprintf("S%d", g.seq.read())
-}
-
-type zipfGenerator struct {
-	seq    *sequence
-	random *rand.Rand
-	zipf   *zipf
-}
-
-// Creates a new zipfian generator.
-func newZipfianGenerator(seq *sequence, rng *rand.Rand) *zipfGenerator {
-	return &zipfGenerator{
-		seq:    seq,
-		random: rng,
-		zipf:   newZipf(1.1, 1, uint64(math.MaxInt64)),
-	}
-}
-
-// Get a random number seeded by v that follows the
-// zipfian distribution.
-func (g *zipfGenerator) zipfian(seed int64) int64 {
+func (g *zipfKeyMapper) mapKey(seed int64) int64 {
 	randomWithSeed := rand.New(rand.NewSource(seed))
 	return int64(g.zipf.Uint64(randomWithSeed))
-}
-
-// Get a zipf write key appropriately.
-func (g *zipfGenerator) writeKey() int64 {
-	return g.zipfian(g.seq.write())
-}
-
-// Get a zipf read key appropriately.
-func (g *zipfGenerator) readKey() int64 {
-	v := g.seq.read()
-	if v == 0 {
-		return 0
-	}
-	return g.zipfian(g.random.Int63n(v))
-}
-
-func (g *zipfGenerator) rand() *rand.Rand {
-	return g.random
-}
-
-func (g *zipfGenerator) state() string {
-	return fmt.Sprintf("Z%d", g.seq.read())
 }
 
 // randBlock returns a sequence of random bytes according to the kv

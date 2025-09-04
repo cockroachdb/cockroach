@@ -359,6 +359,12 @@ func (g *ycsb) Tables() []workload.Table {
 		const batchSize = 1000
 		usertable.InitialRows = workload.BatchedTuples{
 			NumBatches: (g.insertCount + batchSize - 1) / batchSize,
+			// If the key sequence is hashed, duplicates are possible. Hash
+			// collisions are inevitable at large insert counts (they're at
+			// least inevitable at ~1b rows). Marking that the keys may contain
+			// duplicates will cause the data loader to use INSERT ... ON
+			// CONFLICT DO NOTHING statements.
+			MayContainDuplicates: !g.insertHash,
 			FillBatch: func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
 				rowBegin, rowEnd := batchIdx*batchSize, (batchIdx+1)*batchSize
 				if rowEnd > g.insertCount {
