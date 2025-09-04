@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -2742,6 +2744,17 @@ func (a *Allocator) ShouldTransferLease(
 	},
 	usageInfo allocator.RangeUsageInfo,
 ) TransferLeaseDecision {
+	halt := false
+	if buf := logtags.FromContext(ctx); buf != nil {
+		tt, yes := buf.GetTag("tick")
+		if yes && strings.HasPrefix(tt.ValueStr(), "Mar 21 11:29:5") {
+			if ttt, yes2 := buf.GetTag("s"); yes2 && ttt.ValueStr() == "1" {
+				halt = true
+			}
+		}
+	}
+	_ = halt
+
 	excludeReplsInNeedOfSnap := a.knobs == nil || !a.knobs.AllowLeaseTransfersToReplicasNeedingSnapshots
 	if a.LeaseholderShouldMoveDueToPreferences(ctx, storePool, conf, leaseRepl, existing, excludeReplsInNeedOfSnap) {
 		return TransferLeaseForPreferences

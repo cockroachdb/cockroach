@@ -200,6 +200,7 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 			return true, 0
 		}
 		log.KvDistribution.VEventf(ctx, 2, "no rebalance target found, not enqueuing")
+
 	}
 
 	return false, 0

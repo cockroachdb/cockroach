@@ -105,7 +105,10 @@ func scanThreshold(t *testing.T, d *datadriven.TestData) (th assertion.Threshold
 		th.ThresholdType = assertion.UpperBound
 		return th
 	}
-	scanArg(t, d, "lower_bound", &th.Value)
-	th.ThresholdType = assertion.LowerBound
-	return th
+	if scanIfExists(t, d, "lower_bound", &th.Value) {
+		th.ThresholdType = assertion.LowerBound
+		return th
+	}
+	t.Fatalf("missing required threshold key")
+	return assertion.Threshold{} // unreachable
 }

@@ -1,0 +1,68 @@
+skip_under_ci
+----
+
+gen_cluster nodes=6 node_cpu_rate_capacity=16000000000 stores_per_node=2 region=(a,b) nodes_per_region=(3,3)
+----
+
+set_span_config
+[0,5000): constraints={'+region=a':3}
+[5000,10000): constraints={'+region=b':3}
+----
+
+# Writes will hit region a, reads will hit region b.
+# Leases are initially pre-randomized (within each region).
+
+gen_ranges ranges=100 min_key=min max_key=5000 placement_type=replica_placement bytes=268435456
+{s1:*,s3,s5}:1
+{s1,s3:*,s5}:1
+{s1,s3,s5:*}:1
+----
+{s1:*,s3,s5}:1
+{s1,s3:*,s5}:1
+{s1,s3,s5:*}:1
+
+gen_ranges ranges=100 min_key=5000 max_key=max placement_type=replica_placement bytes=268435456
+{s7:*,s9,s11}:1
+{s7,s9:*,s11}:1
+{s7,s9,s11:*}:1
+----
+{s7:*,s9,s11}:1
+{s7,s9:*,s11}:1
+{s7,s9,s11:*}:1
+
+# write-only on region a
+gen_load rate=1000 rw_ratio=0.0 min_block=1024 max_block=1024 min_key=1 max_key=5000
+----
+
+# read-only on region b
+gen_load rate=1000 rw_ratio=1.0 request_cpu_per_access=5000000 min_key=5000 max_key=max
+----
+
+assertion type=balance stat=leases upper_bound=1.32
+----
+
+assertion type=balance stat=replicas upper_bound=1.05
+----
+
+eval duration=60m cfgs=(sma-only,mma-only,both) metrics=(replicas,leases,cpu,write_bytes_per_second)
+----
+cpu#1: last:  [s1=450281684, s2=400803880, s3=399607734, s4=449332275, s5=452214585, s6=398228202, s7=448773333, s8=400434083, s9=451363333, s10=350388470, s11=448980000, s12=351267034] (stddev=37143079.88, mean=416806217.75, sum=5001674613)
+leases#1: first: [s1=34, s2=0, s3=33, s4=0, s5=33, s6=0, s7=35, s8=0, s9=33, s10=0, s11=33, s12=0] (stddev=16.76, mean=16.75, sum=201)
+leases#1: last:  [s1=43, s2=8, s3=41, s4=9, s5=42, s6=8, s7=10, s8=8, s9=9, s10=7, s11=9, s12=7] (stddev=14.61, mean=16.75, sum=201)
+replicas#1: first: [s1=100, s2=0, s3=100, s4=0, s5=100, s6=0, s7=101, s8=0, s9=101, s10=0, s11=101, s12=0] (stddev=50.25, mean=50.25, sum=603)
+replicas#1: last:  [s1=110, s2=8, s3=108, s4=10, s5=109, s6=8, s7=76, s8=8, s9=76, s10=7, s11=76, s12=7] (stddev=43.84, mean=50.25, sum=603)
+write_bytes_per_second#1: last:  [s1=1024341, s2=0, s3=1024341, s4=0, s5=1024341, s6=0, s7=0, s8=0, s9=0, s10=0, s11=0, s12=0] (stddev=443552.66, mean=256085.25, sum=3073023)
+artifacts[mma-only]: 23fd0743d1309d6a
+failed assertion sample 1
+  balance stat=leases threshold=(<1.32) ticks=5
+	max/mean=43.00/16.75 2.57 tick=0
+	max/mean=43.00/16.75 2.57 tick=1
+	max/mean=43.00/16.75 2.57 tick=2
+	max/mean=43.00/16.75 2.57 tick=3
+	max/mean=43.00/16.75 2.57 tick=4
+  balance stat=replicas threshold=(<1.05) ticks=5
+	max/mean=110.00/50.25 2.19 tick=0
+	max/mean=110.00/50.25 2.19 tick=1
+	max/mean=110.00/50.25 2.19 tick=2
+	max/mean=110.00/50.25 2.19 tick=3
+	max/mean=110.00/50.25 2.19 tick=4

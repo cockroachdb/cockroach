@@ -600,13 +600,13 @@ func TestDataDriven(t *testing.T) {
 			case "assertion":
 				var stat string
 				var typ string
-				var ticks int
+				ticks := 5
 				scanMustExist(t, d, "type", &typ)
 
 				switch typ {
 				case "balance":
 					scanMustExist(t, d, "stat", &stat)
-					scanMustExist(t, d, "ticks", &ticks)
+					scanIfExists(t, d, "ticks", &ticks)
 					assertions = append(assertions, assertion.BalanceAssertion{
 						Ticks:     ticks,
 						Stat:      stat,
@@ -614,7 +614,7 @@ func TestDataDriven(t *testing.T) {
 					})
 				case "steady":
 					scanMustExist(t, d, "stat", &stat)
-					scanMustExist(t, d, "ticks", &ticks)
+					scanIfExists(t, d, "ticks", &ticks)
 					assertions = append(assertions, assertion.SteadyStateAssertion{
 						Ticks:     ticks,
 						Stat:      stat,
@@ -623,7 +623,7 @@ func TestDataDriven(t *testing.T) {
 				case "stat":
 					var stores []int
 					scanMustExist(t, d, "stat", &stat)
-					scanMustExist(t, d, "ticks", &ticks)
+					scanIfExists(t, d, "ticks", &ticks)
 					scanMustExist(t, d, "stores", &stores)
 					assertions = append(assertions, assertion.StoreStatAssertion{
 						Ticks:     ticks,

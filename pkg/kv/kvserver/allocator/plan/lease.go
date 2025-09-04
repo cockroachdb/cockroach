@@ -8,6 +8,7 @@ package plan
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // LeasePlanner implements the ReplicationPlanner interface.
@@ -74,14 +76,31 @@ func (lp LeasePlanner) ShouldPlanChange(
 		return true, 0
 	}
 
+	halt := false
+	if buf := logtags.FromContext(ctx); buf != nil {
+		tt, yes := buf.GetTag("tick")
+		if yes && strings.HasPrefix(tt.ValueStr(), "Mar 21 11:29:5") {
+			if ttt, yes2 := buf.GetTag("s"); yes2 && ttt.ValueStr() == "1" {
+				halt = true
+			}
+		}
+	}
+
 	if !opts.CanTransferLease {
 		log.VEventf(ctx, 3, "can't transfer lease, not enqueueing")
 		return false, 0
 	}
 
+	vd := desc.Replicas().VoterDescriptors()
+	ui := repl.RangeUsageInfo()
 	decision := lp.allocator.ShouldTransferLease(
-		ctx, lp.storePool, desc, conf, desc.Replicas().VoterDescriptors(),
-		repl, repl.RangeUsageInfo())
+		ctx, lp.storePool, desc, conf, vd,
+		repl, ui)
+	if halt {
+		decision = lp.allocator.ShouldTransferLease(
+			ctx, lp.storePool, desc, conf, vd,
+			repl, ui)
+	}
 
 	if decision.ShouldTransfer() {
 		log.KvDistribution.VEventf(ctx,

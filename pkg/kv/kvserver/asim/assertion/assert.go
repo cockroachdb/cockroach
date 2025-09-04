@@ -225,7 +225,7 @@ func (ba BalanceAssertion) Assert(
 				fmt.Fprintf(&buf, "  %s\n", ba)
 				holds = false
 			}
-			fmt.Fprintf(&buf, "\tmax/mean=%.2f tick=%d\n", maxMeanRatio, tick)
+			fmt.Fprintf(&buf, "\tmax/mean=%.2f/%.2f %.2f tick=%d\n", max, mean, maxMeanRatio, tick)
 		}
 	}
 	return holds, buf.String()
