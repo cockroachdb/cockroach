@@ -1267,6 +1267,7 @@ GO_TARGETS = [
     "//pkg/cmd/roachprod/grafana:grafana",
     "//pkg/cmd/roachprod:roachprod",
     "//pkg/cmd/roachprod:roachprod_lib",
+    "//pkg/cmd/roachtest/cluster/mock:mockcluster",
     "//pkg/cmd/roachtest/cluster:cluster",
     "//pkg/cmd/roachtest/clusterstats:clusterstats",
     "//pkg/cmd/roachtest/clusterstats:clusterstats_test",
