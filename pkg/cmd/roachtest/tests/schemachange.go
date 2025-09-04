@@ -433,6 +433,13 @@ func makeSchemaChangeBulkIngestTest(
 				db := c.Conn(ctx, t.L(), 1)
 				defer db.Close()
 
+				// TODO(152859): Temporarily disable soft limit for distribute scan to
+				// test performance regression fix (see #152295).
+				t.L().Printf("Setting use_soft_limit_for_distribute_scan = false")
+				if _, err := db.Exec("SET use_soft_limit_for_distribute_scan = false"); err != nil {
+					t.Fatal(err)
+				}
+
 				t.L().Printf("Computing table statistics manually")
 				if _, err := db.Exec("CREATE STATISTICS stats from bulkingest.bulkingest"); err != nil {
 					t.Fatal(err)
