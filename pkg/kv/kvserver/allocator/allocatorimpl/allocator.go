@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -2723,6 +2724,11 @@ func (t TransferLeaseDecision) String() string {
 	default:
 		panic(fmt.Sprintf("unknown transfer lease decision %d", t))
 	}
+}
+
+func (a *Allocator) CountBasedRebalanceDisabled() bool {
+	return kvserverbase.DisableReplicaLeaseCountRebalancingIfMMAEnabled.Get(&a.st.SV) &&
+		kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetric
 }
 
 // ShouldTransferLease returns true if the specified store is overfull in terms

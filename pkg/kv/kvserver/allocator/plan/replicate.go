@@ -164,6 +164,9 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 		return true, priority
 	}
 
+	if rp.allocator.CountBasedRebalanceDisabled() {
+		return false, 0
+	}
 	voterReplicas := desc.Replicas().VoterDescriptors()
 	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
 	if !rp.knobs.DisableReplicaRebalancing {
