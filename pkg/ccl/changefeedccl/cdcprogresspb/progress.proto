@@ -23,7 +23,7 @@ message ResolvedTables {
 }
 
 // ProtectedTimestampRecords contains the IDs of protected timestamps records
-// for the changefeed.
+// for a changefeed.
 message ProtectedTimestampRecords {
   // SystemTablesRecord protects all system tables back to the highwater.
   bytes system_tables_record = 1 [
