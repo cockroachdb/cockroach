@@ -370,6 +370,8 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, st
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
+		ctx := logtags.AddTag(ctx, "n", store.NodeID())
+		ctx = logtags.AddTag(ctx, "s", store.StoreID())
 		s.srs[store.StoreID()].Tick(ctx, tick, state)
 	}
 }
@@ -380,6 +382,8 @@ func (s *Simulator) tickMMStoreRebalancers(ctx context.Context, tick time.Time, 
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
+		ctx := logtags.AddTag(ctx, "n", store.NodeID())
+		ctx = logtags.AddTag(ctx, "s", store.StoreID())
 		s.mmSRs[store.StoreID()].Tick(ctx, tick, state)
 	}
 }

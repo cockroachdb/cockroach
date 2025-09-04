@@ -81,7 +81,8 @@ func NewMMAStoreRebalancer(
 		pendingTicket:        -1,
 		currentlyRebalancing: false,
 	}
-	msr.AddLogTag(fmt.Sprintf("n%ds%d", localNodeID, localStoreID), "")
+	msr.AddLogTag("n", localNodeID)
+	msr.AddLogTag("s", localStoreID)
 	return msr
 }
 

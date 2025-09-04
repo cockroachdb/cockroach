@@ -57,7 +57,8 @@ func NewReplicateQueue(
 		as:    allocatorSync,
 	}
 	rq.AddLogTag("replica", nil)
-	rq.AddLogTag(fmt.Sprintf("n%ds%d", nodeID, storeID), "")
+	rq.AddLogTag("n", nodeID)
+	rq.AddLogTag("s", storeID)
 	return &rq
 }
 
