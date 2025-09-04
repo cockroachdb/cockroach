@@ -245,6 +245,7 @@ type Context struct {
 	// crdb_internal.request_statement_bundle builtin to insert a statement
 	// bundle request.
 	StmtDiagnosticsRequestInserter StmtDiagnosticsRequestInsertFunc
+	TxnDiagnosticsRequestInserter  TxnDiagnosticsRequestInsertFunc
 
 	// CatalogBuiltins is used by various builtins which depend on looking up
 	// catalog information. Unlike the Planner, it is available in DistSQL.

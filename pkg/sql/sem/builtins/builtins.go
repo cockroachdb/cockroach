@@ -8523,6 +8523,85 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, false /* withAntiPlanGist */, true /* redacted */),
 		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, true /* withAntiPlanGist */, true /* redacted */),
 	),
+	"crdb_internal.request_txn_bundle": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "txn_fingerprint_id", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				hasPriv, shouldRedact, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
+				if err != nil {
+					return nil, err
+				}
+				var redacted bool
+				if shouldRedact {
+					if !redacted {
+						return nil, pgerror.Newf(
+							pgcode.InsufficientPrivilege,
+							"users with VIEWACTIVITYREDACTED privilege can only request redacted statement bundles",
+						)
+					}
+				} else if !hasPriv {
+					return nil, pgerror.Newf(
+						pgcode.InsufficientPrivilege,
+						"requesting statement bundle requires VIEWACTIVITY privilege",
+					)
+				}
+
+				txnFingerprintIdStr := string(tree.MustBeDString(args[0]))
+				txnFingerprintId, err := strconv.ParseUint(txnFingerprintIdStr, 16, 64)
+				if err != nil {
+					return nil, err
+				}
+				query := `
+SELECT jsonb_array_elements_text(metadata->'stmtFingerprintIDs') as stmt_fingerprint_id
+FROM (
+	SELECT metadata from crdb_internal.transaction_statistics
+	WHERE fingerprint_id = decode($1, 'hex')
+	LIMIT 1
+) t
+`
+				it, err := evalCtx.Planner.QueryIteratorEx(ctx, "get_txn_fingerprint", sessiondata.NoSessionDataOverride, query, txnFingerprintIdStr)
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
+
+				var stmtFPs []uint64
+				var ok bool
+				for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+					if err != nil {
+						return nil, err
+					}
+					id := string(tree.MustBeDString(it.Cur()[0]))
+					value, err := strconv.ParseUint(id, 16, 64)
+					if err != nil {
+						return nil, err
+					}
+					stmtFPs = append(stmtFPs, value)
+				}
+				fmt.Printf("Fingerprints: %v\n", stmtFPs)
+				if err = evalCtx.TxnDiagnosticsRequestInserter(
+					ctx,
+					txnFingerprintId,
+					stmtFPs,
+					"",
+					0,
+					0,
+					0,
+					false); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Volatility: volatility.Volatile,
+			Info:       `Starts a txn diagnostic for the txn`,
+		},
+	),
 
 	"crdb_internal.set_compaction_concurrency": makeBuiltin(
 		tree.FunctionProperties{
