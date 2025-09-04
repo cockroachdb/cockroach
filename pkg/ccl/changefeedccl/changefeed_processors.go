@@ -2096,7 +2096,7 @@ func (cf *changeFrontier) createPerTableProtectedTimestampRecords(
 			return err
 		}
 		ptr := createProtectedTimestampRecord(
-			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, tableHighWater,
+			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, tableHighWater, false, /* includeSystemTables */
 		)
 		uuid := ptr.ID.GetUUID()
 		ptsEntries.LaggingTablesRecords[tableID] = &uuid
@@ -2189,6 +2189,7 @@ func (cf *changeFrontier) advancePrimaryProtectedTimestamp(
 	if err := pts.UpdateTimestamp(ctx, ptsEntries.PrimaryRecord, timestamp); err != nil {
 		return false, err
 	}
+
 	return true, nil
 }
 

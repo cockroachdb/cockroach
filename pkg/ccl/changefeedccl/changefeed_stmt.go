@@ -14,8 +14,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -321,7 +321,7 @@ func changefeedPlanHook(
 			recordPTSMetricsTime := sliMetrics.Timers.PTSCreate.Start()
 
 			var ptr *ptpb.Record
-			var ptrs *changefeedpb.ProtectedTimestampRecords
+			var ptrs *cdcprogresspb.ProtectedTimestampRecords
 			var primaryRecord *ptpb.Record
 			var systemTablesRecord *ptpb.Record
 
@@ -333,8 +333,8 @@ func changefeedPlanHook(
 			writingMultiplePTS := perTableTrackingEnabled && perTableProtectedTimestampsEnabled
 			if writingMultiplePTS {
 				primaryRecord = createProtectedTimestampRecord(ctx, codec, jobID, targets, details.StatementTime, false)
-				systemTablesRecord = createSystemTablesProtectedTimestampRecord(ctx, p.ExecCfg().Codec, jobID, details.StatementTime)
-				ptrs = &changefeedpb.ProtectedTimestampRecords{
+				systemTablesRecord = createSystemTablesProtectedTimestampRecord(ctx, p.ExecCfg().Codec, jobID, details.StatementTime.AddDuration(-2*time.Hour))
+				ptrs = &cdcprogresspb.ProtectedTimestampRecords{
 					PrimaryRecord:      primaryRecord.ID.GetUUID(),
 					SystemTablesRecord: systemTablesRecord.ID.GetUUID(),
 				}
@@ -361,6 +361,7 @@ func changefeedPlanHook(
 				if err != nil {
 					return err
 				}
+
 				if ptr != nil {
 					pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 					if err := pts.Protect(ctx, ptr); err != nil {
@@ -1838,12 +1839,30 @@ func (b *changefeedResumer) OnFailOrCancel(
 	exec := jobExec.(sql.JobExecContext)
 	execCfg := exec.ExecCfg()
 	progress := b.job.Progress()
-	b.maybeCleanUpProtectedTimestamp(
-		ctx,
-		execCfg.InternalDB,
-		execCfg.ProtectedTimestampProvider,
-		progress.GetChangefeed().ProtectedTimestampRecord,
-	)
+
+	maybeCleanUpProtectedTimestamp := func(ptsID uuid.UUID) {
+		b.maybeCleanUpProtectedTimestamp(
+			ctx,
+			execCfg.InternalDB,
+			execCfg.ProtectedTimestampProvider,
+			ptsID,
+		)
+	}
+	maybeCleanUpProtectedTimestamp(progress.GetChangefeed().ProtectedTimestampRecord)
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		ptsEntries := cdcprogresspb.ProtectedTimestampRecords{}
+		if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, b.job.ID()); err != nil {
+			return err
+		}
+		maybeCleanUpProtectedTimestamp(ptsEntries.PrimaryRecord)
+		maybeCleanUpProtectedTimestamp(ptsEntries.SystemTablesRecord)
+		for _, laggingTableRecord := range ptsEntries.LaggingTablesRecords {
+			maybeCleanUpProtectedTimestamp(*laggingTableRecord)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
 
 	var numTargets uint
 	if b.job != nil {

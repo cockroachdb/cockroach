@@ -249,11 +249,6 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
-		// We need to disable per-table PTS records for this test so that we can
-		// make assertions about the PTS records.
-		changefeedbase.PerTableProtectedTimestamps.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, false)
-
 		sysDB.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'`)
 		sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 		sqlDB.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 100`)
@@ -384,10 +379,10 @@ func TestChangefeedAlterPTS(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
-		// We need to disable per-table PTS records for this test so that we can
-		// make assertions about the PTS records.
-		changefeedbase.PerTableProtectedTimestamps.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, false)
+
+		perTablePTSEnabled :=
+			changefeedbase.PerTableProtectedTimestamps.Get(&s.Server.ClusterSettings().SV) &&
+				changefeedbase.TrackPerTableProgress.Get(&s.Server.ClusterSettings().SV)
 
 		f2 := feed(t, f, `CREATE CHANGEFEED FOR table foo with protect_data_from_gc_on_pause,
 			resolved='1s', min_checkpoint_frequency='1s'`)
@@ -406,7 +401,13 @@ func TestChangefeedAlterPTS(t *testing.T) {
 
 		_, _ = expectResolvedTimestamp(t, f2)
 
-		require.Equal(t, 1, getNumPTSRecords())
+		expectedNumPTSRecords := func() int {
+			if perTablePTSEnabled {
+				return 2
+			}
+			return 1
+		}()
+		require.Equal(t, expectedNumPTSRecords, getNumPTSRecords())
 
 		require.NoError(t, jobFeed.Pause())
 		sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d ADD TABLE foo2 with initial_scan='yes'", jobFeed.JobID()))
@@ -414,7 +415,7 @@ func TestChangefeedAlterPTS(t *testing.T) {
 
 		_, _ = expectResolvedTimestamp(t, f2)
 
-		require.Equal(t, 1, getNumPTSRecords())
+		require.Equal(t, expectedNumPTSRecords, getNumPTSRecords())
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
@@ -747,8 +748,9 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
-		// We need to disable per-table PTS records for this test so that we can
-		// make assertions about the PTS records.
+
+		// No per-table PTS records should be created without targets, so none
+		// will need to be migrated.
 		changefeedbase.PerTableProtectedTimestamps.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, false)
 
@@ -868,8 +870,8 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 
-		// We need to disable per-table PTS records for this test so that we can
-		// make assertions about the PTS records.
+		// No per-table PTS records should be created with the old style PTS record
+		// format, so none will need to be migrated.
 		changefeedbase.PerTableProtectedTimestamps.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, false)
 
@@ -1157,6 +1159,9 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 					if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID()); err != nil {
 						return err
 					}
+
+					require.NotEqual(t, uuid.Nil, ptsEntries.PrimaryRecord)
+					require.NotEqual(t, uuid.Nil, ptsEntries.SystemTablesRecord)
 
 					if len(ptsEntries.LaggingTablesRecords) != len(expectedTables) {
 						return errors.Newf("expected %d per-table PTS records, got %d", len(expectedTables), len(ptsEntries.LaggingTablesRecords))
