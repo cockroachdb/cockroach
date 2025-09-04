@@ -4380,6 +4380,10 @@ func (m *sessionDataMutator) SetEnableScrubJob(val bool) {
 	m.data.EnableScrubJob = val
 }
 
+func (m *sessionDataMutator) SetEnableInspectCommand(val bool) {
+	m.data.EnableInspectCommand = val
+}
+
 func (m *sessionDataMutator) SetInitialRetryBackoffForReadCommitted(val time.Duration) {
 	m.data.InitialRetryBackoffForReadCommitted = val
 }

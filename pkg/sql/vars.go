@@ -4256,6 +4256,23 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// CockroachDB extension.
+	`enable_inspect_command`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_inspect_command`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_inspect_command", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnableInspectCommand(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableInspectCommand), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	// CockroachDB extension. Configures the initial backoff duration for
 	// automatic retries of statements in explicit READ COMMITTED transactions
 	// that see a transaction retry error. For statements experiencing contention
