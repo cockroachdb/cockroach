@@ -97,4 +97,9 @@ const (
 	// DanglingSecondaryIndexEntry occurs when a secondary index entry exists
 	// but the corresponding row in the primary index is missing.
 	DanglingSecondaryIndexEntry inspectErrorType = "dangling_secondary_index_entry"
+
+	// InternalError occurs when an internal error (e.g., data corruption, encoding
+	// issues) prevents the check from completing normally. These errors indicate
+	// potential data corruption or other serious issues that require investigation.
+	InternalError inspectErrorType = "internal_error"
 )

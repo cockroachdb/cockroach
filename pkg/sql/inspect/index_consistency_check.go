@@ -49,6 +49,10 @@ type indexConsistencyCheck struct {
 	// queries join. The actual resulting rows from the RowContainer is
 	// twice this plus the error_type column.
 	columns []catalog.Column
+
+	// lastQuery stores the SQL query executed for this check to help
+	// debug internal errors by providing context about the span bounds.
+	lastQuery string
 }
 
 var _ inspectCheck = (*indexConsistencyCheck)(nil)
@@ -190,6 +194,9 @@ func (c *indexConsistencyCheck) Start(
 		colNames(pkColumns), colNames(otherColumns), c.tableDesc.GetID(), c.secIndex, c.priIndex.GetID(), predicate,
 	)
 
+	// Store the query for error reporting
+	c.lastQuery = checkQuery
+
 	it, err := c.flowCtx.Cfg.DB.Executor().QueryIteratorEx(
 		ctx, "inspect-index-consistency-check", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
@@ -221,7 +228,29 @@ func (c *indexConsistencyCheck) Next(
 
 	ok, err := c.rowIter.Next(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "fetching next row in index consistency check")
+		// Close the iterator to prevent further usage. The close may emit the
+		// internal error too, but we only need to capture it once.
+		_ = c.Close(ctx)
+		c.exhaustedIter = true
+
+		// Convert internal errors to inspect issues rather than failing the entire job.
+		// This allows us to capture and log data corruption or encoding errors as
+		// structured issues for investigation.
+		details := make(map[redact.RedactableString]interface{})
+		details["error_message"] = err.Error()
+		details["error_type"] = "internal_query_error"
+		details["index_name"] = c.secIndex.GetName()
+		details["query"] = c.lastQuery // Store the query that caused the error
+
+		return &inspectIssue{
+			ErrorType: InternalError,
+			// TODO(148573): Use the timestamp that we create a protected timestamp for.
+			AOST:       timeutil.Now(),
+			DatabaseID: c.tableDesc.GetParentID(),
+			SchemaID:   c.tableDesc.GetParentSchemaID(),
+			ObjectID:   c.tableDesc.GetID(),
+			Details:    details,
+		}, nil
 	}
 	if !ok {
 		c.exhaustedIter = true
@@ -303,10 +332,12 @@ func (c *indexConsistencyCheck) Done(context.Context) bool {
 // Close implements the inspectCheck interface.
 func (c *indexConsistencyCheck) Close(context.Context) error {
 	if c.rowIter != nil {
-		if err := c.rowIter.Close(); err != nil {
+		// Clear the iter ahead of close to ensure we only attempt the close once.
+		it := c.rowIter
+		c.rowIter = nil
+		if err := it.Close(); err != nil {
 			return errors.Wrap(err, "closing index consistency check iterator")
 		}
-		c.rowIter = nil
 	}
 	return nil
 }
