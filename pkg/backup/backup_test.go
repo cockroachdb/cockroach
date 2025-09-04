@@ -3603,9 +3603,11 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	sqlDB.Exec(t, `ALTER TABLE data.bank ADD COLUMN points_balance INT DEFAULT 50`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[5])
 
+	sqlDB.Exec(t, "ALTER TABLE data.bank SET (schema_locked=false)")
 	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
 	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
 	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
+	sqlDB.Exec(t, "ALTER TABLE data.bank SET (schema_locked=true)")
 	sqlDB.Exec(t, `CREATE TABLE other.sometable AS SELECT * FROM data.sometable`)
 	sqlDB.Exec(t, `DROP TABLE data.sometable`)
 	sqlDB.Exec(t, `CREATE INDEX ON data.teller (name)`)
@@ -3613,7 +3615,9 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO data.teller VALUES (2, 'craig')`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[6])
 
+	sqlDB.Exec(t, "ALTER TABLE data.bank SET (schema_locked=false)")
 	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
+	sqlDB.Exec(t, "ALTER TABLE data.bank SET (schema_locked=true)")
 	sqlDB.Exec(t, `INSERT INTO data.bank VALUES (2, 2), (4, 4)`)
 	sqlDB.Exec(t, `DROP TABLE other.sometable`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[7])
@@ -5037,7 +5041,9 @@ func TestBackupRestoreIncrementalTruncateTable(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO data.t VALUES ('before')`)
 	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, full)
 	sqlDB.Exec(t, `UPDATE data.t SET s = 'after'`)
+	sqlDB.Exec(t, "ALTER TABLE data.t SET (schema_locked=false)")
 	sqlDB.Exec(t, `TRUNCATE data.t`)
+	sqlDB.Exec(t, "ALTER TABLE data.t SET (schema_locked=true)")
 
 	sqlDB.Exec(t, "BACKUP DATABASE data INTO $1", full)
 }

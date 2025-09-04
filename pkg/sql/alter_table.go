@@ -2558,6 +2558,11 @@ func (p *planner) checkSchemaChangeIsAllowed(
 		return sqlerrors.NewSchemaChangeOnLockedTableErr(desc.GetName())
 	}
 	if len(desc.TableDesc().LDRJobIDs) > 0 {
+		// Truncates are excluded for LDR.
+		switch n.(type) {
+		case *tree.Truncate:
+			return nil
+		}
 		var virtualColNames []string
 		for _, col := range desc.NonDropColumns() {
 			if col.IsVirtual() {
