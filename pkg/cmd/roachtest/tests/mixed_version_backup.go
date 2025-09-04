@@ -2964,6 +2964,12 @@ func registerBackupMixedVersion(r registry.Registry) {
 			// is no longer backwards compatible after #149374, so we need to use the same
 			// version as the cockroach cluster.
 			// TODO(testeng): Replace with https://github.com/cockroachdb/cockroach/issues/147374
+			// Background workload, arc over whole test, starts when tests start
+			// This one would need to be lowest compatible version (from version)
+
+			// What if someone wanted to use something fancy from a newer version
+			// No one will use a new workload feature in the background (Herko hopes)
+
 			stopBank := mvt.Workload("bank", c.WorkloadNode(), bankInit, bankRun, true /* overrideBinary */)
 			stopTPCC := mvt.Workload("tpcc", c.WorkloadNode(), tpccInit, tpccRun, false /* overrideBinary */)
 			stopSystemWriter := mvt.BackgroundFunc("system table writer", backupTest.systemTableWriter)
@@ -3014,7 +3020,7 @@ func bankWorkloadCmd(
 		bankPayload = 9
 		bankRows = 10
 	}
-
+	// This binary "./cockroach" is the bootstrap version (not master?)
 	init = roachtestutil.NewCommand("./cockroach workload init bank").
 		Flag("rows", bankRows).
 		MaybeFlag(bankPayload != 0, "payload-bytes", bankPayload).

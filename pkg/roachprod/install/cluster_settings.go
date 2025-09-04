@@ -16,13 +16,14 @@ import (
 
 // ClusterSettings contains various knobs that affect operations on a cluster.
 type ClusterSettings struct {
-	Binary        string
-	Secure        bool
-	PGUrlCertsDir string
-	Env           []string
-	Tag           string
-	UseTreeDist   bool
-	NumRacks      int
+	Binary         string // Need to change this to Cockroach Binary because I'm adding workload binary
+	WorkloadBinary string
+	Secure         bool
+	PGUrlCertsDir  string
+	Env            []string
+	Tag            string
+	UseTreeDist    bool
+	NumRacks       int
 	// DebugDir is used to stash debug information.
 	DebugDir string
 	// ClusterSettings are, eh, actual cluster settings, i.e.

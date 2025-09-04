@@ -840,6 +840,9 @@ func (t *Test) BackgroundCommand(
 // be replaced with the cockroach binary of the current version the
 // cluster is running in.
 // TODO(testeng): Replace with https://github.com/cockroachdb/cockroach/issues/147374
+// The binary used to run the command(s) will always of the current version the
+// cluster is running in because the workload binary isn't guaranteed to be
+// backwards compatible
 func (t *Test) Workload(
 	name string,
 	node option.NodeListOption,
@@ -857,6 +860,9 @@ func (t *Test) Workload(
 		addSeed(initCmd)
 		t.OnStartup(fmt.Sprintf("initialize %s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
 			if overrideBinary {
+				// Originally this block would only execute if overrideBinary (arg) was true
+				// Actually, instead of overriding the initCmd.Binary like this, I should just always set it to be the cluster version
+				// to begin with.
 				binary, err := clusterupgrade.UploadCockroach(ctx, t.rt, t.logger, t.cluster, node, h.System.FromVersion)
 				if err != nil {
 					t.rt.Fatal(err)

@@ -31,6 +31,9 @@ type Command struct {
 func NewCommand(format string, args ...interface{}) *Command {
 	cmd := fmt.Sprintf(format, args...)
 	parts := strings.Fields(cmd)
+	//if parts[1] == "workload" {
+	//	return newWorkloadCommand(cmd, parts)
+	//}
 	return &Command{
 		Binary:    parts[0],
 		Arguments: parts[1:],
@@ -135,3 +138,12 @@ func (c *Command) String() string {
 func stringP(s string) *string {
 	return &s
 }
+
+//// newWorkloadCommand overrides the binary
+//func newWorkloadCommand(cmd string, parts []string) *Command {
+//	return &Command{
+//		Binary:    parts[0],
+//		Arguments: parts[1:],
+//		Flags:     make(map[string]*string),
+//	}
+//}
