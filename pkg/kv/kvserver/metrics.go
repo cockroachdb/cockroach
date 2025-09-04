@@ -2172,26 +2172,6 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	metaReplicateQueueEnqueueSuccesses = metric.Metadata{
-		Name:        "queue.replicate.enqueue.success",
-		Help:        "Number of replicas successfully enqueued by the replicate queue",
-		Measurement: "Replicas",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueEnqueueFailures = metric.Metadata{
-		Name: "queue.replicate.enqueue.failure",
-		Help: "Number of replicas which attempted to be enqueued but failed " +
-			"to do so in the replicate queue",
-		Measurement: "Replicas",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueEnqueueSkipped = metric.Metadata{
-		Name: "queue.replicate.enqueue.skipped",
-		Help: "Number of replicas which didn't attempt to be enqueued but returned " +
-			"early during maybeAdd in the replicate queue",
-		Measurement: "Replicas",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaLeaseQueueSuccesses = metric.Metadata{
 		Name:        "queue.lease.process.success",
 		Help:        "Number of replicas successfully processed by the replica lease queue",
@@ -3240,9 +3220,6 @@ type StoreMetrics struct {
 	ReplicaGCQueueFailures                    *metric.Counter
 	ReplicaGCQueuePending                     *metric.Gauge
 	ReplicaGCQueueProcessingNanos             *metric.Counter
-	ReplicateQueueEnqueueSuccesses            *metric.Counter
-	ReplicateQueueEnqueueFailures             *metric.Counter
-	ReplicateQueueEnqueueSkipped              *metric.Counter
 	ReplicateQueueSuccesses                   *metric.Counter
 	ReplicateQueueFailures                    *metric.Counter
 	ReplicateQueuePending                     *metric.Gauge
@@ -4037,9 +4014,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaGCQueueFailures:                    metric.NewCounter(metaReplicaGCQueueFailures),
 		ReplicaGCQueuePending:                     metric.NewGauge(metaReplicaGCQueuePending),
 		ReplicaGCQueueProcessingNanos:             metric.NewCounter(metaReplicaGCQueueProcessingNanos),
-		ReplicateQueueEnqueueSuccesses:            metric.NewCounter(metaReplicateQueueEnqueueSuccesses),
-		ReplicateQueueEnqueueFailures:             metric.NewCounter(metaReplicateQueueEnqueueFailures),
-		ReplicateQueueEnqueueSkipped:              metric.NewCounter(metaReplicateQueueEnqueueSkipped),
 		ReplicateQueueSuccesses:                   metric.NewCounter(metaReplicateQueueSuccesses),
 		ReplicateQueueFailures:                    metric.NewCounter(metaReplicateQueueFailures),
 		ReplicateQueuePending:                     metric.NewGauge(metaReplicateQueuePending),

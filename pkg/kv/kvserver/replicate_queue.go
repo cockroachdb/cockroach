@@ -611,9 +611,6 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			// to consulting the setting which controls the minimum timeout.
 			processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
 			successes:          store.metrics.ReplicateQueueSuccesses,
-			enqueueSuccesses:   store.metrics.ReplicateQueueEnqueueSuccesses,
-			enqueueFailures:    store.metrics.ReplicateQueueEnqueueFailures,
-			enqueueSkipped:     store.metrics.ReplicateQueueEnqueueSkipped,
 			failures:           store.metrics.ReplicateQueueFailures,
 			pending:            store.metrics.ReplicateQueuePending,
 			full:               store.metrics.ReplicateQueueFull,

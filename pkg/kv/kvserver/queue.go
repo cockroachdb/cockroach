@@ -388,13 +388,6 @@ type queueConfig struct {
 	processDestroyedReplicas bool
 	// processTimeout returns the timeout for processing a replica.
 	processTimeoutFunc queueProcessTimeoutFunc
-	// successes is a counter of replicas enqueued successfully.
-	enqueueSuccesses *metric.Counter
-	// failures is a counter of replicas that tries to enqueue but fails to do so.
-	enqueueFailures *metric.Counter
-	// enqueueSkipped is a counter of replicas that didn't attempt to enqueue but
-	// returned early during maybeAdd.
-	enqueueSkipped *metric.Counter
 	// successes is a counter of replicas processed successfully.
 	successes *metric.Counter
 	// failures is a counter of replicas which failed processing.
@@ -719,35 +712,15 @@ func (bq *baseQueue) Async(
 	return nil
 }
 
-// updateMetricsOnEnqueueSkipped increments the enqueueSkipped metric if it is
-// not nil.
-func (bq *baseQueue) updateMetricsOnEnqueueSkipped() {
-	if bq.enqueueSkipped != nil {
-		bq.enqueueSkipped.Inc(1)
-	}
-}
-
-// updateMetricsOnEnqueueResult increments the enqueueSuccesses or enqueueFailures
-// metric if it is not nil.
-func (bq *baseQueue) updateMetricsOnEnqueueResult(success bool) {
-	if success && bq.enqueueSuccesses != nil {
-		bq.enqueueSuccesses.Inc(1)
-	} else if !success && bq.enqueueFailures != nil {
-		bq.enqueueFailures.Inc(1)
-	}
-}
-
 // MaybeAddAsync offers the replica to the queue. The queue will only process a
 // certain number of these operations concurrently, and will drop (i.e. treat as
 // a noop) any additional calls.
 func (bq *baseQueue) MaybeAddAsync(
 	ctx context.Context, repl replicaInQueue, now hlc.ClockTimestamp,
 ) {
-	if err := bq.Async(ctx, "MaybeAdd", false /* wait */, func(ctx context.Context, h queueHelper) {
+	_ = bq.Async(ctx, "MaybeAdd", false /* wait */, func(ctx context.Context, h queueHelper) {
 		h.MaybeAdd(ctx, repl, now)
-	}); err != nil {
-		bq.updateMetricsOnEnqueueSkipped()
-	}
+	})
 }
 
 // AddAsyncWithCallback is the same as AddAsync, but allows the caller to
@@ -790,7 +763,6 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	bq.mu.Unlock()
 
 	if stopped {
-		bq.updateMetricsOnEnqueueSkipped()
 		return
 	}
 
@@ -800,7 +772,6 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		// through the queue.
 		bypassDisabled := bq.store.TestingKnobs().BaseQueueDisabledBypassFilter
 		if bypassDisabled == nil || !bypassDisabled(repl.GetRangeID()) {
-			bq.updateMetricsOnEnqueueSkipped()
 			return
 		}
 	}
@@ -808,7 +779,6 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	// Load the system config if it's needed.
 	confReader, err := bq.replicaCanBeProcessed(ctx, repl, false /* acquireLeaseIfNeeded */)
 	if err != nil {
-		bq.updateMetricsOnEnqueueSkipped()
 		return
 	}
 
@@ -818,7 +788,6 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	realRepl, _ := repl.(*Replica)
 	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, confReader)
 	if !should {
-		bq.updateMetricsOnEnqueueSkipped()
 		return
 	}
 
@@ -827,12 +796,10 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		hasExternal, err := realRepl.HasExternalBytes()
 		if err != nil {
 			log.Dev.Warningf(ctx, "could not determine if %s has external bytes: %s", realRepl, err)
-			bq.updateMetricsOnEnqueueSkipped()
 			return
 		}
 		if hasExternal {
 			log.Dev.VInfof(ctx, 1, "skipping %s for %s because it has external bytes", bq.name, realRepl)
-			bq.updateMetricsOnEnqueueSkipped()
 			return
 		}
 	}
@@ -876,7 +843,6 @@ func (bq *baseQueue) addInternal(
 	defer func() {
 		if err != nil {
 			cb.onEnqueueResult(-1 /* indexOnHeap */, err)
-            bq.updateMetricsOnEnqueueResult(added)
 		}
 	}()
 	// NB: this is intentionally outside of bq.mu to avoid having to consider
