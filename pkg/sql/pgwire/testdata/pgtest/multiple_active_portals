@@ -1455,7 +1455,7 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Query {"String": "CREATE TABLE IF NOT EXISTS tbl (x timestamp, y int);"}
+Query {"String": "CREATE TABLE IF NOT EXISTS tbl (x timestamp, y int) WITH (schema_locked=false);"}
 Query {"String": "TRUNCATE tbl;"}
 Query {"String": "CREATE OR REPLACE PROCEDURE insert_one() LANGUAGE PLpgSQL AS $$ BEGIN INSERT INTO tbl (x, y) VALUES (now(), 1); END; $$;"}
 ----
@@ -1532,10 +1532,10 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Query {"String": "CREATE TABLE IF NOT EXISTS sensors (id TEXT NOT NULL, ts TIMESTAMPTZ NOT NULL, val FLOAT8 NULL, CONSTRAINT s_pk PRIMARY KEY (id, ts));"}
+Query {"String": "CREATE TABLE IF NOT EXISTS sensors (id TEXT NOT NULL, ts TIMESTAMPTZ NOT NULL, val FLOAT8 NULL, CONSTRAINT s_pk PRIMARY KEY (id, ts)) WITH (schema_locked=false);"}
 Query {"String": "TRUNCATE sensors;"}
 Query {"String": "INSERT INTO sensors values ('a', now(), 0.1);"}
-Query {"String": "CREATE TABLE IF NOT EXISTS sensors_summary (id TEXT NOT NULL, val FLOAT8 NULL, CONSTRAINT ss_pk PRIMARY KEY (id));"}
+Query {"String": "CREATE TABLE IF NOT EXISTS sensors_summary (id TEXT NOT NULL, val FLOAT8 NULL, CONSTRAINT ss_pk PRIMARY KEY (id)) WITH (schema_locked=false);"}
 Query {"String": "TRUNCATE sensors_summary;"}
 Query {"String": "CREATE TYPE IF NOT EXISTS k AS (x TEXT, y FLOAT8);"}
 ----

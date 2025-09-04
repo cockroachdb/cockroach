@@ -59,6 +59,8 @@ func IsAllowedLDRSchemaChange(n Statement, virtualColNames []string, kvWriterEna
 		return true
 	case *SetZoneConfig:
 		return true
+	case *Truncate:
+		return true
 	case *AlterTable:
 		onlySafeStorageParams := true
 		for _, cmd := range s.Cmds {

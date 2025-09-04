@@ -803,6 +803,8 @@ func TestLogicalReplicationWithPhantomDelete(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	serverAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	serverASQL.Exec(t, "ALTER TABLE tab SET (schema_locked = false)")
+	serverBSQL.Exec(t, "ALTER TABLE tab SET (schema_locked = false)")
 
 	for _, mode := range []string{"validated", "immediate"} {
 		t.Run(mode, func(t *testing.T) {

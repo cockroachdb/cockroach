@@ -678,6 +678,8 @@ func TestTruncateTable(t *testing.T) {
 			_, err := db.ExecContext(ctx, createTable)
 			message := fmt.Sprintf("tenant=%s", tenant)
 			require.NoErrorf(t, err, message)
+			_, err = db.ExecContext(ctx, "ALTER TABLE t SET (schema_locked=false)")
+			require.NoErrorf(t, err, message)
 			_, err = db.ExecContext(ctx, "ALTER TABLE t SPLIT AT VALUES (1);")
 			require.NoErrorf(t, err, message)
 

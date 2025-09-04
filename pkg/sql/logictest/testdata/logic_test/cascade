@@ -2195,7 +2195,43 @@ c3-pk3-b2-pk2  NULL
 c3-pk4-b2-pk2  NULL
 
 statement ok
+ALTER TABLE c3 SET (schema_locked=false)
+
+statement ok
+ALTER TABLE c2 SET (schema_locked=false)
+
+statement ok
+ALTER TABLE c1 SET (schema_locked=false)
+
+statement ok
+ALTER TABLE b2 SET (schema_locked=false)
+
+statement ok
+ALTER TABLE b1 SET (schema_locked=false)
+
+statement ok
+ALTER TABLE a SET (schema_locked=false)
+
+statement ok
 TRUNCATE c3, c2, c1, b2, b1, a;
+
+statement ok
+ALTER TABLE c3 RESET (schema_locked)
+
+statement ok
+ALTER TABLE c2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE c1 RESET (schema_locked)
+
+statement ok
+ALTER TABLE b2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE b1 RESET (schema_locked)
+
+statement ok
+ALTER TABLE a RESET (schema_locked)
 
 # Clean up after the test.
 statement ok
@@ -2742,7 +2778,45 @@ c3-pk3-b2-pk2  b2-default
 c3-pk4-b2-pk2  b2-default
 
 statement ok
+
+statement ok
+ALTER TABLE c3 SET (schema_locked=false)
+
+statement ok
+ALTER TABLE c2 SET (schema_locked=false)
+
+statement ok
+ALTER TABLE c1 SET (schema_locked=false)
+
+statement ok
+ALTER TABLE b2 SET (schema_locked=false)
+
+statement ok
+ALTER TABLE b1 SET (schema_locked=false)
+
+statement ok
+ALTER TABLE a SET (schema_locked=false)
+
+statement ok
 TRUNCATE c3, c2, c1, b2, b1, a;
+
+statement ok
+ALTER TABLE c3 RESET (schema_locked)
+
+statement ok
+ALTER TABLE c2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE c1 RESET (schema_locked)
+
+statement ok
+ALTER TABLE b2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE b1 RESET (schema_locked)
+
+statement ok
+ALTER TABLE a RESET (schema_locked)
 
 # Clean up after the test.
 statement ok
@@ -3454,11 +3528,23 @@ SELECT * FROM a ORDER BY x;
 ----
 x    y
 
+statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
+ALTER TABLE a SET (schema_locked=false);
+
 # Now try the same with inserts
 statement ok
 TRUNCATE b, a;
 INSERT INTO a VALUES (NULL, NULL), (NULL, 4), (5, NULL), (6, 6);
 INSERT INTO b VALUES (NULL, NULL), (NULL, 4), (5, NULL), (6, 6);
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
+
+statement ok
+ALTER TABLE a RESET (schema_locked);
 
 # For this, only x=6,y=6 should cascade.
 statement ok
@@ -3525,11 +3611,23 @@ SELECT * FROM a ORDER BY x;
 ----
 x    y
 
+statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
+ALTER TABLE a SET (schema_locked=false);
+
 # Now try the same with updates.
 statement ok
 TRUNCATE b, a;
 INSERT INTO a VALUES (NULL, NULL), (NULL, 4), (5, NULL), (6, 6);
 INSERT INTO b VALUES (NULL, NULL), (6, 6);
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
+
+statement ok
+ALTER TABLE a RESET (schema_locked);
 
 # For this test, only x=6,y=6 should cascade.
 statement ok

@@ -503,7 +503,7 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 
 	sqlRunner.Exec(t, `CREATE DATABASE t;`)
-	sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v)) WITH (schema_locked=false);`)
 
 	// read table descriptor
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
@@ -525,7 +525,7 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 				// Init table with some entries.
 				sqlRunner.Exec(t, `TRUNCATE TABLE t.test`)
 				sqlRunner.Exec(t, `DROP TABLE t.test;`)
-				sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));`)
+				sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v)) WITH (schema_locked=false);`)
 				// read table descriptor
 				mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
 					kvDB, server.Codec(), "t", "test")
@@ -705,7 +705,7 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 				}
 				// Init table to start state.
 				sqlRunner.Exec(t, `DROP TABLE t.test;`)
-				sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k),FAMILY (v), FAMILY (i));`)
+				sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k),FAMILY (v), FAMILY (i)) WITH (schema_locked=false);`)
 				sqlRunner.Exec(t, `CREATE INDEX allidx ON t.test (k, v);`)
 				if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
 					t.Fatal(err)
