@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -144,6 +145,10 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 		// expectedErrRegex is the regex pattern that the error message should match.
 		// If empty then no error is expected.
 		expectedErrRegex string
+		// expectedInternalErrorPatterns contains patterns for validating internal error details.
+		// Each element corresponds to the issue at the same index in expectedIssues.
+		// For non-internal-error issues, the corresponding element should be nil.
+		expectedInternalErrorPatterns []map[string]string
 	}{
 		{
 			desc: "happy path sanity",
@@ -192,16 +197,24 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 			expectedErrRegex: expectedInspectFoundInconsistencies,
 		},
 		{
-			desc:          "2 ranges, secondary index on 'a', 1 dangling entry",
+			desc:          "2 ranges, secondary index on 'a', 1 dangling entry with internal error",
 			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
 			indexDDL: []string{
 				"CREATE INDEX idx_t_a ON test.t (a) STORING (f)",
 			},
 			danglingIndexEntryInsertQuery: "SELECT 3, 30, 300, 'd_3', 'e_3', -56.712",
-			// TODO(148299): We eventually want to detect internal errors. Currently
-			// this test passes by expecting the internal error pattern rather than
-			// detecting the dangling entry.
-			expectedErrRegex: "error decoding 6 bytes: float64 value should be exactly 8 bytes: 5",
+			expectedIssues: []inspectIssue{
+				{ErrorType: "internal_error"},
+			},
+			expectedErrRegex: expectedInspectFoundInconsistencies,
+			expectedInternalErrorPatterns: []map[string]string{
+				{
+					"error_message": "error decoding.*float64",
+					"error_type":    "internal_query_error",
+					"index_name":    "idx_t_a",
+					"query":         "FROM.*table_",
+				},
+			},
 		},
 		{
 			desc:          "2 ranges, secondary index on 'b' storing 'f', 1 dangling entry",
@@ -368,6 +381,28 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 				require.NotEqual(t, 0, foundIssue.SchemaID, "expected issue to have a schema ID: %s", expectedIssue)
 				require.NotEqual(t, 0, foundIssue.ObjectID, "expected issue to have an object ID: %s", expectedIssue)
 				require.NotEqual(t, time.Time{}, foundIssue.AOST, "expected issue to have an AOST time: %s", expectedIssue)
+
+				// Additional validation for internal errors
+				if foundIssue.ErrorType == "internal_error" {
+					require.NotNil(t, foundIssue.Details, "internal error should have details")
+
+					// Validate patterns if provided for this specific issue
+					if tc.expectedInternalErrorPatterns != nil && i < len(tc.expectedInternalErrorPatterns) &&
+						tc.expectedInternalErrorPatterns[i] != nil {
+						expectedPatterns := tc.expectedInternalErrorPatterns[i]
+
+						// Validate each expected pattern
+						for detailKey, expectedPattern := range expectedPatterns {
+							redactableKey := redact.RedactableString(detailKey)
+							require.Contains(t, foundIssue.Details, redactableKey, "internal error should contain detail key: %s", detailKey)
+
+							detailValue, ok := foundIssue.Details[redactableKey].(string)
+							require.True(t, ok, "detail value for key %s should be a string", detailKey)
+							require.Regexp(t, expectedPattern, detailValue,
+								"detail %s should match pattern %s, got: %s", detailKey, expectedPattern, detailValue)
+						}
+					}
+				}
 			}
 
 			// Validate job status matches expected outcome

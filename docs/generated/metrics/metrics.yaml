@@ -13903,6 +13903,38 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.enqueue.add
+      exported_name: queue_replicate_enqueue_add
+      description: Number of replicas successfully added to the replicate queue
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.enqueue.failedprecondition
+      exported_name: queue_replicate_enqueue_failedprecondition
+      description: Number of replicas that failed the precondition checks and were therefore not added to the replicate queue
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.enqueue.noaction
+      exported_name: queue_replicate_enqueue_noaction
+      description: Number of replicas for which ShouldQueue determined no action was needed and were therefore not added to the replicate queue
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.enqueue.unexpectederror
+      exported_name: queue_replicate_enqueue_unexpectederror
+      description: Number of replicas that were expected to be enqueued (ShouldQueue returned true or the caller decided to add to the replicate queue directly), but failed to be enqueued due to unexpected errors
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: queue.replicate.nonvoterpromotions
       exported_name: queue_replicate_nonvoterpromotions
       description: Number of non-voters promoted to voters by the replicate queue
@@ -15342,10 +15374,46 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.enqueue.failure
+      exported_name: ranges_decommissioning_nudger_enqueue_failure
+      labeled_name: ranges.decommissioning.nudger.enqueue.failure
+      description: Number of ranges that failed to enqueue at the replicate queue
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.enqueue.success
+      exported_name: ranges_decommissioning_nudger_enqueue_success
+      labeled_name: ranges.decommissioning.nudger.enqueue.success
+      description: Number of ranges that were successfully enqueued by the decommisioning nudger
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: ranges.decommissioning.nudger.not_leaseholder_or_invalid_lease
       exported_name: ranges_decommissioning_nudger_not_leaseholder_or_invalid_lease
       labeled_name: ranges.decommissioning.nudger.not_leaseholder_or_invalid_lease
-      description: Number of enqueues of a range for decommissioning by the decommissioning nudger that were not the leaseholder or had an invalid lease
+      description: Number of ranges that were not the leaseholder or had an invalid lease at the decommissioning nudger
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.process.failure
+      exported_name: ranges_decommissioning_nudger_process_failure
+      labeled_name: ranges.decommissioning.nudger.process.failure
+      description: Number of ranges enqueued by the decommissioning nudger that failed to process by the replicate queue
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.process.success
+      exported_name: ranges_decommissioning_nudger_process_success
+      labeled_name: ranges.decommissioning.nudger.process.success
+      description: Number of ranges enqueued by the decommissioning nudger that were successfully processed by the replicate queue
       y_axis_label: Ranges
       type: COUNTER
       unit: COUNT
