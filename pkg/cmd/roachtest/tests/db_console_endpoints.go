@@ -9,6 +9,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
@@ -114,22 +115,24 @@ func runDBConsoleMixedVersion(ctx context.Context, t test.Test, c cluster.Cluste
 		mixedversion.MinimumSupportedVersion("v24.3.0"),
 		// Panics are problematic for the /logs endpoints, see https://github.com/cockroachdb/cockroach/issues/151493.
 		mixedversion.DisableMutators(mixedversion.PanicNode),
+		mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 	)
 
-	mvt.InMixedVersion("test db console endpoints", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-		if err := initializeSchemaAndIDs(ctx, c, t.L()); err != nil {
-			t.Fatal(err)
-		}
-		return testEndpoints(ctx, c, l, getEndpoints(t), true)
-	})
+	mvt.InMixedVersion(
+		"test db console endpoints", func(ctx context.Context, l *logger.Logger, rng *rand.Rand,
+			h *mixedversion.Helper) error {
+			if err := initializeSchemaAndIDs(ctx, c, l, h.VersionedCockroachPath(t)); err != nil {
+				t.Fatal(err)
+			}
+			return testEndpoints(ctx, c, l, getEndpoints(t), true)
+		})
 
 	mvt.Run()
 }
 
 func runDBConsole(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-
-	if err := initializeSchemaAndIDs(ctx, c, t.L()); err != nil {
+	if err := initializeSchemaAndIDs(ctx, c, t.L(), "./cockroach"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -270,9 +273,11 @@ func withRetries(ctx context.Context, opts retry.Options, f func() error) error 
 
 // initializeSchemaAndIDs ensures schema objects are created in the cluster, and determines
 // the various IDs that will be used as placeholders for the endpoints.
-func initializeSchemaAndIDs(ctx context.Context, c cluster.Cluster, l *logger.Logger) error {
+func initializeSchemaAndIDs(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger, binaryPath string,
+) error {
 	// Initialize some schema objects.
-	initTpcc := "./cockroach workload init tpcc --drop {pgurl:1}"
+	initTpcc := fmt.Sprintf("%s workload init tpcc --drop {pgurl:1}", binaryPath)
 	c.Run(ctx, option.WithNodes([]int{1}), initTpcc)
 
 	// Get SQL connection to query for a tableID, databaseID and fingerprintID.
