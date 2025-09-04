@@ -138,40 +138,11 @@ func (f *MultiFrontier[P]) PeekFrontierSpan() roachpb.Span {
 
 // Forward implements Frontier.
 func (f *MultiFrontier[P]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	partition, err := f.partitioner(span)
-	if err != nil {
-		return false, errors.Wrapf(err, "got partitioner error when attempting to forward")
-	}
-
-	frontier := f.mu.frontiers.get(partition)
-	if frontier == nil {
-		return false, nil
-	}
-
-	prevMinFrontier := f.mu.frontiers.min().Frontier()
-	forwarded, err := frontier.Forward(span, ts)
+	details, err := f.ForwardWithDetails(span, ts)
 	if err != nil {
 		return false, err
 	}
-	if forwarded {
-		if err := f.mu.frontiers.fixup(partition); err != nil {
-			return false, err
-		}
-	}
-
-	if buildutil.CrdbTestBuild && !f.mu.frontiers.valid() {
-		return false, errors.AssertionFailedf(
-			"Forward: heap invariant violated after forwarding span: %v", span)
-	}
-
-	newMinFrontier := f.mu.frontiers.min().Frontier()
-	if prevMinFrontier.Less(newMinFrontier) {
-		return true, nil
-	}
-	return false, nil
+	return details.FrontierForwarded, err
 }
 
 // Release implements Frontier.
@@ -266,6 +237,57 @@ func (f *MultiFrontier[P]) Frontiers() iter.Seq2[P, ReadOnlyFrontier] {
 			}
 		}
 	}
+}
+
+// MultiFrontierForwardDetails is the return value of
+// MultiFrontier.ForwardWithDetails.
+type MultiFrontierForwardDetails struct {
+	FrontierForwarded    bool
+	SubFrontierForwarded bool
+}
+
+// ForwardWithDetails is like Forward except it returns more details
+// about the sub-frontier being forwarded.
+func (f *MultiFrontier[P]) ForwardWithDetails(
+	span roachpb.Span, ts hlc.Timestamp,
+) (MultiFrontierForwardDetails, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	partition, err := f.partitioner(span)
+	if err != nil {
+		return MultiFrontierForwardDetails{},
+			errors.Wrapf(err, "got partitioner error when attempting to forward")
+	}
+
+	frontier := f.mu.frontiers.get(partition)
+	if frontier == nil {
+		return MultiFrontierForwardDetails{}, nil
+	}
+
+	prevMinFrontier := f.mu.frontiers.min().Frontier()
+	forwarded, err := frontier.Forward(span, ts)
+	if err != nil {
+		return MultiFrontierForwardDetails{}, err
+	}
+	if forwarded {
+		if err := f.mu.frontiers.fixup(partition); err != nil {
+			return MultiFrontierForwardDetails{}, err
+		}
+	}
+
+	if buildutil.CrdbTestBuild && !f.mu.frontiers.valid() {
+		return MultiFrontierForwardDetails{},
+			errors.AssertionFailedf("Forward: heap invariant violated after forwarding span: %v", span)
+	}
+
+	newMinFrontier := f.mu.frontiers.min().Frontier()
+	minFrontierForwarded := prevMinFrontier.Less(newMinFrontier)
+
+	return MultiFrontierForwardDetails{
+		FrontierForwarded:    minFrontierForwarded,
+		SubFrontierForwarded: forwarded,
+	}, nil
 }
 
 // partitionedMultiFrontierHeap is a wrapper around multiFrontierHeap
