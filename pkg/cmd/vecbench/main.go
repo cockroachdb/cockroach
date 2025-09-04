@@ -96,6 +96,9 @@ var flagDBConnStr = flag.String("db", "postgresql://root@localhost:26257",
 //	laion-1m-test-ip (1M vectors, 768 dims)
 //	coco-t2i-512-angular (113K vectors, 512 dims)
 //	coco-i2i-512-angular (113K vectors, 512 dims)
+//	wiki-cohere-768-100k-angular (100K vectors, 768 dims)
+//	wiki-cohere-768-1m-angular (1M vectors, 768 dims)
+//	wiki-cohere-768-10m-angular (10M vectors, 768 dims)
 //
 // After download, the datasets are cached in a local temp directory and a
 // vector index is created. The built vector index is also cached in the temp
@@ -244,20 +247,28 @@ func (vb *vectorBench) SearchIndex() {
 			panic(err)
 		}
 
-		start := timeutil.Now()
+		// Create percentile estimator for search latencies.
+		latencyEstimator := NewPercentileEstimator(1000)
 
 		// Search for test vectors.
-		var sumRecall, sumVectors, sumLeafVectors, sumFullVectors, sumPartitions float64
+		var sumRecall, sumVectors, sumLeafVectors, sumFullVectors, sumPartitions, sumElapsed float64
 		count := vb.data.Test.Count
 		for i := range count {
 			// Calculate truth set for the vector.
 			queryVector := vb.data.Test.At(i)
 
+			// Time individual search.
+			start := timeutil.Now()
 			var stats cspann.SearchStats
 			prediction, err := vb.provider.Search(vb.ctx, state, queryVector, &stats)
 			if err != nil {
 				panic(err)
 			}
+
+			// Record latency in seconds.
+			elapsed := timeutil.Since(start).Seconds()
+			sumElapsed += elapsed
+			latencyEstimator.Add(elapsed)
 
 			primaryKeys := make([]byte, maxResults*4)
 			truth := make([]cspann.KeyBytes, maxResults)
@@ -274,12 +285,18 @@ func (vb *vectorBench) SearchIndex() {
 			sumPartitions += float64(stats.PartitionCount)
 		}
 
-		elapsed := timeutil.Since(start)
-		fmt.Printf("%d\t%0.2f%%\t%0.0f\t%0.0f\t%0.2f\t%0.2f\t%0.2f\n",
+		qps := float64(count) / sumElapsed
+
+		// Calculate percentile latencies.
+		p50Latency := latencyEstimator.Estimate(0.50) * 1000
+		p95Latency := latencyEstimator.Estimate(0.95) * 1000
+		p99Latency := latencyEstimator.Estimate(0.99) * 1000
+
+		fmt.Printf("%d\t%0.2f%%\t%0.0f\t%0.0f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\n",
 			beamSize, sumRecall/float64(count)*100,
 			sumLeafVectors/float64(count), sumVectors/float64(count),
 			sumFullVectors/float64(count), sumPartitions/float64(count),
-			float64(count)/elapsed.Seconds())
+			qps, p50Latency, p95Latency, p99Latency)
 	}
 
 	fmt.Println()
@@ -290,7 +307,7 @@ func (vb *vectorBench) SearchIndex() {
 		minPartitionSize, maxPartitionSize, *flagBeamSize)
 	fmt.Println(vb.provider.FormatStats())
 
-	fmt.Printf("beam\trecall\tleaf\tall\tfull\tpartns\tqps\n")
+	fmt.Printf("beam\trecall\tleaf\tall\tfull\tpartns\tqps\tp50(ms)\tp95(ms)\tp99(ms)\n")
 
 	// Search multiple times with different search beam sizes.
 	beamSizeStrs := strings.Split(*flagSearchBeamSizes, ",")
