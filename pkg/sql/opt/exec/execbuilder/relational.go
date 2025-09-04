@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -893,10 +892,17 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 		if first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
 			b.ScanCounts[exec.ScanWithStatsForecastCount]++
 
-			// Calculate time since the forecast (or negative time until the forecast).
-			nanosSinceStatsForecasted := timeutil.Since(tab.Statistic(first).CreatedAt())
-			if nanosSinceStatsForecasted.Abs() > b.NanosSinceStatsForecasted.Abs() {
-				b.NanosSinceStatsForecasted = nanosSinceStatsForecasted
+			// Calculate time since the forecast (or negative time until the
+			// forecast).
+			// TODO: Track negative time or update the comment.
+			if t := tab.Statistic(first).CreatedAt(); t.After(b.StatsForecastedAt) {
+				b.StatsForecastedAt = t
+			}
+
+			// Find the first non-forecast full stat.
+			for first < tab.StatisticCount() &&
+				(tab.Statistic(first).IsPartial() || tab.Statistic(first).IsForecast()) {
+				first++
 			}
 
 			// Since currently 'first' points at the forecast, then usage of the
@@ -910,9 +916,8 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 		if first < tab.StatisticCount() {
 			tabStat := tab.Statistic(first)
 
-			nanosSinceStatsCollected := timeutil.Since(tabStat.CreatedAt())
-			if nanosSinceStatsCollected > b.NanosSinceStatsCollected {
-				b.NanosSinceStatsCollected = nanosSinceStatsCollected
+			if b.StatsCollectedAt.IsZero() || tabStat.CreatedAt().Before(b.StatsCollectedAt) {
+				b.StatsCollectedAt = tabStat.CreatedAt()
 			}
 
 			// Calculate another row count estimate using these (non-forecast)

@@ -156,15 +156,13 @@ type Builder struct {
 	// forecasts were not used, this should be the same as TotalScanRows.)
 	TotalScanRowsWithoutForecasts float64
 
-	// NanosSinceStatsCollected is the maximum number of nanoseconds that have
-	// passed since stats were collected on any table scanned by this query.
-	NanosSinceStatsCollected time.Duration
+	// StatsCollectedAt is the collection timestamp of the oldest statistics
+	// used for a table scanned by this query.
+	StatsCollectedAt time.Time
 
-	// NanosSinceStatsForecasted is the greatest quantity of nanoseconds that have
-	// passed since the forecast time (or until the forecast time, if the it is in
-	// the future, in which case it will be negative) for any table with
-	// forecasted stats scanned by this query.
-	NanosSinceStatsForecasted time.Duration
+	// StatsCollectedAt is the forecast timestamp of the latest statistics
+	// used for a table scanned by this query. It may be in the future.
+	StatsForecastedAt time.Time
 
 	// JoinTypeCounts records the number of times each type of logical join was
 	// used in the query, up to 255.
