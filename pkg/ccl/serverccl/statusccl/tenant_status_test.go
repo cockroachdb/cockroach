@@ -57,7 +57,11 @@ func TestTenantStatusAPI(t *testing.T) {
 	ctx := context.Background()
 
 	var knobs base.TestingKnobs
-	knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
+
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	sqlStatsKnobs.SynchronousSQLStats = true
+
+	knobs.SQLStatsKnobs = sqlStatsKnobs
 	knobs.SpanConfig = &spanconfig.TestingKnobs{
 		// Some of these subtests expect multiple (uncoalesced) tenant ranges.
 		StoreDisableCoalesceAdjacent: true,
