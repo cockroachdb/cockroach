@@ -2195,6 +2195,7 @@ func (cf *changeFrontier) advancePrimaryProtectedTimestamp(
 	if err := pts.UpdateTimestamp(ctx, progress.ProtectedTimestampRecord, timestamp); err != nil {
 		return false, err
 	}
+
 	return true, nil
 }
 
