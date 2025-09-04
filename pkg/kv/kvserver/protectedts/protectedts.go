@@ -79,6 +79,11 @@ type Storage interface {
 	// this method can be used to provide such a timestamp.
 	GetRecord(context.Context, uuid.UUID) (*ptpb.Record, error)
 
+	// GetRecords retrieves multiple records with the specified UUIDs. Records
+	// that do not exist are omitted from the result. If no records exist for
+	// the provided IDs, an empty slice is returned.
+	GetRecords(context.Context, []uuid.UUID) ([]ptpb.Record, error)
+
 	// MarkVerified will mark a protected timestamp as verified.
 	//
 	// This method is generally used by an implementation of Verifier.
@@ -101,6 +106,10 @@ type Storage interface {
 	// UpdateTimestamp updates the timestamp protected by the record with the
 	// specified UUID.
 	UpdateTimestamp(ctx context.Context, id uuid.UUID, timestamp hlc.Timestamp) error
+
+	// UpdateTimestamps updates the timestamps protected by the records with the
+	// specified UUIDs and timestamps.
+	UpdateTimestamps(ctx context.Context, recordsToUpdate map[uuid.UUID]hlc.Timestamp) error
 }
 
 // Iterator iterates records in a cache until wantMore is false or all Records
