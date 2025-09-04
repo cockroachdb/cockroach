@@ -361,6 +361,7 @@ func changefeedPlanHook(
 				if err != nil {
 					return err
 				}
+
 				if ptr != nil {
 					pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 					if err := pts.Protect(ctx, ptr); err != nil {
@@ -1838,12 +1839,30 @@ func (b *changefeedResumer) OnFailOrCancel(
 	exec := jobExec.(sql.JobExecContext)
 	execCfg := exec.ExecCfg()
 	progress := b.job.Progress()
-	b.maybeCleanUpProtectedTimestamp(
-		ctx,
-		execCfg.InternalDB,
-		execCfg.ProtectedTimestampProvider,
-		progress.GetChangefeed().ProtectedTimestampRecord,
-	)
+
+	maybeCleanUpProtectedTimestamp := func(ptsID uuid.UUID) {
+		b.maybeCleanUpProtectedTimestamp(
+			ctx,
+			execCfg.InternalDB,
+			execCfg.ProtectedTimestampProvider,
+			ptsID,
+		)
+	}
+	maybeCleanUpProtectedTimestamp(progress.GetChangefeed().ProtectedTimestampRecord)
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		ptsEntries := cdcprogresspb.ProtectedTimestampRecords{}
+		if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, b.job.ID()); err != nil {
+			return err
+		}
+		maybeCleanUpProtectedTimestamp(ptsEntries.PrimaryRecord)
+		maybeCleanUpProtectedTimestamp(ptsEntries.SystemTablesRecord)
+		for _, laggingTableRecord := range ptsEntries.LaggingTablesRecords {
+			maybeCleanUpProtectedTimestamp(*laggingTableRecord)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
 
 	var numTargets uint
 	if b.job != nil {
