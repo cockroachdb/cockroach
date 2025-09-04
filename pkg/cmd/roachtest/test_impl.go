@@ -140,6 +140,10 @@ type testImpl struct {
 		// parameters if there is a failure. They will additionally be logged in the test itself
 		// in case github issue posting is disabled.
 		extraParams map[string]string
+
+		// githubMessage contains additional message information that will be
+		// passed to github.MaybePost
+		githubMessage string
 	}
 	// Map from version to path to the cockroach binary to be used when
 	// mixed-version test wants a binary for that binary. If a particular version
@@ -556,6 +560,18 @@ func (t *testImpl) failureMsg() string {
 	var b strings.Builder
 	formatFailure(&b, t.mu.failures...)
 	return b.String()
+}
+
+func (t *testImpl) getGithubMessage() string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.mu.githubMessage
+}
+
+func (t *testImpl) appendGithubMessage(msg string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.githubMessage += msg
 }
 
 // failuresMatchingError checks whether the first error in trees of
