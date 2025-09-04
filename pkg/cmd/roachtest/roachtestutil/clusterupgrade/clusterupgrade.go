@@ -228,7 +228,6 @@ func UploadWorkload(
 	default:
 		minWorkloadBinaryVersion = MustParseVersion("v22.2.0")
 	}
-
 	// If we are uploading the `current` version, skip version checking,
 	// as the binary used is the one passed via command line flags.
 	if !v.IsCurrent() && !v.AtLeast(minWorkloadBinaryVersion) {
@@ -239,9 +238,15 @@ func UploadWorkload(
 	return path, err == nil, err
 }
 
-// uploadBinaryVersion uploads the specified binary associated with
-// the given version to the given nodes. It returns the path of the
-// uploaded binaries on the nodes.
+// uploadBinaryVersion attempts to upload the specified binary associated with
+// the given version to the given nodes. If the destination binary path already
+// exists, assume the binary has already been uploaded previously. Returns the
+// path of the uploaded binaries on the nodes.
+//
+// If cockroach is the target binary and if --versions-binary-override option
+// is set and if version v is contained in the override map, use that version's
+// value, which is a local binary path as the source binary to upload instead
+// of using roachprod to stage.
 func uploadBinaryVersion(
 	ctx context.Context,
 	t test.Test,
@@ -256,6 +261,8 @@ func uploadBinaryVersion(
 	var isOverridden bool
 	switch binary {
 	case "cockroach":
+		// If the --versions-binary-override option is set and version v is in the
+		// argument map, then use that version's value as the path to the binary
 		defaultBinary, isOverridden = t.VersionsBinaryOverride()[v.String()]
 		if isOverridden {
 			l.Printf("using cockroach binary override for version %s: %s", v, defaultBinary)
@@ -305,7 +312,6 @@ func uploadBinaryVersion(
 			return "", err
 		}
 	}
-
 	return dstBinary, nil
 }
 

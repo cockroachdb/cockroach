@@ -359,7 +359,7 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 		addSteps(p.finalizeUpgradeSteps(service, to, scheduleHooks, virtualClusterRunning))
 
 		// run after upgrade steps, if any,
-		addSteps(p.afterUpgradeSteps(service, from, to, scheduleHooks))
+		addSteps(p.afterUpgradeSteps(service, scheduleHooks))
 
 		return steps
 	}
@@ -629,7 +629,8 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 	if len(clusterStartHooks) > 0 {
 		steps = append(steps, p.concurrently(beforeClusterStartLabel, clusterStartHooks)...)
 	}
-	return append(steps,
+
+	steps = append(steps,
 		p.newSingleStepWithContext(setupContext, startStep{
 			version:            initialVersion,
 			rt:                 p.rt,
@@ -644,6 +645,19 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 			virtualClusterName: install.SystemInterfaceName,
 		}),
 	)
+
+	if len(p.options.workloadNodes) > 0 {
+		// Add step for staging all workload binaries needed for test on workload
+		// node(s)
+		steps = append(steps,
+			p.newSingleStepWithContext(setupContext, stageAllWorkloadBinariesStep{
+				versions:      p.versions,
+				rt:            p.rt,
+				workloadNodes: p.options.workloadNodes,
+			}))
+	}
+
+	return steps
 }
 
 // tenantSetupSteps returns the series of steps needed to create the
@@ -655,15 +669,15 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	shouldGrantCapabilities := p.deploymentMode == SeparateProcessDeployment ||
 		(p.deploymentMode == SharedProcessDeployment && !v.AtLeast(TenantsAndSystemAlignedSettingsVersion))
 
-	var startStep singleStepProtocol
+	var tenantSetupStep singleStepProtocol
 	if p.deploymentMode == SharedProcessDeployment {
-		startStep = startSharedProcessVirtualClusterStep{
+		tenantSetupStep = startSharedProcessVirtualClusterStep{
 			name:       p.tenantName(),
 			initTarget: p.currentContext.Tenant.Descriptor.Nodes[0],
 			settings:   p.clusterSettingsForTenant(v),
 		}
 	} else {
-		startStep = startSeparateProcessVirtualClusterStep{
+		tenantSetupStep = startSeparateProcessVirtualClusterStep{
 			name:     p.tenantName(),
 			rt:       p.rt,
 			version:  v,
@@ -680,7 +694,7 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	// it as the default cluster, and finally give it all capabilities
 	// if necessary.
 	steps = append(steps,
-		p.newSingleStepWithContext(setupContext, startStep),
+		p.newSingleStepWithContext(setupContext, tenantSetupStep),
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
 			nodes:              p.currentContext.Tenant.Descriptor.Nodes,
 			timeout:            p.options.upgradeTimeout,
@@ -800,17 +814,17 @@ func (p *testPlanner) initUpgradeSteps(
 // the same and then run any after-finalization hooks the user may
 // have provided.
 func (p *testPlanner) afterUpgradeSteps(
-	service *ServiceContext, fromVersion, toVersion *clusterupgrade.Version, scheduleHooks bool,
-) []testStep {
+	service *ServiceContext, scheduleHooks bool,
+) (steps []testStep) {
 	p.setFinalizing(service, false)
 	p.setStage(service, AfterUpgradeFinalizedStage)
-	if scheduleHooks {
-		return p.concurrently(afterTestLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))
-	}
 
-	// Currently, we only schedule user-provided hooks after the upgrade
-	// is finalized; if we are not scheduling hooks, return a nil slice.
-	return nil
+	if scheduleHooks {
+		steps = append(steps,
+			p.concurrently(afterTestLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))...)
+	}
+	// if we are not scheduling hooks, return a nil slice.
+	return steps
 }
 
 func (p *testPlanner) upgradeSteps(

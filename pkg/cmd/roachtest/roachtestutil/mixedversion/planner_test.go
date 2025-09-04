@@ -146,7 +146,7 @@ func TestTestPlanner(t *testing.T) {
 			case "workload":
 				initCmd := roachtestutil.NewCommand("./cockroach workload init some-workload")
 				runCmd := roachtestutil.NewCommand("./cockroach workload run some-workload")
-				mvt.Workload(d.CmdArgs[0].Vals[0], nodes, initCmd, runCmd, false /* overrideBinary */)
+				mvt.Workload(d.CmdArgs[0].Vals[0], nodes, initCmd, runCmd)
 			case "background-command":
 				cmd := roachtestutil.NewCommand("./cockroach some-command")
 				mvt.BackgroundCommand(d.CmdArgs[0].Vals[0], nodes, cmd)
@@ -599,6 +599,15 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 
 		case "deployment_mode":
 			opts = append(opts, EnabledDeploymentModes(DeploymentMode(arg.Vals[0])))
+
+		case "workload_node":
+			workloadNodes := option.NodeListOption{}
+			for _, nodeStr := range arg.Vals {
+				n, err := strconv.Atoi(nodeStr)
+				require.NoError(t, err)
+				workloadNodes = append(workloadNodes, n)
+			}
+			opts = append(opts, WithWorkloadNodes(workloadNodes))
 
 		default:
 			t.Errorf("unknown mixed-version-test option: %s", arg.Key)
