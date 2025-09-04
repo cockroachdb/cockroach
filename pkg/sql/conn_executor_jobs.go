@@ -84,14 +84,11 @@ func (ex *connExecutor) waitForNewVersionPropagation(
 			continue
 		}
 
-		// TODO(sql-foundations): Change this back to WaitForNewVersion once we
-		// address the flaky behavior around privilege and role membership caching.
-		if _, err := ex.planner.LeaseMgr().WaitForOneVersion(ex.Ctx(), idVersion.ID, cachedRegions,
-			retry.Options{
-				InitialBackoff: time.Millisecond,
-				MaxBackoff:     time.Second,
-				Multiplier:     1.5,
-			}); err != nil {
+		if _, err := ex.planner.LeaseMgr().WaitForNewVersion(ex.Ctx(), idVersion.ID, cachedRegions, retry.Options{
+			InitialBackoff: time.Millisecond,
+			MaxBackoff:     time.Second,
+			Multiplier:     1.5,
+		}); err != nil {
 			return err
 		}
 	}
