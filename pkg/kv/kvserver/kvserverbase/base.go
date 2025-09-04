@@ -165,7 +165,7 @@ var DisableReplicaLeaseCountRebalancingIfMMAEnabled = settings.RegisterBoolSetti
 	settings.SystemOnly,
 	"kv.allocator.disable_replica_lease_count_rebalancing_if_mma.enabled",
 	"whether to disable replica and lease count rebalancing if multi-metric allocator is enabled",
-	false,
+	true,
 )
 
 // RangeFeedRefreshInterval is injected from kvserver to avoid import cycles
