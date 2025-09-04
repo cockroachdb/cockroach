@@ -848,8 +848,15 @@ start_pretty    end_pretty
 statement ok
 SET CLUSTER SETTING jobs.registry.interval.adopt = '1s'
 
+
+statement ok
+ALTER TABLE foo SET (schema_locked=false)
+
 statement ok
 TRUNCATE TABLE foo
+
+statement ok
+ALTER TABLE foo RESET (schema_locked)
 
 # Ensure that there are no longer any splits left over on the original indexes.
 # TRUNCATE will have created equivalent splits points on the new indexes, so

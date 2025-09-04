@@ -273,7 +273,7 @@ RESET autocommit_before_ddl
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE expr SET (schema_locked=true)
+ALTER TABLE expr RESET (schema_locked)
 
 # Now add all of the schema elements.
 statement ok
@@ -336,7 +336,13 @@ statement ok
 INSERT INTO tab VALUES ('hello');
 
 statement ok
+ALTER TABLE tab SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE tab
+
+statement ok
+ALTER TABLE tab RESET (schema_locked);
 
 statement error pq: cannot drop type "ty" because other objects \(\[test.public.tab\]\) still depend on it
 DROP TYPE ty

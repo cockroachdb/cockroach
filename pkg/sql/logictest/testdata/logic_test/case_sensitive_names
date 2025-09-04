@@ -22,7 +22,7 @@ SHOW TABLES FROM "E"
 # When non-quoted, table names are normalized during creation.
 
 statement ok
-CREATE TABLE A(x INT)
+CREATE TABLE A(x INT) WITH (schema_locked=false)
 
 statement error pgcode 42P01 relation "A" does not exist
 SHOW COLUMNS FROM "A"
@@ -94,7 +94,7 @@ DROP TABLE a
 # must be thus quoted during use.
 
 statement ok
-CREATE TABLE "B"(x INT)
+CREATE TABLE "B"(x INT) WITH (schema_locked=false)
 
 statement error pgcode 42P01 relation "b" does not exist
 SHOW COLUMNS FROM B

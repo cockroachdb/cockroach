@@ -400,7 +400,7 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 
 			var err error
 			_, err = conn.ExecContext(ctx, `
-CREATE TABLE a(a INT PRIMARY KEY, b INT, INDEX(b));
+CREATE TABLE a(a INT PRIMARY KEY, b INT, INDEX(b)) WITH (schema_locked=false);
 INSERT INTO a SELECT g,g FROM generate_series(1,10000) g(g);
 ALTER TABLE a SPLIT AT VALUES(1000), (2000), (3000), (4000), (5000), (6000), (7000), (8000), (9000);
 ALTER INDEX a_b_idx SPLIT AT VALUES(1000), (2000), (3000), (4000), (5000), (6000), (7000), (8000), (9000);

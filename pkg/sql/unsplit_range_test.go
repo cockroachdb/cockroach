@@ -10,6 +10,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -290,6 +291,8 @@ func TestUnsplitRanges(t *testing.T) {
 		defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 		require.NoError(t, tests.CreateKVTable(sqlDB, tableName, numRows))
+		_, err := sqlDB.Exec(fmt.Sprintf(`ALTER TABLE t.%s SET (schema_locked=false)`, tableName))
+		require.NoError(t, err)
 
 		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
 		tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)

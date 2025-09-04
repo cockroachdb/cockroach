@@ -233,8 +233,15 @@ vectorized: true
               table: t@bc
               spans: /"3"-/"3"/PrefixEnd
 
+
+statement ok
+ALTER TABLE t SET (schema_locked=false)
+
 statement ok
 TRUNCATE TABLE t
+
+statement ok
+ALTER TABLE t SET (schema_locked=true)
 
 statement ok
 INSERT INTO t VALUES
