@@ -355,6 +355,14 @@ func (h *Helper) IsSkipVersionUpgrade() bool {
 	return numReleases > 1
 }
 
+// VersionedCockroachPath returns the correct binary path to use when
+// executing workload commands in user-defined hooks that will match the
+// current cluster's version e.g., v25.3.1/cockroach
+func (h *Helper) VersionedCockroachPath(rt test.Test) string {
+	return clusterupgrade.BinaryPathForVersion(
+		rt, h.System.FromVersion, "cockroach")
+}
+
 // logSQL standardizes the logging when a SQL statement or query is
 // run using one of the Helper methods. It includes the node used as
 // gateway, along with the version currently running on it, for ease
