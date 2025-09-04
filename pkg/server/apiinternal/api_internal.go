@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/mux"
@@ -58,9 +59,9 @@ type apiInternalServer struct {
 // RPC services. It establishes connections to the RPC services and registers
 // all REST endpoints.
 func NewAPIInternalServer(
-	ctx context.Context, nd rpcbase.NodeDialer, nodeID roachpb.NodeID,
+	ctx context.Context, nd rpcbase.NodeDialer, localNodeID roachpb.NodeID,
 ) (*apiInternalServer, error) {
-	status, err := serverpb.DialStatusClient(nd, ctx, nodeID)
+	status, err := serverpb.DialStatusClient(nd, ctx, localNodeID)
 	if err != nil {
 		return nil, err
 	}
@@ -70,9 +71,7 @@ func NewAPIInternalServer(
 		mux:    mux.NewRouter(),
 	}
 
-	if err := r.registerStatusRoutes(); err != nil {
-		return nil, err
-	}
+	r.registerStatusRoutes()
 
 	decoder.SetAliasTag("json")
 	decoder.IgnoreUnknownKeys(true)
@@ -86,10 +85,7 @@ func (r *apiInternalServer) ServeHTTP(w http.ResponseWriter, req *http.Request) 
 }
 
 // createHandler creates an HTTP handler function that proxies requests to the
-// given RPC method. Returns nil if an error occurs during handler creation.
-// Returns nil instead of an error to keep caller code concise when registering
-// multiple handlers in arrays. Callers should check for nil before using the
-// returned handler.
+// given RPC method.
 func createHandler[TReq, TResp protoutil.Message](
 	rpcMethod func(context.Context, TReq) (TResp, error),
 ) http.HandlerFunc {
@@ -97,7 +93,7 @@ func createHandler[TReq, TResp protoutil.Message](
 	msgName := proto.MessageName(zero)
 	msgType := proto.MessageType(msgName)
 	if msgType == nil {
-		return nil
+		panic(errors.AssertionFailedf("failed to determine request protobuf type: %s", msgName))
 	}
 	return func(w http.ResponseWriter, req *http.Request) {
 		newReq := reflect.New(msgType.Elem()).Interface().(TReq)
@@ -215,12 +211,12 @@ func writeResponse(
 		}
 		buf = b
 	case httputil.JSONContentType, httputil.MIMEWildcard:
-		marshaler := &protoutil.JSONPb{
+		jsonpb := &protoutil.JSONPb{
 			EnumsAsInts:  true,
 			EmitDefaults: true,
 			Indent:       "  ",
 		}
-		b, err := marshaler.Marshal(payload)
+		b, err := jsonpb.Marshal(payload)
 		if err != nil {
 			return status.Errorf(codes.Internal, "failed to marshal the JSON response: %v", err)
 		}

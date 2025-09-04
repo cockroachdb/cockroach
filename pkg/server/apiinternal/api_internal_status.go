@@ -5,10 +5,8 @@
 
 package apiinternal
 
-import "github.com/cockroachdb/errors"
-
 // registerStatusRoutes sets up all the status REST endpoints.
-func (r *apiInternalServer) registerStatusRoutes() error {
+func (r *apiInternalServer) registerStatusRoutes() {
 	routes := []route{
 		// Node information
 		{GET, "/_status/nodes", createHandler(r.status.Nodes)},
@@ -99,12 +97,8 @@ func (r *apiInternalServer) registerStatusRoutes() error {
 		{POST, "/_status/keyvissamples", createHandler(r.status.KeyVisSamples)},
 	}
 
-	// Register all routes with error handling wrapper
+	// Register all routes
 	for _, route := range routes {
-		if route.handler == nil {
-			return errors.Errorf("failed to create handler for path: %s", route.path)
-		}
 		r.mux.HandleFunc(route.path, route.handler).Methods(string(route.method))
 	}
-	return nil
 }
