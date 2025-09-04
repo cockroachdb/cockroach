@@ -60,11 +60,12 @@ go_test(
     name = "backupinfo_test",
     srcs = [
         "backup_metadata_test.go",
+        "desc_sst_test.go",
         "main_test.go",
         "manifest_handling_test.go",
     ],
+    embed = [":backupinfo"],
     deps = [
-        ":backupinfo",
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/ccl",
@@ -93,6 +94,7 @@ go_test(
         "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
