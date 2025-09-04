@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
@@ -12008,6 +12009,9 @@ func TestChangefeedAvroDecimalColumnWithDiff(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+// TestChangefeedProtectedTimestampUpdate tests that a changefeed will update
+// its protected timestamp record when the high watermark advances and update
+// the related metrics.
 func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -12026,10 +12030,8 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Hour)
 
-		// The pts query in this test assumes that the pts record is stored
-		// in the job progress table. This assumption is only true when
-		// PerTableProtectedTimestamps is disabled. We will add test coverage
-		// for when it is enabled in the following commit.
+		// This test only tests the non-per-table PTS behavior. We test the
+		// per-table PTS behavior in TestChangefeedProtectedTimestampUpdatePerTablePTS.
 		changefeedbase.PerTableProtectedTimestamps.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, false)
 
@@ -12073,8 +12075,26 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		require.NoError(t, err)
 
 		ptsQry := fmt.Sprintf(`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`, p.ProtectedTimestampRecord)
+		// When PerTableProtectedTimestamps is disabled, expect record in ProtectedTimestampRecord
+		// but not in ProtectedTimestampRecords
+		require.NotEqual(t, uuid.Nil, p.ProtectedTimestampRecord)
+
 		var ts, ts2 string
 		sqlDB.QueryRow(t, ptsQry).Scan(&ts)
+
+		// Verify that per-table records don't exist
+		execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+		err = execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+			var ptsEntries cdcprogresspb.ProtectedTimestampRecords
+			if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID()); err != nil {
+				return err
+			}
+
+			// If the file exists, the records should be nil
+			require.Equal(t, uuid.Nil, ptsEntries.PrimaryRecord)
+			require.Equal(t, uuid.Nil, ptsEntries.SystemTablesRecord)
+			return nil
+		})
 		require.NoError(t, err)
 
 		// Force the changefeed to restart.
@@ -12086,7 +12106,6 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 
 		// Check that the PTS was not updated after the resume.
 		sqlDB.QueryRow(t, ptsQry).Scan(&ts2)
-		require.NoError(t, err)
 		require.Equal(t, ts, ts2)
 
 		// Lower the PTS lag and check that it has been updated.
@@ -12099,7 +12118,6 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		testutils.SucceedsSoon(t, checkHWM)
 
 		sqlDB.QueryRow(t, ptsQry).Scan(&ts2)
-		require.NoError(t, err)
 		require.Less(t, ts, ts2)
 
 		managePTSCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
@@ -12116,7 +12134,161 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		verifyFunc = vf
 	})
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"), withTxnRetries)
+}
+
+// TestChangefeedProtectedTimestampUpdatePerTablePTS tests that a
+// changefeed will update its per-table protected timestamp records when the
+// high watermark advances and update the related metrics when the
+// per-table protected timestamp records are enabled.
+func TestChangefeedProtectedTimestampUpdatePerTablePTS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	verifyFunc := func() {}
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		defer verifyFunc()
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		// Checkpoint and trigger potential protected timestamp updates frequently.
+		// Make the protected timestamp lag long enough that it shouldn't be
+		// immediately updated after a restart.
+		changefeedbase.SpanCheckpointInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.ProtectTimestampInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Hour)
+
+		// Enable per-table protected timestamps and progress tracking.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, true)
+		changefeedbase.TrackPerTableProgress.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, true)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT)`)
+
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+		createPTSCount, _ := metrics.AggMetrics.Timers.PTSCreate.WindowedSnapshot().Total()
+		managePTSCount, _ := metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
+		managePTSErrorCount, _ := metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
+		require.Equal(t, int64(0), createPTSCount)
+		require.Equal(t, int64(0), managePTSCount)
+		require.Equal(t, int64(0), managePTSErrorCount)
+
+		createStmt := `CREATE CHANGEFEED FOR foo WITH resolved='10ms', no_initial_scan`
+		testFeed := feed(t, f, createStmt)
+		defer closeFeed(t, testFeed)
+
+		createPTSCount, _ = metrics.AggMetrics.Timers.PTSCreate.WindowedSnapshot().Total()
+		managePTSCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
+		require.Equal(t, int64(1), createPTSCount)
+		require.Equal(t, int64(0), managePTSCount)
+
+		eFeed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		// Wait for the changefeed to checkpoint and update PTS at least once.
+		var lastHWM hlc.Timestamp
+		checkHWM := func() error {
+			hwm, err := eFeed.HighWaterMark()
+			if err == nil && !hwm.IsEmpty() && lastHWM.Less(hwm) {
+				lastHWM = hwm
+				return nil
+			}
+			return errors.New("waiting for high watermark to advance")
+		}
+		testutils.SucceedsSoon(t, checkHWM)
+
+		p, err := eFeed.Progress()
+		require.NoError(t, err)
+
+		// When PerTablePTS is enabled, expect records in ProtectedTimestampRecords
+		// but not in the changefeed progress ProtectedTimestampRecord
+		require.Equal(t, uuid.Nil, p.ProtectedTimestampRecord)
+
+		var initialPrimaryPTS, initialSystemPTS string
+
+		execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+		getPTSByID := func(id uuid.UUID) string {
+			var ts string
+			query := fmt.Sprintf(`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`, id)
+			sqlDB.QueryRow(t, query).Scan(&ts)
+			return ts
+		}
+		err = execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+			var ptsEntries cdcprogresspb.ProtectedTimestampRecords
+			if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID()); err != nil {
+				return err
+			}
+
+			require.NotEqual(t, uuid.Nil, ptsEntries.PrimaryRecord)
+			require.NotEqual(t, uuid.Nil, ptsEntries.SystemTablesRecord)
+			initialPrimaryPTS = getPTSByID(ptsEntries.PrimaryRecord)
+			initialSystemPTS = getPTSByID(ptsEntries.SystemTablesRecord)
+			return nil
+		})
+		require.NoError(t, err)
+
+		// Force the changefeed to restart.
+		require.NoError(t, eFeed.Pause())
+		require.NoError(t, eFeed.Resume())
+
+		// Wait for a new checkpoint.
+		testutils.SucceedsSoon(t, checkHWM)
+
+		// Check that the primary and system tables PTS records were not updated.
+		err = execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+			var ptsEntries cdcprogresspb.ProtectedTimestampRecords
+			if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID()); err != nil {
+				return err
+			}
+			newPrimaryPTS := getPTSByID(ptsEntries.PrimaryRecord)
+			require.Equal(t, initialPrimaryPTS, newPrimaryPTS)
+			newSystemPTS := getPTSByID(ptsEntries.SystemTablesRecord)
+			require.Equal(t, initialSystemPTS, newSystemPTS)
+			return nil
+		})
+		require.NoError(t, err)
+
+		// Lower the PTS lag and check that it has been updated.
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+
+		// Ensure that the resolved timestamp advances at least once
+		// since the PTS lag override.
+		testutils.SucceedsSoon(t, checkHWM)
+		testutils.SucceedsSoon(t, checkHWM)
+
+		// Check that the primary and system tables PTS records were updated.
+		err = execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+			var ptsEntries cdcprogresspb.ProtectedTimestampRecords
+			if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID()); err != nil {
+				return err
+			}
+			newPrimaryPTS := getPTSByID(ptsEntries.PrimaryRecord)
+			require.Less(t, initialPrimaryPTS, newPrimaryPTS)
+			newSystemPTS := getPTSByID(ptsEntries.SystemTablesRecord)
+			require.Less(t, initialSystemPTS, newSystemPTS)
+			return nil
+		})
+		require.NoError(t, err)
+
+		managePTSCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
+		managePTSErrorCount, _ = metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
+		require.GreaterOrEqual(t, managePTSCount, int64(2))
+		require.Equal(t, int64(0), managePTSErrorCount)
+	}
+
+	withTxnRetries := withArgsFn(func(args *base.TestServerArgs) {
+		requestFilter, vf := testutils.TestingRequestFilterRetryTxnWithPrefix(t, changefeedJobProgressTxnName, 1)
+		args.Knobs.Store = &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: requestFilter,
+		}
+		verifyFunc = vf
+	})
+
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"), withTxnRetries)
 }
 
 // TestChangefeedProtectedTimestampUpdateError tests that a changefeed that
