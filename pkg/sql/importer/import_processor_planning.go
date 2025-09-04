@@ -123,12 +123,13 @@ func distImport(
 	// accumulatedBulkSummary accumulates the BulkOpSummary returned from each
 	// processor in their progress updates. It stores stats about the amount of
 	// data written since the last time we update the job progress.
+	// TODO(janexing): update comments.
 	accumulatedBulkSummary := struct {
 		syncutil.Mutex
 		kvpb.BulkOpSummary
 	}{}
 	accumulatedBulkSummary.Lock()
-	accumulatedBulkSummary.BulkOpSummary = getLastImportSummary(job)
+	accumulatedBulkSummary.BulkOpSummary = kvpb.BulkOpSummary{}
 	accumulatedBulkSummary.Unlock()
 
 	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
