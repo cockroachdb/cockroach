@@ -428,6 +428,13 @@ func (w *kv) Tables() []workload.Table {
 		const batchSize = 1000
 		table.InitialRows = workload.BatchedTuples{
 			NumBatches: (w.insertCount + batchSize - 1) / batchSize,
+			// If the key sequence is not sequential, duplicates are possible.
+			// The zipfian distribution produces duplicates by design, and the
+			// hash key mapper can also produce duplicates at larger insert
+			// counts (it's at least inevitable at ~1b rows). Marking that the
+			// keys may contain duplicates will cause the data loader to use
+			// INSERT ... ON CONFLICT DO NOTHING statements.
+			MayContainDuplicates: !w.sequential,
 			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 				rowBegin, rowEnd := batchIdx*batchSize, (batchIdx+1)*batchSize
 				if rowEnd > w.insertCount {
