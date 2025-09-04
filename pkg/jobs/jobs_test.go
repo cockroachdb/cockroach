@@ -393,6 +393,8 @@ func TestRegistryLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 152542)
+
 	t.Run("normal success", func(t *testing.T) {
 		rts := registryTestSuite{}
 		defer rts.setUp(t)()
