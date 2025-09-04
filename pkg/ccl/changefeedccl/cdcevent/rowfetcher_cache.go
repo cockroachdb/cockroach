@@ -114,6 +114,7 @@ func refreshUDT(
 		tableDesc, err = collection.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, tableID)
 		return err
 	}); err != nil {
+		err = errors.Wrapf(err, "refreshing UDT")
 		if errors.Is(err, catalog.ErrDescriptorDropped) {
 			// Dropped descriptors are a bad news.
 			return nil, changefeedbase.WithTerminalError(err)

@@ -6,6 +6,9 @@
 package changefeedbase
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -153,4 +156,18 @@ func (ts *Targets) FindByTableIDAndFamilyName(id descpb.ID, family string) (Targ
 		return *tbt.wholeTable, true
 	}
 	return Target{}, false
+}
+
+func (ts *Targets) String() string {
+	buf := strings.Builder{}
+	buf.WriteString("Targets:{")
+	ts.EachTarget(func(t Target) error {
+		buf.WriteString(strconv.Itoa(int(t.DescID)))
+		buf.WriteString(": ")
+		buf.WriteString(string(t.StatementTimeName))
+		buf.WriteString(", ")
+		return nil
+	})
+	buf.WriteString("}")
+	return buf.String()
 }

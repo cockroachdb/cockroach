@@ -576,6 +576,7 @@ func getDescriptors(
 		return nil
 	}
 	if err := execCfg.InternalDB.DescsTxn(ctx, f, isql.WithPriority(admissionpb.NormalPri)); err != nil {
+		err = errors.Wrapf(err, "getting descriptors")
 		if errors.Is(err, catalog.ErrDescriptorDropped) {
 			err = changefeedbase.WithTerminalError(err)
 		}

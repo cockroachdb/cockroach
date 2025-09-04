@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"hash"
 	"hash/crc32"
 	"runtime"
@@ -486,6 +487,7 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	}
 	if log.V(3) {
 		log.Dev.Infof(ctx, `r %s: %s(%+v) -> %s`, updatedRow.TableName, keyCopy, headers, valueCopy)
+		fmt.Printf("r %s: %s(%+v) -> %s\n", updatedRow.TableName, keyCopy, headers, valueCopy) // DBG
 	}
 	return nil
 }

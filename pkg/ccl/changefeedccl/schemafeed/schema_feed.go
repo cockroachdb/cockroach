@@ -538,6 +538,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		}
 		return true, nil
 	}); !canPausePolling || err != nil {
+		err = errors.Wrapf(err, "checking if polling can be paused") // this is the one that's racing
 		if errors.Is(err, catalog.ErrDescriptorDropped) {
 			// If a table is dropped and causes Acquire to fail, we mark it as a
 			// terminal error, so that we don't retry, and let the changefeed job

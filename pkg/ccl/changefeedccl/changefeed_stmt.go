@@ -1570,6 +1570,10 @@ func (b *changefeedResumer) resumeWithRetries(
 			if err != nil {
 				return err
 			}
+
+			log.Dev.Infof(ctx, "targets: %s", targets)
+			fmt.Printf("targets: %s\n", &targets) // DBG
+
 			g.GoCtx(func(ctx context.Context) error {
 				defer close(confPoller)
 				return distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh, onTracingEvent, targets)
@@ -1608,8 +1612,27 @@ func (b *changefeedResumer) resumeWithRetries(
 
 			isDBLevelChangefeed := details.TargetSpecifications[0].Type == jobspb.ChangefeedTargetSpecification_DATABASE
 			if isDBLevelChangefeed && errors.Is(flowErr, catalog.ErrDescriptorDropped) {
-				log.Dev.Infof(ctx, "ignoring dropped table error for database-level changefeed")
+				fmt.Printf("ignoring dropped table error for database-level changefeed: %+v\n", flowErr) // DBG
+				log.Dev.Infof(ctx, "ignoring dropped table error for database-level changefeed: %+v", flowErr)
+				// TODO: this error is marked as terminal somewhere.. maybe undo that
 				// TODO: we need to save progress here without that table ... right?
+
+				// TODO: currently we just retry at the same ts. but if we did save progress (ever), it uses ts.Next() which omits the dropped table.... for some reason?
+				// tbh i'm not sure why it's working even some of the time like this.
+				//   - the reason it works sometimes is because AllTargets ignores timestamps. this is a bug
+
+				// -> and when it doesnt work (doesnt have the dropped table but didnt emit the last value),
+				// the next ts is not the same as the previous ts. that's a clue
+
+				// ignoring the above, is it race between emitting the last row and the schema feed dying?
+				// event_processing printfs bear that out.
+				// -> we need the schema feed not to die, or to delay dying
+
+				// when this works, it comes from:
+				// - schemafeed.pauseOrResumePolling
+				// when this doesnt work, it comes from:
+				// - schemafeed.pauseOrResumePolling (so maybe the call site isnt the source of the race?)
+
 				continue
 			}
 

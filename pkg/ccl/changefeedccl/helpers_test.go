@@ -462,6 +462,9 @@ func assertPayloadsBaseErr(
 
 	sort.Strings(expected)
 	sort.Strings(actualFormatted)
+
+	fmt.Printf("actual: %+#v\n", actualFormatted)
+
 	if !reflect.DeepEqual(expected, actualFormatted) {
 		return errors.Newf("expected\n  %s\ngot\n  %s",
 			strings.Join(expected, "\n  "), strings.Join(actualFormatted, "\n  "))

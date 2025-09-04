@@ -126,10 +126,14 @@ func distChangefeedFlow(
 		// timestamp specified; initial scans can be created at the timestamp of a
 		// schema change and thus should see the side-effect of the schema change.
 		isRestartAfterCheckpointOrNoInitialScan := progress.GetHighWater() != nil
+		// TODO: any change needed here?
 		if isRestartAfterCheckpointOrNoInitialScan {
 			schemaTS = schemaTS.Next()
 		}
 	}
+
+	log.Dev.Infof(ctx, "schemaTS: %s", schemaTS)
+	fmt.Printf("schemaTS: %s\n", schemaTS) // DBG
 
 	if knobs, ok := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
 		if knobs != nil && knobs.StartDistChangefeedInitialHighwater != nil {
@@ -169,7 +173,7 @@ func fetchTableDescriptors(
 	}
 	if err := sql.DescsTxn(ctx, execCfg, fetchSpans); err != nil {
 		if errors.Is(err, catalog.ErrDescriptorDropped) {
-			return nil, changefeedbase.WithTerminalError(err)
+			return nil, changefeedbase.WithTerminalError(errors.Wrapf(err, "fetching table descriptors"))
 		}
 		return nil, err
 	}
