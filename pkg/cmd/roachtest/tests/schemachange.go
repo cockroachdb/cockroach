@@ -359,7 +359,7 @@ func makeSchemaChangeBulkIngestTest(
 		Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.SSD(4)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
+		Leases:           registry.LeaderLeases,
 		Timeout:          length * 2,
 		PostProcessPerfMetrics: func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
 			// The histogram tracks the total elapsed time for the CREATE INDEX operation.
