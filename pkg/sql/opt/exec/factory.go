@@ -598,34 +598,3 @@ const (
 	// Streaming means that the grouping columns are fully ordered.
 	Streaming
 )
-
-// JoinAlgorithm is the type of join algorithm used.
-type JoinAlgorithm int8
-
-// The following are all the supported join algorithms.
-const (
-	HashJoin JoinAlgorithm = iota
-	CrossJoin
-	IndexJoin
-	LookupJoin
-	MergeJoin
-	InvertedJoin
-	ApplyJoin
-	ZigZagJoin
-	NumJoinAlgorithms
-)
-
-// ScanCountType is the type of count of scan operations in a query.
-type ScanCountType int
-
-const (
-	// ScanCount is the count of all scans in a query.
-	ScanCount ScanCountType = iota
-	// ScanWithStatsCount is the count of scans with statistics in a query.
-	ScanWithStatsCount
-	// ScanWithStatsForecastCount is the count of scans which used forecasted
-	// statistics in a query.
-	ScanWithStatsForecastCount
-	// NumScanCountTypes is the total number of types of counts of scans.
-	NumScanCountTypes
-)

@@ -7,9 +7,6 @@ package execbuilder
 
 import (
 	"context"
-	"slices"
-	"strconv"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -38,11 +35,6 @@ var parallelScanResultThreshold = uint64(metamorphic.ConstantWithTestRange(
 
 const (
 	parallelScanResultThresholdProductionValue = 10000
-
-	// NumRecordedJoinTypes includes all join types except for
-	// descpb.RightSemiJoin and descpb.RightAntiJoin, which are recorded as left
-	// joins.
-	NumRecordedJoinTypes = 8
 )
 
 func getParallelScanResultThreshold(forceProductionValue bool) uint64 {
@@ -143,37 +135,8 @@ type Builder struct {
 	// staleness and contains a scan.
 	containsBoundedStalenessScan bool
 
-	// MaxFullScanRows is the maximum number of rows scanned by a full scan, as
-	// estimated by the optimizer.
-	MaxFullScanRows float64
-
-	// TotalScanRows is the total number of rows read by all scans in the query,
-	// as estimated by the optimizer.
-	TotalScanRows float64
-
-	// TotalScanRowsWithoutForecasts is the total number of rows read by all scans
-	// in the query, as estimated by the optimizer without using forecasts. (If
-	// forecasts were not used, this should be the same as TotalScanRows.)
-	TotalScanRowsWithoutForecasts float64
-
-	// StatsCollectedAt is the collection timestamp of the oldest statistics
-	// used for a table scanned by this query.
-	StatsCollectedAt time.Time
-
-	// StatsCollectedAt is the forecast timestamp of the latest statistics
-	// used for a table scanned by this query. It may be in the future.
-	StatsForecastedAt time.Time
-
-	// JoinTypeCounts records the number of times each type of logical join was
-	// used in the query, up to 255.
-	JoinTypeCounts [NumRecordedJoinTypes]uint8
-
-	// JoinAlgorithmCounts records the number of times each type of join
-	// algorithm was used in the query, up to 255.
-	JoinAlgorithmCounts [exec.NumJoinAlgorithms]uint8
-
-	// ScanCounts records the number of times scans were used in the query.
-	ScanCounts [exec.NumScanCountTypes]int
+	// Metrics tracks various optimizer-time metrics about the query.
+	Metrics exec.QueryMetrics
 
 	// builtScans collects all scans in the operation tree so post-build checking
 	// for non-local execution can be done.
@@ -187,43 +150,6 @@ type Builder struct {
 	// 4 DML statements, SELECT, UPDATE, INSERT, DELETE, or an EXPLAIN of one of
 	// these statements.
 	IsANSIDML bool
-
-	// IndexesUsed list the indexes used in query with the format tableID@indexID.
-	IndexesUsed
-}
-
-// IndexesUsed is a list of indexes used in a query.
-type IndexesUsed struct {
-	indexes []struct {
-		tableID cat.StableID
-		indexID cat.StableID
-	}
-}
-
-// add adds the given index to the list, if it is not already present.
-func (iu *IndexesUsed) add(tableID, indexID cat.StableID) {
-	s := struct {
-		tableID cat.StableID
-		indexID cat.StableID
-	}{tableID, indexID}
-	if !slices.Contains(iu.indexes, s) {
-		iu.indexes = append(iu.indexes, s)
-	}
-}
-
-// Strings returns a slice of strings with the format tableID@indexID for each
-// index in the list.
-//
-// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of converting
-// to strings.
-func (iu *IndexesUsed) Strings() []string {
-	res := make([]string, len(iu.indexes))
-	const base = 10
-	for i, u := range iu.indexes {
-		res[i] = strconv.FormatUint(uint64(u.tableID), base) + "@" +
-			strconv.FormatUint(uint64(u.indexID), base)
-	}
-	return res
 }
 
 // New constructs an instance of the execution node builder using the
