@@ -396,7 +396,12 @@ func (tf *schemaFeed) peekOrPop(
 ) (events []TableEvent, err error) {
 	// Routinely check whether to pause or resume polling.
 	if err = tf.pauseOrResumePolling(ctx, atOrBefore); err != nil {
-		return nil, err
+		isDBLF := true
+		if !(isDBLF && errors.Is(err, catalog.ErrDescriptorDropped)) {
+			return nil, err
+		}
+		// otherwise, ignore the error
+		// TODO: IS THIS CHILL
 	}
 	if err = tf.waitForTS(ctx, atOrBefore); err != nil {
 		return nil, err
@@ -506,7 +511,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		// Check if target table is schema-locked at the current frontier.
 		ld1, err := tf.leaseMgr.Acquire(ctx, frontier, id)
 		if err != nil {
-			return false, err
+			return false, errors.Wrapf(err, "acquiring lease 1 for table %d at frontier %s", id, frontier)
 		}
 		defer ld1.Release(ctx)
 		desc1 := ld1.Underlying().(catalog.TableDescriptor)
@@ -524,7 +529,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		// Check if target table remains at the same version at atOrBefore.
 		ld2, err := tf.leaseMgr.Acquire(ctx, atOrBefore, id)
 		if err != nil {
-			return false, err
+			return false, errors.Wrapf(err, "acquiring lease 2 for table %d at atOrBefore %s", id, atOrBefore)
 		}
 		defer ld2.Release(ctx)
 		desc2 := ld2.Underlying().(catalog.TableDescriptor)

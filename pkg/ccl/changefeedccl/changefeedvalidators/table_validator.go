@@ -51,7 +51,7 @@ func validateTable(
 	}
 	found, err := targets.EachHavingTableID(tableDesc.GetID(), func(t changefeedbase.Target) error {
 		if tableDesc.Dropped() {
-			return errors.Errorf(`"%s" was dropped`, t.StatementTimeName)
+			return errors.Wrapf(catalog.ErrDescriptorDropped, `validateTable: "%s" was dropped`, t.StatementTimeName)
 		}
 		switch t.Type {
 		case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:

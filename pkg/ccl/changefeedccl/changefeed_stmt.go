@@ -1628,10 +1628,14 @@ func (b *changefeedResumer) resumeWithRetries(
 				// event_processing printfs bear that out.
 				// -> we need the schema feed not to die, or to delay dying
 
-				// when this works, it comes from:
-				// - schemafeed.pauseOrResumePolling
-				// when this doesnt work, it comes from:
-				// - schemafeed.pauseOrResumePolling (so maybe the call site isnt the source of the race?)
+				// ultimately the schema feed is the one who WILL notice the table drop and die. we just need him to do it *after* we emit the last row.
+				// we need to delay premature death.
+
+				// previously it was dying sometimes in pauseOrResumePolling.
+				// since we've ignored that one, now it's dying in periodicallyUpdateTableHistory.
+				// -> we need to do something in there like "if there's this error", note which desc version is dropped and
+				// dont die until we try and read a row at that ts... or smth
+				// NEXT: ^
 
 				continue
 			}
