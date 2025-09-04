@@ -177,7 +177,7 @@ func (w *ledger) Tables() []workload.Table {
 func (w *ledger) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	db, err := workload.OpenDBWithUnsafeInternals(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}

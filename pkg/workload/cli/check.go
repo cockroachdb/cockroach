@@ -76,7 +76,7 @@ func check(gen workload.Generator, urls []string, dbName string) error {
 		return errors.Errorf(`no consistency checks are defined for %s`, gen.Meta().Name)
 	}
 
-	sqlDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	sqlDB, err := workload.OpenDBWithUnsafeInternals(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}

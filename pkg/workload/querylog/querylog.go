@@ -171,7 +171,7 @@ func (w *querylog) Hooks() workload.Hooks {
 func (w *querylog) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	db, err := workload.OpenDBWithUnsafeInternals(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -205,6 +205,7 @@ func (w *querylog) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
+	workload.ConfigurePgxConnConfigWithUnsafeInternals(connCfg)
 	ql := workload.QueryLoad{}
 	if w.querybenchPath != `` {
 		conn, err := pgx.ConnectConfig(ctx, connCfg)

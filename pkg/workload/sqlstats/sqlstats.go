@@ -7,7 +7,6 @@ package sqlstats
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -130,7 +129,7 @@ func genPermutations() *gen {
 func (s *sqlStats) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	db, err := workload.OpenDBWithUnsafeInternals(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
