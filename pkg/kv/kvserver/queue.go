@@ -1001,6 +1001,9 @@ func (bq *baseQueue) addInternal(
 	default:
 		// No need to signal again.
 	}
+	if postEnqueueInterceptor := bq.store.TestingKnobs().BaseQueuePostEnqueueInterceptor; postEnqueueInterceptor != nil {
+		postEnqueueInterceptor(bq.store.StoreID(), desc.RangeID)
+	}
 	// Note that we are bumping enqueueAdd here instead of during defer to avoid
 	// treating requeuing a processing replica as newly added. They will be
 	// re-added to the queue later which will double count them.

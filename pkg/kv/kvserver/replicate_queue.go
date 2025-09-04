@@ -322,6 +322,22 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaReplicateQueueRequeueDueToPriorityInversion = metric.Metadata{
+		Name: "queue.replicate.priority_inversion.requeue",
+		Help: "Number of priority inversions in the replicate queue that resulted in requeuing of the replicas. " +
+			"A priority inversion occurs when the priority at processing time ends up being lower " +
+			"than at enqueue time. When the priority has changed from a high priority repair action to rebalance, " +
+			"the change is requeued to avoid unfairness.",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionTotal = metric.Metadata{
+		Name: "queue.replicate.priority_inversion.total",
+		Help: "Total number of priority inversions in the replicate queue. " +
+			"A priority inversion occurs when the priority at processing time ends up being lower than at enqueue time",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // quorumError indicates a retryable error condition which sends replicas being
@@ -344,6 +360,7 @@ func (e *quorumError) Error() string {
 func (*quorumError) PurgatoryErrorMarker() {}
 
 // ReplicateQueueMetrics is the set of metrics for the replicate queue.
+// TODO(wenyihu6): metrics initialization could be cleaned up by using a map.
 type ReplicateQueueMetrics struct {
 	AddReplicaCount                           *metric.Counter
 	AddVoterReplicaCount                      *metric.Counter
@@ -381,6 +398,10 @@ type ReplicateQueueMetrics struct {
 	// TODO(sarkesian): Consider adding metrics for AllocatorRemoveLearner,
 	// AllocatorConsiderRebalance, and AllocatorFinalizeAtomicReplicationChange
 	// allocator actions.
+
+	// Priority Inversion.
+	RequeueDueToPriorityInversion *metric.Counter
+	PriorityInversionTotal        *metric.Counter
 }
 
 func makeReplicateQueueMetrics() ReplicateQueueMetrics {
@@ -417,6 +438,9 @@ func makeReplicateQueueMetrics() ReplicateQueueMetrics {
 		ReplaceDecommissioningReplicaErrorCount:   metric.NewCounter(metaReplicateQueueReplaceDecommissioningReplicaErrorCount),
 		RemoveDecommissioningReplicaSuccessCount:  metric.NewCounter(metaReplicateQueueRemoveDecommissioningReplicaSuccessCount),
 		RemoveDecommissioningReplicaErrorCount:    metric.NewCounter(metaReplicateQueueRemoveDecommissioningReplicaErrorCount),
+
+		RequeueDueToPriorityInversion: metric.NewCounter(metaReplicateQueueRequeueDueToPriorityInversion),
+		PriorityInversionTotal:        metric.NewCounter(metaReplicateQueuePriorityInversionTotal),
 	}
 }
 
@@ -955,12 +979,14 @@ func (rq *replicateQueue) processOneChange(
 	// starving other higher priority work.
 	if PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
 		if inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action); inversion {
+			rq.metrics.PriorityInversionTotal.Inc(1)
 			if priorityInversionLogEveryN.ShouldLog() {
 				log.KvDistribution.Infof(ctx,
 					"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
 					shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
 			}
 			if shouldRequeue {
+				rq.metrics.RequeueDueToPriorityInversion.Inc(1)
 				// Return true to requeue the range. Return the error to ensure it is
 				// logged and tracked in replicate queue bq.failures metrics. See
 				// replicateQueue.process for details.

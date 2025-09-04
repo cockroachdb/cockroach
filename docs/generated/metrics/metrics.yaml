@@ -13951,6 +13951,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: queue.replicate.priority_inversion.requeue
+      exported_name: queue_replicate_priority_inversion_requeue
+      description: Number of priority inversions in the replicate queue that resulted in requeuing of the replicas. A priority inversion occurs when the priority at processing time ends up being lower than at enqueue time. When the priority has changed from a high priority repair action to rebalance, the change is requeued to avoid unfairness.
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.total
+      exported_name: queue_replicate_priority_inversion_total
+      description: Total number of priority inversions in the replicate queue. A priority inversion occurs when the priority at processing time ends up being lower than at enqueue time
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: queue.replicate.process.failure
       exported_name: queue_replicate_process_failure
       description: Number of replicas which failed processing in the replicate queue
