@@ -20,6 +20,7 @@ import (
 // showTraceNode is a planNode that processes session trace data.
 type showTraceNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	columns colinfo.ResultColumns
 	compact bool
 

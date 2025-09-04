@@ -22,6 +22,7 @@ var deleteNodePool = sync.Pool{
 }
 
 type deleteNode struct {
+	nonReusablePlanNode
 	singleInputPlanNode
 
 	// columns is set if this DELETE is returning any rows, to be

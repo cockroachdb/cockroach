@@ -209,6 +209,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 // perform all schema changes, unified in the new schema changer.
 type schemaChangePlanNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	sql  string
 	stmt tree.Statement
 	// lastState was the state observed so far while planning for the current

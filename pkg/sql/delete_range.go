@@ -32,6 +32,7 @@ import (
 type deleteRangeNode struct {
 	zeroInputPlanNode
 	rowsAffectedOutputHelper
+	nonReusablePlanNode
 	// spans are the spans to delete.
 	spans roachpb.Spans
 	// desc is the table descriptor the delete is operating on.

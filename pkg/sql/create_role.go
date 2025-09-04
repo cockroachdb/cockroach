@@ -36,6 +36,7 @@ import (
 // This is called from CREATE USER and CREATE ROLE.
 type CreateRoleNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	ifNotExists bool
 	isRole      bool
 	roleOptions roleoption.List

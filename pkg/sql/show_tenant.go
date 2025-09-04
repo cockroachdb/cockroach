@@ -42,6 +42,7 @@ type showTenantNodeCapability struct {
 
 type showTenantNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	tenantSpec           tenantSpec
 	withReplication      bool
 	withPriorReplication bool

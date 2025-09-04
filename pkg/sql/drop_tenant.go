@@ -15,6 +15,7 @@ import (
 
 type dropTenantNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	tenantSpec tenantSpec
 	ifExists   bool
 	immediate  bool

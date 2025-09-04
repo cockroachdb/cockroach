@@ -20,6 +20,7 @@ import (
 // filtering, sorting, limiting).
 type indexJoinNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	indexJoinPlanningInfo
 
 	// columns are the produced columns, namely the columns fetched from the table

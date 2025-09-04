@@ -31,6 +31,7 @@ import (
 
 type createSchemaNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n *tree.CreateSchema
 }
 

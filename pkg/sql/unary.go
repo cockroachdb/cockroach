@@ -16,6 +16,7 @@ import (
 // property as the join identity.
 type unaryNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	run unaryRun
 }
 

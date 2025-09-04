@@ -26,6 +26,7 @@ const externalConnectionOp = "CREATE EXTERNAL CONNECTION"
 
 type createExternalConnectionNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n *tree.CreateExternalConnection
 }
 

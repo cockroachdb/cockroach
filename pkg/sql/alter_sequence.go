@@ -21,6 +21,7 @@ import (
 
 type alterSequenceNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n       *tree.AlterSequence
 	seqDesc *tabledesc.Mutable
 }

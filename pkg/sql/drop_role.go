@@ -35,6 +35,7 @@ import (
 // This is called from DROP USER and DROP ROLE.
 type DropRoleNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	ifExists  bool
 	isRole    bool
 	roleNames []username.SQLUsername

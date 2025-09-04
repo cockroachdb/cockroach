@@ -37,6 +37,7 @@ var tableInserterPool = sync.Pool{
 
 type insertNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	// columns is set if this INSERT is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a

@@ -22,6 +22,7 @@ import (
 // variations of each set operation: distinct, which always returns unique
 // results, and all, which does no de-duplication.
 type unionNode struct {
+	nonReusablePlanNode
 	setOpPlanningInfo
 
 	// right and left are the data source operands.

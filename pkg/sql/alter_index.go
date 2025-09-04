@@ -24,6 +24,7 @@ import (
 
 type alterIndexNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n         *tree.AlterIndex
 	tableDesc *tabledesc.Mutable
 	index     catalog.Index

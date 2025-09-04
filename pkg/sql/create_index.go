@@ -41,6 +41,7 @@ import (
 
 type createIndexNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n         *tree.CreateIndex
 	tableDesc *tabledesc.Mutable
 }

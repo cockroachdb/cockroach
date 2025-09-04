@@ -23,6 +23,7 @@ import (
 // COMPLETIONS as an observer statement.
 type completionsNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	optColumnsSlot
 
 	n       *tree.ShowCompletions

@@ -23,6 +23,7 @@ import (
 // runtime.
 type max1RowNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	nexted    bool
 	values    tree.Datums

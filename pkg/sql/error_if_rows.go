@@ -16,6 +16,7 @@ import (
 // node produces any rows.
 type errorIfRowsNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	// mkErr creates the error message, given the values of the first row
 	// produced.

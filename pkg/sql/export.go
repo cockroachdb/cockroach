@@ -33,6 +33,7 @@ import (
 
 type exportNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	optColumnsSlot
 	exportPlanningInfo
 }

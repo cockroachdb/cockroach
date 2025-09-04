@@ -26,6 +26,7 @@ import (
 
 type controlSchedulesNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	rowsAffectedOutputHelper
 	command tree.ScheduleCommand
 }

@@ -23,6 +23,7 @@ import (
 
 type splitNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	optColumnsSlot
 
 	tableDesc      catalog.TableDescriptor

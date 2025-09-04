@@ -17,6 +17,7 @@ import (
 
 type commentOnTableNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n         *tree.CommentOnTable
 	tableDesc catalog.TableDescriptor
 }

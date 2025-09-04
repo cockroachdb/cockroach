@@ -21,6 +21,7 @@ var errEmptyIndexName = pgerror.New(pgcode.Syntax, "empty index name")
 
 type renameIndexNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n         *tree.RenameIndex
 	tableDesc *tabledesc.Mutable
 	idx       catalog.Index

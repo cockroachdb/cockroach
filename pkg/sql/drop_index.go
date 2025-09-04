@@ -28,6 +28,7 @@ import (
 
 type dropIndexNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n        *tree.DropIndex
 	idxNames []fullIndexName
 }

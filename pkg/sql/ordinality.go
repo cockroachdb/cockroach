@@ -29,6 +29,7 @@ import (
 // situations where the corresponding performance cost is affordable.
 type ordinalityNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	columns     colinfo.ResultColumns
 	reqOrdering ReqOrdering
 }

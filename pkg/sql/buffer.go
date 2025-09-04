@@ -19,6 +19,7 @@ import (
 // times.
 type bufferNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	// typs is the schema of rows buffered by this node.
 	typs       []*types.T
@@ -69,6 +70,7 @@ func (n *bufferNode) Close(ctx context.Context) {
 // simultaneously, however, a new scanBufferNode is needed.
 type scanBufferNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 
 	// mu, if non-nil, protects access buffer as well as creation and closure of
 	// iterator (rowcontainer.RowIterator which is wrapped by

@@ -29,6 +29,7 @@ import (
 
 type dropDatabaseNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n      *tree.DropDatabase
 	dbDesc *dbdesc.Mutable
 	d      *dropCascadeState

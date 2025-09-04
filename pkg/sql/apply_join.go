@@ -38,6 +38,7 @@ type applyJoinNode struct {
 
 	// The data source with no outer columns.
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	// forwarder allows propagating the ProducerMetadata towards the
 	// DistSQLReceiver.

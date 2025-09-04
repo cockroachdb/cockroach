@@ -19,6 +19,7 @@ import (
 // blown selectTopNode/renderNode pair.
 type filterNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	columns     colinfo.ResultColumns
 	filter      tree.TypedExpr
 	reqOrdering ReqOrdering

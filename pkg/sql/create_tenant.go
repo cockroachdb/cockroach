@@ -13,6 +13,7 @@ import (
 
 type createTenantNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	ifNotExists bool
 	tenantSpec  tenantSpec
 }
