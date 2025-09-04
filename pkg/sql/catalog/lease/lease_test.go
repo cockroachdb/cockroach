@@ -557,8 +557,6 @@ func TestWaitForNewVersion(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	defer log.Scope(testingT).Close(testingT)
 
-	skip.WithIssue(testingT, 152051)
-
 	var params base.TestClusterArgs
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
