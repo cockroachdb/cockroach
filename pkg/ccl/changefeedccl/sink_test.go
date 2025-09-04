@@ -520,7 +520,9 @@ func TestSQLSink(t *testing.T) {
 	sqlDB.CheckQueryResults(t, `SELECT key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{{`k1`, `v0`}},
 	)
+	sqlDB.Exec(t, `ALTER TABLE sink SET (schema_locked=false)`)
 	sqlDB.Exec(t, `TRUNCATE sink`)
+	sqlDB.Exec(t, `ALTER TABLE sink SET (schema_locked=true)`)
 
 	// Verify the implicit flushing
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM sink`, [][]string{{`0`}})
@@ -532,7 +534,9 @@ func TestSQLSink(t *testing.T) {
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM sink`, [][]string{{`3`}})
 	require.NoError(t, sink.Flush(ctx))
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM sink`, [][]string{{`4`}})
+	sqlDB.Exec(t, `ALTER TABLE sink SET (schema_locked=false)`)
 	sqlDB.Exec(t, `TRUNCATE sink`)
+	sqlDB.Exec(t, `ALTER TABLE sink SET (schema_locked=true)`)
 
 	// Two tables interleaved in time
 	var pool testAllocPool
@@ -544,7 +548,9 @@ func TestSQLSink(t *testing.T) {
 	sqlDB.CheckQueryResults(t, `SELECT topic, key, value FROM sink ORDER BY PRIMARY KEY sink`,
 		[][]string{{`bar`, `kbar`, `v0`}, {`foo`, `kfoo`, `v0`}, {`foo`, `kfoo`, `v1`}},
 	)
+	sqlDB.Exec(t, `ALTER TABLE sink SET (schema_locked=false)`)
 	sqlDB.Exec(t, `TRUNCATE sink`)
+	sqlDB.Exec(t, `ALTER TABLE sink SET (schema_locked=true)`)
 
 	// Multiple keys interleaved in time. Use sqlSinkNumPartitions+1 keys to
 	// guarantee that at lease two of them end up in the same partition.
@@ -569,7 +575,9 @@ func TestSQLSink(t *testing.T) {
 			{`2`, `v0`, `v1`},
 		},
 	)
+	sqlDB.Exec(t, `ALTER TABLE sink SET (schema_locked=false)`)
 	sqlDB.Exec(t, `TRUNCATE sink`)
+	sqlDB.Exec(t, `ALTER TABLE sink SET (schema_locked=true)`)
 
 	// Emit resolved
 	var e testEncoder
