@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -119,7 +120,13 @@ type TxnRegistry struct {
 		// these requests should be recorded on their next execution, regardless
 		// of the transaction's latency or other conditions.
 		unconditionalOngoingRequests map[RequestID]TxnRequest
-		rand                         *rand.Rand
+
+		// epoch is observed before reading system.transaction_diagnostics_requests, and then
+		// checked again before loading the tables contents. If the value changed in
+		// between, then the table contents might be stale.
+		epoch int
+
+		rand *rand.Rand
 	}
 }
 
@@ -298,6 +305,7 @@ func (r *TxnRegistry) insertTxnRequestInternal(
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
+		r.mu.epoch++
 		r.addTxnRequestInternalLocked(
 			ctx, reqID, txnFingerprintId, stmtFingerprintIds, samplingProbability,
 			minExecutionLatency, expiresAt, redacted, username,
@@ -483,4 +491,100 @@ func (r *TxnRegistry) findTxnRequestLocked(requestID RequestID) bool {
 	}
 	_, ok = r.mu.unconditionalOngoingRequests[requestID]
 	return ok
+}
+
+// pollTxnRequests reads the pending rows from system.transaction_diagnostics_requests and
+// updates r.mu.requests accordingly.
+func (r *TxnRegistry) pollTxnRequests(ctx context.Context) error {
+	var rows []tree.Datums
+
+	// Loop until we run the query without straddling an epoch increment.
+	for {
+		r.mu.Lock()
+		epoch := r.mu.epoch
+		r.mu.Unlock()
+
+		it, err := r.db.Executor().QueryIteratorEx(ctx, "txn-diag-poll", nil, /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			`SELECT id, transaction_fingerprint_id, statement_fingerprint_ids, min_execution_latency, expires_at, sampling_probability, redacted, username
+				FROM system.transaction_diagnostics_requests
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
+		)
+		if err != nil {
+			return err
+		}
+		rows = rows[:0]
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			rows = append(rows, it.Cur())
+		}
+		if err != nil {
+			return err
+		}
+
+		// If the epoch changed it means that a request was added to the registry
+		// manually while the query was running. In that case, if we were to process
+		// the query results normally, we might remove that manually-added request.
+		if r.mu.Lock(); r.mu.epoch != epoch {
+			r.mu.Unlock()
+			continue
+		}
+		break
+	}
+	defer r.mu.Unlock()
+
+	now := r.ts.Now()
+	var ids intsets.Fast
+	for _, row := range rows {
+		id := RequestID(*row[0].(*tree.DInt))
+		var txnFingerprintId uint64
+		txnFingerprintId, err := sqlstatsutil.DatumToUint64(row[1])
+		if err != nil {
+			return err
+		}
+
+		var stmtFingerprintIds []uint64
+		stmtFingerprintArray := row[2].(*tree.DArray)
+		for _, elem := range stmtFingerprintArray.Array {
+			stmtFpId, err := sqlstatsutil.DatumToUint64(elem)
+			if err != nil {
+				return err
+			}
+			stmtFingerprintIds = append(stmtFingerprintIds, stmtFpId)
+		}
+
+		var minExecutionLatency time.Duration
+		var expiresAt time.Time
+		var samplingProbability float64
+		var redacted bool
+		var username string
+
+		if minExecLatency, ok := row[3].(*tree.DInterval); ok {
+			minExecutionLatency = time.Duration(minExecLatency.Nanos())
+		}
+		if e, ok := row[4].(*tree.DTimestampTZ); ok {
+			expiresAt = e.Time
+		}
+		if prob, ok := row[5].(*tree.DFloat); ok {
+			samplingProbability = float64(*prob)
+		}
+		if b, ok := row[6].(*tree.DBool); ok {
+			redacted = bool(*b)
+		}
+
+		if u, ok := row[7].(*tree.DString); ok {
+			username = string(*u)
+		}
+
+		ids.Add(int(id))
+		r.addTxnRequestInternalLocked(ctx, id, txnFingerprintId, stmtFingerprintIds, samplingProbability, minExecutionLatency, expiresAt, redacted, username)
+	}
+
+	// Remove all other requests.
+	for id, req := range r.mu.requests {
+		if !ids.Contains(int(id)) || req.isExpired(now) {
+			delete(r.mu.requests, id)
+		}
+	}
+	return nil
 }
