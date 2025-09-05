@@ -1095,7 +1095,7 @@ func (rq *replicateQueue) TransferLease(
 	rangeUsageInfo allocator.RangeUsageInfo,
 ) error {
 	rq.metrics.TransferLeaseCount.Inc(1)
-	log.KvDistribution.Infof(ctx, "transferring lease to s%d", target)
+	log.KvDistribution.Infof(ctx, "transferring lease to %v", target)
 	// Inform allocator sync that the change has been applied which applies
 	// changes to store pool and inform mma.
 	changeID := rq.as.NonMMAPreTransferLease(
@@ -1109,7 +1109,7 @@ func (rq *replicateQueue) TransferLease(
 	rq.as.PostApply(changeID, err == nil /*success*/)
 
 	if err != nil {
-		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
+		return errors.Wrapf(err, "%s: unable to transfer lease to %v", rlm, target)
 	}
 	return nil
 }
