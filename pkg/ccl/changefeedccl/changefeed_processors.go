@@ -1985,6 +1985,7 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 
 	pts := cf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
 	tableIDsToRelease := make([]descpb.ID, 0)
+	tableIDsToCreate := make(map[descpb.ID]hlc.Timestamp)
 	for tableID, frontier := range cf.frontier.Frontiers() {
 		tableHighWater := func() hlc.Timestamp {
 			// If this table has not yet finished its initial scan, we use the highwater
@@ -2016,15 +2017,19 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 			}
 		} else {
 			// TODO(#152448): Do not include system table protections in these records.
-			if err := cf.createPerTableProtectedTimestampRecord(ctx, txn, ptsEntries, tableID, tableHighWater, pts); err != nil {
-				return hlc.Timestamp{}, false, err
-			}
-			updatedPerTablePTS = true
+			tableIDsToCreate[tableID] = tableHighWater
 		}
 	}
 
 	if len(tableIDsToRelease) > 0 {
 		if err := cf.releasePerTableProtectedTimestampRecords(ctx, txn, ptsEntries, tableIDsToRelease, pts); err != nil {
+			return hlc.Timestamp{}, false, err
+		}
+		updatedPerTablePTS = true
+	}
+
+	if len(tableIDsToCreate) > 0 {
+		if err := cf.createPerTableProtectedTimestampRecords(ctx, txn, ptsEntries, tableIDsToCreate, pts); err != nil {
 			return hlc.Timestamp{}, false, err
 		}
 		updatedPerTablePTS = true
@@ -2072,40 +2077,51 @@ func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
 	return true, nil
 }
 
-func (cf *changeFrontier) createPerTableProtectedTimestampRecord(
+func (cf *changeFrontier) createPerTableProtectedTimestampRecords(
 	ctx context.Context,
 	txn isql.Txn,
 	ptsEntries *cdcprogresspb.ProtectedTimestampRecords,
-	tableID descpb.ID,
-	tableHighWater hlc.Timestamp,
+	tableIDsToCreate map[descpb.ID]hlc.Timestamp,
 	pts protectedts.Storage,
 ) error {
-	// If the table is lagging and doesn't have a per table PTS record,
-	// we create a new one.
-	targets := changefeedbase.Targets{}
-	if cf.targets.Size > 0 {
-		err := cf.targets.EachTarget(func(target changefeedbase.Target) error {
-			if target.DescID == tableID {
-				targets.Add(target)
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-	}
-	ptr := createProtectedTimestampRecord(
-		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, tableHighWater,
-	)
 	if ptsEntries.ProtectedTimestampRecords == nil {
 		ptsEntries.ProtectedTimestampRecords = make(map[descpb.ID]*uuid.UUID)
 	}
-	uuid := ptr.ID.GetUUID()
-	ptsEntries.ProtectedTimestampRecords[tableID] = &uuid
-	if err := pts.Protect(ctx, ptr); err != nil {
-		return err
+	for tableID, tableHighWater := range tableIDsToCreate {
+		targets, err := cf.createPerTablePTSTarget(tableID)
+		if err != nil {
+			return err
+		}
+		ptr := createProtectedTimestampRecord(
+			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, tableHighWater,
+		)
+		uuid := ptr.ID.GetUUID()
+		ptsEntries.ProtectedTimestampRecords[tableID] = &uuid
+		if err := pts.Protect(ctx, ptr); err != nil {
+			return err
+		}
 	}
 	return writeChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, ptsEntries, txn, cf.spec.JobID)
+}
+
+func (cf *changeFrontier) createPerTablePTSTarget(
+	tableID descpb.ID,
+) (changefeedbase.Targets, error) {
+	targets := changefeedbase.Targets{}
+	if cf.targets.Size > 0 {
+		if found, err := cf.targets.EachHavingTableID(tableID, func(target changefeedbase.Target) error {
+			targets.Add(target)
+			return nil
+		}); err != nil {
+			return changefeedbase.Targets{}, err
+		} else if !found {
+			return changefeedbase.Targets{}, errors.AssertionFailedf("attempted to create a per-table PTS record for table %d, but no target was found", tableID)
+		}
+	}
+	if targets.Size != 1 {
+		return changefeedbase.Targets{}, errors.AssertionFailedf("expected 1 target, got %d", targets.Size)
+	}
+	return targets, nil
 }
 
 func (cf *changeFrontier) advanceProtectedTimestamp(
