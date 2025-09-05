@@ -4402,6 +4402,24 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	`optimizer_clamp_low_histogram_selectivity`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_clamp_low_histogram_selectivity`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_clamp_low_histogram_selectivity", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerClampLowHistogramSelectivity(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(
+				evalCtx.SessionData().OptimizerClampLowHistogramSelectivity,
+			), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
