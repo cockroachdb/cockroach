@@ -12,15 +12,27 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+)
+
+var txnPollingInterval = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"sql.txn_diagnostics.poll_interval",
+	"rate at which the TxnRegistry polls for requests, set to zero to disable",
+	10*time.Second,
 )
 
 // TxnRequest describes a transaction diagnostic request for which a diagnostic
@@ -115,7 +127,13 @@ type TxnRegistry struct {
 		// these requests should be recorded on their next execution, regardless
 		// of the transaction's latency or other conditions.
 		unconditionalOngoingRequests map[RequestID]TxnRequest
-		rand                         *rand.Rand
+
+		// epoch is observed before reading system.transaction_diagnostics_requests, and then
+		// checked again before loading the tables contents. If the value changed in
+		// between, then the table contents might be stale.
+		epoch int
+
+		rand *rand.Rand
 	}
 }
 
@@ -294,6 +312,7 @@ func (r *TxnRegistry) insertTxnRequestInternal(
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
+		r.mu.epoch++
 		r.addTxnRequestInternalLocked(
 			ctx, reqID, txnFingerprintId, stmtFingerprintIds, samplingProbability,
 			minExecutionLatency, expiresAt, redacted, username,
@@ -446,4 +465,168 @@ func (r *TxnRegistry) findTxnRequestLocked(requestID RequestID) bool {
 	}
 	_, ok = r.mu.unconditionalOngoingRequests[requestID]
 	return ok
+}
+
+// Start will start the polling loop for the TxnRegistry.
+func (r *TxnRegistry) Start(ctx context.Context, stopper *stop.Stopper) {
+	// The registry has the same lifetime as the server, so the cancellation
+	// function can be ignored and it'll be called by the stopper.
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx) // nolint:quiesce
+
+	// Since background transaction diagnostics collection is not under user
+	// control, exclude it from cost accounting and control.
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
+
+	// NB: The only error that should occur here would be if the server were
+	// shutting down so let's swallow it.
+	_ = stopper.RunAsyncTask(ctx, "txn-diag-poll", r.poll)
+}
+
+func (r *TxnRegistry) poll(ctx context.Context) {
+	var (
+		timer               timeutil.Timer
+		lastPoll            time.Time
+		deadline            time.Time
+		pollIntervalChanged = make(chan struct{}, 1)
+		maybeResetTimer     = func() {
+			if interval := txnPollingInterval.Get(&r.st.SV); interval == 0 {
+				// Setting the interval to zero stops the polling.
+				timer.Stop()
+			} else {
+				newDeadline := lastPoll.Add(interval)
+				if deadline.IsZero() || !deadline.Equal(newDeadline) {
+					deadline = newDeadline
+					timer.Reset(timeutil.Until(deadline))
+				}
+			}
+		}
+		poll = func() {
+			if err := r.pollTxnRequests(ctx); err != nil {
+				fmt.Printf("error polling for transaction diagnostics requests: %s", err)
+				if ctx.Err() != nil {
+					return
+				}
+				log.Dev.Warningf(ctx, "error polling for transaction diagnostics requests: %s", err)
+			}
+			lastPoll = r.ts.Now()
+		}
+	)
+	txnPollingInterval.SetOnChange(&r.st.SV, func(ctx context.Context) {
+		select {
+		case pollIntervalChanged <- struct{}{}:
+		default:
+		}
+	})
+	for {
+		maybeResetTimer()
+		select {
+		case <-pollIntervalChanged:
+			continue // go back around and maybe reset the timer
+		case <-timer.C:
+		case <-ctx.Done():
+			return
+		}
+		poll()
+	}
+}
+
+// pollTxnRequests reads the pending rows from system.transaction_diagnostics_requests and
+// updates r.mu.requests accordingly.
+func (r *TxnRegistry) pollTxnRequests(ctx context.Context) error {
+	var rows []tree.Datums
+
+	// Loop until we run the query without straddling an epoch increment.
+	for {
+		r.mu.Lock()
+		epoch := r.mu.epoch
+		r.mu.Unlock()
+
+		it, err := r.db.Executor().QueryIteratorEx(ctx, "txn-diag-poll", nil, /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			`SELECT id, transaction_fingerprint_id, statement_fingerprint_ids, min_execution_latency, expires_at, sampling_probability, redacted, username
+				FROM system.transaction_diagnostics_requests
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
+		)
+		if err != nil {
+			return err
+		}
+		rows = rows[:0]
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			rows = append(rows, it.Cur())
+		}
+		if err != nil {
+			return err
+		}
+
+		// If the epoch changed it means that a request was added to the registry
+		// manually while the query was running. In that case, if we were to process
+		// the query results normally, we might remove that manually-added request.
+		if r.mu.Lock(); r.mu.epoch != epoch {
+			r.mu.Unlock()
+			continue
+		}
+		break
+	}
+	defer r.mu.Unlock()
+
+	now := r.ts.Now()
+	var ids intsets.Fast
+	for _, row := range rows {
+		id := RequestID(*row[0].(*tree.DInt))
+		var txnFingerprintId uint64
+		txnFingerprintId, err := sqlstatsutil.DatumToUint64(row[1])
+		if err != nil {
+			return err
+		}
+
+		var stmtFingerprintIds []uint64
+		stmtFingerprintArray := row[2].(*tree.DArray)
+		for _, elem := range stmtFingerprintArray.Array {
+			stmtFpId, err := sqlstatsutil.DatumToUint64(elem)
+			if err != nil {
+				return err
+			}
+			stmtFingerprintIds = append(stmtFingerprintIds, stmtFpId)
+		}
+
+		var minExecutionLatency time.Duration
+		var expiresAt time.Time
+		var samplingProbability float64
+		var redacted bool
+		var username string
+
+		if minExecLatency, ok := row[3].(*tree.DInterval); ok {
+			minExecutionLatency = time.Duration(minExecLatency.Nanos())
+		}
+		if e, ok := row[4].(*tree.DTimestampTZ); ok {
+			expiresAt = e.Time
+		}
+		if prob, ok := row[5].(*tree.DFloat); ok {
+			samplingProbability = float64(*prob)
+			if samplingProbability < 0 || samplingProbability > 1 {
+				log.Dev.Warningf(ctx, "malformed sampling probability for txn request %d: %f (expected in range [0, 1]), resetting to 1.0",
+					id, samplingProbability)
+				samplingProbability = 1.0
+			}
+		}
+		if b, ok := row[6].(*tree.DBool); ok {
+			redacted = bool(*b)
+		}
+
+		if u, ok := row[7].(*tree.DString); ok {
+			username = string(*u)
+		}
+
+		ids.Add(int(id))
+		r.addTxnRequestInternalLocked(ctx, id, txnFingerprintId, stmtFingerprintIds, samplingProbability, minExecutionLatency, expiresAt, redacted, username)
+	}
+
+	// Remove all other requests.
+	for id, req := range r.mu.requests {
+		if !ids.Contains(int(id)) || req.isExpired(now) {
+			delete(r.mu.requests, id)
+		}
+	}
+	return nil
 }

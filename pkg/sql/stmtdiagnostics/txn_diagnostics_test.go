@@ -242,10 +242,6 @@ func TestTxnRegistry_InsertTxnRequest(t *testing.T) {
 	}
 }
 
-func TestTxnRegistry_InsertTxnRequest_Polling(t *testing.T) {
-	// TODO: create a multi-node cluster to test that it propagates correctly, once persistence is added.
-}
-
 func TestTxnRegistry_ResetTxnRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -390,7 +386,7 @@ func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
 	var bundleChunkCount int
 	// Verify that statement_bundle_chunks table has entries for the transaction diagnostic
 	runner.QueryRow(t, `
-  SELECT COUNT(*)
+  SELECT count(*)
   FROM system.statement_bundle_chunks sbc
   JOIN system.transaction_diagnostics td ON sbc.id = ANY(td.bundle_chunks)
   WHERE td.id = $1
