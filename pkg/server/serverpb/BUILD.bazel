@@ -113,7 +113,9 @@ go_library(
     deps = [
         "//pkg/gossip",
         "//pkg/roachpb",
+        "//pkg/rpc/nodedialer",
         "//pkg/rpc/rpcbase",
+        "//pkg/settings/cluster",
         "//pkg/util/errorutil",
         "//pkg/util/metric",
         "@com_github_prometheus_client_model//go",
