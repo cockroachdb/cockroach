@@ -971,6 +971,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/twitchyliquid64/golang-asm/com_github_twitchyliquid64_golang_asm-v0.15.1.zip": "448f87fb680adda839b60bbaa0b371c28f99f3928dea7a069f42800e5100018d",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/twmb/franz-go/com_github_twmb_franz_go-v1.18.0.zip": "343bdc5d5f8e5536678caa0753a325ab281f72a7a72da97d8a9485f70a2e1322",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/twmb/franz-go/pkg/kadm/com_github_twmb_franz_go_pkg_kadm-v1.11.0.zip": "df8b445c52226a7398b9c82055548961c977cce92b1aa392581e636a5f5fcfc8",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/twmb/franz-go/pkg/kfake/com_github_twmb_franz_go_pkg_kfake-v0.0.0-20241015012055-0a9996b613b1.zip": "eb4c77ce423b9da1cccc2f49e08de9540734dd341291bf017abf6c2b4114f66a",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/twmb/franz-go/pkg/kmsg/com_github_twmb_franz_go_pkg_kmsg-v1.9.0.zip": "ab70bc73e6f7167da6ec1af42399fee83971bcd8f31b03d063a201944845e229",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/twpayne/go-geom/com_github_twpayne_go_geom-v1.4.2.zip": "df7e9bbccc443348b23fbb67039e216700eb79ed79f9412b38a6bb8a81edb4cb",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/twpayne/go-kml/com_github_twpayne_go_kml-v1.5.2.zip": "f67a698f9a02c889a1f6ff4e0a0625ec2359057674c0f25cf8c862ae519e382e",
