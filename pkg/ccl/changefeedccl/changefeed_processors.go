@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -1803,7 +1803,7 @@ func (cf *changeFrontier) maybeCheckpointJob(
 			return false, nil
 		}
 		checkpointStart := timeutil.Now()
-		updated, err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint, cf.evalCtx.Settings.Version)
+		updated, err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint)
 		if err != nil {
 			return false, err
 		}
@@ -1817,10 +1817,7 @@ func (cf *changeFrontier) maybeCheckpointJob(
 const changefeedJobProgressTxnName = "changefeed job progress"
 
 func (cf *changeFrontier) checkpointJobProgress(
-	ctx context.Context,
-	frontier hlc.Timestamp,
-	spanLevelCheckpoint *jobspb.TimestampSpansMap,
-	cv clusterversion.Handle,
+	ctx context.Context, frontier hlc.Timestamp, spanLevelCheckpoint *jobspb.TimestampSpansMap,
 ) (bool, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_job_progress")
 	defer sp.Finish()
@@ -1856,6 +1853,10 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
+
+			if err := cf.checkpointSpanFrontier(ctx, txn); err != nil {
+				return err
+			}
 
 			if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress); err != nil {
 				log.Changefeed.Warningf(ctx, "error managing protected timestamp record: %v", err)
@@ -1899,6 +1900,21 @@ func (cf *changeFrontier) checkpointJobProgress(
 	cf.localState.SetCheckpoint(spanLevelCheckpoint)
 
 	return true, nil
+}
+
+func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context, txn isql.Txn) error {
+	for tableID, tableFrontier := range cf.frontier.Frontiers() {
+		name := func() string {
+			if tableID == 0 {
+				return "coordinator"
+			}
+			return fmt.Sprintf("table%d", tableID)
+		}()
+		if err := jobfrontier.Store(ctx, txn, cf.spec.JobID, name, tableFrontier); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // manageProtectedTimestamps periodically advances the protected timestamp for
