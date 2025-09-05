@@ -1007,6 +1007,31 @@ func (node *Subquery) Format(ctx *FmtCtx) {
 	}
 }
 
+// InputCount implements the WalkableTreeNode interface.
+func (node *Subquery) InputCount() int { return 1 }
+
+// Input implements the WalkableTreeNode interface.
+func (node *Subquery) Input(i int) WalkableTreeNode {
+	if i == 0 {
+		if walkable, ok := node.Select.(WalkableTreeNode); ok {
+			return walkable
+		}
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *Subquery) SetChild(i int, child WalkableTreeNode) error {
+	if i == 0 {
+		if selectStmt, ok := child.(SelectStatement); ok {
+			node.Select = selectStmt
+			return nil
+		}
+		return errors.Errorf("Subquery child 0 must be SelectStatement, got %T", child)
+	}
+	return errors.Errorf("Subquery child index %d out of bounds", i)
+}
+
 // TypedDummy is a dummy expression that represents a dummy value with
 // a specified type. It can be used in situations where TypedExprs of a
 // particular type are required for semantic analysis.

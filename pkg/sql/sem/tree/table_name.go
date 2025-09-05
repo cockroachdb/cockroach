@@ -5,6 +5,8 @@
 
 package tree
 
+import "github.com/cockroachdb/errors"
+
 // TableName corresponds to the name of a table in a FROM clause,
 // INSERT or UPDATE statement, etc.
 //
@@ -45,6 +47,17 @@ func (t *TableName) Equals(other *TableName) bool {
 
 // tableExpr implements the TableExpr interface.
 func (*TableName) tableExpr() {}
+
+// InputCount implements the WalkableTreeNode interface.
+func (node *TableName) InputCount() int { return 0 }
+
+// Input implements the WalkableTreeNode interface.
+func (node *TableName) Input(i int) WalkableTreeNode { return nil }
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *TableName) SetChild(i int, child WalkableTreeNode) error {
+	return errors.Newf("index out of range: %d", i)
+}
 
 // NewTableNameWithSchema creates a new table name qualified with a given
 // catalog and schema.

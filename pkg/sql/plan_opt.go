@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -14,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -23,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -446,6 +449,111 @@ const (
 	memoTypeIdealGeneric
 )
 
+// applyASTHints applies external AST hints to the given AST by walking both
+// the original AST and the hinted AST in parallel, transferring inline hints.
+func (opc *optPlanningCtx) applyASTHints(
+	ctx context.Context, ast tree.Statement, planHints *hints.PlanHints,
+) (tree.Statement, error) {
+	if planHints == nil || planHints.AstHint == nil {
+		return ast, nil
+	}
+
+	// TODO(drewk): Parse the hinted fingerprint and walk both ASTs to apply hints.
+	// For now, parse the hinted fingerprint to validate it's syntactically correct.
+	hintedFingerprint := planHints.AstHint.HintedFingerprint
+
+	// Parse the hinted fingerprint to ensure it's valid SQL.
+	hintAST, err := parser.ParseOne(hintedFingerprint)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid hinted fingerprint: %s", hintedFingerprint)
+	}
+
+	// TODO(drewk): Implement AST walking logic to transfer inline hints from
+	// parsed.AST to ast. This should handle:
+	// - Index hints on table expressions (@index_name)
+	// - Join algorithm hints (HASH JOIN, MERGE JOIN, etc.)
+	// The implementation should:
+	// 1. Walk both ASTs in parallel to verify structural equivalence
+	// 2. Transfer hint annotations from hinted AST to original AST
+	// 3. Handle placeholders correctly (hints should apply regardless of placeholder values)
+	// 4. Validate that table names, join structure, etc. match exactly
+	var explainOptions tree.ExplainOptions
+	explainStmt, isExplain := ast.(*tree.Explain)
+	if isExplain {
+		explainOptions = explainStmt.ExplainOptions
+		ast = explainStmt.Statement
+	}
+	// TODO(drewk): come up with a sane way to do this.
+	var walk func(ast, hintAST tree.WalkableTreeNode) error
+	walk = func(matchedAST, hintAST tree.WalkableTreeNode) error {
+		if matchedAST == nil || hintAST == nil {
+			return errors.New("nil AST is not allowed")
+		}
+		if reflect.TypeOf(matchedAST) != reflect.TypeOf(hintAST) {
+			// Structural mismatch; cannot apply hints
+			return errors.New("structural mismatch; cannot apply hints")
+		}
+		if matchedAST.InputCount() != hintAST.InputCount() {
+			return errors.New("structural mismatch; cannot apply hints")
+		}
+		for i := 0; i < matchedAST.InputCount(); i++ {
+			matchedChild := matchedAST.Input(i)
+			hintChild := hintAST.Input(i)
+			switch t := hintChild.(type) {
+			case *tree.JoinTableExpr:
+				ogNode, ok := matchedChild.(*tree.JoinTableExpr)
+				if !ok {
+					return errors.New("structural mismatch; cannot apply hints")
+				}
+				newNode := *ogNode
+				newNode.Hint = t.Hint
+				if err = matchedAST.SetChild(i, &newNode); err != nil {
+					return err
+				}
+			case *tree.AliasedTableExpr:
+				switch ogNode := matchedChild.(type) {
+				case *tree.AliasedTableExpr:
+					newNode := *ogNode
+					newNode.IndexFlags = t.IndexFlags
+					if err = matchedAST.SetChild(i, &newNode); err != nil {
+						return err
+					}
+				case tree.TableExpr:
+					newNode := &tree.AliasedTableExpr{
+						Expr:       ogNode,
+						IndexFlags: t.IndexFlags,
+					}
+					if err = matchedAST.SetChild(i, newNode); err != nil {
+						return err
+					}
+				default:
+					return errors.New("structural mismatch; cannot apply hints")
+				}
+			}
+			// Subtle - must call Input() again to get the updated child.
+			if err = walk(matchedAST.Input(i), hintAST.Input(i)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	walkableAST, ok := ast.(tree.WalkableTreeNode)
+	walkableHintAST, ok2 := hintAST.AST.(tree.WalkableTreeNode)
+	if !ok || !ok2 {
+		return nil, errors.New("unable to walk ASTs to apply hints")
+	}
+	if err = walk(walkableAST, walkableHintAST); err != nil {
+		return nil, err
+	}
+	if isExplain {
+		ast = &tree.Explain{
+			Statement:      ast,
+			ExplainOptions: explainOptions,
+		}
+	}
+	return ast, nil
+}
+
 // buildReusableMemo builds the statement into a memo that can be stored for
 // prepared statements and can later be used as a starting point for
 // optimization. The returned memo is fully optimized if:
@@ -484,6 +592,29 @@ func (opc *optPlanningCtx) buildReusableMemo(
 		)
 	}
 
+	// Apply external AST hints if any exist for this query fingerprint.
+	ast := opc.p.stmt.AST
+	astForHints := opc.p.stmt.AST
+	if explainStmt, ok := astForHints.(*tree.Explain); ok {
+		// If this is an EXPLAIN (OPT, ...), we want to get the wrapped stmt.
+		astForHints = explainStmt.Statement
+	}
+	fmtCtx := tree.NewFmtCtx(tree.FmtHideConstants)
+	astForHints.Format(fmtCtx)
+	if planHints := p.execCfg.PlanHintsCache.MaybeGetPlanHints(ctx, fmtCtx.CloseAndGetString()); planHints != nil {
+		// TODO(drewk): Implement memo cache invalidation when external hints change.
+		// Currently cached memos may become stale when external hints are modified.
+		// Need to:
+		// 1. Track hint fingerprints/versions in the memo (similar to session settings)
+		// 2. Check for hint changes in memo.IsStale()
+		// 3. Invalidate query cache entries when hints are added/modified/deleted
+		var err error
+		ast, err = opc.applyASTHints(ctx, ast, planHints)
+		if err != nil {
+			return nil, memoTypeUnknown, err
+		}
+	}
+
 	// Build the Memo (optbuild) and apply normalization rules to it. If the
 	// query contains placeholders, values are not assigned during this phase,
 	// as that only happens during the EXECUTE phase. If the query does not
@@ -491,7 +622,7 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	// that there's even less to do during the EXECUTE phase.
 	//
 	f := opc.optimizer.Factory()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, opc.p.stmt.AST)
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, ast)
 	bld.KeepPlaceholders = true
 	if opc.flags.IsSet(planFlagSessionMigration) {
 		bld.SkipAOST = true
@@ -845,6 +976,28 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		opc.log(ctx, "query cache miss")
 	} else {
 		opc.log(ctx, "not using query cache")
+	}
+
+	// Apply external AST hints if any exist for this query fingerprint.
+	ast := opc.p.stmt.AST
+	astForHints := opc.p.stmt.AST
+	if explainStmt, ok := astForHints.(*tree.Explain); ok {
+		// If this is an EXPLAIN (OPT, ...), we want to get the wrapped stmt.
+		astForHints = explainStmt.Statement
+	}
+	fmtCtx := tree.NewFmtCtx(tree.FmtHideConstants)
+	astForHints.Format(fmtCtx)
+	if planHints := p.execCfg.PlanHintsCache.MaybeGetPlanHints(ctx, fmtCtx.CloseAndGetString()); planHints != nil {
+		// TODO(drewk): Implement memo cache invalidation when external hints change.
+		// Currently cached memos may become stale when external hints are modified.
+		// Need to:
+		// 1. Track hint fingerprints/versions in the memo (similar to session settings)
+		// 2. Check for hint changes in memo.IsStale()
+		// 3. Invalidate query cache entries when hints are added/modified/deleted
+		ast, err = opc.applyASTHints(ctx, ast, planHints)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// We are executing a statement for which there is no reusable memo

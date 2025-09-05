@@ -1343,6 +1343,25 @@ CREATE TABLE public.inspect_errors (
     INDEX object_idx (id ASC),
 	FAMILY "primary" (error_id, job_id, error_type, database_id, schema_id, id, primary_key, details, crdb_internal_expiration)
 ) WITH (ttl_expire_after = '90 days');`
+
+	// PlanHintsTableSchema defines the schema for the system.plan_hints table,
+	// which associates custom external plan hints with queries that match a
+	// specified fingerprint.
+	// * query_hash: a 64-bit hash of the query fingerprint, used as the leading
+	//   primary key column.
+	// * row_id: a unique ID used to de-duplicate collisions in the query_hash
+	//   column.
+	// * fingerprint: the query fingerprint.
+	// * plan_hints: the plan hints for the query, serialized into bytes.
+	PlanHintsTableSchema = `
+  CREATE TABLE system.plan_hints (
+    "query_hash"  INT8 NOT NULL,
+    "row_id"      INT8 DEFAULT unique_rowid() NOT NULL,
+    "fingerprint" STRING NOT NULL,
+    "plan_hints"  BYTES NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY ("query_hash", "row_id"),
+    FAMILY "primary" ("query_hash", "row_id", "fingerprint", "plan_hints")
+  );`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1585,6 +1604,7 @@ func MakeSystemTables() []SystemTable {
 		SystemJobMessageTable,
 		PreparedTransactionsTable,
 		InspectErrorsTable,
+		PlanHintsTable,
 	}
 }
 
@@ -5278,6 +5298,39 @@ var (
 			tbl.RowLevelTTL = &catpb.RowLevelTTL{
 				DurationExpr: catpb.Expression("'90 days':::INTERVAL")}
 		},
+	)
+
+	PlanHintsTable = makeSystemTable(
+		PlanHintsTableSchema,
+		systemTable(
+			catconstants.PlanHintsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "query_hash", ID: 1, Type: types.Int},
+				{Name: "row_id", ID: 2, Type: types.Int},
+				{Name: "fingerprint", ID: 3, Type: types.String},
+				{Name: "plan_hints", ID: 4, Type: types.Bytes},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"query_hash", "row_id", "fingerprint", "plan_hints"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"query_hash", "row_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2},
+			},
+		),
 	)
 )
 

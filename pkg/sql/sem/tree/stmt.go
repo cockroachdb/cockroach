@@ -17,6 +17,8 @@ package tree
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 // Instructions for creating new types: If a type needs to satisfy an
@@ -139,6 +141,21 @@ type Statement interface {
 	// TODO(dt): Currently tags are always pg-compatible in the future it
 	// might make sense to pass a tag format specifier.
 	StatementTag() string
+}
+
+// WalkableTreeNode is implemented by AST nodes that contain input nodes,
+// enabling tree traversal for AST walking operations like hint application.
+// This interface provides a uniform way to navigate both statement and expression hierarchies.
+type WalkableTreeNode interface {
+	// InputCount returns the number of input node slots this node has.
+	// This includes slots that may be unset (nil).
+	InputCount() int
+	// Input returns the i-th input node, where 0 <= i < InputCount().
+	// Returns nil if the input at that index is unset or if i is out of bounds.
+	Input(i int) WalkableTreeNode
+	// SetChild replaces the i-th input node with the given child node.
+	// Returns an error if i is out of bounds or if the child type is not compatible.
+	SetChild(i int, child WalkableTreeNode) error
 }
 
 // canModifySchema is to be implemented by statements that can modify
@@ -1188,6 +1205,76 @@ func (*Delete) StatementType() StatementType { return TypeDML }
 // StatementTag returns a short string identifying the type of statement.
 func (*Delete) StatementTag() string { return "DELETE" }
 
+// InputCount implements the WalkableTreeNode interface.
+func (node *Delete) InputCount() int {
+	count := 0
+	if node.With != nil {
+		count += len(node.With.CTEList)
+	}
+	count += len(node.Using) // TableExprs in USING clause
+	return count
+}
+
+// Input implements the WalkableTreeNode interface.
+func (node *Delete) Input(i int) WalkableTreeNode {
+	// CTEs come first
+	if node.With != nil && i < len(node.With.CTEList) {
+		return node.With.CTEList[i]
+	}
+	// USING clause tables come after CTEs
+	cteCount := 0
+	if node.With != nil {
+		cteCount = len(node.With.CTEList)
+	}
+	if i == cteCount {
+		if walkable, ok := node.Table.(WalkableTreeNode); ok {
+			return walkable
+		}
+		return nil
+	}
+	usingIndex := i - cteCount - 1
+	if usingIndex >= 0 && usingIndex < len(node.Using) {
+		if walkable, ok := node.Using[usingIndex].(WalkableTreeNode); ok {
+			return walkable
+		}
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *Delete) SetChild(i int, child WalkableTreeNode) error {
+	// CTEs come first
+	if node.With != nil && i < len(node.With.CTEList) {
+		if cte, ok := child.(*CTE); ok {
+			node.With.CTEList[i] = cte
+			return nil
+		}
+		return errors.Newf("expected *CTE, got %T", child)
+	}
+	// USING clause tables come after CTEs
+	cteCount := 0
+	if node.With != nil {
+		cteCount = len(node.With.CTEList)
+	}
+	if i == cteCount {
+		if tableExpr, ok := child.(TableExpr); ok {
+			node.Table = tableExpr
+			return nil
+		} else {
+			return errors.Newf("expected TableExpr, got %T", child)
+		}
+	}
+	usingIndex := i - cteCount - 1
+	if usingIndex >= 0 && usingIndex < len(node.Using) {
+		if tableExpr, ok := child.(TableExpr); ok {
+			node.Using[usingIndex] = tableExpr
+			return nil
+		}
+		return errors.Newf("expected TableExpr, got %T", child)
+	}
+	return errors.Newf("index out of range: %d", i)
+}
+
 // StatementReturnType implements the Statement interface.
 func (*DropDatabase) StatementReturnType() StatementReturnType { return DDL }
 
@@ -1368,6 +1455,74 @@ func (*Insert) StatementType() StatementType { return TypeDML }
 // StatementTag returns a short string identifying the type of statement.
 func (*Insert) StatementTag() string { return "INSERT" }
 
+// InputCount implements the WalkableTreeNode interface.
+func (node *Insert) InputCount() int {
+	count := 0
+	if node.With != nil {
+		count += len(node.With.CTEList)
+	}
+	if node.Rows != nil {
+		count++
+	}
+	return count
+}
+
+// Input implements the WalkableTreeNode interface.
+func (node *Insert) Input(i int) WalkableTreeNode {
+	// CTEs come first
+	if node.With != nil && i < len(node.With.CTEList) {
+		return node.With.CTEList[i]
+	}
+	// Rows comes after all CTEs
+	cteCount := 0
+	if node.With != nil {
+		cteCount = len(node.With.CTEList)
+	}
+	if i == cteCount {
+		if walkable, ok := node.Table.(WalkableTreeNode); ok {
+			return walkable
+		}
+		return nil
+	}
+	if i == cteCount+1 && node.Rows != nil {
+		return node.Rows
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *Insert) SetChild(i int, child WalkableTreeNode) error {
+	// CTEs come first
+	if node.With != nil && i < len(node.With.CTEList) {
+		if cte, ok := child.(*CTE); ok {
+			node.With.CTEList[i] = cte
+			return nil
+		}
+		return errors.Newf("expected *CTE, got %T", child)
+	}
+	// Rows comes after all CTEs
+	cteCount := 0
+	if node.With != nil {
+		cteCount = len(node.With.CTEList)
+	}
+	if i == cteCount {
+		if tableExpr, ok := child.(TableExpr); ok {
+			node.Table = tableExpr
+			return nil
+		} else {
+			return errors.Newf("expected TableExpr, got %T", child)
+		}
+	}
+	if i == cteCount+1 && node.Rows != nil {
+		if rows, ok := child.(*Select); ok {
+			node.Rows = rows
+			return nil
+		}
+		return errors.Newf("expected *Select, got %T", child)
+	}
+	return errors.Newf("index out of range: %d", i)
+}
+
 // StatementReturnType implements the Statement interface.
 func (*Import) StatementReturnType() StatementReturnType { return Rows }
 
@@ -1405,6 +1560,29 @@ func (*ParenSelect) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ParenSelect) StatementTag() string { return "SELECT" }
+
+// InputCount implements the WalkableTreeNode interface.
+func (node *ParenSelect) InputCount() int { return 1 }
+
+// Input implements the WalkableTreeNode interface.
+func (node *ParenSelect) Input(i int) WalkableTreeNode {
+	if i == 0 {
+		return node.Select
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *ParenSelect) SetChild(i int, child WalkableTreeNode) error {
+	if i == 0 {
+		if select_, ok := child.(*Select); ok {
+			node.Select = select_
+			return nil
+		}
+		return errors.Errorf("ParenSelect child 0 must be *Select, got %T", child)
+	}
+	return errors.Errorf("ParenSelect child index %d out of bounds", i)
+}
 
 // StatementReturnType implements the Statement interface.
 func (*Prepare) StatementReturnType() StatementReturnType { return Ack }
@@ -1635,6 +1813,61 @@ func (*Select) StatementType() StatementType { return TypeDML }
 // StatementTag returns a short string identifying the type of statement.
 func (*Select) StatementTag() string { return "SELECT" }
 
+// InputCount implements the WalkableTreeNode interface.
+func (node *Select) InputCount() int {
+	// Select has CTEs first, then the main Select statement
+	count := 0
+	if node.With != nil {
+		count += len(node.With.CTEList)
+	}
+	count++ // main Select statement
+	return count
+}
+
+// Input implements the WalkableTreeNode interface.
+func (node *Select) Input(i int) WalkableTreeNode {
+	// CTEs come first
+	if node.With != nil && i < len(node.With.CTEList) {
+		return node.With.CTEList[i]
+	}
+	// Main Select statement comes after all CTEs
+	cteCount := 0
+	if node.With != nil {
+		cteCount = len(node.With.CTEList)
+	}
+	if i == cteCount {
+		if walkable, ok := node.Select.(WalkableTreeNode); ok {
+			return walkable
+		}
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *Select) SetChild(i int, child WalkableTreeNode) error {
+	// CTEs come first
+	if node.With != nil && i < len(node.With.CTEList) {
+		if cte, ok := child.(*CTE); ok {
+			node.With.CTEList[i] = cte
+			return nil
+		}
+		return errors.Errorf("Select CTE child %d must be *CTE, got %T", i, child)
+	}
+	// Main Select statement comes after all CTEs
+	cteCount := 0
+	if node.With != nil {
+		cteCount = len(node.With.CTEList)
+	}
+	if i == cteCount {
+		if selectStmt, ok := child.(SelectStatement); ok {
+			node.Select = selectStmt
+			return nil
+		}
+		return errors.Errorf("Select main child must be SelectStatement, got %T", child)
+	}
+	return errors.Errorf("Select child index %d out of bounds", i)
+}
+
 // StatementReturnType implements the Statement interface.
 func (*SelectClause) StatementReturnType() StatementReturnType { return Rows }
 
@@ -1643,6 +1876,32 @@ func (*SelectClause) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SelectClause) StatementTag() string { return "SELECT" }
+
+// InputCount implements the WalkableTreeNode interface.
+func (node *SelectClause) InputCount() int {
+	// SelectClause has one From clause that contains the table references
+	return 1
+}
+
+// Input implements the WalkableTreeNode interface.
+func (node *SelectClause) Input(i int) WalkableTreeNode {
+	if i == 0 {
+		return &node.From
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *SelectClause) SetChild(i int, child WalkableTreeNode) error {
+	if i == 0 {
+		if from, ok := child.(*From); ok {
+			node.From = *from
+			return nil
+		}
+		return errors.Errorf("SelectClause child 0 must be *From, got %T", child)
+	}
+	return errors.Errorf("SelectClause child index %d out of bounds", i)
+}
 
 // StatementReturnType implements the Statement interface.
 func (*SetVar) StatementReturnType() StatementReturnType { return Ack }
@@ -2348,6 +2607,74 @@ func (*Update) StatementType() StatementType { return TypeDML }
 // StatementTag returns a short string identifying the type of statement.
 func (*Update) StatementTag() string { return "UPDATE" }
 
+// InputCount implements the WalkableTreeNode interface.
+func (node *Update) InputCount() int {
+	count := 0
+	if node.With != nil {
+		count += len(node.With.CTEList)
+	}
+	count += len(node.From) // TableExprs in FROM clause
+	return count
+}
+
+// Input implements the WalkableTreeNode interface.
+func (node *Update) Input(i int) WalkableTreeNode {
+	// CTEs come first
+	if node.With != nil && i < len(node.With.CTEList) {
+		return node.With.CTEList[i]
+	}
+	// FROM clause tables come after CTEs
+	cteCount := 0
+	if node.With != nil {
+		cteCount = len(node.With.CTEList)
+	}
+	if i == cteCount {
+		if walkable, ok := node.Table.(WalkableTreeNode); ok {
+			return walkable
+		}
+	}
+	fromIndex := i - cteCount - 1
+	if fromIndex >= 0 && fromIndex < len(node.From) {
+		if walkable, ok := node.From[fromIndex].(WalkableTreeNode); ok {
+			return walkable
+		}
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *Update) SetChild(i int, child WalkableTreeNode) error {
+	// CTEs come first
+	if node.With != nil && i < len(node.With.CTEList) {
+		if cte, ok := child.(*CTE); ok {
+			node.With.CTEList[i] = cte
+			return nil
+		}
+		return errors.Newf("expected *CTE, got %T", child)
+	}
+	// FROM clause tables come after CTEs
+	cteCount := 0
+	if node.With != nil {
+		cteCount = len(node.With.CTEList)
+	}
+	if i == cteCount {
+		if table, ok := child.(TableExpr); ok {
+			node.Table = table
+			return nil
+		}
+		return errors.Newf("expected TableExpr, got %T", child)
+	}
+	fromIndex := i - cteCount - 1
+	if fromIndex >= 0 && fromIndex < len(node.From) {
+		if table, ok := child.(TableExpr); ok {
+			node.From[fromIndex] = table
+			return nil
+		}
+		return errors.Newf("expected TableExpr, got %T", child)
+	}
+	return errors.Newf("index out of range: %d", i)
+}
+
 // StatementReturnType implements the Statement interface.
 func (*UnionClause) StatementReturnType() StatementReturnType { return Rows }
 
@@ -2356,6 +2683,40 @@ func (*UnionClause) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*UnionClause) StatementTag() string { return "UNION" }
+
+// InputCount implements the WalkableTreeNode interface.
+func (node *UnionClause) InputCount() int { return 2 }
+
+// Input implements the WalkableTreeNode interface.
+func (node *UnionClause) Input(i int) WalkableTreeNode {
+	switch i {
+	case 0:
+		return node.Left
+	case 1:
+		return node.Right
+	}
+	return nil
+}
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *UnionClause) SetChild(i int, child WalkableTreeNode) error {
+	switch i {
+	case 0:
+		if sel, ok := child.(*Select); ok {
+			node.Left = sel
+			return nil
+		}
+		return errors.Newf("expected *Select, got %T", child)
+	case 1:
+		if sel, ok := child.(*Select); ok {
+			node.Right = sel
+			return nil
+		}
+		return errors.Newf("expected *Select, got %T", child)
+	default:
+		return errors.Newf("index out of range: %d", i)
+	}
+}
 
 // StatementReturnType implements the Statement interface.
 func (*Unlisten) StatementReturnType() StatementReturnType { return Ack }
@@ -2374,6 +2735,17 @@ func (*ValuesClause) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ValuesClause) StatementTag() string { return "VALUES" }
+
+// InputCount implements the WalkableTreeNode interface.
+func (node *ValuesClause) InputCount() int { return 0 }
+
+// Input implements the WalkableTreeNode interface.
+func (node *ValuesClause) Input(i int) WalkableTreeNode { return nil }
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *ValuesClause) SetChild(i int, child WalkableTreeNode) error {
+	return errors.Newf("index out of range: %d", i)
+}
 
 // StatementReturnType implements the Statement interface.
 func (*CreateRoutine) StatementReturnType() StatementReturnType { return DDL }

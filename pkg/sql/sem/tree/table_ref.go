@@ -5,7 +5,10 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/errors"
+)
 
 // ID is a custom type for {Database,Table}Descriptor IDs.
 type ID = catid.ColumnID
@@ -53,3 +56,14 @@ func (n *TableRef) String() string { return AsString(n) }
 
 // tableExpr implements the TableExpr interface.
 func (n *TableRef) tableExpr() {}
+
+// InputCount implements the WalkableTreeNode interface.
+func (node *TableRef) InputCount() int { return 0 }
+
+// Input implements the WalkableTreeNode interface.
+func (node *TableRef) Input(i int) WalkableTreeNode { return nil }
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *TableRef) SetChild(i int, child WalkableTreeNode) error {
+	return errors.Newf("index out of range: %d", i)
+}
