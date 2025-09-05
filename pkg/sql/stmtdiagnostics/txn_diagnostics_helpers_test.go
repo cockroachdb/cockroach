@@ -44,3 +44,6 @@ func (r *TxnRegistry) InsertTxnRequestInternal(
 		ctx, txnFingerprintId, stmtFingerprintIds, username, samplingProbability, minExecutionLatency, expiresAfter, redacted)
 	return id, err
 }
+
+// TxnPollingInterval is exposed to override in tests
+var TxnPollingInterval = txnPollingInterval
