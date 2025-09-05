@@ -580,7 +580,7 @@ func (r *Registry) InsertStatementDiagnostics(
 	var diagID CollectedInstanceID
 	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		txn.KV().SetDebugName("stmt-diag-insert-bundle")
-		id, err := r.innerInsertStatementDiagnostics(ctx, NewStmtDiagnostic(requestID, req, stmtFingerprint, stmt, bundle, collectionErr), txn)
+		id, err := r.innerInsertStatementDiagnostics(ctx, NewStmtDiagnostic(requestID, req, stmtFingerprint, stmt, bundle, collectionErr), txn, CollectedInstanceID(0))
 		if err != nil {
 			return err
 		}
@@ -627,7 +627,7 @@ func (r *Registry) insertBundleChunks(
 }
 
 func (r *Registry) innerInsertStatementDiagnostics(
-	ctx context.Context, diagnostic StmtDiagnostic, txn isql.Txn,
+	ctx context.Context, diagnostic StmtDiagnostic, txn isql.Txn, txnDiagnosticId CollectedInstanceID,
 ) (CollectedInstanceID, error) {
 	var diagID CollectedInstanceID
 	if diagnostic.requestID != 0 {
@@ -663,14 +663,22 @@ func (r *Registry) innerInsertStatementDiagnostics(
 
 	collectionTime := timeutil.Now()
 
+	insertCols := "statement_fingerprint, statement, collected_at, bundle_chunks, error"
+	insertVals := "$1, $2, $3, $4, $5"
+	vals := []interface{}{diagnostic.stmtFingerprint, diagnostic.stmt, collectionTime, bundleChunksVal, errorVal}
+	if txnDiagnosticId != 0 {
+		insertCols += ", transaction_diagnostics_id"
+		insertVals += ", $6"
+		vals = append(vals, txnDiagnosticId)
+	}
 	// Insert the collection metadata into system.statement_diagnostics.
 	row, err := txn.QueryRowEx(
 		ctx, "stmt-diag-insert", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		"INSERT INTO system.statement_diagnostics "+
-			"(statement_fingerprint, statement, collected_at, bundle_chunks, error) "+
-			"VALUES ($1, $2, $3, $4, $5) RETURNING id",
-		diagnostic.stmtFingerprint, diagnostic.stmt, collectionTime, bundleChunksVal, errorVal,
+			"("+insertCols+") "+
+			"VALUES ("+insertVals+") RETURNING id",
+		vals...,
 	)
 	if err != nil {
 		return diagID, err
