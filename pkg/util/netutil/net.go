@@ -83,7 +83,8 @@ func MakeHTTPServer(
 					delete(activeConns, conn)
 				}
 			},
-			ErrorLog: httpLogger,
+			ErrorLog:          httpLogger,
+			ReadHeaderTimeout: 5 * time.Second,
 		},
 	}
 
