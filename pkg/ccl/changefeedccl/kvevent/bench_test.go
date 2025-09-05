@@ -27,7 +27,7 @@ import (
 )
 
 func BenchmarkMemBuffer(b *testing.B) {
-	log.Dev.Infof(context.Background(), "b.N=%d", b.N)
+	log.Changefeed.Infof(context.Background(), "b.N=%d", b.N)
 
 	eventPool := func() []kvevent.Event {
 		const valSize = 16 << 10

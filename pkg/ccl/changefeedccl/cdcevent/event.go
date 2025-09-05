@@ -612,7 +612,7 @@ func (d *eventDecoder) DecodeKV(
 	err = changefeedbase.WithTerminalError(errors.Wrapf(err,
 		"error decoding key %s@%s (hex_kv: %x)",
 		keys.PrettyPrint(nil, kv.Key), kv.Value.Timestamp, kvBytes))
-	log.Dev.Errorf(ctx, "terminal error decoding KV: %v", err)
+	log.Changefeed.Errorf(ctx, "terminal error decoding KV: %v", err)
 	return Row{}, err
 }
 
@@ -844,7 +844,7 @@ func MakeRowFromTuple(ctx context.Context, evalCtx *eval.Context, t *tree.DTuple
 		r.AddValueColumn(name, d.ResolvedType())
 		if err := r.SetValueDatumAt(i, d); err != nil {
 			if build.IsRelease() {
-				log.Dev.Warningf(ctx, "failed to set row value from tuple due to error %v", err)
+				log.Changefeed.Warningf(ctx, "failed to set row value from tuple due to error %v", err)
 				_ = r.SetValueDatumAt(i, tree.DNull)
 			} else {
 				panic(err)

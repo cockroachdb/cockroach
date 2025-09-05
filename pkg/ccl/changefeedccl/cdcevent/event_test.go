@@ -784,10 +784,10 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			require.NoError(t, err)
 
 			expectedEvents := len(tc.expectMainFamily) + len(tc.expectECFamily)
-			log.Dev.Infof(ctx, "expectedEvents: %d\n", expectedEvents)
+			log.Changefeed.Infof(ctx, "expectedEvents: %d\n", expectedEvents)
 			for i := 0; i < expectedEvents; i++ {
 				v, deleteRange := popRow(t)
-				log.Dev.Infof(ctx, "event[%d]: v=%+v, deleteRange=%+v", i, v, deleteRange)
+				log.Changefeed.Infof(ctx, "event[%d]: v=%+v, deleteRange=%+v", i, v, deleteRange)
 
 				if deleteRange != nil {
 					// Should not see a RangeFeedValue and a RangeFeedDeleteRange
