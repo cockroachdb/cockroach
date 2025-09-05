@@ -8330,6 +8330,14 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_twmb_franz_go_pkg_kfake",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/twmb/franz-go/pkg/kfake",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:OdVmioEFv4chXyb9F2X4Nv1uwKqYytSQZ2iH5i/u3u4=",
+        version = "v0.0.0-20241015012055-0a9996b613b1",
+    )
+    go_repository(
         name = "com_github_twmb_franz_go_pkg_kmsg",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/twmb/franz-go/pkg/kmsg",

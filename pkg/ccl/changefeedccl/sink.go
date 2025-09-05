@@ -258,9 +258,13 @@ func getSink(
 					return nil, err
 				}
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
+					createTopics, err := opts.GetCreateKafkaTopics()
+					if err != nil {
+						return nil, err
+					}
 					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts,
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{})
+						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{}, createTopics)
 				} else {
 					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts, serverCfg.Settings, metricsBuilder)
 				}
