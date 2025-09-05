@@ -46,12 +46,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
+const defaultLinkWorkersPerNode = 2
+
+var onlineRestoreLinkWorkers = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"backup.restore.online_worker_count",
-	"workers to use for online restore link phase",
-	32,
-	settings.PositiveInt,
+	"total workers to use for online restore link phase (defaults to 2x number of nodes if set to 0)",
+	0,
+	settings.NonNegativeInt,
 )
 
 var onlineRestoreLayerLimit = settings.RegisterIntSetting(
@@ -83,7 +85,10 @@ func splitAndScatter(
 
 	log.Dev.Infof(ctx, "splitting and scattering spans")
 
-	workers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
+	workers, err := getNumOnlineRestoreLinkWorkers(ctx, execCtx)
+	if err != nil {
+		return err
+	}
 	toScatter := make(chan execinfrapb.RestoreSpanEntry, 1)
 	toSplit := make(chan execinfrapb.RestoreSpanEntry, workers)
 
@@ -270,7 +275,10 @@ func linkExternalFiles(
 
 	log.Dev.Infof(ctx, "ingesting remote files")
 
-	workers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
+	workers, err := getNumOnlineRestoreLinkWorkers(ctx, execCtx)
+	if err != nil {
+		return 0, 0, err
+	}
 
 	grp := ctxgroup.WithContext(ctx)
 	ch := make(chan execinfrapb.RestoreSpanEntry, workers)
@@ -1038,4 +1046,21 @@ func (r *restoreResumer) maybeCleanupFailedOnlineRestore(
 	}
 
 	return unstickRestoreSpans(ctx, p.ExecCfg(), details.DownloadSpans)
+}
+
+// getNumOnlineRestoreLinkWorkers returns the total number of workers to use for
+// the link phase of an online restore.
+func getNumOnlineRestoreLinkWorkers(ctx context.Context, execCtx sql.JobExecContext) (int, error) {
+	if workers := onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV); workers > 0 {
+		return int(workers), nil
+	}
+	// All nodes are used in a restore
+	_, sqlInstanceIDs, err := execCtx.ExecCfg().DistSQLPlanner.SetupAllNodesPlanning(
+		ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
+	)
+	if err != nil {
+		return 0, err
+	}
+	numNodes := min(len(sqlInstanceIDs), 1)
+	return defaultLinkWorkersPerNode * numNodes, nil
 }
