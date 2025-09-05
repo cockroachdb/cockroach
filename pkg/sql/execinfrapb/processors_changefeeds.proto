@@ -64,6 +64,8 @@ message ChangeAggregatorSpec {
 
   // ProgressConfig is the configuration for the changefeed's progress tracking.
   optional ChangefeedProgressConfig progress_config = 10;
+
+  optional cockroach.sql.jobs.jobspb.ResolvedSpans resolved_spans = 11;
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
@@ -98,6 +100,8 @@ message ChangeFrontierSpec {
 
   // ProgressConfig is the configuration for the changefeed's progress tracking.
   optional ChangefeedProgressConfig progress_config = 7;
+
+  optional cockroach.sql.jobs.jobspb.ResolvedSpans resolved_spans = 8;
 }
 
 // ChangefeedProgressConfig is the configuration for the changefeed's progress tracking.
