@@ -3559,7 +3559,7 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 			}
 			// Wait for there to be a single version.
 			lm := srv.ApplicationLayer().LeaseManager().(*lease.Manager)
-			_, err := lm.WaitForOneVersion(ctx, descpb.ID(descID), cachedDatabaseRegions, retry.Options{})
+			_, err := lm.WaitForOneVersion(ctx, descpb.ID(descID), retry.Options{}, cachedDatabaseRegions)
 			return err
 		}
 		return nil
@@ -3569,7 +3569,7 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 	grp.GoCtx(func(ctx context.Context) error {
 		<-startWaiters
 		lm := srv.ApplicationLayer().LeaseManager().(*lease.Manager)
-		return lm.WaitForNoVersion(ctx, descpb.ID(descID), cachedDatabaseRegions, retry.Options{})
+		return lm.WaitForNoVersion(ctx, descpb.ID(descID), retry.Options{}, cachedDatabaseRegions)
 	})
 
 	require.NoError(t, grp.Wait())
