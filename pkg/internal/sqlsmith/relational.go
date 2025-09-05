@@ -1940,7 +1940,9 @@ func makeCreateStats(s *Smither) (tree.Statement, bool) {
 		s.rnd.Shuffle(len(columns), func(i, j int) {
 			columns[i], columns[j] = columns[j], columns[i]
 		})
-		columns = columns[0:s.rnd.Intn(len(columns))]
+		if len(columns) > 0 {
+			columns = columns[0:s.rnd.Intn(len(columns))]
+		}
 	}
 
 	var options tree.CreateStatsOptions
