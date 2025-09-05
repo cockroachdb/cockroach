@@ -447,6 +447,26 @@ func (v Value) GetTag() ValueType {
 	return ValueType(v.RawBytes[tagPos])
 }
 
+// GetTieringAttribute retrieves the tiering attribute (or 0 if it doesn't exist).
+func (v Value) GetTieringAttribute() uint64 {
+	pos := tagPos
+	if v.usesExtendedEncoding() {
+		pos = v.extendedSimpleTagPos()
+	}
+	tag := ValueType(v.RawBytes[pos])
+	switch tag {
+	case ValueType_TUPLE_WITH_TIERING_ATTRIBUTE_4:
+		if len(v.RawBytes) > pos+4 {
+			return uint64(binary.LittleEndian.Uint32(v.RawBytes[pos+1:]))
+		}
+	case ValueType_TUPLE_WITH_TIERING_ATTRIBUTE_8:
+		if len(v.RawBytes) > pos+8 {
+			return binary.LittleEndian.Uint64(v.RawBytes[pos+1:])
+		}
+	}
+	return 0
+}
+
 // GetMVCCValueHeader returns the MVCCValueHeader if one exists.
 func (v Value) GetMVCCValueHeader() (enginepb.MVCCValueHeader, error) {
 	if len(v.RawBytes) <= tagPos {
@@ -684,6 +704,32 @@ func (v *Value) SetTuple(data []byte) {
 	v.setTag(ValueType_TUPLE)
 }
 
+// SetTupleAndTieringAttribute sets the tuple bytes, the tiering attribute (if
+// not zero), and tag field of the receiver and clears the checksum.
+func (v *Value) SetTupleAndTieringAttribute(data []byte, tieringAttribute uint64) {
+	n := 0
+	if tieringAttribute > 0 {
+		if tieringAttribute <= math.MaxUint32 {
+			n = 4
+		} else {
+			n = 8
+		}
+	}
+	v.ensureRawBytes(headerSize + n + len(data))
+	vData := v.dataBytes()
+	switch n {
+	case 0:
+		v.setTag(ValueType_TUPLE)
+	case 4:
+		binary.LittleEndian.PutUint32(vData, uint32(tieringAttribute))
+		v.setTag(ValueType_TUPLE_WITH_TIERING_ATTRIBUTE_4)
+	default:
+		binary.LittleEndian.PutUint64(vData, tieringAttribute)
+		v.setTag(ValueType_TUPLE_WITH_TIERING_ATTRIBUTE_8)
+	}
+	copy(vData[n:], data)
+}
+
 // GetBytes returns the bytes field of the receiver. If the tag is not
 // BYTES an error will be returned.
 func (v Value) GetBytes() ([]byte, error) {
@@ -878,13 +924,19 @@ func (v Value) GetTimeseries() (InternalTimeSeriesData, error) {
 	return ts, err
 }
 
-// GetTuple returns the tuple bytes of the receiver. If the tag is not TUPLE an
-// error will be returned.
+// GetTuple returns the tuple bytes of the receiver. If the tag is not TUPLE or
+// TUPLE_WITH_TIERING_ATTRIBUTE_4/8 an error will be returned.
 func (v Value) GetTuple() ([]byte, error) {
-	if tag := v.GetTag(); tag != ValueType_TUPLE {
+	switch tag := v.GetTag(); tag {
+	case ValueType_TUPLE:
+		return v.dataBytes(), nil
+	case ValueType_TUPLE_WITH_TIERING_ATTRIBUTE_4:
+		return v.dataBytes()[4:], nil
+	case ValueType_TUPLE_WITH_TIERING_ATTRIBUTE_8:
+		return v.dataBytes()[8:], nil
+	default:
 		return nil, errors.Errorf("value type is not %s: %s", ValueType_TUPLE, tag)
 	}
-	return v.dataBytes(), nil
 }
 
 var crc32Pool = sync.Pool{
