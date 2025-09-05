@@ -4347,10 +4347,10 @@ SELECT c0 FROM t00 WHERE (c0 = 1) OR (c1 = 3) OR
 ----
 project
  ├── columns: c0:1(int)
- ├── stats: [rows=1.9]
+ ├── stats: [rows=3.439]
  └── select
       ├── columns: c0:1(int) c1:2(int)
-      ├── stats: [rows=1.9]
+      ├── stats: [rows=3.439]
       ├── scan t00
       │    ├── columns: c0:1(int) c1:2(int)
       │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]

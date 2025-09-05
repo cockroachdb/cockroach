@@ -10418,30 +10418,10 @@ select
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- ├── index-join b
+ ├── scan b
  │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- │    └── inverted-filter
- │         ├── columns: k:1!null
- │         ├── inverted expression: /9
- │         │    ├── tight: false, unique: true
- │         │    ├── union spans: [Arr/3, Arr/3]
- │         │    └── INTERSECTION
- │         │         ├── span expression
- │         │         │    ├── tight: true, unique: true
- │         │         │    └── union spans: [Arr/Arr/1, Arr/Arr/1]
- │         │         └── span expression
- │         │              ├── tight: true, unique: true
- │         │              └── union spans: [Arr/Arr/2, Arr/Arr/2]
- │         ├── key: (1)
- │         └── scan b@j_inv_idx,inverted
- │              ├── columns: k:1!null j_inverted_key:9!null
- │              └── inverted constraint: /9/1
- │                   └── spans
- │                        ├── [Arr/3, Arr/3]
- │                        ├── [Arr/Arr/1, Arr/Arr/1]
- │                        └── [Arr/Arr/2, Arr/Arr/2]
+ │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
       └── (j:4 @> '[3]') OR (j:4 @> '[[1, 2]]') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -10476,23 +10456,26 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── select
-      ├── columns: k:1!null j:4!null
-      ├── immutable
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: true
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    └── union spans: ["a"/"b", "a"/"b"]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: ["c"/"d", "c"/"d"]
       ├── key: (1)
-      ├── fd: (1)-->(4)
-      ├── index-join b
-      │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx,inverted
-      │         ├── columns: k:1!null
-      │         ├── inverted constraint: /9/1
-      │         │    └── spans: ["c"/"d", "c"/"d"]
-      │         ├── flags: no-zigzag-join
-      │         └── key: (1)
-      └── filters
-           └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           ├── inverted constraint: /9/1
+           │    └── spans
+           │         ├── ["a"/"b", "a"/"b"]
+           │         └── ["c"/"d", "c"/"d"]
+           └── flags: no-zigzag-join
 
 exec-ddl
 CREATE TABLE inv_zz_partial (
@@ -10935,43 +10918,17 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── distinct-on
+ └── select
       ├── columns: k:1!null j:4
-      ├── grouping columns: k:1!null
-      ├── internal-ordering: +1
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
-      ├── union-all
+      ├── scan b
       │    ├── columns: k:1!null j:4
-      │    ├── left columns: k:10 j:13
-      │    ├── right columns: k:19 j:22
-      │    ├── immutable
-      │    ├── ordering: +1
-      │    ├── scan b
-      │    │    ├── columns: k:10!null j:13
-      │    │    ├── constraint: /10: [/1 - /1]
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    └── fd: ()-->(10,13)
-      │    └── index-join b
-      │         ├── columns: k:19!null j:22!null
-      │         ├── immutable
-      │         ├── key: (19)
-      │         ├── fd: (19)-->(22)
-      │         ├── ordering: +19
-      │         └── sort
-      │              ├── columns: k:19!null
-      │              ├── key: (19)
-      │              ├── ordering: +19
-      │              └── scan b@j_inv_idx,inverted
-      │                   ├── columns: k:19!null
-      │                   ├── inverted constraint: /27/19
-      │                   │    └── spans: ["foo"/"bar", "foo"/"bar"]
-      │                   └── key: (19)
-      └── aggregations
-           └── const-agg [as=j:4, outer=(4)]
-                └── j:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── (k:1 = 1) OR (j:4 @> '{"foo": "bar"}') [outer=(1,4), immutable]
 
 # Split and constrain with an inverted index on an array on one side.
 opt expect=SplitDisjunction
@@ -10981,43 +10938,17 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── distinct-on
+ └── select
       ├── columns: k:1!null a:2
-      ├── grouping columns: k:1!null
-      ├── internal-ordering: +1
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2)
-      ├── union-all
+      ├── scan c
       │    ├── columns: k:1!null a:2
-      │    ├── left columns: k:9 a:10
-      │    ├── right columns: k:17 a:18
-      │    ├── immutable
-      │    ├── ordering: +1
-      │    ├── scan c
-      │    │    ├── columns: k:9!null a:10
-      │    │    ├── constraint: /9: [/1 - /1]
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    └── fd: ()-->(9,10)
-      │    └── index-join c
-      │         ├── columns: k:17!null a:18!null
-      │         ├── immutable
-      │         ├── key: (17)
-      │         ├── fd: (17)-->(18)
-      │         ├── ordering: +17
-      │         └── sort
-      │              ├── columns: k:17!null
-      │              ├── key: (17)
-      │              ├── ordering: +17
-      │              └── scan c@a_inv_idx,inverted
-      │                   ├── columns: k:17!null
-      │                   ├── inverted constraint: /24/17
-      │                   │    └── spans: [2, 2]
-      │                   └── key: (17)
-      └── aggregations
-           └── const-agg [as=a:2, outer=(2)]
-                └── a:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── (k:1 = 1) OR (a:2 @> ARRAY[2]) [outer=(1,2), immutable]
 
 # Uncorrelated subquery.
 opt expect=SplitDisjunction
@@ -12451,105 +12382,25 @@ project
 opt expect=SplitDisjunctionAddKey
 SELECT u, j FROM b WHERE u = 1 OR j @> '{"foo": "bar"}'
 ----
-project
+select
  ├── columns: u:2 j:4
  ├── immutable
- └── distinct-on
-      ├── columns: k:1!null u:2 j:4
-      ├── grouping columns: k:1!null
-      ├── internal-ordering: +1
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2,4)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 j:4
-      │    ├── left columns: k:10 u:11 j:13
-      │    ├── right columns: k:19 u:20 j:22
-      │    ├── immutable
-      │    ├── ordering: +1
-      │    ├── index-join b
-      │    │    ├── columns: k:10!null u:11!null j:13
-      │    │    ├── key: (10)
-      │    │    ├── fd: ()-->(11), (10)-->(13)
-      │    │    ├── ordering: +10 opt(11) [actual: +10]
-      │    │    └── scan b@u
-      │    │         ├── columns: k:10!null u:11!null
-      │    │         ├── constraint: /11/10: [/1 - /1]
-      │    │         ├── key: (10)
-      │    │         ├── fd: ()-->(11)
-      │    │         └── ordering: +10 opt(11) [actual: +10]
-      │    └── index-join b
-      │         ├── columns: k:19!null u:20 j:22!null
-      │         ├── immutable
-      │         ├── key: (19)
-      │         ├── fd: (19)-->(20,22)
-      │         ├── ordering: +19
-      │         └── sort
-      │              ├── columns: k:19!null
-      │              ├── key: (19)
-      │              ├── ordering: +19
-      │              └── scan b@j_inv_idx,inverted
-      │                   ├── columns: k:19!null
-      │                   ├── inverted constraint: /27/19
-      │                   │    └── spans: ["foo"/"bar", "foo"/"bar"]
-      │                   └── key: (19)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=j:4, outer=(4)]
-                └── j:4
+ ├── scan b
+ │    └── columns: u:2 j:4
+ └── filters
+      └── (u:2 = 1) OR (j:4 @> '{"foo": "bar"}') [outer=(2,4), immutable]
 
 # Split and constrain with an inverted index on an array on one side.
 opt expect=SplitDisjunctionAddKey
 SELECT u, a FROM c WHERE u = 1 OR a @> ARRAY[2]
 ----
-project
+select
  ├── columns: u:3 a:2
  ├── immutable
- └── distinct-on
-      ├── columns: k:1!null a:2 u:3
-      ├── grouping columns: k:1!null
-      ├── internal-ordering: +1
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: k:1!null a:2 u:3
-      │    ├── left columns: k:9 a:10 u:11
-      │    ├── right columns: k:17 a:18 u:19
-      │    ├── immutable
-      │    ├── ordering: +1
-      │    ├── index-join c
-      │    │    ├── columns: k:9!null a:10 u:11!null
-      │    │    ├── key: (9)
-      │    │    ├── fd: ()-->(11), (9)-->(10)
-      │    │    ├── ordering: +9 opt(11) [actual: +9]
-      │    │    └── scan c@u
-      │    │         ├── columns: k:9!null u:11!null
-      │    │         ├── constraint: /11/9: [/1 - /1]
-      │    │         ├── key: (9)
-      │    │         ├── fd: ()-->(11)
-      │    │         └── ordering: +9 opt(11) [actual: +9]
-      │    └── index-join c
-      │         ├── columns: k:17!null a:18!null u:19
-      │         ├── immutable
-      │         ├── key: (17)
-      │         ├── fd: (17)-->(18,19)
-      │         ├── ordering: +17
-      │         └── sort
-      │              ├── columns: k:17!null
-      │              ├── key: (17)
-      │              ├── ordering: +17
-      │              └── scan c@a_inv_idx,inverted
-      │                   ├── columns: k:17!null
-      │                   ├── inverted constraint: /24/17
-      │                   │    └── spans: [2, 2]
-      │                   └── key: (17)
-      └── aggregations
-           ├── const-agg [as=a:2, outer=(2)]
-           │    └── a:2
-           └── const-agg [as=u:3, outer=(3)]
-                └── u:3
+ ├── scan c
+ │    └── columns: a:2 u:3
+ └── filters
+      └── (u:3 = 1) OR (a:2 @> ARRAY[2]) [outer=(2,3), immutable]
 
 # Uncorrelated subquery.
 opt expect=SplitDisjunctionAddKey
