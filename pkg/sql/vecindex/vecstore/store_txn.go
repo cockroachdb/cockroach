@@ -384,7 +384,7 @@ func (d *PKDecoder) Init(fetchSpec *fetchpb.IndexFetchSpec) {
 	if cap(d.output) < len(fetchSpec.FetchedColumns) {
 		d.output = make(rowenc.EncDatumRow, len(fetchSpec.FetchedColumns))
 	} else {
-		d.output = d.output[:0]
+		d.output = d.output[:len(fetchSpec.FetchedColumns)]
 	}
 	for i, col := range fetchSpec.FetchedColumns {
 		d.colOrdMap.Set(col.ColumnID, i)
