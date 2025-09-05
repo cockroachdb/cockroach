@@ -43,6 +43,7 @@ information_schema  domains                                table  node  NULL  NU
 information_schema  element_types                          table  node  NULL  NULL
 information_schema  enabled_roles                          table  node  NULL  NULL
 information_schema  engines                                table  node  NULL  NULL
+information_schema  eventlog                               view   node  NULL  NULL
 information_schema  events                                 table  node  NULL  NULL
 information_schema  files                                  table  node  NULL  NULL
 information_schema  foreign_data_wrapper_options           table  node  NULL  NULL
