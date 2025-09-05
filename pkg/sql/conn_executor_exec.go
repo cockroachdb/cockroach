@@ -3255,10 +3255,7 @@ func (ex *connExecutor) makeExecPlan(
 		//
 		// In 50% cases, use nil catalog.
 		var catalog cat.Catalog
-		if ex.rng.internal.Float64() < 0.5 && !planner.SessionData().AllowRoleMembershipsToChangeDuringTransaction {
-			// For some reason, TestAllowRoleMembershipsToChangeDuringTransaction
-			// times out with non-nil catalog, so we'll keep it as nil when the
-			// session var is set to 'true' ('false' is the default).
+		if ex.rng.internal.Float64() < 0.5 {
 			catalog = planner.optPlanningCtx.catalog
 		}
 		_, err := explain.DecodePlanGistToRows(ctx, &planner.extendedEvalCtx.Context, ih.planGist.String(), catalog)
