@@ -37,6 +37,13 @@ type Histogram struct {
 	selectivity float64
 	buckets     []cat.HistogramBucket
 	col         opt.ColumnID
+	// resolution is the number of rows below which selectivity estimates based on
+	// this histogram should fall back to a more pessimistic distinct-count based
+	// estimate. This is used to avoid overfitting to histograms that may be
+	// missing values due to sampling or staleness. This number roughly
+	// corresponds to the highest expected multiplicity of any value missing from
+	// the histogram.
+	resolution float64
 }
 
 func (h *Histogram) String() string {
@@ -48,7 +55,9 @@ func (h *Histogram) String() string {
 }
 
 // Init initializes the histogram with data from the catalog.
-func (h *Histogram) Init(evalCtx *eval.Context, col opt.ColumnID, buckets []cat.HistogramBucket) {
+func (h *Histogram) Init(
+	evalCtx *eval.Context, col opt.ColumnID, buckets []cat.HistogramBucket, resolution float64,
+) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*h = Histogram{
@@ -56,6 +65,7 @@ func (h *Histogram) Init(evalCtx *eval.Context, col opt.ColumnID, buckets []cat.
 		col:         col,
 		selectivity: 1,
 		buckets:     buckets,
+		resolution:  resolution,
 	}
 }
 
@@ -115,6 +125,13 @@ func (h *Histogram) ValuesCount() float64 {
 		count += h.numEq(i)
 	}
 	return count
+}
+
+// Resolution returns the minimum row count for which selectivity estimates
+// based on this histogram should be trusted. See the resolution field comment
+// for details.
+func (h *Histogram) Resolution() float64 {
+	return h.resolution
 }
 
 // EqEstimate returns the estimated number of rows that equal the given
@@ -317,6 +334,7 @@ func (h *Histogram) filter(
 		evalCtx:     h.evalCtx,
 		col:         h.col,
 		selectivity: h.selectivity,
+		resolution:  h.resolution,
 	}
 	if bucketCount == 0 {
 		return filtered
