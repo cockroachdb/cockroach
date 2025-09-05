@@ -19,6 +19,9 @@ go_test(
     data = [
         "//c-deps:libgeos",  # keep
     ],
+    exec_properties = select({
+        "//conditions:default": {"test.Pool": "large"},
+    }),
     shard_count = 16,
     deps = [
         "//pkg/base",
