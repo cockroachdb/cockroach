@@ -239,7 +239,7 @@ func (mq *mergeQueue) requestRangeStats(
 }
 
 func (mq *mergeQueue) process(
-	ctx context.Context, lhsRepl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, lhsRepl *Replica, confReader spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 
 	lhsDesc := lhsRepl.Desc()
@@ -420,7 +420,7 @@ func (mq *mergeQueue) process(
 		return false, rangeMergePurgatoryError{err}
 	}
 	if testingAggressiveConsistencyChecks {
-		if _, err := mq.store.consistencyQueue.process(ctx, lhsRepl, confReader); err != nil {
+		if _, err := mq.store.consistencyQueue.process(ctx, lhsRepl, confReader, -1 /*priorityAtEnqueue*/); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
 	}

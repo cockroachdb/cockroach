@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -138,6 +139,7 @@ const (
 	AllocatorConsiderRebalance
 	AllocatorRangeUnavailable
 	AllocatorFinalizeAtomicReplicationChange
+	AllocatorMaxPriority
 )
 
 // Add indicates an action adding a replica.
@@ -161,6 +163,15 @@ func (a AllocatorAction) Remove() bool {
 		a == AllocatorRemoveDeadNonVoter ||
 		a == AllocatorRemoveDecommissioningVoter ||
 		a == AllocatorRemoveDecommissioningNonVoter
+}
+
+// Decommissioning indicates an action replacing or removing a decommissioning
+// replicas.
+func (a AllocatorAction) Decommissioning() bool {
+	return a == AllocatorRemoveDecommissioningVoter ||
+		a == AllocatorRemoveDecommissioningNonVoter ||
+		a == AllocatorReplaceDecommissioningVoter ||
+		a == AllocatorReplaceDecommissioningNonVoter
 }
 
 // TargetReplicaType returns that the action is for a voter or non-voter replica.
@@ -242,10 +253,27 @@ func (a AllocatorAction) SafeValue() {}
 // range. Within a given range, the ordering of the various checks inside
 // `Allocator.computeAction` determines which repair/rebalancing actions are
 // taken before the others.
+//
+// NB: Priorities should be non-negative and should be spaced in multiples of
+// 100 unless you believe they should belong to the same priority category.
+// AllocatorNoop should have the lowest priority. CheckPriorityInversion depends
+// on this contract. In most cases, the allocator returns a priority that
+// matches the definitions below. For AllocatorAddVoter,
+// AllocatorRemoveDeadVoter, and AllocatorRemoveVoter, the priority may be
+// adjusted (see ComputeAction for details), but the adjustment is expected to
+// be small (<49).
+//
+// Exceptions: AllocatorFinalizeAtomicReplicationChange, AllocatorRemoveLearner,
+// and AllocatorReplaceDeadVoter violates the spacing of 100. These cases
+// predate this comment, so we allow them as they belong to the same general
+// priority category.
 func (a AllocatorAction) Priority() float64 {
+	const maxPriority = 12002
 	switch a {
+	case AllocatorMaxPriority:
+		return maxPriority
 	case AllocatorFinalizeAtomicReplicationChange:
-		return 12002
+		return maxPriority
 	case AllocatorRemoveLearner:
 		return 12001
 	case AllocatorReplaceDeadVoter:
@@ -946,10 +974,68 @@ func (a *Allocator) ComputeAction(
 		return action, action.Priority()
 	}
 
-	return a.computeAction(ctx, storePool, conf, desc.Replicas().VoterDescriptors(),
+	action, priority = a.computeAction(ctx, storePool, conf, desc.Replicas().VoterDescriptors(),
 		desc.Replicas().NonVoterDescriptors())
+	// Ensure that priority is never -1. Typically, computeAction return
+	// action.Priority(), but we sometimes modify the priority for specific
+	// actions like AllocatorAddVoter, AllocatorRemoveDeadVoter, and
+	// AllocatorRemoveVoter. A priority of -1 is a special case, indicating that
+	// the caller expects the processing logic to be invoked even if there's a
+	// priority inversion. If the priority is not -1, the range might be re-queued
+	// to be processed with the correct priority.
+	if priority == -1 {
+		if buildutil.CrdbTestBuild {
+			log.Fatalf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
+		} else {
+			log.Warningf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
+		}
+	}
+	return action, priority
 }
 
+// computeAction determines the action to take on a range along with its
+// priority.
+//
+// NB: The returned priority may include a small adjustment and therefore might
+// not exactly match action.Priority(). See AllocatorAddVoter,
+// AllocatorRemoveDeadVoter, AllocatorRemoveVoter below. The adjustment should
+// be <49 with two assumptions below. New uses on this contract should be
+// avoided since the assumptions are not strong guarantees (especially the
+// second one).
+//
+// The claim that the adjustment is < 49 has two assumptions:
+// 1. min(num_replicas,total_nodes) in zone configuration is < 98.
+// 2. when ranges are not under-replicated, the difference between
+// min(num_replicas,total_nodes)/2-1 and existing_replicas is < 49.
+//
+// neededVoters <= min(num_replicas,total_nodes)
+// desiredQuorum = neededVoters/2-1
+// quorum = haveVoters/2-1
+//
+// For AllocatorAddVoter, we know haveVoters < neededVoters
+// adjustment = desiredQuorum-haveVoters = neededVoters/2-1-haveVoters
+// To find the worst case (largest adjustment),
+//  1. haveVoters = neededVoters-1,
+//     adjustment = neededVoters/2-1-(neededVoters-1)
+//     = neededVoters/2-neededVoters = -neededVoters/2
+//  2. haveVoters = 0
+//     adjustement = neededVoters/2-1
+//
+// In order for adjustment to be <49, neededVoters/2<49 => neededVoters<98.
+// Hence the first assumption.
+//
+// For AllocatorRemoveDeadVoter, we know haveVoters >= neededVoters
+// adjustment = desiredQuorum-haveVoters = neededVoters/2-1-haveVoters
+// To find the worst case (largest adjustment),
+// 1. neededVoters/2-1 is much larger than haveVoters: given haveVoters >=
+// neededVoters, haveVoters/2-1 >= neededVoters/2-1. So this case is impossible.
+// 2. neededVoters/2-1 is much smaller than haveVoters: since ranges could be
+// over-replicated, theoretically speaking, there may be no upper bounds on
+// haveVoters. In order for adjustment to be < 49, we can only make an
+// assumption here that the difference between neededVoters/2-1 and haveVoters
+// cannot be >= 49 in this case.
+//
+// For AllocatorRemoveVoter, adjustment is haveVoters%2 = 0 or 1 < 49.
 func (a *Allocator) computeAction(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
@@ -3219,4 +3305,66 @@ func replDescsToStoreIDs(descs []roachpb.ReplicaDescriptor) []roachpb.StoreID {
 		ret[i] = desc.StoreID
 	}
 	return ret
+}
+
+// roundToNearestPriorityCategory rounds a priority to the nearest 100. n should
+// be non-negative.
+func roundToNearestPriorityCategory(n float64) float64 {
+	return math.Round(n/100.0) * 100
+}
+
+// CheckPriorityInversion returns whether there was a priority inversion (and
+// the range should not be processed at this time, since doing so could starve
+// higher-priority items), and whether the caller should re-add the range to the
+// queue (presumably under its new priority). A priority inversion happens if
+// the priority at enqueue time is higher than the priority corresponding to the
+// action computed at processing time. Caller should re-add the range to the
+// queue if it has gone from a repair action to lowest priority
+// (AllocatorConsiderRebalance).
+//
+// Note: Changing from AllocatorRangeUnavailable/AllocatorNoop to
+// AllocatorConsiderRebalance is not treated as a priority inversion. Going from
+// a repair action to AllocatorRangeUnavailable/AllocatorNoop is considered a
+// priority inversion but shouldRequeue = false.
+//
+// INVARIANT: shouldRequeue => isInversion
+func CheckPriorityInversion(
+	priorityAtEnqueue float64, actionAtProcessing AllocatorAction,
+) (isInversion bool, shouldRequeue bool) {
+	// NB: priorityAtEnqueue is -1 for callers such as scatter, dry runs, and
+	// manual queue runs. Priority inversion does not apply to these calls.
+	if priorityAtEnqueue == -1 {
+		return false, false
+	}
+
+	// NB: we need to check for when priorityAtEnqueue falls within the range
+	// of the allocator actions because store.Enqueue might enqueue things with
+	// a very high priority (1e5). In those cases, we do not want to requeue
+	// these actions or count it as an inversion.
+	withinPriorityRange := func(priority float64) bool {
+		return AllocatorNoop.Priority() <= priority && priority <= AllocatorMaxPriority.Priority()
+	}
+	if !withinPriorityRange(priorityAtEnqueue) {
+		return false, false
+	}
+
+	if priorityAtEnqueue > AllocatorConsiderRebalance.Priority() && actionAtProcessing == AllocatorConsiderRebalance {
+		return true, true
+	}
+
+	// NB: Usually, the priority at enqueue time should correspond to
+	// action.Priority(). However, for AllocatorAddVoter,
+	// AllocatorRemoveDeadVoter, AllocatorRemoveVoter, the priority can be
+	// adjusted at enqueue time (See ComputeAction for more details). However, we
+	// expect the adjustment to be relatively small (<49). So we round the
+	// priority to the nearest 100 to compare against
+	// actionAtProcessing.Priority(). Without this rounding, we might treat going
+	// from 10000 to 999 as an inversion, but it was just due to the adjustment.
+	// Note that priorities at AllocatorFinalizeAtomicReplicationChange,
+	// AllocatorRemoveLearner, and AllocatorReplaceDeadVoter will be rounded to
+	// the same priority. They are so close to each other, so we don't really
+	// count it as an inversion among them.
+	normPriorityAtEnqueue := roundToNearestPriorityCategory(priorityAtEnqueue)
+	isInversion = normPriorityAtEnqueue > actionAtProcessing.Priority()
+	return isInversion, false
 }

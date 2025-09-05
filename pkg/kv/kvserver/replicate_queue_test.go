@@ -2471,12 +2471,58 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 		return nil
 	})
 
+	getDecommissioningNudgerMetricValue := func(t *testing.T, tc *testcluster.TestCluster, metricType string,
+	) int64 {
+		var total int64
+
+		for i := 0; i < tc.NumServers(); i++ {
+			store := tc.GetFirstStoreFromServer(t, i)
+			var value int64
+
+			switch metricType {
+			case "decommissioning_ranges":
+				value = store.Metrics().DecommissioningRangeCount.Value()
+			case "enqueue":
+				value = store.Metrics().DecommissioningNudgerEnqueue.Count()
+			case "enqueue_success":
+				value = store.Metrics().DecommissioningNudgerEnqueueSuccess.Count()
+			case "process_success":
+				value = store.Metrics().DecommissioningNudgerProcessSuccess.Count()
+			default:
+				t.Fatalf("unknown metric type: %s", metricType)
+			}
+
+			total += value
+		}
+		return total
+	}
+
+	initialDecommissioningRanges := getDecommissioningNudgerMetricValue(t, tc, "decommissioning_ranges")
+
 	// Now add a replica to the decommissioning node and then enable the
 	// replicate queue. We expect that the replica will be removed after the
 	// decommissioning replica is noticed via maybeEnqueueProblemRange.
 	scratchKey := tc.ScratchRange(t)
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decommissioningSrvIdx))
 	tc.ToggleReplicateQueues(true /* active */)
+
+	// Wait for the enqueue logic to trigger and validate metrics were updated.
+	testutils.SucceedsSoon(t, func() error {
+		// TODO(wenyihu6): is there a race condition here where we might not observe
+		// decommissioning_ranges increasing?
+		afterDecommissioningRanges := getDecommissioningNudgerMetricValue(t, tc, "decommissioning_ranges")
+		afterEnqueued := getDecommissioningNudgerMetricValue(t, tc, "enqueue")
+		if afterDecommissioningRanges <= initialDecommissioningRanges {
+			return errors.New("expected DecommissioningRangeCount to increase")
+		}
+		if afterEnqueued <= 0 {
+			return errors.New("expected DecommissioningNudgerEnqueueEnqueued to be greater than 0")
+		}
+
+		return nil
+	})
+
+	// Verify that the decommissioning node has no replicas left.
 	testutils.SucceedsSoon(t, func() error {
 		var descs []*roachpb.RangeDescriptor
 		tc.GetFirstStoreFromServer(t, decommissioningSrvIdx).VisitReplicas(func(r *kvserver.Replica) bool {
@@ -2485,6 +2531,124 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 		})
 		if len(descs) != 0 {
 			return errors.Errorf("expected no replicas, found %d: %v", len(descs), descs)
+		}
+		return nil
+	})
+	afterEnqueueSuccess := getDecommissioningNudgerMetricValue(t, tc, "enqueue_success")
+	require.Greater(t, afterEnqueueSuccess, int64(0))
+	afterProcessSuccess := getDecommissioningNudgerMetricValue(t, tc, "process_success")
+	require.Greater(t, afterProcessSuccess, int64(0))
+}
+
+// TestPriorityInversionRequeue tests that the replicate queue correctly handles
+// priority inversions by requeuing replicas when the PriorityInversionRequeue
+// setting is enabled.
+//
+// This test specifically targets a race condition where:
+//  1. A replica is enqueued for a high-priority repair action
+//     (FinalizeAtomicReplicationChange or RemoveLearner).
+//  2. By the time the replica is processed, the repair is no longer needed and
+//     only a low-priority rebalance action (ConsiderRebalance) is computed.
+//  3. This creates a priority inversion where a low-priority action blocks
+//     other higher-priority replicas in the queue from being processed.
+//
+// The race occurs during range rebalancing:
+//  1. A leaseholder replica of a range is rebalanced from one store to another.
+//  2. The new leaseholder enqueues the replica for repair (e.g. to finalize
+//     the atomic replication change or remove a learner replica).
+//  3. Before processing, the old leaseholder has left the atomic joint config
+//     state or removed the learner replica. 4. When the new leaseholder processes
+//     the replica, it computes a ConsiderRebalance action, causing priority
+//     inversion.
+//
+// With PriorityInversionRequeue enabled, the queue should detect this condition
+// and requeue the replica at the correct priority. The test validates this
+// behavior through metrics that track priority inversions and requeuing events.
+func TestPriorityInversionRequeue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	kvserver.PriorityInversionRequeue.Override(ctx, &settings.SV, true)
+
+	var scratchRangeID int64
+	atomic.StoreInt64(&scratchRangeID, -1)
+	require.NoError(t, log.SetVModule("queue=5,replicate_queue=5,replica_command=5,replicate=5,replica=5"))
+
+	const newLeaseholderStoreAndNodeID = 4
+	var waitUntilLeavingJoint = func() {}
+
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					BaseQueueDisabledBypassFilter: func(rangeID roachpb.RangeID) bool {
+						// Disable the replicate queue except for the scratch range on the new leaseholder.
+						t.Logf("range %d is added to replicate queue store", rangeID)
+						return rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID))
+					},
+					BaseQueuePostEnqueueInterceptor: func(storeID roachpb.StoreID, rangeID roachpb.RangeID) {
+						// After enqueuing, wait for the old leaseholder to leave the atomic
+						// joint config state or remove the learner replica to force the
+						// priority inversion.
+						t.Logf("waiting for %d to leave joint config", rangeID)
+						if storeID == 4 && rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) {
+							waitUntilLeavingJoint()
+						}
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+
+	// Wait until the old leaseholder has left the atomic joint config state or
+	// removed the learner replica.
+	waitUntilLeavingJoint = func() {
+		testutils.SucceedsSoon(t, func() error {
+			rangeDesc := tc.LookupRangeOrFatal(t, scratchKey)
+			replicas := rangeDesc.Replicas()
+			t.Logf("range %v: waiting to leave joint conf", rangeDesc)
+			if replicas.InAtomicReplicationChange() || len(replicas.LearnerDescriptors()) != 0 {
+				return errors.Newf("in between atomic changes: %v", replicas)
+			}
+			return nil
+		})
+	}
+
+	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+	tc.AddVotersOrFatal(t, scratchRange.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+	atomic.StoreInt64(&scratchRangeID, int64(scratchRange.RangeID))
+	lh, err := tc.FindRangeLeaseHolder(scratchRange, nil)
+	require.NoError(t, err)
+
+	// Rebalance the leaseholder replica to a new store. This will cause the race
+	// condition where the new leaseholder can enqueue a replica to replicate
+	// queue with high priority but compute a low priority action at processing
+	// time.
+	t.Logf("rebalancing range %d from s%d to s%d", scratchRange, lh.StoreID, newLeaseholderStoreAndNodeID)
+	_, err = tc.RebalanceVoter(
+		ctx,
+		scratchRange.StartKey.AsRawKey(),
+		roachpb.ReplicationTarget{StoreID: lh.StoreID, NodeID: lh.NodeID},                                      /* src */
+		roachpb.ReplicationTarget{StoreID: newLeaseholderStoreAndNodeID, NodeID: newLeaseholderStoreAndNodeID}, /* dest */
+	)
+	require.NoError(t, err)
+
+	// Wait until the priority inversion is detected and the replica is requeued.
+	testutils.SucceedsSoon(t, func() error {
+		store := tc.GetFirstStoreFromServer(t, 3)
+		if c := store.ReplicateQueueMetrics().PriorityInversionTotal.Count(); c == 0 {
+			return errors.New("expected non-zero priority inversion total count but got 0")
+		}
+		if c := store.ReplicateQueueMetrics().RequeueDueToPriorityInversion.Count(); c == 0 {
+			return errors.New("expected to requeue due to priority inversion but got 0")
 		}
 		return nil
 	})
