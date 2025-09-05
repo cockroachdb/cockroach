@@ -242,10 +242,6 @@ func TestTxnRegistry_InsertTxnRequest(t *testing.T) {
 	}
 }
 
-func TestTxnRegistry_InsertTxnRequest_Polling(t *testing.T) {
-	// TODO: create a multi-node cluster to test that it propagates correctly, once persistence is added.
-}
-
 func TestTxnRegistry_ResetTxnRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
