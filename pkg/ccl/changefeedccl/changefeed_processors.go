@@ -654,6 +654,12 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 		return nil, errors.Wrapf(err, "failed to restore span-level checkpoint")
 	}
 
+	for _, rs := range ca.spec.ResolvedSpans {
+		if _, err := ca.frontier.Forward(rs.Span, rs.Timestamp); err != nil {
+			return nil, errors.Wrapf(err, "failed to restore frontier")
+		}
+	}
+
 	return spans, nil
 }
 
@@ -1470,6 +1476,15 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 			"moving to draining due to error restoring span-level checkpoint: %v", err)
 		cf.MoveToDraining(err)
 		return
+	}
+
+	for _, rs := range cf.spec.ResolvedSpans {
+		if _, err := cf.frontier.Forward(rs.Span, rs.Timestamp); err != nil {
+			log.Changefeed.Warningf(cf.Ctx(),
+				"moving to draining due to error restoring frontier: %v", err)
+			cf.MoveToDraining(err)
+			return
+		}
 	}
 
 	if cf.knobs.AfterCoordinatorFrontierRestore != nil {
