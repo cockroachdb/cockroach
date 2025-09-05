@@ -622,7 +622,7 @@ type mockDialer struct {
 	}
 }
 
-var _ nodeDialer = &mockDialer{}
+var _ rpcbase.NodeDialer = &mockDialer{}
 
 type nodeAddr struct {
 	nid  roachpb.NodeID
@@ -825,7 +825,7 @@ type failingDialer struct {
 	dialCount int32
 }
 
-var _ nodeDialer = &failingDialer{}
+var _ rpcbase.NodeDialer = &failingDialer{}
 
 func (f *failingDialer) Dial(
 	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
