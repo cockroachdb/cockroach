@@ -90,6 +90,16 @@ const (
 	// values from the spans a check constraint is allowed to have in order to build
 	// a histogram from it.
 	maxValuesForFullHistogramFromCheckConstraint = tabledesc.MaxBucketAllowed
+
+	// histogramPessimisticThreshold determines the cutoff point below which the
+	// selectivity estimate of a histogram is overridden with a more pessimistic
+	// estimate. This is to avoid over-fitting to a stale or inaccurate histogram.
+	//
+	// The value (1 in 10,000) was chosen because we choose sample sizes according
+	// to table size such that we expect to *nearly* always sample all values with
+	// multiplicity >= row_count/10000. Cardinality estimates below this threshold
+	// are increasingly likely to be inaccurate. See also computeNumberSamples.
+	histogramPessimisticThreshold = 1.0 / 10000.0
 )
 
 // statisticsBuilder is responsible for building the statistics that are
@@ -4538,7 +4548,7 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 			continue
 		}
 
-		inputColStat, _ := sb.colStatFromInput(colStat.Cols, e)
+		inputColStat, inputStats := sb.colStatFromInput(colStat.Cols, e)
 		newHist := colStat.Histogram
 		oldHist := inputColStat.Histogram
 		if newHist == nil || oldHist == nil {
@@ -4548,9 +4558,17 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 		newCount := newHist.ValuesCount()
 		oldCount := oldHist.ValuesCount()
 
-		// Calculate the selectivity of the predicate. Nulls are already included
-		// in the histogram, so we do not need to account for them separately.
+		// Calculate the selectivity of the predicate using the histogram. Nulls
+		// are already included in the histogram, so we do not need to account for
+		// them separately.
 		predicateSelectivity := props.MakeSelectivityFromFraction(newCount, oldCount)
+
+		// Possibly clamp the selectivity to a higher value to avoid overly
+		// optimistic estimates.
+		pessimisticSel := sb.pessimisticSelForHistogram(
+			oldCount, newCount, inputColStat.DistinctCount, colStat.DistinctCount, inputStats.RowCount,
+		)
+		predicateSelectivity = props.MaxSelectivity(predicateSelectivity, pessimisticSel)
 
 		// The maximum possible selectivity of the entire expression is the minimum
 		// selectivity of all individual predicates.
@@ -4560,6 +4578,39 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 	}
 
 	return selectivity, selectivityUpperBound
+}
+
+// pessimisticSelForHistogram returns a selectivity up to which the estimate
+// derived from a histogram should be clamped. This is to account for the
+// possibility that the histogram is missing values due to sampling or
+// staleness. See also histogramPessimisticThreshold.
+func (sb *statisticsBuilder) pessimisticSelForHistogram(
+	oldHistValues, newHistValues, oldDistinct, newDistinct, tableRowCount float64,
+) props.Selectivity {
+	// Calculate the expected number of out-of-histogram values that will pass
+	// through the filters.
+	pessimisticThreshold := tableRowCount * histogramPessimisticThreshold
+	if newHistValues < pessimisticThreshold {
+		// NOTE: columns with histograms are skipped when considering distinct
+		// counts in selectivityFromSingleColDistinctCounts, so this doesn't
+		// double count the effect of the predicate.
+		pessimisticSel := props.MakeSelectivityFromFraction(newDistinct, oldDistinct)
+
+		// Cap the selectivity so that the row count estimate is no more than the
+		// pessimistic threshold. This can result in a lower estimate if the
+		// multiplicities of the filtered values really are low compared to the
+		// average multiplicity.
+		//
+		// NOTE: while we use tableRowCount to predict the number of
+		// out-of-histogram values, we must use inputRowCount to calculate the
+		// selectivity, since an inverted index can have more rows than the primary
+		// key.
+		inputRowCount := max(tableRowCount, oldHistValues)
+		return props.MinSelectivity(pessimisticSel,
+			props.MakeSelectivityFromFraction(pessimisticThreshold, inputRowCount),
+		)
+	}
+	return props.ZeroSelectivity
 }
 
 // selectivityFromConstrainedCols calculates the selectivity from the
