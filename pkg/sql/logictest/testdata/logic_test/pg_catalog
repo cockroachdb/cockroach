@@ -429,8 +429,8 @@ SELECT * FROM pg_catalog.pg_namespace
 oid         nspname             nspowner    nspacl
 4294967295  crdb_internal       3233629770  NULL
 4294967181  information_schema  3233629770  NULL
-4294967094  pg_catalog          3233629770  NULL
-4294966964  pg_extension        3233629770  NULL
+4294967093  pg_catalog          3233629770  NULL
+4294966963  pg_extension        3233629770  NULL
 105         public              1546506610  NULL
 
 # Verify that we can still see the schemas even if we don't have any privilege
@@ -448,8 +448,8 @@ SELECT * FROM pg_catalog.pg_namespace
 oid         nspname             nspowner    nspacl
 4294967295  crdb_internal       3233629770  NULL
 4294967181  information_schema  3233629770  NULL
-4294967094  pg_catalog          3233629770  NULL
-4294966964  pg_extension        3233629770  NULL
+4294967093  pg_catalog          3233629770  NULL
+4294966963  pg_extension        3233629770  NULL
 105         public              1546506610  NULL
 
 user root

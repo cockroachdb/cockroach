@@ -268,7 +268,7 @@ SELECT crdb_internal.decode_plan_gist('AgH8/f//nxkAAN6DgICAgDQAAAADAZz9//+fGQAAz
             │ order
             │
             └── • hash join (left outer)
-                │ equality: (engine_attribute) = (conversion_factor)
+                │ equality: (engine_attribute) = (srs_id)
                 │
                 ├── • filter
                 │   │
