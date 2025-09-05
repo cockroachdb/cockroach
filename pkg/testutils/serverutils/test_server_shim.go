@@ -546,8 +546,10 @@ func WaitForTenantCapabilities(
 // `TestServerArgs.Settings` based on that.
 func TryEnableDRPCSetting(ctx context.Context, t TestLogger, args *base.TestServerArgs) {
 	option := args.DefaultDRPCOption
-	if option == base.TestDRPCDisabled && globalDefaultDRPCOptionOverride.isSet {
+	var logSuffix string
+	if option == base.TestDRPCUnset && globalDefaultDRPCOptionOverride.isSet {
 		option = globalDefaultDRPCOptionOverride.value
+		logSuffix = " (override by TestingGlobalDRPCOption)"
 	}
 	enableDRPC := false
 	switch option {
@@ -561,6 +563,7 @@ func TryEnableDRPCSetting(ctx context.Context, t TestLogger, args *base.TestServ
 		return
 	}
 
+	t.Log("DRPC is enabled" + logSuffix)
 	if args.Settings == nil {
 		args.Settings = cluster.MakeClusterSettings()
 	}

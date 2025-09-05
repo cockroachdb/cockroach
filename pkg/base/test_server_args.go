@@ -235,9 +235,12 @@ type SlimTestServerConfig struct {
 type DefaultTestDRPCOption uint8
 
 const (
+	// TestDRPCUnset represents an uninitialized or invalid DRPC option.
+	TestDRPCUnset DefaultTestDRPCOption = iota
+
 	// TestDRPCDisabled disables DRPC; all inter-node connectivity will use gRPC
 	// only.
-	TestDRPCDisabled DefaultTestDRPCOption = iota
+	TestDRPCDisabled
 
 	// TestDRPCEnabled enables DRPC. Some services may still use gRPC if they
 	// have not yet migrated to DRPC.
