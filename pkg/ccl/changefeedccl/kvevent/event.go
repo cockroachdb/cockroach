@@ -127,7 +127,7 @@ func (t Type) Index() int {
 	case TypeResolved, resolvedBackfill, resolvedRestart, resolvedExit:
 		return int(TypeResolved)
 	default:
-		log.Dev.Warningf(context.TODO(),
+		log.Changefeed.Warningf(context.TODO(),
 			"returning TypeFlush boundary type for unknown event type %d", t)
 		return int(TypeFlush)
 	}
@@ -171,7 +171,7 @@ func (e *Event) boundaryType() jobspb.ResolvedSpan_BoundaryType {
 	case resolvedExit:
 		return jobspb.ResolvedSpan_EXIT
 	default:
-		log.Dev.Warningf(context.TODO(),
+		log.Changefeed.Warningf(context.TODO(),
 			"returning jobspb.ResolvedSpan_EXIT boundary type for unknown boundary")
 		return jobspb.ResolvedSpan_EXIT
 	}
@@ -229,7 +229,7 @@ func (e *Event) getTimestamp(backfillTS hlc.Timestamp) hlc.Timestamp {
 	case TypeFlush:
 		return hlc.Timestamp{}
 	default:
-		log.Dev.Warningf(context.TODO(),
+		log.Changefeed.Warningf(context.TODO(),
 			"setting empty timestamp for unknown event type")
 		return hlc.Timestamp{}
 	}

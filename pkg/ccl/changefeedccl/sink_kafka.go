@@ -80,13 +80,13 @@ type kafkaSinkKnobs struct {
 var _ sarama.StdLogger = (*kafkaLogAdapter)(nil)
 
 func (l *kafkaLogAdapter) Print(v ...interface{}) {
-	log.Dev.InfofDepth(l.ctx, 1, "", v...)
+	log.Changefeed.InfofDepth(l.ctx, 1, "", v...)
 }
 func (l *kafkaLogAdapter) Printf(format string, v ...interface{}) {
-	log.Dev.InfofDepth(l.ctx, 1, format, v...)
+	log.Changefeed.InfofDepth(l.ctx, 1, format, v...)
 }
 func (l *kafkaLogAdapter) Println(v ...interface{}) {
-	log.Dev.InfofDepth(l.ctx, 1, "", v...)
+	log.Changefeed.InfofDepth(l.ctx, 1, "", v...)
 }
 
 func init() {
@@ -483,7 +483,7 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	}
 
 	if log.V(1) {
-		log.Dev.Infof(ctx, "flush waiting for %d inflight messages", inflight)
+		log.Changefeed.Infof(ctx, "flush waiting for %d inflight messages", inflight)
 	}
 	select {
 	case <-ctx.Done():
@@ -507,7 +507,7 @@ func (s *kafkaSink) startInflightMessage(ctx context.Context) error {
 
 	s.mu.inflight++
 	if log.V(2) {
-		log.Dev.Infof(ctx, "emitting %d inflight records to kafka", s.mu.inflight)
+		log.Changefeed.Infof(ctx, "emitting %d inflight records to kafka", s.mu.inflight)
 	}
 	return nil
 }
@@ -554,7 +554,7 @@ func (s *kafkaSink) workerLoop() {
 
 	startInternalRetry := func(err error) {
 		s.mu.AssertHeld()
-		log.Dev.Infof(
+		log.Changefeed.Infof(
 			s.ctx,
 			"kafka sink with flush config (%+v) beginning internal retry with %d inflight messages due to error: %s",
 			s.kafkaCfg.Producer.Flush,
@@ -660,7 +660,7 @@ func (s *kafkaSink) finishProducerMessage(ackMsg *sarama.ProducerMessage, ackErr
 func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryErr error) error {
 	lastSendErr := retryErr
 	activeConfig := s.kafkaCfg
-	log.Dev.Infof(s.ctx, "kafka sink handling %d buffered messages for internal retry", len(msgs))
+	log.Changefeed.Infof(s.ctx, "kafka sink handling %d buffered messages for internal retry", len(msgs))
 
 	// Ensure memory for messages are always cleaned up
 	defer func() {
@@ -672,7 +672,7 @@ func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryE
 	for {
 		select {
 		case <-s.stopWorkerCh:
-			log.Dev.Infof(s.ctx, "kafka sink ending retries due to worker close")
+			log.Changefeed.Infof(s.ctx, "kafka sink ending retries due to worker close")
 			return lastSendErr
 		default:
 		}
@@ -682,14 +682,14 @@ func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryE
 		// Surface the error if its not retryable or we weren't able to reduce the
 		// batching config any further
 		if !s.isInternalRetryable(lastSendErr) {
-			log.Dev.Infof(s.ctx, "kafka sink abandoning internal retry due to error: %s", lastSendErr.Error())
+			log.Changefeed.Infof(s.ctx, "kafka sink abandoning internal retry due to error: %s", lastSendErr.Error())
 			return lastSendErr
 		} else if !wasReduced {
-			log.Dev.Infof(s.ctx, "kafka sink abandoning internal retry due to being unable to reduce batching size")
+			log.Changefeed.Infof(s.ctx, "kafka sink abandoning internal retry due to being unable to reduce batching size")
 			return lastSendErr
 		}
 
-		log.Dev.Infof(s.ctx, "kafka sink retrying %d messages with reduced flush config: (%+v)", len(msgs), newConfig.Producer.Flush)
+		log.Changefeed.Infof(s.ctx, "kafka sink retrying %d messages with reduced flush config: (%+v)", len(msgs), newConfig.Producer.Flush)
 		activeConfig = newConfig
 
 		newClient, err := s.newClient(newConfig)
@@ -717,14 +717,14 @@ func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryE
 		}
 
 		if err := newProducer.Close(); err != nil {
-			log.Dev.Errorf(s.ctx, "closing of previous sarama producer for retry failed with: %s", err.Error())
+			log.Changefeed.Errorf(s.ctx, "closing of previous sarama producer for retry failed with: %s", err.Error())
 		}
 		if err := newClient.Close(); err != nil {
-			log.Dev.Errorf(s.ctx, "closing of previous sarama client for retry failed with: %s", err.Error())
+			log.Changefeed.Errorf(s.ctx, "closing of previous sarama client for retry failed with: %s", err.Error())
 		}
 
 		if lastSendErr == nil {
-			log.Dev.Infof(s.ctx, "kafka sink internal retry succeeded")
+			log.Changefeed.Infof(s.ctx, "kafka sink internal retry succeeded")
 			return nil
 		}
 	}
@@ -1178,7 +1178,7 @@ func buildKafkaConfig(
 		if err := dialConfig.authMechanism.ApplySarama(ctx, config); err != nil {
 			return nil, err
 		}
-		log.Dev.VInfof(ctx, 2, "applied kafka auth mechanism: %+#v\n", dialConfig.authMechanism)
+		log.Changefeed.VInfof(ctx, 2, "applied kafka auth mechanism: %+#v\n", dialConfig.authMechanism)
 	}
 
 	// Apply statement level overrides.
