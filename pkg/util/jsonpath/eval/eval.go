@@ -274,7 +274,7 @@ func (ctx *jsonpathCtx) executeAnyItem(
 			}
 		}
 	default:
-		panic(errors.AssertionFailedf("executeAnyItem called with type: %s", jsonValue.Type()))
+		return nil, errors.AssertionFailedf("executeAnyItem called with type: %s", jsonValue.Type())
 	}
 	return agg, nil
 }
