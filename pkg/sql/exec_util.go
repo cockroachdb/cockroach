@@ -1671,6 +1671,9 @@ type ExecutorConfig struct {
 	// StmtDiagnosticsRecorder deals with recording statement diagnostics.
 	StmtDiagnosticsRecorder *stmtdiagnostics.Registry
 
+	// TxnDiagnosticsRecorder deals with recording transaction diagnostics.
+	TxnDiagnosticsRecorder *stmtdiagnostics.TxnRegistry
+
 	ExternalIODirConfig base.ExternalIODirConfig
 
 	GCJobNotifier *gcjobnotifier.Notifier
