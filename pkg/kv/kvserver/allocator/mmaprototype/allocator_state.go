@@ -682,6 +682,7 @@ func (a *allocatorState) rebalanceStores(
 			cands, ssSLS := a.computeCandidatesForRange(disj[:], storesToExcludeForRange, store.StoreID)
 			log.Dev.VInfof(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
 				rangeID, store.StoreID, ss.adjusted.load)
+			log.Dev.Infof(ctx, "span-config: %+v", rstate.constraints.spanConfig.uninternedConfig())
 			if log.V(2) {
 				log.Dev.Infof(ctx, "candidates are:")
 				for _, c := range cands.candidates {
