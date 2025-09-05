@@ -1739,6 +1739,12 @@ func (cf *changeFrontier) noteAggregatorProgress(ctx context.Context, d rowenc.E
 		log.Dev.Infof(ctx, "progress update from aggregator: %#v", resolvedSpans)
 	}
 
+	if cf.knobs.ChangeFrontierKnobs.OnAggregatorProgress != nil {
+		if err := cf.knobs.ChangeFrontierKnobs.OnAggregatorProgress(&resolvedSpans); err != nil {
+			return err
+		}
+	}
+
 	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
 
 	for _, resolved := range resolvedSpans.ResolvedSpans {
@@ -1844,6 +1850,8 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	}
 
 	if updateCheckpoint || updateHighWater {
+		fmt.Printf("CHECKPOINT DEBUG: updateCheckpoint=%t, updateHighWater=%t, inBackfill=%t, frontierChanged=%t, atBoundary=%t\n",
+			updateCheckpoint, updateHighWater, inBackfill, frontierChanged, atBoundary)
 		if cf.knobs.ShouldCheckpointToJobRecord != nil && !cf.knobs.ShouldCheckpointToJobRecord(cf.frontier.Frontier()) {
 			return false, nil
 		}
@@ -1919,6 +1927,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 				for tableID, tableFrontier := range cf.frontier.Frontiers() {
 					resolvedTables.Tables[tableID] = tableFrontier.Frontier()
 				}
+
+				fmt.Printf("RESOLVED TABLES DEBUG: writing resolved tables to job info: %v\n", resolvedTables)
 
 				if err := writeChangefeedJobInfo(ctx, resolvedTablesFilename, resolvedTables, txn, cf.spec.JobID); err != nil {
 					return errors.Wrap(err, "error writing resolved tables to job info")

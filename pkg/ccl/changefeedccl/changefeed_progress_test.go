@@ -50,13 +50,19 @@ func TestChangefeedResolvedTablesRestoreDuringInitialScan(t *testing.T) {
 		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'bar'`).Scan(&barTableID)
 		fooTableSpan := s.Codec.TableSpan(fooTableID)
 
-		// Skip foo's resolved spans to prevent its progress from advancing
+		// Modify aggregator progress to filter out foo's resolved spans
 		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
-		knobs.FilterSpanWithMutation = func(resolved *jobspb.ResolvedSpan) (bool, error) {
-			shouldSkip := fooTableSpan.Contains(resolved.Span)
-			fmt.Printf("RESOLVED SPAN FILTER: span=%s, fooSpan=%s, contains=%t, skipping=%t\n",
-				resolved.Span, fooTableSpan, shouldSkip, shouldSkip)
-			return shouldSkip, nil
+		knobs.ChangeFrontierKnobs.OnAggregatorProgress = func(resolvedSpans *jobspb.ResolvedSpans) error {
+			var filteredSpans []jobspb.ResolvedSpan
+			for _, resolved := range resolvedSpans.ResolvedSpans {
+				if fooTableSpan.Contains(resolved.Span) {
+					fmt.Printf("ON AGGREGATOR PROGRESS: filtering out foo span %s\n", resolved.Span)
+					continue // Skip foo's resolved spans
+				}
+				filteredSpans = append(filteredSpans, resolved)
+			}
+			resolvedSpans.ResolvedSpans = filteredSpans
+			return nil
 		}
 
 		// Start changefeed with per-table tracking enabled

@@ -22,6 +22,7 @@ import (
 )
 
 // TestingKnobs are the testing knobs for changefeed.
+// TODO(#153044): Split up the knobs in this struct by processor type.
 type TestingKnobs struct {
 	// BeforeEmitRow is called before every sink emit row operation.
 	BeforeEmitRow func(context.Context) error
@@ -124,7 +125,18 @@ type TestingKnobs struct {
 	// MakeKVFeedToAggregatorBufferKnobs is used to make a fresh set of testing knobs
 	// to pass to the constructor of the kv feed to change aggregator buffer.
 	MakeKVFeedToAggregatorBufferKnobs func() kvevent.BlockingBufferTestingKnobs
+
+	// ChangeFrontierKnobs are knobs specific to the change frontier processor.
+	ChangeFrontierKnobs ChangeFrontierTestingKnobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
+
+// ChangeFrontierTestingKnobs are knobs specific to the change frontier processor.
+type ChangeFrontierTestingKnobs struct {
+	// OnAggregatorProgress, if set, is called in the changeFrontier
+	// when processing aggregator progress updates, allowing tests to inspect
+	// or modify the resolved spans before they are processed by the frontier.
+	OnAggregatorProgress func(*jobspb.ResolvedSpans) error
+}
