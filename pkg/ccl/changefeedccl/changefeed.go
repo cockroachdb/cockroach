@@ -164,7 +164,7 @@ func emitResolvedTimestamp(
 		return err
 	}
 	if log.V(2) {
-		log.Dev.Infof(ctx, `resolved %s`, resolved)
+		log.Changefeed.Infof(ctx, `resolved %s`, resolved)
 	}
 	return nil
 }

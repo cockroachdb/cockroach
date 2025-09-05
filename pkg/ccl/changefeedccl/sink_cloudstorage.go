@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+
 	// Placeholder for pgzip and zdstd.
 	_ "github.com/klauspost/compress/zstd"
 	_ "github.com/klauspost/pgzip"
@@ -644,7 +645,7 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	part := resolved.GoTime().Format(s.partitionFormat)
 	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
 	if log.V(1) {
-		log.Dev.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
+		log.Changefeed.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
 	}
 	return cloud.WriteFile(ctx, s.es, filepath.Join(part, filename), bytes.NewReader(payload))
 }
@@ -833,7 +834,7 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 		return nil
 	default:
 		if logQueueDepth.ShouldLog() {
-			log.Dev.Infof(ctx, "changefeed flush queue is full; ~%d bytes to flush",
+			log.Changefeed.Infof(ctx, "changefeed flush queue is full; ~%d bytes to flush",
 				flushQueueDepth*s.targetMaxFileSize)
 		}
 	}
@@ -879,7 +880,7 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 			flushDone()
 
 			if err != nil {
-				log.Dev.Errorf(ctx, "error flushing file to storage: %s", err)
+				log.Changefeed.Errorf(ctx, "error flushing file to storage: %s", err)
 				s.asyncFlushErr = err
 				return err
 			}

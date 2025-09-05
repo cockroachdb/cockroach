@@ -65,7 +65,7 @@ func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg 
 
 	if log.V(2) {
 		var sp roachpb.Spans = cfg.Spans
-		log.Dev.Infof(ctx, "performing scan on %s at %v withDiff %v",
+		log.Changefeed.Infof(ctx, "performing scan on %s at %v withDiff %v",
 			sp, cfg.Timestamp, cfg.WithDiff)
 	}
 
@@ -119,7 +119,7 @@ func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg 
 				backfillDec()
 			}
 			if log.V(2) {
-				log.Dev.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
+				log.Changefeed.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
 			}
 			return err
 		})
@@ -156,7 +156,7 @@ func (p *scanRequestScanner) tryAcquireMemory(
 		// Sink implements memory allocator interface, so acquire
 		// memory needed to hold scan reply.
 		if logMemAcquireEvery.ShouldLog() {
-			log.Dev.Errorf(ctx, "Failed to acquire memory for export span: %s (attempt %d)",
+			log.Changefeed.Errorf(ctx, "Failed to acquire memory for export span: %s (attempt %d)",
 				err, attempt.CurrentAttempt()+1)
 		}
 		alloc, err = allocator.AcquireMemory(ctx, changefeedbase.ScanRequestSize.Get(&p.settings.SV))
@@ -182,7 +182,7 @@ func (p *scanRequestScanner) exportSpan(
 
 	txn := p.db.NewTxn(ctx, "changefeed backfill")
 	if log.V(2) {
-		log.Dev.Infof(ctx, `sending ScanRequest %s at %s`, span, ts)
+		log.Changefeed.Infof(ctx, `sending ScanRequest %s at %s`, span, ts)
 	}
 	if err := txn.SetFixedTimestamp(ctx, ts); err != nil {
 		return err
@@ -248,7 +248,7 @@ func (p *scanRequestScanner) exportSpan(
 		return err
 	}
 	if log.V(2) {
-		log.Dev.Infof(ctx, `finished Scan of %s at %s took %s`,
+		log.Changefeed.Infof(ctx, `finished Scan of %s at %s took %s`,
 			span, ts.AsOfSystemTime(), timeutil.Since(stopwatchStart))
 	}
 	return nil
@@ -319,7 +319,7 @@ func slurpScanResponse(
 				return errors.Wrapf(err, `decoding changes for %s`, span)
 			}
 			if log.V(3) {
-				log.Dev.Infof(ctx, "scanResponse: %s@%s", keys.PrettyPrint(nil, keyBytes), ts)
+				log.Changefeed.Infof(ctx, "scanResponse: %s@%s", keys.PrettyPrint(nil, keyBytes), ts)
 			}
 			if err = sink.Add(ctx, kvevent.NewBackfillKVEvent(keyBytes, ts, valBytes, withDiff, backfillTS)); err != nil {
 				return errors.Wrapf(err, `buffering changes for %s`, span)
