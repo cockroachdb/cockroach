@@ -188,6 +188,10 @@ func (m *Manager) maybeGetDescriptorWithoutValidation(
 		return nil, err
 	}
 
+	if len(descArr) == 0 {
+		return nil, nil
+	}
+
 	return descArr[0], nil
 }
 
